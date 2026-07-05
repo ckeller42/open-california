@@ -1,0 +1,21 @@
+.gitignore
+  s_1dccea91605154::t_878660b11fbb7c 1-7
+docs/superpowers/plans/2026-07-05-california-ble-toolkit.md
+  s_1dccea91605154::t_f25ef856b7c7dd 1-984
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9a1604b6e1253fe5860396ad49b6b94a236a5cbd",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
