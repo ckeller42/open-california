@@ -1,0 +1,238 @@
+# VW California Camper Unit control dictionary
+# Auto-extracted (static) from the decompiled app by tools/extract_protocol.py.
+# Field names are the app's own debug-log labels. Widths from sg.a typecodes.
+# All value_semantics UNVERIFIED until a live pass; bit offsets need f()/e() (todo).
+functions:
+  airheater:
+    state_services: [1700, 1702]
+    control_source: sf/a.java   # control char 1701
+    control_fields:
+      - {name: NormalOperationRequest, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: PermanentOperationConfirmation, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: PermanentOperationRequest, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: AirDistribution, width: 2, default: 0, value_semantics: UNVERIFIED}
+      - {name: HeatingLevel, width: 4, default: 11, value_semantics: UNVERIFIED}
+      - {name: OperationModeAirHeater, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: OperationModeCombined, width: 4, default: 0, value_semantics: UNVERIFIED}
+      - {name: RunningTime, width: 8, default: 127, value_semantics: UNVERIFIED}
+      - {name: TimerHour, width: 8, default: 31, value_semantics: UNVERIFIED}
+      - {name: TimerMin, width: 8, default: 63, value_semantics: UNVERIFIED}
+    state_fields:
+      - {name: PermanentOperationRequestConfirmation}
+      - {name: NormalOperation}
+      - {name: PermanentOperation}
+      - {name: FaultTriggerBit}
+      - {name: Installed}
+      - {name: AirDistribution}
+      - {name: ErrorCode}
+      - {name: HeatingLevel}
+      - {name: OperationModeAirHeater}
+      - {name: OperationModeCombined}
+      - {name: RunningTime}
+      - {name: TimerHour}
+      - {name: TimerMin}
+      - {name: RunningTimeinAction}
+  campingmode:
+    state_services: [1200, 1202]
+    control_source: lg/a.java   # control char 1201
+    control_fields:
+      - {name: State, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: UsbCharger, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: OutsideLight, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: InteriorLight, width: 2, default: 3, value_semantics: UNVERIFIED}
+    state_fields:
+      - {name: State}
+      - {name: UsbCharger}
+      - {name: OutsideLight}
+      - {name: InteriorLight}
+      - {name: Enable}
+      - {name: Installed}
+  cooler:
+    state_services: [1100, 1102]
+    control_source: sf/a.java   # control char 1101
+    control_fields:
+      - {name: State, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: TimerStart, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: TimerCancel, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: NightTimerSet, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Level, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: Mode, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: TimerHour, width: 8, default: 30, value_semantics: UNVERIFIED}
+      - {name: TimerMin, width: 8, default: 62, value_semantics: UNVERIFIED}
+      - {name: NightTimerHourOn, width: 8, default: 31, value_semantics: UNVERIFIED}
+      - {name: NightTimerHourOff, width: 8, default: 31, value_semantics: UNVERIFIED}
+    state_fields:
+      - {name: State}
+      - {name: TimerState}
+      - {name: TimerElapsed}
+      - {name: Installed}
+      - {name: NightTimerSet}
+      - {name: Error}
+      - {name: Level}
+      - {name: Mode}
+      - {name: TimerHourSet}
+      - {name: TimerMinSet}
+      - {name: TimerCounterHour}
+      - {name: TimerCounterMin}
+      - {name: NightTimerHourOn}
+      - {name: NightTimerHourOff}
+  energy:
+    state_services: [1600, 1602]
+    control_source: pg/a.java   # control char 1601
+    control_fields:
+      - {name: OperationMode, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Movement, value_semantics: UNVERIFIED}
+    state_fields:
+      - {name: TwoBattNotCharged}
+      - {name: TwoBattSwitchAtCharging}
+      - {name: TwoBattSwitchAtWorkshop}
+      - {name: WarningLevelActive}
+      - {name: DcdcDefect}
+      - {name: EnergyModeNotSelectable}
+      - {name: LandDefect}
+      - {name: LandNotAvailable}
+      - {name: PvDefect}
+      - {name: SleepWarning}
+      - {name: CurrentDeratingTemperature}
+      - {name: SystemError}
+      - {name: EmpInstalled}
+      - {name: PvInstalled}
+      - {name: LadInstalled}
+      - {name: DcdcInstalled}
+      - {name: WarningLevelTwo}
+      - {name: EnergyMode}
+      - {name: SocOneBattAfs}
+      - {name: SocTwoBattAfs}
+      - {name: StateDcdcAfs}
+      - {name: StateLandAfs}
+      - {name: StatePvAfs}
+      - {name: AgeOneBattValuesMinutes}
+      - {name: IOneBattBemAfs}
+      - {name: PDcdcAfs}
+      - {name: PLandAfs}
+      - {name: PPvAfs}
+      - {name: tTwoBattRemainingh}
+      - {name: tTwoBattRemainingmin}
+      - {name: UOneBattBemAfs}
+      - {name: UTwoBattBemAfs}
+      - {name: ITwoBattBemAfs}
+      - {name: IDcdcAfs}
+      - {name: ILandAfs}
+      - {name: IPvAfs}
+  general:
+    state_services: [1000, 1001, 1002, 1004]
+    control_fields:
+      []   # no unambiguous control model (see control_models_unresolved)
+    state_fields:
+      - {name: AmbSwVersion}
+      - {name: CmSwVersion}
+      - {name: CommunicationVersion}
+  generalpurposesignals:
+    state_services: [f000, f001]
+    control_fields:
+      []   # no unambiguous control model (see control_models_unresolved)
+    state_fields:
+      - {name: BitZeroOne}
+      - {name: BitZeroTwo}
+      - {name: BitZeroThree}
+      - {name: BitZeroFour}
+      - {name: BitZeroFive}
+      - {name: BitZeroSix}
+      - {name: BitZeroSeven}
+      - {name: BitZeroEight}
+      - {name: ByteZeroOne}
+      - {name: ByteZeroTwo}
+      - {name: ByteZeroThree}
+      - {name: ByteZeroFour}
+      - {name: ByteZeroFive}
+      - {name: ByteZeroSix}
+      - {name: ByteZeroSeven}
+      - {name: ByteZeroEight}
+      - {name: WordZeroOne}
+      - {name: WordZeroTwo}
+      - {name: WordZeroThree}
+      - {name: WordZeroFour}
+      - {name: DwordZeroOne}
+  livingroomheater:
+    state_services: [2100, 2102]
+    control_source: gg/a.java   # control char 2101
+    control_fields:
+      - {name: StateAir, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: StateWater, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: TemperatureWater, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Mode, width: 4, default: 5, value_semantics: UNVERIFIED}
+      - {name: TemperatureAir, width: 8, default: 0, value_semantics: UNVERIFIED}
+    state_fields:
+      - {name: StateAir}
+      - {name: StateWater}
+      - {name: TemperatureWater}
+      - {name: Installed}
+      - {name: Variant}
+      - {name: Mode}
+      - {name: Error}
+      - {name: TemperatureAir}
+  roofaircondition:
+    state_services: [2000, 2002]
+    control_source: lg/a.java   # control char 2001
+    control_fields:
+      - {name: State, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: FanSpeed, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: Mode, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: Temperature, width: 8, default: 0, value_semantics: UNVERIFIED}
+    state_fields:
+      - {name: State}
+      - {name: Installed}
+      - {name: Mode}
+      - {name: Error}
+      - {name: Fanspeed}
+      - {name: Temperature}
+  satelliteantenna:
+    state_services: [1900, 1902, 1903, 1904, 1905]
+    control_source: gg/a.java   # control char 1901
+    control_fields:
+      - {name: DishStop, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Wlan, width: 2, default: 0, value_semantics: UNVERIFIED}
+      - {name: System, width: 4, default: 0, value_semantics: UNVERIFIED}
+      - {name: Dish, value_semantics: UNVERIFIED}
+      - {name: SatelliteSelection, value_semantics: UNVERIFIED}
+    state_fields:
+      - {name: Installed}
+      - {name: System}
+      - {name: Error}
+      - {name: Dish}
+      - {name: SatelliteSelection}
+      - {name: SignalLevel}
+  stairs:
+    state_services: [1800, 1802]
+    control_source: pg/a.java   # control char 1801
+    control_fields:
+      - {name: OperationMode, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Movement, width: 2, default: 0, value_semantics: UNVERIFIED}
+    state_fields:
+      - {name: Installed}
+      - {name: OperationMode}
+      - {name: State}
+      - {name: Sensor}
+      - {name: InfoPopUp}
+  water:
+    state_services: [1300, 1302]
+    control_fields:
+      []   # no unambiguous control model (see control_models_unresolved)
+    state_fields:
+      - {name: FreshWaterUnit}
+      - {name: Installed}
+      - {name: FreshWaterInfoPopUp}
+      - {name: FreshWaterLevel}
+      - {name: FreshWaterVolume}
+      - {name: WasteWaterUnit}
+      - {name: WasteWaterInfoPopUp}
+      - {name: WasteWaterLevel}
+      - {name: WasteWaterVolume}
+
+# Control models that couldn't be uniquely attributed (merged classes serving
+# multiple services). Resolve which function each belongs to via a live pass.
+control_models_unresolved:
+  - file: jg/a.java   # control char 1401 (no matching state function)
+    candidate_field_sets: [['Up', 'Down', 'SafetyCounter']]
+  - file: eg/a.java   # control char 1501 (no matching state function)
+    candidate_field_sets: [['ProfileNumber', 'Mode', 'Timestamp', 'LightValue', 'BrightnessLOne', 'BrightnessLTwo', 'BrightnessLThree', 'BrightnessLFour', 'BrightnessLFive', 'BrightnessLSix', 'BrightnessLSeven', 'BrightnessLEight', 'BrightnessLNine', 'BrightnessLOneZero', 'BrightnessLOneOne', 'BrightnessLOneTwo', 'BrightnessLOneThree', 'BrightnessLOneFour', 'BrightnessLOneFive', 'BrightnessLOneSix']]

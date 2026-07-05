@@ -26,8 +26,23 @@ unit's own `0x2901` descriptors label every pair "Control"/"State".
 | 1200 | LIGHT | 1900 | SAT antenna + WLAN/system |
 | 1300 | FRESH_WATER (tank) | 2000 | ROOF_AIR_CONDITION |
 | 1400 | ROOF (pop-top) | 2100 | LIVING_ROOM_HEATER |
-| 1500 | (awning/secondary) | 1600 | ENERGY (battery/solar/DC-DC/shore) |
+| 1500 | **INTERIOR LIGHTING** (per-zone brightness/color/profile) | 1600 | ENERGY (battery/solar/DC-DC/shore) |
 | f000 | generic Read/Write (OTA?) | | |
+
+> Note on 1500: command enum (`SET_BRIGHTNESS`/`SET_COLOR`/`SET_PROFILE`/`PREVIEW`/
+> `SYSTEM_TIME`/`WAKEUP_TIME`) + control fields `Mode, Timestamp, LightValue,
+> BrightnessL{One,Two,Three}` = the interior LED lighting. There is **no** BLE
+> control for the unit's own touchscreen/panel brightness (that's a local setting).
+
+## Machine-readable dictionary
+
+The full per-function field map (control + state field names, widths, defaults) is
+auto-extracted from the app by **`tools/extract_protocol.py`** into
+**`protocol/dictionary.yaml`** (11 functions with state logs; control models joined
+per-constructor with state-field-overlap to defeat the shared fridge/heater class).
+Re-run `python3 tools/extract_protocol.py <decompiled sources> protocol/dictionary.yaml`
+after an app update. Bit *offsets* (from each `f()`/`e()`) and value semantics remain
+`UNVERIFIED` until a later pass; the fridge worked example below has verified widths.
 
 ## Frame format
 
