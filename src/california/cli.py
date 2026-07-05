@@ -35,7 +35,10 @@ def main(argv: list[str] | None = None) -> int:
         for c in caps:
             by_action.setdefault(c.action, []).append(c)
         for action, reps in by_action.items():
-            print(f"{action}: {'PASS' if replay_safe(reps) else 'FAIL (nonce/crypto?)'}")
+            if len(reps) < 2:
+                print(f"{action}: SKIP (need >=2 repeats)")
+            else:
+                print(f"{action}: {'PASS' if replay_safe(reps) else 'FAIL (nonce/crypto?)'}")
     elif args.cmd == "codegen":
         src = generate(load_map(args.map), args.address)
         with open(args.out, "w") as f:

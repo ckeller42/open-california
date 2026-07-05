@@ -6,7 +6,7 @@ def classify_transport(packets: list[dict]) -> str:
         layers = pkt.get("_source", {}).get("layers", {})
         if "btatt" in layers or "btgatt" in layers:
             saw_att = True
-        if "btrfcomm" in layers or "btspp" in layers or "btl2cap" in layers and "btatt" not in layers:
+        if "btrfcomm" in layers or "btspp" in layers or ("btl2cap" in layers and "btatt" not in layers):
             saw_classic = True
     if saw_att:
         return "ble-gatt"

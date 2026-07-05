@@ -45,6 +45,11 @@ def test_generate_rejects_injected_handle_string():
     with pytest.raises(ValueError, match="unsafe handle"):
         generate(malicious_map, "AA:BB:CC:DD:EE:FF")
 
+def test_generate_rejects_injected_address():
+    """Regression: address containing a quote should raise ValueError, not produce injected output."""
+    with pytest.raises(ValueError):
+        generate(MAP, 'AA:BB:CC:DD:EE:FF"); import os; ("')
+
 def test_generate_accepts_valid_int_handle_without_uuid():
     """Regression: valid int handle without uuid should succeed and produce valid Python."""
     valid_map = {"actions": {

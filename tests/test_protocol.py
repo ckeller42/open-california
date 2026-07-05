@@ -26,3 +26,14 @@ def test_load_map_missing_file(tmp_path):
     # Regression: load_map should return {"actions": {}} for nonexistent path
     p = str(tmp_path / "nope.yaml")
     assert load_map(p) == {"actions": {}}
+
+def test_replay_safe_false_when_stable_cccd_masks_varying_nonce():
+    # Regression: a stable CCCD/keepalive write (handle 0x10) is identical in
+    # every repeat and must not mask a command (handle 0x2a) whose payload
+    # varies with a nonce. The naive intersection-based check falsely PASSes
+    # this because the stable write survives the intersection.
+    reps = [
+        _cap("light-on", [(0x10, b"\x01\x00"), (0x2a, b"\x01\xAA")]),
+        _cap("light-on", [(0x10, b"\x01\x00"), (0x2a, b"\x01\xBB")]),
+    ]
+    assert replay_safe(reps) is False
