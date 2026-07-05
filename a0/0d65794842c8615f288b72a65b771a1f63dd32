@@ -1,0 +1,42 @@
+tests/test_extract_protocol.py
+  s_1dccea91605154::t_d777183b6c9ca3 1-90
+docs/protocol.md
+  s_1dccea91605154::t_7569976310cfd7 67-83
+protocol/dictionary.yaml
+  s_1dccea91605154::t_d4981133d22f87 85,194-195
+  s_1dccea91605154::t_99999901736144 2-5,84,161-162,210,233,235-238
+  s_1dccea91605154::t_5c42f8e855e52b 11-20,40-43,55-64,163-165,179-182,196-198,211
+tools/extract_protocol.py
+  s_1dccea91605154::t_c2eed25ff916bd 5-16,19,31,33-37,42,47,54-59,61-62,64-66,69-80,82,84,86-87,95-97,102,105-106,110,117,119-121,124-126,132-133,143,146-148,150-156,160-161,168-170,174,179-180,182,194-197,206,208-209,217-218,220-223,226,230,233-235,237,239
+  s_1dccea91605154::t_b34a44bd1e29e5 210-213
+  s_1dccea91605154::t_5d0821e515058d 215
+  s_1dccea91605154::t_fa7c38cd6f761d 81,90-94
+  s_1dccea91605154::t_8463d7b31a2f83 167
+  s_1dccea91605154::t_ce8369e9419302 171-173,175-176,178
+  s_1dccea91605154::t_1e87e88643adda 32
+  s_1dccea91605154::t_ff32ea9dd7c061 83,85
+  s_1dccea91605154::t_ba13cb461905d6 177,181
+  s_1dccea91605154::t_01987ec8090911 236
+  s_1dccea91605154::t_02ce9aafe3a2be 111-116,118,122-123
+  s_1dccea91605154::t_a76f239fd6e210 142
+tools/encode.py
+  s_1dccea91605154::t_e0a5556c680718 42-47
+.gitignore
+  s_1dccea91605154::t_401076f93195ff 18-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a00d65794842c8615f288b72a65b771a1f63dd32",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
