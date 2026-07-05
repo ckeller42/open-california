@@ -15,3 +15,6 @@ jadx*/
 *.jdk/
 jdk-*/
 /vendor-decompiled/
+
+# Claude Code local session/config
+.claude/

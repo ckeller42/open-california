@@ -2,19 +2,21 @@
 """Extract the VW California Camper Unit control dictionary from the decompiled
 CaliforniaOnTour app.
 
-Pure static extraction. Harvests every function's control + state field names
-from the app's own debug-log methods ("--> Sending Data:" for control models,
-"<-- Incoming Data for <Fn>:" for state), plus per-field bit width/default from
-the control model's `new sg.a(default, typecode)` declarations.
+Pure static extraction, keyed by field OBJECT (e.g. f23982e0) so name, width,
+default, and bit offset stay aligned even when a class serves two services
+(shared fridge/heater control model) or when field counts differ from sg.a counts.
 
-Merged control models (one class serving two services via two constructors, e.g.
-fridge 1101 + heater 1701) are NOT force-attributed — that mis-attribution is
-exactly the bug this avoids. A control model is joined to a function only when its
-service set is unambiguous; otherwise it is listed under `control_models` with the
-services it touches, for a human/live pass to resolve.
+Sources joined per field object:
+- name   : the "--> Sending Data:" / "<-- Incoming Data for X:" debug logs
+           (`Object o = this.<obj>.f398b` order + the quoted labels)
+- width  : `this.<obj> = new sg.a(default, typecode)`  (typecode -> bit width)
+- offset : the control model's f() placements  `frame[P] = <local>[k]` where
+           `<local> = this.<obj>.f399c`; emitted only when a field's positions are
+           unambiguous (a field placed differently across two merged branches is
+           left offset: MERGED_AMBIGUOUS).
 
 Usage:  python3 extract_protocol.py <decompile/.../sources> [out.yaml]
-Stdlib only. Output contains only protocol facts (field names, bits) — no app source.
+Stdlib only. Output holds protocol facts only (names, bits) — no app source.
 """
 from __future__ import annotations
 import os
@@ -26,66 +28,109 @@ INCOMING_RE = re.compile(r'"<-- Incoming Data for ([A-Za-z0-9]+)')
 SENDING_RE = re.compile(r'"--> Sending Data')
 QUOTED_RE = re.compile(r'"([^"]*)"')
 LABEL_RE = re.compile(r'^([A-Za-z][A-Za-z0-9]*):?$')
-SGA_RE = re.compile(r'new sg\.a\((\d+),\s*(\d+)\)')
+SGA_RE = re.compile(r'this\.(\w+)\s*=\s*new sg\.a\((\d+),\s*(\d+)\)')
+BOBJ_RE = re.compile(r'this\.(\w+)\)?\.f398b')           # field objects in log order (tolerate cast `)`)
+FLOCAL_RE = re.compile(r'\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c')  # obj -> local (by position)
+FLOCAL_DECL_RE = re.compile(r'(\w+)\s*=\s*\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c')  # local = this.obj
+FPLACE_RE = re.compile(r'\w+\[(\d+)\]\s*=\s*(\w+)\[(\d+)\]')  # frame[P] = local[k]
+SUBLIST_RE = re.compile(r'(\w+)\.p\(\(Boolean\[\]\)[^;]*?subList\((\d+),\s*(\d+)\)')  # state decode aVar<-bits
+STATE_OBJ_RE = re.compile(r'this\.(\w+)|=\s*(\w+)\.f398b')
 TYPECODE_WIDTH = {0: 1, 2: 8, 3: 16, 4: 2, 5: 32, 6: 4, 7: 8}
 LOG_END = re.compile(r'\.toString\(\)|xm\.a\.b\(')
 
 
-def read(path: str) -> str:
+def read(path):
     with open(path, encoding="utf-8", errors="replace") as f:
         return f.read()
 
 
-def java_files(root: str):
+def java_files(root):
     for dp, _, files in os.walk(root):
         for fn in files:
             if fn.endswith(".java"):
                 yield os.path.join(dp, fn)
 
 
-def log_labels(text: str, start: int) -> list[str]:
-    """Ordered field labels between a log marker and the log-emit call."""
-    end_m = LOG_END.search(text, start)
-    window = text[start: end_m.start() if end_m else start + 4000]
-    names: list[str] = []
-    for q in QUOTED_RE.finditer(window):
-        s = q.group(1)
-        s = re.sub(r'^<-- Incoming Data for [A-Za-z0-9]+:', '', s)
-        s = re.sub(r'^--> Sending Data:?', '', s)
-        s = s.strip()
-        m = LABEL_RE.match(s)
-        if m and m.group(1) not in names:
-            names.append(m.group(1))
-    return names
-
-
-def uuids(text: str) -> list[str]:
+def uuids(text):
     return sorted({m.group(1).lower() for m in UUID_RE.finditer(text)})
 
 
-def _constructors(text: str) -> list[str]:
-    """Each constructor body (a class may have several — one per shared service)."""
+def _labels(window):
+    out = []
+    for q in QUOTED_RE.finditer(window):
+        s = re.sub(r'^<-- Incoming Data for [A-Za-z0-9]+:', '', q.group(1))
+        s = re.sub(r'^--> Sending Data:?', '', s).strip()
+        m = LABEL_RE.match(s)
+        if m and m.group(1) not in out:
+            out.append(m.group(1))
+    return out
+
+
+def _methods_with(text, marker_re):
+    """Yield the source window of each method that contains the marker."""
+    for m in marker_re.finditer(text):
+        end = LOG_END.search(text, m.start())
+        # widen slightly past the emit so the obj= assignments before it are included
+        lo = text.rfind("\n    public ", 0, m.start())
+        lo = lo if lo != -1 else m.start()
+        hi = end.start() if end else m.start() + 4000
+        yield text[lo:hi], m.start()
+
+
+def obj_names(text, marker_re):
+    """[{obj: name}] — one dict per control debug-log method (uses this.<obj>.f398b)."""
+    result = []
+    for win, _mstart in _methods_with(text, marker_re):
+        objs = BOBJ_RE.findall(win)
+        names = _labels(win)   # same order as objs (each field printed once with its label)
+        result.append({o: n for o, n in zip(objs, names)})
+    return result
+
+
+def state_field_names(text):
+    """State decode (`e()`) uses local aVar objects, not this.<obj> — take labels only."""
+    for win, _ in _methods_with(text, INCOMING_RE):
+        return _labels(win)
+    return []
+
+
+def constructors(text):
     cm = re.search(r'class\s+(\w+)', text)
     if not cm:
         return []
     ctor_re = re.compile(r'\n    public ' + re.escape(cm.group(1)) + r'\(')
-    method_re = re.compile(r'\n    (?:public|private|protected|final|static|void|Object) ')
+    boundary = re.compile(r'\n    (?:public|private|protected|final|static|void|Object|boolean|int) ')
     blocks = []
     for m in ctor_re.finditer(text):
-        s = m.start()
-        nxt = method_re.search(text, s + 5)
-        blocks.append(text[s: nxt.start() if nxt else len(text)])
+        nxt = boundary.search(text, m.start() + 5)
+        blocks.append(text[m.start(): nxt.start() if nxt else len(text)])
     return blocks
 
 
-def main() -> int:
+def field_offsets(text):
+    """obj -> sorted unique frame-bit positions from all f() placements.
+
+    A field placed at the SAME positions in two merged branches is fine (dedup);
+    a field placed at DIFFERENT positions spans more than its width -> the caller
+    detects that (run length != field width) and flags it ambiguous.
+    """
+    local2obj = {loc: obj for loc, obj in FLOCAL_DECL_RE.findall(text)}
+    positions: dict[str, set[int]] = {}
+    for P, local, _k in FPLACE_RE.findall(text):
+        obj = local2obj.get(local)
+        if obj:
+            positions.setdefault(obj, set()).add(int(P))
+    return {obj: sorted(ps) for obj, ps in positions.items()}
+
+
+def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return 2
     root, out = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else "protocol/dictionary.yaml")
 
-    functions: dict[str, dict] = {}   # by state-log function name
-    control_ctors: list[dict] = []    # per-constructor: {file, fields, ctrl_uuid, sga}
+    functions = {}
+    control_ctors = []  # {file, ctrl_uuid, decls:{obj:(d,w)}, offsets:{obj:(off,w)|None}, blogs:[{obj:name}]}
 
     for p in java_files(root):
         t = read(p)
@@ -94,39 +139,47 @@ def main() -> int:
         if im:
             fn = im.group(1)
             functions[fn] = {
-                "state_fields": log_labels(t, im.start()),
-                "state_uuids": uuids(t),
-                "control_fields": [], "control_sga": [], "control_uuid": None,
-                "control_source": None,
+                "state_names": state_field_names(t), "state_uuids": uuids(t),
+                "control": [], "control_uuid": None, "control_source": None,
             }
         if SENDING_RE.search(t):
-            # a control-model file may hold several "Sending Data" logs + constructors
-            # (merged classes serving multiple services, each with its own name-set + defaults)
-            blogs = [log_labels(t, m.start()) for m in SENDING_RE.finditer(t)]
-            for ctor in _constructors(t):
+            blogs = obj_names(t, SENDING_RE)
+            offsets = field_offsets(t)
+            for ctor in constructors(t):
                 cu = uuids(ctor)
-                sga = [(int(a), TYPECODE_WIDTH.get(int(b), int(b))) for a, b in SGA_RE.findall(ctor)]
-                if cu and sga:
-                    control_ctors.append({"file": rel, "blogs": blogs,
-                                          "ctrl_uuid": cu[0], "sga": sga})
+                decls = {o: (int(d), TYPECODE_WIDTH.get(int(tc), int(tc)))
+                         for o, d, tc in SGA_RE.findall(ctor)}
+                if cu and decls:
+                    control_ctors.append({"file": rel, "ctrl_uuid": cu[0],
+                                          "decls": decls, "offsets": offsets, "blogs": blogs})
 
-    # attach each constructor to the function whose service prefix matches its control char,
-    # then pick the field-name log that best overlaps THAT function's state fields.
-    fn_by_prefix: dict[str, str] = {}
+    fn_by_prefix = {}
     for fn, e in functions.items():
         for u in e["state_uuids"]:
             fn_by_prefix.setdefault(u[:2], fn)
-    unresolved: list[dict] = []
+
+    unresolved = []
     for cc in control_ctors:
         fn = fn_by_prefix.get(cc["ctrl_uuid"][:2])
         if not fn:
             unresolved.append(cc)
             continue
-        state = set(functions[fn]["state_fields"])
-        blogs = [b for b in cc["blogs"] if b]
-        best = max(blogs, key=lambda b: len(set(b) & state), default=[])
-        functions[fn]["control_fields"] = best
-        functions[fn]["control_sga"] = cc["sga"]
+        state_names = set(functions[fn]["state_names"])
+        # pick the debug-log name map whose values best overlap this function's state
+        blog = max((b for b in cc["blogs"] if b),
+                   key=lambda b: len(set(b.values()) & state_names), default={})
+        # iterate the full named field set (log order), plus any sg.a-only objs, so
+        # nothing is dropped; attach width/default/offset per object where present.
+        order = list(blog.keys()) + [o for o in cc["decls"] if o not in blog]
+        fields = []
+        for obj in order:
+            default, width = cc["decls"].get(obj, (None, None))
+            ps = cc["offsets"].get(obj, [])
+            ok = width is not None and len(ps) == width and ps[-1] - ps[0] + 1 == width
+            fields.append({"obj": obj, "name": blog.get(obj, obj),
+                           "width": width, "default": default,
+                           "offset": ps[0] if ok else None})
+        functions[fn]["control"] = fields
         functions[fn]["control_uuid"] = cc["ctrl_uuid"]
         functions[fn]["control_source"] = cc["file"]
 
@@ -138,9 +191,10 @@ def main() -> int:
 def _emit(functions, unresolved, out):
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     L = ["# VW California Camper Unit control dictionary",
-         "# Auto-extracted (static) from the decompiled app by tools/extract_protocol.py.",
-         "# Field names are the app's own debug-log labels. Widths from sg.a typecodes.",
-         "# All value_semantics UNVERIFIED until a live pass; bit offsets need f()/e() (todo).",
+         "# Auto-extracted (static, object-keyed) by tools/extract_protocol.py.",
+         "# name/width/default/offset are per field object. offset MERGED_AMBIGUOUS when a",
+         "# field is placed differently across a shared (fridge/heater) control model.",
+         "# value_semantics UNVERIFIED (enum meanings/ranges) until a live pass.",
          "functions:"]
     for fn in sorted(functions):
         e = functions[fn]
@@ -149,39 +203,40 @@ def _emit(functions, unresolved, out):
         if e["control_source"]:
             L.append("    control_source: %s   # control char %s" % (e["control_source"], e["control_uuid"]))
         L.append("    control_fields:")
-        cf, sga = e["control_fields"], e["control_sga"]
-        if not cf:
+        if not e["control"]:
             L.append("      []   # no unambiguous control model (see control_models_unresolved)")
-        for i, name in enumerate(cf):
-            if i < len(sga):
-                d, w = sga[i]
-                L.append("      - {name: %s, width: %d, default: %d, value_semantics: UNVERIFIED}" % (name, w, d))
-            else:
-                L.append("      - {name: %s, value_semantics: UNVERIFIED}" % name)
+        for f in e["control"]:
+            off = f["offset"] if f["offset"] is not None else "MERGED_AMBIGUOUS"
+            wd = ("width: %d, default: %d" % (f["width"], f["default"])
+                  if f["width"] is not None else "width: UNKNOWN, default: UNKNOWN")
+            L.append("      - {name: %s, offset: %s, %s, value_semantics: UNVERIFIED}"
+                     % (f["name"], off, wd))
         L.append("    state_fields:")
-        for name in e["state_fields"]:
+        for name in e["state_names"]:
             L.append("      - {name: %s}" % name)
-    L.append("")
-    L.append("# Control models that couldn't be uniquely attributed (merged classes serving")
-    L.append("# multiple services). Resolve which function each belongs to via a live pass.")
-    L.append("control_models_unresolved:")
+    L += ["", "# Control models with no matching state function (resolve via a live pass).",
+          "control_models_unresolved:"]
     for cm in unresolved:
-        L.append("  - file: %s   # control char %s (no matching state function)" % (cm["file"], cm["ctrl_uuid"]))
-        L.append("    candidate_field_sets: %s" % (cm["blogs"] or "[]"))
+        names = [b for b in cm["blogs"] if b]
+        flds = list((names[0] if names else {}).values()) or list(cm["decls"].keys())
+        L.append("  - file: %s   # control char %s" % (cm["file"], cm["ctrl_uuid"]))
+        L.append("    fields: [%s]" % ", ".join(flds))
     with open(out, "w") as f:
         f.write("\n".join(L) + "\n")
-    print("wrote %s (%d functions, %d unresolved control models)" % (out, len(functions), len(unresolved)))
+    print("wrote %s (%d functions, %d unresolved)" % (out, len(functions), len(unresolved)))
 
 
 def _report(functions, unresolved):
-    print("\n=== coverage (functions) ===")
+    print("\n=== coverage ===")
     for fn in sorted(functions):
         e = functions[fn]
-        print("  %-24s control=%2d  state=%2d  src=%s" % (
-            fn, len(e["control_fields"]), len(e["state_fields"]), e["control_source"] or "-"))
-    print("=== unresolved control constructors: %d ===" % len(unresolved))
+        c = e["control"]
+        placed = sum(1 for f in c if f["offset"] is not None)
+        print("  %-22s control=%2d (offsets %d/%d)  state=%2d  src=%s" % (
+            fn, len(c), placed, len(c), len(e["state_names"]), e["control_source"] or "-"))
+    print("=== unresolved: %d ===" % len(unresolved))
     for cm in unresolved:
-        print("  %-14s ctrl=%s  field_sets=%d" % (cm["file"], cm["ctrl_uuid"], len(cm["blogs"])))
+        print("  %-12s ctrl=%s" % (cm["file"], cm["ctrl_uuid"]))
 
 
 if __name__ == "__main__":

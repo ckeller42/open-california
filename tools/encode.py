@@ -39,11 +39,12 @@ def fridge_control(power: int, *, f0=3, g0=3, h0=3, j0=7, i0=7,
     defaults — do not mix them up (an earlier version did, producing the wrong
     frame `3d7b007f1f3f`; the fridge frame is `fd770f1e3e1f`).
 
-    UNVERIFIED against the live unit. Also: `power` (field f23982e0) being the
-    on/off bit is inferred; the fridge/heater model classes are merged in the
-    decompile so the case-0 bit placement is assumed; and bytes 1-5 are
-    constructor defaults — the app likely sends current setpoint/mode there, so
-    writing defaults may reset settings. Verify against State char 1102 before use.
+    STRUCTURAL EXAMPLE ONLY — NOT a working command. Writing this default-filled
+    frame was tested live and did NOT toggle power: the defaults form a garbage
+    command (Level=7 is out of the 1-5 range; TimerStart/Cancel/NightTimerSet=3 =
+    conflicting timer actions). A real power toggle sets `power`, sets the timer
+    ACTION fields to 0, and carries the current Level/Mode (read from State 1102),
+    not defaults. See docs/protocol.md and protocol/dictionary.yaml.
 
     `power` is 0=off / 1=on.
     """

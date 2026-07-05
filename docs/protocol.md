@@ -64,18 +64,23 @@ any bonded central has full, replayable control.
 - **State `0x1102`** (8 bytes): byte0 bit0 = power (`09`=on/`08`=off), byte1 =
   fluctuating temperature reading; remaining bytes bit-packed flags/setpoint.
   Full bit slicing is in the app's decode; the power bit is live-confirmed.
-- **Control `0x1101`** (6 bytes, device-confirmed length): field `POWER` at
-  bits 6-7; neighbors + setpoint fields elsewhere (see `tools/encode.py`).
-- **Computed frames** (fridge defaults) — **UNVERIFIED, do not trust blindly**:
-  - **ON  = `fd 77 0f 1e 3e 1f`**
-  - **OFF = `fc 77 0f 1e 3e 1f`**
-  - Caveats: (1) the fridge/heater control models are *merged* in the decompile —
-    field defaults were initially mis-read from the heater (`1701`) model, giving
-    the WRONG frame `3d7b007f1f3f`; the values above use the fridge (`1101`)
-    constructor. (2) `POWER`=`f23982e0` is inferred (the sole boolean field).
-    (3) Bytes 1-5 are constructor defaults; the app likely sends current
-    setpoint/mode — writing defaults may reset them. **Verify against State
-    char `1102` (byte0 `08↔09`) before relying on any specific frame.**
+- **Control `0x1101`** (6 bytes, device-confirmed length). The 6-byte frame is
+  **10 named fields** (`sf/a.B()` debug log): `State` (power, bits 6-7),
+  `TimerStart`/`TimerCancel`/`NightTimerSet` (timer *actions*, bits 0-5),
+  `Level` (bits 12-15), `Mode` (bits 8-11), and `TimerHour/Min`,
+  `NightTimerHourOn/Off`. Offsets bits 0-15 are extracted; the timer-value
+  fields are `MERGED_AMBIGUOUS` (fridge vs heater share the model, placed
+  differently). See `protocol/dictionary.yaml`.
+- **LIVE RESULT (do NOT reuse `fd77…`/`3d7b…`):** writing a whole-frame with the
+  model's *defaults* was tested against the unit and **did not toggle power** —
+  it was a garbage command (`Level=7` is out of the 1-5 range; `TimerStart/Cancel/
+  NightTimerSet=3` = three conflicting timer actions). The unit ignored power and
+  stored stray bytes. The `fd770f1e3e1f` frame in `tools/encode.py` is therefore
+  a **structural example only, not a working command.**
+- **Correct power toggle:** set `State`, set all timer-**action** fields
+  (`TimerStart`,`TimerCancel`,`NightTimerSet`) to `0` (no-op), and carry the
+  *current* `Level`/`Mode` (read from State) rather than defaults. Verify against
+  State `1102` byte0 `08↔09`.
 
 ## Status / open items
 

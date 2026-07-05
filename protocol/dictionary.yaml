@@ -1,22 +1,23 @@
 # VW California Camper Unit control dictionary
-# Auto-extracted (static) from the decompiled app by tools/extract_protocol.py.
-# Field names are the app's own debug-log labels. Widths from sg.a typecodes.
-# All value_semantics UNVERIFIED until a live pass; bit offsets need f()/e() (todo).
+# Auto-extracted (static, object-keyed) by tools/extract_protocol.py.
+# name/width/default/offset are per field object. offset MERGED_AMBIGUOUS when a
+# field is placed differently across a shared (fridge/heater) control model.
+# value_semantics UNVERIFIED (enum meanings/ranges) until a live pass.
 functions:
   airheater:
     state_services: [1700, 1702]
     control_source: sf/a.java   # control char 1701
     control_fields:
-      - {name: NormalOperationRequest, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: PermanentOperationConfirmation, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: PermanentOperationRequest, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: AirDistribution, width: 2, default: 0, value_semantics: UNVERIFIED}
-      - {name: HeatingLevel, width: 4, default: 11, value_semantics: UNVERIFIED}
-      - {name: OperationModeAirHeater, width: 4, default: 7, value_semantics: UNVERIFIED}
-      - {name: OperationModeCombined, width: 4, default: 0, value_semantics: UNVERIFIED}
-      - {name: RunningTime, width: 8, default: 127, value_semantics: UNVERIFIED}
-      - {name: TimerHour, width: 8, default: 31, value_semantics: UNVERIFIED}
-      - {name: TimerMin, width: 8, default: 63, value_semantics: UNVERIFIED}
+      - {name: NormalOperationRequest, offset: 6, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: PermanentOperationConfirmation, offset: 4, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: PermanentOperationRequest, offset: 2, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: AirDistribution, offset: 0, width: 2, default: 0, value_semantics: UNVERIFIED}
+      - {name: HeatingLevel, offset: 12, width: 4, default: 11, value_semantics: UNVERIFIED}
+      - {name: OperationModeAirHeater, offset: 8, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: OperationModeCombined, offset: MERGED_AMBIGUOUS, width: 4, default: 0, value_semantics: UNVERIFIED}
+      - {name: RunningTime, offset: MERGED_AMBIGUOUS, width: 8, default: 127, value_semantics: UNVERIFIED}
+      - {name: TimerHour, offset: MERGED_AMBIGUOUS, width: 8, default: 31, value_semantics: UNVERIFIED}
+      - {name: TimerMin, offset: MERGED_AMBIGUOUS, width: 8, default: 63, value_semantics: UNVERIFIED}
     state_fields:
       - {name: PermanentOperationRequestConfirmation}
       - {name: NormalOperation}
@@ -36,10 +37,10 @@ functions:
     state_services: [1200, 1202]
     control_source: lg/a.java   # control char 1201
     control_fields:
-      - {name: State, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: UsbCharger, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: OutsideLight, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: InteriorLight, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: State, offset: 6, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: UsbCharger, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: OutsideLight, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: InteriorLight, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
     state_fields:
       - {name: State}
       - {name: UsbCharger}
@@ -51,16 +52,16 @@ functions:
     state_services: [1100, 1102]
     control_source: sf/a.java   # control char 1101
     control_fields:
-      - {name: State, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: TimerStart, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: TimerCancel, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: NightTimerSet, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: Level, width: 4, default: 7, value_semantics: UNVERIFIED}
-      - {name: Mode, width: 4, default: 7, value_semantics: UNVERIFIED}
-      - {name: TimerHour, width: 8, default: 30, value_semantics: UNVERIFIED}
-      - {name: TimerMin, width: 8, default: 62, value_semantics: UNVERIFIED}
-      - {name: NightTimerHourOn, width: 8, default: 31, value_semantics: UNVERIFIED}
-      - {name: NightTimerHourOff, width: 8, default: 31, value_semantics: UNVERIFIED}
+      - {name: State, offset: 6, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: TimerStart, offset: 4, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: TimerCancel, offset: 2, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: NightTimerSet, offset: 0, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Level, offset: 12, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: Mode, offset: 8, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: TimerHour, offset: MERGED_AMBIGUOUS, width: 8, default: 30, value_semantics: UNVERIFIED}
+      - {name: TimerMin, offset: MERGED_AMBIGUOUS, width: 8, default: 62, value_semantics: UNVERIFIED}
+      - {name: NightTimerHourOn, offset: MERGED_AMBIGUOUS, width: 8, default: 31, value_semantics: UNVERIFIED}
+      - {name: NightTimerHourOff, offset: MERGED_AMBIGUOUS, width: 8, default: 31, value_semantics: UNVERIFIED}
     state_fields:
       - {name: State}
       - {name: TimerState}
@@ -80,8 +81,8 @@ functions:
     state_services: [1600, 1602]
     control_source: pg/a.java   # control char 1601
     control_fields:
-      - {name: OperationMode, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: Movement, value_semantics: UNVERIFIED}
+      - {name: OperationMode, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Movement, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
     state_fields:
       - {name: TwoBattNotCharged}
       - {name: TwoBattSwitchAtCharging}
@@ -157,11 +158,11 @@ functions:
     state_services: [2100, 2102]
     control_source: gg/a.java   # control char 2101
     control_fields:
-      - {name: StateAir, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: StateWater, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: TemperatureWater, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: Mode, width: 4, default: 5, value_semantics: UNVERIFIED}
-      - {name: TemperatureAir, width: 8, default: 0, value_semantics: UNVERIFIED}
+      - {name: StateAir, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: StateWater, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: TemperatureWater, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Mode, offset: 12, width: 4, default: 5, value_semantics: UNVERIFIED}
+      - {name: TemperatureAir, offset: MERGED_AMBIGUOUS, width: 8, default: 0, value_semantics: UNVERIFIED}
     state_fields:
       - {name: StateAir}
       - {name: StateWater}
@@ -175,10 +176,10 @@ functions:
     state_services: [2000, 2002]
     control_source: lg/a.java   # control char 2001
     control_fields:
-      - {name: State, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: FanSpeed, width: 4, default: 7, value_semantics: UNVERIFIED}
-      - {name: Mode, width: 4, default: 7, value_semantics: UNVERIFIED}
-      - {name: Temperature, width: 8, default: 0, value_semantics: UNVERIFIED}
+      - {name: State, offset: 6, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: FanSpeed, offset: MERGED_AMBIGUOUS, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: Mode, offset: MERGED_AMBIGUOUS, width: 4, default: 7, value_semantics: UNVERIFIED}
+      - {name: Temperature, offset: MERGED_AMBIGUOUS, width: 8, default: 0, value_semantics: UNVERIFIED}
     state_fields:
       - {name: State}
       - {name: Installed}
@@ -190,11 +191,11 @@ functions:
     state_services: [1900, 1902, 1903, 1904, 1905]
     control_source: gg/a.java   # control char 1901
     control_fields:
-      - {name: DishStop, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: Wlan, width: 2, default: 0, value_semantics: UNVERIFIED}
-      - {name: System, width: 4, default: 0, value_semantics: UNVERIFIED}
-      - {name: Dish, value_semantics: UNVERIFIED}
-      - {name: SatelliteSelection, value_semantics: UNVERIFIED}
+      - {name: DishStop, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
+      - {name: Wlan, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
+      - {name: System, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Dish, offset: MERGED_AMBIGUOUS, width: 2, default: 0, value_semantics: UNVERIFIED}
+      - {name: SatelliteSelection, offset: 12, width: 4, default: 0, value_semantics: UNVERIFIED}
     state_fields:
       - {name: Installed}
       - {name: System}
@@ -206,8 +207,8 @@ functions:
     state_services: [1800, 1802]
     control_source: pg/a.java   # control char 1801
     control_fields:
-      - {name: OperationMode, width: 2, default: 3, value_semantics: UNVERIFIED}
-      - {name: Movement, width: 2, default: 0, value_semantics: UNVERIFIED}
+      - {name: OperationMode, offset: MERGED_AMBIGUOUS, width: 2, default: 3, value_semantics: UNVERIFIED}
+      - {name: Movement, offset: MERGED_AMBIGUOUS, width: 2, default: 0, value_semantics: UNVERIFIED}
     state_fields:
       - {name: Installed}
       - {name: OperationMode}
@@ -229,10 +230,9 @@ functions:
       - {name: WasteWaterLevel}
       - {name: WasteWaterVolume}
 
-# Control models that couldn't be uniquely attributed (merged classes serving
-# multiple services). Resolve which function each belongs to via a live pass.
+# Control models with no matching state function (resolve via a live pass).
 control_models_unresolved:
-  - file: jg/a.java   # control char 1401 (no matching state function)
-    candidate_field_sets: [['Up', 'Down', 'SafetyCounter']]
-  - file: eg/a.java   # control char 1501 (no matching state function)
-    candidate_field_sets: [['ProfileNumber', 'Mode', 'Timestamp', 'LightValue', 'BrightnessLOne', 'BrightnessLTwo', 'BrightnessLThree', 'BrightnessLFour', 'BrightnessLFive', 'BrightnessLSix', 'BrightnessLSeven', 'BrightnessLEight', 'BrightnessLNine', 'BrightnessLOneZero', 'BrightnessLOneOne', 'BrightnessLOneTwo', 'BrightnessLOneThree', 'BrightnessLOneFour', 'BrightnessLOneFive', 'BrightnessLOneSix']]
+  - file: jg/a.java   # control char 1401
+    fields: [Up, Down, SafetyCounter]
+  - file: eg/a.java   # control char 1501
+    fields: [ProfileNumber, Mode, Timestamp, LightValue, BrightnessLOne, BrightnessLTwo, BrightnessLThree, BrightnessLFour, BrightnessLFive, BrightnessLSix, BrightnessLSeven, BrightnessLEight, BrightnessLNine, BrightnessLOneZero, BrightnessLOneOne, BrightnessLOneTwo, BrightnessLOneThree, BrightnessLOneFour, BrightnessLOneFive, BrightnessLOneSix]
