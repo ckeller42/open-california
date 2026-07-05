@@ -1,0 +1,21 @@
+src/california/ingest.py
+  s_d2aaf32ad5a63d::t_da74d10ea90a62 1-30
+tests/test_ingest.py
+  s_d2aaf32ad5a63d::t_c880d16ed462fb 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6ba3465b7a0b455544299d28b74509b832c09f77",
+  "prompts": {},
+  "sessions": {
+    "s_d2aaf32ad5a63d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a3a4081bc3777304a",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
