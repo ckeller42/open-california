@@ -1,0 +1,92 @@
+# Roof-mounted air conditioning (climate unit built into the pop-up roof).
+# Distinct from "roof.yaml" (mechanical raise/lower of the roof itself).
+# Nav destination: NavigationConnectivity$RoofAirConditionScreen
+#   com/californiaontour/connectivityui/graphs/NavigationConnectivity$RoofAirConditionScreen.java
+# Full reverse-engineered business logic documented in
+# docs/business-logic/climate-stairs.md ("RoofAirCondition" section) —
+# authoritative source for exact BLE recipes; this file is the GUI-shape
+# summary of it.
+# Service 0x2000, state char 0x2002 (lg/b.java, kg/b.java:192), control char
+# 0x2001 (lg/a.java:139-147, built from kg/b.java:90). Feature ViewModel
+# kg/b.java implements jf.a (jf/a.java:9-29 interface signature).
+screen: roof-air-condition
+title_key: null   # no dedicated *_pageTitle key found; screen is entered via vehiclePage_remoteControlWidget_heatingAndCooling_text tile (x9/q.java:97-pattern)
+function: roofaircondition   # protocol/dictionary.yaml:153-167 (state_services [2000,2002], control_source lg/a.java char 2001)
+widgets:
+  - id: powerToggle
+    type: toggle
+    label_key: null
+    range: null
+    controls: {field: State, action: X1}
+    elements: [{value: 0, name: "off"}, {value: 1, name: "on"}]
+    constraints: "kg/b.java:166-175 b3(boolean on) -> State = on?1:0. Wire sentinel 3 = unset/first-command-of-session default. Full 24-bit packet resent on every change (all 4 fields together)."
+
+  - id: modeSelector
+    type: button
+    label_key: null
+    range: null
+    controls: {field: Mode, action: X1}
+    elements:
+      - {value: 0, name: AUTOMATIC}
+      - {value: 1, name: MANUAL_COOLING}
+      - {value: 2, name: MANUAL_HEATING}
+      - {value: 3, name: VENTING}
+    constraints: "enum jf/c.java, confirmed identity ordinal mapping (climate-stairs.md:82-84); setter kg/b.java:119-143 L3(); out-of-range readback clamps to AUTOMATIC (kg/b.java:323-326); UI label pairing via kj/b.java RoofAirConditionModeWithText(mode, text)"
+
+  - id: fanSpeedSlider
+    type: slider
+    label_key: null
+    range: "0..4"
+    controls: {field: FanSpeed, action: X1}
+    elements:
+      - {value: 0, name: LEVEL_0}
+      - {value: 1, name: LEVEL_1}
+      - {value: 2, name: LEVEL_2}
+      - {value: 3, name: LEVEL_3}
+      - {value: 4, name: AUTO}
+    constraints: "enum jf/b.java, confirmed identity ordinal mapping (climate-stairs.md:85-86); setter kg/b.java:348-375 y3(); out-of-range readback clamps to AUTO; UI label pairing via kj/a.java RoofAirConditionFanSpeedWithText(fanSpeed, text)"
+
+  - id: temperatureSlider
+    type: slider
+    label_key: null
+    range: "0..255"
+    controls: {field: Temperature, action: X1}
+    elements: null
+    constraints: "setter kg/b.java:145-154 O(int raw) — raw passthrough, NO scaling/clamping at this layer; unit UNVERIFIED (likely direct °C or a fixed offset/step encoding, per climate-stairs.md:71-75)"
+
+  - id: errorReadout
+    type: readout
+    label_key: null
+    range: null
+    controls: {field: Error, action: null}
+    elements:
+      - {value: 0, name: OK}
+      - {value: 1, name: NoPowerSupply}
+      - {value: 2, name: ErrorAC}
+    constraints: "confirmed via kg/b.java:236-284 dispatching ROOF_AIR_CONDITION_NO_POWER_SUPPLY_ID / _ERROR_AC_ID notifications (climate-stairs.md:89-92); fault-only, does not block further commands"
+
+  - id: installedLabel
+    type: label
+    label_key: null
+    range: null
+    controls: {field: Installed, action: null}
+    elements: null
+    constraints: "gates the whole screen/tile: boolArr index [6,7) of the 0x2002 state frame, wired straight into ViewModel's te.k.b4() StateFlow (kg/b.java:96,105,178) — confirmed data-driven per-vehicle flag, see docs/business-logic/feature-availability.md table row 'RoofAirCondition'"
+icons:
+  - drawable/air_heater02
+  - drawable/snowflake
+  - drawable/heating_cooling_timer
+  - drawable/pop_up_roof
+notes: >
+  No composeResources string keys were found containing "roofAirCondition" /
+  "airCondition" as a UI-copy prefix (checked case-insensitively across the
+  whole decompiled tree) — labels for Mode/FanSpeed values are resolved
+  dynamically via the kj/a.java + kj/b.java "WithText" wrapper data classes
+  rather than embedded as static per-value resource keys. Business-logic
+  facts above (enum values, setter names/line numbers, full-packet-resend
+  rule, error codes) are all cross-checked against
+  docs/business-logic/climate-stairs.md's "RoofAirCondition" section, which
+  is the authoritative source — this YAML restates only what's needed for
+  GUI layout. HeatingAndCoolingTimerScreen (a separate nav destination,
+  shared with airheater/cooler timers) is documented in vehicle-info.yaml as
+  a cross-feature shared component, not duplicated here.

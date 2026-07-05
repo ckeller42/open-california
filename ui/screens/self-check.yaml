@@ -1,0 +1,77 @@
+# Self-check / pre-trip checklist feature. Own nav graph (NavigationSelfCheck),
+# reachable from home.yaml's selfCheckWidget, and also a top-level module
+# (NavigationModule$SelfCheckModule) — see README navigation section.
+#   com/californiaontour/connectivityui/graphs/NavigationSelfCheck$SelfCheckListScreen.java
+#   com/californiaontour/connectivityui/graphs/NavigationSelfCheck$SelfCheckScreen.java
+#   com/californiaontour/connectivityui/graphs/NavigationSelfCheck$SelfCheckExitScreen.java
+screen: self-check
+title_key: selfCheck_pageTitle_selfCheck_text
+function: null
+widgets:
+  - id: menuSection
+    type: section
+    label_key: selfCheck_menuSection_californiaChecklistsColon_text
+    range: null
+    controls: null
+    elements: [selfCheck_menuSection_yourListsColon_text, selfCheck_menuSection_noTasksColon_text]
+
+  - id: checklistSection
+    type: section
+    label_key: selfCheck_checklistSection_openTasksColon_text
+    range: null
+    controls: null
+    elements:
+      - selfCheck_checklistSection_completedTasksColon_text
+      - selfCheck_checklistSectionInfo_getStartedByChecking_text
+      - selfCheck_checklistSectionInfo_addTasksAndOrganize_text
+      - selfCheck_checklistSectionInfo_youHaveCompletedAll_text
+
+  - id: actionDialog
+    type: drawer
+    label_key: selfCheck_actionDialog_list_text
+    range: null
+    controls: null
+    elements: [selfCheck_actionDialog_edit_button, selfCheck_actionDialog_duplicate_button, selfCheck_actionDialog_reset_button, selfCheck_actionDialog_restart_button]
+
+  - id: editSection
+    type: section
+    label_key: selfCheck_editSection_listItems_text
+    range: null
+    controls: null
+    elements: [selfCheck_editSection_hiddenItems_text, selfCheck_editSectionInfo_switchingThe_Toggle_text]
+
+  - id: restartCheckButton
+    type: button
+    label_key: selfCheck_restartCheckButton_restartCheck_button
+    range: null
+    controls: null
+    elements: [selfCheck_restartHeadline_areYouSureYou_text, selfCheck_restartSubheadline_allChecksWillBe_text]
+
+  - id: tasksCompletedButton
+    type: button
+    label_key: selfCheck_tasksCompletedButton_checkCompletedExclamation_button
+    range: null
+    controls: null
+    elements: null
+
+  - id: disclaimerDialog
+    type: label
+    label_key: selfCheck_disclaimerDialog_theContentShownHere_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: exitScreen
+    type: nav
+    label_key: selfCheck_exitAllroundCheck_celebrationScreen_text
+    range: null
+    controls: null
+    elements: [selfCheck_goToOverviewButton_goToOverview_button]
+    target: home
+    constraints: "Maps to NavigationSelfCheck$SelfCheckExitScreen"
+icons: []
+notes: >
+  No self-check-prefixed drawables were found in the connectivity-ui
+  drawable set gathered for this task; icons likely come from
+  libraries.core_ui generic checkmark/list glyphs (checked, checked_filled,
+  list, edit, bin — see ui/assets/README.md "Generic UI chrome" section).

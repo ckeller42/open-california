@@ -1,0 +1,122 @@
+# Camping mode (parked-camping convenience preset: interior/outside lights,
+# USB chargers, alarm-sensor behavior while stationary).
+# Nav destination: NavigationConnectivity$CampingModeScreen
+#   com/californiaontour/connectivityui/graphs/NavigationConnectivity$CampingModeScreen.java
+# Full reverse-engineered business logic documented in
+# docs/business-logic/climate-stairs.md ("Campingmode" section) —
+# authoritative source for exact BLE recipes; this file is the GUI-shape
+# summary of it.
+# Service 0x1200, control char 0x1201, state char 0x1202. Control model is
+# the SAME shared class (lg.a/lg.b) used by roofaircondition, differentiated
+# by constructor path (tf/a.java:74, using the (jn.b, tf.a, xm.a) overload of
+# lg/a.java:26-34). Feature ViewModel tf/a.java implements xe.a.
+screen: camping-mode
+title_key: campingMode_pageTitle_campingMode_text
+function: campingmode
+widgets:
+  - id: powerToggle
+    type: toggle
+    label_key: null
+    range: null
+    controls: {field: State, action: X1}
+    elements: [campingMode_disabledState_disabled_text, campingMode_enabledState_enabled_text]
+    constraints: "tf/a.java:211-220 z2(boolean on) -> State = on?1:0. Overall camping-mode on/off."
+
+  - id: usbChargerToggle
+    type: toggle
+    label_key: campingMode_rearUsbPorts_text
+    range: null
+    controls: {field: UsbCharger, action: X1}
+    elements: null
+    constraints: "tf/a.java:94-103 B2(boolean on) -> UsbCharger = on?1:0"
+
+  - id: allLightsToggle
+    type: toggle
+    label_key: null
+    range: null
+    controls: {field: OutsideLight, action: X1}
+    elements: null
+    constraints: >
+      tf/a.java:110-121 K0(boolean on) sets BOTH OutsideLight AND
+      InteriorLight together (no independent per-light control exists in
+      this interface): on=true writes 0 to both fields, on=false writes 1
+      to both. Polarity is inverted from what you'd expect — presented
+      exactly as coded, UNVERIFIED which raw value the vehicle interprets
+      as "lit". Derived readback flag tf/a.java:185-188 m2() = true iff both
+      lights currently read back false — this is almost certainly the value
+      shown/bound to this single "lights" toggle (climate-stairs.md:246-249).
+      Modeled as ONE toggle (not two), matching K0's combined-write behavior.
+
+  - id: interiorLightState
+    type: label
+    label_key: null
+    range: null
+    controls: {field: InteriorLight, action: null}
+    elements: null
+    constraints: "Same field written by K0 above; no independent setter exists — read-only for display purposes distinct from allLightsToggle's combined write"
+
+  - id: behaviorInfoSection
+    type: section
+    label_key: null
+    range: null
+    controls: null
+    elements:
+      - campingMode_lightingAndUsbWillBehave_text
+      - campingMode_lightingWillBehave_text
+      - campingMode_openingFrontDoorTriggers_text
+      - campingMode_seeAlsoLightingAndSlidingDoor_text
+      - campingMode_tipInteriorMonitoringAlarm_text
+
+  - id: alarmDisclaimerDrawer
+    type: drawer
+    label_key: campingMode_alarmPopUp_disclaimerTitle_text
+    range: null
+    controls: null
+    elements: [campingMode_alarmPopUp_disclaimerDescription_text, campingMode_alarmPopUp_disclaimerDescription_text_gc]
+    constraints: "_gc suffix variant likely = Grand California trim-specific copy"
+
+  - id: onlyPossibleWhenStationaryDialog
+    type: label
+    label_key: dialog_info_campingMode_onlyPossibleWhenStationary_headline
+    range: null
+    controls: null
+    elements: [dialog_info_campingMode_onlyPossibleWhenStationary_text]
+
+  - id: infoPage
+    type: nav
+    label_key: infoPage_campingMode_pageTitle
+    range: null
+    controls: null
+    elements: [infoPage_campingMode_headline, infoPage_campingMode_description]
+
+  - id: dashboardTileLabel
+    type: label
+    label_key: vehiclePage_remoteControlWidget_campingMode_text
+    range: null
+    controls: null
+    elements: null
+    constraints: "home-screen quick-access tile label, cf. home.yaml remoteControlWidget"
+icons:
+  - drawable/campingmode
+  - drawable/campinginfo
+  - drawable/camping_lights_on
+notes: >
+  All four control fields ride the same 1201 BLE characteristic and are
+  resent together on every change (full-packet-resend rule, see
+  docs/business-logic/climate-stairs.md's shared-plumbing section).
+  "Enable"/"Installed" state_fields (offset 3/2) are hardware-availability
+  flags, not user-facing toggles. There is a dead stub `q0(boolean)`
+  (tf/a.java:207-209) that touches no field — an apparent leftover from an
+  earlier build that used to write the read-only `Enable` bit; no working
+  app-level command exists for it (climate-stairs.md:230-232).
+  IMPORTANT UX fact (docs/business-logic/feature-availability.md §2a):
+  Campingmode's `Installed` bit (index [2,3) of the 0x1202 frame) IS decoded
+  and logged but is NEVER wired into the te.k.b4() StateFlow the
+  screen/dashboard uses to decide visibility (tf/a.java:91,121-141 hardcodes
+  `Boolean.TRUE`) — the app shows this screen/tile UNCONDITIONALLY regardless
+  of the reported Installed value. A faithful replica should do the same
+  (always show camping-mode.yaml), not gate it on the Installed bit the way
+  every other feature screen in this task is gated. Business-logic facts
+  above are cross-checked against docs/business-logic/climate-stairs.md's
+  "Campingmode" section, which is the authoritative source — this YAML
+  restates only what's needed for GUI layout.

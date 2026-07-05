@@ -1,0 +1,307 @@
+# Extracted from VW CaliforniaOnTour app decompile (string-key harvest).
+# Deep link route observed: californiaontour://app/vehicle/lighting
+# Key families (variant suffixes reflect different camper generations sharing
+# one screen implementation with per-model zone layouts):
+#   <no suffix>   = base / T6.1 Multivan-style layout (outerLights, kitchen)
+#   _t6           = "T6" layout (livingArea, popupRoof, rear sections)
+#   _gc           = "Grand California" layout (interiorLighting, readingLights,
+#                   exteriorLight sections; also the only variant with the
+#                   wake-up-light colour picker)
+# All zone brightness sliders map to the 16-zone BrightnessLOne..BrightnessLOneSix
+# control fields (control char 1501, source eg/a.java); order of the 16 zones to
+# vehicle areas is UNVERIFIED (needs live-traffic capture to confirm which zone
+# index corresponds to which named area, per generation).
+screen: lighting
+title_key: lighting_pageTitle_lighting_text
+function: lighting  # service 1500/1502, control 1501 (eg/a.java) — see dictionary control_models_unresolved
+widgets:
+  - id: pageHeader
+    type: label
+    label_key: lighting_pageTitle_lighting_text
+    range: null
+    controls: null
+    elements: [lighting_pageTitle, lighting_headline, lighting_text]
+    constraints: null
+
+  - id: allLightsToggle
+    type: toggle
+    label_key: lighting_mainSection_allLights_text
+    range: null
+    controls: {field: null, action: null}
+    elements: null
+    constraints: "Convenience toggle; likely fans out to all 16 BrightnessL* fields at once rather than a single dictionary field. UNVERIFIED."
+
+  - id: profileSelector
+    type: drawer
+    label_key: lighting_mainSection_profile_text
+    range: "0..63"
+    controls: {field: ProfileNumber, action: SET_PROFILE}
+    elements: [LIGHTING_PROFILE_EMPTY_DIALOG, lighting_noAreaChosen_headline, lighting_noAreaChosen_text]
+    constraints: "ProfileNumber is a 6-bit field (offset 14, width 6 in eg/a.java) -> up to 64 stored lighting profiles. Empty-state dialog shown when no profile saved yet."
+
+  - id: sectionInteriorLighting_gc
+    type: section
+    label_key: lighting_interiorLighting_sectionTitle_interiorLighting_text_gc
+    range: null
+    controls: null
+    elements:
+      - lighting_interiorLighting_SectionLight_backgroundLighting_text_gc
+      - lighting_interiorLighting_SectionLight_bathroom_text_gc
+      - lighting_interiorLighting_SectionLight_diningArea_text_gc
+      - lighting_interiorLighting_SectionLight_kitchen_text_gc
+      - lighting_interiorLighting_SectionLight_livingArea_text_gc
+    constraints: "Grand California layout. Subline: lighting_interiorLighting_SectionLightSubline_adjustLightColour_text (zones here support colour, not just brightness)."
+
+  - id: sectionLivingArea_t6
+    type: section
+    label_key: lighting_livingArea_sectionTitle_livingArea_text_t6
+    range: null
+    controls: null
+    elements:
+      - lighting_livingArea_sectionLight_ambientLighting_text_t6
+      - lighting_livingArea_sectionLight_kitchen_text_t6
+      - lighting_livingArea_sectionLight_Left_text_t6
+      - lighting_livingArea_sectionLight_right_text_t6
+      - lighting_livingArea_sectionLight_roomleft_text_t6
+    constraints: "T6 layout equivalent of interiorLighting."
+
+  - id: sectionKitchen
+    type: section
+    label_key: lighting_kitchen_sectionTitle_kitchen_text
+    range: null
+    controls: null
+    elements:
+      - lighting_kitchen_SectionLight_backgroundLighting_text
+      - lighting_kitchen_SectionLight_cooking_text
+    constraints: "Base layout; kitchen broken out as its own section instead of nested under interiorLighting/livingArea."
+
+  - id: sectionReadingLights
+    type: section
+    label_key: lighting_readingLights_sectionTitle_readingLights_text
+    range: null
+    controls: null
+    elements:
+      - lighting_readingLights_SectionLight_frontArea_text_gc
+      - lighting_readingLights_SectionLight_frontPassenger_text
+      - lighting_readingLights_SectionLight_left_text
+      - lighting_readingLights_SectionLight_left_text_gc
+      - lighting_readingLights_SectionLight_loftBed_text_gc
+      - lighting_readingLights_SectionLight_right_text
+      - lighting_readingLights_SectionLight_right_text_gc
+    constraints: "Base and _gc variants both present; _gc adds loftBed / frontArea zones specific to Grand California."
+
+  - id: sectionPopupRoof
+    type: section
+    label_key: lighting_popupRoof_sectionTitle_PopupRoof_text
+    range: null
+    controls: null
+    elements:
+      - lighting_popupRoof_SectionLight_backgroundLighting_text
+      - lighting_popupRoof_SectionLight_left_text_t6
+      - lighting_popupRoof_SectionLight_readingLight_text
+      - lighting_popupRoof_SectionLight_right_text_t6
+    constraints: "Subline: lighting_popupRoof_SectionLightSubline_onlyAvailableWhenPopUpRoof_text (only shown/enabled when pop-up roof installed)."
+
+  - id: sectionRear_t6
+    type: section
+    label_key: lighting_rear_sectionTitle_rear_text_t6
+    range: null
+    controls: null
+    elements:
+      - lighting_rear_sectionLight_bootLid_text_t6
+      - lighting_rear_sectionLight_luggaggeCompartment_text_t6
+    constraints: null
+
+  - id: sectionExteriorLight_gc
+    type: section
+    label_key: lighting_exteriorLight_sectionTitle_exteriorLight_text_gc
+    range: null
+    controls: null
+    elements:
+      - lighting_exteriorLight_SectionLight_entrance_text_gc
+      - lighting_exteriorLight_SectionLight_luggageCompartment_text_gc
+    constraints: "Subline: lighting_exteriorLight_SectionLightSubline_onlyAvailableWhenCamping_text_gc (only while in camping mode)."
+
+  - id: sectionOuterLights
+    type: section
+    label_key: lighting_outerLights_sectionTitle_outerLights_text
+    range: null
+    controls: null
+    elements:
+      - lighting_outerLights_SectionLight_entrance_text
+      - lighting_outerLights_SectionLight_rearSurroundings_text
+    constraints: "Subline: lighting_outerLights_SectionLightSubline_onlyAvailableWhenCamping_text. General constraint across all zone sections: lighting_general_SectionLightSubline_onlyAvailableWhenEngineOff_text (some zones only adjustable with engine off)."
+
+  - id: zoneBrightnessSlider
+    type: slider
+    label_key: lighting_dimValue_general_text
+    range: "0..63"
+    controls: {field: "BrightnessLOne..BrightnessLOneSix (per selected zone, index-to-area mapping UNVERIFIED)", action: SET_BRIGHTNESS}
+    elements: null
+    constraints: "Per-zone brightness slider shown when a SectionLight row is expanded/tapped; long-press behavior: lighting_pleasePressAndHold_headline / lighting_pleasePressAndHold_text."
+
+  - id: zoneColorPicker
+    type: colorpicker
+    label_key: null
+    range: "0..7 (3-bit LightValue field; 10 named colors listed so exact enum mapping UNVERIFIED)"
+    controls: {field: LightValue, action: SET_COLOR}
+    elements:
+      - lighting_lightColor_amber_text
+      - lighting_lightColor_azure_text
+      - lighting_lightColor_bloodOrange_text
+      - lighting_lightColor_darkBlue_text
+      - lighting_lightColor_mint_text
+      - lighting_lightColor_peppermint_text
+      - lighting_lightColor_pistachio_text
+      - lighting_lightColor_red_text
+      - lighting_lightColor_salmon_text
+      - lighting_lightColor_warmWhite_text
+    constraints: "Shown for zones marked colour-adjustable (see interiorLighting subline)."
+
+  - id: functionsAndSettingsMenu
+    type: section
+    label_key: lighting_functionsAndSettings_sectionTitle_functionsAndSettings_text
+    range: null
+    controls: null
+    elements:
+      - lighting_functionsAndSettings_function_lightingAndSlidingDoor_text
+      - lighting_functionsAndSettings_function_wakeUpLight_text
+      - lighting_functionsAndSettings_setting_lightingDoubleTap_text
+      - lighting_functionsAndSettings_setting_resetVehicleTo_text
+      - lighting_functionsAndSettings_setting_roofConsole_text
+    constraints: "Nav list to sub-drawers/pages: wakeUpLight, doubleTap, roofConsole, lightingAndSlidingDoor, factorySetting (each modeled as its own widget below)."
+
+  - id: wakeUpLight
+    type: drawer
+    label_key: lighting_wakeUpLight_pageTitle_wakeUpLight_text
+    range: null
+    controls: {field: Timestamp, action: WAKEUP_TIME}
+    elements:
+      - lighting_wakeUpLight_section_wakeUpLight_text
+      - lighting_wakeUpLight_section_wakeUpTime_text
+      - lighting_wakeUpLight_section_brightness_text
+      - lighting_wakeUpLight_section_leadTime_text
+      - lighting_wakeUpLight_section_vehicleArea_text
+      - lighting_wakeUpLight_section_adjustLightColour_text_gc
+      - lighting_wakeUpLight_sliderWidget_brightness_text
+      - lighting_wakeUpLight_sliderWidget_leadTime_text
+      - lighting_wakeUpLight_timerWidget_time_text
+      - lighting_wakeUpLight_drawerHeadline_wakeUpTime_text
+      - lighting_wakeUpLight_drawerText_time_text
+      - lighting_wakeUpLight_listItem_backgroundLighting_text_gc
+      - lighting_wakeUpLight_listItem_kitchenBackgroundLighting_text
+      - lighting_wakeUpLight_listItem_livingArea_text_gc
+      - lighting_wakeUpLight_listItem_livingAreaReading_text
+      - lighting_wakeUpLight_listItem_loftBed_text_gc
+      - lighting_wakeUpLight_listItem_popUpRoofBackground_text
+      - lighting_wakeUpLight_listItem_popUpRoofReading_text
+      - lighting_wakeUpLight_listItem_sleepingArea_text_gc
+      - lighting_wakeUpLight_colour_amber_text_gc
+      - lighting_wakeUpLight_colour_azure_text_gc
+      - lighting_wakeUpLight_colour_bloodOrange_text_gc
+      - lighting_wakeUpLight_colour_darkBlue_text_gc
+      - lighting_wakeUpLight_colour_mint_text_gc
+      - lighting_wakeUpLight_colour_peppermint_text_gc
+      - lighting_wakeUpLight_colour_pistachio_text_gc
+      - lighting_wakeUpLight_colour_red_text_gc
+      - lighting_wakeUpLight_colour_salmon_text_gc
+      - lighting_wakeUpLight_colour_warmWhite_text_gc
+      - lighting_wakeUpLight_description_lightsThatSwitch_text
+      - lighting_wakeUpLight_description_periodInWhich_text
+      - lighting_wakeUpLight_description_selectedBrightnessOf_text
+      - lighting_wakeUpLight_description_timeAtWhich_text
+      - lighting_wakeUpLight_description_toBeWoken_text
+      - lighting_wakeUpLight_wakeUpLightPreview_button
+      - lighting_wakeUpLight_wakeUpLightPreview_button_disbaled
+    constraints: "Sub-screen (SLIDER_FOR_WAKE_UP_LIGHT_BRIGHTNESS in lr/a.java confirms distinct slider id from main SLIDER_FOR_LIGHTS_BRIGHTNESS). vehicleArea picker chooses which zone(s) light up at wake time (mirrors zone list, gc-only colour picker). Preview button maps to PREVIEW command enum; brightness slider -> SET_BRIGHTNESS; time/lead-time -> WAKEUP_TIME."
+
+  - id: doubleTapSettings
+    type: drawer
+    label_key: lighting_functionsAndSettings_setting_lightingDoubleTap_text
+    range: null
+    controls: {field: null, action: SET_DOUBLE}
+    elements:
+      - lighting_doubleTap_configureOperation_text
+      - lighting_doubleTap_doubleTapSpeed_text
+      - lighting_doubleTap_doubleTapTheReadingLight_text
+      - lighting_doubleTap_lightingDoubleTap_text
+      - lighting_doubleTap_speedFast_text
+      - lighting_doubleTap_speedSlow_text
+    constraints: "Configures double-tap-to-toggle behavior + speed (fast/slow) on reading lights. No dedicated dictionary state/control field identified beyond the SET_DOUBLE command enum; UNVERIFIED."
+
+  - id: roofConsoleSettings
+    type: drawer
+    label_key: lighting_functionsAndSettings_setting_roofConsole_text
+    range: null
+    controls: {field: null, action: null}
+    elements:
+      - lighting_roofConsole_applyLightingConfiguration_text
+      - lighting_roofConsole_configureRoofConsoleLightSwitch_text
+      - lighting_roofConsole_roofConsoleLightSwitch_text
+      - lighting_roofConsole_saveLightSetting_button
+    constraints: "Icon RoofConsoleSwitch present in drawables (x2/e.java). No dictionary field identified."
+
+  - id: lightingAndSlidingDoor
+    type: drawer
+    label_key: lighting_functionsAndSettings_function_lightingAndSlidingDoor_text
+    range: null
+    controls: {field: null, action: null}
+    elements:
+      - lighting_lightingAndSlidingDoor_applyTheCurrentConfigurationFor_text
+      - lighting_lightingAndSlidingDoor_disabled_text
+      - lighting_lightingAndSlidingDoor_enabled_text
+      - lighting_lightingAndSlidingDoor_lightingWhenSlidingDoorOpens_text
+      - lighting_lightingAndSlidingDoor_lightingWhenSlidingDoorOpensWithCamping_text
+      - lighting_lightingAndSlidingDoor_openingSlidingDoorTriggers_text
+      - lighting_lightingAndSlidingDoor_saveLightSetting_button
+      - lighting_lightingAndSlidingDoor_theLightThatComesOnWhenTheSliding_text
+    constraints: "Enabled/disabled toggle for which light comes on when sliding door opens (camping-mode variant text also present)."
+
+  - id: factorySettingReset
+    type: button
+    label_key: lighting_factorySetting_reset_button
+    range: null
+    controls: {field: null, action: null}
+    elements:
+      - lighting_factorySetting_dialog_allLightingSettingsWillBeReset_text
+      - lighting_factorySetting_dialog_resetLightToFactorySettings_text
+      - lighting_factorySetting_generalLightingSettings_text
+      - lighting_factorySetting_generalLightingSettingsWakeUpLight_text
+      - lighting_factorySetting_ifTheFactorySettingsAreRestored_text
+      - lighting_factorySetting_toast_configurationFailed_text
+      - lighting_factorySetting_toast_configurationSuccessful_text
+      - lighting_factorySetting_toast_theLightSettingsCouldNotBeReset_text
+      - lighting_factorySetting_toast_youHaveResetYourLightSettings_text
+    constraints: "Confirm dialog + success/failure toasts for resetting all lighting (incl. wake-up light) to factory defaults."
+
+  - id: infoTutorialOverlay
+    type: label
+    label_key: infoPage_lighting_pageTitle
+    range: null
+    controls: null
+    elements: [infoPage_lighting_headline, infoPage_lighting_description, infoPage_lighting_descriptionNoProfiles]
+    constraints: "Onboarding tooltip carousel shown on first visit (uses shared infoPage_general_back/close/next/skip_button chrome), not the live control screen itself."
+
+icons:
+  - lights_ambiente_off
+  - lights_ambiente_on
+  - lights_off
+  - lights_on_filled
+  - camping_lights_on
+  - bulb_info
+  - profile
+  - profile_dimmed
+  - profile_filled_blue
+
+notes: >
+  Richest of the three screens. Zone brightness sliders and the color picker are
+  the only widgets with a confident protocol mapping (BrightnessLOne..OneSix /
+  SET_BRIGHTNESS, LightValue / SET_COLOR, ProfileNumber / SET_PROFILE via control
+  char 1501, eg/a.java). Command enum (dg_n): NO_MODE, PREVIEW, REQUEST_CONFIG,
+  SET_BRIGHTNESS, SET_COLOR, SET_DOUBLE, SET_PROFILE, SYSTEM_TIME, WAKEUP_TIME —
+  every one of these maps to a widget found here (PREVIEW->wake-up preview button,
+  SET_DOUBLE->double-tap settings, SYSTEM_TIME/WAKEUP_TIME->wake-up timer).
+  Section layout differs by vehicle generation (base/_t6/_gc suffixes); a replica
+  GUI should probably pick one generation's layout (recommend _gc, most complete)
+  rather than union all sections. Zone-index-to-BrightnessL* mapping still needs
+  live traffic capture to verify (see dictionary.yaml control_models_unresolved).

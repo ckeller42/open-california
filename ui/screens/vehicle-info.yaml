@@ -1,0 +1,132 @@
+# Secondary "more about your vehicle" area reachable from home.yaml
+# (overviewWidget "seeAllInfo" / helpWidget). Bundles several small nav
+# destinations from the connectivityui graph that don't warrant their own
+# top-level file:
+#   NavigationConnectivity$VehicleDataScreen      - full vehicle spec/equipment list
+#   NavigationConnectivity$VehicleDataMenuScreen   - category menu into the above
+#   NavigationConnectivity$VehicleInfo             - graph route grouping node
+#   NavigationConnectivity$HowToAndInfoScreen      - how-to videos / manuals / find service
+#   NavigationConnectivity$LevelIndicatorScreen    - vehicle tilt/leveling display
+#   NavigationConnectivity$HeatingAndCoolingTimerScreen - shared timer UI used by
+#                                                    airheater/cooler/roofaircondition
+screen: vehicle-info
+title_key: howToAndInfo_titleBar_pageTitle_text
+function: null
+widgets:
+  - id: howToVideosSection
+    type: section
+    label_key: howToAndInfo_howToVideos_title_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: vehicleCardAccessoriesNav
+    type: nav
+    label_key: howToAndInfo_vehicleCard_accessories_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: vehicleCardFindServiceNav
+    type: nav
+    label_key: howToAndInfo_vehicleCard_findService_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: vehicleCardMoreInfoNav
+    type: nav
+    label_key: howToAndInfo_vehicleCard_moreInfo_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: vehicleDataSpecList
+    type: list
+    label_key: null
+    range: null
+    controls: null
+    elements:
+      - Vehicle_Category_Roof_Name / Vehicle_Category_Roof_ShortName
+      - Vehicle_Property_RoofMaterial_Name / _Value_T5_T60_T61
+      - Vehicle_Property_RoofSpeed_Name / RoofSpeedElectric_Name
+      - Vehicle_Property_HeightOpenRoof_Name / HeightInsideOpenRoof_Name
+      - Vehicle_Property_PermissibleRoofLoad_Name / PermissibleRoofLoadClosed_Name
+      - Vehicle_Property_AllowedLoadBedInRoof_Name / AllowedLoadClosedRoof_Name / AllowedLoadRoofStorageBox_Name
+      - Vehicle_Property_BedSurfaceInRoof_Name
+      - Vehicle_Property_RoofWaterResistance_Name
+      - Vehicle_Property_RoofStorageBoxVolume_Name
+      - Vehicle_Property_SquattingHeightFullroof_Name / SquattingHeightPanoramaroof_Name
+    constraints: >
+      Read-only spec/equipment catalog (per-trim values suffixed _T5_T60_T61 /
+      _Caddy5 / _C5Maxi / _C5Short etc.) — this is the likely (unconfirmed)
+      destination for pop-up-roof-family equipment details referenced from
+      home.yaml, but no composable enumerating "Roof screen -> here" edge was
+      found; only the shared string-key prefixes co-exist in the same
+      connectivity_ui resource module.
+
+  - id: levelIndicatorReadout
+    type: readout
+    label_key: infoPage_levellingDisplay_pageTitle
+    range: null
+    controls: {field: CarLevelRoll, action: null}
+    elements: [infoPage_levellingDisplay_headline, infoPage_levellingDisplay_description, CarLevelPitch, CarLevelPopUp]
+    constraints: >
+      CONFIRMED (docs/business-logic/feature-availability.md §2d): NOT a
+      separate BLE characteristic — derived from the always-on "General"
+      handshake service 0x1000, characteristic 0x1004 (zf/d.java), fields
+      CarLevelRoll/CarLevelPitch (exposed via ye.a.R1()/ye.a.F3(),
+      zf/d.java:196-204) and CarLevelPopUp (ye.a.t3()/ye.a.B4(),
+      zf/d.java:160-161,363-366). Since it rides the always-true General
+      handshake (b4() hardcoded Boolean.TRUE, zf/d.java:155,222-224), this
+      widget should be treated as ALWAYS available, unlike every
+      Installed-bit-gated feature screen in this task.
+
+  - id: vehicleHandshakeSection
+    type: section
+    label_key: null
+    range: null
+    controls: null
+    elements:
+      - {label: "Firmware version", fields: [AmbSwVersion, CmSwVersion, CommunicationVersion], char: "0x1001", source: "zf/d.java:232-243"}
+      - {label: "VIN", fields: [Vin], char: "0x1002 (128-bit)", source: "zf/d.java:247-252", note: "cross-ref connectivity.yaml vinFlow_* add-vehicle flow"}
+      - {label: "Vehicle status", fields: [TerminalOneFive, CarLevelPopUp, CarVariant, car clock, CarLevelRoll, CarLevelPitch], char: "0x1004", source: "zf/d.java:266-303"}
+    constraints: >
+      This is protocol/dictionary.yaml's "general" function (state_services
+      [1000,1001,1002,1004], dictionary.yaml:104-107 — currently undecoded
+      there). Always-on (b4() hardcoded true), read first on every connect,
+      before any accessory function (pf/k.java constructor order). CarVariant
+      decodes to CALIFORNIA_6_1/CALIFORNIA_7/GRAND_CALIFORNIA (te/a.java)
+      but per feature-availability.md §2e is NOT a reliable feature-gating
+      signal — do not use vehicle model to decide which of this task's
+      screens (roof/roof-air-condition/satellite-antenna/stairs/camping-mode)
+      to show; use each feature's own Installed bit instead (see each
+      screen's installedLabel widget).
+
+  - id: heatingCoolingTimerNav
+    type: nav
+    label_key: infoPage_timer_pageTitle
+    range: null
+    controls: null
+    elements: [infoPage_timer_headline, infoPage_timer_description]
+    constraints: "Shared timer editor reused by airheater/cooler (TimerHour/TimerMin/NightTimer* fields) and roofaircondition; owned jointly, documented here as the shell entry point only"
+icons:
+  - drawable/level
+  - drawable/level_grid_indicator
+  - drawable/level_indicator
+  - drawable/level_indicator_green
+  - drawable/level_state
+  - drawable/level_state_disabled
+  - drawable/level_state_green
+  - drawable/level_state_green_disabled
+  - drawable/heating_cooling_timer
+  - drawable/manual
+  - drawable/service
+  - drawable/dimensions
+notes: >
+  This file groups several small/structural nav destinations rather than
+  one single screen, because none of them had enough distinct evidence to
+  justify a full file on their own. VehicleDataMenuScreen presumably lists
+  category tiles (one of which is Vehicle_Category_Roof_Name and similar
+  per-function categories for cooler/heater/lighting/etc., owned by other
+  agents) leading into VehicleDataScreen's flat spec list.

@@ -1,0 +1,149 @@
+# "Vehicle" tab — the main dashboard/home screen shown after connecting to
+# the camper. This is the landing page of the bottom-tab-bar "vehicle"
+# destination (common_tabBar_vehicle_button, see README navigation section).
+# Nav destination: NavigationConnectivity$Vehicle / $VehicleInfo (graph root)
+#   com/californiaontour/connectivityui/graphs/NavigationConnectivity$Vehicle.java
+#   com/californiaontour/connectivityui/graphs/NavigationConnectivity$VehicleInfo.java
+# Composable evidence: x9/q.java (contains all vehiclePage_* / goToVehiclePage
+# / vehiclePage string-key accessors), same string-registry pattern as
+# x9/q.java:97 ("string:vehiclePage_remoteControlWidget_step_text").
+screen: home
+title_key: vehiclePage_pageTitle_vehicle_text
+function: null
+widgets:
+  - id: connectHeader
+    type: button
+    label_key: vehiclePage_header_connect_button
+    range: null
+    controls: null
+    elements: [vehiclePage_header_disconnect_button, vehiclePage_connectButton_setUpRemoteControl_button]
+    constraints: "Header shows connect/disconnect depending on current BLE link state; see connectivity.yaml for the pairing flow itself"
+
+  - id: disconnectedInfoWidget
+    type: label
+    label_key: vehiclePage_disconnectedInfoWidget_connectTheAppToTheVehicle_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: firstTimeDrawer
+    type: drawer
+    label_key: vehiclePage_firstTimeDrawer_connectYourVehicle_text
+    range: null
+    controls: null
+    elements:
+      - vehiclePage_firstTimeDrawer_quickAccesTo_text
+      - vehiclePage_firstTimeDrawer_remoteControlFunctionality_text
+      - vehiclePage_firstTimeDrawer_featureAvailability_text
+      - vehiclePage_firstTimeDrawer_UpToDate_text
+
+  - id: vehicleNotEnrolledTile
+    type: nav
+    label_key: vehiclePage_vehicleNotEnrolledTile_addVehicle_text
+    range: null
+    controls: null
+    elements: [vehiclePage_vehicleNotEnrolledTile_haveEasyAccess_text, vehiclePage_vehicleNotEnrolledTile_theCaliforniaApp_text]
+    target: connectivity
+    constraints: "Leads into the VIN add-vehicle flow, see connectivity.yaml (vinFlow_*)"
+
+  - id: overviewWidget
+    type: section
+    label_key: vehiclePage_overviewWidget_vehicleOverview_text
+    range: null
+    controls: null
+    elements:
+      - {label: vehiclePage_overviewWidget_secondBattery_text, target: energy, note: "full widget spec + field mapping owned by energy.yaml (dashboardSummaryTile)"}
+      - {label: vehiclePage_overviewWidget_freshWater_text, target: water, note: "full widget spec + field mapping owned by water.yaml (freshWaterTank)"}
+      - {label: vehiclePage_overviewWidget_wasteWater_text, target: water, note: "full widget spec + field mapping owned by water.yaml (wasteWaterTank)"}
+      - {label: vehiclePage_overviewWidget_allInfos_issues_text}
+      - {label: vehiclePage_overviewWidget_seeAllInfo_text, type: nav, target: vehicle-info}
+    constraints: "This dashboard section is just tile placement; see energy.yaml and water.yaml for the authoritative per-field widget breakdown (energy_textHour/Minute, freshwater_kfg1/water_kfg2, Empty/Full labels all documented there)."
+
+  - id: remoteControlWidget
+    type: nav
+    label_key: vehiclePage_remoteControlWidget_remoteControl_text
+    range: null
+    controls: null
+    elements:
+      - {label: vehiclePage_remoteControlWidget_airHeater_text, target: air-heater}
+      - {label: vehiclePage_remoteControlWidget_livingRoomHeater_text, target: living-room-heater}
+      - {label: vehiclePage_remoteControlWidget_coolbox_text, target: coolbox}
+      - {label: vehiclePage_remoteControlWidget_heatingAndCooling_text, target: roof-air-condition}
+      - {label: vehiclePage_remoteControlWidget_hotWater_text, target: water}
+      - {label: vehiclePage_remoteControlWidget_lighting_text, target: lighting}
+      - {label: vehiclePage_remoteControlWidget_campingMode_text, target: camping-mode}
+      - {label: vehiclePage_remoteControlWidget_step_text, target: stairs}
+    constraints: >
+      Exactly 9 keys exist under vehiclePage_remoteControlWidget_* (x9/q.java) —
+      only 8 map to feature screens; the 9th (vehiclePage_remoteControlWidget_remoteControl_text)
+      is this widget's own section header, not a tile. Roof (pop-up roof) and
+      Satellite Antenna have NO matching remoteControlWidget key — they are
+      reachable some other way (most likely vehicle-info.yaml's full function
+      list / VehicleDataMenuScreen). The reachability *path* is still
+      UNCONFIRMED (no menu-enumeration composable was resolvable from the
+      R8-obfuscated sources), but per-vehicle *visibility* of every tile here
+      IS confirmed data-driven: each feature has a 1-bit "Installed" flag in
+      its own BLE state frame, wired straight to the screen's visibility flow
+      (te.k.b4()) — see docs/business-logic/feature-availability.md. This
+      task's 5 screens split three ways on that mechanism: RoofAirCondition/
+      SatelliteAntenna/Stairs are genuinely Installed-bit-gated (confirmed
+      bit index, see each screen's installedLabel widget); Roof (pop-up)
+      is *likely* gated but the exact bit is UNVERIFIED (JADX couldn't
+      decompile the decode method, feature-availability.md §2b); Camping
+      Mode's Installed bit is decoded but never wired up — it is shown
+      UNCONDITIONALLY regardless of equipment (feature-availability.md §2a).
+      Do NOT use vehicle model/CarVariant to decide what to show (see
+      vehicle-info.yaml's vehicleHandshakeSection) — use each feature's own
+      Installed bit instead.
+
+  - id: remoteControlTooltip
+    type: label
+    label_key: vehiclePage_remoteControlTooltip_quickActions_text
+    range: null
+    controls: null
+    elements: [vehiclePage_remoteControlTooltip_whenAnIconHasACircleAroundIt_text]
+
+  - id: remoteControlStatusLabel
+    type: label
+    label_key: vehiclePage_remoteControlStatus_SetTo_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: selfCheckWidget
+    type: nav
+    label_key: vehiclePage_selfCheckWidget_selfCheck_text
+    range: null
+    controls: null
+    elements: [vehiclePage_selfCheckWidget_seeAllChecklists_text]
+    target: self-check
+
+  - id: helpWidget
+    type: list
+    label_key: vehiclePage_helpWidget_help_text
+    range: null
+    controls: null
+    elements: [vehiclePage_helpWidget_onlineManual_text, vehiclePage_helpWidget_technicalInformation_text]
+    target: vehicle-info
+
+  - id: errorWarningLabels
+    type: label
+    label_key: vehiclePage_label_error_text
+    range: null
+    controls: null
+    elements: [vehiclePage_label_warning_text]
+icons:
+  - drawable/level
+  - drawable/vehiclepower
+  - drawable/vehicle_status_charging
+  - drawable/vehicle_status_shore_power
+  - drawable/vehicle_status_solar
+  - drawable/freshwater
+  - drawable/remote
+  - drawable/california_remote
+notes: >
+  This is the single richest screen for cross-feature navigation — every
+  other connectivity-ui feature screen (this agent's + coolbox/air-heater/
+  lighting/energy/water owned elsewhere) is reachable from here via the
+  remoteControlWidget grid. See README.md navigation section for the full
+  tab-bar + drawer structure this screen sits inside.

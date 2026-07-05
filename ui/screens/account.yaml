@@ -1,0 +1,128 @@
+# Account tab (bottom nav "common_tabBar_account_button", ga/c.java:123 —
+# same string-registry accessor pattern used for all 5 tab-bar labels).
+# Nav graph: com.californiaontour.account.graph.NavigationAccount
+#   NavigationAccount$AccountScreen.java        - main menu (this file)
+#   NavigationAccount$MyProfileScreen.java       - profile/login details
+#   NavigationAccount$MyCaliforniaScreen.java    - vehicle management (delete/reset)
+#   NavigationAccount$FaqScreen.java             - FAQ
+#   NavigationAccount$ContactScreen.java         - contact info
+#   NavigationAccount$HelpContactScreen.java     - help+contact combined entry
+# Settings-flavored children (Unit of Distance, Data Privacy, Notification
+# Settings, Connectivity Settings) are split out into settings.yaml.
+screen: account
+title_key: account_mainNavigation_myAccount_text   # inferred: no dedicated account-screen pageTitle key found; menu entries double as titles for their child screens throughout this app
+function: null
+widgets:
+  - id: mainNavigationList
+    type: list
+    label_key: null
+    range: null
+    controls: null
+    elements:
+      - {label: account_mainNavigation_login_text, target: onboarding}
+      - {label: account_mainNavigation_myAccount_text, target: account}
+      - {label: account_mainNavigation_addVehicle_text, target: connectivity}
+      - {label: account_mainNavigation_myCalifornia_text, target: account-my-california}
+      - {label: account_mainNavigation_bluetoothActivity_text, target: settings}
+      - {label: account_mainNavigation_notificationSettings_text, target: settings}
+      - {label: account_mainNavigation_dataPrivacy_text, target: settings}
+      - {label: account_mainNavigation_unitOfDistance_text, target: settings}
+      - {label: account_mainNavigation_helpAndContact_text, target: account}
+    constraints: "9 entries; ordering as-found in the string-key list, not confirmed as visual order"
+
+  - id: loginBanner
+    type: section
+    label_key: common_loginBanner_registerForFree_text
+    range: null
+    controls: null
+    elements: [common_loginBanner_keepsYouAStepAhead_text]
+
+  - id: loginBottomSheet
+    type: drawer
+    label_key: common_loginBottomSheet_login_button
+    range: null
+    controls: null
+    elements: [common_loginBottomSheet_registerForFree_button, common_loginBottomSheet_oneStepAhead_text, common_loginBottomSheet_signInToUseExclusiveFeatures_text]
+
+  - id: myProfileNav
+    type: nav
+    label_key: Settings_Entry_MyProfile
+    range: null
+    controls: null
+    elements: null
+    target: account
+    constraints: "Only matching key for this screen is the legacy-style 'Settings_Entry_MyProfile' (PascalCase family, distinct from the camelCase account_* keys) — see also Settings_App_Version, Settings_VehicleId_* used elsewhere in this screen's vehicle-model display"
+
+  - id: helpAndContactList
+    type: list
+    label_key: account_helpAndContact_contact_text
+    range: null
+    controls: null
+    elements: [account_helpAndContact_FAQ_text, account_helpAndContact_giveUsFeedback_text]
+
+  - id: giveUsFeedbackDrawer
+    type: drawer
+    label_key: account_giveUsFeedback_rateYourCamping_text
+    range: null
+    controls: null
+    elements:
+      - account_giveUsFeedback_oneStarRating_text
+      - account_giveUsFeedback_twoStarRating_text
+      - account_giveUsFeedback_threeStarRating_text
+      - account_giveUsFeedback_fourStarRating_text
+      - account_giveUsFeedback_fiveStarRating_text
+      - account_giveUsFeedback_tellUsMore_text
+      - account_giveUsFeedback_sendFeedback_text
+
+  - id: contactInfoLabel
+    type: label
+    label_key: account_contactInfo_ifYouHaveAny_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: helpContactList
+    type: list
+    label_key: account_helpContact_ifYouHaveAnyFurtherQuestions_text
+    range: null
+    controls: null
+    elements: [account_helpContact_email_text, account_helpContact_emailAddress_text, account_helpContact_phone_text, account_helpContact_phoneNumber_text]
+
+  - id: myCaliforniaNav
+    type: nav
+    label_key: myCalifornia_pageTitle_myCalifornia_text
+    range: null
+    controls: null
+    elements:
+      - myCalifornia_vinNumber_vin_text
+      - myCalifornia_listSubline_vehicleIdentificationNumber_text
+      - myCalifornia_listSubline_equipment_text
+      - myCalifornia_listTitle_setupRemoteControl_text
+      - myCalifornia_listTitle_bluetoothReset_text
+      - myCalifornia_listSubline_resetBluetoothIfConnection_text
+      - myCalifornia_listSubline_resetWifiIfConnection_text
+      - myCalifornia_listSubline_smartphoneConnection_text
+      - myCalifornia_listTitle_deleteVehicle_text
+      - myCalifornia_listSubline_IfYouWantToAdd_text
+    constraints: "delete-vehicle confirmation: myCalifornia_drawerHeadline_doYouReallyWant_text / myCalifornia_drawerText_pleaseNoteThatRemoving_text / myCalifornia_primaryButton_delete_button / myCalifornia_secondaryButton_cancel_button"
+    target: account-my-california
+icons:
+  - drawable/profile
+  - drawable/profile_dimmed
+  - drawable/profile_filled_blue
+  - drawable/account_filled
+  - drawable/faq
+  - drawable/chat
+  - drawable/customers_center
+  - drawable/technical_specification
+  - drawable/statistic
+  - drawable/bin
+  - drawable/new_car_commercial
+  - drawable/bluetooth_reset
+  - drawable/wlan_hotspot
+  - drawable/general_cabe
+  - drawable/california_remote
+notes: >
+  appTour_accountTab_title_text / _description_text / _letsGo_button (part of
+  onboarding's app-tour carousel, onboarding.yaml) describe this tab as it's
+  introduced to first-time users.

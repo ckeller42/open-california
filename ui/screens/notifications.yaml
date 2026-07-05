@@ -1,0 +1,41 @@
+# In-app vehicle alerts/notifications feed. Nav destination:
+# NavigationConnectivity$NotificationCenterScreen
+#   com/californiaontour/connectivityui/graphs/NavigationConnectivity$NotificationCenterScreen.java
+# User-facing preferences for *which* categories appear here are configured
+# in settings.yaml's notificationSettingsList widget (NavigationAccount$NotificationSettingsScreen).
+screen: notifications
+title_key: notificationCenter_pageTitle_notifications_text
+function: null
+widgets:
+  - id: notificationFeedList
+    type: list
+    label_key: null
+    range: null
+    controls: null
+    elements: null
+    constraints: "Feed items are per-alert dynamic content (connection status changes, errors/warnings/infos per notificationSettings_listItem_* categories); no static list-item string keys found, only the empty/placeholder and not-connected states below"
+
+  - id: emptyPlaceholder
+    type: label
+    label_key: notificationCenter_placeholder_noNotificationExists_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: notConnectedInfo
+    type: label
+    label_key: notificationCenter_notConnectedInfo_inOrderToDisplay_text
+    range: null
+    controls: null
+    elements: null
+icons:
+  - drawable/notification
+  - drawable/alert
+  - drawable/alert_red
+  - drawable/alert_small_red
+  - drawable/alert_small_yellow
+notes: >
+  Small screen; only 3 string keys found under notificationCenter_*. Reachable
+  from home.yaml (not modeled as an explicit widget there since no
+  vehiclePage_* key references it directly — likely a toolbar/app-bar bell
+  icon rather than a dashboard tile; UNCONFIRMED).

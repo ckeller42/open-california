@@ -1,0 +1,96 @@
+# Electric entrance step/stairs (extend/retract). UI copy calls this
+# feature "step", not "stairs" — dictionary function name is "stairs".
+# Nav destination: NavigationConnectivity$StairsScreen
+#   com/californiaontour/connectivityui/graphs/NavigationConnectivity$StairsScreen.java
+# Full reverse-engineered business logic documented in
+# docs/business-logic/climate-stairs.md ("Stairs" section) — authoritative
+# source for exact BLE recipes; this file is the GUI-shape summary of it.
+# Service 0x1800, control char 0x1801 (pg/a.java:20-26, Stairs-specific
+# constructor — pg/a.java is SHARED with "energy" via a different
+# constructor, see energy.yaml). Feature ViewModel og/b.java implements lf.a.
+screen: stairs
+title_key: null   # no dedicated pageTitle key found for the live control screen; only infoPage_step_pageTitle exists for the "how it works" info popup
+function: stairs
+widgets:
+  - id: extendRetractButton
+    type: button
+    label_key: null
+    range: null
+    controls: {field: Movement, action: X1}
+    elements:
+      - {value: 1, setter: "h1(extend=false)"}
+      - {value: 2, setter: "h1(extend=true)"}
+    constraints: >
+      og/b.java:288-297 h1(boolean extend) -> Movement = extend?2:1. Momentary
+      command; only 1/2 are ever sent, 0 (power-up default) is never written
+      by a user action — there is NO explicit "stop" command in this
+      interface (climate-stairs.md:288-295). Which of 1/2 is extend vs
+      retract is UNVERIFIED (presented exactly as coded).
+
+  - id: autoExtensionToggle
+    type: toggle
+    label_key: step_widget_automaticExtensionWhen_text
+    range: null
+    controls: {field: OperationMode, action: X1}
+    elements: [step_widget_toggleOff_text, step_widget_toggleOn_text]
+    constraints: >
+      og/b.java:121-131 N0(boolean auto) -> OperationMode = (!auto)?1:0, i.e.
+      auto=true writes 0. By analogy with every other enum in this app where
+      0=AUTOMATIC, likely 0=AUTOMATIC/1=MANUAL but no dedicated enum class
+      exists for this field — UNVERIFIED (climate-stairs.md:283-287).
+      UI likely gates whether extendRetractButton is enabled based on this
+      mode (og/b.java derives f3() = !OperationMode readback, climate-stairs.md:315-317).
+
+  - id: stateReadout
+    type: readout
+    label_key: null
+    range: null
+    controls: {field: State, action: null}
+    elements: null
+    constraints: "read-only, likely 'currently extended' boolean — not confirmed (climate-stairs.md:307-308)"
+
+  - id: installedLabel
+    type: label
+    label_key: null
+    range: null
+    controls: {field: Installed, action: null}
+    elements: null
+    constraints: "gates the whole screen/tile: boolArr index [7,8) of the 0x1802 state frame, wired into te.k.b4() (og/b.java:164,181-183,149) — confirmed data-driven per-vehicle flag, docs/business-logic/feature-availability.md table row 'Stairs'"
+
+  - id: sensorLabel
+    type: label
+    label_key: null
+    range: null
+    controls: {field: Sensor, action: null}
+    elements: null
+
+  - id: infoPopUpWarning
+    type: label
+    label_key: null
+    range: null
+    controls: {field: InfoPopUp, action: null}
+    elements:
+      - {value: 0, name: none}
+      - {value: 1, name: STAIRS_STEPS_OR_SENSOR_JAMMED, label_key: dialog_warning_step_stepBlocked_headline}
+      - {value: 2, name: STAIRS_CONTROL_DENIED, label_key: dialog_warning_step_stepNotAvailable_headline}
+    constraints: "confirmed via og/b.java:187-201 (climate-stairs.md:304-306); og/b.java derives C3() = InfoPopUp==1||InfoPopUp==2, used to show warning banner and/or disable the movement control (climate-stairs.md:312-314, UNVERIFIED whether write path itself enforces this)"
+
+  - id: infoPage
+    type: nav
+    label_key: infoPage_step_pageTitle
+    range: null
+    controls: null
+    elements: [infoPage_step_headline, infoPage_step_description]
+icons:
+  - drawable/step
+notes: >
+  "vehiclePage_remoteControlWidget_step_text" (x9/q.java:97) is the
+  home-screen quick-access tile label for this feature. No screen-level
+  pageTitle key exists the way most other feature screens have one — either
+  it reuses vehiclePage_remoteControlWidget_step_text at runtime, or the
+  screen is presented as a bottom sheet/drawer rather than a full page.
+  Business-logic facts above (Movement/OperationMode/InfoPopUp field
+  meanings, setter names/line numbers) are cross-checked against
+  docs/business-logic/climate-stairs.md's "Stairs" section, which is the
+  authoritative source — this YAML restates only what's needed for GUI
+  layout.

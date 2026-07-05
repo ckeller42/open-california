@@ -1,0 +1,162 @@
+# Satellite TV antenna/dish screen (roof-mounted, has own WiFi hotspot for
+# receiver pairing). Nav destination: NavigationConnectivity$SatelliteAntennaScreen
+#   com/californiaontour/connectivityui/graphs/NavigationConnectivity$SatelliteAntennaScreen.java
+# Full reverse-engineered business logic documented in
+# docs/business-logic/lighting-energy-water-sat-roof.md ("SatelliteAntenna"
+# section) — authoritative source for exact BLE recipes; this file is the
+# GUI-shape summary of it.
+# Control model gg/a.java: SECOND constructor (gg/a.java:151-160) = Satellite
+# on UUID 00001901-... ; FIRST constructor (gg/a.java:31-40) = LivingRoomHeater
+# on UUID 00002101-... — same shared class, different BLE service per
+# constructor path (not a runtime discriminant field as this agent first
+# guessed; corrected against the doc). Feature class mg/f.java.
+# protocol/dictionary.yaml:168-183 (state_services [1900,1902,1903,1904,1905]).
+screen: satellite-antenna
+title_key: satellite_pageTitle_satelliteSystem_text
+function: satelliteantenna
+widgets:
+  - id: statusReadout
+    type: readout
+    label_key: null
+    range: null
+    controls: {field: null, action: null}
+    elements:
+      - {name: FOLDED, label_key: satellite_status_folded_text}
+      - {name: MOVED_OUT, label_key: satellite_status_extended_text}
+      - {name: SEARCHING, label_key: satellite_status_searching_text}
+      - {name: FOLDING, label_key: satellite_status_intermediate_text}
+      - {name: STOPPED, label_key: satellite_status_stopped_text}
+      - {name: OPTIMIZING, label_key: satellite_status_optimizing_text}
+      - {name: STANDBY, label_key: satellite_status_standby_text}
+      - {name: BOOTING, label_key: satellite_status_booting_text}
+      - {label_key: satellite_status_noConnection_text, note: "distinct from the 8-value dish-state enum; likely tied to the Error readback instead"}
+    constraints: "dish physical-state readback enum kf/b.java (lighting-energy-water-sat-roof.md:336-337); paired 1:1 with the 8 UI status strings by name-match, order not independently confirmed"
+
+  - id: errorReadout
+    type: readout
+    label_key: null
+    range: null
+    controls: {field: Error, action: null}
+    elements: [NO_ERROR, NO_CONNECTION, SAT_NOT_FOUND, IGNITION_ON, MECHANICAL_ERROR, VOLTAGE_LOW, TEMPERATURE_HIGH, NO_TRANSPONDER, ANTENNA_RESERVED]
+    constraints: "kf/a.java enum (lighting-energy-water-sat-roof.md:334-335); dictionary.yaml Error field is only width 4 (dictionary.yaml:180) which fits 9 values"
+
+  - id: installedLabel
+    type: label
+    label_key: null
+    range: null
+    controls: {field: Installed, action: null}
+    elements: null
+    constraints: "gates the whole screen/tile: boolArr index [7,8) of the 0x1902 state frame, wired into te.k.b4() (mg/f.java:142,161,303) — confirmed data-driven per-vehicle flag, docs/business-logic/feature-availability.md table row 'SatelliteAntenna'"
+
+  - id: signalLevelReadout
+    type: readout
+    label_key: satellite_signal_text
+    range: "0..255"
+    controls: {field: SignalLevel, action: null}
+    elements: null
+
+  - id: dishStopButton
+    type: button
+    label_key: null
+    range: null
+    controls: {field: DishStop, action: X1}
+    elements: null
+    constraints: "mg/f.java:866-875 e3() -> DishStop=true, sent DIRECT. Distinct 'halt movement now' command, separate from selecting a satellite; app pattern implies stop-before-reposition (lighting-energy-water-sat-roof.md:323-327, UNVERIFIED whether enforced)"
+
+  - id: wlanToggle
+    type: toggle
+    label_key: null
+    range: null
+    controls: {field: Wlan, action: X1}
+    elements: null
+    constraints: "mg/f.java:221-236 J1() -> Wlan=true sent DIRECT; schedules 5000ms + 10000ms follow-up connection-status re-checks (async AP bring-up)"
+
+  - id: systemToggle
+    type: toggle
+    label_key: null
+    range: null
+    controls: {field: System, action: X1}
+    elements: [{value: 0, name: "off"}, {value: 1, name: "on"}]
+    constraints: "mg/f.java:1021-1031 l1(boolean on) -> System = on?1:0, sent DIRECT"
+
+  - id: channelSelectionList
+    type: list
+    label_key: satellite_listItems_satellite_text
+    range: null
+    controls: {field: SatelliteSelection, action: X1}
+    elements:
+      - {wire: 1, name: ASTRA_19_EAST, label_key: satellite_channel_astra19_text}
+      - {wire: 2, name: HOTBIRD_13_EAST, label_key: satellite_channel_hotbird_text}
+      - {wire: 3, name: ASTRA_23_5_EAST, label_key: satellite_channel_astra23_text}
+      - {wire: 4, name: ASTRA_28_2_EAST, label_key: satellite_channel_astra28_text}
+      - {wire: 5, name: SIRIUS_4_5_EAST, label_key: satellite_channel_sirius_text}
+      - {wire: 6, name: EUTELSAT_9_EAST, label_key: satellite_channel_eutelsat9_text}
+      - {wire: 7, name: EUTELSAT_16_EAST, label_key: satellite_channel_eutelsat16_text}
+      - {wire: 8, name: HISPASAT_30_WEST, label_key: satellite_channel_hispasat_text}
+      - {wire: 9, name: EUTELSAT_5_WEST, label_key: satellite_channel_eutelsat5_text}
+      - {wire: 10, name: INTELSAT_10_2_T1_WEST, label_key: satellite_channel_intelsat_text}
+      - {wire: 11, name: TURKSAT_4_2_EAST, label_key: satellite_channel_turksat_text}
+    constraints: "enum kf/d.java, wire value = ordinal+1 (1-11); setter mg/f.java:877-916 f1(kf.d sat) -> SatelliteSelection = sat.ordinal()+1, sent DIRECT. Matches dictionary width 4 (0..15)."
+
+  - id: dishModeButton
+    type: button
+    label_key: null
+    range: null
+    controls: {field: Dish, action: X1}
+    elements:
+      - {value: 1, setter: "g0() -> static f(fVar,1)", note: "mg/f.java:929-931"}
+      - {value: 2, setter: "O2() -> static f(fVar,2)", note: "mg/f.java:239-241"}
+    constraints: "Two move commands, direction/state meaning (fold-in vs search/move-out) UNVERIFIED per lighting-energy-water-sat-roof.md:314-318"
+
+  - id: softwareVersionLabel
+    type: label
+    label_key: satellite_listItems_softwareVersion_text
+    range: null
+    controls: null
+    elements: [satellite_softwareVersion_dish_text]
+
+  - id: wifiAccessDataDrawer
+    type: drawer
+    label_key: satellite_listItems_wifiAcessData_text
+    range: null
+    controls: null
+    elements:
+      - satellite_wifiAcessData_ssid_text
+      - satellite_wifiAcessData_password_text
+      - satellite_wifiAcessData_toUseThe_text
+      - satellite_wifiAcessData_ifYouDoNotHave_text
+    constraints: "Receiver's own WiFi hotspot credentials, unrelated to vehicle BLE/WiFi pairing (see connectivity.yaml)"
+
+  - id: warningDialogs
+    type: list
+    label_key: null
+    range: null
+    controls: null
+    elements:
+      - dialog_warning_satellite_busy_headline / _text
+      - dialog_warning_satellite_ignition_headline / _text
+      - dialog_warning_satellite_notFound_headline / _text
+      - dialog_warning_satellite_programmeList_headline / _text
+      - dialog_warning_satellite_starting_headline / _text
+      - dialog_error_satellite_blocked_headline / _text
+      - dialog_error_satellite_noConnection_headline / _text
+      - dialog_error_satellite_temperature_headline / _text
+      - dialog_error_satellite_voltageLow_headline / _text
+
+  - id: infoPage
+    type: nav
+    label_key: infoPage_satellite_pageTitle
+    range: null
+    controls: null
+    elements: [infoPage_satellite_headline, infoPage_satellite_description]
+    constraints: "page-seen key INFO_PAGE_SATELLITE_ANTENNA_WAS_SEEN, xp/g.java:150"
+icons:
+  - drawable/satellite_antenna
+notes: >
+  "string:search_mapStyle_satellite_text" also matches a naive "satellite"
+  grep but belongs to the Discover/map-style toggle (features.search module),
+  not this vehicle function — excluded. Business-logic facts above (dish
+  state/error/channel enums, setter names/line numbers) are cross-checked
+  against docs/business-logic/lighting-energy-water-sat-roof.md's
+  "SatelliteAntenna" section, which is the authoritative source — this YAML
+  restates only what's needed for GUI layout.
