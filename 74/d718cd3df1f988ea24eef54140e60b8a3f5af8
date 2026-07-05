@@ -1,0 +1,23 @@
+docs/protocol.md
+  s_1dccea91605154::t_3161479e2e16ea 29,32-46
+tools/extract_protocol.py
+  s_1dccea91605154::t_9d351e7cf45255 1-188
+protocol/dictionary.yaml
+  s_1dccea91605154::t_7c731d698333dc 1-238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "74d718cd3df1f988ea24eef54140e60b8a3f5af8",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
