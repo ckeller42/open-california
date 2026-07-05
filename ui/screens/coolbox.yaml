@@ -1,0 +1,140 @@
+# Coolbox (fridge) screen — extracted from decompiled CaliforniaOnTour app.
+# Source: string-resource KEYS harvested from the resource-accessor classes
+#   ea/d.java, ea/i.java, ea/j.java, x9/l0.java, x9/p0.java, x9/q0.java
+#   (all pure StringResource lazy-getters keyed "string:<key>" — no widget
+#   logic lives there, only the KEY NAMES, which is all we need).
+# Protocol/action linkage cross-referenced against:
+#   - protocol/dictionary.yaml -> functions.cooler (state_services [1100,1102],
+#     control_source sf/a.java)
+#   - vf/c.java — the Cooler screen ViewModel (implements interface af.a).
+#     Action letters below are the LITERAL decompiled method names on that
+#     class, confirmed by reading the method bodies:
+#       U0(boolean, ...)      -> writes control bit "State" (power on/off)
+#       X1(int, ...)          -> writes control field "Level" (1..5, clamped
+#                                 in-app via `(1 > i || i >= 6) ? 1 : i`)
+#       f(c, int) [static]    -> writes control field "Mode"; observed called
+#                                 with 0 (T1/off), 2 (x0), 4 (k0) — mapped to
+#                                 Off/Manual/TimerBased quiet-mode selection
+#                                 (UNVERIFIED exact enum-to-int mapping)
+#       D(fz.i)               -> writes control field "TimerStart" (=1)
+#       X0(dz.c)              -> writes control field "TimerCancel" (=1)
+#       y0(m, si.e)           -> writes control fields "TimerHour"+"TimerMin"
+#                                 as a pair (m.f24999a=hour, m.f25000b=min)
+#       c0(int, yh.b)         -> writes control field "NightTimerHourOn"
+#       Y2(int, yh.b)         -> writes control field "NightTimerHourOff"
+screen: coolbox
+title_key: coolboxPage_pageTitle_coolbox_text
+function: cooler
+widgets:
+  - id: refrigeratorBoxWidget
+    type: toggle
+    label_key: coolboxPage_refrigeratorBoxWidget_refrigeratorBox_text
+    range: null
+    controls: {field: State, action: U0}
+    elements: []
+    constraints: null
+
+  - id: coolingLevelSlider
+    type: slider
+    label_key: coolboxPage_coolingLevelSlider_coolingLevel_text
+    range: "1..5"
+    controls: {field: Level, action: X1}
+    elements: []
+    constraints: "UI clamps raw Level (protocol range 0..15) to 1..5"
+
+  - id: manualQuietMode
+    type: toggle
+    label_key: coolboxPage_manualQuietMode_text
+    range: null
+    controls: {field: Mode, action: f}
+    elements: []
+    constraints: "UNVERIFIED — appears to be a standalone/summary-row switch for manual quiet mode, distinct from (but overlapping) quietModeWidget below; same underlying Mode field"
+
+  - id: quietModeWidget
+    type: section
+    label_key: coolboxPage_quietModeWidget_quietMode_text
+    range: null
+    controls: {field: Mode, action: f}
+    elements:
+      - manualQuietMode_text
+      - Manual_text
+      - timerBasedQuietMode_text
+      - startsAt_text
+      - endsAt_text
+      - quietModeCanOnlyBeActivated_text
+      - quietModeCanOnlyBeSwitchedOn_text
+    constraints: "Manual quiet mode 'can only be switched on' (not off) directly per key name coolboxPage_quietModeWidget_quietModeCanOnlyBeSwitchedOn_text; timer-based quiet mode 'can only be activated' under some precondition per coolboxPage_quietModeWidget_quietModeCanOnlyBeActivated_text — exact rule UNVERIFIED (likely requires refrigeratorBoxWidget State == on)"
+
+  - id: quietModeDrawer
+    type: drawer
+    label_key: coolboxPage_quietModeDrawer_time_text
+    range: null
+    controls: {field: "NightTimerHourOn/NightTimerHourOff", action: "c0/Y2"}
+    elements:
+      - quietModeStart_text
+      - quietModeEnd_text
+    constraints: null
+
+  - id: timerWidget
+    type: timer
+    label_key: coolboxPage_timerWidget_timer_text
+    range: null
+    controls: {field: "TimerStart/TimerCancel", action: "D/X0"}
+    elements:
+      - timerColon_text
+      - toSetTimer_text
+      - pleaseSetTheTimespan_text
+      - startTimer_button
+      - pauseTimer_button
+      - cancelTimer_button
+      - continueTimer_button
+      - coolingIn_text
+      - coolingStartsAt_text
+      - theBoxWillBeCooled_text
+      - afterTheTimerIsActivated_text
+      - afterContinuingTheBoxWillbeCooled_text
+    constraints: null
+
+  - id: timerSetupDrawer
+    type: drawer
+    label_key: coolboxPage_timerSetupDrawer_time_text
+    range: null
+    controls: {field: "TimerHour/TimerMin", action: y0}
+    elements:
+      - coolingStartsAt_text
+      - coolingStartsIn_text
+      - hoursMinutes_text
+    constraints: null
+
+icons:
+  - coolingbox           # drawable/coolingbox — main fridge icon (x9/d.java)
+  - heating_cooling_timer # drawable/heating_cooling_timer — shared timer icon (also used by air-heater)
+  - snowflake            # drawable/snowflake — UNVERIFIED, could belong to roofaircondition instead of coolbox
+
+notes: |
+  Screen composed from two parallel Java resource-accessor classes in the
+  decompiled sources (ea/* and x9/* packages define the same key set twice —
+  likely two build variants/targets, e.g. phone vs. t6/t6.1 vehicle line, or
+  a widget/preview duplicate). Only the key NAMES were used to reconstruct
+  the widget tree per the task's method; the localized text itself lives in
+  byte-offset-addressed values-en/*.cvr resource blobs and was not needed.
+
+  Widget-tree hierarchy inferred purely from the `<screen>Page_<widget>_<element>_<type>`
+  key structure — there is no separately-recoverable Compose UI tree in the
+  decompiled output (the actual @Composable functions are fully obfuscated,
+  single-letter classes with no meaningful names; only the shared resource
+  accessor classes and the ViewModel (vf/c.java) retain readable identifiers).
+
+  ViewModel class vf.c (package vf) is the single source of truth for the
+  interactive control surface: it implements interface af.a with literal
+  one/two-character method names (U0, X1, f, D, X0, y0, c0, Y2, plus several
+  StateFlow getters D3/H/I1/J0/P1/P2/f2/g1/h0/k4/l2/t2/v0/z1/X3/d3/b4) backed
+  by a shared bit-packed register class sf.b — the SAME register class is
+  reused for the airheater screen (rf/b.java) with different field bindings
+  at the same bit offsets, which is exactly what protocol/dictionary.yaml
+  flags as "MERGED_AMBIGUOUS" offsets.
+
+  quietModeWidget's Mode field write value semantics (0/2/4) are UNVERIFIED —
+  the ViewModel only shows raw integer writes (f(this,0), f(this,2), f(this,4))
+  without a decoded enum; a live protocol capture is needed to confirm which
+  int corresponds to Off/Manual/TimerBased.

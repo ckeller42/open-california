@@ -1,0 +1,162 @@
+# Extracted from VW CaliforniaOnTour app decompile (string-key harvest).
+# No dedicated "energyPage_*" key family exists; the live energy/battery detail
+# screen reuses a generic "infoPage_*" prefix (pageHeadline/sectionHeadline/
+# listItem/statusBar/value_text), shared with an unrelated "Vehicle Information"
+# detail screen and with onboarding tooltip pages — disambiguated below by
+# grouping only the battery/charging-relevant keys. A compact summary tile
+# (vehiclePage_overviewWidget_secondBattery_*) lives on the main vehicle
+# dashboard and links into this detail screen via "seeAllInfo".
+screen: energy
+title_key: infoPage_pageHeadline_vehicleBattery_text
+function: energy  # service 1600/1602, control char 1601 (pg/a.java) — state telemetry only, control_fields largely MERGED_AMBIGUOUS/UNVERIFIED
+widgets:
+  - id: dashboardSummaryTile
+    type: readout
+    label_key: vehiclePage_overviewWidget_secondBattery_text
+    range: null
+    controls: {field: null, action: null}
+    elements:
+      - vehiclePage_overviewWidget_secondBattery_via_text
+      - vehiclePage_overviewWidget_secondBattery_externalPowerSource_text
+      - vehiclePage_overviewWidget_secondBattery_solarPower_text
+      - vehiclePage_overviewWidget_secondBattery_vehiclePower_text
+      - vehiclePage_overviewWidget_seeAllInfo_text
+      - vehiclePage_overviewWidget_allInfos_issues_text
+    constraints: "Compact dashboard tile: '<battery %> via <source>' where source is one of externalPowerSource/solarPower/vehiclePower. 'seeAllInfo' navigates to this detail screen."
+
+  - id: energyDurationFormat
+    type: label
+    label_key: vehiclePage_overviewWidget_energy_textHour_text
+    range: null
+    controls: null
+    elements: [vehiclePage_overviewWidget_energy_textHour, vehiclePage_overviewWidget_energy_textMinute]
+    constraints: "Hour/minute unit suffixes for a remaining-time-style readout (e.g. estimated charge time remaining)."
+
+  - id: statusBar
+    type: readout
+    label_key: infoPage_sectionHeadline_status_text
+    range: null
+    controls: {field: null, action: null}
+    elements: [infoPage_statusBar_active_text, infoPage_statusBar_inactive_text, infoPage_statusBar_ready_text]
+    constraints: "Overall status text; derives from combination of state_fields below rather than one field directly."
+
+  - id: batteryValue
+    type: readout
+    label_key: infoPage_battery_value_text
+    range: null
+    controls: {field: null, action: null}
+    elements: null
+    constraints: "Second/leisure battery charge level. No single dictionary field identified for the percentage itself (service 1600 state_fields are mostly warning/fault bits, not a level value) — UNVERIFIED, may come from a different service."
+
+  - id: chargingSection
+    type: section
+    label_key: infoPage_sectionHeadline_charging_text
+    range: null
+    controls: null
+    elements: [infoPage_charging_value_text]
+    constraints: null
+
+  - id: energyModeSelector
+    type: toggle
+    label_key: infoPage_listItem_energyMode_text
+    range: "0..3 (2-bit OperationMode field, offset MERGED_AMBIGUOUS)"
+    controls: {field: OperationMode, action: null}
+    elements: [energyMode_eco_text, energyMode_max_text, energyMode_normal_text, energyMode_text]
+    constraints: "3-way mode selector (eco/normal/max). Disabled state signalled by EnergyModeNotSelectable state bit (offset 2)."
+
+  - id: vehicleInfoListItems
+    type: section
+    label_key: null
+    range: null
+    controls: null
+    elements:
+      - infoPage_listItem_campsitePowerSupply_text
+      - infoPage_listItem_energyMode_text
+      - infoPage_listItem_outsideTemperature_text
+      - infoPage_listItem_solarPower_text
+      - infoPage_listItem_vehiclePower_text
+    constraints: "Row list shown under both the 'Vehicle Battery' and 'Vehicle Information' infoPage headlines; campsitePowerSupply/solarPower/vehiclePower are the three energy-source rows, energyMode/outsideTemperature are shared vehicle-status rows."
+
+  - id: outsideTemperature
+    type: readout
+    label_key: infoPage_outsideTemperature_value_text
+    range: null
+    controls: {field: null, action: null}
+    elements: [infoPage_subline_outsideTemperature_text]
+    constraints: "Not an energy field per se, but co-displayed on the same vehicle-status list as energy source rows."
+
+  - id: batteryWarningDialogs
+    type: label
+    label_key: infoPage_pageHeadline_vehicleBattery_text
+    range: null
+    controls: null
+    elements:
+      - energy_additionalBatteryChargingRequired_headline
+      - energy_additionalBatteryChargingRequired_text
+      - energy_additionalBatteryDeepDischarge_headline
+      - energy_additionalBatteryDeepDischarge_text
+      - energy_batteryFlat_headline
+      - energy_batteryFlat_text
+      - energy_batteryNotCharging_headline
+      - energy_batteryNotCharging_text
+      - energy_secondBattery_headline
+      - energy_secondBattery_text
+      - energy_secondBatteryAlmostEmpty_headline
+      - energy_secondBatteryAlmostEmpty_text
+    constraints: "Battery-fault banners/dialogs. Field mapping (UNVERIFIED but plausible by name match): batteryNotCharging/secondBattery* -> TwoBattNotCharged (offset 7) / WarningLevelActive (offset 4) / WarningLevelTwo state bits."
+
+  - id: chargingWarningDialogs
+    type: label
+    label_key: infoPage_sectionHeadline_charging_text
+    range: null
+    controls: null
+    elements:
+      - energy_chargingCableStillInVehicle_headline
+      - energy_chargingCableStillInVehicle_text
+      - energy_chargingLimited_headline
+      - energy_chargingLimited_text
+      - energy_chargingRestricted_headline
+      - energy_chargingRestricted_text
+      - energy_externalPowerSourceNotFunctioning_headline
+      - energy_externalPowerSourceNotFunctioning_text
+      - energy_externalPowerSourceUnavailable_headline
+      - energy_externalPowerSourceUnavailable_text
+      - energy_solarInverterNotWorking_headline
+      - energy_solarInverterNotWorking_text
+    constraints: "externalPowerSource dialogs map to LandDefect (offset 1) / LandNotAvailable (offset 0) state bits ('Land' = shore/land power in source). solarInverterNotWorking maps to PvDefect (offset 15)."
+
+  - id: acknowledgeableFaultToasts
+    type: button
+    label_key: null
+    range: null
+    controls: {field: null, action: null}
+    elements:
+      - {key: energyCurrentDeratingTemperatureConfirmed, field: CurrentDeratingTemperature}
+      - {key: energyDcDcDefectConfirmed, field: DcdcDefect}
+      - {key: energyPhotovoltaicsDefectConfirmed, field: PvDefect}
+      - {key: energySecondBatteryNotChargedConfirmed, field: TwoBattNotCharged}
+      - {key: energySecondBatterySwitchAtChargingConfirmed, field: TwoBattSwitchAtCharging}
+      - {key: energySecondBatterySwitchAtWorkshopConfirmed, field: TwoBattSwitchAtWorkshop}
+      - {key: energySecondBatteryWarnLevelTwoConfirmed, field: WarningLevelTwo}
+      - {key: energyShorePowerDefectConfirmed, field: LandDefect}
+      - {key: energyShorePowerNotAvailableConfirmed, field: LandNotAvailable}
+      - {key: energySystemErrorConfirmed, field: SystemError}
+    constraints: "Direct 1:1 name-to-field mapping confirmed by naming convention; each is a user 'acknowledge this fault' confirmation action, one per service-1600 state_field warning bit (dictionary.yaml functions.energy.state_fields)."
+
+icons:
+  - vehicle_status_charging
+  - vehicle_status_shore_power
+  - vehicle_status_solar
+  - vehiclepower
+  - vehicle_and_charging_options
+
+notes: >
+  Read-only telemetry screen (service 1600/1602 state_fields are all fault/warning
+  bits plus a handful of install-flags; no control_fields beyond an ambiguous
+  OperationMode). Every energy*Confirmed acknowledgement string has an exact
+  1:1 name match to a dictionary.yaml state_field, giving high confidence there;
+  the live numeric battery-percentage / charging-value readouts (infoPage_battery_
+  value_text, infoPage_charging_value_text) have no obvious dictionary field and
+  are flagged UNVERIFIED — likely sourced from a different/general service not
+  yet mapped. No energy-specific icon set beyond the three vehicle_status_* +
+  vehiclepower source icons was found in the connectivity_ui module.
