@@ -1,3 +1,4 @@
+import ast
 import pytest
 from california.codegen import generate
 
@@ -35,3 +36,22 @@ def test_generate_rejects_invalid_hex_value():
     }}
     with pytest.raises(ValueError):
         generate(bad_map, "AA:BB:CC:DD:EE:FF")
+
+def test_generate_rejects_injected_handle_string():
+    """Regression: handle must be int when uuid is absent. Injected string should raise ValueError."""
+    malicious_map = {"actions": {
+        "light-evil": {"handle": '1); import os; os.system("id")  #', "value": "01", "confirmed": True},
+    }}
+    with pytest.raises(ValueError, match="unsafe handle"):
+        generate(malicious_map, "AA:BB:CC:DD:EE:FF")
+
+def test_generate_accepts_valid_int_handle_without_uuid():
+    """Regression: valid int handle without uuid should succeed and produce valid Python."""
+    valid_map = {"actions": {
+        "light-via-handle": {"handle": 42, "value": "01", "confirmed": True},
+    }}
+    src = generate(valid_map, "AA:BB:CC:DD:EE:FF")
+    assert "light-via-handle" in src
+    assert ": (42, bytes.fromhex(" in src
+    # Verify output is valid Python
+    ast.parse(src)

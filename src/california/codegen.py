@@ -44,15 +44,21 @@ def generate(mapping: dict, address: str) -> str:
 
         # Validate uuid and handle
         uuid = spec.get("uuid")
-        if uuid is None and "handle" not in spec:
+        if not uuid and "handle" not in spec:
             raise ValueError(f"action {action} has neither uuid nor handle")
-        if uuid is not None and not _UUID_RE.match(uuid):
+        if uuid and not _UUID_RE.match(uuid):
             raise ValueError(f"unsafe uuid for {action}: {uuid!r}")
 
         # Validate hex value
         hexval = spec["value"]
         if not _HEX_RE.match(hexval):
             raise ValueError(f"unsafe hex value for {action}: {hexval!r}")
+
+        # When uuid is falsy, handle must be an int (not bool, since bool is subclass of int)
+        if not uuid:
+            handle = spec["handle"]
+            if not isinstance(handle, int) or isinstance(handle, bool):
+                raise ValueError(f"unsafe handle for {action}: {handle!r}")
 
         char = f'"{uuid}"' if uuid else spec["handle"]
         lines.append(f'    "{action}": ({char}, bytes.fromhex("{hexval}")),')
