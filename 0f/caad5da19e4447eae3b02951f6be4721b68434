@@ -1,0 +1,21 @@
+docs/protocol.md
+  s_1dccea91605154::t_bf8f414e622a5f 52-63
+tools/encode.py
+  s_1dccea91605154::t_b898804e0694c2 33-34,37-48,71-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "0fcaad5da19e4447eae3b02951f6be4721b68434",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
