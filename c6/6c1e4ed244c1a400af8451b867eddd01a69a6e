@@ -1,0 +1,21 @@
+src/california/protocol.py
+  s_19a05de410cb0f::t_a584e658053ff3 1-37
+tests/test_protocol.py
+  s_19a05de410cb0f::t_d301392f00ce02 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c66c1e4ed244c1a400af8451b867eddd01a69a6e",
+  "prompts": {},
+  "sessions": {
+    "s_19a05de410cb0f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-acc3ce0d249eb4261",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
