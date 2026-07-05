@@ -1,0 +1,22 @@
+tools/build_frame.py
+  s_1dccea91605154::t_49f16fe4832eeb 1-76,78-201
+  s_1dccea91605154::t_8ef62972221b81 77
+tests/test_build_frame.py
+  s_1dccea91605154::t_ade5961230d7a4 1-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "977a0372d586c699899cbc076b368219da48e80b",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
