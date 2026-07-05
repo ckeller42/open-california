@@ -19,3 +19,19 @@ def test_generate_excludes_safety_action():
 def test_generate_raises_when_nothing_allowed():
     with pytest.raises(ValueError):
         generate({"actions": {"roof-open": MAP["actions"]["roof-open"]}}, "AA:BB:CC:DD:EE:FF")
+
+def test_generate_rejects_injected_uuid():
+    """Regression: uuid with quote should raise ValueError, not produce injected output."""
+    malicious_map = {"actions": {
+        "light-evil": {"handle": 42, "uuid": 'fff1"); import os; ("', "value": "01", "confirmed": True},
+    }}
+    with pytest.raises(ValueError):
+        generate(malicious_map, "AA:BB:CC:DD:EE:FF")
+
+def test_generate_rejects_invalid_hex_value():
+    """Regression: non-hex value should raise ValueError."""
+    bad_map = {"actions": {
+        "light-bad": {"handle": 42, "uuid": "fff1", "value": "zz", "confirmed": True},
+    }}
+    with pytest.raises(ValueError):
+        generate(bad_map, "AA:BB:CC:DD:EE:FF")
