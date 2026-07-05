@@ -1,0 +1,608 @@
+docs/business-logic/feature-availability.md
+  s_1dccea91605154::t_0d6f43d26dcebb 1-85,93-246
+  s_1dccea91605154::t_c96bdf94cbb8d2 86-92
+ui/assets/svg/bin.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/bulb_info.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/snowflake.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/wlan_hotspot.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/alert_vin_flow.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/cabinet.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/info_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/bluetooth.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/fridge.svg
+  s_1dccea91605154::t_b89686fe5e1619 1-6
+ui/assets/svg/park_heater_continuous.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/resource_false.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/campsite_pin_active.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/water.yaml
+  s_1dccea91605154::t_5b2e6a3f0c0f3f 1-110
+ui/assets/svg/connection_wifi_bt_button.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/alert.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vehicle_status_solar.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/notifications.yaml
+  s_1dccea91605154::t_a6b637bc048855 1-41
+ui/assets/svg/air_distribution_controller_front_on.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/settings.yaml
+  s_1dccea91605154::t_f172a5cff70387 1-98
+ui/assets/svg/connection_searching.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/update.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vehicle_status_charging.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vehiclepower.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/info.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/california_certified.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/alert_small_yellow.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/sorting.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/bread_service.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+docs/business-logic/climate-stairs.md
+  s_1dccea91605154::t_b51f789c2fe888 1-331
+ui/assets/svg/chevron_12px_icon.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/checked_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/layers.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/lights_on_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/lights_off.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/bookmark_outlined_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/heart_filled_blue.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/README.md
+  s_1dccea91605154::t_750e62051e190f 1-144
+ui/assets/svg/statistic.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/washing_machine.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/shopping_options.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/bookmark.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/add_12.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/clear.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/paper_airplane.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/alert_blue.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/pets.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/lights_ambiente_off.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/coolbox.yaml
+  s_1dccea91605154::t_6e9ebfd99abc1e 1-140
+ui/assets/svg/heart_dimmed.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/map_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/electric_hookup.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/vd2svg.py
+  s_1dccea91605154::t_48f12329dfacf7 1-17,25-323
+  s_1dccea91605154::t_5fbd9ef06cfc12 18-24
+ui/assets/svg/legal_terms_and_conditions.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/general_cabe.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/home.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/couple_california_centered.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/crossed_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/usb.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/greywater_disposal.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/play.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/technical_specification.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/air_distribution_controller_mixed_off.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/info_symbol.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/internet_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/route_with_blue_circle.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/tumble_dryer.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/camping_lights_on.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/california_remote.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/phone_24px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/air-heater.yaml
+  s_1dccea91605154::t_30619d1a23d8d6 1-171
+ui/screens/roof.yaml
+  s_1dccea91605154::t_9c59a0de3eb218 5-11,14,22-30,38-43,51-53,55-62,80-91,146,150-159
+  s_1dccea91605154::t_a13cd953e2a557 63-79
+  s_1dccea91605154::t_0453e203493c3b 1-4,12-13,15-21,31-37,44-50,54,92-145,147-149
+ui/assets/svg/bookmark_grey_22px_x_32px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/videos.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connection_success.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/supply_and_disposal.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connection_ignition.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/reload.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/usb_off.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/discovery_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/profile_filled_blue.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/circle_checked.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/discover_filled_blue.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/close.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/stellplatz.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/circle_bookmark_48px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/discover_dimmed.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/drive_distance_icon.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/toilet.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/wifi_flow_connection_connecting.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/thumbsup.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+docs/business-logic/lighting-energy-water-sat-roof.md
+  s_1dccea91605154::t_394124c8ff0079 1-402
+ui/assets/svg/alert_red.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/new_car_commercial_filled_blue.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/cooking.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number6.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number1.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/bullet.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/restaurant.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/locate.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/level.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number2.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/profile_dimmed.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/home.yaml
+  s_1dccea91605154::t_23a6d6a48341bc 1-54,58-59,61-78,98-149
+  s_1dccea91605154::t_a224a3728de6c5 55-57,60
+  s_1dccea91605154::t_8fcfa45830b8c9 79-97
+ui/screens/camping-mode.yaml
+  s_1dccea91605154::t_089f37bb108b92 5-12,23,31,33,39-51,54,56,104-110
+  s_1dccea91605154::t_ef762cb316ed82 111-122
+  s_1dccea91605154::t_f5dabdc73da862 1-4,13-22,24-30,32,34-38,52-53,55,57-103
+ui/assets/svg/external_link_icon_24.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/laundry_facilities.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/arrow_left.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/no_internet.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/heart.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/culture_and_nightlife.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/phone_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/pop_up_roof.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vin_flow_warning.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/yellow_star.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/cali_logo_without_box.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/air_distribution_controller_rear_off.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connection_all_models.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vin_flow_add_vehicle.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/highway_access.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/awning.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/camping_or_caravan_site.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+docs/business-logic/alert-states.md
+  s_1dccea91605154::t_c517e50270d7c3 1-365
+ui/screens/stairs.yaml
+  s_1dccea91605154::t_a024e7bb7ad6df 5-10,20-28,36-42,50,67,73-76,87-96
+  s_1dccea91605154::t_c321812eaffff4 1-4,11-19,29-35,43-49,51,60-66,68-72,77-86
+  s_1dccea91605154::t_18653ea08dc716 52-59
+ui/assets/svg/account_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/heating_cooling_timer.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/clock_12.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/connectivity.yaml
+  s_1dccea91605154::t_0a5c74a980d18a 1-129
+ui/assets/svg/edit_12.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/remote.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/locate_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/transport_and_mobility.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vehicle_status_shore_power.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/edit.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/heart_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/more.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number3.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/drag_indicator.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/navigate_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/shower.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/login_banner_high_five.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/mobile_reception.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/chevron.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connection_connecting.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/new_car_commercial.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/close_left_aligned.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/visited.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/wifi.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/tiltroof.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/star_outline.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/water_heater.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number5.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/wifi_flow_connection_connecting_02.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/volkswagen_logo_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/map.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number8.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/remove_minus.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/service.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/topographical_lines.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/family_and_trips.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/magnifier.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/reload_12.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/coolingbox.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vehicle_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/checkmark_24px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/build_prototype.py
+  s_1dccea91605154::t_18fabad86cbc13 1-1077
+ui/assets/svg/circle_heart_48px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/onboarding.yaml
+  s_1dccea91605154::t_7c905baba8a3e2 1-137
+ui/assets/svg/map_dimmed.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connection_bt_background.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/checkmark.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/shape.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/heart_with_red_circle.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/mail_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/chat.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/route_arrow.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+docs/business-logic/status-states-audit.md
+  s_1dccea91605154::t_93550dd51dc147 1-257
+ui/assets/svg/accessories.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/step.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/arrow_right_12.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/mail_24px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/no_internet_80.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/cooking_and_kitchen.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/circle_flag_48px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/route.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connectivity_and_media.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/privacy.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/calender_24px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/new_car_commercial_dimmed.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vin_flow_read_vin.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/waves.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/lighting.yaml
+  s_1dccea91605154::t_9a4f59b25a5730 1-307
+ui/assets/svg/gear.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/alert_small_red.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/successuserhappy.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/account.yaml
+  s_1dccea91605154::t_fa1ad0554dee02 1-128
+ui/assets/svg/circle_pin_48px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/map_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/notification.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/prototype.html
+  s_1dccea91605154::t_ac1e1d912b8caf 1-485,558-591,646-649,990-1016
+  s_1dccea91605154::t_ff45f298d2d6c2 486-489,494-501,510-513,518-525,534-553,592-594,598-603,610-612,616-621,628-642,650-663,701-733,791-807,824-849,851-856,868-869,881,884-887,890-973
+  s_1dccea91605154::t_e21aced755c4e3 530-533,625-627,850,857,874-880,882-883,888-889
+  s_1dccea91605154::t_5f64dbb2fed7a8 490-493,502-509,514-517,595-597,604-609,613-615,664-700,734-790,808-823
+  s_1dccea91605154::t_47271127f9ae4c 526-529,554-557,622-624,643-645,858-867,870-873,974-989
+ui/assets/svg/checkmark_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/campinginfo.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/satellite-antenna.yaml
+  s_1dccea91605154::t_3e1eb295883d79 4-12,22,24-33,35-42,64,72-80,88-99,106-109,152,158-162
+  s_1dccea91605154::t_f53e5ce3d48496 1-3,13-21,23,34,51-63,65-71,81-87,100-105,110-151,153-157
+  s_1dccea91605154::t_3e44982b41a8ab 43-50
+ui/screens/self-check.yaml
+  s_1dccea91605154::t_49ff23f7d04c8c 1-77
+ui/assets/svg/california_logo.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number4.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/three_dots.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/freshwater.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/list.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/section_header.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connection_error.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/public_transport.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/energy.yaml
+  s_1dccea91605154::t_cad5dc8cbf1086 1-162
+ui/assets/svg/food_and_drinks.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/green_checked_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/winter_activities.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/vehicle-info.yaml
+  s_1dccea91605154::t_7fddde59365b7a 1-71,89,105-132
+  s_1dccea91605154::t_9d9b675cf60e8d 72-88,90-104
+ui/assets/svg/add_car_commercial.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/logout.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connectionerrorcot.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/checked.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/air_distribution_controller_mixed_on.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/copy.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+docs/business-logic/cooler-airheater.md
+  s_1dccea91605154::t_0a1707835095b8 1-344
+ui/assets/svg/internet.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/lights_ambiente_on.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/roadsurfer.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/clock_24px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/faq.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vehicle_and_charging_options.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/accessibility.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/calendar.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/customers_center.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/campfire_and_grilling.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/help.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/air_distribution_controller_rear_on.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/flag_with_green_circle.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/manual.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/empty_yellow_start.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/vin_flow_checked.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/cta_illustration.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connection_smartphone.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/filters.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/half_yellow_star.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/dimensions.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/close_12.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/bookmark_filled_12.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/group.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/wifi_flow_connection_connecting_03.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/satellite_antenna.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/settings.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/sanitary_facilities.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/air_distribution_controller_front_off.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/cali_chat_icon.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/wellness.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/add.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/profile.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/temperature.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/chevron_up.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/outdoor_activities.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/chevron_right_12.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number7.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/hinterland.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/wallbox.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/air_heater.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/magnifier_12px.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/water_activities.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/dog_friendly.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/connection_cabe.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/map_filled_blue.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/screens/roof-air-condition.yaml
+  s_1dccea91605154::t_9070ac88ced341 5-11,13,21-22,29-34,41-47,55,62-66,83-92
+  s_1dccea91605154::t_4426d9135dac1d 74
+  s_1dccea91605154::t_a82814f8fdaedf 1-4,12,14-20,23-28,35-40,48-54,56-61,67-73,75-82
+ui/README.md
+  s_1dccea91605154::t_5df6437b722d5b 1-182
+ui/assets/svg/star_filled.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/stop.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/air_heater02.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/bluetooth_reset.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/couple_california.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/flash.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/campingmode.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/alert_yellow.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/checked_filled_large.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/number9.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/login_card_high_five.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/topolines_padding_2.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/external_link_icon.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+ui/assets/svg/login.svg
+  s_1dccea91605154::t_927e0e72b6fc67 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9b835abb7702e2c6612c80f4fe61d564695ff744",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
