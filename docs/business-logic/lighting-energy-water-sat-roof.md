@@ -261,28 +261,34 @@ for this service — confirmed no `sg.a.o(...)` + `.y(true)` send pattern anywhe
 | FreshWaterUnit | 1 | display-unit flag: `false`→`cf.c.PERCENT`, `true`→`cf.c.ABSOLUTE` (liters) |
 | Installed | 1 | fresh-water sensor installed |
 | FreshWaterInfoPopUp | 4 | `cf.a` enum: `EMPTY`(0), `ONE_THIRD_FULL`(1), `TWO_THIRD_FULL`(2), `FULL`(3), `OTHER`(4) |
-| FreshWaterLevel | 8 | if unit=PERCENT: level 0–100%; if unit=ABSOLUTE: reused as tank **capacity** (liters) |
-| FreshWaterVolume | 8 | if unit=PERCENT: tank capacity (liters); if unit=ABSOLUTE: current volume (liters) |
-| WasteWaterUnit | 1 | same 2-mode flag for the waste tank (`nf.b`: `ONLY_EMPTY_FULL`/`ABSOLUTE`/`PERCENT`) |
+| FreshWaterLevel | 8 | **primary value**: if unit=ABSOLUTE → current liters; if unit=PERCENT → current 0–100% |
+| FreshWaterVolume | 8 | **tank capacity** (liters), used as the percent denominator (⚠️ name is misleading — this is NOT the current volume) |
+| WasteWaterUnit | 1 | same 3-mode flag for the waste tank (`nf.b`: `DISCRETE`/`ABSOLUTE`/`PERCENT`) |
 | WasteWaterInfoPopUp | 2 | discrete waste-tank status code |
-| WasteWaterLevel | 8 | percent or capacity, mirrors FreshWaterLevel logic |
-| WasteWaterVolume | 8 | capacity or current volume, mirrors FreshWaterVolume logic |
+| WasteWaterLevel | 8 | primary value (current liters or %), mirrors FreshWaterLevel |
+| WasteWaterVolume | 8 | tank capacity (liters), mirrors FreshWaterVolume |
 
-### Unit conversion helpers (`qg/b.java:414-470`)
+### Unit conversion helpers (`qg/b.java` `h()/i()` 414–429, `j()/k()` 441–466) — VERIFIED LIVE 2026-07-05
+
+⚠️ **The field NAMES are backwards from their meaning.** `FreshWaterLevel` is the current
+reading (liters in ABSOLUTE mode); `FreshWaterVolume` is the tank *capacity*. Confirmed by the
+getters (`c.f3752y` = ABSOLUTE = enum ordinal 1; `c.X` = PERCENT = 2) **and** by a live read.
 
 ```
-h()  // displayed fresh-water volume, liters
-  = unit==ABSOLUTE ? FreshWaterVolume : FreshWaterLevel * FreshWaterVolume / 100
+h()  // displayed fresh-water liters
+  = unit==ABSOLUTE ? FreshWaterLevel : FreshWaterVolume * FreshWaterLevel / 100
 
 i()  // displayed fresh-water percentage
-  = unit==ABSOLUTE ? FreshWaterVolume * 100 / FreshWaterLevel : FreshWaterLevel
+  = unit==ABSOLUTE ? FreshWaterLevel * 100 / FreshWaterVolume : FreshWaterLevel   // Level is already % in PERCENT mode
 
 j()/k()  // same pair for waste water, using WasteWaterUnit / WasteWaterLevel / WasteWaterVolume
 ```
 
-I.e. depending on the vehicle's sensor type, the "Level" and "Volume" wire fields swap roles between
-"percentage + capacity" and "current liters + capacity". A consumer implementing this on another vehicle must
-first read the Unit bit before interpreting Level/Volume.
+A consumer on another vehicle must read the Unit bit first, then treat **Level = current value,
+Volume = capacity**. Do not infer roles from the field names.
+
+**Live check (owner's vehicle, char `1302` = `03 0b 1d 01 00 16`, both tanks ABSOLUTE):**
+fresh `Level=0x0b=11 L` of `Volume=0x1d=29 L` capacity → **37%**; waste `Level=0 L` of `Volume=22 L` → empty.
 
 `T3()`/`nf.a` interface method (`qg/b.java:161-163`) is a **local-only** "acknowledge warning" toggle, not a BLE
 write — consistent with Water being fully read-only.
