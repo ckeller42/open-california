@@ -1,0 +1,21 @@
+src/california/model.py
+  s_63b6a7be25579f::t_9c8b81139b1b69 1-28
+tests/test_model.py
+  s_63b6a7be25579f::t_058e2b4d2f4141 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "89711c6be56329e335f8cba954ce9ba88f3aff52",
+  "prompts": {},
+  "sessions": {
+    "s_63b6a7be25579f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a0ab28cf4efca02d6",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
