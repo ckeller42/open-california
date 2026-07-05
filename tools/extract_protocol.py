@@ -34,7 +34,8 @@ FLOCAL_RE = re.compile(r'\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c')
 FLOCAL_DECL_RE = re.compile(r'(\w+)\s*=\s*\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c')  # local = this.obj
 FPLACE_RE = re.compile(r'\w+\[(\d+)\]\s*=\s*(\w+)\[(\d+)\]')  # frame[P] = local[k]
 SUBLIST_RE = re.compile(r'(\w+)\.p\(\(Boolean\[\]\)[^;]*?subList\((\d+),\s*(\d+)\)')  # state decode aVar<-bits
-STATE_OBJ_RE = re.compile(r'this\.(\w+)|=\s*(\w+)\.f398b')
+STATE_LOGOBJ_RE = re.compile(r'=\s*(\w+)\.f398b')     # aVar in the state log, in order
+ENUM_RE = re.compile(r'new \w+\("([A-Z][A-Z0-9_]{2,})"')  # command/mode enum constants
 TYPECODE_WIDTH = {0: 1, 2: 8, 3: 16, 4: 2, 5: 32, 6: 4, 7: 8}
 LOG_END = re.compile(r'\.toString\(\)|xm\.a\.b\(')
 
@@ -123,6 +124,32 @@ def field_offsets(text):
     return {obj: sorted(ps) for obj, ps in positions.items()}
 
 
+def state_offsets(text):
+    """[{name, offset, width}] for the state frame, best-effort.
+
+    subList(a,b) placements give aVar -> (offset,width); the "Incoming Data" log's
+    `= aVar.f398b` order gives aVar -> name. Joined by aVar; a field whose aVar has
+    no subList (jadx aliasing) is emitted name-only.
+    """
+    bits = {av: (int(a), int(b) - int(a)) for av, a, b in SUBLIST_RE.findall(text)}
+    for win, _ in _methods_with(text, INCOMING_RE):
+        avars = STATE_LOGOBJ_RE.findall(win)
+        names = _labels(win)
+        out = []
+        for av, name in zip(avars, names):
+            f = {"name": name}
+            if av in bits:
+                f["offset"], f["width"] = bits[av]
+            out.append(f)
+        return out
+    return []
+
+
+def enums(text):
+    """Uppercase command/mode enum constant groups defined in a file."""
+    return [m for m in ENUM_RE.findall(text)]
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -131,15 +158,28 @@ def main():
 
     functions = {}
     control_ctors = []  # {file, ctrl_uuid, decls:{obj:(d,w)}, offsets:{obj:(off,w)|None}, blogs:[{obj:name}]}
+    command_enums = {}  # file -> [enum constants]  (value-semantic command vocabularies)
 
     for p in java_files(root):
         t = read(p)
         rel = os.path.relpath(p, root)
+        # harvest command-enum vocabularies (drop alert IDs + BLE-internal error enums)
+        INTERNAL = ("BLUETOOTH", "SCANNING", "PERMISSION", "TIMEOUT", "TIMED_OUT",
+                    "RECONNECT", "VERSION_CHECK", "SUBSCRIPTION", "WIFI_EXLAP", "DISCONNECT")
+        ens = [e for e in enums(t)
+               if not e.endswith(("_ID", "_NOTIFICATION", "_CONFIRMED", "_INTERACTED"))
+               and not any(k in e for k in INTERNAL)]
+        cmds = [e for e in ens if any(k in e for k in ("SET_", "MODE", "_TIME", "REQUEST", "PROFILE", "PREVIEW", "WAKEUP"))]
+        # keep only where command verbs dominate the group (drops incidental constants)
+        if len(cmds) >= 3 and len(cmds) >= 0.5 * len(ens):
+            command_enums[rel] = sorted(set(ens))
         im = INCOMING_RE.search(t)
         if im:
             fn = im.group(1)
+            sfields = state_offsets(t)
             functions[fn] = {
-                "state_names": state_field_names(t), "state_uuids": uuids(t),
+                "state_fields": sfields, "state_names": [f["name"] for f in sfields],
+                "state_uuids": uuids(t),
                 "control": [], "control_uuid": None, "control_source": None,
             }
         if SENDING_RE.search(t):
@@ -183,12 +223,12 @@ def main():
         functions[fn]["control_uuid"] = cc["ctrl_uuid"]
         functions[fn]["control_source"] = cc["file"]
 
-    _emit(functions, unresolved, out)
+    _emit(functions, unresolved, command_enums, out)
     _report(functions, unresolved)
     return 0
 
 
-def _emit(functions, unresolved, out):
+def _emit(functions, unresolved, command_enums, out):
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     L = ["# VW California Camper Unit control dictionary",
          "# Auto-extracted (static, object-keyed) by tools/extract_protocol.py.",
@@ -207,13 +247,19 @@ def _emit(functions, unresolved, out):
             L.append("      []   # no unambiguous control model (see control_models_unresolved)")
         for f in e["control"]:
             off = f["offset"] if f["offset"] is not None else "MERGED_AMBIGUOUS"
-            wd = ("width: %d, default: %d" % (f["width"], f["default"])
-                  if f["width"] is not None else "width: UNKNOWN, default: UNKNOWN")
+            if f["width"] is not None:
+                rng = "0..%d" % (2 ** f["width"] - 1)
+                wd = "width: %d, default: %d, raw_range: %s" % (f["width"], f["default"], rng)
+            else:
+                wd = "width: UNKNOWN, default: UNKNOWN"
             L.append("      - {name: %s, offset: %s, %s, value_semantics: UNVERIFIED}"
                      % (f["name"], off, wd))
         L.append("    state_fields:")
-        for name in e["state_names"]:
-            L.append("      - {name: %s}" % name)
+        for f in e["state_fields"]:
+            if "offset" in f:
+                L.append("      - {name: %s, offset: %d, width: %d}" % (f["name"], f["offset"], f["width"]))
+            else:
+                L.append("      - {name: %s}" % f["name"])
     L += ["", "# Control models with no matching state function (resolve via a live pass).",
           "control_models_unresolved:"]
     for cm in unresolved:
@@ -221,6 +267,11 @@ def _emit(functions, unresolved, out):
         flds = list((names[0] if names else {}).values()) or list(cm["decls"].keys())
         L.append("  - file: %s   # control char %s" % (cm["file"], cm["ctrl_uuid"]))
         L.append("    fields: [%s]" % ", ".join(flds))
+    L += ["", "# Command / mode enum vocabularies found in the app (value semantics for the",
+          "# Mode-style fields above; map to a service by package).",
+          "command_enums:"]
+    for f in sorted(command_enums):
+        L.append("  %s: [%s]" % (f.replace("/", "_").replace(".java", ""), ", ".join(command_enums[f])))
     with open(out, "w") as f:
         f.write("\n".join(L) + "\n")
     print("wrote %s (%d functions, %d unresolved)" % (out, len(functions), len(unresolved)))

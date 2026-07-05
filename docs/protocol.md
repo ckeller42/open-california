@@ -36,13 +36,24 @@ unit's own `0x2901` descriptors label every pair "Control"/"State".
 
 ## Machine-readable dictionary
 
-The full per-function field map (control + state field names, widths, defaults) is
-auto-extracted from the app by **`tools/extract_protocol.py`** into
-**`protocol/dictionary.yaml`** (11 functions with state logs; control models joined
-per-constructor with state-field-overlap to defeat the shared fridge/heater class).
-Re-run `python3 tools/extract_protocol.py <decompiled sources> protocol/dictionary.yaml`
-after an app update. Bit *offsets* (from each `f()`/`e()`) and value semantics remain
-`UNVERIFIED` until a later pass; the fridge worked example below has verified widths.
+The full per-function field map is auto-extracted from the app by
+**`tools/extract_protocol.py`** into **`protocol/dictionary.yaml`** (11 functions).
+Extraction is **object-keyed** (`f23982e0`…) so name/width/default/offset stay
+aligned even for the shared fridge/heater control model; the right name-set is
+chosen by state-field overlap.
+
+Per field it emits: **name, bit offset, width, default, raw_range** (`0..2^w-1`).
+Control offsets come from each `f()`; state offsets from each `e()` (`subList`).
+A field placed differently across a shared model's two branches is flagged
+`offset: MERGED_AMBIGUOUS` (needs a live pass to disambiguate) rather than guessed.
+A `command_enums:` section lists the app's command vocabularies (e.g. lighting's
+`SET_BRIGHTNESS`/`SET_COLOR`/`SET_PROFILE`) for `Mode`-style value semantics;
+everything else stays `value_semantics: UNVERIFIED`.
+
+**Reproduce** end-to-end with `tools/decompile.sh` (apkeep → dex → jadx), then
+`python3 tools/extract_protocol.py <sources> protocol/dictionary.yaml`. A
+dictionary-driven frame builder lives in `tools/build_frame.py` (refuses to build
+when required fields are `MERGED_AMBIGUOUS`/`UNKNOWN`).
 
 ## Frame format
 
