@@ -1,0 +1,29 @@
+src/california/classify.py
+  s_63b6a7be25579f::t_0134ee16f789ab 1-15
+src/california/parse.py
+  s_63b6a7be25579f::t_cec251759b88b9 1-38
+tests/fixtures/tshark_classic_rfcomm.json
+  s_63b6a7be25579f::t_3c93523632e74b 1-6
+tests/fixtures/tshark_light_on.json
+  s_63b6a7be25579f::t_4891b52b15a14f 1-11
+tests/test_classify.py
+  s_63b6a7be25579f::t_5b7f9df7110c98 1-12
+tests/test_parse.py
+  s_63b6a7be25579f::t_3ed2007f753ba1 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4cb954eda838a23a151cbd5ff189036b416cf650",
+  "prompts": {},
+  "sessions": {
+    "s_63b6a7be25579f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a0ab28cf4efca02d6",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
