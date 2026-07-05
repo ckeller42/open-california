@@ -1,0 +1,11 @@
+[
+  {"_source": {"layers": {
+    "frame": {"frame.number": "12", "frame.time_relative": "1.500"},
+    "btatt": {
+      "btatt.opcode": "0x52",
+      "btatt.handle": "0x002a",
+      "btatt.uuid128": "0000fff1-0000-1000-8000-00805f9b34fb",
+      "btatt.value": "01:ff"
+    }
+  }}}
+]

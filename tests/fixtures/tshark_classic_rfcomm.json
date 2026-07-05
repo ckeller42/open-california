@@ -1,0 +1,6 @@
+[
+  {"_source": {"layers": {
+    "frame": {"frame.number": "5", "frame.time_relative": "0.200"},
+    "btrfcomm": {"btrfcomm.channel": "3"}
+  }}}
+]
