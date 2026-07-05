@@ -4,8 +4,11 @@ from california.model import Capture
 from california.diff import writes_of, WriteCandidate
 
 def load_map(path: str) -> dict:
-    with open(path) as f:
-        return yaml.safe_load(f) or {"actions": {}}
+    try:
+        with open(path) as f:
+            return yaml.safe_load(f) or {"actions": {}}
+    except FileNotFoundError:
+        return {"actions": {}}
 
 def save_map(path: str, data: dict) -> None:
     with open(path, "w") as f:

@@ -21,3 +21,8 @@ def test_replay_safe_false_when_payload_varies():
     # same action, differing payloads => nonce/counter/crypto present
     reps = [_cap("light-on", [(0x2a, b"\x01\xAA")]), _cap("light-on", [(0x2a, b"\x01\xBB")])]
     assert replay_safe(reps) is False
+
+def test_load_map_missing_file(tmp_path):
+    # Regression: load_map should return {"actions": {}} for nonexistent path
+    p = str(tmp_path / "nope.yaml")
+    assert load_map(p) == {"actions": {}}
