@@ -49,13 +49,18 @@ any bonded central has full, replayable control.
 - **State `0x1102`** (8 bytes): byte0 bit0 = power (`09`=on/`08`=off), byte1 =
   fluctuating temperature reading; remaining bytes bit-packed flags/setpoint.
   Full bit slicing is in the app's decode; the power bit is live-confirmed.
-- **Control `0x1101`** (6 bytes): field `POWER` at bits 6-7; neighbors + setpoint
-  fields elsewhere (see `tools/encode.py` for the field map + defaults).
-- **Computed frames** (other fields = app defaults):
-  - **ON  = `3d 7b 00 7f 1f 3f`**
-  - **OFF = `3c 7b 00 7f 1f 3f`**
-  - Bytes 1-5 are defaults; the app sends current setpoint/mode there — pass
-    live values to avoid resetting them.
+- **Control `0x1101`** (6 bytes, device-confirmed length): field `POWER` at
+  bits 6-7; neighbors + setpoint fields elsewhere (see `tools/encode.py`).
+- **Computed frames** (fridge defaults) — **UNVERIFIED, do not trust blindly**:
+  - **ON  = `fd 77 0f 1e 3e 1f`**
+  - **OFF = `fc 77 0f 1e 3e 1f`**
+  - Caveats: (1) the fridge/heater control models are *merged* in the decompile —
+    field defaults were initially mis-read from the heater (`1701`) model, giving
+    the WRONG frame `3d7b007f1f3f`; the values above use the fridge (`1101`)
+    constructor. (2) `POWER`=`f23982e0` is inferred (the sole boolean field).
+    (3) Bytes 1-5 are constructor defaults; the app likely sends current
+    setpoint/mode — writing defaults may reset them. **Verify against State
+    char `1102` (byte0 `08↔09`) before relying on any specific frame.**
 
 ## Status / open items
 

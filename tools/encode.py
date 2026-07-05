@@ -30,13 +30,22 @@ def pack_msb(frame_bits: list[int]) -> bytes:
     return bytes(out)
 
 
-def fridge_control(power: int, *, f0=3, g0=3, h0=0, j0=7, i0=11,
-                   n0=0, k0=127, l0=31, m0=63) -> bytes:
+def fridge_control(power: int, *, f0=3, g0=3, h0=3, j0=7, i0=7,
+                   n0=31, k0=30, l0=62, m0=31) -> bytes:
     """Build the 6-byte fridge (service 0x1100) control frame.
 
-    Field placement from the app's control model. `power` is 0=off / 1=on;
-    the remaining kwargs default to the app's field defaults. Bytes 1-5 carry
-    setpoint/mode; pass current values to preserve them (defaults will reset).
+    Field placement + defaults from the app's *fridge* control model (the 1101
+    constructor). NOTE: the heater (1701) model shares this class with DIFFERENT
+    defaults — do not mix them up (an earlier version did, producing the wrong
+    frame `3d7b007f1f3f`; the fridge frame is `fd770f1e3e1f`).
+
+    UNVERIFIED against the live unit. Also: `power` (field f23982e0) being the
+    on/off bit is inferred; the fridge/heater model classes are merged in the
+    decompile so the case-0 bit placement is assumed; and bytes 1-5 are
+    constructor defaults — the app likely sends current setpoint/mode there, so
+    writing defaults may reset settings. Verify against State char 1102 before use.
+
+    `power` is 0=off / 1=on.
     """
     a = [0] * 48
 
@@ -59,6 +68,7 @@ def fridge_control(power: int, *, f0=3, g0=3, h0=0, j0=7, i0=11,
 
 
 if __name__ == "__main__":
-    assert bits_msb_first(5, 4) == [0, 1, 0, 1]
-    print("fridge ON :", fridge_control(1).hex())   # 3d7b007f1f3f
-    print("fridge OFF:", fridge_control(0).hex())    # 3c7b007f1f3f
+    # bit-math sanity (matches the app's u8.c/u8.e derived semantics)
+    assert bits_msb_first(11, 4) == [1, 0, 1, 1]      # low 4 bits of 11, MSB-first
+    print("fridge ON  (UNVERIFIED):", fridge_control(1).hex())   # fd770f1e3e1f
+    print("fridge OFF (UNVERIFIED):", fridge_control(0).hex())   # fc770f1e3e1f
