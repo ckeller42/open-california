@@ -1,0 +1,23 @@
+docs/capture-sop.md
+  s_af83cfaccd00ef::t_945e4879049a37 1-30
+src/california/cli.py
+  s_af83cfaccd00ef::t_b2d3787eee1da3 1-43
+tests/test_cli.py
+  s_af83cfaccd00ef::t_cc208e5e16262b 4-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "30619488a21c2eca5141b322fe2c78d6fe4c9e8b",
+  "prompts": {},
+  "sessions": {
+    "s_af83cfaccd00ef": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a8ab532fe6a35c666",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
