@@ -1,0 +1,21 @@
+src/california/codegen.py
+  s_5f9a601c3b8281::t_871a6b014b1685 2,6-9,40-45,47-56,58
+tests/test_codegen.py
+  s_5f9a601c3b8281::t_8b809cdbfb10e6 22-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fab2173820b12afd6b11979fb55d7f27910d4c2e",
+  "prompts": {},
+  "sessions": {
+    "s_5f9a601c3b8281": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aa5cc7b08bfe7aa69",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
