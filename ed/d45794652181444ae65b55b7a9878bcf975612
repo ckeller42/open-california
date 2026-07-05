@@ -1,0 +1,21 @@
+src/california/diff.py
+  s_c9bcd43d103a63::t_fb6c5f91cec7ed 1-63
+tests/test_diff.py
+  s_c9bcd43d103a63::t_0869edf1d7a9d8 1-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "edd45794652181444ae65b55b7a9878bcf975612",
+  "prompts": {},
+  "sessions": {
+    "s_c9bcd43d103a63": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a4fd607275ce19c36",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
