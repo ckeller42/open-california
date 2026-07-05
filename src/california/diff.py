@@ -15,10 +15,13 @@ class WriteCandidate:
 def writes_of(cap: Capture) -> set[tuple[int, bytes]]:
     return {(e.handle, e.value) for e in cap.events if e.op in _WRITE_OPS}
 
-def _uuid_for(cap: Capture, handle: int) -> str | None:
-    for e in cap.events:
-        if e.handle == handle and e.uuid:
-            return e.uuid
+def _uuid_for(caps: list[Capture] | Capture, handle: int) -> str | None:
+    # Accept either a list or a single capture for backward compatibility with diff_pair
+    caps_list = caps if isinstance(caps, list) else [caps]
+    for cap in caps_list:
+        for e in cap.events:
+            if e.handle == handle and e.uuid:
+                return e.uuid
     return None
 
 def diff_pair(action_cap: Capture, baseline_cap: Capture) -> list[WriteCandidate]:
@@ -33,7 +36,12 @@ def isolate(captures: list[Capture]) -> dict[str, list[WriteCandidate]]:
 
     def baseline_for(action: str) -> set[tuple[int, bytes]]:
         # prefer the paired inverse (on<->off); else union of all other actions
-        inverse = action.replace("-on", "-off") if action.endswith("-on") else action.replace("-off", "-on")
+        if action.endswith("-on"):
+            inverse = action.replace("-on", "-off")
+        elif action.endswith("-off"):
+            inverse = action.replace("-off", "-on")
+        else:
+            inverse = None
         if inverse in by_action and inverse != action:
             base: set[tuple[int, bytes]] = set()
             for c in by_action[inverse]:
@@ -56,7 +64,7 @@ def isolate(captures: list[Capture]) -> dict[str, list[WriteCandidate]]:
             for w in writes_of(c) - base:
                 counts[w] += 1
         n = len(caps)
-        cands = [WriteCandidate(h, _uuid_for(caps[0], h), v, cnt / n)
+        cands = [WriteCandidate(h, _uuid_for(caps, h), v, cnt / n)
                  for (h, v), cnt in counts.items()]
         cands.sort(key=lambda c: (-c.confidence, c.handle))
         result[action] = cands
