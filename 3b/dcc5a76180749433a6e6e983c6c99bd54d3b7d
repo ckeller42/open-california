@@ -1,0 +1,31 @@
+src/california/classify.py
+  s_2eba988819d9be::t_221e54b8ccb1e2 9
+src/california/cli.py
+  s_2eba988819d9be::t_8696156d4ce1d6 38-41
+src/california/codegen.py
+  s_2eba988819d9be::t_e6d91a081e15f6 9,35-37
+src/california/protocol.py
+  s_2eba988819d9be::t_b4d8d34bc1ccf3 2,5,38-56
+tests/test_codegen.py
+  s_2eba988819d9be::t_604a33ccd03b53 48-52
+tests/test_integration.py
+  s_2eba988819d9be::t_d54ef2220f0119 1-51
+tests/test_protocol.py
+  s_2eba988819d9be::t_627a06e5c2d2b9 29-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3bdcc5a76180749433a6e6e983c6c99bd54d3b7d",
+  "prompts": {},
+  "sessions": {
+    "s_2eba988819d9be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a6cedd53eb4cff93d",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
