@@ -42,11 +42,14 @@ def water(d: dict) -> dict:
 
 def energy(d: dict) -> dict:
     stale = d.get("AgeOneBattValuesMinutes", 255) >= 255
+    # battery-1 telemetry reads sentinels (I=0x81 / U=48) when the engine is off;
+    # battery-2 (leisure) is always live. Flag validity rather than show garbage.
+    b1_valid = d.get("IOneBattBemAfs") != 0x81
     return {
         "installed": True,
         "stale": stale,               # True => SoC/V/A below are last-known, not live
         "age_min": d.get("AgeOneBattValuesMinutes"),
-        "batt1_v": round(d.get("UOneBattBemAfs", 0) * 0.1, 1),
+        "batt1_v": round(d.get("UOneBattBemAfs", 0) * 0.1, 1) if b1_valid else None,
         "batt2_v": round(d.get("UTwoBattBemAfs", 0) * 0.1, 1),
         "soc1_level": d.get("SocOneBattAfs"),      # coarse 0-15
         "soc2_level": d.get("SocTwoBattAfs"),
@@ -104,15 +107,35 @@ def roof(d: dict) -> dict:
     }
 
 
+def lighting(d: dict) -> dict:
+    zones = {k: v for k, v in d.items() if k.startswith("Brightness")}
+    on = [k.replace("BrightnessL", "") for k, v in zones.items() if v]
+    return {
+        "installed": True,
+        "profile": d.get("ProfileNumber"),
+        "mode": d.get("Mode"),
+        "any_on": bool(on),
+        "zones_on": ",".join(on) if on else "-",
+    }
+
+
+def general(d: dict) -> dict:
+    # SwVersion-style fields are raw*100 (÷100 for display); left raw here.
+    return {"installed": True, **{k: v for k, v in d.items()}}
+
+
 def _generic(d: dict) -> dict:
-    out = {"installed": bool(d.get("Installed"))} if "Installed" in d else {}
-    out["raw"] = d
+    # surface fields inline (installed flag first) so status isn't blank
+    out = {}
+    if "Installed" in d:
+        out["installed"] = bool(d["Installed"])
+    out.update({k: v for k, v in d.items() if k != "Installed"})
     return out
 
 
 INTERPRETERS = {
     "water": water, "energy": energy, "cooler": cooler, "airheater": airheater,
-    "campingmode": campingmode, "roof": roof,
+    "campingmode": campingmode, "roof": roof, "lighting": lighting, "general": general,
 }
 
 
