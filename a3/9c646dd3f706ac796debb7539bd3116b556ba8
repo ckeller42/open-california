@@ -1,0 +1,21 @@
+docs/business-logic/remote-control-connect-gate.md
+  s_1dccea91605154::t_d3644588c90a37 1-180
+docs/business-logic/remote-control-write-mechanics.md
+  s_1dccea91605154::t_5f7a1537d7ff7d 1-138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a39c646dd3f706ac796debb7539bd3116b556ba8",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
