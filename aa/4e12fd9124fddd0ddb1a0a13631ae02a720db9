@@ -1,0 +1,23 @@
+tests/test_calictl.py
+  s_1dccea91605154::t_147fdcb3780aac 123-137
+calictl/overrides.py
+  s_1dccea91605154::t_5f5495b27abf00 27-35,39
+calictl/control.py
+  s_1dccea91605154::t_0151faf2e7608f 1-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "aa4e12fd9124fddd0ddb1a0a13631ae02a720db9",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
