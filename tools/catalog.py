@@ -27,3 +27,18 @@ def keys(cat: dict) -> set:
     return {"%s.%s.%s" % (fn, k, f)
             for fn, kinds in cat.items() for k, fields in (kinds or {}).items()
             for f in (fields or {})}
+
+def dictionary_keys(funcs) -> set:
+    out = set()
+    for fn, f in funcs.items():
+        for sf in f.state_fields:
+            out.add("%s.state.%s" % (fn, sf.name))
+        for cf in f.control_fields:
+            out.add("%s.control.%s" % (fn, cf.name))
+    return out
+
+def emitted_state_names(fn, funcs) -> set:
+    from calictl import semantics, mqtt
+    func = funcs[fn]
+    zero = {sf.name: 0 for sf in func.state_fields if sf.placed}
+    return set(mqtt.flatten(semantics.interpret(fn, zero)))
