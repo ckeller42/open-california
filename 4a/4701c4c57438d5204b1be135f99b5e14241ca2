@@ -1,0 +1,22 @@
+calictl/serve.py
+  s_1dccea91605154::t_e1eac8c94f1576 112-119
+  s_1dccea91605154::t_937e9ef66de0a9 33
+  s_1dccea91605154::t_d79a9d04d2c20c 85
+  s_1dccea91605154::t_e9db4b583721c0 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4a4701c4c57438d5204b1be135f99b5e14241ca2",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
