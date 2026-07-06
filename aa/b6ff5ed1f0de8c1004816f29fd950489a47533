@@ -1,0 +1,21 @@
+tests/test_audit_signals.py
+  s_1dccea91605154::t_9772bc5b107108 1-10
+tools/audit_signals.py
+  s_1dccea91605154::t_c4144da6c7c3e6 1-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "aab6ff5ed1f0de8c1004816f29fd950489a47533",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
