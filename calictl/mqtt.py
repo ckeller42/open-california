@@ -53,6 +53,7 @@ ENTITY_SPECS: dict[str, list] = {
         EntitySpec("sensor", "batt2_current", "Leisure Battery Current", {"icon": "mdi:current-dc"}),
         EntitySpec("sensor", "batt1_v", "Starter Battery", {"unit_of_measurement": "V", "device_class": "voltage"}),
         EntitySpec("binary_sensor", "dcdc_charging", "DC-DC Charging", {**_BIN, "device_class": "battery_charging"}),
+        EntitySpec("sensor", "energy_mode", "Energy Mode", {"icon": "mdi:lightning-bolt"}),
     ],
     "cooler": [
         EntitySpec("binary_sensor", "on", "Fridge On", {**_BIN, "icon": "mdi:fridge"}),
@@ -66,12 +67,29 @@ ENTITY_SPECS: dict[str, list] = {
     "airheater": [
         EntitySpec("binary_sensor", "running", "Air Heater Running", {**_BIN, "device_class": "running"}),
         EntitySpec("sensor", "level", "Air Heater Level", {"icon": "mdi:radiator"}),
+        EntitySpec("sensor", "running_time", "Air Heater Runtime", {"unit_of_measurement": "min", "icon": "mdi:timer"}),
     ],
     "lighting": [
         EntitySpec("binary_sensor", "any_on", "Interior Lights On", {**_BIN, "icon": "mdi:led-strip-variant"}),
     ],
     "roof": [
         EntitySpec("sensor", "position", "Roof Position", {"icon": "mdi:caravan"}),
+    ],
+    # Installed-gated: only appear on vans that have these features.
+    "livingroomheater": [
+        EntitySpec("binary_sensor", "air_on", "LR Heater Air", {**_BIN, "icon": "mdi:heat-wave"}),
+        EntitySpec("binary_sensor", "water_on", "LR Heater Water", {**_BIN, "icon": "mdi:water-boiler"}),
+        EntitySpec("sensor", "air_temp", "LR Heater Air Temp", {"unit_of_measurement": "°C", "device_class": "temperature"}),
+        EntitySpec("sensor", "water_temp", "LR Heater Water Temp", {"unit_of_measurement": "°C", "device_class": "temperature"}),
+    ],
+    "roofaircondition": [
+        EntitySpec("binary_sensor", "on", "Roof A/C On", {**_BIN, "icon": "mdi:air-conditioner"}),
+        EntitySpec("sensor", "target_temp", "Roof A/C Target Temp", {"unit_of_measurement": "°C", "device_class": "temperature"}),
+        EntitySpec("sensor", "fan_speed", "Roof A/C Fan", {"icon": "mdi:fan"}),
+    ],
+    "satelliteantenna": [
+        EntitySpec("sensor", "signal_level", "Satellite Signal", {"icon": "mdi:satellite-uplink"}),
+        EntitySpec("binary_sensor", "system_on", "Satellite On", {**_BIN, "icon": "mdi:satellite-variant"}),
     ],
 }
 
