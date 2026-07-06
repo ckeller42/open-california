@@ -1,0 +1,19 @@
+protocol/signals.yaml
+  s_1dccea91605154::t_d64fee01dcfac3 1-419,421-435,437-517,519,521,524-543,546-1580
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e114780906c41ef1b9d3c6b1527ea18f18c48ec8",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
