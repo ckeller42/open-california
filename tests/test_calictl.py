@@ -106,8 +106,11 @@ def test_installed_from_states():
 def test_points_for_reuses_numeric_fields():
     from calictl import influx
     pts = influx.points_for({"water": {"installed": True, "fresh": {"percent": 38}}})
-    # one Point tagged function=water with a numeric field
-    assert any(p._name == "camper" for p in pts)
+    # one "camper" Point tagged function=water carrying the flattened numeric field
+    assert len(pts) == 1
+    p = pts[0]
+    assert p._name == "camper" and p._tags.get("function") == "water"
+    assert p._fields.get("fresh_percent") == 38.0   # field actually landed, not just the point
 
 
 def test_full_parity_devices_and_installed_gating():

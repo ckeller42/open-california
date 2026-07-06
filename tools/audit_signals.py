@@ -12,8 +12,11 @@ def gui_keys(ui_dir) -> dict:
                 out.setdefault(tok, key)
     return out
 
-# Plausible ranges by catalog 'kind' for live sanity.
-_RANGES = {"battery": (8, 16), "leisure_battery": (8, 16), "level": (0, 15),
+# Plausible ranges for INTERPRETED (scaled) sample values, keyed by catalog 'kind'.
+# Only kinds with a well-defined band are listed; overloaded kinds like 'level'
+# (0-15 SoC vs 0-255 counters) and unscaled 'current' are intentionally excluded to
+# avoid false positives. Samples passed to report_from_keys must be scaled values.
+_RANGES = {"battery": (8, 16), "leisure_battery": (8, 16),
            "percent": (0, 100), "temperature": (-40, 90)}
 
 def report_from_keys(dictkeys, cat, gui, app, samples) -> list:
