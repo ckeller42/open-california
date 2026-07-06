@@ -1,0 +1,14 @@
+energy:
+  state:
+    ITwoBattBemAfs:
+      decision: surface
+      name: batt2_current
+      unit: A
+      scale: UNVERIFIED
+      kind: leisure_battery
+      sources: {app: null, live: 319, gui: infoPage_battery_value_text, vwdoc: null}
+      confidence: medium
+    LandNotAvailable:
+      decision: omit
+      reason: "fault/status bit — surfaced via faults[] aggregate"
+      sources: {app: null, gui: null, vwdoc: null}
