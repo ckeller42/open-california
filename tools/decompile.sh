@@ -73,7 +73,10 @@ unzip -o "$APK_FILE" "classes*.dex" -d "$DEX_DIR" || die "unzip failed"
 
 # --- Step 3: Decompile ---
 echo "Step 3: Decompiling with jadx..."
-jadx -d "$OUTPUT_DIR" "$DEX_DIR"/classes.dex "$DEX_DIR"/classes2.dex --no-res || die "jadx failed"
+# --show-bad-code is REQUIRED: jadx's normal pass silently skips two large state
+# decode methods (roof ig/c, lighting dg/a -> "Method dump skipped"), which drops
+# the Roof(1402)/Lighting(1502) state field maps from the dictionary entirely.
+jadx --show-bad-code -d "$OUTPUT_DIR" "$DEX_DIR"/classes.dex "$DEX_DIR"/classes2.dex --no-res || die "jadx failed"
 
 # --- Done ---
 SOURCES="${OUTPUT_DIR}/sources"
