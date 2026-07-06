@@ -1,0 +1,27 @@
+tools/app_setters.py
+  s_1dccea91605154::t_17648377e05c0b 1-47
+tests/test_app_setters.py
+  s_1dccea91605154::t_9ae682e3f716ba 1-17
+tools/audit_signals.py
+  s_1dccea91605154::t_d7e01fb5c0f1e3 22
+  s_1dccea91605154::t_d8cba77e07e286 47-62,65-66
+  s_1dccea91605154::t_7e9f0e1de51563 90-92,95
+tests/test_audit_signals.py
+  s_1dccea91605154::t_9ae682e3f716ba 22-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "20f5d418d30fd518adeef06c96de3b7edc25e32c",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
