@@ -24,10 +24,19 @@ CONTROL_OFFSETS = {
         "TimerMin": (32, 8),
         "NightTimerHourOn": (40, 8),
     },
+    # 1-byte camping control frame (control char 1201), from lg/a.java f()
+    # default branch. State@6 is already placed by the extractor; the other
+    # three 2-bit fields were left MERGED_AMBIGUOUS because lg/a also serves
+    # roof-AC.
+    "campingmode": {
+        "InteriorLight": (0, 2),
+        "OutsideLight": (2, 2),
+        "UsbCharger": (4, 2),
+    },
 }
 
 # control frame lengths confirmed on-device / from the model (bytes)
-CONTROL_FRAME_BYTES = {"cooler": 6, "airheater": 6}
+CONTROL_FRAME_BYTES = {"cooler": 6, "airheater": 6, "campingmode": 1}
 
 
 def apply(funcs: dict) -> None:

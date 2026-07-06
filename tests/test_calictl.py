@@ -120,3 +120,18 @@ def test_full_parity_devices_and_installed_gating():
     # roof is present but ONLY as a sensor (no switch/light/command_topic)
     roof = [c for t, c in cfgs.items() if "roof_" in t and "roofair" not in t]
     assert roof and all("command_topic" not in c for c in roof)
+
+
+def test_camping_light_control_frame():
+    from calictl import protocol as P, overrides, control
+    funcs = P.load(); overrides.apply(funcs)
+    frame = control.build(funcs, "campingmode", "interior_light", "on", {})
+    assert len(frame) == 1
+    back = control.decode_control(funcs["campingmode"], frame)
+    assert back["InteriorLight"] == control.LIGHT_ON        # changed
+    assert back["OutsideLight"] == 3 and back["State"] == 3 # untouched = sentinel
+    assert back["UsbCharger"] == 3
+    # USB is not inverted
+    usb = control.decode_control(funcs["campingmode"],
+                                 control.build(funcs, "campingmode", "usb_charger", "on", {}))
+    assert usb["UsbCharger"] == 1 and usb["InteriorLight"] == 3
