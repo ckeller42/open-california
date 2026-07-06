@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-07-06-homeassistant-siri-lights-design.md
+  s_1dccea91605154::t_8bbf1e8821e2aa 1,5-9,13-69,74-76,78-79,82-88,90,92-93,95-97,99-124,129-132,138,141,144,146-151,155-159,163-167,172-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9ab75e42b4aae98b6aa8fa45e861b2afc8ecf1e6",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
