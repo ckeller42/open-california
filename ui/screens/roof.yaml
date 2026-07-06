@@ -1,0 +1,159 @@
+# Pop-up roof (raise/lower) screen. NOT the same feature as "roof air
+# condition" (climate control mounted in the roof) — see roof-air-condition.yaml.
+# Nav destination: NavigationConnectivity$RoofScreen (connectivityui/graphs).
+#   com/californiaontour/connectivityui/graphs/NavigationConnectivity$RoofScreen.java
+# Full reverse-engineered business logic (control model, safety heartbeat,
+# enums) is documented in docs/business-logic/lighting-energy-water-sat-roof.md
+# ("Roof / pop-top" section) — this file focuses on the GUI surface only;
+# see that doc for exact BLE recipes.
+# Control model: jg/a.java (service 0x1400, control char 0x1401). Feature
+# ViewModel: ig/c.java (implements hf.a). protocol/dictionary.yaml lists this
+# under control_models_unresolved (no dictionary function name assigned yet).
+screen: roof
+title_key: popUpRoof_pageTitle_popUpRoof_text
+function: null   # matches control_models_unresolved[jg/a.java] in protocol/dictionary.yaml, not a named dictionary function
+widgets:
+  - id: statusReadout
+    type: readout
+    label_key: null
+    range: null
+    controls: {field: State, action: null}
+    elements:
+      - {value: 0, name: CLOSED, label_key: popUpRoof_statusBar_theRoofIsClosed_text}
+      - {value: 1, name: OPEN, label_key: popUpRoof_statusBar_theRoofIsOpen_text}
+      - {value: 2, name: MIDDLE_POSITION, label_key: popUpRoof_statusBar_intermediatePosition_text}
+      - {value: 3, name: OTHER}
+      - {value: 4, name: INIT}
+      - {value: 5, name: ERROR}
+      - {name: OPENING_TRANSIENT, label_key: popUpRoof_statusBar_opening_text, note: "local UI flag while heartbeat is running, not a wire state"}
+      - {name: CLOSING_TRANSIENT, label_key: popUpRoof_statusBar_closing_text, note: "local UI flag while heartbeat is running, not a wire state"}
+    constraints: "readback enum hf/b.java (docs/business-logic/lighting-energy-water-sat-roof.md:391); OPENING/CLOSING are local flags set around the 1Hz heartbeat, not part of the 6-value wire enum"
+
+  - id: openButton
+    type: button
+    label_key: popUpRoof_instruction_toOpenPressTheUpperButton_text
+    range: null
+    controls: {field: Up, action: X1}
+    elements: null
+    constraints: >
+      ig/c.java:329-351 n2(). No-op if state already OPEN, or if <1000ms since
+      last open/close command (debounce). Otherwise sends {Down:0, Up:1} once,
+      then RESENDS {Down:0, Up:1} every 1000ms (continuous heartbeat) until
+      stopped or fully open — a single tap is not sufficient to replicate
+      this UI, must hold/repeat. See popUpRoof_instruction_holdTheButton_text.
+
+  - id: closeButton
+    type: button
+    label_key: popUpRoof_instruction_toClosePressTheLowerButton_text
+    range: null
+    controls: {field: Down, action: X1}
+    elements: null
+    constraints: >
+      ig/c.java:239-266 e1(). Mirror of openButton: no-op if already CLOSED
+      or debounced; otherwise {Down:1, Up:0} once then repeated every 1000ms.
+
+  - id: stopButton
+    type: button
+    label_key: null
+    range: null
+    controls: {field: null, action: X1}
+    elements: null
+    constraints: "ig/c.java:191-206 W(). Cancels the repeat timer and sends {Down:0, Up:0} once. No dedicated string key found for this button; UI likely reuses a generic stop/pause icon (drawable/stop)."
+
+  - id: installedLabel
+    type: label
+    label_key: null
+    range: null
+    controls: {field: null, action: null}
+    elements: null
+    constraints: >
+      docs/business-logic/feature-availability.md §2b: unlike every other
+      confirmed feature in this task, the Roof/pop-top screen's visibility
+      flag (ig/c.java b4(), seeded from f12420f0 = bVar2.f14589c, ig/c.java:127)
+      IS backed by a genuine decoded field (not a hardcoded constant like
+      Campingmode) — but JADX failed to decompile the e() decode method body
+      for this class, so the exact Installed bit index within the 0x1400
+      characteristic is UNVERIFIED. Treat as "likely Installed-gated, confirm
+      bit position by live capture" — do NOT assume unconditional
+      availability the way Campingmode gets.
+
+  - id: safetyAckIndicator
+    type: label
+    label_key: null
+    range: null
+    controls: {field: SafetyCounter, action: null}
+    elements: null
+    constraints: >
+      ig/c.java:181-190 R3()/L(). 3000ms dead-man's-switch: after starting a
+      move, the app expects a SafetyCounter ack from the vehicle; if absent
+      after 3s it logs a warning and raises a UI flag. Modeled here as an
+      indicator widget, not a user control.
+
+  - id: setRoofInstructionLabel
+    type: label
+    label_key: popUpRoof_instruction_pleaseSetTheRoof_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: legalNoteLabel
+    type: label
+    label_key: popUpRoof_legalNote_pleaseNoteThat_text
+    range: null
+    controls: null
+    elements: null
+
+  - id: roofConsoleLightingNav
+    type: nav
+    label_key: lighting_roofConsole_roofConsoleLightSwitch_text
+    range: null
+    controls: null
+    elements: null
+    constraints: "Target: NavigationConnectivity$RoofConsoleLightSwitchScreen — owned by the lighting agent's screens (lighting_roofConsole_* / lighting_popupRoof_* keys), not duplicated here"
+
+  - id: safetyDialogs
+    type: list
+    label_key: null
+    range: null
+    controls: null
+    elements:
+      - dialog_info_popUpRoof_safetyCheck_headline / _beforeOpening_text / _beforeClosing_text / _wait_button
+      - dialog_info_popUpRoof_activateIgnition_headline / _text / _button
+      - dialog_info_popUpRoof_onlyPossibleWhenStationary_headline / _text / _button
+      - dialog_info_popUpRoof_functionInUse_headline / _text
+      - dialog_info_popUpRoof_somethingWentWrong_headline / _text
+      - dialog_warning_popUpRoof_childLock_headline / _text
+      - dialog_warning_popUpRoof_lowBattery_headline / _text
+      - dialog_warning_popUpRoof_roofStuck_headline / _text
+      - dialog_warning_popUpRoof_roofStillOpen_headline_t6 / _text_t6
+      - dialog_warning_popUpRoof_roofNotFullyOpen_headline_t6 / _text_t6
+      - dialog_error_popUpRoof_secureManually_headline / _text
+      - dialog_error_popUpRoof_roofHydraulicsError_headline_t6 / _text_t6
+      - dialog_error_popUpRoof_temporarilyOutOfFunction_headline / _text
+      - dialog_error_popUpRoof_unknownError_headline / _text
+      - dialog_error_popUpRoof_unknownErrorActive_headline_t6 / _text_t6
+      - dialog_criticalError_popUpRoof_roofOpenWhileDriving_headline / _text
+    constraints: "Full set of modal dialogs found for this screen; not modeled as individual widgets"
+icons:
+  - drawable/pop_up_roof
+  - drawable/tiltroof
+  - drawable/roof_switch_closed
+  - drawable/roof_switch_open
+  - drawable/roof_switch_disabled
+  - drawable/roof_switch_enabled
+  - drawable/roof_switch_pressed_down
+  - drawable/roof_switch_pressed_up
+  - drawable/stop
+notes: >
+  Discovered via NavigationConnectivity$RoofScreen.java (empty nav-route
+  marker, no composable body — content lives in R8-obfuscated lambda classes
+  not resolvable by name). Widget list reconstructed from composeResources
+  string keys filtered to "popUpRoof"/"PopUpRoof" prefix (114 keys total;
+  lighting_* and Vehicle_Property_*Roof* keys excluded — see
+  roof-console-light-switch under lighting.yaml and Vehicle_Category_Roof_*
+  under vehicle-data in vehicle-info.yaml). Business logic (Up/Down heartbeat,
+  debounce, safety ack, roof-state enum) fully cross-checked against
+  docs/business-logic/lighting-energy-water-sat-roof.md's "Roof / pop-top"
+  section, which reverse-engineered jg/a.java + ig/c.java + hf/b.java in
+  detail — this is the authoritative source for exact recipes; this YAML is
+  the GUI-shape summary of it.

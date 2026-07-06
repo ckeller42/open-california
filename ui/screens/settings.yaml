@@ -1,0 +1,98 @@
+# Settings-flavored children of the Account tab: unit preference, data
+# privacy toggles, notification preferences, and connectivity/background
+# behavior. All four are separate NavigationAccount nav destinations, but
+# grouped in one file since each is a small single-purpose form.
+#   NavigationAccount$UnitOfDistanceScreen.java
+#   NavigationAccount$DataPrivacyScreen.java (+ $DataPrivacyAnalyticsScreen, $DataPrivacyGoogleMapsScreen)
+#   NavigationAccount$NotificationSettingsScreen.java
+#   NavigationAccount$ConnectivitySettingsScreen.java
+screen: settings
+title_key: connectivitySettings_pageTitle_connectivitySettings_text   # only one of the 4 sub-screens has a dedicated pageTitle key
+function: null
+widgets:
+  - id: unitOfDistanceSelector
+    type: button
+    label_key: account_mainNavigation_unitOfDistance_text
+    range: null
+    controls: null
+    elements: [account_unitOfDistance_kilometers_text, account_unitOfDistance_miles_text]
+    constraints: "Simple 2-option picker (km/mi)"
+
+  - id: dataPrivacyList
+    type: list
+    label_key: account_mainNavigation_dataPrivacy_text
+    range: null
+    controls: null
+    elements: [account_dataPrivacy_analytics_text, account_dataPrivacy_googleMaps_text]
+
+  - id: analyticsToggle
+    type: toggle
+    label_key: account_analytics_allowAnalytics_text
+    range: null
+    controls: null
+    elements: null
+    constraints: "$DataPrivacyAnalyticsScreen child; cf. onboarding_analytics_* copy shown at first-run time in onboarding.yaml"
+
+  - id: googleMapsToggle
+    type: toggle
+    label_key: account_googleMaps_useGoogleMaps_text
+    range: null
+    controls: null
+    elements: [account_googleMaps_byUsingGoogleMaps_text, account_googleMaps_youCanFindMoreInfo_text]
+    constraints: "$DataPrivacyGoogleMapsScreen child"
+
+  - id: notificationSettingsList
+    type: list
+    label_key: notificationSettings_headline_vehcileAlertsAnd_text
+    range: null
+    controls: null
+    elements:
+      - notificationSettings_headline_vehicleConnection_text
+      - notificationSettings_description_manageStatus_text
+      - notificationSettings_listItem_connectionStatus_text
+      - notificationSettings_listItem_criticalIssues_text
+      - notificationSettings_listItem_errors_text
+      - notificationSettings_listItem_importantIssues_text
+      - notificationSettings_listItem_infos_text
+      - notificationSettings_listItem_nonUrgentBut_text
+      - notificationSettings_listItem_stayInformedAbout_text
+      - notificationSettings_listItem_warnings_text
+    constraints: "Per-severity toggle list (critical/errors/warnings/infos); feeds notifications.yaml's NotificationCenterScreen feed"
+
+  - id: connectivitySettingsDescription
+    type: label
+    label_key: connectivitySettings_description_ifTheSettingsBelow_text
+    range: null
+    controls: null
+    elements: [connectivitySettings_description_thisMayAffect_text, connectivitySettings_description_toReceiveNotifications_text]
+
+  - id: connectivitySettingsList
+    type: list
+    label_key: null
+    range: null
+    controls: null
+    elements: [connectivitySettings_listItem_appNotifications_text, connectivitySettings_listItem_bluetoothBackgroundActivity_text]
+
+  - id: enableNotificationsDrawer
+    type: drawer
+    label_key: connectivitySettings_drawerTitle_manageSettings_text
+    range: null
+    controls: null
+    elements:
+      - connectivitySettings_drawer_enableAppNotifications_text
+      - connectivitySettings_drawer_activateNow_button
+      - connectivitySettings_step_allowNotifications_text
+      - connectivitySettings_step_goToSettings_text
+      - connectivitySettings_step_selectTheListEntry_text
+      - connectivitySettings_primaryButton_goToSettings_button
+icons:
+  - drawable/privacy
+  - drawable/notification
+  - drawable/alert_blue
+  - drawable/checkmark
+notes: >
+  All four sub-forms live under NavigationAccount (not a separate top-level
+  "Settings" module — grep of com/californiaontour/settings/ found only a
+  single unrelated model class, OnlineManualAvailability.java, no screen).
+  ConnectivitySettingsScreen and its drawer/step flow deep-link out to the
+  OS-level Bluetooth/notification settings (external, not modeled here).

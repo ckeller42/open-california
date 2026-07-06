@@ -1,0 +1,110 @@
+# Extracted from VW CaliforniaOnTour app decompile (string-key harvest).
+# No dedicated "waterPage_*" title key exists — fresh/waste water tank readouts
+# appear to live as tiles on the main vehicle-overview dashboard
+# (vehiclePage_overviewWidget_freshWater_text / wasteWater_text) rather than as
+# their own titled screen, backed directly by service 1300/1302 state_fields
+# (read-only telemetry, no control_fields in dictionary.yaml).
+# NOTE: keys like FreshWaterSupply/GreyWaterDisposal/freshwater/greywater_disposal
+# drawables found elsewhere in the app belong to the campsite-search "amenities"
+# feature (places_core module, search_features_* strings) and are UNRELATED to
+# this in-vehicle tank telemetry — excluded here.
+screen: water
+title_key: null
+function: water  # service 1300/1302, no control model (read-only telemetry)
+widgets:
+  - id: freshWaterTank
+    type: readout
+    label_key: vehiclePage_overviewWidget_freshWater_text
+    range: "0..255 (FreshWaterLevel, offset 8, width 8 — raw scale UNVERIFIED, likely 0..100%)"
+    controls: {field: FreshWaterLevel, action: null}
+    elements: [FreshWaterVolume, FreshWaterUnit]
+    constraints: "FreshWaterVolume offset 16 width 8 (liters, raw scale UNVERIFIED); FreshWaterUnit offset 7 width 1 (unit toggle, e.g. L vs gal)."
+
+  - id: freshWaterInfoPopup
+    type: readout
+    label_key: null
+    range: "0..15 (FreshWaterInfoPopUp, offset 0, width 4)"
+    controls: {field: FreshWaterInfoPopUp, action: null}
+    elements:
+      - dialog_error_freshWater_errorPump_headline
+      - dialog_error_freshWater_errorPump_text
+      - dialog_error_freshWater_unknownError_headline
+      - dialog_error_freshWater_unknownError_text
+      - dialog_info_freshWater_empty_headline
+      - dialog_info_freshWater_emtpy_text
+      - dialog_warning_freshWater_errorActive_headline_t6
+      - dialog_warning_freshWater_errorActive_text_t6
+      - dialog_warning_freshWater_fillLevelSensor_headline
+      - dialog_warning_freshWater_fillLevelSensor_text
+      - dialog_warning_freshWater_pumpProtection_headline
+      - dialog_warning_freshWater_pumpProtection_text
+    constraints: "4-bit info-popup code selects which dialog/banner to show (pump error, unknown error, empty-tank info, sensor fault, pump-protection warning). Exact code->dialog mapping UNVERIFIED."
+
+  - id: wasteWaterTank
+    type: readout
+    label_key: vehiclePage_overviewWidget_wasteWater_text
+    range: "0..255 (WasteWaterLevel, offset 32, width 8 — raw scale UNVERIFIED, likely 0..100%)"
+    controls: {field: WasteWaterLevel, action: null}
+    elements: [WasteWaterVolume, WasteWaterUnit]
+    constraints: "WasteWaterVolume offset 40 width 8 (liters, raw scale UNVERIFIED); WasteWaterUnit offset 31 width 1 (unit toggle)."
+
+  - id: wasteWaterInfoPopup
+    type: readout
+    label_key: null
+    range: "0..3 (WasteWaterInfoPopUp, offset 26, width 2)"
+    controls: {field: WasteWaterInfoPopUp, action: null}
+    elements:
+      - dialog_error_usedWater_errorActive_headline_t6
+      - dialog_error_usedWater_errorActive_text_t6
+      - dialog_error_usedWater_generalError_headline_t6
+      - dialog_error_usedWater_generalError_text
+      - dialog_error_usedWater_generalError_text_t6
+      - dialog_error_usedWater_genralError_headline
+      - dialog_warning_usedWater_fillLevelSensor_headline
+      - dialog_warning_usedWater_fillLevelSensor_headline_t6
+      - dialog_warning_usedWater_fillLevelSensor_text
+      - dialog_warning_usedWater_fillLevelSensor_text_t6
+      - dialog_warning_usedWater_genralError_headline_t6
+      - dialog_warning_usedWater_tankFull_headline
+      - dialog_warning_usedWater_tankFull_headline_t6
+      - dialog_warning_usedWater_tankFull_text
+      - dialog_warning_usedWater_tankFull_text_t6
+    constraints: "2-bit code (narrower than fresh water's 4-bit) — waste tank has fewer distinct fault states (no pump, so no pump-error/pump-protection dialogs; adds tankFull instead)."
+
+  - id: tankGaugeExtremesLabel
+    type: label
+    label_key: null
+    range: null
+    controls: null
+    elements: [vehiclePage_overviewWidget_Empty_text, vehiclePage_overviewWidget_Full_text]
+    constraints: "Generic Empty/Full gauge-extreme labels shared by both tank tiles."
+
+  - id: bodyVariantIllustrationLabel
+    type: label
+    label_key: null
+    range: null
+    controls: null
+    elements: [vehiclePage_overviewWidget_freshwater_kfg1_text, vehiclePage_overviewWidget_water_kfg2_text]
+    constraints: "kfg1/kfg2 suffixes suggest vehicle-body-specific tank illustration variants (exact meaning UNVERIFIED)."
+
+  - id: installedFlag
+    type: readout
+    label_key: null
+    range: "0..1"
+    controls: {field: Installed, action: null}
+    elements: null
+    constraints: "Whether the water system is installed/present on this vehicle configuration; gates whether the tile renders at all."
+
+icons: []
+
+notes: >
+  Simplest of the three screens and fully read-only (dictionary.yaml
+  functions.water.control_fields is empty — "no unambiguous control model").
+  All 9 state_fields (FreshWaterUnit, Installed, FreshWaterInfoPopUp,
+  FreshWaterLevel, FreshWaterVolume, WasteWaterUnit, WasteWaterInfoPopUp,
+  WasteWaterLevel, WasteWaterVolume) are accounted for above. No dedicated
+  in-vehicle tank icon was found in the connectivity_ui drawable set — the
+  freshwater/greywater_disposal drawables belong to the unrelated campsite-
+  amenities search feature (places_core module) and were intentionally excluded.
+  A replica GUI likely renders these as simple horizontal/vertical level bars
+  with a numeric % or liter readout, no distinct icon needed.

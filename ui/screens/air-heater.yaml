@@ -1,0 +1,171 @@
+# Air-heater (parking heater) screen — extracted from decompiled
+# CaliforniaOnTour app.
+# Source: string-resource KEYS harvested from the resource-accessor class
+#   x9/i0.java (a pure StringResource lazy-getter class, same style as the
+#   coolbox accessors — only the KEY NAMES are meaningful, no widget logic).
+# NOTE: rg pattern also matched keys prefixed "HeaterPage_" (capital H, in
+#   ea/w.java + x9/i1.java) — those belong to a DIFFERENT screen
+#   ("livingRoomHeater" / combined water+air heater, dictionary function
+#   `livingroomheater`) and are intentionally EXCLUDED here per the task's
+#   scope (only coolbox.yaml + air-heater.yaml requested).
+#
+# Protocol/action linkage cross-referenced against:
+#   - protocol/dictionary.yaml -> functions.airheater (state_services
+#     [1700,1702], control_source sf/a.java — the SAME shared bit-packed
+#     control-register class used by the cooler function, see coolbox.yaml
+#     notes; this is why dictionary.yaml marks several airheater offsets
+#     "MERGED_AMBIGUOUS").
+#   - rf/b.java — the AirHeater screen ViewModel, class `rf.b`, which
+#     implements TWO interfaces:
+#       * we.b  — the airHeaterPage (parking heater) controls used below.
+#       * df.a  — controls for the separate combined/livingRoomHeater
+#                 screen (methods a2, j4, B1, M1, b2) — OUT OF SCOPE, not
+#                 modeled here.
+#     Action letters below are the LITERAL decompiled method names on
+#     `rf.b`, confirmed by reading the method bodies:
+#       C2(boolean, ...)   -> writes control field "NormalOperationRequest"
+#                             (immediate/"now" heating on/off)
+#       q4(int, ...)       -> writes control field "HeatingLevel"; validated
+#                             in-app to 1..10 (protocol raw_range is 0..15)
+#       D4(int, ...)       -> writes control field "RunningTime" (single int,
+#                             no in-app range check found — UNVERIFIED units,
+#                             likely minutes)
+#       B0(m, ...)         -> writes control fields "TimerHour"+"TimerMin" as
+#                             a pair (start-heating-at time picker)
+#       E3(fz.i)           -> writes control field "PermanentOperationRequest"
+#                             = 0 (OFF/cancel). NOTE: no literal "=1" (turn ON)
+#                             call site was found anywhere in rf/b.java for
+#                             this field — the ON path is UNVERIFIED.
+#       H3(we.a, ...)      -> writes control field "AirDistribution" (enum
+#                             we.a: FRONT_AND_REAR/FRONT/REAR -> 1/2/3). No
+#                             matching airHeaterPage_* string key was found
+#                             for this control, so it is NOT modeled as a
+#                             widget below — noted here only.
+screen: air-heater
+title_key: airHeaterPage_pageTitle_heating_text
+function: airheater
+widgets:
+  - id: imediateHeatingWidget
+    type: toggle
+    label_key: airHeaterPage_imediateHeatingWidget_imediateHeating_text
+    range: null
+    controls: {field: NormalOperationRequest, action: C2}
+    elements: []
+    constraints: null
+
+  - id: heatingSlider
+    type: slider
+    label_key: airHeaterPage_heatingSlider_heatingTemperature_text
+    range: "1..10"
+    controls: {field: HeatingLevel, action: q4}
+    elements: []
+    constraints: "UI validates 0 < value <= 10 before writing (protocol raw_range is 0..15)"
+
+  - id: runTimeSlider
+    type: slider
+    label_key: airHeaterPage_runTimeSlider_runTime_text
+    range: null
+    controls: {field: RunningTime, action: D4}
+    elements: []
+    constraints: "UNVERIFIED range/units — no in-app bounds check found for D4, protocol raw_range is 0..255"
+
+  - id: timerWidget
+    type: timer
+    label_key: airHeaterPage_timerWidget_startTimer_text
+    range: null
+    controls: {field: "TimerHour/TimerMin", action: B0}
+    elements:
+      - afterTheTimerIsActivated_text
+      - heatingWillStart_text
+      - startHeatingAt_text
+    constraints: "UNVERIFIED — no distinct start/cancel *_button keys found for this widget (unlike coolbox's timerWidget); starting/cancelling the heating timer may be driven through imediateHeatingWidget's toggle and/or the applyDialog instead"
+
+  - id: permanentHeatingWidget
+    type: toggle
+    label_key: airHeaterPage_permanentHeatingWidget_permanentHeating_text
+    range: null
+    controls: {field: PermanentOperationRequest, action: E3}
+    elements:
+      - canOnlyBeActivated_text
+    constraints: "Per key name: 'can only be activated' under some precondition, UNVERIFIED exact rule (likely requires imediateHeatingWidget off, i.e. NormalOperationRequest/PermanentOperationRequest mutually exclusive). Only the OFF direction (E3, writes 0) was confirmed in code; the ON write path is UNVERIFIED."
+
+  - id: permanentHeatingOnDialog
+    type: drawer
+    label_key: airHeaterPage_permanentHeatingOnDialog_permanentHeatingCanOnlyBeActivated_text
+    range: null
+    controls: null
+    elements:
+      - thisFeatureCanBeDisabled_text
+    constraints: "Confirmation dialog shown before turning permanent heating ON; exact confirm-action wiring UNVERIFIED (see permanentHeatingWidget note)"
+
+  - id: permanentHeatingOffDialog
+    type: drawer
+    label_key: airHeaterPage_permanentHeatingOffDialog_turnOffPermanentHeating_text
+    range: null
+    controls: {field: PermanentOperationRequest, action: E3}
+    elements:
+      - youCanOnlyTurnItBackOn_text
+    constraints: "Confirm action writes PermanentOperationRequest=0 via E3"
+
+  - id: permanentHeatingTimerDialog
+    type: drawer
+    label_key: airHeaterPage_permanentHeatingTimerDialog_doYouWantToProceed_text
+    range: null
+    controls: {field: "TimerHour/TimerMin", action: B0}
+    elements:
+      - permanentHeatingWillTurnOff_text
+      - yesStartTimer_button
+    constraints: "Shown when starting a heating timer while permanent heating is active; confirms that starting the timer will turn permanent heating off"
+
+  - id: applyDialog
+    type: drawer
+    label_key: airHeaterPage_applyDialog_applyNewSettingsNow_text
+    range: null
+    controls: {field: "HeatingLevel/RunningTime", action: "q4/D4"}
+    elements:
+      - runTimeWillBeReset_text
+    constraints: "Confirms applying changed heatingSlider/runTimeSlider values while heating is already running; warns RunningTime counter will reset"
+
+  - id: statusBar
+    type: readout
+    label_key: airHeaterPage_statusBar_inactive_text
+    range: null
+    controls: null
+    elements:
+      - activePermHeating_text
+      - activePermHeatingTimer_text
+      - activeRemainingTimerStartTimer_text
+      - activeRunTime_text
+      - inactive_text
+      - inactiveStartTimer_text
+    constraints: "Read-only summary; text variant selected based on combination of NormalOperation/PermanentOperation/RunningTime state (UNVERIFIED exact selection logic)"
+
+icons:
+  - air_heater             # drawable/air_heater
+  - air_heater02            # drawable/air_heater02
+  - park_heater_continuous  # drawable/park_heater_continuous — likely the permanentHeatingWidget icon
+  - heating_cooling_timer   # drawable/heating_cooling_timer — shared timer icon (also used by coolbox)
+
+notes: |
+  Widget-tree hierarchy inferred purely from the
+  `airHeaterPage_<widget>_<element>_<type>` key structure (same method as
+  coolbox.yaml) — the real @Composable functions are fully obfuscated in
+  the decompiled output and carry no recoverable names.
+
+  The screen's ViewModel (rf/b.java, class rf.b) implements BOTH we.b
+  (this screen) and df.a (the separate combined livingRoomHeater screen),
+  because both features are multiplexed over the same BLE control
+  characteristic (1701/1702, class sf.a/sf.b — shared with the cooler
+  function's 1101/1102 register layout). Methods belonging to df.a
+  (a2, j4, B1, M1, b2) were deliberately left out of this spec.
+
+  Enum we.a (package `we`) backing the H3 action has 3 members:
+  FRONT_AND_REAR(0), FRONT(1), REAR(2) — mapped to AirDistribution values
+  1/2/3. No airHeaterPage_* string key surfaces this control, so either
+  it's not exposed on this screen/vehicle variant, or it's controlled via
+  a settings surface not captured by this key harvest.
+
+  Enum df.b (7 members: AIR_HEATER, TRUMA_HEATER, ROOF_AIR_CONDITION, and
+  4 combinations) backs the df.a-only `a2` action — this is almost
+  certainly the HeaterPage_livingRoomHeatingWidget energy-source picker
+  (6A/10A/diesel/gas/mix6A/mix10A keys), not part of air-heater.yaml.

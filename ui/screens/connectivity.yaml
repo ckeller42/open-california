@@ -1,0 +1,129 @@
+# BLE/WiFi pairing, connection troubleshooting, and add-vehicle (VIN) flows.
+# Cross-cutting: reachable from home.yaml (connectHeader / vehicleNotEnrolledTile),
+# account.yaml (myCaliforniaNav bluetooth/wifi reset entries), and onboarding.
+# Nav destination: NavigationAccount$ConnectivitySettingsScreen covers the
+# *settings toggle* (see settings.yaml); this file covers the *pairing wizard*
+# screens, which are not exposed as their own NavigationConnectivity$*Screen
+# nav-route stubs (no dedicated route class found) — reconstructed purely
+# from string-key prefixes: vinFlow_*, bluetoothReset_*, wifiReset_*,
+# setUpRemoteControl_*.
+screen: connectivity
+title_key: vinFlow_drawerTitle_addVehicle_text
+function: null
+widgets:
+  - id: vinFlowInput
+    type: drawer
+    label_key: vinFlow_headline_beginYourAdventure_text
+    range: null
+    controls: null
+    elements:
+      - vinFlow_listInput_myVin_text
+      - vinFlow_inputSubLine_unsupportedCharacter_text
+      - vinFlow_listInput_selectModel_text
+      - vinFlow_listInputSubline_selectTheModel_text
+      - vinFlow_listInput_selectEdition_text
+      - vinFlow_listInputSubline_selectTheEdition_text
+      - vinFlow_modelDisplay_model_text
+    constraints: "VIN entry + model/edition disambiguation"
+
+  - id: vinFlowDescription
+    type: label
+    label_key: vinFlow_description_toCheckTheVehicleStatus_text
+    range: null
+    controls: null
+    elements:
+      - vinFlow_description_followingModelIdentified_text
+      - vinFlow_description_followingModelAndEquipmentIdentified_text
+      - vinFlow_description_noVolkswagenCalifornia_text
+      - vinFlow_description_unfortunatelyTheVin_text
+      - vinFlow_description_pleaseNoteThat_text
+      - vinFlow_description_youWillFindYour_text
+      - vinFlow_headline_validationCurrentlyNotPossible_text
+
+  - id: vinFlowActions
+    type: button
+    label_key: vinFlow_primaryButton_next_button
+    range: null
+    controls: null
+    elements:
+      - vinFlow_primaryButton_select_text
+      - vinFlow_primaryButton_okay_text
+      - vinFlow_primaryButton_close_button
+      - vinFlow_secondaryButton_later_button
+      - vinFlow_disabledButton_save_button
+      - vinFlow_primaryButton_setUpRemoteControl_button
+      - vinFlow_subline_youCanAlsoSetUp_text
+      - vinFlow_headline_yourVehicleHasBeenAdded_text
+      - vinFlow_primaryButton_goToVehiclePage_button
+    target: home
+
+  - id: setUpRemoteControlSteps
+    type: list
+    label_key: setUpRemoteControl_headline_toSetUpYourRemote_text
+    range: null
+    controls: null
+    elements:
+      - setUpRemoteControl_description_ifNecessaryRemove_text
+      - setUpRemoteControl_step_openBluetoothsettings_linkout
+      - setUpRemoteControl_primaryButton_continueWithRemoteControl_button
+
+  - id: bluetoothResetFlow
+    type: list
+    label_key: bluetoothReset_drawerHeadline_bluetoothReset_text
+    range: null
+    controls: null
+    elements:
+      - bluetoothReset_description_ifNecessaryRemove_text
+      - bluetoothReset_step_openBluetoothsettings_linkout
+      - bluetoothReset_step_resetBluetooth_text
+      - bluetoothReset_step_selectYourVehicle_text
+      - bluetoothReset_checkbox_allStepsCompleted_text
+      - bluetoothReset_dialog_bluetoothReset_headline
+      - bluetoothReset_dialog_bluetoothReset_text
+      - bluetoothReset_headline_pleaseGoToYour_text
+      - bluetoothReset_headline_theBluetoothResetWasSucessful_text
+      - bluetoothReset_primaryButton_continueWithRemoteControl_button
+
+  - id: wifiResetFlow
+    type: list
+    label_key: wifiReset_drawerHeadline_wifiReset_text
+    range: null
+    controls: null
+    elements:
+      - wifiReset_step_switchOnTheIgnition_text
+      - wifiReset_step_pressAndHoldThe_text
+      - wifiReset_checkbox_allStepsCompleted_text
+      - wifiReset_dialog_wifiReset_headline
+      - wifiReset_dialog_wifiReset_text
+      - wifiReset_headline_pleaseGoToYour_text
+      - wifiReset_headline_theWifiResetWasSucessful_text
+      - wifiReset_primaryButton_continueWithRemoteControl_button
+
+  - id: connectionStateReadout
+    type: readout
+    label_key: null
+    range: null
+    controls: null
+    elements: [connection_searching, connection_error, connection_success, connection_ignition]
+    constraints: "Inferred purely from drawable names (connection_searching/_error/_success/_ignition/_bt_background/_all_models/_cabe/_connecting/_smartphone/_wifi_bt_button); no matching string keys found to pair with each state"
+icons:
+  - drawable/bluetooth_reset
+  - drawable/connection_error
+  - drawable/connection_ignition
+  - drawable/connection_searching
+  - drawable/connection_success
+  - drawable/connectionerrorcot
+  - drawable/internet
+  - drawable/vin_flow_add_vehicle
+  - drawable/vin_flow_checked
+  - drawable/vin_flow_read_vin
+  - drawable/vin_flow_warning
+  - drawable/new_car_commercial
+  - drawable/add_car_commercial
+notes: >
+  BluetoothLowEnergyConnectionService.java (com/californiaontour/connectivity/bluetooth/)
+  is the actual BLE transport implementation referenced by dictionary.yaml's
+  control_source files (sf/a.java, lg/a.java, gg/a.java, pg/a.java all write
+  through this service) — out of scope for a GUI spec but worth noting as the
+  file to check for the real connect/disconnect state machine if replicating
+  behavior, not just layout.

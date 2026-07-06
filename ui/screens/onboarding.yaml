@@ -1,0 +1,137 @@
+# First-run onboarding flow. Nav graph: com.californiaontour.onboarding.graphs.NavigationOnboarding
+#   NavigationOnboarding$WelcomeScreen.java
+#   NavigationOnboarding$LocalizationSelection.java   (region picker)
+#   NavigationOnboarding$LegalDocument.java / $TermsAndConditions.java
+#   NavigationOnboarding$AnalyticsScreen.java
+#   NavigationOnboarding$MyLocation.java / $MyVehicle.java
+#   NavigationOnboarding$AppTourScreen.java            (post-onboarding tab-bar tour)
+#   NavigationOnboarding$Onboarding.java                (graph root)
+# Also covers the standalone migration / no-internet / force-update screens
+# found under the onboarding_* string prefix (no dedicated nav-route class
+# found for these three — likely presented as full-screen interstitials from
+# the app root rather than the onboarding graph itself).
+screen: onboarding
+title_key: onboarding_welcomeScreen_welcomeToTheWorldOf_text
+function: null
+widgets:
+  - id: welcomeScreen
+    type: button
+    label_key: onboarding_welcomeScreen_getStarted_button
+    range: null
+    controls: null
+    elements: [onboarding_welcomeScreen_welcomeToTheWorldOf_text]
+
+  - id: regionScreen
+    type: button
+    label_key: onboarding_regionScreen_whereDoYouLive_text
+    range: null
+    controls: null
+    elements: null
+    constraints: "NavigationOnboarding$LocalizationSelection"
+
+  - id: legalScreen
+    type: drawer
+    label_key: onboarding_legalScreen_pleaseReadAndAgree_text
+    range: null
+    controls: null
+    elements: [onboarding_legalScreen_termsAndConditions_text, onboarding_legalScreen_termsOfUse_text, onboarding_legalScreen_privacyPolicy_text]
+    constraints: "NavigationOnboarding$LegalDocument / $TermsAndConditions"
+
+  - id: analyticsScreen
+    type: toggle
+    label_key: onboarding_analytics_toHelpUsImprove_text
+    range: null
+    controls: null
+    elements: [onboarding_analytics_helpUsBuild_text, onboarding_analytics_participationIsOptional_text, onboarding_analytics_forMoreDetails_text]
+    constraints: "NavigationOnboarding$AnalyticsScreen; setting is later editable in settings.yaml analyticsToggle"
+
+  - id: migrationScreen
+    type: button
+    label_key: onboarding_migration_migrationTitle_text
+    range: null
+    controls: null
+    elements:
+      - onboarding_migration_description_text
+      - onboarding_migration_bringMyData_button
+      - onboarding_migration_setupAsNew_button
+      - onboarding_migration_skip_button
+      - onboarding_migration_migrating_text
+      - onboarding_migration_migrationFailed_text
+      - onboarding_migration_migrationFailedInfo_text
+      - onboarding_migration_noInternet_text
+      - onboarding_migration_noInternetDescription_text
+      - onboarding_migration_wifiResetTitle_text
+      - onboarding_migration_wifiResetDescription_text
+    constraints: "Legacy-app-to-this-app data migration prompt; no dedicated NavigationOnboarding nav-route class found for it"
+
+  - id: noInternetScreen
+    type: label
+    label_key: onboarding_noInternet_noInternetConnection_text
+    range: null
+    controls: null
+    elements: [onboarding_noInternet_youNeedAnActiveInternetConnection_text]
+
+  - id: updateScreen
+    type: button
+    label_key: onboarding_updateScreen_headline
+    range: null
+    controls: null
+    elements: [onboarding_updateScreen_text, onboarding_updateScreen_button]
+    constraints: "Forced app-store-update interstitial"
+
+  - id: finalScreen
+    type: button
+    label_key: onboarding_finalScreen_welcomeToTheWorldOfCalifornia_text
+    range: null
+    controls: null
+    elements: [onboarding_finalScreen_takeATour_button, onboarding_finalScreen_maybeLater_button]
+
+  - id: appTourCarousel
+    type: list
+    label_key: null
+    range: null
+    controls: null
+    elements:
+      - {tab: discover, title: appTour_discoverTab_title_text, elements: [appTour_discoverTab_description_text, appTour_discoverTab_disclaimer_text]}
+      - {tab: plan, title: appTour_planTab_title_text, elements: [appTour_planTab_description_text]}
+      - {tab: travel, title: appTour_travelTab_title_text, elements: [appTour_travelTab_description_text]}
+      - {tab: vehicle, title: appTour_vehicleTab_title_text, elements: [appTour_vehicleTab_description_text, appTour_vehicleTab_disclaimer_text]}
+      - {tab: account, title: appTour_accountTab_title_text, elements: [appTour_accountTab_description_text, appTour_accountTab_letsGo_button]}
+    constraints: "NavigationOnboarding$AppTourScreen — one slide per bottom-tab-bar destination; 'plan' and 'travel' are both distinct tabs per common_tabBar_plan_button / common_tabBar_travel_button (see README nav section), matching this 5-slide tour"
+
+  - id: myLocationNav
+    type: nav
+    label_key: null
+    range: null
+    controls: null
+    elements: null
+    constraints: "NavigationOnboarding$MyLocation — no distinct onboarding_myLocation_* string-key prefix found; likely reuses Search/Discover's location-permission copy"
+
+  - id: myVehicleNav
+    type: nav
+    label_key: null
+    range: null
+    controls: null
+    elements: null
+    target: connectivity
+    constraints: "NavigationOnboarding$MyVehicle — likely hands off into the vinFlow add-vehicle screens (connectivity.yaml)"
+icons:
+  - drawable/couple_california
+  - drawable/couple_california_centered
+  - drawable/login_banner_high_five
+  - drawable/login_card_high_five
+  - drawable/legal_terms_and_conditions
+  - drawable/no_internet
+  - drawable/no_internet_80
+  - drawable/update
+  - drawable/topographical_lines
+  - drawable/discovery_filled
+  - drawable/map_filled
+  - drawable/vehicle_filled
+  - drawable/heart_filled
+notes: >
+  onboarding_* and appTour_* keys were the only reliable evidence source;
+  the individual NavigationOnboarding$*.java files are all empty nav-route
+  marker classes (same @Serializable-object-with-cached-serializer pattern
+  seen on every NavigationConnectivity$*Screen — no composable body
+  resolvable by class name, see roof.yaml's note on the same pattern).

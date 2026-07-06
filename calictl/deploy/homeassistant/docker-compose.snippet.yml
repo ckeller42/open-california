@@ -1,0 +1,22 @@
+# Merge these into your monitoring docker-compose.yml (alongside influxdb + grafana).
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    # Bind to localhost only: HA is host-networked and calictl runs on the Pi,
+    # so nothing off-box needs the broker. Change to "1883:1883" only if you
+    # deliberately want LAN MQTT clients (auth is on either way).
+    ports: ["127.0.0.1:1883:1883"]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    network_mode: host                # required for HomeKit mDNS/Bonjour
+    volumes:
+      - ./homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+    depends_on: [mosquitto]
+# volumes: mosquitto-data:

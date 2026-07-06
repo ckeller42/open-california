@@ -5,3 +5,17 @@ build/
 dist/
 .pytest_cache/
 .venv/
+
+# Reverse-engineering scratch — never commit (VW copyright / large binaries)
+*.apk
+*.xapk
+*.dex
+decompile/
+jadx*/
+*.jdk/
+jdk-*/
+/vendor-decompiled/
+
+# Claude Code local session/config
+.claude/
+manuals/    # copyrighted VW PDFs — never commit (citations only)

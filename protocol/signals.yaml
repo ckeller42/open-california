@@ -1,0 +1,2030 @@
+airheater:
+  control:
+    AirDistribution:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    HeatingLevel:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NormalOperationRequest:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationModeAirHeater:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationModeCombined:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PermanentOperationConfirmation:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PermanentOperationRequest:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    RunningTime:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerHour:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerMin:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    AirDistribution:
+      confidence: high
+      decision: surface
+      kind: state
+      name: air_distribution
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    ErrorCode:
+      confidence: high
+      decision: surface
+      kind: state
+      name: error_code
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    FaultTriggerBit:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    HeatingLevel:
+      confidence: high
+      decision: surface
+      kind: level
+      name: level
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NormalOperation:
+      confidence: high
+      decision: surface
+      kind: state
+      name: running
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    OperationModeAirHeater:
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    OperationModeCombined:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PermanentOperation:
+      confidence: high
+      decision: surface
+      kind: state
+      name: permanent
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    PermanentOperationRequestConfirmation:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    RunningTime:
+      confidence: high
+      decision: surface
+      kind: level
+      name: running_time
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: min
+    RunningTimeinAction:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerHour:
+      decision: omit
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerMin:
+      decision: omit
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+campingmode:
+  control:
+    InteriorLight:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OutsideLight:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    UsbCharger:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Enable:
+      confidence: high
+      decision: surface
+      kind: state
+      name: enable
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    InteriorLight:
+      confidence: high
+      decision: surface
+      kind: state
+      name: interior_light
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    OutsideLight:
+      confidence: high
+      decision: surface
+      kind: state
+      name: outside_light
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    State:
+      confidence: high
+      decision: surface
+      kind: state
+      name: master_on
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    UsbCharger:
+      confidence: high
+      decision: surface
+      kind: state
+      name: usb_charger
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+cooler:
+  control:
+    Level:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerHourOff:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerHourOn:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerSet:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerCancel:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerHour:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerMin:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerStart:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Error:
+      confidence: high
+      decision: surface
+      kind: state
+      name: error
+      scale: raw
+      sources:
+        app: null
+        gui: vehiclepage_label_error_text
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Level:
+      confidence: high
+      decision: surface
+      kind: level
+      name: level
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Mode:
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    NightTimerHourOff:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerHourOn:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerSet:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      confidence: high
+      decision: surface
+      kind: state
+      name: 'on'
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    TimerCounterHour:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerCounterMin:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerElapsed:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerHourSet:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerMinSet:
+      decision: omit
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerState:
+      confidence: high
+      decision: surface
+      kind: state
+      name: timer_active
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+energy:
+  control:
+    Movement:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationMode:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    AgeOneBattValuesMinutes:
+      confidence: high
+      decision: surface
+      kind: level
+      name: age_min
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: min
+    CurrentDeratingTemperature:
+      confidence: high
+      decision: surface
+      kind: state
+      name: derating_temp_active
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    DcdcDefect:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    DcdcInstalled:
+      confidence: high
+      decision: surface
+      kind: state
+      name: dcdc_installed
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    EmpInstalled:
+      decision: omit
+      reason: "EMP feature-availability flag \u2014 not a measurement"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    EnergyMode:
+      confidence: high
+      decision: surface
+      kind: state
+      name: energy_mode
+      scale: raw
+      sources:
+        app: null
+        gui: infopage_listitem_energymode_text
+        vwdoc: null
+      unit: null
+    EnergyModeNotSelectable:
+      confidence: high
+      decision: surface
+      kind: state
+      name: energy_mode_locked
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    IDcdcAfs:
+      confidence: medium
+      decision: surface
+      kind: source
+      name: dcdc_current
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: A
+    ILandAfs:
+      confidence: medium
+      decision: surface
+      kind: source
+      name: shore_current
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: A
+    IOneBattBemAfs:
+      confidence: high
+      decision: surface
+      kind: current
+      name: batt1_current
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: A
+    IPvAfs:
+      confidence: medium
+      decision: surface
+      kind: source
+      name: solar_current
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: A
+    ITwoBattBemAfs:
+      confidence: medium
+      decision: surface
+      kind: current
+      name: batt2_current
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: infoPage_battery_value_text
+        live: 319
+        vwdoc: 'T7 manual: leisure-battery current shown on the control panel'
+      unit: A
+    LadInstalled:
+      confidence: high
+      decision: surface
+      kind: state
+      name: shore_installed
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    LandDefect:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    LandNotAvailable:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PDcdcAfs:
+      confidence: high
+      decision: surface
+      kind: source
+      name: dcdc_power
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: 'T7 manual: charging from the vehicle (alternator via split-charge
+          relay)'
+      unit: W
+    PLandAfs:
+      confidence: high
+      decision: surface
+      kind: source
+      name: shore_power
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: W
+    PPvAfs:
+      confidence: high
+      decision: surface
+      kind: source
+      name: solar_power
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: W
+    PvDefect:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PvInstalled:
+      confidence: high
+      decision: surface
+      kind: state
+      name: solar_installed
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    SleepWarning:
+      confidence: high
+      decision: surface
+      kind: state
+      name: sleep_warning
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    SocOneBattAfs:
+      confidence: high
+      decision: surface
+      kind: level
+      name: soc1_level
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    SocTwoBattAfs:
+      confidence: high
+      decision: surface
+      kind: level
+      name: soc2_level
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    StateDcdcAfs:
+      confidence: high
+      decision: surface
+      kind: state
+      name: dcdc_charging
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    StateLandAfs:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StatePvAfs:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SystemError:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TwoBattNotCharged:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TwoBattSwitchAtCharging:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TwoBattSwitchAtWorkshop:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    UOneBattBemAfs:
+      confidence: high
+      decision: surface
+      kind: battery
+      name: batt1_v
+      scale: '0.1'
+      sources:
+        app: null
+        gui: null
+        vwdoc: 'T7 manual: starter battery, split-charge relay to the leisure battery'
+      unit: V
+    UTwoBattBemAfs:
+      confidence: high
+      decision: surface
+      kind: leisure_battery
+      name: batt2_v
+      scale: '0.1'
+      sources:
+        app: null
+        gui: null
+        vwdoc: 'T7 manual: 80-Ah lithium leisure battery, voltage monitored on the
+          display'
+      unit: V
+    WarningLevelActive:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WarningLevelTwo:
+      decision: omit
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    tTwoBattRemainingh:
+      confidence: high
+      decision: surface
+      kind: level
+      name: batt2_remaining_h
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: h
+    tTwoBattRemainingmin:
+      confidence: high
+      decision: surface
+      kind: level
+      name: batt2_remaining_min
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: min
+general:
+  state:
+    AmbSwVersion:
+      confidence: high
+      decision: surface
+      kind: state
+      name: amb_sw_version
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    CmSwVersion:
+      confidence: high
+      decision: surface
+      kind: state
+      name: cm_sw_version
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    CommunicationVersion:
+      confidence: high
+      decision: surface
+      kind: state
+      name: comm_version
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+generalpurposesignals:
+  state:
+    BitZeroEight:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroFive:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroFour:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroOne:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroSeven:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroSix:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroThree:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroTwo:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroEight:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroFive:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroFour:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroOne:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroSeven:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroSix:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroThree:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroTwo:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    DwordZeroOne:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WordZeroFour:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WordZeroOne:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WordZeroThree:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WordZeroTwo:
+      decision: omit
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+lighting:
+  control:
+    BrightnessLEight:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLFive:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLFour:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLNine:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOne:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneFive:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneFour:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneOne:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneSix:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneThree:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneTwo:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneZero:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLSeven:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLSix:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLThree:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLTwo:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    LightValue:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ProfileNumber:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Timestamp:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    BrightnessLEight:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_8
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLFive:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_5
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLFour:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_4
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLNine:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_9
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLOne:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_1
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLOneFive:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_15
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLOneFour:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_14
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLOneOne:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_11
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLOneSix:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_16
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLOneThree:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_13
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLOneTwo:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_12
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLOneZero:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_10
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLSeven:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_7
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLSix:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_6
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLThree:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_3
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    BrightnessLTwo:
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_2
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    LightValue:
+      confidence: high
+      decision: surface
+      kind: state
+      name: any_on
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Mode:
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    ProfileNumber:
+      confidence: high
+      decision: surface
+      kind: state
+      name: profile
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Timestamp:
+      decision: omit
+      reason: frame timestamp, not a user-facing signal
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+livingroomheater:
+  control:
+    Mode:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StateAir:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StateWater:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TemperatureAir:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TemperatureWater:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Error:
+      confidence: high
+      decision: surface
+      kind: state
+      name: error
+      scale: raw
+      sources:
+        app: null
+        gui: vehiclepage_label_error_text
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    StateAir:
+      confidence: high
+      decision: surface
+      kind: state
+      name: air_on
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    StateWater:
+      confidence: high
+      decision: surface
+      kind: state
+      name: water_on
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    TemperatureAir:
+      confidence: medium
+      decision: surface
+      kind: temperature
+      name: air_temp
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: "\xB0C"
+    TemperatureWater:
+      confidence: medium
+      decision: surface
+      kind: temperature
+      name: water_temp
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: "\xB0C"
+    Variant:
+      decision: omit
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+roof:
+  control:
+    Down:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SafetyCounter:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Up:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    InfoPopUp:
+      decision: omit
+      reason: UI transient popup flag, not telemetry
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Position:
+      confidence: high
+      decision: surface
+      kind: level
+      name: position
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: 'T7 manual: electrohydraulic pop-up roof (hold rotary knob to raise/lower)'
+      unit: null
+    SafetyCounterValid:
+      confidence: high
+      decision: surface
+      kind: state
+      name: safety_valid
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+roofaircondition:
+  control:
+    FanSpeed:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Temperature:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Error:
+      confidence: high
+      decision: surface
+      kind: state
+      name: error
+      scale: raw
+      sources:
+        app: null
+        gui: vehiclepage_label_error_text
+        vwdoc: null
+      unit: null
+    Fanspeed:
+      confidence: high
+      decision: surface
+      kind: level
+      name: fan_speed
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    State:
+      confidence: high
+      decision: surface
+      kind: state
+      name: 'on'
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Temperature:
+      confidence: medium
+      decision: surface
+      kind: temperature
+      name: target_temp
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: "\xB0C"
+satelliteantenna:
+  control:
+    Dish:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    DishStop:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SatelliteSelection:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    System:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Wlan:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Dish:
+      confidence: high
+      decision: surface
+      kind: state
+      name: dish
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Error:
+      confidence: high
+      decision: surface
+      kind: state
+      name: error
+      scale: raw
+      sources:
+        app: null
+        gui: vehiclepage_label_error_text
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SatelliteSelection:
+      confidence: high
+      decision: surface
+      kind: state
+      name: satellite
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    SignalLevel:
+      confidence: high
+      decision: surface
+      kind: level
+      name: signal_level
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    System:
+      confidence: high
+      decision: surface
+      kind: state
+      name: system_on
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+stairs:
+  control:
+    Movement:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationMode:
+      decision: omit
+      reason: "control command field \u2014 definition captured in dictionary/overrides;\
+        \ command surfacing deferred while control writes are blocked (issue #2)"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    InfoPopUp:
+      decision: omit
+      reason: UI transient popup flag, not telemetry
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationMode:
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    Sensor:
+      confidence: high
+      decision: surface
+      kind: state
+      name: obstacle_sensor
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+    State:
+      confidence: high
+      decision: surface
+      kind: state
+      name: extended
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: null
+water:
+  state:
+    FreshWaterInfoPopUp:
+      decision: omit
+      reason: UI transient popup flag, not telemetry
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    FreshWaterLevel:
+      confidence: high
+      decision: surface
+      kind: percent
+      name: fresh_percent
+      scale: derived
+      sources:
+        app: null
+        gui: null
+        vwdoc: 'T7 manual: fresh-water tank indicator'
+      unit: '%'
+    FreshWaterUnit:
+      decision: omit
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    FreshWaterVolume:
+      confidence: high
+      decision: surface
+      kind: level
+      name: fresh_capacity_l
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: L
+    Installed:
+      decision: omit
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WasteWaterInfoPopUp:
+      decision: omit
+      reason: UI transient popup flag, not telemetry
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WasteWaterLevel:
+      confidence: high
+      decision: surface
+      kind: percent
+      name: waste_percent
+      scale: derived
+      sources:
+        app: null
+        gui: null
+        vwdoc: 'T7 manual: waste-water tank indicator'
+      unit: '%'
+    WasteWaterUnit:
+      decision: omit
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WasteWaterVolume:
+      confidence: high
+      decision: surface
+      kind: level
+      name: waste_capacity_l
+      scale: raw
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+      unit: L
