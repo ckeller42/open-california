@@ -143,6 +143,19 @@ def omit_reason(fn, field, kind="state"):
         return "granular timer/mode detail — surfaced via the aggregate state, not standalone"
     return "control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed)"
 
+# VW T7 California owner's-manual cross-check (citations only; the manual itself is
+# copyrighted and NOT stored). Confirms terminology/units for the key families.
+VWDOC = {
+    ("energy", "UTwoBattBemAfs"): "T7 manual: 80-Ah lithium leisure battery, voltage monitored on the display",
+    ("energy", "ITwoBattBemAfs"): "T7 manual: leisure-battery current shown on the control panel",
+    ("energy", "UOneBattBemAfs"): "T7 manual: starter battery, split-charge relay to the leisure battery",
+    ("energy", "PDcdcAfs"): "T7 manual: charging from the vehicle (alternator via split-charge relay)",
+    ("water", "FreshWaterLevel"): "T7 manual: fresh-water tank indicator",
+    ("water", "WasteWaterLevel"): "T7 manual: waste-water tank indicator",
+    ("roof", "Position"): "T7 manual: electrohydraulic pop-up roof (hold rotary knob to raise/lower)",
+}
+
+
 def main():
     root = os.path.join(os.path.dirname(__file__), "..")
     cat = catalog.load_catalog()
@@ -152,9 +165,11 @@ def main():
                 s = SURFACE.get(fn, {}).get(field)
                 if s and kind == "state":
                     name, unit, scale, kd = s
+                    src = dict(fields[field].get("sources", {}))
+                    if (fn, field) in VWDOC:
+                        src["vwdoc"] = VWDOC[(fn, field)]
                     fields[field] = {"decision": "surface", "name": name, "unit": unit,
-                                     "scale": scale, "kind": kd,
-                                     "sources": fields[field].get("sources", {}),
+                                     "scale": scale, "kind": kd, "sources": src,
                                      "confidence": "medium" if scale == "UNVERIFIED" else "high"}
                 else:
                     fields[field] = {"decision": "omit", "reason": omit_reason(fn, field, kind),
