@@ -21,10 +21,10 @@ SURFACE = {
     },
     "energy": {
         "UOneBattBemAfs": ("batt1_v", "V", "0.1", "battery"),
-        "IOneBattBemAfs": ("batt1_current", "A", "raw", "battery"),
+        "IOneBattBemAfs": ("batt1_current", "A", "raw", "current"),   # current, not voltage-ranged
         "SocOneBattAfs": ("soc1_level", None, "raw", "level"),
         "UTwoBattBemAfs": ("batt2_v", "V", "0.1", "leisure_battery"),
-        "ITwoBattBemAfs": ("batt2_current", "A", "UNVERIFIED", "leisure_battery"),
+        "ITwoBattBemAfs": ("batt2_current", "A", "UNVERIFIED", "current"),
         "SocTwoBattAfs": ("soc2_level", None, "raw", "level"),
         "tTwoBattRemainingh": ("batt2_remaining_h", "h", "raw", "level"),
         "tTwoBattRemainingmin": ("batt2_remaining_min", "min", "raw", "level"),
