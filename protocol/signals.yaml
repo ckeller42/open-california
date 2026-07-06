@@ -636,7 +636,7 @@ energy:
     IOneBattBemAfs:
       confidence: high
       decision: surface
-      kind: battery
+      kind: current
       name: batt1_current
       scale: raw
       sources:
@@ -658,7 +658,7 @@ energy:
     ITwoBattBemAfs:
       confidence: medium
       decision: surface
-      kind: leisure_battery
+      kind: current
       name: batt2_current
       scale: UNVERIFIED
       sources:
