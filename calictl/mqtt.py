@@ -1,9 +1,9 @@
 """Home Assistant MQTT-discovery bridge.
 
-Publishes the Camper Unit as native HA entities. For each poll we publish one
-JSON state message per function to `calivan/<fn>`; discovery configs point each
-entity at a field of that JSON via a value_template. Control entities (e.g. the
-fridge switch) subscribe to `calivan/<fn>/set/<what>`.
+Publishes the Camper Unit as native HA entities, one HA device per vehicle
+function. For each poll we publish one JSON state message per function to
+`calivan/<fn>`; discovery configs point each entity at a field of that JSON
+via a value_template.
 
 `paho.mqtt` is imported lazily; `render_discovery`/`flatten`/`render_state` are
 pure and unit-tested without a broker.
@@ -11,6 +11,7 @@ pure and unit-tested without a broker.
 from __future__ import annotations
 
 import json
+from collections import namedtuple
 
 DISCOVERY_PREFIX = "homeassistant"
 BASE = "calivan"
@@ -21,25 +22,56 @@ DEVICE = {
     "model": "California T7",
 }
 
-# Curated HA entities. Each references a flattened key of its function's state.
-# component, function, key, name, [unit], [device_class], [extra config]
-ENTITIES = [
-    ("sensor", "water", "fresh_percent", "Fresh Water", {"unit_of_measurement": "%", "icon": "mdi:water"}),
-    ("sensor", "water", "waste_percent", "Waste Water", {"unit_of_measurement": "%", "icon": "mdi:water-off"}),
-    ("binary_sensor", "cooler", "on", "Fridge", {"payload_on": "True", "payload_off": "False", "icon": "mdi:fridge"}),
-    ("sensor", "cooler", "level", "Fridge Level", {"icon": "mdi:snowflake"}),
-    ("sensor", "energy", "batt2_v", "Leisure Battery", {"unit_of_measurement": "V", "device_class": "voltage"}),
-    ("sensor", "energy", "soc2_level", "Leisure Battery Level", {"icon": "mdi:battery"}),
-    ("binary_sensor", "energy", "dcdc_charging", "DC-DC Charging", {"payload_on": "True", "payload_off": "False", "device_class": "battery_charging"}),
-    ("binary_sensor", "campingmode", "usb_charger", "USB Charger", {"payload_on": "True", "payload_off": "False", "icon": "mdi:usb"}),
-    ("binary_sensor", "airheater", "running", "Air Heater", {"payload_on": "True", "payload_off": "False", "device_class": "running"}),
-    ("sensor", "roof", "position", "Roof Position", {"icon": "mdi:caravan"}),
-]
+EntitySpec = namedtuple("EntitySpec", "component key name config")
 
-# Control entities: HA switch -> command topic.  (component, function, what, name, config)
-SWITCHES = [
-    ("cooler", "power", "Fridge Power", {"icon": "mdi:fridge", "payload_on": "on", "payload_off": "off"}),
-]
+DEVICE_BASE = {"manufacturer": "Volkswagen", "model": "California T7"}
+FUNCTION_NAMES = {
+    "water": "Water", "energy": "Energy", "cooler": "Fridge", "campingmode": "Camping Mode",
+    "airheater": "Air Heater", "roof": "Roof", "lighting": "Lighting",
+    "livingroomheater": "Living-Room Heater", "roofaircondition": "Roof A/C",
+    "stairs": "Stairs", "satelliteantenna": "Satellite",
+}
+
+
+def device_block(function: str) -> dict:
+    return {"identifiers": ["vwcamper_%s" % function],
+            "name": "VW California — %s" % FUNCTION_NAMES.get(function, function),
+            "via_device": "vwcamper", **DEVICE_BASE}
+
+
+_BIN = {"payload_on": "True", "payload_off": "False"}
+
+# Read-only entities per function (control entities added in Tasks 6-8).
+ENTITY_SPECS: dict[str, list] = {
+    "water": [
+        EntitySpec("sensor", "fresh_percent", "Fresh Water", {"unit_of_measurement": "%", "icon": "mdi:water"}),
+        EntitySpec("sensor", "waste_percent", "Waste Water", {"unit_of_measurement": "%", "icon": "mdi:water-off"}),
+    ],
+    "energy": [
+        EntitySpec("sensor", "batt2_v", "Leisure Battery", {"unit_of_measurement": "V", "device_class": "voltage"}),
+        EntitySpec("sensor", "soc2_level", "Leisure Battery Level", {"icon": "mdi:battery"}),
+        EntitySpec("binary_sensor", "dcdc_charging", "DC-DC Charging", {**_BIN, "device_class": "battery_charging"}),
+    ],
+    "cooler": [
+        EntitySpec("binary_sensor", "on", "Fridge On", {**_BIN, "icon": "mdi:fridge"}),
+        EntitySpec("sensor", "level", "Fridge Level", {"icon": "mdi:snowflake"}),
+    ],
+    "campingmode": [
+        EntitySpec("binary_sensor", "usb_charger", "USB Charger", {**_BIN, "icon": "mdi:usb"}),
+        EntitySpec("binary_sensor", "interior_light", "Interior Light (state)", {**_BIN, "icon": "mdi:lightbulb"}),
+        EntitySpec("binary_sensor", "outside_light", "Outside Light (state)", {**_BIN, "icon": "mdi:outdoor-lamp"}),
+    ],
+    "airheater": [
+        EntitySpec("binary_sensor", "running", "Air Heater Running", {**_BIN, "device_class": "running"}),
+        EntitySpec("sensor", "level", "Air Heater Level", {"icon": "mdi:radiator"}),
+    ],
+    "lighting": [
+        EntitySpec("binary_sensor", "any_on", "Interior Lights On", {**_BIN, "icon": "mdi:led-strip-variant"}),
+    ],
+    "roof": [
+        EntitySpec("sensor", "position", "Roof Position", {"icon": "mdi:caravan"}),
+    ],
+}
 
 
 def flatten(interp: dict, prefix: str = "") -> dict:
@@ -53,39 +85,26 @@ def flatten(interp: dict, prefix: str = "") -> dict:
     return out
 
 
-def _uid(fn, key):
-    return "vwcamper_%s_%s" % (fn, key)
+def _config(function, spec):
+    uid = "vwcamper_%s_%s" % (function, spec.key)
+    cfg = {"name": spec.name, "unique_id": uid,
+           "state_topic": "%s/%s" % (BASE, function),
+           "value_template": "{{ value_json.%s }}" % spec.key,
+           "availability_topic": "%s/status" % BASE,
+           "device": device_block(function)}
+    cfg.update(spec.config)
+    return "%s/%s/%s/config" % (DISCOVERY_PREFIX, spec.component, uid), cfg
 
 
-def render_discovery() -> dict[str, dict]:
-    """Return {config_topic: payload_dict} for all entities + switches."""
-    cfgs = {}
-    for component, fn, key, name, extra in ENTITIES:
-        uid = _uid(fn, key)
-        payload = {
-            "name": name,
-            "unique_id": uid,
-            "state_topic": "%s/%s" % (BASE, fn),
-            "value_template": "{{ value_json.%s }}" % key,
-            "availability_topic": "%s/status" % BASE,
-            "device": DEVICE,
-        }
-        payload.update(extra)
-        cfgs["%s/%s/%s/config" % (DISCOVERY_PREFIX, component, uid)] = payload
-    for fn, what, name, extra in SWITCHES:
-        uid = _uid(fn, what)
-        payload = {
-            "name": name,
-            "unique_id": uid,
-            "state_topic": "%s/%s" % (BASE, fn),
-            "value_template": "{{ 'on' if value_json.on else 'off' }}",
-            "command_topic": "%s/%s/set/%s" % (BASE, fn, what),
-            "availability_topic": "%s/status" % BASE,
-            "device": DEVICE,
-        }
-        payload.update(extra)
-        cfgs["%s/switch/%s/config" % (DISCOVERY_PREFIX, uid)] = payload
-    return cfgs
+def render_discovery(installed=None) -> dict:
+    out = {}
+    for function, specs in ENTITY_SPECS.items():
+        if installed is not None and function not in installed:
+            continue
+        for spec in specs:
+            topic, cfg = _config(function, spec)
+            out[topic] = cfg
+    return out
 
 
 def render_state(function: str, interp: dict) -> tuple[str, str]:
@@ -93,6 +112,5 @@ def render_state(function: str, interp: dict) -> tuple[str, str]:
     return "%s/%s" % (BASE, function), json.dumps(flatten(interp), default=str)
 
 
-def command_topics() -> dict[str, tuple[str, str]]:
-    """{command_topic: (function, what)} for subscribed control switches."""
-    return {"%s/%s/set/%s" % (BASE, fn, what): (fn, what) for fn, what, _n, _e in SWITCHES}
+def availability_topic() -> str:
+    return "%s/status" % BASE
