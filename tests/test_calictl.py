@@ -93,11 +93,16 @@ def test_mqtt_flatten_and_state():
     assert topic == "calivan/water" and '"fresh_percent": 38' in payload
 
 
-def test_mqtt_discovery_and_commands():
+def test_full_parity_devices_and_installed_gating():
     from calictl import mqtt
-    cfgs = mqtt.render_discovery()
-    # every entity has a unique config topic + references its function state topic
-    assert any("binary_sensor" in t and "fridge" in t.lower() or "cooler_on" in t for t in cfgs)
-    fridge = cfgs["homeassistant/switch/vwcamper_cooler_power/config"]
-    assert fridge["command_topic"] == "calivan/cooler/set/power"
-    assert mqtt.command_topics()["calivan/cooler/set/power"] == ("cooler", "power")
+    # every installed function gets its own HA device + >=1 entity
+    installed = {"water", "energy", "cooler", "campingmode", "airheater", "roof", "lighting"}
+    cfgs = mqtt.render_discovery(installed=installed)
+    # one device per function, keyed in each entity's config
+    devices = {tuple(sorted(c["device"]["identifiers"])) for c in cfgs.values()}
+    assert ("vwcamper_water",) in devices and ("vwcamper_energy",) in devices
+    # a not-installed function (stairs) publishes nothing
+    assert not any("stairs" in t for t in cfgs)
+    # roof is present but ONLY as a sensor (no switch/light/command_topic)
+    roof = [c for t, c in cfgs.items() if "roof_" in t and "roofair" not in t]
+    assert roof and all("command_topic" not in c for c in roof)
