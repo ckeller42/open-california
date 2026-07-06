@@ -13,8 +13,9 @@ auto-extracted, live-verified protocol map).
 | `semantics.py` | live-verified transforms (water `Level`=current/`Volume`=capacity, energy ×0.1 V + stale-age + signed currents, per-function `Installed` gating, camping independent outputs) |
 | `device.py` | robust BLE (single `async with` connect, adapter-reset + rescan recovery, `ConnectionUnavailable` when the phone app holds the one slot) |
 | `overrides.py` | the 4 cooler/heater timer offsets resolved from `sf/a.java` `f()` (extractor left `MERGED_AMBIGUOUS`) |
-| `cli.py` | `status` / `get` / `raw` / `set` / `daemon` |
-| `mqtt.py` + `daemon.py` | Home Assistant MQTT discovery + poll loop |
+| `cli.py` | `status` / `get` / `raw` / `set` / `serve` / `influx` |
+| `serve.py` | unified daemon: one BLE owner → InfluxDB + MQTT (HA discovery) + commands |
+| `mqtt.py` | Home Assistant MQTT-discovery entity configs |
 
 ## CLI
 
@@ -24,13 +25,14 @@ python -m calictl get water              # one function: decoded + interpreted (
 python -m calictl raw cooler             # raw hex of the state characteristic
 python -m calictl set cooler power off   # control (writes + verifies readback)
 python -m calictl set cooler level 3
-python -m calictl daemon --dry-run       # print HA discovery + one poll, no broker
-python -m calictl daemon --broker HOST   # run the Home Assistant bridge
+python -m calictl serve --dry-run        # print HA discovery + one poll, no broker
+python -m calictl serve                  # unified daemon (InfluxDB + MQTT); config via env
 ```
 
 ## Home Assistant
 
-`daemon --broker HOST` publishes MQTT-discovery configs so the van appears as a
+`serve` (MQTT broker + InfluxDB from env: `MQTT_HOST/USER/PASSWORD`, `INFLUXDB_TOKEN`,
+…) publishes MQTT-discovery configs so the van appears as a
 device with entities (fresh/waste water %, fridge on/level, leisure battery
 V/level, DC-DC charging, USB charger, air heater, roof position) plus a fridge
 power **switch**. State is published to `calivan/<function>` as JSON; the switch

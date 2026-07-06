@@ -124,39 +124,27 @@ def build_parser():
     r = sub.add_parser("raw"); r.add_argument("function")
     s = sub.add_parser("set")
     s.add_argument("function"); s.add_argument("what"); s.add_argument("value")
-    d = sub.add_parser("daemon", help="bridge to Home Assistant over MQTT")
-    d.add_argument("--broker"); d.add_argument("--port", type=int, default=1883)
-    d.add_argument("--interval", type=float, default=30.0)
-    d.add_argument("--dry-run", action="store_true")
-    i = sub.add_parser("influx", help="write telemetry to InfluxDB (buspi/Grafana)")
-    i.add_argument("--interval", type=float, default=None)
-    i.add_argument("--once", action="store_true", help="single poll+write then exit")
+    i = sub.add_parser("influx", help="single InfluxDB test write; the serve daemon does this continuously")
     sv = sub.add_parser("serve", help="unified daemon: one BLE owner -> InfluxDB + MQTT + commands")
     sv.add_argument("--interval", type=float, default=30.0)
     sv.add_argument("--no-influx", action="store_true", help="skip InfluxDB writes")
+    sv.add_argument("--dry-run", action="store_true", help="print discovery + one poll, no broker/InfluxDB")
     return p
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    if args.cmd == "daemon":
-        from . import daemon
-        if args.dry_run or not args.broker:
-            asyncio.run(daemon.dry_run())
-        else:
-            daemon.run(args.broker, args.port, args.interval, args.addr)
-        return 0
     if args.cmd == "influx":
         from . import influx
-        if args.once:
-            influx.write_once(args.addr)
-        else:
-            influx.run(args.interval, args.addr)
+        influx.write_once(args.addr)
         return 0
     if args.cmd == "serve":
         from . import serve
-        serve.Server(args.addr, interval=args.interval,
-                     influx_enabled=not args.no_influx).run()
+        if args.dry_run:
+            asyncio.run(serve.dry_run(args.addr))
+        else:
+            serve.Server(args.addr, interval=args.interval,
+                         influx_enabled=not args.no_influx).run()
         return 0
     funcs = _load()
     if getattr(args, "function", None) and args.function not in funcs:
