@@ -183,6 +183,9 @@ def roofaircondition(d: dict) -> dict:
 
 
 def satelliteantenna(d: dict) -> dict:
+    # UNVERIFIED polarity: mg/f.java has an inverted readback getter (!((Boolean)…)), so
+    # one of these booleans is likely inverted in the app. Sat is NOT installed on this
+    # van -> can't confirm which. See docs/business-logic/signal-scales.md.
     return {
         "installed": bool(d.get("Installed")),
         "dish": d.get("Dish"),
@@ -194,6 +197,9 @@ def satelliteantenna(d: dict) -> dict:
 
 
 def stairs(d: dict) -> dict:
+    # UNVERIFIED polarity: og/b.java has an inverted readback getter (!((Boolean)…)) plus
+    # inverted setters — one of these booleans is likely inverted. Stairs is NOT installed
+    # on this van -> can't confirm which. See docs/business-logic/signal-scales.md.
     return {
         "installed": bool(d.get("Installed")),
         "extended": bool(d.get("State")),

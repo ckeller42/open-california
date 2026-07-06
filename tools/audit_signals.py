@@ -53,13 +53,16 @@ def report_from_keys(dictkeys, cat, gui, app, samples, setters=None) -> list:
                     if e.get("decision") == "surface"]
         if not surfaced:
             continue
-        ack = any("inverted" in str(e.get("scale", "")) or "combined" in str(e.get("scale", ""))
-                  for e in surfaced)
-        if not ack:
-            tags = "+".join(t for t in ("inverted", "combined") if flag.get(t))
-            lines.append("SEMANTIC-REVIEW-NEEDED %s (%s setter in %s): no surfaced field marks "
-                         "the transform — verify polarity/combination against the app"
-                         % (fn, tags, flag.get("where")))
+        # INVERTED (setter or readback) is a read risk: a naive bool() disagrees with
+        # the app unless a surfaced field's scale marks it inverted.
+        if flag.get("inverted") and not any("inverted" in str(e.get("scale", "")) for e in surfaced):
+            lines.append("SEMANTIC-REVIEW-NEEDED %s (inverted transform in %s): no surfaced field "
+                         "marks it inverted — a naive bool() read likely disagrees with the app"
+                         % (fn, flag.get("where")))
+        # COMBINED is a control-model note (one control -> many fields); reads are per-field.
+        if flag.get("combined"):
+            lines.append("COMBINED-CONTROL %s (%s): one control writes multiple fields — reads are "
+                         "per-field (usually fine)" % (fn, flag.get("where")))
     return lines
 
 def report(funcs, cat, app, gui, samples, setters=None):

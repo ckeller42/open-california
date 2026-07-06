@@ -33,3 +33,19 @@ unit that implies precision (this is the "fake percentage" trap).
 The coverage guardrail (`tests/test_signal_coverage.py`) enforces that these signals
 stay surfaced; it does **not** assert the scale — that's what this doc + a live check
 are for.
+
+## Open review items (inverted readback, not installed → unverifiable)
+
+The `SEMANTIC-REVIEW-NEEDED` auditor check (`tools/app_setters.py`) flags functions whose
+app code inverts a field (`!on?1:0` setter or `!((Boolean)…)` readback getter) but whose
+surfaced fields don't mark it inverted. After the camping fix, two remain — **not
+installed on this van, so their polarity cannot be live-verified**:
+
+| function | evidence | status |
+|---|---|---|
+| `satelliteantenna` | inverted readback in `mg/f.java` | boolean polarity UNVERIFIED — resolve when a sat-equipped vehicle is available |
+| `stairs` | inverted setter + readback in `og/b.java` | `extended`/`obstacle_sensor` polarity UNVERIFIED — resolve when a stairs-equipped vehicle is available |
+
+These stay flagged **on purpose** — the check is honestly reporting real, unresolved risk.
+Do not "acknowledge" them by marking a scale `inverted` without verifying which field, or
+you re-create the camping mistake in the opposite direction.
