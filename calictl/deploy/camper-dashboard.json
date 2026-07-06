@@ -374,7 +374,7 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Leisure battery current (A)",
+      "title": "Leisure battery current (raw, unverified scale)",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -387,8 +387,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "amp",
-          "decimals": 0
+          "unit": "none"
         },
         "overrides": []
       },
@@ -538,7 +537,7 @@
     {
       "id": 14,
       "type": "timeseries",
-      "title": "Source currents (A)",
+      "title": "Source currents (raw, unverified scale)",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -551,8 +550,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "amp",
-          "decimals": 0
+          "unit": "none"
         },
         "overrides": []
       },
