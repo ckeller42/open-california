@@ -1,0 +1,31 @@
+calictl/mqtt.py
+  s_1dccea91605154::t_74d018b57e31b9 1-98
+calictl/semantics.py
+  s_1dccea91605154::t_5fd0db0f42357c 110-126,128-132,138
+  s_1dccea91605154::t_5c32d6d38713d0 45-47,52
+calictl/cli.py
+  s_1dccea91605154::t_5c22a71531f6b9 135-141
+  s_1dccea91605154::t_f12435e4590bb4 126-129
+calictl/README.md
+  s_1dccea91605154::t_e9d686178cb076 1-56
+tests/test_calictl.py
+  s_1dccea91605154::t_90c285234738c1 77-103
+calictl/daemon.py
+  s_1dccea91605154::t_15200c44eb1097 1-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "cfec006766779c122cd70d0470d0d91282cdfc7c",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
