@@ -111,7 +111,7 @@ def write_once(addr: str | None = None) -> int:
     dev = CamperDevice(addr) if addr else CamperDevice()
     states = asyncio.run(_poll(funcs, dev))
     pts = build_points(states)
-    client = InfluxDBClient(url=url, token=token, org=org)
-    client.write_api(write_options=SYNCHRONOUS).write(bucket=bucket, org=org, record=pts)
+    with InfluxDBClient(url=url, token=token, org=org) as client:
+        client.write_api(write_options=SYNCHRONOUS).write(bucket=bucket, org=org, record=pts)
     print("wrote %d points to %s/%s" % (len(pts), bucket, org))
     return len(pts)

@@ -94,7 +94,8 @@ async def cmd_set(funcs, dev, args):
     cur = protocol.decode(f, await dev.read(f))
     print("current: State=%s Mode=%s Level=%s" % (cur.get("State"), cur.get("Mode"), cur.get("Level")))
     if args.what == "power":
-        target = {"State": 1 if args.value == "on" else 0}
+        on = args.value.strip().lower() in ("on", "true", "1")
+        target = {"State": 1 if on else 0}
         check = ("State", target["State"])
     elif args.what == "level":
         lvl = int(args.value)

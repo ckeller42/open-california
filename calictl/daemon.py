@@ -53,20 +53,3 @@ def run(broker: str, port: int = 1883, interval: float = 30.0, addr: str | None 
         os.environ["MQTT_HOST"] = broker
     os.environ["MQTT_PORT"] = str(port)
     serve.Server(addr, interval=interval).run()
-
-
-async def _apply_command(funcs, dev, fn, what, value):
-    """Execute an HA control command; return the post-write decoded state."""
-    if fn == "cooler":
-        f = funcs["cooler"]
-        cur = protocol.decode(f, await dev.read(f))
-        from .cli import _cooler_values
-        if what == "power":
-            changes = {"State": 1 if value == "on" else 0}
-        elif what == "level":
-            changes = {"Level": max(1, min(5, int(value)))}
-        else:
-            return None
-        frame = protocol.encode(f, _cooler_values(cur, **changes), frame_bytes=6)
-        return await dev.write_control(f, frame, verify=True)
-    return None
