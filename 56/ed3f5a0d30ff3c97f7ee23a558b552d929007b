@@ -1,0 +1,28 @@
+calictl/influx.py
+  s_1dccea91605154::t_0b0875cf87caf6 1-106
+calictl/deploy/GRAFANA.md
+  s_1dccea91605154::t_60e4834d7ed06a 1-52
+calictl/deploy/camper-dashboard.json
+  s_1dccea91605154::t_9b2b712a40ac53 1-72
+calictl/deploy/calictl-influx.service
+  s_1dccea91605154::t_a7893730b36424 1-18
+calictl/cli.py
+  s_1dccea91605154::t_743c58d4c1ea1a 130-132
+  s_1dccea91605154::t_a8034e22346ed5 145-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "56ed3f5a0d30ff3c97f7ee23a558b552d929007b",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
