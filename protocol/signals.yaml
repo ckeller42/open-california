@@ -2,169 +2,214 @@ airheater:
   control:
     AirDistribution:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     HeatingLevel:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     NormalOperationRequest:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     OperationModeAirHeater:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     OperationModeCombined:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     PermanentOperationConfirmation:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     PermanentOperationRequest:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     RunningTime:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerHour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerMin:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
   state:
     AirDistribution:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: air_distribution
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     ErrorCode:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: error_code
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     FaultTriggerBit:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     HeatingLevel:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: level
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     NormalOperation:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: running
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     OperationModeAirHeater:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     OperationModeCombined:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     PermanentOperation:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: permanent
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     PermanentOperationRequestConfirmation:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     RunningTime:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: running_time
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: min
     RunningTimeinAction:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerHour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerMin:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
@@ -173,154 +218,189 @@ campingmode:
   control:
     InteriorLight:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     OutsideLight:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     State:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     UsbCharger:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
   state:
     Enable:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: enable
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     InteriorLight:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: interior_light
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     OutsideLight:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: outside_light
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     State:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: master_on
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     UsbCharger:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: usb_charger
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
 cooler:
   control:
     Level:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     Mode:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     NightTimerHourOff:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     NightTimerHourOn:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     NightTimerSet:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     State:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerCancel:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerHour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerMin:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerStart:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
   state:
     Error:
-      confidence: low
+      confidence: high
       decision: surface
       kind: state
       name: error
-      scale: UNVERIFIED
+      scale: raw
       sources:
         app: null
         gui: vehiclepage_label_error_text
@@ -328,193 +408,253 @@ cooler:
       unit: null
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     Level:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: level
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Mode:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     NightTimerHourOff:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     NightTimerHourOn:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     NightTimerSet:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     State:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: 'on'
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     TimerCounterHour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerCounterMin:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerElapsed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerHourSet:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerMinSet:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "granular timer/mode detail \u2014 surfaced via the aggregate state,\
+        \ not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TimerState:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: timer_active
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
 energy:
   control:
     Movement:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     OperationMode:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
   state:
     AgeOneBattValuesMinutes:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: age_min
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: min
     CurrentDeratingTemperature:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: derating_temp_active
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     DcdcDefect:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     DcdcInstalled:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: dcdc_installed
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     EmpInstalled:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "EMP feature-availability flag \u2014 not a measurement"
       sources:
         app: null
         gui: null
         vwdoc: null
     EnergyMode:
-      confidence: low
+      confidence: high
       decision: surface
       kind: state
-      name: energymode
-      scale: UNVERIFIED
+      name: energy_mode
+      scale: raw
       sources:
         app: null
         gui: infopage_listitem_energymode_text
         vwdoc: null
       unit: null
     EnergyModeNotSelectable:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: energy_mode_locked
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     IDcdcAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: medium
+      decision: surface
+      kind: source
+      name: dcdc_current
+      scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: A
     ILandAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: medium
+      decision: surface
+      kind: source
+      name: shore_current
+      scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: A
     IOneBattBemAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: battery
+      name: batt1_current
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: A
     IPvAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: medium
+      decision: surface
+      kind: source
+      name: solar_current
+      scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: A
     ITwoBattBemAfs:
       confidence: medium
       decision: surface
@@ -528,341 +668,437 @@ energy:
         vwdoc: null
       unit: A
     LadInstalled:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: shore_installed
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     LandDefect:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     LandNotAvailable:
       decision: omit
-      reason: "fault/status bit \u2014 surfaced via faults[] aggregate"
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     PDcdcAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: source
+      name: dcdc_power
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: W
     PLandAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: source
+      name: shore_power
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: W
     PPvAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: source
+      name: solar_power
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: W
     PvDefect:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     PvInstalled:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: solar_installed
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     SleepWarning:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: sleep_warning
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     SocOneBattAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: soc1_level
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     SocTwoBattAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: soc2_level
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     StateDcdcAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: dcdc_charging
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     StateLandAfs:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     StatePvAfs:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     SystemError:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TwoBattNotCharged:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TwoBattSwitchAtCharging:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     TwoBattSwitchAtWorkshop:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     UOneBattBemAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: battery
+      name: batt1_v
+      scale: '0.1'
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: V
     UTwoBattBemAfs:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: leisure_battery
+      name: batt2_v
+      scale: '0.1'
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: V
     WarningLevelActive:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     WarningLevelTwo:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "fault/warning/source-state bit \u2014 aggregated into the faults[]\
+        \ / source status, not standalone"
       sources:
         app: null
         gui: null
         vwdoc: null
     tTwoBattRemainingh:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: batt2_remaining_h
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: h
     tTwoBattRemainingmin:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: batt2_remaining_min
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: min
 general:
   state:
     AmbSwVersion:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: amb_sw_version
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     CmSwVersion:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: cm_sw_version
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     CommunicationVersion:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: comm_version
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
 generalpurposesignals:
   state:
     BitZeroEight:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     BitZeroFive:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     BitZeroFour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     BitZeroOne:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     BitZeroSeven:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     BitZeroSix:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     BitZeroThree:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     BitZeroTwo:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     ByteZeroEight:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     ByteZeroFive:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     ByteZeroFour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     ByteZeroOne:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     ByteZeroSeven:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     ByteZeroSix:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     ByteZeroThree:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     ByteZeroTwo:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     DwordZeroOne:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     WordZeroFour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     WordZeroOne:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     WordZeroThree:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
         vwdoc: null
     WordZeroTwo:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "opaque general-purpose signal \u2014 no GUI widget or getter; meaning\
+        \ undetermined"
       sources:
         app: null
         gui: null
@@ -871,281 +1107,376 @@ lighting:
   control:
     BrightnessLEight:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLFive:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLFour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLNine:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOne:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneFive:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneFour:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneOne:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneSix:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneThree:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneTwo:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLOneZero:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLSeven:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLSix:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLThree:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     BrightnessLTwo:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     LightValue:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     Mode:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     ProfileNumber:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     Timestamp:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: frame timestamp, not a user-facing signal
       sources:
         app: null
         gui: null
         vwdoc: null
   state:
     BrightnessLEight:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_8
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLFive:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_5
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLFour:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_4
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLNine:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_9
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLOne:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_1
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLOneFive:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_15
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLOneFour:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_14
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLOneOne:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_11
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLOneSix:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_16
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLOneThree:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_13
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLOneTwo:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_12
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLOneZero:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_10
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLSeven:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_7
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLSix:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_6
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLThree:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_3
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     BrightnessLTwo:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: brightness_zone_2
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     LightValue:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: any_on
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Mode:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     ProfileNumber:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: profile
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Timestamp:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: frame timestamp, not a user-facing signal
       sources:
         app: null
         gui: null
@@ -1154,46 +1485,51 @@ livingroomheater:
   control:
     Mode:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     StateAir:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     StateWater:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TemperatureAir:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     TemperatureWater:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
   state:
     Error:
-      confidence: low
+      confidence: high
       decision: surface
       kind: state
       name: error
-      scale: UNVERIFIED
+      scale: raw
       sources:
         app: null
         gui: vehiclepage_label_error_text
@@ -1201,49 +1537,71 @@ livingroomheater:
       unit: null
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     Mode:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     StateAir:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: air_on
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     StateWater:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: water_on
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     TemperatureAir:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: medium
+      decision: surface
+      kind: temperature
+      name: air_temp
+      scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: "\xB0C"
     TemperatureWater:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: medium
+      decision: surface
+      kind: temperature
+      name: water_temp
+      scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: "\xB0C"
     Variant:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
@@ -1252,21 +1610,24 @@ roof:
   control:
     Down:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     SafetyCounter:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     Up:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
@@ -1274,160 +1635,199 @@ roof:
   state:
     InfoPopUp:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: UI transient popup flag, not telemetry
       sources:
         app: null
         gui: null
         vwdoc: null
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     Position:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: position
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     SafetyCounterValid:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: safety_valid
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
 roofaircondition:
   control:
     FanSpeed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     Mode:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     State:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     Temperature:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
   state:
     Error:
-      confidence: low
+      confidence: high
       decision: surface
       kind: state
       name: error
-      scale: UNVERIFIED
+      scale: raw
       sources:
         app: null
         gui: vehiclepage_label_error_text
         vwdoc: null
       unit: null
     Fanspeed:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: fan_speed
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     Mode:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     State:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: 'on'
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Temperature:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: medium
+      decision: surface
+      kind: temperature
+      name: target_temp
+      scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: "\xB0C"
 satelliteantenna:
   control:
     Dish:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     DishStop:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     SatelliteSelection:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     System:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     Wlan:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
   state:
     Dish:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: dish
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Error:
-      confidence: low
+      confidence: high
       decision: surface
       kind: state
       name: error
-      scale: UNVERIFIED
+      scale: raw
       sources:
         app: null
         gui: vehiclepage_label_error_text
@@ -1435,44 +1835,59 @@ satelliteantenna:
       unit: null
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     SatelliteSelection:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: satellite
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     SignalLevel:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: signal_level
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     System:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: system_on
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
 stairs:
   control:
     Movement:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     OperationMode:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
@@ -1480,101 +1895,133 @@ stairs:
   state:
     InfoPopUp:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: UI transient popup flag, not telemetry
       sources:
         app: null
         gui: null
         vwdoc: null
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     OperationMode:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: mode
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     Sensor:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: obstacle_sensor
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
     State:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: state
+      name: extended
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
 water:
   state:
     FreshWaterInfoPopUp:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: UI transient popup flag, not telemetry
       sources:
         app: null
         gui: null
         vwdoc: null
     FreshWaterLevel:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: percent
+      name: fresh_percent
+      scale: derived
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: '%'
     FreshWaterUnit:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     FreshWaterVolume:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: fresh_capacity_l
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: L
     Installed:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: "per-function feature-availability flag \u2014 surfaced as the 'installed'\
+        \ key"
       sources:
         app: null
         gui: null
         vwdoc: null
     WasteWaterInfoPopUp:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: UI transient popup flag, not telemetry
       sources:
         app: null
         gui: null
         vwdoc: null
     WasteWaterLevel:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: percent
+      name: waste_percent
+      scale: derived
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: '%'
     WasteWaterUnit:
       decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      reason: control/telemetry field with no GUI or getter evidence; not surfaced
+        (revisit if needed)
       sources:
         app: null
         gui: null
         vwdoc: null
     WasteWaterVolume:
-      decision: omit
-      reason: 'TODO: triage (no GUI/getter evidence)'
+      confidence: high
+      decision: surface
+      kind: level
+      name: waste_capacity_l
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: L
