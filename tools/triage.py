@@ -117,8 +117,11 @@ for suf, num in _ZMAP.items():
     SURFACE["lighting"]["BrightnessL" + suf] = ("brightness_zone_%d" % num, None, "raw", "level")
 
 # explicit omit reasons by category (checked in order; else a default).
-def omit_reason(fn, field):
+def omit_reason(fn, field, kind="state"):
     f = field
+    if kind == "control":
+        return ("control command field — definition captured in dictionary/overrides; "
+                "command surfacing deferred while control writes are blocked (issue #2)")
     if fn == "generalpurposesignals":
         return "opaque general-purpose signal — no GUI widget or getter; meaning undetermined"
     if f.endswith("InfoPopUp"):
@@ -154,7 +157,7 @@ def main():
                                      "sources": fields[field].get("sources", {}),
                                      "confidence": "medium" if scale == "UNVERIFIED" else "high"}
                 else:
-                    fields[field] = {"decision": "omit", "reason": omit_reason(fn, field),
+                    fields[field] = {"decision": "omit", "reason": omit_reason(fn, field, kind),
                                      "sources": fields[field].get("sources", {})}
     with open(os.path.join(root, "protocol", "signals.yaml"), "w") as fh:
         yaml.safe_dump(cat, fh, sort_keys=True, default_flow_style=False)
