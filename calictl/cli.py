@@ -127,6 +127,9 @@ def build_parser():
     d.add_argument("--broker"); d.add_argument("--port", type=int, default=1883)
     d.add_argument("--interval", type=float, default=30.0)
     d.add_argument("--dry-run", action="store_true")
+    i = sub.add_parser("influx", help="write telemetry to InfluxDB (buspi/Grafana)")
+    i.add_argument("--interval", type=float, default=None)
+    i.add_argument("--once", action="store_true", help="single poll+write then exit")
     return p
 
 
@@ -138,6 +141,13 @@ def main(argv=None):
             asyncio.run(daemon.dry_run())
         else:
             daemon.run(args.broker, args.port, args.interval, args.addr)
+        return 0
+    if args.cmd == "influx":
+        from . import influx
+        if args.once:
+            influx.write_once(args.addr)
+        else:
+            influx.run(args.interval, args.addr)
         return 0
     funcs = _load()
     if getattr(args, "function", None) and args.function not in funcs:
