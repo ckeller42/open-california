@@ -46,9 +46,18 @@ class CamperDevice:
         self.adapter = adapter
         self.connect_timeout = connect_timeout
 
-    async def _session(self, reset_on_fail: bool = True):
-        """Yield a connected BleakClient, recovering once via adapter reset."""
+    async def _session(self, reset_on_fail: bool | None = None):
+        """Yield a connected BleakClient, retrying on the abort cascade.
+
+        Adapter power-cycle recovery is OPT-IN (env CALICTL_ADAPTER_RESET=1),
+        default OFF: on buspi hci0 is shared with the Anker/Victron/Govee readers,
+        so resetting it would disrupt them. Plain retries (plus bleak-retry-connector
+        in solix-env) handle the cascade without touching the adapter.
+        """
+        import os
         from bleak import BleakClient  # lazy
+        if reset_on_fail is None:
+            reset_on_fail = os.environ.get("CALICTL_ADAPTER_RESET") == "1"
         last = None
         for attempt in range(3):
             try:
