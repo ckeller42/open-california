@@ -1,0 +1,25 @@
+calictl/influx.py
+  s_1dccea91605154::t_92051b5044732b 114-115
+tests/test_calictl.py
+  s_1dccea91605154::t_720ed567e42f05 109-113
+calictl/cli.py
+  s_1dccea91605154::t_3c698f2f93390e 97-98
+tools/audit_signals.py
+  s_1dccea91605154::t_42eeed77a78292 15-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e408d9140448703ef791c3b955b372bdecbbec4a",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
