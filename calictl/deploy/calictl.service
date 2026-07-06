@@ -1,0 +1,18 @@
+[Unit]
+Description=VW California Camper Unit (BLE) -> InfluxDB + MQTT (Home Assistant)
+After=bluetooth.target influxdb.service mosquitto.service network-online.target
+Wants=bluetooth.target network-online.target
+
+[Service]
+ExecStart=/home/pi/solix-env/bin/python -m calictl serve
+WorkingDirectory=/home/pi/open-california
+EnvironmentFile=/etc/buspi/secrets.env
+EnvironmentFile=/etc/buspi/calictl.env
+Environment=PYTHONUNBUFFERED=1
+Environment=POLL_INTERVAL=30
+Restart=always
+RestartSec=30
+User=pi
+
+[Install]
+WantedBy=multi-user.target

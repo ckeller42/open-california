@@ -1,0 +1,12 @@
+default_config:            # includes the MQTT integration (auto-discovery on `homeassistant/#`)
+homekit:
+  - name: "VW California"
+    mode: bridge
+    filter:
+      include_domains: [light, switch, climate]   # controllable van features
+      include_entities: []                         # add specific sensors if desired
+# MQTT broker is configured once via the UI (Settings > Devices > MQTT) or:
+# mqtt:
+#   broker: 127.0.0.1
+#   username: !secret mqtt_user
+#   password: !secret mqtt_password
