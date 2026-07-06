@@ -19,3 +19,17 @@ def test_report_flags_out_of_range():
     # in-range value produces no OUT-OF-RANGE line
     ok = A.report_from_keys(dictkeys, cat, gui={}, app={}, samples={"UTwoBattBemAfs": 13.5})
     assert not any(l.startswith("OUT-OF-RANGE") for l in ok)
+
+
+def test_report_flags_and_clears_semantic_review():
+    from tools import audit_signals as A
+    setters = {"campingmode": {"inverted": True, "combined": True, "where": "tf/a.java"}}
+    dk = {"campingmode.state.InteriorLight"}
+    # naive plain surface of an inverted/combined field -> flagged
+    bad = {"campingmode": {"state": {"InteriorLight": {"decision": "surface", "name": "interior_light", "scale": "raw"}}}}
+    assert any(l.startswith("SEMANTIC-REVIEW-NEEDED campingmode")
+               for l in A.report_from_keys(dk, bad, gui={}, app={}, samples={}, setters=setters))
+    # once a surfaced field marks the transform -> cleared
+    ok = {"campingmode": {"state": {"InteriorLight": {"decision": "surface", "name": "lights_on", "scale": "inverted-combined"}}}}
+    assert not any(l.startswith("SEMANTIC-REVIEW-NEEDED")
+                   for l in A.report_from_keys(dk, ok, gui={}, app={}, samples={}, setters=setters))

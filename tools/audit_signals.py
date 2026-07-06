@@ -19,7 +19,7 @@ def gui_keys(ui_dir) -> dict:
 _RANGES = {"battery": (8, 16), "leisure_battery": (8, 16),
            "percent": (0, 100), "temperature": (-40, 90)}
 
-def report_from_keys(dictkeys, cat, gui, app, samples) -> list:
+def report_from_keys(dictkeys, cat, gui, app, samples, setters=None) -> list:
     catkeys = catalog.keys(cat)
     lines = []
     for k in sorted(dictkeys - catkeys):
@@ -44,10 +44,26 @@ def report_from_keys(dictkeys, cat, gui, app, samples) -> list:
                         lo, hi = rng
                         if not (lo <= val <= hi):
                             lines.append("OUT-OF-RANGE %s.%s.%s value=%s kind=%s" % (fn, kind, field, val, e.get("kind")))
+    # A function whose app setter is INVERTED or COMBINED must have at least one
+    # surfaced field whose scale acknowledges the transform; else a naive interpreter
+    # may silently disagree with the app (the camping-lights bug). Review flag.
+    for fn, flag in (setters or {}).items():
+        kinds = cat.get(fn, {})
+        surfaced = [e for k in ("state", "control") for e in (kinds.get(k) or {}).values()
+                    if e.get("decision") == "surface"]
+        if not surfaced:
+            continue
+        ack = any("inverted" in str(e.get("scale", "")) or "combined" in str(e.get("scale", ""))
+                  for e in surfaced)
+        if not ack:
+            tags = "+".join(t for t in ("inverted", "combined") if flag.get(t))
+            lines.append("SEMANTIC-REVIEW-NEEDED %s (%s setter in %s): no surfaced field marks "
+                         "the transform — verify polarity/combination against the app"
+                         % (fn, tags, flag.get("where")))
     return lines
 
-def report(funcs, cat, app, gui, samples):
-    return report_from_keys(catalog.dictionary_keys(funcs), cat, gui, app, samples)
+def report(funcs, cat, app, gui, samples, setters=None):
+    return report_from_keys(catalog.dictionary_keys(funcs), cat, gui, app, samples, setters)
 
 def seed(funcs, cat, app, gui) -> dict:
     for k in catalog.dictionary_keys(funcs) - catalog.keys(cat):
@@ -71,11 +87,12 @@ def main(argv=None):
     root = os.path.join(os.path.dirname(__file__), "..")
     funcs = protocol.load(); overrides.apply(funcs)
     cat = catalog.load_catalog()
-    app = __import__("tools.app_scales", fromlist=["scales"]).scales(
-        os.environ.get("DECOMPILE_SRC", ""))
+    src = os.environ.get("DECOMPILE_SRC", "")
+    app = __import__("tools.app_scales", fromlist=["scales"]).scales(src)
+    setters = __import__("tools.app_setters", fromlist=["nontrivial"]).nontrivial(src) if src else {}
     gui = gui_keys(os.path.join(root, "ui", "screens"))
     if "--report" in argv:
-        print("\n".join(report(funcs, cat, app, gui, {})) or "clean")
+        print("\n".join(report(funcs, cat, app, gui, {}, setters)) or "clean")
     if "--seed" in argv:
         cat = seed(funcs, cat, app, gui)
         with open(os.path.join(root, "protocol", "signals.yaml"), "w") as fh:
