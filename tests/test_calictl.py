@@ -74,3 +74,30 @@ def test_decode_roundtrip_via_bits():
     # a byte-aligned 8-bit field equals its raw byte
     bits = P.to_bits(bytes([0x1d]))
     assert P.get_field(bits, 0, 8) == 0x1d
+
+
+def test_energy_batt1_sentinel_nulled():
+    f = _funcs()
+    # engine-off frame: IOneBattBemAfs=0x81 sentinel -> batt1_v suppressed
+    off = bytes.fromhex("00d0500400ff810000fe18033083fffdfffe000001ff")
+    e = semantics.energy(P.decode(f["energy"], off))
+    assert e["batt1_v"] is None and e["batt2_v"] == 13.1
+
+
+def test_mqtt_flatten_and_state():
+    from calictl import mqtt
+    interp = {"installed": True, "fresh": {"percent": 38, "liters": 11}, "waste": {"percent": 0}}
+    flat = mqtt.flatten(interp)
+    assert flat["fresh_percent"] == 38 and flat["waste_percent"] == 0
+    topic, payload = mqtt.render_state("water", interp)
+    assert topic == "calivan/water" and '"fresh_percent": 38' in payload
+
+
+def test_mqtt_discovery_and_commands():
+    from calictl import mqtt
+    cfgs = mqtt.render_discovery()
+    # every entity has a unique config topic + references its function state topic
+    assert any("binary_sensor" in t and "fridge" in t.lower() or "cooler_on" in t for t in cfgs)
+    fridge = cfgs["homeassistant/switch/vwcamper_cooler_power/config"]
+    assert fridge["command_topic"] == "calivan/cooler/set/power"
+    assert mqtt.command_topics()["calivan/cooler/set/power"] == ("cooler", "power")

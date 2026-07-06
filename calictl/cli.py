@@ -123,11 +123,22 @@ def build_parser():
     r = sub.add_parser("raw"); r.add_argument("function")
     s = sub.add_parser("set")
     s.add_argument("function"); s.add_argument("what"); s.add_argument("value")
+    d = sub.add_parser("daemon", help="bridge to Home Assistant over MQTT")
+    d.add_argument("--broker"); d.add_argument("--port", type=int, default=1883)
+    d.add_argument("--interval", type=float, default=30.0)
+    d.add_argument("--dry-run", action="store_true")
     return p
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.cmd == "daemon":
+        from . import daemon
+        if args.dry_run or not args.broker:
+            asyncio.run(daemon.dry_run())
+        else:
+            daemon.run(args.broker, args.port, args.interval, args.addr)
+        return 0
     funcs = _load()
     if getattr(args, "function", None) and args.function not in funcs:
         print("unknown function %r. known: %s" % (args.function, ", ".join(sorted(funcs))),
