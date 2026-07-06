@@ -8,7 +8,20 @@ app *reads/subscribes to* as vehicle status, compared against
 noted inline). All camper-protocol characteristics share the UUID suffix
 `-6C77-4B7D-BBF6-A5E587701F3D` ("Exlap" protocol).
 
-## Verdict (short)
+## RESOLVED 2026-07-06 (commits e74e176, 7ac5480)
+
+This audit's gaps are now **fixed**. `state_offsets` in the extractor was joining
+on debug-log variable names (missed struct sub-fields) instead of the `subList`
+slices; reworking it to a subList spine recovered Energy (17→36) and the rest.
+Roof/Lighting were genuinely absent because jadx's normal pass skipped their
+state-decode methods ("Method dump skipped") — a `--show-bad-code` re-decompile
+of `ig/c` and `dg/a` recovered them; `decompile.sh` now passes that flag.
+**Dictionary is now 13 functions, 0 unresolved, all with state fields.** Energy
+telemetry (SoC/V/A/W) and Water (`Level`=current, `Volume`=capacity) are
+additionally **live-verified** against the vehicle. The original verdict below
+is kept as the historical record of what was found.
+
+## Verdict (short) — HISTORICAL (now resolved, see above)
 
 **INCOMPLETE.** The dictionary is missing two entire status functions (Roof,
 Lighting — never even referenced in the 11-function list), has a completely
