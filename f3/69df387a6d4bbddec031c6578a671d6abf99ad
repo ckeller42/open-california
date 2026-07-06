@@ -1,0 +1,21 @@
+tests/test_app_scales.py
+  s_1dccea91605154::t_49450cffd477df 1-7
+tools/app_scales.py
+  s_1dccea91605154::t_7912760d14de93 1-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f369df387a6d4bbddec031c6578a671d6abf99ad",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
