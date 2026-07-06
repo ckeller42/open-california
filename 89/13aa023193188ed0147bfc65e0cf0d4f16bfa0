@@ -1,0 +1,25 @@
+tools/hooks/README.md
+  s_1dccea91605154::t_13da9b43764eb2 1-26
+tools/hooks/dashboard-sync-reminder.py
+  s_1dccea91605154::t_13da9b43764eb2 1-23
+docs/business-logic/signal-scales.md
+  s_1dccea91605154::t_7945d4820c81b7 1-35
+calictl/deploy/camper-dashboard.json
+  s_1dccea91605154::t_918e1369ff38f2 377,390,540,553
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8913aa023193188ed0147bfc65e0cf0d4f16bfa0",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
