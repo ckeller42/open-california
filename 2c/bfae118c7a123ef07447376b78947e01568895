@@ -1,0 +1,27 @@
+calictl/deploy/homeassistant/configuration.yaml
+  s_1dccea91605154::t_21b0a0a5f1ef14 1-12
+calictl/deploy/homeassistant/HOMEASSISTANT.md
+  s_1dccea91605154::t_dc6c2e766367f4 1-120
+calictl/deploy/calictl.service
+  s_1dccea91605154::t_0d5c58d2abe3a2 1-18
+calictl/deploy/homeassistant/docker-compose.snippet.yml
+  s_1dccea91605154::t_aa36a8119437d2 1-19
+calictl/deploy/homeassistant/mosquitto.conf
+  s_1dccea91605154::t_8359da1ee46dd4 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2cbfae118c7a123ef07447376b78947e01568895",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
