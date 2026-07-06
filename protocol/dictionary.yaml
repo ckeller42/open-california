@@ -19,16 +19,16 @@ functions:
       - {name: TimerHour, offset: MERGED_AMBIGUOUS, width: 8, default: 31, raw_range: 0..255, value_semantics: UNVERIFIED}
       - {name: TimerMin, offset: MERGED_AMBIGUOUS, width: 8, default: 63, raw_range: 0..255, value_semantics: UNVERIFIED}
     state_fields:
-      - {name: PermanentOperationRequestConfirmation}
-      - {name: NormalOperation, offset: 6, width: 1}
-      - {name: PermanentOperation, offset: 5, width: 1}
-      - {name: FaultTriggerBit, offset: 4, width: 1}
-      - {name: Installed, offset: 3, width: 1}
       - {name: AirDistribution, offset: 0, width: 2}
-      - {name: ErrorCode, offset: 12, width: 4}
+      - {name: Installed, offset: 3, width: 1}
+      - {name: FaultTriggerBit, offset: 4, width: 1}
+      - {name: PermanentOperation, offset: 5, width: 1}
+      - {name: NormalOperation, offset: 6, width: 1}
+      - {name: PermanentOperationRequestConfirmation, offset: 7, width: 1}
       - {name: HeatingLevel, offset: 8, width: 4}
-      - {name: OperationModeAirHeater, offset: 20, width: 4}
+      - {name: ErrorCode, offset: 12, width: 4}
       - {name: OperationModeCombined, offset: 16, width: 4}
+      - {name: OperationModeAirHeater, offset: 20, width: 4}
       - {name: RunningTime, offset: 24, width: 8}
       - {name: TimerHour, offset: 32, width: 8}
       - {name: TimerMin, offset: 40, width: 8}
@@ -42,12 +42,12 @@ functions:
       - {name: OutsideLight, offset: MERGED_AMBIGUOUS, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
       - {name: InteriorLight, offset: MERGED_AMBIGUOUS, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
     state_fields:
-      - {name: State, offset: 7, width: 1}
-      - {name: UsbCharger, offset: 6, width: 1}
-      - {name: OutsideLight, offset: 5, width: 1}
-      - {name: InteriorLight, offset: 4, width: 1}
-      - {name: Enable, offset: 3, width: 1}
       - {name: Installed, offset: 2, width: 1}
+      - {name: Enable, offset: 3, width: 1}
+      - {name: InteriorLight, offset: 4, width: 1}
+      - {name: OutsideLight, offset: 5, width: 1}
+      - {name: UsbCharger, offset: 6, width: 1}
+      - {name: State, offset: 7, width: 1}
   cooler:
     state_services: [1100, 1102]
     control_source: sf/a.java   # control char 1101
@@ -63,14 +63,14 @@ functions:
       - {name: NightTimerHourOn, offset: MERGED_AMBIGUOUS, width: 8, default: 31, raw_range: 0..255, value_semantics: UNVERIFIED}
       - {name: NightTimerHourOff, offset: MERGED_AMBIGUOUS, width: 8, default: 31, raw_range: 0..255, value_semantics: UNVERIFIED}
     state_fields:
-      - {name: State}
-      - {name: TimerState, offset: 6, width: 1}
-      - {name: TimerElapsed, offset: 5, width: 1}
-      - {name: Installed, offset: 4, width: 1}
-      - {name: NightTimerSet, offset: 3, width: 1}
       - {name: Error, offset: 0, width: 2}
-      - {name: Level, offset: 12, width: 4}
+      - {name: NightTimerSet, offset: 3, width: 1}
+      - {name: Installed, offset: 4, width: 1}
+      - {name: TimerElapsed, offset: 5, width: 1}
+      - {name: TimerState, offset: 6, width: 1}
+      - {name: State, offset: 7, width: 1}
       - {name: Mode, offset: 8, width: 4}
+      - {name: Level, offset: 12, width: 4}
       - {name: TimerHourSet, offset: 16, width: 8}
       - {name: TimerMinSet, offset: 24, width: 8}
       - {name: TimerCounterHour, offset: 32, width: 8}
@@ -84,41 +84,63 @@ functions:
       - {name: OperationMode, offset: MERGED_AMBIGUOUS, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
       - {name: Movement, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
     state_fields:
-      - {name: TwoBattNotCharged, offset: 7, width: 1}
-      - {name: TwoBattSwitchAtCharging, offset: 6, width: 1}
-      - {name: TwoBattSwitchAtWorkshop, offset: 5, width: 1}
-      - {name: WarningLevelActive, offset: 4, width: 1}
-      - {name: DcdcDefect, offset: 3, width: 1}
-      - {name: EnergyModeNotSelectable, offset: 2, width: 1}
-      - {name: LandDefect, offset: 1, width: 1}
       - {name: LandNotAvailable, offset: 0, width: 1}
-      - {name: PvDefect, offset: 15, width: 1}
-      - {name: SleepWarning, offset: 14, width: 1}
-      - {name: CurrentDeratingTemperature, offset: 13, width: 1}
-      - {name: SystemError}
-      - {name: EmpInstalled}
-      - {name: PvInstalled, offset: 10, width: 1}
-      - {name: LadInstalled, offset: 9, width: 1}
+      - {name: LandDefect, offset: 1, width: 1}
+      - {name: EnergyModeNotSelectable, offset: 2, width: 1}
+      - {name: DcdcDefect, offset: 3, width: 1}
+      - {name: WarningLevelActive, offset: 4, width: 1}
+      - {name: TwoBattSwitchAtWorkshop, offset: 5, width: 1}
+      - {name: TwoBattSwitchAtCharging, offset: 6, width: 1}
+      - {name: TwoBattNotCharged, offset: 7, width: 1}
       - {name: DcdcInstalled, offset: 8, width: 1}
-      - {name: WarningLevelTwo}
+      - {name: LadInstalled, offset: 9, width: 1}
+      - {name: PvInstalled, offset: 10, width: 1}
+      - {name: EmpInstalled, offset: 11, width: 1}
+      - {name: SystemError, offset: 12, width: 1}
+      - {name: CurrentDeratingTemperature, offset: 13, width: 1}
+      - {name: SleepWarning, offset: 14, width: 1}
+      - {name: PvDefect, offset: 15, width: 1}
+      - {name: SocOneBattAfs, offset: 16, width: 4}
+      - {name: EnergyMode, offset: 20, width: 2}
+      - {name: WarningLevelTwo, offset: 22, width: 2}
+      - {name: StateDcdcAfs, offset: 24, width: 4}
+      - {name: SocTwoBattAfs, offset: 28, width: 4}
+      - {name: StatePvAfs, offset: 32, width: 4}
+      - {name: StateLandAfs, offset: 36, width: 4}
+      - {name: AgeOneBattValuesMinutes, offset: 40, width: 8}
+      - {name: IOneBattBemAfs, offset: 48, width: 8}
+      - {name: PDcdcAfs, offset: 56, width: 8}
+      - {name: PLandAfs, offset: 64, width: 8}
+      - {name: PPvAfs, offset: 72, width: 8}
+      - {name: tTwoBattRemainingh, offset: 80, width: 8}
+      - {name: tTwoBattRemainingmin, offset: 88, width: 8}
+      - {name: UOneBattBemAfs, offset: 96, width: 8}
+      - {name: UTwoBattBemAfs, offset: 104, width: 8}
+      - {name: ITwoBattBemAfs, offset: 112, width: 16}
+      - {name: IDcdcAfs, offset: 128, width: 16}
+      - {name: ILandAfs, offset: 144, width: 16}
+      - {name: IPvAfs, offset: 160, width: 16}
   general:
     state_services: [1000, 1001, 1002, 1004]
     control_fields:
       []   # no unambiguous control model (see control_models_unresolved)
     state_fields:
+      - {name: AmbSwVersion}
+      - {name: CmSwVersion}
+      - {name: CommunicationVersion}
   generalpurposesignals:
     state_services: [f000, f001]
     control_fields:
       []   # no unambiguous control model (see control_models_unresolved)
     state_fields:
-      - {name: BitZeroOne, offset: 7, width: 1}
-      - {name: BitZeroTwo, offset: 6, width: 1}
-      - {name: BitZeroThree, offset: 5, width: 1}
-      - {name: BitZeroFour, offset: 4, width: 1}
-      - {name: BitZeroFive, offset: 3, width: 1}
-      - {name: BitZeroSix, offset: 2, width: 1}
-      - {name: BitZeroSeven, offset: 1, width: 1}
       - {name: BitZeroEight, offset: 0, width: 1}
+      - {name: BitZeroSeven, offset: 1, width: 1}
+      - {name: BitZeroSix, offset: 2, width: 1}
+      - {name: BitZeroFive, offset: 3, width: 1}
+      - {name: BitZeroFour, offset: 4, width: 1}
+      - {name: BitZeroThree, offset: 5, width: 1}
+      - {name: BitZeroTwo, offset: 6, width: 1}
+      - {name: BitZeroOne, offset: 7, width: 1}
       - {name: ByteZeroOne, offset: 8, width: 8}
       - {name: ByteZeroTwo, offset: 16, width: 8}
       - {name: ByteZeroThree, offset: 24, width: 8}
@@ -142,13 +164,13 @@ functions:
       - {name: Mode, offset: 12, width: 4, default: 5, raw_range: 0..15, value_semantics: UNVERIFIED}
       - {name: TemperatureAir, offset: MERGED_AMBIGUOUS, width: 8, default: 0, raw_range: 0..255, value_semantics: UNVERIFIED}
     state_fields:
-      - {name: StateAir, offset: 7, width: 1}
-      - {name: StateWater, offset: 6, width: 1}
-      - {name: TemperatureWater, offset: 5, width: 1}
-      - {name: Installed, offset: 4, width: 1}
       - {name: Variant, offset: 0, width: 2}
-      - {name: Mode, offset: 12, width: 4}
+      - {name: Installed, offset: 4, width: 1}
+      - {name: TemperatureWater, offset: 5, width: 1}
+      - {name: StateWater, offset: 6, width: 1}
+      - {name: StateAir, offset: 7, width: 1}
       - {name: Error, offset: 8, width: 4}
+      - {name: Mode, offset: 12, width: 4}
       - {name: TemperatureAir, offset: 16, width: 8}
   roofaircondition:
     state_services: [2000, 2002]
@@ -159,10 +181,10 @@ functions:
       - {name: Mode, offset: MERGED_AMBIGUOUS, width: 4, default: 7, raw_range: 0..15, value_semantics: UNVERIFIED}
       - {name: Temperature, offset: MERGED_AMBIGUOUS, width: 8, default: 0, raw_range: 0..255, value_semantics: UNVERIFIED}
     state_fields:
-      - {name: State, offset: 7, width: 1}
-      - {name: Installed, offset: 6, width: 1}
-      - {name: Mode, offset: 2, width: 2}
       - {name: Error, offset: 0, width: 2}
+      - {name: Mode, offset: 2, width: 2}
+      - {name: Installed, offset: 6, width: 1}
+      - {name: State, offset: 7, width: 1}
       - {name: Fanspeed, offset: 12, width: 4}
       - {name: Temperature, offset: 16, width: 8}
   satelliteantenna:
@@ -175,11 +197,11 @@ functions:
       - {name: Dish, offset: MERGED_AMBIGUOUS, width: 2, default: 0, raw_range: 0..3, value_semantics: UNVERIFIED}
       - {name: SatelliteSelection, offset: 12, width: 4, default: 0, raw_range: 0..15, value_semantics: UNVERIFIED}
     state_fields:
-      - {name: Installed, offset: 7, width: 1}
-      - {name: System, offset: 4, width: 2}
       - {name: Error, offset: 0, width: 4}
-      - {name: Dish, offset: 12, width: 4}
+      - {name: System, offset: 4, width: 2}
+      - {name: Installed, offset: 7, width: 1}
       - {name: SatelliteSelection, offset: 8, width: 4}
+      - {name: Dish, offset: 12, width: 4}
       - {name: SignalLevel, offset: 16, width: 8}
   stairs:
     state_services: [1800, 1802]
@@ -188,23 +210,23 @@ functions:
       - {name: OperationMode, offset: MERGED_AMBIGUOUS, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
       - {name: Movement, offset: MERGED_AMBIGUOUS, width: 2, default: 0, raw_range: 0..3, value_semantics: UNVERIFIED}
     state_fields:
-      - {name: Installed, offset: 7, width: 1}
-      - {name: OperationMode, offset: 6, width: 1}
-      - {name: State, offset: 5, width: 1}
-      - {name: Sensor, offset: 4, width: 1}
       - {name: InfoPopUp, offset: 2, width: 2}
+      - {name: Sensor, offset: 4, width: 1}
+      - {name: State, offset: 5, width: 1}
+      - {name: OperationMode, offset: 6, width: 1}
+      - {name: Installed, offset: 7, width: 1}
   water:
     state_services: [1300, 1302]
     control_fields:
       []   # no unambiguous control model (see control_models_unresolved)
     state_fields:
-      - {name: FreshWaterUnit, offset: 7, width: 1}
-      - {name: Installed, offset: 6, width: 1}
       - {name: FreshWaterInfoPopUp, offset: 0, width: 4}
+      - {name: Installed, offset: 6, width: 1}
+      - {name: FreshWaterUnit, offset: 7, width: 1}
       - {name: FreshWaterLevel, offset: 8, width: 8}
       - {name: FreshWaterVolume, offset: 16, width: 8}
-      - {name: WasteWaterUnit, offset: 31, width: 1}
       - {name: WasteWaterInfoPopUp, offset: 26, width: 2}
+      - {name: WasteWaterUnit, offset: 31, width: 1}
       - {name: WasteWaterLevel, offset: 32, width: 8}
       - {name: WasteWaterVolume, offset: 40, width: 8}
 
