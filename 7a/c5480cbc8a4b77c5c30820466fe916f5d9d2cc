@@ -1,0 +1,21 @@
+protocol/dictionary.yaml
+  s_1dccea91605154::t_35b57d9494aed3 157-201,220-231
+tools/decompile.sh
+  s_1dccea91605154::t_82809ea6aa02ea 76-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7ac5480cbc8a4b77c5c30820466fe916f5d9d2cc",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
