@@ -45,6 +45,11 @@ def energy(d: dict) -> dict:
     # battery-1 telemetry reads sentinels (I=0x81 / U=48) when the engine is off;
     # battery-2 (leisure) is always live. Flag validity rather than show garbage.
     b1_valid = d.get("IOneBattBemAfs") != 0x81
+    # A source's power reads a meaningless offset when that source isn't fitted
+    # (e.g. this van has no solar); suppress it so it doesn't plot a phantom series.
+    dcdc_inst = bool(d.get("DcdcInstalled"))
+    shore_inst = bool(d.get("LadInstalled"))
+    solar_inst = bool(d.get("PvInstalled"))
     return {
         "installed": True,
         "stale": stale,               # True => SoC/V/A below are last-known, not live
@@ -54,13 +59,13 @@ def energy(d: dict) -> dict:
         "soc1_level": d.get("SocOneBattAfs"),      # coarse 0-15
         "soc2_level": d.get("SocTwoBattAfs"),
         "dcdc_charging": bool(d.get("StateDcdcAfs")),
-        "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8),
-        "shore_power": _signed(d.get("PLandAfs", 0), 8),
-        "solar_power": _signed(d.get("PPvAfs", 0), 8),
+        "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8) if dcdc_inst else None,
+        "shore_power": _signed(d.get("PLandAfs", 0), 8) if shore_inst else None,
+        "solar_power": _signed(d.get("PPvAfs", 0), 8) if solar_inst else None,
         "batt1_current": _signed(d.get("IOneBattBemAfs", 0), 8),
-        "dcdc_installed": bool(d.get("DcdcInstalled")),
-        "shore_installed": bool(d.get("LadInstalled")),
-        "solar_installed": bool(d.get("PvInstalled")),
+        "dcdc_installed": dcdc_inst,
+        "shore_installed": shore_inst,
+        "solar_installed": solar_inst,
         "faults": [k for k in ("SystemError", "DcdcDefect", "PvDefect", "LandDefect")
                    if d.get(k)],
     }
