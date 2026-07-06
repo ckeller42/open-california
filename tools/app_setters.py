@@ -14,14 +14,18 @@ gospel (the decompiled tree is R8-obfuscated).
 from __future__ import annotations
 import os, re
 
-_INV = re.compile(r"!\s*\w+\s*\?\s*1\s*:\s*0|!\s*\w+\s*\?\s*0\s*:\s*1")
+_INV_WRITE = re.compile(r"!\s*\w+\s*\?\s*1\s*:\s*0|!\s*\w+\s*\?\s*0\s*:\s*1")   # setter inverts value
+_INV_READ = re.compile(r"!\s*\(\(Boolean\)")   # readback getter inverts a field (the READ risk)
 _WRITE = re.compile(r"\.o\(Integer\.valueOf\((\w+)\)\)")
 _FN = re.compile(r"Incoming Data for (\w+)")
 
 
 def nontrivial(root: str) -> dict:
-    """{function_name: {"inverted": bool, "combined": bool, "where": relpath}} for
-    every function whose setter class contains an inverted or combined write."""
+    """{function: {"inverted": bool, "combined": bool, "where": relpath}} for every
+    function whose feature class has a non-trivial transform. `inverted` means a field
+    is stored/displayed as the logical OPPOSITE — a setter inversion (`!on?1:0`) OR,
+    more importantly for reads, an inverted readback getter (`!((Boolean)…)`). This is
+    the signal that a naive `bool(field)` interpreter will disagree with the app."""
     out: dict = {}
     for dp, _, files in os.walk(root):
         for fn in files:
@@ -36,7 +40,7 @@ def nontrivial(root: str) -> dict:
             if not m:
                 continue
             func = m.group(1).lower()
-            inverted = bool(_INV.search(txt))
+            inverted = bool(_INV_WRITE.search(txt)) or bool(_INV_READ.search(txt))
             writes = _WRITE.findall(txt)
             combined = any(writes.count(v) >= 2 for v in set(writes))   # same value -> 2+ holders
             if inverted or combined:
