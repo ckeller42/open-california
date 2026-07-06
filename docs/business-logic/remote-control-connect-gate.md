@@ -178,3 +178,19 @@ stacks report a stale bond).
   `src/sources/qf/a.java`, `src/sources/vf/c.java`, `src/sources/sf/a.java`,
   `src/sources/sf/b.java`, `src/sources/tf/a.java`, `src/sources/lg/a.java`
 - Op params: `src/sources/qd/{q,l,m,p}.java`, `src/sources/td/{a,b,c,d}.java`
+
+## Update: the 1004 value is NOT a session token (ruled out)
+
+Traced the auth-read response through the write path (`pf/g.java` default case): the
+`1004` data (`boolArr2`) is only used for `.length` (empty vs non-empty) then discarded —
+never stored, never fed into any write. No nonce / signed-write / challenge exists in the
+GATT layer (`qd`/`s`/`m2`/`jb`). So writes are **not** gated by an auth token derived from
+the read; the auth read is purely an encryption/bonding trigger + a "did it return data"
+gate.
+
+**Sharpened next lead:** `CONNECTED` requires **every notifiable characteristic** to be
+subscribed (`jb/b.java:122` counts `b()==true` chars; `:131-139` subscribes each). A group
+(`pf.k.H0`) can have **more than one** char. Our handshake subscribed only ONE char per
+function — if any group has multiple notifiable chars we never reach the armed `CONNECTED`
+state, which would explain writes being ACKed-but-ignored. Next: extract the full per-group
+char list and diff against what we subscribe.
