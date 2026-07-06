@@ -1,0 +1,24 @@
+tools/app_setters.py
+  s_1dccea91605154::t_5bf8f9c0023040 17-18,24-28,43
+tools/audit_signals.py
+  s_1dccea91605154::t_3ca07c5e47a4bf 56-65
+calictl/semantics.py
+  s_1dccea91605154::t_d80d23014a8806 186-188
+  s_1dccea91605154::t_1430d92717b4a4 200-202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "431b0d504266ff06ae724ff978c97ad341426e77",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
