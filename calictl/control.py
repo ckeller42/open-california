@@ -17,13 +17,17 @@ def camping_values(**changes) -> dict:
 
 
 def _camping(funcs, what, value, last):
+    # Matches the app's camping screen: ONE combined "lights" toggle (tf/a K0 writes
+    # 0 to BOTH light fields for ON, inverted), USB (B2) + master (z2) normal.
+    # lights/usb are only effective while master (camping mode) is on.
     on = str(value).lower() in ("on", "true", "1")
-    if what == "interior_light":
-        ch = {"InteriorLight": LIGHT_ON if on else LIGHT_OFF}
-    elif what == "outside_light":
-        ch = {"OutsideLight": LIGHT_ON if on else LIGHT_OFF}
-    elif what == "usb_charger":
+    if what == "lights":                       # combined interior+outside, inverted
+        v = LIGHT_ON if on else LIGHT_OFF
+        ch = {"InteriorLight": v, "OutsideLight": v}
+    elif what == "usb":                        # rear USB ports, normal
         ch = {"UsbCharger": 1 if on else 0}
+    elif what == "master":                     # camping mode on/off, normal
+        ch = {"State": 1 if on else 0}
     else:
         return None
     return protocol.encode(funcs["campingmode"], camping_values(**ch), frame_bytes=1)

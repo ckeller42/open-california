@@ -54,8 +54,9 @@ SURFACE = {
     "campingmode": {
         "State": ("master_on", None, "raw", "state"),
         "UsbCharger": ("usb_charger", None, "raw", "state"),
-        "InteriorLight": ("interior_light", None, "raw", "state"),
-        "OutsideLight": ("outside_light", None, "raw", "state"),
+        # app's single "Lights" toggle: K0 writes 0 to both InteriorLight+OutsideLight
+        # for ON (inverted); lit iff both read 0 -> surfaced as the combined lights_on.
+        "InteriorLight": ("lights_on", None, "inverted-combined", "state"),
         "Enable": ("enable", None, "raw", "state"),
     },
     "airheater": {
@@ -124,6 +125,9 @@ def omit_reason(fn, field, kind="state"):
                 "command surfacing deferred while control writes are blocked (issue #2)")
     if fn == "generalpurposesignals":
         return "opaque general-purpose signal — no GUI widget or getter; meaning undetermined"
+    if fn == "campingmode" and f == "OutsideLight":
+        return ("tied to InteriorLight — the app's single Lights toggle (tf/a K0) writes "
+                "both together (inverted); surfaced via the combined lights_on")
     if f.endswith("InfoPopUp"):
         return "UI transient popup flag, not telemetry"
     if f == "Timestamp":

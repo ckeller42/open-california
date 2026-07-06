@@ -272,24 +272,21 @@ campingmode:
       confidence: high
       decision: surface
       kind: state
-      name: interior_light
-      scale: raw
+      name: lights_on
+      scale: inverted-combined
       sources:
         app: null
         gui: null
         vwdoc: null
       unit: null
     OutsideLight:
-      confidence: high
-      decision: surface
-      kind: state
-      name: outside_light
-      scale: raw
+      decision: omit
+      reason: "tied to InteriorLight \u2014 the app's single Lights toggle (tf/a K0)\
+        \ writes both together (inverted); surfaced via the combined lights_on"
       sources:
         app: null
         gui: null
         vwdoc: null
-      unit: null
     State:
       confidence: high
       decision: surface

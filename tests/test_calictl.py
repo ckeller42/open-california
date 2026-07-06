@@ -46,11 +46,19 @@ def test_energy_charging_and_scale():
     assert "batt2_remaining_h" in e
 
 
-def test_camping_independent_outputs():
+def test_camping_lights_combined_inverted_and_gated():
     f = _funcs()
-    c = semantics.campingmode(P.decode(f["campingmode"], CAMPING))
-    assert c["master_on"] is False and c["usb_charger"] is True  # independent
+    c = semantics.campingmode(P.decode(f["campingmode"], CAMPING))  # 0x32: State=0,USB=1,Int=Out=0,Enable=1
+    assert c["master_on"] is False and c["usb_charger"] is True
+    assert c["outputs_controllable"] is False          # lights/USB only toggle when master on
+    assert c["lights_on"] is False                     # gated off when camping mode off
     assert c["enable"] is True
+    # app: Lights ON = master on AND both light fields 0 (K0 writes 0/0, inverted+combined)
+    d = P.decode(f["campingmode"], CAMPING); d["State"] = 1
+    d["InteriorLight"] = 0; d["OutsideLight"] = 0
+    assert semantics.campingmode(d)["lights_on"] is True
+    d["InteriorLight"] = 1; d["OutsideLight"] = 1
+    assert semantics.campingmode(d)["lights_on"] is False   # fields=1 -> not lit
 
 
 def test_encode_cooler_frames_match_hand_derived():
@@ -128,16 +136,16 @@ def test_full_parity_devices_and_installed_gating():
     assert roof and all("command_topic" not in c for c in roof)
 
 
-def test_camping_light_control_frame():
+def test_camping_lights_control_frame():
     from calictl import protocol as P, overrides, control
     funcs = P.load(); overrides.apply(funcs)
-    frame = control.build(funcs, "campingmode", "interior_light", "on", {})
+    # app's single "Lights" toggle writes BOTH light fields together, inverted (on -> 0)
+    frame = control.build(funcs, "campingmode", "lights", "on", {})
     assert len(frame) == 1
     back = control.decode_control(funcs["campingmode"], frame)
-    assert back["InteriorLight"] == control.LIGHT_ON        # changed
-    assert back["OutsideLight"] == 3 and back["State"] == 3 # untouched = sentinel
-    assert back["UsbCharger"] == 3
-    # USB is not inverted
+    assert back["InteriorLight"] == control.LIGHT_ON and back["OutsideLight"] == control.LIGHT_ON  # both
+    assert back["State"] == 3 and back["UsbCharger"] == 3   # untouched = sentinel
+    # USB is not inverted, and is separate from the lights
     usb = control.decode_control(funcs["campingmode"],
-                                 control.build(funcs, "campingmode", "usb_charger", "on", {}))
+                                 control.build(funcs, "campingmode", "usb", "on", {}))
     assert usb["UsbCharger"] == 1 and usb["InteriorLight"] == 3
