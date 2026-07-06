@@ -42,30 +42,36 @@ def water(d: dict) -> dict:
 
 def energy(d: dict) -> dict:
     stale = d.get("AgeOneBattValuesMinutes", 255) >= 255
-    # battery-1 telemetry reads sentinels (I=0x81 / U=48) when the engine is off;
-    # battery-2 (leisure) is always live. Flag validity rather than show garbage.
+    # battery-1 = STARTER ("default car"/vehicle) battery: only measured with
+    # terminal-15 (engine on); off => sentinels (I=0x81 / U=48). battery-2 = LEISURE
+    # (second) battery: always live. Suppress only the starter's sentinel garbage,
+    # never the real leisure/source signals (solar stays even when not fitted).
     b1_valid = d.get("IOneBattBemAfs") != 0x81
-    # A source's power reads a meaningless offset when that source isn't fitted
-    # (e.g. this van has no solar); suppress it so it doesn't plot a phantom series.
-    dcdc_inst = bool(d.get("DcdcInstalled"))
-    shore_inst = bool(d.get("LadInstalled"))
-    solar_inst = bool(d.get("PvInstalled"))
     return {
         "installed": True,
-        "stale": stale,               # True => SoC/V/A below are last-known, not live
+        "stale": stale,               # True => STARTER values are last-known, not live
         "age_min": d.get("AgeOneBattValuesMinutes"),
+        # --- STARTER (default car) battery: engine-on only ---
         "batt1_v": round(d.get("UOneBattBemAfs", 0) * 0.1, 1) if b1_valid else None,
-        "batt2_v": round(d.get("UTwoBattBemAfs", 0) * 0.1, 1),
+        "batt1_current": _signed(d.get("IOneBattBemAfs", 0), 8) if b1_valid else None,
         "soc1_level": d.get("SocOneBattAfs"),      # coarse 0-15
+        # --- LEISURE (second) battery: always live ---
+        "batt2_v": round(d.get("UTwoBattBemAfs", 0) * 0.1, 1),
+        "batt2_current": _signed(d.get("ITwoBattBemAfs", 0), 16),  # draw from leisure batt (raw signed; scale UNVERIFIED)
         "soc2_level": d.get("SocTwoBattAfs"),
+        "batt2_remaining_h": d.get("tTwoBattRemainingh"),
+        "batt2_remaining_min": d.get("tTwoBattRemainingmin"),
+        # --- sources feeding the leisure battery (app: vehiclePower / externalPowerSource / solarPower) ---
         "dcdc_charging": bool(d.get("StateDcdcAfs")),
-        "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8) if dcdc_inst else None,
-        "shore_power": _signed(d.get("PLandAfs", 0), 8) if shore_inst else None,
-        "solar_power": _signed(d.get("PPvAfs", 0), 8) if solar_inst else None,
-        "batt1_current": _signed(d.get("IOneBattBemAfs", 0), 8),
-        "dcdc_installed": dcdc_inst,
-        "shore_installed": shore_inst,
-        "solar_installed": solar_inst,
+        "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8),    # app "vehiclePower" (DC-DC from starter/alternator)
+        "shore_power": _signed(d.get("PLandAfs", 0), 8),   # app "externalPowerSource" / campsite
+        "solar_power": _signed(d.get("PPvAfs", 0), 8),     # app "solarPower" (kept even if not fitted)
+        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16),
+        "shore_current": _signed(d.get("ILandAfs", 0), 16),
+        "solar_current": _signed(d.get("IPvAfs", 0), 16),
+        "dcdc_installed": bool(d.get("DcdcInstalled")),
+        "shore_installed": bool(d.get("LadInstalled")),
+        "solar_installed": bool(d.get("PvInstalled")),
         "faults": [k for k in ("SystemError", "DcdcDefect", "PvDefect", "LandDefect")
                    if d.get(k)],
     }

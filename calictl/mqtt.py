@@ -50,6 +50,8 @@ ENTITY_SPECS: dict[str, list] = {
     "energy": [
         EntitySpec("sensor", "batt2_v", "Leisure Battery", {"unit_of_measurement": "V", "device_class": "voltage"}),
         EntitySpec("sensor", "soc2_level", "Leisure Battery Level", {"icon": "mdi:battery"}),
+        EntitySpec("sensor", "batt2_current", "Leisure Battery Current", {"icon": "mdi:current-dc"}),
+        EntitySpec("sensor", "batt1_v", "Starter Battery", {"unit_of_measurement": "V", "device_class": "voltage"}),
         EntitySpec("binary_sensor", "dcdc_charging", "DC-DC Charging", {**_BIN, "device_class": "battery_charging"}),
     ],
     "cooler": [
