@@ -1,0 +1,34 @@
+tools/triage.py
+  s_1dccea91605154::t_1ac48705129486 128-130
+  s_1dccea91605154::t_18a8b4229e56f2 57-59
+calictl/control.py
+  s_1dccea91605154::t_ca7f06292614e6 20-22,24-27,29-30
+calictl/semantics.py
+  s_1dccea91605154::t_5ba42060327e9d 110-114,117-118,122
+  s_1dccea91605154::t_a993f44461062b 119-121
+calictl/mqtt.py
+  s_1dccea91605154::t_23019bb28806dd 57-58
+tests/test_calictl.py
+  s_1dccea91605154::t_92198cad3d9156 49,51-54,56-61
+  s_1dccea91605154::t_f3bca567066599 139,142-143,146-148,150
+protocol/signals.yaml
+  s_1dccea91605154::t_e0530693c90e0d 275-276,283-285
+docs/business-logic/signal-catalog.md
+  s_1dccea91605154::t_6fc135919bf0d1 77-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "281cad68007c662f85860072d0608e1ac227e09d",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
