@@ -30,7 +30,7 @@ class Server:
         self.dev = CamperDevice(addr) if addr else CamperDevice()
         self.interval = interval
         self.influx_enabled = influx_enabled
-        self._ble = asyncio.Lock()          # the van allows ONE connection
+        self._ble = None                    # asyncio.Lock(); created inside run()'s loop
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
         self._mqtt = None
@@ -52,7 +52,7 @@ class Server:
         inst = installed_from(states)
         new = inst - self._published
         if new and self._mqtt:
-            for topic, cfg in mqtt.render_discovery(installed=inst).items():
+            for topic, cfg in mqtt.render_discovery(installed=new).items():
                 self._mqtt.publish(topic, json.dumps(cfg), retain=True)
             self._published |= inst
         for fn, interp in states.items():
@@ -82,6 +82,7 @@ class Server:
         loop = asyncio.new_event_loop()
         self._loop = loop
         asyncio.set_event_loop(loop)
+        self._ble = asyncio.Lock()          # the van allows ONE connection; created on this loop
 
         # --- MQTT (Home Assistant) ---
         host = os.environ.get("MQTT_HOST", "localhost")
@@ -108,7 +109,14 @@ class Server:
                 return
             value = msg.payload.decode().strip()
             print("command: %s %s %s" % (fn, what, value), flush=True)
-            asyncio.run_coroutine_threadsafe(self.on_command(fn, what, value), loop)
+            fut = asyncio.run_coroutine_threadsafe(self.on_command(fn, what, value), loop)
+
+            def _log_command_failure(f, fn=fn, what=what, value=value):
+                exc = f.exception()
+                if exc is not None:
+                    print("command failed: %s %s %s: %r" % (fn, what, value, exc), flush=True)
+
+            fut.add_done_callback(_log_command_failure)
 
         cli.on_connect = on_connect
         cli.on_message = on_message
