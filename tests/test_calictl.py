@@ -41,6 +41,7 @@ def test_energy_charging_and_scale():
     assert e["dcdc_charging"] is True       # StateDcdc=1
     assert e["batt1_v"] == 13.6             # UOneBattBemAfs=136 * 0.1
     assert e["solar_installed"] is False
+    assert e["solar_power"] is None         # no solar fitted -> suppressed, not a phantom offset
 
 
 def test_camping_independent_outputs():
