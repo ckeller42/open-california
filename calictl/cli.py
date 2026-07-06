@@ -130,6 +130,9 @@ def build_parser():
     i = sub.add_parser("influx", help="write telemetry to InfluxDB (buspi/Grafana)")
     i.add_argument("--interval", type=float, default=None)
     i.add_argument("--once", action="store_true", help="single poll+write then exit")
+    sv = sub.add_parser("serve", help="unified daemon: one BLE owner -> InfluxDB + MQTT + commands")
+    sv.add_argument("--interval", type=float, default=30.0)
+    sv.add_argument("--no-influx", action="store_true", help="skip InfluxDB writes")
     return p
 
 
@@ -148,6 +151,11 @@ def main(argv=None):
             influx.write_once(args.addr)
         else:
             influx.run(args.interval, args.addr)
+        return 0
+    if args.cmd == "serve":
+        from . import serve
+        serve.Server(args.addr, interval=args.interval,
+                     influx_enabled=not args.no_influx).run()
         return 0
     funcs = _load()
     if getattr(args, "function", None) and args.function not in funcs:
