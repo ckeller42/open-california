@@ -72,6 +72,10 @@ def energy(d: dict) -> dict:
         "dcdc_installed": bool(d.get("DcdcInstalled")),
         "shore_installed": bool(d.get("LadInstalled")),
         "solar_installed": bool(d.get("PvInstalled")),
+        "energy_mode": d.get("EnergyMode"),                     # 0=eco 1=normal 2=max (per GUI)
+        "energy_mode_locked": bool(d.get("EnergyModeNotSelectable")),
+        "derating_temp_active": bool(d.get("CurrentDeratingTemperature")),
+        "sleep_warning": bool(d.get("SleepWarning")),
         "faults": [k for k in ("SystemError", "DcdcDefect", "PvDefect", "LandDefect")
                    if d.get(k)],
     }
@@ -96,6 +100,9 @@ def airheater(d: dict) -> dict:
         "permanent": bool(d.get("PermanentOperation")),
         "level": d.get("HeatingLevel"),
         "error_code": d.get("ErrorCode"),
+        "mode": d.get("OperationModeAirHeater"),
+        "air_distribution": d.get("AirDistribution"),
+        "running_time": d.get("RunningTime"),
     }
 
 
@@ -118,21 +125,74 @@ def roof(d: dict) -> dict:
     }
 
 
+_LZONES = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seven": 7,
+           "Eight": 8, "Nine": 9, "OneZero": 10, "OneOne": 11, "OneTwo": 12, "OneThree": 13,
+           "OneFour": 14, "OneFive": 15, "OneSix": 16}
+
+
 def lighting(d: dict) -> dict:
-    zones = {k: v for k, v in d.items() if k.startswith("Brightness")}
-    on = [k.replace("BrightnessL", "") for k, v in zones.items() if v]
-    return {
-        "installed": True,
-        "profile": d.get("ProfileNumber"),
-        "mode": d.get("Mode"),
-        "any_on": bool(on),
-        "zones_on": ",".join(on) if on else "-",
-    }
+    out = {"installed": True, "profile": d.get("ProfileNumber"), "mode": d.get("Mode")}
+    any_on = bool(d.get("LightValue"))
+    for suf, num in _LZONES.items():
+        v = d.get("BrightnessL" + suf)
+        out["brightness_zone_%d" % num] = v
+        if v:
+            any_on = True
+    out["any_on"] = any_on
+    return out
 
 
 def general(d: dict) -> dict:
-    # SwVersion-style fields are raw*100 (÷100 for display); left raw here.
-    return {"installed": True, **{k: v for k, v in d.items()}}
+    # SwVersion-style fields are raw (÷100 for display); left raw here.
+    return {
+        "installed": True,
+        "comm_version": d.get("CommunicationVersion"),
+        "cm_sw_version": d.get("CmSwVersion"),
+        "amb_sw_version": d.get("AmbSwVersion"),
+    }
+
+
+def livingroomheater(d: dict) -> dict:
+    return {
+        "installed": bool(d.get("Installed")),
+        "air_on": bool(d.get("StateAir")),
+        "water_on": bool(d.get("StateWater")),
+        "air_temp": d.get("TemperatureAir"),        # scale UNVERIFIED
+        "water_temp": d.get("TemperatureWater"),    # scale UNVERIFIED
+        "mode": d.get("Mode"),
+        "error": bool(d.get("Error")),
+    }
+
+
+def roofaircondition(d: dict) -> dict:
+    return {
+        "installed": bool(d.get("Installed")),
+        "on": bool(d.get("State")),
+        "mode": d.get("Mode"),
+        "fan_speed": d.get("Fanspeed"),
+        "target_temp": d.get("Temperature"),        # scale UNVERIFIED
+        "error": bool(d.get("Error")),
+    }
+
+
+def satelliteantenna(d: dict) -> dict:
+    return {
+        "installed": bool(d.get("Installed")),
+        "dish": d.get("Dish"),
+        "satellite": d.get("SatelliteSelection"),
+        "signal_level": d.get("SignalLevel"),
+        "system_on": bool(d.get("System")),
+        "error": bool(d.get("Error")),
+    }
+
+
+def stairs(d: dict) -> dict:
+    return {
+        "installed": bool(d.get("Installed")),
+        "extended": bool(d.get("State")),
+        "mode": d.get("OperationMode"),
+        "obstacle_sensor": bool(d.get("Sensor")),
+    }
 
 
 def _generic(d: dict) -> dict:
@@ -147,6 +207,8 @@ def _generic(d: dict) -> dict:
 INTERPRETERS = {
     "water": water, "energy": energy, "cooler": cooler, "airheater": airheater,
     "campingmode": campingmode, "roof": roof, "lighting": lighting, "general": general,
+    "livingroomheater": livingroomheater, "roofaircondition": roofaircondition,
+    "satelliteantenna": satelliteantenna, "stairs": stairs,
 }
 
 
