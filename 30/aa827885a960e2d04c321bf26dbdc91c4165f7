@@ -1,0 +1,23 @@
+tests/test_signal_coverage.py
+  s_1dccea91605154::t_bb9078a7cabc1a 1-19
+tools/catalog.py
+  s_1dccea91605154::t_bfe81eda21c31b 1-29
+protocol/signals.yaml
+  s_1dccea91605154::t_2f2983ce2b0910 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "30aa827885a960e2d04c321bf26dbdc91c4165f7",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
