@@ -1,0 +1,26 @@
+protocol/signals.yaml
+  s_1dccea91605154::t_154a07ca7ab801 668,706-707,851,862-863,1663,1965,2010
+docs/business-logic/signal-catalog.md
+  s_1dccea91605154::t_d3a1144b5e1dd7 1-76
+tools/triage.py
+  s_1dccea91605154::t_511a0add2bf585 168-170,172
+  s_1dccea91605154::t_15c0f770b8a588 146-158
+.gitignore
+  s_1dccea91605154::t_8c1df105ce8429 21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5ce4178ed50eaba72cd49d05eefc4c94f6690e5f",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
