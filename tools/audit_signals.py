@@ -35,6 +35,12 @@ def report_from_keys(dictkeys, cat, gui, app, samples) -> list:
                     c = str(e.get("scale"))
                     if a and c not in ("UNVERIFIED", a):
                         lines.append("SCALE-MISMATCH %s.%s.%s app=%s cat=%s" % (fn, kind, field, a, c))
+                    rng = _RANGES.get(e.get("kind"))
+                    val = samples.get(field)
+                    if rng is not None and isinstance(val, (int, float)):
+                        lo, hi = rng
+                        if not (lo <= val <= hi):
+                            lines.append("OUT-OF-RANGE %s.%s.%s value=%s kind=%s" % (fn, kind, field, val, e.get("kind")))
     return lines
 
 def report(funcs, cat, app, gui, samples):
