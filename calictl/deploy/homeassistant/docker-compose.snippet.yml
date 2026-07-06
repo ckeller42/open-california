@@ -3,7 +3,10 @@
     image: eclipse-mosquitto:2
     container_name: mosquitto
     restart: unless-stopped
-    ports: ["1883:1883"]
+    # Bind to localhost only: HA is host-networked and calictl runs on the Pi,
+    # so nothing off-box needs the broker. Change to "1883:1883" only if you
+    # deliberately want LAN MQTT clients (auth is on either way).
+    ports: ["127.0.0.1:1883:1883"]
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
