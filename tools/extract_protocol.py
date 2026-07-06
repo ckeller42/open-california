@@ -34,7 +34,6 @@ FLOCAL_RE = re.compile(r'\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c')
 FLOCAL_DECL_RE = re.compile(r'(\w+)\s*=\s*\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c')  # local = this.obj
 FPLACE_RE = re.compile(r'\w+\[(\d+)\]\s*=\s*(\w+)\[(\d+)\]')  # frame[P] = local[k]
 SUBLIST_RE = re.compile(r'(\w+)\.p\(\(Boolean\[\]\)[^;]*?subList\((\d+),\s*(\d+)\)')  # state decode aVar<-bits
-STATE_LOGOBJ_RE = re.compile(r'=\s*(\w+)\.f398b')     # aVar in the state log, in order
 ENUM_RE = re.compile(r'new \w+\("([A-Z][A-Z0-9_]{2,})"')  # command/mode enum constants
 TYPECODE_WIDTH = {0: 1, 2: 8, 3: 16, 4: 2, 5: 32, 6: 4, 7: 8}
 LOG_END = re.compile(r'\.toString\(\)|xm\.a\.b\(')
@@ -88,13 +87,6 @@ def obj_names(text, marker_re):
     return result
 
 
-def state_field_names(text):
-    """State decode (`e()`) uses local aVar objects, not this.<obj> — take labels only."""
-    for win, _ in _methods_with(text, INCOMING_RE):
-        return _labels(win)
-    return []
-
-
 def constructors(text):
     cm = re.search(r'class\s+(\w+)', text)
     if not cm:
@@ -124,24 +116,42 @@ def field_offsets(text):
     return {obj: sorted(ps) for obj, ps in positions.items()}
 
 
-def state_offsets(text):
-    """[{name, offset, width}] for the state frame, best-effort.
+def _validate_state_layout(fn_hint, fields):
+    """Warn (stderr) if decoded state slices overlap — a sign of a bad join.
 
-    subList(a,b) placements give aVar -> (offset,width); the "Incoming Data" log's
-    `= aVar.f398b` order gives aVar -> name. Joined by aVar; a field whose aVar has
-    no subList (jadx aliasing) is emitted name-only.
+    Gaps are normal (reserved/unused bits); overlap is not and means two fields
+    claim the same wire bits, which silently corrupts every downstream decode.
     """
-    bits = {av: (int(a), int(b) - int(a)) for av, a, b in SUBLIST_RE.findall(text)}
+    prev_end = 0
+    for f in sorted(fields, key=lambda x: x["offset"]):
+        if f["offset"] < prev_end:
+            sys.stderr.write(
+                "WARN: %s state overlap: %s @%d/w%d starts before bit %d\n"
+                % (fn_hint, f["name"], f["offset"], f["width"], prev_end))
+        prev_end = max(prev_end, f["offset"] + f["width"])
+
+
+def state_offsets(text, fn_hint=""):
+    """[{name, offset, width}] for the state frame.
+
+    The subList(a,b) slices in e() are the authoritative spine: their code order
+    is exactly the debug log's field order (verified on Water and Energy). Names
+    come from the log labels, joined positionally. A slice past the last recovered
+    label (truncated log string constant, e.g. Energy) is emitted as bits_<a>_<b>
+    so the wire layout is NEVER silently dropped just because a name was cut.
+    """
     for win, _ in _methods_with(text, INCOMING_RE):
-        avars = STATE_LOGOBJ_RE.findall(win)
+        slices = [(int(a), int(b) - int(a)) for _av, a, b in SUBLIST_RE.findall(win)]
         names = _labels(win)
-        out = []
-        for av, name in zip(avars, names):
-            f = {"name": name}
-            if av in bits:
-                f["offset"], f["width"] = bits[av]
-            out.append(f)
-        return out
+        if not slices:
+            return [{"name": n} for n in names]   # no layout recoverable; name-only
+        fields = []
+        for i, (off, width) in enumerate(slices):
+            nm = names[i] if i < len(names) else "bits_%d_%d" % (off, off + width)
+            fields.append({"name": nm, "offset": off, "width": width})
+        fields.sort(key=lambda f: f["offset"])
+        _validate_state_layout(fn_hint, fields)
+        return fields
     return []
 
 
@@ -176,7 +186,7 @@ def main():
         im = INCOMING_RE.search(t)
         if im:
             fn = im.group(1)
-            sfields = state_offsets(t)
+            sfields = state_offsets(t, fn)
             functions[fn] = {
                 "state_fields": sfields, "state_names": [f["name"] for f in sfields],
                 "state_uuids": uuids(t),
