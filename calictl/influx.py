@@ -38,7 +38,9 @@ def numeric_fields(interp: dict) -> dict[str, float]:
     return out
 
 
-def build_points(states: dict[str, dict]):
+def points_for(states: dict) -> list:
+    """Build InfluxDB Points from interpreted states (one per function with any
+    numeric field). Shared by the standalone `run` path and `serve`."""
     from influxdb_client import Point
     pts = []
     for fn, interp in states.items():
@@ -52,10 +54,19 @@ def build_points(states: dict[str, dict]):
     return pts
 
 
-async def _poll(funcs, dev) -> dict[str, dict]:
+def build_points(states: dict[str, dict]):
+    return points_for(states)
+
+
+async def poll_states(funcs, dev) -> dict:
+    """One BLE session: read every function and return {function: interpreted}."""
     raw = await dev.read_all(funcs)
     return {name: semantics.interpret(name, protocol.decode(funcs[name], data))
             for name, data in raw.items()}
+
+
+async def _poll(funcs, dev) -> dict[str, dict]:
+    return await poll_states(funcs, dev)
 
 
 def run(interval: float | None = None, addr: str | None = None):

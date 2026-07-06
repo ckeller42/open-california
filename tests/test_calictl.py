@@ -93,6 +93,20 @@ def test_mqtt_flatten_and_state():
     assert topic == "calivan/water" and '"fresh_percent": 38' in payload
 
 
+def test_installed_from_states():
+    from calictl import serve
+    states = {"water": {"installed": True}, "stairs": {"installed": False},
+              "energy": {"installed": True}, "roof": {"installed": True}}
+    assert serve.installed_from(states) == {"water", "energy", "roof"}
+
+
+def test_points_for_reuses_numeric_fields():
+    from calictl import influx
+    pts = influx.points_for({"water": {"installed": True, "fresh": {"percent": 38}}})
+    # one Point tagged function=water with a numeric field
+    assert any(p._name == "camper" for p in pts)
+
+
 def test_full_parity_devices_and_installed_gating():
     from calictl import mqtt
     # every installed function gets its own HA device + >=1 entity
