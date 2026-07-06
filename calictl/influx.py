@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import time
 
 from . import protocol, semantics, overrides, mqtt
 from .device import CamperDevice, ConnectionUnavailable
@@ -67,36 +66,6 @@ async def poll_states(funcs, dev) -> dict:
 
 async def _poll(funcs, dev) -> dict[str, dict]:
     return await poll_states(funcs, dev)
-
-
-def run(interval: float | None = None, addr: str | None = None):
-    from influxdb_client import InfluxDBClient
-    from influxdb_client.client.write_api import SYNCHRONOUS
-
-    url = os.environ.get("INFLUX_URL", "http://localhost:8086")
-    org = os.environ.get("INFLUX_ORG", "home")
-    bucket = os.environ.get("INFLUX_BUCKET", "buspi")
-    token = os.environ["INFLUXDB_TOKEN"]
-    interval = interval if interval is not None else float(os.environ.get("POLL_INTERVAL", "60"))
-
-    funcs = protocol.load(); overrides.apply(funcs)
-    dev = CamperDevice(addr) if addr else CamperDevice()
-    client = InfluxDBClient(url=url, token=token, org=org)
-    write_api = client.write_api(write_options=SYNCHRONOUS)
-    loop = asyncio.new_event_loop()
-
-    print("calictl influx -> %s bucket=%s org=%s interval=%.0fs" % (url, bucket, org, interval))
-    while True:
-        try:
-            states = loop.run_until_complete(_poll(funcs, dev))
-            pts = build_points(states)
-            write_api.write(bucket=bucket, org=org, record=pts)
-            print("wrote %d points (%d functions)" % (len(pts), len(states)), flush=True)
-        except ConnectionUnavailable as e:
-            print("poll skipped: %s" % e, flush=True)
-        except Exception as e:
-            print("write error: %s" % e, flush=True)
-        time.sleep(interval)
 
 
 def write_once(addr: str | None = None) -> int:

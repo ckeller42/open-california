@@ -24,6 +24,24 @@ def installed_from(states: dict) -> set:
     return {fn for fn, i in states.items() if i.get("installed")}
 
 
+async def dry_run(addr=None):
+    """Print the MQTT discovery configs + one live poll — no broker, no InfluxDB.
+    Backs `calictl serve --dry-run`."""
+    funcs = protocol.load(); overrides.apply(funcs)
+    print("# --- HA discovery configs ---")
+    for topic, cfg in mqtt.render_discovery().items():
+        print(topic, "=>", json.dumps(cfg))
+    print("\n# --- one poll ---")
+    dev = CamperDevice(addr) if addr else CamperDevice()
+    try:
+        states = await influx.poll_states(funcs, dev)
+    except ConnectionUnavailable as e:
+        print("(device unreachable: %s)" % e); return
+    for fn, interp in states.items():
+        topic, payload = mqtt.render_state(fn, interp)
+        print(topic, "=>", payload)
+
+
 class Server:
     def __init__(self, addr=None, *, interval=30.0, influx_enabled=True):
         self.funcs = protocol.load(); overrides.apply(self.funcs)

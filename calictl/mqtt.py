@@ -15,12 +15,6 @@ from collections import namedtuple
 
 DISCOVERY_PREFIX = "homeassistant"
 BASE = "calivan"
-DEVICE = {
-    "identifiers": ["vwcamper"],
-    "name": "VW California Camper Unit",
-    "manufacturer": "Volkswagen",
-    "model": "California T7",
-}
 
 EntitySpec = namedtuple("EntitySpec", "component key name config")
 
