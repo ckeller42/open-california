@@ -665,7 +665,7 @@ energy:
         app: null
         gui: infoPage_battery_value_text
         live: 319
-        vwdoc: null
+        vwdoc: 'T7 manual: leisure-battery current shown on the control panel'
       unit: A
     LadInstalled:
       confidence: high
@@ -703,7 +703,8 @@ energy:
       sources:
         app: null
         gui: null
-        vwdoc: null
+        vwdoc: 'T7 manual: charging from the vehicle (alternator via split-charge
+          relay)'
       unit: W
     PLandAfs:
       confidence: high
@@ -847,7 +848,7 @@ energy:
       sources:
         app: null
         gui: null
-        vwdoc: null
+        vwdoc: 'T7 manual: starter battery, split-charge relay to the leisure battery'
       unit: V
     UTwoBattBemAfs:
       confidence: high
@@ -858,7 +859,8 @@ energy:
       sources:
         app: null
         gui: null
-        vwdoc: null
+        vwdoc: 'T7 manual: 80-Ah lithium leisure battery, voltage monitored on the
+          display'
       unit: V
     WarningLevelActive:
       decision: omit
@@ -1658,7 +1660,7 @@ roof:
       sources:
         app: null
         gui: null
-        vwdoc: null
+        vwdoc: 'T7 manual: electrohydraulic pop-up roof (hold rotary knob to raise/lower)'
       unit: null
     SafetyCounterValid:
       confidence: high
@@ -1960,7 +1962,7 @@ water:
       sources:
         app: null
         gui: null
-        vwdoc: null
+        vwdoc: 'T7 manual: fresh-water tank indicator'
       unit: '%'
     FreshWaterUnit:
       decision: omit
@@ -2005,7 +2007,7 @@ water:
       sources:
         app: null
         gui: null
-        vwdoc: null
+        vwdoc: 'T7 manual: waste-water tank indicator'
       unit: '%'
     WasteWaterUnit:
       decision: omit

@@ -18,3 +18,4 @@ jdk-*/
 
 # Claude Code local session/config
 .claude/
+manuals/    # copyrighted VW PDFs — never commit (citations only)
