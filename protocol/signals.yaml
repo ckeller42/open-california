@@ -1,14 +1,1580 @@
-energy:
+airheater:
+  control:
+    AirDistribution:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    HeatingLevel:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NormalOperationRequest:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationModeAirHeater:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationModeCombined:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PermanentOperationConfirmation:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PermanentOperationRequest:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    RunningTime:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerHour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerMin:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
   state:
-    ITwoBattBemAfs:
+    AirDistribution:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ErrorCode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    FaultTriggerBit:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    HeatingLevel:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NormalOperation:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationModeAirHeater:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationModeCombined:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PermanentOperation:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PermanentOperationRequestConfirmation:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    RunningTime:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    RunningTimeinAction:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerHour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerMin:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+campingmode:
+  control:
+    InteriorLight:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OutsideLight:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    UsbCharger:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Enable:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    InteriorLight:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OutsideLight:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    UsbCharger:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+cooler:
+  control:
+    Level:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerHourOff:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerHourOn:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerSet:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerCancel:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerHour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerMin:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerStart:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Error:
+      confidence: low
       decision: surface
-      name: batt2_current
-      unit: A
+      kind: state
+      name: error
       scale: UNVERIFIED
-      kind: leisure_battery
-      sources: {app: null, live: 319, gui: infoPage_battery_value_text, vwdoc: null}
+      sources:
+        app: null
+        gui: vehiclepage_label_error_text
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Level:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerHourOff:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerHourOn:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    NightTimerSet:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerCounterHour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerCounterMin:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerElapsed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerHourSet:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerMinSet:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TimerState:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+energy:
+  control:
+    Movement:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationMode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    AgeOneBattValuesMinutes:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    CurrentDeratingTemperature:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    DcdcDefect:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    DcdcInstalled:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    EmpInstalled:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    EnergyMode:
+      confidence: low
+      decision: surface
+      kind: state
+      name: energymode
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: infopage_listitem_energymode_text
+        vwdoc: null
+      unit: null
+    EnergyModeNotSelectable:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    IDcdcAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ILandAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    IOneBattBemAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    IPvAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ITwoBattBemAfs:
       confidence: medium
+      decision: surface
+      kind: leisure_battery
+      name: batt2_current
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: infoPage_battery_value_text
+        live: 319
+        vwdoc: null
+      unit: A
+    LadInstalled:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    LandDefect:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
     LandNotAvailable:
       decision: omit
-      reason: "fault/status bit — surfaced via faults[] aggregate"
-      sources: {app: null, gui: null, vwdoc: null}
+      reason: "fault/status bit \u2014 surfaced via faults[] aggregate"
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PDcdcAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PLandAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PPvAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PvDefect:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    PvInstalled:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SleepWarning:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SocOneBattAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SocTwoBattAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StateDcdcAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StateLandAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StatePvAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SystemError:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TwoBattNotCharged:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TwoBattSwitchAtCharging:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TwoBattSwitchAtWorkshop:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    UOneBattBemAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    UTwoBattBemAfs:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WarningLevelActive:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WarningLevelTwo:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    tTwoBattRemainingh:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    tTwoBattRemainingmin:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+general:
+  state:
+    AmbSwVersion:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    CmSwVersion:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    CommunicationVersion:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+generalpurposesignals:
+  state:
+    BitZeroEight:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroFive:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroFour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroOne:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroSeven:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroSix:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroThree:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BitZeroTwo:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroEight:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroFive:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroFour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroOne:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroSeven:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroSix:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroThree:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ByteZeroTwo:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    DwordZeroOne:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WordZeroFour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WordZeroOne:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WordZeroThree:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WordZeroTwo:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+lighting:
+  control:
+    BrightnessLEight:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLFive:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLFour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLNine:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOne:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneFive:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneFour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneOne:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneSix:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneThree:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneTwo:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneZero:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLSeven:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLSix:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLThree:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLTwo:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    LightValue:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ProfileNumber:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Timestamp:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    BrightnessLEight:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLFive:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLFour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLNine:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOne:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneFive:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneFour:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneOne:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneSix:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneThree:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneTwo:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLOneZero:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLSeven:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLSix:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLThree:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    BrightnessLTwo:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    LightValue:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    ProfileNumber:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Timestamp:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+livingroomheater:
+  control:
+    Mode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StateAir:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StateWater:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TemperatureAir:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TemperatureWater:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Error:
+      confidence: low
+      decision: surface
+      kind: state
+      name: error
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: vehiclepage_label_error_text
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StateAir:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    StateWater:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TemperatureAir:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    TemperatureWater:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Variant:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+roof:
+  control:
+    Down:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SafetyCounter:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Up:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    InfoPopUp:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Position:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SafetyCounterValid:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+roofaircondition:
+  control:
+    FanSpeed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Temperature:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Error:
+      confidence: low
+      decision: surface
+      kind: state
+      name: error
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: vehiclepage_label_error_text
+        vwdoc: null
+      unit: null
+    Fanspeed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Mode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Temperature:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+satelliteantenna:
+  control:
+    Dish:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    DishStop:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SatelliteSelection:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    System:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Wlan:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    Dish:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Error:
+      confidence: low
+      decision: surface
+      kind: state
+      name: error
+      scale: UNVERIFIED
+      sources:
+        app: null
+        gui: vehiclepage_label_error_text
+        vwdoc: null
+      unit: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SatelliteSelection:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    SignalLevel:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    System:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+stairs:
+  control:
+    Movement:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationMode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+  state:
+    InfoPopUp:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    OperationMode:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Sensor:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    State:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+water:
+  state:
+    FreshWaterInfoPopUp:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    FreshWaterLevel:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    FreshWaterUnit:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    FreshWaterVolume:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    Installed:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WasteWaterInfoPopUp:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WasteWaterLevel:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WasteWaterUnit:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
+    WasteWaterVolume:
+      decision: omit
+      reason: 'TODO: triage (no GUI/getter evidence)'
+      sources:
+        app: null
+        gui: null
+        vwdoc: null
