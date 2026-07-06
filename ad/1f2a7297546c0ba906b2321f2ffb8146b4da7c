@@ -1,0 +1,21 @@
+tests/test_calictl.py
+  s_1dccea91605154::t_77d6e91520d01a 96,98-108
+calictl/mqtt.py
+  s_1dccea91605154::t_d148f6162d614b 3-6,14,25-74,88-107,115-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ad1f2a7297546c0ba906b2321f2ffb8146b4da7c",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
