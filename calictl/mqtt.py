@@ -54,9 +54,8 @@ ENTITY_SPECS: dict[str, list] = {
         EntitySpec("sensor", "level", "Fridge Level", {"icon": "mdi:snowflake"}),
     ],
     "campingmode": [
-        EntitySpec("binary_sensor", "usb_charger", "USB Charger", {**_BIN, "icon": "mdi:usb"}),
-        EntitySpec("binary_sensor", "interior_light", "Interior Light (state)", {**_BIN, "icon": "mdi:lightbulb"}),
-        EntitySpec("binary_sensor", "outside_light", "Outside Light (state)", {**_BIN, "icon": "mdi:outdoor-lamp"}),
+        EntitySpec("binary_sensor", "usb_charger", "Rear USB Ports", {**_BIN, "icon": "mdi:usb"}),
+        EntitySpec("binary_sensor", "lights_on", "Camping Lights", {**_BIN, "icon": "mdi:lightbulb"}),
     ],
     "airheater": [
         EntitySpec("binary_sensor", "running", "Air Heater Running", {**_BIN, "device_class": "running"}),

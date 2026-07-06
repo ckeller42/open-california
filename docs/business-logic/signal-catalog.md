@@ -74,3 +74,37 @@ functions are `Installed`-gated, so they appear only on vans that have them.
 
 Sources: [VW California owner manuals](https://en.volkswagenclub.net/manuals.php?ddlb_model=45),
 [VW California Owners Club — user manuals](https://vwcaliforniaclub.com/resources/categories/california-user-manuals.7/).
+
+## Correction & known limitation: the guardrail checks *presence*, not *semantic correctness*
+
+**What happened.** `campingmode` was modeled with two separate, non-inverted light
+booleans (`interior_light`, `outside_light`). The app actually has **one combined,
+inverted "Lights" toggle** (`tf/a.java` `K0(on)` writes `0` to *both* light fields;
+readback `m2()` = lit iff both read `0`), and the lights/USB are **only actionable
+while camping mode (`State`) is on**. So our reads were split *and* polarity-inverted.
+It was caught only when the owner toggled the light in the app and the read disagreed.
+
+**Why the cross-validation missed it — the real gap.** The guardrail
+(`tests/test_signal_coverage.py`) enforces three things: every field has a decision
+(coverage), every surfaced field is **emitted** (presence), and surfaced control fields
+are placed. It does **not** verify that the *interpretation logic* — polarity,
+combination, gating — matches the app's setter/getter code. `interior_light` was
+surfaced and emitted, so the guardrail was green while the semantics were wrong.
+Two compounding causes:
+1. **`semantics.campingmode` predated the catalog** and was hand-written with a naive
+   `bool(field)` mapping; the signal sweep only *added missing* signals, it never
+   re-validated existing interpreters against the GUI setters.
+2. **The auditor's GUI cross-check is shallow** — `gui_keys()` only checks that a
+   string key *mentions* a field, never reads the setter method (`K0`'s inverted
+   combined write). The authoritative facts were in `camping-mode.yaml` /
+   `climate-stairs.md`, but nothing forced the interpreter to honor them.
+
+**Fix applied.** `lights_on = master and InteriorLight == 0 and OutsideLight == 0`
+(combined, inverted, master-gated); `usb_charger`/`master_on` unchanged (normal);
+`OutsideLight` omitted (tied to `InteriorLight`); catalog scale marked
+`inverted-combined`; HA entity → single "Camping Lights", USB → "Rear USB Ports".
+
+**Improvement worth making (not yet done):** the auditor should flag any field whose
+GUI setter has non-trivial logic (inverted / combined / gated) as **requiring manual
+semantic review**, so a naive `bool(field)` interpreter can't silently disagree with
+the app. Presence + scale are validated today; *transform correctness* is not.

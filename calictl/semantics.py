@@ -107,12 +107,19 @@ def airheater(d: dict) -> dict:
 
 
 def campingmode(d: dict) -> dict:
+    # The app has ONE combined "Lights" toggle, INVERTED: tf/a.java K0(on) writes 0
+    # to BOTH InteriorLight+OutsideLight; readback m2() = lit iff both read 0. USB
+    # (B2) and master (z2) are normal (on=1). Lights+USB are only actionable in the
+    # app while camping mode (master) is on — a UI gate, not a per-field guard.
+    master = bool(d.get("State"))
     return {
         "installed": bool(d.get("Installed")),
-        "master_on": bool(d.get("State")),        # independent of the outputs below
-        "usb_charger": bool(d.get("UsbCharger")),
-        "interior_light": bool(d.get("InteriorLight")),
-        "outside_light": bool(d.get("OutsideLight")),
+        "master_on": master,
+        "usb_charger": bool(d.get("UsbCharger")),                 # normal: on=1
+        # inverted+combined AND only meaningful while master on (fields default to 0
+        # when camping is off, which would otherwise read as a false "lit").
+        "lights_on": master and d.get("InteriorLight") == 0 and d.get("OutsideLight") == 0,
+        "outputs_controllable": master,                            # lights/USB toggle only when master on
         "enable": bool(d.get("Enable")),          # read-only vehicle signal (terminal-15)
     }
 
