@@ -1,0 +1,20 @@
+docs/business-logic/re-gap-inventory.md
+  s_d2c35aeebbd344::t_04b8b74f26a087 173-195
+  s_d2c35aeebbd344::t_b0d72c11a423b2 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6e6b9428e27503bca2e38675bbf0aaffffb3390a",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
