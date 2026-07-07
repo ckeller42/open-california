@@ -1,0 +1,23 @@
+CLAUDE.md
+  s_d2c35aeebbd344::t_25fad66b133ae0 19
+.gitignore
+  s_d2c35aeebbd344::t_03406cae1e55e2 22-44
+ui/README.md
+  s_d2c35aeebbd344::t_26c8ec49b9c0e0 29-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "984ab1223192299a235037e9423f216d004cc79c",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
