@@ -37,7 +37,7 @@ widgets:
     range: "0..63"
     controls: {field: ProfileNumber, action: SET_PROFILE}
     elements: [LIGHTING_PROFILE_EMPTY_DIALOG, lighting_noAreaChosen_headline, lighting_noAreaChosen_text]
-    constraints: "ProfileNumber is a 6-bit field (offset 14, width 6 in eg/a.java) -> up to 64 stored lighting profiles. Empty-state dialog shown when no profile saved yet."
+    constraints: "ProfileNumber is a 4-bit field (offset 4, width 4). The eg/a.java `sg.a(14, 6)` was misread: 14 is the initial VALUE, 6 is the type code = 4-bit width (matches dictionary.yaml). Profiles 0-14 (dg/l.java): 0=LIGHTS_OFF, 1-7=FAVORITE, 8=DOOR_CONTACT, 9=LIVE_VIEW, 10=WAKEUP_LIGHT, 11=INTERIOR_LIGHT, 12=LIGHTS_ON, 13=DEFAULT, 14=INIT. NOTE a SET_BRIGHTNESS frame must ECHO the currently-active ProfileNumber read from 1502, not 0 (re-gap §A1)."
 
   - id: sectionInteriorLighting_gc
     type: section

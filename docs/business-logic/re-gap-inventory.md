@@ -32,6 +32,36 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 
 ---
 
+## Update 2026-07-08 — 6-agent decompile batch + VIN + APK strings
+
+Resolved/applied this pass (details in the sections below):
+
+- **§A1 Lighting SET — FIXED (no capture needed).** The active ProfileNumber is an identity
+  round-trip of the ProfileNumber the unit reports in 1502 (`dg/l.java` f5472x==ordinal,
+  `w10/d.java` identity). `control._lighting` now echoes `last["ProfileNumber"]` instead of 0.
+  Also fixed the `ui/screens/lighting.yaml`/`prototype.html` "offset 14, width 6" misread
+  (→ offset 4, width 4). Pending one live confirm on buspi.
+- **§A2 char 1002 "Vin" — RESOLVED via the owner's VIN: it is `SHA-256(VIN)[16:32]`** (the low
+  16 bytes of the plaintext VIN's SHA-256 — matched live). A privacy-preserving one-way vehicle
+  id; no plaintext VIN over BLE. Vehicle decodes to a **2026 T7 California** (WMI WV2, model
+  code ST, MY `T`=2026, Hannover). New sat chars: **1904=`SystemInfoWlanSsid`** (15 B UTF-8),
+  **1905=`SystemInfoWlanKey`** (10 B), **1903**=`SatDish/CapConverter/CibusInterface/TpList` —
+  all satellite-option-gated (not installed here).
+- **§A3 control models — DONE for all four.** roof/roofAC/stairs/LR-heater MERGED offsets
+  resolved from their `f()` builders and added to `overrides.py` (+ frame bytes). Setter values
+  + roof's ~1 Hz move-heartbeat documented. `set` not wired (not installed; roof needs the
+  heartbeat loop). Enum semantics still UNVERIFIED.
+- **Energy semantics — CORRECTED + live-verified** (`semantics.energy`): batt2 current /10,
+  SoC→%, source powers ×10 (0 when not installed — the PPv=254 sentinel), shore/solar current
+  unsigned /10, source-state enum, `energy_mode` un-inverted, warning level, expanded faults.
+- **§C2 EXLAP — URLs are HARDCODED literals, not runtime** (correction). The 12 handlers return
+  literal `VWN_Camper_<Fn>_State`/`_Control` URLs; 7 actuate. `<Call>` wire format fully
+  recovered: `<Req id="N"><Call url="VWN_Camper_<Fn>_Control"><Abs|Enm name=".." val=".."/>…
+  </Call></Req>`, unauthenticated, no heartbeat/sequence. Only blocker remains reachability.
+- **§A5 lighting overlay + §E alerts** decoded — see the new subsections below.
+
+---
+
 ## A. BLE protocol / control gaps
 
 ### A1 (TOP) — Lighting SET_BRIGHTNESS must carry the *active* ProfileNumber

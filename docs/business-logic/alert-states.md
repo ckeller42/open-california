@@ -363,3 +363,36 @@ dialog, not a fault).
 - `jg/a.java` (roof-lift control model, service 1400/1402) state-side field layout — still listed
   `control_models_unresolved` in `protocol/dictionary.yaml`; §11 confirms an alert surface exists
   for it via `ij/c.java` but the raw bit offsets weren't resolved here.
+
+---
+
+## Addendum 2026-07-08 (decompile audit) — roof InfoPopUp alerts + clock threshold
+
+Two gaps this doc previously left UNVERIFIED are now closed:
+
+### Roof pop-top fault alerts — char `1402`, `ig/c.java` (a SECOND roof alert surface)
+Distinct from the `ij/c.java`/`hj.c` interlocks (§11). The roof-lift status char `0x1402`
+decodes: `SafetyCounterValid` bit 7, `Installed` bit 6, `Position` bits 0-3,
+**`InfoPopUp` bits 12-15** (`ig/c.java:241-246`). Dispatch `switch(InfoPopUp)` (`:311-638`):
+
+| InfoPopUp | Alert `_ID` | In-app sev | Ack pref key |
+|---|---|---|---|
+| 0 | (clears all 6) | — | — |
+| 1 | ROOF_CHILD_LOCK | MEDIUM | BLUETOOTH_ROOF_CHILD_LOCK_CONFIRMED |
+| 4 | ROOF_ERROR | HIGH | BLUETOOTH_ROOF_ERROR_WORKSHOP |
+| 5 | ROOF_OP_DRIVING | **CRITICAL** | (in-app only, every poll) |
+| 6 | ROOF_SENSOR_ERROR | HIGH | BLUETOOTH_ROOF_ERROR_SENSOR_CONFIRMED |
+| 7 | ROOF_EMERGENCY_LOCKED | HIGH | BLUETOOTH_ROOF_EMERGENCY_LOCKED_CONFIRMED |
+| 10 | ROOF_NOT_POSSIBLE_TEMPORARILY | HIGH | BLUETOOTH_ROOF_NOT_POSSIBLE_TEMP |
+| 11 | ROOF_LOW_BATTERY | HIGH | BLUETOOTH_ROOF_LOW_BATTERY_CONFIRMED |
+
+`ROOF_ERROR`/`ROOF_NOT_POSSIBLE_TEMPORARILY`/`ROOF_OP_DRIVING` are wholly new IDs. Two ack
+keys lack the `_CONFIRMED` suffix (`..._NOT_POSSIBLE_TEMP`, `..._ERROR_WORKSHOP`), which is
+why a `_CONFIRMED`-only grep missed them. (Severity `f29352x`=CRITICAL resolves only in the
+BAD root; CLEAN renumbered it.) The `1402` `InfoPopUp` layout is worth adding to
+`dictionary.yaml` (still listed there as `control_models_unresolved`).
+
+### `CLOCK_OUT_OF_SYNC_ID` threshold — closed
+Fires when **|phone-time − camper-clock| > 5 minutes** (both UTC), or unconditionally if the
+camper's car-time object is null (`bad/sources/zf/d.java:235,242-248`; unit
+`n20/d.java:42` = MINUTES). Severity LOW. Car clock = general `0x1004` `CarTime*` fields.
