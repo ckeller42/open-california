@@ -1,0 +1,45 @@
+tests/test_calictl.py
+  s_1dccea91605154::t_4d87aa8f0d0f0e 73-116
+docs/business-logic/remote-control-connect-gate.md
+  s_1dccea91605154::t_036b99bf667575 197-236
+  s_1dccea91605154::t_fb56ae85cb4670 256-267
+  s_1dccea91605154::t_102c6a691985e6 237-255,268-279,286-292
+  s_1dccea91605154::t_038961e5fc03d3 280-285
+calictl/overrides.py
+  s_1dccea91605154::t_9e7cda687296c4 36-40
+  s_1dccea91605154::t_45a71f4428a7dd 66-67,75-81
+  s_1dccea91605154::t_9aea54b808aace 44
+  s_1dccea91605154::t_c8dbd8c3c0fb94 46-62
+  s_1dccea91605154::t_14c1e79975ed84 45
+docs/business-logic/signal-scales.md
+  s_1dccea91605154::t_896d868af8638a 13-14,17-30
+  s_1dccea91605154::t_bbfb44e85d1bbe 36
+  s_1dccea91605154::t_14a38a9ebe60d1 31
+calictl/protocol.py
+  s_1dccea91605154::t_8c183db764c5e1 52-53
+  s_1dccea91605154::t_05fff1db42d48f 207
+  s_1dccea91605154::t_5553af8eeef140 144-167
+tools/app_ranges.py
+  s_1dccea91605154::t_92e0769087d498 1-76
+CLAUDE.md
+  s_1dccea91605154::t_6284b067f39fa4 15
+calictl/semantics.py
+  s_1dccea91605154::t_e4b1eb0cc40dae 50-56
+  s_1dccea91605154::t_d488b8f1b2ed8e 76-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "11d1e0d5787ace5672e55053de19b54a5ccc8778",
+  "prompts": {},
+  "sessions": {
+    "s_1dccea91605154": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
