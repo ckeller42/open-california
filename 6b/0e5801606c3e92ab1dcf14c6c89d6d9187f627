@@ -1,0 +1,23 @@
+ui/screens/lighting.yaml
+  s_d2c35aeebbd344::t_46b0c477f2d71b 40
+docs/business-logic/re-gap-inventory.md
+  s_d2c35aeebbd344::t_e10a8b661af75f 35-64
+docs/business-logic/alert-states.md
+  s_d2c35aeebbd344::t_5ffa7f1371aca0 366-398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6b0e5801606c3e92ab1dcf14c6c89d6d9187f627",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
