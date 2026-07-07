@@ -222,11 +222,17 @@ login/subscribe handshake — entirely outside our BLE model. Decode `AbstractIn
   So EXLAP is a selectable *alternative transport for the identical function set*, not a
   different feature. Actuation goes through `<Call>` and (being a different transport) is **not**
   subject to the BLE 1003-heartbeat arm.
+- **No EXLAP-over-Bluetooth path (checked 2026-07-07).** `ah/f.java` is the unified connectivity
+  manager with exactly TWO camper transports: EXLAP over **TCP** (`:190` `connectToExlapClient(ip,
+  port)`→`socket://`) and **BLE GATT** (`:404` `BluetoothDevice`→`jb.b`, the GATT processor). The
+  BluetoothDevice at :404 is the BLE link, NOT RFCOMM — the SDK's `TransportConnectorAndroidBluetooth`
+  /SPP is registered in `TransportManager` but never used for the camper. So there is **no parked
+  Bluetooth-RFCOMM control shortcut**; EXLAP for the camper is WiFi/TCP-only (needs infotainment up).
 - **Net:** feasible in principle (unauthenticated, actuation via `<Call>`, same functions), but
-  **gated purely on reachability** — the vehicle must expose the EXLAP server on a WiFi we can
-  join. Not present while parked (probe above). The concrete DataElement **URLs are runtime**
-  (from the vehicle's `<Dir>`/interface description), so a live `<Dir>` against a reachable server
-  is the only way to enumerate them.
+  **gated purely on reachability** over WiFi — the vehicle must expose the EXLAP server on a WiFi we
+  can join (infotainment/ignition on). Not present while parked (probe above). The concrete
+  DataElement **URLs are runtime** (from the vehicle's `<Dir>`/interface), so a live `<Dir>` against a
+  reachable server is the only way to enumerate them.
 
 **C3 — Other backends:** CARIAD AI voice (`tc/f.java`, SSE, `nvt-au-eu…cariad.digital`);
 Adobe AEM GraphQL CMS (`me/j.java`); VW online-manual (`userguide.volkswagen.de`); consent
