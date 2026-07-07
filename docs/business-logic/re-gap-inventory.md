@@ -28,7 +28,7 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 | 7 | Whole feature modules untracked: **Travel, Search, Discover/CMS, AiAssist, Camera, Developer** | feature | static |
 | 8 | **Light scenes/favorites** model (7 slots × 8 zones × on+brightness) | feature | static |
 | 9 | VW **OIDC/IDK** auth + backend request signing | infra | static + capture |
-| 10 | Zone→lamp names + all UI labels (dex-only decompile, no resources) | feature | needs resource re-extract |
+| 10 | UI label *text* (dex-only: 1882 string KEYS recovered, but VALUES are in `.cvr` assets) — light zone names DONE | feature | needs the APK's `.cvr` |
 
 ---
 
@@ -170,9 +170,29 @@ defined/saved/recalled.
 **Persistence (untracked):** `database/CaliforniaAppDatabase.java` (Room) + remote KV store
 (`backend/api/keyvaluestore`) hold the 7 favorites, settings, trips — no table/key map yet.
 
-**Structural caveat:** the decompile is **dex-only** (no `res/`, no `strings.xml`), so
-zone→lamp names and all UI labels are unrecoverable here. Re-extract `resources.arsc`
-(apktool / jadx-with-resources) to close #10 and confirm screen-label semantics.
+**Structural caveat (refined 2026-07-08):** the decompile is **dex-only** — jadx processed
+`classes.dex`, not the APK assets. Consequence for strings:
+- **String KEYS are fully recoverable** (1882 distinct `"string:area_component_meaning_text"`
+  refs in the dex) — descriptive enough to read menu structure/feature semantics without the text.
+- **Localized VALUES are NOT here** — Compose Multiplatform packs UI text into binary
+  `composeResources/**/strings.commonMain.cvr` blobs (zero `.cvr` in the decompile); the code
+  references them by `(path, offset, length)` (e.g. offset 5218 len 241). This is a *resource
+  extraction* gap, **not** code obfuscation (obfuscation renamed symbols but preserved string
+  constants — which is why pref keys / zone names / log strings all read fine).
+- To recover the text: `unzip <app>.apk` → read the `.cvr` at the code-given offsets, OR re-run
+  jadx/apktool WITH resources. Needs the original APK (not in this scratchpad; gitignored).
+
+**Developer-module dive (2026-07-08) — findings from the prefs surface (`xp/g.java`):**
+- **Interior lights = 8 NAMED zones** (partially closes #10 without the APK): `AMBIENT, D_PILLAR,
+  KITCHEN, READING_LEFT, READING_REAR, READING_RIGHT, SPOT_LEFT, SPOT_RIGHT` (EXLAP
+  `EXLAP_LIGHT_PROFILE_*_ENABLED/_BRIGHTNESS`) = the 8-zone `wp/i.java` profile. The BLE frame's 16
+  `BrightnessL*` slots are a superset; the ~6 lit on this van map to the installed named subset.
+- **Complete alert/error taxonomy** (~50 `BLUETOOTH_*_CONFIRMED` + `EXLAP_*_INTERACTED` keys) per
+  function — authoritative reference for `alert-states.md`; also reconfirms the BLE/EXLAP dual
+  transport (parallel alert-ack flags).
+- **Corroborations:** `LEVELING_ROLL`/`LEVELING_PITCH` prefs ↔ the char-1004 vehicle roll/pitch
+  just decoded; `BACKEND_STAGE`+`CUSTOM_STAGE_NAMESPACE` = dev environment switch; the
+  `DeveloperModule` nav entry is a stub (labels stripped into `.cvr`).
 
 ---
 
