@@ -1,7 +1,7 @@
 docs/protocol.md
-  s_1dccea91605154::t_bf8f414e622a5f 52-63
+  s_1dccea91605154::t_fe10b32d345fec 52-63
 tools/encode.py
-  s_1dccea91605154::t_b898804e0694c2 33-34,37-48,71-74
+  s_1dccea91605154::t_97529a229752a7 33-34,37-48,71-74
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -13,7 +13,7 @@ tools/encode.py
       "agent_id": {
         "tool": "claude",
         "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
-        "model": "unknown"
+        "model": "claude-opus-4-8"
       },
       "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
     }
