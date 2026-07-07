@@ -19,3 +19,26 @@ jdk-*/
 # Claude Code local session/config
 .claude/
 manuals/    # copyrighted VW PDFs — never commit (citations only)
+
+# VW app-derived assets — icons/drawables/logos are VW/partner copyright (citations only;
+# regenerate locally from the APK, see ui/README.md). Purged from history 2026-07-08.
+ui/assets/svg/
+strings_resolved*
+*.strings
+
+# BLE / HCI capture files (own-vehicle captures — never commit)
+*.cvr
+*.pcap
+*.pcapng
+*.pklg
+*.btsnoop
+
+# other Android build artifacts (siblings of the ignored *.apk/*.dex)
+*.jar
+*.aar
+*.aab
+
+# RE scratch + test/coverage artifacts
+scratchpad/
+.coverage
+.coverage.*

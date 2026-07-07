@@ -26,10 +26,12 @@ exact file:line citations).
   cite these docs by section/line rather than repeating their content —
   treat the docs as authoritative for *protocol behavior*, the YAMLs as
   authoritative for *GUI shape/layout*.
-- **`ui/assets/svg/*.svg`** — every icon referenced by `icons:` in a screen
-  YAML has (in almost all cases) a matching converted SVG here; see
-  `ui/assets/README.md` for the extraction/conversion notes and a
-  by-category icon index.
+- **`ui/assets/svg/` — NOT committed** (gitignored). The screen-YAML `icons:`
+  names are VW/partner copyrighted drawables (incl. the VW roundel + California
+  logos); per the repo's citations-only rule they are not redistributed here and
+  were purged from git history (2026-07-08). Regenerate them locally from the APK
+  with `ui/assets/vd2svg.py`; `build_prototype.py` falls back to neutral
+  placeholders when they're absent.
 
 ## Screen inventory
 

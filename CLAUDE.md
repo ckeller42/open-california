@@ -16,7 +16,7 @@ blocked by a firmware gate (see below). Runs on a Raspberry Pi (`buspi`), feedin
 | `tests/` | pytest; **must stay green** |
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) |
 | `docs/superpowers/` | specs + plans |
-| `ui/` | machine-usable GUI specs (`screens/*.yaml`) + extracted icons — **authoritative for app UI semantics** |
+| `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); regenerate locally with `ui/assets/vd2svg.py` from the APK. |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
 
 ## Hard rules (don't break these)
