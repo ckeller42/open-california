@@ -111,9 +111,9 @@ def test_energy_source_current_nulled_when_not_installed():
     f = _funcs()
     e = semantics.energy(P.decode(f["energy"], ENERGY_IGN_ON))
     assert e["solar_installed"] is False and e["solar_current"] is None   # 511 sentinel not surfaced
-    # when installed, the current is a real signed int (not None)
-    d = P.decode(f["energy"], ENERGY_IGN_ON); d["PvInstalled"] = 1; d["IPvAfs"] = 5
-    assert semantics.energy(d)["solar_current"] == 5
+    # when installed, the current is a real value (unsigned /10 A, per xf/d.java)
+    d = P.decode(f["energy"], ENERGY_IGN_ON); d["PvInstalled"] = 1; d["IPvAfs"] = 50
+    assert semantics.energy(d)["solar_current"] == 5.0   # 50 raw /10 = 5.0 A
 
 
 def test_encode_refuses_unresolved_without_override():
