@@ -121,13 +121,38 @@ functions:
       - {name: ILandAfs, offset: 144, width: 16}
       - {name: IPvAfs, offset: 160, width: 16}
   general:
-    state_services: [1000, 1001, 1002, 1004]
+    # state_char points at 1001 (the SW-version char). Prior [1000,1001,1002,1004]
+    # made the "..02" picker select 1002 (the opaque 16-byte VIN), so `get general`
+    # read the wrong characteristic. VIN(1002) is left unmodeled (opaque/encrypted);
+    # the vehicle-state char 1004 is its own `vehicle` function below.
+    state_services: [1000, 1001]
     control_fields:
       []   # no unambiguous control model (see control_models_unresolved)
     state_fields:
       - {name: AmbSwVersion}
       - {name: CmSwVersion}
       - {name: CommunicationVersion}
+  vehicle:
+    # MANUAL addition (char 1004). NOT emitted by tools/extract_protocol — 1004 has
+    # no structured debug-log — so preserve this block across regeneration. Bit layout
+    # from ag/a.java (cell order/widths) + zf/d.java f() (names), validated live
+    # 2026-07-07 (car clock decoded to the correct wall-time). Requirement R_VEHICLE_1004
+    # (see calictl.semantics.vehicle). state_services picks the non-1000 short -> 1004.
+    state_services: [1000, 1004]
+    control_fields:
+      []
+    state_fields:
+      - {name: TerminalOneFive, offset: 0, width: 1}     # terminal-15 / ignition
+      - {name: CarLevelPopUp, offset: 1, width: 2}
+      - {name: CarVariant, offset: 3, width: 4}
+      - {name: CarTimeYear, offset: 8, width: 8}          # +1900
+      - {name: CarTimeMonth, offset: 16, width: 8}        # +1
+      - {name: CarTimeDay, offset: 24, width: 8}
+      - {name: CarTimeHour, offset: 32, width: 8}
+      - {name: CarTimeMinute, offset: 40, width: 8}
+      - {name: CarTimeSecond, offset: 48, width: 8}
+      - {name: CarLevelRoll, offset: 56, width: 16}       # signed
+      - {name: CarLevelPitch, offset: 72, width: 16}      # signed
   generalpurposesignals:
     state_services: [f000, f001]
     control_fields:

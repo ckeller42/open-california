@@ -62,13 +62,30 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   on-device: `cooler` (power/level) and `campingmode` (master/lights/usb) actuate for real.**
   `lighting` is wired (`set lighting power|brightness`) and builds a valid SET_BRIGHTNESS
   frame, but **on-device apply is UNCONFIRMED** — the frame ACKs yet the zones don't change
-  (a LightValue/SET_PROFILE semantic gap, not the arm gate). Extend via `control.BUILDERS`.
-  See `docs/business-logic/remote-control-connect-gate.md`.
+  (a LightValue/SET_PROFILE semantic gap, not the arm gate — `re-gap-inventory.md` §A1).
+  Extend via `control.BUILDERS`. See `docs/business-logic/remote-control-connect-gate.md`.
+- **`vehicle` function reads char 1004** (`calictl get vehicle`, live-verified): ignition
+  (terminal-15), car variant, unit RTC, 2-axis roll/pitch leveling — hand-added to
+  `dictionary.yaml` (NOT emitted by `extract_protocol`; preserve on regen). `general` was
+  repointed 1002→1001 (it had been reading the opaque VIN char, not the SW-version char).
+  No BLE firmware/OTA path exists (`re-gap-inventory.md` §A6).
 - **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar.
   Those functions are `Installed`-gated and only publish on vehicles that have them; their
   polarities can't be live-verified here (`satelliteantenna`, `stairs` are open review items).
 - **buspi**: `sudo` needs the Pi password; `serve` runs under `~/solix-env`; secrets in
   `/etc/buspi/*.env` (root, 0600). The van allows buspi + the phone app connected at once.
+
+## Documentation (sphinx + sphinx-needs)
+
+- **Write Sphinx-renderable docstrings** (RST field lists: `:param:`, `:returns:`) on
+  new/changed public functions. Keep them next to the code.
+- **Author requirements as `sphinx-needs` objects IN the docstrings** — `.. req::` with
+  `:id: R_<NAME>` in the implementing code, `.. test::` with `:id: T_<NAME>` +
+  `:links: R_<NAME>` in the verifying test's docstring (the link is the trace). Example:
+  `calictl.semantics.vehicle` (`R_VEHICLE_1004`) ← `tests/…test_vehicle_decode_char_1004`
+  (`T_VEHICLE_DECODE`). Add each autodoc'd target to `docs/sphinx/api.rst`.
+- Build/verify the trace: `docs/sphinx/README.md` (`sphinx -b html -W` and `-b needs`; a
+  resolved trace shows up as the req's `links_back` in `needs.json`). `needs_id_required=True`.
 
 ## Working style
 

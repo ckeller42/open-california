@@ -14,9 +14,11 @@ def _funcs():
 
 def test_loads_all_functions():
     f = _funcs()
-    assert len(f) == 13
+    assert len(f) == 14                                      # +vehicle (char 1004)
     assert f["water"].state_char.startswith("00001302")
     assert f["cooler"].control_char.startswith("00001101")
+    assert f["vehicle"].state_char.startswith("00001004")   # picker selects the non-1000 short
+    assert f["general"].state_char.startswith("00001001")   # fixed: was 1002 (VIN)
 
 
 def test_decode_water_roles_and_percent():
@@ -253,6 +255,30 @@ def test_lighting_brightness_range_and_mode_guard():
             pass
         else:
             raise AssertionError("expected ValueError for lighting brightness %s" % bad)
+
+
+def test_vehicle_decode_char_1004():
+    """Decode the vehicle characteristic (BLE char ``00001004``) end-to-end.
+
+    .. test:: Vehicle 1004 decode
+       :id: T_VEHICLE_DECODE
+       :links: R_VEHICLE_1004
+       :status: passing
+
+       Verifies :need:`R_VEHICLE_1004`: a captured ``1004`` frame decodes to the
+       correct ignition (terminal-15 off), car variant, real-time clock and
+       roll/pitch leveling, and that the level axes are signed.
+    """
+    f = _funcs()
+    raw = bytes.fromhex("047e060717142a00000000")   # live capture 2026-07-07
+    v = semantics.vehicle(P.decode(f["vehicle"], raw))
+    assert v["ignition_on"] is False                 # terminal-15 off (parked)
+    assert v["car_variant"] == 2
+    assert v["car_clock"] == "2026-07-07 23:20:42"   # year+1900, month+1
+    assert v["level_roll"] == 0 and v["level_pitch"] == 0
+    # signed axes: a 0xFFFF roll must read back as -1, not 65535
+    raw_neg = bytes.fromhex("047e060717142affff0000")
+    assert semantics.vehicle(P.decode(f["vehicle"], raw_neg))["level_roll"] == -1
 
 
 def test_heartbeat_counter_bytes():

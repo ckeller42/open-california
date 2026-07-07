@@ -215,6 +215,50 @@ def stairs(d: dict) -> dict:
     }
 
 
+def vehicle(d: dict) -> dict:
+    """Interpret the vehicle-state characteristic (BLE char ``00001004``).
+
+    Decodes the ignition line (terminal-15), the car variant, the unit's
+    real-time clock and the two-axis leveling readout. Bit layout is taken from
+    the app's ``ag/a.java`` cell model + ``zf/d.java`` parser and was validated
+    on-device 2026-07-07 (the RTC decoded to the correct wall-clock time). Roll
+    and pitch are signed 16-bit.
+
+    :param d: decoded field map from :func:`calictl.protocol.decode` for the
+        ``vehicle`` function (keys ``TerminalOneFive``, ``CarVariant``,
+        ``CarTime*``, ``CarLevelRoll``, ``CarLevelPitch``).
+    :returns: interpreted dict with ``ignition_on`` (terminal-15),
+        ``car_variant``, ``level_roll``/``level_pitch`` (signed), ``car_clock``
+        (ISO-ish ``YYYY-MM-DD HH:MM:SS``) and ``level_popup``.
+
+    .. req:: Decode vehicle state (char 1004)
+       :id: R_VEHICLE_1004
+       :status: implemented
+       :tags: ble, telemetry, vehicle
+
+       ``calictl`` shall decode BLE characteristic ``00001004`` into the ignition
+       state (terminal-15), car variant, unit real-time clock and the two-axis
+       (roll/pitch) leveling readout, exposing them as interpreted signals.
+    """
+    def s16(v):
+        return None if v is None else (v - 65536 if v >= 32768 else v)
+    y, mo, da = d.get("CarTimeYear"), d.get("CarTimeMonth"), d.get("CarTimeDay")
+    h, mi, se = d.get("CarTimeHour"), d.get("CarTimeMinute"), d.get("CarTimeSecond")
+    clock = None
+    if None not in (y, mo, da, h, mi, se):
+        # app applies +1900 to the year field and +1 to the month field
+        clock = "%04d-%02d-%02d %02d:%02d:%02d" % (y + 1900, mo + 1, da, h, mi, se)
+    return {
+        "installed": True,
+        "ignition_on": bool(d.get("TerminalOneFive")),   # terminal-15 line
+        "car_variant": d.get("CarVariant"),
+        "level_popup": d.get("CarLevelPopUp"),
+        "level_roll": s16(d.get("CarLevelRoll")),         # signed; 0 = level/unknown
+        "level_pitch": s16(d.get("CarLevelPitch")),
+        "car_clock": clock,
+    }
+
+
 def _generic(d: dict) -> dict:
     # surface fields inline (installed flag first) so status isn't blank
     out = {}
@@ -228,7 +272,7 @@ INTERPRETERS = {
     "water": water, "energy": energy, "cooler": cooler, "airheater": airheater,
     "campingmode": campingmode, "roof": roof, "lighting": lighting, "general": general,
     "livingroomheater": livingroomheater, "roofaircondition": roofaircondition,
-    "satelliteantenna": satelliteantenna, "stairs": stairs,
+    "satelliteantenna": satelliteantenna, "stairs": stairs, "vehicle": vehicle,
 }
 
 
