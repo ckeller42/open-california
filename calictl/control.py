@@ -28,7 +28,7 @@ def _camping(funcs, what, value, last):
     # Matches the app's camping screen: ONE combined "lights" toggle (tf/a K0 writes
     # 0 to BOTH light fields for ON, inverted), USB (B2) + master (z2) normal.
     # lights/usb are only effective while master (camping mode) is on.
-    on = str(value).lower() in ("on", "true", "1")
+    on = _truthy(value)   # strips whitespace; "on " must not read as OFF
     if what == "lights":                       # combined interior+outside, inverted
         v = LIGHT_ON if on else LIGHT_OFF
         ch = {"InteriorLight": v, "OutsideLight": v}

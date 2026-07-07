@@ -116,6 +116,19 @@ def test_energy_source_current_nulled_when_not_installed():
     assert semantics.energy(d)["solar_current"] == 5.0   # 50 raw /10 = 5.0 A
 
 
+def test_encode_refuses_frame_too_small():
+    # a too-small frame_bytes must raise, not silently grow/corrupt the frame
+    f = _funcs()
+    base = dict(State=1, Mode=4, Level=4, TimerStart=3, TimerCancel=3, NightTimerSet=0,
+                NightTimerHourOff=0, TimerHour=0, TimerMin=0, NightTimerHourOn=0)
+    try:
+        P.encode(f["cooler"], base, frame_bytes=2)   # cooler needs 6
+    except ValueError as e:
+        assert "exceeds" in str(e)
+    else:
+        raise AssertionError("expected ValueError for undersized frame_bytes")
+
+
 def test_encode_refuses_unresolved_without_override():
     f = P.load()  # NO overrides applied -> cooler timer fields unplaced
     try:
@@ -157,7 +170,19 @@ def test_installed_from_states():
     assert serve.installed_from(states) == {"water", "energy", "roof"}
 
 
+def test_numeric_fields_flattens_and_filters():
+    # pure/stdlib: nested numerics flatten; bool->1.0/0.0; list-> <key>_count; str/None dropped
+    from calictl import influx
+    nf = influx.numeric_fields({"installed": True, "on": False, "level": 5,
+                                "fresh": {"percent": 38.0}, "mode": "eco", "x": None,
+                                "faults": ["a", "b"]})
+    assert nf == {"installed": 1.0, "on": 0.0, "level": 5.0,
+                  "fresh_percent": 38.0, "faults_count": 2.0}
+
+
 def test_points_for_reuses_numeric_fields():
+    import pytest
+    pytest.importorskip("influxdb_client")   # tests must run without MQTT/Influx installed
     from calictl import influx
     pts = influx.points_for({"water": {"installed": True, "fresh": {"percent": 38}}})
     # one "camper" Point tagged function=water carrying the flattened numeric field

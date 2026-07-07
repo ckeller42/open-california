@@ -201,6 +201,12 @@ def encode(func: Function, values: dict[str, int], *,
         max((f.offset + f.width for f in placed), default=0)
     frame = [0] * total
     for f in placed:
+        if f.offset + f.width > total:
+            # a too-small frame_bytes would let list-slice assignment GROW the frame
+            # and silently misplace bits -> a corrupt write the firmware may reject by
+            # dropping the ATT link. Fail loudly instead.
+            raise ValueError("%s.%s (offset %d width %d) exceeds the %d-bit frame"
+                             % (func.name, f.name, f.offset, f.width, total))
         val = values.get(f.name, f.default)
         if val is None or val == "UNKNOWN":
             raise ValueError("no value/default for %s.%s" % (func.name, f.name))

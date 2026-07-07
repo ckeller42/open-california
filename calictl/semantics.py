@@ -27,7 +27,10 @@ def _pct(cur: int, cap: int) -> int | None:
 def water(d: dict) -> dict:
     def tank(unit, level, volume):
         # unit 1 = ABSOLUTE (Level=liters), 0 = PERCENT (Level=percent).
-        # Volume is always the tank capacity in liters.
+        # Volume is always the tank capacity in liters. None-tolerant: a truncated
+        # frame must not KeyError and kill the whole poll (all functions).
+        if level is None or volume is None:
+            return {"liters": None, "capacity_l": volume, "percent": None}
         if unit:
             liters, pct = level, _pct(level, volume)
         else:
@@ -35,8 +38,8 @@ def water(d: dict) -> dict:
         return {"liters": liters, "capacity_l": volume, "percent": pct}
     return {
         "installed": bool(d.get("Installed")),
-        "fresh": tank(d["FreshWaterUnit"], d["FreshWaterLevel"], d["FreshWaterVolume"]),
-        "waste": tank(d["WasteWaterUnit"], d["WasteWaterLevel"], d["WasteWaterVolume"]),
+        "fresh": tank(d.get("FreshWaterUnit"), d.get("FreshWaterLevel"), d.get("FreshWaterVolume")),
+        "waste": tank(d.get("WasteWaterUnit"), d.get("WasteWaterLevel"), d.get("WasteWaterVolume")),
     }
 
 
