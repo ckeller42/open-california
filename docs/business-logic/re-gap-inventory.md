@@ -199,6 +199,34 @@ login/subscribe handshake — entirely outside our BLE model. Decode `AbstractIn
   from the BLE camper unit) and its WiFi is down while the vehicle is off. Pursuing it needs
   (a) vehicle infotainment WiFi up (ignition on) + buspi joined to *that* SSID, and (b) the UDP
   discovery-probe payload decoded (the app *sends* the probe; passive listen won't do).
+- **Protocol decoded 2026-07-07 (full read of `de/exlap/`).** EXLAP is a standard **XML
+  request/response + publish-subscribe** protocol over a stream (TCP `socket://ip:port`,
+  BT-RFCOMM, or WebSocket). Verbs (`de/exlap/command/*`, each a `writeXML`): `<Protocol
+  version=.. returnCapabilities=..>` (negotiate) → optional `<Authenticate>` **challenge-
+  response** (server `<Challenge nonce usingHash>`, client digest = SHA256/MD5 of
+  username+password+nonce+16-byte cnonce; `AuthCommand`) → `<Dir>` (enumerate URLs) /
+  `<Get url>` (read a DataObject) / `<Subscribe url ival content timestamp>` (stream on change,
+  ival 0–60000 ms) / `<Call url><DataObject/></Call>` (**invoke/actuate**) / `<Unsubscribe>` /
+  `<Alive>`+`<Heartbeat>` keepalive / `<Bye>`. Status codes in `ExlapConstants` (OK=0,
+  AUTHENTICATIONFAILED=6, KEEPALIVE_TIMEOUT=13). Data model: typed `DataElement`s (Absolute,
+  Relative, Enumeration, Text, Time, Binary) addressed by URL. Discovery = UDP `<ServiceInquiry
+  service=.. id=..>` on 28500.
+- **How THIS app wires it (dual-transport).** `ExlapClientDelegateImpl` exposes
+  `connectToExlapClient(ip,port)` / `subscribeToURL(url,ival)` / `sendDataToExlapClient(url,obj)`
+  (= `<Call>`, the actuation path) / a data flow. The connect (`ah/f.java:190` — ip/port from the
+  `EXLAP_IP_ADDRESS`/`PORT` prefs) builds `socket://ip:port`, `setBlockingConnect(true)`, and
+  **NEVER calls `authenticate()`** (grep: zero callers) — so the app uses EXLAP **unauthenticated**;
+  auth is a library capability the vehicle side apparently doesn't require here. `ah/m.java:162`
+  builds a **fixed list of 12 DataElement handlers** (`f1134w0`, each a `ch.a` with url `.c()` +
+  interval `.f()` + parser `.g()`) — i.e. **the SAME ~12 vehicle functions as BLE, over EXLAP**.
+  So EXLAP is a selectable *alternative transport for the identical function set*, not a
+  different feature. Actuation goes through `<Call>` and (being a different transport) is **not**
+  subject to the BLE 1003-heartbeat arm.
+- **Net:** feasible in principle (unauthenticated, actuation via `<Call>`, same functions), but
+  **gated purely on reachability** — the vehicle must expose the EXLAP server on a WiFi we can
+  join. Not present while parked (probe above). The concrete DataElement **URLs are runtime**
+  (from the vehicle's `<Dir>`/interface description), so a live `<Dir>` against a reachable server
+  is the only way to enumerate them.
 
 **C3 — Other backends:** CARIAD AI voice (`tc/f.java`, SSE, `nvt-au-eu…cariad.digital`);
 Adobe AEM GraphQL CMS (`me/j.java`); VW online-manual (`userguide.volkswagen.de`); consent
