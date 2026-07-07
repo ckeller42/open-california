@@ -39,11 +39,14 @@ repeat (reconciling the "no fridge/camping heartbeat" finding in
 - **lighting** (`power` on/off, `brightness` 0-15) — ⚠️ **ACKed but does NOT apply.** A
   SET_BRIGHTNESS frame (`Mode=4`, `ProfileNumber=0`, per-zone brightness) is accepted at ATT
   (no 0x0E) but the `1502` zone brightnesses do not change — unlike cooler/camping under the
-  identical heartbeat. So this is a **lighting-specific semantic gap**, not the arm gate:
-  the `LightValue` field is likely a per-zone enable/bitmask (SET_BRIGHTNESS applies to no
-  zones when it is 0), or the real path is SET_PROFILE (`Mode=16` + `ProfileNumber`). Needs
-  the app's `eg/a.java` SET frame decoded / an HCI capture of a light change. Until then
-  `set lighting` builds a well-formed frame and reports `NOT APPLIED` honestly.
+  identical heartbeat. So this is a **lighting-specific semantic gap**, not the arm gate.
+  **Root cause found** (decompile audit, `re-gap-inventory.md` §A1): the app's SET_BRIGHTNESS
+  frame carries the **currently-active ProfileNumber** (`dg/h.java:615` sends
+  `w10.d.b(k).f5472x`, **never 0**) and encodes on/off purely in the zone nibbles; `LightValue`
+  is **not** in the SET_BRIGHTNESS frame (it's the SET_PROFILE on/off lever). Our
+  `ProfileNumber=0` addresses an inactive profile → silently ignored. The fix needs the active
+  profile's wire value (HCI capture of one in-app brightness change; profile→wire table
+  `w10/l.java`). Until then `set lighting` builds a frame and reports `NOT APPLIED` honestly.
 
 The analysis below documents the (correct-but-incomplete) connect handshake and the dead
 ends ruled out along the way; the "safety interlock" conclusion in the final two updates is

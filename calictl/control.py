@@ -78,14 +78,17 @@ LIGHT_ON_BRIGHTNESS = 14         # zone value for "on" (0..15; the app/dict defa
 
 
 def _lighting(funcs, what, value, last):
-    # NOTE: on-device apply is UNCONFIRMED. Live test 2026-07-07 (heartbeat-armed):
-    # this SET_BRIGHTNESS frame is ACKed but the zones do NOT change — unlike cooler
-    # and campingmode, which actuate fine under the same heartbeat. So lighting has a
-    # remaining semantic gap (the LightValue zone-enable / SET_PROFILE mechanism is
-    # not yet reverse-engineered), NOT an arm-gate problem. `set lighting` builds a
-    # well-formed frame and reports readback honestly (NOT APPLIED) until this is fixed.
+    # NOTE: on-device apply is UNCONFIRMED and this frame is known to be WRONG.
+    # Decompile audit (2026-07-07, docs/business-logic/re-gap-inventory.md §A1) shows the
+    # app's SET_BRIGHTNESS frame carries the *currently-active* ProfileNumber (dg/h.java:615
+    # sends w10.d.b(k).f5472x, never 0) and encodes on/off purely in the zone nibbles;
+    # LightValue is NOT in the SET_BRIGHTNESS frame (it's the SET_PROFILE on/off lever).
+    # ProfileNumber=0 addresses an inactive profile -> the unit silently ignores it, which
+    # is exactly what the live test saw. Fixing this needs the active-profile wire value
+    # (HCI capture of an in-app brightness change; profile->wire table w10/l.java). Until
+    # then `set lighting` builds a frame and reports readback honestly (NOT APPLIED).
     #
-    # SET_BRIGHTNESS: ProfileNumber MUST be 0 (else the unit rejects 0x0E — a
+    # SET_BRIGHTNESS: ProfileNumber pinned 0 for now (also avoids the 0x0E reject seen with
     # cross-field rule encode can't express, so we pin it here). We CARRY the
     # current per-zone brightness (the per-zone -> physical-lamp mapping is
     # UNVERIFIED, so we don't blindly light every zone):
