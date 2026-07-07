@@ -55,9 +55,12 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
 
 ## Known state
 
-- **Control writes are BLOCKED** (firmware gate). Reads work; writes ACK at ATT but the unit
-  ignores them, even with the app's connect handshake reproduced. Tracked in **issue #2**;
-  next step is an HCI capture of the app. Don't assume `set`/command paths work on-device.
+- **Control writes WORK** (issue #2 solved 2026-07-07). The gate was a **liveness heartbeat
+  on char `00001003`**: while a +1 4-byte BE counter ticks (~0.6 s), the unit honours
+  actuation writes. Actuation is **one-shot arm** — the load latches, so the heartbeat only
+  spans the write window (`device.actuate`, held under the `serve` lock). `calictl set cooler
+  power on|off` actuates for real (verified on-device). Only `cooler` is wired so far; extend
+  lighting/campingmode via `control.BUILDERS`. See `docs/business-logic/remote-control-connect-gate.md`.
 - **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar.
   Those functions are `Installed`-gated and only publish on vehicles that have them; their
   polarities can't be live-verified here (`satelliteantenna`, `stairs` are open review items).

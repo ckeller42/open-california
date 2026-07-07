@@ -84,13 +84,15 @@ class Server:
         return states
 
     async def on_command(self, function, what, value):
-        from . import control  # lazy: control.py is added by a later task
+        from . import control  # lazy
         frame = control.build(self.funcs, function, what, value,
                               self._last.get(function, {}))
         if frame is None:
             return
+        # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
+        # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
-            await self.dev.write_control(self.funcs[function], frame, verify=False)
+            await self.dev.actuate(self.funcs[function], frame, verify=False)
 
     def run(self):
         """Blocking daemon: connect MQTT (+ optional InfluxDB), then poll→fan-out

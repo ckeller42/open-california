@@ -6,10 +6,10 @@
     calictl set cooler power on|off
     calictl set cooler level <1-5>
 
-Read commands are fully live-verified. `set` builds the correct full-packet
-frame (verified against the app's frame builder) but a live control write has
-not yet been confirmed on-device, so it reads the state back and reports whether
-the change actually took effect.
+Read commands are fully live-verified. `set` builds the full-packet frame and
+writes it under a 1003 liveness heartbeat (`device.actuate`), which arms
+actuation on-device (issue #2); it reads the state back and reports whether the
+change actually took effect.
 """
 from __future__ import annotations
 
@@ -72,42 +72,26 @@ async def cmd_raw(funcs, dev, args):
     print((await dev.read(f)).hex())
 
 
-def _cooler_values(state: dict, **changes) -> dict:
-    """Full-packet cooler control values: carry current State/Mode/Level and
-    timer values, timer ACTION fields at no-op, then apply `changes`."""
-    vals = dict(
-        State=state.get("State", 1), Mode=state.get("Mode", 4),
-        Level=state.get("Level", 3),
-        TimerStart=3, TimerCancel=3, NightTimerSet=0,   # no-op actions
-        NightTimerHourOff=0, NightTimerHourOn=0,
-        TimerHour=state.get("TimerHourSet", 0), TimerMin=state.get("TimerMinSet", 0),
-    )
-    vals.update(changes)
-    return vals
-
-
 async def cmd_set(funcs, dev, args):
+    from . import control
     if args.function != "cooler":
         print("set is currently implemented only for 'cooler'", file=sys.stderr)
         return 2
     f = funcs["cooler"]
     cur = protocol.decode(f, await dev.read(f))
     print("current: State=%s Mode=%s Level=%s" % (cur.get("State"), cur.get("Mode"), cur.get("Level")))
+    try:
+        frame = control.build(funcs, "cooler", args.what, args.value, cur)
+    except ValueError as e:
+        print(str(e), file=sys.stderr); return 2
+    if frame is None:
+        print("unknown target %r for cooler" % args.what, file=sys.stderr); return 2
     if args.what == "power":
-        on = args.value.strip().lower() in ("on", "true", "1")
-        target = {"State": 1 if on else 0}
-        check = ("State", target["State"])
-    elif args.what == "level":
-        lvl = int(args.value)
-        if not 1 <= lvl <= 5:
-            print("level must be 1-5", file=sys.stderr); return 2
-        target = {"Level": lvl}
-        check = ("Level", lvl)
-    else:
-        print("unknown target %r" % args.what, file=sys.stderr); return 2
-    frame = protocol.encode(f, _cooler_values(cur, **target), frame_bytes=6)
-    print("writing %s to cooler control ..." % frame.hex())
-    post = await dev.write_control(f, frame, verify=True)
+        check = ("State", 1 if args.value.strip().lower() in ("on", "true", "1") else 0)
+    else:  # level
+        check = ("Level", int(args.value))
+    print("writing %s to cooler control (heartbeat-armed) ..." % frame.hex())
+    post = await dev.actuate(f, frame, verify=True)
     field, want = check
     got = post.get(field) if post else None
     ok = got == want

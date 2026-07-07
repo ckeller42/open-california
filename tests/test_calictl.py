@@ -193,3 +193,36 @@ def test_camping_lights_control_frame():
     usb = control.decode_control(funcs["campingmode"],
                                  control.build(funcs, "campingmode", "usb", "on", {}))
     assert usb["UsbCharger"] == 1 and usb["InteriorLight"] == 3
+
+
+def test_cooler_power_control_frame():
+    from calictl import control
+    f = _funcs()
+    cur = {"State": 0, "Mode": 4, "Level": 3}
+    on = control.decode_control(f["cooler"], control.build(f, "cooler", "power", "on", cur))
+    off = control.decode_control(f["cooler"], control.build(f, "cooler", "power", "off", cur))
+    assert on["State"] == 1 and off["State"] == 0
+    assert on["Level"] == 3 and on["Mode"] == 4          # untargeted fields carry current
+
+
+def test_cooler_level_control_frame_and_range():
+    from calictl import control
+    f = _funcs()
+    cur = {"State": 1, "Mode": 4, "Level": 3}
+    fr = control.build(f, "cooler", "level", "5", cur)
+    assert control.decode_control(f["cooler"], fr)["Level"] == 5
+    for bad in ("0", "6"):
+        try:
+            control.build(f, "cooler", "level", bad, cur)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for cooler level %s" % bad)
+
+
+def test_heartbeat_counter_bytes():
+    # 1003 liveness counter: 4-byte big-endian, monotonic +1, wraps at 32 bits.
+    from calictl import device
+    assert device._beat_bytes(device.HEARTBEAT_START) == bytes.fromhex("00100000")
+    assert device._beat_bytes(device.HEARTBEAT_START + 1) == bytes.fromhex("00100001")
+    assert device._beat_bytes(0x1_00000000) == bytes.fromhex("00000000")

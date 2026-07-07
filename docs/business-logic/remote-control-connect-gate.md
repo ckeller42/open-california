@@ -1,5 +1,43 @@
 # RE: The connect gate — why control WRITES are silently ignored
 
+## ✅ SOLVED (2026-07-07) — the gate is a 1003 liveness heartbeat
+
+The missing precondition is **not** the handshake below and **not** the vehicle
+"safety interlock" hypothesized in the later updates. It is a **liveness heartbeat
+on characteristic `00001003`** (the write-only "Counter" char, decompiled `ag/b.java`;
+see `status-states-audit.md:123`). While a monotonic **+1 four-byte big-endian counter
+ticks on `1003`** (~0.6 s cadence), the unit **honours actuation writes** to the normal
+control chars. Static analysis missed this because `1003` carries no debug log and the
+write path never references it — it is a generic liveness signal, not a per-command
+repeat (reconciling the "no fridge/camping heartbeat" finding in
+`remote-control-write-mechanics.md`).
+
+**Confirmed on-device**, phone app **closed**, buspi the sole controller:
+- With the heartbeat running, `cooler.on` goes **False → True** on a `State=1` write to
+  `1101` (and True → False on `State=0`). Proof: `scratchpad/heartbeat_actuate.py`, then
+  the productionized `calictl set cooler power on|off` (frames `3d4300000000` / `3c4300000000`).
+
+**Empirical results that shaped the implementation** (`scratchpad/sustain_test.py`):
+- **One-shot arm, NOT deadman.** After actuation the load **latches**: cooler stayed ON
+  for a full 120 s window with the heartbeat **stopped and the client disconnected**. So
+  actuation is a bounded operation — the heartbeat only needs to span the write window,
+  not run continuously. (This is why `serve` did not need a persistent-connection redesign.)
+- **No release frame needed.** A single `State` write latches both directions; the app's
+  assert-then-`State=3`-release pattern is unnecessary (and would collide with the curated
+  `CONTROL_RANGES` `State∈{0,1}`, so it is deliberately not used).
+- **Cadence:** 0.6 s proven (~10 beats span the ~3 s arm delay + write). Max-gap tolerance
+  was not pinned down because it is immaterial for a short one-shot arm window.
+
+**Where it lives in `calictl`:** `device.HEARTBEAT_CHAR` + `device.actuate()` (arm handshake
+→ subscribe-all → heartbeat task → control write → readback, one BLE session under the
+`serve` lock). `calictl set cooler power on|off` and `serve.on_command` both go through it.
+
+The analysis below documents the (correct-but-incomplete) connect handshake and the dead
+ends ruled out along the way; the "safety interlock" conclusion in the final two updates is
+**superseded** by this heartbeat finding.
+
+---
+
 Investigation of the CaliforniaOnTour BLE layer (JADX decompile). All citations are
 `file:line` under
 `…/b137c4a5-…/scratchpad/decompile/src/sources` (clean output) and

@@ -1,9 +1,17 @@
-"""Per-function control-frame builders (full-packet, dictionary-driven)."""
+"""Per-function control-frame builders (full-packet, dictionary-driven).
+
+Shared by the CLI (`calictl set`) and the daemon (`serve.on_command`) so both
+build identical frames. Frames are written under a 1003 liveness heartbeat
+(`device.actuate`), which is what arms actuation on-device (issue #2)."""
 from __future__ import annotations
-from . import protocol
+from . import protocol, overrides
 
 LIGHT_ON, LIGHT_OFF = 0, 1   # camping lights inverted (app K0 writes (!on)?1:0). VERIFY live.
 SENTINEL = 3                 # 2-bit "leave unchanged" (sg.a default)
+
+
+def _truthy(value) -> bool:
+    return str(value).strip().lower() in ("on", "true", "1")
 
 
 def camping_values(**changes) -> dict:
@@ -33,7 +41,39 @@ def _camping(funcs, what, value, last):
     return protocol.encode(funcs["campingmode"], camping_values(**ch), frame_bytes=1)
 
 
-BUILDERS = {"campingmode": _camping}
+def _cooler_values(state: dict, **changes) -> dict:
+    """Full-packet cooler control values: carry current State/Mode/Level and the
+    schedule (writing the current schedule back = no change), timer ACTION fields
+    at no-op, then apply `changes`. (Moved from cli.cmd_set so the daemon shares it.)"""
+    vals = dict(
+        State=state.get("State", 1), Mode=state.get("Mode", 4),
+        Level=state.get("Level", 3),
+        TimerStart=3, TimerCancel=3, NightTimerSet=0,   # no-op actions
+        NightTimerHourOff=0, NightTimerHourOn=0,
+        TimerHour=state.get("TimerHourSet", 0), TimerMin=state.get("TimerMinSet", 0),
+    )
+    vals.update(changes)
+    return vals
+
+
+def _cooler(funcs, what, value, last):
+    # `power` on/off flips State (encode validates State in {0,1}); `level` sets the
+    # cooling intensity 1-5. Everything else carries current state, so only the
+    # targeted field changes.
+    if what == "power":
+        ch = {"State": 1 if _truthy(value) else 0}
+    elif what == "level":
+        lvl = int(value)
+        if not 1 <= lvl <= 5:
+            raise ValueError("cooler level must be 1-5, got %r" % value)
+        ch = {"Level": lvl}
+    else:
+        return None
+    return protocol.encode(funcs["cooler"], _cooler_values(last, **ch),
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"])
+
+
+BUILDERS = {"campingmode": _camping, "cooler": _cooler}
 
 
 def build(funcs, function, what, value, last_decoded):
