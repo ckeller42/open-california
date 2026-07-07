@@ -66,6 +66,14 @@ PREVIEW=28. Frame builder `eg/a.java f()` (nibble order swapped: L1@68, L2@64, L
   signal/config chars; dictionary models only 1900/1902.
 - No OTA/DFU service exists (only the `…-6C77-4B7D-BBF6-A5E587701F3D` family, services
   1000–2100 + F000). **Add these as new dictionary functions — pure static work.**
+- **Service `F000` decoded 2026-07-07 — it is NOT a bootloader/DFU.** `bg/a.java` (service) +
+  `cg/a.java` (char `F001`) = a **read-only "GeneralPurposeSignals"** block: one char, `b()`=
+  false (not even subscribed), only an incoming-data parser `e()` (no write/command). It
+  decodes a fixed **168-bit / 21-byte** frame of *semantically-unassigned* signals — 8×1-bit
+  (`BitZeroOne..Eight`), 8×8-bit (`ByteZeroOne..Eight`), 4×16-bit (`WordZeroOne..Four`),
+  1×32-bit (`DwordZeroOne`) — logged as `"<-- Incoming Data for GeneralPurposeSignals"`. So
+  **OTA is definitively absent** (see §C4); F000 is a firmware diagnostic/expansion register
+  set, readable telemetry `calictl` doesn't yet capture (meaning unknown — generic names).
 
 ### A3 — Statically-resolvable MERGED_AMBIGUOUS control offsets (+ a wrong width)
 Builders are per-control-char, so the "shared model" ambiguity is an extractor artifact, not
@@ -171,8 +179,9 @@ login/subscribe handshake — entirely outside our BLE model. Decode `AbstractIn
 
 **C3 — Other backends:** CARIAD AI voice (`tc/f.java`, SSE, `nvt-au-eu…cariad.digital`);
 Adobe AEM GraphQL CMS (`me/j.java`); VW online-manual (`userguide.volkswagen.de`); consent
-texts (`consent.vwgroup.io`). **C4 — no OTA for the unit** (only 1001 version read; app-level
-force-update kill-switch via `MINUMUM_REQUIRED_APP_*_VERSION` prefs). **C5 — analytics/
+texts (`consent.vwgroup.io`). **C4 — no OTA for the unit, CONFIRMED** (only 1001 version read;
+app-level force-update kill-switch via `MINUMUM_REQUIRED_APP_*_VERSION` prefs; the last suspect
+service `F000` was decoded = read-only "GeneralPurposeSignals" telemetry, not a bootloader — §A2). **C5 — analytics/
 consent:** Firebase + obfuscated tracker (`zw/a.java`, `hw/a.java`) + AES-GCM consent store;
 check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bodies).
 
