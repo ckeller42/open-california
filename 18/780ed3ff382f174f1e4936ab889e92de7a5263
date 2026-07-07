@@ -1,0 +1,26 @@
+calictl/control.py
+  s_d2c35aeebbd344::t_ecd889b00796b7 81-95,109-110
+docs/business-logic/re-gap-inventory.md
+  s_d2c35aeebbd344::t_ecdd201040b55c 183-187
+calictl/overrides.py
+  s_d2c35aeebbd344::t_4549d3286fc59d 42-58
+  s_d2c35aeebbd344::t_b42b1e90421db8 62-63
+tests/test_calictl.py
+  s_d2c35aeebbd344::t_0149749c1de377 228-229,232
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "18780ed3ff382f174f1e4936ab889e92de7a5263",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
