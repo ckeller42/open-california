@@ -1,9 +1,9 @@
 .gitignore
-  s_1dccea91605154::t_1df7c07c1c4b99 8-17
+  s_1dccea91605154::t_e38fd4e0d3b435 8-17
 docs/protocol.md
-  s_1dccea91605154::t_e306e907ae48c7 1-67
+  s_1dccea91605154::t_f79f4633c9adcd 1-67
 tools/encode.py
-  s_1dccea91605154::t_b3fd69fda8e776 1-64
+  s_1dccea91605154::t_f7cd736a657843 1-64
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -15,7 +15,7 @@ tools/encode.py
       "agent_id": {
         "tool": "claude",
         "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
-        "model": "unknown"
+        "model": "claude-opus-4-8"
       },
       "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
     }
