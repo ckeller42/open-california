@@ -1,8 +1,7 @@
-tools/build_frame.py
-  s_1dccea91605154::t_49f16fe4832eeb 1-76,78-201
-  s_1dccea91605154::t_8ef62972221b81 77
 tests/test_build_frame.py
-  s_1dccea91605154::t_ade5961230d7a4 1-114
+  s_f4a7f84de3d678::t_d06b46dc9994ce 1-114
+tools/build_frame.py
+  s_f4a7f84de3d678::t_36ba4df4bcb09a 1-201
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -10,11 +9,11 @@ tests/test_build_frame.py
   "base_commit_sha": "977a0372d586c699899cbc076b368219da48e80b",
   "prompts": {},
   "sessions": {
-    "s_1dccea91605154": {
+    "s_f4a7f84de3d678": {
       "agent_id": {
         "tool": "claude",
-        "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
-        "model": "claude-opus-4-8"
+        "id": "agent-a83c5782c2212a733",
+        "model": "unknown"
       },
       "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
     }
