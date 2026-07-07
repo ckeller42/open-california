@@ -106,6 +106,29 @@ enums (static; one capture confirms bit assignments).
 
 ---
 
+### A6 — Live device fingerprint (2026-07-07) — firmware-acquisition recon
+Full GATT + identity read from buspi (app closed). Bearing on "can we get the firmware":
+- **No Device Information Service (0x180A)** and **no DFU service** — the unit exposes only
+  the custom `1000–2100`+`F000` family plus standard GAP `1800` (`2a00` name "VWCAMPER",
+  `2a01` appearance) and GATT `1801`. So **no chip/vendor/firmware-rev strings, no OTA** — the
+  silicon is not identifiable over the air.
+- **Address `AA:BB:CC:DD:EE:FF` OUI is NOT IEEE-registered** (macvendors: not found) → private/
+  unregistered MAC, reveals no vendor.
+- **Identity chars:** `1001` SW versions = `303431303032303702` → ASCII "0410"/"0207" + `0x02`
+  ⇒ **AmbSwVersion "0410", CmSwVersion "0207", CommunicationVersion 2**. `1004` car-variant =
+  `047e060717142a…`. **`1002` "VIN" returns 16 opaque high-entropy bytes**
+  (`071dbddf…dfc6`), **NOT a plaintext VIN** — encrypted/hashed vehicle id; no readable VIN or
+  part number is exposed over BLE (so official flash-file lookup can't be seeded from BLE alone).
+- **New: `F000` has `F001`[read] + `F002`[WRITE], and the app references `F002` NOWHERE**
+  (`grep 0000F002` = 0 hits; `bg/a.java` parses only F001). An **unused firmware write endpoint**
+  on GeneralPurposeSignals — a possible debug/production/bootloader hook. Untested; blind writes
+  to an unknown control-unit char are risky (reset/brick), so treat as a lead, not an action.
+- **Net for firmware:** BLE is exhausted — no chip ID, no part number, no memory read, no DFU,
+  no plaintext VIN. Acquisition requires physical: (1) PCB teardown → identify the SoC → SWD/
+  JTAG or chip-off dump (feasibility = whether readout protection is set); or (2) VCDS/ODIS
+  diagnostic to read the ECU part number + coding → erWin/ODIS flash-file lookup. `F002` is the
+  only remaining BLE curiosity.
+
 ## B. Feature / domain-logic gaps
 
 The app is far larger than the vehicle-control surface `ui/screens` covers — 11 top-level
