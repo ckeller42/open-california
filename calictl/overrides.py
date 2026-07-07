@@ -39,10 +39,28 @@ CONTROL_OFFSETS = {
     "lighting": {
         "Timestamp": (16, 32),
     },
+    # The following resolve the remaining MERGED_AMBIGUOUS control offsets, read directly
+    # from each function's f() builder (2026-07-08). Not installed on this van (except roof),
+    # so `set` isn't wired for them yet; this just completes the frame layout. Enum value
+    # semantics remain UNVERIFIED. See docs/business-logic/re-gap-inventory.md §A3.
+    "roof": {                       # jg/a.java f() — 5-byte frame (Up@6/Down@4 already placed)
+        "SafetyCounter": (8, 32),   # app->unit echo/handshake; roof move needs a ~1 Hz heartbeat
+    },
+    "roofaircondition": {           # lg/a.java f() case0 — 3-byte frame (State@6 already placed)
+        "Mode": (8, 4), "FanSpeed": (12, 4), "Temperature": (16, 8),
+    },
+    "stairs": {                     # pg/a.java f() case0 — 1-byte frame
+        "OperationMode": (6, 2), "Movement": (4, 2),
+    },
+    "livingroomheater": {           # gg/a.java f() case0 — 3-byte frame (Mode@12 already placed)
+        "TemperatureWater": (2, 2), "StateWater": (4, 2),
+        "StateAir": (6, 2), "TemperatureAir": (16, 8),
+    },
 }
 
 # control frame lengths confirmed on-device / from the model (bytes)
-CONTROL_FRAME_BYTES = {"cooler": 6, "airheater": 6, "campingmode": 1, "lighting": 16}
+CONTROL_FRAME_BYTES = {"cooler": 6, "airheater": 6, "campingmode": 1, "lighting": 16,
+                       "roof": 5, "roofaircondition": 3, "stairs": 1, "livingroomheater": 3}
 
 # Semantic value constraints beyond the field's bit-width. The unit's firmware
 # range-VALIDATES control writes and drops the ATT link with 0x0E on an out-of-range

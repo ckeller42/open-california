@@ -78,24 +78,21 @@ LIGHT_ON_BRIGHTNESS = 14         # zone value for "on" (0..15; the app/dict defa
 
 
 def _lighting(funcs, what, value, last):
-    # NOTE: on-device apply is UNCONFIRMED and this frame is known to be WRONG.
-    # Decompile audit (2026-07-07, docs/business-logic/re-gap-inventory.md §A1) shows the
-    # app's SET_BRIGHTNESS frame carries the *currently-active* ProfileNumber (dg/h.java:615
-    # sends w10.d.b(k).f5472x, never 0) and encodes on/off purely in the zone nibbles;
-    # LightValue is NOT in the SET_BRIGHTNESS frame (it's the SET_PROFILE on/off lever).
-    # ProfileNumber=0 addresses an inactive profile -> the unit silently ignores it, which
-    # is exactly what the live test saw. Fixing this needs the active-profile wire value
-    # (HCI capture of an in-app brightness change; profile->wire table w10/l.java). Until
-    # then `set lighting` builds a frame and reports readback honestly (NOT APPLIED).
-    #
-    # SET_BRIGHTNESS: ProfileNumber pinned 0 for now (also avoids the 0x0E reject seen with
-    # cross-field rule encode can't express, so we pin it here). We CARRY the
-    # current per-zone brightness (the per-zone -> physical-lamp mapping is
-    # UNVERIFIED, so we don't blindly light every zone):
-    #   brightness <0-15> -> scale only the currently-lit zones (0 = all off),
-    #                        preserving which lamps are on;
-    #   power on          -> every zone to full (turns ALL zones on);
-    #   power off         -> every zone dark.
+    """Build a lighting SET_BRIGHTNESS frame (char 1501).
+
+    KEY FIX (decompile audit 2026-07-08, re-gap-inventory §A1): the frame must carry
+    the **currently-active ProfileNumber**, which is an identity round-trip of the
+    ProfileNumber the unit reports in its 1502 state (chain: `dg/l.java` f5472x==ordinal,
+    `w10/d.java` identity, `dg/a.java` readback). Sending `ProfileNumber=0` addresses an
+    inactive profile and the unit silently ignores it — the bug behind the earlier
+    ACK-but-no-op. So we **echo `last["ProfileNumber"]`** into the SET frame. Statically
+    airtight; pending one live confirm on buspi.
+
+    Zone handling: carry current per-zone brightness (per-zone→physical-lamp map still
+    UNVERIFIED — an `ef.i`→BrightnessL[1..13] channel map exists but not the lamp binding):
+      brightness <0-15> -> scale only currently-lit zones (0 = all off);
+      power on/off       -> every zone to full / dark.
+    """
     f = funcs["lighting"]
     zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
     cur = {z: int(last.get(z) or 0) for z in zone_fields}
@@ -109,7 +106,8 @@ def _lighting(funcs, what, value, last):
         zones = {z: full for z in zone_fields}
     else:
         return None
-    vals = {"ProfileNumber": 0, "Mode": LIGHT_MODE_SET_BRIGHTNESS,
+    profile = int(last.get("ProfileNumber") or 0)   # echo the active profile (the fix)
+    vals = {"ProfileNumber": profile, "Mode": LIGHT_MODE_SET_BRIGHTNESS,
             "Timestamp": 0, "LightValue": 0, **zones}
     return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 

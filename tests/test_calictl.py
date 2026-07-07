@@ -225,11 +225,11 @@ def test_cooler_level_control_frame_and_range():
 def test_lighting_brightness_scales_lit_zones_only():
     from calictl import control
     f = _funcs()
-    # current state: zones One + Three lit, the rest dark
-    last = {"BrightnessLOne": 13, "BrightnessLThree": 13}
+    # current state: active profile 12 (LIGHTS_ON), zones One + Three lit, the rest dark
+    last = {"ProfileNumber": 12, "BrightnessLOne": 13, "BrightnessLThree": 13}
     back = control.decode_control(f["lighting"], control.build(f, "lighting", "brightness", "8", last))
     assert back["Mode"] == control.LIGHT_MODE_SET_BRIGHTNESS   # SET_BRIGHTNESS
-    assert back["ProfileNumber"] == 0                          # MUST be 0 for SET_BRIGHTNESS
+    assert back["ProfileNumber"] == 12                         # echoes the ACTIVE profile (the fix)
     assert back["BrightnessLOne"] == 8 and back["BrightnessLThree"] == 8   # lit -> scaled
     assert back["BrightnessLTwo"] == 0 and back["BrightnessLFour"] == 0    # dark -> stay off
 

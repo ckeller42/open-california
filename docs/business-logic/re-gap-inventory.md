@@ -180,7 +180,11 @@ defined/saved/recalled.
   extraction* gap, **not** code obfuscation (obfuscation renamed symbols but preserved string
   constants — which is why pref keys / zone names / log strings all read fine).
 - To recover the text: `unzip <app>.apk` → read the `.cvr` at the code-given offsets, OR re-run
-  jadx/apktool WITH resources. Needs the original APK (not in this scratchpad; gitignored).
+  jadx/apktool WITH resources. **The APK is on buspi at `~/apks/de.volkswagen.CaliforniaOnTour.apk`
+  (105 MB, single APK with assets; gitignored — never commit).**
+- **App identity:** Play Store **applicationId = `de.volkswagen.CaliforniaOnTour`** (the code
+  *package* root is `com.californiaontour` — they differ, which is why `com.californiaontour`
+  APK-mirror lookups 404'd). Confirm via `play.google.com/store/apps/details?id=de.volkswagen.CaliforniaOnTour`.
 
 **Developer-module dive (2026-07-08) — findings from the prefs surface (`xp/g.java`):**
 - **Interior-light zone names — two complementary sources (correction).** Zone names were
