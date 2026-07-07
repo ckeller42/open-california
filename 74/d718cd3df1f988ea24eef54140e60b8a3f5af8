@@ -1,9 +1,9 @@
 docs/protocol.md
-  s_1dccea91605154::t_3161479e2e16ea 29,32-46
+  s_1dccea91605154::t_9d1851c46454ff 29,32-46
 tools/extract_protocol.py
-  s_1dccea91605154::t_9d351e7cf45255 1-188
+  s_1dccea91605154::t_b7e04900eb1ba6 1-188
 protocol/dictionary.yaml
-  s_1dccea91605154::t_7c731d698333dc 1-238
+  s_1dccea91605154::t_6f0a645ccfc3da 1-238
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -15,7 +15,7 @@ protocol/dictionary.yaml
       "agent_id": {
         "tool": "claude",
         "id": "b137c4a5-b11b-4b8b-b6d6-16b437dd2993",
-        "model": "unknown"
+        "model": "claude-opus-4-8"
       },
       "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
     }
