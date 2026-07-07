@@ -374,7 +374,7 @@
     {
       "id": 10,
       "type": "timeseries",
-      "title": "Leisure battery current (raw, unverified scale)",
+      "title": "Leisure battery current (A)",
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -387,7 +387,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
+          "unit": "amp"
         },
         "overrides": []
       },
