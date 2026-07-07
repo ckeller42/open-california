@@ -8,6 +8,8 @@
     calictl set campingmode master|lights|usb on|off
     calictl set lighting power on|off
     calictl set lighting brightness <0-15>
+    calictl set airheater power on|off
+    calictl set airheater level <0-15>
 
 Read commands are fully live-verified. `set` builds the full-packet frame and
 writes it under a 1003 liveness heartbeat (`device.actuate`), which arms
@@ -87,6 +89,8 @@ def _set_check(function, what, value, interp, decoded):
         ("campingmode", "lights"):  lambda: ("lights_on", interp.get("lights_on"), on),
         ("lighting", "power"):      lambda: ("any_on", interp.get("any_on"), on),
         ("lighting", "brightness"): lambda: ("max_zone", _max_zone(interp), int(value)),
+        ("airheater", "power"):     lambda: ("running", interp.get("running"), on),
+        ("airheater", "level"):     lambda: ("level", interp.get("level"), int(value)),
     }
     fn = table.get((function, what))
     return fn() if fn else (what, None, None)

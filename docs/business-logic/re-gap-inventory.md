@@ -21,7 +21,7 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 |---|-----|------|-----------------|
 | 1 | **Lighting SET frame needs the active ProfileNumber** (not 0) | protocol | needs 2 HCI captures |
 | 2 | Char **1004** (car RTC + roll/pitch leveling), **1002**, sat **1903–1905** unmodeled | protocol | **static now** |
-| 3 | MERGED_AMBIGUOUS control offsets derivable from the builders (+ a wrong sat width) | protocol | **static now** |
+| 3 | MERGED_AMBIGUOUS control offsets from the builders — **airheater DONE**; roof/roofAC/stairs/LR-heater remain | protocol | **static** |
 | 4 | **1003 counter cadence / firmware disarm timeout** | protocol | needs idle HCI capture |
 | 5 | Lighting **profile/color/wake-timer** notification overlay | protocol | static (enum decode) |
 | 6 | **EXLAP over WiFi/TCP** — an entire second transport (99 files) | infra | static + capture |
@@ -75,16 +75,24 @@ PREVIEW=28. Frame builder `eg/a.java f()` (nibble order swapped: L1@68, L2@64, L
   **OTA is definitively absent** (see §C4); F000 is a firmware diagnostic/expansion register
   set, readable telemetry `calictl` doesn't yet capture (meaning unknown — generic names).
 
-### A3 — Statically-resolvable MERGED_AMBIGUOUS control offsets (+ a wrong width)
+### A3 — Statically-resolvable MERGED_AMBIGUOUS control offsets — airheater DONE
 Builders are per-control-char, so the "shared model" ambiguity is an extractor artifact, not
 in the bytecode:
-- **airheater (1701, `sf/a.java f()` bad:112–147)**: OperationModeCombined@20(4),
-  RunningTime@24(8), timer fields @32/@40 — resolves the four merged heater offsets.
-- **satelliteantenna (1901, `gg/a.java:154–159`)**: System + Dish are **4-bit** (dictionary
-  says 2 — **wrong**); DishStop/Wlan are **1-bit booleans** (dictionary "UNKNOWN").
-- cooler (1101) merged timer offsets resolve from the other branch of `sf/a.java f()`.
-- Mechanical transcription across `sf/a.java`, `gg/a.java`, `lg/a.java`, `pg/a.java`,
-  `jg/a.java`. Field *value semantics* (enum meanings) still need a live pass.
+- **airheater (1701, `sf/a.java f()`) — RESOLVED + WIRED 2026-07-08.** The four merged fields
+  are `OperationModeCombined@20(4)`, `RunningTime@24(8)`, `TimerHour@32(8)`, `TimerMin@40(8)`
+  (read directly from `f()`; the old `overrides` entry was cooler's layout — a latent bug that
+  made airheater unencodable). `overrides.CONTROL_OFFSETS["airheater"]` fixed; `set airheater
+  power|level` wired (`control._airheater`): **power = `NormalOperationRequest` 1/0, verified
+  from `rf/b.java C2()`:187**; level = `HeatingLevel` 0-15. **Not yet live-verified** (buspi was
+  offline; airheater IS installed, so testable when it returns).
+- **satelliteantenna (1901, `gg/a.java:157–159`) — the earlier "wrong width" claim was FALSE.**
+  `System`/`Dish` = `sg.a(_,4)` = **type 4 = 2-bit**, which matches the dictionary (width 2). The
+  audit conflated the sg.a type-arg with bit-width. Only real gap: `DishStop`/`Wlan` =
+  `sg.a(false)` = 1-bit booleans with MERGED offsets — low value (sat not installed).
+- **Remaining (not installed, unresolved-but-derivable):** roof (1401 `jg/a.java`), roofAC (2001
+  `lg/a.java`), stairs (1801 `pg/a.java`), LR-heater (2101 `gg/a.java`). Transcribe from each
+  `f()` when needed; roof also needs a 1-Hz move-heartbeat (`ig/c.java`) so its `set` is more
+  than a frame. Field *value semantics* (enum meanings) still need a live pass.
 
 ### A4 — 1003 counter cadence / firmware disarm timeout (needs idle capture)
 Char 1003 (`ag/b.java`, 32-bit, `v()` resets to 0) is written app-side via `t0/c.java:264`

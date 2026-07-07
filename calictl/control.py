@@ -114,7 +114,66 @@ def _lighting(funcs, what, value, last):
     return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 
 
-BUILDERS = {"campingmode": _camping, "cooler": _cooler, "lighting": _lighting}
+def _airheater_values(state: dict, **changes) -> dict:
+    """Full-packet airheater control values (char 1701, ``sf/a.java``).
+
+    The three 2-bit request/confirmation fields default to the leave-unchanged
+    sentinel ``3``; the physical fields (mode/level/air-distribution/running-time)
+    carry current state so a targeted change doesn't disturb them; then ``changes``
+    is applied. Timer fields fall back to their dictionary defaults when the state
+    decode doesn't expose them.
+    """
+    vals = dict(
+        NormalOperationRequest=SENTINEL, PermanentOperationRequest=SENTINEL,
+        PermanentOperationConfirmation=SENTINEL,
+        AirDistribution=state.get("AirDistribution", 0),
+        OperationModeAirHeater=state.get("OperationModeAirHeater", 7),
+        HeatingLevel=state.get("HeatingLevel", 11),
+        OperationModeCombined=0,
+        RunningTime=state.get("RunningTime", 127),
+        TimerHour=state.get("TimerHour", 31), TimerMin=state.get("TimerMin", 63),
+    )
+    vals.update(changes)
+    return vals
+
+
+def _airheater(funcs, what, value, last):
+    """Build an airheater (parking heater) control frame.
+
+    ``power`` on/off drives ``NormalOperationRequest`` (1=on, 0=off — verified from
+    the app's ``rf/b.java`` ``C2()`` at :187); ``level`` sets ``HeatingLevel`` 0-15.
+    Full-packet, MSB-first, like cooler. NOTE: not yet live-verified on-device.
+
+    :param funcs: loaded + overridden Function map.
+    :param what: ``"power"`` or ``"level"``.
+    :param value: on/off token for power, or 0-15 for level.
+    :param last: current decoded airheater state (carried into the frame).
+    :returns: the 6-byte control frame, or ``None`` for an unknown target.
+
+    .. req:: Build airheater control frame
+       :id: R_AIRHEATER_SET
+       :status: implemented
+       :tags: ble, control, airheater
+
+       ``calictl`` shall build a full-packet airheater (char 1701) control frame
+       for ``power`` (via ``NormalOperationRequest`` = 1/0) and ``level`` (via
+       ``HeatingLevel`` 0-15), carrying current state for untargeted fields.
+    """
+    if what == "power":
+        ch = {"NormalOperationRequest": 1 if _truthy(value) else 0}
+    elif what == "level":
+        lvl = int(value)
+        if not 0 <= lvl <= 15:
+            raise ValueError("airheater level must be 0-15, got %r" % value)
+        ch = {"HeatingLevel": lvl}
+    else:
+        return None
+    return protocol.encode(funcs["airheater"], _airheater_values(last, **ch),
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["airheater"])
+
+
+BUILDERS = {"campingmode": _camping, "cooler": _cooler, "lighting": _lighting,
+            "airheater": _airheater}
 
 
 def build(funcs, function, what, value, last_decoded):

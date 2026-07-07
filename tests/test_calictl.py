@@ -257,6 +257,37 @@ def test_lighting_brightness_range_and_mode_guard():
             raise AssertionError("expected ValueError for lighting brightness %s" % bad)
 
 
+def test_airheater_control_frame():
+    """Airheater control frame: power (NormalOperationRequest) + level (HeatingLevel).
+
+    .. test:: Airheater control frame
+       :id: T_AIRHEATER_SET
+       :links: R_AIRHEATER_SET
+       :status: passing
+
+       Verifies :need:`R_AIRHEATER_SET`: all four formerly-MERGED_AMBIGUOUS fields
+       are placed (the frame encodes), power toggles NormalOperationRequest 1/0, and
+       level sets HeatingLevel; untargeted request fields stay at the sentinel 3.
+    """
+    from calictl import control
+    f = _funcs()
+    cur = {"OperationModeAirHeater": 7, "HeatingLevel": 11, "AirDistribution": 0, "RunningTime": 127}
+    on = control.decode_control(f["airheater"], control.build(f, "airheater", "power", "on", cur))
+    off = control.decode_control(f["airheater"], control.build(f, "airheater", "power", "off", cur))
+    assert on["NormalOperationRequest"] == 1 and off["NormalOperationRequest"] == 0
+    assert on["OperationModeCombined"] == 0 and on["RunningTime"] == 127   # formerly MERGED, now placed
+    assert on["PermanentOperationRequest"] == 3                            # untouched = sentinel
+    lvl = control.decode_control(f["airheater"], control.build(f, "airheater", "level", "9", cur))
+    assert lvl["HeatingLevel"] == 9
+    for bad in ("-1", "16"):
+        try:
+            control.build(f, "airheater", "level", bad, cur)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for airheater level %s" % bad)
+
+
 def test_vehicle_decode_char_1004():
     """Decode the vehicle characteristic (BLE char ``00001004``) end-to-end.
 

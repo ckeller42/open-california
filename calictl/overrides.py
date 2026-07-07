@@ -18,11 +18,12 @@ CONTROL_OFFSETS = {
         "TimerMin": (32, 8),
         "NightTimerHourOn": (40, 8),
     },
-    "airheater": {  # same shared-model layout
-        "NightTimerHourOff": (20, 4),
-        "TimerHour": (24, 8),
-        "TimerMin": (32, 8),
-        "NightTimerHourOn": (40, 8),
+    "airheater": {  # 1701; from sf/a.java f() (airheater ctor branch, read directly).
+        # NOT the cooler layout — airheater's four MERGED_AMBIGUOUS control fields differ.
+        "OperationModeCombined": (20, 4),
+        "RunningTime": (24, 8),
+        "TimerHour": (32, 8),
+        "TimerMin": (40, 8),
     },
     # 1-byte camping control frame (control char 1201), from lg/a.java f()
     # default branch. State@6 is already placed by the extractor; the other

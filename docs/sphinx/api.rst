@@ -10,7 +10,13 @@ Semantics
 
 .. autofunction:: calictl.semantics.vehicle
 
+Control frames
+--------------
+
+.. autofunction:: calictl.control._airheater
+
 Tests
 -----
 
 .. autofunction:: tests.test_calictl.test_vehicle_decode_char_1004
+.. autofunction:: tests.test_calictl.test_airheater_control_frame
