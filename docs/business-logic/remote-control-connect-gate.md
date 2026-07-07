@@ -194,3 +194,99 @@ subscribed (`jb/b.java:122` counts `b()==true` chars; `:131-139` subscribes each
 function — if any group has multiple notifiable chars we never reach the armed `CONNECTED`
 state, which would explain writes being ACKed-but-ignored. Next: extract the full per-group
 char list and diff against what we subscribe.
+
+## Update (2026-07-07): live lighting write test — incomplete-subscription theory RULED OUT
+
+Ran a full-handshake lighting write test on the vehicle (`scratchpad/full_light.py`,
+`echo_light.py`, `diag_light.py`). Findings:
+
+1. **Only 12 notifiable characteristics EXIST on the device**, one status char per
+   function group plus the auth char:
+   `1004, 1102, 1202, 1302, 1402, 1502, 1602, 1702, 1802, 1902, 2002, 2102`.
+   We subscribe to **all 12**. There is no 13th+ notifiable char hiding in any group —
+   the "we only subscribe one-per-group, groups may have several" lead is **false at the
+   GATT layer**. Full subscription is achievable and we reach it.
+
+2. **The firmware has two write-processing layers, and the gate is at the second:**
+   - *Parse/validate* — **runs**. A lighting frame with `ProfileNumber=14` + `Mode=4`
+     (`0e04…`) is **rejected at ATT with `0x0E` UNLIKELY_ERROR**. `ProfileNumber` must be
+     `0` when `Mode=4` (SET_BRIGHTNESS); a profile number is only valid with `Mode=16`
+     (SET_PROFILE). So the unit genuinely parses and content-validates our writes.
+   - *Apply/act* — **gated**. A firmware-valid frame (echoing the unit's own 1502 state
+     bytes, or `00 04 …` with brightness zeroed) is **ACKed** then **silently ignored**:
+     1502 state does not change, interior LEDs (zones 10,11,13-16 were lit at brightness
+     13) do not respond.
+
+3. **Conclusion:** the write-block (#2) is **not** subscription count (12/12 reached),
+   **not** the 1004 token (length-only, already ruled out), and **not** frame validity
+   (echo of firmware-produced bytes is ACKed). The missing precondition sits at the
+   *apply* layer — the app flips an "armed" state we have not replicated by
+   read-1001 → read-1004 → subscribe-all → write alone.
+
+**Lighting frame, now fully resolved** (for when the gate is cracked): 16 bytes /128 bits,
+`ProfileNumber@4/w4` (default 14, but **must be 0 for SET_BRIGHTNESS**), `Mode@8/w8`
+(4=SET_BRIGHTNESS, 16=SET_PROFILE), `Timestamp@16/w32` (`sg.a()` no-arg, default 0 — part
+of the packet, not a validated clock), `LightValue@48/w16`, 16×`BrightnessL*@64-127/w4`.
+
+**Remaining leads for the apply-gate** (all require app HCI capture to settle, issue #2):
+a naive theory that writes arm only after the unit *pushes* an initial notification on every
+subscribed char (we subscribed but did not wait for/confirm inbound data on all 12); or a
+post-CONNECTED write to a session/enable char in the obfuscated BLE library that static
+analysis has not surfaced. An HCI snoop of one successful app light-toggle would show
+exactly what precedes the effective write.
+
+## Update (2026-07-07, later): the gate is SELECTIVE — config writes land, only ACTUATION is gated
+
+Follow-up cooler writes (`scratchpad/gate_class2.py`, `gate_decisive.py`) settled a much
+sharper picture. **The write path is NOT blanket-blocked.**
+
+Decisive single-frame test — `State=1` (power ON) **and** `TimerHour=7` in ONE 6-byte write
+to 1101 (`3d7300070000`), ACKed:
+- state field `TimerMinSet` changed `9 → 7` — **the config value landed at exactly what we
+  wrote**, and a prior `=9` write had **persisted** across sessions (durable storage).
+- on-state stayed **False** — **the `State=1` power actuation was ignored**.
+
+Baseline (`gate_class.py` Phase 1) confirmed the cooler state is otherwise **stable** across
+reads with no write, so the config change is attributable to our write, not drift.
+
+**Reframed conclusion:**
+
+| Write class | On-device result |
+|---|---|
+| Schedule/metadata (`TimerHour`, `TimerMin`) | **applied + persisted** |
+| Physical-load fields (`State` power on/off, `Level` cooling intensity, light on/off + brightness) | **ACKed then ignored** |
+
+Refined by a self-restoring config-surface probe (`scratchpad/config_surface.py`, cooler,
+`State=0` held so no actuation): `TimerHour→11` and `TimerMin→22` **landed**; `Level→5`
+**changed nothing (gated)**. So the split is not "config vs actuation" — it is **anything
+that touches the physical cooling load (power *and* intensity) is gated; only scheduling
+metadata is freely writable.** Lighting brightness is likewise gated (echo test). This is
+even more consistent with a **load-energizing safety interlock** than a simple on/off gate.
+(Note: control→state field names don't align by name — control `TimerHour` lands in state
+`TimerMinSet`, `TimerMin` in `NightTimerHourOn` — the placement is offset-based; the written
+*value* provably persists, which is the point.)
+
+This strongly suggests a **safety interlock in the vehicle/unit, not a BLE-handshake gate**:
+the unit accepts configuration over BLE but refuses to energize physical loads (compressor,
+lights) unless a **vehicle-permissive condition** holds. Corroborating evidence already in
+the model: campingmode's read-only **`Enable`** field "tracks terminal-15", and
+`outputs_controllable`/`master` gate the camping outputs. The likely missing precondition is
+a **vehicle state** (ignition / terminal-15 / handbrake / an `Enable`-type signal), which is
+why static analysis of the obfuscated BLE layer never surfaced an "arm" write — the gate is
+not in the protocol.
+
+Also confirmed en route: the firmware **range-validates fields** and rejects out-of-range
+values by dropping the ATT link (cooler `State=3` and lighting `ProfileNumber=14`+`Mode=4`
+both → `0x0E`/disconnect), so valid framing matters. The app itself does **no** client-side
+range check (decompile scan: no clamp near the field writes) — validation is firmware-side.
+Mitigation shipped: `protocol.encode` now validates every value against its field bit-width
+**and** a curated semantic range (`overrides.CONTROL_RANGES`, seeded from these on-device
+observations + the lighting `Mode` enum), raising a clear `ValueError` instead of sending a
+link-dropping frame. `python3 -m tools.app_ranges` reports width/curated coverage per field.
+
+**Next test (concrete):** correlate actuation success with vehicle state — attempt a
+`State=1` cooler write (or a light toggle) with **terminal-15 on / engine running** and again
+with it off, watching whether the actuation lands only in the permissive state. If it does,
+#2 is a documented safety interlock, not a bug in our handshake, and `calictl set` should
+gate/annotate actuation accordingly. An HCI snoop of a successful app actuation would confirm
+the exact permissive bit.

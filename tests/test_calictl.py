@@ -70,6 +70,50 @@ def test_encode_cooler_frames_match_hand_derived():
     assert P.encode(f["cooler"], {**base, "Level": 3}, frame_bytes=6).hex() == "3d43000f1e00"
 
 
+def test_encode_rejects_out_of_width_value():
+    f = _funcs()
+    base = dict(State=1, Mode=4, Level=16, TimerStart=3, TimerCancel=3, NightTimerSet=0,
+                NightTimerHourOff=0, TimerHour=0, TimerMin=0, NightTimerHourOn=0)
+    # Level is a 4-bit field (0..15); 16 would silently wrap to 0 without the guard
+    try:
+        P.encode(f["cooler"], base, frame_bytes=6)
+    except ValueError as e:
+        assert "out of range" in str(e) and "Level" in str(e)
+    else:
+        raise AssertionError("expected ValueError for out-of-width Level=16")
+
+
+def test_encode_rejects_curated_invalid_value():
+    f = _funcs()
+    # cooler State=3 fits the 2-bit field but is rejected 0x0E on-device; curated {0,1}
+    base = dict(State=3, Mode=4, Level=4, TimerStart=3, TimerCancel=3, NightTimerSet=0,
+                NightTimerHourOff=0, TimerHour=0, TimerMin=0, NightTimerHourOn=0)
+    try:
+        P.encode(f["cooler"], base, frame_bytes=6)
+    except ValueError as e:
+        assert "not an allowed value" in str(e) and "State" in str(e)
+    else:
+        raise AssertionError("expected ValueError for curated-invalid cooler State=3")
+    # the camping sentinel 3 is NOT restricted (leave-unchanged), still encodes
+    from calictl import control
+    assert len(control.build(f, "campingmode", "usb", "on", {})) == 1
+
+
+def test_control_ranges_consistent_with_width():
+    from tools import app_ranges
+    f = _funcs()
+    assert app_ranges.inconsistencies(f) == []   # no curated value exceeds its field width
+
+
+def test_energy_source_current_nulled_when_not_installed():
+    f = _funcs()
+    e = semantics.energy(P.decode(f["energy"], ENERGY_IGN_ON))
+    assert e["solar_installed"] is False and e["solar_current"] is None   # 511 sentinel not surfaced
+    # when installed, the current is a real signed int (not None)
+    d = P.decode(f["energy"], ENERGY_IGN_ON); d["PvInstalled"] = 1; d["IPvAfs"] = 5
+    assert semantics.energy(d)["solar_current"] == 5
+
+
 def test_encode_refuses_unresolved_without_override():
     f = P.load()  # NO overrides applied -> cooler timer fields unplaced
     try:

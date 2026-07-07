@@ -47,6 +47,13 @@ def energy(d: dict) -> dict:
     # (second) battery: always live. Suppress only the starter's sentinel garbage,
     # never the real leisure/source signals (solar stays even when not fitted).
     b1_valid = d.get("IOneBattBemAfs") != 0x81
+    # A source's raw current reads a not-fitted sentinel (observed 511 / 0x1FF over
+    # 14 d telemetry: solar_current constant 511 with solar absent) when the source
+    # isn't installed. Null the current in that case so the sentinel never surfaces as
+    # a reading — the signal stays present (None), like the batt1 0x81 handling. The
+    # *_power fields read a clean 0 when absent, so they're left as-is.
+    dcdc_i, shore_i, solar_i = (bool(d.get("DcdcInstalled")), bool(d.get("LadInstalled")),
+                                bool(d.get("PvInstalled")))
     return {
         "installed": True,
         "stale": stale,               # True => STARTER values are last-known, not live
@@ -66,12 +73,12 @@ def energy(d: dict) -> dict:
         "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8),    # app "vehiclePower" (DC-DC from starter/alternator)
         "shore_power": _signed(d.get("PLandAfs", 0), 8),   # app "externalPowerSource" / campsite
         "solar_power": _signed(d.get("PPvAfs", 0), 8),     # app "solarPower" (kept even if not fitted)
-        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16),
-        "shore_current": _signed(d.get("ILandAfs", 0), 16),
-        "solar_current": _signed(d.get("IPvAfs", 0), 16),
-        "dcdc_installed": bool(d.get("DcdcInstalled")),
-        "shore_installed": bool(d.get("LadInstalled")),
-        "solar_installed": bool(d.get("PvInstalled")),
+        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16) if dcdc_i else None,
+        "shore_current": _signed(d.get("ILandAfs", 0), 16) if shore_i else None,
+        "solar_current": _signed(d.get("IPvAfs", 0), 16) if solar_i else None,
+        "dcdc_installed": dcdc_i,
+        "shore_installed": shore_i,
+        "solar_installed": solar_i,
         "energy_mode": d.get("EnergyMode"),                     # 0=eco 1=normal 2=max (per GUI)
         "energy_mode_locked": bool(d.get("EnergyModeNotSelectable")),
         "derating_temp_active": bool(d.get("CurrentDeratingTemperature")),

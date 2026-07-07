@@ -12,7 +12,7 @@ blocked by a firmware gate (see below). Runs on a Raspberry Pi (`buspi`), feedin
 | `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `mqtt`/`influx` (sinks), `control`/`overrides` (frames), `cli` |
 | `protocol/dictionary.yaml` | extracted field map (13 functions, state+control); source of truth for bit layout |
 | `protocol/signals.yaml` | the **signal catalog** — surface/omit decision + provenance per field |
-| `tools/` | `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `catalog` (the auditor), `triage` (catalog decisions), `hooks/` |
+| `tools/` | `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `hooks/` |
 | `tests/` | pytest; **must stay green** |
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) |
 | `docs/superpowers/` | specs + plans |
