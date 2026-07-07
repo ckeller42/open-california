@@ -30,7 +30,20 @@ repeat (reconciling the "no fridge/camping heartbeat" finding in
 
 **Where it lives in `calictl`:** `device.HEARTBEAT_CHAR` + `device.actuate()` (arm handshake
 → subscribe-all → heartbeat task → control write → readback, one BLE session under the
-`serve` lock). `calictl set cooler power on|off` and `serve.on_command` both go through it.
+`serve` lock). `calictl set` and `serve.on_command` both go through it.
+
+**Per-feature actuation status (heartbeat-armed, live 2026-07-07):**
+- **cooler** (`power` on/off, `level` 1-5) — ✅ actuates (State 0↔1, Level applied).
+- **campingmode** (`master`/`lights`/`usb` on/off) — ✅ actuates (usb_charger toggled live;
+  same 1-byte inverted/combined model as the app).
+- **lighting** (`power` on/off, `brightness` 0-15) — ⚠️ **ACKed but does NOT apply.** A
+  SET_BRIGHTNESS frame (`Mode=4`, `ProfileNumber=0`, per-zone brightness) is accepted at ATT
+  (no 0x0E) but the `1502` zone brightnesses do not change — unlike cooler/camping under the
+  identical heartbeat. So this is a **lighting-specific semantic gap**, not the arm gate:
+  the `LightValue` field is likely a per-zone enable/bitmask (SET_BRIGHTNESS applies to no
+  zones when it is 0), or the real path is SET_PROFILE (`Mode=16` + `ProfileNumber`). Needs
+  the app's `eg/a.java` SET frame decoded / an HCI capture of a light change. Until then
+  `set lighting` builds a well-formed frame and reports `NOT APPLIED` honestly.
 
 The analysis below documents the (correct-but-incomplete) connect handshake and the dead
 ends ruled out along the way; the "safety interlock" conclusion in the final two updates is

@@ -58,9 +58,12 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
 - **Control writes WORK** (issue #2 solved 2026-07-07). The gate was a **liveness heartbeat
   on char `00001003`**: while a +1 4-byte BE counter ticks (~0.6 s), the unit honours
   actuation writes. Actuation is **one-shot arm** — the load latches, so the heartbeat only
-  spans the write window (`device.actuate`, held under the `serve` lock). `calictl set cooler
-  power on|off` actuates for real (verified on-device). Only `cooler` is wired so far; extend
-  lighting/campingmode via `control.BUILDERS`. See `docs/business-logic/remote-control-connect-gate.md`.
+  spans the write window (`device.actuate`, held under the `serve` lock). **Verified
+  on-device: `cooler` (power/level) and `campingmode` (master/lights/usb) actuate for real.**
+  `lighting` is wired (`set lighting power|brightness`) and builds a valid SET_BRIGHTNESS
+  frame, but **on-device apply is UNCONFIRMED** — the frame ACKs yet the zones don't change
+  (a LightValue/SET_PROFILE semantic gap, not the arm gate). Extend via `control.BUILDERS`.
+  See `docs/business-logic/remote-control-connect-gate.md`.
 - **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar.
   Those functions are `Installed`-gated and only publish on vehicles that have them; their
   polarities can't be live-verified here (`satelliteantenna`, `stairs` are open review items).

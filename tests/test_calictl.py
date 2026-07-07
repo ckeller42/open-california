@@ -220,6 +220,41 @@ def test_cooler_level_control_frame_and_range():
             raise AssertionError("expected ValueError for cooler level %s" % bad)
 
 
+def test_lighting_brightness_scales_lit_zones_only():
+    from calictl import control
+    f = _funcs()
+    # current state: zones One + Three lit, the rest dark
+    last = {"BrightnessLOne": 13, "BrightnessLThree": 13}
+    back = control.decode_control(f["lighting"], control.build(f, "lighting", "brightness", "8", last))
+    assert back["Mode"] == control.LIGHT_MODE_SET_BRIGHTNESS   # SET_BRIGHTNESS
+    assert back["ProfileNumber"] == 0                          # MUST be 0 for SET_BRIGHTNESS
+    assert back["BrightnessLOne"] == 8 and back["BrightnessLThree"] == 8   # lit -> scaled
+    assert back["BrightnessLTwo"] == 0 and back["BrightnessLFour"] == 0    # dark -> stay off
+
+
+def test_lighting_power_all_zones():
+    from calictl import control
+    f = _funcs()
+    on = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "on", {}))
+    off = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "off", {}))
+    on_zones = [on[n] for n in on if n.startswith("BrightnessL")]
+    off_zones = [off[n] for n in off if n.startswith("BrightnessL")]
+    assert len(on_zones) == 16 and all(z == control.LIGHT_ON_BRIGHTNESS for z in on_zones)
+    assert all(z == 0 for z in off_zones)
+
+
+def test_lighting_brightness_range_and_mode_guard():
+    from calictl import control
+    f = _funcs()
+    for bad in ("-1", "16"):
+        try:
+            control.build(f, "lighting", "brightness", bad, {})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for lighting brightness %s" % bad)
+
+
 def test_heartbeat_counter_bytes():
     # 1003 liveness counter: 4-byte big-endian, monotonic +1, wraps at 32 bits.
     from calictl import device

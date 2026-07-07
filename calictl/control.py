@@ -73,7 +73,45 @@ def _cooler(funcs, what, value, last):
                            frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"])
 
 
-BUILDERS = {"campingmode": _camping, "cooler": _cooler}
+LIGHT_MODE_SET_BRIGHTNESS = 4    # dg/n.java Mode enum (0=no-op, 4=SET_BRIGHTNESS, 16=SET_PROFILE)
+LIGHT_ON_BRIGHTNESS = 14         # zone value for "on" (0..15; the app/dict default is 14)
+
+
+def _lighting(funcs, what, value, last):
+    # NOTE: on-device apply is UNCONFIRMED. Live test 2026-07-07 (heartbeat-armed):
+    # this SET_BRIGHTNESS frame is ACKed but the zones do NOT change — unlike cooler
+    # and campingmode, which actuate fine under the same heartbeat. So lighting has a
+    # remaining semantic gap (the LightValue zone-enable / SET_PROFILE mechanism is
+    # not yet reverse-engineered), NOT an arm-gate problem. `set lighting` builds a
+    # well-formed frame and reports readback honestly (NOT APPLIED) until this is fixed.
+    #
+    # SET_BRIGHTNESS: ProfileNumber MUST be 0 (else the unit rejects 0x0E — a
+    # cross-field rule encode can't express, so we pin it here). We CARRY the
+    # current per-zone brightness (the per-zone -> physical-lamp mapping is
+    # UNVERIFIED, so we don't blindly light every zone):
+    #   brightness <0-15> -> scale only the currently-lit zones (0 = all off),
+    #                        preserving which lamps are on;
+    #   power on          -> every zone to full (turns ALL zones on);
+    #   power off         -> every zone dark.
+    f = funcs["lighting"]
+    zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
+    cur = {z: int(last.get(z) or 0) for z in zone_fields}
+    if what == "brightness":
+        b = int(value)
+        if not 0 <= b <= 15:
+            raise ValueError("lighting brightness must be 0-15, got %r" % value)
+        zones = {z: (b if cur[z] else 0) for z in zone_fields}   # scale lit zones only
+    elif what == "power":
+        full = LIGHT_ON_BRIGHTNESS if _truthy(value) else 0
+        zones = {z: full for z in zone_fields}
+    else:
+        return None
+    vals = {"ProfileNumber": 0, "Mode": LIGHT_MODE_SET_BRIGHTNESS,
+            "Timestamp": 0, "LightValue": 0, **zones}
+    return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
+
+
+BUILDERS = {"campingmode": _camping, "cooler": _cooler, "lighting": _lighting}
 
 
 def build(funcs, function, what, value, last_decoded):

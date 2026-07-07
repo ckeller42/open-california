@@ -5,6 +5,9 @@
     calictl raw <function>         # raw hex of the state characteristic
     calictl set cooler power on|off
     calictl set cooler level <1-5>
+    calictl set campingmode master|lights|usb on|off
+    calictl set lighting power on|off
+    calictl set lighting brightness <0-15>
 
 Read commands are fully live-verified. `set` builds the full-packet frame and
 writes it under a 1003 liveness heartbeat (`device.actuate`), which arms
@@ -72,30 +75,51 @@ async def cmd_raw(funcs, dev, args):
     print((await dev.read(f)).hex())
 
 
+def _set_check(function, what, value, interp, decoded):
+    """Post-write success check: (label, got, want). `got == want` -> OK. Reads the
+    targeted field from the interpreted state (or the raw decode for cooler numerics)."""
+    on = str(value).strip().lower() in ("on", "true", "1")
+    table = {
+        ("cooler", "power"):        lambda: ("State", decoded.get("State"), 1 if on else 0),
+        ("cooler", "level"):        lambda: ("Level", decoded.get("Level"), int(value)),
+        ("campingmode", "master"):  lambda: ("master_on", interp.get("master_on"), on),
+        ("campingmode", "usb"):     lambda: ("usb_charger", interp.get("usb_charger"), on),
+        ("campingmode", "lights"):  lambda: ("lights_on", interp.get("lights_on"), on),
+        ("lighting", "power"):      lambda: ("any_on", interp.get("any_on"), on),
+        ("lighting", "brightness"): lambda: ("max_zone", _max_zone(interp), int(value)),
+    }
+    fn = table.get((function, what))
+    return fn() if fn else (what, None, None)
+
+
+def _max_zone(interp):
+    return max((interp.get("brightness_zone_%d" % z) or 0 for z in range(1, 17)), default=0)
+
+
 async def cmd_set(funcs, dev, args):
     from . import control
-    if args.function != "cooler":
-        print("set is currently implemented only for 'cooler'", file=sys.stderr)
+    fn = args.function
+    if fn not in control.BUILDERS:
+        print("set not implemented for %r (have: %s)"
+              % (fn, ", ".join(sorted(control.BUILDERS))), file=sys.stderr)
         return 2
-    f = funcs["cooler"]
+    f = funcs[fn]
     cur = protocol.decode(f, await dev.read(f))
-    print("current: State=%s Mode=%s Level=%s" % (cur.get("State"), cur.get("Mode"), cur.get("Level")))
+    print("current %s: %s" % (fn, json.dumps(semantics.interpret(fn, cur), default=str)))
     try:
-        frame = control.build(funcs, "cooler", args.what, args.value, cur)
+        frame = control.build(funcs, fn, args.what, args.value, cur)
     except ValueError as e:
         print(str(e), file=sys.stderr); return 2
     if frame is None:
-        print("unknown target %r for cooler" % args.what, file=sys.stderr); return 2
-    if args.what == "power":
-        check = ("State", 1 if args.value.strip().lower() in ("on", "true", "1") else 0)
-    else:  # level
-        check = ("Level", int(args.value))
-    print("writing %s to cooler control (heartbeat-armed) ..." % frame.hex())
+        print("unknown target %r for %s" % (args.what, fn), file=sys.stderr); return 2
+    print("writing %s to %s control (heartbeat-armed) ..." % (frame.hex(), fn))
     post = await dev.actuate(f, frame, verify=True)
-    field, want = check
-    got = post.get(field) if post else None
+    if post is None:
+        print("write sent, no readback"); return 1
+    interp = semantics.interpret(fn, post)
+    label, got, want = _set_check(fn, args.what, args.value, interp, post)
     ok = got == want
-    print("after write: %s=%s (wanted %s) -> %s" % (field, got, want, "OK" if ok else "NOT APPLIED"))
+    print("after write: %s=%s (wanted %s) -> %s" % (label, got, want, "OK" if ok else "NOT APPLIED"))
     return 0 if ok else 1
 
 
