@@ -1,0 +1,22 @@
+calictl/semantics.py
+  s_d2c35aeebbd344::t_121af118e8c490 89-94
+  s_d2c35aeebbd344::t_5363748efc701b 57-67,74-76,79-81,84-88,95-97,101,103-104,107-110
+tests/test_calictl.py
+  s_d2c35aeebbd344::t_87d4c51575dddd 114-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "16e4e12e6d7ccdc12f93ff8c426803b6cd82831e",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
