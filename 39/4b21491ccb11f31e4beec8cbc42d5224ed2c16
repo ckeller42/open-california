@@ -1,0 +1,29 @@
+DISCLAIMER.md
+  s_d2c35aeebbd344::t_6a88e5d04a3d7b 1-33
+.githooks/README.md
+  s_d2c35aeebbd344::t_eeb3ec065bde75 1-19
+README.md
+  s_d2c35aeebbd344::t_5bbb214d24be77 1-65
+.githooks/pre-commit
+  s_d2c35aeebbd344::t_31e2dd1853ebab 1-16,22-36
+  s_d2c35aeebbd344::t_8c83d6316bec7b 17-21
+.github/workflows/ci.yml
+  s_d2c35aeebbd344::t_aeb833893bacfe 47-49
+  s_d2c35aeebbd344::t_ffc9c808791d7f 1-46,50-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "394b21491ccb11f31e4beec8cbc42d5224ed2c16",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
