@@ -1,0 +1,20 @@
+calictl/deploy/camper-dashboard.json
+  s_d2c35aeebbd344::t_7807c55d742819 390
+  s_d2c35aeebbd344::t_6a074ea3b02976 377
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7015886657ccf0897a0b49cb559033af9868d363",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
