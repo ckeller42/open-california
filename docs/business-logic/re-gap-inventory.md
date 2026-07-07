@@ -161,6 +161,13 @@ Shares the light-profile/alert prefs with the BLE side → **likely a parallel a
 channel** (VW "Exchange of Live Automotive Parameters", MIB head-unit path) with its own
 login/subscribe handshake — entirely outside our BLE model. Decode `AbstractInterface.java`,
 `command/*`, `ContentStream.java`; capture discovery on 28500.
+- **Live probe 2026-07-07 (buspi, van parked/off): NOT reachable.** buspi is on a GL.iNet
+  travel router (`192.168.8.0/24`, gw `.8.1` nginx). WiFi scan shows no camper AP (only the
+  home SSID); a full `192.168.8.0/24` sweep found no host with **tcp/28500**; a 12 s passive
+  **udp/28500** listen got 0 beacons. So EXLAP is the MIB **infotainment** subsystem (distinct
+  from the BLE camper unit) and its WiFi is down while the vehicle is off. Pursuing it needs
+  (a) vehicle infotainment WiFi up (ignition on) + buspi joined to *that* SSID, and (b) the UDP
+  discovery-probe payload decoded (the app *sends* the probe; passive listen won't do).
 
 **C3 — Other backends:** CARIAD AI voice (`tc/f.java`, SSE, `nvt-au-eu…cariad.digital`);
 Adobe AEM GraphQL CMS (`me/j.java`); VW online-manual (`userguide.volkswagen.de`); consent
