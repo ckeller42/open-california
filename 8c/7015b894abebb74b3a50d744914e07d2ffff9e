@@ -1,0 +1,35 @@
+tests/test_calictl.py
+  s_d2c35aeebbd344::t_b8776bdd297d3c 196-228
+calictl/control.py
+  s_d2c35aeebbd344::t_9267febd97e1eb 44-76
+  s_d2c35aeebbd344::t_30a3b6a3981e7c 1-5,7,13-14
+  s_d2c35aeebbd344::t_8c597ebe66b5a5 15-16
+calictl/cli.py
+  s_d2c35aeebbd344::t_0806ebec36342b 9-12
+  s_d2c35aeebbd344::t_5fab73027197ad 76,83-88,90-94
+docs/business-logic/remote-control-connect-gate.md
+  s_d2c35aeebbd344::t_7cea49ee563a1a 3-40
+CLAUDE.md
+  s_d2c35aeebbd344::t_e376b1480e4d1a 58-63
+calictl/serve.py
+  s_d2c35aeebbd344::t_eb35b95aef5a15 87,92-93,95
+calictl/device.py
+  s_d2c35aeebbd344::t_4210ae62eee673 147-220
+  s_d2c35aeebbd344::t_eb8e38c53062a3 23-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8c7015b894abebb74b3a50d744914e07d2ffff9e",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
