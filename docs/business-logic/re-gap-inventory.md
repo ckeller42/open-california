@@ -183,10 +183,15 @@ defined/saved/recalled.
   jadx/apktool WITH resources. Needs the original APK (not in this scratchpad; gitignored).
 
 **Developer-module dive (2026-07-08) — findings from the prefs surface (`xp/g.java`):**
-- **Interior lights = 8 NAMED zones** (partially closes #10 without the APK): `AMBIENT, D_PILLAR,
-  KITCHEN, READING_LEFT, READING_REAR, READING_RIGHT, SPOT_LEFT, SPOT_RIGHT` (EXLAP
-  `EXLAP_LIGHT_PROFILE_*_ENABLED/_BRIGHTNESS`) = the 8-zone `wp/i.java` profile. The BLE frame's 16
-  `BrightnessL*` slots are a superset; the ~6 lit on this van map to the installed named subset.
+- **Interior-light zone names — two complementary sources (correction).** Zone names were
+  already documented in `ui/screens/lighting.yaml` (per-model section labels: ambientLighting,
+  kitchen, readingLights left/right/frontArea/loftBed, popupRoof, bootLid, entrance, … across the
+  base/`_t6`/`_gc` layouts) — as `label_key`s (text still in `.cvr`). The EXLAP prefs add a
+  SECOND naming: the 8 profile-editor zones `AMBIENT, D_PILLAR, KITCHEN, READING_{LEFT,REAR,RIGHT},
+  SPOT_{LEFT,RIGHT}` = the 8-zone `wp/i.java` profile. **Neither resolves the actual gap:** which
+  BLE `BrightnessL[1..16]` index maps to which physical lamp. `ui/screens/lighting.yaml` states this
+  explicitly ("order of the 16 zones to vehicle areas is UNVERIFIED — needs live-traffic capture").
+  So the zone→BLE-index map still needs a live toggle-and-watch capture, not more static reading.
 - **Complete alert/error taxonomy** (~50 `BLUETOOTH_*_CONFIRMED` + `EXLAP_*_INTERACTED` keys) per
   function — authoritative reference for `alert-states.md`; also reconfirms the BLE/EXLAP dual
   transport (parallel alert-ack flags).
