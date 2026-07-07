@@ -1,0 +1,23 @@
+docs/business-logic/remote-control-connect-gate.md
+  s_d2c35aeebbd344::t_7c8234a4649af7 42-49
+calictl/control.py
+  s_d2c35aeebbd344::t_8e1e104c5a6f8d 81-89,91
+docs/business-logic/re-gap-inventory.md
+  s_d2c35aeebbd344::t_5dbb754e68d4d1 1-185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5b8d50d3cd9dc0fc4ab12d53f380f6788b1be666",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
