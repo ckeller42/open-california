@@ -112,3 +112,12 @@ def test_camping_master_toggle_applies(page):
     sw.click()
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
     expect(page.locator('.switch[aria-checked="true"]').first).to_be_visible()
+
+
+def test_lighting_screen_activate_profile(page):
+    # the rebuilt lighting screen: grouped lamps render; activating a profile applies
+    page.get_by_text("Lighting", exact=True).first.click()
+    expect(page.get_by_text("Reading lights")).to_be_visible()
+    expect(page.get_by_text("Left", exact=True)).to_be_visible()   # a reading lamp
+    page.get_by_role("button", name="Activate").click()
+    expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
