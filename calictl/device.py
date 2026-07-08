@@ -111,11 +111,18 @@ class CamperDevice:
             for name, f in funcs.items():
                 if not f.state_char:
                     continue
-                for _ in range(3):
+                for attempt in range(3):
                     try:
                         out[name] = bytes(await client.read_gatt_char(f.state_char))
                         break
-                    except Exception:
+                    except Exception as e:
+                        if not client.is_connected:
+                            # link dropped mid-session: don't burn ~30 s of futile retries
+                            # (3 chars x 0.8 s x remaining funcs) under the serve BLE lock.
+                            print("read_all: link dropped at %s; aborting cycle" % name, flush=True)
+                            return out
+                        if attempt == 2:
+                            print("read_all: %s failed after retries: %r" % (name, e), flush=True)
                         await asyncio.sleep(0.8)
         finally:
             await self._safe_disconnect(client)
@@ -125,26 +132,6 @@ class CamperDevice:
         client = await self._session()
         try:
             return bytes(await client.read_gatt_char(func.state_char))
-        finally:
-            await self._safe_disconnect(client)
-
-    async def write_control(self, func, frame: bytes, *, verify=True) -> dict | None:
-        """Write a control frame; optionally read the state char back and return
-        the post-write decode for the caller to verify."""
-        from . import protocol
-        if not func.control_char:
-            raise ValueError("%s has no control characteristic" % func.name)
-        client = await self._session()
-        try:
-            try:
-                await client.write_gatt_char(func.control_char, frame, response=True)
-            except Exception:
-                await client.write_gatt_char(func.control_char, frame, response=False)
-            if not verify or not func.state_char:
-                return None
-            await asyncio.sleep(1.5)
-            raw = bytes(await client.read_gatt_char(func.state_char))
-            return protocol.decode(func, raw)
         finally:
             await self._safe_disconnect(client)
 
@@ -166,12 +153,18 @@ class CamperDevice:
         beat = None
         try:
             # connect handshake: version + authenticated reads (bonding/liveness gate)
+            auth_ok = 0
             for uuid in (VERSION_CHAR, AUTH_CHAR):
                 try:
-                    await client.read_gatt_char(uuid)
+                    await client.read_gatt_char(uuid); auth_ok += 1
                 except Exception:
                     pass
-            await self._subscribe_all(client)
+            n = await self._subscribe_all(client)
+            if auth_ok < 2 or n == 0:
+                # a weak handshake is the leading write-gate hypothesis — surface it rather
+                # than silently proceed to a write the unit may ignore.
+                print("actuate: weak handshake (auth-reads=%d/2, subscribed=%d) — write may "
+                      "be ignored" % (auth_ok, n), flush=True)
             beat = asyncio.create_task(self._heartbeat(client, stop))
             await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
             await client.write_gatt_char(func.control_char, frame, response=True)

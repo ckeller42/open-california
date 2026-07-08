@@ -85,13 +85,24 @@ class Server:
 
     async def on_command(self, function, what, value):
         from . import control  # lazy
-        frame = control.build(self.funcs, function, what, value,
-                              self._last.get(function, {}))
-        if frame is None:
-            return
         # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
+            last = self._last.get(function)
+            if not last:
+                # cold cache -> a full-packet frame built from field DEFAULTS would carry
+                # e.g. cooler State=1 (fridge ON) or lighting ProfileNumber=0 (silent no-op).
+                # Read the live state first so untargeted fields carry the real values.
+                try:
+                    last = protocol.decode(self.funcs[function],
+                                           await self.dev.read(self.funcs[function]))
+                    self._last[function] = last
+                except ConnectionUnavailable as e:
+                    print("command %s skipped (no state read): %s" % (function, e), flush=True)
+                    return
+            frame = control.build(self.funcs, function, what, value, last)
+            if frame is None:
+                return
             await self.dev.actuate(self.funcs[function], frame, verify=False)
 
     def run(self):
@@ -112,7 +123,12 @@ class Server:
         # command_topics() is added by a later task; tolerate its absence.
         cmd_map = getattr(mqtt, "command_topics", lambda: {})()
 
-        cli = mqtt_client.Client()
+        # paho-mqtt >= 2.0 requires an explicit callback API version; request V1 so the
+        # 4-arg on_connect / 3-arg on_message below stay valid on both 1.x and 2.x.
+        try:
+            cli = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION1)
+        except AttributeError:
+            cli = mqtt_client.Client()   # paho-mqtt < 2.0
         if user:
             cli.username_pw_set(user, password)
         cli.will_set(mqtt.availability_topic(), "offline", retain=True)
@@ -165,8 +181,10 @@ class Server:
                     print("polled %d functions" % len(states), flush=True)
                 except ConnectionUnavailable as e:
                     print("poll skipped: %s" % e, flush=True)
-                except Exception as e:
-                    print("poll error: %s" % e, flush=True)
+                except Exception:
+                    import traceback
+                    print("poll error:", flush=True)
+                    traceback.print_exc()
                 await asyncio.sleep(self.interval)
 
         try:

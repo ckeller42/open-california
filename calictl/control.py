@@ -184,4 +184,5 @@ def decode_control(func, frame: bytes) -> dict:
     (protocol.decode uses STATE offsets, which differ)."""
     bits = protocol.to_bits(frame)
     return {f.name: protocol.get_field(bits, f.offset, f.width)
-            for f in func.control_fields if f.placed}
+            for f in func.control_fields
+            if f.placed and f.offset + f.width <= len(bits)}   # skip fields past a short frame

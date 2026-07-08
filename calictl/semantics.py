@@ -49,7 +49,8 @@ def energy(d: dict) -> dict:
     # terminal-15 (engine on); off => sentinels (I=0x81 / U=48). battery-2 = LEISURE
     # (second) battery: always live. Suppress only the starter's sentinel garbage,
     # never the real leisure/source signals (solar stays even when not fitted).
-    b1_valid = d.get("IOneBattBemAfs") != 0x81
+    _b1 = d.get("IOneBattBemAfs")
+    b1_valid = _b1 is not None and _b1 != 0x81   # missing (short frame) -> not valid, not 0.0
     # A source's raw current reads a not-fitted sentinel (observed 511 / 0x1FF over
     # 14 d telemetry: solar_current constant 511 with solar absent) when the source
     # isn't installed. Null the current in that case so the sentinel never surfaces as
