@@ -1,0 +1,14 @@
+# Known-good validation scenario: cooler power ON.
+# calictl already actuates the cooler live (issue #2), so the app's frame and calictl's
+# MUST be identical here. Run this first to prove the capture->decode->diff pipeline before
+# trusting any lighting diff. Expected app write to char 1101: 3d4300000000.
+function: cooler
+what: power
+value: "on"
+control_char: "1101"
+handle: 0x0022          # confirmed live (cooler control handle)
+capture_label: cooler-power-on
+state:                  # decoded cooler state at capture time (carry-forward for build)
+  State: 0
+  Mode: 4
+  Level: 3
