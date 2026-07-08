@@ -1,0 +1,21 @@
+calictl/semantics.py
+  s_d2c35aeebbd344::t_d5ab9b0f818354 174-179,182,186
+tests/test_lighting_capture.py
+  s_d2c35aeebbd344::t_542dfe3784d05e 50-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "12a0d045cabc0250c52cc539ed0ccdd563395eed",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
