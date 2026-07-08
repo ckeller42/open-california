@@ -1,0 +1,867 @@
+{
+  "screens": {
+    "home": {
+      "screen": "home",
+      "function": null,
+      "title": "Vehicle",
+      "widgets": [
+        {
+          "id": "connectHeader",
+          "type": "button",
+          "label": "Connect",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "disconnectedInfoWidget",
+          "type": "label",
+          "label": "Connect the app to the vehicle",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "firstTimeDrawer",
+          "type": "drawer",
+          "label": "Connect your vehicle",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "vehicleNotEnrolledTile",
+          "type": "nav",
+          "label": "Add vehicle",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "overviewWidget",
+          "type": "section",
+          "label": "Vehicle overview",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "remoteControlWidget",
+          "type": "nav",
+          "label": "Remote control",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "remoteControlTooltip",
+          "type": "label",
+          "label": "Quick actions",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "remoteControlStatusLabel",
+          "type": "label",
+          "label": "Set to",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "selfCheckWidget",
+          "type": "nav",
+          "label": "Self check",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "helpWidget",
+          "type": "list",
+          "label": "Help",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "errorWarningLabels",
+          "type": "label",
+          "label": "Error",
+          "range": null,
+          "controls": null
+        }
+      ]
+    },
+    "coolbox": {
+      "screen": "coolbox",
+      "function": "cooler",
+      "title": "Cooler",
+      "widgets": [
+        {
+          "id": "refrigeratorBoxWidget",
+          "type": "toggle",
+          "label": "Refrigerator box",
+          "range": null,
+          "controls": {
+            "field": "State",
+            "action": "U0"
+          }
+        },
+        {
+          "id": "coolingLevelSlider",
+          "type": "slider",
+          "label": "Cooling level",
+          "range": "1..5",
+          "controls": {
+            "field": "Level",
+            "action": "X1"
+          }
+        },
+        {
+          "id": "manualQuietMode",
+          "type": "toggle",
+          "label": "Manual quiet mode",
+          "range": null,
+          "controls": {
+            "field": "Mode",
+            "action": "f"
+          }
+        },
+        {
+          "id": "quietModeWidget",
+          "type": "section",
+          "label": "Quiet mode",
+          "range": null,
+          "controls": {
+            "field": "Mode",
+            "action": "f"
+          }
+        },
+        {
+          "id": "quietModeDrawer",
+          "type": "drawer",
+          "label": "Quiet mode time",
+          "range": null,
+          "controls": {
+            "field": "NightTimerHourOn/NightTimerHourOff",
+            "action": "c0/Y2"
+          }
+        },
+        {
+          "id": "timerWidget",
+          "type": "timer",
+          "label": "Timer",
+          "range": null,
+          "controls": {
+            "field": "TimerStart/TimerCancel",
+            "action": "D/X0"
+          }
+        },
+        {
+          "id": "timerSetupDrawer",
+          "type": "drawer",
+          "label": "Timer time",
+          "range": null,
+          "controls": {
+            "field": "TimerHour/TimerMin",
+            "action": "y0"
+          }
+        }
+      ]
+    },
+    "camping-mode": {
+      "screen": "camping-mode",
+      "function": "campingmode",
+      "title": "Camping mode",
+      "widgets": [
+        {
+          "id": "powerToggle",
+          "type": "toggle",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": "State",
+            "action": "X1"
+          }
+        },
+        {
+          "id": "usbChargerToggle",
+          "type": "toggle",
+          "label": "Rear USB ports",
+          "range": null,
+          "controls": {
+            "field": "UsbCharger",
+            "action": "X1"
+          }
+        },
+        {
+          "id": "allLightsToggle",
+          "type": "toggle",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": "OutsideLight",
+            "action": "X1"
+          }
+        },
+        {
+          "id": "interiorLightState",
+          "type": "label",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": "InteriorLight",
+            "action": null
+          }
+        },
+        {
+          "id": "behaviorInfoSection",
+          "type": "section",
+          "label": null,
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "alarmDisclaimerDrawer",
+          "type": "drawer",
+          "label": "Disclaimer title",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "onlyPossibleWhenStationaryDialog",
+          "type": "label",
+          "label": "Only possible when stationary",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "infoPage",
+          "type": "nav",
+          "label": "Camping mode info",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "dashboardTileLabel",
+          "type": "label",
+          "label": "Camping mode shortcut",
+          "range": null,
+          "controls": null
+        }
+      ]
+    },
+    "lighting": {
+      "screen": "lighting",
+      "function": "lighting",
+      "title": "Lighting",
+      "widgets": [
+        {
+          "id": "pageHeader",
+          "type": "label",
+          "label": "Lighting",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "allLightsToggle",
+          "type": "toggle",
+          "label": "All lights",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "profileSelector",
+          "type": "drawer",
+          "label": "Profile",
+          "range": "0..63",
+          "controls": {
+            "field": "ProfileNumber",
+            "action": "SET_PROFILE"
+          }
+        },
+        {
+          "id": "sectionInteriorLighting_gc",
+          "type": "section",
+          "label": "Interior lighting",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "sectionLivingArea_t6",
+          "type": "section",
+          "label": "Living area",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "sectionKitchen",
+          "type": "section",
+          "label": "Kitchen",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "sectionReadingLights",
+          "type": "section",
+          "label": "Reading lights",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "sectionPopupRoof",
+          "type": "section",
+          "label": "Popup roof",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "sectionRear_t6",
+          "type": "section",
+          "label": "Rear",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "sectionExteriorLight_gc",
+          "type": "section",
+          "label": "Exterior light",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "sectionOuterLights",
+          "type": "section",
+          "label": "Outer lights",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "zoneBrightnessSlider",
+          "type": "slider",
+          "label": "Brightness",
+          "range": "0..63",
+          "controls": {
+            "field": "BrightnessLOne..BrightnessLOneSix (per selected zone, index-to-area mapping UNVERIFIED)",
+            "action": "SET_BRIGHTNESS"
+          }
+        },
+        {
+          "id": "zoneColorPicker",
+          "type": "colorpicker",
+          "label": null,
+          "range": "0..7 (3-bit LightValue field; 10 named colors listed so exact enum mapping UNVERIFIED)",
+          "controls": {
+            "field": "LightValue",
+            "action": "SET_COLOR"
+          }
+        },
+        {
+          "id": "functionsAndSettingsMenu",
+          "type": "section",
+          "label": "Functions and settings",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "wakeUpLight",
+          "type": "drawer",
+          "label": "Wake up light",
+          "range": null,
+          "controls": {
+            "field": "Timestamp",
+            "action": "WAKEUP_TIME"
+          }
+        },
+        {
+          "id": "doubleTapSettings",
+          "type": "drawer",
+          "label": "Lighting double tap",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": "SET_DOUBLE"
+          }
+        },
+        {
+          "id": "roofConsoleSettings",
+          "type": "drawer",
+          "label": "Roof console",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "lightingAndSlidingDoor",
+          "type": "drawer",
+          "label": "Lighting and sliding door",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "factorySettingReset",
+          "type": "button",
+          "label": "Reset",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "infoTutorialOverlay",
+          "type": "label",
+          "label": "Lighting info",
+          "range": null,
+          "controls": null
+        }
+      ]
+    },
+    "air-heater": {
+      "screen": "air-heater",
+      "function": "airheater",
+      "title": "Air heater",
+      "widgets": [
+        {
+          "id": "imediateHeatingWidget",
+          "type": "toggle",
+          "label": "Immediate heating",
+          "range": null,
+          "controls": {
+            "field": "NormalOperationRequest",
+            "action": "C2"
+          }
+        },
+        {
+          "id": "heatingSlider",
+          "type": "slider",
+          "label": "Heating temperature",
+          "range": "1..10",
+          "controls": {
+            "field": "HeatingLevel",
+            "action": "q4"
+          }
+        },
+        {
+          "id": "runTimeSlider",
+          "type": "slider",
+          "label": "Run time",
+          "range": null,
+          "controls": {
+            "field": "RunningTime",
+            "action": "D4"
+          }
+        },
+        {
+          "id": "timerWidget",
+          "type": "timer",
+          "label": "Start timer",
+          "range": null,
+          "controls": {
+            "field": "TimerHour/TimerMin",
+            "action": "B0"
+          }
+        },
+        {
+          "id": "permanentHeatingWidget",
+          "type": "toggle",
+          "label": "Permanent heating",
+          "range": null,
+          "controls": {
+            "field": "PermanentOperationRequest",
+            "action": "E3"
+          }
+        },
+        {
+          "id": "permanentHeatingOnDialog",
+          "type": "drawer",
+          "label": "Permanent heating can only be activated",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "permanentHeatingOffDialog",
+          "type": "drawer",
+          "label": "Turn off permanent heating",
+          "range": null,
+          "controls": {
+            "field": "PermanentOperationRequest",
+            "action": "E3"
+          }
+        },
+        {
+          "id": "permanentHeatingTimerDialog",
+          "type": "drawer",
+          "label": "Do you want to proceed",
+          "range": null,
+          "controls": {
+            "field": "TimerHour/TimerMin",
+            "action": "B0"
+          }
+        },
+        {
+          "id": "applyDialog",
+          "type": "drawer",
+          "label": "Apply new settings now",
+          "range": null,
+          "controls": {
+            "field": "HeatingLevel/RunningTime",
+            "action": "q4/D4"
+          }
+        },
+        {
+          "id": "statusBar",
+          "type": "readout",
+          "label": "Inactive",
+          "range": null,
+          "controls": null
+        }
+      ]
+    },
+    "roof": {
+      "screen": "roof",
+      "function": null,
+      "title": "Roof",
+      "widgets": [
+        {
+          "id": "statusReadout",
+          "type": "readout",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": "State",
+            "action": null
+          }
+        },
+        {
+          "id": "openButton",
+          "type": "button",
+          "label": "Open",
+          "range": null,
+          "controls": {
+            "field": "Up",
+            "action": "X1"
+          }
+        },
+        {
+          "id": "closeButton",
+          "type": "button",
+          "label": "Close",
+          "range": null,
+          "controls": {
+            "field": "Down",
+            "action": "X1"
+          }
+        },
+        {
+          "id": "stopButton",
+          "type": "button",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": "X1"
+          }
+        },
+        {
+          "id": "installedLabel",
+          "type": "label",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "safetyAckIndicator",
+          "type": "label",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": "SafetyCounter",
+            "action": null
+          }
+        },
+        {
+          "id": "setRoofInstructionLabel",
+          "type": "label",
+          "label": "Please set the roof",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "legalNoteLabel",
+          "type": "label",
+          "label": "Please note that",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "roofConsoleLightingNav",
+          "type": "nav",
+          "label": "Roof console light switch",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "safetyDialogs",
+          "type": "list",
+          "label": null,
+          "range": null,
+          "controls": null
+        }
+      ]
+    },
+    "water": {
+      "screen": "water",
+      "function": "water",
+      "title": null,
+      "widgets": [
+        {
+          "id": "freshWaterTank",
+          "type": "readout",
+          "label": "Fresh water",
+          "range": "0..255 (FreshWaterLevel, offset 8, width 8 — raw scale UNVERIFIED, likely 0..100%)",
+          "controls": {
+            "field": "FreshWaterLevel",
+            "action": null
+          }
+        },
+        {
+          "id": "freshWaterInfoPopup",
+          "type": "readout",
+          "label": null,
+          "range": "0..15 (FreshWaterInfoPopUp, offset 0, width 4)",
+          "controls": {
+            "field": "FreshWaterInfoPopUp",
+            "action": null
+          }
+        },
+        {
+          "id": "wasteWaterTank",
+          "type": "readout",
+          "label": "Waste water",
+          "range": "0..255 (WasteWaterLevel, offset 32, width 8 — raw scale UNVERIFIED, likely 0..100%)",
+          "controls": {
+            "field": "WasteWaterLevel",
+            "action": null
+          }
+        },
+        {
+          "id": "wasteWaterInfoPopup",
+          "type": "readout",
+          "label": null,
+          "range": "0..3 (WasteWaterInfoPopUp, offset 26, width 2)",
+          "controls": {
+            "field": "WasteWaterInfoPopUp",
+            "action": null
+          }
+        },
+        {
+          "id": "tankGaugeExtremesLabel",
+          "type": "label",
+          "label": null,
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "bodyVariantIllustrationLabel",
+          "type": "label",
+          "label": null,
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "installedFlag",
+          "type": "readout",
+          "label": null,
+          "range": "0..1",
+          "controls": {
+            "field": "Installed",
+            "action": null
+          }
+        }
+      ]
+    },
+    "energy": {
+      "screen": "energy",
+      "function": "energy",
+      "title": "Energy",
+      "widgets": [
+        {
+          "id": "dashboardSummaryTile",
+          "type": "readout",
+          "label": "Second battery",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "energyDurationFormat",
+          "type": "label",
+          "label": "Text hour",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "statusBar",
+          "type": "readout",
+          "label": "Status",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "batteryValue",
+          "type": "readout",
+          "label": "Battery level",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "chargingSection",
+          "type": "section",
+          "label": "Charging",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "energyModeSelector",
+          "type": "toggle",
+          "label": "Energy mode",
+          "range": "0..3 (2-bit OperationMode field, offset MERGED_AMBIGUOUS)",
+          "controls": {
+            "field": "OperationMode",
+            "action": null
+          }
+        },
+        {
+          "id": "vehicleInfoListItems",
+          "type": "section",
+          "label": null,
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "outsideTemperature",
+          "type": "readout",
+          "label": "Outside temperature",
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        },
+        {
+          "id": "batteryWarningDialogs",
+          "type": "label",
+          "label": "Energy",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "chargingWarningDialogs",
+          "type": "label",
+          "label": null,
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "acknowledgeableFaultToasts",
+          "type": "button",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": null,
+            "action": null
+          }
+        }
+      ]
+    },
+    "vehicle-info": {
+      "screen": "vehicle-info",
+      "function": null,
+      "title": "Vehicle info",
+      "widgets": [
+        {
+          "id": "howToVideosSection",
+          "type": "section",
+          "label": "How to videos",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "vehicleCardAccessoriesNav",
+          "type": "nav",
+          "label": "Accessories",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "vehicleCardFindServiceNav",
+          "type": "nav",
+          "label": "Find service",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "vehicleCardMoreInfoNav",
+          "type": "nav",
+          "label": "More info",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "vehicleDataSpecList",
+          "type": "list",
+          "label": null,
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "levelIndicatorReadout",
+          "type": "readout",
+          "label": "Levelling display",
+          "range": null,
+          "controls": {
+            "field": "CarLevelRoll",
+            "action": null
+          }
+        },
+        {
+          "id": "vehicleHandshakeSection",
+          "type": "section",
+          "label": null,
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "heatingCoolingTimerNav",
+          "type": "nav",
+          "label": "Timer",
+          "range": null,
+          "controls": null
+        }
+      ]
+    }
+  },
+  "order": [
+    "home",
+    "coolbox",
+    "camping-mode",
+    "lighting",
+    "air-heater",
+    "roof",
+    "water",
+    "energy",
+    "vehicle-info"
+  ]
+}
