@@ -98,6 +98,29 @@ and `calictl/deploy/GRAFANA.md`. `install.sh --with-sinks` installs the Python c
 calictl→broker side is done; you still stand up the broker + Home Assistant and pair HomeKit
 (the UI steps) per HOMEASSISTANT.md.
 
+## Web UI
+
+The daemon can also serve a browser replica of the app's Vehicle-tab controls (dashboard →
+per-feature screens) from the same BLE-owning process — no extra connection, no broker:
+
+```sh
+# add --web to the service, or run it directly:
+~/open-california/.venv/bin/python -m calictl serve --web 8080
+#   then open http://<pi-hostname-or-ip>:8080
+```
+
+- `--read-only` serves the dashboard with controls disabled.
+- The UI is **unauthenticated** — expose it only on a trusted LAN (same posture as the
+  Home Assistant / Grafana stack), never on the open internet.
+- Uninstalled features are hidden; roof control asks for confirmation; lighting shows a
+  "not applied" note (BLE lighting actuation is still unsolved).
+- Labels are neutral by default. To render your app's exact text, rebuild the screen data
+  against your own APK strings — `python3 -m tools.build_web --strings <apk.cvr.json>`
+  (local only; never committed, like the icons).
+
+To enable it under systemd, append `--web 8080` to the unit's `ExecStart` and restart
+(`sudo systemctl daemon-reload && sudo systemctl restart calictl`).
+
 ## Troubleshooting
 
 - **`VWCAMPER` not found** — make sure the camper is on its "Connect device" screen (it only

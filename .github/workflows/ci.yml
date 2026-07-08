@@ -35,6 +35,7 @@ jobs:
           import sys
           import calictl.protocol, calictl.semantics, calictl.device, calictl.serve
           import calictl.control, calictl.cli, calictl.mqtt, calictl.influx, calictl.overrides
+          import calictl.web
           banned = {"bleak", "paho", "paho.mqtt", "influxdb_client", "yaml"}
           leaked = banned & set(sys.modules)
           assert not leaked, "runtime pulled non-stdlib at import: %s" % sorted(leaked)
