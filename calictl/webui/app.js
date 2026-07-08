@@ -1,4 +1,4 @@
-// Renders the camper control web UI from /api/screens + /api/state.
+// OpenCalifornia web UI — renders the camper Vehicle-tab controls from /api/screens + /api/state.
 const app = document.getElementById("app");
 const titleEl = document.getElementById("title");
 const backEl = document.getElementById("back");
