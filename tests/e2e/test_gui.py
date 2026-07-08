@@ -121,3 +121,21 @@ def test_lighting_screen_activate_profile(page):
     expect(page.get_by_text("Left", exact=True)).to_be_visible()   # a reading lamp
     page.get_by_role("button", name="Activate").click()
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
+
+
+def test_no_red_flag_text(page, base_url):
+    # Auto-catches the UX-bug classes we hit by hand: raw compose-key ids, undefined/null/NaN,
+    # nonsense dates, [object Object]. Scans every installed screen + the dashboard.
+    RED = ("_text", "_toggle", "_widget", "_section", "_drawer",
+           "undefined", "null", "NaN", "1900-", "[object Object]")
+    for name in ("Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Vehicle"):
+        page.goto(base_url)
+        page.locator(".tile", has_text=name).first.click()
+        page.wait_for_timeout(500)
+        text = page.locator("#app").inner_text()
+        for flag in RED:
+            assert flag not in text, "%r rendered on the %s screen" % (flag, name)
+    page.goto(base_url)                     # dashboard
+    dtext = page.locator("#app").inner_text()
+    for flag in RED:
+        assert flag not in dtext, "%r rendered on the dashboard" % flag
