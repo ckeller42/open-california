@@ -1,0 +1,39 @@
+tests/test_mock_integration.py
+  s_d2c35aeebbd344::t_3200b83c48471c 74,76,78-79,81-83
+calictl/cli.py
+  s_d2c35aeebbd344::t_022a0c12d138c3 103-104
+  s_d2c35aeebbd344::t_87d44ce02562e4 9-12
+  s_d2c35aeebbd344::t_054f85bf147216 134-149
+tools/mock_unit.py
+  s_d2c35aeebbd344::t_6912c47911daa5 45
+  s_d2c35aeebbd344::t_fad2c7fddeadc7 22-24
+  s_d2c35aeebbd344::t_83c4c6c788e34a 138,147-150
+tests/test_capture_diff.py
+  s_d2c35aeebbd344::t_7128be5e67ea41 35,38-39,41,45
+calictl/control.py
+  s_d2c35aeebbd344::t_5927352d149ee2 93-104,108-112,114-119,121-130
+  s_d2c35aeebbd344::t_bcb3eb65c32ddb 77-89
+tests/test_lighting_capture.py
+  s_d2c35aeebbd344::t_b21f2bcd5df3ec 1-49
+tests/test_calictl.py
+  s_d2c35aeebbd344::t_f53df66d2fcbdb 275,280
+  s_d2c35aeebbd344::t_2d68d740ee7359 250,253-256,258-261
+tools/scenarios/lighting/kitchen-50.yaml
+  s_d2c35aeebbd344::t_1aa5453b5b84c6 1-4,6-7,10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "191f92b3df10f496c292fdcc067c886e2edfbaf2",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
