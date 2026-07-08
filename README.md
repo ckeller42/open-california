@@ -3,7 +3,7 @@
 [![CI](https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg)](https://github.com/ckeller42/open-california/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![Runtime deps](https://img.shields.io/badge/runtime%20deps-stdlib%20only-brightgreen)](#design)
-[![License](https://img.shields.io/badge/license-TBD-lightgrey)](#license)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Reverse-engineered **read + control** for the **VW California T7 camper control unit** over
 Bluetooth LE — own-vehicle interoperability. Reads all vehicle telemetry and (with the
@@ -12,6 +12,12 @@ firmware liveness gate solved) actuates loads, feeding **Home Assistant** (MQTT)
 
 > ⚠️ Independent RE project, **not affiliated with Volkswagen**. No VW binaries, decompiled
 > source, manuals, or artwork are distributed. See **[DISCLAIMER.md](DISCLAIMER.md)** before use.
+
+> 🛑 **Use at your own risk.** This software sends control writes to a real vehicle
+> (heaters, roof, electrical loads). It can damage your vehicle, void your warranty, or
+> cause unsafe conditions. It is provided **"as is", with NO WARRANTY and NO LIABILITY** —
+> if it breaks your car, that's on you. Only use it on a vehicle you own, and only if you
+> understand what each command does.
 
 ## What it does
 
@@ -60,6 +66,6 @@ See [`CLAUDE.md`](CLAUDE.md) for the full contributor guide and hard rules, and
 
 ## License
 
-**Not yet chosen** — currently all-rights-reserved by default. See [DISCLAIMER.md](DISCLAIMER.md).
-If you plan to use or contribute, open an issue; a license decision is pending (and warrants
-legal review given the VW-interop context).
+**[MIT](LICENSE)** — covers only the original work here (`calictl` code, tooling, docs); it
+grants no rights in any Volkswagen IP (none is included) and provides **no warranty and no
+liability** (see [DISCLAIMER.md](DISCLAIMER.md)). Interoperability with your own vehicle only.
