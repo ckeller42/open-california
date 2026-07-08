@@ -73,14 +73,15 @@ def test_set_cooler_level_out_of_range_is_clean_error(mock, capsys):
 
 # --- lighting now actuates (cracked via HCI capture 2026-07-08) --------------
 
-def test_set_lighting_zone_applies(mock):
+def test_set_lighting_needs_active_profile_then_applies(mock):
     from calictl import cli
-    # rc 0 == applied; the mock now honours the SET_BRIGHTNESS frame (14 = leave unchanged).
+    # live-verified precondition: with no active profile a zone set is ACKed but NOT applied
+    assert cli.main(["set", "lighting", "kitchen", "8"]) == 1    # rc 1 = NOT APPLIED
+    assert mock.decoded("lighting")["BrightnessLSeven"] == 0
+    # activate a profile, then the zone applies
+    assert cli.main(["set", "lighting", "profile", "9"]) == 0
     assert cli.main(["set", "lighting", "kitchen", "8"]) == 0
-    dec = mock.decoded("lighting")
-    assert dec["BrightnessLSeven"] == 8                       # kitchen zone set
-    # unchanged zones (sent as 14) were left as-is, not clobbered to 14
-    assert dec["BrightnessLOne"] != 14
+    assert mock.decoded("lighting")["BrightnessLSeven"] == 8
 
 
 # --- the 1003 arm-gate, at the unit level -----------------------------------
