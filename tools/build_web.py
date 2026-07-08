@@ -20,13 +20,27 @@ CONTROL_SCREENS = ["home", "coolbox", "camping-mode", "lighting", "air-heater",
                    "roof", "water", "energy", "vehicle-info"]
 
 
+# Last-segment words that are generic UI chrome, not the widget's actual
+# subject (e.g. "howToAndInfo_titleBar_pageTitle_text" is about "howToAndInfo",
+# not "pageTitle"). Checked case-insensitively.
+_GENERIC_SEGMENTS = {"pagetitle", "titlebar", "pageheadline", "headline", "widget"}
+
+
 def humanize(label_key):
     """Mechanical neutral label from a compose resource key (no VW text)."""
     if not label_key:
         return None
     s = re.sub(r"^[A-Za-z]+Page_", "", label_key)
-    s = re.sub(r"_(text|button|title)$", "", s)
-    seg = s.split("_")[-1]
+    # Strip a trailing "_text"/"_button"/"_title", plus an optional short
+    # variant suffix riding along (e.g. "_text_gc", "_text_t6") — otherwise
+    # those variant tags ("Gc", "T6") leak into the output as the label.
+    s = re.sub(r"_(text|button|title)(_[a-z0-9]{1,3})?$", "", s)
+    segments = s.split("_")
+    seg = segments[-1]
+    for candidate in reversed(segments):
+        if candidate.lower() not in _GENERIC_SEGMENTS:
+            seg = candidate
+            break
     seg = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", seg)   # camelCase -> spaced
     seg = seg.replace("_", " ").strip().lower()
     return seg[:1].upper() + seg[1:] if seg else None

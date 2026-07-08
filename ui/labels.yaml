@@ -1,14 +1,49 @@
 # ui/labels.yaml — NEUTRAL, generic control labels. NO VW app text (citations-only).
 # label_key -> plain label. Unmapped keys fall back to mechanical humanization.
 # The real VW strings load locally via `build_web --strings <apk.cvr.json>` (never committed).
+# Keys below are the REAL title_key / widget label_key values pulled from
+# ui/screens/*.yaml for the 9 in-scope control screens (home, coolbox,
+# camping-mode, lighting, air-heater, roof, water, energy, vehicle-info) —
+# see tests/test_build_web.py::test_labels_yaml_keys_exist_in_screens for the
+# guard that keeps this file honest.
+
+# home.yaml
+vehiclePage_pageTitle_vehicle_text: Vehicle
+
+# coolbox.yaml
 coolboxPage_pageTitle_coolbox_text: Cooler
 coolboxPage_refrigeratorBoxWidget_refrigeratorBox_text: Refrigerator box
 coolboxPage_coolingLevelSlider_coolingLevel_text: Cooling level
-campingModePage_pageTitle_camping_text: Camping mode
-lightingPage_pageTitle_lighting_text: Lighting
-airHeaterPage_pageTitle_airHeater_text: Air heater
-roofPage_pageTitle_roof_text: Roof
-waterPage_pageTitle_water_text: Water
-energyPage_pageTitle_energy_text: Energy
-vehicleInfoPage_pageTitle_vehicle_text: Vehicle
-homePage_pageTitle_home_text: Vehicle
+
+# camping-mode.yaml
+campingMode_pageTitle_campingMode_text: Camping mode
+campingMode_rearUsbPorts_text: Rear USB ports
+
+# lighting.yaml
+lighting_pageTitle_lighting_text: Lighting
+lighting_mainSection_allLights_text: All lights
+lighting_mainSection_profile_text: Profile
+lighting_dimValue_general_text: Brightness
+
+# air-heater.yaml
+airHeaterPage_pageTitle_heating_text: Air heater
+airHeaterPage_imediateHeatingWidget_imediateHeating_text: Immediate heating
+airHeaterPage_heatingSlider_heatingTemperature_text: Heating temperature
+airHeaterPage_runTimeSlider_runTime_text: Run time
+airHeaterPage_permanentHeatingWidget_permanentHeating_text: Permanent heating
+
+# roof.yaml
+popUpRoof_pageTitle_popUpRoof_text: Roof
+popUpRoof_instruction_toOpenPressTheUpperButton_text: Open
+popUpRoof_instruction_toClosePressTheLowerButton_text: Close
+
+# water.yaml (title_key is null on this screen; left unmapped, humanize covers it)
+vehiclePage_overviewWidget_freshWater_text: Fresh water
+vehiclePage_overviewWidget_wasteWater_text: Waste water
+
+# energy.yaml
+infoPage_pageHeadline_vehicleBattery_text: Energy
+infoPage_listItem_energyMode_text: Energy mode
+
+# vehicle-info.yaml
+howToAndInfo_titleBar_pageTitle_text: Vehicle info

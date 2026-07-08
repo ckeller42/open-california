@@ -35,3 +35,42 @@ def test_no_raw_label_keys_leak_into_output():
         assert "_text" not in (scr["title"] or "")
         for w in scr["widgets"]:
             assert "_text" not in (w["label"] or "")
+
+
+def test_humanize_strips_variant_suffix_not_just_bare_suffix():
+    # A bare "_text_gc"/"_text_t6" variant tag must not survive as the label
+    # (this used to yield "Gc"/"T6" — the suffix regex only matched "_text$").
+    result = build_web.humanize(
+        "lighting_interiorLighting_sectionTitle_interiorLighting_text_gc"
+    )
+    assert result == "Interior lighting"
+    assert result not in ("Gc", "T6")
+
+
+def test_humanize_prefers_meaningful_segment_over_generic_titlebar():
+    # Real title_key from vehicle-info.yaml. The naive "last underscore
+    # segment" rule picks "pageTitle" (then "titleBar") for several distinct
+    # widgets, colliding them all on "Page title".
+    result = build_web.humanize("howToAndInfo_titleBar_pageTitle_text")
+    assert result == "How to and info"
+    assert result != "Page title"
+
+
+def test_labels_yaml_keys_exist_in_screens():
+    """Every ui/labels.yaml key must be a real title_key or widget label_key
+    in one of the in-scope ui/screens/*.yaml files — otherwise it silently
+    never applies and resolve_label falls through to humanize()."""
+    import yaml
+
+    labels = yaml.safe_load(build_web.LABELS_FILE.read_text()) or {}
+    real_keys = set()
+    for name in build_web.CONTROL_SCREENS:
+        spec = yaml.safe_load((build_web.SCREENS_DIR / (name + ".yaml")).read_text())
+        if spec.get("title_key"):
+            real_keys.add(spec["title_key"])
+        for w in (spec.get("widgets") or []):
+            if w.get("label_key"):
+                real_keys.add(w["label_key"])
+
+    dead = set(labels) - real_keys
+    assert not dead, "ui/labels.yaml has keys that match no real title_key/label_key: %s" % dead
