@@ -22,8 +22,13 @@ CONTROL_SCREENS = ["home", "coolbox", "camping-mode", "lighting", "air-heater",
 
 # Last-segment words that are generic UI chrome, not the widget's actual
 # subject (e.g. "howToAndInfo_titleBar_pageTitle_text" is about "howToAndInfo",
-# not "pageTitle"). Checked case-insensitively.
-_GENERIC_SEGMENTS = {"pagetitle", "titlebar", "pageheadline", "headline", "widget"}
+# not "pageTitle"). Checked case-insensitively. Includes bare terminal
+# generics ("value"/"time"/"title") as well as the compound chrome tokens —
+# a readout named "..._battery_value_text" is about "battery", not "value",
+# and a bare "Value"/"Time"/"Title" label collides across every widget that
+# happens to share that last segment (see test_no_intra_screen_label_collisions).
+_GENERIC_SEGMENTS = {"pagetitle", "titlebar", "pageheadline", "headline", "widget",
+                     "value", "time", "title"}
 
 
 def humanize(label_key):

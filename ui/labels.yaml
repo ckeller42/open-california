@@ -14,16 +14,29 @@ vehiclePage_pageTitle_vehicle_text: Vehicle
 coolboxPage_pageTitle_coolbox_text: Cooler
 coolboxPage_refrigeratorBoxWidget_refrigeratorBox_text: Refrigerator box
 coolboxPage_coolingLevelSlider_coolingLevel_text: Cooling level
+# explicit, more descriptive than the mechanical "Quiet mode drawer"/"Timer
+# setup drawer" humanize fallback would give (both drawers share a generic
+# "..._time_text" key shape).
+coolboxPage_quietModeDrawer_time_text: Quiet mode time
+coolboxPage_timerSetupDrawer_time_text: Timer time
 
 # camping-mode.yaml
 campingMode_pageTitle_campingMode_text: Camping mode
 campingMode_rearUsbPorts_text: Rear USB ports
+# humanize alone can't disambiguate these two from the page title: all three
+# are legitimately "about" camping mode, but are distinct widgets (nav entry
+# vs. dashboard tile) that must not collapse onto one identical label.
+infoPage_campingMode_pageTitle: Camping mode info
+vehiclePage_remoteControlWidget_campingMode_text: Camping mode shortcut
 
 # lighting.yaml
 lighting_pageTitle_lighting_text: Lighting
 lighting_mainSection_allLights_text: All lights
 lighting_mainSection_profile_text: Profile
 lighting_dimValue_general_text: Brightness
+# same page-title collision as camping-mode above: the onboarding tutorial
+# overlay's title humanizes to the same "Lighting" as the main page header.
+infoPage_lighting_pageTitle: Lighting info
 
 # air-heater.yaml
 airHeaterPage_pageTitle_heating_text: Air heater
@@ -44,6 +57,11 @@ vehiclePage_overviewWidget_wasteWater_text: Waste water
 # energy.yaml
 infoPage_pageHeadline_vehicleBattery_text: Energy
 infoPage_listItem_energyMode_text: Energy mode
+# explicit, more descriptive than the mechanical "Battery"/"Outside
+# temperature" humanize fallback would give (both readouts on the same
+# vehicle-status list, sharing a generic "..._value_text" key shape).
+infoPage_battery_value_text: Battery level
+infoPage_outsideTemperature_value_text: Outside temperature
 
 # vehicle-info.yaml
 howToAndInfo_titleBar_pageTitle_text: Vehicle info

@@ -56,6 +56,46 @@ def test_humanize_prefers_meaningful_segment_over_generic_titlebar():
     assert result != "Page title"
 
 
+def test_no_intra_screen_label_collisions():
+    """Within a single screen, distinct widgets (distinct label_keys) must
+    never resolve to the same label, and no widget label may be a bare
+    generic word ("Value"/"Time"/"Title") — the 'generic last-segment
+    collision' class. Two widgets sharing the SAME label_key (deliberate
+    text reuse, e.g. a section header repeated on two dialog groups) is
+    fine; two DIFFERENT label_keys colliding on one meaningless word is the
+    defect (e.g. infoPage_battery_value_text and
+    infoPage_outsideTemperature_value_text both humanizing to "Value")."""
+    import collections
+    import yaml
+
+    data = build_web.build()
+    GENERIC_BARE_WORDS = {"value", "time", "title"}
+
+    for name in build_web.CONTROL_SCREENS:
+        spec = yaml.safe_load((build_web.SCREENS_DIR / (name + ".yaml")).read_text())
+        raw_widgets = spec.get("widgets") or []
+        built_widgets = data["screens"][name]["widgets"]
+        assert len(raw_widgets) == len(built_widgets)
+
+        by_label = collections.defaultdict(set)
+        for raw, built in zip(raw_widgets, built_widgets):
+            key = raw.get("label_key")
+            label = built["label"]
+            if not key or not label:
+                continue
+            assert label.lower() not in GENERIC_BARE_WORDS, (
+                "%s widget %r has bare generic label %r (key %s)"
+                % (name, built["id"], label, key)
+            )
+            by_label[label].add(key)
+
+        for label, keys in by_label.items():
+            assert len(keys) <= 1, (
+                "%s: distinct label_keys %s collide on label %r"
+                % (name, sorted(keys), label)
+            )
+
+
 def test_labels_yaml_keys_exist_in_screens():
     """Every ui/labels.yaml key must be a real title_key or widget label_key
     in one of the in-scope ui/screens/*.yaml files — otherwise it silently
