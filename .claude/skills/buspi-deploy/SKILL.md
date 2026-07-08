@@ -27,6 +27,15 @@ ssh buspi 'cd ~/open-california && ~/solix-env/bin/python -m calictl set cooler 
 ssh buspi 'echo raspberry | sudo -S systemctl start calictl && sleep 2 && systemctl is-active calictl'
 ```
 
+## Manual runs need CALICTL_ADDR (post MAC-scrub)
+The real BLE address is NOT in the code (it's a placeholder `AA:BB:CC:DD:EE:FF`); only the
+systemd unit loads it from `/etc/buspi/calictl.env`. A manual `calictl` run gets the placeholder
+and fails with `BleakDeviceNotFoundError`. Source it (without printing it) first:
+```sh
+export CALICTL_ADDR=$(echo raspberry | sudo -S grep -oP "(?<=CALICTL_ADDR=).*" /etc/buspi/calictl.env)
+~/solix-env/bin/python -m calictl get cooler      # or pass --addr "$CALICTL_ADDR"
+```
+
 ## Notes
 - Long BLE ops (`get`, `set`, actuate) take ~10-60 s; run detached with a log + poll, or use
   `timeout 70`. `set` competes with the daemon for the slot — stop the daemon for clean reads.
