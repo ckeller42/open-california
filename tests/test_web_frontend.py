@@ -1,0 +1,30 @@
+import urllib.request
+from pathlib import Path
+
+from calictl import web
+
+WEBUI = str(Path(__file__).resolve().parent.parent / "calictl" / "webui")
+
+
+class _StubBackend:
+    read_only = False
+    def state(self): return {}
+    def screens_bytes(self): return b'{"screens":{},"order":[]}'
+    def command(self, *a, **k): return {"ok": True, "applied": True, "state": {}, "error": None}
+
+
+def _serve():
+    srv = web.serve_http(_StubBackend(), WEBUI, "127.0.0.1", 0)
+    return srv, "http://127.0.0.1:%d" % srv.server_address[1]
+
+
+def test_index_and_assets_served():
+    srv, base = _serve()
+    try:
+        for path, needle in (("/", b"<div id=\"app\""), ("/app.js", b"/api/state"),
+                             ("/app.css", b"--card")):
+            with urllib.request.urlopen(base + path) as r:
+                assert r.status == 200
+                assert needle in r.read()
+    finally:
+        srv.shutdown()
