@@ -3,7 +3,7 @@
 Compiled 2026-07-07 from a three-way decompile audit (BLE protocol, feature/domain
 logic, session/auth/infra), each diffed against the current baseline: `protocol/
 dictionary.yaml` (13 functions), `protocol/signals.yaml`, `ui/screens/*.yaml` (18
-screens), and the 10 `docs/business-logic/*.md` writeups. Citations are `file:line`
+screens), and the `docs/business-logic/*.md` writeups. Citations are `file:line`
 under the JADX decompile (`…/scratchpad/decompile/src/sources` = CLEAN,
 `…/decompile/bad/sources` = method bodies jadx dropped from clean). VW material:
 citations only.
@@ -15,114 +15,57 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 
 ---
 
-## Cross-cutting priority ranking
+## Cross-cutting priority ranking (open only)
 
 | # | Gap | Kind | Resolvable now? |
 |---|-----|------|-----------------|
-| 1 | ~~Lighting SET frame needs the active ProfileNumber~~ — **FIXED** (echo 1502's ProfileNumber); one live confirm pending | protocol | done (static) |
-| 2 | ~~Char 1004 / 1002 / sat 1903–1905 unmodeled~~ — **DONE** (1004 modeled; 1002 = SHA-256(VIN)[16:32]; sat chars mapped) | protocol | done |
-| 3 | MERGED_AMBIGUOUS control offsets from the builders — **airheater DONE**; roof/roofAC/stairs/LR-heater remain | protocol | **static** |
+| 1 | **Lighting SET does not actuate** — ProfileNumber ruled out live (§A1); gate unknown | protocol | needs HCI capture |
+| 3 | MERGED_AMBIGUOUS control offsets — **roof/roofAC/stairs/LR-heater remain** (airheater done) | protocol | **static** |
 | 4 | **1003 counter cadence / firmware disarm timeout** | protocol | needs idle HCI capture |
 | 5 | Lighting **profile/color/wake-timer** notification overlay | protocol | static (enum decode) |
-| 6 | **EXLAP over WiFi/TCP** — an entire second transport (99 files) | infra | static + capture |
+| 6 | **EXLAP over WiFi/TCP** — an entire second transport (99 files) | infra | reachability-blocked |
 | 7 | Whole feature modules untracked: **Travel, Search, Discover/CMS, AiAssist, Camera, Developer** | feature | static |
 | 8 | **Light scenes/favorites** model (7 slots × 8 zones × on+brightness) | feature | static |
 | 9 | VW **OIDC/IDK** auth + backend request signing | infra | static + capture |
-| 10 | UI label *text* (dex-only: 1882 string KEYS recovered, but VALUES are in `.cvr` assets) — light zone names DONE | feature | needs the APK's `.cvr` |
+| 10 | UI label *text* — 1882 string KEYS recovered, VALUES in `.cvr` assets (light zone names done) | feature | needs the APK's `.cvr` |
 
----
-
-## Update 2026-07-08 — 6-agent decompile batch + VIN + APK strings
-
-Resolved/applied this pass (details in the sections below):
-
-- **§A1 Lighting SET — FIXED (no capture needed).** The active ProfileNumber is an identity
-  round-trip of the ProfileNumber the unit reports in 1502 (`dg/l.java` f5472x==ordinal,
-  `w10/d.java` identity). `control._lighting` now echoes `last["ProfileNumber"]` instead of 0.
-  Also fixed the `ui/screens/lighting.yaml`/`prototype.html` "offset 14, width 6" misread
-  (→ offset 4, width 4). Pending one live confirm on buspi.
-- **§A2 char 1002 "Vin" — RESOLVED via the owner's VIN: it is `SHA-256(VIN)[16:32]`** (the low
-  16 bytes of the plaintext VIN's SHA-256 — matched live). A privacy-preserving one-way vehicle
-  id; no plaintext VIN over BLE. Vehicle decodes to a **2026 T7 California** (WMI WV2, model
-  code ST, MY `T`=2026, Hannover). New sat chars: **1904=`SystemInfoWlanSsid`** (15 B UTF-8),
-  **1905=`SystemInfoWlanKey`** (10 B), **1903**=`SatDish/CapConverter/CibusInterface/TpList` —
-  all satellite-option-gated (not installed here).
-- **§A3 control models — DONE for all four.** roof/roofAC/stairs/LR-heater MERGED offsets
-  resolved from their `f()` builders and added to `overrides.py` (+ frame bytes). Setter values
-  + roof's ~1 Hz move-heartbeat documented. `set` not wired (not installed; roof needs the
-  heartbeat loop). Enum semantics still UNVERIFIED.
-- **Energy semantics — CORRECTED + live-verified** (`semantics.energy`): batt2 current /10,
-  SoC→%, source powers ×10 (0 when not installed — the PPv=254 sentinel), shore/solar current
-  unsigned /10, source-state enum, `energy_mode` un-inverted, warning level, expanded faults.
-- **§C2 EXLAP — URLs are HARDCODED literals, not runtime** (correction). The 12 handlers return
-  literal `VWN_Camper_<Fn>_State`/`_Control` URLs; 7 actuate. `<Call>` wire format fully
-  recovered: `<Req id="N"><Call url="VWN_Camper_<Fn>_Control"><Abs|Enm name=".." val=".."/>…
-  </Call></Req>`, unauthenticated, no heartbeat/sequence. Only blocker remains reachability.
-- **§A5 lighting overlay + §E alerts** decoded — see the new subsections below.
+Resolved gaps (chars 1004/1002/sat, airheater offsets, energy scales, EXLAP URLs) and the dated
+changelog are in **[DECISIONS.md](DECISIONS.md)**. (Lighting SET was thought fixed but is NOT —
+§A1.)
 
 ---
 
 ## A. BLE protocol / control gaps
 
-### A1 (TOP) — Lighting SET_BRIGHTNESS must carry the *active* ProfileNumber
-The live test that showed a `Mode=4, ProfileNumber=0` frame ACKed-but-ignored is now
-explained. The app's brightness flow (`dg/h.java:615–642`) stages every zone nibble then
-sends `w(w10.d.b(kVar).f5472x, DIRECT)` — ProfileNumber = **the currently-active profile's
-wire value, never 0**; on/off is encoded purely in the 4-bit brightness nibbles
-(`dg/i.java:26–41`: OFF=0, 10–100%→1..10, DEFAULT=11, NOT_EQUIPPED=13). `ProfileNumber=0`
-addresses an inactive/invalid profile → silently dropped. `LightValue@48/16b` is **not part
-of the SET_BRIGHTNESS frame** — it is a per-zone on/off bitmask read back in REQUEST_CONFIG
-(`dg/a.java e()`, bits 9–15 = 7 zones) and the on/off lever in `SET_PROFILE` (`dg/h.java:808`
-`n4()`: `v(16); w(8); s(z?1:0)`). Command enum `dg/n.java:34–50`: SET_BRIGHTNESS=4,
-SET_COLOR=6, SET_DOUBLE=8, REQUEST_CONFIG=12, SET_PROFILE=16, WAKEUP_TIME=20, SYSTEM_TIME=24,
-PREVIEW=28. Frame builder `eg/a.java f()` (nibble order swapped: L1@68, L2@64, L3@76…).
-- **Impact:** this is the fix for `calictl set lighting` (currently ACKs, no-op). `calictl`'s
-  `overrides.CONTROL_RANGES` note ("ProfileNumber must be 0") is **wrong** — it must be the
-  active profile's wire value.
-- **To resolve:** HCI-capture one in-app brightness change + one profile on/off; decode the
-  profile→wire table `w10/l.java` and `w10/d.java:55–89 b()`; replay `Mode=4` with the
-  captured active profile number.
+### A1 — Lighting SET is UNSOLVED (ProfileNumber ruled out on-device 2026-07-08)
+The `Mode=4` SET_BRIGHTNESS frame is ACKed but never changes the `1502` zones. The
+decompile-derived "echo the active ProfileNumber" theory (it looked statically airtight) was
+**disproven live**: under a running 1003 heartbeat, a SET_BRIGHTNESS with **every** ProfileNumber
+0–14 was ACKed yet left the zones unchanged (`scratchpad/profile_sweep.py`, buspi). So the gate is
+**not ProfileNumber** — and not the heartbeat (cooler/camping actuate fine under it). Leading
+suspects now: **`LightValue`** (likely a per-zone enable bitmask, which our frame sends as 0) or a
+required **SET_PROFILE preamble**. **Needs an HCI capture** of the app performing a real brightness
+change to see exactly what it writes. `control._lighting` still echoes the current ProfileNumber
+(more correct than hardcoding 0) but `set lighting` honestly reports NOT APPLIED. Lighting overlay = §A5.
 
-### A2 — Chars 1004 / 1002 / satellite 1903–1905 are unmodeled (static decode)
-`dictionary.yaml general` models only the three SW-version fields from char **1001**
-(`ag/c.java`, parsed `zf/d.java:289–296`). Missing:
-- **1004** (`ag/a.java`, parsed `zf/d.java:323–357`): CarVariant, CarLevelPopUp,
-  TerminalOneFive, CarTime Year/Month/Day/Hour/Minute/Second (8-bit @8–56), **CarLevelRoll
-  16b@56**, **CarLevelPitch 16b@72** — the vehicle-leveling readout + the RTC that drives
-  CLOCK_OUT_OF_SYNC. Widths from `ag/a.java:8–35`.
-- **1002** (`ag/d.java`, guard `zf/d.java:304`) — parsed but undocumented; `ag/d.java` is
-  shared with 1904/1905.
-- **satellite 1903/1904/1905** (`mg/f.java`, `jg/b.java`, `ag/d.java`) — extended
-  signal/config chars; dictionary models only 1900/1902.
-- No OTA/DFU service exists (only the `…-6C77-4B7D-BBF6-A5E587701F3D` family, services
-  1000–2100 + F000). **Add these as new dictionary functions — pure static work.**
-- **Service `F000` decoded 2026-07-07 — it is NOT a bootloader/DFU.** `bg/a.java` (service) +
-  `cg/a.java` (char `F001`) = a **read-only "GeneralPurposeSignals"** block: one char, `b()`=
-  false (not even subscribed), only an incoming-data parser `e()` (no write/command). It
-  decodes a fixed **168-bit / 21-byte** frame of *semantically-unassigned* signals — 8×1-bit
-  (`BitZeroOne..Eight`), 8×8-bit (`ByteZeroOne..Eight`), 4×16-bit (`WordZeroOne..Four`),
-  1×32-bit (`DwordZeroOne`) — logged as `"<-- Incoming Data for GeneralPurposeSignals"`. So
-  **OTA is definitively absent** (see §C4); F000 is a firmware diagnostic/expansion register
-  set, readable telemetry `calictl` doesn't yet capture (meaning unknown — generic names).
+### A2 — chars 1004 / 1002 / satellite 1903–1905 (RESOLVED; open leads)
+1004 modeled; **1002 = `SHA-256(VIN)[16:32]`**; sat chars 1903–1905 mapped — detail + citations
+in `DECISIONS.md`. **Open leads:**
+- **`generalpurposesignals` (service `F000`, char `F001`)** — a read-only 168-bit/21-byte block
+  of semantically-unassigned signals (`bg/a.java` service, `cg/a.java` char; 8×1-bit `BitZero*`,
+  8×8-bit `ByteZero*`, 4×16-bit `WordZero*`, 1×32-bit `DwordZero*`; `b()`=false so not even
+  subscribed), not yet captured by `calictl`. Field meanings unknown (generic names). Confirms
+  **OTA is absent** — F000 is a diagnostic register set, not a bootloader (see §C4, §A6).
+- **`F002` (WRITE) is referenced NOWHERE in the app** (`grep 0000F002` = 0 hits; `bg/a.java`
+  parses only F001) — an unused firmware write endpoint; a possible debug/production hook. Blind
+  writes risk brick — treat as a lead, not an action. Firmware-acquisition recon in §A6.
 
-### A3 — Statically-resolvable MERGED_AMBIGUOUS control offsets — airheater DONE
-Builders are per-control-char, so the "shared model" ambiguity is an extractor artifact, not
-in the bytecode:
-- **airheater (1701, `sf/a.java f()`) — RESOLVED + WIRED 2026-07-08.** The four merged fields
-  are `OperationModeCombined@20(4)`, `RunningTime@24(8)`, `TimerHour@32(8)`, `TimerMin@40(8)`
-  (read directly from `f()`; the old `overrides` entry was cooler's layout — a latent bug that
-  made airheater unencodable). `overrides.CONTROL_OFFSETS["airheater"]` fixed; `set airheater
-  power|level` wired (`control._airheater`): **power = `NormalOperationRequest` 1/0, verified
-  from `rf/b.java C2()`:187**; level = `HeatingLevel` 0-15. **Not yet live-verified** (buspi was
-  offline; airheater IS installed, so testable when it returns).
-- **satelliteantenna (1901, `gg/a.java:157–159`) — the earlier "wrong width" claim was FALSE.**
-  `System`/`Dish` = `sg.a(_,4)` = **type 4 = 2-bit**, which matches the dictionary (width 2). The
-  audit conflated the sg.a type-arg with bit-width. Only real gap: `DishStop`/`Wlan` =
-  `sg.a(false)` = 1-bit booleans with MERGED offsets — low value (sat not installed).
-- **Remaining (not installed, unresolved-but-derivable):** roof (1401 `jg/a.java`), roofAC (2001
-  `lg/a.java`), stairs (1801 `pg/a.java`), LR-heater (2101 `gg/a.java`). Transcribe from each
-  `f()` when needed; roof also needs a 1-Hz move-heartbeat (`ig/c.java`) so its `set` is more
-  than a frame. Field *value semantics* (enum meanings) still need a live pass.
+### A3 — MERGED_AMBIGUOUS control offsets — roof/roofAC/stairs/LR-heater remain
+airheater (1701) is resolved + wired and the satelliteantenna "wrong width" claim was a false
+alarm (both in `DECISIONS.md`). **Open:** roof (1401 `jg/a.java`), roofAC (2001 `lg/a.java`),
+stairs (1801 `pg/a.java`), LR-heater (2101 `gg/a.java`) — transcribe offsets from each `f()`
+when needed; roof also needs a 1-Hz move-heartbeat loop (`ig/c.java`) so its `set` is more than
+a frame. Field *value semantics* (enum meanings) still need a live pass.
 
 ### A4 — 1003 counter cadence / firmware disarm timeout (needs idle capture)
 Char 1003 (`ag/b.java`, 32-bit, `v()` resets to 0) is written app-side via `t0/c.java:264`

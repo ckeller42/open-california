@@ -35,12 +35,12 @@ blocked by a firmware gate (see below). Runs on a Raspberry Pi (`buspi`), feedin
   not interpretation logic. When a field's app setter/getter is **inverted** or **combined**
   (`python3 -m tools.audit_signals --report` → `SEMANTIC-REVIEW-NEEDED`), verify the polarity
   against `ui/screens/*.yaml` / the decompiled getter, not a naive `bool(field)`. (This is
-  how the camping-lights inversion was missed — see `docs/business-logic/signal-catalog.md`.)
+  how the camping-lights inversion was missed — see `docs/business-logic/signals.md`.)
 - **Grafana dashboards don't auto-update.** After changing surfaced signals, edit
   `calictl/deploy/camper-dashboard.json` and push to Pi **and** Cloud via `push_dashboard.py`.
   A PostToolUse hook (`tools/hooks/dashboard-sync-reminder.py`) reminds you.
 - **Don't label unverified values with a unit.** Several scales are `UNVERIFIED` (SoC is a
-  coarse 0–15 level not %, currents/temps are raw). See `docs/business-logic/signal-scales.md`.
+  coarse 0–15 level not %, currents/temps are raw). See `docs/business-logic/signals.md`.
 - **Never commit** the APK, decompiled sources (`decompile/`), VW manuals (`manuals/`), or
   secrets/tokens (`*.env`) — all gitignored. VW material: citations only.
 
@@ -63,7 +63,7 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   `lighting` is wired (`set lighting power|brightness`) and builds a valid SET_BRIGHTNESS
   frame, but **on-device apply is UNCONFIRMED** — the frame ACKs yet the zones don't change
   (a LightValue/SET_PROFILE semantic gap, not the arm gate — `re-gap-inventory.md` §A1).
-  Extend via `control.BUILDERS`. See `docs/business-logic/remote-control-connect-gate.md`.
+  Extend via `control.BUILDERS`. See `docs/business-logic/control-and-actuation.md`.
 - **`vehicle` function reads char 1004** (`calictl get vehicle`, live-verified): ignition
   (terminal-15), car variant, unit RTC, 2-axis roll/pitch leveling — hand-added to
   `dictionary.yaml` (NOT emitted by `extract_protocol`; preserve on regen). `general` was

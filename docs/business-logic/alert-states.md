@@ -54,6 +54,25 @@ feature's primary widget class (route `californiaontour://app/<feature>`), and o
 dashboard aggregates multiple features into one summary card. Documented as "primary" / "secondary
 (dashboard)" below.
 
+Every alert is **edge-triggered off one decoded trigger field**: value 0 clears every `_ID` for
+that field; value ∈ 1..n raises the mapped `<ID>` (in-app record) **and** `<ID>_NOTIFICATION_ID`
+(banner) in parallel. A Home Assistant `binary_sensor` mirrors it directly — `on` at the alert
+value, `off` at 0 — no extra debounce (see §13).
+
+```mermaid
+stateDiagram-v2
+  [*] --> Normal
+  Normal --> Alerting: trigger field value ∈ 1..n
+  Alerting --> Normal: value == 0\n(clears all _ID for this field)
+  state Alerting {
+    [*] --> Raise
+    Raise: raise <ID> (in-app record)\n+ <ID>_NOTIFICATION_ID (banner)
+    Raise --> HA
+    HA: HA binary_sensor <ID> = on\n(device_class problem)
+  }
+  note right of Normal: value 0 = HA binary_sensor off\nmirrors app dVar.e(<ID>) clear
+```
+
 ---
 
 ## 2. Cooler (fridge)
@@ -288,12 +307,29 @@ These map onto `protocol/dictionary.yaml`'s `control_models_unresolved` entry fo
 surface** even though its control-side field layout is still ambiguous; worth a follow-up pass to
 resolve `jg/a.java`'s read-back characteristic directly.
 
-The separate `BLUETOOTH_ROOF_CHILD_LOCK_CONFIRMED`, `BLUETOOTH_ROOF_EMERGENCY_LOCKED_CONFIRMED`,
-`BLUETOOTH_ROOF_ERROR_SENSOR_CONFIRMED`, `BLUETOOTH_ROOF_LOW_BATTERY_CONFIRMED` constants exist
-only as BLE-local ack events (§1) — no corresponding `_ID`/`_NOTIFICATION_ID` pair was found in
-this pass, meaning either they're raised from a class not covered here, or they're
-acknowledgement-only events for alerts whose *raise* site lives in still-unexamined code.
-UNVERIFIED.
+### Roof pop-top fault alerts — char `1402`, `ig/c.java` (a SECOND roof alert surface)
+
+Distinct from the `ij/c.java`/`hj.c` interlocks above. The roof-lift status char `0x1402`
+decodes `SafetyCounterValid` bit 7, `Installed` bit 6, `Position` bits 0-3, and **`InfoPopUp`
+bits 12-15** (`ig/c.java:241-246`). Dispatch `switch(InfoPopUp)` (`:311-638`):
+
+| InfoPopUp | Alert `_ID` | In-app sev | Ack pref key |
+|---|---|---|---|
+| 0 | (clears all 6) | — | — |
+| 1 | ROOF_CHILD_LOCK | MEDIUM | BLUETOOTH_ROOF_CHILD_LOCK_CONFIRMED |
+| 4 | ROOF_ERROR | HIGH | BLUETOOTH_ROOF_ERROR_WORKSHOP |
+| 5 | ROOF_OP_DRIVING | **CRITICAL** | (in-app only, every poll) |
+| 6 | ROOF_SENSOR_ERROR | HIGH | BLUETOOTH_ROOF_ERROR_SENSOR_CONFIRMED |
+| 7 | ROOF_EMERGENCY_LOCKED | HIGH | BLUETOOTH_ROOF_EMERGENCY_LOCKED_CONFIRMED |
+| 10 | ROOF_NOT_POSSIBLE_TEMPORARILY | HIGH | BLUETOOTH_ROOF_NOT_POSSIBLE_TEMP |
+| 11 | ROOF_LOW_BATTERY | HIGH | BLUETOOTH_ROOF_LOW_BATTERY_CONFIRMED |
+
+`ROOF_ERROR`/`ROOF_NOT_POSSIBLE_TEMPORARILY`/`ROOF_OP_DRIVING` are wholly new IDs. Two ack keys
+lack the `_CONFIRMED` suffix (`..._NOT_POSSIBLE_TEMP`, `..._ERROR_WORKSHOP`), which is why a
+`_CONFIRMED`-only grep missed them. (Severity `f29352x`=CRITICAL resolves only in the BAD root;
+CLEAN renumbered it.) This **resolves** the four `BLUETOOTH_ROOF_*_CONFIRMED` ack constants that
+were previously UNVERIFIED here — they pair with these `1402` `InfoPopUp` values. The `1402`
+`InfoPopUp` layout is worth adding to `dictionary.yaml` (still listed `control_models_unresolved`).
 
 ---
 
@@ -301,7 +337,7 @@ UNVERIFIED.
 
 | Alert ID | Meaning | Trigger | Severity | Cite |
 |---|---|---|---|---|
-| `CLOCK_OUT_OF_SYNC_ID` | Camper's onboard clock (Year/Month/Day/Hour/Min/Sec fields, `general` service) disagrees with phone/app time | Called from `h(List)` (`zf/d.java:352-361`); comparison threshold/logic not shown inline (UNVERIFIED exact delta) | LOW | `zf/d.java:352-361` |
+| `CLOCK_OUT_OF_SYNC_ID` | Camper's onboard clock (Year/Month/Day/Hour/Min/Sec fields, `general` service) disagrees with phone/app time | Fires when **\|phone − camper clock\| > 5 min** (UTC), or unconditionally if the car-time object is null (`bad/sources/zf/d.java:235,242-248`; unit `n20/d.java:42` = MINUTES); dispatched from `h(List)` `zf/d.java:352-361`. Car clock = general `0x1004` `CarTime*` fields. | LOW | `zf/d.java:352-361` |
 | `LEVELING_OVER_SPEED_ID` | Level-indicator (bubble level) screen warns leveling is unsafe/inaccurate above some vehicle speed | Compose UI boolean flow, gated on a "vehicle over speed" condition — **not** a camper-protocol field, this is core-vehicle speed (own-vehicle interop, not BLE camper unit) | HIGH | `ut/qa.java:78-97` |
 
 Not real vehicle alerts (excluded from the catalog, noted for completeness since they matched the
@@ -357,42 +393,12 @@ dialog, not a fault).
 - `COOLER_ERROR_SENSOR_ID` — second cooler zone vs. dashboard-only sensor-fault subcase (§2).
   `FRESH_WATER_EMERGENCY_OPERATION_ERROR_ID` — no primary-surface equivalent found (§5).
 - `CAMPING_MODE_BLOCKED_ID` and `LEVELING_OVER_SPEED_ID` upstream trigger fields (§10, §12).
-- `CLOCK_OUT_OF_SYNC_ID` exact time-delta threshold (§12).
-- All `BLUETOOTH_*_CONFIRMED` / `*_INTERACTED` / `EXLAP_COOLER_ERROR_INTERACTED` constants — ack
-  channel existence confirmed, full trigger/consumption trace not done this pass (§1, §11).
-- `jg/a.java` (roof-lift control model, service 1400/1402) state-side field layout — still listed
-  `control_models_unresolved` in `protocol/dictionary.yaml`; §11 confirms an alert surface exists
-  for it via `ij/c.java` but the raw bit offsets weren't resolved here.
+- Non-roof `BLUETOOTH_*_CONFIRMED` / `*_INTERACTED` / `EXLAP_COOLER_ERROR_INTERACTED` constants —
+  ack channel existence confirmed, full trigger/consumption trace not done (§1, §7). The roof
+  `BLUETOOTH_ROOF_*` ack keys are now paired to `1402` `InfoPopUp` values (§11).
+- `jg/a.java` (roof-lift control model, service 1400/1402) state-side field layout is still listed
+  `control_models_unresolved` in `protocol/dictionary.yaml`, though §11 now decodes the `1402`
+  `InfoPopUp` alert layout (`ig/c.java:241-246`) and the `ij/c.java` interlock surface.
 
----
-
-## Addendum 2026-07-08 (decompile audit) — roof InfoPopUp alerts + clock threshold
-
-Two gaps this doc previously left UNVERIFIED are now closed:
-
-### Roof pop-top fault alerts — char `1402`, `ig/c.java` (a SECOND roof alert surface)
-Distinct from the `ij/c.java`/`hj.c` interlocks (§11). The roof-lift status char `0x1402`
-decodes: `SafetyCounterValid` bit 7, `Installed` bit 6, `Position` bits 0-3,
-**`InfoPopUp` bits 12-15** (`ig/c.java:241-246`). Dispatch `switch(InfoPopUp)` (`:311-638`):
-
-| InfoPopUp | Alert `_ID` | In-app sev | Ack pref key |
-|---|---|---|---|
-| 0 | (clears all 6) | — | — |
-| 1 | ROOF_CHILD_LOCK | MEDIUM | BLUETOOTH_ROOF_CHILD_LOCK_CONFIRMED |
-| 4 | ROOF_ERROR | HIGH | BLUETOOTH_ROOF_ERROR_WORKSHOP |
-| 5 | ROOF_OP_DRIVING | **CRITICAL** | (in-app only, every poll) |
-| 6 | ROOF_SENSOR_ERROR | HIGH | BLUETOOTH_ROOF_ERROR_SENSOR_CONFIRMED |
-| 7 | ROOF_EMERGENCY_LOCKED | HIGH | BLUETOOTH_ROOF_EMERGENCY_LOCKED_CONFIRMED |
-| 10 | ROOF_NOT_POSSIBLE_TEMPORARILY | HIGH | BLUETOOTH_ROOF_NOT_POSSIBLE_TEMP |
-| 11 | ROOF_LOW_BATTERY | HIGH | BLUETOOTH_ROOF_LOW_BATTERY_CONFIRMED |
-
-`ROOF_ERROR`/`ROOF_NOT_POSSIBLE_TEMPORARILY`/`ROOF_OP_DRIVING` are wholly new IDs. Two ack
-keys lack the `_CONFIRMED` suffix (`..._NOT_POSSIBLE_TEMP`, `..._ERROR_WORKSHOP`), which is
-why a `_CONFIRMED`-only grep missed them. (Severity `f29352x`=CRITICAL resolves only in the
-BAD root; CLEAN renumbered it.) The `1402` `InfoPopUp` layout is worth adding to
-`dictionary.yaml` (still listed there as `control_models_unresolved`).
-
-### `CLOCK_OUT_OF_SYNC_ID` threshold — closed
-Fires when **|phone-time − camper-clock| > 5 minutes** (both UTC), or unconditionally if the
-camper's car-time object is null (`bad/sources/zf/d.java:235,242-248`; unit
-`n20/d.java:42` = MINUTES). Severity LOW. Car clock = general `0x1004` `CarTime*` fields.
+**Resolved since first pass:** `CLOCK_OUT_OF_SYNC_ID` threshold (>5 min, §12); roof `1402`
+`InfoPopUp` fault alerts + their `BLUETOOTH_ROOF_*` ack keys (§11).
