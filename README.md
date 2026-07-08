@@ -1,7 +1,7 @@
 # open-california
 
 [![CI](https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg)](https://github.com/ckeller42/open-california/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![Runtime deps](https://img.shields.io/badge/runtime%20deps-stdlib%20only-brightgreen)](#design)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
