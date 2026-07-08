@@ -48,4 +48,9 @@ jobs:
           # unit's OUI prefix + any suffix so this guard doesn't embed the full device MAC.
           if git grep -niE '20:81:9a(:[0-9a-f]{2}){3}' -- . ':!.github/' ':!.githooks/'; then
             echo "::error::real vehicle BLE MAC committed — use a placeholder / env var"; exit 1; fi
-          echo "no vendor material or vehicle MAC committed"
+          # No committed VIN (PII). Mirrors the pre-commit hook: a 17-char VIN token AND a
+          # WV2ZZZ/VIN context on the same line (WV2ZZZ is the generic VW world-manufacturer
+          # prefix, safe to name; the owner's full VIN never appears in the repo).
+          if git grep -nE '\b[A-HJ-NPR-Z0-9]{17}\b' -- . ':!.github/' ':!.githooks/' | grep -qiE 'WV2ZZZ|VIN'; then
+            echo "::error::a VIN appears in a tracked file — VINs are PII, keep them out"; exit 1; fi
+          echo "no vendor material, vehicle MAC, or VIN committed"
