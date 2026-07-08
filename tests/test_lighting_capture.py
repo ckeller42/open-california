@@ -47,3 +47,12 @@ def test_power_off_zeroes_all_zones():
     frame = control.build(f, "lighting", "power", "off", {"ProfileNumber": 9})
     d = control.decode_control(f["lighting"], frame)
     assert all(v == 0 for k, v in d.items() if k.startswith("Brightness"))
+
+
+def test_any_on_ignores_phantom_zones():
+    from calictl import semantics
+    # L9-L16 read constant not-installed defaults (13) — must NOT count as "on"
+    d = {"BrightnessL" + s: (13 if n >= 9 else 0) for s, n in semantics._LZONES.items()}
+    assert semantics.interpret("lighting", d)["any_on"] is False
+    d["BrightnessLSeven"] = 5   # a real lamp (L7 = Kitchen) lit
+    assert semantics.interpret("lighting", d)["any_on"] is True

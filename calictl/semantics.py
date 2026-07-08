@@ -171,13 +171,19 @@ _LZONES = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seve
            "OneFour": 14, "OneFive": 15, "OneSix": 16}
 
 
+# L1-L8 are the installed lamps on this van (reading/kitchen/roof-ambient/outside — confirmed
+# by the HCI capture 2026-07-08). L9-L16 read constant not-installed defaults (0 or 13) that
+# ignore SET_BRIGHTNESS, so they must NOT count toward "any light on".
+_REAL_LIGHT_ZONES = frozenset(range(1, 9))
+
+
 def lighting(d: dict) -> dict:
     out = {"installed": True, "profile": d.get("ProfileNumber"), "mode": d.get("Mode")}
-    any_on = bool(d.get("LightValue"))
+    any_on = False
     for suf, num in _LZONES.items():
         v = d.get("BrightnessL" + suf)
         out["brightness_zone_%d" % num] = v
-        if v:
+        if v and num in _REAL_LIGHT_ZONES:
             any_on = True
     out["any_on"] = any_on
     return out
