@@ -17,8 +17,6 @@ vehicle.
 - **No Volkswagen material is redistributed.** This repository contains **no** VW app binary
   (APK), decompiled source, firmware, owner's manuals, or artwork. Such material is used
   locally only and is git-ignored; documentation refers to it by citation, never reproduction.
-- **I am not a lawyer.** This project makes no legal claims, and nothing in this repository is
-  legal advice.
 
 ## No warranty — use at your own risk
 

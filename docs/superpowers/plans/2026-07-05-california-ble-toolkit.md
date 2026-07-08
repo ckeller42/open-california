@@ -132,7 +132,7 @@ and generate a Raspberry Pi replay script for lights and fridge.
 > **Purpose / risk:** For use on your own vehicle only, to enable Linux/open-platform
 > interoperability that the vendor app does not provide. Use at your own risk; actuation
 > may affect your warranty or safety. Safety functions (heater, roof) are documented but
-> excluded from replay codegen. (Not a lawyer; no legal claims — see DISCLAIMER.md.)
+> excluded from replay codegen. See DISCLAIMER.md.
 
 ## Quickstart
 See `docs/capture-sop.md` for the manual capture procedure, then:
