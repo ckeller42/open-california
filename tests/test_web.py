@@ -216,3 +216,11 @@ def test_path_traversal_returns_404(server):
         except urllib.error.HTTPError as e:
             status = e.code
         assert status == 404
+
+
+def test_responses_are_no_cache(server):
+    import urllib.request
+    _, base = server
+    for path in ("/", "/api/state"):
+        with urllib.request.urlopen(base + path) as r:
+            assert r.headers.get("Cache-Control") == "no-cache", path

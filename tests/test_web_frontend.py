@@ -38,3 +38,12 @@ def test_no_vw_brand_strings_in_committed_assets():
         content = (Path(WEBUI) / name).read_bytes()
         for needle in banned:
             assert needle not in content, "%s found in %s" % (needle, name)
+
+
+def test_app_js_surfaces_real_state_keys():
+    """Guard the curated data readouts: app.js must reference the interpreted /api/state keys,
+    so a regression back to a data-less spec dump is caught."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parent.parent / "calictl" / "webui" / "app.js").read_text()
+    for key in ("soc2_pct", "batt2_v", "fresh", "waste", "master_on", "usb_charger", "running_time"):
+        assert key in js, "app.js no longer surfaces %r" % key
