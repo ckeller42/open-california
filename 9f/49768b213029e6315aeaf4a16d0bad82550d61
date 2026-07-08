@@ -1,0 +1,24 @@
+docs/business-logic/re-gap-inventory.md
+  s_d2c35aeebbd344::t_7847dafc612474 22
+  s_d2c35aeebbd344::t_7884a134f2a436 40-49
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_afdd4d9566dc45 93-94
+docs/business-logic/DECISIONS.md
+  s_d2c35aeebbd344::t_6bed7bb5091a92 11-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9f49768b213029e6315aeaf4a16d0bad82550d61",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
