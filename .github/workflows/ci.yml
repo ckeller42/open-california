@@ -24,6 +24,11 @@ jobs:
         run: python -m pytest tests/ -q
       - name: Signal-coverage + semantic-review audit
         run: python -m tools.audit_signals --report
+      - name: Web assets are fresh (screens.json == build_web output)
+        run: |
+          python -m tools.build_web --out /tmp/screens.json
+          diff -q /tmp/screens.json calictl/webui/screens.json \
+            || { echo "::error::screens.json stale — run python -m tools.build_web"; exit 1; }
       - name: Runtime is stdlib-only at import
         run: |
           python - <<'PY'
