@@ -320,7 +320,24 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
 - `de/exlap/ExlapClientDelegateImpl.java`, `AbstractInterface.java`, `command/*` — EXLAP (C2).
 - producer feeding `t0/c.java:264` — 1003 counter source/cadence (A4).
 
-## Items that REQUIRE a live capture (not static)
-- Lighting active-ProfileNumber wire value (A1); 1003 disarm timeout + app cadence (A4);
-  OIDC redirect/token endpoint/secret (C1); EXLAP discovery+handshake on 28500 (C2);
-  control-field enum *meanings* across functions (A3).
+## Open topics needing the vehicle (nothing else is static-blocked)
+
+**Needs a phone HCI capture** (app behavior buspi can't derive):
+- **Zone → physical-lamp map** — toggle each named light zone in the app, watch which
+  `BrightnessL[1..16]` moves. The only real lighting-capture item (names + `ef.i`→channel map
+  are known; the fix works without it — it's just for labeling which slider = which lamp).
+- **Control-field enum meanings** for roof/roofAC/stairs/LR-heater (Mode/FanSpeed/position) —
+  best captured from the app operating those functions (roof is installed → capturable here).
+- *(optional/low)* confirm lighting SET_COLOR / wake-timer bit-packing; the app's exact 1003
+  cadence (both already decoded statically).
+
+**Needs a buspi live test — no phone:**
+- `set lighting` confirm (does the ProfileNumber-echo frame actuate?), `set airheater` confirm.
+- **1003 disarm timeout** — heartbeat, stop, actuate after N s (settles arm-window sizing).
+- `set roof` (once the ~1 Hz move-heartbeat loop is implemented).
+- Grafana dashboard push (needs the buspi Grafana creds).
+
+**Needs a special vehicle state (not a BLE capture):**
+- **EXLAP** — infotainment WiFi up (ignition on), buspi joined to that SSID, speak `<Protocol>`
+  then `<Dir>`/`<Get>`/`<Call>`. Wire format fully known; only reachability blocks it.
+- **OIDC** redirect/token endpoint/client-secret (C1) — capture a login (out of scope for BLE).
