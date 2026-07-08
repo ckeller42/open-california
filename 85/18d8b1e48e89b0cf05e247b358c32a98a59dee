@@ -1,0 +1,32 @@
+docs/superpowers/specs/2026-07-08-raspberry-pi-guided-installer-design.md
+  s_d2c35aeebbd344::t_68cc61512f4ea8 1-63,70-114
+  s_d2c35aeebbd344::t_910c07130ff8b9 64-69
+docs/raspberry-pi-setup.md
+  s_d2c35aeebbd344::t_18cdf2af9dbbbd 1-107
+README.md
+  s_d2c35aeebbd344::t_02a3450a7cc04f 45-58
+install.sh
+  s_d2c35aeebbd344::t_c6d31c88a7e5a4 81-83,86-89
+  s_d2c35aeebbd344::t_9b7515aadfecad 1-80,84-85,90-315
+tests/test_install_sh.py
+  s_d2c35aeebbd344::t_40effdf87e9aa2 33-34
+  s_d2c35aeebbd344::t_f34ac112bdd162 1-32,35-56
+.github/workflows/ci.yml
+  s_d2c35aeebbd344::t_a101d376810beb 58-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8518d8b1e48e89b0cf05e247b358c32a98a59dee",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
