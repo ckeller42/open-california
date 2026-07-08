@@ -1,0 +1,68 @@
+docs/business-logic/cooler-airheater.md
+  s_d2c35aeebbd344::t_b46f56edc63155 49-54
+docs/architecture.md
+  s_d2c35aeebbd344::t_b46f56edc63155 1-83
+docs/business-logic/re-gap-inventory.md
+  s_d2c35aeebbd344::t_eeb6c31eab0979 18,22,25,29,31-32,38-63
+  s_d2c35aeebbd344::t_b5785490947808 6
+  s_d2c35aeebbd344::t_b46f56edc63155 1-5,7-17,19-21,23-24,26-28,30,33-37,64-281
+  s_d2c35aeebbd344::t_9ff85682f423d4 282-284
+  s_2342ae361d5471::t_21c5bdf93b2b19 285-343
+CLAUDE.md
+  s_d2c35aeebbd344::t_b46f56edc63155 15,19,58-63,65-71,78-86
+  s_d2c35aeebbd344::t_28f9a786a154ac 64
+  s_d2c35aeebbd344::t_cb31368199464e 87-89
+docs/README.md
+  s_d2c35aeebbd344::t_50671351383078 13-14
+  s_d2c35aeebbd344::t_06b9dc7dad02c1 24,27-28
+  s_d2c35aeebbd344::t_b46f56edc63155 1-12,15-23,25-26,29-38
+  s_d2c35aeebbd344::t_e70a9036b5f16b 39-40
+docs/sphinx/conf.py
+  s_d2c35aeebbd344::t_b46f56edc63155 1-40
+docs/business-logic/feature-availability.md
+  s_d2c35aeebbd344::t_b46f56edc63155 172
+docs/sphinx/requirements.txt
+  s_d2c35aeebbd344::t_b46f56edc63155 1-6
+docs/sphinx/index.rst
+  s_d2c35aeebbd344::t_b46f56edc63155 1-30
+docs/sphinx/api.rst
+  s_d2c35aeebbd344::t_b46f56edc63155 1-22
+docs/business-logic/remote-control-connect-gate.md
+  s_d2c35aeebbd344::t_4c6ca2e9bf2091 3-5
+  s_d2c35aeebbd344::t_26823f0608768b 6-8
+  s_2342ae361d5471::t_76e8eecc0e667b 9-56,251-346
+docs/sphinx/README.md
+  s_d2c35aeebbd344::t_b46f56edc63155 1-28
+docs/superpowers/plans/2026-07-05-california-ble-toolkit.md
+  s_d2c35aeebbd344::t_b46f56edc63155 21,132-135
+docs/business-logic/status-states-audit.md
+  s_d2c35aeebbd344::t_b46f56edc63155 110-111
+docs/business-logic/alert-states.md
+  s_2342ae361d5471::t_f7c9ebceb9db31 366-398
+docs/business-logic/signal-scales.md
+  s_2342ae361d5471::t_577ed5fcbf5127 13-14,17-31,36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b371b63219e29d19d3f873105fa41d514e5a7c94",
+  "prompts": {},
+  "sessions": {
+    "s_2342ae361d5471": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-adb4195f96bd1dec1",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    },
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
