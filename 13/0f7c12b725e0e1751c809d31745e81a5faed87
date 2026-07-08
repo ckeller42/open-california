@@ -1,0 +1,33 @@
+calictl/deploy/homeassistant/HOMEASSISTANT.md
+  s_d2c35aeebbd344::t_3fd477933aee97 63-65,74-76
+  s_d2c35aeebbd344::t_d295df4bf098c2 77
+docs/raspberry-pi-setup.md
+  s_d2c35aeebbd344::t_f064957b3ecad3 96-99
+tests/test_install_sh.py
+  s_d2c35aeebbd344::t_eed77811b9eba3 57-65
+install.sh
+  s_d2c35aeebbd344::t_0334893ebead62 72-83
+  s_d2c35aeebbd344::t_d32974079cf74b 28
+  s_d2c35aeebbd344::t_6590b0ffeefc75 238,241-247
+  s_d2c35aeebbd344::t_d79f55bd9d34bc 316-318
+  s_d2c35aeebbd344::t_3d0b685383f9b6 306
+  s_d2c35aeebbd344::t_e2c5e5bdb39915 143-160
+  s_d2c35aeebbd344::t_79d568b4041d9b 347
+  s_d2c35aeebbd344::t_777a0dfff0dc3c 38-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "130f7c12b725e0e1751c809d31745e81a5faed87",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
