@@ -60,7 +60,16 @@ def make_handler(backend, webui_dir):
         def do_POST(self):
             if self.path.split("?", 1)[0] != "/api/command":
                 return self._send_json({"error": "not_found"}, 404)
-            length = int(self.headers.get("Content-Length", 0))
+            ctype = self.headers.get("Content-Type", "")
+            if ctype.split(";", 1)[0].strip().lower() != "application/json":
+                return self._send_json({"error": "unsupported_media_type"}, 415)
+            raw_length = self.headers.get("Content-Length", "0")
+            try:
+                length = int(raw_length)
+            except ValueError:
+                length = -1
+            if length < 0:
+                return self._send_json({"error": "bad_request"}, 400)
             try:
                 req = json.loads(self.rfile.read(length) or b"{}")
             except ValueError:
@@ -75,8 +84,9 @@ def make_handler(backend, webui_dir):
                 return self._send_json({"error": "confirm_required"}, 400)
             try:
                 result = backend.command(fn, what, value, confirm=confirm)
-            except Exception as e:  # surface, don't crash the server thread
-                return self._send_json({"error": "command_failed", "detail": str(e)}, 500)
+            except Exception as e:  # log server-side only; never leak exception text to client
+                print("web: command failed: %r" % (e,), flush=True)
+                return self._send_json({"error": "command_failed"}, 500)
             return self._send_json(result)
 
     return Handler
@@ -85,5 +95,6 @@ def make_handler(backend, webui_dir):
 def serve_http(backend, webui_dir, host="0.0.0.0", port=8080):
     """Create a ThreadingHTTPServer and start serving in a daemon thread. Returns it."""
     httpd = ThreadingHTTPServer((host, port), make_handler(backend, webui_dir))
+    print("web UI is UNAUTHENTICATED — expose only on a trusted LAN", flush=True)
     Thread(target=httpd.serve_forever, name="calictl-web", daemon=True).start()
     return httpd
