@@ -18,7 +18,7 @@ The user owns a VW California T7 Ocean and wants to control its lights and fridg
 1. **App-layer crypto / nonces.** If commands carry counters, tokens, or challenge-response *above* GATT, raw-byte replay fails. Milestone: capture the *same* action twice — if payloads differ, an app-layer crypto layer exists and byte replay is out. This is checked in Task 6 before any codegen.
 2. **Transport unknown until measured.** The Camper Unit may use BLE/GATT or classic Bluetooth (RFCOMM/SPP). Task 3's classifier reports which; the whole GATT approach is conditional on BLE.
 
-**Scope guardrail (enforced in code, Task 8):** only `light_*`, `fridge_*`, and setpoint actions are eligible for replay codegen. Safety-relevant functions (heater, pop-top roof) are analyzed/documented but **refused** by the codegen step. Reverse-engineering one's own device for interoperability is generally lawful (EU interop exception); note the warranty implication in the README.
+**Scope guardrail (enforced in code, Task 8):** only `light_*`, `fridge_*`, and setpoint actions are eligible for replay codegen. Safety-relevant functions (heater, pop-top roof) are analyzed/documented but **refused** by the codegen step. Purpose is interoperability of the owner's own vehicle with Linux/open platforms; note the warranty implication in the README and DISCLAIMER.md.
 
 ## Global Constraints
 

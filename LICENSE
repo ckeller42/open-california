@@ -22,8 +22,6 @@ SOFTWARE.
 
 ---
 
-Note: this MIT license covers only the original work in this repository (the
-`calictl` code, tooling, and documentation). It grants no rights in any
-third-party or Volkswagen intellectual property, which is not included here.
-See DISCLAIMER.md — the Software is used entirely at your own risk and the
-authors accept no liability for any damage to your vehicle or otherwise.
+Note: this license applies to the original work in this repository (the `calictl`
+code, tooling, and documentation). No Volkswagen material is included. The Software
+is used at your own risk with no warranty and no liability — see DISCLAIMER.md.
