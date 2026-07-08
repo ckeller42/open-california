@@ -1,0 +1,39 @@
+calictl/device.py
+  s_d2c35aeebbd344::t_be9edb4b9eecc8 183
+  s_d2c35aeebbd344::t_129f4e305ad4bd 270
+  s_d2c35aeebbd344::t_43e019a813a264 42-47
+tests/test_web_serve.py
+  s_d2c35aeebbd344::t_d9ee1102a6c015 119-126
+tools/mock_unit.py
+  s_d2c35aeebbd344::t_69f06f59c0527f 55-57
+calictl/serve.py
+  s_d2c35aeebbd344::t_75dbc502cfc597 206-209,211-213,253-258,260-261,270,273,275,278
+  s_d2c35aeebbd344::t_76480f4bb7115f 291-292
+  s_d2c35aeebbd344::t_b5d78f5c33a010 327-333
+  s_d2c35aeebbd344::t_dc143af080ba2e 262-264,267-269
+  s_d2c35aeebbd344::t_7d6d7178735ff7 271-272
+  s_d2c35aeebbd344::t_4bdec6d2066f25 274
+  s_d2c35aeebbd344::t_dd06f17ab911ee 276-277
+  s_d2c35aeebbd344::t_4bdbc88a7e1840 279-281,288-290
+  s_d2c35aeebbd344::t_15e0a2af0ca652 265-266,282-287
+tests/e2e/test_gui.py
+  s_d2c35aeebbd344::t_e3fb7358c3c485 1-114
+.github/workflows/ci.yml
+  s_d2c35aeebbd344::t_3caacedbc8ce5e 73-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5bf5e724e8046dcd81cde1bb4b7b7b70c3d6dcd6",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
