@@ -337,6 +337,29 @@ def test_vehicle_decode_char_1004():
     assert semantics.vehicle(P.decode(f["vehicle"], raw_neg))["level_roll"] == -1
 
 
+def test_cli_set_check_all_rows():
+    from calictl import cli
+    # (function, what, value, interp, decoded) -> (label, got, want)
+    assert cli._set_check("cooler", "power", "on", {}, {"State": 1}) == ("State", 1, 1)
+    assert cli._set_check("cooler", "power", "off", {}, {"State": 0}) == ("State", 0, 0)
+    assert cli._set_check("cooler", "level", "5", {}, {"Level": 5}) == ("Level", 5, 5)
+    assert cli._set_check("campingmode", "master", "on", {"master_on": True}, {}) == ("master_on", True, True)
+    assert cli._set_check("campingmode", "usb", "off", {"usb_charger": False}, {}) == ("usb_charger", False, False)
+    assert cli._set_check("campingmode", "lights", "on", {"lights_on": True}, {}) == ("lights_on", True, True)
+    assert cli._set_check("lighting", "power", "on", {"any_on": True}, {}) == ("any_on", True, True)
+    assert cli._set_check("airheater", "power", "on", {"running": True}, {}) == ("running", True, True)
+    assert cli._set_check("airheater", "level", "9", {"level": 9}, {}) == ("level", 9, 9)
+    # unknown target -> passthrough with no expectation
+    assert cli._set_check("cooler", "bogus", "x", {}, {}) == ("bogus", None, None)
+
+
+def test_cli_max_zone():
+    from calictl import cli
+    interp = {"brightness_zone_1": 0, "brightness_zone_10": 13, "brightness_zone_16": 8, "other": 99}
+    assert cli._max_zone(interp) == 13
+    assert cli._max_zone({}) == 0
+
+
 def test_heartbeat_counter_bytes():
     # 1003 liveness counter: 4-byte big-endian, monotonic +1, wraps at 32 bits.
     from calictl import device
