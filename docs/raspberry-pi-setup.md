@@ -93,7 +93,10 @@ journalctl -u calictl -f                                    # daemon logs
 ```
 
 Add Home Assistant / MQTT / InfluxDB / Grafana: `calictl/deploy/homeassistant/HOMEASSISTANT.md`
-and `calictl/deploy/GRAFANA.md` (`install.sh --with-sinks` pre-installs the Python client libs).
+and `calictl/deploy/GRAFANA.md`. `install.sh --with-sinks` installs the Python client libs
+**and prompts for the MQTT broker credentials**, writing them to `calictl.env` — so the
+calictl→broker side is done; you still stand up the broker + Home Assistant and pair HomeKit
+(the UI steps) per HOMEASSISTANT.md.
 
 ## Troubleshooting
 

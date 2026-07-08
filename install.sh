@@ -25,6 +25,7 @@ SERVICE_NAME="calictl"
 DIR="$DEFAULT_DIR"
 WITH_SINKS=0; NO_SERVICE=0; DRY_RUN=0; ASSUME_YES=0; FORCE=0
 IDENTITY=""
+MQTT_HOST=""; MQTT_PORT=""; MQTT_USER=""; MQTT_PASSWORD=""   # set by configure_sinks
 
 # --- tiny output helpers ----------------------------------------------------
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -34,7 +35,8 @@ die()  { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<EOF
 open-california installer
-  --with-sinks     also pip-install MQTT/InfluxDB client deps (paho-mqtt, influxdb_client)
+  --with-sinks     install MQTT/InfluxDB client deps AND prompt for MQTT broker creds
+                   (written to the env file, for the Home Assistant bridge)
   --no-service     do not install/enable the systemd service (just print the command)
   --dir PATH       install location for the repo + venv (default: $DEFAULT_DIR)
   --config-dir DIR env-file directory (default: $CONFIG_DIR)
@@ -65,6 +67,18 @@ confirm() {  # confirm "question" -> 0 if yes
   [ "$ASSUME_YES" = 1 ] && return 0
   _a=$(ask "$1 [y/N]")
   case "$_a" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+}
+
+ask_secret() {  # ask_secret "prompt" -> echoes reply with terminal echo OFF (no leak)
+  _sp="$1"
+  if [ "$DRY_RUN" = 1 ]; then echo ""; return 0; fi
+  [ -r /dev/tty ] || die "no terminal for a password prompt"
+  printf '%s ' "$_sp" > /dev/tty
+  stty -echo < /dev/tty 2>/dev/null || true
+  IFS= read -r _sv < /dev/tty || _sv=""
+  stty echo < /dev/tty 2>/dev/null || true
+  printf '\n' > /dev/tty
+  echo "$_sv"
 }
 
 # --- bluetoothctl output parsing (pure; unit-tested via OC_INSTALL_LIB) ------
@@ -124,6 +138,24 @@ setup_venv() {
     info "Installing sink deps (paho-mqtt, influxdb_client)"
     run "$DIR/.venv/bin/pip" install paho-mqtt influxdb_client
   fi
+}
+
+# When --with-sinks: gather MQTT broker credentials for the Home Assistant bridge, so serve
+# can publish MQTT discovery. Only the calictl->broker side is configured here; the broker
+# itself, Home Assistant, and HomeKit pairing stay manual (see HOMEASSISTANT.md).
+configure_sinks() {
+  [ "$WITH_SINKS" = 1 ] || return 0
+  info "Configuring the MQTT sink (Home Assistant bridge)"
+  if [ "$DRY_RUN" = 1 ]; then
+    printf '  + prompt MQTT host/port/user/password -> %s/calictl.env\n' "$CONFIG_DIR"
+    MQTT_HOST="127.0.0.1"; MQTT_PORT="1883"; MQTT_USER="calictl"; MQTT_PASSWORD="<hidden>"
+    return 0
+  fi
+  _h=$(ask "MQTT broker host [127.0.0.1]:");  MQTT_HOST="${_h:-127.0.0.1}"
+  _p=$(ask "MQTT broker port [1883]:");       MQTT_PORT="${_p:-1883}"
+  _u=$(ask "MQTT username [calictl]:");        MQTT_USER="${_u:-calictl}"
+  MQTT_PASSWORD=$(ask_secret "MQTT password (input hidden):")
+  [ -n "$MQTT_PASSWORD" ] || warn "empty MQTT password — set MQTT_PASSWORD in $CONFIG_DIR/calictl.env later"
 }
 
 # Scan for the vehicle by NAME (its BLE address rotates until bonded). Echoes the MAC.
@@ -203,9 +235,16 @@ write_env() {
   run sudo install -d -m 755 "$CONFIG_DIR"
   if [ "$DRY_RUN" = 1 ]; then
     printf '  + write CALICTL_ADDR=%s -> %s (0600 root)\n' "${IDENTITY:-<identity>}" "$envfile"
+    [ -n "$MQTT_HOST" ] && printf '  + write MQTT_HOST/PORT/USER/PASSWORD (password hidden) -> %s\n' "$envfile"
     return 0
   fi
-  printf 'CALICTL_ADDR=%s\n' "$IDENTITY" | sudo tee "$envfile" >/dev/null
+  {
+    printf 'CALICTL_ADDR=%s\n' "$IDENTITY"
+    if [ -n "$MQTT_HOST" ]; then
+      printf 'MQTT_HOST=%s\nMQTT_PORT=%s\nMQTT_USER=%s\nMQTT_PASSWORD=%s\n' \
+        "$MQTT_HOST" "$MQTT_PORT" "$MQTT_USER" "$MQTT_PASSWORD"
+    fi
+  } | sudo tee "$envfile" >/dev/null
   sudo chmod 600 "$envfile"
 }
 
@@ -264,6 +303,7 @@ $(info "Done.")
     $DIR/.venv/bin/python -m calictl set cooler power on
     journalctl -u $SERVICE_NAME -f          # daemon logs
 
+$( [ "$WITH_SINKS" = 1 ] && printf '  MQTT credentials written to the env file. Next, stand up the broker + Home Assistant\n  and pair HomeKit (manual/UI steps): calictl/deploy/homeassistant/HOMEASSISTANT.md\n' )
   Add MQTT / InfluxDB / Home Assistant / Grafana: see calictl/deploy/ (HOMEASSISTANT.md, GRAFANA.md).
 EOF
 }
@@ -273,9 +313,9 @@ plan() {
 open-california installer — planned actions${DRY_RUN:+ (DRY RUN)}:
   1. apt-get install bluez git python3-venv python3-pip   (sudo)
   2. clone/update the repo at            $DIR
-  3. create venv + pip install bleak$( [ "$WITH_SINKS" = 1 ] && echo " + sinks" )
-  4. guided BLE pairing with $DEVICE_NAME (you type the passkey shown on the camper)
-  5. write CALICTL_ADDR ->               $CONFIG_DIR/calictl.env   (sudo, 0600)
+  3. create venv + pip install bleak$( [ "$WITH_SINKS" = 1 ] && echo " + MQTT/Influx client deps" )
+  4. guided BLE pairing with $DEVICE_NAME (you type the passkey shown on the camper)$( [ "$WITH_SINKS" = 1 ] && printf '\n  4b. prompt for MQTT broker credentials (Home Assistant bridge)' )
+  5. write CALICTL_ADDR$( [ "$WITH_SINKS" = 1 ] && echo " + MQTT_*" ) ->        $CONFIG_DIR/calictl.env   (sudo, 0600)
   6. verify reads (calictl status), then $( [ "$NO_SERVICE" = 1 ] && echo "skip the service" || echo "enable the $SERVICE_NAME service" )
 EOF
 }
@@ -304,6 +344,7 @@ main() {
   acquire_repo
   setup_venv
   pair_vehicle
+  configure_sinks
   write_env
   verify_reads
   install_service

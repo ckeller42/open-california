@@ -60,7 +60,9 @@ file.
 
 ## 3. Set credentials
 
-**calictl side** — add to `/etc/buspi/calictl.env` (gitignored, instance-only):
+**calictl side** — the MQTT credentials go in the env file
+(`/etc/opencalifornia/calictl.env` for a fresh install, `/etc/buspi/calictl.env` on the
+legacy buspi host — whichever your `calictl.service` points at):
 
 ```bash
 MQTT_HOST=127.0.0.1
@@ -68,6 +70,10 @@ MQTT_PORT=1883
 MQTT_USER=calictl
 MQTT_PASSWORD=<the password you set above>
 ```
+
+> `install.sh --with-sinks` prompts for these and writes them to the env file for you (see
+> [`docs/raspberry-pi-setup.md`](../../../docs/raspberry-pi-setup.md)); you still create the
+> broker user (step 2) and stand up the containers below.
 
 **Home Assistant side** — MQTT broker credentials are entered once through
 the UI after first boot (Settings → Devices & Services → Add Integration →
