@@ -1,0 +1,28 @@
+tests/test_build_web.py
+  s_d2c35aeebbd344::t_9a585f6941acfe 59-98
+tools/build_web.py
+  s_d2c35aeebbd344::t_0f5d377bfca67b 25-31
+ui/labels.yaml
+  s_d2c35aeebbd344::t_37ece5f7c655ac 37-39
+  s_d2c35aeebbd344::t_49e1ae8b92d7aa 26-30
+  s_d2c35aeebbd344::t_45318672aa3a13 17-21
+  s_d2c35aeebbd344::t_a336ae808d0283 60-64
+ui/screens/energy.yaml
+  s_d2c35aeebbd344::t_4340a2cd617e0b 110-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9ddf41cfff4726cb0091dba664e900e1430f584a",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
