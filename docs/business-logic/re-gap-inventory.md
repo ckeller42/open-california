@@ -19,7 +19,7 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 
 | # | Gap | Kind | Resolvable now? |
 |---|-----|------|-----------------|
-| 1 | **Lighting SET does not actuate** — ProfileNumber ruled out live (§A1); gate unknown | protocol | needs HCI capture |
+| ~~1~~ | ~~Lighting SET does not actuate~~ — **SOLVED + live-verified** (14-sentinel + active profile, §A1) | protocol | ✅ done |
 | 3 | MERGED_AMBIGUOUS control offsets — **roof/roofAC/stairs/LR-heater remain** (airheater done) | protocol | **static** |
 | 4 | **1003 counter cadence / firmware disarm timeout** | protocol | needs idle HCI capture |
 | 5 | Lighting **profile/color/wake-timer** notification overlay | protocol | static (enum decode) |
@@ -37,16 +37,16 @@ changelog are in **[DECISIONS.md](DECISIONS.md)**. (Lighting SET was thought fix
 
 ## A. BLE protocol / control gaps
 
-### A1 — Lighting SET is UNSOLVED (ProfileNumber ruled out on-device 2026-07-08)
-The `Mode=4` SET_BRIGHTNESS frame is ACKed but never changes the `1502` zones. The
-decompile-derived "echo the active ProfileNumber" theory (it looked statically airtight) was
-**disproven live**: under a running 1003 heartbeat, a SET_BRIGHTNESS with **every** ProfileNumber
-0–14 was ACKed yet left the zones unchanged (`scratchpad/profile_sweep.py`, buspi). So the gate is
-**not ProfileNumber** — and not the heartbeat (cooler/camping actuate fine under it). Leading
-suspects now: **`LightValue`** (likely a per-zone enable bitmask, which our frame sends as 0) or a
-required **SET_PROFILE preamble**. **Needs an HCI capture** of the app performing a real brightness
-change to see exactly what it writes. `control._lighting` still echoes the current ProfileNumber
-(more correct than hardcoding 0) but `set lighting` honestly reports NOT APPLIED. Lighting overlay = §A5.
+### A1 — Lighting SET — SOLVED + live-verified (HCI capture 2026-07-08)
+Two things our static guesses got wrong, both nailed by the owner's HCI capture of the app:
+(1) unchanged zones carry **`14` (0xe) = leave-unchanged**, NOT 0; (2) a profile must be
+**ACTIVE** (the earlier ProfileNumber sweep failed only because it *also* zeroed the zones).
+**Recipe (verified on buspi):** `set lighting profile 9` to activate profile "A", then
+`set lighting <zone> <0-13>` — the zone applies; every other zone = 14. Profile switch = Mode
+16. calictl reproduces the app byte-for-byte. `control._lighting` rewritten (14-sentinel,
+per-zone / all / power / profile grammar, `LIGHT_ZONES` map). See DECISIONS.md 2026-07-08.
+**Still open (need more captures):** SET_COLOR, Wecklicht wake-light, the Alle-Lichter master
+frame, the full 16-zone→lamp map (~6 confirmed), and the profile-number semantics (A=9).
 
 ### A2 — chars 1004 / 1002 / satellite 1903–1905 (RESOLVED; open leads)
 1004 modeled; **1002 = `SHA-256(VIN)[16:32]`**; sat chars 1903–1905 mapped — detail + citations

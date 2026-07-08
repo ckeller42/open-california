@@ -32,21 +32,17 @@ def test_cooler_scenario_zero_diff():
 
 
 def test_lighting_lead_detected():
-    """Simulate the app carrying LightValue + a lit zone that calictl leaves at 0 —
-    exactly the signal that would crack lighting SET."""
+    """The diff tool flags a field the app carries that calictl leaves at 0/sentinel."""
     funcs = _funcs()
     scen = Scenario.from_dict("lighting/kitchen-50", {
-        "function": "lighting", "what": "brightness", "value": 8, "control_char": "1501"})
-    ours_frame = control.build(funcs, "lighting", "brightness", 8, {})
+        "function": "lighting", "what": "kitchen", "value": 5, "control_char": "1501"})
+    ours_frame = control.build(funcs, "lighting", "kitchen", 5, {})
     app_vals = dict(control.decode_control(funcs["lighting"], ours_frame))
-    zone = next(cf.name for cf in funcs["lighting"].control_fields
-                if cf.name.startswith("BrightnessL") and cf.placed)
-    app_vals["LightValue"] = 1                          # app enables the zone mask
-    app_vals[zone] = 8                                  # ...and lights the zone
+    app_vals["LightValue"] = 1                          # app carries a field we send as 0
     app_frame = protocol.encode(funcs["lighting"], app_vals, frame_bytes=16)
 
     rows, leads, _ = capture_diff.diff(funcs, scen, app_frame)
-    assert "LightValue" in leads and zone in leads
+    assert "LightValue" in leads
     assert any(not r.match for r in rows)
 
 

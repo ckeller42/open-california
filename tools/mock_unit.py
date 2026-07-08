@@ -19,9 +19,9 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
   * **Range validation → link drop:** an out-of-range field value raises
     ``MockDisconnect`` (the unit drops the ATT link with 0x0E; e.g. cooler State=3).
     This runs regardless of arming (the firmware's parse layer always validates).
-  * **Lighting ACK-but-ignore (STILL UNSOLVED):** a lighting SET is accepted but changes
-    no zones — the mock reproduces the real, unsolved gate so it can never fool us into
-    thinking lighting actuation works.
+  * **Lighting per-zone SET (cracked 2026-07-08):** a SET_BRIGHTNESS applies the changed
+    zone and honours the ``14`` per-zone leave-unchanged sentinel (0 = set-to-0). Solved via
+    an HCI capture of the app, so the mock now actuates lighting like any other control.
   * It does NOT fake what we haven't decoded: the control→state timer offset remap and
     the roof/heater enum semantics are deliberately not modelled (untouched by writes).
 
@@ -42,6 +42,7 @@ _AUTH_SHORT = "1004"
 _HEARTBEAT_SHORT = "1003"
 
 LEAVE_UNCHANGED_2BIT = 3   # the sg.a 2-bit "leave unchanged" sentinel (see control.SENTINEL)
+LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 
 # Per-function initial decoded state. Installed flags on so semantics reports the
 # function as present; loads start OFF. Functions absent here start all-zero.
@@ -134,11 +135,7 @@ class MockCamperUnit:
                 except ValueError as e:
                     raise MockDisconnect("out-of-range write to %s: %s" % (fn, e))
 
-        # 2) lighting SET is STILL UNSOLVED — accept the frame but change nothing.
-        if fn == "lighting":
-            return
-
-        # 3) apply layer — gated on the 1003 heartbeat (issue #2). Without a live
+        # 2) apply layer — gated on the 1003 heartbeat (issue #2). Without a live
         #    heartbeat the write is ACKed and ignored.
         if not self.armed:
             return
@@ -147,7 +144,10 @@ class MockCamperUnit:
             if not (cf.placed and cf.name in ctrl):
                 continue
             if cf.width == 2 and ctrl[cf.name] == LEAVE_UNCHANGED_2BIT:
-                continue                          # full-packet "leave unchanged" sentinel
+                continue                          # full-packet "leave unchanged" 2-bit sentinel
+            if fn == "lighting" and cf.name.startswith("BrightnessL") \
+                    and ctrl[cf.name] == LIGHT_ZONE_UNCHANGED:
+                continue                          # lighting per-zone leave-unchanged (14, from the HCI capture)
             if func.state_field(cf.name) is None:
                 continue                          # not a name-aligned control→state field
                                                   # (offset-remapped timers are NOT faked)

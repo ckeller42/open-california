@@ -6,8 +6,10 @@
     calictl set cooler power on|off
     calictl set cooler level <1-5>
     calictl set campingmode master|lights|usb on|off
-    calictl set lighting power on|off
-    calictl set lighting brightness <0-15>
+    calictl set lighting power on|off             # every zone on (13) / off
+    calictl set lighting <zone> <0-13>            # zones: reading-1/2/3, kitchen, roof-ambient, outside-rear
+    calictl set lighting all <0-13>               # every zone to one level
+    calictl set lighting profile <N>              # switch the active lighting profile
     calictl set airheater power on|off
     calictl set airheater level <0-15>
     calictl set roofaircondition power on|off       # UNVERIFIED (not installed)
@@ -98,6 +100,8 @@ def _set_check(function, what, value, interp, decoded):
     """Post-write success check: (label, got, want). `got == want` -> OK. Reads the
     targeted field from the interpreted state (or the raw decode for cooler numerics)."""
     on = str(value).strip().lower() in ("on", "true", "1")
+    if function == "lighting" and what != "power":
+        return _lighting_check(what, value, interp)
     table = {
         ("cooler", "power"):        lambda: ("State", decoded.get("State"), 1 if on else 0),
         ("cooler", "level"):        lambda: ("Level", decoded.get("Level"), int(value)),
@@ -105,7 +109,6 @@ def _set_check(function, what, value, interp, decoded):
         ("campingmode", "usb"):     lambda: ("usb_charger", interp.get("usb_charger"), on),
         ("campingmode", "lights"):  lambda: ("lights_on", interp.get("lights_on"), on),
         ("lighting", "power"):      lambda: ("any_on", interp.get("any_on"), on),
-        ("lighting", "brightness"): lambda: ("max_zone", _max_zone(interp), int(value)),
         ("airheater", "power"):     lambda: ("running", interp.get("running"), on),
         ("airheater", "level"):     lambda: ("level", interp.get("level"), int(value)),
         # UNVERIFIED targets (not installed on this van) — interp keys per semantics.py.
@@ -126,6 +129,22 @@ def _set_check(function, what, value, interp, decoded):
 
 def _max_zone(interp):
     return max((interp.get("brightness_zone_%d" % z) or 0 for z in range(1, 17)), default=0)
+
+
+# friendly lighting-zone key -> the interpreted brightness_zone_<N> it maps to (see
+# control.LIGHT_ZONES / semantics._LZONES). Used only for the CLI's applied-check.
+_LIGHT_ZONE_NUM = {"reading-1": 2, "reading-2": 1, "reading-3": 4,
+                   "kitchen": 7, "roof-ambient": 8, "outside-rear": 3}
+
+
+def _lighting_check(what, value, interp):
+    """Applied-check for the per-zone lighting grammar (zone / all / profile)."""
+    if what == "profile":
+        return ("profile", interp.get("profile"), int(value))
+    znum = _LIGHT_ZONE_NUM.get(what)
+    if znum is not None:
+        return ("zone_%d" % znum, interp.get("brightness_zone_%d" % znum), int(value))
+    return ("max_zone", _max_zone(interp), int(value))   # "all" or a raw field: check the peak
 
 
 async def _set_roof(f, funcs, dev, args):

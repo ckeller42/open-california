@@ -46,14 +46,7 @@ const FEATURES = {
     summary: (s) => onoff(s.master_on),
   },
   lighting: {
-    title: "Lighting", icon: "💡",
-    note: "Lighting actuation over BLE isn't supported yet — status only.",
-    controls: [],
-    readouts: [
-      { label: "Any zone on", get: (s) => yn(s.any_on) },
-      { label: "Zones lit", get: (s) => zonesLit(s) },
-      { label: "Profile", get: (s) => s.profile },
-    ],
+    title: "Lighting", icon: "💡", lighting: true,   // custom renderer (renderLighting)
     summary: (s) => onoff(s.any_on),
   },
   airheater: {
@@ -97,7 +90,8 @@ const FEATURES = {
     title: "Vehicle", icon: "🚗",
     readouts: [
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
-      { label: "Leveling (roll / pitch)", get: (s) => `${s.level_roll} / ${s.level_pitch}` },
+      { label: "Leveling (roll / pitch)",
+        get: (s) => `${s.level_roll}° / ${s.level_pitch}°` },
       { label: "Vehicle clock", get: (s) => s.car_clock },
     ],
     summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
@@ -211,10 +205,74 @@ function renderDashboard() {
   app.appendChild(grid);
 }
 
+// Lighting lamps, grouped like the app (from the HCI capture + screenshots). `what` is the
+// control API zone key (control.LIGHT_ZONES); `zone` is the interpreted brightness_zone_<N>.
+const LIGHT_LAMPS = [
+  { group: "Reading lights", lamps: [
+    { label: "Left", what: "reading-1", zone: 2 },
+    { label: "Right", what: "reading-2", zone: 1 },
+    { label: "Passenger", what: "reading-3", zone: 4 } ] },
+  { group: "Kitchen", lamps: [{ label: "Kitchen", what: "kitchen", zone: 7 }] },
+  { group: "Pop-roof", lamps: [{ label: "Ambient", what: "roof-ambient", zone: 8 }] },
+  { group: "Outside", lamps: [{ label: "Rear", what: "outside-rear", zone: 3 }] },
+];
+const LIGHT_MAX = 13;   // brightness 0..13 (14 = the leave-unchanged sentinel)
+
+function renderLighting(s) {
+  titleEl.textContent = "Lighting";
+  const active = !!(s.profile && s.profile !== 0);
+  // profile card — a profile must be active for zone changes to apply (verified on-device)
+  const pc = document.createElement("div"); pc.className = "card";
+  const prow = document.createElement("div"); prow.className = "row";
+  const plabel = document.createElement("span"); plabel.className = "lbl";
+  plabel.textContent = active ? "Profile " + s.profile + " active" : "No profile active";
+  prow.appendChild(plabel);
+  const pbtn = document.createElement("button"); pbtn.className = "btn"; pbtn.style.flex = "0 0 auto";
+  pbtn.textContent = active ? "Reactivate" : "Activate";
+  pbtn.disabled = busy;
+  pbtn.onclick = () => command("lighting", "profile", 9);   // profile 9 = A (verified)
+  prow.appendChild(pbtn);
+  pc.appendChild(prow);
+  app.appendChild(pc);
+  if (!active) {
+    const n = document.createElement("div"); n.className = "note";
+    n.textContent = "Activate a lighting profile to control the lamps.";
+    app.appendChild(n);
+  }
+  // lamp sliders, grouped
+  for (const grp of LIGHT_LAMPS) {
+    const card = document.createElement("div"); card.className = "card";
+    const h = document.createElement("div"); h.className = "note"; h.style.padding = ".6rem 0 0";
+    h.textContent = grp.group; card.appendChild(h);
+    for (const lamp of grp.lamps) {
+      const row = document.createElement("div"); row.className = "row";
+      const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = lamp.label;
+      const val = s["brightness_zone_" + lamp.zone];
+      const isPending = busy && pending_is("lighting", lamp.what);
+      row.appendChild(lbl);
+      if (isPending) row.appendChild(spinner());
+      const inp = document.createElement("input"); inp.type = "range"; inp.min = 0; inp.max = LIGHT_MAX;
+      inp.value = val != null ? val : 0; inp.disabled = busy;
+      const out = document.createElement("span"); out.className = "sval";
+      out.textContent = isPending ? "…" : (val != null ? val : 0);
+      inp.oninput = () => (out.textContent = inp.value);
+      inp.onchange = () => command("lighting", lamp.what, Number(inp.value));
+      row.appendChild(inp); row.appendChild(out);
+      card.appendChild(row);
+    }
+    app.appendChild(card);
+  }
+}
+
+function pending_is(fn, what) {
+  return pending && pending.fn === fn && pending.what === what;
+}
+
 function renderFeature(fn) {
   const f = FEATURES[fn];
   const s = STATE[fn] || {};
   titleEl.textContent = f.title;
+  if (f.lighting) return renderLighting(s);
   if (f.controls && f.controls.length) {
     const card = document.createElement("div");
     card.className = "card";

@@ -8,6 +8,32 @@ under the JADX decompile (`…/scratchpad/decompile/src/sources` = CLEAN,
 
 ---
 
+## 2026-07-08 — HCI capture (owner's phone ↔ van): lighting CRACKED + live-verified
+
+Owner captured the CaliforniaOnTour app driving the real van (`idevicebtlogger` on the bar
+Mac; the phone had the iOS Bluetooth-logging profile). This resolved three gaps at once.
+
+- **Lighting SET — SOLVED and live-verified** (supersedes §A1). SET_BRIGHTNESS (Mode 4) changes
+  ONE zone; every OTHER zone carries **`14` (0xe) = leave-unchanged**, NOT 0 — our old builder
+  zeroed all zones, and the earlier ProfileNumber sweep failed only because it *also* zeroed
+  them. ProfileNumber echoes the active profile; the profile switch is **Mode 16**. calictl
+  reproduces the app byte-for-byte (Kitchen=5 @profile 9 → `0904000000000000eeeeeee5eeeeeeee`;
+  SET_PROFILE → `0010…`). **RECIPE, verified on buspi with the app gone:** a profile must be
+  ACTIVE first — `set lighting profile 9` (→ profile 9 = "A") then `set lighting <zone> <0-13>`
+  applies; with no active profile (state reads 0) bare SET_BRIGHTNESS is ACKed but ignored.
+  Partial zone→lamp map from the drags: L1/L2/L4 = Leselichter (Links/Rechts/Beifahrer), L3 =
+  Außenlicht (Umgebung hinten), L7 = Küche, L8 = Aufstelldach (Ambientelicht).
+- **Air-heater — VERIFIED.** calictl's on/off frames match the app byte-for-byte (on
+  `3d7b007f1f3f`, off `3c7b007f1f3f`; `NormalOperationRequest` 1/0, other fields at their
+  leave-unchanged sentinels). Dropped the "not live-verified" caveat.
+- **Roof — SafetyCounter is a LIVE +1 counter.** Direction bytes were already right (open
+  `0x01`, close `0x04`, stop `0x00`); the app writes an incrementing 32-bit SafetyCounter
+  (frame bytes 1-4) on every roof frame, idle and moving. `device.actuate_roof` now increments
+  it instead of sending a fixed 0. Still not live-verified on hardware (safety).
+- **Still open:** lighting SET_COLOR / Wecklicht (wake-light) / Alle-Lichter master / full
+  16-zone map / profile-number semantics; air-heater level+runtime frames; leveling (char 1004
+  read decode still wrong — needs the app's parser). See `re-gap-inventory.md`.
+
 ## 2026-07-08 — 6-agent decompile batch + VIN + APK strings
 
 - **Lighting SET — theory PROPOSED then DISPROVEN live** (`re-gap` §A1). The decompile said the

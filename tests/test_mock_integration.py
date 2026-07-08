@@ -71,14 +71,16 @@ def test_set_cooler_level_out_of_range_is_clean_error(mock, capsys):
     assert mock.decoded("cooler")["Level"] == 3          # unchanged seed default
 
 
-# --- lighting stays honestly unsolved ---------------------------------------
+# --- lighting now actuates (cracked via HCI capture 2026-07-08) --------------
 
-def test_set_lighting_brightness_not_applied(mock):
+def test_set_lighting_zone_applies(mock):
     from calictl import cli
-    # rc 1 == NOT APPLIED; the mock ACKs the frame but changes no zones.
-    assert cli.main(["set", "lighting", "brightness", "8"]) == 1
+    # rc 0 == applied; the mock now honours the SET_BRIGHTNESS frame (14 = leave unchanged).
+    assert cli.main(["set", "lighting", "kitchen", "8"]) == 0
     dec = mock.decoded("lighting")
-    assert not any(v for k, v in dec.items() if k.startswith("BrightnessL"))
+    assert dec["BrightnessLSeven"] == 8                       # kitchen zone set
+    # unchanged zones (sent as 14) were left as-is, not clobbered to 14
+    assert dec["BrightnessLOne"] != 14
 
 
 # --- the 1003 arm-gate, at the unit level -----------------------------------
