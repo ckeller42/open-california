@@ -28,3 +28,13 @@ def test_index_and_assets_served():
                 assert needle in r.read()
     finally:
         srv.shutdown()
+
+
+def test_no_vw_brand_strings_in_committed_assets():
+    # The web UI must ship with neutral wording only — no VW/CaliforniaOnTour
+    # branding in the committed frontend files.
+    banned = (b"VW California", b"CaliforniaOnTour", b"Volkswagen")
+    for name in ("index.html", "app.js", "app.css"):
+        content = (Path(WEBUI) / name).read_bytes()
+        for needle in banned:
+            assert needle not in content, "%s found in %s" % (needle, name)
