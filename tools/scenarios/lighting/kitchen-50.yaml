@@ -1,13 +1,10 @@
-# The prize: capture the app setting the Kitchen zone to ~50% brightness, then diff.
-# calictl's SET_BRIGHTNESS is ACKed but never applies (re-gap-inventory.md §A1); this diff
-# should surface the field the app carries that we send as 0 — leading suspect LightValue
-# (a per-zone enable mask) or a SET_PROFILE (Mode=16) preamble frame.
-#
-# Capture SOP: in the app, open Lighting, set the Kitchen zone to 50%, label the capture
-# "kitchen-50". Zone->physical-lamp mapping is UNVERIFIED, so confirm which zone reacted.
+# Lighting was CRACKED from an HCI capture (2026-07-08): SET_BRIGHTNESS sets one zone and
+# fills every other zone with 14 (leave-unchanged); calictl now reproduces the app byte-for-
+# byte. This scenario stays as a regression/validation target — a fresh capture of the app
+# setting Kitchen should diff to zero against calictl.
 function: lighting
-what: brightness
-value: 8               # ~50% of 0..15
+what: kitchen          # BrightnessLSeven
+value: 5
 control_char: "1501"
 capture_label: kitchen-50
-state: {}             # fill with the decoded 1502 state at capture time if known
+state: {ProfileNumber: 9}   # the active profile at capture time (echoed into the frame)

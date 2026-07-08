@@ -247,16 +247,18 @@ def test_cooler_level_control_frame_and_range():
             raise AssertionError("expected ValueError for cooler level %s" % bad)
 
 
-def test_lighting_brightness_scales_lit_zones_only():
+def test_lighting_zone_set_leaves_others_unchanged():
     from calictl import control
     f = _funcs()
-    # current state: active profile 12 (LIGHTS_ON), zones One + Three lit, the rest dark
-    last = {"ProfileNumber": 12, "BrightnessLOne": 13, "BrightnessLThree": 13}
-    back = control.decode_control(f["lighting"], control.build(f, "lighting", "brightness", "8", last))
+    # setting one zone: that zone gets the value, every OTHER zone the leave-unchanged
+    # sentinel 14 (0xe) — the HCI-verified behaviour, NOT 0.
+    last = {"ProfileNumber": 12}
+    back = control.decode_control(f["lighting"], control.build(f, "lighting", "kitchen", "8", last))
     assert back["Mode"] == control.LIGHT_MODE_SET_BRIGHTNESS   # SET_BRIGHTNESS
-    assert back["ProfileNumber"] == 12                         # echoes the ACTIVE profile (the fix)
-    assert back["BrightnessLOne"] == 8 and back["BrightnessLThree"] == 8   # lit -> scaled
-    assert back["BrightnessLTwo"] == 0 and back["BrightnessLFour"] == 0    # dark -> stay off
+    assert back["ProfileNumber"] == 12                         # echoes the ACTIVE profile
+    assert back["BrightnessLSeven"] == 8                       # kitchen (L7) -> 8
+    others = [v for k, v in back.items() if k.startswith("Brightness") and k != "BrightnessLSeven"]
+    assert set(others) == {control.LIGHT_UNCHANGED}            # every other zone = 14 (unchanged)
 
 
 def test_lighting_power_all_zones():
@@ -270,12 +272,12 @@ def test_lighting_power_all_zones():
     assert all(z == 0 for z in off_zones)
 
 
-def test_lighting_brightness_range_and_mode_guard():
+def test_lighting_brightness_range_guard():
     from calictl import control
     f = _funcs()
     for bad in ("-1", "16"):
         try:
-            control.build(f, "lighting", "brightness", bad, {})
+            control.build(f, "lighting", "kitchen", bad, {})
         except ValueError:
             pass
         else:

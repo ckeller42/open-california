@@ -74,41 +74,60 @@ def _cooler(funcs, what, value, last):
 
 
 LIGHT_MODE_SET_BRIGHTNESS = 4    # dg/n.java Mode enum (0=no-op, 4=SET_BRIGHTNESS, 16=SET_PROFILE)
-LIGHT_ON_BRIGHTNESS = 14         # zone value for "on" (0..15; the app/dict default is 14)
+LIGHT_MODE_SET_PROFILE = 16      # switch active profile (payload carries the ProfileNumber)
+# Per-zone "leave unchanged" sentinel — CRACKED via HCI capture 2026-07-08: the app fills every
+# zone it is NOT changing with 14 (0xe), not 0. 0 means "set this zone to 0"; 14 = "no change".
+LIGHT_UNCHANGED = 14
+LIGHT_ON_BRIGHTNESS = 13         # "on" brightness (0..13; 14=unchanged sentinel, so max real=13)
+
+# Friendly zone key -> BrightnessL control field, from the app's Lighting screen + the HCI
+# capture (which nibble tracked each slider). Reading trio (Links/Rechts/Beifahrer) map to
+# L1/L2/L4 — group confirmed, the left/right/passenger split within it is best-effort.
+LIGHT_ZONES = {
+    "reading-1": "BrightnessLTwo", "reading-2": "BrightnessLOne", "reading-3": "BrightnessLFour",
+    "kitchen": "BrightnessLSeven", "roof-ambient": "BrightnessLEight", "outside-rear": "BrightnessLThree",
+}
 
 
 def _lighting(funcs, what, value, last):
-    """Build a lighting SET_BRIGHTNESS frame (char 1501).
+    """Build a lighting control frame (char 1501). CRACKED via HCI capture 2026-07-08.
 
-    STATUS: lighting actuation is STILL UNSOLVED. The decompile-derived "echo the active
-    ProfileNumber" theory was **disproven on-device 2026-07-08**: under a live 1003
-    heartbeat, a SET_BRIGHTNESS with EVERY ProfileNumber 0-14 was ACKed but left the 1502
-    zones unchanged (`scratchpad/profile_sweep.py`). So the gate is NOT ProfileNumber (and
-    not the heartbeat — cooler/camping actuate fine under it). The real precondition is
-    unknown; leading suspects are `LightValue` (a per-zone enable bitmask, sent as 0 here)
-    or a SET_PROFILE preamble. Needs an HCI capture of the app doing a real brightness
-    change (re-gap-inventory §A1). We still echo `last["ProfileNumber"]` (more correct than
-    hardcoding 0) but `set lighting` will report NOT APPLIED until this is cracked.
+    The app's SET_BRIGHTNESS changes ONE zone at a time: the target zone carries the new
+    brightness, every OTHER zone carries the leave-unchanged sentinel ``14`` (NOT 0 — 0 sets
+    that zone to 0). ``ProfileNumber`` echoes the active profile. Verified byte-for-byte
+    against the app (e.g. Kitchen=5 under profile 9 -> ``0904000000000000eeeeeee5eeeeeeee``).
 
-    Zone handling: carry current per-zone brightness (per-zone→physical-lamp map also
-    UNVERIFIED): brightness <0-15> -> scale currently-lit zones (0 = all off); power -> all.
+    Grammar (``what``):
+      * a zone key (``LIGHT_ZONES``) or a raw ``BrightnessL*`` field  -> SET_BRIGHTNESS that zone
+        to ``value`` (0-13); all other zones = 14 (unchanged).
+      * ``"all"`` -> set every zone to ``value``; ``"power"`` on->13 / off->0 for every zone.
+      * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = target ProfileNumber.
     """
     f = funcs["lighting"]
     zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
-    cur = {z: int(last.get(z) or 0) for z in zone_fields}
-    if what == "brightness":
-        b = int(value)
+    profile = int(last.get("ProfileNumber") or 0)
+    base = {"ProfileNumber": profile, "Mode": LIGHT_MODE_SET_BRIGHTNESS, "Timestamp": 0, "LightValue": 0}
+
+    def _b(v):
+        b = int(v)
         if not 0 <= b <= 15:
-            raise ValueError("lighting brightness must be 0-15, got %r" % value)
-        zones = {z: (b if cur[z] else 0) for z in zone_fields}   # scale lit zones only
+            raise ValueError("lighting brightness must be 0-15, got %r" % v)
+        return b
+
+    if what == "profile":
+        vals = {**base, "Mode": LIGHT_MODE_SET_PROFILE, "ProfileNumber": int(value),
+                **{z: LIGHT_UNCHANGED for z in zone_fields}}
     elif what == "power":
-        full = LIGHT_ON_BRIGHTNESS if _truthy(value) else 0
-        zones = {z: full for z in zone_fields}
-    else:
-        return None
-    profile = int(last.get("ProfileNumber") or 0)   # echo current profile (does NOT actuate — see docstring)
-    vals = {"ProfileNumber": profile, "Mode": LIGHT_MODE_SET_BRIGHTNESS,
-            "Timestamp": 0, "LightValue": 0, **zones}
+        b = LIGHT_ON_BRIGHTNESS if _truthy(value) else 0
+        vals = {**base, **{z: b for z in zone_fields}}
+    elif what == "all":
+        b = _b(value)
+        vals = {**base, **{z: b for z in zone_fields}}
+    else:                                   # a single zone (friendly key or BrightnessL field)
+        field = LIGHT_ZONES.get(what, what)
+        if field not in zone_fields:
+            return None
+        vals = {**base, **{z: LIGHT_UNCHANGED for z in zone_fields}, field: _b(value)}
     return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 
 
