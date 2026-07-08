@@ -15,9 +15,13 @@ Hard-won connection lessons baked in:
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 
-DEFAULT_ADDR = "AA:BB:CC:DD:EE:FF"
+# The vehicle's BLE identity address is owner-specific PII — never hardcode a real one.
+# Set CALICTL_ADDR in the environment (buspi: /etc/buspi/calictl.env) or pass --addr;
+# the repo default is a non-functional placeholder.
+DEFAULT_ADDR = os.environ.get("CALICTL_ADDR", "AA:BB:CC:DD:EE:FF")
 
 
 # --- non-function GATT chars (deliberately absent from dictionary.yaml) --------

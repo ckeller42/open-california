@@ -150,8 +150,9 @@ Full GATT + identity read from buspi (app closed). Bearing on "can we get the fi
   the custom `1000–2100`+`F000` family plus standard GAP `1800` (`2a00` name "VWCAMPER",
   `2a01` appearance) and GATT `1801`. So **no chip/vendor/firmware-rev strings, no OTA** — the
   silicon is not identifiable over the air.
-- **Address `AA:BB:CC:DD:EE:FF` OUI is NOT IEEE-registered** (macvendors: not found) → private/
-  unregistered MAC, reveals no vendor.
+- **The unit's BLE address OUI is NOT IEEE-registered** (macvendors: not found) → private/
+  unregistered MAC, reveals no vendor. (The address itself is owner PII — set `CALICTL_ADDR`;
+  the repo carries only a placeholder.)
 - **Identity chars:** `1001` SW versions = `303431303032303702` → ASCII "0410"/"0207" + `0x02`
   ⇒ **AmbSwVersion "0410", CmSwVersion "0207", CommunicationVersion 2**. `1004` car-variant =
   `047e060717142a…`. **`1002` "VIN" returns 16 opaque high-entropy bytes**
