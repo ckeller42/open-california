@@ -54,3 +54,12 @@ def test_dry_run_previews_all_steps_and_touches_nothing(tmp_path):
                    "calictl.env", "calictl status", "systemd", "Done."):
         assert marker in out, "missing %r in dry-run output" % marker
     assert not target.exists()            # dry-run created nothing
+
+
+def test_with_sinks_dry_run_configures_mqtt_without_leaking_password(tmp_path):
+    r = subprocess.run(["sh", SH, "--dry-run", "--yes", "--with-sinks", "--dir", str(tmp_path / "oc")],
+                       capture_output=True, text=True, cwd=str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    out = r.stdout
+    assert "MQTT" in out and "paho-mqtt" in out          # sink deps + MQTT config previewed
+    assert "password hidden" in out                       # password is never printed
