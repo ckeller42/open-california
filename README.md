@@ -6,9 +6,10 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Reverse-engineered **read + control** for the **VW California T7 camper control unit** over
-Bluetooth LE — own-vehicle interoperability. Reads all vehicle telemetry and (with the
-firmware liveness gate solved) actuates loads, feeding **Home Assistant** (MQTT) and
-**Grafana** (InfluxDB) from a Raspberry Pi.
+Bluetooth LE. **Purpose: interoperability** — bringing the unit to **Linux and open platforms**,
+which the vendor app (iOS/Android-only) doesn't support, for use on the owner's **own** vehicle.
+Reads all vehicle telemetry and (with the firmware liveness gate solved) actuates loads, feeding
+**Home Assistant** (MQTT) and **Grafana** (InfluxDB) from a Raspberry Pi.
 
 > ⚠️ Independent RE project, **not affiliated with Volkswagen**. No VW binaries, decompiled
 > source, manuals, or artwork are distributed. See **[DISCLAIMER.md](DISCLAIMER.md)** before use.
