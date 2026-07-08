@@ -51,6 +51,10 @@ SETTLE_S = float(os.environ.get("CALICTL_SETTLE_S", "2.5"))         # let the ac
 # how long actuate_roof drives the move before force-STOPping.
 ROOF_MOVE_PERIOD_S = 1.0          # ~1 Hz move-heartbeat cadence (ig/c.java)
 ROOF_MAX_TRAVEL_S = 30.0          # hard safety cap on a single open/close command
+# HCI capture (2026-07-08) showed the app writes a LIVE +1 SafetyCounter (frame bytes 1-4,
+# 32-bit BE) on every roof frame — idle and moving. A fixed counter=0 (our old behaviour)
+# is not "live". actuate_roof increments it each resend, starting from an arbitrary high value.
+ROOF_SAFETY_START = 0x00100000
 
 
 def _beat_bytes(ctr: int) -> bytes:
@@ -250,19 +254,24 @@ class CamperDevice:
                       "may be ignored" % (auth_ok, n), flush=True)
             beat = asyncio.create_task(self._heartbeat(client, stop))
             await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
-            # 1 Hz move-heartbeat: re-send the move frame until the safety cap, then STOP.
+            # 1 Hz move-heartbeat: re-send the move frame with a LIVE +1 SafetyCounter (bytes
+            # 1-4, from the HCI capture) until the safety cap, then STOP.
+            ctr = ROOF_SAFETY_START
             deadline = time.monotonic() + max_duration_s
             while time.monotonic() < deadline:
+                frame = move_frame[:1] + (ctr & 0xFFFFFFFF).to_bytes(4, "big")
+                ctr += 1
                 try:
-                    await client.write_gatt_char(func.control_char, move_frame, response=True)
+                    await client.write_gatt_char(func.control_char, frame, response=True)
                 except Exception:
                     if not client.is_connected:
                         print("actuate_roof: link dropped mid-move — sending STOP", flush=True)
                         break
                 await asyncio.sleep(period_s)
-            # ALWAYS force a STOP (best-effort even if the link is flaky).
+            # ALWAYS force a STOP (best-effort even if the link is flaky), with the next counter.
             try:
-                await client.write_gatt_char(func.control_char, stop_frame, response=True)
+                stop_live = stop_frame[:1] + (ctr & 0xFFFFFFFF).to_bytes(4, "big")
+                await client.write_gatt_char(func.control_char, stop_live, response=True)
             except Exception:
                 pass
             if not verify or not func.state_char:

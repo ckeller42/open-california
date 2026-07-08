@@ -157,9 +157,11 @@ def _airheater_values(state: dict, **changes) -> dict:
 def _airheater(funcs, what, value, last):
     """Build an airheater (parking heater) control frame.
 
-    ``power`` on/off drives ``NormalOperationRequest`` (1=on, 0=off — verified from
-    the app's ``rf/b.java`` ``C2()`` at :187); ``level`` sets ``HeatingLevel`` 0-15.
-    Full-packet, MSB-first, like cooler. NOTE: not yet live-verified on-device.
+    ``power`` on/off drives ``NormalOperationRequest`` (1=on, 0=off); ``level`` sets
+    ``HeatingLevel`` 0-15. Full-packet, MSB-first, like cooler. VERIFIED against the real
+    app by HCI capture (2026-07-08): calictl's on/off frames match byte-for-byte —
+    on ``3d7b007f1f3f``, off ``3c7b007f1f3f`` (``NormalOperationRequest`` 1/0, other fields
+    at their leave-unchanged sentinels).
 
     :param funcs: loaded + overridden Function map.
     :param what: ``"power"`` or ``"level"``.
