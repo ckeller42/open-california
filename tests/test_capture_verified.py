@@ -33,3 +33,11 @@ def test_vehicle_leveling_is_degrees():
     interp = semantics.interpret("vehicle", d)
     assert interp["level_roll"] == -1.09
     assert interp["level_pitch"] == 0.35
+
+
+def test_vehicle_clock_unavailable_when_rtc_unset():
+    # ignition off / asleep -> all-zero time fields; clock must be None, not "1900-01-00..."
+    from calictl import semantics
+    f = _f()
+    d = protocol.decode(f["vehicle"], bytes(11))
+    assert semantics.interpret("vehicle", d)["car_clock"] is None
