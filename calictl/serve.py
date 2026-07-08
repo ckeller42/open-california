@@ -50,7 +50,7 @@ class ServeBackend:
     def state(self):
         """Interpreted state for every function in the poll cache (no BLE read)."""
         out = {}
-        for fn, decoded in (self._s._last or {}).items():
+        for fn, decoded in dict(self._s._last or {}).items():
             out[fn] = semantics.interpret(fn, decoded)
         return out
 

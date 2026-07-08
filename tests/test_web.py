@@ -178,6 +178,24 @@ def test_command_failure_does_not_leak_exception_text(server):
     assert "secret internal detail" not in json.dumps(body)
 
 
+def test_state_failure_does_not_leak_exception_text(server):
+    be, base = server
+
+    def boom(*_a, **_kw):
+        raise RuntimeError("secret internal detail")
+
+    be.state = boom
+    try:
+        status, body = _get(base + "/api/state")
+    except urllib.error.HTTPError as e:
+        status = e.code
+        body = json.loads(e.read())
+    assert status == 500
+    assert body["error"] == "state_failed"
+    assert "detail" not in body
+    assert "secret internal detail" not in json.dumps(body)
+
+
 def test_path_traversal_returns_404(server):
     _, base = server
     for path in ("/../../etc/passwd", "/a/b/../../../../etc/passwd"):

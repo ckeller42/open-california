@@ -39,7 +39,11 @@ def make_handler(backend, webui_dir):
         def do_GET(self):
             path = self.path.split("?", 1)[0]
             if path == "/api/state":
-                return self._send_json(backend.state())
+                try:
+                    return self._send_json(backend.state())
+                except Exception as e:  # log server-side only; never leak exception text to client
+                    print("web: state failed: %r" % (e,), flush=True)
+                    return self._send_json({"error": "state_failed"}, 500)
             if path == "/api/screens":
                 return self._send_bytes(backend.screens_bytes(), "application/json")
             return self._serve_static(path)
