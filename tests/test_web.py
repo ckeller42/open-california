@@ -87,6 +87,18 @@ def test_roof_requires_confirm(server):
     assert status2 == 200
 
 
+def test_airheater_requires_confirm(server):
+    be, base = server
+    status, body = _post(base + "/api/command",
+                          {"function": "airheater", "what": "power", "value": "on"})
+    assert status == 400 and body["error"] == "confirm_required"
+    assert be.commands == []   # unconfirmed request must never reach the backend
+    status2, body2 = _post(base + "/api/command",
+                            {"function": "airheater", "what": "power", "value": "on", "confirm": True})
+    assert status2 == 200 and body2["ok"] is True
+    assert be.commands[-1] == ("airheater", "power", "on", True)
+
+
 def test_read_only_rejects_commands():
     be = FakeBackend(read_only=True)
     srv = web.serve_http(be, WEBUI, "127.0.0.1", 0)

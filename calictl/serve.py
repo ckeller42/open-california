@@ -161,6 +161,23 @@ class Server:
         # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
+            if function == "roof":
+                # SAFETY-SENSITIVE: a single roof frame won't complete travel and has
+                # no guaranteed STOP, so roof must use the bounded 1 Hz move-heartbeat
+                # (device.actuate_roof), never the one-shot device.actuate. Mirrors
+                # cli._set_roof. `what` is the direction (open/close/stop).
+                try:
+                    move_frame = control.roof_frame(self.funcs, what)
+                    stop_frame = control.roof_frame(self.funcs, "stop")
+                except ValueError:
+                    return None
+                f = self.funcs["roof"]
+                if what == "stop":
+                    await self.dev.actuate(f, stop_frame, verify=True)
+                else:
+                    await self.dev.actuate_roof(f, move_frame, stop_frame, verify=True)
+                # roof has no _set_check row -- keep the honest "not applied" (unknown).
+                return None
             last = self._last.get(function)
             if not last:
                 # cold cache -> a full-packet frame built from field DEFAULTS would carry

@@ -12,6 +12,16 @@ let poll;
 // (see calictl/web.py ROOF_FUNCTION). Keep the literal in sync with that.
 const ROOF_FUNCTION = "roof";
 
+// Functions that are safety-sensitive / not-live-verified and must be gated
+// behind an explicit confirm() dialog before actuating (mirrors calictl/web.py
+// CONFIRM_REQUIRED). The message fn takes the widget's `what` token.
+const CONFIRM_MESSAGES = {
+  roof: (what) => "Roof " + what + ": this physically moves the pop-top and is "
+    + "UNVERIFIED on this vehicle. Ensure the roof path is clear. Continue?",
+  airheater: (what) => "Air heater " + what + ": this runs the fuel-burning parking "
+    + "heater, which is NOT live-verified. Continue?",
+};
+
 // Explicit widget -> command map. Only these widgets actuate. Keyed by the
 // screen's `function` and the widget's real `id` (verified against
 // calictl/webui/screens.json), mapped to the control API's `what` token
@@ -50,6 +60,18 @@ async function command(function_, what, value, confirm) {
   return res;
 }
 
+// Route a widget-driven command through a confirm() dialog when `fn` is
+// safety-sensitive / not-live-verified (CONFIRM_MESSAGES). A cancelled dialog
+// must not fire the command at all.
+function confirmedCommand(fn, what, value) {
+  const msg = CONFIRM_MESSAGES[fn];
+  if (msg) {
+    if (!confirm(msg(what))) return;
+    return command(fn, what, value, true);
+  }
+  return command(fn, what, value);
+}
+
 function installed(fn) { return !fn || !STATE[fn] || STATE[fn].installed !== false; }
 function toast(msg){ const d=document.createElement("div"); d.className="card"; d.textContent=msg;
   d.style.position="fixed"; d.style.bottom="1rem"; d.style.left="50%"; d.style.transform="translateX(-50%)";
@@ -70,7 +92,15 @@ function renderDashboard() {
   const grid = document.createElement("div"); grid.className = "tilegrid";
   for (const name of SCREENS.order) {
     const scr = SCREENS.screens[name];
-    if (name === "home" || !installed(scr.function)) continue;
+    if (name === "home") continue;
+    // Roof has no `function` in screens.json (see ROOF_FUNCTION above), so the
+    // generic installed(scr.function) is always true for it; gate it explicitly
+    // on the roof state's own installed flag instead (no pop-top -> no tile).
+    if (name === "roof") {
+      if (!(STATE[ROOF_FUNCTION] && STATE[ROOF_FUNCTION].installed !== false)) continue;
+    } else if (!installed(scr.function)) {
+      continue;
+    }
     const tile = document.createElement("button"); tile.className = "tile";
     tile.innerHTML = `<h3>${scr.title || name}</h3><div class="v">${summary(scr)}</div>`;
     tile.onclick = () => goto(name);
@@ -108,13 +138,13 @@ function renderWidget(fn, w, st) {
     const sw = document.createElement("button"); sw.className = "switch";
     const on = !!st[mapped.stateKey];
     sw.setAttribute("aria-checked", on ? "true" : "false");
-    sw.onclick = () => command(fn, mapped.what, on ? "off" : "on");
+    sw.onclick = () => confirmedCommand(fn, mapped.what, on ? "off" : "on");
     row.appendChild(sw);
   } else if (mapped && mapped.kind === "slider" && w.range) {
     const [lo, hi] = w.range.split("..").map(Number);
     const inp = document.createElement("input"); inp.type = "range";
     inp.min = lo; inp.max = hi; inp.value = st[mapped.stateKey] ?? lo;
-    inp.onchange = () => command(fn, mapped.what, Number(inp.value));
+    inp.onchange = () => confirmedCommand(fn, mapped.what, Number(inp.value));
     row.appendChild(inp);
   } else {
     // Not an actuating widget: render read-only. Show the interpreted value if we

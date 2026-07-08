@@ -12,6 +12,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
 ROOF_FUNCTION = "roof"
+# Safety-sensitive / not-live-verified targets that require an explicit client
+# confirmation flag on the POST: roof (physically moves the pop-top) and
+# airheater (fuel-burning parking heater). See CLAUDE.md "Known state".
+CONFIRM_REQUIRED = {ROOF_FUNCTION, "airheater"}
 _CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css",
                   ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml"}
 
@@ -84,7 +88,7 @@ def make_handler(backend, webui_dir):
             value = req.get("value"); confirm = bool(req.get("confirm"))
             if not fn or not what:
                 return self._send_json({"error": "missing_function_or_what"}, 400)
-            if fn == ROOF_FUNCTION and not confirm:
+            if fn in CONFIRM_REQUIRED and not confirm:
                 return self._send_json({"error": "confirm_required"}, 400)
             try:
                 result = backend.command(fn, what, value, confirm=confirm)
