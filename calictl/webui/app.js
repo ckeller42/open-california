@@ -220,6 +220,19 @@ const LIGHT_MAX = 13;   // brightness 0..13 (14 = the leave-unchanged sentinel)
 
 function renderLighting(s) {
   titleEl.textContent = "Lighting";
+  // "All lights" master toggle (the app's "Alle Lichter") — on = any real lamp lit;
+  // tapping sends power on/off (every zone). Needs an active profile to apply, like the zones.
+  const allOn = !!s.any_on;
+  const mc = document.createElement("div"); mc.className = "card";
+  const mrow = document.createElement("div"); mrow.className = "row";
+  const mlbl = document.createElement("span"); mlbl.className = "lbl"; mlbl.textContent = "All lights";
+  mrow.appendChild(mlbl);
+  if (busy && pending_is("lighting", "power")) mrow.appendChild(spinner());
+  const msw = document.createElement("button"); msw.className = "switch";
+  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = busy;
+  msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
+  mrow.appendChild(msw); mc.appendChild(mrow); app.appendChild(mc);
+
   const active = !!(s.profile && s.profile !== 0);
   // profile card — a profile must be active for zone changes to apply (verified on-device)
   const pc = document.createElement("div"); pc.className = "card";

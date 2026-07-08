@@ -19,9 +19,10 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
   * **Range validation → link drop:** an out-of-range field value raises
     ``MockDisconnect`` (the unit drops the ATT link with 0x0E; e.g. cooler State=3).
     This runs regardless of arming (the firmware's parse layer always validates).
-  * **Lighting per-zone SET (cracked 2026-07-08):** a SET_BRIGHTNESS applies the changed
-    zone and honours the ``14`` per-zone leave-unchanged sentinel (0 = set-to-0). Solved via
-    an HCI capture of the app, so the mock now actuates lighting like any other control.
+  * **Lighting per-zone SET (cracked 2026-07-08):** SET_PROFILE (Mode 16) activates a profile;
+    SET_BRIGHTNESS (Mode 4) applies the changed zone (honouring the ``14`` per-zone
+    leave-unchanged sentinel; 0 = set-to-0) but ONLY while a profile is active — the
+    live-verified precondition. All from an HCI capture of the app.
   * It does NOT fake what we haven't decoded: the control→state timer offset remap and
     the roof/heater enum semantics are deliberately not modelled (untouched by writes).
 
@@ -43,6 +44,8 @@ _HEARTBEAT_SHORT = "1003"
 
 LEAVE_UNCHANGED_2BIT = 3   # the sg.a 2-bit "leave unchanged" sentinel (see control.SENTINEL)
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
+LIGHT_MODE_SET_BRIGHTNESS = 4
+LIGHT_MODE_SET_PROFILE = 16
 
 # Per-function initial decoded state. Installed flags on so semantics reports the
 # function as present; loads start OFF. Functions absent here start all-zero.
@@ -52,10 +55,21 @@ DEFAULT_SEED = {
                     "InteriorLight": 0, "OutsideLight": 0},
     "airheater": {"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0,
                   "HeatingLevel": 0},
-    "lighting": {"ProfileNumber": 0, "Mode": 0, "LightValue": 0},   # all zones off
+    # ProfileNumber 0 = NO active profile: SET_BRIGHTNESS is ACKed but ignored until a profile
+    # is activated (SET_PROFILE) — the live-verified precondition. L10-16 hold the constant
+    # not-installed default (13) that the real van reports (so any_on must ignore them).
+    "lighting": {"ProfileNumber": 0, "Mode": 0, "LightValue": 0,
+                 "BrightnessLOneZero": 13, "BrightnessLOneOne": 13, "BrightnessLOneThree": 13,
+                 "BrightnessLOneFour": 13, "BrightnessLOneFive": 13, "BrightnessLOneSix": 13},
     # fresh 12/29 L (~41%), waste 3/22 L — so the GUI water readout has real levels
     "water": {"Installed": 1, "FreshWaterUnit": 0, "FreshWaterLevel": 12, "FreshWaterVolume": 29,
               "WasteWaterUnit": 0, "WasteWaterLevel": 3, "WasteWaterVolume": 22},
+    # ignition on, a valid RTC, and a small tilt (roll -1.09°, pitch 0.35°) so the vehicle
+    # screen shows real data in dev (raw CarLevelRoll -109 = 0.01°-units, ÷100 in semantics).
+    "vehicle": {"TerminalOneFive": 1, "CarVariant": 4,
+                "CarTimeYear": 126, "CarTimeMonth": 6, "CarTimeDay": 8,
+                "CarTimeHour": 19, "CarTimeMinute": 30, "CarTimeSecond": 0,
+                "CarLevelRoll": -109, "CarLevelPitch": 35},
 }
 
 
@@ -96,12 +110,15 @@ class MockCamperUnit:
 
     # --- reads -------------------------------------------------------------
     def read(self, uuid: str) -> bytes:
-        if uuid in (device.VERSION_CHAR, device.AUTH_CHAR):
-            return b"\x04\x10\x02\x07"           # any non-empty payload (version / auth gate)
+        # A real state characteristic wins over the auth/version stub: `vehicle` reads char
+        # 1004 and `general` reads 1001 — the SAME UUIDs device.py reads for the connect
+        # handshake — so those must return the packed state, not the placeholder.
         fn = self._state_char.get(uuid)
-        if fn is None:
-            return bytes(6)                      # unknown readable char: benign payload
-        return _pack_state(self.funcs[fn], self.state.get(fn, {}))
+        if fn is not None:
+            return _pack_state(self.funcs[fn], self.state.get(fn, {}))
+        if uuid in (device.VERSION_CHAR, device.AUTH_CHAR):
+            return b"\x04\x10\x02\x07"           # non-empty payload for the version/auth gate
+        return bytes(6)                          # unknown readable char: benign payload
 
     def decoded(self, function: str) -> dict:
         """Current decoded state as calictl would read it (for test assertions)."""
@@ -140,14 +157,28 @@ class MockCamperUnit:
         if not self.armed:
             return
         st = self.state.setdefault(fn, {})
+
+        # Lighting has its own live-verified precondition: SET_PROFILE (Mode 16) activates a
+        # profile; SET_BRIGHTNESS (Mode 4) applies zones ONLY while a profile is active
+        # (ProfileNumber != 0) — with none active the unit ACKs but ignores it.
+        if fn == "lighting":
+            mode = ctrl.get("Mode")
+            if mode == LIGHT_MODE_SET_PROFILE:
+                st["ProfileNumber"] = ctrl.get("ProfileNumber", st.get("ProfileNumber", 0))
+                return
+            if not st.get("ProfileNumber"):       # 0/None -> no active profile -> ignored
+                return
+            for cf in func.control_fields:
+                if cf.placed and cf.name.startswith("BrightnessL") and cf.name in ctrl \
+                        and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED and func.state_field(cf.name):
+                    st[cf.name] = ctrl[cf.name]
+            return
+
         for cf in func.control_fields:
             if not (cf.placed and cf.name in ctrl):
                 continue
             if cf.width == 2 and ctrl[cf.name] == LEAVE_UNCHANGED_2BIT:
                 continue                          # full-packet "leave unchanged" 2-bit sentinel
-            if fn == "lighting" and cf.name.startswith("BrightnessL") \
-                    and ctrl[cf.name] == LIGHT_ZONE_UNCHANGED:
-                continue                          # lighting per-zone leave-unchanged (14, from the HCI capture)
             if func.state_field(cf.name) is None:
                 continue                          # not a name-aligned control→state field
                                                   # (offset-remapped timers are NOT faked)
