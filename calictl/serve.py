@@ -190,7 +190,11 @@ class Server:
         try:
             loop.run_until_complete(_forever())
         finally:
-            cli.publish(mqtt.availability_topic(), "offline", retain=True)
+            info = cli.publish(mqtt.availability_topic(), "offline", retain=True)
+            try:
+                info.wait_for_publish(timeout=2)   # flush the retained "offline" before stopping
+            except Exception:
+                pass
             cli.loop_stop()
 
 
