@@ -203,6 +203,27 @@ class Server:
                 return None
             return got == want
 
+    def _maybe_start_web(self, loop):
+        """Start the embedded web UI if ``_web_port`` is set, returning the server or None.
+
+        The web UI is OPTIONAL: a bind failure (e.g. the port is already taken) must never
+        take down BLE polling + MQTT. On any startup error we log and continue headless.
+        """
+        port = getattr(self, "_web_port", None)
+        if port is None:
+            return None
+        from . import web  # lazy: stdlib http.server only, keep serve.py's import light
+        backend = ServeBackend(self, loop, read_only=getattr(self, "_read_only", False))
+        try:
+            httpd = web.serve_http(backend, _WEBUI_DIR, "0.0.0.0", port)
+        except OSError as e:
+            print("web UI failed to start on port %d (%s) — continuing without it"
+                  % (port, e), flush=True)
+            return None
+        print("web UI on http://0.0.0.0:%d%s"
+              % (port, "  (read-only)" if getattr(self, "_read_only", False) else ""), flush=True)
+        return httpd
+
     def run(self):
         """Blocking daemon: connect MQTT (+ optional InfluxDB), then poll→fan-out
         on a timer while servicing HA commands from the MQTT network thread."""
@@ -272,13 +293,8 @@ class Server:
             else:
                 print("influx disabled: no INFLUXDB_TOKEN", flush=True)
 
-        # --- web UI (replica app, embedded) ---
-        if getattr(self, "_web_port", None) is not None:
-            from . import web  # lazy: stdlib http.server only, but keep serve.py's import light
-            backend = ServeBackend(self, loop, read_only=getattr(self, "_read_only", False))
-            self._httpd = web.serve_http(backend, _WEBUI_DIR, "0.0.0.0", self._web_port)
-            print("web UI on http://0.0.0.0:%d%s" % (
-                self._web_port, "  (read-only)" if self._read_only else ""), flush=True)
+        # --- web UI (replica app, embedded) — optional; must never crash the daemon ---
+        self._httpd = self._maybe_start_web(loop)
 
         async def _forever():
             while True:
