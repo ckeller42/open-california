@@ -56,6 +56,14 @@ it. Read the script first if you like — `curl … -o install.sh && less instal
 and `sh install.sh --dry-run` previews every step without changing anything. Full guide,
 including manual steps and troubleshooting: **[docs/raspberry-pi-setup.md](docs/raspberry-pi-setup.md)**.
 
+## Web UI
+
+`calictl serve --web 8080` also serves a browser replica of the app's Vehicle-tab controls
+(dashboard → per-feature screens) at `http://<pi>:8080` — same process, no extra BLE
+connection. `--read-only` disables commands. Labels are neutral; point the build at your own
+APK for the exact app text (`python -m tools.build_web --strings <apk.cvr.json>`, local only).
+See **[docs/raspberry-pi-setup.md](docs/raspberry-pi-setup.md)**.
+
 ## Layout
 
 | Path | What |

@@ -107,7 +107,11 @@ widgets:
 
   - id: chargingWarningDialogs
     type: label
-    label_key: infoPage_sectionHeadline_charging_text
+    label_key: null  # multi-string dialog group, no single label of its own (matches
+                      # vehicleInfoListItems/acknowledgeableFaultToasts below, which are
+                      # the same kind of container and already use null); it previously
+                      # borrowed the chargingSection widget's own label_key, which made
+                      # the two widgets collide on the identical displayed label "Charging"
     range: null
     controls: null
     elements:

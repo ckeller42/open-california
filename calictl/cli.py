@@ -208,6 +208,9 @@ def build_parser():
     sv.add_argument("--interval", type=float, default=30.0)
     sv.add_argument("--no-influx", action="store_true", help="skip InfluxDB writes")
     sv.add_argument("--dry-run", action="store_true", help="print discovery + one poll, no broker/InfluxDB")
+    sv.add_argument("--web", nargs="?", const=8080, type=int, default=None,
+                    metavar="PORT", help="serve the replica web UI on PORT (default 8080)")
+    sv.add_argument("--read-only", action="store_true", help="web UI: reads only, reject commands")
     return p
 
 
@@ -222,8 +225,11 @@ def main(argv=None):
         if args.dry_run:
             asyncio.run(serve.dry_run(args.addr))
         else:
-            serve.Server(args.addr, interval=args.interval,
-                         influx_enabled=not args.no_influx).run()
+            srv = serve.Server(args.addr, interval=args.interval,
+                                influx_enabled=not args.no_influx)
+            srv._web_port = args.web
+            srv._read_only = args.read_only
+            srv.run()
         return 0
     funcs = _load()
     if getattr(args, "function", None) and args.function not in funcs:
