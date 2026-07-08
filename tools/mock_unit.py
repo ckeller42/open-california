@@ -110,12 +110,15 @@ class MockCamperUnit:
 
     # --- reads -------------------------------------------------------------
     def read(self, uuid: str) -> bytes:
-        if uuid in (device.VERSION_CHAR, device.AUTH_CHAR):
-            return b"\x04\x10\x02\x07"           # any non-empty payload (version / auth gate)
+        # A real state characteristic wins over the auth/version stub: `vehicle` reads char
+        # 1004 and `general` reads 1001 — the SAME UUIDs device.py reads for the connect
+        # handshake — so those must return the packed state, not the placeholder.
         fn = self._state_char.get(uuid)
-        if fn is None:
-            return bytes(6)                      # unknown readable char: benign payload
-        return _pack_state(self.funcs[fn], self.state.get(fn, {}))
+        if fn is not None:
+            return _pack_state(self.funcs[fn], self.state.get(fn, {}))
+        if uuid in (device.VERSION_CHAR, device.AUTH_CHAR):
+            return b"\x04\x10\x02\x07"           # non-empty payload for the version/auth gate
+        return bytes(6)                          # unknown readable char: benign payload
 
     def decoded(self, function: str) -> dict:
         """Current decoded state as calictl would read it (for test assertions)."""
