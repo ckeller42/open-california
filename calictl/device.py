@@ -39,8 +39,12 @@ HEARTBEAT_CHAR = _aux_uuid("1003")
 VERSION_CHAR = _aux_uuid("1001")
 AUTH_CHAR = _aux_uuid("1004")
 HEARTBEAT_START = 0x00100000      # arbitrary high start (no read-seed / challenge)
-HEARTBEAT_PERIOD_S = 0.6          # proven cadence; ~10 beats span the arm window
-ARM_DELAY_S = 3.0                 # let the unit register the heartbeat before writing
+# Timing (env-overridable). Defaults are the proven on-device values; the mock/e2e harness
+# shrinks them so a run is fast while still exercising the multi-step arm→write→settle window
+# (and thus the UI's in-flight feedback). Do NOT lower the defaults for real hardware.
+HEARTBEAT_PERIOD_S = float(os.environ.get("CALICTL_HEARTBEAT_PERIOD_S", "0.6"))  # ~10 beats span the arm window
+ARM_DELAY_S = float(os.environ.get("CALICTL_ARM_DELAY_S", "3.0"))   # let the unit register the heartbeat before writing
+SETTLE_S = float(os.environ.get("CALICTL_SETTLE_S", "2.5"))         # let the actuation take effect before readback
 
 # roof move-heartbeat (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame
 # won't complete travel: ig/c.java re-sends Up/Down at ~1 Hz until STOP. These bound
@@ -176,7 +180,7 @@ class CamperDevice:
             await client.write_gatt_char(func.control_char, frame, response=True)
             if not verify or not func.state_char:
                 return None
-            await asyncio.sleep(2.5)           # let the actuation take effect
+            await asyncio.sleep(SETTLE_S)      # let the actuation take effect
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw)
         finally:
@@ -263,7 +267,7 @@ class CamperDevice:
                 pass
             if not verify or not func.state_char:
                 return None
-            await asyncio.sleep(2.5)           # let the state settle after STOP
+            await asyncio.sleep(SETTLE_S)      # let the state settle after STOP
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw)
         finally:

@@ -203,45 +203,20 @@ class Server:
                 return None
             return got == want
 
-    def _maybe_start_web(self, loop):
-        """Start the embedded web UI if ``_web_port`` is set, returning the server or None.
-
-        The web UI is OPTIONAL: a bind failure (e.g. the port is already taken) must never
-        take down BLE polling + MQTT. On any startup error we log and continue headless.
-        """
-        port = getattr(self, "_web_port", None)
-        if port is None:
-            return None
-        from . import web  # lazy: stdlib http.server only, keep serve.py's import light
-        backend = ServeBackend(self, loop, read_only=getattr(self, "_read_only", False))
+    def _maybe_start_mqtt(self, loop):
+        """Connect the MQTT client for Home Assistant, or skip gracefully. Returns the client
+        or None. MQTT is OPTIONAL: paho-mqtt not installed, or the broker being unreachable,
+        must never stop BLE polling + the web UI (web-only / dev / e2e runs have no broker)."""
         try:
-            httpd = web.serve_http(backend, _WEBUI_DIR, "0.0.0.0", port)
-        except OSError as e:
-            print("web UI failed to start on port %d (%s) — continuing without it"
-                  % (port, e), flush=True)
+            import paho.mqtt.client as mqtt_client  # lazy
+        except ImportError:
+            print("mqtt: paho-mqtt not installed — skipping MQTT (polling + web only)", flush=True)
             return None
-        print("web UI on http://0.0.0.0:%d%s"
-              % (port, "  (read-only)" if getattr(self, "_read_only", False) else ""), flush=True)
-        return httpd
-
-    def run(self):
-        """Blocking daemon: connect MQTT (+ optional InfluxDB), then poll→fan-out
-        on a timer while servicing HA commands from the MQTT network thread."""
-        import paho.mqtt.client as mqtt_client  # lazy
-
-        loop = asyncio.new_event_loop()
-        self._loop = loop
-        asyncio.set_event_loop(loop)
-        self._ble = asyncio.Lock()          # the van allows ONE connection; created on this loop
-
-        # --- MQTT (Home Assistant) ---
         host = os.environ.get("MQTT_HOST", "localhost")
         port = int(os.environ.get("MQTT_PORT", "1883"))
         user = os.environ.get("MQTT_USER")
         password = os.environ.get("MQTT_PASSWORD")
-        # command_topics() is added by a later task; tolerate its absence.
         cmd_map = getattr(mqtt, "command_topics", lambda: {})()
-
         # paho-mqtt >= 2.0 requires an explicit callback API version; request V1 so the
         # 4-arg on_connect / 3-arg on_message below stay valid on both 1.x and 2.x.
         try:
@@ -275,9 +250,46 @@ class Server:
 
         cli.on_connect = on_connect
         cli.on_message = on_message
-        cli.connect(host, port, keepalive=60)
+        try:
+            cli.connect(host, port, keepalive=60)
+        except OSError as e:
+            print("mqtt: connect to %s:%d failed (%s) — skipping MQTT (polling + web only)"
+                  % (host, port, e), flush=True)
+            return None
         cli.loop_start()
-        self._mqtt = cli
+        return cli
+
+    def _maybe_start_web(self, loop):
+        """Start the embedded web UI if ``_web_port`` is set, returning the server or None.
+
+        The web UI is OPTIONAL: a bind failure (e.g. the port is already taken) must never
+        take down BLE polling + MQTT. On any startup error we log and continue headless.
+        """
+        port = getattr(self, "_web_port", None)
+        if port is None:
+            return None
+        from . import web  # lazy: stdlib http.server only, keep serve.py's import light
+        backend = ServeBackend(self, loop, read_only=getattr(self, "_read_only", False))
+        try:
+            httpd = web.serve_http(backend, _WEBUI_DIR, "0.0.0.0", port)
+        except OSError as e:
+            print("web UI failed to start on port %d (%s) — continuing without it"
+                  % (port, e), flush=True)
+            return None
+        print("web UI on http://0.0.0.0:%d%s"
+              % (port, "  (read-only)" if getattr(self, "_read_only", False) else ""), flush=True)
+        return httpd
+
+    def run(self):
+        """Blocking daemon: connect MQTT (+ optional InfluxDB), then poll→fan-out
+        on a timer while servicing HA commands from the MQTT network thread."""
+        loop = asyncio.new_event_loop()
+        self._loop = loop
+        asyncio.set_event_loop(loop)
+        self._ble = asyncio.Lock()          # the van allows ONE connection; created on this loop
+
+        # --- MQTT (Home Assistant) — optional; a missing broker must not stop polling+web ---
+        self._mqtt = self._maybe_start_mqtt(loop)
 
         # --- InfluxDB (Grafana/buspi) ---
         if self.influx_enabled:
@@ -312,12 +324,13 @@ class Server:
         try:
             loop.run_until_complete(_forever())
         finally:
-            info = cli.publish(mqtt.availability_topic(), "offline", retain=True)
-            try:
-                info.wait_for_publish(timeout=2)   # flush the retained "offline" before stopping
-            except Exception:
-                pass
-            cli.loop_stop()
+            if self._mqtt is not None:
+                info = self._mqtt.publish(mqtt.availability_topic(), "offline", retain=True)
+                try:
+                    info.wait_for_publish(timeout=2)   # flush the retained "offline" before stopping
+                except Exception:
+                    pass
+                self._mqtt.loop_stop()
 
 
 def run(addr=None, *, interval=30.0, influx_enabled=True):
