@@ -1,0 +1,34 @@
+tests/test_capture_diff.py
+  s_d2c35aeebbd344::t_ed3c1b7e838aa5 1-83
+.claude/skills/capture-and-diff/SKILL.md
+  s_d2c35aeebbd344::t_c0ecacf63a0527 1-65
+tools/scenarios/cooler/power-on.yaml
+  s_d2c35aeebbd344::t_fc04f66ece5c93 1-14
+tools/mock_unit.py
+  s_d2c35aeebbd344::t_1dfbb038dc94f1 1-212
+tools/capture_diff.py
+  s_d2c35aeebbd344::t_ea0286cec81a91 122
+  s_d2c35aeebbd344::t_38617e137ce939 1-121,123-224
+tests/test_mock_integration.py
+  s_d2c35aeebbd344::t_865dd75cd5dca5 1-139
+tools/scenarios/lighting/kitchen-50.yaml
+  s_d2c35aeebbd344::t_a5cf94d2a93a66 1-13
+tools/run_against_mock.py
+  s_d2c35aeebbd344::t_10e7ecac25cda7 1-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2cd57ae80dbc2ae50c7678ff7d0efef74861ded1",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
