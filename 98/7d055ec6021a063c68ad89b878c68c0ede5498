@@ -1,0 +1,26 @@
+calictl/influx.py
+  s_d2c35aeebbd344::t_94c1e3e83bc081 78-81
+calictl/mqtt.py
+  s_d2c35aeebbd344::t_94c1e3e83bc081 90-148,171-193,202-207
+  s_d2c35aeebbd344::t_1ad68b921d667f 208
+tests/test_ha.py
+  s_d2c35aeebbd344::t_94c1e3e83bc081 1-95
+calictl/serve.py
+  s_d2c35aeebbd344::t_a0ab0122b6d116 193-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "987d055ec6021a063c68ad89b878c68c0ede5498",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
