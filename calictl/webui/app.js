@@ -1,45 +1,106 @@
-// OpenCalifornia web UI — renders the camper Vehicle-tab controls from /api/screens + /api/state.
+// OpenCalifornia web UI — curated camper Vehicle-tab controls, driven by /api/state.
+//
+// Rather than mechanically render the reverse-engineered screen spec, each feature is a
+// small hand-authored spec: the actual controls (mapped to the /api/command `what` tokens)
+// plus the data readouts pulled from the interpreted /api/state. Labels are our own neutral
+// English (no VW app text). Actuation is slow (BLE), so every command shows a spinner on the
+// tapped control and a result toast; idle polls don't re-render (no flicker).
 const app = document.getElementById("app");
 const titleEl = document.getElementById("title");
 const backEl = document.getElementById("back");
-let SCREENS = {order: [], screens: {}};
+const statusEl = document.getElementById("status");
+
 let STATE = {};
 let view = "home";
-let poll;
+let busy = false;        // a command is in flight — BLE is slow, one at a time
+let pending = null;      // {fn, what} currently actuating -> show a spinner there
+let lastRender = "";     // signature of the last paint, to skip idle re-renders
 
-// The roof screen carries no single `function` in screens.json (its widgets span
-// a multi-action control set), but the backend targets it as function "roof"
-// (see calictl/web.py ROOF_FUNCTION). Keep the literal in sync with that.
-const ROOF_FUNCTION = "roof";
+const yn = (b) => (b ? "yes" : "no");
+const onoff = (b) => (b ? "On" : "Off");
+const tank = (t) => (t && t.percent != null ? `${t.percent}%  (${t.liters}/${t.capacity_l} L)` : "—");
+const zonesLit = (s) => Object.keys(s).filter((k) => k.startsWith("brightness_zone_") && s[k]).length;
 
-// Functions that are safety-sensitive / not-live-verified and must be gated
-// behind an explicit confirm() dialog before actuating (mirrors calictl/web.py
-// CONFIRM_REQUIRED). The message fn takes the widget's `what` token.
-const CONFIRM_MESSAGES = {
-  roof: (what) => "Roof " + what + ": this physically moves the pop-top and is "
-    + "UNVERIFIED on this vehicle. Ensure the roof path is clear. Continue?",
-  airheater: (what) => "Air heater " + what + ": this runs the fuel-burning parking "
-    + "heater, which is NOT live-verified. Continue?",
-};
-
-// Explicit widget -> command map. Only these widgets actuate. Keyed by the
-// screen's `function` and the widget's real `id` (verified against
-// calictl/webui/screens.json), mapped to the control API's `what` token
-// (calictl/control.py BUILDERS) and the interpreted state key it reflects
-// (calictl/semantics.py). Everything not listed here renders read-only.
-const CONTROL_MAP = {
+// Feature specs. `controls[].what` are /api/command tokens (calictl/control.py BUILDERS);
+// `state` is the interpreted /api/state key (calictl/semantics.py). `confirm` gates fuel/
+// motion actuators behind a dialog. `readouts[].get(state)` formats a live value.
+const ORDER = ["cooler", "campingmode", "lighting", "airheater", "water", "energy", "roof", "vehicle"];
+const FEATURES = {
   cooler: {
-    refrigeratorBoxWidget: {kind: "toggle", what: "power", stateKey: "on"},
-    coolingLevelSlider: {kind: "slider", what: "level", stateKey: "level"},
+    title: "Cooler", icon: "❄️",
+    controls: [
+      { what: "power", kind: "toggle", label: "Refrigerator", state: "on" },
+      { what: "level", kind: "slider", label: "Cooling level", state: "level", min: 1, max: 5 },
+    ],
+    readouts: [{ label: "Timer", get: (s) => onoff(s.timer_active) }, { label: "Error", get: (s) => yn(s.error) }],
+    summary: (s) => (s.on ? `On · level ${s.level}` : "Off"),
   },
   campingmode: {
-    powerToggle: {kind: "toggle", what: "master", stateKey: "master_on"},
-    usbChargerToggle: {kind: "toggle", what: "usb", stateKey: "usb_charger"},
-    allLightsToggle: {kind: "toggle", what: "lights", stateKey: "lights_on"},
+    title: "Camping mode", icon: "🏕️",
+    controls: [
+      { what: "master", kind: "toggle", label: "Camping mode", state: "master_on" },
+      { what: "lights", kind: "toggle", label: "Interior + outside lights", state: "lights_on" },
+      { what: "usb", kind: "toggle", label: "Rear USB ports", state: "usb_charger" },
+    ],
+    readouts: [{ label: "Ignition (terminal-15)", get: (s) => onoff(s.enable) }],
+    summary: (s) => onoff(s.master_on),
+  },
+  lighting: {
+    title: "Lighting", icon: "💡",
+    note: "Lighting actuation over BLE isn't supported yet — status only.",
+    controls: [],
+    readouts: [
+      { label: "Any zone on", get: (s) => yn(s.any_on) },
+      { label: "Zones lit", get: (s) => zonesLit(s) },
+      { label: "Profile", get: (s) => s.profile },
+    ],
+    summary: (s) => onoff(s.any_on),
   },
   airheater: {
-    imediateHeatingWidget: {kind: "toggle", what: "power", stateKey: "running"},
-    heatingSlider: {kind: "slider", what: "level", stateKey: "level"},
+    title: "Air heater", icon: "🔥", confirm: (w) => `Start the fuel-burning parking heater (${w})? It is not live-verified. Continue?`,
+    controls: [
+      { what: "power", kind: "toggle", label: "Parking heater", state: "running" },
+      { what: "level", kind: "slider", label: "Heating level", state: "level", min: 0, max: 15 },
+    ],
+    readouts: [{ label: "Running time", get: (s) => `${s.running_time} min` }, { label: "Error code", get: (s) => s.error_code }],
+    summary: (s) => (s.running ? "Running" : "Off"),
+  },
+  water: {
+    title: "Water", icon: "💧",
+    readouts: [
+      { label: "Fresh water", get: (s) => tank(s.fresh), bar: (s) => s.fresh && s.fresh.percent },
+      { label: "Waste water", get: (s) => tank(s.waste), bar: (s) => s.waste && s.waste.percent },
+    ],
+    summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%` : ""),
+  },
+  energy: {
+    title: "Energy", icon: "🔋",
+    readouts: [
+      { label: "Living battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
+      { label: "Living voltage", get: (s) => `${s.batt2_v} V` },
+      { label: "Time remaining", get: (s) => (s.batt2_remaining_h != null ? `${s.batt2_remaining_h} h` : "—") },
+      { label: "Starter battery", get: (s) => (s.soc1_pct != null ? `${s.soc1_pct}%` : "—"), bar: (s) => s.soc1_pct },
+      { label: "Starter voltage", get: (s) => `${s.batt1_v} V` },
+      { label: "DC-DC charger", get: (s) => (s.dcdc_installed ? `${s.dcdc_state} (${s.dcdc_power} W)` : "—") },
+      { label: "Shore power", get: (s) => (s.shore_installed ? `${s.shore_state} (${s.shore_power} W)` : "—") },
+      { label: "Solar", get: (s) => (s.solar_installed ? s.solar_state : "not installed") },
+      { label: "Warnings", get: (s) => (s.faults && s.faults.length ? s.faults.join(", ") : "none") },
+    ],
+    summary: (s) => (s.soc2_pct != null ? `Battery ${s.soc2_pct}%` : ""),
+  },
+  roof: {
+    title: "Roof", icon: "🚐", roof: true,
+    readouts: [{ label: "Position", get: (s) => s.position }, { label: "Safety valid", get: (s) => yn(s.safety_valid) }],
+    summary: (s) => (s && s.position != null ? `Position ${s.position}` : ""),
+  },
+  vehicle: {
+    title: "Vehicle", icon: "🚗",
+    readouts: [
+      { label: "Ignition", get: (s) => onoff(s.ignition_on) },
+      { label: "Leveling (roll / pitch)", get: (s) => `${s.level_roll} / ${s.level_pitch}` },
+      { label: "Vehicle clock", get: (s) => s.car_clock },
+    ],
+    summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
   },
 };
 
@@ -47,157 +108,242 @@ async function api(path, opts) {
   const r = await fetch(path, opts);
   return r.json();
 }
-async function refreshState() { STATE = await api("/api/state"); render(); }
 
-async function command(function_, what, value, confirm) {
-  const body = {function: function_, what, value, confirm: !!confirm};
-  const res = await api("/api/command", {method: "POST",
-    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
-  // `applied` is true/false/null (no readback / unknown). Both false and null mean
-  // "don't assume it worked" — a dead/unmapped command must not fail silently.
-  if (res.applied === false || res.applied == null) toast("Sent — but the unit did not apply it (known gap).");
-  await refreshState();
-  return res;
+function setStatus(text, kind) {
+  statusEl.textContent = text;
+  statusEl.className = "pill" + (kind ? " " + kind : "");
 }
 
-// Route a widget-driven command through a confirm() dialog when `fn` is
-// safety-sensitive / not-live-verified (CONFIRM_MESSAGES). A cancelled dialog
-// must not fire the command at all.
-function confirmedCommand(fn, what, value) {
-  const msg = CONFIRM_MESSAGES[fn];
-  if (msg) {
-    if (!confirm(msg(what))) return;
-    return command(fn, what, value, true);
+function installed(fn) {
+  const s = STATE[fn];
+  return !s || s.installed !== false;
+}
+
+function toast(msg, kind) {
+  const d = document.createElement("div");
+  d.className = "toast" + (kind ? " " + kind : "");
+  d.textContent = msg;
+  document.getElementById("toasts").appendChild(d);
+  setTimeout(() => d.remove(), 4000);
+}
+
+async function refreshState(force) {
+  let next;
+  try {
+    next = await api("/api/state");
+  } catch (e) {
+    setStatus("offline", "error");
+    return;
   }
-  return command(fn, what, value);
+  STATE = next;
+  if (!busy) setStatus("live", "ok");
+  if (busy && !force) return; // an in-flight interaction owns the screen
+  const sig = view + "|" + JSON.stringify(next);
+  if (!force && sig === lastRender) return; // nothing changed -> no flicker
+  lastRender = sig;
+  render();
 }
 
-function installed(fn) { return !fn || !STATE[fn] || STATE[fn].installed !== false; }
-function toast(msg){ const d=document.createElement("div"); d.className="card"; d.textContent=msg;
-  d.style.position="fixed"; d.style.bottom="1rem"; d.style.left="50%"; d.style.transform="translateX(-50%)";
-  document.body.appendChild(d); setTimeout(()=>d.remove(), 3500); }
+// Send a command: optimistic spinner on the tapped control, then a result toast. Always
+// sends confirm:true (the frontend already showed any confirm dialog; the backend only
+// requires it for roof/airheater, ignores it otherwise).
+async function command(fn, what, value) {
+  if (busy) return;
+  busy = true;
+  pending = { fn, what };
+  setStatus("Sending…", "busy");
+  render();
+  let res;
+  try {
+    res = await api("/api/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ function: fn, what, value, confirm: true }),
+    });
+  } catch (e) {
+    res = { ok: false, error: String(e) };
+  }
+  busy = false;
+  pending = null;
+  if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
+  else if (res && res.ok) toast("Sent — the unit didn't apply it (known gap)", "warn");
+  else toast("Command failed" + (res && res.error ? `: ${res.error}` : ""), "error");
+  await refreshState(true);
+}
 
-function goto(v){ view=v; render(); }
+// Actuate a control, gating fuel/motion features behind a confirm() dialog.
+function act(fn, what, value) {
+  if (busy) return;
+  const f = FEATURES[fn];
+  if (f && f.confirm && !confirm(f.confirm(what))) return;
+  command(fn, what, value);
+}
+
+function goto(v) {
+  view = v;
+  lastRender = "";
+  render();
+}
 
 function render() {
-  backEl.hidden = (view === "home");
+  backEl.hidden = view === "home";
   backEl.onclick = () => goto("home");
   app.innerHTML = "";
-  if (view === "home") return renderDashboard();
-  renderScreen(view);
+  if (view === "home") renderDashboard();
+  else renderFeature(view);
 }
 
 function renderDashboard() {
   titleEl.textContent = "Vehicle";
-  const grid = document.createElement("div"); grid.className = "tilegrid";
-  for (const name of SCREENS.order) {
-    const scr = SCREENS.screens[name];
-    if (name === "home") continue;
-    // Roof has no `function` in screens.json (see ROOF_FUNCTION above), so the
-    // generic installed(scr.function) is always true for it; gate it explicitly
-    // on the roof state's own installed flag instead (no pop-top -> no tile).
-    if (name === "roof") {
-      if (!(STATE[ROOF_FUNCTION] && STATE[ROOF_FUNCTION].installed !== false)) continue;
-    } else if (!installed(scr.function)) {
-      continue;
-    }
-    const tile = document.createElement("button"); tile.className = "tile";
-    tile.innerHTML = `<h3>${scr.title || name}</h3><div class="v">${summary(scr)}</div>`;
-    tile.onclick = () => goto(name);
+  const grid = document.createElement("div");
+  grid.className = "tilegrid";
+  for (const fn of ORDER) {
+    if (!installed(fn)) continue;
+    const f = FEATURES[fn];
+    const s = STATE[fn] || {};
+    const tile = document.createElement("button");
+    tile.className = "tile";
+    tile.innerHTML = `<div class="ti">${f.icon || ""}</div><div class="tt">${f.title}</div>` +
+      `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>`;
+    tile.onclick = () => goto(fn);
     grid.appendChild(tile);
   }
   app.appendChild(grid);
 }
 
-function summary(scr) {
-  const st = STATE[scr.function]; if (!st) return "";
-  if ("on" in st) return st.on ? "On" : "Off";
-  if ("percent" in st && st.percent != null) return st.percent + "%";
-  return "";
+function renderFeature(fn) {
+  const f = FEATURES[fn];
+  const s = STATE[fn] || {};
+  titleEl.textContent = f.title;
+  if (f.controls && f.controls.length) {
+    const card = document.createElement("div");
+    card.className = "card";
+    for (const c of f.controls) card.appendChild(renderControl(fn, c, s));
+    app.appendChild(card);
+  }
+  if (f.roof) app.appendChild(roofControls());
+  if (f.readouts && f.readouts.length) {
+    const card = document.createElement("div");
+    card.className = "card";
+    for (const r of f.readouts) card.appendChild(renderReadout(r, s));
+    app.appendChild(card);
+  }
+  if (f.note) {
+    const n = document.createElement("div");
+    n.className = "note";
+    n.textContent = f.note;
+    app.appendChild(n);
+  }
 }
 
-function renderScreen(name) {
-  const scr = SCREENS.screens[name]; titleEl.textContent = scr.title || name;
-  // Roof has no `function` in screens.json (see ROOF_FUNCTION above); every other
-  // screen's function (if any) already names its state-cache key directly.
-  const fn = scr.function || (name === "roof" ? ROOF_FUNCTION : null);
-  const st = (fn && STATE[fn]) || {};
-  for (const w of scr.widgets) app.appendChild(renderWidget(fn, w, st));
-  // Per-screen side content: rendered ONCE after the widget list, not per-widget.
-  if (name === "roof") app.appendChild(roofControls(ROOF_FUNCTION));
-  if (name === "lighting") app.appendChild(lightingNote());
-}
-
-function renderWidget(fn, w, st) {
-  const card = document.createElement("div"); card.className = "card";
-  const row = document.createElement("div"); row.className = "row";
-  const label = document.createElement("span"); label.textContent = w.label || w.id;
+function renderControl(fn, c, s) {
+  const row = document.createElement("div");
+  row.className = "row";
+  const label = document.createElement("span");
+  label.className = "lbl";
+  label.textContent = c.label;
   row.appendChild(label);
-  const mapped = fn && CONTROL_MAP[fn] && CONTROL_MAP[fn][w.id];
-  if (mapped && mapped.kind === "toggle") {
-    const sw = document.createElement("button"); sw.className = "switch";
-    const on = !!st[mapped.stateKey];
+  const isPending = busy && pending && pending.fn === fn && pending.what === c.what;
+  if (isPending) row.appendChild(spinner());
+  if (c.kind === "toggle") {
+    const on = !!s[c.state];
+    const sw = document.createElement("button");
+    sw.className = "switch" + (isPending ? " pending" : "");
     sw.setAttribute("aria-checked", on ? "true" : "false");
-    sw.onclick = () => confirmedCommand(fn, mapped.what, on ? "off" : "on");
+    sw.disabled = busy;
+    sw.onclick = () => act(fn, c.what, on ? "off" : "on");
     row.appendChild(sw);
-  } else if (mapped && mapped.kind === "slider" && w.range) {
-    const [lo, hi] = w.range.split("..").map(Number);
-    const inp = document.createElement("input"); inp.type = "range";
-    inp.min = lo; inp.max = hi; inp.value = st[mapped.stateKey] ?? lo;
-    inp.onchange = () => confirmedCommand(fn, mapped.what, Number(inp.value));
+  } else if (c.kind === "slider") {
+    const val = s[c.state] != null ? s[c.state] : c.min;
+    const inp = document.createElement("input");
+    inp.type = "range";
+    inp.min = c.min;
+    inp.max = c.max;
+    inp.value = val;
+    inp.disabled = busy;
+    const out = document.createElement("span");
+    out.className = "sval";
+    out.textContent = isPending ? "…" : val;
+    inp.oninput = () => (out.textContent = inp.value);
+    inp.onchange = () => act(fn, c.what, Number(inp.value));
     row.appendChild(inp);
-  } else {
-    // Not an actuating widget: render read-only. Show the interpreted value if we
-    // can find a matching state key, otherwise just the label (never a broken toggle).
-    const val = readonlyValue(st, w);
-    const b = document.createElement("span"); b.className = "badge";
-    b.textContent = val != null ? String(val) : w.type;
-    row.appendChild(b);
+    row.appendChild(out);
   }
-  card.appendChild(row);
-  return card;
+  return row;
 }
 
-// Best-effort read-only display value: try the interpreted-state key that matches
-// this widget's raw protocol field name. Never used to drive a control (informational
-// only) — if nothing matches, the caller just falls back to the widget type/label.
-function readonlyValue(st, w) {
-  const field = w.controls && w.controls.field;
-  if (!field) return null;
-  const first = field.split("/")[0].split(" ")[0];
-  const snake = first.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
-  if (snake in st) return st[snake];
-  const lower = first.toLowerCase();
-  if (lower in st) return st[lower];
-  return null;
+function renderReadout(r, s) {
+  const wrap = document.createElement("div");
+  wrap.className = "rowwrap";
+  const row = document.createElement("div");
+  row.className = "row ro";
+  const label = document.createElement("span");
+  label.className = "lbl";
+  label.textContent = r.label;
+  const v = document.createElement("span");
+  v.className = "val";
+  let val;
+  try {
+    val = r.get(s);
+  } catch (e) {
+    val = "—";
+  }
+  v.textContent = val == null || val === "" ? "—" : String(val);
+  row.appendChild(label);
+  row.appendChild(v);
+  wrap.appendChild(row);
+  if (r.bar) {
+    let p;
+    try {
+      p = r.bar(s);
+    } catch (e) {
+      p = null;
+    }
+    if (p != null) {
+      const bar = document.createElement("div");
+      bar.className = "bar";
+      const fill = document.createElement("div");
+      fill.className = "fill";
+      fill.style.width = Math.max(0, Math.min(100, p)) + "%";
+      bar.appendChild(fill);
+      wrap.appendChild(bar);
+    }
+  }
+  return wrap;
 }
 
-function roofControls(fn) {
-  const box = document.createElement("div"); box.className = "card";
+function spinner() {
+  const s = document.createElement("span");
+  s.className = "spinner";
+  return s;
+}
+
+function roofControls() {
+  const card = document.createElement("div");
+  card.className = "card";
+  const warn = document.createElement("div");
+  warn.className = "warn";
+  warn.textContent = "Roof control is safety-sensitive and not live-verified.";
+  card.appendChild(warn);
+  const btns = document.createElement("div");
+  btns.className = "btnrow";
   for (const dir of ["open", "close", "stop"]) {
-    const b = document.createElement("button"); b.textContent = dir; b.className = "badge";
-    b.style.marginRight = ".5rem";
-    b.onclick = () => { if (confirm("Roof "+dir+": this physically moves the pop-top and is "
-        +"UNVERIFIED on this vehicle. Ensure the roof path is clear. Continue?"))
-        command(fn, dir, null, true); };
-    box.appendChild(b);
+    const b = document.createElement("button");
+    b.className = "btn";
+    b.textContent = dir;
+    b.disabled = busy;
+    b.onclick = () => {
+      if (confirm(`Roof ${dir}: this physically moves the pop-top (UNVERIFIED on this vehicle). Ensure the path is clear. Continue?`))
+        command("roof", dir, null);
+    };
+    btns.appendChild(b);
   }
-  const warn = document.createElement("div"); warn.className = "warn";
-  warn.textContent = "Roof control is safety-sensitive and not live-verified."; box.appendChild(warn);
-  return box;
-}
-
-function lightingNote() {
-  const card = document.createElement("div"); card.className = "card";
-  const n = document.createElement("div"); n.className = "muted";
-  n.textContent = "Note: lighting actuation is not yet supported by the unit over BLE.";
-  card.appendChild(n);
+  card.appendChild(btns);
   return card;
 }
 
 async function main() {
-  SCREENS = await api("/api/screens");
-  await refreshState();
-  poll = setInterval(refreshState, 1500);
+  await refreshState(true);
+  setInterval(() => refreshState(false), 2000);
 }
 main();
