@@ -42,6 +42,12 @@ HEARTBEAT_START = 0x00100000      # arbitrary high start (no read-seed / challen
 HEARTBEAT_PERIOD_S = 0.6          # proven cadence; ~10 beats span the arm window
 ARM_DELAY_S = 3.0                 # let the unit register the heartbeat before writing
 
+# roof move-heartbeat (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame
+# won't complete travel: ig/c.java re-sends Up/Down at ~1 Hz until STOP. These bound
+# how long actuate_roof drives the move before force-STOPping.
+ROOF_MOVE_PERIOD_S = 1.0          # ~1 Hz move-heartbeat cadence (ig/c.java)
+ROOF_MAX_TRAVEL_S = 30.0          # hard safety cap on a single open/close command
+
 
 def _beat_bytes(ctr: int) -> bytes:
     """The 4-byte big-endian liveness value written to HEARTBEAT_CHAR each tick."""
@@ -171,6 +177,93 @@ class CamperDevice:
             if not verify or not func.state_char:
                 return None
             await asyncio.sleep(2.5)           # let the actuation take effect
+            raw = bytes(await client.read_gatt_char(func.state_char))
+            return protocol.decode(func, raw)
+        finally:
+            stop.set()
+            if beat is not None:
+                try:
+                    await beat
+                except Exception:
+                    pass
+            await self._safe_disconnect(client)
+
+    async def actuate_roof(self, func, move_frame: bytes, stop_frame: bytes, *,
+                           max_duration_s: float = ROOF_MAX_TRAVEL_S,
+                           period_s: float = ROOF_MOVE_PERIOD_S,
+                           verify: bool = True) -> dict | None:
+        """Drive a roof OPEN/CLOSE move with the 1 Hz move-heartbeat, then force STOP.
+
+        **SAFETY-SENSITIVE and NOT-LIVE-VERIFIED** (the pop-up roof is not installed
+        on this van, so this path has never actuated real hardware; enum polarity +
+        the SafetyCounter handshake are UNVERIFIED). Physical roof motion can pinch/
+        collide — a caller must have confirmed the roof is clear. Nothing here runs
+        automatically.
+
+        Unlike the one-shot :meth:`actuate`, a single roof frame will not complete
+        travel: the app's ``ig/c.java`` re-sends the Up/Down frame at ~1 Hz until a
+        STOP. This runs the whole thing in ONE BLE session (single-owner model, held
+        under the ``serve`` lock): connect, replay the connect handshake (version +
+        auth reads, subscribe-all), start the 1003 arm heartbeat, then re-send
+        ``move_frame`` every ``period_s`` for at most ``max_duration_s`` — a bounded
+        safety cap — and ALWAYS send ``stop_frame`` at the end (also on a mid-move
+        link drop). Returns the post-STOP state decode when ``verify``, else None.
+
+        :param func: the roof Function (needs ``control_char`` + ``state_char``).
+        :param move_frame: the OPEN or CLOSE frame (``control.roof_frame``).
+        :param stop_frame: the STOP frame, sent to end travel unconditionally.
+        :param max_duration_s: hard cap on move-heartbeat duration (safety bound).
+        :param period_s: move-heartbeat cadence (~1 Hz).
+        :param verify: read the state char back after STOP.
+        :returns: post-STOP state decode, or None when ``verify`` is false.
+
+        .. req:: Drive roof travel with a bounded move-heartbeat
+           :id: R_ROOF_ACTUATE
+           :status: implemented
+           :tags: ble, control, roof, safety
+
+           ``calictl`` shall, in one armed BLE session, re-send the roof move frame
+           at ~1 Hz for a bounded maximum duration and then unconditionally send a
+           STOP frame, so roof travel is completed but never left running unbounded.
+        """
+        import time
+        from . import protocol  # lazy
+        if not func.control_char:
+            raise ValueError("%s has no control characteristic" % func.name)
+        client = await self._session()
+        stop = asyncio.Event()
+        beat = None
+        try:
+            auth_ok = 0
+            for uuid in (VERSION_CHAR, AUTH_CHAR):
+                try:
+                    await client.read_gatt_char(uuid); auth_ok += 1
+                except Exception:
+                    pass
+            n = await self._subscribe_all(client)
+            if auth_ok < 2 or n == 0:
+                print("actuate_roof: weak handshake (auth-reads=%d/2, subscribed=%d) — move "
+                      "may be ignored" % (auth_ok, n), flush=True)
+            beat = asyncio.create_task(self._heartbeat(client, stop))
+            await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
+            # 1 Hz move-heartbeat: re-send the move frame until the safety cap, then STOP.
+            deadline = time.monotonic() + max_duration_s
+            while time.monotonic() < deadline:
+                try:
+                    await client.write_gatt_char(func.control_char, move_frame, response=True)
+                except Exception:
+                    if not client.is_connected:
+                        print("actuate_roof: link dropped mid-move — sending STOP", flush=True)
+                        break
+                await asyncio.sleep(period_s)
+            # ALWAYS force a STOP (best-effort even if the link is flaky).
+            try:
+                await client.write_gatt_char(func.control_char, stop_frame, response=True)
+            except Exception:
+                pass
+            if not verify or not func.state_char:
+                return None
+            await asyncio.sleep(2.5)           # let the state settle after STOP
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw)
         finally:

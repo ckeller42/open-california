@@ -80,18 +80,18 @@ LIGHT_ON_BRIGHTNESS = 14         # zone value for "on" (0..15; the app/dict defa
 def _lighting(funcs, what, value, last):
     """Build a lighting SET_BRIGHTNESS frame (char 1501).
 
-    KEY FIX (decompile audit 2026-07-08, re-gap-inventory §A1): the frame must carry
-    the **currently-active ProfileNumber**, which is an identity round-trip of the
-    ProfileNumber the unit reports in its 1502 state (chain: `dg/l.java` f5472x==ordinal,
-    `w10/d.java` identity, `dg/a.java` readback). Sending `ProfileNumber=0` addresses an
-    inactive profile and the unit silently ignores it — the bug behind the earlier
-    ACK-but-no-op. So we **echo `last["ProfileNumber"]`** into the SET frame. Statically
-    airtight; pending one live confirm on buspi.
+    STATUS: lighting actuation is STILL UNSOLVED. The decompile-derived "echo the active
+    ProfileNumber" theory was **disproven on-device 2026-07-08**: under a live 1003
+    heartbeat, a SET_BRIGHTNESS with EVERY ProfileNumber 0-14 was ACKed but left the 1502
+    zones unchanged (`scratchpad/profile_sweep.py`). So the gate is NOT ProfileNumber (and
+    not the heartbeat — cooler/camping actuate fine under it). The real precondition is
+    unknown; leading suspects are `LightValue` (a per-zone enable bitmask, sent as 0 here)
+    or a SET_PROFILE preamble. Needs an HCI capture of the app doing a real brightness
+    change (re-gap-inventory §A1). We still echo `last["ProfileNumber"]` (more correct than
+    hardcoding 0) but `set lighting` will report NOT APPLIED until this is cracked.
 
-    Zone handling: carry current per-zone brightness (per-zone→physical-lamp map still
-    UNVERIFIED — an `ef.i`→BrightnessL[1..13] channel map exists but not the lamp binding):
-      brightness <0-15> -> scale only currently-lit zones (0 = all off);
-      power on/off       -> every zone to full / dark.
+    Zone handling: carry current per-zone brightness (per-zone→physical-lamp map also
+    UNVERIFIED): brightness <0-15> -> scale currently-lit zones (0 = all off); power -> all.
     """
     f = funcs["lighting"]
     zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
@@ -106,7 +106,7 @@ def _lighting(funcs, what, value, last):
         zones = {z: full for z in zone_fields}
     else:
         return None
-    profile = int(last.get("ProfileNumber") or 0)   # echo the active profile (the fix)
+    profile = int(last.get("ProfileNumber") or 0)   # echo current profile (does NOT actuate — see docstring)
     vals = {"ProfileNumber": profile, "Mode": LIGHT_MODE_SET_BRIGHTNESS,
             "Timestamp": 0, "LightValue": 0, **zones}
     return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
@@ -170,8 +170,160 @@ def _airheater(funcs, what, value, last):
                            frame_bytes=overrides.CONTROL_FRAME_BYTES["airheater"])
 
 
+# --- roof / roof-A/C / stairs / LR-heater ------------------------------------
+# ALL FOUR ARE NOT-LIVE-VERIFIED. None is installed on this van (see CLAUDE.md
+# "Known state"), so enum polarity + carried-field behaviour are UNVERIFIED —
+# statically transcribed from each function's app builder f() (re-gap §A3) and
+# offset-resolved in overrides.py. encode() validates bit-widths; it does NOT
+# validate that these enum values mean what the app names imply.
+
+
+def _roofac_values(state: dict, **changes) -> dict:
+    """Full-packet roof-A/C values (char 2001, ``lg/a.java`` case0). Carry current
+    State/Mode/FanSpeed/Temperature so a targeted change leaves the rest as-is; then
+    apply ``changes``. NOTE: the state decode names the fan field ``Fanspeed`` while
+    the control field is ``FanSpeed``."""
+    vals = dict(
+        State=state.get("State", 0), Mode=state.get("Mode", 0),
+        FanSpeed=state.get("Fanspeed", 0), Temperature=state.get("Temperature", 0),
+    )
+    vals.update(changes)
+    return vals
+
+
+def _roofaircondition(funcs, what, value, last):
+    """Build a roof-A/C (char 2001) control frame. NOT-LIVE-VERIFIED (not installed).
+
+    ``power`` on/off -> ``State`` 1/0; ``fanspeed`` 0-4; ``mode`` 0-3;
+    ``temperature`` 0-255 (raw, scale UNVERIFIED). Untargeted fields carry current
+    state (mirrors ``_cooler``). Setter values from re-gap §A3."""
+    if what == "power":
+        ch = {"State": 1 if _truthy(value) else 0}
+    elif what == "fanspeed":
+        v = int(value)
+        if not 0 <= v <= 4:
+            raise ValueError("roofaircondition fanspeed must be 0-4, got %r" % value)
+        ch = {"FanSpeed": v}
+    elif what == "mode":
+        v = int(value)
+        if not 0 <= v <= 3:
+            raise ValueError("roofaircondition mode must be 0-3, got %r" % value)
+        ch = {"Mode": v}
+    elif what == "temperature":
+        v = int(value)
+        if not 0 <= v <= 255:
+            raise ValueError("roofaircondition temperature must be 0-255, got %r" % value)
+        ch = {"Temperature": v}
+    else:
+        return None
+    return protocol.encode(funcs["roofaircondition"], _roofac_values(last, **ch),
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["roofaircondition"])
+
+
+STAIRS_MOVEMENT = {"extend": 2, "retract": 1, "stop": 0}   # pg/a.java Movement enum (UNVERIFIED)
+
+
+def _stairs_values(state: dict, **changes) -> dict:
+    """Full-packet stairs values (char 1801, ``pg/a.java`` case0). ``OperationMode``
+    defaults to the leave-unchanged sentinel 3; ``Movement`` defaults to 0=stop; then
+    apply ``changes``."""
+    vals = dict(OperationMode=SENTINEL, Movement=0)
+    vals.update(changes)
+    return vals
+
+
+def _stairs(funcs, what, value, last):
+    """Build a stairs (char 1801) control frame. NOT-LIVE-VERIFIED (not installed).
+
+    ``move`` extend/retract/stop -> ``Movement`` 2/1/0; ``mode`` 0-3 ->
+    ``OperationMode``. Setter values from re-gap §A3. Enum polarity UNVERIFIED."""
+    if what == "move":
+        v = str(value).strip().lower()
+        if v not in STAIRS_MOVEMENT:
+            raise ValueError("stairs move must be extend/retract/stop, got %r" % value)
+        ch = {"Movement": STAIRS_MOVEMENT[v]}
+    elif what == "mode":
+        m = int(value)
+        if not 0 <= m <= 3:
+            raise ValueError("stairs mode must be 0-3, got %r" % value)
+        ch = {"OperationMode": m}
+    else:
+        return None
+    return protocol.encode(funcs["stairs"], _stairs_values(last, **ch),
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["stairs"])
+
+
+def _lrheater_values(state: dict, **changes) -> dict:
+    """Full-packet living-room-heater values (char 2101, ``gg/a.java`` case0). Carry
+    current StateAir/StateWater/TemperatureWater/Mode/TemperatureAir; then apply
+    ``changes``."""
+    vals = dict(
+        StateAir=state.get("StateAir", 0), StateWater=state.get("StateWater", 0),
+        TemperatureWater=state.get("TemperatureWater", 0),
+        Mode=state.get("Mode", 5), TemperatureAir=state.get("TemperatureAir", 0),
+    )
+    vals.update(changes)
+    return vals
+
+
+def _livingroomheater(funcs, what, value, last):
+    """Build a living-room-heater (char 2101) control frame. NOT-LIVE-VERIFIED
+    (not installed).
+
+    ``air`` on/off -> ``StateAir`` 1/0; ``water`` on/off -> ``StateWater`` 1/0;
+    ``temperature`` 0-255 -> ``TemperatureAir`` (raw, scale UNVERIFIED). Untargeted
+    fields carry current state (mirrors ``_cooler``). Setter values from re-gap §A3."""
+    if what == "air":
+        ch = {"StateAir": 1 if _truthy(value) else 0}
+    elif what == "water":
+        ch = {"StateWater": 1 if _truthy(value) else 0}
+    elif what in ("temperature", "temperatureair"):
+        v = int(value)
+        if not 0 <= v <= 255:
+            raise ValueError("livingroomheater temperature must be 0-255, got %r" % value)
+        ch = {"TemperatureAir": v}
+    else:
+        return None
+    return protocol.encode(funcs["livingroomheater"], _lrheater_values(last, **ch),
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["livingroomheater"])
+
+
+# roof (char 1401, jg/a.java f()) — SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
+# The move needs a ~1 Hz heartbeat (ig/c.java re-sends Up/Down at 1 Hz until STOP);
+# a single frame will NOT complete travel. The heartbeat is driven by
+# device.actuate_roof, NOT the one-shot device.actuate.
+#   OPEN = Up1/Down0    CLOSE = Up0/Down1    STOP = Up0/Down0
+# SafetyCounter (32-bit) is an app<->unit echo/handshake; its increment rule is
+# UNVERIFIED, so we send 0 and resend the identical move frame each tick.
+ROOF_MOVES = {"open": (1, 0), "close": (0, 1), "stop": (0, 0)}   # -> (Up, Down)
+
+
+def roof_frame(funcs, direction: str, counter: int = 0) -> bytes:
+    """Build one roof (char 1401) move frame. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
+
+    ``direction`` is ``open``/``close``/``stop`` (Up/Down per ``ROOF_MOVES``);
+    ``counter`` fills the 32-bit ``SafetyCounter`` (echo/handshake, increment rule
+    UNVERIFIED). Raises ValueError on an unknown direction."""
+    if direction not in ROOF_MOVES:
+        raise ValueError("roof direction must be open/close/stop, got %r" % direction)
+    up, down = ROOF_MOVES[direction]
+    vals = {"Up": up, "Down": down, "SafetyCounter": counter}
+    return protocol.encode(funcs["roof"], vals,
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["roof"])
+
+
+def _roof(funcs, what, value, last):
+    """Generic builder entry for roof: ``what`` is the direction (open/close/stop);
+    ``value`` is unused. Returns ONE move frame — the CLI drives the 1 Hz heartbeat
+    via ``device.actuate_roof``. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED."""
+    if what not in ROOF_MOVES:
+        return None
+    return roof_frame(funcs, what)
+
+
 BUILDERS = {"campingmode": _camping, "cooler": _cooler, "lighting": _lighting,
-            "airheater": _airheater}
+            "airheater": _airheater, "roofaircondition": _roofaircondition,
+            "stairs": _stairs, "livingroomheater": _livingroomheater, "roof": _roof}
 
 
 def build(funcs, function, what, value, last_decoded):

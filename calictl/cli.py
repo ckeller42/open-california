@@ -10,11 +10,28 @@
     calictl set lighting brightness <0-15>
     calictl set airheater power on|off
     calictl set airheater level <0-15>
+    calictl set roofaircondition power on|off       # UNVERIFIED (not installed)
+    calictl set roofaircondition fanspeed <0-4>     # UNVERIFIED
+    calictl set roofaircondition mode <0-3>         # UNVERIFIED
+    calictl set roofaircondition temperature <0-255># UNVERIFIED (raw)
+    calictl set stairs move extend|retract|stop     # UNVERIFIED (not installed)
+    calictl set stairs mode <0-3>                    # UNVERIFIED
+    calictl set livingroomheater air on|off          # UNVERIFIED (not installed)
+    calictl set livingroomheater water on|off        # UNVERIFIED
+    calictl set livingroomheater temperature <0-255> # UNVERIFIED (raw)
+    calictl set roof open|close|stop                 # SAFETY-SENSITIVE + UNVERIFIED
 
 Read commands are fully live-verified. `set` builds the full-packet frame and
 writes it under a 1003 liveness heartbeat (`device.actuate`), which arms
 actuation on-device (issue #2); it reads the state back and reports whether the
 change actually took effect.
+
+The roofaircondition/stairs/livingroomheater/roof targets are NOT-LIVE-VERIFIED
+(none is installed on this van) — their enum polarity is statically derived, not
+confirmed on hardware. `roof` is additionally SAFETY-SENSITIVE: it physically
+moves the pop-up roof and needs a ~1 Hz move-heartbeat, so it runs via
+`device.actuate_roof` (re-send move at 1 Hz, bounded, always STOP) rather than the
+one-shot `device.actuate`. Nothing runs automatically.
 """
 from __future__ import annotations
 
@@ -91,6 +108,17 @@ def _set_check(function, what, value, interp, decoded):
         ("lighting", "brightness"): lambda: ("max_zone", _max_zone(interp), int(value)),
         ("airheater", "power"):     lambda: ("running", interp.get("running"), on),
         ("airheater", "level"):     lambda: ("level", interp.get("level"), int(value)),
+        # UNVERIFIED targets (not installed on this van) — interp keys per semantics.py.
+        ("roofaircondition", "power"):       lambda: ("on", interp.get("on"), on),
+        ("roofaircondition", "fanspeed"):    lambda: ("fan_speed", interp.get("fan_speed"), int(value)),
+        ("roofaircondition", "mode"):        lambda: ("mode", interp.get("mode"), int(value)),
+        ("roofaircondition", "temperature"): lambda: ("target_temp", interp.get("target_temp"), int(value)),
+        ("stairs", "move"):     lambda: ("extended", interp.get("extended"),
+                                         {"extend": True, "retract": False}.get(str(value).strip().lower())),
+        ("stairs", "mode"):     lambda: ("mode", interp.get("mode"), int(value)),
+        ("livingroomheater", "air"):         lambda: ("air_on", interp.get("air_on"), on),
+        ("livingroomheater", "water"):       lambda: ("water_on", interp.get("water_on"), on),
+        ("livingroomheater", "temperature"): lambda: ("air_temp", interp.get("air_temp"), int(value)),
     }
     fn = table.get((function, what))
     return fn() if fn else (what, None, None)
@@ -98,6 +126,39 @@ def _set_check(function, what, value, interp, decoded):
 
 def _max_zone(interp):
     return max((interp.get("brightness_zone_%d" % z) or 0 for z in range(1, 17)), default=0)
+
+
+async def _set_roof(f, funcs, dev, args):
+    """Actuate the pop-up roof. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
+
+    `set roof open|close|stop`: the direction is `args.what`. open/close run the
+    1 Hz move-heartbeat (`device.actuate_roof`, bounded then always STOP); stop is a
+    one-shot STOP frame. Loudly flags that roof travel is unverified on this vehicle
+    (roof not installed here) before writing."""
+    from . import control
+    from . import device as _device
+    direction = args.what
+    if direction not in control.ROOF_MOVES:
+        print("roof direction must be open|close|stop, got %r" % direction, file=sys.stderr)
+        return 2
+    print("*** SAFETY-SENSITIVE + NOT-LIVE-VERIFIED ***", file=sys.stderr)
+    print("roof %s: pop-up roof actuation. Not installed on this van -> enum polarity + "
+          "SafetyCounter handshake are UNVERIFIED; this has never moved real hardware. "
+          "Ensure the roof path is physically clear." % direction, file=sys.stderr)
+    stop_frame = control.roof_frame(funcs, "stop")
+    if direction == "stop":
+        print("writing one-shot STOP %s (heartbeat-armed) ..." % stop_frame.hex())
+        post = await dev.actuate(f, stop_frame, verify=True)
+    else:
+        move_frame = control.roof_frame(funcs, direction)
+        print("writing roof %s: move %s re-sent at ~1 Hz for <= %.0fs then STOP %s ..."
+              % (direction, move_frame.hex(), _device.ROOF_MAX_TRAVEL_S, stop_frame.hex()))
+        post = await dev.actuate_roof(f, move_frame, stop_frame, verify=True)
+    if post is None:
+        print("write sent, no readback"); return 1
+    print("after write: roof state = %s"
+          % json.dumps(semantics.interpret("roof", post), default=str))
+    return 0
 
 
 async def cmd_set(funcs, dev, args):
@@ -108,6 +169,10 @@ async def cmd_set(funcs, dev, args):
               % (fn, ", ".join(sorted(control.BUILDERS))), file=sys.stderr)
         return 2
     f = funcs[fn]
+    if fn == "roof":
+        return await _set_roof(f, funcs, dev, args)
+    if args.value is None:
+        print("set %s %s needs a value" % (fn, args.what), file=sys.stderr); return 2
     cur = protocol.decode(f, await dev.read(f))
     print("current %s: %s" % (fn, json.dumps(semantics.interpret(fn, cur), default=str)))
     try:
@@ -135,7 +200,9 @@ def build_parser():
     g = sub.add_parser("get"); g.add_argument("function")
     r = sub.add_parser("raw"); r.add_argument("function")
     s = sub.add_parser("set")
-    s.add_argument("function"); s.add_argument("what"); s.add_argument("value")
+    s.add_argument("function"); s.add_argument("what")
+    # value is optional: `set roof open|close|stop` takes no value (the direction is `what`).
+    s.add_argument("value", nargs="?", default=None)
     i = sub.add_parser("influx", help="single InfluxDB test write; the serve daemon does this continuously")
     sv = sub.add_parser("serve", help="unified daemon: one BLE owner -> InfluxDB + MQTT + commands")
     sv.add_argument("--interval", type=float, default=30.0)
