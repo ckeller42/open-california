@@ -1,0 +1,25 @@
+docs/sphinx/index.rst
+  s_d2c35aeebbd344::t_66466b3f7456c4 4-14
+LICENSE
+  s_d2c35aeebbd344::t_73628927574931 1-29
+README.md
+  s_d2c35aeebbd344::t_2d801a7b1f52c1 6
+  s_d2c35aeebbd344::t_9c623232011934 69-71
+  s_d2c35aeebbd344::t_ec6784c4469d12 16-21
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b12ea14ebe6841a48f42602bf6db57a2b93a78d7",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
