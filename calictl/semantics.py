@@ -255,7 +255,7 @@ def vehicle(d: dict) -> dict:
         ``vehicle`` function (keys ``TerminalOneFive``, ``CarVariant``,
         ``CarTime*``, ``CarLevelRoll``, ``CarLevelPitch``).
     :returns: interpreted dict with ``ignition_on`` (terminal-15),
-        ``car_variant``, ``level_roll``/``level_pitch`` (signed), ``car_clock``
+        ``car_variant``, ``level_roll``/``level_pitch`` (degrees, signed), ``car_clock``
         (ISO-ish ``YYYY-MM-DD HH:MM:SS``) and ``level_popup``.
 
     .. req:: Decode vehicle state (char 1004)
@@ -269,6 +269,13 @@ def vehicle(d: dict) -> dict:
     """
     def s16(v):
         return None if v is None else (v - 65536 if v >= 32768 else v)
+
+    def deg(v):
+        # roll/pitch are signed-16 hundredths of a degree (0.01° resolution). Verified against
+        # the app's Niveauanzeige (HCI capture 2026-07-08): raw -109 -> -1.09° ~ app roll 1.1°,
+        # raw 35 -> 0.35° ~ app pitch 0.3°. The old "-57/-256" were just -0.57°/-2.56° unscaled.
+        s = s16(v)
+        return None if s is None else round(s / 100.0, 2)
     y, mo, da = d.get("CarTimeYear"), d.get("CarTimeMonth"), d.get("CarTimeDay")
     h, mi, se = d.get("CarTimeHour"), d.get("CarTimeMinute"), d.get("CarTimeSecond")
     clock = None
@@ -280,8 +287,8 @@ def vehicle(d: dict) -> dict:
         "ignition_on": bool(d.get("TerminalOneFive")),   # terminal-15 line
         "car_variant": d.get("CarVariant"),
         "level_popup": d.get("CarLevelPopUp"),
-        "level_roll": s16(d.get("CarLevelRoll")),         # signed; 0 = level/unknown
-        "level_pitch": s16(d.get("CarLevelPitch")),
+        "level_roll": deg(d.get("CarLevelRoll")),         # degrees (signed, 0.01° resolution)
+        "level_pitch": deg(d.get("CarLevelPitch")),
         "car_clock": clock,
     }
 

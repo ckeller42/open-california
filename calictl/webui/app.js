@@ -90,8 +90,8 @@ const FEATURES = {
     title: "Vehicle", icon: "🚗",
     readouts: [
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
-      { label: "Leveling (roll / pitch, raw — uncalibrated)",
-        get: (s) => `${s.level_roll} / ${s.level_pitch}` },
+      { label: "Leveling (roll / pitch)",
+        get: (s) => `${s.level_roll}° / ${s.level_pitch}°` },
       { label: "Vehicle clock", get: (s) => s.car_clock },
     ],
     summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),

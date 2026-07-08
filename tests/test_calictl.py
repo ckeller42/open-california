@@ -334,9 +334,9 @@ def test_vehicle_decode_char_1004():
     assert v["car_variant"] == 2
     assert v["car_clock"] == "2026-07-07 23:20:42"   # year+1900, month+1
     assert v["level_roll"] == 0 and v["level_pitch"] == 0
-    # signed axes: a 0xFFFF roll must read back as -1, not 65535
+    # signed axes scaled to degrees (0.01°): a 0xFFFF roll = -1 raw = -0.01°, not 655.35
     raw_neg = bytes.fromhex("047e060717142affff0000")
-    assert semantics.vehicle(P.decode(f["vehicle"], raw_neg))["level_roll"] == -1
+    assert semantics.vehicle(P.decode(f["vehicle"], raw_neg))["level_roll"] == -0.01
 
 
 def test_cli_set_check_all_rows():

@@ -23,3 +23,13 @@ def test_roof_direction_bytes_match_app():
     assert control.roof_frame(f, "open").hex()[:2] == "01"
     assert control.roof_frame(f, "close").hex()[:2] == "04"
     assert control.roof_frame(f, "stop").hex()[:2] == "00"
+
+
+def test_vehicle_leveling_is_degrees():
+    # captured raw 1004 (017e0608123b00ff930023): roll ff93 = -1.09°, pitch 0023 = 0.35°
+    from calictl import semantics
+    f = _f()
+    d = protocol.decode(f["vehicle"], bytes.fromhex("017e0608123b00ff930023"))
+    interp = semantics.interpret("vehicle", d)
+    assert interp["level_roll"] == -1.09
+    assert interp["level_pitch"] == 0.35
