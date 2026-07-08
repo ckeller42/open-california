@@ -46,11 +46,12 @@ Cooler code (`vf/c.java`) always calls `aVar.B()`; AirHeater code (`rf/b.java`) 
 1. Calls `f()` to rebuild the **entire** bit-packed frame from *all 10 slots' current
    in-memory values* — not just the one you changed (`m2/a.java:96`, `sf/a.java:104-232`).
 2. Writes that full frame to the characteristic (`m2/a.java:96-98`).
-3. If called with `true` (every action method does), arms a **~500 ms retry/repeat timer**
-   (`jn/a.java:33-38`, confirmed by `vf/c.java:153` `this.A0 = 500L;`) that re-sends. Exact
-   cancel condition is UNVERIFIED (not traced into `jn/a.java`'s coroutine internals), but the
-   pattern is: one write is not necessarily sufficient — the model is stateful and resends on a
-   timer until something (probably a matching state read-back) cancels it.
+3. CORRECTION (2026-07-08): this is a **~500 ms one-shot** `jn.a`, **not** a repeating timer.
+   `jn.a`'s 3rd ctor arg is `false` for cooler/camping (`repeat=false`); only the roof uses
+   `true`/repeating (its move-heartbeat). See `remote-control-write-mechanics.md`. The actual
+   on-device precondition for actuation is the **1003 liveness heartbeat** (issue #2, SOLVED),
+   not this timer. So: send the full frame once under a running 1003 heartbeat; no per-command
+   resend is needed for cooler/camping.
 
 **Implication for own-vehicle commands:** you must maintain shadow state for *all* fields of a
 device's control object, not just the one you're changing, and send the full frame each time —

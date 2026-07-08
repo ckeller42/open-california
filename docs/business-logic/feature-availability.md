@@ -169,7 +169,7 @@ unconditionally available on any unit that answers BLE at all:
 
 - **General/Vehicle handshake** — `zf/d.java`, service `0x1000` (`zf/d.java:134`). Characteristics
   `1001` (firmware: `AmbSwVersion`/`CmSwVersion`/`CommunicationVersion`, `zf/d.java:232-243`),
-  `1002` (VIN, 128-bit, `zf/d.java:247-252`), `1004` (`TerminalOneFive`, `CarLevelPopUp`,
+  `1002` (opaque 128-bit = SHA-256(VIN)[16:32], NOT plaintext, `zf/d.java:247-252`), `1004` (`TerminalOneFive`, `CarLevelPopUp`,
   **`CarVariant`**, car clock, `CarLevelRoll`/`CarLevelPitch`, `zf/d.java:266-303`). `b4()` is
   hardcoded `Boolean.TRUE` (`zf/d.java:155,222-224`). This is the very first thing the app reads
   after connecting (constructed first in `pf/k.java`'s constructor, before any accessory

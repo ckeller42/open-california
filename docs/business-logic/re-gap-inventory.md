@@ -19,8 +19,8 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 
 | # | Gap | Kind | Resolvable now? |
 |---|-----|------|-----------------|
-| 1 | **Lighting SET frame needs the active ProfileNumber** (not 0) | protocol | needs 2 HCI captures |
-| 2 | Char **1004** (car RTC + roll/pitch leveling), **1002**, sat **1903–1905** unmodeled | protocol | **static now** |
+| 1 | ~~Lighting SET frame needs the active ProfileNumber~~ — **FIXED** (echo 1502's ProfileNumber); one live confirm pending | protocol | done (static) |
+| 2 | ~~Char 1004 / 1002 / sat 1903–1905 unmodeled~~ — **DONE** (1004 modeled; 1002 = SHA-256(VIN)[16:32]; sat chars mapped) | protocol | done |
 | 3 | MERGED_AMBIGUOUS control offsets from the builders — **airheater DONE**; roof/roofAC/stairs/LR-heater remain | protocol | **static** |
 | 4 | **1003 counter cadence / firmware disarm timeout** | protocol | needs idle HCI capture |
 | 5 | Lighting **profile/color/wake-timer** notification overlay | protocol | static (enum decode) |

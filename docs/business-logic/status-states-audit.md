@@ -107,7 +107,8 @@ The function actually decodes 3 separate characteristics:
 - **char `1001` ("Info")** — `zf/d.java:232-242`, boolArr ≥72 bits (`ag/c.java:44-51`):
   `AmbSwVersion` (offset 0, width 32), `CmSwVersion` (offset 32, width 32),
   `CommunicationVersion` (offset 64, width 7)
-- **char `1002` ("VIN")** — `zf/d.java:247-251`: `Vin` (offset 0, width 128 — 16-byte ASCII)
+- **char `1002` ("Vin")** — `zf/d.java:247-251`: 16 opaque bytes (128-bit), **NOT ASCII** —
+  it is `SHA-256(VIN)[16:32]` (confirmed against the owner's VIN); a one-way hashed vehicle id
 - **char `1004` ("Car_Info")** — `zf/d.java:266-303`, boolArr ≥88 bits:
   `TerminalOneFive` (offset 7, w1), `CarLevelPopUp` (offset 4, w2),
   `CarVariant` (offset 0, w4), `CarTimeYear` (offset 8, w8),
