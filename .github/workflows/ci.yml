@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main, vwcamper-control]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Floor 3.11 (3.9/3.10 are EOL); 3.13 is what buspi (the deploy target) runs.
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install test/tooling deps (runtime is stdlib-only)
+        run: pip install pytest pyyaml
+      - name: Test suite
+        run: python -m pytest tests/ -q
+      - name: Signal-coverage + semantic-review audit
+        run: python -m tools.audit_signals --report
+      - name: Runtime is stdlib-only at import
+        run: |
+          python - <<'PY'
+          import sys
+          import calictl.protocol, calictl.semantics, calictl.device, calictl.serve
+          import calictl.control, calictl.cli, calictl.mqtt, calictl.influx, calictl.overrides
+          banned = {"bleak", "paho", "paho.mqtt", "influxdb_client", "yaml"}
+          leaked = banned & set(sys.modules)
+          assert not leaked, "runtime pulled non-stdlib at import: %s" % sorted(leaked)
+          print("import-clean:", sorted(banned), "not imported")
+          PY
+
+  no-vendor-material:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse committed VW/vendor material or vehicle PII
+        run: |
+          set -e
+          bad=$(git ls-files | grep -iE '\.(apk|xapk|dex|jar|aar|aab|cvr|pcap|pcapng|pklg|btsnoop)$|(^|/)decompile/|(^|/)manuals/|ui/assets/svg/' || true)
+          if [ -n "$bad" ]; then echo "::error::vendor/binary material committed:"; echo "$bad"; exit 1; fi
+          # real vehicle BLE MAC must not be committed (use a placeholder). Match by the
+          # unit's OUI prefix + any suffix so this guard doesn't embed the full device MAC.
+          if git grep -niE '20:81:9a(:[0-9a-f]{2}){3}' -- . ':!.github/' ':!.githooks/'; then
+            echo "::error::real vehicle BLE MAC committed — use a placeholder / env var"; exit 1; fi
+          # No committed VIN (PII). Mirrors the pre-commit hook: a 17-char VIN token AND a
+          # WV2ZZZ/VIN context on the same line (WV2ZZZ is the generic VW world-manufacturer
+          # prefix, safe to name; the owner's full VIN never appears in the repo).
+          if git grep -nE '\b[A-HJ-NPR-Z0-9]{17}\b' -- . ':!.github/' ':!.githooks/' | grep -qiE 'WV2ZZZ|VIN'; then
+            echo "::error::a VIN appears in a tracked file — VINs are PII, keep them out"; exit 1; fi
+          echo "no vendor material, vehicle MAC, or VIN committed"
+
+  install-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint install.sh (POSIX syntax + shellcheck)
+        run: |
+          sh -n install.sh
+          shellcheck install.sh

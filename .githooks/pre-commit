@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# open-california local pre-commit hook.
+# Install once:  git config core.hooksPath .githooks
+#
+# Blocks the two things that keep going wrong (VW/vendor material or the real vehicle
+# MAC getting committed) and keeps the suite + coverage guardrail green before a commit.
+set -euo pipefail
+
+staged() { git diff --cached --name-only --diff-filter=ACM; }
+
+fail() { echo "pre-commit: BLOCKED — $1" >&2; exit 1; }
+
+# 1) No VW/vendor binaries or extracted assets (belt-and-braces over .gitignore).
+bad=$(staged | grep -iE '\.(apk|xapk|dex|jar|aar|aab|cvr|pcap|pcapng|pklg|btsnoop)$|(^|/)decompile/|(^|/)manuals/|ui/assets/svg/|strings_resolved' || true)
+[ -z "$bad" ] || fail "vendor/binary material staged:"$'\n'"$bad"
+
+# 2) No real vehicle BLE MAC (use a placeholder / env var instead). Match the unit's OUI
+#    prefix + any suffix so this hook never embeds the full device MAC itself.
+if staged | grep -qvE '^\.githooks/' && \
+   staged | grep -vE '^\.githooks/' | xargs -r git diff --cached -- | grep -niE '20:81:9a(:[0-9a-f]{2}){3}' >/dev/null 2>&1; then
+  fail "real vehicle BLE MAC (OUI 20:81:9A:…) in the diff — use a placeholder / env var"
+fi
+
+# 3) No VIN (17-char) in the diff.
+if staged | xargs -r git diff --cached -- | grep -nE '\b[A-HJ-NPR-Z0-9]{17}\b' | grep -qiE 'WV2ZZZ|VIN'; then
+  fail "a VIN appears in the diff — VINs are PII, keep them out of the repo"
+fi
+
+# 4) Tests + coverage guardrail (skip with SKIP_TESTS=1 for docs-only commits).
+if [ "${SKIP_TESTS:-0}" != "1" ]; then
+  python3 -m pytest tests/ -q >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
+  python3 -m tools.audit_signals --report >/dev/null 2>&1 || \
+    fail "signal-coverage/semantic-review audit failed"
+fi
+
+echo "pre-commit: OK"

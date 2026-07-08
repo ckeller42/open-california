@@ -49,6 +49,8 @@ class Field:
     offset: object          # int, or "MERGED_AMBIGUOUS"
     width: object           # int, or "UNKNOWN"
     default: object = None  # control fields only
+    valid: object = None    # optional semantic constraint: (lo, hi) inclusive range,
+                            # or a set/frozenset of allowed values. Set via overrides.
 
     @property
     def placed(self) -> bool:
@@ -139,6 +141,30 @@ def _bits_of(value: int, width: int) -> list[int]:
     return [(value >> k) & 1 for k in range(width)][::-1]
 
 
+def _in_valid(val: int, valid) -> bool:
+    """`valid` is either an (lo, hi) inclusive range or a set of allowed values."""
+    if isinstance(valid, (set, frozenset)):
+        return val in valid
+    lo, hi = valid
+    return lo <= val <= hi
+
+
+def check_value(func: "Function", name: str, width: int, val: int, valid=None) -> None:
+    """Raise ValueError if `val` won't fit `width` bits, or violates a curated
+    semantic `valid` constraint. Guards against two failure modes: a value wider
+    than its field silently corrupting the frame (``_bits_of`` masks low bits), and
+    a within-width-but-semantically-invalid value that the unit rejects at ATT with
+    ``0x0E`` and drops the link (observed: cooler ``State=3``, lighting
+    ``ProfileNumber=14``)."""
+    lo, hi = 0, (1 << width) - 1
+    if not (lo <= val <= hi):
+        raise ValueError("%s.%s=%s out of range %d..%d for a %d-bit field"
+                         % (func.name, name, val, lo, hi, width))
+    if valid is not None and not _in_valid(val, valid):
+        allowed = sorted(valid) if isinstance(valid, (set, frozenset)) else "%d..%d" % valid
+        raise ValueError("%s.%s=%s not an allowed value (%s)" % (func.name, name, val, allowed))
+
+
 def pack(frame_bits: list[int]) -> bytes:
     out = bytearray((len(frame_bits) + 7) // 8)
     for i, b in enumerate(frame_bits):
@@ -175,8 +201,15 @@ def encode(func: Function, values: dict[str, int], *,
         max((f.offset + f.width for f in placed), default=0)
     frame = [0] * total
     for f in placed:
+        if f.offset + f.width > total:
+            # a too-small frame_bytes would let list-slice assignment GROW the frame
+            # and silently misplace bits -> a corrupt write the firmware may reject by
+            # dropping the ATT link. Fail loudly instead.
+            raise ValueError("%s.%s (offset %d width %d) exceeds the %d-bit frame"
+                             % (func.name, f.name, f.offset, f.width, total))
         val = values.get(f.name, f.default)
         if val is None or val == "UNKNOWN":
             raise ValueError("no value/default for %s.%s" % (func.name, f.name))
+        check_value(func, f.name, f.width, int(val), f.valid)
         frame[f.offset:f.offset + f.width] = _bits_of(int(val), f.width)
     return pack(frame)

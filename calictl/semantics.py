@@ -27,7 +27,10 @@ def _pct(cur: int, cap: int) -> int | None:
 def water(d: dict) -> dict:
     def tank(unit, level, volume):
         # unit 1 = ABSOLUTE (Level=liters), 0 = PERCENT (Level=percent).
-        # Volume is always the tank capacity in liters.
+        # Volume is always the tank capacity in liters. None-tolerant: a truncated
+        # frame must not KeyError and kill the whole poll (all functions).
+        if level is None or volume is None:
+            return {"liters": None, "capacity_l": volume, "percent": None}
         if unit:
             liters, pct = level, _pct(level, volume)
         else:
@@ -35,8 +38,8 @@ def water(d: dict) -> dict:
         return {"liters": liters, "capacity_l": volume, "percent": pct}
     return {
         "installed": bool(d.get("Installed")),
-        "fresh": tank(d["FreshWaterUnit"], d["FreshWaterLevel"], d["FreshWaterVolume"]),
-        "waste": tank(d["WasteWaterUnit"], d["WasteWaterLevel"], d["WasteWaterVolume"]),
+        "fresh": tank(d.get("FreshWaterUnit"), d.get("FreshWaterLevel"), d.get("FreshWaterVolume")),
+        "waste": tank(d.get("WasteWaterUnit"), d.get("WasteWaterLevel"), d.get("WasteWaterVolume")),
     }
 
 
@@ -46,38 +49,69 @@ def energy(d: dict) -> dict:
     # terminal-15 (engine on); off => sentinels (I=0x81 / U=48). battery-2 = LEISURE
     # (second) battery: always live. Suppress only the starter's sentinel garbage,
     # never the real leisure/source signals (solar stays even when not fitted).
-    b1_valid = d.get("IOneBattBemAfs") != 0x81
+    _b1 = d.get("IOneBattBemAfs")
+    b1_valid = _b1 is not None and _b1 != 0x81   # missing (short frame) -> not valid, not 0.0
+    # A source's raw current reads a not-fitted sentinel (observed 511 / 0x1FF over
+    # 14 d telemetry: solar_current constant 511 with solar absent) when the source
+    # isn't installed. Null the current in that case so the sentinel never surfaces as
+    # a reading — the signal stays present (None), like the batt1 0x81 handling. The
+    # *_power fields read a clean 0 when absent, so they're left as-is.
+    dcdc_i, shore_i, solar_i = (bool(d.get("DcdcInstalled")), bool(d.get("LadInstalled")),
+                                bool(d.get("PvInstalled")))
+    # Scales/signs/enums verified against the app view-model xf/d.java (2026-07-08):
+    #   powers = raw*10 W (PDcdc signed, PLand/PPv unsigned); ITwoBatt signed /10 A;
+    #   ILand/IPv UNSIGNED /10 A; IDcdc signed, NO /10 (a +2 correction applies for SW
+    #   version 0409/0410 — not wired here, needs the general SW version); SoC 0-10 -> *10 %.
+    def soc_pct(level):
+        return level * 10 if isinstance(level, int) and 0 <= level <= 10 else None
+
+    def src_state(v):   # bf/a.java: 0=inactive 1=active 2=standby 6=init 7/else=error
+        return None if v is None else {0: "inactive", 1: "active", 2: "standby", 6: "init"}.get(v, "error")
+
+    soc1, soc2 = d.get("SocOneBattAfs"), d.get("SocTwoBattAfs")
     return {
         "installed": True,
         "stale": stale,               # True => STARTER values are last-known, not live
         "age_min": d.get("AgeOneBattValuesMinutes"),
         # --- STARTER (default car) battery: engine-on only ---
         "batt1_v": round(d.get("UOneBattBemAfs", 0) * 0.1, 1) if b1_valid else None,
-        "batt1_current": _signed(d.get("IOneBattBemAfs", 0), 8) if b1_valid else None,
-        "soc1_level": d.get("SocOneBattAfs"),      # coarse 0-15
+        "batt1_current": _signed(d.get("IOneBattBemAfs", 0), 8) if b1_valid else None,  # signed A, no scale
+        "soc1_level": soc1,                        # coarse 0-15 (11-15 invalid)
+        "soc1_pct": soc_pct(soc1),                 # 0-10 -> 0/10/../100 %; else None
         # --- LEISURE (second) battery: always live ---
         "batt2_v": round(d.get("UTwoBattBemAfs", 0) * 0.1, 1),
-        "batt2_current": _signed(d.get("ITwoBattBemAfs", 0), 16),  # draw from leisure batt (raw signed; scale UNVERIFIED)
-        "soc2_level": d.get("SocTwoBattAfs"),
+        "batt2_current": round(_signed(d.get("ITwoBattBemAfs", 0), 16) * 0.1, 1),  # signed A (/10)
+        "soc2_level": soc2,
+        "soc2_pct": soc_pct(soc2),
         "batt2_remaining_h": d.get("tTwoBattRemainingh"),
         "batt2_remaining_min": d.get("tTwoBattRemainingmin"),
-        # --- sources feeding the leisure battery (app: vehiclePower / externalPowerSource / solarPower) ---
-        "dcdc_charging": bool(d.get("StateDcdcAfs")),
-        "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8),    # app "vehiclePower" (DC-DC from starter/alternator)
-        "shore_power": _signed(d.get("PLandAfs", 0), 8),   # app "externalPowerSource" / campsite
-        "solar_power": _signed(d.get("PPvAfs", 0), 8),     # app "solarPower" (kept even if not fitted)
-        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16),
-        "shore_current": _signed(d.get("ILandAfs", 0), 16),
-        "solar_current": _signed(d.get("IPvAfs", 0), 16),
-        "dcdc_installed": bool(d.get("DcdcInstalled")),
-        "shore_installed": bool(d.get("LadInstalled")),
-        "solar_installed": bool(d.get("PvInstalled")),
-        "energy_mode": d.get("EnergyMode"),                     # 0=eco 1=normal 2=max (per GUI)
+        # --- sources feeding the leisure battery (DC-DC=vehicle/alternator, Land=shore, Pv=solar) ---
+        "dcdc_charging": src_state(d.get("StateDcdcAfs")) == "active",   # active(1) only, not "nonzero"
+        "dcdc_state": src_state(d.get("StateDcdcAfs")),
+        "shore_state": src_state(d.get("StateLandAfs")),
+        "solar_state": src_state(d.get("StatePvAfs")),
+        # powers = raw*10 W, but 0 when the source isn't installed (the raw reads a 254
+        # not-fitted sentinel — observed live: PPv=254 with solar absent — which *10 would
+        # surface as phantom watts). dcdc signed; land/pv unsigned.
+        "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8) * 10 if dcdc_i else 0,
+        "shore_power": d.get("PLandAfs", 0) * 10 if shore_i else 0,
+        "solar_power": d.get("PPvAfs", 0) * 10 if solar_i else 0,
+        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16) if dcdc_i else None,   # signed A, no /10 (+2 for SW 0409/0410)
+        "shore_current": round(d.get("ILandAfs", 0) * 0.1, 1) if shore_i else None,   # unsigned A (/10)
+        "solar_current": round(d.get("IPvAfs", 0) * 0.1, 1) if solar_i else None,     # unsigned A (/10)
+        "dcdc_installed": dcdc_i,
+        "shore_installed": shore_i,
+        "solar_installed": solar_i,
+        "energy_mode": d.get("EnergyMode"),                     # 0=normal 1=max_charge 2=eco 3=error (bf/c.java)
         "energy_mode_locked": bool(d.get("EnergyModeNotSelectable")),
+        "warning_level": d.get("WarningLevelTwo"),              # 0=none 1=level1 2=level2 (bf/d.java)
+        "warning_active": bool(d.get("WarningLevelActive")),
         "derating_temp_active": bool(d.get("CurrentDeratingTemperature")),
         "sleep_warning": bool(d.get("SleepWarning")),
-        "faults": [k for k in ("SystemError", "DcdcDefect", "PvDefect", "LandDefect")
-                   if d.get(k)],
+        "faults": [k for k in ("SystemError", "DcdcDefect", "PvDefect", "LandDefect",
+                               "LandNotAvailable", "TwoBattNotCharged", "TwoBattSwitchAtCharging",
+                               "TwoBattSwitchAtWorkshop", "WarningLevelTwo", "WarningLevelActive",
+                               "SleepWarning", "CurrentDeratingTemperature") if d.get(k)],
     }
 
 
@@ -208,6 +242,50 @@ def stairs(d: dict) -> dict:
     }
 
 
+def vehicle(d: dict) -> dict:
+    """Interpret the vehicle-state characteristic (BLE char ``00001004``).
+
+    Decodes the ignition line (terminal-15), the car variant, the unit's
+    real-time clock and the two-axis leveling readout. Bit layout is taken from
+    the app's ``ag/a.java`` cell model + ``zf/d.java`` parser and was validated
+    on-device 2026-07-07 (the RTC decoded to the correct wall-clock time). Roll
+    and pitch are signed 16-bit.
+
+    :param d: decoded field map from :func:`calictl.protocol.decode` for the
+        ``vehicle`` function (keys ``TerminalOneFive``, ``CarVariant``,
+        ``CarTime*``, ``CarLevelRoll``, ``CarLevelPitch``).
+    :returns: interpreted dict with ``ignition_on`` (terminal-15),
+        ``car_variant``, ``level_roll``/``level_pitch`` (signed), ``car_clock``
+        (ISO-ish ``YYYY-MM-DD HH:MM:SS``) and ``level_popup``.
+
+    .. req:: Decode vehicle state (char 1004)
+       :id: R_VEHICLE_1004
+       :status: implemented
+       :tags: ble, telemetry, vehicle
+
+       ``calictl`` shall decode BLE characteristic ``00001004`` into the ignition
+       state (terminal-15), car variant, unit real-time clock and the two-axis
+       (roll/pitch) leveling readout, exposing them as interpreted signals.
+    """
+    def s16(v):
+        return None if v is None else (v - 65536 if v >= 32768 else v)
+    y, mo, da = d.get("CarTimeYear"), d.get("CarTimeMonth"), d.get("CarTimeDay")
+    h, mi, se = d.get("CarTimeHour"), d.get("CarTimeMinute"), d.get("CarTimeSecond")
+    clock = None
+    if None not in (y, mo, da, h, mi, se):
+        # app applies +1900 to the year field and +1 to the month field
+        clock = "%04d-%02d-%02d %02d:%02d:%02d" % (y + 1900, mo + 1, da, h, mi, se)
+    return {
+        "installed": True,
+        "ignition_on": bool(d.get("TerminalOneFive")),   # terminal-15 line
+        "car_variant": d.get("CarVariant"),
+        "level_popup": d.get("CarLevelPopUp"),
+        "level_roll": s16(d.get("CarLevelRoll")),         # signed; 0 = level/unknown
+        "level_pitch": s16(d.get("CarLevelPitch")),
+        "car_clock": clock,
+    }
+
+
 def _generic(d: dict) -> dict:
     # surface fields inline (installed flag first) so status isn't blank
     out = {}
@@ -221,7 +299,7 @@ INTERPRETERS = {
     "water": water, "energy": energy, "cooler": cooler, "airheater": airheater,
     "campingmode": campingmode, "roof": roof, "lighting": lighting, "general": general,
     "livingroomheater": livingroomheater, "roofaircondition": roofaircondition,
-    "satelliteantenna": satelliteantenna, "stairs": stairs,
+    "satelliteantenna": satelliteantenna, "stairs": stairs, "vehicle": vehicle,
 }
 
 

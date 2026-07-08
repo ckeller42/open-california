@@ -87,6 +87,65 @@ ENTITY_SPECS: dict[str, list] = {
 }
 
 
+# --- Controllable entities (HA -> BLE command path) ------------------------
+# One CommandSpec per (function, what) that ``control.BUILDERS`` can actuate.
+# ``component`` maps on/off -> HA ``switch`` and level/brightness -> HA ``number``.
+# ``what`` is the control target passed to ``serve.on_command`` / ``control.build``.
+# ``config`` carries component extras (a number's min/max). ``state_key`` names the
+# flattened state field (from ``semantics``) the entity reflects, or ``None`` if the
+# control target has no direct read-back field.
+CommandSpec = namedtuple("CommandSpec", "component what name config state_key")
+
+COMMAND_SPECS: dict[str, list] = {
+    "cooler": [
+        CommandSpec("switch", "power", "Fridge Power", {}, "on"),
+        CommandSpec("number", "level", "Fridge Set Level", {"min": 1, "max": 5}, "level"),
+    ],
+    "campingmode": [
+        CommandSpec("switch", "master", "Camping Mode", {}, "master_on"),
+        CommandSpec("switch", "lights", "Camping Lights Switch", {}, "lights_on"),
+        CommandSpec("switch", "usb", "Rear USB Ports Switch", {}, "usb_charger"),
+    ],
+    "lighting": [
+        CommandSpec("switch", "power", "Interior Lights", {}, "any_on"),
+        CommandSpec("number", "brightness", "Interior Brightness", {"min": 0, "max": 15}, None),
+    ],
+    "airheater": [
+        CommandSpec("switch", "power", "Air Heater Power", {}, "running"),
+        CommandSpec("number", "level", "Air Heater Set Level", {"min": 0, "max": 15}, "level"),
+    ],
+}
+
+
+def command_topic(function: str, what: str) -> str:
+    """The MQTT set-topic for one actuatable target: ``calivan/<fn>/<what>/set``."""
+    return "%s/%s/%s/set" % (BASE, function, what)
+
+
+def command_topics() -> dict:
+    """Map every actuatable command topic to its ``(function, what)`` pair.
+
+    :returns: ``{topic: (function, what)}`` covering every ``COMMAND_SPECS`` entry.
+        ``serve.run`` subscribes to these keys on connect and routes an inbound
+        message through the value into ``serve.on_command`` / ``control.build``.
+
+    .. req:: Expose HA command topics for every actuatable target
+       :id: R_MQTT_COMMAND_TOPICS
+       :status: implemented
+       :tags: mqtt, control, ha
+
+       ``mqtt.command_topics`` shall return a ``{topic: (function, what)}`` map
+       covering every ``control.BUILDERS`` target (cooler power/level, campingmode
+       master/lights/usb, lighting power/brightness, airheater power/level) using a
+       stable ``calivan/<function>/<what>/set`` topic scheme.
+    """
+    out = {}
+    for function, specs in COMMAND_SPECS.items():
+        for spec in specs:
+            out[command_topic(function, spec.what)] = (function, spec.what)
+    return out
+
+
 def flatten(interp: dict, prefix: str = "") -> dict:
     """Flatten nested interpretation (e.g. water fresh.percent) to fresh_percent."""
     out = {}
@@ -109,6 +168,29 @@ def _config(function, spec):
     return "%s/%s/%s/config" % (DISCOVERY_PREFIX, spec.component, uid), cfg
 
 
+def _command_config(function, spec):
+    """Discovery config for one controllable entity (a switch or number with a
+    ``command_topic``). Switches carry on/off command payloads (``control._truthy``
+    accepts ``"on"``); numbers carry min/max from ``spec.config``. When the target
+    has a read-back field (``spec.state_key``) the entity also reflects live state."""
+    uid = "vwcamper_%s_%s_set" % (function, spec.what)
+    cfg = {"name": spec.name, "unique_id": uid,
+           "command_topic": command_topic(function, spec.what),
+           "availability_topic": "%s/status" % BASE,
+           "device": device_block(function)}
+    if spec.state_key is not None:
+        cfg["state_topic"] = "%s/%s" % (BASE, function)
+        cfg["value_template"] = "{{ value_json.%s }}" % spec.state_key
+    if spec.component == "switch":
+        cfg["payload_on"] = "on"
+        cfg["payload_off"] = "off"
+        if spec.state_key is not None:      # semantics emits bools -> "True"/"False"
+            cfg["state_on"] = "True"
+            cfg["state_off"] = "False"
+    cfg.update(spec.config)                 # number min/max
+    return "%s/%s/%s/config" % (DISCOVERY_PREFIX, spec.component, uid), cfg
+
+
 def render_discovery(installed=None) -> dict:
     out = {}
     for function, specs in ENTITY_SPECS.items():
@@ -116,6 +198,13 @@ def render_discovery(installed=None) -> dict:
             continue
         for spec in specs:
             topic, cfg = _config(function, spec)
+            out[topic] = cfg
+    # controllable entities (only for installed functions, same gating)
+    for function, specs in COMMAND_SPECS.items():
+        if installed is not None and function not in installed:
+            continue
+        for spec in specs:
+            topic, cfg = _command_config(function, spec)
             out[topic] = cfg
     return out
 

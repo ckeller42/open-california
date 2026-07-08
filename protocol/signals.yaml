@@ -2025,3 +2025,84 @@ water:
         gui: null
         vwdoc: null
       unit: L
+vehicle:
+  state:
+    TerminalOneFive:
+      confidence: high
+      decision: surface
+      kind: state
+      name: ignition_on
+      scale: raw
+      sources:
+        app: "ag/a.java f1070a; zf/d.java TerminalOneFive"
+        gui: null
+        vwdoc: null
+      unit: null
+    CarVariant:
+      confidence: medium
+      decision: surface
+      kind: state
+      name: car_variant
+      scale: raw
+      sources:
+        app: "ag/a.java f1072c (4-bit, default 15); zf/d.java ==1/==2 branch"
+        gui: null
+        vwdoc: null
+      unit: null
+    CarLevelPopUp:
+      confidence: medium
+      decision: surface
+      kind: state
+      name: level_popup
+      scale: raw
+      sources:
+        app: "ag/a.java f1071b (2-bit)"
+        gui: null
+        vwdoc: null
+      unit: null
+    CarLevelRoll:
+      confidence: medium
+      decision: surface
+      kind: state
+      name: level_roll
+      scale: "signed16 (raw; angle units UNVERIFIED)"
+      sources:
+        app: "ag/a.java f1078j (signed 16); zf/d.java CarLevelRoll"
+        gui: null
+        vwdoc: null
+      unit: null
+    CarLevelPitch:
+      confidence: medium
+      decision: surface
+      kind: state
+      name: level_pitch
+      scale: "signed16 (raw; angle units UNVERIFIED)"
+      sources:
+        app: "ag/a.java f1079k (signed 16); zf/d.java CarLevelPitch"
+        gui: null
+        vwdoc: null
+      unit: null
+    CarTimeYear:
+      decision: omit
+      reason: "car-clock component (year+1900) — combined into the car_clock output by semantics.vehicle"
+      sources: {app: "zf/d.java f()", gui: null, vwdoc: null}
+    CarTimeMonth:
+      decision: omit
+      reason: "car-clock component (month+1) — combined into the car_clock output by semantics.vehicle"
+      sources: {app: "zf/d.java f()", gui: null, vwdoc: null}
+    CarTimeDay:
+      decision: omit
+      reason: "car-clock component — combined into the car_clock output by semantics.vehicle"
+      sources: {app: "zf/d.java f()", gui: null, vwdoc: null}
+    CarTimeHour:
+      decision: omit
+      reason: "car-clock component — combined into the car_clock output by semantics.vehicle"
+      sources: {app: "zf/d.java f()", gui: null, vwdoc: null}
+    CarTimeMinute:
+      decision: omit
+      reason: "car-clock component — combined into the car_clock output by semantics.vehicle"
+      sources: {app: "zf/d.java f()", gui: null, vwdoc: null}
+    CarTimeSecond:
+      decision: omit
+      reason: "car-clock component — combined into the car_clock output by semantics.vehicle"
+      sources: {app: "zf/d.java f()", gui: null, vwdoc: null}

@@ -75,7 +75,10 @@ def write_once(addr: str | None = None) -> int:
     url = os.environ.get("INFLUX_URL", "http://localhost:8086")
     org = os.environ.get("INFLUX_ORG", "home")
     bucket = os.environ.get("INFLUX_BUCKET", "buspi")
-    token = os.environ["INFLUXDB_TOKEN"]
+    token = os.environ.get("INFLUXDB_TOKEN")
+    if not token:   # mirror serve.run()'s handling instead of a raw KeyError
+        print("influx disabled: no INFLUXDB_TOKEN")
+        return 0
     funcs = protocol.load(); overrides.apply(funcs)
     dev = CamperDevice(addr) if addr else CamperDevice()
     states = asyncio.run(_poll(funcs, dev))
