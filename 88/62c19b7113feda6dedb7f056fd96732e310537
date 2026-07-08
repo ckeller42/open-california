@@ -1,0 +1,22 @@
+docs/superpowers/specs/2026-07-08-app-replica-webserver-design.md
+  s_d2c35aeebbd344::t_5124b337018374 71
+  s_d2c35aeebbd344::t_0a4d9518a5a551 44-49
+  s_d2c35aeebbd344::t_dab430a557da21 99-101
+  s_d2c35aeebbd344::t_b8701dd30e01c0 1-43,50-70,72-98,102-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8862c19b7113feda6dedb7f056fd96732e310537",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
