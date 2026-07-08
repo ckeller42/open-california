@@ -1,0 +1,27 @@
+tests/test_calictl.py
+  s_d2c35aeebbd344::t_4305bf24128794 337,339
+tests/test_capture_verified.py
+  s_d2c35aeebbd344::t_b8146c6135950e 26-35
+calictl/semantics.py
+  s_d2c35aeebbd344::t_e6650095c09c52 272-278
+  s_d2c35aeebbd344::t_e0edad0f143e2c 290-291
+  s_d2c35aeebbd344::t_7a7e540165d370 258
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_55a7f012e02f67 93-94
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1258065b21da5744f23e71e1b10e879c68ef9542",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
