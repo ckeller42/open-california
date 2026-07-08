@@ -116,3 +116,11 @@ def test_maybe_start_web_returns_server_on_success(monkeypatch, capsys):
     s._web_port = 8088
     assert s._maybe_start_web(loop=None) is sentinel
     assert "web UI on http://0.0.0.0:8088" in capsys.readouterr().out
+
+
+# --- MQTT is optional: no broker / paho absent must not crash the daemon ---
+
+def test_maybe_start_mqtt_survives_no_broker(monkeypatch):
+    monkeypatch.setenv("MQTT_PORT", "1")   # nothing listens on port 1 -> connect refused
+    s = serve.Server(influx_enabled=False)
+    assert s._maybe_start_mqtt(loop=None) is None   # graceful None, never raises

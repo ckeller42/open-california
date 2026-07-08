@@ -52,6 +52,9 @@ DEFAULT_SEED = {
     "airheater": {"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0,
                   "HeatingLevel": 0},
     "lighting": {"ProfileNumber": 0, "Mode": 0, "LightValue": 0},   # all zones off
+    # fresh 12/29 L (~41%), waste 3/22 L — so the GUI water readout has real levels
+    "water": {"Installed": 1, "FreshWaterUnit": 0, "FreshWaterLevel": 12, "FreshWaterVolume": 29,
+              "WasteWaterUnit": 0, "WasteWaterLevel": 3, "WasteWaterVolume": 22},
 }
 
 
