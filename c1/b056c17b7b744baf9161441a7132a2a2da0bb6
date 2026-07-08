@@ -1,0 +1,55 @@
+docs/business-logic/remote-control-connect-gate.md
+  s_d2c35aeebbd344::t_4c6ca2e9bf2091 1
+  s_2342ae361d5471::t_e426fef84516dc 3-7
+docs/business-logic/signal-catalog.md
+  s_d2c35aeebbd344::t_84d67631a19ae9 1,3-4
+docs/business-logic/remote-control-write-mechanics.md
+  s_d2c35aeebbd344::t_91e2826190eb81 1,3-5
+docs/business-logic/control-and-actuation.md
+  s_d2c35aeebbd344::t_4f635b3e33b71d 1-184
+docs/business-logic/DECISIONS.md
+  s_d2c35aeebbd344::t_e308411d69ec28 1-89
+CLAUDE.md
+  s_d2c35aeebbd344::t_1cdf3d46218f1a 43
+  s_d2c35aeebbd344::t_dee293428474bd 38
+  s_2342ae361d5471::t_f72501746cf94e 66
+docs/business-logic/signal-scales.md
+  s_d2c35aeebbd344::t_cd7ccd6024591d 1,3-4
+docs/business-logic/alert-states.md
+  s_d2c35aeebbd344::t_0322db680d04a6 57-75
+  s_d2c35aeebbd344::t_a9d762f9511bf1 399-404
+  s_d2c35aeebbd344::t_5e596b87eae89b 310-332
+  s_d2c35aeebbd344::t_9da8b8c187141f 340
+  s_d2c35aeebbd344::t_9926a28172fe23 396-398
+docs/README.md
+  s_d2c35aeebbd344::t_50671351383078 16-17
+  s_2342ae361d5471::t_beee2af52931b5 13-14,26,29-30
+docs/business-logic/signals.md
+  s_d2c35aeebbd344::t_7737530e9dd232 1-194
+docs/business-logic/re-gap-inventory.md
+  s_2342ae361d5471::t_a1cedca85454a7 6,18,22,25,29,31-32,38-44,46-56,58-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c1b056c17b7b744baf9161441a7132a2a2da0bb6",
+  "prompts": {},
+  "sessions": {
+    "s_2342ae361d5471": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-adb4195f96bd1dec1",
+        "model": "unknown"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    },
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
