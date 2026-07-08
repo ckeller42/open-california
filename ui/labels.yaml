@@ -1,0 +1,14 @@
+# ui/labels.yaml — NEUTRAL, generic control labels. NO VW app text (citations-only).
+# label_key -> plain label. Unmapped keys fall back to mechanical humanization.
+# The real VW strings load locally via `build_web --strings <apk.cvr.json>` (never committed).
+coolboxPage_pageTitle_coolbox_text: Cooler
+coolboxPage_refrigeratorBoxWidget_refrigeratorBox_text: Refrigerator box
+coolboxPage_coolingLevelSlider_coolingLevel_text: Cooling level
+campingModePage_pageTitle_camping_text: Camping mode
+lightingPage_pageTitle_lighting_text: Lighting
+airHeaterPage_pageTitle_airHeater_text: Air heater
+roofPage_pageTitle_roof_text: Roof
+waterPage_pageTitle_water_text: Water
+energyPage_pageTitle_energy_text: Energy
+vehicleInfoPage_pageTitle_vehicle_text: Vehicle
+homePage_pageTitle_home_text: Vehicle
