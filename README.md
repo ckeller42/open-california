@@ -42,6 +42,20 @@ python3 -m calictl serve [--dry-run]   # the unified daemon -> InfluxDB + MQTT
 Runtime needs only the standard library at import; `bleak`/`paho-mqtt`/`influxdb_client` are
 imported lazily and only when actually talking to BLE/MQTT/InfluxDB.
 
+## Raspberry Pi setup
+
+Fresh Pi to a running monitor in one guided step — dependencies, virtualenv, **BLE pairing**,
+config, and the systemd service:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ckeller42/open-california/main/install.sh | sh
+```
+
+Pairing is interactive (the camper shows a passkey you type); the installer walks you through
+it. Read the script first if you like — `curl … -o install.sh && less install.sh && sh install.sh` —
+and `sh install.sh --dry-run` previews every step without changing anything. Full guide,
+including manual steps and troubleshooting: **[docs/raspberry-pi-setup.md](docs/raspberry-pi-setup.md)**.
+
 ## Layout
 
 | Path | What |

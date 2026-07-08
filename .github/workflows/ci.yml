@@ -55,3 +55,12 @@ jobs:
           if git grep -nE '\b[A-HJ-NPR-Z0-9]{17}\b' -- . ':!.github/' ':!.githooks/' | grep -qiE 'WV2ZZZ|VIN'; then
             echo "::error::a VIN appears in a tracked file — VINs are PII, keep them out"; exit 1; fi
           echo "no vendor material, vehicle MAC, or VIN committed"
+
+  install-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint install.sh (POSIX syntax + shellcheck)
+        run: |
+          sh -n install.sh
+          shellcheck install.sh
