@@ -86,3 +86,33 @@ def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
     assert result is None
     assert calls["actuate"] is not None
     assert calls["actuate_roof"] is None
+
+
+# --- web UI start is optional: a bind failure must not crash the daemon ---
+
+def test_maybe_start_web_none_when_no_port():
+    s = serve.Server(influx_enabled=False)
+    assert s._maybe_start_web(loop=None) is None       # _web_port unset
+
+
+def test_maybe_start_web_survives_bind_failure(monkeypatch, capsys):
+    from calictl import web
+
+    def _boom(*_a, **_k):
+        raise OSError(98, "Address already in use")
+
+    monkeypatch.setattr(web, "serve_http", _boom)
+    s = serve.Server(influx_enabled=False)
+    s._web_port = 8088
+    assert s._maybe_start_web(loop=None) is None        # swallowed, did not raise
+    assert "web UI failed to start" in capsys.readouterr().out
+
+
+def test_maybe_start_web_returns_server_on_success(monkeypatch, capsys):
+    from calictl import web
+    sentinel = object()
+    monkeypatch.setattr(web, "serve_http", lambda *_a, **_k: sentinel)
+    s = serve.Server(influx_enabled=False)
+    s._web_port = 8088
+    assert s._maybe_start_web(loop=None) is sentinel
+    assert "web UI on http://0.0.0.0:8088" in capsys.readouterr().out
