@@ -19,6 +19,7 @@ so a failing or missing link surfaces at doc-build time next to the code.
 .. toctree::
    :maxdepth: 2
 
+   screenshots
    api
 
 Requirement traceability
