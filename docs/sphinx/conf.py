@@ -37,4 +37,7 @@ needs_extra_links = [
     dict(option="verifies", incoming="verified by", outgoing="verifies"),
 ]
 html_theme = "alabaster"
+html_static_path = ["_static"]
+html_logo = "_static/logo.png"
+html_favicon = "_static/favicon.ico"
 exclude_patterns = ["_build"]

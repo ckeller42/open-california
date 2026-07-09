@@ -18,6 +18,9 @@ let lastRender = "";     // signature of the last paint, to skip idle re-renders
 
 const yn = (b) => (b ? "yes" : "no");
 const onoff = (b) => (b ? "On" : "Off");
+// Format a numeric value with a unit, but never print "null V"/"undefined %": a null/undefined
+// reading (e.g. starter battery when engine-off) renders as an em-dash instead.
+const withUnit = (v, u) => (v == null ? "—" : `${v} ${u}`);
 const tank = (t) => (t && t.percent != null ? `${t.percent}%  (${t.liters}/${t.capacity_l} L)` : "—");
 const zonesLit = (s) => Object.keys(s).filter((k) => k.startsWith("brightness_zone_") && s[k]).length;
 
@@ -70,13 +73,15 @@ const FEATURES = {
     title: "Energy", icon: "🔋",
     readouts: [
       { label: "Living battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
-      { label: "Living voltage", get: (s) => `${s.batt2_v} V` },
+      { label: "Living voltage", get: (s) => withUnit(s.batt2_v, "V") },
+      { label: "Living current", get: (s) => withUnit(s.batt2_current, "A") },
       { label: "Time remaining", get: (s) => (s.batt2_remaining_h != null ? `${s.batt2_remaining_h} h` : "—") },
       { label: "Starter battery", get: (s) => (s.soc1_pct != null ? `${s.soc1_pct}%` : "—"), bar: (s) => s.soc1_pct },
-      { label: "Starter voltage", get: (s) => `${s.batt1_v} V` },
-      { label: "DC-DC charger", get: (s) => (s.dcdc_installed ? `${s.dcdc_state} (${s.dcdc_power} W)` : "—") },
-      { label: "Shore power", get: (s) => (s.shore_installed ? `${s.shore_state} (${s.shore_power} W)` : "—") },
-      { label: "Solar", get: (s) => (s.solar_installed ? s.solar_state : "not installed") },
+      { label: "Starter voltage", get: (s) => withUnit(s.batt1_v, "V") },
+      { label: "Starter current", get: (s) => withUnit(s.batt1_current, "A") },
+      { label: "DC-DC charger", get: (s) => (s.dcdc_installed ? `${s.dcdc_state} (${s.dcdc_power} W · ${s.dcdc_current} A)` : "—") },
+      { label: "Shore power", get: (s) => (s.shore_installed ? `${s.shore_state} (${s.shore_power} W · ${s.shore_current} A)` : "—") },
+      { label: "Solar", get: (s) => (s.solar_installed ? `${s.solar_state} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
       { label: "Warnings", get: (s) => (s.faults && s.faults.length ? s.faults.join(", ") : "none") },
     ],
     summary: (s) => (s.soc2_pct != null ? `Battery ${s.soc2_pct}%` : ""),
@@ -91,7 +96,8 @@ const FEATURES = {
     readouts: [
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
       { label: "Leveling (roll / pitch)",
-        get: (s) => `${s.level_roll}° / ${s.level_pitch}°` },
+        get: (s) => (s.level_roll == null || s.level_pitch == null
+          ? "—" : `${s.level_roll}° / ${s.level_pitch}°`) },
       { label: "Vehicle clock", get: (s) => s.car_clock },
     ],
     summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
@@ -187,8 +193,40 @@ function render() {
   else renderFeature(view);
 }
 
+// The app's "California Status" overview card: fresh/grey water + leisure battery, at a glance.
+// A row is emitted only when its data is present (installed + non-null), so a truncated poll or
+// an uninstalled tank never renders a "— / — l" ghost row.
+function sumRow(label, value) {
+  const row = document.createElement("div"); row.className = "row";
+  const l = document.createElement("span"); l.className = "lbl"; l.textContent = label;
+  const v = document.createElement("span"); v.className = "val"; v.textContent = value;
+  row.append(l, v);
+  return row;
+}
+
+function renderSummary() {
+  const rows = [];
+  const w = STATE.water || {};
+  if (installed("water")) {
+    const f = w.fresh, g = w.waste;
+    if (f && f.liters != null) rows.push(sumRow("Fresh water", `${f.liters} / ${f.capacity_l} l`));
+    if (g && g.liters != null) rows.push(sumRow("Grey water", `${g.liters} / ${g.capacity_l} l`));
+  }
+  const e = STATE.energy || {};
+  if (e.soc2_pct != null) {
+    const h = e.batt2_remaining_h;
+    rows.push(sumRow("Second battery", `${e.soc2_pct}%` + (h ? ` · ${h} h` : "")));
+  }
+  if (!rows.length) return null;
+  const card = document.createElement("div"); card.className = "card summary";
+  rows.forEach((r) => card.appendChild(r));
+  return card;
+}
+
 function renderDashboard() {
   titleEl.textContent = "Vehicle";
+  const summary = renderSummary();
+  if (summary) app.appendChild(summary);
   const grid = document.createElement("div");
   grid.className = "tilegrid";
   for (const fn of ORDER) {

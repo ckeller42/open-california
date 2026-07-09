@@ -45,6 +45,13 @@ HEARTBEAT_START = 0x00100000      # arbitrary high start (no read-seed / challen
 HEARTBEAT_PERIOD_S = float(os.environ.get("CALICTL_HEARTBEAT_PERIOD_S", "0.6"))  # ~10 beats span the arm window
 ARM_DELAY_S = float(os.environ.get("CALICTL_ARM_DELAY_S", "3.0"))   # let the unit register the heartbeat before writing
 SETTLE_S = float(os.environ.get("CALICTL_SETTLE_S", "2.5"))         # let the actuation take effect before readback
+# A plain read returns whatever is LATCHED in a state characteristic, which goes STALE: the
+# fresh-water level char read 1 L while the true level was 11 L. The 1003 liveness heartbeat is
+# what drives the unit's sensor-measurement loop AND keeps the link up (an un-heartbeated link is
+# dropped after ~15 s) — the app ticks it continuously (~0.7 s) the whole time it's connected, not
+# only for actuation. So the read path runs the same heartbeat: this warm-up lets the measurement
+# refresh before the read pass. Live-verified on-device 2026-07-09 (1 L -> 11 L, link held 64 s).
+HEARTBEAT_WARMUP_S = float(os.environ.get("CALICTL_HEARTBEAT_WARMUP_S", "2.0"))
 
 # roof move-heartbeat (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame
 # won't complete travel: ig/c.java re-sends Up/Down at ~1 Hz until STOP. These bound
@@ -116,12 +123,36 @@ class CamperDevice:
             "phone app may hold the single connection slot." % (self.addr, type(last).__name__))
 
     async def read_all(self, funcs: dict) -> dict[str, bytes]:
-        """One session: read every function's state characteristic.
-        Returns {function_name: raw_bytes}; missing/failed reads are omitted.
+        """One session: read every function's state characteristic, under a live 1003 heartbeat
+        so the values are FRESH.
+
+        :param funcs: the loaded function table (name -> Function with ``state_char``).
+        :returns: ``{function_name: raw_bytes}``; functions with no state char (or whose read
+            failed) are omitted.
+
+        A bare read returns whatever is LATCHED in the characteristic, which decays to a stale
+        value (the fresh-water char read 1 L while the true level was 11 L). The 1003 liveness
+        heartbeat is what drives the unit's sensor-measurement loop and keeps the link alive — the
+        app ticks it continuously the whole time it is connected, not only for actuation. So this
+        runs the same ``_heartbeat`` for the duration of the read (with a short warm-up so the
+        measurement refreshes first), all within the one session held under the ``serve`` BLE lock.
+
+        .. req:: read_all keeps values fresh with a live 1003 heartbeat
+            :id: R_READ_HEARTBEAT_REFRESH
+
+            The poll must run the 1003 liveness heartbeat while reading, so the unit measures and
+            the link stays up — otherwise a stale latched value (fresh-water 1 L vs the true 11 L)
+            is surfaced and the link is dropped mid-cycle.
         """
         client = await self._session()
+        return await self._read_all_on(client, funcs)
+
+    async def _read_all_on(self, client, funcs: dict) -> dict[str, bytes]:
         out: dict[str, bytes] = {}
+        stop = asyncio.Event()
+        beat = asyncio.ensure_future(self._heartbeat(client, stop))
         try:
+            await asyncio.sleep(HEARTBEAT_WARMUP_S)   # let the liveness register + sensors refresh
             for name, f in funcs.items():
                 if not f.state_char:
                     continue
@@ -134,19 +165,36 @@ class CamperDevice:
                             # link dropped mid-session: don't burn ~30 s of futile retries
                             # (3 chars x 0.8 s x remaining funcs) under the serve BLE lock.
                             print("read_all: link dropped at %s; aborting cycle" % name, flush=True)
-                            return out
+                            break
                         if attempt == 2:
                             print("read_all: %s failed after retries: %r" % (name, e), flush=True)
                         await asyncio.sleep(0.8)
+                if not client.is_connected:
+                    break
         finally:
+            stop.set()
+            try:
+                await beat
+            except Exception:
+                pass
             await self._safe_disconnect(client)
         return out
 
     async def read(self, func) -> bytes:
+        """Read one function's state char under a live 1003 heartbeat (fresh, not the stale
+        latch — see :meth:`read_all`)."""
         client = await self._session()
+        stop = asyncio.Event()
+        beat = asyncio.ensure_future(self._heartbeat(client, stop))
         try:
+            await asyncio.sleep(HEARTBEAT_WARMUP_S)
             return bytes(await client.read_gatt_char(func.state_char))
         finally:
+            stop.set()
+            try:
+                await beat
+            except Exception:
+                pass
             await self._safe_disconnect(client)
 
     async def actuate(self, func, frame: bytes, *, verify=True) -> dict | None:

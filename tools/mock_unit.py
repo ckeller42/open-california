@@ -61,12 +61,26 @@ DEFAULT_SEED = {
     "lighting": {"ProfileNumber": 0, "Mode": 0, "LightValue": 0,
                  "BrightnessLOneZero": 13, "BrightnessLOneOne": 13, "BrightnessLOneThree": 13,
                  "BrightnessLOneFour": 13, "BrightnessLOneFive": 13, "BrightnessLOneSix": 13},
-    # fresh 12/29 L (~41%), waste 3/22 L — so the GUI water readout has real levels
-    "water": {"Installed": 1, "FreshWaterUnit": 0, "FreshWaterLevel": 12, "FreshWaterVolume": 29,
-              "WasteWaterUnit": 0, "WasteWaterLevel": 3, "WasteWaterVolume": 22},
-    # ignition on, a valid RTC, and a small tilt (roll -1.09°, pitch 0.35°) so the vehicle
-    # screen shows real data in dev (raw CarLevelRoll -109 = 0.01°-units, ÷100 in semantics).
-    "vehicle": {"TerminalOneFive": 1, "CarVariant": 4,
+    # Water uses the van's ABSOLUTE encoding (Unit=1: Level=litres, Volume=capacity), matching
+    # a live read: fresh 11/29 L (38%), waste 0/22 L. (The van's fresh sensor is coarse, so a low
+    # reading like 1 L can appear without the grey tank rising — modelled as a normal healthy 11 L.)
+    "water": {"Installed": 1, "FreshWaterUnit": 1, "FreshWaterLevel": 11, "FreshWaterVolume": 29,
+              "WasteWaterUnit": 1, "WasteWaterLevel": 0, "WasteWaterVolume": 22},
+    # Engine-OFF energy state (mirrors the real van, live-verified): the STARTER battery is
+    # only measured with terminal-15, so its current reads the 0x81 sentinel and Age=255 (stale)
+    # -> batt1_v is None (the UI must render "—", never "null V"). Leisure battery is always live
+    # (100% / 14.1 V, 58 h remaining). Seeding this makes the null-readout path reachable in tests.
+    # DC-DC + shore are fitted but idle (-> "inactive (0 W)"); solar is NOT fitted (-> "not
+    # installed") — the real equipment profile of this van.
+    "energy": {"SocOneBattAfs": 5, "SocTwoBattAfs": 10, "UTwoBattBemAfs": 141,
+               "ITwoBattBemAfs": 0, "UOneBattBemAfs": 48, "IOneBattBemAfs": 0x81,
+               "AgeOneBattValuesMinutes": 255, "tTwoBattRemainingh": 58,
+               "DcdcInstalled": 1, "LadInstalled": 1, "PvInstalled": 0,
+               "StateDcdcAfs": 0, "StateLandAfs": 0},
+    # Parked, engine-OFF (COHERENT with the energy seed above: terminal-15 off => starter
+    # battery unmeasured). Valid RTC (runs regardless of ignition) + a small tilt (roll -1.09°,
+    # pitch 0.35°; raw CarLevelRoll -109 = 0.01°-units, ÷100 in semantics).
+    "vehicle": {"TerminalOneFive": 0, "CarVariant": 4,
                 "CarTimeYear": 126, "CarTimeMonth": 6, "CarTimeDay": 8,
                 "CarTimeHour": 19, "CarTimeMinute": 30, "CarTimeSecond": 0,
                 "CarLevelRoll": -109, "CarLevelPitch": 35},
@@ -104,6 +118,11 @@ class MockCamperUnit:
         self.armed = False
         self.last_beat: int | None = None
         self.writes: list[tuple[str, bytes]] = []   # (function, frame) audit trail
+        # Per-function STALE-read overrides: a read returns these until the 1003 heartbeat arms
+        # the session (self.armed), after which the true `state` is returned — models the real
+        # unit latching an old value until the liveness heartbeat drives its measurement loop
+        # (observed: fresh-water 1 L latched vs the true 11 L once the app's heartbeat runs).
+        self.read_latch: dict[str, dict] = {}
         # reverse maps: char UUID -> function, for read/write routing
         self._state_char = {f.state_char: fn for fn, f in self.funcs.items() if f.state_char}
         self._control_char = {f.control_char: fn for fn, f in self.funcs.items() if f.control_char}
@@ -115,7 +134,13 @@ class MockCamperUnit:
         # handshake — so those must return the packed state, not the placeholder.
         fn = self._state_char.get(uuid)
         if fn is not None:
-            return _pack_state(self.funcs[fn], self.state.get(fn, {}))
+            vals = dict(self.state.get(fn, {}))
+            # Freshness gate (live-verified): a state char decays to a STALE latched value unless
+            # the 1003 liveness heartbeat is running — that drives the unit's measurement loop.
+            # So a read returns the latch until a heartbeat has armed the session, then the truth.
+            if fn in self.read_latch and not self.armed:
+                vals.update(self.read_latch[fn])
+            return _pack_state(self.funcs[fn], vals)
         if uuid in (device.VERSION_CHAR, device.AUTH_CHAR):
             return b"\x04\x10\x02\x07"           # non-empty payload for the version/auth gate
         return bytes(6)                          # unknown readable char: benign payload
@@ -243,4 +268,7 @@ class MockBleakClient:
             raise
 
     async def start_notify(self, uuid, cb):
+        return None
+
+    async def stop_notify(self, uuid):
         return None

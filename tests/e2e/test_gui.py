@@ -43,7 +43,8 @@ def base_url():
     port = _free_port()
     env = dict(os.environ,
                CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
-               CALICTL_ARM_DELAY_S="0.3", CALICTL_SETTLE_S="0.3", CALICTL_HEARTBEAT_PERIOD_S="0.1")
+               CALICTL_ARM_DELAY_S="0.3", CALICTL_SETTLE_S="0.3", CALICTL_HEARTBEAT_PERIOD_S="0.1",
+               CALICTL_HEARTBEAT_WARMUP_S="0")
     proc = subprocess.Popen(
         [sys.executable, "-m", "tools.run_against_mock", "serve",
          "--web", str(port), "--interval", "1", "--no-influx"],
@@ -121,6 +122,17 @@ def test_lighting_screen_activate_profile(page):
     expect(page.get_by_text("Left", exact=True)).to_be_visible()   # a reading lamp
     page.get_by_role("button", name="Activate").click()
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
+
+
+def test_dashboard_summary_card(page):
+    # the app's "California Status" overview: fresh/grey water + leisure battery, above the tiles.
+    card = page.locator(".card.summary")
+    expect(card).to_be_visible()
+    for label in ("Fresh water", "Grey water", "Second battery"):
+        expect(card.get_by_text(label, exact=True)).to_be_visible()
+    # a real "<liters> / <capacity> l" readout, not a spec/ghost row
+    import re
+    assert re.search(r"\d+ / \d+ l", card.inner_text())
 
 
 def test_no_red_flag_text(page, base_url):

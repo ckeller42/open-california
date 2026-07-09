@@ -1,4 +1,7 @@
-# open-california
+<p align="center">
+  <img src="docs/assets/logo.png" width="140" alt="open California logo">
+</p>
+<h1 align="center">Open California</h1>
 
 [![CI](https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg)](https://github.com/ckeller42/open-california/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)

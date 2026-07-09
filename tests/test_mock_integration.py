@@ -38,6 +38,29 @@ def _funcs():
     f = protocol.load(); overrides.apply(f); return f
 
 
+# --- mock seed fidelity: a coherent, realistic snapshot of the real van ------
+
+def test_mock_seed_is_coherent_and_realistic():
+    """The DEFAULT_SEED must mirror a real engine-off/parked read, so the GUI tests exercise
+    the states the hardware actually emits (this is how the 'null V' starter-voltage bug slipped
+    through — the old seed made the starter battery look measured when the real van doesn't)."""
+    from calictl import semantics
+    u = MockCamperUnit()
+    en = semantics.interpret("energy", u.decoded("energy"))
+    ve = semantics.interpret("vehicle", u.decoded("vehicle"))
+    wa = semantics.interpret("water", u.decoded("water"))
+    # engine-off coherence: terminal-15 off <=> starter battery unmeasured (batt1_v None)
+    assert ve["ignition_on"] is False and en["stale"] is True and en["batt1_v"] is None
+    # leisure battery is always live (never null) — 100% / 14.1 V / 58 h
+    assert en["batt2_v"] == 14.1 and en["soc2_pct"] == 100 and en["batt2_remaining_h"] == 58
+    # this van's source profile: DC-DC + shore fitted (idle), solar absent
+    assert en["dcdc_installed"] and en["shore_installed"] and not en["solar_installed"]
+    assert en["dcdc_state"] == "inactive" and en["shore_state"] == "inactive"
+    # water in the van's absolute-litre encoding: fresh 11/29 (38%), waste 0/22
+    assert wa["fresh"] == {"liters": 11, "capacity_l": 29, "percent": 38}
+    assert wa["waste"] == {"liters": 0, "capacity_l": 22, "percent": 0}
+
+
 # --- cli.cmd_set end-to-end -------------------------------------------------
 
 def test_set_cooler_power_on_then_off(mock):
@@ -82,6 +105,28 @@ def test_set_lighting_needs_active_profile_then_applies(mock):
     assert cli.main(["set", "lighting", "profile", "9"]) == 0
     assert cli.main(["set", "lighting", "kitchen", "8"]) == 0
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
+
+
+# --- read_all prefers pushed notifications over a stale latched read ---------
+
+def test_read_all_heartbeat_refreshes_stale_read(mock):
+    """T_READ_HEARTBEAT_REFRESH — verifies R_READ_HEARTBEAT_REFRESH: a bare read of the fresh-water
+    char returns the stale latch (1 L), but read_all runs the 1003 liveness heartbeat, which arms
+    the unit's measurement loop, so it surfaces the true 11 L. Live-verified on-device 2026-07-09
+    (bare poll read 1 L; with a continuous heartbeat the same read returned 11 L). The `mock`
+    fixture patches device sleeps to no-ops, so the warm-up is instant here."""
+    import asyncio
+    from calictl import protocol, device
+    mock.state["water"]["FreshWaterLevel"] = 11             # the truth (revealed once armed)
+    mock.read_latch["water"] = {"FreshWaterLevel": 1}       # a bare read returns the stale latch
+    funcs = mock.funcs
+
+    # a plain read (no heartbeat -> not armed) sees the stale latch...
+    assert protocol.decode(funcs["water"], mock.read(funcs["water"].state_char))["FreshWaterLevel"] == 1
+    # ...but read_all runs the heartbeat, which arms the session, so it surfaces the truth
+    raw = asyncio.run(device.CamperDevice().read_all(funcs))
+    assert mock.armed is True
+    assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 11
 
 
 # --- the 1003 arm-gate, at the unit level -----------------------------------

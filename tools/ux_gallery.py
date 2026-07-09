@@ -40,7 +40,8 @@ def _free_port():
 def _start_mock_server():
     port = _free_port()
     env = dict(os.environ, CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
-               CALICTL_ARM_DELAY_S="0.2", CALICTL_SETTLE_S="0.2", CALICTL_HEARTBEAT_PERIOD_S="0.1")
+               CALICTL_ARM_DELAY_S="0.2", CALICTL_SETTLE_S="0.2", CALICTL_HEARTBEAT_PERIOD_S="0.1",
+               CALICTL_HEARTBEAT_WARMUP_S="0")
     proc = subprocess.Popen(
         [sys.executable, "-m", "tools.run_against_mock", "serve", "--web", str(port),
          "--interval", "1", "--no-influx"],
