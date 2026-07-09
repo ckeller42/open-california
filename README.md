@@ -1,96 +1,85 @@
 <p align="center">
-  <img src="docs/assets/logo.png" width="140" alt="open California logo">
+  <img src="docs/assets/logo.png" width="140" alt="Open California logo">
 </p>
 <h1 align="center">Open California</h1>
 
-[![CI](https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg)](https://github.com/ckeller42/open-california/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
-[![Runtime deps](https://img.shields.io/badge/runtime%20deps-stdlib%20only-brightgreen)](#design)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+<p align="center">
+  <b>Run your VW California T7 camper from Linux — every sensor read, every load actuated, over Bluetooth LE.</b>
+</p>
 
-Reverse-engineered **read + control** for the **VW California T7 camper control unit** over
-Bluetooth LE. **Purpose: I want to use my own camper from Linux and open platforms** — the
-vendor app is iOS/Android-only, so this interoperability does not exist without this project.
-Reads all vehicle telemetry and (with the firmware liveness gate solved) actuates loads, feeding
-**Home Assistant** (MQTT) and **Grafana** (InfluxDB) from a Raspberry Pi.
+<p align="center">
+  <a href="https://github.com/ckeller42/open-california/actions/workflows/ci.yml"><img src="https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">
+  <img src="https://img.shields.io/badge/runtime%20deps-stdlib%20only-brightgreen" alt="Runtime deps">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+</p>
 
-> ⚠️ Independent RE project, **not affiliated with Volkswagen**. No VW binaries, decompiled
-> source, manuals, or artwork are distributed. See **[DISCLAIMER.md](DISCLAIMER.md)** before use.
+The camper control unit only talks to the vendor's iOS/Android app — so from Linux, Home
+Assistant, or a script there's simply no way to see the water level or turn on the fridge.
+**Open California** reverse-engineers its Bluetooth-LE protocol into a clean, **stdlib-only**
+toolkit: full telemetry, *real* control writes, and a self-hosted **web UI + Home Assistant +
+Grafana**, all from a Raspberry Pi.
 
-> 🛑 **Use at your own risk.** This software sends control writes to a real vehicle
-> (heaters, roof, electrical loads). It can damage your vehicle, void your warranty, or
-> cause unsafe conditions. It is provided **"as is", with NO WARRANTY and NO LIABILITY** —
-> if it breaks your car, that's on you. Only use it on a vehicle you own, and only if you
-> understand what each command does.
+<p align="center">
+  <img src="docs/screenshots/light_00_dashboard.png" width="230" alt="Dashboard — status overview + feature tiles">
+  <img src="docs/screenshots/light_06_Energy.png" width="230" alt="Energy — batteries, voltages, currents, sources">
+  <img src="docs/screenshots/light_05_Water.png" width="230" alt="Water — fresh and grey tanks">
+</p>
+
+> 🛑 **Use at your own risk.** It sends control writes to a real vehicle (heaters, roof,
+> electrical loads) and can damage it or void your warranty — provided **AS IS, no warranty, no
+> liability**. Independent project, **not affiliated with Volkswagen**; no VW binaries, sources,
+> manuals, or artwork are distributed. See **[DISCLAIMER.md](DISCLAIMER.md)**.
 
 ## What it does
 
-- **Telemetry** — decodes 14 BLE functions (cooler, air-heater, camping mode, lighting,
+- **Reads everything** — decodes 14 BLE functions (cooler, air-heater, camping mode, lighting,
   energy, water, roof, vehicle state, …) into meaningful signals, cross-validated by a signal
-  catalog + coverage guardrail so no signal is silently dropped or mislabeled.
-- **Control** — `calictl set cooler power on|off` (and campingmode, lighting, …) actuate for
-  real via a **1003-characteristic liveness heartbeat** that arms the firmware's write gate.
-- **Integration** — one BLE-owning daemon fans out to InfluxDB/Grafana and Home Assistant.
+  catalog + coverage guardrail so nothing is silently dropped or mislabeled. Values stay **fresh**
+  by holding the unit's `1003` liveness heartbeat during reads (a bare read goes stale).
+- **Actually controls** — `calictl set cooler power on` (camping mode, lighting, roof, …) actuate
+  for real, armed by the same `1003` heartbeat that unlocks the firmware's write gate.
+- **Fits your stack** — one BLE-owning daemon fans out to **InfluxDB/Grafana** and **Home
+  Assistant** (MQTT), and serves the web UI above — same process, one connection.
 
 ## Quickstart
 
 ```sh
-python3 -m pytest tests/ -q            # test suite (stdlib-only; no BLE/MQTT needed)
-python3 -m calictl status              # live read of every function  (needs BLE + a free slot)
-python3 -m calictl get vehicle         # ignition / car-variant / RTC / roll-pitch leveling
+python3 -m pytest tests/ -q            # test suite — stdlib-only, no BLE/MQTT needed
+python3 -m calictl status              # live read of every function (needs BLE + a free slot)
 python3 -m calictl set cooler power on # actuate (heartbeat-armed); reads back + reports
-python3 -m calictl serve [--dry-run]   # the unified daemon -> InfluxDB + MQTT
+python3 -m calictl serve --web 8080    # the daemon → InfluxDB + MQTT + web UI at :8080
 ```
 
-Runtime needs only the standard library at import; `bleak`/`paho-mqtt`/`influxdb_client` are
-imported lazily and only when actually talking to BLE/MQTT/InfluxDB.
+Only the standard library is imported at load; `bleak` / `paho-mqtt` / `influxdb_client` load
+lazily, only when actually talking to BLE / MQTT / InfluxDB.
 
-## Raspberry Pi setup
+## Raspberry Pi
 
-Fresh Pi to a running monitor in one guided step — dependencies, virtualenv, **BLE pairing**,
-config, and the systemd service:
+Fresh Pi to a running monitor in one guided step — deps, virtualenv, **BLE pairing**, config, and
+the systemd service:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ckeller42/open-california/main/install.sh | sh
 ```
 
-Pairing is interactive (the camper shows a passkey you type); the installer walks you through
-it. Read the script first if you like — `curl … -o install.sh && less install.sh && sh install.sh` —
-and `sh install.sh --dry-run` previews every step without changing anything. Full guide,
-including manual steps and troubleshooting: **[docs/raspberry-pi-setup.md](docs/raspberry-pi-setup.md)**.
+Pairing is interactive (type the passkey the camper shows). `sh install.sh --dry-run` previews
+every step without changing anything. Full guide: **[docs/raspberry-pi-setup.md](docs/raspberry-pi-setup.md)**.
 
-## Web UI
+## How it works
 
-`calictl serve --web 8080` also serves a browser replica of the app's Vehicle-tab controls
-(dashboard → per-feature screens) at `http://<pi>:8080` — same process, no extra BLE
-connection. `--read-only` disables commands. Labels are neutral; point the build at your own
-APK for the exact app text (`python -m tools.build_web --strings <apk.cvr.json>`, local only).
-See **[docs/raspberry-pi-setup.md](docs/raspberry-pi-setup.md)**.
+- **Stdlib-only at import** — the runtime pulls no third-party packages until it actually needs a
+  BLE/MQTT/InfluxDB connection, so tests run anywhere.
+- **One BLE owner** — a single daemon holds the vehicle's single connection slot, serialized by an
+  `asyncio.Lock`; control writes never race a poll.
+- **Dictionary-driven** — every field is extracted into `protocol/dictionary.yaml` and has a
+  catalog decision in `protocol/signals.yaml`; a dropped or unaccounted field **fails CI**. Manual
+  bit offsets live only in `overrides.py`.
 
-## Layout
-
-| Path | What |
-|---|---|
-| `calictl/` | runtime: `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `control`/`overrides` (frames), `serve` (daemon), `mqtt`/`influx` (sinks), `cli` |
-| `protocol/dictionary.yaml` | extracted field map — source of truth for bit layout |
-| `protocol/signals.yaml` | signal catalog — surface/omit decision + provenance per field |
-| `tools/` | `extract_protocol` (regenerates the dictionary), `audit_signals` (coverage/semantic-review), `triage`, `catalog` |
-| `docs/business-logic/` | RE notes (control recipes, the write gate, signal scales) |
-| `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (icons not committed — VW copyright) |
-| `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard |
-
-## Design
-
-- **Runtime is stdlib-only at import** (tests run without BLE/MQTT installed).
-- **One BLE owner** — a single daemon holds the vehicle's single connection slot, serialized by
-  an `asyncio.Lock`; control writes never race a poll.
-- **Dictionary-driven** — every field has a catalog decision (a dropped/unaccounted field fails
-  CI); manual bit offsets live only in `overrides.py`.
-
-See [`CLAUDE.md`](CLAUDE.md) for the full contributor guide and hard rules, and
-[`docs/business-logic/`](docs/business-logic/) for the reverse-engineering notes.
+Contributor guide and hard rules: **[CLAUDE.md](CLAUDE.md)**. Reverse-engineering notes (control
+recipes, the write gate, value-freshness, signal scales): **[docs/business-logic/](docs/business-logic/)**.
 
 ## License
 
-**[MIT](LICENSE)** — covers the original work here (`calictl` code, tooling, docs). No VW
-material is included. **No warranty, no liability** — see [DISCLAIMER.md](DISCLAIMER.md).
+**[MIT](LICENSE)** — covers the original work here (`calictl` code, tooling, docs); no VW material
+is included. No warranty, no liability — see **[DISCLAIMER.md](DISCLAIMER.md)**.

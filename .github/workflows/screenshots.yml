@@ -1,0 +1,43 @@
+name: Screenshots
+
+# Render the web-UI screenshots (over the mock unit) whenever the UI changes on main, and commit
+# them back, so the README + Sphinx docs always show the current build. The [skip ci] on the
+# commit prevents a re-trigger loop; the paths filter keeps it from running on unrelated pushes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "calictl/webui/**"
+      - "calictl/semantics.py"
+      - "tools/ux_gallery.py"
+      - "tools/mock_unit.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright + Chromium
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Render the web UI over the mock unit
+        run: python -m tools.ux_gallery --out docs/screenshots
+      - name: Commit refreshed screenshots (if any changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if git diff --cached --quiet; then
+            echo "no screenshot changes"
+          else
+            git commit -m "docs: refresh web-UI screenshots [skip ci]"
+            git push
+          fi
