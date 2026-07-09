@@ -224,3 +224,27 @@ def test_responses_are_no_cache(server):
     for path in ("/", "/api/state"):
         with urllib.request.urlopen(base + path) as r:
             assert r.headers.get("Cache-Control") == "no-cache", path
+
+
+def test_pwa_manifest_and_icons_served_with_correct_types(server):
+    # Installable web app: the manifest + icons must serve with correct content-types, and
+    # index.html must link them (else "Add to Home Screen" gets no name/icon).
+    import urllib.request
+    _, base = server
+    for path, ctype, magic in (
+        ("/manifest.webmanifest", "application/manifest+json", b"{"),
+        ("/icon-192.png", "image/png", b"\x89PNG"),
+        ("/icon-512.png", "image/png", b"\x89PNG"),
+        ("/apple-touch-icon.png", "image/png", b"\x89PNG"),
+        ("/maskable-icon-192.png", "image/png", b"\x89PNG"),
+        ("/maskable-icon-512.png", "image/png", b"\x89PNG"),
+        ("/favicon-32x32.png", "image/png", b"\x89PNG"),
+        ("/favicon.ico", "image/x-icon", b"\x00\x00"),
+    ):
+        with urllib.request.urlopen(base + path) as r:
+            assert r.status == 200, path
+            assert r.headers["Content-Type"] == ctype, path
+            assert r.read().startswith(magic), path
+    with urllib.request.urlopen(base + "/") as r:
+        html = r.read().decode()
+    assert 'rel="manifest"' in html and 'rel="apple-touch-icon"' in html

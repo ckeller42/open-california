@@ -1,0 +1,46 @@
+# State-value freshness: the 1003 liveness heartbeat
+
+**Status:** SOLVED + live-verified on-device 2026-07-09.
+
+## Symptom
+
+A bare poll of the fresh-water state char (`00001302`) returned **1 L** while the vehicle truly
+held **11 L** (shown by the app). The decode was correct (capacities 29/22 and the waste level
+all cross-matched the app); only the live *level* was a **stale latched value** — not a decode
+bug, a drain, or a sensor fault (`FreshWaterInfoPopUp = 0` = valid).
+
+## What it is NOT (ruled out along the way)
+
+- **Not Exlap / WiFi.** The app *does* ship an Exlap client (`de.exlap.*`, XML over a
+  `socket://192.168.2.1` TCP transport to the camper's WiFi AP), but that is a **separate path**,
+  code-disjoint from the camper BLE stack, and is **not** how the app reads the vehicle tab here.
+  The van's WiFi AP wasn't even broadcasting. (Earlier notes that guessed an Exlap/WiFi fix were
+  wrong.)
+- **Not BLE GATT notifications.** Enabling notifications (CCCD `01 00`) yields no fresh push on
+  its own; a persistent bare subscription stayed stale and the van dropped the link every ~15 s.
+
+## Root cause (live-verified)
+
+The **`00001003` liveness heartbeat** — a +1 4-byte-BE counter — is what drives the unit's
+sensor-measurement loop **and** keeps the link alive. It is not only for actuation: the app ticks
+it **continuously (~0.7 s) the entire time it is connected**. A characteristic read returns the
+last latched value; without the heartbeat running, that value decays to a stale reading and, after
+~15 s with no heartbeat, the van drops the connection.
+
+**Capture evidence** (PacketLogger via `idevicebtlogger`, app opening the vehicle screen): the app
+writes a monotonic +1 counter to handle `0x001a` (= char `1003`) every ~0.76 s; the water value
+came back fresh (`030b1d…` = 11 L) from a **plain read** — no notification, no request/refresh
+command (`DisplayRefresh` is an unrelated *energy* actuation bit).
+
+**On-device confirmation** (buspi): with a continuous, landing heartbeat the fresh-water read went
+**1 L → 11 L immediately and held for 64 s**, `hb_fail=0`, and **the link never dropped**.
+
+## The fix
+
+`device.read_all` / `device.read` run the existing `_heartbeat(client, stop)` for the duration of
+the read session (a short `HEARTBEAT_WARMUP_S` lets the measurement refresh first), then stop it
+and disconnect — all within the one session under the `serve` BLE lock. This both **freshens the
+values** and **fixes the mid-poll link drops**. Stdlib-only, no new transport. See
+`R_READ_HEARTBEAT_REFRESH` in `calictl/device.py` ← `T_READ_HEARTBEAT_REFRESH`
+(`tests/test_mock_integration.py`); the mock models "reads are stale until a heartbeat arms the
+session."

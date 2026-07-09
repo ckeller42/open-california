@@ -17,14 +17,23 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
   background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; }
 
 #topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: .6rem;
-  padding: .9rem 1rem; background: var(--bg); border-bottom: 1px solid var(--border); }
+  padding: .9rem 1rem; background: var(--bg); border-bottom: 1px solid var(--border);
+  /* iOS standalone PWA: keep the header clear of the status bar / Dynamic Island. env() is 0
+     in a normal browser, so this only takes effect once installed to the home screen. */
+  padding-top: calc(.9rem + env(safe-area-inset-top));
+  padding-left: calc(1rem + env(safe-area-inset-left));
+  padding-right: calc(1rem + env(safe-area-inset-right)); }
 #topbar h1 { font-size: 1.15rem; font-weight: 650; margin: 0; }
 #back { font-size: 1.6rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 .2rem; }
 .pill { margin-left: auto; font-size: .72rem; color: var(--muted); border: 1px solid var(--border);
   border-radius: 999px; padding: .15rem .55rem; white-space: nowrap; }
 .pill.ok { color: var(--ok); } .pill.busy { color: var(--accent); } .pill.error { color: var(--error); }
 
-#app { max-width: 640px; margin: 0 auto; padding: 1rem; display: grid; gap: .8rem; }
+#app { max-width: 640px; margin: 0 auto; padding: 1rem; display: grid; gap: .8rem;
+  /* respect the side/bottom safe areas too (landscape notch, home indicator) */
+  padding-left: calc(1rem + env(safe-area-inset-left));
+  padding-right: calc(1rem + env(safe-area-inset-right));
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
 
 /* dashboard tiles */
 .tilegrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .8rem; }
@@ -39,6 +48,7 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 /* cards + rows */
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px;
   box-shadow: var(--shadow); padding: .3rem 1rem; }
+.card.summary { margin-bottom: .9rem; }
 .row { display: flex; align-items: center; gap: 1rem; padding: .8rem 0; }
 .rowwrap { border-top: 1px solid var(--border); }
 .rowwrap:first-child { border-top: 0; }

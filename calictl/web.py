@@ -17,7 +17,9 @@ ROOF_FUNCTION = "roof"
 # airheater (fuel-burning parking heater). See CLAUDE.md "Known state".
 CONFIRM_REQUIRED = {ROOF_FUNCTION, "airheater"}
 _CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css",
-                  ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml"}
+                  ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml",
+                  ".png": "image/png", ".webmanifest": "application/manifest+json",
+                  ".ico": "image/x-icon"}
 
 
 def make_handler(backend, webui_dir):
