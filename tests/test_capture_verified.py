@@ -33,6 +33,10 @@ def test_vehicle_leveling_is_degrees():
     interp = semantics.interpret("vehicle", d)
     assert interp["level_roll"] == -1.09
     assert interp["level_pitch"] == 0.35
+    # This frame was captured with ignition ON (leveling only reads non-zero when awake), which
+    # pins the byte-0 layout: TerminalOneFive is bit 7 (app subList), not bit 0 (our old guess) —
+    # so ignition must decode True here. Guards the vehicle byte-0 alignment fix.
+    assert interp["ignition_on"] is True
 
 
 def test_vehicle_clock_unavailable_when_rtc_unset():

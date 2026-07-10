@@ -142,9 +142,11 @@ functions:
     control_fields:
       []
     state_fields:
-      - {name: TerminalOneFive, offset: 0, width: 1}     # terminal-15 / ignition
-      - {name: CarLevelPopUp, offset: 1, width: 2}
-      - {name: CarVariant, offset: 3, width: 4}
+      # byte-0 layout from the app's own subList slices (Lzf/d;), not our original hand guess:
+      # captured frame 017e0608...(ignition ON, leveling non-zero) only decodes T15=1 with T15@7.
+      - {name: CarVariant, offset: 0, width: 4}
+      - {name: CarLevelPopUp, offset: 4, width: 2}          # bit 6 = spare
+      - {name: TerminalOneFive, offset: 7, width: 1}        # terminal-15 / ignition
       - {name: CarTimeYear, offset: 8, width: 8}          # +1900
       - {name: CarTimeMonth, offset: 16, width: 8}        # +1
       - {name: CarTimeDay, offset: 24, width: 8}
