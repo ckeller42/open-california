@@ -331,7 +331,10 @@ def test_vehicle_decode_char_1004():
     raw = bytes.fromhex("047e060717142a00000000")   # live capture 2026-07-07
     v = semantics.vehicle(P.decode(f["vehicle"], raw))
     assert v["ignition_on"] is False                 # terminal-15 off (parked)
-    assert v["car_variant"] == 2
+    # byte-0 layout corrected to the app's subList slices (CarVariant@0/4): this yields a
+    # CONSISTENT CarVariant across frames (0 here and in the ignition-on capture), whereas the
+    # old CarVariant@3/4 spuriously read a CarLevelPopUp bit as "2". See test_capture_verified.
+    assert v["car_variant"] == 0
     assert v["car_clock"] == "2026-07-07 23:20:42"   # year+1900, month+1
     assert v["level_roll"] == 0 and v["level_pitch"] == 0
     # signed axes scaled to degrees (0.01°): a 0xFFFF roll = -1 raw = -0.01°, not 655.35
