@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from pathlib import Path
 
 from . import protocol, semantics, overrides, mqtt, influx
@@ -48,10 +49,22 @@ class ServeBackend:
         self.read_only = read_only
 
     def state(self):
-        """Interpreted state for every function in the poll cache (no BLE read)."""
+        """Interpreted state for every function in the poll cache (no BLE read), plus a `_meta`
+        block with the last-successful-poll time and an online flag. The camper unit deep-sleeps
+        when the van is parked and then can't be reached at all, so the UI must show the last
+        known values *with an "as of" age* and an offline indicator — never a blank or a stale
+        number dressed as live. `_meta` is not a function name, so it never renders as a tile."""
         out = {}
         for fn, decoded in dict(self._s._last or {}).items():
             out[fn] = semantics.interpret(fn, decoded)
+        ts = self._s._last_ok_ts
+        age = (time.time() - ts) if ts else None
+        out["_meta"] = {
+            "last_seen": ts,
+            "age_s": round(age) if age is not None else None,
+            # online = a poll succeeded within the last few cycles; else the van is asleep/gone
+            "online": bool(age is not None and age < self._s.interval * 3 + 30),
+        }
         return out
 
     def screens_bytes(self):
@@ -109,12 +122,39 @@ class Server:
         self._ble = None                    # asyncio.Lock(); created inside run()'s loop
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
+        self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
+        # Persist the last-known state so a restart while the van is asleep still shows the last
+        # real values (the unit can be unreachable for days when parked). Env-overridable path.
+        self._state_cache = os.environ.get(
+            "CALICTL_STATE_CACHE", os.path.expanduser("~/.cache/calictl/last_state.json"))
+        self._load_last()
         self._mqtt = None
         self._iw = None                     # influx write_api
         self._loop = None
         self._web_port = None                # set by the CLI to enable the web UI
         self._read_only = False              # set by the CLI: web UI rejects commands
         self._httpd = None
+
+    def _load_last(self):
+        """Load the persisted last-known decoded state (best-effort; missing/corrupt -> empty)."""
+        try:
+            with open(self._state_cache) as f:
+                blob = json.load(f)
+            self._last = {fn: v for fn, v in (blob.get("last") or {}).items() if fn in self.funcs}
+            self._last_ok_ts = blob.get("ts")
+        except (OSError, ValueError):
+            pass
+
+    def _save_last(self):
+        """Atomically persist the last-known decoded state + timestamp (never crashes the poll)."""
+        try:
+            os.makedirs(os.path.dirname(self._state_cache), exist_ok=True)
+            tmp = self._state_cache + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump({"ts": self._last_ok_ts, "last": self._last}, f)
+            os.replace(tmp, self._state_cache)
+        except OSError:
+            pass
 
     async def poll(self):
         # One BLE read of every function under the lock; cache the DECODED state
@@ -127,6 +167,9 @@ class Server:
             decoded = protocol.decode(self.funcs[fn], data)
             self._last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
+        if states:                          # a real read happened -> mark fresh + persist
+            self._last_ok_ts = time.time()
+            self._save_last()
         # MQTT discovery for newly-seen installed functions
         inst = installed_from(states)
         new = inst - self._published

@@ -185,10 +185,35 @@ function goto(v) {
   render();
 }
 
+function agoText(sec) {
+  if (sec == null) return "unknown";
+  if (sec < 90) return "just now";
+  const m = Math.round(sec / 60);
+  if (m < 90) return m + " min ago";
+  const h = Math.round(m / 60);
+  return h < 48 ? h + " h ago" : Math.round(h / 24) + " d ago";
+}
+
+// The camper unit deep-sleeps when the van is parked and becomes unreachable — so when the daemon
+// hasn't polled recently, show the LAST known values behind a clear "offline — last seen X" banner
+// rather than a blank screen or a stale number pretending to be live.
+function offlineBanner() {
+  const m = STATE._meta;
+  if (!m || m.online) return null;
+  const b = document.createElement("div");
+  b.className = "offline";
+  b.textContent = m.last_seen
+    ? `Offline — van asleep. Showing last data from ${agoText(m.age_s)}.`
+    : "Offline — no data yet (van has been asleep since the monitor started).";
+  return b;
+}
+
 function render() {
   backEl.hidden = view === "home";
   backEl.onclick = () => goto("home");
   app.innerHTML = "";
+  const ob = offlineBanner();
+  if (ob) app.appendChild(ob);
   if (view === "home") renderDashboard();
   else renderFeature(view);
 }

@@ -49,6 +49,9 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px;
   box-shadow: var(--shadow); padding: .3rem 1rem; }
 .card.summary { margin-bottom: .9rem; }
+.offline { margin-bottom: .9rem; padding: .7rem 1rem; border-radius: 12px; font-size: .9rem;
+  background: color-mix(in srgb, var(--warn) 16%, var(--card)); color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border)); }
 .row { display: flex; align-items: center; gap: 1rem; padding: .8rem 0; }
 .rowwrap { border-top: 1px solid var(--border); }
 .rowwrap:first-child { border-top: 0; }
