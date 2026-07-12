@@ -28,6 +28,7 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .pill { margin-left: auto; font-size: .72rem; color: var(--muted); border: 1px solid var(--border);
   border-radius: 999px; padding: .15rem .55rem; white-space: nowrap; }
 .pill.ok { color: var(--ok); } .pill.busy { color: var(--accent); } .pill.error { color: var(--error); }
+.pill.warn { color: var(--warn); }
 
 #app { max-width: 640px; margin: 0 auto; padding: 1rem; display: grid; gap: .8rem;
   /* respect the side/bottom safe areas too (landscape notch, home indicator) */
