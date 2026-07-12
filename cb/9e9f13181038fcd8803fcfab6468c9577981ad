@@ -1,0 +1,37 @@
+tests/test_web_serve.py
+  s_d2c35aeebbd344::t_2cd30ba5a480a4 5-24
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_46569e2405a6fb 188-210,215-216
+tools/ux_gallery.py
+  s_d2c35aeebbd344::t_08052cd6c94b83 44
+tools/ble_stability_spike.py
+  s_d2c35aeebbd344::t_6e88d4ef9eaae7 1-96
+tests/conftest.py
+  s_d2c35aeebbd344::t_391428364db7d2 1-8
+calictl/serve.py
+  s_d2c35aeebbd344::t_786ac218082982 170-172
+  s_d2c35aeebbd344::t_98247b8dfc6e73 125-130
+  s_d2c35aeebbd344::t_81cc997ab978bf 52-56,60-67
+  s_d2c35aeebbd344::t_2b56f43523eb29 138-158
+  s_d2c35aeebbd344::t_2830eebd81cdda 17
+tests/e2e/test_gui.py
+  s_d2c35aeebbd344::t_66407b8c4ba480 47
+calictl/webui/app.css
+  s_d2c35aeebbd344::t_e62e161196dba7 52-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "cb9e9f13181038fcd8803fcfab6468c9577981ad",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
