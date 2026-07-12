@@ -80,10 +80,11 @@ CONTROL_RANGES = {
     # State=3 (the dict default, a leave-unchanged sentinel) is NOT valid for cooler —
     # it was rejected 0x0E on-device. A full-packet cooler write must send 0=off / 1=on.
     "cooler": {"State": {0, 1}},
-    # lighting Mode enum (dg/n.java): 0=default/no-op, 4=SET_BRIGHTNESS, 16=SET_PROFILE.
-    # (ProfileNumber is intentionally NOT constrained: valid range depends on Mode —
-    #  must be 0 with SET_BRIGHTNESS but selects a profile with SET_PROFILE.)
-    "lighting": {"Mode": {0, 4, 16}},
+    # lighting Mode enum (dg/n.java, full set decoded 2026-07-12): 0=NO_MODE, 4=SET_BRIGHTNESS,
+    # 6=SET_COLOR, 8=SET_DOUBLE, 12=REQUEST_CONFIG, 16=SET_PROFILE, 20=WAKEUP_TIME, 24=SYSTEM_TIME,
+    # 28=PREVIEW — all legitimate firmware modes (guard against out-of-enum values only).
+    # (ProfileNumber is intentionally NOT constrained: valid range depends on Mode.)
+    "lighting": {"Mode": {0, 4, 6, 8, 12, 16, 20, 24, 28}},
 }
 
 

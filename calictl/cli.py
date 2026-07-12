@@ -10,6 +10,7 @@
     calictl set lighting <zone> <0-13>            # zones: reading-1/2/3, kitchen, roof-ambient, outside-rear
     calictl set lighting all <0-13>               # every zone to one level
     calictl set lighting profile <N>              # switch the active lighting profile
+    calictl set lighting color <name>             # recolour active profile: warm-white/amber/red/azure/... (apply UNVERIFIED)
     calictl set airheater power on|off
     calictl set airheater level <0-15>
     calictl set roofaircondition power on|off       # UNVERIFIED (not installed)

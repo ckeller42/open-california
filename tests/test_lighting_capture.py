@@ -42,6 +42,22 @@ def test_set_profile_is_mode_16():
     assert control.decode_control(f["lighting"], frame)["Mode"] == 16
 
 
+def test_set_color_is_mode_6_palette_index():
+    # SET_COLOR (dg/n Mode 6): recolour the active profile — LightValue = palette index (1-10),
+    # ProfileNumber echoes active, all zones unchanged (14). Byte layout from the decompile.
+    f = _f()
+    frame = control.build(f, "lighting", "color", "red", {"ProfileNumber": 9})  # red = index 9
+    assert frame.hex() == "0906000000000009eeeeeeeeeeeeeeee"
+    d = control.decode_control(f["lighting"], frame)
+    assert d["Mode"] == 6 and d["LightValue"] == 9 and d["ProfileNumber"] == 9
+    # unknown colour is a clean error, not a bad frame
+    try:
+        control.build(f, "lighting", "color", "chartreuse", {"ProfileNumber": 9})
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
 def test_power_off_zeroes_all_zones():
     f = _f()
     frame = control.build(f, "lighting", "power", "off", {"ProfileNumber": 9})
