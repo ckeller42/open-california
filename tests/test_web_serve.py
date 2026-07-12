@@ -31,6 +31,41 @@ def test_serve_backend_state_interprets_cache():
     assert st["cooler"]["installed"] is True and st["cooler"]["on"] is True
 
 
+def test_state_read_is_safe_while_poll_rebinds_last(monkeypatch):
+    """Cross-thread safety: ServeBackend.state() reads Server._last UNLOCKED on the web thread
+    while the loop thread publishes new poll results. poll() must rebind _last atomically (copy-
+    on-publish), never mutate the live dict in place -- otherwise a concurrent dict() copy raises
+    'dictionary changed size during iteration' and a real applied write can surface as a 500."""
+    import threading
+    from tools.mock_unit import MockCamperUnit
+    u = MockCamperUnit()
+    safe = ["cooler", "campingmode", "lighting", "water", "vehicle", "energy"]
+    pool = {fn: u.decoded(fn) for fn in safe}       # realistic decoded states (interpret cleanly)
+    s = serve.Server(influx_enabled=False)
+    be = serve.ServeBackend(s, loop=None)
+    stop = threading.Event()
+    errors = []
+
+    def reader():                                   # the web thread hammering /api/state
+        while not stop.is_set():
+            try:
+                be.state()
+            except Exception as e:                  # a race would surface here (RuntimeError)
+                errors.append(e); return
+
+    t = threading.Thread(target=reader); t.start()
+    try:
+        # the loop thread republishing a cache of VARYING SIZE many times, the way poll() does.
+        # Size changes are what trigger 'dictionary changed size during iteration' if state()
+        # ever iterates a dict being mutated in place -- copy-on-publish must prevent it.
+        for i in range(4000):
+            k = 1 + (i % len(safe))
+            s._last = {fn: pool[fn] for fn in safe[:k]}   # atomic rebind, never in-place mutation
+    finally:
+        stop.set(); t.join()
+    assert not errors, "state() raced with poll rebind: %r" % (errors[:1])
+
+
 def test_serve_backend_command_bridges_to_on_command(monkeypatch):
     s = serve.Server(influx_enabled=False)
     calls = []

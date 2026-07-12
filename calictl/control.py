@@ -119,9 +119,11 @@ def _lighting(funcs, what, value, last):
     base = {"ProfileNumber": profile, "Mode": LIGHT_MODE_SET_BRIGHTNESS, "Timestamp": 0, "LightValue": 0}
 
     def _b(v):
+        # real brightness is 0..13; 14 is the leave-unchanged sentinel and 15 is unused,
+        # so neither is a valid value to *set* a zone to (would silently mean "no change").
         b = int(v)
-        if not 0 <= b <= 15:
-            raise ValueError("lighting brightness must be 0-15, got %r" % v)
+        if not 0 <= b <= LIGHT_ON_BRIGHTNESS:
+            raise ValueError("lighting brightness must be 0-%d, got %r" % (LIGHT_ON_BRIGHTNESS, v))
         return b
 
     if what == "profile":

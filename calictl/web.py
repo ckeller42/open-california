@@ -16,6 +16,7 @@ ROOF_FUNCTION = "roof"
 # confirmation flag on the POST: roof (physically moves the pop-top) and
 # airheater (fuel-burning parking heater). See CLAUDE.md "Known state".
 CONFIRM_REQUIRED = {ROOF_FUNCTION, "airheater"}
+_MAX_BODY = 64 * 1024   # command POSTs are tiny JSON; reject anything larger unread
 _CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css",
                   ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml",
                   ".png": "image/png", ".webmanifest": "application/manifest+json",
@@ -81,7 +82,7 @@ def make_handler(backend, webui_dir):
                 length = int(raw_length)
             except ValueError:
                 length = -1
-            if length < 0:
+            if length < 0 or length > _MAX_BODY:   # cap: commands are tiny JSON objects
                 return self._send_json({"error": "bad_request"}, 400)
             try:
                 req = json.loads(self.rfile.read(length) or b"{}")
