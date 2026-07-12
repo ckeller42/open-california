@@ -136,7 +136,12 @@ async function refreshState(force) {
     return;
   }
   STATE = next;
-  if (!busy) setStatus("live", "ok");
+  // "live" = the van is currently reachable; "offline" = daemon can't reach it (van asleep),
+  // matching the banner. The web UI itself is up either way — this reflects the vehicle link.
+  if (!busy) {
+    const vanOnline = !STATE._meta || STATE._meta.online;
+    setStatus(vanOnline ? "live" : "offline", vanOnline ? "ok" : "warn");
+  }
   if (busy && !force) return; // an in-flight interaction owns the screen
   const sig = view + "|" + JSON.stringify(next);
   if (!force && sig === lastRender) return; // nothing changed -> no flicker
