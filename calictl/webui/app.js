@@ -290,18 +290,20 @@ function renderLighting(s) {
   titleEl.textContent = "Lighting";
   // "All lights" master toggle (the app's "Alle Lichter") — on = any real lamp lit;
   // tapping sends power on/off (every zone). Needs an active profile to apply, like the zones.
+  // A profile must be active before ANY lamp control applies (verified on-device) — so the
+  // all-lights toggle + zone sliders are disabled + dimmed until one is; only Activate is live.
+  const active = !!(s.profile && s.profile !== 0);
   const allOn = !!s.any_on;
-  const mc = document.createElement("div"); mc.className = "card";
+  const mc = document.createElement("div"); mc.className = "card" + (active ? "" : " dim");
   const mrow = document.createElement("div"); mrow.className = "row";
   const mlbl = document.createElement("span"); mlbl.className = "lbl"; mlbl.textContent = "All lights";
   mrow.appendChild(mlbl);
   if (busy && pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
-  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = busy;
+  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = busy || !active;
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow); app.appendChild(mc);
 
-  const active = !!(s.profile && s.profile !== 0);
   // profile card — a profile must be active for zone changes to apply (verified on-device)
   const pc = document.createElement("div"); pc.className = "card";
   const prow = document.createElement("div"); prow.className = "row";
@@ -320,9 +322,9 @@ function renderLighting(s) {
     n.textContent = "Activate a lighting profile to control the lamps.";
     app.appendChild(n);
   }
-  // lamp sliders, grouped
+  // lamp sliders, grouped (disabled + dimmed until a profile is active)
   for (const grp of LIGHT_LAMPS) {
-    const card = document.createElement("div"); card.className = "card";
+    const card = document.createElement("div"); card.className = "card" + (active ? "" : " dim");
     const h = document.createElement("div"); h.className = "note"; h.style.padding = ".6rem 0 0";
     h.textContent = grp.group; card.appendChild(h);
     for (const lamp of grp.lamps) {
@@ -333,7 +335,7 @@ function renderLighting(s) {
       row.appendChild(lbl);
       if (isPending) row.appendChild(spinner());
       const inp = document.createElement("input"); inp.type = "range"; inp.min = 0; inp.max = LIGHT_MAX;
-      inp.value = val != null ? val : 0; inp.disabled = busy;
+      inp.value = val != null ? val : 0; inp.disabled = busy || !active;
       const out = document.createElement("span"); out.className = "sval";
       out.textContent = isPending ? "…" : (val != null ? val : 0);
       inp.oninput = () => (out.textContent = inp.value);

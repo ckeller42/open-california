@@ -120,8 +120,13 @@ def test_lighting_screen_activate_profile(page):
     page.get_by_text("Lighting", exact=True).first.click()
     expect(page.get_by_text("Reading lights")).to_be_visible()
     expect(page.get_by_text("Left", exact=True)).to_be_visible()   # a reading lamp
+    # with NO profile active, lamp controls must be disabled (they can't apply) — not a live trap
+    assert page.locator("input[type=range]").first.is_disabled()
+    assert page.locator(".switch").first.is_disabled()             # all-lights master too
     page.get_by_role("button", name="Activate").click()
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
+    # after activating, the lamp sliders become controllable
+    expect(page.locator("input[type=range]").first).to_be_enabled()
 
 
 def test_dashboard_summary_card(page):
