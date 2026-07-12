@@ -167,7 +167,7 @@ stay `UNVERIFIED` because this van can't exercise them live.
 | signal(s) | what we know | do NOT assume |
 |---|---|---|
 | `batt2_current`, `dcdc_current`, `shore_current`, `solar_current` | raw **signed** integers (8- or 16-bit). Sign/direction plausible; magnitude scale unknown. 14 d telemetry: batt2_current −49…318 (mean ~0, balanced), dcdc −2…29, dcdc_power 0…45; **solar/shore read the `511` sentinel** when not fitted (§4). | Not confirmed amps. Grafana labels them **"raw, unverified scale"**, not "A". A `511` reading is *no data*, not a huge current. |
-| `air_temp`, `water_temp` (LR-heater), `target_temp` (roof-A/C) | raw integers; likely °C-ish but multiplier/offset unconfirmed. | Not confirmed °C. |
+| `air_temp`, `water_temp` (LR-heater), `target_temp` (roof-A/C) | **RESOLVED 2026-07-12** (semantics verified against the app): the app applies **no arithmetic scale** — these are **coarse levels** (`air_temp`/`water_temp` 4-bit 0–15, `target_temp` 8-bit), same category as SoC, **not °C**. | **Do NOT label °C** — a level/setpoint index. |
 | `energy_mode` | 0/1/2 → eco/normal/max **order inferred** from GUI string keys (`energyMode_eco/normal/max`), not observed live. | The 0↔eco mapping order is a guess until confirmed. |
 
 **How to verify a scale.** (1) Drive a known state (a measured shore-charging current, a
