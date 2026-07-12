@@ -12,11 +12,13 @@ from __future__ import annotations
 
 # function -> {field_name: (offset, width)}   (source: sf/a.java f())
 CONTROL_OFFSETS = {
-    "cooler": {
-        "NightTimerHourOff": (20, 4),
-        "TimerHour": (24, 8),
-        "TimerMin": (32, 8),
-        "NightTimerHourOn": (40, 8),
+    "cooler": {  # 1101; sf/a.java f() DEFAULT branch (Z=1). Contiguous, no bit-hole after Level.
+        # Was wrong: the previous entry pasted the airheater (case-0) layout — which has a 4-bit
+        # hole at 16-19 — onto cooler, shifting all four timers +4. Corrected 2026-07-12.
+        "TimerHour": (16, 8),
+        "TimerMin": (24, 8),
+        "NightTimerHourOn": (32, 8),
+        "NightTimerHourOff": (40, 8),
     },
     "airheater": {  # 1701; from sf/a.java f() (airheater ctor branch, read directly).
         # NOT the cooler layout — airheater's four MERGED_AMBIGUOUS control fields differ.
@@ -56,11 +58,15 @@ CONTROL_OFFSETS = {
         "TemperatureWater": (2, 2), "StateWater": (4, 2),
         "StateAir": (6, 2), "TemperatureAir": (16, 8),
     },
+    "satelliteantenna": {           # gg/a.java f() default branch — 2-byte frame (SatelliteSelection@12 placed)
+        "Dish": (0, 2), "System": (2, 2), "Wlan": (6, 1), "DishStop": (7, 1),
+    },
 }
 
 # control frame lengths confirmed on-device / from the model (bytes)
 CONTROL_FRAME_BYTES = {"cooler": 6, "airheater": 6, "campingmode": 1, "lighting": 16,
-                       "roof": 5, "roofaircondition": 3, "stairs": 1, "livingroomheater": 3}
+                       "roof": 5, "roofaircondition": 3, "stairs": 1, "livingroomheater": 3,
+                       "satelliteantenna": 2}
 
 # Semantic value constraints beyond the field's bit-width. The unit's firmware
 # range-VALIDATES control writes and drops the ATT link with 0x0E on an out-of-range

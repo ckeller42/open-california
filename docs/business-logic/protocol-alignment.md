@@ -35,6 +35,70 @@ InteriorLight`); `2001/2002` = roof-A/C (`State/FanSpeed/Mode/Temperature`). All
 | **satellite `1901`** | ➕ missing | app adds `DishStop 7/1, Wlan 6/1, System 2/2, Dish 0/2` (we have only `SatelliteSelection 12/4`). Uninstalled here → can't verify; add when it matters. |
 | **energy `1601`** | ⚠️ likely wrong | our `OperationMode/Movement` duplicate the `stairs` model; app writes `EnergyModeSet` + `DisplayRefresh` (offsets route through `Lxf/d;` ViewModel, unresolved). Energy is read-only telemetry for us; re-derive before adding any energy control. |
 
+## Control gaps — RESOLVED 2026-07-12 (decompile push)
+
+Proven directly from the `f()` frame builders:
+
+- **cooler `1101` timers — FIXED (was a real bug).** The old `overrides.py` had the *airheater*
+  layout (which has a 4-bit hole at 16–19) pasted onto cooler. Cooler's default branch is
+  contiguous: **`TimerHour 16/8, TimerMin 24/8, NightTimerHourOn 32/8, NightTimerHourOff 40/8`**.
+  Corrected in `overrides.py`; `test_encode_cooler_frames_match_hand_derived` updated.
+- **satellite `1901` — RESOLVED** (the `MERGED_AMBIGUOUS` offsets): `Dish 0/2, System 2/2,
+  Wlan 6/1, DishStop 7/1` (+ existing `SatelliteSelection 12/4`). Added to `overrides.py`.
+  Uninstalled here → not live-verifiable.
+- **energy `1601` — documented (not applied).** The app's real energy write is
+  **`EnergyModeSet 2/2` + `DisplayRefresh 7/1`** (`Lpg/a;` default / `Lxf/d;` d4). Our dictionary's
+  `OperationMode/Movement` is a mis-map of the *stairs* fields; left `MERGED_AMBIGUOUS` (unplaced,
+  so no wrong frame is built). We don't actuate energy, so this stays documentation-only.
+
+## Lighting modes — FULLY DECODED 2026-07-12
+
+All modes share one builder (`eg/a`, full 128-bit packet); a mode = which slots `dg/h` writes.
+Frame: `ProfileNumber@4/4, Mode@8/8, Timestamp@16/32 (control-side MERGED_AMBIGUOUS → 16/32,
+confirmed), LightValue@48/16, Brightness×16 @64 (4-bit each, sentinel 14 = leave-unchanged)`.
+
+| Mode | value | what it writes |
+|---|---|---|
+| SET_BRIGHTNESS | 4 | per-zone Brightness (supported) |
+| **SET_COLOR** | 6 | `LightValue` = **colour palette INDEX 1–10** (`dg/j`: WARM_WHITE=1…SALMON=10 — *not RGB*), `ProfileNumber` = target profile |
+| **SET_DOUBLE** | 8 | `LightValue` = an int (dual/split config; value meaning INFERRED) |
+| REQUEST_CONFIG | 12 | Mode only + `ProfileNumber=13`; a config-pull trigger, no payload |
+| SET_PROFILE | 16 | `ProfileNumber` = `dg/l` profile (supported); variants set PN 0/8/12 |
+| **WAKEUP_TIME** | 20 | `Timestamp@16/32` = **epoch seconds** (next hh:mm), + packed `LightValue` (colour+areas+wake-profile) |
+| SYSTEM_TIME | 24 | **defined but the app NEVER sends it** (unit likely self-syncs its RTC) |
+| PREVIEW | 28 | `ProfileNumber=10, LightValue=1` (+ 5 s UI timeout) |
+
+Enums: profiles `dg/l` 0=OFF,1–7=FAVORITE,8=DOOR,9=LIVE_VIEW,10=WAKEUP,11=INTERIOR,12=ON,13=DEFAULT;
+brightness `dg/i` OFF=0,10–100%=1–10,DEFAULT=11,NOT_EQUIPPED=13,14=leave-unchanged; colour `dg/j`
+1–10; wake `dg/k` 0–7; areas `dg/m` 0–3. So calictl could add SET_COLOR (index) and WAKEUP_TIME
+(epoch + packed field) — the frame layouts are now known (a live capture would confirm the two
+INFERRED bits: the Timestamp unit and WAKEUP_TIME's internal packing).
+
+## Semantics verified against the app's getters (2026-07-12) — SOUND
+
+Read every `semantics.py` transform against the app's Kotlin state-parsers + view-model getters.
+**Result: no interpretation bugs — the camping-lights-inversion class does not recur.** All
+transforms MATCH the app (proven): water math + names-reversed; camping combined-inverted lights
+vs un-inverted usb/master; every energy scale (÷10 V & currents, ×10 powers, IDcdc no-÷10 +2, SoC
+×10, sentinels); vehicle +1900/+1-month + roll/pitch ÷100; cooler/roof/airheater.
+
+Review flags resolved by the app's intent:
+- **LR-heater `air_temp`/`water_temp` (4-bit) and roof-AC `target_temp` (8-bit) carry NO code
+  scale — they are coarse *levels*, not °C.** The app never converts. `UNVERIFIED`→resolved: don't
+  label °C (matches the existing `signals.md` caution).
+- **stairs review NARROWED:** the app's `^1` inversion is on `OperationMode` + the movement
+  *setter* only — the `extended`(State) and `obstacle_sensor`(Sensor) *getters* are non-inverted,
+  so our surfaced booleans have correct polarity.
+- **satellite `System` is a 2-bit enum**, not a boolean — our `system_on=bool(System)` is a lossy
+  simplification (should be an enum) but not a polarity bug.
+- **energy `WarnLevelTwo`:** the app *derives* it (suppresses when a source is active); our
+  `faults[]` lists the raw bit — a minor over-report, not a bug.
+- `energy_mode` eco/normal/max order + the source-state/warning display *labels* stay INFERRED
+  (bound in undecompiled Compose UI) — but all are surfaced as raw ints, so no runtime risk.
+
+Genuinely still need a **live measurement** (not code): power magnitudes' absolute unit,
+`target_temp`'s real-world unit, and satellite/stairs end-to-end (uninstalled here).
+
 ## Enums / extras (add when the extractor emits them)
 
 - **Lighting `Mode` wire values** (`Ldg/n;`): `NO_MODE=0, SET_BRIGHTNESS=4, SET_COLOR=6,
