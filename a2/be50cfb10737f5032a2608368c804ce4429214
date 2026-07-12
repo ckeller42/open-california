@@ -1,0 +1,25 @@
+tests/e2e/test_gui.py
+  s_d2c35aeebbd344::t_fffd88d82d52ee 123-125,128-129
+calictl/webui/app.css
+  s_d2c35aeebbd344::t_84f792a204e5a4 53
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_97d0d47d96d7e8 338
+  s_d2c35aeebbd344::t_b70a9370fbade9 293-295,297,303
+  s_d2c35aeebbd344::t_52ad4270c80ad2 325,327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "a2be50cfb10737f5032a2608368c804ce4429214",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
