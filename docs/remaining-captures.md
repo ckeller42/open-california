@@ -1,57 +1,51 @@
-# In-car capture plan — the remaining ~10%
+# At-the-van plan — closing the last ~2% (van-gated)
 
-A field checklist for the next capture session, to close the gaps that need the app + the
-vehicle. Everything else (cooler, camping, lighting, air-heater on/off, roof frames, leveling)
-is already cracked/verified. Do actions **one at a time with ~3 s pauses** and **distinct
-values** so each frame is easy to correlate. See `.claude/skills/capture-and-diff` for the tool.
+Everything statically recoverable from the APK is done (protocol ~98%, semantics verified). What
+remains needs the **physical van** (a capture / a driven reference) — it cannot be decompiled.
+This is the ordered checklist for the next session, highest-leverage first.
 
-## Setup (I trigger the recording)
-1. Wake the bar (Mac) so `ssh bar` works; keep the phone plugged in / the iOS Bluetooth-logging
-   profile active. Tell me "go".
-2. I start `idevicebtlogger` on the bar and confirm packets are flowing before you tap anything.
-3. You run the actions below; reply "done"; I stop + decode against our model.
+Do actions **one at a time with ~3 s pauses** and **distinct values** so each frame is easy to
+correlate. Two tools: `idevicebtlogger` on the **bar** Mac (captures the iPhone app's BLE), and
+`calictl` / the spike on **buspi**. Recording: I trigger it — you say "go", I confirm packets
+flow, you act, you say "done", I decode.
 
-## Priority 1 — Air-heater level + runtime (finishes air-heater)
-Only on/off was captured (the physical fields were at "leave-unchanged" sentinels). On the
-Heizung screen:
-- Drag **Heizstufe** (level) to two distinct values (e.g. 3, then 8) — pause between.
-- Drag **Laufzeit** (runtime) to two distinct values (e.g. 30, then 90 min).
-- Toggle the **Timer** on with a set time; toggle it off.
-→ gives the HeatingLevel / RunningTime / timer frame layout + scale.
+## Priority 1 — the lighting-apply gap (unlocks the MOST)
+Our lighting frames ACK but the zones don't visibly change (`re-gap A1`). Cracking this unlocks
+**all lamp control + colour + profile authoring** at once.
+- With the app: **activate a profile, then change ONE lamp's brightness** (e.g. kitchen 0→8).
+- Then **change a colour** (SET_COLOR) and **edit/create a favorite profile**.
+- I diff the app's real writes against `control._lighting` (SET_BRIGHTNESS / SET_COLOR=Mode 6 /
+  SET_PROFILE) to find what it carries that we don't — likely a `LightValue`/SET_PROFILE preamble.
+  Also confirms `SET_COLOR` (now wired) and the `WAKEUP_TIME` packing.
 
-## Priority 2 — Full lamp → nibble map (finishes the lighting zone map)
-~6 of 16 lamps are mapped. Set **every** lamp to a **distinct** level, one at a time:
-- Leselichter: **Links**, **Rechts**, **Beifahrer**
-- **Küche** (each sub-lamp it exposes)
-- Aufstelldach: **Ambientelicht** — and **Leselicht** (only shows with the roof open, so open
-  the roof a little first if you want this one)
-- Außenlicht: **Umgebung hinten** — and **Eingang** (only in Camping mode, so enable camping
-  first if you want this one)
-→ maps each remaining `BrightnessL` nibble to its physical lamp.
+## Priority 2 — can buspi hold a persistent session? (continuous data)
+Van awake, **phone app closed**, on buspi:
+`PYTHONPATH=/home/pi/open-california python3 -m tools.ble_stability_spike --seconds 180`
+Verdict tells us if a persistent-read mode is viable, or if intermittent access is inherent (→ the
+offline/hold-last design is the ceiling).
 
-## Priority 3 — Lighting: Alle-Lichter + profiles
-- Toggle **Alle Lichter** ON, then OFF (captures the master all-on / all-off frame).
-- Switch/create profiles **A → B → C → D** (tap each; "+" creates one). Captures the
-  SET_PROFILE (Mode 16) payload per profile → the profile-number semantics (we know A=9).
+## Priority 3 — the "van awake" freshness signal
+Baseline read, then **open a door / ignition on**, then re-read all functions and diff. The field
+that flips = the gate for marking sensor values fresh vs stale. (Cloud unlock does NOT wake the
+unit — must be a physical door/ignition, phone app closed so buspi gets the slot.)
 
-## Priority 4 — Lighting SET_COLOR + Wecklicht (extras)
-- If a lamp supports **color**, change one zone's color (captures the SET_COLOR frame + Mode).
-- **Wecklicht** (wake-light, under the lighting screen): set a wake time + lead time +
-  target brightness, toggle it **on** (captures its config frame).
+## Priority 4 — verify the frames we just fixed/decoded (decoded-but-UNVERIFIED)
+- **vehicle ignition byte-0**: ignition ON → confirm `ignition_on` reads True (the bit-7 fix).
+- **water ↔ ignition**: ignition on → 11 L; off → decays.
+- **cooler night-timer** (corrected offsets 16/24/32/40): set a night-timer, capture, confirm.
+- **SET_COLOR** (Mode 6): `set lighting color amber` with a profile active — capture + confirm it
+  matches the app's colour write, and (with P1) whether it applies.
 
-## Priority 5 — Cooler timer / quiet-mode (pins the last cooler enum)
-On the Coolbox screen: switch **Quiet mode** manual → timer → off (captures the Mode enum
-0/2/4), and set the **timer** (start/cancel + hours/minutes) — confirms the timer field layout.
+## Priority 5 — finish the smaller gaps
+- **air-heater level + runtime** (only on/off captured; the physical fields were at sentinels):
+  drag Heizstufe to 3 then 8; Laufzeit to 30 then 90 min.
+- **WAKEUP_TIME** (Wecklicht): set a wake-alarm → capture → confirm the epoch-seconds `Timestamp`
+  + the internal packing of `LightValue` (both currently INFERRED).
+- **full lamp→nibble map**: ~6 of 16 lamps mapped; set each remaining lamp to a distinct level.
+- **roof open/close** (SAFETY-SENSITIVE, only if the roof path is clear): open→partial→Stop→close,
+  to live-verify the move frames + SafetyCounter cadence.
 
-## Priority 6 — Roof open/close (LIVE-VERIFY — safety-sensitive)
-**Only if parked with the roof path fully clear.** We have the frames but never confirmed a
-real move end-to-end. Do it slowly:
-- **Open** and hold to a partial position (~a few seconds) → **Stop**.
-- **Close** fully.
-→ confirms which byte0 is open vs close, the STOP frame, and the SafetyCounter cadence during
-an actual move. This is the one item that also needs the physical roof to move.
-
-## Not capturable here (for reference)
-- **EXLAP over WiFi** — needs the infotainment WiFi up (ignition) + buspi joined to that SSID;
-  a different transport, not a BLE capture.
-- **Uninstalled features** (roof-A/C, stairs, LR-heater, satellite) — no hardware on this van.
+## Out of reach even at the van (WiFi, not BLE)
+- **Exlap data-body schemas** — need the camper's WiFi AP up + an Exlap/TCP capture on
+  `192.168.2.1`; a separate transport, not a BLE capture.
+- **Uninstalled features** (satellite/stairs/roof-A/C/LR-heater) — no hardware on this van.

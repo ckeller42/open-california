@@ -74,7 +74,15 @@ def _cooler(funcs, what, value, last):
 
 
 LIGHT_MODE_SET_BRIGHTNESS = 4    # dg/n.java Mode enum (0=no-op, 4=SET_BRIGHTNESS, 16=SET_PROFILE)
+LIGHT_MODE_SET_COLOR = 6         # recolour the active profile: LightValue = palette index (1-10)
 LIGHT_MODE_SET_PROFILE = 16      # switch active profile (payload carries the ProfileNumber)
+# Colour palette (dg/j.java, decompile 2026-07-12): SET_COLOR carries ONE index in LightValue for
+# the whole target profile — not RGB. On-device apply is UNVERIFIED (same lighting-apply gap as
+# SET_BRIGHTNESS, re-gap A1); the frame layout is byte-decoded from the app.
+LIGHT_COLORS = {
+    "warm-white": 1, "blood-orange": 2, "amber": 3, "pistachio": 4, "peppermint": 5,
+    "mint": 6, "azure": 7, "dark-blue": 8, "red": 9, "salmon": 10,
+}
 # Per-zone "leave unchanged" sentinel — CRACKED via HCI capture 2026-07-08: the app fills every
 # zone it is NOT changing with 14 (0xe), not 0. 0 means "set this zone to 0"; 14 = "no change".
 LIGHT_UNCHANGED = 14
@@ -102,6 +110,8 @@ def _lighting(funcs, what, value, last):
         to ``value`` (0-13); all other zones = 14 (unchanged).
       * ``"all"`` -> set every zone to ``value``; ``"power"`` on->13 / off->0 for every zone.
       * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = target ProfileNumber.
+      * ``"color"`` -> SET_COLOR (Mode 6); ``value`` = a ``LIGHT_COLORS`` name; recolours the
+        active profile (LightValue = palette index 1-10). On-device apply UNVERIFIED (re-gap A1).
     """
     f = funcs["lighting"]
     zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
@@ -116,6 +126,13 @@ def _lighting(funcs, what, value, last):
 
     if what == "profile":
         vals = {**base, "Mode": LIGHT_MODE_SET_PROFILE, "ProfileNumber": int(value),
+                **{z: LIGHT_UNCHANGED for z in zone_fields}}
+    elif what == "color":                   # recolour the active profile (LightValue = palette idx)
+        idx = LIGHT_COLORS.get(str(value).lower().replace("_", "-"))
+        if idx is None:
+            raise ValueError("unknown light colour %r; one of: %s"
+                             % (value, ", ".join(sorted(LIGHT_COLORS))))
+        vals = {**base, "Mode": LIGHT_MODE_SET_COLOR, "LightValue": idx,
                 **{z: LIGHT_UNCHANGED for z in zone_fields}}
     elif what == "power":
         b = LIGHT_ON_BRIGHTNESS if _truthy(value) else 0
