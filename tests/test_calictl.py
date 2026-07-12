@@ -67,9 +67,11 @@ def test_encode_cooler_frames_match_hand_derived():
     f = _funcs()
     base = dict(State=1, Mode=4, Level=4, TimerStart=3, TimerCancel=3, NightTimerSet=0,
                 NightTimerHourOff=0, TimerHour=15, TimerMin=30, NightTimerHourOn=0)
-    assert P.encode(f["cooler"], base, frame_bytes=6).hex() == "3d44000f1e00"
-    assert P.encode(f["cooler"], {**base, "State": 0}, frame_bytes=6).hex() == "3c44000f1e00"
-    assert P.encode(f["cooler"], {**base, "Level": 3}, frame_bytes=6).hex() == "3d43000f1e00"
+    # Corrected cooler timer offsets (sf/a.java f() default branch): TimerHour@16, TimerMin@24,
+    # contiguous (no 4-bit hole — that was the airheater layout). So 15/30 land in bytes 2/3.
+    assert P.encode(f["cooler"], base, frame_bytes=6).hex() == "3d440f1e0000"
+    assert P.encode(f["cooler"], {**base, "State": 0}, frame_bytes=6).hex() == "3c440f1e0000"
+    assert P.encode(f["cooler"], {**base, "Level": 3}, frame_bytes=6).hex() == "3d430f1e0000"
 
 
 def test_encode_rejects_out_of_width_value():
