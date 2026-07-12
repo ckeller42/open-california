@@ -262,8 +262,14 @@ class CamperDevice:
         under the ``serve`` lock): connect, replay the connect handshake (version +
         auth reads, subscribe-all), start the 1003 arm heartbeat, then re-send
         ``move_frame`` every ``period_s`` for at most ``max_duration_s`` — a bounded
-        safety cap — and ALWAYS send ``stop_frame`` at the end (also on a mid-move
-        link drop). Returns the post-STOP state decode when ``verify``, else None.
+        safety cap — and then send ``stop_frame``. The STOP is **best-effort**: on a
+        clean end-of-travel it is written and confirmed, but on a mid-move link drop
+        the STOP write will itself fail and is swallowed. The real stop guarantee in
+        that case is the hardware's own behaviour — the unit is expected to halt when
+        the 1 Hz move-heartbeat ceases (the move only continues while frames arrive) —
+        which is plausible but **UNVERIFIED on this unit**. Do not rely on the software
+        STOP reaching the unit after a link drop.
+        Returns the post-STOP state decode when ``verify``, else None.
 
         :param func: the roof Function (needs ``control_char`` + ``state_char``).
         :param move_frame: the OPEN or CLOSE frame (``control.roof_frame``).

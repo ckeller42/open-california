@@ -163,11 +163,16 @@ class Server:
         async with self._ble:
             raw = await self.dev.read_all(self.funcs)
         states = {}
+        new_last = dict(self._last)         # build a fresh copy, then publish atomically
         for fn, data in raw.items():
             decoded = protocol.decode(self.funcs[fn], data)
-            self._last[fn] = decoded
+            new_last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
         if states:                          # a real read happened -> mark fresh + persist
+            # Rebind (never mutate in place): the web thread reads `_last` unlocked in
+            # ServeBackend.state(), so it must only ever see a complete dict, not one
+            # growing mid-iteration (RuntimeError). Reference assignment is atomic (GIL).
+            self._last = new_last
             self._last_ok_ts = time.time()
             self._save_last()
         # MQTT discovery for newly-seen installed functions
@@ -229,7 +234,7 @@ class Server:
                 try:
                     last = protocol.decode(self.funcs[function],
                                            await self.dev.read(self.funcs[function]))
-                    self._last[function] = last
+                    self._last = {**self._last, function: last}   # atomic rebind (web thread reads unlocked)
                 except ConnectionUnavailable as e:
                     print("command %s skipped (no state read): %s" % (function, e), flush=True)
                     return None
@@ -239,7 +244,7 @@ class Server:
             post = await self.dev.actuate(self.funcs[function], frame, verify=True)
             if post is None:
                 return None
-            self._last[function] = post
+            self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
             interp = semantics.interpret(function, post)
             _, got, want = _set_check(function, what, value, interp, post)
             if got is None and want is None:   # no table entry for this target
