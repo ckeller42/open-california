@@ -61,19 +61,30 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   spans the write window (`device.actuate`, held under the `serve` lock). **Verified
   on-device: `cooler` (power/level) and `campingmode` (master/lights/usb) actuate for real.**
   `lighting` is wired (`set lighting power|brightness`) and builds a valid SET_BRIGHTNESS
-  frame, but **on-device apply is UNCONFIRMED** — the frame ACKs yet the zones don't change
-  (a LightValue/SET_PROFILE semantic gap, not the arm gate — `re-gap-inventory.md` §A1).
-  Extend via `control.BUILDERS`. See `docs/business-logic/control-and-actuation.md`.
-- **`vehicle` function reads char 1004** (`calictl get vehicle`, live-verified): ignition
-  (terminal-15), car variant, unit RTC, 2-axis roll/pitch leveling — hand-added to
-  `dictionary.yaml` (NOT emitted by `extract_protocol`; preserve on regen). `general` was
-  repointed 1002→1001 (it had been reading the opaque VIN char, not the SW-version char).
-  No BLE firmware/OTA path exists (`re-gap-inventory.md` §A6).
-- **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar.
-  Those functions are `Installed`-gated and only publish on vehicles that have them; their
-  polarities can't be live-verified here (`satelliteantenna`, `stairs` are open review items).
+  frame (and `set lighting color <name>` → SET_COLOR/Mode 6), but **on-device apply is
+  UNCONFIRMED** — the frame ACKs yet the zones don't change (a LightValue/SET_PROFILE semantic
+  gap, not the arm gate — `re-gap-inventory.md` §A1). Extend via `control.BUILDERS`. See
+  `docs/business-logic/control-and-actuation.md`.
+- **Reads go STALE, and the unit deep-sleeps** (found 2026-07-{09,12}). A bare read returns a
+  latched value that decays (fresh-water read 1 L vs true 11 L); `device.read_all`/`read` now run
+  the **1003 heartbeat during reads** to keep values fresh + the link alive. But when the van is
+  **parked, the camper unit deep-sleeps and stops advertising entirely** — buspi (in the van, bond
+  intact) can't even connect for days; only physical use (door/ignition) wakes it, and the phone
+  app can grab the single slot on wake. So buspi access is **inherently intermittent**: `serve`
+  persists the last-known state + an "as of" timestamp and the web UI shows an **offline** banner
+  when unreachable. See `docs/business-logic/value-freshness.md`.
+- **`vehicle` function reads char 1004** (`calictl get vehicle`): ignition (terminal-15), car
+  variant, unit RTC, 2-axis roll/pitch leveling — hand-added to `dictionary.yaml` (NOT emitted by
+  `extract_protocol`; preserve on regen). **byte-0 was FIXED 2026-07-12** (`TerminalOneFive` is
+  bit **7**, not 0 — ignition had always decoded "off"; `CarVariant 0/4`, `CarLevelPopUp 4/2`).
+  Dynamic fields (leveling, RTC) only read while ignition is on. `general` repointed 1002→1001.
+- **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar. Their
+  `Installed`-gated; polarities can't be live-verified here — but the **semantics were verified
+  statically against the app's getters 2026-07-12** (no bugs; stairs `extended`/`obstacle_sensor`
+  non-inverted, satellite `System` is a 2-bit enum). See `docs/business-logic/protocol-alignment.md`.
 - **buspi**: `sudo` needs the Pi password; `serve` runs under `~/solix-env`; secrets in
-  `/etc/buspi/*.env` (root, 0600). The van allows buspi + the phone app connected at once.
+  `/etc/buspi/*.env` (root, 0600). The van *can* have buspi + the phone connected at once **once
+  buspi is in** — but see the deep-sleep note: a parked unit isn't reachable at all.
 
 ## Documentation (sphinx + sphinx-needs)
 

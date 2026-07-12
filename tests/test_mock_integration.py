@@ -110,11 +110,16 @@ def test_set_lighting_needs_active_profile_then_applies(mock):
 # --- read_all prefers pushed notifications over a stale latched read ---------
 
 def test_read_all_heartbeat_refreshes_stale_read(mock):
-    """T_READ_HEARTBEAT_REFRESH — verifies R_READ_HEARTBEAT_REFRESH: a bare read of the fresh-water
-    char returns the stale latch (1 L), but read_all runs the 1003 liveness heartbeat, which arms
-    the unit's measurement loop, so it surfaces the true 11 L. Live-verified on-device 2026-07-09
-    (bare poll read 1 L; with a continuous heartbeat the same read returned 11 L). The `mock`
-    fixture patches device sleeps to no-ops, so the warm-up is instant here."""
+    """A bare read of the fresh-water char returns the stale latch (1 L), but read_all runs the
+    1003 liveness heartbeat, which arms the unit's measurement loop, so it surfaces the true 11 L.
+    Live-verified on-device 2026-07-09 (bare poll read 1 L; with a continuous heartbeat the same
+    read returned 11 L). The `mock` fixture patches device sleeps to no-ops, so warm-up is instant.
+
+    .. test:: read_all heartbeat refreshes a stale latched read
+       :id: T_READ_HEARTBEAT_REFRESH
+       :links: R_READ_HEARTBEAT_REFRESH
+       :status: passing
+    """
     import asyncio
     from calictl import protocol, device
     mock.state["water"]["FreshWaterLevel"] = 11             # the truth (revealed once armed)

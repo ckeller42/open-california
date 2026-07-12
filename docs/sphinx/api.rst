@@ -10,6 +10,11 @@ Semantics
 
 .. autofunction:: calictl.semantics.vehicle
 
+Device / reads
+--------------
+
+.. automethod:: calictl.device.CamperDevice.read_all
+
 Control frames
 --------------
 
@@ -20,3 +25,4 @@ Tests
 
 .. autofunction:: tests.test_calictl.test_vehicle_decode_char_1004
 .. autofunction:: tests.test_calictl.test_airheater_control_frame
+.. autofunction:: tests.test_mock_integration.test_read_all_heartbeat_refreshes_stale_read

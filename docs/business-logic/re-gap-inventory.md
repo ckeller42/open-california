@@ -1,5 +1,11 @@
 # RE gap inventory — what of the CaliforniaOnTour app is NOT yet understood
 
+> **NOTE (2026-07-12):** this is the original 2026-07-07 audit. Several gaps here have since been
+> **resolved** — see **`protocol-alignment.md`** (cooler-timer offsets, satellite `1901`, vehicle
+> byte-0, all lighting modes) and **`value-freshness.md`** (the stale-read / deep-sleep behavior)
+> for the current state. The BLE protocol is now ~98%; the residual is van-gated (see
+> `docs/remaining-captures.md`). `A1` (lighting on-device apply) remains the key open item.
+
 Compiled 2026-07-07 from a three-way decompile audit (BLE protocol, feature/domain
 logic, session/auth/infra), each diffed against the current baseline: `protocol/
 dictionary.yaml` (13 functions), `protocol/signals.yaml`, `ui/screens/*.yaml` (18
