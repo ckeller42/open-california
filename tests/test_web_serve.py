@@ -2,6 +2,26 @@ import asyncio
 from calictl import serve, protocol, overrides, control
 
 
+def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
+    """The daemon must keep serving the last-known values behind an offline flag when the van's
+    unreachable, and the cache must survive a restart (the unit deep-sleeps for days when parked)."""
+    import time
+    monkeypatch.setenv("CALICTL_STATE_CACHE", str(tmp_path / "last.json"))
+    s = serve.Server(influx_enabled=False)
+    s._last = {"cooler": {"Installed": 1, "State": 1, "Level": 3, "Mode": 4}}
+    be = serve.ServeBackend(s, loop=None)
+    # no successful poll yet -> offline, but last-known values still shown
+    st = be.state()
+    assert st["_meta"]["online"] is False and st["_meta"]["last_seen"] is None
+    assert st["cooler"]["on"] is True
+    # a fresh poll -> online + persisted
+    s._last_ok_ts = time.time(); s._save_last()
+    assert be.state()["_meta"]["online"] is True
+    # a brand-new Server (restart) loads the persisted cache
+    s2 = serve.Server(influx_enabled=False)
+    assert s2._last.get("cooler", {}).get("State") == 1 and s2._last_ok_ts is not None
+
+
 def test_serve_backend_state_interprets_cache():
     s = serve.Server(influx_enabled=False)
     funcs = protocol.load(); overrides.apply(funcs)
