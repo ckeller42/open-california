@@ -53,10 +53,12 @@ sequenceDiagram
 ## 1. Heartbeat-armed control write (`device.actuate`)
 
 The unit only honours a control write while a **+1 monotonic 4-byte-BE counter ticks on `1003`** —
-the liveness/arm gate (issue #2). Decompile-confirmed 2026-07-14 (`d2/s` driver, `ag/b` builder):
-4-byte BE uint32, `+1` per tick, **~500 ms** cadence (the app ticks it continuously; calictl ticks
-it only across the write window). The seed value is unconfirmed. Arm is the 1003 liveness *only* —
-no ignition/mode/enable gate (roof is the one exception).
+the liveness/arm gate (issue #2). jadx-confirmed 2026-07-14 (`d2/s` driver, `ag/b` builder): 4-byte
+BE uint32, `+1` per tick (`b1/d`), **500 ms** cadence (`zf/d` `J0=500L`), **seed 0** (`d2/s` inits
+the counter at 0 — unlike the roof's random seed). calictl ticks it at ~0.6 s from a fixed
+arbitrary start, only across the write window — both satisfy the unit's liveness/monotonicity check
+(the value doesn't matter; verified on-device). Arm is the 1003 liveness *only* — no
+ignition/mode/enable gate (roof is the one exception).
 
 ```mermaid
 sequenceDiagram

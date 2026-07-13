@@ -6,9 +6,12 @@ a ``sphinx-needs`` **specification** (``S_SEQ_*``) that **links to the requireme
 (``R_*``, declared in the implementing code's docstring and collected in :doc:`api`), so every
 diagram traces to the function that realises it. All are HCI-verified against the real app; the
 lighting-apply and roof flows were additionally confirmed on-device (2026-07-13), and every flow
-was cross-checked against the **decompiled app** (2026-07-14) — corrections from that pass are
-folded in below (arm cadence, the lighting "commit" being a neutral flush not an app mechanism,
-water being push-driven, and the ``0x0E`` being calictl's own observation).
+was cross-checked against the **decompiled app** — first with androguard, then re-verified with a
+cleaner **jadx** decompile (2026-07-14). Corrections from those passes are folded in below (arm
+cadence + seed, the lighting "commit" being a neutral flush not an app mechanism, water being
+push-driven, and the ``0x0E`` being calictl's own observation). The jadx pass found **no defects**
+in our implementation and pinned the previously-open constants (1003 seed 0 / 500 ms; roof 3000 ms
+dead-man + random counter seed).
 
 Char short-UUIDs: ``1001`` VERSION, ``1003`` HEARTBEAT (liveness/arm counter), ``1004`` AUTH,
 plus per-function state/control chars (``1101/1102`` cooler, ``1201`` camping, ``1401/1402``
@@ -74,12 +77,13 @@ Heartbeat-armed control write
    :links: R_ACTUATE_ARM
 
    The unit honours a control write only while a **+1 monotonic 4-byte-BE counter ticks on
-   ``1003``** — the arm gate (issue #2). Decompile-confirmed 2026-07-14 (``d2/s`` driver, ``ag/b``
-   builder): 4-byte BE uint32, ``+1`` per tick. The app ticks it at **~500 ms** for the whole
-   connection (the ``+1`` seed value is unconfirmed — ``ag.b.v()`` resets to 0 but the sibling
-   roof counter seeds random). calictl ticks it only across the write window (its own choice, not
-   an app gate). Arm is the 1003 liveness *only* — no ignition/mode/enable gate (roof is the one
-   exception, separately gated). Implemented by :py:meth:`calictl.device.CamperDevice.actuate`.
+   ``1003``** — the arm gate (issue #2). jadx-confirmed 2026-07-14 (``d2/s`` driver, ``ag/b``
+   builder): 4-byte BE uint32, ``+1`` per tick (``b1/d``), **500 ms** cadence (``zf/d`` ``J0=500L``),
+   **seed 0** (``d2/s`` inits the counter at 0 — unlike the roof, which seeds random). calictl ticks
+   it at ~0.6 s from a fixed arbitrary start, only across the write window — both satisfy the unit's
+   liveness/monotonicity check (the value doesn't matter; verified on-device). Arm is the 1003
+   liveness *only* — no ignition/mode/enable gate (roof is the one exception, separately gated).
+   Implemented by :py:meth:`calictl.device.CamperDevice.actuate`.
 
 .. mermaid::
 
