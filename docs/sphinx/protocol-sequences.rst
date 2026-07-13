@@ -220,25 +220,26 @@ Fresh state read under heartbeat
 
    **Water is different — push-driven, and measurement-gated (decompile + on-device, 2026-07-14).**
    The app never gets fresh water from a heartbeat-refreshed *read*; it gets it from a **``1302``
-   notification** and parses the pushed frame (VM ``qg/b``). calictl subscribes but ``_noop``\s the
-   payload and bare-reads → it only ever sees the stale latch (1 L). Worse: on-device the unit
-   pushed **0** ``1302`` frames in 40 s while **parked** — the fresh-water level is only measured
-   when water actually flows (pump activity), so no fresh value is fetchable while idle; the app
-   shows a *cached* last push. Fix (pending): register a real ``1302`` notify handler, keep the
-   last real push with an "as-of" timestamp, and surface that instead of the decayed read.
+   notification** and parses the pushed frame (VM ``qg/b``). **Fixed:** ``read_all``/``read`` now
+   subscribe with a real handler (:meth:`~calictl.device.CamperDevice._subscribe_all` ``sink``) and
+   **prefer a pushed value over the bare read**, so calictl captures the true level whenever the
+   unit pushes it (during water use). While **parked** the unit pushes nothing (0 ``1302`` frames
+   in 40 s on-device) — the level is only measured on pump activity, so no fresh value is fetchable
+   while idle and it falls back to the last read; that residual staleness is a hardware limit, not
+   a calictl one.
 
 .. mermaid::
 
     sequenceDiagram
         participant C as calictl
         participant U as Camper unit
-        C->>U: connect + subscribe
+        C->>U: connect + subscribe-all (real handler → sink)
         loop ~500 ms (warm-up ~2 s, then read)
             C-)U: write 1003 heartbeat
         end
-        Note over U: heartbeat keeps link up + refreshes re-read chars (1102/1602/1902/1004)
-        C->>U: read state_char → FRESH value  (NOT water)
         U-->>C: notify 1302 → water (push-driven; only fires on pump activity)
+        Note over U: heartbeat keeps link up + refreshes re-read chars (1102/1602/1902/1004)
+        C->>U: read state_char (prefer a pushed value over the bare read)
         C->>U: disconnect
 
 Reachability / deep-sleep

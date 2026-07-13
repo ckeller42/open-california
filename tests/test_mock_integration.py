@@ -155,6 +155,22 @@ def test_read_all_heartbeat_refreshes_stale_read(mock):
     assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 11
 
 
+def test_read_all_prefers_water_notification_over_stale_read(mock):
+    """Water (1302) is PUSH-ONLY for freshness (decompile-confirmed 2026-07-14: the app's water VM
+    ``qg/b`` reads the level from the 1302 notification, not a bare read). A bare read returns the
+    stale latch; ``read_all`` now subscribes and prefers the pushed value."""
+    import asyncio
+    from calictl import protocol, device
+    mock.state["water"]["FreshWaterLevel"] = 1               # bare read = stale latch
+    mock.notify_push["water"] = {"FreshWaterLevel": 11}      # the unit pushes the truth
+    funcs = mock.funcs
+    # a bare read still sees the stale 1...
+    assert protocol.decode(funcs["water"], mock.read(funcs["water"].state_char))["FreshWaterLevel"] == 1
+    # ...but read_all consumes the 1302 notification and surfaces 11
+    raw = asyncio.run(device.CamperDevice().read_all(funcs))
+    assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 11
+
+
 # --- the 1003 arm-gate, at the unit level -----------------------------------
 
 def test_write_ignored_without_heartbeat_then_applied_with_it():

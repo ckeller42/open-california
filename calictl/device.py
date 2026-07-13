@@ -163,12 +163,18 @@ class CamperDevice:
 
     async def _read_all_on(self, client, funcs: dict) -> dict[str, bytes]:
         out: dict[str, bytes] = {}
+        notif: dict[str, bytes] = {}                  # pushed values, keyed by lowercased char UUID
+        await self._subscribe_all(client, notif)      # water (1302) is push-only for freshness
         stop = asyncio.Event()
         beat = asyncio.ensure_future(self._heartbeat(client, stop))
         try:
             await asyncio.sleep(HEARTBEAT_WARMUP_S)   # let the liveness register + sensors refresh
             for name, f in funcs.items():
                 if not f.state_char:
+                    continue
+                pushed = notif.get(str(f.state_char).lower())
+                if pushed is not None:                # a fresh notification beats the stale latch
+                    out[name] = pushed
                     continue
                 for attempt in range(3):
                     try:
@@ -196,13 +202,17 @@ class CamperDevice:
 
     async def read(self, func) -> bytes:
         """Read one function's state char under a live 1003 heartbeat (fresh, not the stale
-        latch — see :meth:`read_all`)."""
+        latch — see :meth:`read_all`). Prefers a pushed notification when one arrives (water is
+        push-only for freshness — see :meth:`_subscribe_all`)."""
         client = await self._session()
+        notif: dict[str, bytes] = {}
+        await self._subscribe_all(client, notif)
         stop = asyncio.Event()
         beat = asyncio.ensure_future(self._heartbeat(client, stop))
         try:
             await asyncio.sleep(HEARTBEAT_WARMUP_S)
-            return bytes(await client.read_gatt_char(func.state_char))
+            pushed = notif.get(str(func.state_char).lower())
+            return pushed if pushed is not None else bytes(await client.read_gatt_char(func.state_char))
         finally:
             stop.set()
             try:
@@ -442,18 +452,26 @@ class CamperDevice:
                 pass
 
     @staticmethod
-    async def _subscribe_all(client) -> int:
+    async def _subscribe_all(client, sink: dict | None = None) -> int:
         """start_notify on every notifiable/indicatable characteristic — the app
         subscribes all status chars before control writes are honoured. Returns the
-        count; individual failures are swallowed (best-effort handshake)."""
-        def _noop(_sender, _data):
-            pass
+        count; individual failures are swallowed (best-effort handshake).
+
+        When ``sink`` is given, pushed notifications are captured into it keyed by the
+        lowercased char UUID. Some chars are **push-only for freshness** — notably water
+        (``1302``): a bare read returns a stale latch, and the true level arrives only as a
+        notification (decompile-confirmed 2026-07-14). Readers prefer ``sink`` over a bare read.
+        """
+        def _handler(sender, data):
+            if sink is not None:
+                u = str(getattr(sender, "uuid", sender)).lower()
+                sink[u] = bytes(data)
         n = 0
         for svc in client.services:
             for ch in svc.characteristics:
                 if "notify" in ch.properties or "indicate" in ch.properties:
                     try:
-                        await client.start_notify(ch.uuid, _noop)
+                        await client.start_notify(ch.uuid, _handler)
                         n += 1
                     except Exception:
                         pass
