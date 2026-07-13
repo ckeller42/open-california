@@ -1,0 +1,32 @@
+docs/sphinx/protocol-sequences.rst
+  s_d2c35aeebbd344::t_5ecee3e07b5e78 67,70,74-77,79,87,93,95-96,98,100-104
+  s_d2c35aeebbd344::t_6a03a3f9d903b4 97
+  s_d2c35aeebbd344::t_8269663af1029a 78,80-86
+  s_d2c35aeebbd344::t_22f8c756a300af 68
+docs/business-logic/protocol-sequences.md
+  s_d2c35aeebbd344::t_2643aadc1abc25 66-72,79,81,86,97-106,111,113-114,116-121,124-125,128-133,137
+  s_d2c35aeebbd344::t_b48b92860c2cd2 115
+  s_d2c35aeebbd344::t_1efbcb16518544 134-136
+  s_d2c35aeebbd344::t_0e618ed6b91f5d 74-78,80,82-85,87-96
+  s_d2c35aeebbd344::t_a875e46464504b 73
+docs/remaining-captures.md
+  s_d2c35aeebbd344::t_e0707f2b5ad63e 4-15
+CLAUDE.md
+  s_d2c35aeebbd344::t_66abf22294fb9d 72-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "9b4cd92f6b0ec93de03c9e301e6e3f176bdd4133",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
