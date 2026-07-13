@@ -42,9 +42,11 @@ Grafana**, all from a Raspberry Pi.
 - **Reads everything** — decodes 14 BLE functions (cooler, air-heater, camping mode, lighting,
   energy, water, roof, vehicle state, …) into meaningful signals, cross-validated by a signal
   catalog + coverage guardrail so nothing is silently dropped or mislabeled. Values stay **fresh**
-  by holding the unit's `1003` liveness heartbeat during reads (a bare read goes stale).
+  by holding the unit's `1003` liveness heartbeat during reads (a bare read goes stale — [why, and
+  the water push-caveat](https://ckeller42.github.io/open-california/protocol-sequences.html#fresh-state-read-under-heartbeat)).
 - **Actually controls** — `calictl set cooler power on` (camping mode, lighting, roof, …) actuate
-  for real, armed by the same `1003` heartbeat that unlocks the firmware's write gate.
+  for real, armed by the same `1003` heartbeat that unlocks the firmware's [write gate](https://ckeller42.github.io/open-california/protocol-sequences.html#heartbeat-armed-control-write)
+  (lighting, roof, and range-rejection have their own [sequence diagrams](https://ckeller42.github.io/open-california/protocol-sequences.html)).
 - **Fits your stack** — one BLE-owning daemon fans out to **InfluxDB/Grafana** and **Home
   Assistant** (MQTT), and serves the web UI above — same process, one connection.
 
