@@ -63,29 +63,64 @@ Without the commit the SET is ACKed but never applied — the "lighting looks br
 stood the whole project. `control.commit_for("lighting")` returns the commit; other functions
 return `None`.
 
-## 3. Roof move-heartbeat (`device.actuate_roof`)
+## 3. Roof actuation — press-and-hold move stream, unit self-gated by a 3 s SafetyCounter (`device.actuate_roof`)
 
-Verified 2026-07-13. **Requires ignition (terminal-15) ON.** The app drives the pop-top with a
-*repeated* move frame — `[direction byte][4-byte SafetyCounter]` — and a final STOP.
-Direction bytes: **open `0x01`** (Up), **close `0x04`** (Down), **stop `0x00`**. The unit halts
-when the move frames cease (dead-man), so STOP is sent unconditionally at the end.
+Settled 2026-07-13 from the **decompiled roof class** (authoritative), reconciled against an
+at-the-van HCI capture of a full open+close (control char `1401` = ATT handle `0x0037`; frames
+`[direction byte][4-byte BE SafetyCounter]`, 5 bytes). **Requires ignition (terminal-15) ON.**
+Direction bytes: **open `0x01`** (Up), **close `0x04`** (Down), **stop `0x00`** — byte-for-byte
+identical to `control.roof_frame`.
+
+Roof movement is **press-and-hold**: the app streams move frames for as long as the user holds the
+on-screen button and stops (sends `0x00`, or just ceases) on release. There is **no protocol
+confirmation phase** and **no app-streamed STOP phase** — an earlier capture read of a "safety
+hold" was the user releasing the button while reading the safety dialog (press-and-hold dead-man),
+not a handshake.
+
+**SafetyCounter is APP-GENERATED, not echoed from the unit.** It is a monotonic BE-uint32 the app
+originates: `seed + elapsed_ms/500` from a **random seed**, i.e. **≈ +1 every 500 ms**. The unit
+only checks it for **liveness/monotonicity** and reports a `SafetyCounterValid` bit (**`1402`
+bit 7**). (The earlier "echoes the unit's counter, ~0.8/frame" reading was wrong — it was two
+senders overlapping: a **500 ms counter engine** plus a **1000 ms direction-resend** repeating the
+current value, which averaged to ~0.8 increments per observed frame.)
+
+**The safety wait is UNIT-enforced, ~3 s — there is no ~4 s app countdown constant.** The vehicle
+**withholds motor actuation until the SafetyCounter validates** (takes ~3 s of a live monotonic
+counter). In parallel the app arms a **3000 ms dead-man**: if `SafetyCounterValid` is still false
+after 3 s it aborts with an error (and shows a "please wait" dialog,
+`dialog_info_popUpRoof_safetyCheck`). The perceived ~4 s before the roof starts ≈ **3 s + BLE
+latency**. So while the user holds the button, the app keeps streaming **move** frames from the
+start; the roof simply doesn't physically move for the first ~3 s until the unit validates.
+
+The state char `1402` (handle `0x0033`) tracks motion: it emits `03xx` (open side) / `23xx` (close
+side) with the low nibble as motion state (`0c` moving, `08` near-limit, `00` stopped) and **bit 7
+= `SafetyCounterValid`**.
 
 ```mermaid
 sequenceDiagram
     participant C as calictl
-    participant U as Roof (1401)
+    participant U as Roof (1401 / state 1402)
     Note over C,U: ignition ON, armed session, roof path clear
-    loop ~1 Hz until deadline or STOP
-        C->>U: move frame  [0x01 open / 0x04 close] + SafetyCounter
-        Note right of U: pop-top travels
+    Note over C,U: user presses & HOLDS open/close
+    loop press-and-hold, move frames @ ~500 ms
+        C->>U: move frame [0x01 open / 0x04 close] + app-generated monotonic SafetyCounter (+1/500 ms)
     end
-    C->>U: STOP frame  [0x00] + SafetyCounter
-    Note right of U: halts (also halts if the move heartbeat stops)
+    Note right of U: unit validates SafetyCounter (~3 s); motor withheld until valid → 1402 bit 7 = SafetyCounterValid
+    Note over C,U: after ~3 s the pop-top travels while frames continue
+    C->>U: STOP frame [0x00] on release / end (or frames cease → dead-man halt)
+    Note right of U: halts
 ```
 
-> ⚠️ **Open gap:** in the capture the SafetyCounter tracked the **unit's own running counter**
-> (echoed, ~0.8 increments/frame — not a pure app `+1`). `actuate_roof` currently injects its own
-> `+1` from a fixed start; to drive the roof for real, read + echo the unit's live SafetyCounter.
+> ### ⚠️ Roof actuation model — implemented, but NOT-LIVE-VERIFIED
+> `device.actuate_roof` now implements this model (mock-tested only — it has **never driven a
+> real roof**), so roof actuation stays **NOT-LIVE-VERIFIED** until a live at-the-van test:
+> 1. **Generates a live monotonic BE-uint32 SafetyCounter (~+1 every 500 ms)** from a random
+>    seed (`_roof_safety_counter`) — it does **not** echo the unit's counter (that reading was
+>    wrong).
+> 2. **Accounts for the ~3 s unit self-gate**: streams move frames continuously (no move-then-STOP
+>    "hold" phase — press-and-hold model); honours `SafetyCounterValid` (`1402` bit 7) and mirrors
+>    the app's **3000 ms** dead-man (`validate_s`, abort to STOP if not valid by 3 s).
+> 3. **Cadence ≈ 500 ms** (`CALICTL_ROOF_PERIOD_S`).
 
 ## 4. Fresh state read under heartbeat (`device.read`/`read_all`)
 

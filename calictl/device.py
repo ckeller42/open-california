@@ -54,15 +54,28 @@ FOLLOW_DELAY_S = float(os.environ.get("CALICTL_FOLLOW_DELAY_S", "0.3"))  # gap b
 # refresh before the read pass. Live-verified on-device 2026-07-09 (1 L -> 11 L, link held 64 s).
 HEARTBEAT_WARMUP_S = float(os.environ.get("CALICTL_HEARTBEAT_WARMUP_S", "2.0"))
 
-# roof move-heartbeat (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame
-# won't complete travel: ig/c.java re-sends Up/Down at ~1 Hz until STOP. These bound
-# how long actuate_roof drives the move before force-STOPping.
-ROOF_MOVE_PERIOD_S = 1.0          # ~1 Hz move-heartbeat cadence (ig/c.java)
-ROOF_MAX_TRAVEL_S = 30.0          # hard safety cap on a single open/close command
-# HCI capture (2026-07-08) showed the app writes a LIVE +1 SafetyCounter (frame bytes 1-4,
-# 32-bit BE) on every roof frame — idle and moving. A fixed counter=0 (our old behaviour)
-# is not "live". actuate_roof increments it each resend, starting from an arbitrary high value.
-ROOF_SAFETY_START = 0x00100000
+# roof move (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame won't complete travel:
+# the app streams the OPEN/CLOSE move frame continuously until STOP. Decompile of the app engine
+# (`w8/a`, 2026-07-13) settled the model: motion is driven IMMEDIATELY — there is NO STOP-hold /
+# confirmation-frame phase. The STOP frames seen in one capture were just the press-and-hold
+# dead-man (the on-screen button wasn't held while the user read the safety dialog), not protocol.
+ROOF_MOVE_PERIOD_S = float(os.environ.get("CALICTL_ROOF_PERIOD_S", "0.5"))  # ~500 ms counter cadence
+ROOF_MAX_TRAVEL_S = float(os.environ.get("CALICTL_ROOF_MAX_TRAVEL_S", "30.0"))  # hard cap on travel
+# SafetyCounter (frame bytes 1-4, 32-bit BE) is APP-GENERATED and purely time-derived — it does
+# NOT echo the unit's counter. The app engine seeds a random int in [1, 1_000_000] and sets
+# value = seed + floor(elapsed_ms / 500), i.e. a monotonic +1 per ~500 ms of wall-clock. The unit
+# only checks liveness/monotonicity and reports a SafetyCounterValid bit (char 1402, bit 7); it
+# gates motor actuation until the counter validates. The app arms a 3 s dead-man: if the counter
+# is still invalid after 3 s it errors ("SafetyCounter is invalid after 3 seconds").
+ROOF_SAFETY_TICK_MS = 500                 # counter increments +1 per this many ms of wall-clock
+ROOF_SAFETY_VALIDATE_S = 3.0              # dead-man: counter must validate within ~3 s, else error
+ROOF_SAFETY_SEED_MAX = 1_000_000          # app seeds a random SafetyCounter in [1, this]
+
+
+def _roof_safety_counter(seed: int, elapsed_ms: float, tick_ms: int = ROOF_SAFETY_TICK_MS) -> int:
+    """The app's time-derived roof SafetyCounter: ``seed + floor(elapsed_ms / tick_ms)`` as a
+    32-bit big-endian-able unsigned int (monotonic +1 per ``tick_ms`` of wall-clock)."""
+    return (seed + int(elapsed_ms // tick_ms)) & 0xFFFFFFFF
 
 
 def _beat_bytes(ctr: int) -> bytes:
@@ -266,47 +279,68 @@ class CamperDevice:
     async def actuate_roof(self, func, move_frame: bytes, stop_frame: bytes, *,
                            max_duration_s: float = ROOF_MAX_TRAVEL_S,
                            period_s: float = ROOF_MOVE_PERIOD_S,
+                           validate_s: float = ROOF_SAFETY_VALIDATE_S,
+                           counter_seed: int | None = None,
                            verify: bool = True) -> dict | None:
-        """Drive a roof OPEN/CLOSE move with the 1 Hz move-heartbeat, then force STOP.
+        """Drive a roof OPEN/CLOSE move by streaming move frames, then force STOP.
 
         **SAFETY-SENSITIVE and NOT-LIVE-VERIFIED** (the pop-up roof is not installed
-        on this van, so this path has never actuated real hardware; enum polarity +
-        the SafetyCounter handshake are UNVERIFIED). Physical roof motion can pinch/
-        collide — a caller must have confirmed the roof is clear. Nothing here runs
-        automatically.
+        on this van, so this path has never actuated real hardware; enum polarity + the
+        SafetyCounter handshake are validated only against the mock). Physical roof
+        motion can pinch/collide — a caller must have confirmed the roof is clear.
+        Nothing here runs automatically.
 
-        Unlike the one-shot :meth:`actuate`, a single roof frame will not complete
-        travel: the app's ``ig/c.java`` re-sends the Up/Down frame at ~1 Hz until a
-        STOP. This runs the whole thing in ONE BLE session (single-owner model, held
-        under the ``serve`` lock): connect, replay the connect handshake (version +
-        auth reads, subscribe-all), start the 1003 arm heartbeat, then re-send
-        ``move_frame`` every ``period_s`` for at most ``max_duration_s`` — a bounded
-        safety cap — and then send ``stop_frame``. The STOP is **best-effort**: on a
-        clean end-of-travel it is written and confirmed, but on a mid-move link drop
-        the STOP write will itself fail and is swallowed. The real stop guarantee in
-        that case is the hardware's own behaviour — the unit is expected to halt when
-        the 1 Hz move-heartbeat ceases (the move only continues while frames arrive) —
-        which is plausible but **UNVERIFIED on this unit**. Do not rely on the software
-        STOP reaching the unit after a link drop.
-        Returns the post-STOP state decode when ``verify``, else None.
+        Model (settled by the app-engine decompile, ``w8/a``, 2026-07-13): a single roof
+        frame will not complete travel, so the app **streams the move frame immediately**
+        — there is NO STOP-hold / confirmation phase (the STOP frames seen in a capture
+        were the press-and-hold dead-man, not protocol). Each frame is ``[direction byte]
+        [4-byte BE SafetyCounter]``. The SafetyCounter is **app-generated and purely
+        time-derived**: a random seed in ``[1, ROOF_SAFETY_SEED_MAX]`` plus ``+1`` per
+        ``ROOF_SAFETY_TICK_MS`` of wall-clock (:func:`_roof_safety_counter`) — it does
+        NOT echo the unit's counter. The unit withholds motor actuation until that
+        counter validates (reported as ``SafetyCounterValid``, char 1402 bit 7), which
+        takes up to a ~3 s dead-man; if still invalid after ``validate_s`` the app treats
+        it as an error, and so do we (log + STOP early).
+
+        Runs in ONE BLE session (single-owner model, held under the ``serve`` lock):
+        connect, replay the connect handshake (version + auth reads, subscribe-all),
+        start the 1003 arm heartbeat, then re-send ``move_frame`` (with the live
+        time-derived counter) every ``period_s`` for at most ``max_duration_s`` — a
+        bounded travel cap — and then send ``stop_frame``. The unit self-gates the first
+        ~3 s via counter validation, so early frames may not move the roof.
+
+        The final STOP is **best-effort**: on a clean end it is written and confirmed,
+        but on a mid-move link drop the STOP write itself fails and is swallowed. The real
+        stop guarantee in that case is the hardware's own dead-man behaviour — the unit is
+        expected to halt when the move frames cease — which is plausible but **UNVERIFIED
+        on this unit**. Do not rely on the software STOP reaching the unit after a link
+        drop. Returns the post-STOP state decode when ``verify``, else None.
 
         :param func: the roof Function (needs ``control_char`` + ``state_char``).
-        :param move_frame: the OPEN or CLOSE frame (``control.roof_frame``).
-        :param stop_frame: the STOP frame, sent to end travel unconditionally.
-        :param max_duration_s: hard cap on move-heartbeat duration (safety bound).
-        :param period_s: move-heartbeat cadence (~1 Hz).
+        :param move_frame: the OPEN or CLOSE frame (``control.roof_frame``); byte 0 is the
+            direction, bytes 1-4 are overwritten with the live time-derived SafetyCounter.
+        :param stop_frame: the STOP frame (byte 0 == 0), sent to end travel unconditionally.
+        :param max_duration_s: hard cap on the move duration (safety bound).
+        :param period_s: frame cadence (~500 ms, ``ROOF_MOVE_PERIOD_S``).
+        :param validate_s: dead-man window — if ``SafetyCounterValid`` is still false after this
+            many seconds the move is aborted (STOP) as the app does. ``None`` disables the check.
+        :param counter_seed: optional explicit SafetyCounter seed (else a random app-style seed);
+            handy for deterministic tests.
         :param verify: read the state char back after STOP.
         :returns: post-STOP state decode, or None when ``verify`` is false.
 
-        .. req:: Drive roof travel with a bounded move-heartbeat
+        .. req:: Drive roof travel with a bounded, time-derived-counter move stream
            :id: R_ROOF_ACTUATE
            :status: implemented
            :tags: ble, control, roof, safety
 
-           ``calictl`` shall, in one armed BLE session, re-send the roof move frame
-           at ~1 Hz for a bounded maximum duration and then unconditionally send a
-           STOP frame, so roof travel is completed but never left running unbounded.
+           ``calictl`` shall, in one armed BLE session, stream the roof move frame with a
+           monotonic app-generated SafetyCounter for a bounded maximum duration and then
+           unconditionally send a STOP frame — so roof travel is completed but never left
+           running unbounded — and shall abort (STOP) if the unit does not validate the
+           SafetyCounter within the ~3 s dead-man window.
         """
+        import random
         import time
         from . import protocol  # lazy
         if not func.control_char:
@@ -314,6 +348,23 @@ class CamperDevice:
         client = await self._session()
         stop = asyncio.Event()
         beat = None
+        seed = counter_seed if counter_seed is not None else random.randint(1, ROOF_SAFETY_SEED_MAX)
+        start = None                       # set once the move stream begins (arms the counter clock)
+
+        async def _send(direction_byte: bytes) -> bool:
+            """Write one 5-byte roof frame (direction + the live time-derived SafetyCounter).
+            Returns False only on a genuine link drop (so the caller breaks to the final STOP)."""
+            elapsed_ms = 0.0 if start is None else (time.monotonic() - start) * 1000.0
+            ctr = _roof_safety_counter(seed, elapsed_ms)
+            frame = direction_byte[:1] + ctr.to_bytes(4, "big")
+            try:
+                await client.write_gatt_char(func.control_char, frame, response=True)
+                return True
+            except Exception:
+                if not client.is_connected:
+                    return False
+                return True   # transient write error on a live link: keep driving
+
         try:
             auth_ok = 0
             for uuid in (VERSION_CHAR, AUTH_CHAR):
@@ -327,26 +378,27 @@ class CamperDevice:
                       "may be ignored" % (auth_ok, n), flush=True)
             beat = asyncio.create_task(self._heartbeat(client, stop))
             await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
-            # 1 Hz move-heartbeat: re-send the move frame with a LIVE +1 SafetyCounter (bytes
-            # 1-4, from the HCI capture) until the safety cap, then STOP.
-            ctr = ROOF_SAFETY_START
-            deadline = time.monotonic() + max_duration_s
+
+            # Stream the move frame with the live time-derived counter until the safety cap. The
+            # unit self-gates motion for the first ~validate_s until the counter validates; we
+            # abort (-> STOP) if it never does, mirroring the app's 3 s dead-man error.
+            start = time.monotonic()
+            deadline = start + max_duration_s
+            validate_checked = False
             while time.monotonic() < deadline:
-                frame = move_frame[:1] + (ctr & 0xFFFFFFFF).to_bytes(4, "big")
-                ctr += 1
-                try:
-                    await client.write_gatt_char(func.control_char, frame, response=True)
-                except Exception:
-                    if not client.is_connected:
-                        print("actuate_roof: link dropped mid-move — sending STOP", flush=True)
+                if not await _send(move_frame):
+                    print("actuate_roof: link dropped mid-move — sending STOP", flush=True)
+                    break
+                if (validate_s is not None and not validate_checked and func.state_char
+                        and (time.monotonic() - start) >= validate_s):
+                    validate_checked = True
+                    if not await self._roof_counter_valid(client, func):
+                        print("actuate_roof: SafetyCounter invalid after %.0fs — aborting move "
+                              "(STOP)" % validate_s, flush=True)
                         break
                 await asyncio.sleep(period_s)
-            # ALWAYS force a STOP (best-effort even if the link is flaky), with the next counter.
-            try:
-                stop_live = stop_frame[:1] + (ctr & 0xFFFFFFFF).to_bytes(4, "big")
-                await client.write_gatt_char(func.control_char, stop_live, response=True)
-            except Exception:
-                pass
+            # ALWAYS force a STOP (best-effort even if the link is flaky), with the live counter.
+            await _send(stop_frame)
             if not verify or not func.state_char:
                 return None
             await asyncio.sleep(SETTLE_S)      # let the state settle after STOP
@@ -360,6 +412,19 @@ class CamperDevice:
                 except Exception:
                     pass
             await self._safe_disconnect(client)
+
+    @staticmethod
+    async def _roof_counter_valid(client, func) -> bool:
+        """Read the roof state char and return the ``SafetyCounterValid`` bit (char 1402 bit 7).
+        Best-effort: a read/decode failure is treated as *valid* (True) so a flaky read never
+        force-aborts a move on its own — the bounded cap + STOP remain the real safety net."""
+        from . import protocol  # lazy
+        try:
+            raw = bytes(await client.read_gatt_char(func.state_char))
+            dec = protocol.decode(func, raw)
+            return bool(dec.get("SafetyCounterValid", 1))
+        except Exception:
+            return True
 
     async def _heartbeat(self, client, stop) -> None:
         """Write a monotonic +1 4-byte big-endian counter to HEARTBEAT_CHAR every
