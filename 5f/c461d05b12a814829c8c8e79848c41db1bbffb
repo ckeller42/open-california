@@ -1,0 +1,23 @@
+calictl/deploy/camper-dashboard.json
+  s_d2c35aeebbd344::t_d310e9160d88c9 2-62,64-65,67-86,88-90,92-93,95,97-118,120-121,123-135,137,139-141,143-165,167-169,171-197,199-200,202-214,216,218-220,222-248,250-251,253-265,267,269-271,273-298,300-302,304-331,333-335,337-359,361-363,365-366,369-390,392-394,396-440,442,444-471,473-593,595-596,598-599,601-603,605-607,609-630,632-634,636-662,664-665,667-679,681,683-685,687-713,715-716,718-730,732,734-736,738-764,766-767,769-781,783-818,820-823
+tests/test_mock_integration.py
+  s_d2c35aeebbd344::t_735bce911fb44a 185-210
+calictl/serve.py
+  s_d2c35aeebbd344::t_524af67fcf59ab 226-228,231
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "5fc461d05b12a814829c8c8e79848c41db1bbffb",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
