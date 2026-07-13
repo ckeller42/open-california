@@ -57,8 +57,14 @@ const FEATURES = {
       { what: "power", kind: "toggle", label: "Refrigerator", state: "on" },
       { what: "level", kind: "slider", label: "Cooling level", state: "level", min: 1, max: 5 },
     ],
-    readouts: [{ label: "Timer", get: (s) => onoff(s.timer_active) }, { label: "Error", get: (s) => yn(s.error) }],
-    summary: (s) => (s.on ? `On · level ${s.level}` : "Off"),
+    readouts: [
+      { label: "Fridge door", get: (s) => (s.error ? "⚠ Open" : "Closed") },
+      { label: "Timer", get: (s) => onoff(s.timer_active) },
+    ],
+    // `error` tracks the fridge door on this van (verified live 2026-07-13: door open -> error
+    // true, closed -> false). Surface it as a banner so an open door is obvious at a glance.
+    warn: (s) => (s.error ? "⚠ Fridge door is open" : null),
+    summary: (s) => (s.error ? "⚠ Door open" : (s.on ? `On · level ${s.level}` : "Off")),
   },
   campingmode: {
     title: "Camping mode", icon: "🏕️",
@@ -429,6 +435,15 @@ function renderFeature(fn) {
   const f = FEATURES[fn];
   const s = STATE[fn] || {};
   titleEl.textContent = f.title;
+  if (f.warn) {                         // dynamic warning banner (e.g. fridge door open)
+    let w;
+    try { w = f.warn(s); } catch (e) { w = null; }
+    if (w) {
+      const b = document.createElement("div");
+      b.className = "warn"; b.textContent = w;
+      app.appendChild(b);
+    }
+  }
   if (f.lighting) return renderLighting(s);
   if (f.controls && f.controls.length) {
     const card = document.createElement("div");

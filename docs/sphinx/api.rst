@@ -14,11 +14,14 @@ Device / reads
 --------------
 
 .. automethod:: calictl.device.CamperDevice.read_all
+.. automethod:: calictl.device.CamperDevice.actuate
+.. automethod:: calictl.device.CamperDevice.actuate_roof
 
 Control frames
 --------------
 
 .. autofunction:: calictl.control._airheater
+.. autofunction:: calictl.control.commit_for
 
 Forecast
 --------

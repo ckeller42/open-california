@@ -88,6 +88,13 @@ LIGHT_COLORS = {
 LIGHT_UNCHANGED = 14
 LIGHT_ON_BRIGHTNESS = 13         # "on" brightness (0..13; 14=unchanged sentinel, so max real=13)
 
+# Lighting COMMIT/APPLY frame. HCI-verified 2026-07-13: the app follows every SET_BRIGHTNESS /
+# SET_PROFILE with this exact frame, and the unit only APPLIES the change once it lands (Mode 0,
+# ProfileNumber + all zones = the 14 "unchanged" sentinel). This is the fix for the old
+# lighting-apply gap — our SET frames were already byte-identical to the app's; only this commit
+# was missing. Sent as the `follow` frame of device.actuate for every lighting write.
+LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
+
 # Friendly zone key -> BrightnessL control field, from the app's Lighting screen + the HCI
 # capture (which nibble tracked each slider). Reading trio (Links/Rechts/Beifahrer) map to
 # L1/L2/L4 — group confirmed, the left/right/passenger split within it is best-effort.
@@ -369,6 +376,24 @@ BUILDERS = {"campingmode": _camping, "cooler": _cooler, "lighting": _lighting,
 def build(funcs, function, what, value, last_decoded):
     b = BUILDERS.get(function)
     return b(funcs, what, value, last_decoded) if b else None
+
+
+def commit_for(function):
+    """The follow/commit frame a function needs after a SET, or None. Lighting is the only one:
+    the unit applies a SET_BRIGHTNESS/SET_PROFILE only once :data:`LIGHT_COMMIT` lands right after
+    it (HCI-verified 2026-07-13, and confirmed on-device via readback). Callers pass this as
+    ``device.actuate(..., follow=commit_for(fn))``.
+
+    .. req:: Apply lighting changes with the commit frame
+       :id: R_LIGHT_COMMIT
+       :status: implemented
+       :tags: control, lighting
+
+       For lighting, ``calictl`` shall follow every SET_BRIGHTNESS/SET_PROFILE with the commit
+       frame :data:`LIGHT_COMMIT` (``0e00…``); the unit applies the staged change only once it
+       lands. Diagram: :need:`S_SEQ_LIGHT_COMMIT`.
+    """
+    return LIGHT_COMMIT if function == "lighting" else None
 
 
 def decode_control(func, frame: bytes) -> dict:

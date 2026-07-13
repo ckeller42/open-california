@@ -46,6 +46,8 @@ LEAVE_UNCHANGED_2BIT = 3   # the sg.a 2-bit "leave unchanged" sentinel (see cont
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 LIGHT_MODE_SET_BRIGHTNESS = 4
 LIGHT_MODE_SET_PROFILE = 16
+LIGHT_MODE_COMMIT = 0        # the 0e00… commit/apply frame (HCI-verified 2026-07-13): a
+                             # SET_BRIGHTNESS/SET_PROFILE is only APPLIED once this lands
 
 # Per-function initial decoded state. Installed flags on so semantics reports the
 # function as present; loads start OFF. Functions absent here start all-zero.
@@ -117,6 +119,7 @@ class MockCamperUnit:
         self.state: dict[str, dict] = base
         self.armed = False
         self.last_beat: int | None = None
+        self._pending_light = None                   # staged lighting change, applied on commit
         self.writes: list[tuple[str, bytes]] = []   # (function, frame) audit trail
         # Per-function STALE-read overrides: a read returns these until the 1003 heartbeat arms
         # the session (self.armed), after which the true `state` is returned — models the real
@@ -183,20 +186,30 @@ class MockCamperUnit:
             return
         st = self.state.setdefault(fn, {})
 
-        # Lighting has its own live-verified precondition: SET_PROFILE (Mode 16) activates a
-        # profile; SET_BRIGHTNESS (Mode 4) applies zones ONLY while a profile is active
-        # (ProfileNumber != 0) — with none active the unit ACKs but ignores it.
+        # Lighting is COMMIT-GATED (HCI-verified 2026-07-13). A SET_PROFILE (Mode 16) or
+        # SET_BRIGHTNESS (Mode 4) only STAGES the change; the unit APPLIES it when the commit
+        # frame (Mode 0, control.LIGHT_COMMIT) lands right after. SET_BRIGHTNESS still requires a
+        # profile active. With no commit, the write is ACKed but never applied (the old gap).
         if fn == "lighting":
             mode = ctrl.get("Mode")
             if mode == LIGHT_MODE_SET_PROFILE:
-                st["ProfileNumber"] = ctrl.get("ProfileNumber", st.get("ProfileNumber", 0))
+                self._pending_light = ("profile", ctrl.get("ProfileNumber", st.get("ProfileNumber", 0)))
                 return
-            if not st.get("ProfileNumber"):       # 0/None -> no active profile -> ignored
+            if mode == LIGHT_MODE_SET_BRIGHTNESS:
+                if not st.get("ProfileNumber"):   # no active profile -> nothing to stage
+                    self._pending_light = None; return
+                zones = {cf.name: ctrl[cf.name] for cf in func.control_fields
+                         if cf.placed and cf.name.startswith("BrightnessL") and cf.name in ctrl
+                         and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED and func.state_field(cf.name)}
+                self._pending_light = ("zones", zones)
                 return
-            for cf in func.control_fields:
-                if cf.placed and cf.name.startswith("BrightnessL") and cf.name in ctrl \
-                        and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED and func.state_field(cf.name):
-                    st[cf.name] = ctrl[cf.name]
+            if mode == LIGHT_MODE_COMMIT:         # apply the staged change
+                p = getattr(self, "_pending_light", None)
+                if p and p[0] == "profile":
+                    st["ProfileNumber"] = p[1]
+                elif p and p[0] == "zones":
+                    st.update(p[1])
+                self._pending_light = None
             return
 
         for cf in func.control_fields:

@@ -19,13 +19,17 @@ so a failing or missing link surfaces at doc-build time next to the code.
 .. toctree::
    :maxdepth: 2
 
+   protocol-sequences
    screenshots
    api
 
 Requirement traceability
 ------------------------
 
+Protocol sequence diagrams (:doc:`protocol-sequences`) are ``spec`` objects that link to the
+requirement each one depicts, so the table below shows the diagram → requirement → test chain.
+
 .. needtable::
-   :types: req, test
+   :types: req, spec, test
    :columns: id, title, status, outgoing, incoming
    :style: table
