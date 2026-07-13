@@ -58,7 +58,7 @@ const FEATURES = {
       { what: "power", kind: "toggle", label: "Parking heater", state: "running" },
       { what: "level", kind: "slider", label: "Heating level", state: "level", min: 0, max: 15 },
     ],
-    readouts: [{ label: "Running time", get: (s) => `${s.running_time} min` }, { label: "Error code", get: (s) => s.error_code }],
+    readouts: [{ label: "Running time", get: (s) => withUnit(s.running_time, "min") }, { label: "Error code", get: (s) => s.error_code ?? "—" }],
     summary: (s) => (s.running ? "Running" : "Off"),
   },
   water: {
@@ -88,7 +88,7 @@ const FEATURES = {
   },
   roof: {
     title: "Roof", icon: "🚐", roof: true,
-    readouts: [{ label: "Position", get: (s) => s.position }, { label: "Safety valid", get: (s) => yn(s.safety_valid) }],
+    readouts: [{ label: "Position", get: (s) => s.position ?? "—" }, { label: "Safety valid", get: (s) => yn(s.safety_valid) }],
     summary: (s) => (s && s.position != null ? `Position ${s.position}` : ""),
   },
   vehicle: {
@@ -98,7 +98,7 @@ const FEATURES = {
       { label: "Leveling (roll / pitch)",
         get: (s) => (s.level_roll == null || s.level_pitch == null
           ? "—" : `${s.level_roll}° / ${s.level_pitch}°`) },
-      { label: "Vehicle clock", get: (s) => s.car_clock },
+      { label: "Vehicle clock", get: (s) => s.car_clock ?? "—" },
     ],
     summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
   },
@@ -199,6 +199,16 @@ function agoText(sec) {
   return h < 48 ? h + " h ago" : Math.round(h / 24) + " d ago";
 }
 
+// Absolute wall-clock label from epoch seconds (undefined -> null). Shows a date too when the
+// timestamp is not from today, so a days-old "last seen" isn't mistaken for this morning.
+function clockText(epochSec) {
+  if (epochSec == null) return null;
+  const d = new Date(epochSec * 1000);
+  const t = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay ? t : `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${t}`;
+}
+
 // The camper unit deep-sleeps when the van is parked and becomes unreachable — so when the daemon
 // hasn't polled recently, show the LAST known values behind a clear "offline — last seen X" banner
 // rather than a blank screen or a stale number pretending to be live.
@@ -208,8 +218,8 @@ function offlineBanner() {
   const b = document.createElement("div");
   b.className = "offline";
   b.textContent = m.last_seen
-    ? `Offline — van asleep. Showing last data from ${agoText(m.age_s)}.`
-    : "Offline — no data yet (van has been asleep since the monitor started).";
+    ? `Offline — van asleep. Last data ${clockText(m.last_seen)} (${agoText(m.age_s)}).`
+    : `Offline — no data yet (van asleep since the monitor started). Checked ${clockText(Date.now() / 1000)}.`;
   return b;
 }
 
