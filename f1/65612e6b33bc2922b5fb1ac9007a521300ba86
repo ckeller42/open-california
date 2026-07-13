@@ -1,0 +1,25 @@
+docs/remaining-captures.md
+  s_d2c35aeebbd344::t_49c691ce652965 56-69
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_0d1fb0783452d2 221-222
+  s_d2c35aeebbd344::t_3af3f1a61dcba0 61
+  s_d2c35aeebbd344::t_120f4297aadc17 101
+  s_d2c35aeebbd344::t_a7135566206fe0 91
+  s_d2c35aeebbd344::t_cade98a4558a97 202-211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "f165612e6b33bc2922b5fb1ac9007a521300ba86",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
