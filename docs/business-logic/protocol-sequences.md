@@ -13,6 +13,38 @@ where noted, confirmed on-device via readback. Char short-UUIDs: `1001` VERSION,
 Implementation: `calictl/device.py` (`actuate`, `actuate_roof`, `read_all`, `_heartbeat`),
 `calictl/control.py` (frame builders + `LIGHT_COMMIT`).
 
+## 0. Session foundation — connect, authenticate, subscribe (`device._session` / `_subscribe_all`)
+
+Every read/write session starts on the **bonded** link: connect (retry on the abort cascade),
+read `1001` VERSION + `1004` AUTH, then subscribe `CCCD=0100` on every notifiable/indicatable char.
+
+```mermaid
+sequenceDiagram
+    participant C as calictl (buspi)
+    participant U as Camper unit
+    Note over C,U: link is BONDED (LE pairing done once; the unit's RPA resolved via the bond)
+    C->>U: connect (retry on the le-connection-abort cascade)
+    C->>U: read 1001 (VERSION)
+    C->>U: read 1004 (AUTH — identity/liveness gate)
+    loop every notifiable/indicatable char
+        C->>U: write CCCD = 0100 (subscribe)
+    end
+    Note over C,U: session ready — state reads fresh, writes can be armed
+```
+
+**Notifications:** after subscribing, the unit pushes notifications on state change. calictl
+subscribes because it's part of the arm handshake, but **no-ops the payloads** and reads state
+chars directly — notifications are a handshake requirement, not calictl's data path.
+
+```mermaid
+sequenceDiagram
+    participant C as calictl
+    participant U as Camper unit
+    C->>U: write CCCD=0100 on a status char (subscribe)
+    U-->>C: notify(status char, payload)  [on state change]
+    Note over C: calictl no-ops the payload; it reads state chars directly
+```
+
 ## 1. Heartbeat-armed control write (`device.actuate`)
 
 The unit only honours a control write while a **+1 4-byte-BE counter ticks on `1003`** (~0.6 s
@@ -121,6 +153,32 @@ sequenceDiagram
 >    "hold" phase — press-and-hold model); honours `SafetyCounterValid` (`1402` bit 7) and mirrors
 >    the app's **3000 ms** dead-man (`validate_s`, abort to STOP if not valid by 3 s).
 > 3. **Cadence ≈ 500 ms** (`CALICTL_ROOF_PERIOD_S`).
+
+## 3b. Range validation & the 0x0E link drop (`protocol.check_value`)
+
+calictl validates every field against its width + curated `valid` set **before** writing; the
+unit also re-validates and, on an out-of-range value, returns ATT `0x0E` and drops the link
+(observed: cooler `State=3`, lighting bad `Mode`). The build-side guard keeps a bad frame from
+ever reaching the vehicle.
+
+```mermaid
+sequenceDiagram
+    participant B as calictl (build)
+    participant C as calictl (BLE)
+    participant U as Camper unit
+    B->>B: encode + check_value(field, width, valid-set)
+    alt value out of range
+        B--xC: raise (frame NEVER written)
+    else in range
+        B->>C: frame
+        C->>U: write control_char
+        alt unit rejects (out of range)
+            U--xC: ATT 0x0E + link drop
+        else accepted
+            U-->>C: ACK
+        end
+    end
+```
 
 ## 4. Fresh state read under heartbeat (`device.read`/`read_all`)
 

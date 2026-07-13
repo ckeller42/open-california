@@ -16,6 +16,13 @@ Device / reads
 .. automethod:: calictl.device.CamperDevice.read_all
 .. automethod:: calictl.device.CamperDevice.actuate
 .. automethod:: calictl.device.CamperDevice.actuate_roof
+.. automethod:: calictl.device.CamperDevice._session
+.. automethod:: calictl.device.CamperDevice._subscribe_all
+
+Protocol codec
+--------------
+
+.. autofunction:: calictl.protocol.check_value
 
 Control frames
 --------------

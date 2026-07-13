@@ -11,6 +11,52 @@ Char short-UUIDs: ``1001`` VERSION, ``1003`` HEARTBEAT (liveness/arm counter), `
 plus per-function state/control chars (``1101/1102`` cooler, ``1201`` camping, ``1401/1402``
 roof, ``1501`` lighting).
 
+Session foundation — connect, authenticate, subscribe
+-----------------------------------------------------
+
+.. spec:: Connect, authenticate, subscribe (session handshake)
+   :id: S_SEQ_CONNECT
+   :links: R_ACTUATE_ARM
+
+   Every read/write session starts by connecting the **bonded** link, replaying the app's
+   handshake (read ``1001`` VERSION + ``1004`` AUTH), and subscribing ``CCCD=0100`` on every
+   notifiable/indicatable char. Implemented by :py:meth:`calictl.device.CamperDevice._session`
+   + :py:meth:`calictl.device.CamperDevice._subscribe_all`.
+
+.. mermaid::
+
+    sequenceDiagram
+        participant C as calictl (buspi)
+        participant U as Camper unit
+        Note over C,U: link is BONDED (LE pairing done once; the unit's RPA is resolved via the bond)
+        C->>U: connect (retry on the le-connection-abort cascade)
+        C->>U: read 1001 (VERSION)
+        C->>U: read 1004 (AUTH — identity/liveness gate)
+        loop every notifiable/indicatable char
+            C->>U: write CCCD = 0100 (subscribe)
+        end
+        Note over C,U: session ready — state reads fresh, writes can be armed
+
+Notifications
+-------------
+
+.. spec:: Subscribe then receive pushed state notifications
+   :id: S_SEQ_NOTIFY
+
+   After subscribing, the unit pushes notifications on the status chars when state changes (the
+   app uses these for live updates). calictl subscribes because it is part of the arm handshake,
+   but **no-ops the payloads** and reads the state chars directly — so notifications are a
+   handshake requirement, not calictl's data path.
+
+.. mermaid::
+
+    sequenceDiagram
+        participant C as calictl
+        participant U as Camper unit
+        C->>U: write CCCD=0100 on a status char (subscribe)
+        U-->>C: notify(status char, payload)  [on state change]
+        Note over C: calictl no-ops the payload; it reads state chars directly
+
 Heartbeat-armed control write
 -----------------------------
 
@@ -101,6 +147,37 @@ Roof actuation (press-and-hold move stream, unit self-gated by a 3 s SafetyCount
         Note over C,U: after ~3 s pop-top travels while frames continue
         C->>U: STOP frame [0x00] on release / end (or frames cease → dead-man halt)
         Note right of U: halts
+
+Range validation and the 0x0E link drop
+---------------------------------------
+
+.. spec:: Out-of-range writes rejected build-side and by the unit (0x0E)
+   :id: S_SEQ_REJECT
+
+   calictl validates every field against its width + curated ``valid`` set **before** writing
+   (:py:func:`calictl.protocol.check_value`); the unit also re-validates and, on an out-of-range
+   value, returns ATT error ``0x0E`` and drops the link (observed: cooler ``State=3``,
+   lighting bad ``Mode``). The build-side guard is what keeps a bad frame from ever reaching the
+   vehicle.
+
+.. mermaid::
+
+    sequenceDiagram
+        participant B as calictl (build)
+        participant C as calictl (BLE)
+        participant U as Camper unit
+        B->>B: encode + check_value(field, width, valid-set)
+        alt value out of range
+            B--xC: raise (frame NEVER written)
+        else in range
+            B->>C: frame
+            C->>U: write control_char
+            alt unit rejects (out of range)
+                U--xC: ATT 0x0E + link drop
+            else accepted
+                U-->>C: ACK
+            end
+        end
 
 Fresh state read under heartbeat
 --------------------------------
