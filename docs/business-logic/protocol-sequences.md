@@ -15,8 +15,11 @@ Implementation: `calictl/device.py` (`actuate`, `actuate_roof`, `read_all`, `_he
 
 ## 0. Session foundation — connect, authenticate, subscribe (`device._session` / `_subscribe_all`)
 
-Every read/write session starts on the **bonded** link: connect (retry on the abort cascade),
-read `1001` VERSION + `1004` AUTH, then subscribe `CCCD=0100` on every notifiable/indicatable char.
+Every read/write session starts on the **bonded** link: connect, read `1001` VERSION + `1004`
+AUTH, then subscribe every notifiable/indicatable char. Decompile-confirmed 2026-07-14: order is
+1001 → 1004 → subscribe; **1004 AUTH is a passive read** (auth is implicit over the bonded link —
+empty read → reconnect; no token/challenge write). The `1002` VIN char is **not** read/validated
+during connect (it's an ordinary later state read, not a gate).
 
 ```mermaid
 sequenceDiagram
@@ -24,10 +27,12 @@ sequenceDiagram
     participant U as Camper unit
     Note over C,U: link is BONDED (LE pairing done once; the unit's RPA resolved via the bond)
     C->>U: connect (retry on the le-connection-abort cascade)
+    C->>U: discoverServices + requestMtu
     C->>U: read 1001 (VERSION)
-    C->>U: read 1004 (AUTH — identity/liveness gate)
-    loop every notifiable/indicatable char
-        C->>U: write CCCD = 0100 (subscribe)
+    Note over C: app aborts the session if VERSION empty or > 2
+    C->>U: read 1004 (AUTH — passive read over the bonded link)
+    loop every notifiable / indicatable char
+        C->>U: write CCCD (0100 notify / 0200 indicate)
     end
     Note over C,U: session ready — state reads fresh, writes can be armed
 ```
@@ -47,9 +52,11 @@ sequenceDiagram
 
 ## 1. Heartbeat-armed control write (`device.actuate`)
 
-The unit only honours a control write while a **+1 4-byte-BE counter ticks on `1003`** (~0.6 s
-cadence) — the liveness/arm gate (issue #2). The write path replays the app's connect handshake,
-starts the heartbeat, writes, reads back, then tears down.
+The unit only honours a control write while a **+1 monotonic 4-byte-BE counter ticks on `1003`** —
+the liveness/arm gate (issue #2). Decompile-confirmed 2026-07-14 (`d2/s` driver, `ag/b` builder):
+4-byte BE uint32, `+1` per tick, **~500 ms** cadence (the app ticks it continuously; calictl ticks
+it only across the write window). The seed value is unconfirmed. Arm is the 1003 liveness *only* —
+no ignition/mode/enable gate (roof is the one exception).
 
 ```mermaid
 sequenceDiagram
@@ -60,8 +67,8 @@ sequenceDiagram
     C->>U: read 1004 (AUTH)
     C->>U: subscribe CCCD=0100 on every notifiable char
     C-)U: write 1003 = N   (heartbeat start)
-    loop every ~0.6 s (ARM_DELAY_S warm-up ≈ 3 s)
-        C-)U: write 1003 = N+1, N+2, …
+    loop every ~500 ms (ARM_DELAY_S warm-up ≈ 3 s)
+        C-)U: write 1003 = N+1, N+2, … (monotonic +1)
     end
     Note over U: armed — actuation writes now honoured
     C->>U: write <control_char> = SET frame (full-packet)
@@ -69,12 +76,22 @@ sequenceDiagram
     C->>U: disconnect          (heartbeat stops)
 ```
 
-## 2. Lighting SET + COMMIT — the apply gate (cracked 2026-07-13)
+## 2. Lighting SET + a flush frame (calictl workaround; cracked 2026-07-13)
 
-calictl's SET frame is **byte-identical to the app's**; the missing piece was a trailing
-**commit frame** `0e00000000000000eeeeeeeeeeeeeeee` (Mode 0, profile + all zones = the `14`
-"unchanged" sentinel). The unit stages the SET and only **applies** it once the commit lands.
-A profile must be active first (itself SET_PROFILE + commit). Sent as `actuate(..., follow=LIGHT_COMMIT)`.
+calictl's SET frame is **byte-identical to the app's**, yet a single calictl SET is ACKed but
+**not applied**; sending a second (neutral) frame right after flushes it and the change applies
+(live-verified: kitchen 0→8). calictl sends `0e00000000000000eeeeeeeeeeeeeeee` as that follow
+(`actuate(..., follow=control.LIGHT_COMMIT)`; `control.commit_for("lighting")` returns it).
+
+**Decompile nuance (2026-07-14) — `0e00…` is NOT an app "commit".** The Lighting Mode enum (`dg/n`)
+is `NO_MODE=0, SET_BRIGHTNESS=4, SET_COLOR=6, SET_DOUBLE=8, REQUEST_CONFIG=12, SET_PROFILE=16,
+WAKEUP_TIME=20, SYSTEM_TIME=24, PREVIEW=28`, so **Mode 0 = NO_MODE** (neutral) and `0e00…` is just
+the builder's **default frame** (ProfileNumber = the `14` "unchanged" sentinel + NO_MODE +
+all-brightness-unchanged). The **app self-applies** each Mode-tagged SET (stage fields → transmit
+the full packet); it does *not* send a commit per SET. Leading theory for calictl's need: the unit
+applies a frame on the **next** write, and the app streams frames continuously (~500 ms) so every
+SET is naturally flushed — calictl's single write is not, so any neutral second frame flushes it.
+"Profile must be active" is unit-side/UX, not in the app's write path.
 
 ```mermaid
 sequenceDiagram
@@ -82,18 +99,14 @@ sequenceDiagram
     participant U as Lighting (1501)
     Note over C,U: (all inside one heartbeat-armed session)
     C->>U: SET_PROFILE  (Mode 16, ProfileNumber=P)
-    C->>U: COMMIT       (0e00… Mode 0)
+    C->>U: flush (0e00… = NO_MODE neutral default frame)
     Note right of U: profile P now active
     C->>U: SET_BRIGHTNESS (Mode 4, zone=N, others=14)
-    Note right of U: staged — ACKed, NOT yet applied
-    C->>U: COMMIT       (0e00… Mode 0)
+    Note right of U: single calictl SET — ACKed, NOT applied
+    C->>U: flush (0e00…) — unit applies the prior frame on the next write
     Note right of U: change APPLIED ✅
     C->>U: read 1502 → BrightnessL<zone> == N
 ```
-
-Without the commit the SET is ACKed but never applied — the "lighting looks broken" gap that
-stood the whole project. `control.commit_for("lighting")` returns the commit; other functions
-return `None`.
 
 ## 3. Roof actuation — press-and-hold move stream, unit self-gated by a 3 s SafetyCounter (`device.actuate_roof`)
 
@@ -156,10 +169,11 @@ sequenceDiagram
 
 ## 3b. Range validation & the 0x0E link drop (`protocol.check_value`)
 
-calictl validates every field against its width + curated `valid` set **before** writing; the
-unit also re-validates and, on an out-of-range value, returns ATT `0x0E` and drops the link
-(observed: cooler `State=3`, lighting bad `Mode`). The build-side guard keeps a bad frame from
-ever reaching the vehicle.
+calictl validates every field against its width + curated `valid` set **before** writing. The
+unit-side `0x0E` behaviour is **calictl's own on-device observation** (cooler `State=3`, lighting
+bad `Mode` → ATT `0x0E` + link drop), not confirmed in the app code — the app's own state fields
+carry the same range bounds (`sg.a(default, max)`) so it never emits out-of-range. The build-side
+guard keeps a bad frame from ever reaching the vehicle.
 
 ```mermaid
 sequenceDiagram
@@ -182,20 +196,29 @@ sequenceDiagram
 
 ## 4. Fresh state read under heartbeat (`device.read`/`read_all`)
 
-A bare read returns a **stale latched** value (fresh-water 1 L vs the true 11 L) and the unit
-drops the link after ~15 s. Ticking `1003` during the read **drives the sensor measurement** and
-keeps the link alive, so the value comes back fresh (verified 2026-07-09).
+Ticking `1003` during a read keeps the link up (a bare read otherwise drops it after ~15 s) and
+refreshes the chars the app re-reads (`1102` cooler, `1602` energy, `1902`, `1004`).
+
+**Water is different — push-driven + measurement-gated (decompile + on-device, 2026-07-14).** The
+app never gets fresh water from a heartbeat-refreshed *read*; it gets it from a **`1302`
+notification** and parses the pushed frame (VM `qg/b`). calictl subscribes but `_noop`s the payload
+and bare-reads → it only ever sees the stale latch (1 L). Worse: on-device the unit pushed **0**
+`1302` frames in 40 s while **parked** — the fresh-water level is only measured when water actually
+flows (pump activity), so no fresh value is fetchable while idle; the app shows a *cached* last
+push. Fix (pending): register a real `1302` notify handler, keep the last real push with an
+"as-of" timestamp, surface that instead of the decayed read.
 
 ```mermaid
 sequenceDiagram
     participant C as calictl
     participant U as Camper unit
     C->>U: connect + subscribe
-    loop ~0.6 s (HEARTBEAT_WARMUP_S ≈ 2 s, then read)
+    loop ~500 ms (HEARTBEAT_WARMUP_S ≈ 2 s, then read)
         C-)U: write 1003 heartbeat
     end
-    Note over U: heartbeat drives measurement + keeps link up
-    C->>U: read <state_char> → FRESH value
+    Note over U: heartbeat keeps link up + refreshes re-read chars (1102/1602/1902/1004)
+    C->>U: read <state_char> → FRESH value  (NOT water)
+    U-->>C: notify 1302 → water (push-driven; only on pump activity)
     C->>U: disconnect
 ```
 

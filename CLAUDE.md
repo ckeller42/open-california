@@ -62,9 +62,13 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   on-device: `cooler` (power/level), `campingmode` (master/lights/usb), and `lighting`
   (profile + per-zone brightness) actuate for real.**
   **`lighting` APPLIES now (gap cracked 2026-07-13).** Our SET_BRIGHTNESS/SET_PROFILE frames were
-  always byte-identical to the app's; the unit only *applies* a SET once a **commit frame**
-  `0e00000000000000eeeeeeeeeeeeeeee` (Mode 0) lands right after it. Sent as
-  `device.actuate(..., follow=control.commit_for(fn))` (= `control.LIGHT_COMMIT` for lighting).
+  always byte-identical to the app's; a single calictl SET is ACKed but not applied, and a **second
+  (neutral) frame** right after flushes it → the change applies (live-verified: kitchen 0→8). We
+  send `0e00000000000000eeeeeeeeeeeeeeee` as that follow (`device.actuate(..., follow=control.commit_for(fn))`
+  = `control.LIGHT_COMMIT`). NB (decompile 2026-07-14): `0e00…` is **not** an app "commit" — Mode
+  0 = `NO_MODE`, and this is just the builder's neutral default frame; the app self-applies each
+  Mode-tagged SET because it streams frames continuously (the unit applies the prior frame on the
+  next write). Our follow frame is the flush a single write otherwise lacks.
   Verified on-device via readback (kitchen 0→8). A profile must be active first (SET_PROFILE +
   commit). **`set lighting color` was decompile-inferred but the app exposes no colour control —
   treat SET_COLOR as unverified/possibly N/A.** Extend via `control.BUILDERS`. See
