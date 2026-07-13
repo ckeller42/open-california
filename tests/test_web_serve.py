@@ -22,6 +22,31 @@ def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
     assert s2._last.get("cooler", {}).get("State") == 1 and s2._last_ok_ts is not None
 
 
+def test_water_forecast_degrades_without_influx(monkeypatch):
+    """No INFLUXDB_TOKEN (the test env) -> field_series returns [] -> forecast is {} and the
+    fresh-water block gets no days_left, but state() still renders the tank. Never raises."""
+    monkeypatch.delenv("INFLUXDB_TOKEN", raising=False)
+    s = serve.Server(influx_enabled=False)
+    s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 11, "FreshWaterVolume": 29,
+                         "WasteWaterUnit": 1, "WasteWaterLevel": 0, "WasteWaterVolume": 22}}
+    be = serve.ServeBackend(s, loop=None)
+    fresh = be.state()["water"]["fresh"]
+    assert fresh["liters"] == 11 and "days_left" not in fresh   # graceful: no forecast, no crash
+    assert s.water_forecast() == {}
+
+
+def test_water_forecast_merges_when_available(monkeypatch):
+    """When the influx history yields a trend, state() enriches fresh with days_left/drain_lpd."""
+    from calictl import influx
+    monkeypatch.setattr(influx, "field_series", lambda *a, **k: [
+        (1_000_000_000, 29.0), (1_000_000_000 + 3 * 86400, 11.0)])   # 6 L/day
+    s = serve.Server(influx_enabled=False)
+    s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 11, "FreshWaterVolume": 29}}
+    be = serve.ServeBackend(s, loop=None)
+    fresh = be.state()["water"]["fresh"]
+    assert fresh["drain_lpd"] == 6.0 and fresh["days_left"] == round(11 / 6.0, 1)
+
+
 def test_serve_backend_state_interprets_cache():
     s = serve.Server(influx_enabled=False)
     funcs = protocol.load(); overrides.apply(funcs)

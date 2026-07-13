@@ -64,6 +64,48 @@ async def poll_states(funcs, dev) -> dict:
             for name, data in raw.items()}
 
 
+def field_series(field: str, function: str, *, days: float = 7.0, every: str = "1h"):
+    """Read a recent time series of one ``camper`` field from InfluxDB.
+
+    Backs the water-duration forecast (:func:`calictl.forecast.days_left`). Lazy
+    `influxdb_client` (only in solix-env); returns ``[]`` when Influx is unavailable or the
+    token is unset, so callers degrade gracefully rather than raise.
+
+    :param field: the flattened field key (e.g. ``"fresh_liters"``).
+    :param function: the ``function`` tag (e.g. ``"water"``).
+    :param days: look-back window in days.
+    :param every: `aggregateWindow` bucket (mean), to bound the row count.
+    :returns: ``[(epoch_seconds, value)]`` ascending, or ``[]``.
+    """
+    token = os.environ.get("INFLUXDB_TOKEN")
+    if not token:
+        return []
+    url = os.environ.get("INFLUX_URL", "http://localhost:8086")
+    org = os.environ.get("INFLUX_ORG", "home")
+    bucket = os.environ.get("INFLUX_BUCKET", "buspi")
+    flux = (
+        'from(bucket:"%s") |> range(start:-%gd) '
+        '|> filter(fn:(r)=>r._measurement=="camper" and r.function=="%s" and r._field=="%s") '
+        '|> aggregateWindow(every:%s, fn:mean, createEmpty:false) |> keep(columns:["_time","_value"])'
+        % (bucket, days, function, field, every)
+    )
+    try:
+        from influxdb_client import InfluxDBClient
+        with InfluxDBClient(url=url, token=token, org=org) as client:
+            tables = client.query_api().query(flux, org=org)
+    except Exception as e:   # network down, deps absent, bad query -> no series, never crash
+        print("influx field_series(%s) failed: %r" % (field, e), flush=True)
+        return []
+    out = []
+    for table in tables:
+        for rec in table.records:
+            v = rec.get_value()
+            if v is not None:
+                out.append((int(rec.get_time().timestamp()), float(v)))
+    out.sort()
+    return out
+
+
 async def _poll(funcs, dev) -> dict[str, dict]:
     return await poll_states(funcs, dev)
 
