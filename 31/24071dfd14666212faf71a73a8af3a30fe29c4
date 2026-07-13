@@ -1,0 +1,22 @@
+docs/sphinx/protocol-sequences.rst
+  s_d2c35aeebbd344::t_c0f621b66926e7 9-14
+  s_d2c35aeebbd344::t_e42d4e4a6a5584 80-86
+docs/business-logic/protocol-sequences.md
+  s_d2c35aeebbd344::t_b95af3207baba2 56-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "3124071dfd14666212faf71a73a8af3a30fe29c4",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
