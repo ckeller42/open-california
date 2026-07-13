@@ -1,5 +1,11 @@
 # At-the-van plan — closing the last ~2% (van-gated)
 
+> **STATUS 2026-07-13 (captures done):** **P1 lighting-apply CRACKED + FIXED** (commit frame
+> `0e00…`; live-verified via readback). **Roof frames VERIFIED** (open `0x01`/stop `0x00`/close
+> `0x04`; SafetyCounter echoes the unit's counter — see `protocol-sequences.md` §3). SET_COLOR
+> is **not exposed** in the app (skip). Cooler `Error` = **fridge door** (now surfaced in the GUI).
+> Remaining: roof-drive counter-echo (P5), air-heater level/runtime, WAKEUP_TIME, full lamp map.
+
 Everything statically recoverable from the APK is done (protocol ~98%, semantics verified). What
 remains needs the **physical van** (a capture / a driven reference) — it cannot be decompiled.
 This is the ordered checklist for the next session, highest-leverage first.

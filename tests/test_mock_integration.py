@@ -94,17 +94,38 @@ def test_set_cooler_level_out_of_range_is_clean_error(mock, capsys):
     assert mock.decoded("cooler")["Level"] == 3          # unchanged seed default
 
 
-# --- lighting now actuates (cracked via HCI capture 2026-07-08) --------------
+# --- lighting: SET frame cracked 2026-07-08; APPLY gap cracked 2026-07-13 (commit frame) -----
 
 def test_set_lighting_needs_active_profile_then_applies(mock):
     from calictl import cli
     # live-verified precondition: with no active profile a zone set is ACKed but NOT applied
     assert cli.main(["set", "lighting", "kitchen", "8"]) == 1    # rc 1 = NOT APPLIED
     assert mock.decoded("lighting")["BrightnessLSeven"] == 0
-    # activate a profile, then the zone applies
+    # activate a profile, then the zone applies (cli sends the 0e00… commit as the follow frame)
     assert cli.main(["set", "lighting", "profile", "9"]) == 0
     assert cli.main(["set", "lighting", "kitchen", "8"]) == 0
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
+
+
+def test_lighting_requires_the_commit_frame_to_apply(mock):
+    """The APPLY gap crack (HCI-verified on-device 2026-07-13): the unit applies a SET_BRIGHTNESS
+    only after the 0e00… commit frame lands. The SET alone is ACKed but never applied — which is
+    exactly why lighting looked broken for so long. `device.actuate(..., follow=control.LIGHT_COMMIT)`
+    sends it; `control.commit_for('lighting')` returns it."""
+    funcs = _funcs()
+    dev = device.CamperDevice()
+    # activate a profile so brightness can apply (SET_PROFILE + its commit)
+    asyncio.run(dev.actuate(funcs["lighting"], control.build(funcs, "lighting", "profile", 9, {}),
+                            verify=False, follow=control.LIGHT_COMMIT))
+    setf = control.build(funcs, "lighting", "kitchen", 8, {"ProfileNumber": 9})
+    # SET alone (no commit) -> ACKed, NOT applied
+    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False))
+    assert mock.decoded("lighting")["BrightnessLSeven"] == 0
+    # SET + commit -> applied
+    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False, follow=control.LIGHT_COMMIT))
+    assert mock.decoded("lighting")["BrightnessLSeven"] == 8
+    assert control.commit_for("lighting") == control.LIGHT_COMMIT
+    assert control.commit_for("cooler") is None
 
 
 # --- read_all prefers pushed notifications over a stale latched read ---------

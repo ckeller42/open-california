@@ -4,7 +4,15 @@
 > **resolved** — see **`protocol-alignment.md`** (cooler-timer offsets, satellite `1901`, vehicle
 > byte-0, all lighting modes) and **`value-freshness.md`** (the stale-read / deep-sleep behavior)
 > for the current state. The BLE protocol is now ~98%; the residual is van-gated (see
-> `docs/remaining-captures.md`). `A1` (lighting on-device apply) remains the key open item.
+> `docs/remaining-captures.md`).
+>
+> **UPDATE (2026-07-13):** `A1` (lighting on-device apply) is **RESOLVED** — the unit applies a
+> SET only after a **commit frame** `0e00000000000000eeeeeeeeeeeeeeee` (Mode 0); our SET frames
+> were already byte-identical to the app's. HCI-captured + confirmed on-device via readback. Fix:
+> `device.actuate(..., follow=control.LIGHT_COMMIT)`. See `protocol-sequences.md` §2 + CLAUDE.md
+> Known state. Also 2026-07-13: roof frames verified (SafetyCounter-echo gap noted); the app
+> exposes **no colour control**, so SET_COLOR is unverified/possibly N/A; the cooler `Error` field
+> tracks the **fridge door** (door open→true, verified live).
 
 Compiled 2026-07-07 from a three-way decompile audit (BLE protocol, feature/domain
 logic, session/auth/infra), each diffed against the current baseline: `protocol/

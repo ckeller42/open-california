@@ -59,12 +59,21 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   on char `00001003`**: while a +1 4-byte BE counter ticks (~0.6 s), the unit honours
   actuation writes. Actuation is **one-shot arm** — the load latches, so the heartbeat only
   spans the write window (`device.actuate`, held under the `serve` lock). **Verified
-  on-device: `cooler` (power/level) and `campingmode` (master/lights/usb) actuate for real.**
-  `lighting` is wired (`set lighting power|brightness`) and builds a valid SET_BRIGHTNESS
-  frame (and `set lighting color <name>` → SET_COLOR/Mode 6), but **on-device apply is
-  UNCONFIRMED** — the frame ACKs yet the zones don't change (a LightValue/SET_PROFILE semantic
-  gap, not the arm gate — `re-gap-inventory.md` §A1). Extend via `control.BUILDERS`. See
-  `docs/business-logic/control-and-actuation.md`.
+  on-device: `cooler` (power/level), `campingmode` (master/lights/usb), and `lighting`
+  (profile + per-zone brightness) actuate for real.**
+  **`lighting` APPLIES now (gap cracked 2026-07-13).** Our SET_BRIGHTNESS/SET_PROFILE frames were
+  always byte-identical to the app's; the unit only *applies* a SET once a **commit frame**
+  `0e00000000000000eeeeeeeeeeeeeeee` (Mode 0) lands right after it. Sent as
+  `device.actuate(..., follow=control.commit_for(fn))` (= `control.LIGHT_COMMIT` for lighting).
+  Verified on-device via readback (kitchen 0→8). A profile must be active first (SET_PROFILE +
+  commit). **`set lighting color` was decompile-inferred but the app exposes no colour control —
+  treat SET_COLOR as unverified/possibly N/A.** Extend via `control.BUILDERS`. See
+  `docs/business-logic/control-and-actuation.md` + `protocol-sequences.md`.
+- **Roof model verified on-device 2026-07-13** (needs ignition ON). `control.roof_frame`
+  direction bytes match the app byte-for-byte (open `0x01`/stop `0x00`/close `0x04`); the
+  repeated-move + STOP model is right. **Open gap:** the SafetyCounter echoes the *unit's* running
+  counter (~0.8/frame), not an app `+1` — `actuate_roof` injects its own, so real roof drive needs
+  to read + echo the unit's live counter. See `protocol-sequences.md` §3.
 - **Reads go STALE, and the unit deep-sleeps** (found 2026-07-{09,12}). A bare read returns a
   latched value that decays (fresh-water read 1 L vs true 11 L); `device.read_all`/`read` now run
   the **1003 heartbeat during reads** to keep values fresh + the link alive. But when the van is

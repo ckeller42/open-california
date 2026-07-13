@@ -280,7 +280,8 @@ class Server:
             frame = control.build(self.funcs, function, what, value, last)
             if frame is None:
                 return None
-            post = await self.dev.actuate(self.funcs[function], frame, verify=True)
+            post = await self.dev.actuate(self.funcs[function], frame, verify=True,
+                                          follow=control.commit_for(function))
             if post is None:
                 return None
             self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)

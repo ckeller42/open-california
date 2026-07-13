@@ -17,6 +17,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx_needs",
+    "sphinxcontrib.mermaid",   # protocol sequence diagrams (client-side mermaid.js, no Java)
 ]
 
 # autodoc must not pull the lazily-imported runtime stack (hard rule: stdlib-only import)

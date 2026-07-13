@@ -45,6 +45,7 @@ HEARTBEAT_START = 0x00100000      # arbitrary high start (no read-seed / challen
 HEARTBEAT_PERIOD_S = float(os.environ.get("CALICTL_HEARTBEAT_PERIOD_S", "0.6"))  # ~10 beats span the arm window
 ARM_DELAY_S = float(os.environ.get("CALICTL_ARM_DELAY_S", "3.0"))   # let the unit register the heartbeat before writing
 SETTLE_S = float(os.environ.get("CALICTL_SETTLE_S", "2.5"))         # let the actuation take effect before readback
+FOLLOW_DELAY_S = float(os.environ.get("CALICTL_FOLLOW_DELAY_S", "0.3"))  # gap before a commit/follow frame
 # A plain read returns whatever is LATCHED in a state characteristic, which goes STALE: the
 # fresh-water level char read 1 L while the true level was 11 L. The 1003 liveness heartbeat is
 # what drives the unit's sensor-measurement loop AND keeps the link up (an un-heartbeated link is
@@ -197,7 +198,7 @@ class CamperDevice:
                 pass
             await self._safe_disconnect(client)
 
-    async def actuate(self, func, frame: bytes, *, verify=True) -> dict | None:
+    async def actuate(self, func, frame: bytes, *, verify=True, follow: bytes | None = None) -> dict | None:
         """Arm the unit with a 1003 liveness heartbeat, then write a control frame.
 
         One BLE session end-to-end (the single-slot rule holds — callers hold the
@@ -206,6 +207,21 @@ class CamperDevice:
         +1 counter heartbeat on 1003, and only then write `frame`. Actuation
         latches (one-shot arm), so the heartbeat is torn down right after the write.
         Returns the post-write state decode when `verify`, else None.
+
+        :param follow: an optional second frame written to the same control char right
+            after `frame`, in the same armed session. The lighting screen needs this: the
+            app follows every SET_BRIGHTNESS/SET_PROFILE with a commit frame
+            (``0e00…``) and the unit only *applies* the change once that commit lands
+            (HCI-verified 2026-07-13 — this is the fix for the old lighting-apply gap).
+
+        .. req:: Arm the unit with a 1003 heartbeat before a control write
+           :id: R_ACTUATE_ARM
+           :status: implemented
+           :tags: ble, control
+
+           ``calictl`` shall, in one BLE session, replay the connect handshake and tick the
+           1003 liveness counter before writing a control frame (and any ``follow`` commit
+           frame), so the unit's arm gate honours the write. Diagram: :need:`S_SEQ_ACTUATE`.
         """
         from . import protocol  # lazy
         if not func.control_char:
@@ -230,6 +246,9 @@ class CamperDevice:
             beat = asyncio.create_task(self._heartbeat(client, stop))
             await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
             await client.write_gatt_char(func.control_char, frame, response=True)
+            if follow is not None:
+                await asyncio.sleep(FOLLOW_DELAY_S)   # brief gap, as the app spaces its commit
+                await client.write_gatt_char(func.control_char, follow, response=True)
             if not verify or not func.state_char:
                 return None
             await asyncio.sleep(SETTLE_S)      # let the actuation take effect
