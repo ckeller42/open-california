@@ -12,9 +12,31 @@ const statusEl = document.getElementById("status");
 
 let STATE = {};
 let view = "home";
-let busy = false;        // a command is in flight — BLE is slow, one at a time
-let pending = null;      // {fn, what} currently actuating -> show a spinner there
+// Command queue: BLE writes are serial, so we send one at a time but keep the GUI fluid.
+// Tapping a control enqueues it and shows an OPTIMISTIC value immediately; re-changing the
+// same control prunes its still-queued command so rapid changes coalesce to the latest value.
+let queue = [];          // [{fn, what, value, key}] waiting to send (prunable)
+let inflight = null;     // {fn, what, value, key} currently POSTing (NOT prunable)
+const optimistic = {};   // key -> intended value, shown until the real state catches up
 let lastRender = "";     // signature of the last paint, to skip idle re-renders
+
+const qKey = (fn, what) => fn + "·" + what;
+const hasWork = () => !!inflight || queue.length > 0;
+// a control has a command queued or in flight -> show a pending badge
+function pending_is(fn, what) {
+  const k = qKey(fn, what);
+  return (inflight && inflight.key === k) || queue.some((c) => c.key === k);
+}
+// optimistic overlay: the user's intended value wins until the command settles + state refreshes
+const optOn = (fn, what, realOn) => {
+  const k = qKey(fn, what);
+  return k in optimistic ? truthy(optimistic[k]) : realOn;
+};
+const optNum = (fn, what, realNum) => {
+  const k = qKey(fn, what);
+  return k in optimistic ? Number(optimistic[k]) : realNum;
+};
+const truthy = (v) => v === true || v === 1 || v === "on" || v === "1";
 
 const yn = (b) => (b ? "yes" : "no");
 const onoff = (b) => (b ? "On" : "Off");
@@ -143,24 +165,37 @@ async function refreshState(force) {
   STATE = next;
   // "live" = the van is currently reachable; "offline" = daemon can't reach it (van asleep),
   // matching the banner. The web UI itself is up either way — this reflects the vehicle link.
-  if (!busy) {
+  if (!hasWork()) {
     const vanOnline = !STATE._meta || STATE._meta.online;
     setStatus(vanOnline ? "live" : "offline", vanOnline ? "ok" : "warn");
   }
-  if (busy && !force) return; // an in-flight interaction owns the screen
+  // don't repaint out from under a slider the user is actively dragging (optimistic values +
+  // the queue keep the rest fresh; a forced refresh after a command still repaints).
+  if (!force && document.activeElement && document.activeElement.type === "range") return;
   const sig = view + "|" + JSON.stringify(next);
   if (!force && sig === lastRender) return; // nothing changed -> no flicker
   lastRender = sig;
   render();
 }
 
-// Send a command: optimistic spinner on the tapped control, then a result toast. Always
-// sends confirm:true (the frontend already showed any confirm dialog; the backend only
-// requires it for roof/airheater, ignores it otherwise).
-async function command(fn, what, value) {
-  if (busy) return;
-  busy = true;
-  pending = { fn, what };
+// Enqueue a command. Shows the intended value immediately (optimistic) and coalesces rapid
+// changes to the same control: any still-queued command for it is pruned so only the latest
+// value is sent (the in-flight one can't be un-sent). Then the queue drains one at a time.
+function command(fn, what, value) {
+  const key = qKey(fn, what);
+  optimistic[key] = value;
+  const i = queue.findIndex((c) => c.key === key);   // prune a superseded queued command
+  if (i >= 0) queue.splice(i, 1);
+  queue.push({ fn, what, value, key });
+  render();
+  processQueue();
+}
+
+// Drain the queue one command at a time (BLE is serial). Always sends confirm:true — the
+// frontend already showed any confirm dialog; the backend only needs it for roof/airheater.
+async function processQueue() {
+  if (inflight || !queue.length) return;
+  inflight = queue.shift();
   setStatus("Sending…", "busy");
   render();
   let res;
@@ -168,22 +203,24 @@ async function command(fn, what, value) {
     res = await api("/api/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ function: fn, what, value, confirm: true }),
+      body: JSON.stringify({ function: inflight.fn, what: inflight.what, value: inflight.value, confirm: true }),
     });
   } catch (e) {
     res = { ok: false, error: String(e) };
   }
-  busy = false;
-  pending = null;
+  const done = inflight;
+  inflight = null;
   if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
   else if (res && res.ok) toast("Sent — the unit didn't apply it (known gap)", "warn");
   else toast("Command failed" + (res && res.error ? `: ${res.error}` : ""), "error");
+  // drop the optimistic value only if no newer change for this control is still queued
+  if (!queue.some((c) => c.key === done.key)) delete optimistic[done.key];
   await refreshState(true);
+  processQueue();
 }
 
 // Actuate a control, gating fuel/motion features behind a confirm() dialog.
 function act(fn, what, value) {
-  if (busy) return;
   const f = FEATURES[fn];
   if (f && f.confirm && !confirm(f.confirm(what))) return;
   command(fn, what, value);
@@ -333,14 +370,14 @@ function renderLighting(s) {
   // A profile must be active before ANY lamp control applies (verified on-device) — so the
   // all-lights toggle + zone sliders are disabled + dimmed until one is; only Activate is live.
   const active = !!(s.profile && s.profile !== 0);
-  const allOn = !!s.any_on;
+  const allOn = optOn("lighting", "power", !!s.any_on);
   const mc = document.createElement("div"); mc.className = "card" + (active ? "" : " dim");
   const mrow = document.createElement("div"); mrow.className = "row";
   const mlbl = document.createElement("span"); mlbl.className = "lbl"; mlbl.textContent = "All lights";
   mrow.appendChild(mlbl);
-  if (busy && pending_is("lighting", "power")) mrow.appendChild(spinner());
+  if (pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
-  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = busy || !active;
+  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = !active;
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow); app.appendChild(mc);
 
@@ -352,7 +389,7 @@ function renderLighting(s) {
   prow.appendChild(plabel);
   const pbtn = document.createElement("button"); pbtn.className = "btn"; pbtn.style.flex = "0 0 auto";
   pbtn.textContent = active ? "Reactivate" : "Activate";
-  pbtn.disabled = busy;
+  if (pending_is("lighting", "profile")) pbtn.appendChild(spinner());
   pbtn.onclick = () => command("lighting", "profile", 9);   // profile 9 = A (verified)
   prow.appendChild(pbtn);
   pc.appendChild(prow);
@@ -370,14 +407,15 @@ function renderLighting(s) {
     for (const lamp of grp.lamps) {
       const row = document.createElement("div"); row.className = "row";
       const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = lamp.label;
-      const val = s["brightness_zone_" + lamp.zone];
-      const isPending = busy && pending_is("lighting", lamp.what);
+      const real = s["brightness_zone_" + lamp.zone];
+      const val = optNum("lighting", lamp.what, real != null ? real : 0);
+      const isPending = pending_is("lighting", lamp.what);
       row.appendChild(lbl);
       if (isPending) row.appendChild(spinner());
       const inp = document.createElement("input"); inp.type = "range"; inp.min = 0; inp.max = LIGHT_MAX;
-      inp.value = val != null ? val : 0; inp.disabled = busy || !active;
+      inp.value = val; inp.disabled = !active;
       const out = document.createElement("span"); out.className = "sval";
-      out.textContent = isPending ? "…" : (val != null ? val : 0);
+      out.textContent = val;
       inp.oninput = () => (out.textContent = inp.value);
       inp.onchange = () => command("lighting", lamp.what, Number(inp.value));
       row.appendChild(inp); row.appendChild(out);
@@ -385,10 +423,6 @@ function renderLighting(s) {
     }
     app.appendChild(card);
   }
-}
-
-function pending_is(fn, what) {
-  return pending && pending.fn === fn && pending.what === what;
 }
 
 function renderFeature(fn) {
@@ -424,27 +458,25 @@ function renderControl(fn, c, s) {
   label.className = "lbl";
   label.textContent = c.label;
   row.appendChild(label);
-  const isPending = busy && pending && pending.fn === fn && pending.what === c.what;
+  const isPending = pending_is(fn, c.what);
   if (isPending) row.appendChild(spinner());
   if (c.kind === "toggle") {
-    const on = !!s[c.state];
+    const on = optOn(fn, c.what, !!s[c.state]);
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
     sw.setAttribute("aria-checked", on ? "true" : "false");
-    sw.disabled = busy;
     sw.onclick = () => act(fn, c.what, on ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
-    const val = s[c.state] != null ? s[c.state] : c.min;
+    const val = optNum(fn, c.what, s[c.state] != null ? s[c.state] : c.min);
     const inp = document.createElement("input");
     inp.type = "range";
     inp.min = c.min;
     inp.max = c.max;
     inp.value = val;
-    inp.disabled = busy;
     const out = document.createElement("span");
     out.className = "sval";
-    out.textContent = isPending ? "…" : val;
+    out.textContent = val;
     inp.oninput = () => (out.textContent = inp.value);
     inp.onchange = () => act(fn, c.what, Number(inp.value));
     row.appendChild(inp);
@@ -517,7 +549,7 @@ function roofControls() {
     const b = document.createElement("button");
     b.className = "btn";
     b.textContent = dir;
-    b.disabled = busy;
+    if (pending_is("roof", dir)) b.appendChild(spinner());
     b.onclick = () => {
       if (confirm(`Roof ${dir}: this physically moves the pop-top (UNVERIFIED on this vehicle). Ensure the path is clear. Continue?`))
         command("roof", dir, null);
