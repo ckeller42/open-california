@@ -126,6 +126,10 @@ class MockCamperUnit:
         # unit latching an old value until the liveness heartbeat drives its measurement loop
         # (observed: fresh-water 1 L latched vs the true 11 L once the app's heartbeat runs).
         self.read_latch: dict[str, dict] = {}
+        # Per-function NOTIFICATION push values: what the unit pushes on the state char (vs the
+        # bare-read latch). Models push-only-for-freshness chars like water (1302), where a bare
+        # read returns the stale latch and the true value arrives only as a notification.
+        self.notify_push: dict[str, dict] = {}
         # reverse maps: char UUID -> function, for read/write routing
         self._state_char = {f.state_char: fn for fn, f in self.funcs.items() if f.state_char}
         self._control_char = {f.control_char: fn for fn, f in self.funcs.items() if f.control_char}
@@ -281,6 +285,13 @@ class MockBleakClient:
             raise
 
     async def start_notify(self, uuid, cb):
+        # If the unit has a pending push for this char's function, deliver it immediately (models
+        # the real unit pushing the fresh value on/after subscribe — e.g. water 1302).
+        fn = self.unit._state_char.get(str(uuid))
+        if fn is not None and fn in self.unit.notify_push:
+            frame = _pack_state(self.unit.funcs[fn],
+                                {**self.unit.state.get(fn, {}), **self.unit.notify_push[fn]})
+            cb(_Char(str(uuid), ["notify"]), frame)
         return None
 
     async def stop_notify(self, uuid):
