@@ -9,9 +9,15 @@
 
 <p align="center">
   <a href="https://github.com/ckeller42/open-california/actions/workflows/ci.yml"><img src="https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://ckeller42.github.io/open-california/"><img src="https://img.shields.io/badge/docs-github%20pages-blue" alt="Docs"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">
   <img src="https://img.shields.io/badge/runtime%20deps-stdlib%20only-brightgreen" alt="Runtime deps">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+</p>
+
+<p align="center">
+  📖 <b><a href="https://ckeller42.github.io/open-california/">Detailed documentation</a></b> —
+  API reference, requirement traceability, and the <a href="https://ckeller42.github.io/open-california/protocol-sequences.html">protocol sequence diagrams</a> (published from Sphinx to GitHub Pages).
 </p>
 
 The camper control unit only talks to the vendor's iOS/Android app — so from Linux, Home
