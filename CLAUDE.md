@@ -69,11 +69,19 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   commit). **`set lighting color` was decompile-inferred but the app exposes no colour control —
   treat SET_COLOR as unverified/possibly N/A.** Extend via `control.BUILDERS`. See
   `docs/business-logic/control-and-actuation.md` + `protocol-sequences.md`.
-- **Roof model verified on-device 2026-07-13** (needs ignition ON). `control.roof_frame`
-  direction bytes match the app byte-for-byte (open `0x01`/stop `0x00`/close `0x04`); the
-  repeated-move + STOP model is right. **Open gap:** the SafetyCounter echoes the *unit's* running
-  counter (~0.8/frame), not an app `+1` — `actuate_roof` injects its own, so real roof drive needs
-  to read + echo the unit's live counter. See `protocol-sequences.md` §3.
+- **Roof sequence settled 2026-07-13 from the decompiled roof class** (needs ignition ON).
+  `control.roof_frame` direction bytes match the app byte-for-byte (open `0x01`/stop `0x00`/close
+  `0x04`). Movement is **press-and-hold**: stream move frames while held, STOP (`0x00`) / cease on
+  release — **no confirmation phase, no STOP-hold**. The **SafetyCounter is APP-GENERATED**: a
+  monotonic BE-uint32 `seed + elapsed_ms/500` (random seed) ⇒ **~+1 every 500 ms** — **NOT** echoed
+  from the unit (an earlier capture read of ~0.8/frame + a "4 s STOP-hold" was wrong: two senders
+  overlapping + the user releasing the button while reading the dialog). The unit checks
+  liveness/monotonicity and reports `SafetyCounterValid` (`1402` bit 7); it **withholds the motor
+  for ~3 s until the counter validates** and the app arms a **3000 ms** dead-man (perceived ~4 s =
+  3 s + BLE latency — no 4 s constant). **Open gaps (roof NOT-LIVE-VERIFIED until fixed):**
+  `actuate_roof` must (a) generate a live monotonic counter (~+1/500 ms), not echo/fixed-`+1`;
+  (b) account for the ~3 s self-gate (optionally honour `SafetyCounterValid` + the 3 s timeout);
+  (c) use ~500 ms cadence, not 1 Hz. See `protocol-sequences.md` §3.
 - **Reads go STALE, and the unit deep-sleeps** (found 2026-07-{09,12}). A bare read returns a
   latched value that decays (fresh-water read 1 L vs true 11 L); `device.read_all`/`read` now run
   the **1003 heartbeat during reads** to keep values fresh + the link alive. But when the van is

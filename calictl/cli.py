@@ -151,9 +151,10 @@ def _lighting_check(what, value, interp):
 async def _set_roof(f, funcs, dev, args):
     """Actuate the pop-up roof. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
 
-    `set roof open|close|stop`: the direction is `args.what`. open/close run the
-    1 Hz move-heartbeat (`device.actuate_roof`, bounded then always STOP); stop is a
-    one-shot STOP frame. Loudly flags that roof travel is unverified on this vehicle
+    `set roof open|close|stop`: the direction is `args.what`. open/close stream the
+    move frame with a live app-generated SafetyCounter (`device.actuate_roof`, bounded
+    then always STOP; the unit self-gates the first ~3 s via counter validation); stop is
+    a one-shot STOP frame. Loudly flags that roof travel is unverified on this vehicle
     (roof not installed here) before writing."""
     from . import control
     from . import device as _device
@@ -171,8 +172,10 @@ async def _set_roof(f, funcs, dev, args):
         post = await dev.actuate(f, stop_frame, verify=True)
     else:
         move_frame = control.roof_frame(funcs, direction)
-        print("writing roof %s: move %s re-sent at ~1 Hz for <= %.0fs then STOP %s ..."
-              % (direction, move_frame.hex(), _device.ROOF_MAX_TRAVEL_S, stop_frame.hex()))
+        print("writing roof %s: streaming move %s (~%.2fs cadence, live SafetyCounter) for "
+              "<= %.0fs then STOP %s; unit self-gates the first ~%.0fs ..."
+              % (direction, move_frame.hex(), _device.ROOF_MOVE_PERIOD_S,
+                 _device.ROOF_MAX_TRAVEL_S, stop_frame.hex(), _device.ROOF_SAFETY_VALIDATE_S))
         post = await dev.actuate_roof(f, move_frame, stop_frame, verify=True)
     if post is None:
         print("write sent, no readback"); return 1

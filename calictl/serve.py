@@ -250,9 +250,9 @@ class Server:
         async with self._ble:
             if function == "roof":
                 # SAFETY-SENSITIVE: a single roof frame won't complete travel and has
-                # no guaranteed STOP, so roof must use the bounded 1 Hz move-heartbeat
-                # (device.actuate_roof), never the one-shot device.actuate. Mirrors
-                # cli._set_roof. `what` is the direction (open/close/stop).
+                # no guaranteed STOP, so roof must stream the move frame with a live
+                # SafetyCounter, bounded then always STOP (device.actuate_roof), never the
+                # one-shot device.actuate. Mirrors cli._set_roof. `what` = direction (open/close/stop).
                 try:
                     move_frame = control.roof_frame(self.funcs, what)
                     stop_frame = control.roof_frame(self.funcs, "stop")

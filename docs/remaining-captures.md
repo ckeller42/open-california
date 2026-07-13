@@ -1,10 +1,20 @@
 # At-the-van plan — closing the last ~2% (van-gated)
 
 > **STATUS 2026-07-13 (captures done):** **P1 lighting-apply CRACKED + FIXED** (commit frame
-> `0e00…`; live-verified via readback). **Roof frames VERIFIED** (open `0x01`/stop `0x00`/close
-> `0x04`; SafetyCounter echoes the unit's counter — see `protocol-sequences.md` §3). SET_COLOR
-> is **not exposed** in the app (skip). Cooler `Error` = **fridge door** (now surfaced in the GUI).
-> Remaining: roof-drive counter-echo (P5), air-heater level/runtime, WAKEUP_TIME, full lamp map.
+> `0e00…`; live-verified via readback). **Roof sequence SETTLED from the decompiled roof class**
+> (open `0x01`/stop `0x00`/close `0x04`; **press-and-hold** move stream, **app-generated monotonic
+> SafetyCounter ~+1/500 ms**, unit self-gates the first **~3 s** via `SafetyCounterValid` (`1402`
+> bit 7) — NO 4 s countdown, NO STOP-hold phase — see `protocol-sequences.md` §3). SET_COLOR is
+> **not exposed** in the app (skip). Cooler `Error` = **fridge door** (now surfaced in the GUI).
+> Remaining: roof-drive fixes (P5), air-heater level/runtime, WAKEUP_TIME, full lamp map.
+>
+> **Required fixes before enabling roof actuation from calictl (roof stays NOT-LIVE-VERIFIED):**
+> (a) **generate a live monotonic BE-uint32 SafetyCounter (~+1/500 ms) from a seed** — do NOT echo
+> the unit's counter (that capture reading was wrong), and not `actuate_roof`'s fixed-start `+1`;
+> (b) **account for the ~3 s unit self-gate** — the motor is withheld until the counter validates;
+> optionally honour `SafetyCounterValid` (`1402` bit 7) and mirror the app's **3000 ms** dead-man
+> timeout. Press-and-hold: just keep streaming move frames, **no** move→STOP "hold" phase;
+> (c) **cadence ≈ 500 ms**, not 1 Hz. `device.actuate_roof` does none yet.
 
 Everything statically recoverable from the APK is done (protocol ~98%, semantics verified). What
 remains needs the **physical van** (a capture / a driven reference) — it cannot be decompiled.
@@ -113,8 +123,11 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 - **WAKEUP_TIME** (Wecklicht): set a wake-alarm → capture → confirm the epoch-seconds `Timestamp`
   + the internal packing of `LightValue` (both currently INFERRED).
 - **full lamp→nibble map**: ~6 of 16 lamps mapped; set each remaining lamp to a distinct level.
-- **roof open/close** (SAFETY-SENSITIVE — **needs ignition ON**, only if the roof path is clear):
-  open→partial→Stop→close, to live-verify the move frames + SafetyCounter cadence. See step 5 above.
+- **roof drive from calictl** (SAFETY-SENSITIVE — **needs ignition ON**, roof path clear): the
+  sequence is now settled (decompiled roof class — press-and-hold, app-generated monotonic
+  SafetyCounter ~+1/500 ms, ~3 s unit self-gate; see `protocol-sequences.md` §3 + the required
+  fixes above). What remains is **implementing + live-verifying** the three fixes in
+  `device.actuate_roof`, then a controlled open→Stop→close drive from calictl.
 
 ## Out of reach even at the van (WiFi, not BLE)
 - **Exlap data-body schemas** — need the camper's WiFi AP up + an Exlap/TCP capture on

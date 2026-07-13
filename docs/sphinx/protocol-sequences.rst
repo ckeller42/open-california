@@ -64,29 +64,43 @@ Lighting SET + COMMIT (apply gate)
         Note right of U: change APPLIED
         C->>U: read 1502 → BrightnessL<zone> == N
 
-Roof move-heartbeat
--------------------
+Roof actuation (press-and-hold move stream, unit self-gated by a 3 s SafetyCounter)
+-----------------------------------------------------------------------------------
 
-.. spec:: Roof bounded move-heartbeat then STOP
+.. spec:: Roof press-and-hold move stream, unit self-gated ~3 s by the SafetyCounter
    :id: S_SEQ_ROOF
    :links: R_ROOF_ACTUATE
 
-   Requires ignition ON. Repeated move frame ``[direction][4-byte SafetyCounter]`` then a STOP.
-   Direction: open ``0x01`` / close ``0x04`` / stop ``0x00``. Implemented by
-   :py:meth:`calictl.device.CamperDevice.actuate_roof`. Open gap: the SafetyCounter echoes the
-   unit's running counter, not an app ``+1``.
+   Requires ignition ON. Settled 2026-07-13 from the **decompiled roof class** (authoritative),
+   reconciled against an at-the-van capture (char ``1401`` = ATT handle ``0x0037``; 5-byte frame
+   ``[direction][4-byte BE SafetyCounter]``; direction open ``0x01`` / close ``0x04`` / stop
+   ``0x00``). Roof movement is **press-and-hold**: the app streams move frames while the button is
+   held and stops (``0x00`` / frames cease) on release — there is **no protocol confirmation phase
+   and no app-streamed STOP phase**. The **SafetyCounter is APP-GENERATED**, a monotonic BE-uint32
+   ``seed + elapsed_ms/500`` (random seed) ⇒ **≈ +1 every 500 ms**; it is **not** echoed from the
+   unit. The unit only checks liveness/monotonicity and reports ``SafetyCounterValid`` (``1402``
+   bit 7). The safety wait is **unit-enforced ~3 s** (the vehicle withholds motor actuation until
+   the counter validates); the app arms a **3000 ms** dead-man that aborts if still invalid at 3 s
+   (dialog ``dialog_info_popUpRoof_safetyCheck``). The perceived ~4 s ≈ 3 s + BLE latency — there
+   is **no ~4 s app-countdown constant**. Implemented by
+   :py:meth:`calictl.device.CamperDevice.actuate_roof`, which does **not** yet generate a live
+   monotonic counter, account for the 3 s self-gate, or use the ~500 ms cadence — roof actuation
+   stays NOT-LIVE-VERIFIED until it does.
 
 .. mermaid::
 
     sequenceDiagram
         participant C as calictl
-        participant U as Roof (1401)
+        participant U as Roof (1401 / state 1402)
         Note over C,U: ignition ON, roof path clear
-        loop ~1 Hz until deadline or STOP
-            C->>U: move frame [0x01 open / 0x04 close] + SafetyCounter
+        Note over C,U: user presses & HOLDS open/close
+        loop press-and-hold, move frames @ ~500 ms
+            C->>U: move frame [0x01 open / 0x04 close] + app-generated monotonic SafetyCounter (+1/500 ms)
         end
-        C->>U: STOP frame [0x00] + SafetyCounter
-        Note right of U: halts (also halts if move frames cease)
+        Note right of U: unit validates SafetyCounter (~3 s); motor withheld until valid → 1402 bit 7
+        Note over C,U: after ~3 s pop-top travels while frames continue
+        C->>U: STOP frame [0x00] on release / end (or frames cease → dead-man halt)
+        Note right of U: halts
 
 Fresh state read under heartbeat
 --------------------------------
