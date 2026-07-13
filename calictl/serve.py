@@ -223,9 +223,12 @@ class Server:
                 t, payload = mqtt.render_state(fn, interp)
                 self._mqtt.publish(t, payload)
         if self.influx_enabled and self._iw:
+            # Store only INSTALLED functions (same set MQTT publishes). The uninstalled ones
+            # (satellite / living-room heater / roof-A/C / stairs / generalpurposesignals) emit
+            # only raw pass-through fields (WordZeroFour, System, ...) — pure noise on this van.
             self._iw.write(bucket=os.environ.get("INFLUX_BUCKET", "buspi"),
                            org=os.environ.get("INFLUX_ORG", "home"),
-                           record=influx.points_for(states))
+                           record=influx.points_for({fn: states[fn] for fn in inst}))
         return states
 
     async def on_command(self, function, what, value):
