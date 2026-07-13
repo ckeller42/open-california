@@ -1,0 +1,35 @@
+tests/test_roof.py
+  s_d2c35aeebbd344::t_a97763c38bdedd 1-20,32-35,49-50,54,75,94,110-129,131-135,143-144,146,148-153,156-157,159-193,198,203-205,207,209-251
+CLAUDE.md
+  s_d2c35aeebbd344::t_a97763c38bdedd 72-84
+calictl/device.py
+  s_d2c35aeebbd344::t_a97763c38bdedd 57-78,282-283,285,288-317,320-328,332,337-341,343,351-367,381-387,389-397,400-401,416-427
+  s_d2c35aeebbd344::t_4078fe9b1e01dc 428
+calictl/cli.py
+  s_d2c35aeebbd344::t_a97763c38bdedd 154-157,175-178
+docs/business-logic/protocol-sequences.md
+  s_d2c35aeebbd344::t_a97763c38bdedd 66-97,102,104-106,108-111
+  s_d2c35aeebbd344::t_1c7f5f261d7e15 114-123
+docs/sphinx/protocol-sequences.rst
+  s_d2c35aeebbd344::t_a97763c38bdedd 67-68,70,74-88,94,96-98,100-103
+docs/remaining-captures.md
+  s_d2c35aeebbd344::t_a97763c38bdedd 4-17,126-130
+calictl/serve.py
+  s_d2c35aeebbd344::t_a97763c38bdedd 253-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "40d1e22f3a389e87ffd27d778642745ddc8ee3f8",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
