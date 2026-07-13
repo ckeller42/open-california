@@ -1,0 +1,60 @@
+calictl/control.py
+  s_d2c35aeebbd344::t_cd4cab604ec2b5 381-384,396-398
+  s_d2c35aeebbd344::t_77530e69721d53 385-395
+  s_d2c35aeebbd344::t_76b48f1832cda4 91-97
+tools/mock_unit.py
+  s_d2c35aeebbd344::t_e624cdc6124464 189-192,196,198-204,206-212
+  s_d2c35aeebbd344::t_42d5faca996255 49-50
+  s_d2c35aeebbd344::t_c15d0caec78528 122
+docs/sphinx/requirements.txt
+  s_d2c35aeebbd344::t_137be279e009f7 7
+calictl/cli.py
+  s_d2c35aeebbd344::t_b1c2bf83bebc8a 205
+docs/business-logic/protocol-sequences.md
+  s_d2c35aeebbd344::t_b2d72976addc41 1-2,7-129
+  s_d2c35aeebbd344::t_2cc5502568ee59 3-6
+CLAUDE.md
+  s_d2c35aeebbd344::t_f268d5d36107ff 62-76
+docs/sphinx/api.rst
+  s_d2c35aeebbd344::t_11850bc11bb5d2 17-18
+  s_d2c35aeebbd344::t_ece4c0834fc8ce 24
+docs/sphinx/index.rst
+  s_d2c35aeebbd344::t_61d50d89dcdfac 22,29-31,33
+docs/remaining-captures.md
+  s_d2c35aeebbd344::t_3e8b6b23ef8782 3-8
+docs/business-logic/re-gap-inventory.md
+  s_d2c35aeebbd344::t_e3dde9d56cec90 7-15
+calictl/serve.py
+  s_d2c35aeebbd344::t_6b8cc02b580a52 283-284
+tests/test_mock_integration.py
+  s_d2c35aeebbd344::t_a0c21ac9696c15 97,104,110-128
+  s_d2c35aeebbd344::t_03fe26e76ea79d 129-130
+calictl/device.py
+  s_d2c35aeebbd344::t_6460bd0e7b0205 249-251
+  s_d2c35aeebbd344::t_df128c6ecacde0 48
+  s_d2c35aeebbd344::t_692094b30fdd9d 216-224
+  s_d2c35aeebbd344::t_002574f2ccf1d8 201,210-215
+docs/sphinx/protocol-sequences.rst
+  s_d2c35aeebbd344::t_7e7c113671a0ab 1-135
+docs/sphinx/conf.py
+  s_d2c35aeebbd344::t_397d2597bda7f7 20
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_8a7cf5d06a0c81 438-446
+  s_d2c35aeebbd344::t_a3c364da626401 60-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "e96f83c073ac0450249a86726590f20a8ce9a768",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
