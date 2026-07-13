@@ -1,0 +1,29 @@
+calictl/device.py
+  s_d2c35aeebbd344::t_d0fe660f75b349 62-69
+  s_d2c35aeebbd344::t_8fcbb073bbcc29 58-61,70-75,77-80
+  s_d2c35aeebbd344::t_4ea193dd1da053 281-314,318-319,321,324-327,330-352,355-362,366,371-375,384-401,413-414,417-437,440-442
+tests/test_roof.py
+  s_d2c35aeebbd344::t_d218b31455b19a 97-99,101-105,113-114,116,118-166,169-170,172,177,180,182-185,188-210
+  s_d2c35aeebbd344::t_f2fc78a7259be9 1-14
+calictl/cli.py
+  s_d2c35aeebbd344::t_f4d1fc23dc6bab 155-157
+  s_d2c35aeebbd344::t_f01526332867af 174-177
+calictl/serve.py
+  s_d2c35aeebbd344::t_b893103bf4a084 253-255
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "21fe75557c5551d66ad2d68e82521dddcd7c7738",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
