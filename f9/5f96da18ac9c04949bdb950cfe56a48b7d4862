@@ -1,0 +1,33 @@
+docs/business-logic/protocol-sequences.md
+  s_d2c35aeebbd344::t_a392d883f3e6cc 79,81-94,102,105-106
+  s_d2c35aeebbd344::t_a37eec4df35445 18-22,30,32-35
+  s_d2c35aeebbd344::t_af6ad0451df3fa 172-176
+  s_d2c35aeebbd344::t_ac8c98befb8ce8 199-209,216,219-221
+  s_d2c35aeebbd344::t_7d6604f5667182 55-59
+  s_d2c35aeebbd344::t_e14db0fc3310d6 70-71
+CLAUDE.md
+  s_d2c35aeebbd344::t_3e8b6c7d11ce6a 65-71
+docs/sphinx/protocol-sequences.rst
+  s_d2c35aeebbd344::t_d7e5c7208bf7d1 217-218,221-229,236,239-241
+  s_d2c35aeebbd344::t_e86bb24965caee 25-30,40,42-45
+  s_d2c35aeebbd344::t_dca4ae99f38f30 100-101,103,107-123,132,135-136
+  s_d2c35aeebbd344::t_0a20ef2336b73e 76-82,90-93
+  s_d2c35aeebbd344::t_2d06d22b98d1ad 185-189
+  s_d2c35aeebbd344::t_bfcf9c57a25576 8-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "f95f96da18ac9c04949bdb950cfe56a48b7d4862",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
