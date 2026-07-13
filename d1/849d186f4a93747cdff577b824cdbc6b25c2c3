@@ -1,0 +1,41 @@
+calictl/forecast.py
+  s_d2c35aeebbd344::t_7b1323c10896f6 1-55
+calictl/serve.py
+  s_d2c35aeebbd344::t_d5969622292390 26-28
+  s_d2c35aeebbd344::t_5b31854a394106 63-69
+  s_d2c35aeebbd344::t_0210f707b04aae 141-142
+  s_d2c35aeebbd344::t_11d422066ee598 150-160,163-173
+  s_d2c35aeebbd344::t_9b90598c452564 161-162
+docs/sphinx/api.rst
+  s_d2c35aeebbd344::t_834472eba36497 34
+  s_d2c35aeebbd344::t_fb1722776dd579 23-27
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_81f137bfbfb50d 68-71
+  s_d2c35aeebbd344::t_bc2279e17c1eed 104-105
+  s_d2c35aeebbd344::t_2b5f6427ef132a 231-255
+  s_d2c35aeebbd344::t_d84d869851fb06 493-497
+tests/test_forecast.py
+  s_d2c35aeebbd344::t_3e8116a542df45 1-58
+calictl/webui/app.css
+  s_d2c35aeebbd344::t_108abbb2be4c7f 106-114
+calictl/influx.py
+  s_d2c35aeebbd344::t_0cdaf7016ed483 67-108
+tests/test_web_serve.py
+  s_d2c35aeebbd344::t_7b78b69194970d 25-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "d1849d186f4a93747cdff577b824cdbc6b25c2c3",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
