@@ -65,6 +65,10 @@ const FEATURES = {
     title: "Water", icon: "💧",
     readouts: [
       { label: "Fresh water", get: (s) => tank(s.fresh), bar: (s) => s.fresh && s.fresh.percent },
+      { label: "Estimated water left",
+        get: (s) => (s.fresh && s.fresh.days_left != null
+          ? `≈ ${s.fresh.days_left} days` + (s.fresh.drain_lpd ? ` · ${s.fresh.drain_lpd} L/day` : "")
+          : "—") },
       { label: "Waste water", get: (s) => tank(s.waste), bar: (s) => s.waste && s.waste.percent },
     ],
     summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%` : ""),
@@ -97,7 +101,8 @@ const FEATURES = {
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
       { label: "Leveling (roll / pitch)",
         get: (s) => (s.level_roll == null || s.level_pitch == null
-          ? "—" : `${s.level_roll}° / ${s.level_pitch}°`) },
+          ? "—" : `${fmtDeg(s.level_roll)} / ${fmtDeg(s.level_pitch)}`),
+        widget: (s) => bubbleLevel(s.level_roll, s.level_pitch) },
       { label: "Vehicle clock", get: (s) => s.car_clock ?? "—" },
     ],
     summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
@@ -221,6 +226,31 @@ function offlineBanner() {
     ? `Offline — van asleep. Last data ${clockText(m.last_seen)} (${agoText(m.age_s)}).`
     : `Offline — no data yet (van asleep since the monitor started). Checked ${clockText(Date.now() / 1000)}.`;
   return b;
+}
+
+const fmtDeg = (d) => (d > 0 ? "+" : "") + d + "°";
+
+// A spirit-level "bubble" for the 2-axis van leveling: a target with a bubble offset by roll (x)
+// and pitch (y). Returns null when there's no reading (ignition off) so the row just shows "—".
+function bubbleLevel(roll, pitch) {
+  if (roll == null || pitch == null) return null;
+  const MAX = 6, R = 70, ring = 64, br = 13, reach = ring - br;   // ±6° maps to the outer ring
+  const clamp = (v) => Math.max(-1, Math.min(1, v / MAX));
+  const bx = (R + clamp(roll) * reach).toFixed(1);
+  const by = (R - clamp(pitch) * reach).toFixed(1);               // +pitch (nose up) => bubble up
+  const level = Math.abs(roll) < 1 && Math.abs(pitch) < 1;
+  const wrap = document.createElement("div");
+  wrap.className = "bubble-wrap";
+  wrap.innerHTML =
+    `<svg viewBox="0 0 ${2 * R} ${2 * R}" class="bubble-level${level ? " level" : ""}" role="img" aria-label="leveling">` +
+    `<circle cx="${R}" cy="${R}" r="${ring}" class="bl-ring"/>` +
+    `<circle cx="${R}" cy="${R}" r="42" class="bl-ring"/>` +
+    `<circle cx="${R}" cy="${R}" r="20" class="bl-ring"/>` +
+    `<line x1="${R}" y1="6" x2="${R}" y2="${2 * R - 6}" class="bl-cross"/>` +
+    `<line x1="6" y1="${R}" x2="${2 * R - 6}" y2="${R}" class="bl-cross"/>` +
+    `<circle cx="${bx}" cy="${by}" r="${br}" class="bl-bubble"/></svg>` +
+    `<div class="bl-nums">roll ${fmtDeg(roll)} · pitch ${fmtDeg(pitch)}${level ? " · level ✓" : ""}</div>`;
+  return wrap;
 }
 
 function render() {
@@ -459,6 +489,11 @@ function renderReadout(r, s) {
       bar.appendChild(fill);
       wrap.appendChild(bar);
     }
+  }
+  if (r.widget) {                    // optional richer visual (e.g. the leveling bubble)
+    let node;
+    try { node = r.widget(s); } catch (e) { node = null; }
+    if (node) wrap.appendChild(node);
   }
   return wrap;
 }

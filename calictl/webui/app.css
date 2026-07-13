@@ -103,3 +103,12 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 .toast.ok { border-left-color: var(--ok); } .toast.warn { border-left-color: var(--warn); }
 .toast.error { border-left-color: var(--error); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+/* Leveling spirit-level bubble (Vehicle screen) — theme-aware via the shared vars. */
+.bubble-wrap { display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: .3rem 0 1rem; }
+.bubble-level { width: 148px; height: 148px; display: block; }
+.bl-ring { fill: none; stroke: var(--border); stroke-width: 2; }
+.bl-cross { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; }
+.bl-bubble { fill: var(--warn); transition: cx .4s ease, cy .4s ease; }
+.bubble-level.level .bl-bubble { fill: var(--ok); }
+.bl-nums { font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
