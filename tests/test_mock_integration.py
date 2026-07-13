@@ -182,6 +182,32 @@ def test_out_of_range_surfaces_through_actuate(mock):
 
 # --- serve.on_command path --------------------------------------------------
 
+def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
+    """Influx should store only INSTALLED functions (same set MQTT publishes). The uninstalled
+    ones (satellite / living-room heater / roof-A/C / stairs / generalpurposesignals) emit only
+    raw pass-through fields (WordZeroFour, System, ...) — noise that must not reach the dashboard."""
+    from calictl import serve, influx
+    captured = {}
+    monkeypatch.setattr(influx, "points_for",
+                        lambda states: (captured.__setitem__("fns", set(states)) or []))
+
+    class _Rec:
+        def write(self, **_k):
+            pass
+
+    s = serve.Server(influx_enabled=True)
+    s._iw = _Rec()
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        await s.poll()
+    asyncio.run(_run())
+
+    fns = captured["fns"]
+    assert {"water", "cooler", "campingmode", "vehicle"} <= fns          # installed -> stored
+    assert "generalpurposesignals" not in fns and "satelliteantenna" not in fns   # noise dropped
+
+
 def test_serve_on_command_actuates(mock):
     from calictl import serve
     s = serve.Server(influx_enabled=False)
