@@ -9,6 +9,50 @@ correlate. Two tools: `idevicebtlogger` on the **bar** Mac (captures the iPhone 
 `calictl` / the spike on **buspi**. Recording: I trigger it — you say "go", I confirm packets
 flow, you act, you say "done", I decode.
 
+## Runbook — copy-paste (staged 2026-07-13, ready to run)
+
+Scenarios for the differential oracle are **pre-staged** under `tools/scenarios/` (all build a valid
+calictl frame — verified offline). The capture is the only manual seam; everything after is one command.
+
+**0. Confirm the van woke (buspi).** After a door/ignition, within one poll cycle (~30 s):
+```
+ssh buspi 'curl -s http://localhost:8088/api/state' | python3 -c 'import sys,json;m=json.load(sys.stdin)["_meta"];print("online:",m["online"],"age_s:",m["age_s"])'
+```
+`online: True` → buspi has the slot. If the phone app is open it may hold the single slot — close it.
+
+**1. Capture (bar Mac) → diff (repo host).** Per action: start the logger, do ONE thing in the app,
+stop, then diff. Capture SOP + iPhone UDID: `.claude/skills/capture-and-diff/SKILL.md`.
+```
+# on the bar: idevicebtlogger -u <UDID> -f pcap /tmp/<label>.pcap   (Ctrl-C to stop)
+# then, where the repo + tshark live:
+python3 -m tools.capture_diff /tmp/<label>.pcap <scenario>
+```
+Run the **known-good validators FIRST** (must diff to zero — proves the pipeline):
+| Order | App action | Scenario | Expect |
+|---|---|---|---|
+| a | Camping Mode ON | `campingmode/master-on` | zero diff |
+| b | Cooler power ON | `cooler/power-on` | zero diff |
+| c | **Kitchen lamp → 5** (profile active) | `lighting/kitchen-50` | **LEADS = the P1 crack** |
+| d | Set light colour → red | `lighting/color-red` | zero = SET_COLOR layout verified |
+| e | Switch to profile 9 | `lighting/profile-9` | zero diff |
+
+**2. Stability spike (buspi, phone app closed):**
+```
+ssh buspi 'cd /home/pi/open-california && python3 -m tools.ble_stability_spike --seconds 180'
+```
+
+**3. Wake-signal diff (buspi):** baseline read → physical door/ignition → re-read → diff the field
+that flips (marks fresh-vs-stale). Cloud unlock does NOT wake it.
+
+**4. Read-side verifications (buspi) — NOT capture_diff (no control write):**
+```
+ssh buspi 'cd /home/pi/open-california && python3 -m calictl get vehicle'   # ignition ON => ignition_on: true  (bit-7 fix)
+ssh buspi 'cd /home/pi/open-california && python3 -m calictl get water'     # ignition ON => fresh ~11 L; OFF later => decays
+# cooler night-timer: set one in the app, capture, then decode-only:
+#   python3 -c 'from calictl import protocol,overrides,control as c;f=protocol.load();overrides.apply(f);print(c.decode_control(f["cooler"], bytes.fromhex("<app-frame>")))'
+#   -> confirm TimerHour/TimerMin land at the corrected offsets (16/24/32/40)
+```
+
 ## Priority 1 — the lighting-apply gap (unlocks the MOST)
 Our lighting frames ACK but the zones don't visibly change (`re-gap A1`). Cracking this unlocks
 **all lamp control + colour + profile authoring** at once.

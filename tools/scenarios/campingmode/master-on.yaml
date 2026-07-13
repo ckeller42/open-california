@@ -1,0 +1,18 @@
+# P4 known-good validation — campingmode MASTER on. calictl actuates campingmode live
+# (verified on-device: master/lights/usb), so the app's frame and calictl's MUST be identical
+# here. A second pipeline-validator alongside cooler/power-on: run it first on a fresh capture
+# to prove capture->decode->diff before trusting any UNVERIFIED lighting diff. char 1201.
+#
+# AT THE VAN: toggle Camping Mode ON in the app, capture, then:
+#   python3 -m tools.capture_diff <capture.pcap> campingmode/master-on
+# Expected: zero diff (identical frames).
+function: campingmode
+what: master
+value: "on"
+control_char: "1201"
+capture_label: campingmode-master-on
+state:                     # decoded campingmode state at capture time (carry-forward for build)
+  State: 0
+  InteriorLight: 3
+  OutsideLight: 3
+  UsbCharger: 0

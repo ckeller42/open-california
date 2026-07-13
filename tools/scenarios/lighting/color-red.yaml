@@ -1,0 +1,16 @@
+# P4 verification — SET_COLOR (dg/n Mode 6). calictl BUILDS this frame but on-device apply is
+# UNVERIFIED (the frame ACKs, the zones don't visibly recolour — same lighting-apply gap as
+# SET_BRIGHTNESS, re-gap A1). A capture of the app changing the active profile's colour to RED
+# lets us diff structurally: if calictl's frame == the app's, our byte layout is right and the
+# gap is purely the apply-side semantics (not our encoding). Expected calictl frame to 1501:
+# 0906000000000009eeeeeeeeeeeeeeee  (Mode 6, LightValue 9 = red, all zones 14=unchanged).
+#
+# AT THE VAN: with a profile active, use the app to set the interior light colour to RED, capture,
+# then:  python3 -m tools.capture_diff <capture.pcap> lighting/color-red
+# A zero diff = layout verified; LEADS = the app carries a field we don't (the missing apply key).
+function: lighting
+what: color
+value: red                 # LIGHT_COLORS["red"] = palette index 9
+control_char: "1501"
+capture_label: lighting-color-red
+state: {ProfileNumber: 9}  # set this to whatever profile is active at capture time
