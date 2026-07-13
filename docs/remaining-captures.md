@@ -53,6 +53,20 @@ ssh buspi 'cd /home/pi/open-california && python3 -m calictl get water'     # ig
 #   -> confirm TimerHour/TimerMin land at the corrected offsets (16/24/32/40)
 ```
 
+**5. Roof control (SAFETY-SENSITIVE — only with the roof physically clear).** Not a `capture_diff`
+scenario: the app drives the roof with a *repeated* 1 Hz move frame + a final STOP, so a single
+committed frame doesn't represent it. Capture the app doing **open → partial → Stop → close** and
+inspect the sequence directly (the move-frame direction byte + the +1 `SafetyCounter` cadence, and
+that a STOP frame follows):
+```
+# on the bar: idevicebtlogger -u <UDID> -f pcap /tmp/roof.pcap   (Ctrl-C after the STOP)
+# then dump every write to the roof control char (1401) in order:
+tshark -r /tmp/roof.pcap -Y 'btatt.opcode.method==0x12 || btatt.opcode.method==0x52' \
+  -T fields -e btatt.handle -e btatt.value | grep -i '<roof-handle>'
+```
+This live-verifies `device.actuate_roof`'s move-heartbeat + STOP against the real app before we
+ever drive the roof from calictl. Roof writes are `CONFIRM_REQUIRED` and NOT-LIVE-VERIFIED.
+
 ## Priority 1 — the lighting-apply gap (unlocks the MOST)
 Our lighting frames ACK but the zones don't visibly change (`re-gap A1`). Cracking this unlocks
 **all lamp control + colour + profile authoring** at once.
