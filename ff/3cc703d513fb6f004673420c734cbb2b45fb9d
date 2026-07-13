@@ -1,0 +1,30 @@
+calictl/serve.py
+  s_d2c35aeebbd344::t_2780280e5e1147 253-255
+docs/business-logic/protocol-sequences.md
+  s_d2c35aeebbd344::t_15e495e2867a1b 66-83,88,90-92,95,98-99
+calictl/device.py
+  s_d2c35aeebbd344::t_0cef1e30dd5169 282,285,288-317,321-328,332,337-341,343,351-352,355-359,382-397,399-400,416-427
+  s_d2c35aeebbd344::t_db89e9b87326b7 57-78
+  s_d2c35aeebbd344::t_86f64d45f3c45d 428
+tests/test_roof.py
+  s_d2c35aeebbd344::t_ab82d531b004b4 4-11,13-20,32-35,49-50,54,75,94,115-133,135,144,148,150-153,156-157,159,168-170,174,185,190-191,193,198,201,204,206-207,211-212,214-215,219,224-246,249-251
+calictl/cli.py
+  s_d2c35aeebbd344::t_aa8ed5e62f4938 154-158
+  s_d2c35aeebbd344::t_244f27e3569735 175-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "ff3cc703d513fb6f004673420c734cbb2b45fb9d",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
