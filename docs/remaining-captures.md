@@ -53,12 +53,17 @@ ssh buspi 'cd /home/pi/open-california && python3 -m calictl get water'     # ig
 #   -> confirm TimerHour/TimerMin land at the corrected offsets (16/24/32/40)
 ```
 
-**5. Roof control (SAFETY-SENSITIVE — only with the roof physically clear).** Not a `capture_diff`
-scenario: the app drives the roof with a *repeated* 1 Hz move frame + a final STOP, so a single
-committed frame doesn't represent it. Capture the app doing **open → partial → Stop → close** and
-inspect the sequence directly (the move-frame direction byte + the +1 `SafetyCounter` cadence, and
-that a STOP frame follows):
+**5. Roof control (SAFETY-SENSITIVE — REQUIRES IGNITION ON; only with the roof physically clear).**
+⚠️ **Ignition (terminal-15) must be ON** — the pop-top actuator is dead with ignition off, so the
+app's roof buttons do nothing and there's nothing to capture. Do this in the **same ignition-on
+window** as the P4 ignition/leveling checks (step 4). Ensure the roof path is clear before moving it.
+
+Not a `capture_diff` scenario: the app drives the roof with a *repeated* 1 Hz move frame + a final
+STOP, so a single committed frame doesn't represent it. Capture the app doing
+**open → partial → Stop → close** and inspect the sequence directly (the move-frame direction byte
++ the +1 `SafetyCounter` cadence, and that a STOP frame follows):
 ```
+# ignition ON, roof path clear, phone app open
 # on the bar: idevicebtlogger -u <UDID> -f pcap /tmp/roof.pcap   (Ctrl-C after the STOP)
 # then dump every write to the roof control char (1401) in order:
 tshark -r /tmp/roof.pcap -Y 'btatt.opcode.method==0x12 || btatt.opcode.method==0x52' \
@@ -66,6 +71,8 @@ tshark -r /tmp/roof.pcap -Y 'btatt.opcode.method==0x12 || btatt.opcode.method==0
 ```
 This live-verifies `device.actuate_roof`'s move-heartbeat + STOP against the real app before we
 ever drive the roof from calictl. Roof writes are `CONFIRM_REQUIRED` and NOT-LIVE-VERIFIED.
+(Live data 2026-07-13 confirmed the van reports `roof` **installed**, so this is a real, capturable
+feature on this vehicle — unlike the uninstalled gear below.)
 
 ## Priority 1 — the lighting-apply gap (unlocks the MOST)
 Our lighting frames ACK but the zones don't visibly change (`re-gap A1`). Cracking this unlocks
@@ -100,8 +107,8 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 - **WAKEUP_TIME** (Wecklicht): set a wake-alarm → capture → confirm the epoch-seconds `Timestamp`
   + the internal packing of `LightValue` (both currently INFERRED).
 - **full lamp→nibble map**: ~6 of 16 lamps mapped; set each remaining lamp to a distinct level.
-- **roof open/close** (SAFETY-SENSITIVE, only if the roof path is clear): open→partial→Stop→close,
-  to live-verify the move frames + SafetyCounter cadence.
+- **roof open/close** (SAFETY-SENSITIVE — **needs ignition ON**, only if the roof path is clear):
+  open→partial→Stop→close, to live-verify the move frames + SafetyCounter cadence. See step 5 above.
 
 ## Out of reach even at the van (WiFi, not BLE)
 - **Exlap data-body schemas** — need the camper's WiFi AP up + an Exlap/TCP capture on
