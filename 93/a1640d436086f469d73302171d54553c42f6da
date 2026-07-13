@@ -1,0 +1,22 @@
+README.md
+  s_d2c35aeebbd344::t_44ac5578fe840f 12,18-20
+  s_d2c35aeebbd344::t_1b970a0ada1d7e 21-22
+.github/workflows/docs.yml
+  s_d2c35aeebbd344::t_2813275414a4ed 1-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "93a1640d436086f469d73302171d54553c42f6da",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
