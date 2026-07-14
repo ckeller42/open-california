@@ -183,39 +183,6 @@ class Server:
             self._forecast = {}
         return self._forecast
 
-    def _seed_water_good(self, current):
-        """Cold-start baseline for the stale guard from InfluxDB history (best-effort, cached).
-
-        With no in-memory ``_water_good`` (fresh process, or a restart while the van was parked so
-        the cache already holds the latched low), the guard has nothing to compare against. The
-        recent fresh-water *max* from Influx is a plausible last-real level; if it sits well above
-        the current reading we return a synthetic baseline (that level + the current capacity/waste)
-        so the current latched low is recognised as stale. ``None`` when Influx is unavailable or
-        the history doesn't exceed the current reading (nothing looks stale). Never raises.
-        """
-        cur = (current.get("fresh") or {}).get("liters")
-        if cur is None:
-            return None
-        try:
-            from . import influx
-            series = influx.field_series("fresh_liters", "water", days=1)
-        except Exception:
-            return None
-        if not series:
-            return None
-        recent_max = max(v for _, v in series)
-        if recent_max <= cur:
-            return None                    # nothing higher in history -> current isn't a stale drop
-        cap = (current.get("fresh") or {}).get("capacity_l")
-        liters = int(round(recent_max))
-        self._water_good = {
-            "installed": current.get("installed", True),
-            "fresh": {"liters": liters, "capacity_l": cap,
-                      "percent": round(liters * 100 / cap) if cap else None},
-            "waste": dict(current.get("waste") or {}),
-        }
-        return self._water_good
-
     def _load_last(self):
         """Load the persisted last-known decoded state (best-effort; missing/corrupt -> empty)."""
         try:
@@ -256,11 +223,12 @@ class Server:
         # Stale-latch guard: when the van is parked/locked the unit stops measuring fresh water and
         # returns a bogus low (true 17 L read back as 1 L). A fresh drop from the last PLAUSIBLE
         # reading with no matching grey rise is physically impossible -> serve/publish that last
-        # plausible reading, flagged stale. The baseline survives restarts (persisted `_water_good`)
-        # and, cold, is seeded from InfluxDB history so a restart-while-parked still flags it.
+        # plausible reading, flagged stale. The baseline is the persisted `_water_good` (survives
+        # restarts, NO Influx dependency). Cold, with no baseline yet, it self-establishes on the
+        # next plausible read (so a fresh install won't flag until it has seen a real level once).
         new_water = states.get("water")
         if new_water is not None and (new_water.get("fresh") or {}).get("liters") is not None:
-            base = self._water_good or self._seed_water_good(new_water)
+            base = self._water_good
             if base is not None and freshness.implausible_water_drop(new_water, base):
                 states["water"] = base                # MQTT/Influx get the plausible level, not the latch
                 self._water_stale_since = self._water_stale_since or self._last_ok_ts or time.time()

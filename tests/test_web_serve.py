@@ -62,23 +62,20 @@ def test_state_flags_stale_water_and_suppresses_forecast(monkeypatch):
     assert fresh["liters"] == 17               # the last plausible level, not the latched 1 L
 
 
-def test_seed_water_good_from_influx_history(monkeypatch):
-    """Cold start (no in-memory baseline): a current low read + higher recent Influx history seeds a
-    plausible baseline so the current latched low is recognised as stale; equal/lower history -> None."""
-    from calictl import influx
-    s = serve.Server(influx_enabled=False)
-    cur = {"installed": True, "fresh": {"liters": 1, "capacity_l": 29, "percent": 3},
-           "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
-    monkeypatch.setattr(influx, "field_series", lambda *a, **k: [(1, 19.0), (2, 18.0), (3, 1.0)])
-    base = s._seed_water_good(cur)
-    assert base is not None and base["fresh"]["liters"] == 19 and base["waste"]["liters"] == 1
-    # a fresh low read is now recognised as an impossible drop vs the seeded baseline
+def test_water_good_baseline_needs_no_influx(monkeypatch):
+    """The stale guard's baseline is the in-memory/persisted _water_good — no Influx. A live
+    plausible read establishes it; a later impossible drop is flagged without any Influx call."""
     from calictl import freshness
-    assert freshness.implausible_water_drop(cur, base) is True
-    # no history above current -> no seed (current isn't a stale drop)
-    s2 = serve.Server(influx_enabled=False)
-    monkeypatch.setattr(influx, "field_series", lambda *a, **k: [(1, 1.0), (2, 1.0)])
-    assert s2._seed_water_good(cur) is None
+    # influx must never be consulted by the stale path
+    from calictl import influx
+    def _boom(*a, **k):
+        raise AssertionError("stale detection must not call influx.field_series")
+    monkeypatch.setattr(influx, "field_series", _boom)
+    good = {"installed": True, "fresh": {"liters": 17, "capacity_l": 29, "percent": 59},
+            "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
+    latch = {"installed": True, "fresh": {"liters": 1, "capacity_l": 29, "percent": 3},
+             "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
+    assert freshness.implausible_water_drop(latch, good) is True     # flagged purely from the baseline
 
 
 def test_serve_backend_state_interprets_cache():
