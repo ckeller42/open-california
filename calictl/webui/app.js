@@ -120,8 +120,9 @@ const FEATURES = {
       { label: "Waste water", get: (s) => tank(s.waste), bar: (s) => s.waste && s.waste.percent },
     ],
     // The fresh-water sensor only measures while the van's water system is on; parked/asleep it
-    // latches a stale low value. Flag it rather than showing a confident-wrong level + 0-day forecast.
-    warn: (s) => (s.fresh && s.fresh.stale ? "🕒 Fresh-water level is stale — the van's water system is off (last measured while active)" : null),
+    // latches a stale low value. This is a soft `note` (informational) — NOT a `warn` (fault), so it
+    // does not raise the dashboard alert badge; a parked van is normal, not a fault.
+    note: (s) => (s.fresh && s.fresh.stale ? "🕒 Fresh-water level is stale — the van's water system is off (last measured while active)" : null),
     summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%${s.fresh.stale ? " (stale)" : ""}` : ""),
   },
   energy: {
@@ -482,12 +483,21 @@ function renderFeature(fn) {
   const f = FEATURES[fn];
   const s = STATE[fn] || {};
   titleEl.textContent = f.title;
-  if (f.warn) {                         // dynamic warning banner (e.g. fridge door open)
+  if (f.warn) {                         // dynamic FAULT banner (e.g. fridge door open) — red/alert
     let w;
     try { w = f.warn(s); } catch (e) { w = null; }
     if (w) {
       const b = document.createElement("div");
       b.className = "warn"; b.textContent = w;
+      app.appendChild(b);
+    }
+  }
+  if (f.note) {                         // soft INFO banner (e.g. water stale) — muted, not a fault
+    let n;
+    try { n = f.note(s); } catch (e) { n = null; }
+    if (n) {
+      const b = document.createElement("div");
+      b.className = "note"; b.textContent = n;
       app.appendChild(b);
     }
   }
@@ -504,12 +514,6 @@ function renderFeature(fn) {
     card.className = "card";
     for (const r of f.readouts) card.appendChild(renderReadout(r, s));
     app.appendChild(card);
-  }
-  if (f.note) {
-    const n = document.createElement("div");
-    n.className = "note";
-    n.textContent = f.note;
-    app.appendChild(n);
   }
 }
 
