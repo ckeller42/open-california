@@ -1,12 +1,57 @@
 # At-the-van plan — closing the last ~2% (van-gated)
 
+## 🚐 YOUR CHECKLIST FOR THE NEXT VAN VISIT (as of 2026-07-14)
+
+Only these need you physically at the van. Everything else is done or is a desk task.
+
+### 1. Water — settle "is 1 L stale or real?" (PRIORITY, unresolved)
+buspi reads **fresh water = 1 L** while polling fine every ~45 s with the heartbeat running.
+We do **not** know if that's stale or the tank is genuinely near-empty (the "true 11 L" was a single
+2026-07-09 reading that isn't reproducing). Do this to settle it:
+
+- [ ] **Before touching anything**, note the **actual** fresh-tank level (gauge / how full you know it is).
+- [ ] **Close the phone app** so buspi owns the single BLE slot.
+- [ ] Read buspi now: `ssh buspi 'curl -s localhost:8088/api/state | python3 -c "import sys,json;print(json.load(sys.stdin)[\"water\"][\"fresh\"])"'`
+- [ ] **Run a tap for ~20–30 s** (pump active), wait ~1 min, read buspi again.
+- [ ] Tell me three numbers: **actual level**, **buspi before**, **buspi after the pump ran**.
+  - buspi jumps toward the real level → the sensor needs *pump flow* to re-measure (real finding).
+  - buspi already matches the tank → **no bug, 1 L was correct**, and the "fix" was for a non-issue.
+  - buspi stays wrong even after the pump → real stale bug to reopen.
+
+### 2. Finish the lamp map (~1 min)
+Sweep 2026-07-14 confirmed **L7=Kochen, L8=Ambientelicht, L3=Umgebung hinten**, and **L5 is a real
+lamp**. Two gaps:
+
+- [ ] **Screenshot the TOP of the Beleuchtung list** (or just name the top 4 lamps) — pins L2, L1, L4, **L5**.
+- [ ] **Capture L6** (the one zone never seen — it's a conditional lamp): **open the pop-roof** so
+  *Leselicht* unlocks and set it, **and/or activate camping mode** so *Eingang* unlocks and set it.
+  Ping me to start the logger first.
+
+### 3. Roof drive from calictl (OPTIONAL — higher risk)
+The roof **protocol is now live-verified** (capture 2026-07-14: dir bytes 0x01/0x04/0x00, free-running
++1/500 ms counter, press-and-hold, Position closed→middle→closed all confirmed against real motion).
+The only thing left is proving **calictl itself** can drive it:
+- [ ] Ignition **ON**, roof path **clear**, writes enabled → I run a bounded `open → stop → close` from
+  calictl and read `1402` back. Only do this if you want it; the protocol is already proven.
+
+**Not van tasks:** `car_variant` (buspi read, anytime); the air-heater 1–10 fix + roof-verified status
+(desk changes, in progress).
+
+---
+
 > **STATUS 2026-07-13 (captures done):** **P1 lighting-apply CRACKED + FIXED** (commit frame
 > `0e00…`; live-verified via readback). **Roof sequence SETTLED from the decompiled roof class**
 > (open `0x01`/stop `0x00`/close `0x04`; **press-and-hold** move stream, **app-generated monotonic
 > SafetyCounter ~+1/500 ms**, unit self-gates the first **~3 s** via `SafetyCounterValid` (`1402`
 > bit 7) — NO 4 s countdown, NO STOP-hold phase — see `protocol-sequences.md` §3). SET_COLOR is
 > **not exposed** in the app (skip). Cooler `Error` = **fridge door** (now surfaced in the GUI).
-> Remaining: roof-drive fixes (P5), air-heater level/runtime, WAKEUP_TIME, full lamp map.
+>
+> **UPDATE 2026-07-14 (at-the-van captures):** **roof protocol LIVE-VERIFIED** (dir bytes + free-running
+> +1/500 ms counter + press-and-hold + Position closed→middle→closed confirmed against real ~30 cm
+> motion); **air-heater level range = 1–10** (HI=10; `HeatingLevel=11` is a post-set commit frame);
+> **lamp map** mostly done (L3/L5/L7/L8 confirmed; L6 = a conditional lamp, still to capture). New open
+> item: **water reads 1 L, stale-vs-real unresolved** (see the checklist above). The old "Remaining"
+> list is superseded by the **YOUR CHECKLIST** section at the top.
 >
 > **Required fixes before enabling roof actuation from calictl (roof stays NOT-LIVE-VERIFIED):**
 > (a) **generate a live monotonic BE-uint32 SafetyCounter (~+1/500 ms) from a seed** — do NOT echo

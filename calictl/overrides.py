@@ -85,6 +85,11 @@ CONTROL_RANGES = {
     # 28=PREVIEW — all legitimate firmware modes (guard against out-of-enum values only).
     # (ProfileNumber is intentionally NOT constrained: valid range depends on Mode.)
     "lighting": {"Mode": {0, 4, 6, 8, 12, 16, 20, 24, 28}},
+    # HeatingLevel is a 4-bit field but the app exposes only levels 1-9 + "HI"(=10); it uses 11
+    # as the post-set leave-unchanged/commit value (verified at the van 2026-07-14 via HCI capture:
+    # lowest set -> 1, "HI" -> 10, a HeatingLevel=11 follow frame after every set). 0 and 12-15 are
+    # never emitted. Allow {1..10} (user) plus 11 (the sentinel the builder defaults to).
+    "airheater": {"HeatingLevel": {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}},
 }
 
 
