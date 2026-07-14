@@ -1,0 +1,26 @@
+calictl/serve.py
+  s_d2c35aeebbd344::t_09cbdea0e37e3c 226-227
+  s_d2c35aeebbd344::t_642c78fb0f985a 154
+  s_d2c35aeebbd344::t_3c0a7daa4a4f70 186-218
+  s_d2c35aeebbd344::t_654a20c584492b 237-239
+  s_d2c35aeebbd344::t_a86f249336d53a 257-265,268
+  s_d2c35aeebbd344::t_f3768fdd52b155 68-73
+tests/test_web_serve.py
+  s_d2c35aeebbd344::t_1a9b575fb88c6d 51-52,54-56,62-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "66c1f8988445070327dce6932df055bdf9f93c45",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
