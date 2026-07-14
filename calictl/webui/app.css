@@ -112,3 +112,8 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 .bl-bubble { fill: var(--warn); transition: cx .4s ease, cy .4s ease; }
 .bubble-level.level .bl-bubble { fill: var(--ok); }
 .bl-nums { font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Read-only mode banner (daemon rejects writes; the safe default). */
+.readonly { margin-bottom: .9rem; padding: .7rem 1rem; border-radius: 12px; font-size: .9rem;
+  background: color-mix(in srgb, var(--muted) 14%, var(--card)); color: var(--muted);
+  border: 1px solid var(--border); }

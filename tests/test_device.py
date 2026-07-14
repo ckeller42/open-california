@@ -132,6 +132,7 @@ def test_on_command_reads_state_when_cache_cold(fake_bleak):
     # on_command reads the live state first.
     from calictl import serve
     s = serve.Server(influx_enabled=False)
+    s._read_only = False                            # writes enabled for this actuation test
     async def _run():
         s._ble = asyncio.Lock()
         await s.on_command("cooler", "power", "off")

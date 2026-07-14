@@ -17,7 +17,7 @@
 
 <p align="center">
   📖 <b><a href="https://ckeller42.github.io/open-california/">Detailed documentation</a></b> —
-  API reference, requirement traceability, and the <a href="https://ckeller42.github.io/open-california/protocol-sequences.html">protocol sequence diagrams</a> (published from Sphinx to GitHub Pages).
+  API reference, requirement traceability, and the <a href="https://ckeller42.github.io/open-california/protocol-sequences.html">protocol sequence diagrams</a>.
 </p>
 
 The camper control unit only talks to the vendor's iOS/Android app — so from Linux, Home
@@ -56,8 +56,13 @@ Grafana**, all from a Raspberry Pi.
 python3 -m pytest tests/ -q            # test suite — stdlib-only, no BLE/MQTT needed
 python3 -m calictl status              # live read of every function (needs BLE + a free slot)
 python3 -m calictl set cooler power on # actuate (heartbeat-armed); reads back + reports
-python3 -m calictl serve --web 8080    # the daemon → InfluxDB + MQTT + web UI at :8080
+python3 -m calictl serve --web 8080    # the daemon → InfluxDB + MQTT + web UI at :8080 (read-only)
+python3 -m calictl serve --web 8080 --enable-writes   # ...allow control writes to the vehicle
 ```
+
+The **daemon is read-only by default** — it will not write to the vehicle until you pass
+`--enable-writes` (or set `CALICTL_ENABLE_WRITES=1`), so a stray deploy never actuates anything by
+accident. The web UI disables its controls and shows a banner when read-only.
 
 Only the standard library is imported at load; `bleak` / `paho-mqtt` / `influxdb_client` load
 lazily, only when actually talking to BLE / MQTT / InfluxDB.

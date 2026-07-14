@@ -152,6 +152,10 @@ function installed(fn) {
   return !s || s.installed !== false;
 }
 
+// read-only = the daemon rejects control writes (the safe default; enable with --enable-writes /
+// CALICTL_ENABLE_WRITES=1). The UI disables every control and shows a banner when true.
+const readOnly = () => !!(STATE._meta && STATE._meta.read_only);
+
 function toast(msg, kind) {
   const d = document.createElement("div");
   d.className = "toast" + (kind ? " " + kind : "");
@@ -188,6 +192,7 @@ async function refreshState(force) {
 // changes to the same control: any still-queued command for it is pruned so only the latest
 // value is sent (the in-flight one can't be un-sent). Then the queue drains one at a time.
 function command(fn, what, value) {
+  if (readOnly()) { toast("Read-only mode — writes are disabled", "warn"); return; }
   const key = qKey(fn, what);
   optimistic[key] = value;
   const i = queue.findIndex((c) => c.key === key);   // prune a superseded queued command
@@ -302,6 +307,12 @@ function render() {
   app.innerHTML = "";
   const ob = offlineBanner();
   if (ob) app.appendChild(ob);
+  if (readOnly()) {
+    const b = document.createElement("div");
+    b.className = "readonly";
+    b.textContent = "🔒 Read-only — control is disabled on this daemon.";
+    app.appendChild(b);
+  }
   if (view === "home") renderDashboard();
   else renderFeature(view);
 }
@@ -383,7 +394,7 @@ function renderLighting(s) {
   mrow.appendChild(mlbl);
   if (pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
-  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = !active;
+  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly() || !active;
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow); app.appendChild(mc);
 
@@ -395,6 +406,7 @@ function renderLighting(s) {
   prow.appendChild(plabel);
   const pbtn = document.createElement("button"); pbtn.className = "btn"; pbtn.style.flex = "0 0 auto";
   pbtn.textContent = active ? "Reactivate" : "Activate";
+  pbtn.disabled = readOnly();
   if (pending_is("lighting", "profile")) pbtn.appendChild(spinner());
   pbtn.onclick = () => command("lighting", "profile", 9);   // profile 9 = A (verified)
   prow.appendChild(pbtn);
@@ -419,7 +431,7 @@ function renderLighting(s) {
       row.appendChild(lbl);
       if (isPending) row.appendChild(spinner());
       const inp = document.createElement("input"); inp.type = "range"; inp.min = 0; inp.max = LIGHT_MAX;
-      inp.value = val; inp.disabled = !active;
+      inp.value = val; inp.disabled = readOnly() || !active;
       const out = document.createElement("span"); out.className = "sval";
       out.textContent = val;
       inp.oninput = () => (out.textContent = inp.value);
@@ -480,6 +492,7 @@ function renderControl(fn, c, s) {
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
     sw.setAttribute("aria-checked", on ? "true" : "false");
+    sw.disabled = readOnly();
     sw.onclick = () => act(fn, c.what, on ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
@@ -489,6 +502,7 @@ function renderControl(fn, c, s) {
     inp.min = c.min;
     inp.max = c.max;
     inp.value = val;
+    inp.disabled = readOnly();
     const out = document.createElement("span");
     out.className = "sval";
     out.textContent = val;
@@ -564,6 +578,7 @@ function roofControls() {
     const b = document.createElement("button");
     b.className = "btn";
     b.textContent = dir;
+    b.disabled = readOnly();
     if (pending_is("roof", dir)) b.appendChild(spinner());
     b.onclick = () => {
       if (confirm(`Roof ${dir}: this physically moves the pop-top (UNVERIFIED on this vehicle). Ensure the path is clear. Continue?`))
