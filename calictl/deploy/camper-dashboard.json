@@ -818,6 +818,131 @@
      "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"airheater\" and r._field == \"running_time\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last)"
     }
    ]
+  },
+  {
+   "id": 21,
+   "type": "stat",
+   "title": "Fridge fault",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 54
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "OK",
+         "color": "green"
+        },
+        "1": {
+         "text": "Error"
+        },
+        "2": {
+         "text": "Emergency"
+        },
+        "3": {
+         "text": "Door open"
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"cooler\" and r._field == \"fault_code\")\n  |> last()"
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "type": "stat",
+   "title": "Roof alert",
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 12,
+    "y": 54
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "OK",
+         "color": "green"
+        },
+        "1": {
+         "text": "Child lock"
+        },
+        "2": {
+         "text": "Error"
+        },
+        "3": {
+         "text": "Sensor error"
+        },
+        "4": {
+         "text": "Emergency locked"
+        },
+        "5": {
+         "text": "Not possible"
+        },
+        "6": {
+         "text": "Low battery"
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"roof\" and r._field == \"alert_code\")\n  |> last()"
+    }
+   ]
   }
  ]
 }

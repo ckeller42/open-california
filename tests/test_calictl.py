@@ -221,6 +221,17 @@ def test_numeric_fields_flattens_and_filters():
                   "fresh_percent": 38.0, "faults_count": 2.0}
 
 
+def test_numeric_fields_alert_enums_become_codes():
+    # cooler.fault / roof.alert are strings (dropped by Influx) -> emit numeric <key>_code so
+    # Grafana can chart them; None/unknown -> 0 (ok), keeping the series continuous.
+    from calictl import influx
+    assert influx.numeric_fields({"fault": "door_open"})["fault_code"] == 3.0
+    assert influx.numeric_fields({"fault": None})["fault_code"] == 0.0
+    assert influx.numeric_fields({"alert": "child_lock"})["alert_code"] == 1.0
+    assert influx.numeric_fields({"alert": "low_battery"})["alert_code"] == 6.0
+    assert influx.numeric_fields({"alert": None})["alert_code"] == 0.0
+
+
 def test_points_for_reuses_numeric_fields():
     import pytest
     pytest.importorskip("influxdb_client")   # tests must run without MQTT/Influx installed

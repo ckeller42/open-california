@@ -22,13 +22,27 @@ from . import protocol, semantics, overrides, mqtt
 from .device import CamperDevice, ConnectionUnavailable
 
 
+# Alert enums are strings (dropped by Influx), but we still want them charted in Grafana.
+# Emit a numeric `<key>_code` for these curated fields so a state-timeline can map code->label.
+# Key = flattened field name; 0 = ok/none (also for None/unknown) so the series stays continuous.
+# Codes match the semantics enums: cooler `fault` (semantics.cooler) + roof `alert` (semantics.roof).
+_ENUM_CODES: dict[str, dict[str, int]] = {
+    "fault": {"error": 1, "emergency": 2, "door_open": 3},
+    "alert": {"child_lock": 1, "error": 2, "sensor_error": 3,
+              "emergency_locked": 4, "not_possible": 5, "low_battery": 6},
+}
+
+
 def numeric_fields(interp: dict) -> dict[str, float]:
     """Flatten interpretation to InfluxDB fields: everything numeric/boolean is
     written as a float (bool -> 1.0/0.0); strings/None/lists are dropped, except
-    list-valued keys become a `<key>_count`."""
+    list-valued keys become a `<key>_count` and curated alert enums (see
+    :data:`_ENUM_CODES`) become a numeric `<key>_code` (0 = ok/none)."""
     out: dict[str, float] = {}
     for k, v in mqtt.flatten(interp).items():
-        if isinstance(v, bool):
+        if k in _ENUM_CODES:                       # alert enum -> code (None/unknown -> 0 = ok)
+            out[k + "_code"] = float(_ENUM_CODES[k].get(v, 0))
+        elif isinstance(v, bool):
             out[k] = 1.0 if v else 0.0
         elif isinstance(v, (int, float)):
             out[k] = float(v)
