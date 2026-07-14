@@ -19,14 +19,15 @@ def _liters(water: dict, tank: str):
     return t.get("liters") if isinstance(t, dict) else None
 
 
-def implausible_water_drop(new: dict, prev: dict, *, min_drop_l: int = 5,
-                           grey_margin_l: int = 2) -> bool:
+def implausible_water_drop(new: dict, prev: dict, *, grey_margin_l: int = 0) -> bool:
     """True when ``new`` fresh-water reading can't physically follow ``prev``.
 
-    A drop of at least ``min_drop_l`` liters of fresh water with a grey-water rise that falls
-    short of it by more than ``grey_margin_l`` (water that "vanished" rather than draining to the
-    grey tank) marks the parked/asleep stale latch. Real usage (fresh down, grey up together) and
-    refills (fresh up) are plausible and return False. Missing levels return False (can't judge).
+    The test is conservation of water, NOT the size of the drop: fresh water that leaves the tank
+    must appear in the grey tank. So ANY fresh-water drop whose grey-water rise falls short of it
+    (by more than ``grey_margin_l``) is water that "vanished" — the parked/asleep stale latch, which
+    **decays gradually** (~1 L/poll) and would otherwise slip under a size threshold and ratchet the
+    baseline down. Real usage (fresh down, grey up together) and refills / re-measures (fresh up or
+    equal) are plausible and return False. Missing levels return False (can't judge).
 
     :param new: freshly-interpreted water dict (``{"fresh":{"liters":..}, "waste":{"liters":..}}``).
     :param prev: the last plausible water dict to compare against.
@@ -45,7 +46,7 @@ def implausible_water_drop(new: dict, prev: dict, *, min_drop_l: int = 5,
     if nf is None or pf is None:
         return False
     drop = pf - nf
-    if drop < min_drop_l:
+    if drop <= 0:                       # not a drop (refill / same / active re-measure) -> plausible
         return False
     ng, pg = _liters(new, "waste"), _liters(prev, "waste")
     grey_rise = (ng - pg) if (ng is not None and pg is not None) else 0
