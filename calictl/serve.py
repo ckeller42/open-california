@@ -189,8 +189,12 @@ class Server:
         # returns a bogus low (true 17 L read back as 1 L). A fresh drop from the last PLAUSIBLE
         # reading with no matching grey rise is physically impossible -> serve/publish that last
         # plausible reading, flagged stale. The baseline is the persisted `_water_good` (survives
-        # restarts, NO Influx dependency). Cold, with no baseline yet, it self-establishes on the
-        # next plausible read (so a fresh install won't flag until it has seen a real level once).
+        # restarts, NO Influx dependency). KNOWN LIMIT (cold start): a brand-new install with no
+        # cached baseline that first reads while parked will accept the latched low as the baseline
+        # and show it unflagged. This is inherent — with no history and no "water-system-on" signal,
+        # a latched 1 L is indistinguishable from a genuinely near-empty tank, and any flag would
+        # clear on the next (identical) parked read; a real level self-establishes once the van is
+        # next active. Persistence covers the common restart-while-parked case.
         new_water = states.get("water")
         if new_water is not None and (new_water.get("fresh") or {}).get("liters") is not None:
             base = self._water_good
