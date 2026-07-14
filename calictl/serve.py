@@ -23,8 +23,6 @@ from .device import CamperDevice, ConnectionUnavailable
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
 
 
-_FORECAST_TTL_S = 300   # recompute the water days-left forecast at most this often (web thread)
-
 
 def installed_from(states: dict) -> set:
     """Functions whose interpreted state reports `installed` truthy."""
@@ -60,21 +58,14 @@ class ServeBackend:
         out = {}
         for fn, decoded in dict(self._s._last or {}).items():
             out[fn] = semantics.interpret(fn, decoded)
-        # Enrich the fresh-water tank with a days-left forecast from the InfluxDB history
-        # (cached; {} when Influx is unavailable or the trend is too flat to estimate).
+        # Stale fresh-water: serve the last PLAUSIBLE reading (not the parked latch), flagged stale.
         water = out.get("water")
         if isinstance(water, dict) and isinstance(water.get("fresh"), dict):
             stale_since = self._s._water_stale_since
             good = self._s._water_good
             if stale_since and isinstance(good, dict) and isinstance(good.get("fresh"), dict):
-                # Serve the last PLAUSIBLE reading (not the latched low), flagged stale, and suppress
-                # the forecast (a days-left number off a latched level is the "0 days" nonsense).
                 out["water"] = {**good, "fresh": {**good["fresh"], "stale": True},
                                 "stale_since": stale_since}
-            else:
-                fc = self._s.water_forecast()
-                if fc:
-                    water["fresh"] = {**water["fresh"], **fc}
         ts = self._s._last_ok_ts
         age = (time.time() - ts) if ts else None
         out["_meta"] = {
@@ -148,8 +139,6 @@ class Server:
         self._state_cache = os.environ.get(
             "CALICTL_STATE_CACHE", os.path.expanduser("~/.cache/calictl/last_state.json"))
         self._load_last()
-        self._forecast = {}                 # cached water days-left forecast (from influx history)
-        self._forecast_ts = 0.0
         self._water_stale_since = None      # ts the fresh-water read went physically-impossible (stale latch)
         self._water_good = None             # last PLAUSIBLE interpreted water (baseline for the stale guard)
         self._mqtt = None
@@ -158,30 +147,6 @@ class Server:
         self._web_port = None                # set by the CLI to enable the web UI
         self._read_only = True               # SAFE DEFAULT: reject writes until explicitly enabled
         self._httpd = None
-
-    def water_forecast(self):
-        """Fresh-water days-left forecast from InfluxDB history, cached ``_FORECAST_TTL_S``.
-
-        Recomputed at most every few minutes (an Influx query per web request would be wasteful),
-        and ``{}`` whenever Influx is unavailable or the trend is too flat to estimate — so the UI
-        shows ``—`` rather than a made-up number. Runs on the web thread; the query is bounded and
-        cached, and never raises out of here.
-
-        :returns: ``{"days_left": float, "drain_lpd": float}`` or ``{}``.
-        """
-        now = time.time()
-        if self._forecast_ts and (now - self._forecast_ts) < _FORECAST_TTL_S:
-            return self._forecast          # serve the cache within the TTL
-        self._forecast_ts = now
-        try:
-            from . import influx, forecast
-            series = influx.field_series("fresh_liters", "water", days=14)
-            days, rate = forecast.days_left(series)
-            self._forecast = {"days_left": days, "drain_lpd": rate} if days is not None else {}
-        except Exception as e:
-            print("water_forecast failed: %r" % e, flush=True)
-            self._forecast = {}
-        return self._forecast
 
     def _load_last(self):
         """Load the persisted last-known decoded state (best-effort; missing/corrupt -> empty)."""

@@ -117,11 +117,6 @@ const FEATURES = {
     readouts: [
       { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  🕒 stale" : ""),
         bar: (s) => s.fresh && s.fresh.percent },
-      { label: "Estimated water left",
-        get: (s) => (s.fresh && s.fresh.stale ? "—  (level stale)"
-          : (s.fresh && s.fresh.days_left != null
-            ? `≈ ${s.fresh.days_left} days` + (s.fresh.drain_lpd ? ` · ${s.fresh.drain_lpd} L/day` : "")
-            : "—")) },
       { label: "Waste water", get: (s) => tank(s.waste), bar: (s) => s.waste && s.waste.percent },
     ],
     // The fresh-water sensor only measures while the van's water system is on; parked/asleep it

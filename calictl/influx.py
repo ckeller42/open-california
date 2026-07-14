@@ -81,7 +81,7 @@ async def poll_states(funcs, dev) -> dict:
 def field_series(field: str, function: str, *, days: float = 7.0, every: str = "1h"):
     """Read a recent time series of one ``camper`` field from InfluxDB.
 
-    Backs the water-duration forecast (:func:`calictl.forecast.days_left`). Lazy
+    A general Influx read helper (not used by the web UI, which is Influx-free). Lazy
     `influxdb_client` (only in solix-env); returns ``[]`` when Influx is unavailable or the
     token is unset, so callers degrade gracefully rather than raise.
 

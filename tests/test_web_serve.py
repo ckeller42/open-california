@@ -22,44 +22,27 @@ def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
     assert s2._last.get("cooler", {}).get("State") == 1 and s2._last_ok_ts is not None
 
 
-def test_water_forecast_degrades_without_influx(monkeypatch):
-    """No INFLUXDB_TOKEN (the test env) -> field_series returns [] -> forecast is {} and the
-    fresh-water block gets no days_left, but state() still renders the tank. Never raises."""
-    monkeypatch.delenv("INFLUXDB_TOKEN", raising=False)
+def test_state_renders_water_without_influx():
+    """state() renders the fresh-water tank straight from the BLE cache — no Influx, no forecast."""
     s = serve.Server(influx_enabled=False)
     s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 11, "FreshWaterVolume": 29,
                          "WasteWaterUnit": 1, "WasteWaterLevel": 0, "WasteWaterVolume": 22}}
-    be = serve.ServeBackend(s, loop=None)
-    fresh = be.state()["water"]["fresh"]
-    assert fresh["liters"] == 11 and "days_left" not in fresh   # graceful: no forecast, no crash
-    assert s.water_forecast() == {}
+    fresh = serve.ServeBackend(s, loop=None).state()["water"]["fresh"]
+    assert fresh["liters"] == 11 and "days_left" not in fresh and "drain_lpd" not in fresh
 
 
-def test_water_forecast_merges_when_available(monkeypatch):
-    """When the influx history yields a trend, state() enriches fresh with days_left/drain_lpd."""
-    from calictl import influx
-    monkeypatch.setattr(influx, "field_series", lambda *a, **k: [
-        (1_000_000_000, 29.0), (1_000_000_000 + 3 * 86400, 11.0)])   # 6 L/day
-    s = serve.Server(influx_enabled=False)
-    s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 11, "FreshWaterVolume": 29}}
-    be = serve.ServeBackend(s, loop=None)
-    fresh = be.state()["water"]["fresh"]
-    assert fresh["drain_lpd"] == 6.0 and fresh["days_left"] == round(11 / 6.0, 1)
-
-
-def test_state_flags_stale_water_and_suppresses_forecast(monkeypatch):
+def test_state_flags_stale_water():
     """When stale, state() serves the last PLAUSIBLE reading (_water_good) flagged stale, NOT the
-    latched low in _last, and does not attach the days-left forecast (nonsense off a latch)."""
+    latched low in _last."""
     s = serve.Server(influx_enabled=False)
     s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 1, "FreshWaterVolume": 29}}  # latched low
     s._water_good = {"installed": True, "fresh": {"liters": 17, "capacity_l": 29, "percent": 59},
                      "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
     s._water_stale_since = 1_700_000_000.0
-    monkeypatch.setattr(serve.Server, "water_forecast", lambda self: {"days_left": 0.0, "drain_lpd": 22.5})
     fresh = serve.ServeBackend(s, loop=None).state()["water"]["fresh"]
     assert fresh["stale"] is True
-    assert "days_left" not in fresh and "drain_lpd" not in fresh
     assert fresh["liters"] == 17               # the last plausible level, not the latched 1 L
+    assert "days_left" not in fresh
 
 
 def test_water_good_baseline_needs_no_influx(monkeypatch):
