@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 
 from . import protocol, semantics, overrides
@@ -233,7 +234,9 @@ def build_parser():
     sv.add_argument("--dry-run", action="store_true", help="print discovery + one poll, no broker/InfluxDB")
     sv.add_argument("--web", nargs="?", const=8080, type=int, default=None,
                     metavar="PORT", help="serve the replica web UI on PORT (default 8080)")
-    sv.add_argument("--read-only", action="store_true", help="web UI: reads only, reject commands")
+    sv.add_argument("--enable-writes", action="store_true",
+                    help="allow control writes to the vehicle (DEFAULT is read-only). Also enabled "
+                         "by the env CALICTL_ENABLE_WRITES=1")
     return p
 
 
@@ -251,7 +254,10 @@ def main(argv=None):
             srv = serve.Server(args.addr, interval=args.interval,
                                 influx_enabled=not args.no_influx)
             srv._web_port = args.web
-            srv._read_only = args.read_only
+            # SAFE DEFAULT: read-only. Writes require an explicit opt-in (flag or env), so a stray
+            # deploy never actuates the vehicle by accident.
+            writes = args.enable_writes or os.environ.get("CALICTL_ENABLE_WRITES", "").lower() in ("1", "true", "yes")
+            srv._read_only = not writes
             srv.run()
         return 0
     funcs = _load()

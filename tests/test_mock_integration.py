@@ -248,8 +248,23 @@ def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
 def test_serve_on_command_actuates(mock):
     from calictl import serve
     s = serve.Server(influx_enabled=False)
+    s._read_only = False                                 # writes explicitly enabled
     async def _run():
         s._ble = asyncio.Lock()                          # normally created inside run()'s loop
         await s.on_command("cooler", "power", "on")
     asyncio.run(_run())
     assert mock.decoded("cooler")["State"] == 1
+
+
+def test_read_only_is_default_and_refuses_writes(mock):
+    """SAFE DEFAULT: a fresh Server is read-only, so on_command refuses to actuate (and _meta
+    reports it). Writes only happen once explicitly enabled (--enable-writes / CALICTL_ENABLE_WRITES)."""
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    assert s._read_only is True                          # default
+    assert serve.ServeBackend(s, loop=None, read_only=s._read_only).state()["_meta"]["read_only"] is True
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("cooler", "power", "on")
+    assert asyncio.run(_run()) is None                   # refused
+    assert mock.decoded("cooler")["State"] == 0          # unchanged

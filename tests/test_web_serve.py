@@ -115,6 +115,7 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
     (device.actuate_roof), never the one-shot device.actuate -- a single frame
     won't complete travel and has no guaranteed STOP."""
     s = serve.Server(influx_enabled=False)
+    s._read_only = False                                 # writes enabled for this actuation test
     calls = {"actuate_roof": None, "actuate": None}
 
     async def fake_actuate_roof(f, move_frame, stop_frame, verify=True):
@@ -145,6 +146,7 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
 def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
     """roof stop is a one-shot STOP frame -- device.actuate, not the move-heartbeat."""
     s = serve.Server(influx_enabled=False)
+    s._read_only = False                                 # writes enabled for this actuation test
     calls = {"actuate_roof": None, "actuate": None}
 
     async def fake_actuate_roof(f, move_frame, stop_frame, verify=True):

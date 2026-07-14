@@ -74,6 +74,8 @@ class ServeBackend:
             "age_s": round(age) if age is not None else None,
             # online = a poll succeeded within the last few cycles; else the van is asleep/gone
             "online": bool(age is not None and age < self._s.interval * 3 + 30),
+            # read_only = writes are disabled (the safe default); the web UI disables controls
+            "read_only": bool(self.read_only),
         }
         return out
 
@@ -144,7 +146,7 @@ class Server:
         self._iw = None                     # influx write_api
         self._loop = None
         self._web_port = None                # set by the CLI to enable the web UI
-        self._read_only = False              # set by the CLI: web UI rejects commands
+        self._read_only = True               # SAFE DEFAULT: reject writes until explicitly enabled
         self._httpd = None
 
     def water_forecast(self):
@@ -245,6 +247,11 @@ class Server:
         """
         from . import control  # lazy
         from .cli import _set_check  # lazy; reuse the CLI's post-write field check
+        if self._read_only:
+            # SAFE DEFAULT: no vehicle writes unless writes were explicitly enabled. Central gate,
+            # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
+            print("read-only: refusing command %s/%s" % (function, what), flush=True)
+            return None
         # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
