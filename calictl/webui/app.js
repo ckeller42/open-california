@@ -49,11 +49,23 @@ const zonesLit = (s) => Object.keys(s).filter((k) => k.startsWith("brightness_zo
 // Feature specs. `controls[].what` are /api/command tokens (calictl/control.py BUILDERS);
 // `state` is the interpreted /api/state key (calictl/semantics.py). `confirm` gates fuel/
 // motion actuators behind a dialog. `readouts[].get(state)` formats a live value.
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : s);
+
 // Cooler fault-enum -> banner text (see semantics.cooler / vf/c.java). Absent/"" = no fault.
 const COOLER_FAULT_MSG = {
   door_open: "⚠ Fridge door is open",
   emergency: "⚠ Cooler in emergency operation",
   error: "⚠ Cooler error",
+};
+
+// Roof InfoPopUp alert -> banner text (see semantics.roof / ig/c.java).
+const ROOF_ALERT_MSG = {
+  child_lock: "⚠ Roof child lock active",
+  error: "⚠ Roof error",
+  sensor_error: "⚠ Roof sensor error",
+  emergency_locked: "⚠ Roof emergency-locked",
+  not_possible: "⚠ Roof operation not possible right now",
+  low_battery: "⚠ Battery too low to operate roof",
 };
 
 const ORDER = ["cooler", "campingmode", "lighting", "airheater", "water", "energy", "roof", "vehicle"];
@@ -127,8 +139,15 @@ const FEATURES = {
   },
   roof: {
     title: "Roof", icon: "🚐", roof: true,
-    readouts: [{ label: "Position", get: (s) => s.position ?? "—" }, { label: "Safety valid", get: (s) => yn(s.safety_valid) }],
-    summary: (s) => (s && s.position != null ? `Position ${s.position}` : ""),
+    readouts: [
+      { label: "Position", get: (s) => (s.position_name ? cap(s.position_name) : (s.position ?? "—")) },
+      { label: "Safety valid", get: (s) => yn(s.safety_valid) },
+      { label: "Alert", get: (s) => (s.alert ? ROOF_ALERT_MSG[s.alert] || s.alert : "none") },
+    ],
+    // InfoPopUp alert -> a banner (ig/c.java): child lock, sensor error, low battery, etc.
+    warn: (s) => (s.alert ? ROOF_ALERT_MSG[s.alert] || `⚠ Roof: ${s.alert}` : null),
+    summary: (s) => (s.alert ? `⚠ ${s.alert.replace(/_/g, " ")}`
+                     : (s && s.position_name ? cap(s.position_name) : "")),
   },
   vehicle: {
     title: "Vehicle", icon: "🚗",
@@ -365,9 +384,14 @@ function renderDashboard() {
     const f = FEATURES[fn];
     const s = STATE[fn] || {};
     const tile = document.createElement("button");
-    tile.className = "tile";
-    tile.innerHTML = `<div class="ti">${f.icon || ""}</div><div class="tt">${f.title}</div>` +
+    // A feature's own warn(s) doubles as the dashboard alert signal (cooler fault, roof alert):
+    // non-null -> the tile gets a ⚠ badge + highlight so a fault is visible without drilling in.
+    const alertMsg = f.warn ? f.warn(s) : null;
+    tile.className = "tile" + (alertMsg ? " alert" : "");
+    tile.innerHTML = (alertMsg ? `<div class="tbadge">⚠</div>` : "") +
+      `<div class="ti">${f.icon || ""}</div><div class="tt">${f.title}</div>` +
       `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>`;
+    if (alertMsg) tile.title = alertMsg;
     tile.onclick = () => goto(fn);
     grid.appendChild(tile);
   }

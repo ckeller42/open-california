@@ -9,6 +9,7 @@ Semantics
 ---------
 
 .. autofunction:: calictl.semantics.vehicle
+.. autofunction:: calictl.semantics.roof
 
 Device / reads
 --------------

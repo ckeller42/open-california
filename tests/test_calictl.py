@@ -54,6 +54,27 @@ def test_cooler_error_is_power_gated_2bit_enum():
     assert off["fault"] is None and off["error"] is False and off["door_open"] is False
 
 
+def test_roof_position_name_and_infopopup_alert():
+    """Position -> name (ig/c.java l() + hf/b.java: 0/14=closed 1=open 2=middle 15=error else=other)
+    and InfoPopUp -> alert (0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked
+    10=not_possible 11=low_battery), the alert only surfaced while the roof is installed.
+
+    .. test:: roof position name + InfoPopUp alert mapping
+       :id: T_ROOF_ALERT
+       :links: R_ROOF_ALERT
+       :status: passing
+    """
+    base = {"Installed": 1, "SafetyCounterValid": 1, "InfoPopUp": 0}
+    for pos, name in [(0, "closed"), (1, "open"), (2, "middle"), (14, "closed"),
+                      (15, "error"), (7, "other")]:
+        assert semantics.roof({**base, "Position": pos})["position_name"] == name
+    for raw, alert in [(0, None), (1, "child_lock"), (4, "error"), (6, "sensor_error"),
+                       (7, "emergency_locked"), (10, "not_possible"), (11, "low_battery")]:
+        assert semantics.roof({**base, "Position": 0, "InfoPopUp": raw})["alert"] == alert
+    # not installed -> no alert even if the field is non-zero (matches the app's install gate)
+    assert semantics.roof({"Installed": 0, "Position": 0, "InfoPopUp": 4})["alert"] is None
+
+
 def test_energy_charging_and_scale():
     f = _funcs()
     e = semantics.energy(P.decode(f["energy"], ENERGY_IGN_ON))
