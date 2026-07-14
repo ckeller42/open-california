@@ -1,0 +1,23 @@
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_c368269f78a57c 123-125
+  s_d2c35aeebbd344::t_f7089e417bffba 486,495-500
+  s_d2c35aeebbd344::t_1ed7cd2a98a06c 501-503
+calictl/serve.py
+  s_d2c35aeebbd344::t_fc7741a79d3f54 192-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "848e1ac0f16f7805579fa74a57ca6f3d9c40496f",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
