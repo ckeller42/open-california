@@ -49,6 +49,13 @@ const zonesLit = (s) => Object.keys(s).filter((k) => k.startsWith("brightness_zo
 // Feature specs. `controls[].what` are /api/command tokens (calictl/control.py BUILDERS);
 // `state` is the interpreted /api/state key (calictl/semantics.py). `confirm` gates fuel/
 // motion actuators behind a dialog. `readouts[].get(state)` formats a live value.
+// Cooler fault-enum -> banner text (see semantics.cooler / vf/c.java). Absent/"" = no fault.
+const COOLER_FAULT_MSG = {
+  door_open: "⚠ Fridge door is open",
+  emergency: "⚠ Cooler in emergency operation",
+  error: "⚠ Cooler error",
+};
+
 const ORDER = ["cooler", "campingmode", "lighting", "airheater", "water", "energy", "roof", "vehicle"];
 const FEATURES = {
   cooler: {
@@ -58,13 +65,13 @@ const FEATURES = {
       { what: "level", kind: "slider", label: "Cooling level", state: "level", min: 1, max: 5 },
     ],
     readouts: [
-      { label: "Fridge door", get: (s) => (s.error ? "⚠ Open" : "Closed") },
+      { label: "Fridge door", get: (s) => (s.door_open ? "⚠ Open" : "Closed") },
       { label: "Timer", get: (s) => onoff(s.timer_active) },
     ],
-    // `error` tracks the fridge door on this van (verified live 2026-07-13: door open -> error
-    // true, closed -> false). Surface it as a banner so an open door is obvious at a glance.
-    warn: (s) => (s.error ? "⚠ Fridge door is open" : null),
-    summary: (s) => (s.error ? "⚠ Door open" : (s.on ? `On · level ${s.level}` : "Off")),
+    // `fault` is the cooler's 2-bit Error enum, only meaningful while powered on (vf/c.java):
+    // door_open | emergency | error. Surface it as a banner so a fault is obvious at a glance.
+    warn: (s) => (COOLER_FAULT_MSG[s.fault] || null),
+    summary: (s) => (COOLER_FAULT_MSG[s.fault] || (s.on ? `On · level ${s.level}` : "Off")),
   },
   campingmode: {
     title: "Camping mode", icon: "🏕️",
