@@ -25,6 +25,25 @@ correlate. Two tools: `idevicebtlogger` on the **bar** Mac (captures the iPhone 
 `calictl` / the spike on **buspi**. Recording: I trigger it — you say "go", I confirm packets
 flow, you act, you say "done", I decode.
 
+## Which unclear items a capture can actually resolve (2026-07-14)
+
+The test is **"is the unknown on the BLE wire?"** A passive HCI capture of the app driving the van
+answers wire facts; it adds nothing for app-side logic or unexposed features.
+
+| Unclear item | Capture resolves it? | What to do |
+|---|---|---|
+| **Air-heater level range** (is it 1–10 or the raw 0–15?) | ✅ **yes, fully** | In the app, set the heater to its **lowest** then **highest** level. The writes to char `1701` carry the exact min/max `HeatingLevel` raw values → pins the real range. Until then `semantics.airheater` keeps the honest raw 0–15 (`HeatingLevel` is 4-bit, dict-marked `UNVERIFIED`). |
+| **`car_variant` → model name** | 🟡 **partial** | A single **read** of char `1004` shows this van's raw `CarVariant`; the app screen shows the model. Pairs raw→label for *this* van (confirms whether `1 = California 7`, per `te/a.java`). Can't prove the other variants — only one vehicle. Kept as raw int meanwhile. |
+| **Vehicle clock-out-of-sync** | ❌ **no — not on the wire** | The RTC decode is already correct. "Out of sync" is the app comparing the unit clock to the **phone** clock (>5 min, `zf/d.java:235`). Nothing to capture — implement daemon-side (compare `vehicle.car_clock` to the Pi system clock) if wanted. |
+| **Lighting colour (`SET_COLOR`)** | ❌ **no — not exposed** | The app has **no colour UI** (decompile-confirmed), so it never emits a colour frame. A capture only confirms the negative. `set lighting color` stays inferred/N-A. |
+
+**Highest-leverage capturable targets** (all wire facts, grab them in one at-the-van session):
+1. **Roof actuation** — the last control path still NOT-LIVE-VERIFIED, and the roof **is** fitted here.
+   A *passive* capture (you tap, we watch — zero risk) confirms SafetyCounter cadence, the ~3 s
+   self-gate, and direction bytes vs `device.actuate_roof`. See §5 + Priority 5.
+2. **Air-heater level range** (above) + a live read while it runs.
+3. **Full 16-zone lamp map** — only L1–L8 identified; drag each remaining lamp to a distinct level.
+
 ## Runbook — copy-paste (staged 2026-07-13, ready to run)
 
 Scenarios for the differential oracle are **pre-staged** under `tools/scenarios/` (all build a valid
@@ -48,8 +67,8 @@ Run the **known-good validators FIRST** (must diff to zero — proves the pipeli
 |---|---|---|---|
 | a | Camping Mode ON | `campingmode/master-on` | zero diff |
 | b | Cooler power ON | `cooler/power-on` | zero diff |
-| c | **Kitchen lamp → 5** (profile active) | `lighting/kitchen-50` | **LEADS = the P1 crack** |
-| d | Set light colour → red | `lighting/color-red` | zero = SET_COLOR layout verified |
+| c | **Kitchen lamp → 5** (profile active) | `lighting/kitchen-50` | zero diff (P1 crack confirmed 2026-07-13) |
+| d | ~~Set light colour → red~~ | ~~`lighting/color-red`~~ | **N/A — app exposes no colour control** |
 | e | Switch to profile 9 | `lighting/profile-9` | zero diff |
 
 **2. Stability spike (buspi, phone app closed):**
@@ -114,8 +133,8 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 - **vehicle ignition byte-0**: ignition ON → confirm `ignition_on` reads True (the bit-7 fix).
 - **water ↔ ignition**: ignition on → 11 L; off → decays.
 - **cooler night-timer** (corrected offsets 16/24/32/40): set a night-timer, capture, confirm.
-- **SET_COLOR** (Mode 6): `set lighting color amber` with a profile active — capture + confirm it
-  matches the app's colour write, and (with P1) whether it applies.
+- ~~**SET_COLOR** (Mode 6)~~: **dropped** — the app exposes no colour control (decompile-confirmed
+  2026-07-13), so there is no colour write to capture.
 
 ## Priority 5 — finish the smaller gaps
 - **air-heater level + runtime** (only on/off captured; the physical fields were at sentinels):
