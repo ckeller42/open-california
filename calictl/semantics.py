@@ -115,14 +115,25 @@ def energy(d: dict) -> dict:
     }
 
 
+# Cooler Error is a 2-bit enum (bits 0-1 of char 1102), interpreted by the app ONLY while
+# the fridge is powered on (vf/c.java gates the alert on State). 0=ok, 1=generic error,
+# 2=emergency operation, 3=door open (COOLER_ERROR/EMERGENCY_OPERATION/DOOR_OPEN IDs).
+_COOLER_FAULT = {1: "error", 2: "emergency", 3: "door_open"}
+
+
 def cooler(d: dict) -> dict:
+    on = d.get("State") == 1
+    # Error bits are only meaningful powered-on; off -> no fault (stale/undefined otherwise).
+    fault = _COOLER_FAULT.get(d.get("Error")) if on else None
     return {
         "installed": bool(d.get("Installed")),
-        "on": d.get("State") == 1,
+        "on": on,
         "level": d.get("Level"),        # 1-5 cooling level
         "mode": d.get("Mode"),
         "timer_active": bool(d.get("TimerState")),
-        "error": bool(d.get("Error")),
+        "fault": fault,                 # None | "error" | "emergency" | "door_open"
+        "door_open": fault == "door_open",
+        "error": bool(fault),           # back-compat: any active fault
     }
 
 
