@@ -115,14 +115,19 @@ const FEATURES = {
   water: {
     title: "Water", icon: "💧",
     readouts: [
-      { label: "Fresh water", get: (s) => tank(s.fresh), bar: (s) => s.fresh && s.fresh.percent },
+      { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  🕒 stale" : ""),
+        bar: (s) => s.fresh && s.fresh.percent },
       { label: "Estimated water left",
-        get: (s) => (s.fresh && s.fresh.days_left != null
-          ? `≈ ${s.fresh.days_left} days` + (s.fresh.drain_lpd ? ` · ${s.fresh.drain_lpd} L/day` : "")
-          : "—") },
+        get: (s) => (s.fresh && s.fresh.stale ? "—  (level stale)"
+          : (s.fresh && s.fresh.days_left != null
+            ? `≈ ${s.fresh.days_left} days` + (s.fresh.drain_lpd ? ` · ${s.fresh.drain_lpd} L/day` : "")
+            : "—")) },
       { label: "Waste water", get: (s) => tank(s.waste), bar: (s) => s.waste && s.waste.percent },
     ],
-    summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%` : ""),
+    // The fresh-water sensor only measures while the van's water system is on; parked/asleep it
+    // latches a stale low value. Flag it rather than showing a confident-wrong level + 0-day forecast.
+    warn: (s) => (s.fresh && s.fresh.stale ? "🕒 Fresh-water level is stale — the van's water system is off (last measured while active)" : null),
+    summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%${s.fresh.stale ? " (stale)" : ""}` : ""),
   },
   energy: {
     title: "Energy", icon: "🔋",

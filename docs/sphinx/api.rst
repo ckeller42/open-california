@@ -10,6 +10,7 @@ Semantics
 
 .. autofunction:: calictl.semantics.vehicle
 .. autofunction:: calictl.semantics.roof
+.. autofunction:: calictl.freshness.implausible_water_drop
 
 Device / reads
 --------------
