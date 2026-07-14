@@ -1,0 +1,23 @@
+tests/test_calictl.py
+  s_d2c35aeebbd344::t_ab0d1f3cab41e7 224-234
+calictl/deploy/camper-dashboard.json
+  s_d2c35aeebbd344::t_bc0a17c87f7e28 821-945,948
+calictl/influx.py
+  s_d2c35aeebbd344::t_cde89c2f88a33d 25-35,39-40,43-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "9a1fcbaef0206ddfcac1930019c77a09a695ddba",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
