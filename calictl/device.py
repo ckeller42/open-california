@@ -294,10 +294,14 @@ class CamperDevice:
                            verify: bool = True) -> dict | None:
         """Drive a roof OPEN/CLOSE move by streaming move frames, then force STOP.
 
-        **SAFETY-SENSITIVE and NOT-LIVE-VERIFIED** (the pop-up roof is not installed
-        on this van, so this path has never actuated real hardware; enum polarity + the
-        SafetyCounter handshake are validated only against the mock). Physical roof
-        motion can pinch/collide — a caller must have confirmed the roof is clear.
+        **SAFETY-SENSITIVE.** The wire protocol is **live-verified** against the app's real
+        roof drive (HCI capture 2026-07-14, char 1401): direction bytes 0x01 open / 0x04 close /
+        0x00 stop, a **free-running** monotonic +1/500 ms SafetyCounter (the app runs it
+        continuously from connect, never echoing the unit), press-and-hold with no STOP-hold
+        phase, and Position decoding closed(0)→middle(2)→closed against a real ~30 cm move with
+        SafetyCounterValid staying set. **calictl driving the roof itself is still unproven** —
+        the frames match the app, but we have not yet had calictl actuate the motor end-to-end.
+        Physical roof motion can pinch/collide — a caller must have confirmed the roof is clear.
         Nothing here runs automatically.
 
         Model (settled by the app-engine decompile, ``w8/a``, 2026-07-13): a single roof

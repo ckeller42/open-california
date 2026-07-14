@@ -103,10 +103,14 @@ const FEATURES = {
     title: "Air heater", icon: "🔥", confirm: (w) => `Start the fuel-burning parking heater (${w})? It is not live-verified. Continue?`,
     controls: [
       { what: "power", kind: "toggle", label: "Parking heater", state: "running" },
-      { what: "level", kind: "slider", label: "Heating level", state: "level", min: 0, max: 15 },
+      { what: "level", kind: "slider", label: "Heating level (10 = HI)", state: "level", min: 1, max: 10 },
     ],
-    readouts: [{ label: "Running time", get: (s) => withUnit(s.running_time, "min") }, { label: "Error code", get: (s) => s.error_code ?? "—" }],
-    summary: (s) => (s.running ? "Running" : "Off"),
+    readouts: [
+      { label: "Level", get: (s) => (s.level == null ? "—" : (s.level >= 10 ? "HI" : s.level)) },
+      { label: "Running time", get: (s) => withUnit(s.running_time, "min") },
+      { label: "Error code", get: (s) => s.error_code ?? "—" },
+    ],
+    summary: (s) => (s.running ? `Running${s.level != null ? " · " + (s.level >= 10 ? "HI" : s.level) : ""}` : "Off"),
   },
   water: {
     title: "Water", icon: "💧",

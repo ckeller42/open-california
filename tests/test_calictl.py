@@ -54,6 +54,25 @@ def test_cooler_error_is_power_gated_2bit_enum():
     assert off["fault"] is None and off["error"] is False and off["door_open"] is False
 
 
+def test_airheater_level_range_1_to_10():
+    """Verified at the van 2026-07-14 (HCI capture): the app exposes heating levels 1-9 + "HI"(=10),
+    building `HeatingLevel` raw 1 (lowest) .. 10 (HI). 11 is the post-set leave-unchanged/commit
+    value; 0 and 12-15 are never emitted. calictl's frames match the app's byte-for-byte."""
+    from calictl import control
+    f = _funcs()
+    st = {"AirDistribution": 0, "OperationModeAirHeater": 7, "HeatingLevel": 11,
+          "RunningTime": 127, "TimerHour": 31, "TimerMin": 63}
+    assert control.build(f, "airheater", "level", 1, st).hex() == "3f71007f1f3f"   # == app's lowest
+    assert control.build(f, "airheater", "level", 10, st).hex() == "3f7a007f1f3f"  # == app's "HI"
+    for bad in (0, 12, 15):
+        try:
+            control.build(f, "airheater", "level", bad, st)
+        except ValueError as e:
+            assert "HeatingLevel" in str(e)
+        else:
+            raise AssertionError("expected ValueError for out-of-range HeatingLevel=%d" % bad)
+
+
 def test_roof_position_name_and_infopopup_alert():
     """Position -> name (ig/c.java l() + hf/b.java: 0/14=closed 1=open 2=middle 15=error else=other)
     and InfoPopUp -> alert (0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked
