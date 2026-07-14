@@ -48,17 +48,37 @@ def test_water_forecast_merges_when_available(monkeypatch):
 
 
 def test_state_flags_stale_water_and_suppresses_forecast(monkeypatch):
-    """When _water_stale_since is set (parked/asleep stale latch), state() flags fresh water stale
-    and does NOT attach the days-left forecast (a forecast off a latched level is nonsense)."""
+    """When stale, state() serves the last PLAUSIBLE reading (_water_good) flagged stale, NOT the
+    latched low in _last, and does not attach the days-left forecast (nonsense off a latch)."""
     s = serve.Server(influx_enabled=False)
-    s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 17, "FreshWaterVolume": 29}}
+    s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 1, "FreshWaterVolume": 29}}  # latched low
+    s._water_good = {"installed": True, "fresh": {"liters": 17, "capacity_l": 29, "percent": 59},
+                     "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
     s._water_stale_since = 1_700_000_000.0
-    # even if a forecast were available, stale must win and skip it
     monkeypatch.setattr(serve.Server, "water_forecast", lambda self: {"days_left": 0.0, "drain_lpd": 22.5})
     fresh = serve.ServeBackend(s, loop=None).state()["water"]["fresh"]
     assert fresh["stale"] is True
     assert "days_left" not in fresh and "drain_lpd" not in fresh
-    assert fresh["liters"] == 17               # the held-over plausible level, not a bogus low
+    assert fresh["liters"] == 17               # the last plausible level, not the latched 1 L
+
+
+def test_seed_water_good_from_influx_history(monkeypatch):
+    """Cold start (no in-memory baseline): a current low read + higher recent Influx history seeds a
+    plausible baseline so the current latched low is recognised as stale; equal/lower history -> None."""
+    from calictl import influx
+    s = serve.Server(influx_enabled=False)
+    cur = {"installed": True, "fresh": {"liters": 1, "capacity_l": 29, "percent": 3},
+           "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
+    monkeypatch.setattr(influx, "field_series", lambda *a, **k: [(1, 19.0), (2, 18.0), (3, 1.0)])
+    base = s._seed_water_good(cur)
+    assert base is not None and base["fresh"]["liters"] == 19 and base["waste"]["liters"] == 1
+    # a fresh low read is now recognised as an impossible drop vs the seeded baseline
+    from calictl import freshness
+    assert freshness.implausible_water_drop(cur, base) is True
+    # no history above current -> no seed (current isn't a stale drop)
+    s2 = serve.Server(influx_enabled=False)
+    monkeypatch.setattr(influx, "field_series", lambda *a, **k: [(1, 1.0), (2, 1.0)])
+    assert s2._seed_water_good(cur) is None
 
 
 def test_serve_backend_state_interprets_cache():
