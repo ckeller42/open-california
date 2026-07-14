@@ -1,0 +1,22 @@
+calictl/freshness.py
+  s_d2c35aeebbd344::t_364077e363ebd8 22,25-30
+  s_d2c35aeebbd344::t_435f4534c73e15 49
+tests/test_calictl.py
+  s_d2c35aeebbd344::t_95e498e79a4512 448-451,461,463-464,467-469,471
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "c165f8327f7df606fef83bf63bbc09b01bbb340e",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
