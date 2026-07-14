@@ -1,0 +1,21 @@
+docs/remaining-captures.md
+  s_d2c35aeebbd344::t_d63bb91233723d 136-137
+  s_d2c35aeebbd344::t_1d1a457e0042f9 28-46
+  s_d2c35aeebbd344::t_c7274350f4cce2 70-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "fc69178314252ce042c19dfb9a763f167257bc39",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
