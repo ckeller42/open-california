@@ -138,9 +138,9 @@ class Server:
         # real values (the unit can be unreachable for days when parked). Env-overridable path.
         self._state_cache = os.environ.get(
             "CALICTL_STATE_CACHE", os.path.expanduser("~/.cache/calictl/last_state.json"))
-        self._load_last()
         self._water_stale_since = None      # ts the fresh-water read went physically-impossible (stale latch)
         self._water_good = None             # last PLAUSIBLE interpreted water (baseline for the stale guard)
+        self._load_last()                   # AFTER the defaults: it restores _water_good/_water_stale_since
         self._mqtt = None
         self._iw = None                     # influx write_api
         self._loop = None
