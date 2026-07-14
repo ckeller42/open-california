@@ -2,6 +2,17 @@
 
 **Status:** SOLVED + live-verified on-device 2026-07-09.
 
+> **CORRECTION 2026-07-14 (ground-truth at the van): the heartbeat keeps the *link* fresh, but
+> fresh-*water* measurement is gated on the van's WATER SYSTEM being powered — not the heartbeat.**
+> Verified against the van's own panel: parked/locked, buspi read fresh-water **1 L** (stale) while
+> the tank truly held **17–19 L**; after unlocking the van (water system on) + running a tap, buspi
+> tracked the true level **live** (19→18→17 L, grey 0→1 L, matching the panel within the poll lag).
+> So the 2026-07-09 "heartbeat → 1→11 L" was **correlation** (the van was active then), not cause.
+> buspi is a faithful mirror; the unit simply stops measuring water when parked. We can't force a
+> measurement, so `calictl/freshness.py::implausible_water_drop` rejects the physically-impossible
+> latched drop (fresh ↓ with no grey ↑) and the daemon holds the last plausible reading, flagged
+> **stale** (forecast suppressed). See `[[value-freshness-heartbeat]]` memory + `R_WATER_STALE_GUARD`.
+
 ## Symptom
 
 A bare poll of the fresh-water state char (`00001302`) returned **1 L** while the vehicle truly

@@ -47,6 +47,20 @@ def test_water_forecast_merges_when_available(monkeypatch):
     assert fresh["drain_lpd"] == 6.0 and fresh["days_left"] == round(11 / 6.0, 1)
 
 
+def test_state_flags_stale_water_and_suppresses_forecast(monkeypatch):
+    """When _water_stale_since is set (parked/asleep stale latch), state() flags fresh water stale
+    and does NOT attach the days-left forecast (a forecast off a latched level is nonsense)."""
+    s = serve.Server(influx_enabled=False)
+    s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 17, "FreshWaterVolume": 29}}
+    s._water_stale_since = 1_700_000_000.0
+    # even if a forecast were available, stale must win and skip it
+    monkeypatch.setattr(serve.Server, "water_forecast", lambda self: {"days_left": 0.0, "drain_lpd": 22.5})
+    fresh = serve.ServeBackend(s, loop=None).state()["water"]["fresh"]
+    assert fresh["stale"] is True
+    assert "days_left" not in fresh and "drain_lpd" not in fresh
+    assert fresh["liters"] == 17               # the held-over plausible level, not a bogus low
+
+
 def test_serve_backend_state_interprets_cache():
     s = serve.Server(influx_enabled=False)
     funcs = protocol.load(); overrides.apply(funcs)

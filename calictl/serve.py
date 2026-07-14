@@ -17,7 +17,7 @@ import os
 import time
 from pathlib import Path
 
-from . import protocol, semantics, overrides, mqtt, influx
+from . import protocol, semantics, overrides, mqtt, influx, freshness
 from .device import CamperDevice, ConnectionUnavailable
 
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
@@ -64,9 +64,16 @@ class ServeBackend:
         # (cached; {} when Influx is unavailable or the trend is too flat to estimate).
         water = out.get("water")
         if isinstance(water, dict) and isinstance(water.get("fresh"), dict):
-            fc = self._s.water_forecast()
-            if fc:
-                water["fresh"] = {**water["fresh"], **fc}
+            stale_since = self._s._water_stale_since
+            if stale_since:
+                # Held-over last-plausible reading: flag it and suppress the forecast (a days-left
+                # number off a latched level is nonsense — that's the "0 days" we don't want to show).
+                water["fresh"] = {**water["fresh"], "stale": True}
+                water["stale_since"] = stale_since
+            else:
+                fc = self._s.water_forecast()
+                if fc:
+                    water["fresh"] = {**water["fresh"], **fc}
         ts = self._s._last_ok_ts
         age = (time.time() - ts) if ts else None
         out["_meta"] = {
@@ -142,6 +149,7 @@ class Server:
         self._load_last()
         self._forecast = {}                 # cached water days-left forecast (from influx history)
         self._forecast_ts = 0.0
+        self._water_stale_since = None      # ts the fresh-water read went physically-impossible (stale latch)
         self._mqtt = None
         self._iw = None                     # influx write_api
         self._loop = None
@@ -202,10 +210,23 @@ class Server:
             raw = await self.dev.read_all(self.funcs)
         states = {}
         new_last = dict(self._last)         # build a fresh copy, then publish atomically
+        prev_water = self._last.get("water")
         for fn, data in raw.items():
             decoded = protocol.decode(self.funcs[fn], data)
             new_last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
+        # Stale-latch guard: when the van is parked/locked the unit stops measuring fresh water and
+        # returns a bogus low (true 17 L read back as 1 L). A fresh drop with no matching grey rise
+        # is physically impossible -> keep the last plausible reading (decoded + interpreted) and
+        # flag it stale, rather than publishing/serving the latched value.
+        if "water" in states and prev_water is not None:
+            prev_w = semantics.interpret("water", prev_water)
+            if freshness.implausible_water_drop(states["water"], prev_w):
+                new_last["water"] = prev_water        # hold the last plausible decoded water
+                states["water"] = prev_w              # ...and keep MQTT/Influx off the bogus value
+                self._water_stale_since = self._water_stale_since or self._last_ok_ts or time.time()
+            else:
+                self._water_stale_since = None
         if states:                          # a real read happened -> mark fresh + persist
             # Rebind (never mutate in place): the web thread reads `_last` unlocked in
             # ServeBackend.state(), so it must only ever see a complete dict, not one
