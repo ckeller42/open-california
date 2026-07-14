@@ -45,6 +45,20 @@ def test_state_flags_stale_water():
     assert "days_left" not in fresh
 
 
+def test_water_baseline_persists_across_restart(monkeypatch, tmp_path):
+    """_water_good + _water_stale_since must survive a restart (load must not be clobbered by the
+    __init__ defaults — the ordering bug that silently disabled persistence)."""
+    monkeypatch.setenv("CALICTL_STATE_CACHE", str(tmp_path / "state.json"))
+    s = serve.Server(influx_enabled=False)
+    s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 1, "FreshWaterVolume": 29}}
+    s._water_good = {"installed": True, "fresh": {"liters": 18, "capacity_l": 29, "percent": 62},
+                     "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
+    s._water_stale_since = 1_700_000_000.0
+    s._save_last()
+    s2 = serve.Server(influx_enabled=False)          # "restart" — same cache path
+    assert s2._water_good == s._water_good and s2._water_stale_since == 1_700_000_000.0
+
+
 def test_water_good_baseline_needs_no_influx(monkeypatch):
     """The stale guard's baseline is the in-memory/persisted _water_good — no Influx. A live
     plausible read establishes it; a later impossible drop is flagged without any Influx call."""
