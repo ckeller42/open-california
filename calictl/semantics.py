@@ -169,10 +169,46 @@ def campingmode(d: dict) -> dict:
     }
 
 
+# Roof Position -> name (ig/c.java l() + hf/b.java enum): 0/14=closed, 1=open, 2=middle,
+# 15=error, everything else (3-13, transitional) = other.
+_ROOF_POS = {0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error"}
+# Roof InfoPopUp alert enum (ig/c.java, 4-bit InfoPopUp), only meaningful while installed:
+# 0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked 10=not_possible 11=low_battery.
+_ROOF_ALERT = {1: "child_lock", 4: "error", 6: "sensor_error", 7: "emergency_locked",
+               10: "not_possible", 11: "low_battery"}
+
+
 def roof(d: dict) -> dict:
+    """Interpret the pop-top roof state (BLE char ``00001402``).
+
+    Adds the app's human-facing readouts on top of the raw ``Position``: a
+    ``position_name`` (``closed``/``open``/``middle``/``error``/``other``) and the
+    ``InfoPopUp`` alert enum (child-lock, sensor error, low battery, ...), the alert
+    surfaced only while the roof is installed. Mapping taken from the decompiled roof
+    view-model ``ig/c.java`` (``l()`` + the ``InfoPopUp`` branch) and ``hf/b.java``.
+
+    :param d: decoded field map for the ``roof`` function (``Position``, ``Installed``,
+        ``InfoPopUp``, ``SafetyCounterValid``).
+    :returns: interpreted dict with ``position``, ``position_name``, ``alert``
+        (``None`` when clear/uninstalled) and ``safety_valid``.
+
+    .. req:: Interpret roof position + InfoPopUp alert
+       :id: R_ROOF_ALERT
+       :status: implemented
+       :tags: ble, telemetry, roof
+
+       ``calictl`` shall map the roof ``Position`` to a human name and the ``InfoPopUp``
+       field to the app's alert enum (child-lock/error/sensor-error/emergency-locked/
+       not-possible/low-battery), surfacing the alert only while the roof is installed.
+    """
+    installed = bool(d.get("Installed"))
+    pos = d.get("Position")
     return {
-        "installed": bool(d.get("Installed")),
-        "position": d.get("Position"),            # 0 = closed/down
+        "installed": installed,
+        "position": pos,                          # raw 0-15 (0 = closed/down)
+        "position_name": _ROOF_POS.get(pos, "other") if pos is not None else None,
+        # alert is the app's InfoPopUp popup, gated on the roof being fitted (ig/c.java gate)
+        "alert": _ROOF_ALERT.get(d.get("InfoPopUp")) if installed else None,
         "safety_valid": bool(d.get("SafetyCounterValid")),
     }
 

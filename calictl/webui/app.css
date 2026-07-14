@@ -42,6 +42,10 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
   box-shadow: var(--shadow); cursor: pointer; text-align: left; color: inherit; display: grid; gap: .15rem;
   transition: transform .08s ease; }
 .tile:active { transform: scale(.98); }
+.tile { position: relative; }
+/* a feature with an active fault/alert (cooler door, roof child-lock, ...) */
+.tile.alert { border-color: var(--warn, #c47d00); box-shadow: 0 0 0 1px var(--warn, #c47d00) inset, var(--shadow); }
+.tile .tbadge { position: absolute; top: .5rem; right: .6rem; font-size: 1rem; line-height: 1; }
 .tile .ti { font-size: 1.5rem; line-height: 1; }
 .tile .tt { font-weight: 600; margin-top: .3rem; }
 .tile .tv { color: var(--muted); font-size: .9rem; min-height: 1.2em; }
