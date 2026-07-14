@@ -445,9 +445,10 @@ def test_heartbeat_counter_bytes():
 
 
 def test_water_stale_latch_guard():
-    """A large fresh-water DROP with no matching grey-water rise is physically impossible (the
-    parked/asleep stale latch, confirmed at the van 2026-07-14: true 17 L read back as 1 L) and
-    must be rejected; real usage (fresh down, grey up) and refills (fresh up) stay plausible.
+    """ANY fresh-water drop with no matching grey-water rise is physically impossible (the
+    parked/asleep stale latch, confirmed at the van 2026-07-14). Crucially the latch DECAYS
+    gradually (~1 L/poll), so even a 1 L unaccounted drop must be flagged — else it ratchets the
+    baseline down. Real usage (fresh down, grey up together) and refills (fresh up) stay plausible.
 
     .. test:: reject physically impossible fresh-water drops
        :id: T_WATER_STALE_GUARD
@@ -457,13 +458,16 @@ def test_water_stale_latch_guard():
     from calictl import freshness
     def w(fresh, waste):
         return {"fresh": {"liters": fresh}, "waste": {"liters": waste}}
-    # stale latch: 17 L -> 1 L with grey flat -> impossible
+    # sharp latch: 17 -> 1 with grey flat -> impossible
     assert freshness.implausible_water_drop(w(1, 1), w(17, 1)) is True
+    # GRADUAL decay: even a 1 L drop with grey flat -> impossible (the ratchet bug this prevents)
+    assert freshness.implausible_water_drop(w(16, 1), w(17, 1)) is True
     # real usage: fresh down 2, grey up 2 -> plausible
     assert freshness.implausible_water_drop(w(15, 3), w(17, 1)) is False
-    # refill: fresh up -> plausible
+    # real usage, exact 1 L: fresh down 1, grey up 1 -> plausible
+    assert freshness.implausible_water_drop(w(16, 2), w(17, 1)) is False
+    # refill / active re-measure: fresh up or equal -> plausible
     assert freshness.implausible_water_drop(w(25, 1), w(17, 1)) is False
-    # small drop under the threshold (noise / slow drain) -> not flagged
-    assert freshness.implausible_water_drop(w(15, 1), w(17, 1)) is False
+    assert freshness.implausible_water_drop(w(17, 1), w(17, 1)) is False
     # missing levels -> can't judge -> not flagged
     assert freshness.implausible_water_drop({"fresh": {"liters": None}}, w(17, 1)) is False
