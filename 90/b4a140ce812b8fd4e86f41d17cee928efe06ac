@@ -1,0 +1,32 @@
+calictl/webui/app.css
+  s_d2c35aeebbd344::t_dbdd9da7bdf33d 45-48
+calictl/webui/app.js
+  s_d2c35aeebbd344::t_aae49bfa97bd7f 142-150
+  s_d2c35aeebbd344::t_c50e708677bd8d 52-53,61-68
+  s_d2c35aeebbd344::t_502346dd358892 387-392,394
+  s_d2c35aeebbd344::t_14ac9f8fe49a0e 69-70
+docs/sphinx/api.rst
+  s_d2c35aeebbd344::t_fc2a482686f546 12
+tests/test_calictl.py
+  s_d2c35aeebbd344::t_68504d8da1234a 60-66
+  s_d2c35aeebbd344::t_41e5355635486e 57-59,67-77
+calictl/semantics.py
+  s_d2c35aeebbd344::t_ff8f23df5761f6 172-180,204-205,207-211
+  s_d2c35aeebbd344::t_33f55809855848 182-203
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "90b4a140ce812b8fd4e86f41d17cee928efe06ac",
+  "prompts": {},
+  "sessions": {
+    "s_d2c35aeebbd344": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5b9aa16-88c9-46d3-8e4d-735c580fc59b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
