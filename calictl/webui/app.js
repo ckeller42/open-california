@@ -126,7 +126,7 @@ const FEATURES = {
     summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%${s.fresh.stale ? " (stale)" : ""}` : ""),
   },
   energy: {
-    title: "Energy", icon: "🔋",
+    title: "Energy", icon: "🔋", chart: true,
     readouts: [
       { label: "Living battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
       { label: "Living voltage", get: (s) => withUnit(s.batt2_v, "V") },
@@ -332,6 +332,122 @@ function bubbleLevel(roll, pitch) {
   return wrap;
 }
 
+// --- 24 h leisure-battery chart ------------------------------------------------------------
+// The series comes from the daemon's own append-only history (/api/history), NOT from InfluxDB:
+// the GUI is Influx-free by design, so the chart must still draw with Influx/Grafana down.
+// History is cached client-side because renderState runs every 2 s and the window is ~2880
+// samples -- refetching that on every tick would be pointless traffic.
+const CHART = { w: 320, h: 132, l: 34, r: 34, t: 10, b: 18 };
+const HISTORY_TTL_MS = 60000;
+let HISTORY = null, HISTORY_TS = 0;
+
+async function loadHistory() {
+  if (HISTORY && Date.now() - HISTORY_TS < HISTORY_TTL_MS) return HISTORY;
+  HISTORY = await api("/api/history?h=24");
+  HISTORY_TS = Date.now();
+  return HISTORY;
+}
+
+// Split samples into runs that are contiguous in time. A jump longer than `gapS` means the van
+// was asleep (or the daemon was down), so the line BREAKS there. Joining across it would draw a
+// voltage the battery never actually held -- the chart would be inventing data.
+function contiguousRuns(samples, gapS) {
+  const runs = [];
+  let cur = [];
+  for (const s of samples) {
+    if (cur.length && s[0] - cur[cur.length - 1][0] > gapS) { runs.push(cur); cur = []; }
+    cur.push(s);
+  }
+  if (cur.length) runs.push(cur);
+  return runs;
+}
+
+// Min/max of column `i`, widened to at least `pad` so a dead-flat line renders mid-plot
+// instead of dividing by a zero range.
+function extent(samples, i, pad) {
+  let lo = Infinity, hi = -Infinity;
+  for (const s of samples) {
+    const v = s[i];
+    if (typeof v === "number" && isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  }
+  if (!isFinite(lo)) return null;
+  if (hi - lo < pad) { const mid = (hi + lo) / 2; lo = mid - pad / 2; hi = mid + pad / 2; }
+  return [lo, hi];
+}
+
+function chartSvg(h) {
+  const samples = (h && h.samples) || [];
+  const vE = extent(samples, 1, 0.4), aE = extent(samples, 2, 2);
+  if (!samples.length || !vE || !aE) return null;
+  const C = CHART, hours = h.hours || 24;
+  const t1 = h.now, t0 = t1 - hours * 3600;          // a TRUE 24 h axis: gaps stay gaps
+  const plotW = C.w - C.l - C.r, plotH = C.h - C.t - C.b;
+  const x = (ts) => C.l + ((ts - t0) / (t1 - t0)) * plotW;
+  const yFor = (e) => (val) => C.t + plotH - ((val - e[0]) / (e[1] - e[0])) * plotH;
+  const yV = yFor(vE), yA = yFor(aE);
+  const draw = (idx, y, cls) => contiguousRuns(samples, h.gap_s || 120).map((run) => {
+    const pts = run.filter((s) => typeof s[idx] === "number" && isFinite(s[idx]));
+    if (!pts.length) return "";
+    if (pts.length === 1)                            // a lone sample has no line -- show the point
+      return `<circle class="${cls}-dot" cx="${x(pts[0][0]).toFixed(1)}" cy="${y(pts[0][idx]).toFixed(1)}" r="1.6"/>`;
+    return `<polyline class="${cls}" points="${
+      pts.map((s) => `${x(s[0]).toFixed(1)},${y(s[idx]).toFixed(1)}`).join(" ")}"/>`;
+  }).join("");
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${C.w} ${C.h}`);
+  svg.setAttribute("class", "echart");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `Leisure battery, last ${hours} hours`);
+  svg.innerHTML =
+    `<line class="ec-axis" x1="${C.l}" y1="${C.t + plotH}" x2="${C.l + plotW}" y2="${C.t + plotH}"/>` +
+    draw(2, yA, "ec-a") + draw(1, yV, "ec-v") +
+    `<text class="ec-lbl ec-v-lbl" x="${C.l - 4}" y="${C.t + 4}" text-anchor="end">${vE[1].toFixed(1)}</text>` +
+    `<text class="ec-lbl ec-v-lbl" x="${C.l - 4}" y="${C.t + plotH}" text-anchor="end">${vE[0].toFixed(1)}</text>` +
+    `<text class="ec-lbl ec-a-lbl" x="${C.l + plotW + 4}" y="${C.t + 4}">${aE[1].toFixed(1)}</text>` +
+    `<text class="ec-lbl ec-a-lbl" x="${C.l + plotW + 4}" y="${C.t + plotH}">${aE[0].toFixed(1)}</text>` +
+    `<text class="ec-lbl" x="${C.l}" y="${C.h - 4}">−${hours} h</text>` +
+    `<text class="ec-lbl" x="${C.l + plotW}" y="${C.h - 4}" text-anchor="end">now</text>`;
+  return svg;
+}
+
+// Returns the card synchronously (render() is sync); the series fills in when the fetch lands.
+function energyChart() {
+  const card = document.createElement("div");
+  card.className = "card echart-card";
+  const head = document.createElement("div");
+  head.className = "echart-head";
+  head.innerHTML = `<span class="echart-title">Leisure battery — last 24 h</span>` +
+    `<span class="echart-key"><i class="ec-key-v"></i>V <i class="ec-key-a"></i>A</span>`;
+  const body = document.createElement("div");
+  body.className = "echart-body";
+  card.append(head, body);
+  const paint = (h) => {
+    body.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.className = "echart-empty";
+    // api() resolves the body even on a 500, so an error must be told apart from an empty
+    // window -- otherwise a broken endpoint reports itself as "van asleep", blaming the van
+    // for a bug on our side.
+    if (!h || h.error) {
+      empty.textContent = "History unavailable.";
+      return body.appendChild(empty);
+    }
+    const svg = chartSvg(h);
+    if (svg) return body.appendChild(svg);
+    const seen = STATE._meta && STATE._meta.last_seen;
+    empty.textContent = seen
+      ? `No data in the last 24 h — van asleep since ${clockText(seen)}.`
+      : "No data yet — history builds while the van is awake.";
+    body.appendChild(empty);
+  };
+  if (HISTORY && Date.now() - HISTORY_TS < HISTORY_TTL_MS) paint(HISTORY);
+  else {
+    body.textContent = "Loading…";
+    loadHistory().then(paint).catch(() => { body.textContent = "History unavailable."; });
+  }
+  return card;
+}
+
 function render() {
   backEl.hidden = view === "home";
   backEl.onclick = () => goto("home");
@@ -515,6 +631,7 @@ function renderFeature(fn) {
     for (const r of f.readouts) card.appendChild(renderReadout(r, s));
     app.appendChild(card);
   }
+  if (f.chart) app.appendChild(energyChart());
 }
 
 function renderControl(fn, c, s) {

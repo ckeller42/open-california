@@ -41,10 +41,18 @@ def _free_port():
 @pytest.fixture(scope="module")
 def base_url():
     port = _free_port()
+    for stale in ("/tmp/calictl_e2e_history.jsonl", "/tmp/calictl_e2e_state.json"):
+        try:                       # a previous run's samples must not make this one pass
+            os.unlink(stale)
+        except OSError:
+            pass
     env = dict(os.environ,
                CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
                CALICTL_ARM_DELAY_S="0.3", CALICTL_SETTLE_S="0.3", CALICTL_HEARTBEAT_PERIOD_S="0.1",
                CALICTL_HEARTBEAT_WARMUP_S="0", CALICTL_STATE_CACHE="/tmp/calictl_e2e_state.json",
+               # BOTH caches must be redirected: the daemon appends an energy sample per poll, so
+               # without this the suite writes mock data into the developer's real ~/.cache.
+               CALICTL_HISTORY_CACHE="/tmp/calictl_e2e_history.jsonl",
                CALICTL_ENABLE_WRITES="1")   # e2e exercises control writes -> not read-only
     proc = subprocess.Popen(
         [sys.executable, "-m", "tools.run_against_mock", "serve",
@@ -157,3 +165,17 @@ def test_no_red_flag_text(page, base_url):
     dtext = page.locator("#app").inner_text()
     for flag in RED:
         assert flag not in dtext, "%r rendered on the dashboard" % flag
+
+
+def test_energy_chart_draws_from_daemon_history_not_influx(page, base_url):
+    """The 24 h chart must render from the daemon's own append-only history.
+
+    The e2e daemon runs with --no-influx, so if this draws a line at all, it proves the chart
+    has no InfluxDB dependency -- the property the user explicitly required.
+    """
+    page.goto(base_url)
+    page.locator(".tile", has_text="Energy").first.click()
+    page.wait_for_selector("svg.echart", timeout=20000)      # polls every 1s -> samples accrue
+    drawn = page.locator("svg.echart polyline.ec-v, svg.echart circle.ec-v-dot").count()
+    assert drawn >= 1, "no voltage series rendered"
+    assert "History unavailable" not in page.locator("#app").inner_text()
