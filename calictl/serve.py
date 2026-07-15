@@ -17,7 +17,7 @@ import os
 import time
 from pathlib import Path
 
-from . import protocol, semantics, overrides, mqtt, influx, freshness
+from . import protocol, semantics, overrides, mqtt, influx, freshness, history
 from .device import CamperDevice, ConnectionUnavailable
 
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
@@ -77,6 +77,31 @@ class ServeBackend:
             "read_only": bool(self.read_only),
         }
         return out
+
+    def history(self, hours=24):
+        """Leisure-battery samples for the last ``hours``, oldest first — read from the daemon's
+        own append-only file, NOT from InfluxDB (the GUI stays Influx-free by design).
+
+        ``gap_s`` is the caller's cue for where to BREAK the plotted line: the unit deep-sleeps for
+        days when parked, so an absent stretch means "no data", never "held flat". It reuses the
+        same threshold as ``_meta.online`` so "we lost the van" means one thing everywhere.
+
+        :param hours: window size, clamped to 1..48 (48 h is the retention ceiling).
+        :returns: ``{"samples": [[ts, volts, amps], ...], "gap_s": float, "now": float,
+            "hours": int}``.
+        """
+        try:
+            hours = int(hours)
+        except (TypeError, ValueError):
+            hours = 24
+        hours = max(1, min(48, hours))
+        now = time.time()
+        return {
+            "samples": history.load(self._s._history_cache, since=now - hours * 3600),
+            "gap_s": self._s.interval * 3 + 30,
+            "now": now,
+            "hours": hours,
+        }
 
     def screens_bytes(self):
         """Raw bytes of the authored `webui/screens.json` GUI spec."""
@@ -140,6 +165,12 @@ class Server:
             "CALICTL_STATE_CACHE", os.path.expanduser("~/.cache/calictl/last_state.json"))
         self._water_stale_since = None      # ts the fresh-water read went physically-impossible (stale latch)
         self._water_good = None             # last PLAUSIBLE interpreted water (baseline for the stale guard)
+        # Leisure-battery history for the web UI's 24 h chart. Its own append-only file (NOT the
+        # state blob: that gets rewritten every poll, and 24 h of samples would mean ~330 MB/day
+        # of SD-card writes). The GUI reads this instead of Influx -- see calictl/history.py.
+        self._history_cache = os.environ.get(
+            "CALICTL_HISTORY_CACHE", os.path.expanduser("~/.cache/calictl/history.jsonl"))
+        self._appends = 0                   # appends since the last trim rewrite
         self._load_last()                   # AFTER the defaults: it restores _water_good/_water_stale_since
         self._mqtt = None
         self._iw = None                     # influx write_api
@@ -172,6 +203,25 @@ class Server:
             os.replace(tmp, self._state_cache)
         except OSError:
             pass
+
+    def _record_history(self, energy):
+        """Record one leisure-battery sample for the web UI's 24 h chart. Never raises.
+
+        Only the leisure (second) battery is recorded: it is always measured, and its scales are
+        the verified ones (``semantics.energy``), so the chart can carry real V/A units. The
+        starter battery is measured only with terminal-15 on and reads sentinels otherwise, which
+        would be a permanently empty series.
+
+        :param energy: the interpreted ``energy`` state of this poll, or None if it wasn't read.
+        """
+        if not energy:
+            return
+        if history.append(self._history_cache, self._last_ok_ts,
+                          energy.get("batt2_v"), energy.get("batt2_current")):
+            self._appends += 1
+            if self._appends >= history.TRIM_EVERY:      # amortised: ~1 rewrite per 4 h of polling
+                self._appends = 0
+                history.trim(self._history_cache)
 
     async def poll(self):
         # One BLE read of every function under the lock; cache the DECODED state
@@ -211,6 +261,7 @@ class Server:
             self._last = new_last
             self._last_ok_ts = time.time()
             self._save_last()
+            self._record_history(states.get("energy"))
         # MQTT discovery for newly-seen installed functions
         inst = installed_from(states)
         new = inst - self._published

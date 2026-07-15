@@ -12,6 +12,15 @@ Semantics
 .. autofunction:: calictl.semantics.roof
 .. autofunction:: calictl.freshness.implausible_water_drop
 
+Energy history
+--------------
+
+.. automodule:: calictl.history
+.. autofunction:: calictl.history.append
+.. autofunction:: calictl.history.load
+.. autofunction:: calictl.history.trim
+.. automethod:: calictl.serve.ServeBackend.history
+
 Device / reads
 --------------
 
