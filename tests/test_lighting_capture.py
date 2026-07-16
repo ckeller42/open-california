@@ -19,6 +19,27 @@ def test_set_brightness_one_zone_matches_app_frame():
     assert frame.hex() == "0904000000000000eeeeeee5eeeeeeee"
 
 
+def test_inferred_zones_l5_l6_target_the_right_fields():
+    # The GUI's 8-lamp layout adds L5 (Küche Ambientelicht) and L6 (Aufstelldach Leselicht),
+    # inferred by elimination. The lamp *identity* is unverified, but the friendly-key -> field
+    # wiring must be exact: kitchen-ambient -> BrightnessLFive, roof-reading -> BrightnessLSix,
+    # every other zone left at the 14 sentinel.
+    f = _f()
+    for what, field in (("kitchen-ambient", "BrightnessLFive"), ("roof-reading", "BrightnessLSix")):
+        d = control.decode_control(f["lighting"], control.build(f, "lighting", what, 6, {"ProfileNumber": 9}))
+        assert d[field] == 6
+        others = [v for k, v in d.items() if k.startswith("Brightness") and k != field]
+        assert set(others) == {14}, "%s must leave every other zone unchanged" % what
+
+
+def test_gui_lamp_keys_all_resolve_to_control_zones():
+    # Guard the GUI<->control contract: every `what` the Lighting screen can send must be a real
+    # LIGHT_ZONES key, or the slider would 400. (app.js LIGHT_LAMPS is the source; mirrored here.)
+    gui_keys = {"reading-1", "reading-2", "reading-3", "kitchen-ambient", "kitchen",
+                "roof-ambient", "roof-reading", "outside-rear"}
+    assert gui_keys <= set(control.LIGHT_ZONES), gui_keys - set(control.LIGHT_ZONES)
+
+
 def test_raw_field_name_also_works():
     f = _f()
     frame = control.build(f, "lighting", "BrightnessLSeven", 5, {"ProfileNumber": 9})

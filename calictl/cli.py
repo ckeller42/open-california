@@ -7,7 +7,7 @@
     calictl set cooler level <1-5>
     calictl set campingmode master|lights|usb on|off
     calictl set lighting power on|off             # every zone on (13) / off
-    calictl set lighting <zone> <0-13>            # zones: reading-1/2/3, kitchen, roof-ambient, outside-rear
+    calictl set lighting <zone> <0-13>            # zones: reading-1/2/3, kitchen, kitchen-ambient*, roof-ambient, roof-reading*, outside-rear  (*L5/L6 inferred)
     calictl set lighting all <0-13>               # every zone to one level
     calictl set lighting profile <N>              # switch the active lighting profile
     calictl set lighting color <name>             # recolour active profile: warm-white/amber/red/azure/... (apply UNVERIFIED)
@@ -136,7 +136,8 @@ def _max_zone(interp):
 # friendly lighting-zone key -> the interpreted brightness_zone_<N> it maps to (see
 # control.LIGHT_ZONES / semantics._LZONES). Used only for the CLI's applied-check.
 _LIGHT_ZONE_NUM = {"reading-1": 2, "reading-2": 1, "reading-3": 4,
-                   "kitchen": 7, "roof-ambient": 8, "outside-rear": 3}
+                   "kitchen": 7, "roof-ambient": 8, "outside-rear": 3,
+                   "kitchen-ambient": 5, "roof-reading": 6}   # L5/L6 inferred (unverified)
 
 
 def _lighting_check(what, value, interp):

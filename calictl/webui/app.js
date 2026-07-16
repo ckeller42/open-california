@@ -521,13 +521,20 @@ function renderDashboard() {
 
 // Lighting lamps, grouped like the app (from the HCI capture + screenshots). `what` is the
 // control API zone key (control.LIGHT_ZONES); `zone` is the interpreted brightness_zone_<N>.
+// Matches the app's 8-lamp layout (screenshots 2026-07-15). `hint` marks zones whose lamp
+// identity is INFERRED by elimination, not confirmed by capture (L5/L6): dragging one on-device
+// is the experiment that confirms it. See control.LIGHT_ZONES.
 const LIGHT_LAMPS = [
   { group: "Reading lights", lamps: [
     { label: "Left", what: "reading-1", zone: 2 },
     { label: "Right", what: "reading-2", zone: 1 },
     { label: "Passenger", what: "reading-3", zone: 4 } ] },
-  { group: "Kitchen", lamps: [{ label: "Kitchen", what: "kitchen", zone: 7 }] },
-  { group: "Pop-roof", lamps: [{ label: "Ambient", what: "roof-ambient", zone: 8 }] },
+  { group: "Kitchen", lamps: [
+    { label: "Ambient", what: "kitchen-ambient", zone: 5, hint: "unverified" },
+    { label: "Cooking", what: "kitchen", zone: 7 } ] },
+  { group: "Pop-roof", lamps: [
+    { label: "Ambient", what: "roof-ambient", zone: 8 },
+    { label: "Reading", what: "roof-reading", zone: 6, hint: "roof open only · unverified" } ] },
   { group: "Outside", lamps: [{ label: "Rear", what: "outside-rear", zone: 3 }] },
 ];
 const LIGHT_MAX = 13;   // brightness 0..13 (14 = the leave-unchanged sentinel)
@@ -577,6 +584,10 @@ function renderLighting(s) {
     for (const lamp of grp.lamps) {
       const row = document.createElement("div"); row.className = "row";
       const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = lamp.label;
+      if (lamp.hint) {
+        const h = document.createElement("span"); h.className = "lamp-hint"; h.textContent = lamp.hint;
+        lbl.appendChild(h);
+      }
       const real = s["brightness_zone_" + lamp.zone];
       const val = optNum("lighting", lamp.what, real != null ? real : 0);
       const isPending = pending_is("lighting", lamp.what);
