@@ -1,0 +1,36 @@
+# Passwordless restart of the calictl daemon, for `pi` on buspi.
+#
+# WHY: deploying is `git pull` + restart. The pull needs no privileges, but the restart
+# needed the interactive sudo password, so every deploy required a human at a terminal.
+#
+# SCOPE: exactly one unit, three verbs, absolute path. sudo matches the literal command and
+# its arguments, so this grants NOTHING else -- `pi` cannot restart any other unit, pass a
+# different unit name, or reach any other systemctl subcommand through this rule.
+#
+# This REDUCES standing privilege rather than adding it: the alternative in practice is
+# typing the box's sudo password (which is also the Grafana admin password, and is present
+# in this repo's git history) on every deploy.
+#
+# INSTALL -- validate BEFORE activating; a malformed sudoers file breaks sudo entirely:
+#
+#   scp calictl/deploy/calictl-restart.sudoers buspi:/tmp/calictl-restart
+#   ssh -t buspi '
+#     sudo visudo -cf /tmp/calictl-restart &&
+#     sudo install -m 0440 -o root -g root /tmp/calictl-restart /etc/sudoers.d/calictl-restart &&
+#     sudo visudo -c &&
+#     rm /tmp/calictl-restart'
+#
+# The first `visudo -cf` checks THIS file in isolation; the second `visudo -c` re-checks the
+# whole sudoers set after install. Keep an open root shell on the box until the second check
+# passes, so a mistake is recoverable.
+#
+# VERIFY (must not prompt):
+#   ssh buspi 'sudo -n systemctl restart calictl.service && systemctl is-active calictl.service'
+#
+# REMOVE:
+#   ssh -t buspi 'sudo rm /etc/sudoers.d/calictl-restart'
+#
+# Mode must be 0440 and owner root:root, or sudo ignores the file (and logs a warning).
+pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart calictl.service
+pi ALL=(root) NOPASSWD: /usr/bin/systemctl stop calictl.service
+pi ALL=(root) NOPASSWD: /usr/bin/systemctl start calictl.service
