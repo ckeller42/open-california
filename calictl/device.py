@@ -222,20 +222,8 @@ class CamperDevice:
             await self._safe_disconnect(client)
 
     async def actuate(self, func, frame: bytes, *, verify=True, follow: bytes | None = None) -> dict | None:
-        """Arm the unit with a 1003 liveness heartbeat, then write a control frame.
-
-        One BLE session end-to-end (the single-slot rule holds — callers hold the
-        serve lock around this): connect, replay the app's connect handshake
-        (version + authenticated reads, subscribe every notifiable char), start a
-        +1 counter heartbeat on 1003, and only then write `frame`. Actuation
-        latches (one-shot arm), so the heartbeat is torn down right after the write.
-        Returns the post-write state decode when `verify`, else None.
-
-        :param follow: an optional second frame written to the same control char right
-            after `frame`, in the same armed session. The lighting screen needs this: the
-            app follows every SET_BRIGHTNESS/SET_PROFILE with a commit frame
-            (``0e00…``) and the unit only *applies* the change once that commit lands
-            (HCI-verified 2026-07-13 — this is the fix for the old lighting-apply gap).
+        """Connect, arm with a 1003 heartbeat, write a control frame, disconnect (one BLE
+        session — the CLI/per-op path). See :meth:`_actuate_on` for the shared write core.
 
         .. req:: Arm the unit with a 1003 heartbeat before a control write
            :id: R_ACTUATE_ARM
@@ -246,35 +234,53 @@ class CamperDevice:
            1003 liveness counter before writing a control frame (and any ``follow`` commit
            frame), so the unit's arm gate honours the write. Diagram: :need:`S_SEQ_ACTUATE`.
         """
-        from . import protocol  # lazy
         if not func.control_char:
             raise ValueError("%s has no control characteristic" % func.name)
         client = await self._session()
+        try:
+            return await self._actuate_on(client, func, frame, follow=follow, verify=verify, arm=True)
+        finally:
+            await self._safe_disconnect(client)
+
+    async def _actuate_on(self, client, func, frame: bytes, *, follow: bytes | None = None,
+                          verify: bool = True, arm: bool = True) -> dict | None:
+        """Write a control frame over an ALREADY-CONNECTED client. Never connects/disconnects.
+
+        ``arm=True`` (cold session, e.g. the CLI): replay the handshake (VERSION/AUTH reads +
+        subscribe-all), start a +1 heartbeat on 1003, wait ``ARM_DELAY_S`` so the unit registers
+        liveness, then write. ``arm=False`` (persistent session): the caller's heartbeat is already
+        ticking, so skip the handshake/heartbeat/arm-delay and write immediately -- the < 1 s path.
+
+        :param follow: optional second frame written to the same control char right after ``frame``
+            (the lighting commit; see ``control.commit_for``).
+        :returns: the post-write ``protocol.decode`` when ``verify`` and the func has a state char.
+        """
+        from . import protocol  # lazy
+        if not func.control_char:
+            raise ValueError("%s has no control characteristic" % func.name)
         stop = asyncio.Event()
         beat = None
         try:
-            # connect handshake: version + authenticated reads (bonding/liveness gate)
-            auth_ok = 0
-            for uuid in (VERSION_CHAR, AUTH_CHAR):
-                try:
-                    await client.read_gatt_char(uuid); auth_ok += 1
-                except Exception:
-                    pass
-            n = await self._subscribe_all(client)
-            if auth_ok < 2 or n == 0:
-                # a weak handshake is the leading write-gate hypothesis — surface it rather
-                # than silently proceed to a write the unit may ignore.
-                print("actuate: weak handshake (auth-reads=%d/2, subscribed=%d) — write may "
-                      "be ignored" % (auth_ok, n), flush=True)
-            beat = asyncio.create_task(self._heartbeat(client, stop))
-            await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
+            if arm:
+                auth_ok = 0
+                for uuid in (VERSION_CHAR, AUTH_CHAR):
+                    try:
+                        await client.read_gatt_char(uuid); auth_ok += 1
+                    except Exception:
+                        pass
+                n = await self._subscribe_all(client)
+                if auth_ok < 2 or n == 0:
+                    print("actuate: weak handshake (auth-reads=%d/2, subscribed=%d) — write may "
+                          "be ignored" % (auth_ok, n), flush=True)
+                beat = asyncio.create_task(self._heartbeat(client, stop))
+                await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
             await client.write_gatt_char(func.control_char, frame, response=True)
             if follow is not None:
-                await asyncio.sleep(FOLLOW_DELAY_S)   # brief gap, as the app spaces its commit
+                await asyncio.sleep(FOLLOW_DELAY_S)
                 await client.write_gatt_char(func.control_char, follow, response=True)
             if not verify or not func.state_char:
                 return None
-            await asyncio.sleep(SETTLE_S)      # let the actuation take effect
+            await asyncio.sleep(SETTLE_S)
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw)
         finally:
@@ -284,7 +290,6 @@ class CamperDevice:
                     await beat
                 except Exception:
                     pass
-            await self._safe_disconnect(client)
 
     async def actuate_roof(self, func, move_frame: bytes, stop_frame: bytes, *,
                            max_duration_s: float = ROOF_MAX_TRAVEL_S,
