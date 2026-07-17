@@ -25,11 +25,12 @@ def test_supervise_session_backoff_to_asleep(monkeypatch):
     fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
     sys.modules["bleak"] = fake
 
-    slept = []
+    # device._session retries the connect 3x with a real asyncio.sleep(4) between attempts;
+    # collapse those to keep this a fast unit test. We assert on state, never on sleep timing.
     real = asyncio.sleep
-    async def fake_sleep(x, *a, **k):
-        slept.append(x); await real(0)
-    monkeypatch.setattr(serve.asyncio, "sleep", fake_sleep)
+    async def fast_sleep(x, *a, **k):
+        await real(0)
+    monkeypatch.setattr(serve.asyncio, "sleep", fast_sleep)
 
     s = serve.Server("MO:CK", influx_enabled=False)
     s._persistent = True
@@ -43,6 +44,47 @@ def test_supervise_session_backoff_to_asleep(monkeypatch):
     state = asyncio.run(_run())
     assert state == "asleep"
     assert s._backoff_fails >= serve.Server.ASLEEP_AFTER
+
+
+def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
+    """_supervise_session's own loop: connect fails (asleep), it escalates to 'asleep' and
+    backs off (up to the 60s cap) rather than spinning."""
+    import asyncio, sys, types
+    from calictl import serve
+    from tools.mock_unit import MockCamperUnit, MockBleakClient
+    unit = MockCamperUnit(); unit.drop()                     # asleep from the start
+    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+    sys.modules["bleak"] = fake
+
+    class _Stop(Exception):
+        pass
+    sleeps = []
+    real = asyncio.sleep
+    s = serve.Server("MO:CK", influx_enabled=False)
+    s._persistent = True
+
+    # Patching serve.asyncio.sleep patches the global asyncio module, so device._session's own
+    # retry sleeps (value 4) land in this list too, alongside the supervisor's backoff sleeps
+    # (5/10/30/60). Stop the otherwise-infinite loop once the machine has ESCALATED to 'asleep'
+    # AND actually backed off at the 60 s cap -- that is the behaviour under test. The len cap is
+    # a pure safety backstop so a regression can't hang the suite.
+    async def fake_sleep(x, *a, **k):
+        sleeps.append(x)
+        if (s._session_state == "asleep" and x == 60) or len(sleeps) >= 200:
+            raise _Stop
+        await real(0)
+    monkeypatch.setattr(serve.asyncio, "sleep", fake_sleep)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        try:
+            await s._supervise_session()
+        except _Stop:
+            pass
+        return s._session_state, sleeps
+    state, sleeps = asyncio.run(_run())
+    assert state == "asleep"                                 # escalated after ASLEEP_AFTER fails
+    assert 60 in sleeps and all(x > 0 for x in sleeps)       # capped backoff, never a 0-sleep spin
 
 
 def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
