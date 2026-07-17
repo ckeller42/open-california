@@ -118,6 +118,7 @@ class MockCamperUnit:
             base.setdefault(fn, {}).update(vals)
         self.state: dict[str, dict] = base
         self.armed = False
+        self.online = True     # False models the parked unit deep-asleep (not advertising)
         self.last_beat: int | None = None
         self._pending_light = None                   # staged lighting change, applied on commit
         self.writes: list[tuple[str, bytes]] = []   # (function, frame) audit trail
@@ -162,6 +163,15 @@ class MockCamperUnit:
         ctr = int.from_bytes(bytes(data), "big")
         self.last_beat = ctr
         self.armed = True
+
+    def drop(self) -> None:
+        """Van parks -> deep sleep: the link dies and the unit stops advertising."""
+        self.online = False
+        self.armed = False
+
+    def wake(self) -> None:
+        """Physical use (door/ignition) wakes the unit; it advertises again."""
+        self.online = True
 
     # --- control writes ----------------------------------------------------
     def write(self, uuid: str, data: bytes) -> None:
@@ -256,6 +266,8 @@ class MockBleakClient:
         return cls
 
     async def connect(self):
+        if self.unit is not None and not self.unit.online:
+            raise MockDisconnect("van asleep (not advertising)")
         self.is_connected = True
 
     async def disconnect(self):
@@ -275,9 +287,15 @@ class MockBleakClient:
         return [_Service(chars)]
 
     async def read_gatt_char(self, uuid):
+        if not self.unit.online:
+            self.is_connected = False
+            raise MockDisconnect("link dropped (asleep)")
         return self.unit.read(str(uuid))
 
     async def write_gatt_char(self, uuid, data, response=None):
+        if not self.unit.online:
+            self.is_connected = False
+            raise MockDisconnect("link dropped (asleep)")
         try:
             self.unit.write(str(uuid), data)
         except MockDisconnect:

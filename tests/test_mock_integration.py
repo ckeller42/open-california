@@ -268,3 +268,29 @@ def test_read_only_is_default_and_refuses_writes(mock):
         return await s.on_command("cooler", "power", "on")
     assert asyncio.run(_run()) is None                   # refused
     assert mock.decoded("cooler")["State"] == 0          # unchanged
+
+
+def test_mock_drop_and_wake_models_deep_sleep():
+    import asyncio
+    from tools.mock_unit import MockCamperUnit, MockBleakClient, MockDisconnect
+    unit = MockCamperUnit()
+    client = MockBleakClient.bind(unit)("MO:CK", timeout=1)
+
+    async def _run():
+        await client.connect(); assert client.is_connected
+        unit.drop()                                   # van parks -> deep sleep
+        raised = False
+        try:
+            await client.read_gatt_char(unit.funcs["cooler"].state_char)
+        except MockDisconnect:
+            raised = True
+        assert raised and client.is_connected is False
+        # a fresh connect while asleep fails (not advertising)
+        c2 = MockBleakClient.bind(unit)("MO:CK", timeout=1)
+        try:
+            await c2.connect(); assert False, "connect should fail while asleep"
+        except MockDisconnect:
+            pass
+        unit.wake()
+        await c2.connect(); assert c2.is_connected     # wakes on physical use
+    asyncio.run(_run())
