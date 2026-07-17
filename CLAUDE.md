@@ -69,8 +69,15 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   0 = `NO_MODE`, and this is just the builder's neutral default frame; the app self-applies each
   Mode-tagged SET because it streams frames continuously (the unit applies the prior frame on the
   next write). Our follow frame is the flush a single write otherwise lacks.
-  Verified on-device via readback (kitchen 0→8). A profile must be active first (SET_PROFILE +
-  commit). **`set lighting color` was decompile-inferred but the app exposes no colour control —
+  Verified on-device via readback (kitchen 0→8). **A profile does NOT need to be active first —
+  that earlier belief was our own bug (CORRECTED + live-verified 2026-07-17, PR #60):**
+  `control._lighting` echoed the live `ProfileNumber` (0 when lights off), and a SET_BRIGHTNESS
+  carrying `PN=0` is ignored — so we wrongly required a manual "activate". The app hardcodes
+  `ProfileNumber=9` in every SET_BRIGHTNESS (`dg/h.java:170`, `w(9)`); "needs a profile" was just the
+  side effect of activating making the live PN read 9. Now `control.LIGHT_BRIGHTNESS_PROFILE=9` is
+  hardcoded, so a lamp set applies from the lights-off state (on-device: forced `SET_PROFILE 0` →
+  drove Cooking→8 → applied). The **commit frame is separate and still required** (see above).
+  **`set lighting color` was decompile-inferred but the app exposes no colour control —
   treat SET_COLOR as unverified/possibly N/A.** Extend via `control.BUILDERS`. See
   `docs/business-logic/control-and-actuation.md` + `protocol-sequences.md`.
 - **Roof sequence settled 2026-07-13 from the decompiled roof class** (needs ignition ON).
