@@ -2,6 +2,49 @@ import asyncio
 from calictl import serve, protocol, overrides, control
 
 
+def test_meta_session_state_reflects_supervisor(monkeypatch):
+    """_meta.session mirrors the supervisor's state machine; online == (session up)."""
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._session_state = "up"
+    st = serve.ServeBackend(s, loop=None).state()
+    assert st["_meta"]["session"] == "up" and st["_meta"]["online"] is True
+    s._session_state = "asleep"
+    st = serve.ServeBackend(s, loop=None).state()
+    assert st["_meta"]["session"] == "asleep" and st["_meta"]["online"] is False
+
+
+def test_supervise_session_backoff_to_asleep(monkeypatch):
+    """Repeated connect failures (parked van) escalate the state to 'asleep' without spinning."""
+    import asyncio
+    from calictl import serve, device
+    from tools.mock_unit import MockCamperUnit, MockBleakClient
+    import sys, types
+    unit = MockCamperUnit(); unit.drop()                 # asleep from the start
+    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+    sys.modules["bleak"] = fake
+
+    slept = []
+    real = asyncio.sleep
+    async def fake_sleep(x, *a, **k):
+        slept.append(x); await real(0)
+    monkeypatch.setattr(serve.asyncio, "sleep", fake_sleep)
+
+    s = serve.Server("MO:CK", influx_enabled=False)
+    s._persistent = True
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        # run a bounded number of supervisor iterations
+        for _ in range(5):
+            await s._session_connect_once()
+        return s._session_state
+    state = asyncio.run(_run())
+    assert state == "asleep"
+    assert s._backoff_fails >= serve.Server.ASLEEP_AFTER
+
+
 def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
     """The daemon must keep serving the last-known values behind an offline flag when the van's
     unreachable, and the cache must survive a restart (the unit deep-sleeps for days when parked)."""

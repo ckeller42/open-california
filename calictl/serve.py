@@ -68,13 +68,21 @@ class ServeBackend:
                                 "stale_since": stale_since}
         ts = self._s._last_ok_ts
         age = (time.time() - ts) if ts else None
+        persistent = getattr(self._s, "_persistent", False)
+        session_state = getattr(self._s, "_session_state", "off")
+        # Session state drives online only once the persistent machinery is active (past "off");
+        # before the supervisor has run, or when persistence is off, use the poll-recency rule so
+        # the pre-persistent behaviour (and its tests) still hold.
+        if persistent and session_state != "off":
+            online = session_state == "up"
+        else:
+            online = bool(age is not None and age < self._s.interval * 3 + 30)
         out["_meta"] = {
             "last_seen": ts,
             "age_s": round(age) if age is not None else None,
-            # online = a poll succeeded within the last few cycles; else the van is asleep/gone
-            "online": bool(age is not None and age < self._s.interval * 3 + 30),
-            # read_only = writes are disabled (the safe default); the web UI disables controls
+            "online": online,
             "read_only": bool(self.read_only),
+            "session": session_state if persistent else "off",
         }
         return out
 
@@ -150,6 +158,9 @@ async def dry_run(addr=None):
 
 
 class Server:
+    SESSION_BACKOFF = (5, 10, 30, 60)   # reconnect backoff seconds, capped
+    ASLEEP_AFTER = 4                     # consecutive fails at cap -> label 'asleep'
+
     def __init__(self, addr=None, *, interval=30.0, influx_enabled=True):
         self.funcs = protocol.load(); overrides.apply(self.funcs)
         self.dev = CamperDevice(addr) if addr else CamperDevice()
@@ -178,6 +189,12 @@ class Server:
         self._web_port = None                # set by the CLI to enable the web UI
         self._read_only = True               # SAFE DEFAULT: reject writes until explicitly enabled
         self._httpd = None
+        # Persistent armed session (fast actuation). Default on; CALICTL_PERSISTENT_SESSION=0
+        # falls back to the connect-per-op model. See docs/.../persistent-ble-session-design.md.
+        self._persistent = os.environ.get("CALICTL_PERSISTENT_SESSION", "1") != "0"
+        self._session = None
+        self._session_state = "off"        # off|connecting|up|degraded|asleep
+        self._backoff_fails = 0
 
     def _load_last(self):
         """Load the persisted last-known decoded state (best-effort; missing/corrupt -> empty)."""
@@ -281,6 +298,38 @@ class Server:
                            org=os.environ.get("INFLUX_ORG", "home"),
                            record=influx.points_for({fn: states[fn] for fn in inst}))
         return states
+
+    async def _session_connect_once(self) -> bool:
+        """One connect attempt for the supervisor. Updates _session_state + _backoff_fails.
+        Returns True if the session came up."""
+        from . import device  # lazy
+        self._session_state = "connecting"
+        sess = device.PersistentSession(self.dev)
+        try:
+            await sess.start()
+        except Exception as e:
+            self._backoff_fails += 1
+            self._session = None
+            self._session_state = "asleep" if self._backoff_fails >= self.ASLEEP_AFTER else "degraded"
+            print("session connect failed (%d): %s" % (self._backoff_fails, e), flush=True)
+            return False
+        self._session = sess
+        self._session_state = "up"
+        self._backoff_fails = 0
+        print("persistent session up", flush=True)
+        return True
+
+    async def _supervise_session(self) -> None:
+        """Keep the persistent session up; back off while the van is unreachable."""
+        while True:
+            if self._session is not None and self._session.is_up:
+                await asyncio.sleep(self.interval)
+                continue
+            async with self._ble:
+                ok = await self._session_connect_once()
+            if not ok:
+                idx = min(self._backoff_fails, len(self.SESSION_BACKOFF)) - 1
+                await asyncio.sleep(self.SESSION_BACKOFF[max(0, idx)])
 
     async def on_command(self, function, what, value):
         """Build + write a control frame, then read back and report applied-ness.
