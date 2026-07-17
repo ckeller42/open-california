@@ -466,6 +466,13 @@ def test_water_stale_latch_guard():
     assert freshness.implausible_water_drop(w(15, 3), w(17, 1)) is False
     # real usage, exact 1 L: fresh down 1, grey up 1 -> plausible
     assert freshness.implausible_water_drop(w(16, 2), w(17, 1)) is False
+    # real usage where fresh leaves faster than grey fills (drink/cook/external drain): grey STILL
+    # rose, which proves the unit is live-measuring -> the drop is real, NOT the parked latch.
+    # Regression: conservation-of-mass here false-positived and suppressed a true 22 L reading as a
+    # stale 29 L on an online, in-use van (2026-07-17, live at the van).
+    assert freshness.implausible_water_drop(w(22, 2), w(29, 0)) is False
+    # grey FROZEN while fresh drops -> the unpowered-latch signature -> stale, at any drop size
+    assert freshness.implausible_water_drop(w(10, 0), w(29, 0)) is True
     # refill / active re-measure: fresh up or equal -> plausible
     assert freshness.implausible_water_drop(w(25, 1), w(17, 1)) is False
     assert freshness.implausible_water_drop(w(17, 1), w(17, 1)) is False
