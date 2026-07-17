@@ -492,3 +492,83 @@ class CamperDevice:
             await client.disconnect()
         except Exception:
             pass  # disconnect frequently throws EOFError after a good read
+
+
+class PersistentSession:
+    """One long-lived connected client with the 1003 heartbeat ticking continuously — the
+    daemon's fast path. Poll reads and command writes run over the live link (no per-op connect,
+    subscribe, or 3 s arm). CLI code keeps using CamperDevice.actuate/read_all.
+
+    .. req:: Hold a persistent armed BLE session for fast actuation
+       :id: R_PERSISTENT_SESSION
+       :status: implemented
+       :tags: ble, control, latency
+
+       While the van is reachable, the daemon shall keep one connected client with the 1003
+       heartbeat ticking, so control writes apply in well under a second (no connect/subscribe/
+       arm-delay per action), and reads stay fresh continuously.
+    """
+
+    def __init__(self, dev: "CamperDevice"):
+        self._dev = dev
+        self._client = None
+        self._notif: dict[str, bytes] = {}
+        self._stop = None
+        self._beat = None
+
+    @property
+    def is_up(self) -> bool:
+        return bool(self._client is not None and getattr(self._client, "is_connected", False)
+                    and self._beat is not None and not self._beat.done())
+
+    async def start(self) -> None:
+        client = await self._dev._session()
+        for uuid in (VERSION_CHAR, AUTH_CHAR):
+            try:
+                await client.read_gatt_char(uuid)
+            except Exception:
+                pass
+        self._notif = {}
+        await self._dev._subscribe_all(client, self._notif)
+        self._stop = asyncio.Event()
+        self._beat = asyncio.create_task(self._dev._heartbeat(client, self._stop))
+        await asyncio.sleep(HEARTBEAT_WARMUP_S)     # let the arm + first measurement register
+        self._client = client
+
+    async def read_all(self, funcs: dict) -> dict[str, bytes]:
+        out: dict[str, bytes] = {}
+        client = self._client
+        for name, f in funcs.items():
+            if not f.state_char:
+                continue
+            pushed = self._notif.get(str(f.state_char).lower())
+            if pushed is not None:
+                out[name] = pushed
+                continue
+            try:
+                out[name] = bytes(await client.read_gatt_char(f.state_char))
+            except Exception:
+                if not getattr(client, "is_connected", False):
+                    break
+        return out
+
+    async def read_one(self, func) -> bytes:
+        return bytes(await self._client.read_gatt_char(func.state_char))
+
+    async def actuate(self, func, frame: bytes, *, follow: bytes | None = None,
+                      verify: bool = True) -> dict | None:
+        return await self._dev._actuate_on(self._client, func, frame, follow=follow,
+                                           verify=verify, arm=False)
+
+    async def aclose(self) -> None:
+        if self._stop is not None:
+            self._stop.set()
+        if self._beat is not None:
+            try:
+                await self._beat
+            except Exception:
+                pass
+        if self._client is not None:
+            await self._dev._safe_disconnect(self._client)
+        self._client = None
+        self._beat = None
