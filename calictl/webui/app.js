@@ -561,52 +561,32 @@ const LIGHT_MAX = 13;   // brightness 0..13 (14 = the leave-unchanged sentinel)
 
 function renderLighting(s) {
   titleEl.textContent = "Lighting";
-  // "All lights" master toggle (the app's "Alle Lichter") — on = any real lamp lit;
-  // tapping sends power on/off (every zone). Needs an active profile to apply, like the zones.
-  // A profile must be active before ANY lamp control applies (verified on-device) — so the
-  // all-lights toggle + zone sliders are disabled + dimmed until one is; only Activate is live.
-  const active = !!(s.profile && s.profile !== 0);
+  // Lamps are ALWAYS controllable, like the app: dragging a lamp sends a SET_BRIGHTNESS that
+  // self-carries the working profile (control.LIGHT_BRIGHTNESS_PROFILE=9), so there is no
+  // "activate a profile first" step — the old gate was a workaround for our echoing PN=0.
+  // "All lights" master toggle (the app's "Alle Lichter"): on = any real lamp lit.
   const allOn = optOn("lighting", "power", !!s.any_on);
-  const mc = document.createElement("div"); mc.className = "card" + (active ? "" : " dim");
+  const mc = document.createElement("div"); mc.className = "card";
   const mrow = document.createElement("div"); mrow.className = "row";
   const mlbl = document.createElement("span"); mlbl.className = "lbl"; mlbl.textContent = "All lights";
   mrow.appendChild(mlbl);
   if (pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
-  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly() || !active;
+  msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly();
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow); app.appendChild(mc);
 
-  // profile card — a profile must be active for zone changes to apply (verified on-device)
-  const pc = document.createElement("div"); pc.className = "card";
-  const prow = document.createElement("div"); prow.className = "row";
-  const plabel = document.createElement("span"); plabel.className = "lbl";
-  plabel.textContent = active ? "Profile " + s.profile + " active" : "No profile active";
-  prow.appendChild(plabel);
-  const pbtn = document.createElement("button"); pbtn.className = "btn"; pbtn.style.flex = "0 0 auto";
-  pbtn.textContent = active ? "Reactivate" : "Activate";
-  pbtn.disabled = readOnly();
-  if (pending_is("lighting", "profile")) pbtn.appendChild(spinner());
-  pbtn.onclick = () => command("lighting", "profile", 9);   // profile 9 = A (verified)
-  prow.appendChild(pbtn);
-  pc.appendChild(prow);
-  app.appendChild(pc);
-  if (!active) {
-    const n = document.createElement("div"); n.className = "note";
-    n.textContent = "Activate a lighting profile to control the lamps.";
-    app.appendChild(n);
-  }
-  // lamp sliders, grouped (disabled + dimmed until a profile is active)
+  // lamp sliders, grouped like the app (always controllable)
   for (const grp of LIGHT_LAMPS) {
-    const card = document.createElement("div"); card.className = "card" + (active ? "" : " dim");
+    const card = document.createElement("div"); card.className = "card";
     const h = document.createElement("div"); h.className = "note"; h.style.padding = ".6rem 0 0";
     h.textContent = grp.group; card.appendChild(h);
     for (const lamp of grp.lamps) {
       const row = document.createElement("div"); row.className = "row";
       const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = lamp.label;
       if (lamp.hint) {
-        const h = document.createElement("span"); h.className = "lamp-hint"; h.textContent = lamp.hint;
-        lbl.appendChild(h);
+        const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = lamp.hint;
+        lbl.appendChild(hh);
       }
       const real = s["brightness_zone_" + lamp.zone];
       const val = optNum("lighting", lamp.what, real != null ? real : 0);
@@ -614,7 +594,7 @@ function renderLighting(s) {
       row.appendChild(lbl);
       if (isPending) row.appendChild(spinner());
       const inp = document.createElement("input"); inp.type = "range"; inp.min = 0; inp.max = LIGHT_MAX;
-      inp.value = val; inp.disabled = readOnly() || !active;
+      inp.value = val; inp.disabled = readOnly();
       const out = document.createElement("span"); out.className = "sval";
       out.textContent = val;
       inp.oninput = () => (out.textContent = inp.value);

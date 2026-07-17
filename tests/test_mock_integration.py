@@ -96,15 +96,15 @@ def test_set_cooler_level_out_of_range_is_clean_error(mock, capsys):
 
 # --- lighting: SET frame cracked 2026-07-08; APPLY gap cracked 2026-07-13 (commit frame) -----
 
-def test_set_lighting_needs_active_profile_then_applies(mock):
+def test_set_lighting_applies_directly_no_activate_step(mock):
+    """A lamp set applies straight away with the lights off (ProfileNumber 0) — like the app,
+    which hardcodes ProfileNumber=9 in every SET_BRIGHTNESS instead of requiring a manual
+    profile activation. The cli sends the 0e00… commit as the follow frame."""
     from calictl import cli
-    # live-verified precondition: with no active profile a zone set is ACKed but NOT applied
-    assert cli.main(["set", "lighting", "kitchen", "8"]) == 1    # rc 1 = NOT APPLIED
-    assert mock.decoded("lighting")["BrightnessLSeven"] == 0
-    # activate a profile, then the zone applies (cli sends the 0e00… commit as the follow frame)
-    assert cli.main(["set", "lighting", "profile", "9"]) == 0
-    assert cli.main(["set", "lighting", "kitchen", "8"]) == 0
+    assert mock.decoded("lighting")["ProfileNumber"] == 0       # lights off, no active profile
+    assert cli.main(["set", "lighting", "kitchen", "8"]) == 0   # rc 0 = APPLIED, no activate needed
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
+    assert mock.decoded("lighting")["ProfileNumber"] == 9       # the set made profile 9 active
 
 
 def test_lighting_requires_the_commit_frame_to_apply(mock):
@@ -114,10 +114,7 @@ def test_lighting_requires_the_commit_frame_to_apply(mock):
     sends it; `control.commit_for('lighting')` returns it."""
     funcs = _funcs()
     dev = device.CamperDevice()
-    # activate a profile so brightness can apply (SET_PROFILE + its commit)
-    asyncio.run(dev.actuate(funcs["lighting"], control.build(funcs, "lighting", "profile", 9, {}),
-                            verify=False, follow=control.LIGHT_COMMIT))
-    setf = control.build(funcs, "lighting", "kitchen", 8, {"ProfileNumber": 9})
+    setf = control.build(funcs, "lighting", "kitchen", 8, {})   # self-carries ProfileNumber=9
     # SET alone (no commit) -> ACKed, NOT applied
     asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 0

@@ -87,6 +87,11 @@ LIGHT_COLORS = {
 # zone it is NOT changing with 14 (0xe), not 0. 0 means "set this zone to 0"; 14 = "no change".
 LIGHT_UNCHANGED = 14
 LIGHT_ON_BRIGHTNESS = 13         # "on" brightness (0..13; 14=unchanged sentinel, so max real=13)
+# Every SET_BRIGHTNESS frame the app sends hardcodes ProfileNumber=9 (LIVE_VIEW, the "live editing"
+# profile) — `w(9, PENDING)` in dg/h.java:170-264 — NOT the currently-active profile. Echoing the
+# live ProfileNumber instead (0 when the lights are off) is why our SET_BRIGHTNESS was ignored until
+# a profile was activated; the real gate was always "PN=9 in the frame", not "a profile is active".
+LIGHT_BRIGHTNESS_PROFILE = 9
 
 # Lighting COMMIT/APPLY frame. HCI-verified 2026-07-13: the app follows every SET_BRIGHTNESS /
 # SET_PROFILE with this exact frame, and the unit only APPLIES the change once it lands (Mode 0,
@@ -117,8 +122,9 @@ def _lighting(funcs, what, value, last):
 
     The app's SET_BRIGHTNESS changes ONE zone at a time: the target zone carries the new
     brightness, every OTHER zone carries the leave-unchanged sentinel ``14`` (NOT 0 — 0 sets
-    that zone to 0). ``ProfileNumber`` echoes the active profile. Verified byte-for-byte
-    against the app (e.g. Kitchen=5 under profile 9 -> ``0904000000000000eeeeeee5eeeeeeee``).
+    that zone to 0). ``ProfileNumber`` is hardcoded to ``9`` like the app (see
+    ``LIGHT_BRIGHTNESS_PROFILE``), so a write applies with the lights off too. Verified byte-for-byte
+    against the app (e.g. Kitchen=5 -> ``0904000000000000eeeeeee5eeeeeeee``).
 
     Grammar (``what``):
       * a zone key (``LIGHT_ZONES``) or a raw ``BrightnessL*`` field  -> SET_BRIGHTNESS that zone
@@ -130,8 +136,10 @@ def _lighting(funcs, what, value, last):
     """
     f = funcs["lighting"]
     zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
-    profile = int(last.get("ProfileNumber") or 0)
-    base = {"ProfileNumber": profile, "Mode": LIGHT_MODE_SET_BRIGHTNESS, "Timestamp": 0, "LightValue": 0}
+    # SET_BRIGHTNESS/power/all hardcode ProfileNumber=9 like the app (writes land even with the
+    # lights off / PN=0). SET_PROFILE overrides it with the target; SET_COLOR recolours that same 9.
+    base = {"ProfileNumber": LIGHT_BRIGHTNESS_PROFILE, "Mode": LIGHT_MODE_SET_BRIGHTNESS,
+            "Timestamp": 0, "LightValue": 0}
 
     def _b(v):
         # real brightness is 0..13; 14 is the leave-unchanged sentinel and 15 is unused,
