@@ -240,12 +240,19 @@ class Server:
                 self._appends = 0
                 history.trim(self._history_cache)
 
+    def _live_session(self):
+        """The persistent session if it's currently up, else None (use the per-op path)."""
+        s = self._session
+        return s if (self._persistent and s is not None and s.is_up) else None
+
     async def poll(self):
         # One BLE read of every function under the lock; cache the DECODED state
         # (on_command builds full-packet control frames from it) and derive the
         # INTERPRETED state for MQTT + InfluxDB.
         async with self._ble:
-            raw = await self.dev.read_all(self.funcs)
+            sess = self._live_session()
+            raw = await (sess.read_all(self.funcs) if sess is not None
+                         else self.dev.read_all(self.funcs))
         states = {}
         new_last = dict(self._last)         # build a fresh copy, then publish atomically
         for fn, data in raw.items():
@@ -376,8 +383,10 @@ class Server:
                 # e.g. cooler State=1 (fridge ON) or lighting ProfileNumber=0 (silent no-op).
                 # Read the live state first so untargeted fields carry the real values.
                 try:
-                    last = protocol.decode(self.funcs[function],
-                                           await self.dev.read(self.funcs[function]))
+                    sess = self._live_session()
+                    raw = await (sess.read_one(self.funcs[function]) if sess is not None
+                                 else self.dev.read(self.funcs[function]))
+                    last = protocol.decode(self.funcs[function], raw)
                     self._last = {**self._last, function: last}   # atomic rebind (web thread reads unlocked)
                 except ConnectionUnavailable as e:
                     print("command %s skipped (no state read): %s" % (function, e), flush=True)
@@ -385,8 +394,13 @@ class Server:
             frame = control.build(self.funcs, function, what, value, last)
             if frame is None:
                 return None
-            post = await self.dev.actuate(self.funcs[function], frame, verify=True,
+            sess = self._live_session()
+            if sess is not None:
+                post = await sess.actuate(self.funcs[function], frame, verify=True,
                                           follow=control.commit_for(function))
+            else:
+                post = await self.dev.actuate(self.funcs[function], frame, verify=True,
+                                              follow=control.commit_for(function))
             if post is None:
                 return None
             self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
@@ -502,8 +516,13 @@ class Server:
         self._httpd = self._maybe_start_web(loop)
 
         async def _forever():
+            if self._persistent:
+                asyncio.ensure_future(self._supervise_session())
             while True:
                 try:
+                    if self._persistent and self._live_session() is None:
+                        await asyncio.sleep(2)        # supervisor is (re)connecting
+                        continue
                     states = await self.poll()
                     print("polled %d functions" % len(states), flush=True)
                 except ConnectionUnavailable as e:

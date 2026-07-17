@@ -283,6 +283,36 @@ def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
     assert calls["actuate_roof"] is None
 
 
+def test_on_command_uses_persistent_session_when_up(monkeypatch):
+    """When a session is up, on_command writes through it (arm-free), not dev.actuate."""
+    import asyncio
+    from calictl import serve, protocol, overrides, control
+    funcs = protocol.load(); overrides.apply(funcs)
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._last = {"cooler": {"Installed": 1, "State": 0, "Level": 3, "Mode": 4}}
+
+    calls = {"session": 0, "dev": 0}
+    class FakeSession:
+        is_up = True
+        async def actuate(self, func, frame, *, follow=None, verify=True):
+            calls["session"] += 1
+            return {"State": 1, "Level": 3, "Mode": 4, "Installed": 1}
+    async def dev_actuate(*a, **k):
+        calls["dev"] += 1
+        return None
+    monkeypatch.setattr(s.dev, "actuate", dev_actuate)
+    s._session = FakeSession()
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("cooler", "power", "on")
+    result = asyncio.run(_run())
+    assert calls["session"] == 1 and calls["dev"] == 0
+    assert result is True     # readback State==1 matches "on"
+
+
 # --- web UI start is optional: a bind failure must not crash the daemon ---
 
 def test_maybe_start_web_none_when_no_port():
