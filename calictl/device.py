@@ -54,6 +54,14 @@ FOLLOW_DELAY_S = float(os.environ.get("CALICTL_FOLLOW_DELAY_S", "0.3"))  # gap b
 # refresh before the read pass. Live-verified on-device 2026-07-09 (1 L -> 11 L, link held 64 s).
 HEARTBEAT_WARMUP_S = float(os.environ.get("CALICTL_HEARTBEAT_WARMUP_S", "2.0"))
 
+# Functions whose state char is PUSH-ONLY for freshness: a bare read returns a stale latch and
+# the true value arrives only as a notification (water 1302, decompile-confirmed 2026-07-14).
+# For all other chars the persistent session live-reads each poll (a stale sticky push would
+# otherwise pin them). NB: whether water re-pushes under the subscribe-once persistent session
+# (vs per-op which re-subscribes each poll) is UNVERIFIED on-device — if water pins stale in
+# persistent mode, a periodic re-subscribe is the follow-up. See value-freshness.md.
+PUSH_ONLY_FUNCS = frozenset({"water"})
+
 # roof move (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame won't complete travel:
 # the app streams the OPEN/CLOSE move frame continuously until STOP. Decompile of the app engine
 # (`w8/a`, 2026-07-13) settled the model: motion is driven IMMEDIATELY — there is NO STOP-hold /
@@ -536,20 +544,42 @@ class PersistentSession:
         self._client = client
 
     async def read_all(self, funcs: dict) -> dict[str, bytes]:
+        """Live-read every function's state char over the already-connected client.
+
+        Mirrors :meth:`CamperDevice._read_all_on`'s retry/logging behaviour: a char not
+        satisfied by a push is retried up to 3x (0.8 s backoff) before being skipped, with a
+        failure logged, and the cycle aborts early if the client itself disconnects mid-loop.
+
+        Only :data:`PUSH_ONLY_FUNCS` (water) may be served from the persistent notification
+        cache (``self._notif``) indefinitely — it is push-only-for-freshness, so a bare read
+        would return a stale latch. Every other notifiable char is live-read each poll: this
+        cache lives for the lifetime of the session, so trusting it for an ordinary char would
+        pin whatever value was captured at subscribe time forever.
+        """
         out: dict[str, bytes] = {}
         client = self._client
         for name, f in funcs.items():
             if not f.state_char:
                 continue
-            pushed = self._notif.get(str(f.state_char).lower())
-            if pushed is not None:
-                out[name] = pushed
-                continue
-            try:
-                out[name] = bytes(await client.read_gatt_char(f.state_char))
-            except Exception:
-                if not getattr(client, "is_connected", False):
+            if name in PUSH_ONLY_FUNCS:
+                pushed = self._notif.get(str(f.state_char).lower())
+                if pushed is not None:
+                    out[name] = pushed
+                    continue
+            for attempt in range(3):
+                try:
+                    out[name] = bytes(await client.read_gatt_char(f.state_char))
                     break
+                except Exception as e:
+                    if not getattr(client, "is_connected", False):
+                        # link dropped mid-session: don't burn retries/remaining funcs
+                        print("read_all: link dropped at %s; aborting cycle" % name, flush=True)
+                        break
+                    if attempt == 2:
+                        print("read_all: %s failed after retries: %r" % (name, e), flush=True)
+                    await asyncio.sleep(0.8)
+            if not getattr(client, "is_connected", False):
+                break
         return out
 
     async def read_one(self, func) -> bytes:

@@ -311,6 +311,15 @@ class Server:
         Returns True if the session came up."""
         from . import device  # lazy
         self._session_state = "connecting"
+        if self._session is not None:
+            # Close the outgoing session before replacing it: otherwise its heartbeat task
+            # (self._stop never set) loops forever and its BleakClient is never disconnected —
+            # an unbounded leak on every drop->reconnect cycle.
+            try:
+                await self._session.aclose()
+            except Exception:
+                pass
+            self._session = None
         sess = device.PersistentSession(self.dev)
         try:
             await sess.start()

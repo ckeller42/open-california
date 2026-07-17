@@ -283,6 +283,44 @@ def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
     assert calls["actuate_roof"] is None
 
 
+def test_reconnect_closes_the_old_session_no_leak(monkeypatch):
+    """FIX (final review): _session_connect_once must aclose() the outgoing session before
+    replacing it. Without this, every drop->reconnect cycle leaks the old session's heartbeat
+    task (runs forever, `_stop` never set) and its BleakClient (never disconnected)."""
+    import asyncio, sys, types
+    from calictl import serve, device
+    from tools.mock_unit import MockCamperUnit, MockBleakClient
+
+    unit = MockCamperUnit()
+    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+    sys.modules["bleak"] = fake
+    monkeypatch.setattr(device, "HEARTBEAT_WARMUP_S", 0.0, raising=False)
+    real_sleep = asyncio.sleep
+    async def fast_sleep(x, *a, **k):
+        await real_sleep(0)
+    monkeypatch.setattr(serve.asyncio, "sleep", fast_sleep)
+    monkeypatch.setattr(device.asyncio, "sleep", fast_sleep)
+
+    s = serve.Server("MO:CK", influx_enabled=False)
+    s._persistent = True
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        assert await s._session_connect_once() is True     # first connect -> up
+        old = s._session
+        assert old.is_up is True
+        assert old._stop.is_set() is False
+        unit.drop(); unit.wake()                            # link cycles; van reachable again
+        ok = await s._session_connect_once()                # reconnect
+        assert ok is True
+        assert s._session is not old                        # a NEW session object
+        assert s._session.is_up is True
+        assert old._stop.is_set() is True                   # old session was closed, not leaked
+        return True
+
+    assert asyncio.run(_run())
+
+
 def test_on_command_uses_persistent_session_when_up(monkeypatch):
     """When a session is up, on_command writes through it (arm-free), not dev.actuate."""
     import asyncio

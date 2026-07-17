@@ -311,6 +311,7 @@ function offlineBanner() {
 // precedent as the read-only lock: the unauthenticated LAN UI must not flip daemon infra state.
 const SESSION_PILL = {
   up: { cls: "ok", text: "🟢 Live · fast" },
+  connecting: { cls: "busy", text: "🟡 Connecting" },
   degraded: { cls: "busy", text: "🟡 Reconnecting" },
   asleep: { cls: "", text: "⚪ Asleep" },
 };
