@@ -307,6 +307,23 @@ function offlineBanner() {
   return b;
 }
 
+// Read-only session-state pill (persistent BLE session). Displayed, never toggled — same
+// precedent as the read-only lock: the unauthenticated LAN UI must not flip daemon infra state.
+const SESSION_PILL = {
+  up: { cls: "ok", text: "🟢 Live · fast" },
+  degraded: { cls: "busy", text: "🟡 Reconnecting" },
+  asleep: { cls: "", text: "⚪ Asleep" },
+};
+function sessionPill() {
+  const st = STATE._meta && STATE._meta.session;
+  if (!st || st === "off") return null;
+  const spec = SESSION_PILL[st] || SESSION_PILL.asleep;
+  const el = document.createElement("div");
+  el.className = "session-pill" + (spec.cls ? " " + spec.cls : "");
+  el.textContent = spec.text;
+  return el;
+}
+
 const fmtDeg = (d) => (d > 0 ? "+" : "") + d + "°";
 
 // A spirit-level "bubble" for the 2-axis van leveling: a target with a bubble offset by roll (x)
@@ -452,6 +469,8 @@ function render() {
   backEl.hidden = view === "home";
   backEl.onclick = () => goto("home");
   app.innerHTML = "";
+  const sp = sessionPill();
+  if (sp) app.appendChild(sp);
   const ob = offlineBanner();
   if (ob) app.appendChild(ob);
   if (readOnly()) {
