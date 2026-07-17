@@ -8,6 +8,13 @@ def _funcs():
 
 
 def test_persistent_session_starts_armed_and_actuates_without_arm_delay(monkeypatch):
+    """.. test:: Persistent session actuates arm-free
+       :id: T_PERSISTENT_SESSION
+       :links: R_PERSISTENT_SESSION
+
+       A started PersistentSession is armed by its continuous heartbeat, so a write applies
+       without the per-command ARM_DELAY (the < 1 s fast path).
+    """
     funcs = _funcs()
     unit = MockCamperUnit()
     monkeypatch.setattr(device, "HEARTBEAT_WARMUP_S", 0.0, raising=False)

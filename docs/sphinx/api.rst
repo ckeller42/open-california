@@ -29,6 +29,9 @@ Device / reads
 .. automethod:: calictl.device.CamperDevice.actuate_roof
 .. automethod:: calictl.device.CamperDevice._session
 .. automethod:: calictl.device.CamperDevice._subscribe_all
+.. automethod:: calictl.device.CamperDevice._actuate_on
+.. autoclass:: calictl.device.PersistentSession
+   :members:
 
 Protocol codec
 --------------

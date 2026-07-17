@@ -176,6 +176,20 @@ def test_session_pill_shows_live(page, base_url):
     assert "Live" in txt
 
 
+def test_command_latency_is_subsecond(page, base_url):
+    """The persistent session's payoff: a control write applies in well under a second
+    (the e2e daemon runs with real ARM_DELAY defaults; only a live session makes this pass)."""
+    import time
+    page.goto(base_url)
+    page.get_by_text("Cooler", exact=True).first.click()
+    sw = page.locator(".switch").first
+    sw.wait_for(state="visible", timeout=20000)
+    t0 = time.time()
+    sw.click()
+    page.get_by_text("Applied").wait_for(timeout=10000)
+    assert time.time() - t0 < 3.0, "command took too long -- persistent fast path not engaged"
+
+
 def test_energy_chart_draws_from_daemon_history_not_influx(page, base_url):
     """The 24 h chart must render from the daemon's own append-only history.
 
