@@ -326,7 +326,9 @@ def test_lighting_zone_set_leaves_others_unchanged():
     last = {"ProfileNumber": 12}
     back = control.decode_control(f["lighting"], control.build(f, "lighting", "kitchen", "8", last))
     assert back["Mode"] == control.LIGHT_MODE_SET_BRIGHTNESS   # SET_BRIGHTNESS
-    assert back["ProfileNumber"] == 12                         # echoes the ACTIVE profile
+    # ProfileNumber is HARDCODED to 9 like the app (LIGHT_BRIGHTNESS_PROFILE), regardless of the
+    # currently-active profile in `last` — so a set applies with the lights off (PN=0) too.
+    assert back["ProfileNumber"] == control.LIGHT_BRIGHTNESS_PROFILE
     assert back["BrightnessLSeven"] == 8                       # kitchen (L7) -> 8
     others = [v for k, v in back.items() if k.startswith("Brightness") and k != "BrightnessLSeven"]
     assert set(others) == {control.LIGHT_UNCHANGED}            # every other zone = 14 (unchanged)

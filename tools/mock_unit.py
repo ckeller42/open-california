@@ -202,20 +202,22 @@ class MockCamperUnit:
 
         # Lighting is COMMIT-GATED (HCI-verified 2026-07-13). A SET_PROFILE (Mode 16) or
         # SET_BRIGHTNESS (Mode 4) only STAGES the change; the unit APPLIES it when the commit
-        # frame (Mode 0, control.LIGHT_COMMIT) lands right after. SET_BRIGHTNESS still requires a
-        # profile active. With no commit, the write is ACKed but never applied (the old gap).
+        # frame (Mode 0, control.LIGHT_COMMIT) lands right after. With no commit, the write is
+        # ACKed but never applied (the old gap). The apply gate for SET_BRIGHTNESS is the FRAME's
+        # ProfileNumber (the app hardcodes 9), NOT a separately-active profile: a brightness frame
+        # carrying PN=0 is ignored, PN=9 applies (and makes profile 9 the active one).
         if fn == "lighting":
             mode = ctrl.get("Mode")
             if mode == LIGHT_MODE_SET_PROFILE:
                 self._pending_light = ("profile", ctrl.get("ProfileNumber", st.get("ProfileNumber", 0)))
                 return
             if mode == LIGHT_MODE_SET_BRIGHTNESS:
-                if not st.get("ProfileNumber"):   # no active profile -> nothing to stage
+                if not ctrl.get("ProfileNumber"):   # frame carries no working profile (PN=0) -> ignored
                     self._pending_light = None; return
                 zones = {cf.name: ctrl[cf.name] for cf in func.control_fields
                          if cf.placed and cf.name.startswith("BrightnessL") and cf.name in ctrl
                          and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED and func.state_field(cf.name)}
-                self._pending_light = ("zones", zones)
+                self._pending_light = ("zones", zones, ctrl.get("ProfileNumber"))
                 return
             if mode == LIGHT_MODE_COMMIT:         # apply the staged change
                 p = getattr(self, "_pending_light", None)
@@ -223,6 +225,7 @@ class MockCamperUnit:
                     st["ProfileNumber"] = p[1]
                 elif p and p[0] == "zones":
                     st.update(p[1])
+                    st["ProfileNumber"] = p[2]    # a brightness set makes its profile the active one
                 self._pending_light = None
             return
 

@@ -125,18 +125,20 @@ def test_camping_master_toggle_applies(page):
     expect(page.locator('.switch[aria-checked="true"]').first).to_be_visible()
 
 
-def test_lighting_screen_activate_profile(page):
-    # the rebuilt lighting screen: grouped lamps render; activating a profile applies
+def test_lighting_screen_lamps_are_directly_controllable(page):
+    # like the app: lamps are always controllable (no "activate a profile first" gate). Dragging
+    # a lamp from the lights-off state applies directly — the SET_BRIGHTNESS self-carries profile 9.
     page.get_by_text("Lighting", exact=True).first.click()
     expect(page.get_by_text("Reading lights")).to_be_visible()
     expect(page.get_by_text("Left", exact=True)).to_be_visible()   # a reading lamp
-    # with NO profile active, lamp controls must be disabled (they can't apply) — not a live trap
-    assert page.locator("input[type=range]").first.is_disabled()
-    assert page.locator(".switch").first.is_disabled()             # all-lights master too
-    page.get_by_role("button", name="Activate").click()
+    # no manual Activate step, and controls are live from the start
+    assert page.get_by_role("button", name="Activate").count() == 0
+    slider = page.locator("input[type=range]").first
+    expect(slider).to_be_enabled()
+    assert page.locator(".switch").first.is_enabled()              # all-lights master too
+    slider.fill("8")                                               # drag a lamp
+    slider.dispatch_event("change")
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
-    # after activating, the lamp sliders become controllable
-    expect(page.locator("input[type=range]").first).to_be_enabled()
 
 
 def test_dashboard_summary_card(page):
