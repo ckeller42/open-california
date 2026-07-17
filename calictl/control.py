@@ -95,12 +95,20 @@ LIGHT_ON_BRIGHTNESS = 13         # "on" brightness (0..13; 14=unchanged sentinel
 # was missing. Sent as the `follow` frame of device.actuate for every lighting write.
 LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
 
-# Friendly zone key -> BrightnessL control field, from the app's Lighting screen + the HCI
-# capture (which nibble tracked each slider). Reading trio (Links/Rechts/Beifahrer) map to
-# L1/L2/L4 — group confirmed, the left/right/passenger split within it is best-effort.
+# Friendly zone key -> BrightnessL control field. Two provenance tiers:
+#   CONFIRMED by the 2026-07-08 HCI capture (which nibble tracked each dragged slider):
+#     reading trio L2/L1/L4 (Links/Rechts/Beifahrer — group confirmed, the split is best-effort),
+#     "kitchen" = L7 (the Küche *Kochen*/cooking light), "roof-ambient" = L8, "outside-rear" = L3.
+#   INFERRED by elimination (2026-07-15 screenshots): the app shows this van has 8 lamps, and
+#     semantics._REAL_LIGHT_ZONES says exactly 8 zones are real (L1-L8). Six are pinned above; the
+#     app's two remaining rows are Küche *Ambientelicht* and Aufstelldach *Leselicht*, so they must
+#     be the two unpinned zones L5/L6 — but WHICH is which is unverified. The GUI marks these
+#     unverified; a single slider drag on-device (watch which lamp lights) will confirm/swap them.
 LIGHT_ZONES = {
     "reading-1": "BrightnessLTwo", "reading-2": "BrightnessLOne", "reading-3": "BrightnessLFour",
     "kitchen": "BrightnessLSeven", "roof-ambient": "BrightnessLEight", "outside-rear": "BrightnessLThree",
+    "kitchen-ambient": "BrightnessLFive",   # INFERRED L5 — Küche Ambientelicht (unverified)
+    "roof-reading": "BrightnessLSix",        # INFERRED L6 — Aufstelldach Leselicht (roof-open only, unverified)
 }
 
 
