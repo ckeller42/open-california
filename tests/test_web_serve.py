@@ -2,6 +2,91 @@ import asyncio
 from calictl import serve, protocol, overrides, control
 
 
+def test_meta_session_state_reflects_supervisor(monkeypatch):
+    """_meta.session mirrors the supervisor's state machine; online == (session up)."""
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._session_state = "up"
+    st = serve.ServeBackend(s, loop=None).state()
+    assert st["_meta"]["session"] == "up" and st["_meta"]["online"] is True
+    s._session_state = "asleep"
+    st = serve.ServeBackend(s, loop=None).state()
+    assert st["_meta"]["session"] == "asleep" and st["_meta"]["online"] is False
+
+
+def test_supervise_session_backoff_to_asleep(monkeypatch):
+    """Repeated connect failures (parked van) escalate the state to 'asleep' without spinning."""
+    import asyncio
+    from calictl import serve, device
+    from tools.mock_unit import MockCamperUnit, MockBleakClient
+    import sys, types
+    unit = MockCamperUnit(); unit.drop()                 # asleep from the start
+    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+    sys.modules["bleak"] = fake
+
+    # device._session retries the connect 3x with a real asyncio.sleep(4) between attempts;
+    # collapse those to keep this a fast unit test. We assert on state, never on sleep timing.
+    real = asyncio.sleep
+    async def fast_sleep(x, *a, **k):
+        await real(0)
+    monkeypatch.setattr(serve.asyncio, "sleep", fast_sleep)
+
+    s = serve.Server("MO:CK", influx_enabled=False)
+    s._persistent = True
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        # run a bounded number of supervisor iterations
+        for _ in range(5):
+            await s._session_connect_once()
+        return s._session_state
+    state = asyncio.run(_run())
+    assert state == "asleep"
+    assert s._backoff_fails >= serve.Server.ASLEEP_AFTER
+
+
+def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
+    """_supervise_session's own loop: connect fails (asleep), it escalates to 'asleep' and
+    backs off (up to the 60s cap) rather than spinning."""
+    import asyncio, sys, types
+    from calictl import serve
+    from tools.mock_unit import MockCamperUnit, MockBleakClient
+    unit = MockCamperUnit(); unit.drop()                     # asleep from the start
+    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+    sys.modules["bleak"] = fake
+
+    class _Stop(Exception):
+        pass
+    sleeps = []
+    real = asyncio.sleep
+    s = serve.Server("MO:CK", influx_enabled=False)
+    s._persistent = True
+
+    # Patching serve.asyncio.sleep patches the global asyncio module, so device._session's own
+    # retry sleeps (value 4) land in this list too, alongside the supervisor's backoff sleeps
+    # (5/10/30/60). Stop the otherwise-infinite loop once the machine has ESCALATED to 'asleep'
+    # AND actually backed off at the 60 s cap -- that is the behaviour under test. The len cap is
+    # a pure safety backstop so a regression can't hang the suite.
+    async def fake_sleep(x, *a, **k):
+        sleeps.append(x)
+        if (s._session_state == "asleep" and x == 60) or len(sleeps) >= 200:
+            raise _Stop
+        await real(0)
+    monkeypatch.setattr(serve.asyncio, "sleep", fake_sleep)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        try:
+            await s._supervise_session()
+        except _Stop:
+            pass
+        return s._session_state, sleeps
+    state, sleeps = asyncio.run(_run())
+    assert state == "asleep"                                 # escalated after ASLEEP_AFTER fails
+    assert 60 in sleeps and all(x > 0 for x in sleeps)       # capped backoff, never a 0-sleep spin
+
+
 def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
     """The daemon must keep serving the last-known values behind an offline flag when the van's
     unreachable, and the cache must survive a restart (the unit deep-sleeps for days when parked)."""
@@ -196,6 +281,74 @@ def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
     assert result is None
     assert calls["actuate"] is not None
     assert calls["actuate_roof"] is None
+
+
+def test_reconnect_closes_the_old_session_no_leak(monkeypatch):
+    """FIX (final review): _session_connect_once must aclose() the outgoing session before
+    replacing it. Without this, every drop->reconnect cycle leaks the old session's heartbeat
+    task (runs forever, `_stop` never set) and its BleakClient (never disconnected)."""
+    import asyncio, sys, types
+    from calictl import serve, device
+    from tools.mock_unit import MockCamperUnit, MockBleakClient
+
+    unit = MockCamperUnit()
+    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+    sys.modules["bleak"] = fake
+    monkeypatch.setattr(device, "HEARTBEAT_WARMUP_S", 0.0, raising=False)
+    real_sleep = asyncio.sleep
+    async def fast_sleep(x, *a, **k):
+        await real_sleep(0)
+    monkeypatch.setattr(serve.asyncio, "sleep", fast_sleep)
+    monkeypatch.setattr(device.asyncio, "sleep", fast_sleep)
+
+    s = serve.Server("MO:CK", influx_enabled=False)
+    s._persistent = True
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        assert await s._session_connect_once() is True     # first connect -> up
+        old = s._session
+        assert old.is_up is True
+        assert old._stop.is_set() is False
+        unit.drop(); unit.wake()                            # link cycles; van reachable again
+        ok = await s._session_connect_once()                # reconnect
+        assert ok is True
+        assert s._session is not old                        # a NEW session object
+        assert s._session.is_up is True
+        assert old._stop.is_set() is True                   # old session was closed, not leaked
+        return True
+
+    assert asyncio.run(_run())
+
+
+def test_on_command_uses_persistent_session_when_up(monkeypatch):
+    """When a session is up, on_command writes through it (arm-free), not dev.actuate."""
+    import asyncio
+    from calictl import serve, protocol, overrides, control
+    funcs = protocol.load(); overrides.apply(funcs)
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._last = {"cooler": {"Installed": 1, "State": 0, "Level": 3, "Mode": 4}}
+
+    calls = {"session": 0, "dev": 0}
+    class FakeSession:
+        is_up = True
+        async def actuate(self, func, frame, *, follow=None, verify=True):
+            calls["session"] += 1
+            return {"State": 1, "Level": 3, "Mode": 4, "Installed": 1}
+    async def dev_actuate(*a, **k):
+        calls["dev"] += 1
+        return None
+    monkeypatch.setattr(s.dev, "actuate", dev_actuate)
+    s._session = FakeSession()
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("cooler", "power", "on")
+    result = asyncio.run(_run())
+    assert calls["session"] == 1 and calls["dev"] == 0
+    assert result is True     # readback State==1 matches "on"
 
 
 # --- web UI start is optional: a bind failure must not crash the daemon ---

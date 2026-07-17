@@ -54,6 +54,14 @@ FOLLOW_DELAY_S = float(os.environ.get("CALICTL_FOLLOW_DELAY_S", "0.3"))  # gap b
 # refresh before the read pass. Live-verified on-device 2026-07-09 (1 L -> 11 L, link held 64 s).
 HEARTBEAT_WARMUP_S = float(os.environ.get("CALICTL_HEARTBEAT_WARMUP_S", "2.0"))
 
+# Functions whose state char is PUSH-ONLY for freshness: a bare read returns a stale latch and
+# the true value arrives only as a notification (water 1302, decompile-confirmed 2026-07-14).
+# For all other chars the persistent session live-reads each poll (a stale sticky push would
+# otherwise pin them). NB: whether water re-pushes under the subscribe-once persistent session
+# (vs per-op which re-subscribes each poll) is UNVERIFIED on-device — if water pins stale in
+# persistent mode, a periodic re-subscribe is the follow-up. See value-freshness.md.
+PUSH_ONLY_FUNCS = frozenset({"water"})
+
 # roof move (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame won't complete travel:
 # the app streams the OPEN/CLOSE move frame continuously until STOP. Decompile of the app engine
 # (`w8/a`, 2026-07-13) settled the model: motion is driven IMMEDIATELY — there is NO STOP-hold /
@@ -222,20 +230,8 @@ class CamperDevice:
             await self._safe_disconnect(client)
 
     async def actuate(self, func, frame: bytes, *, verify=True, follow: bytes | None = None) -> dict | None:
-        """Arm the unit with a 1003 liveness heartbeat, then write a control frame.
-
-        One BLE session end-to-end (the single-slot rule holds — callers hold the
-        serve lock around this): connect, replay the app's connect handshake
-        (version + authenticated reads, subscribe every notifiable char), start a
-        +1 counter heartbeat on 1003, and only then write `frame`. Actuation
-        latches (one-shot arm), so the heartbeat is torn down right after the write.
-        Returns the post-write state decode when `verify`, else None.
-
-        :param follow: an optional second frame written to the same control char right
-            after `frame`, in the same armed session. The lighting screen needs this: the
-            app follows every SET_BRIGHTNESS/SET_PROFILE with a commit frame
-            (``0e00…``) and the unit only *applies* the change once that commit lands
-            (HCI-verified 2026-07-13 — this is the fix for the old lighting-apply gap).
+        """Connect, arm with a 1003 heartbeat, write a control frame, disconnect (one BLE
+        session — the CLI/per-op path). See :meth:`_actuate_on` for the shared write core.
 
         .. req:: Arm the unit with a 1003 heartbeat before a control write
            :id: R_ACTUATE_ARM
@@ -246,35 +242,53 @@ class CamperDevice:
            1003 liveness counter before writing a control frame (and any ``follow`` commit
            frame), so the unit's arm gate honours the write. Diagram: :need:`S_SEQ_ACTUATE`.
         """
-        from . import protocol  # lazy
         if not func.control_char:
             raise ValueError("%s has no control characteristic" % func.name)
         client = await self._session()
+        try:
+            return await self._actuate_on(client, func, frame, follow=follow, verify=verify, arm=True)
+        finally:
+            await self._safe_disconnect(client)
+
+    async def _actuate_on(self, client, func, frame: bytes, *, follow: bytes | None = None,
+                          verify: bool = True, arm: bool = True) -> dict | None:
+        """Write a control frame over an ALREADY-CONNECTED client. Never connects/disconnects.
+
+        ``arm=True`` (cold session, e.g. the CLI): replay the handshake (VERSION/AUTH reads +
+        subscribe-all), start a +1 heartbeat on 1003, wait ``ARM_DELAY_S`` so the unit registers
+        liveness, then write. ``arm=False`` (persistent session): the caller's heartbeat is already
+        ticking, so skip the handshake/heartbeat/arm-delay and write immediately -- the < 1 s path.
+
+        :param follow: optional second frame written to the same control char right after ``frame``
+            (the lighting commit; see ``control.commit_for``).
+        :returns: the post-write ``protocol.decode`` when ``verify`` and the func has a state char.
+        """
+        from . import protocol  # lazy
+        if not func.control_char:
+            raise ValueError("%s has no control characteristic" % func.name)
         stop = asyncio.Event()
         beat = None
         try:
-            # connect handshake: version + authenticated reads (bonding/liveness gate)
-            auth_ok = 0
-            for uuid in (VERSION_CHAR, AUTH_CHAR):
-                try:
-                    await client.read_gatt_char(uuid); auth_ok += 1
-                except Exception:
-                    pass
-            n = await self._subscribe_all(client)
-            if auth_ok < 2 or n == 0:
-                # a weak handshake is the leading write-gate hypothesis — surface it rather
-                # than silently proceed to a write the unit may ignore.
-                print("actuate: weak handshake (auth-reads=%d/2, subscribed=%d) — write may "
-                      "be ignored" % (auth_ok, n), flush=True)
-            beat = asyncio.create_task(self._heartbeat(client, stop))
-            await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
+            if arm:
+                auth_ok = 0
+                for uuid in (VERSION_CHAR, AUTH_CHAR):
+                    try:
+                        await client.read_gatt_char(uuid); auth_ok += 1
+                    except Exception:
+                        pass
+                n = await self._subscribe_all(client)
+                if auth_ok < 2 or n == 0:
+                    print("actuate: weak handshake (auth-reads=%d/2, subscribed=%d) — write may "
+                          "be ignored" % (auth_ok, n), flush=True)
+                beat = asyncio.create_task(self._heartbeat(client, stop))
+                await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
             await client.write_gatt_char(func.control_char, frame, response=True)
             if follow is not None:
-                await asyncio.sleep(FOLLOW_DELAY_S)   # brief gap, as the app spaces its commit
+                await asyncio.sleep(FOLLOW_DELAY_S)
                 await client.write_gatt_char(func.control_char, follow, response=True)
             if not verify or not func.state_char:
                 return None
-            await asyncio.sleep(SETTLE_S)      # let the actuation take effect
+            await asyncio.sleep(SETTLE_S)
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw)
         finally:
@@ -284,7 +298,6 @@ class CamperDevice:
                     await beat
                 except Exception:
                     pass
-            await self._safe_disconnect(client)
 
     async def actuate_roof(self, func, move_frame: bytes, stop_frame: bytes, *,
                            max_duration_s: float = ROOF_MAX_TRAVEL_S,
@@ -487,3 +500,105 @@ class CamperDevice:
             await client.disconnect()
         except Exception:
             pass  # disconnect frequently throws EOFError after a good read
+
+
+class PersistentSession:
+    """One long-lived connected client with the 1003 heartbeat ticking continuously — the
+    daemon's fast path. Poll reads and command writes run over the live link (no per-op connect,
+    subscribe, or 3 s arm). CLI code keeps using CamperDevice.actuate/read_all.
+
+    .. req:: Hold a persistent armed BLE session for fast actuation
+       :id: R_PERSISTENT_SESSION
+       :status: implemented
+       :tags: ble, control, latency
+
+       While the van is reachable, the daemon shall keep one connected client with the 1003
+       heartbeat ticking, so control writes apply in well under a second (no connect/subscribe/
+       arm-delay per action), and reads stay fresh continuously.
+    """
+
+    def __init__(self, dev: "CamperDevice"):
+        self._dev = dev
+        self._client = None
+        self._notif: dict[str, bytes] = {}
+        self._stop = None
+        self._beat = None
+
+    @property
+    def is_up(self) -> bool:
+        return bool(self._client is not None and getattr(self._client, "is_connected", False)
+                    and self._beat is not None and not self._beat.done())
+
+    async def start(self) -> None:
+        client = await self._dev._session()
+        for uuid in (VERSION_CHAR, AUTH_CHAR):
+            try:
+                await client.read_gatt_char(uuid)
+            except Exception:
+                pass
+        self._notif = {}
+        await self._dev._subscribe_all(client, self._notif)
+        self._stop = asyncio.Event()
+        self._beat = asyncio.create_task(self._dev._heartbeat(client, self._stop))
+        await asyncio.sleep(HEARTBEAT_WARMUP_S)     # let the arm + first measurement register
+        self._client = client
+
+    async def read_all(self, funcs: dict) -> dict[str, bytes]:
+        """Live-read every function's state char over the already-connected client.
+
+        Mirrors :meth:`CamperDevice._read_all_on`'s retry/logging behaviour: a char not
+        satisfied by a push is retried up to 3x (0.8 s backoff) before being skipped, with a
+        failure logged, and the cycle aborts early if the client itself disconnects mid-loop.
+
+        Only :data:`PUSH_ONLY_FUNCS` (water) may be served from the persistent notification
+        cache (``self._notif``) indefinitely — it is push-only-for-freshness, so a bare read
+        would return a stale latch. Every other notifiable char is live-read each poll: this
+        cache lives for the lifetime of the session, so trusting it for an ordinary char would
+        pin whatever value was captured at subscribe time forever.
+        """
+        out: dict[str, bytes] = {}
+        client = self._client
+        for name, f in funcs.items():
+            if not f.state_char:
+                continue
+            if name in PUSH_ONLY_FUNCS:
+                pushed = self._notif.get(str(f.state_char).lower())
+                if pushed is not None:
+                    out[name] = pushed
+                    continue
+            for attempt in range(3):
+                try:
+                    out[name] = bytes(await client.read_gatt_char(f.state_char))
+                    break
+                except Exception as e:
+                    if not getattr(client, "is_connected", False):
+                        # link dropped mid-session: don't burn retries/remaining funcs
+                        print("read_all: link dropped at %s; aborting cycle" % name, flush=True)
+                        break
+                    if attempt == 2:
+                        print("read_all: %s failed after retries: %r" % (name, e), flush=True)
+                    await asyncio.sleep(0.8)
+            if not getattr(client, "is_connected", False):
+                break
+        return out
+
+    async def read_one(self, func) -> bytes:
+        return bytes(await self._client.read_gatt_char(func.state_char))
+
+    async def actuate(self, func, frame: bytes, *, follow: bytes | None = None,
+                      verify: bool = True) -> dict | None:
+        return await self._dev._actuate_on(self._client, func, frame, follow=follow,
+                                           verify=verify, arm=False)
+
+    async def aclose(self) -> None:
+        if self._stop is not None:
+            self._stop.set()
+        if self._beat is not None:
+            try:
+                await self._beat
+            except Exception:
+                pass
+        if self._client is not None:
+            await self._dev._safe_disconnect(self._client)
+        self._client = None
+        self._beat = None

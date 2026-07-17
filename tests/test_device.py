@@ -139,3 +139,31 @@ def test_on_command_reads_state_when_cache_cold(fake_bleak):
     assert "cooler" not in s._last
     asyncio.run(_run())
     assert "cooler" in s._last               # it did a fresh state read before actuating
+
+
+def test_actuate_on_arm_false_skips_handshake_and_arm_delay(monkeypatch):
+    """The persistent fast path: given a live heartbeat, a write must NOT replay the
+    handshake or wait ARM_DELAY_S -- that is the entire latency win."""
+    from calictl import control
+    from tools.mock_unit import MockCamperUnit, MockBleakClient
+    funcs = protocol.load(); overrides.apply(funcs)
+    unit = MockCamperUnit(); unit.armed = True            # heartbeat already ticking
+    client = MockBleakClient.bind(unit)("MO:CK", timeout=1)
+
+    slept = []
+    real_sleep = asyncio.sleep
+    async def fake_sleep(s, *a, **k):
+        slept.append(s)
+        await real_sleep(0)
+    monkeypatch.setattr(device.asyncio, "sleep", fake_sleep)
+
+    async def _run():
+        await client.connect()
+        dev = device.CamperDevice("MO:CK")
+        frame = control.build(funcs, "cooler", "power", "on", {"State": 0, "Level": 3, "Mode": 4})
+        return await dev._actuate_on(client, funcs["cooler"], frame, verify=True, arm=False)
+
+    post = asyncio.run(_run())
+    assert device.ARM_DELAY_S not in slept          # no 3s arm wait
+    assert post is not None and post.get("State") == 1   # write applied
+    assert unit.decoded("cooler")["State"] == 1

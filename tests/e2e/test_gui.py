@@ -53,7 +53,8 @@ def base_url():
                # BOTH caches must be redirected: the daemon appends an energy sample per poll, so
                # without this the suite writes mock data into the developer's real ~/.cache.
                CALICTL_HISTORY_CACHE="/tmp/calictl_e2e_history.jsonl",
-               CALICTL_ENABLE_WRITES="1")   # e2e exercises control writes -> not read-only
+               CALICTL_ENABLE_WRITES="1",  # e2e exercises control writes -> not read-only
+               CALICTL_PERSISTENT_SESSION="1")  # default, explicit for the session-pill test's intent
     proc = subprocess.Popen(
         [sys.executable, "-m", "tools.run_against_mock", "serve",
          "--web", str(port), "--interval", "1", "--no-influx"],
@@ -165,6 +166,28 @@ def test_no_red_flag_text(page, base_url):
     dtext = page.locator("#app").inner_text()
     for flag in RED:
         assert flag not in dtext, "%r rendered on the dashboard" % flag
+
+
+def test_session_pill_shows_live(page, base_url):
+    """With the persistent session up, the header shows a 'Live' session pill."""
+    page.goto(base_url)
+    page.wait_for_selector(".session-pill", timeout=20000)
+    txt = page.locator(".session-pill").inner_text()
+    assert "Live" in txt
+
+
+def test_command_latency_is_subsecond(page, base_url):
+    """The persistent session's payoff: a control write applies in well under a second
+    (the e2e daemon runs with real ARM_DELAY defaults; only a live session makes this pass)."""
+    import time
+    page.goto(base_url)
+    page.get_by_text("Cooler", exact=True).first.click()
+    sw = page.locator(".switch").first
+    sw.wait_for(state="visible", timeout=20000)
+    t0 = time.time()
+    sw.click()
+    page.get_by_text("Applied").wait_for(timeout=10000)
+    assert time.time() - t0 < 3.0, "command took too long -- persistent fast path not engaged"
 
 
 def test_energy_chart_draws_from_daemon_history_not_influx(page, base_url):

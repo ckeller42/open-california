@@ -146,3 +146,9 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 /* inferred/unverified lamp identity marker on the Lighting screen */
 .lamp-hint { margin-left: .5rem; font-size: .68rem; font-weight: 400; color: var(--muted);
   border: 1px solid var(--border); border-radius: 6px; padding: 0 .3rem; vertical-align: middle; }
+
+/* persistent-session status pill (read-only) */
+.session-pill { display: inline-block; font-size: .72rem; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: .1rem .6rem; margin-bottom: .6rem; }
+.session-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.session-pill.busy { color: var(--accent); }
