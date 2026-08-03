@@ -61,24 +61,25 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   spans the write window (`device.actuate`, held under the `serve` lock). **Verified
   on-device: `cooler` (power/level), `campingmode` (master/lights/usb), and `lighting`
   (profile + per-zone brightness) actuate for real.**
-  **`lighting` APPLIES now (gap cracked 2026-07-13).** Our SET_BRIGHTNESS/SET_PROFILE frames were
-  always byte-identical to the app's; a single calictl SET is ACKed but not applied, and a **second
-  (neutral) frame** right after flushes it → the change applies (live-verified: kitchen 0→8). We
-  send `0e00000000000000eeeeeeeeeeeeeeee` as that follow (`device.actuate(..., follow=control.commit_for(fn))`
-  = `control.LIGHT_COMMIT`). NB (decompile 2026-07-14): `0e00…` is **not** an app "commit" — Mode
-  0 = `NO_MODE`, and this is just the builder's neutral default frame; the app self-applies each
-  Mode-tagged SET because it streams frames continuously (the unit applies the prior frame on the
-  next write). Our follow frame is the flush a single write otherwise lacks.
-  Verified on-device via readback (kitchen 0→8). **A profile does NOT need to be active first —
-  that earlier belief was our own bug (CORRECTED + live-verified 2026-07-17, PR #60):**
-  `control._lighting` echoed the live `ProfileNumber` (0 when lights off), and a SET_BRIGHTNESS
-  carrying `PN=0` is ignored — so we wrongly required a manual "activate". The app hardcodes
-  `ProfileNumber=9` in every SET_BRIGHTNESS (`dg/h.java:170`, `w(9)`); "needs a profile" was just the
-  side effect of activating making the live PN read 9. Now `control.LIGHT_BRIGHTNESS_PROFILE=9` is
-  hardcoded, so a lamp set applies from the lights-off state (on-device: forced `SET_PROFILE 0` →
-  drove Cooking→8 → applied). The **commit frame is separate and still required** (see above).
-  **`set lighting color` was decompile-inferred but the app exposes no colour control —
-  treat SET_COLOR as unverified/possibly N/A.** Extend via `control.BUILDERS`. See
+  **`lighting` PHYSICAL ACTUATION IS UNVERIFIED — probably does NOT work (owner-confirmed
+  2026-07-18).** ⚠️ Every prior "lighting applies / live-verified kitchen 0→8" claim was
+  **READBACK-based, and the state char is a write-through ECHO**: a SET_BRIGHTNESS is ACKed and the
+  reported value updates to what we sent, so a readback ALWAYS "confirms" — even though the physical
+  lamp does not light. The owner physically checked at the van: the lamps **stay dark**. So do not
+  trust readback as proof of actuation for lighting; only a human seeing the lamp counts.
+  What IS solid (protocol facts, unchanged): our SET_BRIGHTNESS/SET_PROFILE frames are byte-identical
+  to the app's; the per-zone unchanged sentinel is `14`; `ProfileNumber` is hardcoded to `9` like the
+  app (`control.LIGHT_BRIGHTNESS_PROFILE`, `dg/h.java:170` `w(9)`), so the *frame* is correct with the
+  lights off; the `0e00…` follow (`control.LIGHT_COMMIT`, `commit_for(fn)`) is the app's neutral
+  default frame (Mode 0 = `NO_MODE`), which flushes a single write since the app self-applies by
+  streaming frames continuously. What's NOT solved: replicating that streaming/timing well enough to
+  drive the physical load — an OPEN RE gap. To crack it: capture the app physically lighting a lamp
+  and diff vs our frames (`tools/capture_diff.py`), with a PHYSICAL success criterion, not a readback.
+  (Ruled out 2026-07-18 as the cause: persistent session, camping-mode/ignition/battery gates.)
+  The "a profile must be active first" rule was ALSO wrong — it was the echo bug — but that's moot
+  until physical actuation works at all. **`set lighting color` was decompile-inferred but the app
+  exposes no colour control — treat SET_COLOR as unverified/possibly N/A.** Extend via
+  `control.BUILDERS`. See
   `docs/business-logic/control-and-actuation.md` + `protocol-sequences.md`.
 - **Roof sequence settled 2026-07-13 from the decompiled roof class** (needs ignition ON).
   `control.roof_frame` direction bytes match the app byte-for-byte (open `0x01`/stop `0x00`/close
