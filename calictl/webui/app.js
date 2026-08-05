@@ -561,6 +561,14 @@ const LIGHT_MAX = 13;   // brightness 0..13 (14 = the leave-unchanged sentinel)
 
 function renderLighting(s) {
   titleEl.textContent = "Lighting";
+  // Honesty banner: physical actuation is UNVERIFIED (owner-confirmed lamps stay dark). The state
+  // char is a write-through ECHO, so a readback ALWAYS "confirms" a change even when no lamp lit —
+  // the sliders below may not drive the real load. Persistent (not just the post-write toast) so the
+  // caveat is visible BEFORE the user drags anything. See docs/business-logic/control-and-actuation.md.
+  const cav = document.createElement("div"); cav.className = "caveat";
+  cav.textContent = "⚠ Lighting control is unverified — the unit echoes commands back, so a slider "
+    + "may look applied while the lamp stays dark. Treat these as best-effort, not confirmed.";
+  app.appendChild(cav);
   // Lamps are ALWAYS controllable, like the app: dragging a lamp sends a SET_BRIGHTNESS that
   // self-carries the working profile (control.LIGHT_BRIGHTNESS_PROFILE=9), so there is no
   // "activate a profile first" step — the old gate was a workaround for our echoing PN=0.
