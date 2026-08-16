@@ -1,0 +1,36 @@
+tests/test_web_serve.py
+  s_a7757c7c919f20::t_0919bd637600bb 358-394
+tests/e2e/test_gui.py
+  s_a7757c7c919f20::t_afeda80fe6b65f 53
+calictl/webui/app.js
+  s_a7757c7c919f20::t_6713455cc029b4 574-577
+docs/sphinx/api.rst
+  s_a7757c7c919f20::t_72dcba947cfbc0 54
+calictl/serve.py
+  s_a7757c7c919f20::t_50c961321cbacf 438-466
+  s_a7757c7c919f20::t_0acf72e3162260 415-428
+  s_a7757c7c919f20::t_469de5ce01f5a8 23-26
+  s_a7757c7c919f20::t_6b379a22553eda 467
+calictl/control.py
+  s_a7757c7c919f20::t_db90dea6e76aee 457-465,470,475-478
+tools/mock_unit.py
+  s_a7757c7c919f20::t_c87bd192c17707 206-211
+tests/test_mock_integration.py
+  s_a7757c7c919f20::t_09a855589af37e 131-132,134,138-140,144,147,149-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "050129505ad40720f1f6bc797e90ca8ad5d92c3c",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
