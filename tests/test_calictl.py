@@ -334,15 +334,18 @@ def test_lighting_zone_set_leaves_others_unchanged():
     assert set(others) == {control.LIGHT_UNCHANGED}            # every other zone = 14 (unchanged)
 
 
-def test_lighting_power_all_zones():
+def test_lighting_power_is_app_faithful_profile_toggle():
     from calictl import control
     f = _funcs()
+    # power == the app's "Alle Lichter" master toggle: SET_PROFILE (Mode 16) selecting
+    # LIGHTS_ON (12) / LIGHTS_OFF (0), NOT per-zone brightness (dg/h.java:323 Q()).
     on = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "on", {}))
     off = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "off", {}))
-    on_zones = [on[n] for n in on if n.startswith("BrightnessL")]
-    off_zones = [off[n] for n in off if n.startswith("BrightnessL")]
-    assert len(on_zones) == 16 and all(z == control.LIGHT_ON_BRIGHTNESS for z in on_zones)
-    assert all(z == 0 for z in off_zones)
+    assert on["Mode"] == control.LIGHT_MODE_SET_PROFILE and on["ProfileNumber"] == 12
+    assert off["Mode"] == control.LIGHT_MODE_SET_PROFILE and off["ProfileNumber"] == 0
+    # every zone carries the unchanged sentinel (a profile select never sets per-zone brightness)
+    assert all(v == control.LIGHT_UNCHANGED for n, v in on.items() if n.startswith("BrightnessL"))
+    assert all(v == control.LIGHT_UNCHANGED for n, v in off.items() if n.startswith("BrightnessL"))
 
 
 def test_lighting_brightness_range_guard():
@@ -424,7 +427,10 @@ def test_cli_set_check_all_rows():
     assert cli._set_check("campingmode", "master", "on", {"master_on": True}, {}) == ("master_on", True, True)
     assert cli._set_check("campingmode", "usb", "off", {"usb_charger": False}, {}) == ("usb_charger", False, False)
     assert cli._set_check("campingmode", "lights", "on", {"lights_on": True}, {}) == ("lights_on", True, True)
-    assert cli._set_check("lighting", "power", "on", {"any_on": True}, {}) == ("any_on", True, True)
+    # power == SET_PROFILE master toggle -> check ProfileNumber (12=LIGHTS_ON, 0=LIGHTS_OFF),
+    # NOT any_on (the profile-select echo carries all zones=14, so any_on is always False)
+    assert cli._set_check("lighting", "power", "on", {"profile": 12}, {}) == ("profile", 12, 12)
+    assert cli._set_check("lighting", "power", "off", {"profile": 0}, {}) == ("profile", 0, 0)
     assert cli._set_check("airheater", "power", "on", {"running": True}, {}) == ("running", True, True)
     assert cli._set_check("airheater", "level", "9", {"level": 9}, {}) == ("level", 9, 9)
     # unknown target -> passthrough with no expectation
@@ -433,8 +439,9 @@ def test_cli_set_check_all_rows():
 
 def test_cli_max_zone():
     from calictl import cli
-    interp = {"brightness_zone_1": 0, "brightness_zone_10": 13, "brightness_zone_16": 8, "other": 99}
-    assert cli._max_zone(interp) == 13
+    # only real zones L1-L8 count; L9-L16 (here 10=13, 16=8) are the unchanged-sentinel range
+    interp = {"brightness_zone_1": 0, "brightness_zone_7": 9, "brightness_zone_10": 13, "brightness_zone_16": 8}
+    assert cli._max_zone(interp) == 9
     assert cli._max_zone({}) == 0
 
 

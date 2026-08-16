@@ -49,6 +49,7 @@ def base_url():
     env = dict(os.environ,
                CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
                CALICTL_ARM_DELAY_S="0.3", CALICTL_SETTLE_S="0.3", CALICTL_HEARTBEAT_PERIOD_S="0.1",
+               CALICTL_PRE_SETTLE_S="0.1",  # lighting arm preamble wait — real default 3 s
                CALICTL_HEARTBEAT_WARMUP_S="0", CALICTL_STATE_CACHE="/tmp/calictl_e2e_state.json",
                # BOTH caches must be redirected: the daemon appends an energy sample per poll, so
                # without this the suite writes mock data into the developer's real ~/.cache.
@@ -138,7 +139,9 @@ def test_lighting_screen_lamps_are_directly_controllable(page):
     assert page.locator(".switch").first.is_enabled()              # all-lights master too
     slider.fill("8")                                               # drag a lamp
     slider.dispatch_event("change")
-    expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
+    # lighting applied-ness is honestly "unknown" (the state char is a write-through echo),
+    # so the toast says Sent — check the lamp, never a false green "Applied"
+    expect(page.get_by_text("Sent — check the lamp")).to_be_visible(timeout=15000)
 
 
 def test_dashboard_summary_card(page):

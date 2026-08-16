@@ -43,6 +43,7 @@ Control frames
 
 .. autofunction:: calictl.control._airheater
 .. autofunction:: calictl.control.commit_for
+.. autofunction:: calictl.control.preamble_for
 
 Tests
 -----
@@ -50,3 +51,4 @@ Tests
 .. autofunction:: tests.test_calictl.test_vehicle_decode_char_1004
 .. autofunction:: tests.test_calictl.test_airheater_control_frame
 .. autofunction:: tests.test_mock_integration.test_read_all_heartbeat_refreshes_stale_read
+.. autofunction:: tests.test_mock_integration.test_lighting_preamble_arms_before_the_set

@@ -8,7 +8,44 @@ under the JADX decompile (`…/scratchpad/decompile/src/sources` = CLEAN,
 
 ---
 
+## 2026-08-16 — lighting PHYSICAL actuation CRACKED (REQUEST_CONFIG preamble, photon-verified) + water guard unwedged
+
+- **Lighting SET — RESOLVED FOR REAL, photon-verified** (finally closes `re-gap` §A1; supersedes
+  every earlier readback-based "verified" claim — the `1502` state char is a **write-through
+  echo**, owner-confirmed 2026-07-18 that the lamps had stayed dark). An iOS HCI capture of the
+  app *physically* lighting a lamp, diffed via `tools/capture_diff.py`, found the one frame the
+  app sends that we never did: a **REQUEST_CONFIG preamble** `0d0c000000000000eeeeeeeeeeeeeeee`
+  (Mode=12, ProfileNumber=13, all zones=14) + the `0e00…` commit, written to `1501` on opening
+  the Lighting screen. Only in a session where that preamble landed does a later SET_BRIGHTNESS
+  drive the lamps. **Photon-verified on Kochen L7 from buspi: 0→dark, 8→80 %, 0→dark
+  (owner-watched).** Implementation: `control.LIGHT_REQUEST_CONFIG` + `control.preamble_for` →
+  `device.actuate(..., pre=…)`; requirement `R_LIGHT_PREAMBLE` ← `T_LIGHT_PREAMBLE`. See
+  `control-and-actuation.md` §4.
+- **Genuine feedback channel found:** after REQUEST_CONFIG the unit streams a Mode-tagged config
+  dump + **Mode-4 brightness-ramp notifications on `1502`** (real brightness stepping to the
+  target) — the first truthful actuation feedback. Notification layout not yet decoded (open RE
+  task). The state-char *readback* remains an echo — never proof.
+- **Brightness enum fix (same capture):** values are the `dg/i.java` enum, not a raw 0-13 scale —
+  0=OFF, 1-10 = 10–100 % in 10 % steps, 11=DEFAULT, 12 unused, 13=NOT_EQUIPPED (read-only),
+  14=leave-unchanged sentinel. Settable range 0-11; "power on" = 10. Our old code wrote 13 as max
+  — NOT_EQUIPPED garbage.
+- **Lamp map:** L5 = Küche Ambientelicht (capture-confirmed), L7 = Kochen, L6 = Aufstelldach
+  Leselicht (by elimination).
+- **Water stale-guard unwedged** (`freshness.implausible_water_drop`): the latch signature is a
+  fresh drop while grey is **EXACTLY frozen**; any grey movement (rise or fall) is a live
+  measurement. The old `<=` comparison wedged the hold for a month after a real grey dump (every
+  post-dump reading re-latched because grey sat below the pre-dump baseline) — fixed to `==`,
+  and a held value now flags **both** tanks stale. See `value-freshness.md`.
+
 ## 2026-07-08 — HCI capture (owner's phone ↔ van): lighting CRACKED + live-verified
+
+> **SUPERSEDED 2026-08-16 (lighting bullets only).** The "live-verified" and the
+> profile-activation RECIPE below were **readback-based** — the `1502` state char echoes what was
+> written, so readback always "confirms" while the physical lamps stay dark (owner-confirmed
+> 2026-07-18). The "profile must be ACTIVE first" rule was that echo bug, not a unit rule; the
+> real frame rule is ProfileNumber hardcoded 9 (`dg/h.java:170`), and physical actuation needs
+> the REQUEST_CONFIG preamble (entry above). The wire facts (14-sentinel, Mode 16 profile switch,
+> byte-identical frames) and the air-heater/roof findings stand.
 
 Owner captured the CaliforniaOnTour app driving the real van (`idevicebtlogger` on the bar
 Mac; the phone had the iOS Bluetooth-logging profile). This resolved three gaps at once.

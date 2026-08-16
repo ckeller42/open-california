@@ -170,8 +170,9 @@ standalone `energy` route — energy is surfaced via VehicleData categories; con
 **Light scenes/favorites model (B-priority, static):** `WifiExlapLightingProfiles` =
 `profileOne..profileSeven` (`wp/j.java:87`), each `wp/i.java:10–56` = **8 zones × (bool on/off
 + int brightness)**; enums `FAVORITE1..7` (`dg/l.java:64–76`, `currentActiveLightProfile`
-:111). This is the storage behind A1's active-profile requirement — documents how scenes are
-defined/saved/recalled.
+:111). Documents how scenes are defined/saved/recalled. (Earlier framed as "the storage behind
+A1's active-profile requirement" — that requirement never existed; it was the `1502` echo bug,
+and A1 was resolved 2026-08-16 with no profile precondition at all.)
 
 **Persistence (untracked):** `database/CaliforniaAppDatabase.java` (Room) + remote KV store
 (`backend/api/keyvaluestore`) hold the 7 favorites, settings, trips — no table/key map yet.
@@ -288,7 +289,8 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
 ---
 
 ## Files to decode next (bodies in `…/decompile/bad/sources/`)
-- `w10/l.java`, `w10/d.java` — lighting profile→wire-value table (**unblocks A1 / `set lighting`**).
+- `w10/l.java`, `w10/d.java` — lighting profile→wire-value table (~~unblocks A1 / `set lighting`~~
+  A1 resolved 2026-08-16 without it; still useful for profile-number semantics, e.g. A=9).
 - `ag/a.java`, `ag/d.java`, `mg/f.java`, `jg/b.java` — chars 1004/1002/1903–1905 (A2, static).
 - `sf/a.java`, `gg/a.java`, `lg/a.java`, `pg/a.java`, `jg/a.java` — resolve merged offsets (A3).
 - `oc/g.java`, `od/k.java` — OIDC token flow + backend signing (C1).
@@ -307,7 +309,9 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
   cadence (both already decoded statically).
 
 **Needs a buspi live test — no phone:**
-- `set lighting` confirm (does the ProfileNumber-echo frame actuate?), `set airheater` confirm.
+- ~~`set lighting` confirm~~ **DONE 2026-08-16** (photon-verified — the ProfileNumber-echo theory
+  was moot; PN is hardcoded 9 and the REQUEST_CONFIG preamble was the gate). `set airheater`
+  confirm still open.
 - **1003 disarm timeout** — heartbeat, stop, actuate after N s (settles arm-window sizing).
 - `set roof` (once the ~1 Hz move-heartbeat loop is implemented).
 - Grafana dashboard push (needs the buspi Grafana creds).

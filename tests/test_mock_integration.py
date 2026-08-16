@@ -6,7 +6,8 @@ recorder), these drive the whole runtime — cli.cmd_set / serve.on_command / de
   * cooler power on/off actually flips the mocked state (arm-gate honoured);
   * a write without the 1003 heartbeat changes nothing (the gate);
   * an out-of-range write drops the link (MockDisconnect);
-  * lighting SET is ACKed but never applied (the still-unsolved gate stays honest);
+  * lighting SET applies only with the commit frame (and the REQUEST_CONFIG arm preamble
+    precedes it — the 2026-08-16 crack of the physical-apply gap);
   * a set is reflected by a subsequent read within the same process.
 All with no bleak/BLE — the fake `bleak` module is backed by the mock.
 """
@@ -115,11 +116,13 @@ def test_lighting_requires_the_commit_frame_to_apply(mock):
     funcs = _funcs()
     dev = device.CamperDevice()
     setf = control.build(funcs, "lighting", "kitchen", 8, {})   # self-carries ProfileNumber=9
-    # SET alone (no commit) -> ACKed, NOT applied
-    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False))
+    # SET alone (armed session, no commit) -> ACKed, NOT applied
+    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False,
+                            pre=control.preamble_for("lighting")))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 0
     # SET + commit -> applied
-    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False, follow=control.LIGHT_COMMIT))
+    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False, follow=control.LIGHT_COMMIT,
+                            pre=control.preamble_for("lighting")))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
     assert control.commit_for("lighting") == control.LIGHT_COMMIT
     assert control.commit_for("cooler") is None

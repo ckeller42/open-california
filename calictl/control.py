@@ -76,6 +76,11 @@ def _cooler(funcs, what, value, last):
 LIGHT_MODE_SET_BRIGHTNESS = 4    # dg/n.java Mode enum (0=no-op, 4=SET_BRIGHTNESS, 16=SET_PROFILE)
 LIGHT_MODE_SET_COLOR = 6         # recolour the active profile: LightValue = palette index (1-10)
 LIGHT_MODE_SET_PROFILE = 16      # switch active profile (payload carries the ProfileNumber)
+# Profile-number enum (dg/l.java mirrors ef/k.java): 0=LIGHTS_OFF, 1-7=FAVORITE1-7, 8=DOOR_CONTACT,
+# 9=LIVE_VIEW (the per-zone-edit profile SET_BRIGHTNESS hardcodes), 10=WAKEUP_LIGHT,
+# 11=INTERIOR_LIGHT, 12=LIGHTS_ON, 13=DEFAULT, 14=INIT sentinel.
+LIGHT_PROFILE_ALL_ON = 12        # LIGHTS_ON  — the app's "Alle Lichter" master ON  (dg/h.java:323 Q())
+LIGHT_PROFILE_ALL_OFF = 0        # LIGHTS_OFF — the app's "Alle Lichter" master OFF
 # Colour palette (dg/j.java, decompile 2026-07-12): SET_COLOR carries ONE index in LightValue for
 # the whole target profile — not RGB. On-device apply is UNVERIFIED (same lighting-apply gap as
 # SET_BRIGHTNESS, re-gap A1); the frame layout is byte-decoded from the app.
@@ -121,6 +126,19 @@ LIGHT_ZONES = {
 }
 
 
+def _all_real_zones(zone_fields, b):
+    """Value ``b`` for the REAL lamp zones (L1-L8), the unchanged sentinel elsewhere.
+
+    ``power``/``all`` used to write every one of the 16 control zones — including the
+    never-equipped L9-L16, which only coincidentally looked right while "on" was the 13
+    NOT_EQUIPPED marker. Only L1-L8 exist on this van (semantics._REAL_LIGHT_ZONES); the
+    app's "Alle Lichter" frame is uncaptured, so stay conservative: never touch phantom zones.
+    """
+    from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
+    real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
+    return {z: (b if z in real else LIGHT_UNCHANGED) for z in zone_fields}
+
+
 def _lighting(funcs, what, value, last):
     """Build a lighting control frame (char 1501). CRACKED via HCI capture 2026-07-08.
 
@@ -132,8 +150,12 @@ def _lighting(funcs, what, value, last):
 
     Grammar (``what``):
       * a zone key (``LIGHT_ZONES``) or a raw ``BrightnessL*`` field  -> SET_BRIGHTNESS that zone
-        to ``value`` (0-13); all other zones = 14 (unchanged).
-      * ``"all"`` -> set every zone to ``value``; ``"power"`` on->13 / off->0 for every zone.
+        to ``value`` (0-11: 0=off, 1-10=10%..100%, 11=default); all other zones = 14 (unchanged).
+      * ``"power"`` -> app-faithful master toggle: SET_PROFILE selecting LIGHTS_ON (12) / LIGHTS_OFF
+        (0), like the app's "Alle Lichter" switch (dg/h.java:323 ``Q()``) — restores the saved
+        on-state, not a forced 100%.
+      * ``"all"`` -> set every REAL zone (L1-L8) to ``value`` (a calictl convenience, not an app
+        action); never-equipped zones (L9-L16) always get the unchanged sentinel.
       * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = target ProfileNumber.
       * ``"color"`` -> SET_COLOR (Mode 6); ``value`` = a ``LIGHT_COLORS`` name; recolours the
         active profile (LightValue = palette index 1-10). On-device apply UNVERIFIED (re-gap A1).
@@ -165,11 +187,16 @@ def _lighting(funcs, what, value, last):
         vals = {**base, "Mode": LIGHT_MODE_SET_COLOR, "LightValue": idx,
                 **{z: LIGHT_UNCHANGED for z in zone_fields}}
     elif what == "power":
-        b = LIGHT_ON_BRIGHTNESS if _truthy(value) else 0
-        vals = {**base, **{z: b for z in zone_fields}}
+        # app-faithful master toggle (dg/h.java:323-337 Q()): a SET_PROFILE selecting LIGHTS_ON
+        # (12) / LIGHTS_OFF (0), NOT per-zone brightness. Matches how the app's "Alle Lichter"
+        # switch works, so it restores the user's saved on-state rather than forcing every lamp
+        # to 100%. Zones carry the unchanged sentinel like every other profile-select frame.
+        pn = LIGHT_PROFILE_ALL_ON if _truthy(value) else LIGHT_PROFILE_ALL_OFF
+        vals = {**base, "Mode": LIGHT_MODE_SET_PROFILE, "ProfileNumber": pn,
+                **{z: LIGHT_UNCHANGED for z in zone_fields}}
     elif what == "all":
-        b = _b(value)
-        vals = {**base, **{z: b for z in zone_fields}}
+        # not an app action (the app is per-zone) — our convenience: every REAL lamp to one level
+        vals = {**base, **_all_real_zones(zone_fields, _b(value))}
     else:                                   # a single zone (friendly key or BrightnessL field)
         field = LIGHT_ZONES.get(what, what)
         if field not in zone_fields:

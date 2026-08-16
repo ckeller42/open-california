@@ -15,10 +15,10 @@ widgets:
   - id: freshWaterTank
     type: readout
     label_key: vehiclePage_overviewWidget_freshWater_text
-    range: "0..255 (FreshWaterLevel, offset 8, width 8 — raw scale UNVERIFIED, likely 0..100%)"
+    range: "0..255 (FreshWaterLevel, offset 8, width 8 — liters, current level; scale live-verified 2026-07-05, read 11 L cross-matched the app)"
     controls: {field: FreshWaterLevel, action: null}
     elements: [FreshWaterVolume, FreshWaterUnit]
-    constraints: "FreshWaterVolume offset 16 width 8 (liters, raw scale UNVERIFIED); FreshWaterUnit offset 7 width 1 (unit toggle, e.g. L vs gal)."
+    constraints: "FreshWaterVolume offset 16 width 8 (liters — tank CAPACITY, 29 L on this van; Level/Volume names are current-vs-capacity, live-verified 2026-07-05); FreshWaterUnit offset 7 width 1 (unit toggle, e.g. L vs gal)."
 
   - id: freshWaterInfoPopup
     type: readout
@@ -43,10 +43,10 @@ widgets:
   - id: wasteWaterTank
     type: readout
     label_key: vehiclePage_overviewWidget_wasteWater_text
-    range: "0..255 (WasteWaterLevel, offset 32, width 8 — raw scale UNVERIFIED, likely 0..100%)"
+    range: "0..255 (WasteWaterLevel, offset 32, width 8 — liters, current level; scale live-verified 2026-07-05 against the app)"
     controls: {field: WasteWaterLevel, action: null}
     elements: [WasteWaterVolume, WasteWaterUnit]
-    constraints: "WasteWaterVolume offset 40 width 8 (liters, raw scale UNVERIFIED); WasteWaterUnit offset 31 width 1 (unit toggle)."
+    constraints: "WasteWaterVolume offset 40 width 8 (liters — tank CAPACITY, 22 L on this van; live-verified 2026-07-05); WasteWaterUnit offset 31 width 1 (unit toggle)."
 
   - id: wasteWaterInfoPopup
     type: readout

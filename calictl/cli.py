@@ -6,9 +6,9 @@
     calictl set cooler power on|off
     calictl set cooler level <1-5>
     calictl set campingmode master|lights|usb on|off
-    calictl set lighting power on|off             # every zone on (13) / off
-    calictl set lighting <zone> <0-13>            # zones: reading-1/2/3, kitchen, kitchen-ambient*, roof-ambient, roof-reading*, outside-rear  (*L5/L6 inferred)
-    calictl set lighting all <0-13>               # every zone to one level
+    calictl set lighting power on|off             # master toggle: LIGHTS_ON/LIGHTS_OFF profile (like the app)
+    calictl set lighting <zone> <0-11>            # 0=off, 1-10=10%..100%, 11=default; zones: reading-1/2/3, kitchen, kitchen-ambient, roof-ambient, roof-reading, outside-rear
+    calictl set lighting all <0-11>               # every real zone to one level
     calictl set lighting profile <N>              # switch the active lighting profile
     calictl set lighting color <name>             # recolour active profile: warm-white/amber/red/azure/... (apply UNVERIFIED)
     calictl set airheater power on|off
@@ -101,6 +101,7 @@ async def cmd_raw(funcs, dev, args):
 def _set_check(function, what, value, interp, decoded):
     """Post-write success check: (label, got, want). `got == want` -> OK. Reads the
     targeted field from the interpreted state (or the raw decode for cooler numerics)."""
+    from . import control       # lazy (stdlib-only import rule); needed for the lighting rows
     on = str(value).strip().lower() in ("on", "true", "1")
     if function == "lighting" and what != "power":
         return _lighting_check(what, value, interp)
@@ -110,7 +111,8 @@ def _set_check(function, what, value, interp, decoded):
         ("campingmode", "master"):  lambda: ("master_on", interp.get("master_on"), on),
         ("campingmode", "usb"):     lambda: ("usb_charger", interp.get("usb_charger"), on),
         ("campingmode", "lights"):  lambda: ("lights_on", interp.get("lights_on"), on),
-        ("lighting", "power"):      lambda: ("any_on", interp.get("any_on"), on),
+        ("lighting", "power"):      lambda: ("profile", interp.get("profile"),
+                                             control.LIGHT_PROFILE_ALL_ON if on else control.LIGHT_PROFILE_ALL_OFF),
         ("airheater", "power"):     lambda: ("running", interp.get("running"), on),
         ("airheater", "level"):     lambda: ("level", interp.get("level"), int(value)),
         # UNVERIFIED targets (not installed on this van) — interp keys per semantics.py.
@@ -130,7 +132,10 @@ def _set_check(function, what, value, interp, decoded):
 
 
 def _max_zone(interp):
-    return max((interp.get("brightness_zone_%d" % z) or 0 for z in range(1, 17)), default=0)
+    # only the REAL lamps (L1-L8) — L9-L16 carry the unchanged sentinel 14 that _all_real_zones
+    # leaves in place, which would otherwise masquerade as the peak brightness
+    from .semantics import _REAL_LIGHT_ZONES
+    return max((interp.get("brightness_zone_%d" % z) or 0 for z in _REAL_LIGHT_ZONES), default=0)
 
 
 # friendly lighting-zone key -> the interpreted brightness_zone_<N> it maps to (see
