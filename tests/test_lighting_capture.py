@@ -79,14 +79,12 @@ def test_set_color_is_mode_6_palette_index():
         pass
 
 
-def test_power_off_zeroes_real_zones_only():
+def test_power_off_selects_lights_off_profile():
     f = _f()
-    frame = control.build(f, "lighting", "power", "off", {"ProfileNumber": 9})
-    d = control.decode_control(f["lighting"], frame)
-    real = {"BrightnessL" + s for s in ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight")}
-    # real lamps -> 0; never-equipped L9-L16 -> untouched (unchanged sentinel), see _all_real_zones
-    assert all(v == (0 if k in real else control.LIGHT_UNCHANGED)
-               for k, v in d.items() if k.startswith("Brightness"))
+    # power off == SET_PROFILE LIGHTS_OFF (0), the app's master toggle — not per-zone zeroing
+    d = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "off", {"ProfileNumber": 9}))
+    assert d["Mode"] == control.LIGHT_MODE_SET_PROFILE and d["ProfileNumber"] == 0
+    assert all(v == control.LIGHT_UNCHANGED for k, v in d.items() if k.startswith("Brightness"))
 
 
 def test_any_on_ignores_phantom_zones():

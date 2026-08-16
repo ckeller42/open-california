@@ -6,7 +6,7 @@
     calictl set cooler power on|off
     calictl set cooler level <1-5>
     calictl set campingmode master|lights|usb on|off
-    calictl set lighting power on|off             # every real zone 100% / off
+    calictl set lighting power on|off             # master toggle: LIGHTS_ON/LIGHTS_OFF profile (like the app)
     calictl set lighting <zone> <0-11>            # 0=off, 1-10=10%..100%, 11=default; zones: reading-1/2/3, kitchen, kitchen-ambient, roof-ambient, roof-reading, outside-rear
     calictl set lighting all <0-11>               # every real zone to one level
     calictl set lighting profile <N>              # switch the active lighting profile

@@ -334,20 +334,18 @@ def test_lighting_zone_set_leaves_others_unchanged():
     assert set(others) == {control.LIGHT_UNCHANGED}            # every other zone = 14 (unchanged)
 
 
-def test_lighting_power_all_zones():
+def test_lighting_power_is_app_faithful_profile_toggle():
     from calictl import control
     f = _funcs()
+    # power == the app's "Alle Lichter" master toggle: SET_PROFILE (Mode 16) selecting
+    # LIGHTS_ON (12) / LIGHTS_OFF (0), NOT per-zone brightness (dg/h.java:323 Q()).
     on = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "on", {}))
     off = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "off", {}))
-    # power touches only the REAL zones (L1-L8); never-equipped L9-L16 get the unchanged
-    # sentinel (the old code wrote a value into all 16 — writing 13 NOT_EQUIPPED as "on")
-    real = {"BrightnessL" + s for s in ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight")}
-    on_zones = {n: on[n] for n in on if n.startswith("BrightnessL")}
-    off_zones = {n: off[n] for n in off if n.startswith("BrightnessL")}
-    assert len(on_zones) == 16
-    assert all(v == (control.LIGHT_ON_BRIGHTNESS if n in real else control.LIGHT_UNCHANGED)
-               for n, v in on_zones.items())
-    assert all(v == (0 if n in real else control.LIGHT_UNCHANGED) for n, v in off_zones.items())
+    assert on["Mode"] == control.LIGHT_MODE_SET_PROFILE and on["ProfileNumber"] == 12
+    assert off["Mode"] == control.LIGHT_MODE_SET_PROFILE and off["ProfileNumber"] == 0
+    # every zone carries the unchanged sentinel (a profile select never sets per-zone brightness)
+    assert all(v == control.LIGHT_UNCHANGED for n, v in on.items() if n.startswith("BrightnessL"))
+    assert all(v == control.LIGHT_UNCHANGED for n, v in off.items() if n.startswith("BrightnessL"))
 
 
 def test_lighting_brightness_range_guard():

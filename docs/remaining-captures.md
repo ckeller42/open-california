@@ -171,12 +171,21 @@ the lamp counts; readback of `1502` is a write-through echo.** See `control-and-
 + `re-gap-inventory.md` §A1.
 
 **Remaining lighting capture targets:**
-- The app's **"Alle Lichter" master frame** — presumably SET_PROFILE with profile 12=LIGHTS_ON /
-  0=LIGHTS_OFF (`dg/l.java`), but **uncaptured**.
+- The app's **"Alle Lichter" master frame** — RESOLVED from the decompile 2026-08-16 (not a
+  capture gap): `dg/h.java:323-337` ``Q(boolean allOn)`` = SET_PROFILE (Mode 16) with
+  ``ProfileNumber = allOn ? 12 : 0`` (12=LIGHTS_ON, 0=LIGHTS_OFF per ``dg/l.java``). ``control._lighting``
+  ``power`` now emits exactly this (was per-zone brightness). Still wants a photon check at the van.
 - **SET_COLOR apply** — the app exposes no colour control (possibly N/A); a colour frame has
   never been captured.
-- **The `1502` Mode-4 ramp-notification layout** — the truthful actuation-feedback channel found
-  2026-08-16 (real brightness stepping to the target); its layout is not yet decoded.
+- **`1502` Mode-4 ramp-notification — real applied-verification** (NOT a decode gap). The layout is
+  already known: a Mode-4 notification is a normal `1502` STATE frame, so `protocol.decode` reads it
+  (cross-checked 2026-08-16 against the captured frames — `090400…0508…` → `Mode=4,
+  BrightnessLSeven=8`, the exact target). What is unproven is whether the ramp is *actuation-gated*:
+  the open experiment is a **negative control** — send a SET in an UN-armed session (no
+  REQUEST_CONFIG preamble, so the lamp stays dark) and check whether the unit still emits the Mode-4
+  ramp. If the ramp fires only when the lamp physically moves, subscribing to `1502` and matching a
+  Mode-4 frame carrying the target brightness is genuine applied-verification (replacing the current
+  honest "unknown"). If it fires regardless, it is just another echo. Small on-device test, no decode.
 
 ## Priority 2 — can buspi hold a persistent session? (continuous data)
 Van awake, **phone app closed**, on buspi:
