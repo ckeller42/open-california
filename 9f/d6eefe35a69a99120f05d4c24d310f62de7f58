@@ -1,0 +1,24 @@
+tests/e2e/test_gui.py
+  s_a7757c7c919f20::t_228d9a65b7dada 54
+tests/test_web_serve.py
+  s_a7757c7c919f20::t_2955b475192b13 429
+calictl/serve.py
+  s_a7757c7c919f20::t_e2d9ced990aafb 444-450
+  s_a7757c7c919f20::t_64da2142f6eaf4 33-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "9fd6eefe35a69a99120f05d4c24d310f62de7f58",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
