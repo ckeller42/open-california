@@ -62,23 +62,30 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   spans the write window (`device.actuate`, held under the `serve` lock). **Verified
   on-device: `cooler` (power/level), `campingmode` (master/lights/usb), and `lighting`
   (per-zone brightness + profile) actuate for real.**
-  **`lighting` PHYSICAL ACTUATION CRACKED + photon-verified 2026-08-16.** The missing
-  ingredient was a **REQUEST_CONFIG preamble**: the app opens its Lighting screen by writing
-  `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12, ProfileNumber=13, all zones=14) + the usual
-  `0e00…` commit to `1501` — only in a session where that preamble landed does a later
-  SET_BRIGHTNESS physically drive the lamps (found via iOS HCI capture of the app lighting a
-  lamp, diffed with `tools/capture_diff.py`; verified at the van on Kochen L7: 0→dark, 8→80%,
-  0→dark, owner-watched). Implemented as `control.LIGHT_REQUEST_CONFIG` +
-  `control.preamble_for(fn)`, sent by `device.actuate(..., pre=…)` with a 3 s arm wait
-  (R_LIGHT_PREAMBLE). Brightness is the `dg/i.java` enum, NOT a raw 0-13 scale: 0=OFF,
-  1-10 = 10–100 % in 10 % steps, 11=DEFAULT, 13=NOT_EQUIPPED (read-only marker) —
-  `LIGHT_ON_BRIGHTNESS=10`, settable 0-11, GUI slider max 10 (old code wrote 13 as "on").
-  Truthful feedback: after REQUEST_CONFIG the unit streams Mode-tagged **notifications on
-  `1502`**; after an applied SET it sends Mode-4 "ramp" frames showing the REAL brightness
-  stepping to target. The state-char **readback is still a write-through echo — never proof
-  of actuation**; trust the Mode-4 notifications or a human at the lamp. `set lighting color`
-  (SET_COLOR) remains unverified — the app exposes no colour control. Extend via
-  `control.BUILDERS`. See
+  **`lighting` PHYSICAL ACTUATION WORKS — the gate is the unit's WAKE/active state, not any
+  arming frame (settled 2026-08-16 evening, 6× photon-verified).** With the unit awake, a
+  **bare SET_BRIGHTNESS + `0e00…` commit physically drives the lamps, both directions** — NO
+  REQUEST_CONFIG preamble, NO 1003 heartbeat, NO arm/settle delay (controlled
+  fresh-connection trials varying only the arming, owner-watched "off, on, off"; even an
+  immediate write on a cold connection actuated). Decompile agrees: the app's set-one-zone
+  `dg/h.java:174 E()` stages PN=9 + Mode=4 and writes DIRECT (immediately) — it does NOT call
+  the config request `d0()` (`dg/h.java:471`), no heartbeat, no delay. The
+  morning-2026-08-16 "REQUEST_CONFIG preamble is THE fix" result was a confound (unit sleepy
+  then; the preamble merely added ~3.3 s + extra frames that let it become ready). The
+  preamble's real role is a **screen-open config pull** — it triggers the unit's Mode-tagged
+  config-dump notifications on `1502`; app-faithful and harmless (`control.preamble_for`
+  still sends it, R_LIGHT_PREAMBLE) but **NOT required for actuation**. Still open: whether a
+  truly deep-asleep unit needs any arming; NB the 1003 heartbeat WAS needed for
+  cooler/camping (issue #2) — those loads may differ, not retested. Brightness is the
+  `dg/i.java` enum, NOT a raw 0-13 scale: 0=OFF, 1-10 = 10–100 % in 10 % steps, 11=DEFAULT,
+  13=NOT_EQUIPPED (read-only marker) — `LIGHT_ON_BRIGHTNESS=10`, settable 0-11, GUI slider
+  max 10 (old code wrote 13 as "on").
+  Truthful feedback: a `1502` **Mode-4 notification is a decodable standard state frame**
+  (`protocol.decode` reads it) carrying the REAL per-zone brightness ramping to target — the
+  app's genuine actuation-feedback channel. The state-char **readback is still a
+  write-through echo — never proof of actuation**; trust the Mode-4 notifications or a human
+  at the lamp. `set lighting color` (SET_COLOR) remains unverified — the app exposes no
+  colour control. Extend via `control.BUILDERS`. See
   `docs/business-logic/control-and-actuation.md` + `protocol-sequences.md`.
 - **Roof sequence settled 2026-07-13 from the decompiled roof class** (needs ignition ON).
   `control.roof_frame` direction bytes match the app byte-for-byte (open `0x01`/stop `0x00`/close

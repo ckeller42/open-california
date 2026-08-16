@@ -145,13 +145,14 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
 |---|---|---|---|
 | **cooler** | `power` on/off, `level` 1-5 | ✅ actuates | State 0↔1, Level applied. |
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). |
-| **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Needs the REQUEST_CONFIG preamble — see below. |
+| **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
 | **airheater** | `power`, `level` 0-15 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
 | **roof** | not wired | — | Needs the 1 Hz move-heartbeat loop (§3); not installed here. |
 | roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
 
-**Lighting — SOLVED 2026-08-16: a REQUEST_CONFIG preamble arms physical actuation
-(photon-verified).** The gap's long history, kept because it is instructive RE:
+**Lighting — SOLVED 2026-08-16: physical actuation works; the real gate is the unit's
+WAKE/active state, not any arming frame (photon-verified).** The gap's long history, kept
+because it is instructive RE:
 - **2026-07-07:** SET_BRIGHTNESS (`Mode=4`) ACKed at ATT (no `0x0E`) but nothing changed under
   the identical heartbeat that actuates cooler/camping — a lighting-specific gap. The
   ProfileNumber-echo theory (`dg/h.java:615`) was **disproved live 2026-07-08**
@@ -163,23 +164,45 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
   2026-07-18: lamps stayed dark). Every readback-based "verified" claim was worthless; the
   physical load never switched. Ruled out: persistent session, camping-mode/ignition/battery
   gates, "profile must be active first" (that was the echo bug too).
-- **2026-08-16 — the crack.** An iOS HCI capture (idevicebtlogger on the bar Mac) of the app
-  *physically* lighting a lamp, decoded with calictl's own `control.decode_control` and diffed
-  against `control.build` (`tools/capture_diff.py`, the capture-and-diff flow), showed the one
-  thing the app sends that we never did: **on opening its Lighting screen it writes a
-  REQUEST_CONFIG frame** — `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12, ProfileNumber=13, all
-  zones=14) — followed by the usual `0e00…` commit, to control char `1501`. **Only in a BLE
-  session where this preamble has landed does the unit physically drive the lamps on a later
-  SET_BRIGHTNESS.** Without it, SETs are ACKed and echoed but the load never switches.
+- **2026-08-16 morning — the (over-stated) crack.** An iOS HCI capture (idevicebtlogger on
+  the bar Mac) of the app *physically* lighting a lamp, decoded with calictl's own
+  `control.decode_control` and diffed against `control.build` (`tools/capture_diff.py`, the
+  capture-and-diff flow), showed one thing the app sends that we never did: **on opening its
+  Lighting screen it writes a REQUEST_CONFIG frame** — `0d0c000000000000eeeeeeeeeeeeeeee`
+  (Mode=12, ProfileNumber=13, all zones=14) — followed by the usual `0e00…` commit, to
+  control char `1501`. That morning, adding the preamble made SETs actuate where the same
+  un-armed path had failed hours earlier, so we concluded the preamble was the required
+  arming step. **That necessity claim was falsified the same evening (below).**
 - **Photon verification (2026-08-16, buspi, owner at the van):** Kochen lamp (zone L7) driven
   0 → physically dark, 8 → physically 80 %, 0 → dark again. Human-observed each transition —
   the only success criterion that counts for lighting.
-- **Truthful feedback channel (new):** after REQUEST_CONFIG the unit streams a **config dump
+- **2026-08-16 evening — the CORRECTION: the preamble is NOT the gate; wake-state is.** Six
+  further photon-confirmed actuations, ending in three controlled fresh-connection trials
+  varying ONLY the arming (unit awake, phone off, daemon stopped; owner watched "off, on,
+  off"): **Trial 1 — NO 1003 heartbeat, NO preamble, ZERO settle, immediate SET + `0e00…`
+  commit on a cold connection → the lamp switched.** So for an awake unit, NONE of
+  {REQUEST_CONFIG preamble, 1003 heartbeat, 3 s arm delay} is required — a **bare
+  SET_BRIGHTNESS + commit is sufficient, both directions**. The decompile agrees: the app's
+  set-one-zone method `dg/h.java:174 E()` stages ProfileNumber=9 + Mode=4 and writes DIRECT
+  (immediately) — it does not call the config request `d0()` (`dg/h.java:471`), no heartbeat,
+  no delay (`ag/b.java` is a generic connection-liveness counter separate from the write
+  path). The morning result was a confound: the unit was freshly woken/sleepy, and the
+  preamble path added ~3.3 s of delay + extra frames that gave it time to become ready — the
+  preamble *correlated* with success, it didn't cause it. **The real determinant is the
+  unit's wake/active state.** Still open: whether a truly deep-asleep unit needs any arming
+  at all, or just needs waking. NB: the 1003 heartbeat WAS needed for cooler/camping
+  actuation (issue #2) — either those loads differ or the unit was in a lower-readiness
+  state then; not retested. **REQUEST_CONFIG's real role is a screen-open config pull** — it
+  triggers the unit's config-dump notifications on `1502`; only that dump is gated on it,
+  not actuation.
+- **Truthful feedback channel:** after REQUEST_CONFIG the unit streams a **config dump
   as notifications on `1502`**, frames tagged by Mode: `0x0c` config echo, `0x06` color state,
   `0x08` SET_DOUBLE, `0x10` profile state (profile 8), `0x14` wake time, `0x18` system time
   (ticking unix seconds). After an *applied* SET_BRIGHTNESS it notifies **Mode-4 "ramp" frames
-  showing the REAL current brightness stepping to the target** (e.g. 01→03→04→05). These
-  notifications are genuine actuation feedback. The state-char **readback remains a
+  showing the REAL current brightness stepping to the target** (e.g. 01→03→04→05). A Mode-4
+  notification is a **normal `1502` STATE frame — `protocol.decode` reads it** — and it
+  tracked real actuation in every observed case (armed and un-armed sessions alike): the
+  app's genuine actuation-feedback channel. The state-char **readback remains a
   write-through echo and is still not proof of actuation.**
 - **Brightness enum fix (same capture):** values are the `dg/i.java` enum, NOT a raw 0-13
   scale — 0=OFF, 1-10 = 10 %…100 % in 10 % steps, 11=DEFAULT, 12 unused, 13=NOT_EQUIPPED
@@ -192,8 +215,13 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
   `FOLLOW_DELAY_S` (0.3 s) gaps, then a `PRE_SETTLE_S` (3.0 s, env `CALICTL_PRE_SETTLE_S`) arm
   wait. All three call sites (serve persistent + cold, cli) pass it. Requirement
   `R_LIGHT_PREAMBLE` (`control.preamble_for` docstring) ← `T_LIGHT_PREAMBLE`
-  (`tests/test_mock_integration.py`).
-- **Still open:** SET_COLOR on-device apply (the app exposes no colour control — possibly N/A).
+  (`tests/test_mock_integration.py`). **Since 2026-08-16 evening this is known to be
+  app-faithful-but-optional** (the app sends it on screen open via `d0()`, not per write): it
+  costs ~3.3 s and is harmless, so the shipped code keeps it — but it is not what makes the
+  lamps switch.
+- **Still open:** SET_COLOR on-device apply (the app exposes no colour control — possibly
+  N/A); whether a deep-asleep unit needs any arming at all; pinning the exact wake-state
+  determinant with controlled trials (awake duration, parked vs active).
 
 **Lighting frame layout** (16 bytes / 128 bits): `ProfileNumber@4/w4`, `Mode@8/w8`
 (4=SET_BRIGHTNESS, 16=SET_PROFILE), `Timestamp@16/w32` (`sg.a()` no-arg, default 0 — part of

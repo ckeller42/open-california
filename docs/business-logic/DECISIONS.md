@@ -8,7 +8,41 @@ under the JADX decompile (`…/scratchpad/decompile/src/sources` = CLEAN,
 
 ---
 
+## 2026-08-16 (evening) — CORRECTION: the REQUEST_CONFIG preamble is NOT the actuation gate; the unit's wake-state is
+
+Supersedes the *mechanism* claimed in the morning entry below (the "preamble arms actuation"
+conclusion). The photon verification, brightness enum, lamp map and feedback-channel findings
+stand.
+
+- **Necessity falsified, 6× photon-confirmed the same evening.** With the unit awake (phone
+  off, daemon stopped), a **bare SET_BRIGHTNESS + `0e00…` commit physically actuates the
+  lamps, both directions** — no preamble, no 1003 heartbeat, no arm/settle delay. The decisive
+  run: three fresh-connection trials varying ONLY the arming, owner-watched ("off, then on,
+  then off") — Trial 1 was an immediate SET+commit on a cold connection with zero arming and
+  it switched the lamp.
+- **Decompile-confirmed (fresh jadx source):** the app's set-one-zone method `dg/h.java:174
+  E()` stages ProfileNumber=9 + Mode=4 and writes DIRECT (immediately); it does **not** call
+  the config request `d0()` (`dg/h.java:471`), no heartbeat, no delay. `ag/b.java` is a
+  generic connection-liveness counter (char `00001003`) separate from the write path.
+- **The morning result was a confound:** the unit was freshly woken/sleepy; the preamble path
+  added ~3.3 s + extra frames that gave it time to become ready — correlation, not cause.
+  **The real gate is the unit's wake/active state.** REQUEST_CONFIG's real role is a
+  **screen-open config pull** (it triggers the Mode-tagged config-dump notifications on
+  `1502`); only that dump is gated on it. The preamble stays in the code — app-faithful,
+  harmless, ~3.3 s slower (`control.preamble_for`, `R_LIGHT_PREAMBLE`) — but is optional.
+- **1502 Mode-4 notifications are decodable standard state frames** (`protocol.decode` reads
+  them; Mode + real per-zone brightness ramping to target); they fired in armed and un-armed
+  sessions alike and tracked real actuation in every observed case — the genuine feedback
+  channel. Not yet certified as an actuation *gate* (no observed negative). The state-char
+  readback remains a write-through echo — never proof.
+- **Kept open:** does a truly deep-asleep unit need any arming, or just waking? And the 1003
+  heartbeat WAS needed for cooler/camping (issue #2) — those loads may differ; not retested.
+
 ## 2026-08-16 — lighting PHYSICAL actuation CRACKED (REQUEST_CONFIG preamble, photon-verified) + water guard unwedged
+
+> **SUPERSEDED (mechanism only) by the 2026-08-16 evening entry above.** The photon-verified
+> actuation, brightness enum, lamp map and `1502` feedback findings stand; the "only in a
+> session where that preamble landed…" causal claim was a wake-state confound.
 
 - **Lighting SET — RESOLVED FOR REAL, photon-verified** (finally closes `re-gap` §A1; supersedes
   every earlier readback-based "verified" claim — the `1502` state char is a **write-through
@@ -44,7 +78,9 @@ under the JADX decompile (`…/scratchpad/decompile/src/sources` = CLEAN,
 > written, so readback always "confirms" while the physical lamps stay dark (owner-confirmed
 > 2026-07-18). The "profile must be ACTIVE first" rule was that echo bug, not a unit rule; the
 > real frame rule is ProfileNumber hardcoded 9 (`dg/h.java:170`), and physical actuation needs
-> the REQUEST_CONFIG preamble (entry above). The wire facts (14-sentinel, Mode 16 profile switch,
+> only an **awake unit** — bare SET + commit suffices (2026-08-16 evening entry above; the
+> interim "REQUEST_CONFIG preamble required" theory was a wake-state confound). The wire facts
+> (14-sentinel, Mode 16 profile switch,
 > byte-identical frames) and the air-heater/roof findings stand.
 
 Owner captured the CaliforniaOnTour app driving the real van (`idevicebtlogger` on the bar
