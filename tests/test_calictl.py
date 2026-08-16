@@ -339,10 +339,15 @@ def test_lighting_power_all_zones():
     f = _funcs()
     on = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "on", {}))
     off = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "off", {}))
-    on_zones = [on[n] for n in on if n.startswith("BrightnessL")]
-    off_zones = [off[n] for n in off if n.startswith("BrightnessL")]
-    assert len(on_zones) == 16 and all(z == control.LIGHT_ON_BRIGHTNESS for z in on_zones)
-    assert all(z == 0 for z in off_zones)
+    # power touches only the REAL zones (L1-L8); never-equipped L9-L16 get the unchanged
+    # sentinel (the old code wrote a value into all 16 — writing 13 NOT_EQUIPPED as "on")
+    real = {"BrightnessL" + s for s in ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight")}
+    on_zones = {n: on[n] for n in on if n.startswith("BrightnessL")}
+    off_zones = {n: off[n] for n in off if n.startswith("BrightnessL")}
+    assert len(on_zones) == 16
+    assert all(v == (control.LIGHT_ON_BRIGHTNESS if n in real else control.LIGHT_UNCHANGED)
+               for n, v in on_zones.items())
+    assert all(v == (0 if n in real else control.LIGHT_UNCHANGED) for n, v in off_zones.items())
 
 
 def test_lighting_brightness_range_guard():

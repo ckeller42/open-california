@@ -230,7 +230,7 @@ def lighting(d: dict) -> dict:
     for suf, num in _LZONES.items():
         v = d.get("BrightnessL" + suf)
         out["brightness_zone_%d" % num] = v
-        if v and num in _REAL_LIGHT_ZONES:
+        if v and v not in (13, 14) and num in _REAL_LIGHT_ZONES:   # 13=NOT_EQUIPPED, 14=sentinel
             any_on = True
     out["any_on"] = any_on
     return out

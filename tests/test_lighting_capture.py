@@ -79,11 +79,14 @@ def test_set_color_is_mode_6_palette_index():
         pass
 
 
-def test_power_off_zeroes_all_zones():
+def test_power_off_zeroes_real_zones_only():
     f = _f()
     frame = control.build(f, "lighting", "power", "off", {"ProfileNumber": 9})
     d = control.decode_control(f["lighting"], frame)
-    assert all(v == 0 for k, v in d.items() if k.startswith("Brightness"))
+    real = {"BrightnessL" + s for s in ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight")}
+    # real lamps -> 0; never-equipped L9-L16 -> untouched (unchanged sentinel), see _all_real_zones
+    assert all(v == (0 if k in real else control.LIGHT_UNCHANGED)
+               for k, v in d.items() if k.startswith("Brightness"))
 
 
 def test_any_on_ignores_phantom_zones():

@@ -423,6 +423,14 @@ class Server:
             _, got, want = _set_check(function, what, value, interp, post)
             if got is None and want is None:   # no table entry for this target
                 return None
+            if function == "lighting":
+                # the lighting state char is a write-through ECHO — a matching readback proves
+                # only that the frame arrived, never that the lamp lit (CLAUDE.md, 2026-08-16).
+                # An echo MISMATCH is still a real failure (link/refusal), so report False; a
+                # match is honestly "unknown". Upgrading to real verification needs the 1502
+                # Mode-4 ramp-notification layout decoded first (it differs from the control
+                # frame layout) — an open RE task.
+                return None if got == want else False
             return got == want
 
     def _maybe_start_mqtt(self, loop):

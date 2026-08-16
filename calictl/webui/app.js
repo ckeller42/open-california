@@ -44,7 +44,9 @@ const onoff = (b) => (b ? "On" : "Off");
 // reading (e.g. starter battery when engine-off) renders as an em-dash instead.
 const withUnit = (v, u) => (v == null ? "—" : `${v} ${u}`);
 const tank = (t) => (t && t.percent != null ? `${t.percent}%  (${t.liters}/${t.capacity_l} L)` : "—");
-const zonesLit = (s) => Object.keys(s).filter((k) => k.startsWith("brightness_zone_") && s[k]).length;
+// dg/i brightness enum -> display: 0-10 are real levels, 11=device default, >=13 is no-reading
+// (13=NOT_EQUIPPED, 14=post-reset sentinel) — never show those raw numbers next to a 0-10 slider
+const brightnessText = (v) => (v == null || v >= 13 ? "—" : v === 11 ? "def" : String(v));
 
 // Feature specs. `controls[].what` are /api/command tokens (calictl/control.py BUILDERS);
 // `state` is the interpreted /api/state key (calictl/semantics.py). `confirm` gates fuel/
@@ -117,12 +119,16 @@ const FEATURES = {
     readouts: [
       { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  🕒 stale" : ""),
         bar: (s) => s.fresh && s.fresh.percent },
-      { label: "Waste water", get: (s) => tank(s.waste), bar: (s) => s.waste && s.waste.percent },
+      { label: "Waste water", get: (s) => tank(s.waste) + (s.waste && s.waste.stale ? "  🕒 stale" : ""),
+        bar: (s) => s.waste && s.waste.percent },
     ],
-    // The fresh-water sensor only measures while the van's water system is on; parked/asleep it
-    // latches a stale low value. This is a soft `note` (informational) — NOT a `warn` (fault), so it
-    // does not raise the dashboard alert badge; a parked van is normal, not a fault.
-    note: (s) => (s.fresh && s.fresh.stale ? "🕒 Fresh-water level is stale — the van's water system is off (last measured while active)" : null),
+    // The water sensor only measures while the van's water system is on; parked/asleep the unit
+    // latches stale values and the daemon holds the last plausible reading for BOTH tanks. Soft
+    // `note` (informational) — NOT a `warn` (fault); a parked van is normal, not a fault.
+    note: (s) => ((s.fresh && s.fresh.stale) || (s.waste && s.waste.stale)
+      ? "🕒 Water levels are stale — the van's water system is off (held since "
+        + (s.stale_since ? agoText(Math.round(Date.now() / 1000 - s.stale_since)) + " ago)" : "last active measurement)")
+      : null),
     summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%${s.fresh.stale ? " (stale)" : ""}` : ""),
   },
   energy: {
@@ -253,6 +259,9 @@ async function processQueue() {
   const done = inflight;
   inflight = null;
   if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
+  // applied === null: sent + acknowledged but not verifiable remotely (lighting: the state
+  // char echoes writes, so only the lamp itself is proof — be honest, not falsely green)
+  else if (res && res.ok && res.applied == null) toast("Sent — check the lamp", "ok");
   else if (res && res.ok) toast("Sent — the unit didn't confirm it", "warn");
   else toast("Command failed" + (res && res.error ? `: ${res.error}` : ""), "error");
   // drop the optimistic value only if no newer change for this control is still queued
@@ -500,8 +509,8 @@ function renderSummary() {
   const w = STATE.water || {};
   if (installed("water")) {
     const f = w.fresh, g = w.waste;
-    if (f && f.liters != null) rows.push(sumRow("Fresh water", `${f.liters} / ${f.capacity_l} l`));
-    if (g && g.liters != null) rows.push(sumRow("Grey water", `${g.liters} / ${g.capacity_l} l`));
+    if (f && f.liters != null) rows.push(sumRow("Fresh water", `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}`));
+    if (g && g.liters != null) rows.push(sumRow("Grey water", `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}`));
   }
   const e = STATE.energy || {};
   if (e.soc2_pct != null) {
@@ -541,9 +550,9 @@ function renderDashboard() {
 
 // Lighting lamps, grouped like the app (from the HCI capture + screenshots). `what` is the
 // control API zone key (control.LIGHT_ZONES); `zone` is the interpreted brightness_zone_<N>.
-// Matches the app's 8-lamp layout (screenshots 2026-07-15). `hint` marks zones whose lamp
-// identity is INFERRED by elimination, not confirmed by capture (L5/L6): dragging one on-device
-// is the experiment that confirms it. See control.LIGHT_ZONES.
+// Matches the app's 8-lamp layout (screenshots 2026-07-15). L5=Küche Ambient was capture-
+// confirmed 2026-08-16; L6 (roof reading) is solid by elimination but its lamp only powers with
+// the roof open, so `hint` flags that. See control.LIGHT_ZONES.
 const LIGHT_LAMPS = [
   { group: "Reading lights", lamps: [
     { label: "Left", what: "reading-1", zone: 2 },
@@ -554,7 +563,7 @@ const LIGHT_LAMPS = [
     { label: "Cooking", what: "kitchen", zone: 7 } ] },
   { group: "Pop-roof", lamps: [
     { label: "Ambient", what: "roof-ambient", zone: 8 },
-    { label: "Reading", what: "roof-reading", zone: 6, hint: "roof open only · unverified" } ] },
+    { label: "Reading", what: "roof-reading", zone: 6, hint: "roof open only" } ] },
   { group: "Outside", lamps: [{ label: "Rear", what: "outside-rear", zone: 3 }] },
 ];
 const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NOT_EQUIPPED — never send)
@@ -578,6 +587,7 @@ function renderLighting(s) {
   mrow.appendChild(mlbl);
   if (pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
+  msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", "All lights");
   msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly();
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow); app.appendChild(mc);
@@ -600,9 +610,13 @@ function renderLighting(s) {
       row.appendChild(lbl);
       if (isPending) row.appendChild(spinner());
       const inp = document.createElement("input"); inp.type = "range"; inp.min = 0; inp.max = LIGHT_MAX;
-      inp.value = val; inp.disabled = readOnly();
+      // readback can carry enum values past the settable range (11=default, 13/14 markers):
+      // clamp the thumb (11 ≈ full) but zero it for the no-reading markers; label shows the truth
+      inp.value = val >= 13 ? 0 : Math.min(val, LIGHT_MAX);
+      inp.disabled = readOnly();
+      inp.setAttribute("aria-label", grp.group + " " + lamp.label + " brightness");
       const out = document.createElement("span"); out.className = "sval";
-      out.textContent = val;
+      out.textContent = brightnessText(val);
       inp.oninput = () => (out.textContent = inp.value);
       inp.onchange = () => command("lighting", lamp.what, Number(inp.value));
       row.appendChild(inp); row.appendChild(out);
@@ -664,6 +678,7 @@ function renderControl(fn, c, s) {
     const on = optOn(fn, c.what, !!s[c.state]);
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
+    sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", c.label);
     sw.setAttribute("aria-checked", on ? "true" : "false");
     sw.disabled = readOnly();
     sw.onclick = () => act(fn, c.what, on ? "off" : "on");

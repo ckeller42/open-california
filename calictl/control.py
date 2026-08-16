@@ -121,6 +121,19 @@ LIGHT_ZONES = {
 }
 
 
+def _all_real_zones(zone_fields, b):
+    """Value ``b`` for the REAL lamp zones (L1-L8), the unchanged sentinel elsewhere.
+
+    ``power``/``all`` used to write every one of the 16 control zones — including the
+    never-equipped L9-L16, which only coincidentally looked right while "on" was the 13
+    NOT_EQUIPPED marker. Only L1-L8 exist on this van (semantics._REAL_LIGHT_ZONES); the
+    app's "Alle Lichter" frame is uncaptured, so stay conservative: never touch phantom zones.
+    """
+    from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
+    real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
+    return {z: (b if z in real else LIGHT_UNCHANGED) for z in zone_fields}
+
+
 def _lighting(funcs, what, value, last):
     """Build a lighting control frame (char 1501). CRACKED via HCI capture 2026-07-08.
 
@@ -132,8 +145,9 @@ def _lighting(funcs, what, value, last):
 
     Grammar (``what``):
       * a zone key (``LIGHT_ZONES``) or a raw ``BrightnessL*`` field  -> SET_BRIGHTNESS that zone
-        to ``value`` (0-13); all other zones = 14 (unchanged).
-      * ``"all"`` -> set every zone to ``value``; ``"power"`` on->13 / off->0 for every zone.
+        to ``value`` (0-11: 0=off, 1-10=10%..100%, 11=default); all other zones = 14 (unchanged).
+      * ``"all"`` -> set every REAL zone (L1-L8) to ``value``; ``"power"`` on->10 (100%) / off->0
+        for every real zone; never-equipped zones (L9-L16) always get the unchanged sentinel.
       * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = target ProfileNumber.
       * ``"color"`` -> SET_COLOR (Mode 6); ``value`` = a ``LIGHT_COLORS`` name; recolours the
         active profile (LightValue = palette index 1-10). On-device apply UNVERIFIED (re-gap A1).
@@ -166,10 +180,9 @@ def _lighting(funcs, what, value, last):
                 **{z: LIGHT_UNCHANGED for z in zone_fields}}
     elif what == "power":
         b = LIGHT_ON_BRIGHTNESS if _truthy(value) else 0
-        vals = {**base, **{z: b for z in zone_fields}}
+        vals = {**base, **_all_real_zones(zone_fields, b)}
     elif what == "all":
-        b = _b(value)
-        vals = {**base, **{z: b for z in zone_fields}}
+        vals = {**base, **_all_real_zones(zone_fields, _b(value))}
     else:                                   # a single zone (friendly key or BrightnessL field)
         field = LIGHT_ZONES.get(what, what)
         if field not in zone_fields:
