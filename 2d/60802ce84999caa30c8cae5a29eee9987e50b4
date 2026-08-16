@@ -1,0 +1,29 @@
+calictl/serve.py
+  s_a7757c7c919f20::t_edf2747678ca0e 367-369,372
+  s_a7757c7c919f20::t_b6cc6dc431ea0b 370-371,373-377
+  s_a7757c7c919f20::t_5cd9df99d92985 574
+  s_a7757c7c919f20::t_99e4b45064e08c 398
+  s_a7757c7c919f20::t_36ae439234ba1d 257-266
+  s_a7757c7c919f20::t_65a6a929713014 178
+tests/test_web_serve.py
+  s_a7757c7c919f20::t_5ae04579339f85 76-88
+  s_a7757c7c919f20::t_0c6a3e1004f963 92
+  s_a7757c7c919f20::t_ba1f5daeb69d61 371-395
+  s_a7757c7c919f20::t_a1360c35e3dc54 89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2d60802ce84999caa30c8cae5a29eee9987e50b4",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
