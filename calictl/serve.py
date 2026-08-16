@@ -175,6 +175,7 @@ class Server:
         self.interval = interval
         self.influx_enabled = influx_enabled
         self._ble = None                    # asyncio.Lock(); created inside run()'s loop
+        self._wake_session = None            # asyncio.Event(); nudges the supervisor to reconnect NOW
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
@@ -252,6 +253,16 @@ class Server:
         """The persistent session if it's currently up, else None (use the per-op path)."""
         s = self._session
         return s if (self._persistent and s is not None and s.is_up) else None
+
+    def _nudge_session(self):
+        """Keep-warm: a command wants to actuate. If no session is up, reset the backoff the
+        supervisor grew while the van slept and wake it to reconnect NOW — the user reaching for a
+        control means the van is likely awake, so the session (and the fast path) should come up
+        promptly instead of after a long backoff. No-op when a session is already live."""
+        if (self._persistent and self._wake_session is not None
+                and self._live_session() is None):
+            self._backoff_fails = 0
+            self._wake_session.set()
 
     async def poll(self):
         # One BLE read of every function under the lock; cache the DECODED state
@@ -353,7 +364,17 @@ class Server:
                 ok = await self._session_connect_once()
             if not ok:
                 idx = min(self._backoff_fails, len(self.SESSION_BACKOFF)) - 1
-                await asyncio.sleep(self.SESSION_BACKOFF[max(0, idx)])
+                # sleep the backoff, but wake IMMEDIATELY if a command nudges us (keep-warm): the
+                # user reaching for a control means the van is likely awake now, so don't make them
+                # wait out a backoff that grew during a long deep-sleep.
+                sleeper = asyncio.ensure_future(asyncio.sleep(self.SESSION_BACKOFF[max(0, idx)]))
+                waker = asyncio.ensure_future(self._wake_session.wait())
+                try:
+                    await asyncio.wait({sleeper, waker}, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    sleeper.cancel()
+                    waker.cancel()
+                    self._wake_session.clear()
 
     async def on_command(self, function, what, value):
         """Build + write a control frame, then read back and report applied-ness.
@@ -374,6 +395,7 @@ class Server:
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
             print("read-only: refusing command %s/%s" % (function, what), flush=True)
             return None
+        self._nudge_session()   # keep-warm: bring the fast-path session up now if it isn't
         # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
@@ -549,6 +571,7 @@ class Server:
         self._loop = loop
         asyncio.set_event_loop(loop)
         self._ble = asyncio.Lock()          # the van allows ONE connection; created on this loop
+        self._wake_session = asyncio.Event()   # a command can wake the session supervisor early
 
         # --- MQTT (Home Assistant) — optional; a missing broker must not stop polling+web ---
         self._mqtt = self._maybe_start_mqtt(loop)

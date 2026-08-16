@@ -70,13 +70,26 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
     # a pure safety backstop so a regression can't hang the suite.
     async def fake_sleep(x, *a, **k):
         sleeps.append(x)
-        if (s._session_state == "asleep" and x == 60) or len(sleeps) >= 200:
-            raise _Stop
         await real(0)
     monkeypatch.setattr(serve.asyncio, "sleep", fake_sleep)
 
+    # Stop the otherwise-infinite supervisor loop from the connect call -- it is awaited DIRECTLY in
+    # the loop, so a raise propagates out (the backoff now runs in a child task via asyncio.wait, so
+    # a raise there would be trapped). 8 iterations is enough to escalate to 'asleep' and reach the
+    # 60 s backoff cap.
+    real_connect = s._session_connect_once
+    _n = {"i": 0}
+    async def counting_connect():
+        _n["i"] += 1
+        ok = await real_connect()
+        if _n["i"] >= 8:
+            raise _Stop
+        return ok
+    monkeypatch.setattr(s, "_session_connect_once", counting_connect)
+
     async def _run():
         s._ble = asyncio.Lock()
+        s._wake_session = asyncio.Event()          # keep-warm nudge target (never set in this test)
         try:
             await s._supervise_session()
         except _Stop:
@@ -353,6 +366,31 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
     result = asyncio.run(_run())
     assert calls["session"] == 1 and calls["dev"] == 0
     assert result is True     # readback State==1 matches "on"
+
+
+def test_on_command_nudges_session_when_down(monkeypatch):
+    """Keep-warm: a command with no live session resets the grown backoff and wakes the
+    supervisor to reconnect now, so the fast-path session comes up promptly."""
+    import asyncio
+    from calictl import serve, protocol, overrides
+    funcs = protocol.load(); overrides.apply(funcs)
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._session = None                       # no live session (van was asleep)
+    s._backoff_fails = 3                     # backoff grew during the sleep
+    s._last = {"lighting": {"ProfileNumber": 9}}
+    async def dev_actuate(*a, **k):
+        return None
+    monkeypatch.setattr(s.dev, "actuate", dev_actuate)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._wake_session = asyncio.Event()
+        await s.on_command("lighting", "kitchen", 8)
+        return s._wake_session.is_set(), s._backoff_fails
+    was_set, fails = asyncio.run(_run())
+    assert was_set is True and fails == 0    # supervisor prodded, backoff reset
 
 
 def test_on_command_lighting_is_fast_path_confirmed_by_notification(monkeypatch):
