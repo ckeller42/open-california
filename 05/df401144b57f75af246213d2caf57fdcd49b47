@@ -1,0 +1,32 @@
+docs/business-logic/control-and-actuation.md
+  s_a7757c7c919f20::t_de2c532a4eee7d 148
+  s_a7757c7c919f20::t_e249772347d14a 153-196
+CLAUDE.md
+  s_a7757c7c919f20::t_ff25945ec52bea 63-79
+docs/business-logic/protocol-sequences.md
+  s_a7757c7c919f20::t_a82ed16b8c63df 81-109,114,116-123
+docs/business-logic/re-gap-inventory.md
+  s_a7757c7c919f20::t_e00d31621d1ac7 41,52-53,59-81
+  s_a7757c7c919f20::t_43b9894344db56 16-20
+docs/business-logic/lighting-energy-water-sat-roof.md
+  s_a7757c7c919f20::t_e00d31621d1ac7 70-74,119-123
+  s_a7757c7c919f20::t_ea9989b123c512 124
+.claude/skills/capture-and-diff/SKILL.md
+  s_a7757c7c919f20::t_6fa5752d2eb07b 21-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "05df401144b57f75af246213d2caf57fdcd49b47",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
