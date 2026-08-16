@@ -426,6 +426,7 @@ def test_on_command_nudges_session_when_down(monkeypatch):
     s._session = None                       # no live session (van was asleep)
     s._backoff_fails = 3                     # backoff grew during the sleep
     s._last = {"lighting": {"ProfileNumber": 9}}
+    monkeypatch.setattr(serve, "_SESSION_WAIT_S", 0.1)   # don't idle the full wait-for-session window
     async def dev_actuate(*a, **k):
         return None
     monkeypatch.setattr(s.dev, "actuate", dev_actuate)

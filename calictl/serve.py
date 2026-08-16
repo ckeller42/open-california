@@ -30,6 +30,11 @@ _FAST_CONFIRM_S = float(os.environ.get("CALICTL_FAST_CONFIRM_S", "1.2"))
 # daemon RELEASES the session (dropping to brief cold polls) so the app can use the slot.
 _UI_IDLE_S = float(os.environ.get("CALICTL_UI_IDLE_S", "25"))
 
+# When a command arrives and no session is up yet, wait up to this long for the supervisor to bring
+# one up (it's connecting due to the keep-warm nudge) and ride it — rather than racing it with a
+# redundant cold connect that fights over the single BLE slot. Falls back to the cold path on timeout.
+_SESSION_WAIT_S = float(os.environ.get("CALICTL_SESSION_WAIT_S", "6"))
+
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
 
 
@@ -436,6 +441,13 @@ class Server:
             return None
         self._note_ui_activity()   # a command counts as active use -> hold the session
         self._nudge_session()      # keep-warm: bring the fast-path session up now if it isn't
+        # Prefer the fast persistent session over a redundant cold connect: the nudge just told the
+        # supervisor to connect, so wait briefly (OUTSIDE the _ble lock, so the supervisor can take
+        # it) for the session to come up rather than racing it cold over the single slot.
+        if self._persistent and self._live_session() is None:
+            deadline = time.monotonic() + _SESSION_WAIT_S
+            while time.monotonic() < deadline and self._live_session() is None:
+                await asyncio.sleep(0.2)
         # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
