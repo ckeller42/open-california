@@ -1,0 +1,36 @@
+calictl/control.py
+  s_a7757c7c919f20::t_93e65c0eca53e6 119-120
+  s_a7757c7c919f20::t_53be4c5f21a9e1 89-93,149-150,152-154,420-449
+calictl/webui/app.js
+  s_a7757c7c919f20::t_a9f3acef7f53fc 256
+  s_a7757c7c919f20::t_8cc0c5bb667583 553
+  s_a7757c7c919f20::t_0592d961c02ab8 564-569
+  s_a7757c7c919f20::t_8b9148f39a72e9 560
+calictl/cli.py
+  s_a7757c7c919f20::t_12ef5c7222a252 210-211
+calictl/device.py
+  s_a7757c7c919f20::t_da9875e26c8cb6 602,604
+  s_a7757c7c919f20::t_127e4a27c6e941 49,233-234,251-252,257-258,268-271,293-297
+calictl/serve.py
+  s_a7757c7c919f20::t_786d8de97378ba 409-410,413-414
+tests/test_web_serve.py
+  s_a7757c7c919f20::t_4d776f0be10e82 337
+tests/test_mock_integration.py
+  s_a7757c7c919f20::t_c3efc732aaf2c1 128-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0c7824a5790e01547403628f7e1505c0d8def2fa",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
