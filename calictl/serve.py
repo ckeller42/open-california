@@ -140,7 +140,7 @@ class ServeBackend:
             self._s.on_command(function, what, value), self._loop)
         applied = fut.result(timeout=90)   # on_command returns applied-ness
         interp = self.state().get(function)
-        return {"ok": True, "applied": applied, "state": interp, "error": None}
+        return {"ok": True, "applied": applied, "state": interp, "error": None, "function": function}
 
 
 async def dry_run(addr=None):

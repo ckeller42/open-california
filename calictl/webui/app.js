@@ -127,7 +127,7 @@ const FEATURES = {
     // `note` (informational) — NOT a `warn` (fault); a parked van is normal, not a fault.
     note: (s) => ((s.fresh && s.fresh.stale) || (s.waste && s.waste.stale)
       ? "🕒 Water levels are stale — the van's water system is off (held since "
-        + (s.stale_since ? agoText(Math.round(Date.now() / 1000 - s.stale_since)) + " ago)" : "last active measurement)")
+        + (s.stale_since ? agoText(Math.round(Date.now() / 1000 - s.stale_since)) + ")" : "last active measurement)")
       : null),
     summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%${s.fresh.stale ? " (stale)" : ""}` : ""),
   },
@@ -259,9 +259,10 @@ async function processQueue() {
   const done = inflight;
   inflight = null;
   if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
-  // applied === null: sent + acknowledged but not verifiable remotely (lighting: the state
-  // char echoes writes, so only the lamp itself is proof — be honest, not falsely green)
-  else if (res && res.ok && res.applied == null) toast("Sent — check the lamp", "ok");
+  // applied === null: sent + acknowledged but not verifiable remotely. For lighting the state
+  // char is a write-through echo, so only the lamp itself is proof — say so. Other functions
+  // that return null (e.g. roof, which has no readback check) keep the neutral phrasing.
+  else if (res && res.ok && res.applied == null && res.function === "lighting") toast("Sent — check the lamp", "ok");
   else if (res && res.ok) toast("Sent — the unit didn't confirm it", "warn");
   else toast("Command failed" + (res && res.error ? `: ${res.error}` : ""), "error");
   // drop the optimistic value only if no newer change for this control is still queued
