@@ -46,6 +46,7 @@ HEARTBEAT_PERIOD_S = float(os.environ.get("CALICTL_HEARTBEAT_PERIOD_S", "0.6")) 
 ARM_DELAY_S = float(os.environ.get("CALICTL_ARM_DELAY_S", "3.0"))   # let the unit register the heartbeat before writing
 SETTLE_S = float(os.environ.get("CALICTL_SETTLE_S", "2.5"))         # let the actuation take effect before readback
 FOLLOW_DELAY_S = float(os.environ.get("CALICTL_FOLLOW_DELAY_S", "0.3"))  # gap before a commit/follow frame
+PRE_SETTLE_S = float(os.environ.get("CALICTL_PRE_SETTLE_S", "3.0"))      # arm wait after a preamble (lighting REQUEST_CONFIG; photon-verified at 3.0)
 # A plain read returns whatever is LATCHED in a state characteristic, which goes STALE: the
 # fresh-water level char read 1 L while the true level was 11 L. The 1003 liveness heartbeat is
 # what drives the unit's sensor-measurement loop AND keeps the link up (an un-heartbeated link is
@@ -229,7 +230,8 @@ class CamperDevice:
                 pass
             await self._safe_disconnect(client)
 
-    async def actuate(self, func, frame: bytes, *, verify=True, follow: bytes | None = None) -> dict | None:
+    async def actuate(self, func, frame: bytes, *, verify=True, follow: bytes | None = None,
+                      pre: list | None = None) -> dict | None:
         """Connect, arm with a 1003 heartbeat, write a control frame, disconnect (one BLE
         session — the CLI/per-op path). See :meth:`_actuate_on` for the shared write core.
 
@@ -246,12 +248,14 @@ class CamperDevice:
             raise ValueError("%s has no control characteristic" % func.name)
         client = await self._session()
         try:
-            return await self._actuate_on(client, func, frame, follow=follow, verify=verify, arm=True)
+            return await self._actuate_on(client, func, frame, follow=follow, verify=verify,
+                                          arm=True, pre=pre)
         finally:
             await self._safe_disconnect(client)
 
     async def _actuate_on(self, client, func, frame: bytes, *, follow: bytes | None = None,
-                          verify: bool = True, arm: bool = True) -> dict | None:
+                          verify: bool = True, arm: bool = True,
+                          pre: list | None = None) -> dict | None:
         """Write a control frame over an ALREADY-CONNECTED client. Never connects/disconnects.
 
         ``arm=True`` (cold session, e.g. the CLI): replay the handshake (VERSION/AUTH reads +
@@ -261,6 +265,10 @@ class CamperDevice:
 
         :param follow: optional second frame written to the same control char right after ``frame``
             (the lighting commit; see ``control.commit_for``).
+        :param pre: optional arm/preamble frames written (in order, ``FOLLOW_DELAY_S`` apart)
+            before ``frame``, then ``PRE_SETTLE_S`` to let the unit arm — the lighting
+            REQUEST_CONFIG handshake (see ``control.preamble_for``); without it the unit ACKs a
+            SET_BRIGHTNESS but never drives the physical load (photon-verified 2026-08-16).
         :returns: the post-write ``protocol.decode`` when ``verify`` and the func has a state char.
         """
         from . import protocol  # lazy
@@ -282,6 +290,11 @@ class CamperDevice:
                           "be ignored" % (auth_ok, n), flush=True)
                 beat = asyncio.create_task(self._heartbeat(client, stop))
                 await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
+            if pre:
+                for p in pre:
+                    await client.write_gatt_char(func.control_char, p, response=True)
+                    await asyncio.sleep(FOLLOW_DELAY_S)
+                await asyncio.sleep(PRE_SETTLE_S)   # let the unit arm (config stream ~1.5 s)
             await client.write_gatt_char(func.control_char, frame, response=True)
             if follow is not None:
                 await asyncio.sleep(FOLLOW_DELAY_S)
@@ -586,9 +599,9 @@ class PersistentSession:
         return bytes(await self._client.read_gatt_char(func.state_char))
 
     async def actuate(self, func, frame: bytes, *, follow: bytes | None = None,
-                      verify: bool = True) -> dict | None:
+                      verify: bool = True, pre: list | None = None) -> dict | None:
         return await self._dev._actuate_on(self._client, func, frame, follow=follow,
-                                           verify=verify, arm=False)
+                                           verify=verify, arm=False, pre=pre)
 
     async def aclose(self) -> None:
         if self._stop is not None:

@@ -124,10 +124,14 @@ def test_state_flags_stale_water():
     s._water_good = {"installed": True, "fresh": {"liters": 17, "capacity_l": 29, "percent": 59},
                      "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
     s._water_stale_since = 1_700_000_000.0
-    fresh = serve.ServeBackend(s, loop=None).state()["water"]["fresh"]
+    held = serve.ServeBackend(s, loop=None).state()["water"]
+    fresh = held["fresh"]
     assert fresh["stale"] is True
     assert fresh["liters"] == 17               # the last plausible level, not the latched 1 L
     assert "days_left" not in fresh
+    # the substitution holds the WHOLE dict, so waste is a held value too — it must carry the
+    # same stale flag (regression: waste was served frozen-but-unflagged for a month, 2026-08-16)
+    assert held["waste"]["stale"] is True
 
 
 def test_water_baseline_persists_across_restart(monkeypatch, tmp_path):
@@ -334,7 +338,7 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
     calls = {"session": 0, "dev": 0}
     class FakeSession:
         is_up = True
-        async def actuate(self, func, frame, *, follow=None, verify=True):
+        async def actuate(self, func, frame, *, follow=None, verify=True, pre=None):
             calls["session"] += 1
             return {"State": 1, "Level": 3, "Mode": 4, "Installed": 1}
     async def dev_actuate(*a, **k):

@@ -86,7 +86,11 @@ LIGHT_COLORS = {
 # Per-zone "leave unchanged" sentinel — CRACKED via HCI capture 2026-07-08: the app fills every
 # zone it is NOT changing with 14 (0xe), not 0. 0 means "set this zone to 0"; 14 = "no change".
 LIGHT_UNCHANGED = 14
-LIGHT_ON_BRIGHTNESS = 13         # "on" brightness (0..13; 14=unchanged sentinel, so max real=13)
+# Brightness is the dg/i.java enum, NOT a raw 0-13 scale: 0=OFF, 1-10 = 10%..100% in 10% steps,
+# 11=DEFAULT, 12 unused, 13=NOT_EQUIPPED (read-only marker for absent zones — writing it is
+# garbage; we did exactly that for "power on" until the 2026-08-16 capture).
+LIGHT_ON_BRIGHTNESS = 10         # "on" = 100% (enum PERCENTAGE_100)
+LIGHT_MAX_SET = 11               # highest settable value (11 = DEFAULT brightness)
 # Every SET_BRIGHTNESS frame the app sends hardcodes ProfileNumber=9 (LIVE_VIEW, the "live editing"
 # profile) — `w(9, PENDING)` in dg/h.java:170-264 — NOT the currently-active profile. Echoing the
 # live ProfileNumber instead (0 when the lights are off) is why our SET_BRIGHTNESS was ignored until
@@ -112,8 +116,8 @@ LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
 LIGHT_ZONES = {
     "reading-1": "BrightnessLTwo", "reading-2": "BrightnessLOne", "reading-3": "BrightnessLFour",
     "kitchen": "BrightnessLSeven", "roof-ambient": "BrightnessLEight", "outside-rear": "BrightnessLThree",
-    "kitchen-ambient": "BrightnessLFive",   # INFERRED L5 — Küche Ambientelicht (unverified)
-    "roof-reading": "BrightnessLSix",        # INFERRED L6 — Aufstelldach Leselicht (roof-open only, unverified)
+    "kitchen-ambient": "BrightnessLFive",   # CONFIRMED 2026-08-16 capture: Küche Ambientelicht slider moved L5
+    "roof-reading": "BrightnessLSix",        # L6 — Aufstelldach Leselicht by elimination (solid now L5 is pinned)
 }
 
 
@@ -142,11 +146,12 @@ def _lighting(funcs, what, value, last):
             "Timestamp": 0, "LightValue": 0}
 
     def _b(v):
-        # real brightness is 0..13; 14 is the leave-unchanged sentinel and 15 is unused,
-        # so neither is a valid value to *set* a zone to (would silently mean "no change").
+        # settable brightness is the dg/i enum 0-11 (0=off, 1-10=10%..100%, 11=default);
+        # 12 is unused, 13=NOT_EQUIPPED and 14=unchanged are markers, never valid to set.
         b = int(v)
-        if not 0 <= b <= LIGHT_ON_BRIGHTNESS:
-            raise ValueError("lighting brightness must be 0-%d, got %r" % (LIGHT_ON_BRIGHTNESS, v))
+        if not 0 <= b <= LIGHT_MAX_SET:
+            raise ValueError("lighting brightness must be 0-%d (0=off, 1-10=10%%..100%%, "
+                             "11=default), got %r" % (LIGHT_MAX_SET, v))
         return b
 
     if what == "profile":
@@ -410,6 +415,36 @@ def commit_for(function):
        lands. Diagram: :need:`S_SEQ_LIGHT_COMMIT`.
     """
     return LIGHT_COMMIT if function == "lighting" else None
+
+
+# Session-arm preamble — THE 2026-08-16 CRACK of the lighting-apply gap. The app opens its
+# Lighting screen with a REQUEST_CONFIG (Mode=12, ProfileNumber=13) + commit; only in a session
+# where this preamble has landed does the unit PHYSICALLY drive the lamps on a later
+# SET_BRIGHTNESS (it also then streams real Mode-4 ramp notifications on 1502). Without it a SET
+# is ACKed and echoed but the load never switches — the byte-identical-frames mystery. Verified
+# with photons on-device 2026-08-16 (Kochen L7: 0 -> dark, 8 -> 80%, 0 -> dark).
+LIGHT_REQUEST_CONFIG = bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee")
+
+
+def preamble_for(function):
+    """The arm/preamble frames a function needs BEFORE a SET, or None. Lighting is the only
+    one: :data:`LIGHT_REQUEST_CONFIG` + :data:`LIGHT_COMMIT`, mirroring the app's screen-open
+    handshake. Callers pass this as ``device.actuate(..., pre=preamble_for(fn))``.
+
+    :param function: the function name (e.g. ``"lighting"``).
+    :returns: list of frames to write (in order) before the SET frame, or ``None``.
+
+    .. req:: Arm lighting with the REQUEST_CONFIG preamble
+       :id: R_LIGHT_PREAMBLE
+       :status: implemented
+       :tags: control, lighting
+
+       For lighting, ``calictl`` shall write :data:`LIGHT_REQUEST_CONFIG` (Mode=12) followed by
+       :data:`LIGHT_COMMIT` before a SET_BRIGHTNESS/SET_PROFILE frame; the unit physically
+       applies brightness only in a session where this preamble has landed (capture-diffed
+       against the app and photon-verified on-device 2026-08-16).
+    """
+    return [LIGHT_REQUEST_CONFIG, LIGHT_COMMIT] if function == "lighting" else None
 
 
 def decode_control(func, frame: bytes) -> dict:

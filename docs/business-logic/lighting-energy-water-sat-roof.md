@@ -67,6 +67,11 @@ percentage:
 
 So brightness is effectively a 0–10 step scale (0%,10%,...,100%) plus two special codes, packed in a 4-bit field.
 
+**Live-confirmed 2026-08-16** (HCI capture of the app + photon-verified actuation): the wire value
+really is this `dg.i` enum, not a raw 0-13 scale — the app's 50 % slider produced wire `5`, and
+`13` is a **read-only NOT_EQUIPPED marker** for absent zones (calictl previously wrote 13 as
+"on"/max — garbage; now `LIGHT_ON_BRIGHTNESS=10`, settable range 0-11, GUI slider max 10).
+
 ### Zone → wire-field map (confirmed via `dg/a.java` setters `f,g,h,i,j,k,l,m,n,o,p,q,r`, each `(int, qf.b)`)
 
 | Setter (`dg/a.java`) | Control field | Zone name (BrightnessL…) |
@@ -110,6 +115,12 @@ layouts (e.g. reading-light-only layouts vs. roof/kitchen-equipped ones) reuse t
 - zone Eleven ← `INTERIOR_DINING_AREA`(8)
 - zone Twelve ← `EXTERIOR_ENTRANCE`(10)
 - zone Thirteen ← `INTERIOR_BATHROOM`(9)
+
+**Zone→lamp map, capture-confirmed 2026-08-16 (this van, T7):** dragging the app's *Küche
+Ambientelicht* slider moved the **L5** nibble — `Küche Ambientelicht = BrightnessLFive` is now
+CONFIRMED (was only inferred from the `KITCHEN_BACKGROUND_LIGHTING`(15) ordinal above); *Küche
+Kochen = L7* re-confirmed in the same capture; **L6 = Aufstelldach Leselicht** is now solid by
+elimination.
 
 ### Action → field map
 

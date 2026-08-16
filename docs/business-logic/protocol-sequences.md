@@ -78,36 +78,49 @@ sequenceDiagram
     C->>U: disconnect          (heartbeat stops)
 ```
 
-## 2. Lighting SET + a flush frame (calictl workaround; cracked 2026-07-13)
+## 2. Lighting SET — REQUEST_CONFIG preamble + SET + commit (cracked 2026-08-16, photon-verified)
 
-calictl's SET frame is **byte-identical to the app's**, yet a single calictl SET is ACKed but
-**not applied**; sending a second (neutral) frame right after flushes it and the change applies
-(live-verified: kitchen 0→8). calictl sends `0e00000000000000eeeeeeeeeeeeeeee` as that follow
-(`actuate(..., follow=control.LIGHT_COMMIT)`; `control.commit_for("lighting")` returns it).
+calictl's SET frame is **byte-identical to the app's**, yet for over a month a calictl SET was
+ACKed (and echoed by the `1502` state char — see the echo caveat below) while the **physical
+lamp stayed dark**. The 2026-08-16 HCI capture of the app *physically* lighting a lamp
+(`tools/capture_diff.py`) found the missing ingredient: on opening its Lighting screen the app
+writes a **REQUEST_CONFIG frame** `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12,
+ProfileNumber=13, all zones=14) followed by the usual `0e00…` commit, to `1501`. **Only in a
+session where this preamble has landed does the unit physically drive the lamps on a later
+SET_BRIGHTNESS.** Photon-verified on Kochen L7 from buspi: 0→dark, 8→80 %, 0→dark
+(owner-watched). calictl sends the preamble via `control.LIGHT_REQUEST_CONFIG` +
+`control.preamble_for("lighting")` → `device.actuate(..., pre=…)` (frames spaced
+`FOLLOW_DELAY_S` = 0.3 s, then `PRE_SETTLE_S` = 3.0 s arm wait, env `CALICTL_PRE_SETTLE_S`).
 
-**Decompile nuance (2026-07-14) — `0e00…` is NOT an app "commit".** The Lighting Mode enum (`dg/n`)
-is `NO_MODE=0, SET_BRIGHTNESS=4, SET_COLOR=6, SET_DOUBLE=8, REQUEST_CONFIG=12, SET_PROFILE=16,
-WAKEUP_TIME=20, SYSTEM_TIME=24, PREVIEW=28`, so **Mode 0 = NO_MODE** (neutral) and `0e00…` is just
-the builder's **default frame** (ProfileNumber = the `14` "unchanged" sentinel + NO_MODE +
-all-brightness-unchanged). The **app self-applies** each Mode-tagged SET (stage fields → transmit
-the full packet); it does *not* send a commit per SET. Leading theory for calictl's need: the unit
-applies a frame on the **next** write, and the app streams frames continuously (~500 ms) so every
-SET is naturally flushed — calictl's single write is not, so any neutral second frame flushes it.
-"Profile must be active" is unit-side/UX, not in the app's write path.
+**Decompile nuance (2026-07-14, still true) — `0e00…` is NOT an app "commit".** The Lighting Mode
+enum (`dg/n`) is `NO_MODE=0, SET_BRIGHTNESS=4, SET_COLOR=6, SET_DOUBLE=8, REQUEST_CONFIG=12,
+SET_PROFILE=16, WAKEUP_TIME=20, SYSTEM_TIME=24, PREVIEW=28`, so **Mode 0 = NO_MODE** (neutral) and
+`0e00…` is just the builder's **default frame** (ProfileNumber = the `14` "unchanged" sentinel +
+NO_MODE + all-brightness-unchanged). The app self-applies by streaming frames continuously;
+calictl's single writes need the explicit neutral flush (`control.LIGHT_COMMIT` /
+`commit_for("lighting")`).
+
+**Feedback: the `1502` notifications are truthful; the readback echo is not.** After
+REQUEST_CONFIG the unit streams a config dump as **notifications on `1502`**, tagged by Mode:
+`0x0c` config echo, `0x06` color state, `0x08` SET_DOUBLE, `0x10` profile state (profile 8),
+`0x14` wake time, `0x18` system time (ticking unix seconds). After an *applied* SET_BRIGHTNESS
+it notifies **Mode-4 "ramp" frames showing the REAL current brightness stepping to the target**
+(e.g. 01→03→04→05). A plain read of `1502` remains a **write-through echo** of the last SET —
+never proof of actuation.
 
 ```mermaid
 sequenceDiagram
     participant C as calictl
-    participant U as Lighting (1501)
+    participant U as Lighting (1501/1502)
     Note over C,U: (all inside one heartbeat-armed session)
-    C->>U: SET_PROFILE  (Mode 16, ProfileNumber=P)
-    C->>U: flush (0e00… = NO_MODE neutral default frame)
-    Note right of U: profile P now active
-    C->>U: SET_BRIGHTNESS (Mode 4, zone=N, others=14)
-    Note right of U: single calictl SET — ACKed, NOT applied
-    C->>U: flush (0e00…) — unit applies the prior frame on the next write
-    Note right of U: change APPLIED ✅
-    C->>U: read 1502 → BrightnessL<zone> == N
+    C->>U: REQUEST_CONFIG (0d0c… — Mode 12, PN=13, zones=14)
+    C->>U: commit (0e00… = NO_MODE neutral default frame)
+    U--)C: 1502 notifications: config dump (Modes 0x0c/0x06/0x08/0x10/0x14/0x18)
+    Note right of U: session armed for PHYSICAL lighting actuation (~3 s settle)
+    C->>U: SET_BRIGHTNESS (Mode 4, PN=9, zone=N, others=14)
+    C->>U: commit (0e00…) — flushes the single write
+    U--)C: 1502 Mode-4 ramp notifications (real brightness → N)
+    Note right of U: lamp PHYSICALLY changes ✅ (photon-verified 2026-08-16)
 ```
 
 ## 3. Roof actuation — press-and-hold move stream, unit self-gated by a 3 s SafetyCounter (`device.actuate_roof`)

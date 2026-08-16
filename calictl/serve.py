@@ -64,8 +64,12 @@ class ServeBackend:
             stale_since = self._s._water_stale_since
             good = self._s._water_good
             if stale_since and isinstance(good, dict) and isinstance(good.get("fresh"), dict):
+                # the hold substitutes the WHOLE dict, so flag BOTH tanks — waste is just as held
+                # as fresh (it was served frozen-but-unflagged for a month before 2026-08-16)
                 out["water"] = {**good, "fresh": {**good["fresh"], "stale": True},
                                 "stale_since": stale_since}
+                if isinstance(good.get("waste"), dict):
+                    out["water"]["waste"] = {**good["waste"], "stale": True}
         ts = self._s._last_ok_ts
         age = (time.time() - ts) if ts else None
         persistent = getattr(self._s, "_persistent", False)
@@ -406,10 +410,12 @@ class Server:
             sess = self._live_session()
             if sess is not None:
                 post = await sess.actuate(self.funcs[function], frame, verify=True,
-                                          follow=control.commit_for(function))
+                                          follow=control.commit_for(function),
+                                          pre=control.preamble_for(function))
             else:
                 post = await self.dev.actuate(self.funcs[function], frame, verify=True,
-                                              follow=control.commit_for(function))
+                                              follow=control.commit_for(function),
+                                              pre=control.preamble_for(function))
             if post is None:
                 return None
             self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)

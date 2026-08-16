@@ -125,6 +125,30 @@ def test_lighting_requires_the_commit_frame_to_apply(mock):
     assert control.commit_for("cooler") is None
 
 
+def test_lighting_preamble_arms_before_the_set(mock):
+    """The PHYSICAL-apply crack (capture-diffed + photon-verified on-device 2026-08-16).
+
+    .. test:: Lighting preamble precedes the SET frame
+       :id: T_LIGHT_PREAMBLE
+       :links: R_LIGHT_PREAMBLE
+
+       The app opens its Lighting screen with REQUEST_CONFIG (Mode=12, PN=13) + commit; only in
+       a session where that preamble landed does the unit drive the real lamps. `preamble_for`
+       returns the two frames for lighting (None otherwise) and `device.actuate(pre=...)` writes
+       them to the control char before the SET."""
+    funcs = _funcs()
+    dev = device.CamperDevice()
+    setf = control.build(funcs, "lighting", "kitchen", 8, {})
+    assert control.preamble_for("lighting") == [control.LIGHT_REQUEST_CONFIG, control.LIGHT_COMMIT]
+    assert control.preamble_for("cooler") is None
+    d = control.decode_control(funcs["lighting"], control.LIGHT_REQUEST_CONFIG)
+    assert d["Mode"] == 12 and d["ProfileNumber"] == 13          # REQUEST_CONFIG, byte-exact
+    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False,
+                            follow=control.LIGHT_COMMIT,
+                            pre=control.preamble_for("lighting")))
+    assert mock.decoded("lighting")["BrightnessLSeven"] == 8     # SET still lands after the preamble
+
+
 # --- read_all prefers pushed notifications over a stale latched read ---------
 
 def test_read_all_heartbeat_refreshes_stale_read(mock):
