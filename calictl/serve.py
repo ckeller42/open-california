@@ -24,6 +24,12 @@ from .device import CamperDevice, ConnectionUnavailable
 # an optimistic "sent" (the lamp itself already reacted; this only bounds the UI confirm latency).
 _FAST_CONFIRM_S = float(os.environ.get("CALICTL_FAST_CONFIRM_S", "1.2"))
 
+# Hold the fast-path persistent BLE session only while the web UI is ACTIVE (a browser polling
+# /api/state every ~2 s, or a recent command). The van allows ONE connection at a time, so a
+# permanently-held session blocks the phone app; after this many seconds without UI activity the
+# daemon RELEASES the session (dropping to brief cold polls) so the app can use the slot.
+_UI_IDLE_S = float(os.environ.get("CALICTL_UI_IDLE_S", "25"))
+
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
 
 
@@ -59,6 +65,7 @@ class ServeBackend:
         when the van is parked and then can't be reached at all, so the UI must show the last
         known values *with an "as of" age* and an offline indicator — never a blank or a stale
         number dressed as live. `_meta` is not a function name, so it never renders as a tile."""
+        self._s._note_ui_activity()   # a browser is polling -> the UI is active; hold the session
         out = {}
         for fn, decoded in dict(self._s._last or {}).items():
             out[fn] = semantics.interpret(fn, decoded)
@@ -176,6 +183,7 @@ class Server:
         self.influx_enabled = influx_enabled
         self._ble = None                    # asyncio.Lock(); created inside run()'s loop
         self._wake_session = None            # asyncio.Event(); nudges the supervisor to reconnect NOW
+        self._last_ui_activity = None        # epoch of the last web-UI poll/command (session scoping)
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
@@ -253,6 +261,19 @@ class Server:
         """The persistent session if it's currently up, else None (use the per-op path)."""
         s = self._session
         return s if (self._persistent and s is not None and s.is_up) else None
+
+    def _note_ui_activity(self):
+        """Mark the web UI as active NOW (a browser poll or a command). While active, the daemon
+        holds the fast-path persistent session; going idle releases it (see ``_ui_active``). Called
+        from both the web thread (ServeBackend) and the loop (on_command) — a plain float write is
+        atomic under the GIL."""
+        self._last_ui_activity = time.time()
+
+    def _ui_active(self):
+        """True while the web UI has been used within ``_UI_IDLE_S`` — the window in which the
+        daemon keeps the persistent session up. Idle beyond it -> release the slot for the app."""
+        a = self._last_ui_activity
+        return a is not None and (time.time() - a) < _UI_IDLE_S
 
     def _nudge_session(self):
         """Keep-warm: a command wants to actuate. If no session is up, reset the backoff the
@@ -355,8 +376,26 @@ class Server:
         return True
 
     async def _supervise_session(self) -> None:
-        """Keep the persistent session up; back off while the van is unreachable."""
+        """Hold the persistent session while the web UI is ACTIVE; release the BLE slot when it goes
+        idle (so the phone app can connect); back off while the van is unreachable."""
         while True:
+            if not self._ui_active():
+                # web UI idle -> release the slot for the phone app; the daemon falls back to brief
+                # cold polls, which coexist with the app far better than a permanently-held link.
+                if self._session is not None:
+                    async with self._ble:
+                        await self._session.aclose()
+                    self._session = None
+                    print("persistent session released (web UI idle)", flush=True)
+                self._session_state = "off"
+                # wake early when a command/poll marks activity, else re-check each interval
+                waiter = asyncio.ensure_future(self._wake_session.wait())
+                try:
+                    await asyncio.wait({waiter}, timeout=self.interval)
+                finally:
+                    waiter.cancel()
+                    self._wake_session.clear()
+                continue
             if self._session is not None and self._session.is_up:
                 await asyncio.sleep(self.interval)
                 continue
@@ -395,7 +434,8 @@ class Server:
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
             print("read-only: refusing command %s/%s" % (function, what), flush=True)
             return None
-        self._nudge_session()   # keep-warm: bring the fast-path session up now if it isn't
+        self._note_ui_activity()   # a command counts as active use -> hold the session
+        self._nudge_session()      # keep-warm: bring the fast-path session up now if it isn't
         # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
@@ -603,8 +643,8 @@ class Server:
                 asyncio.ensure_future(self._supervise_session())
             while True:
                 try:
-                    if self._persistent and self._live_session() is None:
-                        await asyncio.sleep(2)        # supervisor is (re)connecting
+                    if self._persistent and self._session_state == "connecting":
+                        await asyncio.sleep(2)        # supervisor is mid-connect; don't race it cold
                         continue
                     states = await self.poll()
                     print("polled %d functions" % len(states), flush=True)

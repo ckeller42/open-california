@@ -90,6 +90,7 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
     async def _run():
         s._ble = asyncio.Lock()
         s._wake_session = asyncio.Event()          # keep-warm nudge target (never set in this test)
+        s._note_ui_activity()                       # UI active -> supervisor attempts connects (vs idle-release)
         try:
             await s._supervise_session()
         except _Stop:
@@ -366,6 +367,51 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
     result = asyncio.run(_run())
     assert calls["session"] == 1 and calls["dev"] == 0
     assert result is True     # readback State==1 matches "on"
+
+
+def test_ui_active_window():
+    """The session-scoping window: fresh activity -> active; stale or never-used -> idle."""
+    import time
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    assert s._ui_active() is False                      # never used
+    s._note_ui_activity()
+    assert s._ui_active() is True                       # just now
+    s._last_ui_activity = time.time() - (serve._UI_IDLE_S + 5)
+    assert s._ui_active() is False                      # gone idle -> release the slot
+
+
+def test_supervise_releases_session_when_ui_idle(monkeypatch):
+    """App-friendliness: when the web UI is idle, the supervisor RELEASES the held session so the
+    phone app can use the single BLE slot."""
+    import asyncio
+    from calictl import serve
+    s = serve.Server("MO:CK", influx_enabled=False)
+    s._persistent = True
+    s._last_ui_activity = None                          # idle (never used)
+    closed = {"n": 0}
+    class FakeSess:
+        is_up = True
+        async def aclose(self):
+            closed["n"] += 1
+    s._session = FakeSess()
+
+    class _Stop(Exception):
+        pass
+    async def fake_wait(aws, timeout=None):             # stop after the first idle-release
+        raise _Stop
+    monkeypatch.setattr(serve.asyncio, "wait", fake_wait)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._wake_session = asyncio.Event()
+        try:
+            await s._supervise_session()
+        except _Stop:
+            pass
+        return closed["n"], s._session, s._session_state
+    n, sess, state = asyncio.run(_run())
+    assert n == 1 and sess is None and state == "off"   # released, slot freed
 
 
 def test_on_command_nudges_session_when_down(monkeypatch):
