@@ -1,0 +1,53 @@
+calictl/webui/app.js
+  s_a7757c7c919f20::t_58ab5bb5789548 512-513
+  s_a7757c7c919f20::t_92afc3317c3cb7 553-555
+  s_a7757c7c919f20::t_812b2140794ba8 566
+  s_a7757c7c919f20::t_9a5411a5dcefce 613-617,619
+  s_a7757c7c919f20::t_d9667f73d550c5 681
+  s_a7757c7c919f20::t_5a6959e9e3be15 262-264
+  s_a7757c7c919f20::t_f14ab00ec66fb1 122-123,125-131
+  s_a7757c7c919f20::t_cab03767cf15f1 590
+  s_a7757c7c919f20::t_147721fe5dc2ba 47-49
+calictl/webui/app.css
+  s_a7757c7c919f20::t_042747b98a243d 58
+calictl/control.py
+  s_a7757c7c919f20::t_a3f4462a2f5722 148-150
+  s_a7757c7c919f20::t_bd38ec29d07fae 183,185
+  s_a7757c7c919f20::t_e16154c46dfd70 124-136
+calictl/serve.py
+  s_a7757c7c919f20::t_d141a90a661af8 426-433
+tests/e2e/test_gui.py
+  s_a7757c7c919f20::t_efd4e9a03a281d 52
+  s_a7757c7c919f20::t_b1e29885a89447 142-144
+tools/mock_unit.py
+  s_a7757c7c919f20::t_1d6014a1e40892 211-214,217-223
+  s_a7757c7c919f20::t_88cdb9bc97f328 49
+  s_a7757c7c919f20::t_861f04ee535d98 172
+tests/test_calictl.py
+  s_a7757c7c919f20::t_0061880211f548 342-350
+tests/test_lighting_capture.py
+  s_a7757c7c919f20::t_dc9e4fd7986f34 82,86-89
+calictl/semantics.py
+  s_a7757c7c919f20::t_9b4ff9a55a98f5 233
+calictl/cli.py
+  s_a7757c7c919f20::t_4e8a541af86592 9-11
+tests/test_mock_integration.py
+  s_a7757c7c919f20::t_9a93e6e0def81f 119-121,124-125
+  s_a7757c7c919f20::t_a9f69ebc1403b2 9-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "46a5dddc1ef30151dbe4710df7387f6a5a03e2fb",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
