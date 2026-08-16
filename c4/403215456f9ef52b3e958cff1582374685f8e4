@@ -1,0 +1,30 @@
+calictl/control.py
+  s_a7757c7c919f20::t_87ff936cceca45 79-83
+  s_a7757c7c919f20::t_606125a11475df 154-158
+  s_a7757c7c919f20::t_93001535753fa7 190-196,198
+docs/remaining-captures.md
+  s_a7757c7c919f20::t_c97f4941f85626 174-177
+  s_a7757c7c919f20::t_5f16578696ba9a 180-188
+calictl/cli.py
+  s_a7757c7c919f20::t_dfdb4198d1e9cc 9
+tests/test_lighting_capture.py
+  s_a7757c7c919f20::t_3ab944e30cf8b2 82,84-87
+tests/test_calictl.py
+  s_a7757c7c919f20::t_8e1ee46736d3df 337,340-341,344-348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c4403215456f9ef52b3e958cff1582374685f8e4",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
