@@ -60,25 +60,23 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   actuation writes. Actuation is **one-shot arm** — the load latches, so the heartbeat only
   spans the write window (`device.actuate`, held under the `serve` lock). **Verified
   on-device: `cooler` (power/level), `campingmode` (master/lights/usb), and `lighting`
-  (profile + per-zone brightness) actuate for real.**
-  **`lighting` PHYSICAL ACTUATION IS UNVERIFIED — probably does NOT work (owner-confirmed
-  2026-07-18).** ⚠️ Every prior "lighting applies / live-verified kitchen 0→8" claim was
-  **READBACK-based, and the state char is a write-through ECHO**: a SET_BRIGHTNESS is ACKed and the
-  reported value updates to what we sent, so a readback ALWAYS "confirms" — even though the physical
-  lamp does not light. The owner physically checked at the van: the lamps **stay dark**. So do not
-  trust readback as proof of actuation for lighting; only a human seeing the lamp counts.
-  What IS solid (protocol facts, unchanged): our SET_BRIGHTNESS/SET_PROFILE frames are byte-identical
-  to the app's; the per-zone unchanged sentinel is `14`; `ProfileNumber` is hardcoded to `9` like the
-  app (`control.LIGHT_BRIGHTNESS_PROFILE`, `dg/h.java:170` `w(9)`), so the *frame* is correct with the
-  lights off; the `0e00…` follow (`control.LIGHT_COMMIT`, `commit_for(fn)`) is the app's neutral
-  default frame (Mode 0 = `NO_MODE`), which flushes a single write since the app self-applies by
-  streaming frames continuously. What's NOT solved: replicating that streaming/timing well enough to
-  drive the physical load — an OPEN RE gap. To crack it: capture the app physically lighting a lamp
-  and diff vs our frames (`tools/capture_diff.py`), with a PHYSICAL success criterion, not a readback.
-  (Ruled out 2026-07-18 as the cause: persistent session, camping-mode/ignition/battery gates.)
-  The "a profile must be active first" rule was ALSO wrong — it was the echo bug — but that's moot
-  until physical actuation works at all. **`set lighting color` was decompile-inferred but the app
-  exposes no colour control — treat SET_COLOR as unverified/possibly N/A.** Extend via
+  (per-zone brightness + profile) actuate for real.**
+  **`lighting` PHYSICAL ACTUATION CRACKED + photon-verified 2026-08-16.** The missing
+  ingredient was a **REQUEST_CONFIG preamble**: the app opens its Lighting screen by writing
+  `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12, ProfileNumber=13, all zones=14) + the usual
+  `0e00…` commit to `1501` — only in a session where that preamble landed does a later
+  SET_BRIGHTNESS physically drive the lamps (found via iOS HCI capture of the app lighting a
+  lamp, diffed with `tools/capture_diff.py`; verified at the van on Kochen L7: 0→dark, 8→80%,
+  0→dark, owner-watched). Implemented as `control.LIGHT_REQUEST_CONFIG` +
+  `control.preamble_for(fn)`, sent by `device.actuate(..., pre=…)` with a 3 s arm wait
+  (R_LIGHT_PREAMBLE). Brightness is the `dg/i.java` enum, NOT a raw 0-13 scale: 0=OFF,
+  1-10 = 10–100 % in 10 % steps, 11=DEFAULT, 13=NOT_EQUIPPED (read-only marker) —
+  `LIGHT_ON_BRIGHTNESS=10`, settable 0-11, GUI slider max 10 (old code wrote 13 as "on").
+  Truthful feedback: after REQUEST_CONFIG the unit streams Mode-tagged **notifications on
+  `1502`**; after an applied SET it sends Mode-4 "ramp" frames showing the REAL brightness
+  stepping to target. The state-char **readback is still a write-through echo — never proof
+  of actuation**; trust the Mode-4 notifications or a human at the lamp. `set lighting color`
+  (SET_COLOR) remains unverified — the app exposes no colour control. Extend via
   `control.BUILDERS`. See
   `docs/business-logic/control-and-actuation.md` + `protocol-sequences.md`.
 - **Roof sequence settled 2026-07-13 from the decompiled roof class** (needs ignition ON).

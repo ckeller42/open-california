@@ -145,21 +145,55 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
 |---|---|---|---|
 | **cooler** | `power` on/off, `level` 1-5 | ✅ actuates | State 0↔1, Level applied. |
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). |
-| **lighting** | `power` on/off, `brightness` 0-15 | ⚠️ **ACKed, does NOT apply** | Semantic gap, not the arm gate — see below. |
+| **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Needs the REQUEST_CONFIG preamble — see below. |
 | **airheater** | `power`, `level` 0-15 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
 | **roof** | not wired | — | Needs the 1 Hz move-heartbeat loop (§3); not installed here. |
 | roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
 
-**Lighting — ACKs but does nothing; still UNSOLVED.** A `SET_BRIGHTNESS` frame (`Mode=4`) is
-accepted at ATT (no `0x0E`) but the `1502` zone brightnesses don't change under the identical
-heartbeat that actuates cooler/camping — a **lighting-specific gap**. The decompile suggested
-the frame must carry the currently-active ProfileNumber (`dg/h.java:615` sends
-`w10.d.b(k).f5472x`, never 0), so `control._lighting` was changed to echo `1502`'s ProfileNumber.
-**A live sweep 2026-07-08 (`scratchpad/profile_sweep.py`) disproved it**: SET_BRIGHTNESS with
-every ProfileNumber 0–14 was ACKed but changed nothing. So the gate is **not ProfileNumber**;
-leading suspects are `LightValue` (a per-zone enable bitmask, sent as 0 by our frame) or a
-required `SET_PROFILE` preamble — needs an HCI capture of a real in-app brightness change. The
-echo is kept (harmless); `set lighting` reports `NOT APPLIED` honestly.
+**Lighting — SOLVED 2026-08-16: a REQUEST_CONFIG preamble arms physical actuation
+(photon-verified).** The gap's long history, kept because it is instructive RE:
+- **2026-07-07:** SET_BRIGHTNESS (`Mode=4`) ACKed at ATT (no `0x0E`) but nothing changed under
+  the identical heartbeat that actuates cooler/camping — a lighting-specific gap. The
+  ProfileNumber-echo theory (`dg/h.java:615`) was **disproved live 2026-07-08**
+  (`scratchpad/profile_sweep.py`: every ProfileNumber 0–14 ACKed, no change).
+- **2026-07-08/13 captures:** our frames were **byte-identical to the app's** (14 = per-zone
+  leave-unchanged sentinel; `ProfileNumber` hardcoded 9 like `dg/h.java:170` `w(9)`); the
+  `0e00…` neutral follow (`control.LIGHT_COMMIT`) flushes a single write. Readback then
+  "confirmed" the change — but **the `1502` state char is a write-through echo** (owner-checked
+  2026-07-18: lamps stayed dark). Every readback-based "verified" claim was worthless; the
+  physical load never switched. Ruled out: persistent session, camping-mode/ignition/battery
+  gates, "profile must be active first" (that was the echo bug too).
+- **2026-08-16 — the crack.** An iOS HCI capture (idevicebtlogger on the bar Mac) of the app
+  *physically* lighting a lamp, decoded with calictl's own `control.decode_control` and diffed
+  against `control.build` (`tools/capture_diff.py`, the capture-and-diff flow), showed the one
+  thing the app sends that we never did: **on opening its Lighting screen it writes a
+  REQUEST_CONFIG frame** — `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12, ProfileNumber=13, all
+  zones=14) — followed by the usual `0e00…` commit, to control char `1501`. **Only in a BLE
+  session where this preamble has landed does the unit physically drive the lamps on a later
+  SET_BRIGHTNESS.** Without it, SETs are ACKed and echoed but the load never switches.
+- **Photon verification (2026-08-16, buspi, owner at the van):** Kochen lamp (zone L7) driven
+  0 → physically dark, 8 → physically 80 %, 0 → dark again. Human-observed each transition —
+  the only success criterion that counts for lighting.
+- **Truthful feedback channel (new):** after REQUEST_CONFIG the unit streams a **config dump
+  as notifications on `1502`**, frames tagged by Mode: `0x0c` config echo, `0x06` color state,
+  `0x08` SET_DOUBLE, `0x10` profile state (profile 8), `0x14` wake time, `0x18` system time
+  (ticking unix seconds). After an *applied* SET_BRIGHTNESS it notifies **Mode-4 "ramp" frames
+  showing the REAL current brightness stepping to the target** (e.g. 01→03→04→05). These
+  notifications are genuine actuation feedback. The state-char **readback remains a
+  write-through echo and is still not proof of actuation.**
+- **Brightness enum fix (same capture):** values are the `dg/i.java` enum, NOT a raw 0-13
+  scale — 0=OFF, 1-10 = 10 %…100 % in 10 % steps, 11=DEFAULT, 12 unused, 13=NOT_EQUIPPED
+  (read-only marker for absent zones), 14=leave-unchanged sentinel. Our old code wrote 13 as
+  "on"/max — NOT_EQUIPPED garbage. Fixed: `LIGHT_ON_BRIGHTNESS=10`, settable range 0-11, GUI
+  slider max 10. (Capture-confirmed: 50 % app slider = wire `5`.)
+- **Where it lives:** `control.LIGHT_REQUEST_CONFIG` (the frame);
+  `control.preamble_for(function)` returns `[LIGHT_REQUEST_CONFIG, LIGHT_COMMIT]` for
+  lighting; `device.actuate(..., pre=preamble_for(fn))` writes them before the SET with
+  `FOLLOW_DELAY_S` (0.3 s) gaps, then a `PRE_SETTLE_S` (3.0 s, env `CALICTL_PRE_SETTLE_S`) arm
+  wait. All three call sites (serve persistent + cold, cli) pass it. Requirement
+  `R_LIGHT_PREAMBLE` (`control.preamble_for` docstring) ← `T_LIGHT_PREAMBLE`
+  (`tests/test_mock_integration.py`).
+- **Still open:** SET_COLOR on-device apply (the app exposes no colour control — possibly N/A).
 
 **Lighting frame layout** (16 bytes / 128 bits): `ProfileNumber@4/w4`, `Mode@8/w8`
 (4=SET_BRIGHTNESS, 16=SET_PROFILE), `Timestamp@16/w32` (`sg.a()` no-arg, default 0 — part of

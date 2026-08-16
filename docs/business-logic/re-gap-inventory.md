@@ -13,6 +13,11 @@
 > Known state. Also 2026-07-13: roof frames verified (SafetyCounter-echo gap noted); the app
 > exposes **no colour control**, so SET_COLOR is unverified/possibly N/A; the cooler `Error` field
 > tracks the **fridge door** (door open→true, verified live).
+>
+> **UPDATE (2026-08-16):** the 2026-07-13 "resolved" claim above was **readback-based and wrong**
+> (the `1502` state char is a write-through echo; owner-confirmed 2026-07-18 the lamps stayed
+> dark). `A1` is now **RESOLVED for real, photon-verified 2026-08-16** — the missing ingredient
+> was a **REQUEST_CONFIG preamble** (`0d0c…ee`, Mode 12) + commit before the SET. See §A1.
 
 Compiled 2026-07-07 from a three-way decompile audit (BLE protocol, feature/domain
 logic, session/auth/infra), each diffed against the current baseline: `protocol/
@@ -33,7 +38,7 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 
 | # | Gap | Kind | Resolvable now? |
 |---|-----|------|-----------------|
-| ~~1~~ | ~~Lighting SET does not actuate~~ — **SOLVED + live-verified** (14-sentinel + active profile, §A1) | protocol | ✅ done |
+| ~~1~~ | ~~Lighting SET does not actuate~~ — **RESOLVED 2026-08-16, photon-verified** (REQUEST_CONFIG preamble, §A1) | protocol | ✅ done |
 | 3 | MERGED_AMBIGUOUS control offsets — **roof/roofAC/stairs/LR-heater remain** (airheater done) | protocol | **static** |
 | 4 | **1003 counter cadence / firmware disarm timeout** | protocol | needs idle HCI capture |
 | 5 | Lighting **profile/color/wake-timer** notification overlay | protocol | static (enum decode) |
@@ -44,23 +49,36 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 | 10 | UI label *text* — 1882 string KEYS recovered, VALUES in `.cvr` assets (light zone names done) | feature | needs the APK's `.cvr` |
 
 Resolved gaps (chars 1004/1002/sat, airheater offsets, energy scales, EXLAP URLs) and the dated
-changelog are in **[DECISIONS.md](DECISIONS.md)**. (Lighting SET was thought fixed but is NOT —
-§A1.)
+changelog are in **[DECISIONS.md](DECISIONS.md)**. (Lighting SET: twice thought fixed on readback
+evidence, finally photon-verified 2026-08-16 — §A1.)
 
 ---
 
 ## A. BLE protocol / control gaps
 
-### A1 — Lighting SET — SOLVED + live-verified (HCI capture 2026-07-08)
-Two things our static guesses got wrong, both nailed by the owner's HCI capture of the app:
-(1) unchanged zones carry **`14` (0xe) = leave-unchanged**, NOT 0; (2) a profile must be
-**ACTIVE** (the earlier ProfileNumber sweep failed only because it *also* zeroed the zones).
-**Recipe (verified on buspi):** `set lighting profile 9` to activate profile "A", then
-`set lighting <zone> <0-13>` — the zone applies; every other zone = 14. Profile switch = Mode
-16. calictl reproduces the app byte-for-byte. `control._lighting` rewritten (14-sentinel,
-per-zone / all / power / profile grammar, `LIGHT_ZONES` map). See DECISIONS.md 2026-07-08.
-**Still open (need more captures):** SET_COLOR, Wecklicht wake-light, the Alle-Lichter master
-frame, the full 16-zone→lamp map (~6 confirmed), and the profile-number semantics (A=9).
+### A1 — Lighting SET — RESOLVED 2026-08-16 (REQUEST_CONFIG preamble, photon-verified)
+**The physical-actuation gap is closed.** The missing ingredient — found by an iOS HCI capture
+of the app *physically* lighting a lamp, diffed via `tools/capture_diff.py` — is a
+**REQUEST_CONFIG preamble**: the app opens its Lighting screen with
+`0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12, ProfileNumber=13, all zones=14) + the `0e00…`
+commit on `1501`; only in a session where that landed does a later SET_BRIGHTNESS drive the
+lamps (otherwise: ACKed + echoed, load never switches). Photon-verified on Kochen L7
+(0→dark, 8→80 %, 0→dark, owner-watched). Bonus: after REQUEST_CONFIG the unit streams a
+Mode-tagged config dump + Mode-4 brightness-ramp **notifications on `1502`** — the first
+truthful feedback channel (the state-char readback remains a write-through echo). Brightness
+is the `dg/i.java` enum (0=OFF, 1-10=10–100 %, 11=DEFAULT, 13=NOT_EQUIPPED, 14=unchanged),
+not a raw 0-13 scale. Full story + implementation (`control.preamble_for`,
+`device.actuate(..., pre=…)`, `R_LIGHT_PREAMBLE`): **`control-and-actuation.md` §4**.
+
+Earlier layers of this gap (kept for history): the 2026-07-08 capture nailed the 14-sentinel
+(unchanged zones = `14`, NOT 0) and Mode-16 profile switch; the "profile must be ACTIVE" rule
+later proved to be the state-char echo bug (the real frame rule is hardcoded PN=9,
+`dg/h.java:170`); the 2026-07-13 `0e00…` commit frame is necessary but was NOT sufficient —
+both "solved" declarations before 2026-08-16 rested on readback, which this unit's echo makes
+worthless as proof.
+**Still open (need more captures):** SET_COLOR (app exposes no colour control — possibly N/A),
+Wecklicht wake-light, the Alle-Lichter master frame, the rest of the 16-zone→lamp map, and the
+profile-number semantics (A=9).
 
 ### A2 — chars 1004 / 1002 / satellite 1903–1905 (RESOLVED; open leads)
 1004 modeled; **1002 = `SHA-256(VIN)[16:32]`**; sat chars 1903–1905 mapped — detail + citations

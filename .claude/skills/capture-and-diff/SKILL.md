@@ -18,8 +18,14 @@ after the pcap is automated.
 ## The loop
 
 1. **Sniff the app↔van BLE session.** Two options:
-   - **iOS** (used for the 1003 discovery), on the bar Mac (Tailscale, see [[laptop-bar-tailscale]]):
-     `idevicebtlogger -f /tmp/cali.pklg` while the phone is plugged in; open the app and perform
+   - **iOS** (used for the 1003 discovery), on the bar Mac (Tailscale hostname `bar`, NOT
+     `laptop-bar`; see [[laptop-bar-tailscale]]). All tools are **MacPorts** at
+     `/opt/local/bin` (NOT Homebrew, and not on the default ssh PATH — use
+     `export PATH=/opt/local/bin:$PATH` or absolute paths): `idevicebtlogger`, `tshark`
+     (wireshark4 +no_gui), `idevice_id`. GUI PacketLogger also exists at
+     `/Applications/Utilities/PacketLogger.app` (Xcode installed).
+     Plug the phone in via USB, tap Trust, confirm `idevice_id -l` lists it, then
+     `idevicebtlogger -f /tmp/cali.pklg`; open the app and perform
      the ONE labelled action (e.g. set the Kitchen zone to 50%), then stop. Convert to pcap if
      needed: `tshark -r /tmp/cali.pklg -w /tmp/cali.pcapng`.
    - **Android/Linux**: enable Bluetooth HCI snoop log (Developer Options) or `btmon -w
