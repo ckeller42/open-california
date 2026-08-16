@@ -1,0 +1,47 @@
+docs/remaining-captures.md
+  s_a7757c7c919f20::t_c71824d1eb2d1d 42-49
+  s_a7757c7c919f20::t_6e53550326a040 121
+  s_a7757c7c919f20::t_2371f8f5438484 163-179
+calictl/webui/screens.json
+  s_a7757c7c919f20::t_d77ada09780f6a 272,338,625,645
+CLAUDE.md
+  s_a7757c7c919f20::t_d174148e155a37 4-6
+docs/business-logic/DECISIONS.md
+  s_a7757c7c919f20::t_959725b27baee4 11-39,42-48
+  s_a7757c7c919f20::t_a702a4913bfe78 49
+docs/sphinx/protocol-sequences.rst
+  s_a7757c7c919f20::t_d580e85eded6e5 176-180
+  s_a7757c7c919f20::t_4100108b4f7edd 8-15
+  s_a7757c7c919f20::t_8d71ee6fed866d 105-106,108,110-122,125-140,146,148,150-155
+ui/screens/lighting.yaml
+  s_a7757c7c919f20::t_9f8a729371ac94 37,40
+  s_a7757c7c919f20::t_bf4dfc7d182a01 138
+ui/screens/water.yaml
+  s_a7757c7c919f20::t_6d6f54c927c90b 46,49
+  s_a7757c7c919f20::t_537899502edfd0 18,21
+docs/business-logic/value-freshness.md
+  s_a7757c7c919f20::t_f7d3e559dcc334 12-23
+docs/business-logic/re-gap-inventory.md
+  s_a7757c7c919f20::t_018fcd35d623d5 312-314
+  s_a7757c7c919f20::t_e5d6b1a835d41a 173-175
+  s_a7757c7c919f20::t_837968583c7f6d 292-293
+docs/sphinx/api.rst
+  s_a7757c7c919f20::t_2a9d712f8c0607 46
+  s_a7757c7c919f20::t_adb7c1a7c7a25a 54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0c414f4b641cab770f0a31e08cdb9733b34c5aba",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
