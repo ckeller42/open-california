@@ -334,7 +334,7 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
     calls = {"session": 0, "dev": 0}
     class FakeSession:
         is_up = True
-        async def actuate(self, func, frame, *, follow=None, verify=True):
+        async def actuate(self, func, frame, *, follow=None, verify=True, pre=None):
             calls["session"] += 1
             return {"State": 1, "Level": 3, "Mode": 4, "Installed": 1}
     async def dev_actuate(*a, **k):

@@ -253,7 +253,7 @@ async function processQueue() {
   const done = inflight;
   inflight = null;
   if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
-  else if (res && res.ok) toast("Sent — the unit didn't apply it (known gap)", "warn");
+  else if (res && res.ok) toast("Sent — the unit didn't confirm it", "warn");
   else toast("Command failed" + (res && res.error ? `: ${res.error}` : ""), "error");
   // drop the optimistic value only if no newer change for this control is still queued
   if (!queue.some((c) => c.key === done.key)) delete optimistic[done.key];
@@ -550,25 +550,23 @@ const LIGHT_LAMPS = [
     { label: "Right", what: "reading-2", zone: 1 },
     { label: "Passenger", what: "reading-3", zone: 4 } ] },
   { group: "Kitchen", lamps: [
-    { label: "Ambient", what: "kitchen-ambient", zone: 5, hint: "unverified" },
+    { label: "Ambient", what: "kitchen-ambient", zone: 5 },
     { label: "Cooking", what: "kitchen", zone: 7 } ] },
   { group: "Pop-roof", lamps: [
     { label: "Ambient", what: "roof-ambient", zone: 8 },
     { label: "Reading", what: "roof-reading", zone: 6, hint: "roof open only · unverified" } ] },
   { group: "Outside", lamps: [{ label: "Rear", what: "outside-rear", zone: 3 }] },
 ];
-const LIGHT_MAX = 13;   // brightness 0..13 (14 = the leave-unchanged sentinel)
+const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NOT_EQUIPPED — never send)
 
 function renderLighting(s) {
   titleEl.textContent = "Lighting";
-  // Honesty banner: physical actuation is UNVERIFIED (owner-confirmed lamps stay dark). The state
-  // char is a write-through ECHO, so a readback ALWAYS "confirms" a change even when no lamp lit —
-  // the sliders below may not drive the real load. Persistent (not just the post-write toast) so the
-  // caveat is visible BEFORE the user drags anything. See docs/business-logic/control-and-actuation.md.
-  const cav = document.createElement("div"); cav.className = "caveat";
-  cav.textContent = "⚠ Lighting control is unverified — the unit echoes commands back, so a slider "
-    + "may look applied while the lamp stays dark. Treat these as best-effort, not confirmed.";
-  app.appendChild(cav);
+  // Actuation was photon-verified 2026-08-16 (REQUEST_CONFIG preamble crack) — the old
+  // "unverified" caveat banner is retired. Each command now carries the arming preamble,
+  // so a lighting write takes a few seconds longer than other controls; say so.
+  const nb = document.createElement("div"); nb.className = "note";
+  nb.textContent = "Lamp commands take a few seconds — each write arms the unit first.";
+  app.appendChild(nb);
   // Lamps are ALWAYS controllable, like the app: dragging a lamp sends a SET_BRIGHTNESS that
   // self-carries the working profile (control.LIGHT_BRIGHTNESS_PROFILE=9), so there is no
   // "activate a profile first" step — the old gate was a workaround for our echoing PN=0.

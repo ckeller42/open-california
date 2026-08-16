@@ -406,10 +406,12 @@ class Server:
             sess = self._live_session()
             if sess is not None:
                 post = await sess.actuate(self.funcs[function], frame, verify=True,
-                                          follow=control.commit_for(function))
+                                          follow=control.commit_for(function),
+                                          pre=control.preamble_for(function))
             else:
                 post = await self.dev.actuate(self.funcs[function], frame, verify=True,
-                                              follow=control.commit_for(function))
+                                              follow=control.commit_for(function),
+                                              pre=control.preamble_for(function))
             if post is None:
                 return None
             self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
