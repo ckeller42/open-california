@@ -443,11 +443,17 @@ class Server:
             is_light = function == "lighting"
             pre = None if is_light else control.preamble_for(function)
             target = sess if sess is not None else self.dev
+            # Snapshot the 1502 notification BEFORE the write: the unit's Mode-4 ramp push arrives
+            # within the ~0.3 s write window, so a snapshot taken afterwards would already contain it
+            # and look stale -> the confirm would miss it.
+            before = None
+            if is_light and getattr(sess, "_notif", None) is not None:
+                before = sess._notif.get(str(self.funcs[function].state_char).lower())
             post = await target.actuate(self.funcs[function], frame,
                                         verify=not is_light,
                                         follow=control.commit_for(function), pre=pre)
             if is_light:
-                return await self._confirm_lighting(sess, function, what, value)
+                return await self._confirm_lighting(sess, function, what, value, before)
             if post is None:
                 return None
             self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
@@ -457,16 +463,16 @@ class Server:
                 return None
             return got == want
 
-    async def _confirm_lighting(self, sess, function, what, value):
+    async def _confirm_lighting(self, sess, function, what, value, before):
         """Confirm a fast lighting write from the unit's real 1502 Mode-4 notification.
 
         The SET + commit already went out (bare frame, no arm, no preamble); the lamp reacts in
-        ~0.3 s. Wait briefly (``CALICTL_FAST_CONFIRM_S``) for a fresh state-char push — the Mode-4
-        ramp notification carries the REAL brightness, unlike the write-through echo readback —
-        update the served cache from it and report applied-ness. Returns ``True`` on a matching
-        notification, else ``None`` (optimistic "sent"); never a false negative for lighting. No
-        live session or no push -> ``None`` (the cold path can't cheaply confirm; the next poll
-        reconciles).
+        ~0.3 s. Wait briefly (``CALICTL_FAST_CONFIRM_S``) for a state-char push newer than
+        ``before`` (snapshotted before the write) — the Mode-4 ramp notification carries the REAL
+        brightness, unlike the write-through echo readback — update the served cache from it and
+        report applied-ness. Returns ``True`` on a matching notification, else ``None`` (optimistic
+        "sent"); never a false negative for lighting. No live session or no push -> ``None`` (the
+        cold path can't cheaply confirm; the next poll reconciles).
         """
         from .cli import _set_check   # lazy
         f = self.funcs[function]
@@ -474,7 +480,6 @@ class Server:
         if notif is None:
             return None
         key = str(f.state_char).lower()
-        before = notif.get(key)
         deadline = time.monotonic() + _FAST_CONFIRM_S
         while time.monotonic() < deadline:
             cur = notif.get(key)
