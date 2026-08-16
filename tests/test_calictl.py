@@ -480,3 +480,10 @@ def test_water_stale_latch_guard():
     assert freshness.implausible_water_drop(w(17, 1), w(17, 1)) is False
     # missing levels -> can't judge -> not flagged
     assert freshness.implausible_water_drop({"fresh": {"liters": None}}, w(17, 1)) is False
+    # grey FELL (tank emptied at a dump station) -> the unit is live-measuring -> the fresh drop is
+    # real, NOT the latch. Regression: `ng <= pg` classified any grey fall as "frozen", so after a
+    # real grey dump every subsequent genuine reading re-latched and the hold WEDGED for a month
+    # (live evidence 2026-08-16: unit fresh 0 L/waste 2 L vs a held July-18 baseline 10 L/9 L).
+    assert freshness.implausible_water_drop(w(0, 2), w(10, 9)) is False
+    # grey fall alone (fresh flat) was never a latch candidate; still plausible
+    assert freshness.implausible_water_drop(w(10, 2), w(10, 9)) is False

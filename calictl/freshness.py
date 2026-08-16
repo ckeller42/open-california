@@ -29,9 +29,10 @@ def implausible_water_drop(new: dict, prev: dict) -> bool:
     """True when ``new``'s fresh-water drop looks like the parked latch, not real usage.
 
     The discriminator is whether the GREY tank moved, NOT conservation of mass. The unit freezes
-    both tanks when unpowered, so a fresh drop while grey is frozen is the latch signature (hold the
-    last plausible value). Any grey rise proves the unit is live-measuring, so the fresh drop is
-    real — even when fresh falls faster than grey fills (drinking/cooking/an external grey drain).
+    both tanks when unpowered, so a fresh drop while grey is EXACTLY frozen is the latch signature
+    (hold the last plausible value). Any grey movement — rise (usage) or fall (a dump-station
+    drain) — proves the unit is live-measuring, so the fresh drop is real, even when fresh falls
+    faster than grey fills (drinking/cooking/an external grey drain).
     A non-drop (refill / same / re-measure) is always plausible. Missing fresh returns False (can't
     judge); a fresh drop we can't corroborate with grey is treated as the latch (conservative — the
     parked-decay ratchet this prevents is worse than briefly holding a real drop, which self-clears
@@ -46,9 +47,10 @@ def implausible_water_drop(new: dict, prev: dict) -> bool:
        :status: implemented
        :tags: water, freshness, ui
 
-       The daemon shall treat a fresh-water drop while the grey tank is frozen as the stale latch
-       (the unit freezes both tanks when the water system is off) and keep displaying the last
-       plausible reading; a fresh drop accompanied by any grey rise is real usage and is shown.
+       The daemon shall treat a fresh-water drop while the grey tank is EXACTLY frozen as the
+       stale latch (the unit freezes both tanks when the water system is off) and keep displaying
+       the last plausible reading; a fresh drop accompanied by any grey movement (rise or fall) is
+       a live measurement and is shown.
     """
     nf, pf = _liters(new, "fresh"), _liters(prev, "fresh")
     if nf is None or pf is None:
@@ -58,4 +60,8 @@ def implausible_water_drop(new: dict, prev: dict) -> bool:
     ng, pg = _liters(new, "waste"), _liters(prev, "waste")
     if ng is None or pg is None:
         return True                     # fresh dropped, grey unknown -> can't corroborate -> latch
-    return ng <= pg                     # grey frozen/fell -> latch; grey rose -> live measurement
+    return ng == pg                     # grey EXACTLY frozen -> latch; ANY grey movement (rise OR
+                                        # fall, e.g. a dump-station drain) -> live measurement.
+                                        # `<=` here wedged the hold for a month after a real grey
+                                        # dump: every genuine post-dump reading re-latched because
+                                        # grey sat below the pre-dump baseline (fixed 2026-08-16).
