@@ -355,6 +355,43 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
     assert result is True     # readback State==1 matches "on"
 
 
+def test_on_command_lighting_is_fast_path_confirmed_by_notification(monkeypatch):
+    """Lighting takes the fast path: NO preamble, NO blocking readback (verify=False); the write
+    returns immediately and applied-ness comes from the unit's real 1502 Mode-4 notification."""
+    import asyncio
+    from calictl import serve, protocol, overrides
+    funcs = protocol.load(); overrides.apply(funcs)
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._last = {"lighting": {"ProfileNumber": 9}}      # non-empty -> skip the cold-cache read
+    key = str(funcs["lighting"].state_char).lower()
+    # a genuine Mode-4 state notification captured on-device: BrightnessLSeven (Kitchen/L7) = 8
+    fresh = bytes.fromhex("090400000000000000000508d00ddddd")
+
+    seen = {}
+    class FakeSession:
+        is_up = True
+        _notif = {}
+        async def actuate(self, func, frame, *, follow=None, verify=True, pre=None):
+            seen["verify"], seen["pre"], seen["follow"] = verify, pre, follow
+            async def push():                          # the unit's Mode-4 arrives shortly after
+                await asyncio.sleep(0.02)
+                self._notif[key] = fresh
+            asyncio.ensure_future(push())
+            return None
+    s._session = FakeSession()
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "kitchen", 8)
+    result = asyncio.run(_run())
+    assert seen["pre"] is None            # no REQUEST_CONFIG preamble on the fast path
+    assert seen["verify"] is False        # no blocking echo-readback
+    assert result is True                 # confirmed by the real Mode-4 notification (L7 == 8)
+    assert s._last["lighting"]["BrightnessLSeven"] == 8   # served state updated from the push
+
+
 # --- web UI start is optional: a bind failure must not crash the daemon ---
 
 def test_maybe_start_web_none_when_no_port():

@@ -20,6 +20,10 @@ from pathlib import Path
 from . import protocol, semantics, overrides, mqtt, influx, freshness, history
 from .device import CamperDevice, ConnectionUnavailable
 
+# How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
+# an optimistic "sent" (the lamp itself already reacted; this only bounds the UI confirm latency).
+_FAST_CONFIRM_S = float(os.environ.get("CALICTL_FAST_CONFIRM_S", "1.2"))
+
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
 
 
@@ -408,14 +412,20 @@ class Server:
             if frame is None:
                 return None
             sess = self._live_session()
-            if sess is not None:
-                post = await sess.actuate(self.funcs[function], frame, verify=True,
-                                          follow=control.commit_for(function),
-                                          pre=control.preamble_for(function))
-            else:
-                post = await self.dev.actuate(self.funcs[function], frame, verify=True,
-                                              follow=control.commit_for(function),
-                                              pre=control.preamble_for(function))
+            # Lighting actuates from a bare SET on an awake unit (photon-verified 2026-08-16), so
+            # the fast path drops the two things that made it slow: the REQUEST_CONFIG preamble
+            # (not an actuation gate — the app's E() writes DIRECT and never sends it) and the
+            # blocking echo-readback. The lamp reacts in ~0.3 s; confirmation comes from the real
+            # 1502 Mode-4 notification, not the write-through echo. cooler/roof keep the armed +
+            # verified path (their heartbeat gate, issue #2, is untouched).
+            is_light = function == "lighting"
+            pre = None if is_light else control.preamble_for(function)
+            target = sess if sess is not None else self.dev
+            post = await target.actuate(self.funcs[function], frame,
+                                        verify=not is_light,
+                                        follow=control.commit_for(function), pre=pre)
+            if is_light:
+                return await self._confirm_lighting(sess, function, what, value)
             if post is None:
                 return None
             self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
@@ -423,15 +433,37 @@ class Server:
             _, got, want = _set_check(function, what, value, interp, post)
             if got is None and want is None:   # no table entry for this target
                 return None
-            if function == "lighting":
-                # the lighting state char is a write-through ECHO — a matching readback proves
-                # only that the frame arrived, never that the lamp lit (CLAUDE.md, 2026-08-16).
-                # An echo MISMATCH is still a real failure (link/refusal), so report False; a
-                # match is honestly "unknown". Upgrading to real verification needs the 1502
-                # Mode-4 ramp-notification layout decoded first (it differs from the control
-                # frame layout) — an open RE task.
-                return None if got == want else False
             return got == want
+
+    async def _confirm_lighting(self, sess, function, what, value):
+        """Confirm a fast lighting write from the unit's real 1502 Mode-4 notification.
+
+        The SET + commit already went out (bare frame, no arm, no preamble); the lamp reacts in
+        ~0.3 s. Wait briefly (``CALICTL_FAST_CONFIRM_S``) for a fresh state-char push — the Mode-4
+        ramp notification carries the REAL brightness, unlike the write-through echo readback —
+        update the served cache from it and report applied-ness. Returns ``True`` on a matching
+        notification, else ``None`` (optimistic "sent"); never a false negative for lighting. No
+        live session or no push -> ``None`` (the cold path can't cheaply confirm; the next poll
+        reconciles).
+        """
+        from .cli import _set_check   # lazy
+        f = self.funcs[function]
+        notif = getattr(sess, "_notif", None)
+        if notif is None:
+            return None
+        key = str(f.state_char).lower()
+        before = notif.get(key)
+        deadline = time.monotonic() + _FAST_CONFIRM_S
+        while time.monotonic() < deadline:
+            cur = notif.get(key)
+            if cur is not None and cur is not before:          # a fresh push arrived
+                decoded = protocol.decode(f, cur)
+                self._last = {**self._last, function: decoded}  # atomic rebind (web thread reads unlocked)
+                interp = semantics.interpret(function, decoded)
+                _, got, want = _set_check(function, what, value, interp, decoded)
+                return True if (got is not None and got == want) else None
+            await asyncio.sleep(0.05)
+        return None
 
     def _maybe_start_mqtt(self, loop):
         """Connect the MQTT client for Home Assistant, or skip gracefully. Returns the client

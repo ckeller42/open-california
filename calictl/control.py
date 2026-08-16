@@ -454,22 +454,28 @@ LIGHT_REQUEST_CONFIG = bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee")
 
 
 def preamble_for(function):
-    """The arm/preamble frames a function needs BEFORE a SET, or None. Lighting is the only
-    one: :data:`LIGHT_REQUEST_CONFIG` + :data:`LIGHT_COMMIT`, mirroring the app's screen-open
-    handshake. Callers pass this as ``device.actuate(..., pre=preamble_for(fn))``.
+    """The app's optional screen-open config-request frames, or None. Lighting is the only one:
+    :data:`LIGHT_REQUEST_CONFIG` + :data:`LIGHT_COMMIT`, mirroring what the app writes when its
+    Lighting screen opens. Callers may pass this as ``device.actuate(..., pre=preamble_for(fn))``.
+
+    NOT an actuation gate. Photon-verified on-device 2026-08-16: a bare ``SET_BRIGHTNESS`` +
+    commit actuates an awake unit with no preamble (the app's ``dg/h.java`` ``E()`` writes DIRECT
+    and never sends it; the earlier "preamble required" result was a wake-state confound). The
+    daemon's fast lighting path omits it; the CLI still sends it (harmless — it also pulls a fresh
+    config dump on the 1502 notifications).
 
     :param function: the function name (e.g. ``"lighting"``).
     :returns: list of frames to write (in order) before the SET frame, or ``None``.
 
-    .. req:: Arm lighting with the REQUEST_CONFIG preamble
+    .. req:: The lighting REQUEST_CONFIG preamble is an optional config pull, not an actuation gate
        :id: R_LIGHT_PREAMBLE
        :status: implemented
        :tags: control, lighting
 
-       For lighting, ``calictl`` shall write :data:`LIGHT_REQUEST_CONFIG` (Mode=12) followed by
-       :data:`LIGHT_COMMIT` before a SET_BRIGHTNESS/SET_PROFILE frame; the unit physically
-       applies brightness only in a session where this preamble has landed (capture-diffed
-       against the app and photon-verified on-device 2026-08-16).
+       ``preamble_for`` shall return :data:`LIGHT_REQUEST_CONFIG` + :data:`LIGHT_COMMIT` for
+       lighting (None otherwise), replicating the app's screen-open config request. Actuation
+       shall NOT depend on it: a bare SET + commit applies on an awake unit (photon-verified
+       2026-08-16), so the daemon's fast path omits it.
     """
     return [LIGHT_REQUEST_CONFIG, LIGHT_COMMIT] if function == "lighting" else None
 

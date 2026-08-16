@@ -571,12 +571,10 @@ const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NO
 
 function renderLighting(s) {
   titleEl.textContent = "Lighting";
-  // Actuation was photon-verified 2026-08-16 (REQUEST_CONFIG preamble crack) — the old
-  // "unverified" caveat banner is retired. Each command now carries the arming preamble,
-  // so a lighting write takes a few seconds longer than other controls; say so.
-  const nb = document.createElement("div"); nb.className = "note";
-  nb.textContent = "Lamp commands take a few seconds — each write arms the unit first.";
-  app.appendChild(nb);
+  // Actuation is photon-verified (2026-08-16): a bare SET+commit drives the lamps on an awake
+  // unit, so the daemon's fast path skips the arm/preamble and lamps respond in well under a
+  // second (like the app). No latency caveat needed; the command confirms from the 1502 Mode-4
+  // notification ("✓ Applied") or falls back to "Sent — check the lamp".
   // Lamps are ALWAYS controllable, like the app: dragging a lamp sends a SET_BRIGHTNESS that
   // self-carries the working profile (control.LIGHT_BRIGHTNESS_PROFILE=9), so there is no
   // "activate a profile first" step — the old gate was a workaround for our echoing PN=0.
