@@ -1,8 +1,9 @@
 # open-california — project guide for Claude
 
 Reverse-engineered control + monitoring for the **VW California T7 Camper Unit** over
-BLE (own-vehicle interoperability). Reads all vehicle telemetry; control *writes* are
-blocked by a firmware gate (see below). Runs on a Raspberry Pi (`buspi`), feeding
+BLE (own-vehicle interoperability). Reads all vehicle telemetry; control *writes* work —
+armed by the 1003 liveness heartbeat, solved 2026-07-07 (see Known state). Runs on a
+Raspberry Pi (`buspi`), feeding
 **Home Assistant** (MQTT) and **Grafana** (InfluxDB).
 
 ## Layout

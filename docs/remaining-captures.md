@@ -39,8 +39,14 @@ The only thing left is proving **calictl itself** can drive it:
 
 ---
 
-> **STATUS 2026-07-13 (captures done):** **P1 lighting-apply CRACKED + FIXED** (commit frame
-> `0e00…`; live-verified via readback). **Roof sequence SETTLED from the decompiled roof class**
+> **STATUS 2026-07-13 (captures done, lighting claim later corrected):** ~~P1 lighting-apply
+> CRACKED + FIXED (commit frame `0e00…`; live-verified via readback)~~ — **that "verification"
+> was readback-only and WRONG** (the `1502` state char is a write-through echo; the lamps stayed
+> dark, owner-confirmed 2026-07-18). **P1 was cracked for real 2026-08-16**: a capture of the app
+> *physically* lighting a lamp showed the missing **REQUEST_CONFIG preamble** (`0d0c…ee`,
+> Mode=12, PN=13) + `0e00…` commit on `1501` before the SET — photon-verified on Kochen L7
+> (0→dark, 8→80 %, 0→dark). See `control-and-actuation.md` §4.
+> **Roof sequence SETTLED from the decompiled roof class**
 > (open `0x01`/stop `0x00`/close `0x04`; **press-and-hold** move stream, **app-generated monotonic
 > SafetyCounter ~+1/500 ms**, unit self-gates the first **~3 s** via `SafetyCounterValid` (`1402`
 > bit 7) — NO 4 s countdown, NO STOP-hold phase — see `protocol-sequences.md` §3). SET_COLOR is
@@ -112,7 +118,7 @@ Run the **known-good validators FIRST** (must diff to zero — proves the pipeli
 |---|---|---|---|
 | a | Camping Mode ON | `campingmode/master-on` | zero diff |
 | b | Cooler power ON | `cooler/power-on` | zero diff |
-| c | **Kitchen lamp → 5** (profile active) | `lighting/kitchen-50` | zero diff (P1 crack confirmed 2026-07-13) |
+| c | **Kitchen lamp → 5** | `lighting/kitchen-50` | zero diff (P1 crack photon-verified 2026-08-16) |
 | d | ~~Set light colour → red~~ | ~~`lighting/color-red`~~ | **N/A — app exposes no colour control** |
 | e | Switch to profile 9 | `lighting/profile-9` | zero diff |
 
@@ -154,14 +160,23 @@ ever drive the roof from calictl. Roof writes are `CONFIRM_REQUIRED` and NOT-LIV
 (Live data 2026-07-13 confirmed the van reports `roof` **installed**, so this is a real, capturable
 feature on this vehicle — unlike the uninstalled gear below.)
 
-## Priority 1 — the lighting-apply gap (unlocks the MOST)
-Our lighting frames ACK but the zones don't visibly change (`re-gap A1`). Cracking this unlocks
-**all lamp control + colour + profile authoring** at once.
-- With the app: **activate a profile, then change ONE lamp's brightness** (e.g. kitchen 0→8).
-- Then **change a colour** (SET_COLOR) and **edit/create a favorite profile**.
-- I diff the app's real writes against `control._lighting` (SET_BRIGHTNESS / SET_COLOR=Mode 6 /
-  SET_PROFILE) to find what it carries that we don't — likely a `LightValue`/SET_PROFILE preamble.
-  Also confirms `SET_COLOR` (now wired) and the `WAKEUP_TIME` packing.
+## Priority 1 — the lighting-apply gap (RESOLVED 2026-08-16, photon-verified)
+~~Our lighting frames ACK but the zones don't visibly change (`re-gap A1`).~~ **Cracked exactly
+this way**: a 2026-08-16 capture of the app *physically* lighting a lamp, diffed with
+`tools/capture_diff.py`, showed the app opens its Lighting screen with a **REQUEST_CONFIG
+preamble** (`0d0c000000000000eeeeeeeeeeeeeeee`, Mode=12, PN=13) + the `0e00…` commit on `1501`;
+only in a session where that landed does a SET_BRIGHTNESS drive the real lamps. Photon-verified
+on Kochen L7 (0→dark, 8→80 %, 0→dark, owner-watched) — the moral stands: **only a human seeing
+the lamp counts; readback of `1502` is a write-through echo.** See `control-and-actuation.md` §4
++ `re-gap-inventory.md` §A1.
+
+**Remaining lighting capture targets:**
+- The app's **"Alle Lichter" master frame** — presumably SET_PROFILE with profile 12=LIGHTS_ON /
+  0=LIGHTS_OFF (`dg/l.java`), but **uncaptured**.
+- **SET_COLOR apply** — the app exposes no colour control (possibly N/A); a colour frame has
+  never been captured.
+- **The `1502` Mode-4 ramp-notification layout** — the truthful actuation-feedback channel found
+  2026-08-16 (real brightness stepping to the target); its layout is not yet decoded.
 
 ## Priority 2 — can buspi hold a persistent session? (continuous data)
 Van awake, **phone app closed**, on buspi:

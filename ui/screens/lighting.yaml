@@ -34,10 +34,10 @@ widgets:
   - id: profileSelector
     type: drawer
     label_key: lighting_mainSection_profile_text
-    range: "0..63"
+    range: "0..14"
     controls: {field: ProfileNumber, action: SET_PROFILE}
     elements: [LIGHTING_PROFILE_EMPTY_DIALOG, lighting_noAreaChosen_headline, lighting_noAreaChosen_text]
-    constraints: "ProfileNumber is a 4-bit field (offset 4, width 4). The eg/a.java `sg.a(14, 6)` was misread: 14 is the initial VALUE, 6 is the type code = 4-bit width (matches dictionary.yaml). Profiles 0-14 (dg/l.java): 0=LIGHTS_OFF, 1-7=FAVORITE, 8=DOOR_CONTACT, 9=LIVE_VIEW, 10=WAKEUP_LIGHT, 11=INTERIOR_LIGHT, 12=LIGHTS_ON, 13=DEFAULT, 14=INIT. NOTE a SET_BRIGHTNESS frame must ECHO the currently-active ProfileNumber read from 1502, not 0 (re-gap §A1)."
+    constraints: "ProfileNumber is a 4-bit field (offset 4, width 4). The eg/a.java `sg.a(14, 6)` was misread: 14 is the initial VALUE, 6 is the type code = 4-bit width (matches dictionary.yaml). Profiles 0-14 (dg/l.java): 0=LIGHTS_OFF, 1-7=FAVORITE, 8=DOOR_CONTACT, 9=LIVE_VIEW, 10=WAKEUP_LIGHT, 11=INTERIOR_LIGHT, 12=LIGHTS_ON, 13=DEFAULT, 14=INIT. NOTE a SET_BRIGHTNESS frame carries ProfileNumber hardcoded to 9, like the app (dg/h.java:170 w(9)) — the earlier 'must echo the active ProfileNumber read from 1502' rule was our own echo-readback bug (re-gap §A1, resolved 2026-08-16)."
 
   - id: sectionInteriorLighting_gc
     type: section
@@ -135,7 +135,7 @@ widgets:
   - id: zoneBrightnessSlider
     type: slider
     label_key: lighting_dimValue_general_text
-    range: "0..63"
+    range: "0..11 settable (4-bit dg/i.java enum: 0=OFF, 1-10=10..100% in 10% steps, 11=DEFAULT; 13=NOT_EQUIPPED read-only, 14=leave-unchanged sentinel — capture-confirmed 2026-08-16, 'on'=10)"
     controls: {field: "BrightnessLOne..BrightnessLOneSix (per selected zone, index-to-area mapping UNVERIFIED)", action: SET_BRIGHTNESS}
     elements: null
     constraints: "Per-zone brightness slider shown when a SectionLight row is expanded/tapped; long-press behavior: lighting_pleasePressAndHold_headline / lighting_pleasePressAndHold_text."

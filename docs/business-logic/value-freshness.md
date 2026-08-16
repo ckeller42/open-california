@@ -9,9 +9,18 @@
 > tracked the true level **live** (19→18→17 L, grey 0→1 L, matching the panel within the poll lag).
 > So the 2026-07-09 "heartbeat → 1→11 L" was **correlation** (the van was active then), not cause.
 > buspi is a faithful mirror; the unit simply stops measuring water when parked. We can't force a
-> measurement, so `calictl/freshness.py::implausible_water_drop` rejects the physically-impossible
-> latched drop (fresh ↓ with no grey ↑) and the daemon holds the last plausible reading, flagged
-> **stale** (forecast suppressed). See `[[value-freshness-heartbeat]]` memory + `R_WATER_STALE_GUARD`.
+> measurement, so `calictl/freshness.py::implausible_water_drop` rejects the latched drop — the
+> latch signature is a fresh ↓ while grey is **EXACTLY frozen** (the unit freezes both tanks when
+> unpowered); **any** grey movement (rise *or* fall) proves a live measurement — and the daemon
+> holds the last plausible reading, flagged **stale** (forecast suppressed). See
+> `[[value-freshness-heartbeat]]` memory + `R_WATER_STALE_GUARD`.
+>
+> **FIX 2026-08-16 (the `<=` wedge):** the guard originally treated grey `<=` its previous value
+> as the latch. After a real grey **dump** at a dump station, grey sat below the pre-dump baseline,
+> so every genuine post-dump reading re-latched — the hold wedged for a month. Fixed to the
+> exact-freeze rule (`==`): only a grey tank that has not moved at all corroborates the latch.
+> Same day: when the guard holds a value, **both tanks** are now flagged stale (grey is frozen by
+> the same unpowered unit, not just fresh).
 
 ## Symptom
 
