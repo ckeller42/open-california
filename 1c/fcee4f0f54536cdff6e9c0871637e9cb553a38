@@ -1,0 +1,29 @@
+calictl/webui/app.js
+  s_a7757c7c919f20::t_ba1bda7586302d 262-265
+  s_a7757c7c919f20::t_3d7033a2aadd3a 130
+calictl/serve.py
+  s_a7757c7c919f20::t_5e081c572c1993 143
+calictl/cli.py
+  s_a7757c7c919f20::t_f035f1666572ad 104
+  s_a7757c7c919f20::t_9a334e9585f2b5 114-115
+  s_a7757c7c919f20::t_c347db033015de 135-138
+tests/test_calictl.py
+  s_a7757c7c919f20::t_bfbaa722ea1c0e 442-444
+  s_a7757c7c919f20::t_9e33fe0d5ab3ce 430-433
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1cfcee4f0f54536cdff6e9c0871637e9cb553a38",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
