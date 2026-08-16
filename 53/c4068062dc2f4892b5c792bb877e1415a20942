@@ -1,0 +1,48 @@
+docs/business-logic/re-gap-inventory.md
+  s_a7757c7c919f20::t_5385e7ca4c1746 87-90
+  s_a7757c7c919f20::t_a3f8b1dde8e189 323-325
+  s_a7757c7c919f20::t_adf77ac9b3a280 19-22
+  s_a7757c7c919f20::t_9d6e485d0a82d5 43
+  s_a7757c7c919f20::t_97582ef6d3c308 61-79
+docs/business-logic/DECISIONS.md
+  s_a7757c7c919f20::t_9e53c5354c7c76 11-40,43-45
+  s_a7757c7c919f20::t_f809a5e8dfd078 81-83
+  s_a7757c7c919f20::t_087a0433f1aa51 46
+docs/remaining-captures.md
+  s_a7757c7c919f20::t_ac6c947db7e7a7 166-175
+  s_a7757c7c919f20::t_0ac5cf87732d31 187-195
+  s_a7757c7c919f20::t_9bddc39ce402f4 45-50
+docs/sphinx/protocol-sequences.rst
+  s_a7757c7c919f20::t_2ccbd5564cba9b 105-106,108,114-129,131-133
+  s_a7757c7c919f20::t_b247b17dc2231c 148-152,159-164,168
+CLAUDE.md
+  s_a7757c7c919f20::t_131846a25a8be8 65-88
+docs/business-logic/control-and-actuation.md
+  s_a7757c7c919f20::t_ed05c5b37511be 218-224
+  s_a7757c7c919f20::t_38fda903009804 167-175,179-198,202-205
+  s_a7757c7c919f20::t_20e1ba22009a49 153-155
+  s_a7757c7c919f20::t_6e7f761dd3eec4 148
+.claude/skills/decompile-app/SKILL.md
+  s_a7757c7c919f20::t_21afe9cffec2ae 1-2,4-5,7,24,29-30,33,35-36,46-47,50,52,67,70,72,124,126,130-132,135,139
+  s_a7757c7c919f20::t_9d4f60945d5ddb 99-100,105,122
+  s_a7757c7c919f20::t_ee71c98228ea8e 3,6,8-23,25-28,31-32,34,37-45,48-49,51,53-66,68-69,71,73-98,101-104,106-121,123,125,127-129,133-134,136-138,140-147
+docs/business-logic/protocol-sequences.md
+  s_a7757c7c919f20::t_5302066435d1dd 81,85-98,101-102
+  s_a7757c7c919f20::t_8369a47ffd7a8d 117-120,126-131,135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "53c4068062dc2f4892b5c792bb877e1415a20942",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
