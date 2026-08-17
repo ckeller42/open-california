@@ -131,6 +131,12 @@ def cooler(d: dict) -> dict:
         "level": d.get("Level"),        # 1-5 cooling level
         "mode": d.get("Mode"),
         "timer_active": bool(d.get("TimerState")),
+        # Readback of the schedule the unit currently holds (state char, NOT the control echo):
+        "quiet_from": d.get("NightTimerHourOn"),    # quiet-mode schedule start hour (0-23)
+        "quiet_to": d.get("NightTimerHourOff"),     # quiet-mode schedule end hour (0-23)
+        "quiet_scheduled": bool(d.get("NightTimerSet")),
+        "timer_hour": d.get("TimerHourSet"),        # configured cooling-timer start time
+        "timer_min": d.get("TimerMinSet"),
         "fault": fault,                 # None | "error" | "emergency" | "door_open"
         "door_open": fault == "door_open",
         "error": bool(fault),           # back-compat: any active fault

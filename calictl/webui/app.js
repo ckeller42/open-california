@@ -85,11 +85,13 @@ const FEATURES = {
         options: [{ value: "normal", label: "Normal" }, { value: "quiet", label: "Quiet" }, { value: "timer_quiet", label: "Timer quiet" }],
         current: (s) => (s.mode === 2 ? "quiet" : s.mode === 4 ? "timer_quiet" : "normal"),
         confirm: () => "Set the cooler's quiet mode? Not yet verified on the van. Continue?" },
-      { what: "night_on", kind: "hour", label: "Quiet from", current: (s) => 0,
+      { what: "night_on", kind: "hour", label: "Quiet from", current: (s) => s.quiet_from ?? 0,
         confirm: (h) => `Set quiet-schedule start to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
-      { what: "night_off", kind: "hour", label: "Quiet until", current: (s) => 0,
+      { what: "night_off", kind: "hour", label: "Quiet until", current: (s) => s.quiet_to ?? 0,
         confirm: (h) => `Set quiet-schedule end to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
-      { what: "timer_set", kind: "time", label: "Timer start at", current: (s) => null,
+      { what: "timer_set", kind: "time", label: "Timer start at",
+        current: (s) => (s.timer_hour != null && s.timer_min != null)
+          ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null,
         confirm: (t) => `Set the cooling-timer start to ${t}? Not yet verified on the van. Continue?` },
       { what: "__cooltimer", kind: "buttons", label: "Cooling timer",
         actions: [{ what: "timer_start", label: "Arm" }, { what: "timer_cancel", label: "Cancel" }],
@@ -98,6 +100,9 @@ const FEATURES = {
     readouts: [
       { label: "Fridge door", get: (s) => (s.door_open ? "⚠ Open" : "Closed") },
       { label: "Timer", get: (s) => onoff(s.timer_active) },
+      { label: "Quiet schedule", get: (s) => (s.quiet_scheduled || s.quiet_from || s.quiet_to)
+        ? `${String(s.quiet_from ?? 0).padStart(2, "0")}:00 → ${String(s.quiet_to ?? 0).padStart(2, "0")}:00`
+          + (s.quiet_scheduled ? "" : " (off)") : "off" },
     ],
     // `fault` is the cooler's 2-bit Error enum, only meaningful while powered on (vf/c.java):
     // door_open | emergency | error. Surface it as a banner so a fault is obvious at a glance.
