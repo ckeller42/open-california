@@ -66,7 +66,7 @@ CONTROL_OFFSETS = {
 # control frame lengths confirmed on-device / from the model (bytes)
 CONTROL_FRAME_BYTES = {"cooler": 6, "airheater": 6, "campingmode": 1, "lighting": 16,
                        "roof": 5, "roofaircondition": 3, "stairs": 1, "livingroomheater": 3,
-                       "satelliteantenna": 2}
+                       "satelliteantenna": 2, "energy": 1}
 
 # Semantic value constraints beyond the field's bit-width. The unit's firmware
 # range-VALIDATES control writes and drops the ATT link with 0x0E on an out-of-range

@@ -73,6 +73,23 @@ def test_airheater_level_range_1_to_10():
             raise AssertionError("expected ValueError for out-of-range HeatingLevel=%d" % bad)
 
 
+def test_energy_mode_control_frame():
+    """`set energy mode <normal|max_charge|eco>` builds the 1-byte char-1601 frame with
+    EnergyModeSet @2/w2 (0/1/2) and DisplayRefresh @7/w1 = 0. Decompile-derived from the app's
+    own energy-VM setter (xf/d.java:389 stages EnergyModeSet = the mode ordinal, DisplayRefresh
+    stays 0) + the shared EnergyMode enum (bf/c.java: 0=normal 1=max_charge 2=eco); NOT yet
+    wire-captured / live-verified."""
+    from calictl import control
+    f = _funcs()
+    assert control.build(f, "energy", "mode", "normal", {}).hex() == "00"      # EnergyModeSet=0
+    assert control.build(f, "energy", "mode", "max_charge", {}).hex() == "10"  # EnergyModeSet=1 -> bits2,3=01
+    assert control.build(f, "energy", "mode", "eco", {}).hex() == "20"         # EnergyModeSet=2 -> bits2,3=10
+    assert control.build(f, "energy", "mode", "Eco ", {}).hex() == "20"        # case/space-insensitive
+    assert control.build(f, "energy", "mode", "turbo", {}) is None            # unknown mode
+    assert control.build(f, "energy", "off", "eco", {}) is None               # unknown action
+    assert f["energy"].control_char.startswith("00001601")                    # actuate target
+
+
 def test_roof_position_name_and_infopopup_alert():
     """Position -> name (ig/c.java l() + hf/b.java: 0/14=closed 1=open 2=middle 15=error else=other)
     and InfoPopUp -> alert (0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked

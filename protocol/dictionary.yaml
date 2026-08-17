@@ -81,11 +81,12 @@ functions:
     state_services: [1600, 1602]
     control_source: pg/a.java   # control char 1601
     control_fields:
-      # 1601 branch of the merged pg/a class (case0=stairs 1801, default=energy 1601). The old
-      # OperationMode/Movement names were the STAIRS layout mis-copied here; the energy builder's
-      # real fields are EnergyModeSet + DisplayRefresh. Decompile-derived, no wire capture yet.
-      - {name: EnergyModeSet, offset: 2, width: 2, default: 3, raw_range: 0..3, value_semantics: "0=normal 1=? 2=? , 3=leave-unchanged (UNVERIFIED, needs capture)"}
-      - {name: DisplayRefresh, offset: 7, width: 1, default: 0, value_semantics: UNVERIFIED}
+      # 1601/energy branch of the merged pg/a class (case0=stairs 1801, default=energy 1601).
+      # Field names + offsets are the app's OWN energy-VM log (xf/d.java:389 "DisplayRefresh: ..
+      # EnergyModeSet: ..") and the f() bit layout — NOT the stairs "OperationMode/Movement" log on
+      # pg/a.A(). Decompile-derived (setter + enum), not yet wire-captured / live-verified.
+      - {name: EnergyModeSet, offset: 2, width: 2, default: 3, raw_range: 0..3, value_semantics: "0=normal 1=max_charge 2=eco (enum bf/c.java, same as read EnergyMode), 3=leave-unchanged"}
+      - {name: DisplayRefresh, offset: 7, width: 1, default: 0, value_semantics: "app mode setter (xf/d.java:389) leaves this 0; purpose unverified"}
     state_fields:
       - {name: LandNotAvailable, offset: 0, width: 1}
       - {name: LandDefect, offset: 1, width: 1}

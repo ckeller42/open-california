@@ -41,6 +41,32 @@ def _camping(funcs, what, value, last):
     return protocol.encode(funcs["campingmode"], camping_values(**ch), frame_bytes=1)
 
 
+# energy (char 1601, pg/a.java f() DEFAULT/energy branch) — set the power-management mode.
+# The frame is 1 byte: EnergyModeSet @2/w2 carries the mode; DisplayRefresh @7/w1 stays 0 (the
+# app's energy-VM mode setter, xf/d.java:389, only stages EnergyModeSet and writes DIRECT —
+# a one-shot actuate, no commit/preamble). Mode ordinals match the read side (semantics.energy
+# `energy_mode`, enum bf/c.java). DECOMPILE-DERIVED, not yet wire-captured / live-verified.
+ENERGY_MODES = {"normal": 0, "max_charge": 1, "eco": 2}
+ENERGY_MODE_UNCHANGED = 3   # 2-bit leave-unchanged sentinel (pg/a v())
+
+
+def _energy(funcs, what, value, last):
+    """Build the energy (char 1601) control frame. ``what`` == ``mode``; ``value`` is one of
+    ``normal`` / ``max_charge`` / ``eco`` (case-insensitive). Returns None for anything else.
+
+    Decompile-derived from the app's own energy setter (``xf/d.java:389`` stages
+    ``EnergyModeSet`` = the mode ordinal, ``DisplayRefresh`` stays 0) and the shared
+    ``EnergyMode`` enum (``bf/c.java``); NOT yet verified on the wire or on-device."""
+    if what != "mode":
+        return None
+    key = str(value).strip().lower()
+    if key not in ENERGY_MODES:
+        return None
+    vals = {"EnergyModeSet": ENERGY_MODES[key], "DisplayRefresh": 0}
+    return protocol.encode(funcs["energy"], vals,
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["energy"])
+
+
 def _cooler_values(state: dict, **changes) -> dict:
     """Full-packet cooler control values: carry current State/Mode/Level and the
     schedule (writing the current schedule back = no change), timer ACTION fields
@@ -427,7 +453,8 @@ def _roof(funcs, what, value, last):
 
 BUILDERS = {"campingmode": _camping, "cooler": _cooler, "lighting": _lighting,
             "airheater": _airheater, "roofaircondition": _roofaircondition,
-            "stairs": _stairs, "livingroomheater": _livingroomheater, "roof": _roof}
+            "stairs": _stairs, "livingroomheater": _livingroomheater, "roof": _roof,
+            "energy": _energy}
 
 
 def build(funcs, function, what, value, last_decoded):
