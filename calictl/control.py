@@ -123,6 +123,9 @@ def _cooler(funcs, what, value, last):
         if key not in COOLER_MODES:
             return None
         ch = {"Mode": COOLER_MODES[key]}
+    elif what == "timer_set":                  # start-at TimerHour:TimerMin (vf/c.java:635 y0())
+        hh, mm = _hhmm(value)
+        ch = {"TimerHour": hh, "TimerMin": mm}
     elif what == "timer_start":                # arm cooling-start timer (vf/c.java:193 D())
         ch = {"TimerStart": 1}
     elif what == "timer_cancel":               # cancel it (vf/c.java:251 X0())

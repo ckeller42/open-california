@@ -89,6 +89,8 @@ const FEATURES = {
         confirm: (h) => `Set quiet-schedule start to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
       { what: "night_off", kind: "hour", label: "Quiet until", current: (s) => 0,
         confirm: (h) => `Set quiet-schedule end to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
+      { what: "timer_set", kind: "time", label: "Timer start at", current: (s) => null,
+        confirm: (t) => `Set the cooling-timer start to ${t}? Not yet verified on the van. Continue?` },
       { what: "__cooltimer", kind: "buttons", label: "Cooling timer",
         actions: [{ what: "timer_start", label: "Arm" }, { what: "timer_cancel", label: "Cancel" }],
         confirm: (b) => `${b.label} the cooling timer? Not yet verified on the van. Continue?` },

@@ -101,6 +101,7 @@ def test_cooler_quiet_mode_and_schedule_frames():
     assert control.build(f, "cooler", "mode", "timer_quiet", last).hex() == "3d4300000000"  # Mode=4
     assert control.build(f, "cooler", "night_on", 22, last).hex() == "3d0300001600"          # byte4=0x16
     assert control.build(f, "cooler", "night_off", 7, last).hex() == "3d0300000007"          # byte5=0x07
+    assert control.build(f, "cooler", "timer_set", "06:45", last).hex() == "3d03062d0000"   # TimerHour=6 TimerMin=45
     assert control.build(f, "cooler", "timer_start", None, last).hex()[:2] != "3d"          # TimerStart flips byte0
     assert control.build(f, "cooler", "mode", "loud", last) is None                          # unknown mode
     for bad in (-1, 24):
