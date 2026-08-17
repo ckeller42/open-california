@@ -1,0 +1,26 @@
+calictl/semantics.py
+  s_a7757c7c919f20::t_46c76fa3d5b8ef 290-293
+  s_a7757c7c919f20::t_983d0ed071a52e 239-248,252-254
+calictl/control.py
+  s_a7757c7c919f20::t_8e7a5030bc6bc8 51-55
+protocol/dictionary.yaml
+  s_a7757c7c919f20::t_6d7869846fa4ea 132-138
+tests/test_calictl.py
+  s_a7757c7c919f20::t_39c96bc7dd3caa 217-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "305a7fe2a39e626b597b45d6a12edf8ec4fab6fc",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
