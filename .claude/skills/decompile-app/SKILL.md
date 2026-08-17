@@ -53,13 +53,16 @@ Fetch + unpack an APK: `apkeep -a "$PKG" -d apk-pure "$WORK"` then
 **jadx (primary, DEX→Java, Kotlin-aware):**
 ```sh
 JAVA_OPTS=-Xmx2g ~/tools/jadx/bin/jadx --show-bad-code --no-res -j 2 \
-  --rename-mappings "$OUT/mapping.jobf" \
+  --mappings-path "$OUT/mapping.mapping" \
   -d "$OUT" "$WORK"/dex/classes*.dex
 ```
 - **`--show-bad-code` is REQUIRED.** Without it jadx *silently* skips large/obfuscated methods,
   printing `"Method dump skipped, instruction units count: N"` — you lose exactly the dense
   state-machine methods you most need. Always pass it.
-- `--rename-mappings <file>` applies your durable rename+doc layer (next section) on every run.
+- `--mappings-path <file>` applies your durable rename+doc layer (next section) on every run
+  (jadx 1.5.6: the flag is `--mappings-path`, NOT `--rename-mappings`; jadx auto-detects **Enigma**
+  by a `.mapping` extension, so name the file `*.mapping` or the load is silently skipped — keep the
+  canonical file that name, e.g. `mapping.mapping`).
 - Long job; run detached (`setsid … </dev/null >log 2>&1 &`) so an ssh drop doesn't kill it; poll
   the log for a completion marker.
 
