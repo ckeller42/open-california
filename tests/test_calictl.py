@@ -214,6 +214,19 @@ def test_energy_batt1_sentinel_nulled():
     assert e["batt1_v"] is None and e["batt2_v"] == 13.1
 
 
+def test_general_decodes_sw_version_strings_and_drives_plus2():
+    # general (char 1001) had UNPLACED fields -> decoded to {} -> amb_sw_version None -> the +2
+    # correction could never fire live. With offsets + ASCII decode it yields the real strings.
+    f = _funcs()
+    raw = bytes.fromhex("303431303032303702")            # "0410" | "0207" | 0x02
+    g = semantics.general(P.decode(f["general"], raw))
+    assert g["amb_sw_version"] == "0410" and g["cm_sw_version"] == "0207" and g["comm_version"] == 2
+    # and it now feeds the +2 gate for real (this van is 0410)
+    st = {"general": g, "energy": {"dcdc_current": -2}}
+    semantics.apply_sw_corrections(st)
+    assert st["energy"]["dcdc_current"] == 0
+
+
 def test_dcdc_sw_correction():
     # app adds +2 to DC-DC current on AmbSwVersion 0409/0410 (this van is 0410); cross-function,
     # applied over a full states dict via apply_sw_corrections (verified vs the app 2026-08-17)

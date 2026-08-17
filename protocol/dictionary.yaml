@@ -129,9 +129,13 @@ functions:
     control_fields:
       []   # no unambiguous control model (see control_models_unresolved)
     state_fields:
-      - {name: AmbSwVersion}
-      - {name: CmSwVersion}
-      - {name: CommunicationVersion}
+      # Offsets added 2026-08-17 (were UNPLACED -> general decoded to {} -> amb_sw_version None,
+      # which silently killed the DC-DC +2 correction). Verified vs the app's ag/c.c() (guard >=72
+      # bits): AmbSwVersion/CmSwVersion are 4 ASCII bytes each (a 4-char string, see semantics.general),
+      # CommunicationVersion is a 1-byte int.
+      - {name: AmbSwVersion, offset: 0, width: 32}
+      - {name: CmSwVersion, offset: 32, width: 32}
+      - {name: CommunicationVersion, offset: 64, width: 8}
   vehicle:
     # MANUAL addition (char 1004). NOT emitted by tools/extract_protocol — 1004 has
     # no structured debug-log — so preserve this block across regeneration. Bit layout

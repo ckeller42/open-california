@@ -48,7 +48,11 @@ def _cooler_values(state: dict, **changes) -> dict:
     vals = dict(
         State=state.get("State", 1), Mode=state.get("Mode", 4),
         Level=state.get("Level", 3),
-        TimerStart=3, TimerCancel=3, NightTimerSet=0,   # no-op actions
+        # no-op actions. NB: the cross-check (2026-08-17) suggested NightTimerSet=3 / hours=31 from
+        # the app's v() class-defaults, but the REAL captured app power-on frame (tests/scenarios/
+        # cooler/power-on) sends NightTimerSet=0 and the hour bytes 0 — the wire capture is ground
+        # truth, so these stay 0. (A good example of capture > decompiled-default inference.)
+        TimerStart=3, TimerCancel=3, NightTimerSet=0,
         NightTimerHourOff=0, NightTimerHourOn=0,
         TimerHour=state.get("TimerHourSet", 0), TimerMin=state.get("TimerMinSet", 0),
     )
