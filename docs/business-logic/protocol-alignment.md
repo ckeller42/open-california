@@ -142,8 +142,14 @@ the wire captures. Corrections applied:
   **no wire capture yet** — `set energy mode` is intentionally NOT wired until a capture confirms the
   frame (same discipline as the cooler correction above).
 
-- **`roof.SafetyCounter` de-flagged** to `@8/w32`: app-**generated** monotonic BE-uint32 (~+1/500 ms),
-  **not** unit-echoed. Stale "~1 Hz heartbeat / echo / send 0" comments in `control.py`/`overrides.py`
-  corrected to match `device.actuate_roof` (which was already right).
+- **`roof.SafetyCounter` de-flagged** to `@8/w32`: app-**generated** monotonic BE-uint32, **not**
+  unit-echoed. Verified against the source there are **two distinct cadences**: the move frame is
+  **re-sent at ~1 Hz** while held (`ig/c.java` arms `jn.a(1000L, repeat=true)`), while the
+  SafetyCounter *value* advances **~+1 per 500 ms of elapsed time** (`w8/a`, constructed `500/450/550`)
+  — a wall-clock rule independent of the frame cadence, so consecutive frames step it ~+2. The stale
+  `control.py`/`overrides.py` comments said the counter was a unit **echo** we "send 0" — corrected to
+  app-generated. (NB: an interim edit briefly mislabelled the *frame* cadence as ~500 ms by conflating
+  it with the counter's 500 ms; the frame resend is ~1 Hz, per `ig/c`. CLAUDE.md's roof open-gap "(c)
+  use ~500 ms cadence, not 1 Hz" rests on the same conflation — the app's own cadence is ~1 Hz.)
 
 - **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).

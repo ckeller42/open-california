@@ -388,15 +388,16 @@ def _livingroomheater(funcs, what, value, last):
 
 
 # roof (char 1401, jg/a.java f()) — SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
-# Press-and-hold: stream move frames at ~500 ms cadence while the button is held,
-# then STOP on release; a single frame will NOT complete travel. The stream is
-# driven by device.actuate_roof, NOT the one-shot device.actuate.
+# Press-and-hold: while the button is held the app RE-SENDS the move frame at ~1 Hz
+# (ig/c.java arms jn.a(1000L, repeat=true)), then STOP on release; a single frame will
+# NOT complete travel. The resend is driven by device.actuate_roof, NOT device.actuate.
 #   OPEN = Up1/Down0    CLOSE = Up0/Down1    STOP = Up0/Down0
 # SafetyCounter (32-bit) is APP-GENERATED, not echoed from the unit: a monotonic
-# BE-uint32 (seed + elapsed_ms/500 => ~+1 every 500 ms) that device.actuate_roof
-# advances per frame. The unit validates liveness/monotonicity (SafetyCounterValid,
-# 1402 bit 7) and withholds the motor ~3 s until it validates. roof_frame() takes
-# whatever counter the caller supplies; a fixed 0 is only valid for a lone STOP.
+# BE-uint32 advancing ~+1 every 500 ms of elapsed time (w8/a, constructed 500/450/550) —
+# a wall-clock rule INDEPENDENT of the ~1 Hz frame cadence, so consecutive frames step
+# the counter by ~+2. device.actuate_roof supplies it; a fixed 0 is valid only for a lone
+# STOP. The unit validates liveness/monotonicity (SafetyCounterValid, 1402 bit 7) and
+# withholds the motor ~3 s (ig/c jn.a(3000L) dead-man) until it validates.
 ROOF_MOVES = {"open": (1, 0), "close": (0, 1), "stop": (0, 0)}   # -> (Up, Down)
 
 
@@ -405,8 +406,8 @@ def roof_frame(funcs, direction: str, counter: int = 0) -> bytes:
 
     ``direction`` is ``open``/``close``/``stop`` (Up/Down per ``ROOF_MOVES``);
     ``counter`` fills the 32-bit ``SafetyCounter`` (app-generated monotonic BE-uint32,
-    ~+1 per 500 ms; advanced by device.actuate_roof). Raises ValueError on an unknown
-    direction."""
+    ~+1 per 500 ms of elapsed time; advanced by device.actuate_roof). Raises ValueError
+    on an unknown direction."""
     if direction not in ROOF_MOVES:
         raise ValueError("roof direction must be open/close/stop, got %r" % direction)
     up, down = ROOF_MOVES[direction]
@@ -417,8 +418,8 @@ def roof_frame(funcs, direction: str, counter: int = 0) -> bytes:
 
 def _roof(funcs, what, value, last):
     """Generic builder entry for roof: ``what`` is the direction (open/close/stop);
-    ``value`` is unused. Returns ONE move frame — device.actuate_roof streams frames
-    at ~500 ms cadence while held. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED."""
+    ``value`` is unused. Returns ONE move frame — device.actuate_roof re-sends it at
+    ~1 Hz while held. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED."""
     if what not in ROOF_MOVES:
         return None
     return roof_frame(funcs, what)
