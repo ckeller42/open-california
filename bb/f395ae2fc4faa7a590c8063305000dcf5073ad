@@ -1,0 +1,28 @@
+calictl/overrides.py
+  s_a7757c7c919f20::t_f942da1846bff1 69
+protocol/signals.yaml
+  s_a7757c7c919f20::t_3676009cf2bd5d 534-536
+tests/test_calictl.py
+  s_a7757c7c919f20::t_204199bc6fc304 76-92
+calictl/control.py
+  s_a7757c7c919f20::t_42f87f9996fb6a 44-69
+  s_a7757c7c919f20::t_4edae8255f6653 456-457
+protocol/dictionary.yaml
+  s_a7757c7c919f20::t_55e8ed26ed564a 84-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "bbf395ae2fc4faa7a590c8063305000dcf5073ad",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
