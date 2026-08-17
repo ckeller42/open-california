@@ -84,6 +84,18 @@ def test_read_only_sensors_have_no_command_topic():
             assert "command_topic" not in c
 
 
+def test_read_only_sensors_carry_expire_after_for_freshness():
+    # freshness: read-only sensors expire (-> HA `unavailable`) when the reading stops refreshing,
+    # so an automation can gate on availability instead of triggering on a stale (parked) value.
+    cfgs = mqtt.render_discovery(installed={"energy"})
+    battery = [c for t, c in cfgs.items() if "/sensor/" in t and c.get("unique_id", "").endswith("soc2_level")]
+    assert battery and battery[0]["expire_after"] == mqtt.EXPIRE_AFTER_S
+    # command entities must NOT carry expire_after (they're command-driven, not polled)
+    for t, c in mqtt.render_discovery().items():
+        if "command_topic" in c:
+            assert "expire_after" not in c
+
+
 def test_command_entities_gated_by_installed():
     # a not-installed controllable function publishes no command entity
     cfgs = mqtt.render_discovery(installed={"cooler"})

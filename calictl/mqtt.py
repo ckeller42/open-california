@@ -11,10 +11,20 @@ pure and unit-tested without a broker.
 from __future__ import annotations
 
 import json
+import os
 from collections import namedtuple
 
 DISCOVERY_PREFIX = "homeassistant"
 BASE = "calivan"
+
+# Freshness: HA marks a sensor `unavailable` if no state message arrives within `expire_after`
+# seconds. The daemon publishes each function every successful poll (~30 s) and publishes NOTHING
+# when the unit is unreachable (parked deep-sleep), so this makes the battery/telemetry sensors go
+# unavailable when the data is stale — instead of showing a days-old value as live. That's the gate
+# an automation needs ("act on the leisure battery only while its sensor is available"). Generous
+# vs the poll cadence; tune with CALICTL_MQTT_EXPIRE_AFTER_S. The daemon's own up/down is a separate
+# signal (the `calivan/status` LWT availability_topic).
+EXPIRE_AFTER_S = int(os.environ.get("CALICTL_MQTT_EXPIRE_AFTER_S", "300"))
 
 EntitySpec = namedtuple("EntitySpec", "component key name config")
 
@@ -163,8 +173,9 @@ def _config(function, spec):
            "state_topic": "%s/%s" % (BASE, function),
            "value_template": "{{ value_json.%s }}" % spec.key,
            "availability_topic": "%s/status" % BASE,
+           "expire_after": EXPIRE_AFTER_S,   # go `unavailable` when the reading stops refreshing
            "device": device_block(function)}
-    cfg.update(spec.config)
+    cfg.update(spec.config)   # a spec may override (e.g. its own expire_after)
     return "%s/%s/%s/config" % (DISCOVERY_PREFIX, spec.component, uid), cfg
 
 
