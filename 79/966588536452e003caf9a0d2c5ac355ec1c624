@@ -1,0 +1,32 @@
+calictl/serve.py
+  s_a7757c7c919f20::t_b99cb511556f14 77
+  s_a7757c7c919f20::t_8942a2353bd691 308
+calictl/semantics.py
+  s_a7757c7c919f20::t_63bd470efd44db 374-395
+  s_a7757c7c919f20::t_778510f75eebe7 99
+docs/business-logic/control-and-actuation.md
+  s_a7757c7c919f20::t_1954a2a5daa604 222-226
+tests/test_calictl.py
+  s_a7757c7c919f20::t_3dd4769a9d42e3 217-231
+docs/business-logic/lighting-energy-water-sat-roof.md
+  s_a7757c7c919f20::t_41eeffa707bc2a 192-200
+.claude/skills/decompile-app/SKILL.md
+  s_a7757c7c919f20::t_fad4e379da7ced 80-104
+  s_a7757c7c919f20::t_591a95a826e2a5 121-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "79966588536452e003caf9a0d2c5ac355ec1c624",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
