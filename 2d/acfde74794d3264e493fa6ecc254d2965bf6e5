@@ -1,0 +1,24 @@
+calictl/semantics.py
+  s_a7757c7c919f20::t_25298aa1d4207d 156-161
+calictl/webui/app.js
+  s_a7757c7c919f20::t_8d56167297e803 132-134
+  s_a7757c7c919f20::t_11c9e9e782b4e2 139-140
+docs/business-logic/control-and-actuation.md
+  s_a7757c7c919f20::t_04979bf81fff72 238-271
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2dacfde74794d3264e493fa6ecc254d2965bf6e5",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
