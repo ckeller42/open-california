@@ -641,7 +641,31 @@ function renderLighting(s) {
   msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", "All lights");
   msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly();
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
-  mrow.appendChild(msw); mc.appendChild(mrow); app.appendChild(mc);
+  mrow.appendChild(msw); mc.appendChild(mrow);
+
+  // Profile activator (the app's profileSelector -> SET_PROFILE / ProfileNumber). Favorites are
+  // user-saved scenes on the unit (content unknown to us; we can only activate by number) + the
+  // wake-up light. LIGHTS_ON/OFF (12/0) are the master toggle above, so they're not listed here.
+  const prow = document.createElement("div"); prow.className = "row";
+  const plbl = document.createElement("span"); plbl.className = "lbl"; plbl.textContent = "Activate profile";
+  prow.appendChild(plbl);
+  if (pending_is("lighting", "profile")) prow.appendChild(spinner());
+  const psel = document.createElement("select");
+  psel.disabled = readOnly();
+  const opt0 = document.createElement("option");
+  opt0.value = ""; opt0.textContent = "Choose…"; opt0.selected = true; psel.appendChild(opt0);
+  const PROFILES = [[1, "Favorite 1"], [2, "Favorite 2"], [3, "Favorite 3"], [4, "Favorite 4"],
+                    [5, "Favorite 5"], [6, "Favorite 6"], [7, "Favorite 7"], [10, "Wake-up light"]];
+  for (const [n, lab] of PROFILES) {
+    const o = document.createElement("option"); o.value = n; o.textContent = lab; psel.appendChild(o);
+  }
+  psel.onchange = () => {
+    if (psel.value === "") return;
+    command("lighting", "profile", Number(psel.value));
+    psel.value = "";   // it's a momentary action, not a persistent selection
+  };
+  prow.appendChild(psel); mc.appendChild(prow);
+  app.appendChild(mc);
 
   // lamp sliders, grouped like the app (always controllable)
   for (const grp of LIGHT_LAMPS) {
