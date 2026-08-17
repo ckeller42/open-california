@@ -657,7 +657,8 @@ function renderLighting(s) {
   const opt0 = document.createElement("option");
   opt0.value = ""; opt0.textContent = "Choose…"; opt0.selected = true; psel.appendChild(opt0);
   const PROFILES = [[1, "Favorite 1"], [2, "Favorite 2"], [3, "Favorite 3"], [4, "Favorite 4"],
-                    [5, "Favorite 5"], [6, "Favorite 6"], [7, "Favorite 7"], [10, "Wake-up light"]];
+                    [5, "Favorite 5"], [6, "Favorite 6"], [7, "Favorite 7"],
+                    [11, "Interior light"], [10, "Wake-up light"]];
   for (const [n, lab] of PROFILES) {
     const o = document.createElement("option"); o.value = n; o.textContent = lab; psel.appendChild(o);
   }
@@ -667,6 +668,26 @@ function renderLighting(s) {
     psel.value = "";   // it's a momentary action, not a persistent selection
   };
   prow.appendChild(psel); mc.appendChild(prow);
+
+  // Save the CURRENT lamp levels into a favorite slot (the app's l3 applyProfileBrightness).
+  const srow = document.createElement("div"); srow.className = "row";
+  const slbl = document.createElement("span"); slbl.className = "lbl"; slbl.textContent = "Save current as";
+  srow.appendChild(slbl);
+  if (pending_is("lighting", "save_profile")) srow.appendChild(spinner());
+  const ssel = document.createElement("select");
+  ssel.disabled = readOnly();
+  const s0 = document.createElement("option"); s0.value = ""; s0.textContent = "Favorite…"; s0.selected = true; ssel.appendChild(s0);
+  for (let n = 1; n <= 7; n++) {
+    const o = document.createElement("option"); o.value = n; o.textContent = "Favorite " + n; ssel.appendChild(o);
+  }
+  ssel.onchange = () => {
+    if (ssel.value === "") return;
+    const n = Number(ssel.value);
+    ssel.value = "";
+    if (!confirm(`Overwrite Favorite ${n} with the current lamp levels? This writes to the unit and is not yet verified on the van. Continue?`)) return;
+    command("lighting", "save_profile", n);
+  };
+  srow.appendChild(ssel); mc.appendChild(srow);
   app.appendChild(mc);
 
   // lamp sliders, grouped like the app (always controllable)

@@ -141,7 +141,9 @@ def _cooler(funcs, what, value, last):
                            frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"])
 
 
-LIGHT_MODE_SET_BRIGHTNESS = 4    # dg/n.java Mode enum (0=no-op, 4=SET_BRIGHTNESS, 16=SET_PROFILE)
+# dg/n.java Mode enum (full, verified 2026-08-17): 0=NO_MODE, 4=SET_BRIGHTNESS, 6=SET_COLOR,
+# 8=SET_DOUBLE, 12=REQUEST_CONFIG, 16=SET_PROFILE, 20=WAKEUP_TIME, 24=SYSTEM_TIME, 28=PREVIEW.
+LIGHT_MODE_SET_BRIGHTNESS = 4
 LIGHT_MODE_SET_COLOR = 6         # recolour the active profile: LightValue = palette index (1-10)
 LIGHT_MODE_SET_PROFILE = 16      # switch active profile (payload carries the ProfileNumber)
 # Profile-number enum (dg/l.java mirrors ef/k.java): 0=LIGHTS_OFF, 1-7=FAVORITE1-7, 8=DOOR_CONTACT,
@@ -247,6 +249,23 @@ def _lighting(funcs, what, value, last):
     if what == "profile":
         vals = {**base, "Mode": LIGHT_MODE_SET_PROFILE, "ProfileNumber": int(value),
                 **{z: LIGHT_UNCHANGED for z in zone_fields}}
+    elif what == "save_profile":
+        # Save the CURRENT lighting into a favorite (dg/h.java:564 l3 applyProfileBrightness):
+        # SET_BRIGHTNESS with ProfileNumber = the favorite N (NOT the live-view 9), every equipped
+        # zone carrying its current brightness (read from `last`), NOT_EQUIPPED zones left at 14.
+        # This is how the app DEFINES a favorite. Decompile-derived; NOT yet wire-verified.
+        n = int(value)
+        if not 1 <= n <= 7:
+            raise ValueError("save_profile target must be a favorite 1-7, got %r" % value)
+        from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
+        real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
+        st = last or {}
+        zones = {}
+        for z in zone_fields:
+            cur = st.get(z)
+            zones[z] = cur if (z in real and isinstance(cur, int) and 0 <= cur <= LIGHT_MAX_SET) \
+                else LIGHT_UNCHANGED
+        vals = {**base, "Mode": LIGHT_MODE_SET_BRIGHTNESS, "ProfileNumber": n, **zones}
     elif what == "color":                   # recolour the active profile (LightValue = palette idx)
         idx = LIGHT_COLORS.get(str(value).lower().replace("_", "-"))
         if idx is None:

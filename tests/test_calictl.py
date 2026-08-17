@@ -132,6 +132,27 @@ def test_airheater_runtime_and_timer_frames():
         raise AssertionError("expected ValueError for out-of-range timer")
 
 
+def test_lighting_save_favorite_frame():
+    """`save_profile` writes the CURRENT lighting into a favorite (dg/h.java:564 l3): SET_BRIGHTNESS
+    with ProfileNumber = the favorite N (not the live-view 9), real zones carrying their current
+    brightness (from `last`), non-equipped zones = 14. Decompile-derived, NOT live-verified."""
+    from calictl import control
+    f = _funcs()
+    last = {"BrightnessLSeven": 5, "BrightnessLFive": 8, "BrightnessLThree": 2}
+    fr = control.build(f, "lighting", "save_profile", 3, last)
+    assert fr[0] == 0x03            # ProfileNumber = 3 (the favorite, not 9)
+    assert fr[1] == 0x04            # Mode = SET_BRIGHTNESS
+    assert fr.hex().endswith("eeeeeeee")   # L9-L16 not-equipped -> unchanged (14)
+    assert "e2e8e5" in fr.hex()    # L3=2, L5=8, L7=5 carried (each real zone's current brightness)
+    for bad in (0, 8):
+        try:
+            control.build(f, "lighting", "save_profile", bad, last)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for save_profile slot %d" % bad)
+
+
 def test_roof_position_name_and_infopopup_alert():
     """Position -> name (ig/c.java l() + hf/b.java: 0/14=closed 1=open 2=middle 15=error else=other)
     and InfoPopUp -> alert (0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked
