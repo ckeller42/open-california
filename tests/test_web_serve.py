@@ -369,6 +369,43 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
     assert result is True     # readback State==1 matches "on"
 
 
+def test_session_toggle_disconnect_and_connect():
+    """The connection toggle: Disconnect forces the session inactive (frees the slot for the app)
+    even while the browser keeps polling; Connect clears the release and marks the UI active."""
+    import asyncio
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+
+    async def _disc():
+        s._ble = asyncio.Lock(); s._wake_session = asyncio.Event()
+        s._note_ui_activity()                       # UI is being polled (active)
+        assert s._ui_active() is True
+        r = await s.set_session_mode("disconnect")
+        return r
+    r = asyncio.run(_disc())
+    assert r["mode"] == "release"
+    assert s._session_mode == "release"
+    assert s._ui_active() is False                  # release overrides activity -> slot freed
+
+    async def _conn():
+        s._wake_session = asyncio.Event()
+        return await s.set_session_mode("connect")
+    r = asyncio.run(_conn())
+    assert r["mode"] == "auto" and s._session_mode is None
+    assert s._ui_active() is True                   # connect re-marked activity
+
+
+def test_meta_exposes_session_mode():
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._session_mode = "release"
+    assert serve.ServeBackend(s, loop=None).state()["_meta"]["session_mode"] == "release"
+    s._session_mode = None
+    assert serve.ServeBackend(s, loop=None).state()["_meta"]["session_mode"] == "auto"
+
+
 def test_ui_active_window():
     """The session-scoping window: fresh activity -> active; stale or never-used -> idle."""
     import time
