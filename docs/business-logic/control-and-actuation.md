@@ -265,7 +265,7 @@ not on this variant).
 
 **State readback surfaced** (decoded straight from the state chars, cross-checked against the
 app decoders): cooler `quiet_from`/`quiet_to`/`timer_hour`/`timer_min` (`vf/c.java:321 e()`,
-bit-exact `NightTimerHourOn@48`/`Off@56`); energy `energy_mode` (`bf/c.java`).
+bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`bf/c.java`).
 
 ---
 

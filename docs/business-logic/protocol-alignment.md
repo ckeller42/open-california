@@ -17,7 +17,7 @@ InteriorLight`); `2001/2002` = roof-A/C (`State/FanSpeed/Mode/Temperature`). All
 - **`vehicle` (1004) byte-0 was wrong** (hand-added, not extractor-emitted). App subList slices:
   `CarVariant 0/4`, `CarLevelPopUp 4/2`, **`TerminalOneFive 7/1`** (bit 6 spare) — we had them at
   `3/4 · 1/2 · 0/1`. **Fixed** in `dictionary.yaml`. Proof from committed captures:
-  - `017e0608…` (leveling non-zero → ignition ON): only `T15@7` decodes ignition = True.
+  - `017e0608…` (leveling non-zero → ignition ON): only `TerminalOneFive@7` decodes ignition = True.
   - `047e06…` (parked): CarVariant is `0` with the new layout in **both** frames (consistent),
     vs `0`/`2` with the old (the old read a `CarLevelPopUp` bit as variant).
   This is why the Vehicle screen always showed "Ignition Off" even ignition-on. Guarded by
