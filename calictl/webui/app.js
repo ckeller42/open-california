@@ -129,11 +129,15 @@ const FEATURES = {
       { what: "power", kind: "toggle", label: "Parking heater", state: "running" },
       { what: "level", kind: "slider", label: "Heating level (10 = HI)", state: "level", min: 1, max: 10 },
       { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 0, max: 120, unit: "min" },
-      { what: "timer", kind: "time", label: "Start at", current: (s) => null },
+      { what: "timer", kind: "time", label: "Start at",
+        current: (s) => (s.timer_hour != null && s.timer_min != null)
+          ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null },
     ],
     readouts: [
       { label: "Level", get: (s) => (s.level == null ? "—" : (s.level >= 10 ? "HI" : s.level)) },
       { label: "Running time", get: (s) => withUnit(s.running_time, "min") },
+      { label: "Timer start", get: (s) => (s.timer_hour != null && s.timer_min != null && (s.timer_hour || s.timer_min))
+        ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : "off" },
       { label: "Error code", get: (s) => s.error_code ?? "—" },
     ],
     summary: (s) => (s.running ? `Running${s.level != null ? " · " + (s.level >= 10 ? "HI" : s.level) : ""}` : "Off"),

@@ -153,7 +153,12 @@ def airheater(d: dict) -> dict:
         "error_code": d.get("ErrorCode"),
         "mode": d.get("OperationModeAirHeater"),
         "air_distribution": d.get("AirDistribution"),
-        "running_time": d.get("RunningTime"),
+        "running_time": d.get("RunningTime"),           # configured run duration (min)
+        # Timer readback the unit reports (state char 1702; cross-checked bit-exact vs the app's
+        # rf/b.java:~395 decoder: RunningTime@24, TimerHour@32, TimerMin@40, RunningTimeinAction@48):
+        "timer_hour": d.get("TimerHour"),               # configured start-at hour
+        "timer_min": d.get("TimerMin"),
+        "running_time_remaining": d.get("RunningTimeinAction"),   # counts down while heating
     }
 
 
