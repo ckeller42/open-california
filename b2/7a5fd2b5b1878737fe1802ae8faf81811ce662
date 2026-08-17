@@ -1,0 +1,25 @@
+docs/business-logic/protocol-alignment.md
+  s_a7757c7c919f20::t_27d5db30c3b829 145-153
+calictl/control.py
+  s_a7757c7c919f20::t_6e34c260890105 421-422
+  s_a7757c7c919f20::t_c677f8a21e42a3 409-410
+  s_a7757c7c919f20::t_885797ae8225ac 391-393,396-400
+CLAUDE.md
+  s_a7757c7c919f20::t_cc929937c20514 102-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b27a5fd2b5b1878737fe1802ae8faf81811ce662",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
