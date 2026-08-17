@@ -42,10 +42,12 @@ The only thing left is proving **calictl itself** can drive it:
 > **STATUS 2026-07-13 (captures done, lighting claim later corrected):** ~~P1 lighting-apply
 > CRACKED + FIXED (commit frame `0e00…`; live-verified via readback)~~ — **that "verification"
 > was readback-only and WRONG** (the `1502` state char is a write-through echo; the lamps stayed
-> dark, owner-confirmed 2026-07-18). **P1 was cracked for real 2026-08-16**: a capture of the app
-> *physically* lighting a lamp showed the missing **REQUEST_CONFIG preamble** (`0d0c…ee`,
-> Mode=12, PN=13) + `0e00…` commit on `1501` before the SET — photon-verified on Kochen L7
-> (0→dark, 8→80 %, 0→dark). See `control-and-actuation.md` §4.
+> dark, owner-confirmed 2026-07-18). **P1 was cracked for real 2026-08-16**, photon-verified on
+> Kochen L7 (0→dark, 8→80 %, 0→dark): with the unit **awake**, a bare SET + `0e00…` commit
+> actuates — the real gate is the unit's wake/active state. (The same morning's
+> "**REQUEST_CONFIG preamble** (`0d0c…ee`, Mode=12, PN=13) required" theory was falsified that
+> evening — a wake-state confound; the preamble is an optional, app-faithful config pull.) See
+> `control-and-actuation.md` §4.
 > **Roof sequence SETTLED from the decompiled roof class**
 > (open `0x01`/stop `0x00`/close `0x04`; **press-and-hold** move stream, **app-generated monotonic
 > SafetyCounter ~+1/500 ms**, unit self-gates the first **~3 s** via `SafetyCounterValid` (`1402`
@@ -161,14 +163,16 @@ ever drive the roof from calictl. Roof writes are `CONFIRM_REQUIRED` and NOT-LIV
 feature on this vehicle — unlike the uninstalled gear below.)
 
 ## Priority 1 — the lighting-apply gap (RESOLVED 2026-08-16, photon-verified)
-~~Our lighting frames ACK but the zones don't visibly change (`re-gap A1`).~~ **Cracked exactly
-this way**: a 2026-08-16 capture of the app *physically* lighting a lamp, diffed with
-`tools/capture_diff.py`, showed the app opens its Lighting screen with a **REQUEST_CONFIG
-preamble** (`0d0c000000000000eeeeeeeeeeeeeeee`, Mode=12, PN=13) + the `0e00…` commit on `1501`;
-only in a session where that landed does a SET_BRIGHTNESS drive the real lamps. Photon-verified
-on Kochen L7 (0→dark, 8→80 %, 0→dark, owner-watched) — the moral stands: **only a human seeing
-the lamp counts; readback of `1502` is a write-through echo.** See `control-and-actuation.md` §4
-+ `re-gap-inventory.md` §A1.
+~~Our lighting frames ACK but the zones don't visibly change (`re-gap A1`).~~ **Resolved**: with
+the unit **awake**, a **bare SET_BRIGHTNESS + `0e00…` commit drives the real lamps, both
+directions** — no preamble, no heartbeat, no arm delay (2026-08-16 evening: 6× photon-confirmed
+incl. controlled fresh-connection trials; owner-watched on Kochen L7: 0→dark, 8→80 %, 0→dark).
+The morning-2026-08-16 capture-and-diff run had fingered the app's **REQUEST_CONFIG preamble**
+(`0d0c000000000000eeeeeeeeeeeeeeee`, Mode=12, PN=13) + `0e00…` commit on `1501` as the required
+arming step — falsified that evening (wake-state confound; the preamble is an optional
+screen-open config pull, decompile-confirmed: `dg/h.java:174 E()` writes DIRECT, never calls
+`d0()` `dg/h.java:471`). The moral stands: **only a human seeing the lamp counts; readback of
+`1502` is a write-through echo.** See `control-and-actuation.md` §4 + `re-gap-inventory.md` §A1.
 
 **Remaining lighting capture targets:**
 - The app's **"Alle Lichter" master frame** — RESOLVED from the decompile 2026-08-16 (not a
@@ -180,12 +184,15 @@ the lamp counts; readback of `1502` is a write-through echo.** See `control-and-
 - **`1502` Mode-4 ramp-notification — real applied-verification** (NOT a decode gap). The layout is
   already known: a Mode-4 notification is a normal `1502` STATE frame, so `protocol.decode` reads it
   (cross-checked 2026-08-16 against the captured frames — `090400…0508…` → `Mode=4,
-  BrightnessLSeven=8`, the exact target). What is unproven is whether the ramp is *actuation-gated*:
-  the open experiment is a **negative control** — send a SET in an UN-armed session (no
-  REQUEST_CONFIG preamble, so the lamp stays dark) and check whether the unit still emits the Mode-4
-  ramp. If the ramp fires only when the lamp physically moves, subscribing to `1502` and matching a
-  Mode-4 frame carrying the target brightness is genuine applied-verification (replacing the current
-  honest "unknown"). If it fires regardless, it is just another echo. Small on-device test, no decode.
+  BrightnessLSeven=8`, the exact target). In every observed case so far (armed and un-armed sessions
+  alike, 2026-08-16) the ramp tracked REAL actuation — but it is not yet *certified* as a gate: the
+  missing evidence is a **negative control**, i.e. a session where the lamp verifiably stays dark
+  (e.g. a sleepy/parked unit, if that failure mode reproduces — the old "un-armed = dark" premise
+  was falsified 2026-08-16; un-armed SETs actuate on an awake unit) while checking whether Mode-4
+  still fires. If the ramp fires only when the lamp physically moves, subscribing to `1502` and
+  matching a Mode-4 frame carrying the target brightness is genuine applied-verification (replacing
+  the current honest "unknown"). If it fires regardless, it is just another echo. Small on-device
+  test, no decode.
 
 ## Priority 2 — can buspi hold a persistent session? (continuous data)
 Van awake, **phone app closed**, on buspi:

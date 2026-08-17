@@ -46,7 +46,6 @@ LEAVE_UNCHANGED_2BIT = 3   # the sg.a 2-bit "leave unchanged" sentinel (see cont
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 LIGHT_MODE_SET_BRIGHTNESS = 4
 LIGHT_MODE_SET_PROFILE = 16
-LIGHT_MODE_REQUEST_CONFIG = 12   # the session-arm preamble (the 2026-08-16 physical-apply crack)
 LIGHT_MODE_COMMIT = 0        # the 0e00… commit/apply frame (HCI-verified 2026-07-13): a
                              # SET_BRIGHTNESS/SET_PROFILE is only APPLIED once this lands
 
@@ -169,7 +168,6 @@ class MockCamperUnit:
         """Van parks -> deep sleep: the link dies and the unit stops advertising."""
         self.online = False
         self.armed = False
-        self._light_cfg_armed = False   # the lighting arm preamble is session-scoped
 
     def wake(self) -> None:
         """Physical use (door/ignition) wakes the unit; it advertises again."""
@@ -205,22 +203,14 @@ class MockCamperUnit:
         # Lighting is COMMIT-GATED (HCI-verified 2026-07-13). A SET_PROFILE (Mode 16) or
         # SET_BRIGHTNESS (Mode 4) only STAGES the change; the unit APPLIES it when the commit
         # frame (Mode 0, control.LIGHT_COMMIT) lands right after. With no commit, the write is
-        # ACKed but never applied (the old gap). The apply gate for SET_BRIGHTNESS is the FRAME's
-        # ProfileNumber (the app hardcodes 9), NOT a separately-active profile: a brightness frame
-        # carrying PN=0 is ignored, PN=9 applies (and makes profile 9 the active one).
-        # Physical-apply gate (the 2026-08-16 crack): the real unit only DRIVES the lamps in a
-        # session where a REQUEST_CONFIG (Mode 12) preamble has landed. Without it, SETs are
-        # ACKed + echoed but nothing applies — so a call site that forgets pre=preamble_for(fn)
-        # fails these tests instead of silently passing.
+        # ACKed but never applied. The apply gate for SET_BRIGHTNESS is the FRAME's ProfileNumber
+        # (the app hardcodes 9), NOT a separately-active profile: a brightness frame carrying PN=0
+        # is ignored, PN=9 applies (and makes profile 9 the active one).
+        # NOTE: there is NO REQUEST_CONFIG-preamble apply-gate. A bare SET+commit actuates on an
+        # awake unit — photon-verified on-device 2026-08-16 (the earlier "preamble required" gate
+        # was a wake-state confound; the app's E() writes DIRECT and never sends the preamble).
         if fn == "lighting":
             mode = ctrl.get("Mode")
-            if mode == LIGHT_MODE_REQUEST_CONFIG:
-                self._light_cfg_armed = True
-                return
-            if mode in (LIGHT_MODE_SET_BRIGHTNESS, LIGHT_MODE_SET_PROFILE) \
-                    and not getattr(self, "_light_cfg_armed", False):
-                self._pending_light = None
-                return                            # un-armed session: ACKed, never applied
             if mode == LIGHT_MODE_SET_PROFILE:
                 self._pending_light = ("profile", ctrl.get("ProfileNumber", st.get("ProfileNumber", 0)))
                 return

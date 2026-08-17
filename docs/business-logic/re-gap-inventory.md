@@ -16,8 +16,10 @@
 >
 > **UPDATE (2026-08-16):** the 2026-07-13 "resolved" claim above was **readback-based and wrong**
 > (the `1502` state char is a write-through echo; owner-confirmed 2026-07-18 the lamps stayed
-> dark). `A1` is now **RESOLVED for real, photon-verified 2026-08-16** — the missing ingredient
-> was a **REQUEST_CONFIG preamble** (`0d0c…ee`, Mode 12) + commit before the SET. See §A1.
+> dark). `A1` is now **RESOLVED for real, photon-verified 2026-08-16** — with the unit **awake**,
+> a bare SET_BRIGHTNESS + `0e00…` commit physically actuates; the real gate is the unit's
+> wake/active state. (The same morning's "REQUEST_CONFIG preamble required" theory was falsified
+> that evening — a wake-state confound.) See §A1.
 
 Compiled 2026-07-07 from a three-way decompile audit (BLE protocol, feature/domain
 logic, session/auth/infra), each diffed against the current baseline: `protocol/
@@ -38,7 +40,7 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 
 | # | Gap | Kind | Resolvable now? |
 |---|-----|------|-----------------|
-| ~~1~~ | ~~Lighting SET does not actuate~~ — **RESOLVED 2026-08-16, photon-verified** (REQUEST_CONFIG preamble, §A1) | protocol | ✅ done |
+| ~~1~~ | ~~Lighting SET does not actuate~~ — **RESOLVED 2026-08-16, photon-verified** (unit awake ⇒ bare SET+commit actuates, §A1) | protocol | ✅ done |
 | 3 | MERGED_AMBIGUOUS control offsets — **roof/roofAC/stairs/LR-heater remain** (airheater done) | protocol | **static** |
 | 4 | **1003 counter cadence / firmware disarm timeout** | protocol | needs idle HCI capture |
 | 5 | Lighting **profile/color/wake-timer** notification overlay | protocol | static (enum decode) |
@@ -56,19 +58,25 @@ evidence, finally photon-verified 2026-08-16 — §A1.)
 
 ## A. BLE protocol / control gaps
 
-### A1 — Lighting SET — RESOLVED 2026-08-16 (REQUEST_CONFIG preamble, photon-verified)
-**The physical-actuation gap is closed.** The missing ingredient — found by an iOS HCI capture
-of the app *physically* lighting a lamp, diffed via `tools/capture_diff.py` — is a
-**REQUEST_CONFIG preamble**: the app opens its Lighting screen with
-`0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12, ProfileNumber=13, all zones=14) + the `0e00…`
-commit on `1501`; only in a session where that landed does a later SET_BRIGHTNESS drive the
-lamps (otherwise: ACKed + echoed, load never switches). Photon-verified on Kochen L7
-(0→dark, 8→80 %, 0→dark, owner-watched). Bonus: after REQUEST_CONFIG the unit streams a
-Mode-tagged config dump + Mode-4 brightness-ramp **notifications on `1502`** — the first
-truthful feedback channel (the state-char readback remains a write-through echo). Brightness
-is the `dg/i.java` enum (0=OFF, 1-10=10–100 %, 11=DEFAULT, 13=NOT_EQUIPPED, 14=unchanged),
-not a raw 0-13 scale. Full story + implementation (`control.preamble_for`,
-`device.actuate(..., pre=…)`, `R_LIGHT_PREAMBLE`): **`control-and-actuation.md` §4**.
+### A1 — Lighting SET — RESOLVED 2026-08-16 (unit awake ⇒ bare SET actuates; photon-verified)
+**The physical-actuation gap is closed.** With the unit **awake/active**, a **bare
+SET_BRIGHTNESS + `0e00…` commit physically drives the lamps, both directions** — no
+REQUEST_CONFIG preamble, no 1003 heartbeat, no arm delay (settled 2026-08-16 evening: 6×
+photon-confirmed, incl. three controlled fresh-connection trials varying only the arming;
+Trial 1 = immediate cold-connection SET+commit, lamp switched, owner-watched). The morning's
+"REQUEST_CONFIG preamble is the required arming step" theory (from an iOS HCI capture of the
+app lighting a lamp, diffed via `tools/capture_diff.py`) was falsified that evening — a
+wake-state confound: the preamble path added ~3.3 s + extra frames while the unit was still
+sleepy. Decompile agrees: the app's set-one-zone `dg/h.java:174 E()` writes DIRECT and never
+calls the config request `d0()` (`dg/h.java:471`). **REQUEST_CONFIG's real role is a
+screen-open config pull**: `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12, ProfileNumber=13, all
+zones=14) triggers the unit's Mode-tagged config dump + Mode-4 brightness-ramp
+**notifications on `1502`** — the truthful feedback channel (a Mode-4 notification is a
+normal state frame, `protocol.decode` reads it; the state-char readback remains a
+write-through echo). Brightness is the `dg/i.java` enum (0=OFF, 1-10=10–100 %, 11=DEFAULT,
+13=NOT_EQUIPPED, 14=unchanged), not a raw 0-13 scale. calictl still sends the preamble —
+app-faithful, harmless, optional (`control.preamble_for`, `device.actuate(..., pre=…)`,
+`R_LIGHT_PREAMBLE`). Full story: **`control-and-actuation.md` §4**.
 
 Earlier layers of this gap (kept for history): the 2026-07-08 capture nailed the 14-sentinel
 (unchanged zones = `14`, NOT 0) and Mode-16 profile switch; the "profile must be ACTIVE" rule
@@ -76,8 +84,10 @@ later proved to be the state-char echo bug (the real frame rule is hardcoded PN=
 `dg/h.java:170`); the 2026-07-13 `0e00…` commit frame is necessary but was NOT sufficient —
 both "solved" declarations before 2026-08-16 rested on readback, which this unit's echo makes
 worthless as proof.
-**Still open (need more captures):** SET_COLOR (app exposes no colour control — possibly N/A),
-Wecklicht wake-light, the Alle-Lichter master frame, the rest of the 16-zone→lamp map, and the
+**Still open (need more captures/trials):** whether a truly *deep-asleep* unit needs any
+arming or just waking (the 1003 heartbeat WAS needed for cooler/camping, issue #2 — not
+retested for those); SET_COLOR (app exposes no colour control — possibly N/A), Wecklicht
+wake-light, the Alle-Lichter master frame, the rest of the 16-zone→lamp map, and the
 profile-number semantics (A=9).
 
 ### A2 — chars 1004 / 1002 / satellite 1903–1905 (RESOLVED; open leads)
@@ -310,8 +320,9 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
 
 **Needs a buspi live test — no phone:**
 - ~~`set lighting` confirm~~ **DONE 2026-08-16** (photon-verified — the ProfileNumber-echo theory
-  was moot; PN is hardcoded 9 and the REQUEST_CONFIG preamble was the gate). `set airheater`
-  confirm still open.
+  was moot; PN is hardcoded 9, and a bare SET+commit actuates once the unit is awake — the
+  interim "REQUEST_CONFIG preamble is the gate" theory was a wake-state confound). `set
+  airheater` confirm still open.
 - **1003 disarm timeout** — heartbeat, stop, actuate after N s (settles arm-window sizing).
 - `set roof` (once the ~1 Hz move-heartbeat loop is implemented).
 - Grafana dashboard push (needs the buspi Grafana creds).

@@ -96,7 +96,7 @@ def energy(d: dict) -> dict:
         "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8) * 10 if dcdc_i else 0,
         "shore_power": d.get("PLandAfs", 0) * 10 if shore_i else 0,
         "solar_power": d.get("PPvAfs", 0) * 10 if solar_i else 0,
-        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16) if dcdc_i else None,   # signed A, no /10 (+2 for SW 0409/0410)
+        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16) if dcdc_i else None,   # signed A, no /10; +2 on AmbSwVersion 0409/0410 via apply_sw_corrections()
         "shore_current": round(d.get("ILandAfs", 0) * 0.1, 1) if shore_i else None,   # unsigned A (/10)
         "solar_current": round(d.get("IPvAfs", 0) * 0.1, 1) if solar_i else None,     # unsigned A (/10)
         "dcdc_installed": dcdc_i,
@@ -369,6 +369,28 @@ def interpret(function: str, decoded: dict) -> dict:
     """Raw decoded fields -> human-meaningful dict. Falls back to a generic
     Installed+raw view for functions without a dedicated interpreter."""
     return INTERPRETERS.get(function, _generic)(decoded)
+
+
+# Firmware versions (AmbSwVersion) on which the app adds +2 to the DC-DC current. Verified against
+# the app 2026-08-17: xf/d.java:171 gates on `["0409","0410"]`, and the field is AmbSwVersion (not
+# Cm/Communication) — resolved by SootUp def-use through gj/b -> pf/k -> zf/d.g() -> cVar.f1297a.
+_DCDC_PLUS2_SW = frozenset({"0409", "0410"})
+
+
+def apply_sw_corrections(states: dict) -> dict:
+    """Cross-function firmware-version corrections over a FULL interpreted-states dict (mutates &
+    returns it). Kept out of the per-function ``energy()`` because the correction depends on the
+    ``general`` service's SW version — data ``energy()`` alone doesn't have.
+
+    Currently: DC-DC current += 2 on AmbSwVersion 0409/0410 (this van is 0410, so it applies). A
+    single-function caller (``cli get energy``) that lacks ``general`` context simply skips it.
+    """
+    en, gen = states.get("energy"), states.get("general")
+    if (isinstance(en, dict) and isinstance(gen, dict)
+            and en.get("dcdc_current") is not None
+            and gen.get("amb_sw_version") in _DCDC_PLUS2_SW):
+        en["dcdc_current"] = en["dcdc_current"] + 2
+    return states
 
 
 def is_installed(function: str, decoded: dict) -> bool | None:

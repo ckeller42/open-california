@@ -214,6 +214,21 @@ def test_energy_batt1_sentinel_nulled():
     assert e["batt1_v"] is None and e["batt2_v"] == 13.1
 
 
+def test_dcdc_sw_correction():
+    # app adds +2 to DC-DC current on AmbSwVersion 0409/0410 (this van is 0410); cross-function,
+    # applied over a full states dict via apply_sw_corrections (verified vs the app 2026-08-17)
+    st = {"general": {"amb_sw_version": "0410"}, "energy": {"dcdc_current": 5}}
+    semantics.apply_sw_corrections(st)
+    assert st["energy"]["dcdc_current"] == 7                     # +2 applied
+    # a non-listed version -> untouched
+    assert semantics.apply_sw_corrections(
+        {"general": {"amb_sw_version": "0207"}, "energy": {"dcdc_current": 5}})["energy"]["dcdc_current"] == 5
+    # dcdc not present (source not installed) -> no-op; missing general context -> no-op
+    assert semantics.apply_sw_corrections(
+        {"general": {"amb_sw_version": "0410"}, "energy": {"dcdc_current": None}})["energy"]["dcdc_current"] is None
+    assert semantics.apply_sw_corrections({"energy": {"dcdc_current": 5}})["energy"]["dcdc_current"] == 5
+
+
 def test_mqtt_flatten_and_state():
     from calictl import mqtt
     interp = {"installed": True, "fresh": {"percent": 38, "liters": 11}, "waste": {"percent": 0}}

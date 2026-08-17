@@ -70,13 +70,27 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
     # a pure safety backstop so a regression can't hang the suite.
     async def fake_sleep(x, *a, **k):
         sleeps.append(x)
-        if (s._session_state == "asleep" and x == 60) or len(sleeps) >= 200:
-            raise _Stop
         await real(0)
     monkeypatch.setattr(serve.asyncio, "sleep", fake_sleep)
 
+    # Stop the otherwise-infinite supervisor loop from the connect call -- it is awaited DIRECTLY in
+    # the loop, so a raise propagates out (the backoff now runs in a child task via asyncio.wait, so
+    # a raise there would be trapped). 8 iterations is enough to escalate to 'asleep' and reach the
+    # 60 s backoff cap.
+    real_connect = s._session_connect_once
+    _n = {"i": 0}
+    async def counting_connect():
+        _n["i"] += 1
+        ok = await real_connect()
+        if _n["i"] >= 8:
+            raise _Stop
+        return ok
+    monkeypatch.setattr(s, "_session_connect_once", counting_connect)
+
     async def _run():
         s._ble = asyncio.Lock()
+        s._wake_session = asyncio.Event()          # keep-warm nudge target (never set in this test)
+        s._note_ui_activity()                       # UI active -> supervisor attempts connects (vs idle-release)
         try:
             await s._supervise_session()
         except _Stop:
@@ -353,6 +367,114 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
     result = asyncio.run(_run())
     assert calls["session"] == 1 and calls["dev"] == 0
     assert result is True     # readback State==1 matches "on"
+
+
+def test_ui_active_window():
+    """The session-scoping window: fresh activity -> active; stale or never-used -> idle."""
+    import time
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    assert s._ui_active() is False                      # never used
+    s._note_ui_activity()
+    assert s._ui_active() is True                       # just now
+    s._last_ui_activity = time.time() - (serve._UI_IDLE_S + 5)
+    assert s._ui_active() is False                      # gone idle -> release the slot
+
+
+def test_supervise_releases_session_when_ui_idle(monkeypatch):
+    """App-friendliness: when the web UI is idle, the supervisor RELEASES the held session so the
+    phone app can use the single BLE slot."""
+    import asyncio
+    from calictl import serve
+    s = serve.Server("MO:CK", influx_enabled=False)
+    s._persistent = True
+    s._last_ui_activity = None                          # idle (never used)
+    closed = {"n": 0}
+    class FakeSess:
+        is_up = True
+        async def aclose(self):
+            closed["n"] += 1
+    s._session = FakeSess()
+
+    class _Stop(Exception):
+        pass
+    async def fake_wait(aws, timeout=None):             # stop after the first idle-release
+        raise _Stop
+    monkeypatch.setattr(serve.asyncio, "wait", fake_wait)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._wake_session = asyncio.Event()
+        try:
+            await s._supervise_session()
+        except _Stop:
+            pass
+        return closed["n"], s._session, s._session_state
+    n, sess, state = asyncio.run(_run())
+    assert n == 1 and sess is None and state == "off"   # released, slot freed
+
+
+def test_on_command_nudges_session_when_down(monkeypatch):
+    """Keep-warm: a command with no live session resets the grown backoff and wakes the
+    supervisor to reconnect now, so the fast-path session comes up promptly."""
+    import asyncio
+    from calictl import serve, protocol, overrides
+    funcs = protocol.load(); overrides.apply(funcs)
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._session = None                       # no live session (van was asleep)
+    s._backoff_fails = 3                     # backoff grew during the sleep
+    s._last = {"lighting": {"ProfileNumber": 9}}
+    monkeypatch.setattr(serve, "_SESSION_WAIT_S", 0.1)   # don't idle the full wait-for-session window
+    async def dev_actuate(*a, **k):
+        return None
+    monkeypatch.setattr(s.dev, "actuate", dev_actuate)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._wake_session = asyncio.Event()
+        await s.on_command("lighting", "kitchen", 8)
+        return s._wake_session.is_set(), s._backoff_fails
+    was_set, fails = asyncio.run(_run())
+    assert was_set is True and fails == 0    # supervisor prodded, backoff reset
+
+
+def test_on_command_lighting_is_fast_path_confirmed_by_notification(monkeypatch):
+    """Lighting takes the fast path: NO preamble, NO blocking readback (verify=False); the write
+    returns immediately and applied-ness comes from the unit's real 1502 Mode-4 notification."""
+    import asyncio
+    from calictl import serve, protocol, overrides
+    funcs = protocol.load(); overrides.apply(funcs)
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._last = {"lighting": {"ProfileNumber": 9}}      # non-empty -> skip the cold-cache read
+    key = str(funcs["lighting"].state_char).lower()
+    # a genuine Mode-4 state notification captured on-device: BrightnessLSeven (Kitchen/L7) = 8
+    fresh = bytes.fromhex("090400000000000000000508d00ddddd")
+
+    seen = {}
+    class FakeSession:
+        is_up = True
+        _notif = {}
+        async def actuate(self, func, frame, *, follow=None, verify=True, pre=None):
+            seen["verify"], seen["pre"], seen["follow"] = verify, pre, follow
+            async def push():                          # the unit's Mode-4 arrives shortly after
+                await asyncio.sleep(0.02)
+                self._notif[key] = fresh
+            asyncio.ensure_future(push())
+            return None
+    s._session = FakeSession()
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "kitchen", 8)
+    result = asyncio.run(_run())
+    assert seen["pre"] is None            # no REQUEST_CONFIG preamble on the fast path
+    assert seen["verify"] is False        # no blocking echo-readback
+    assert result is True                 # confirmed by the real Mode-4 notification (L7 == 8)
+    assert s._last["lighting"]["BrightnessLSeven"] == 8   # served state updated from the push
 
 
 # --- web UI start is optional: a bind failure must not crash the daemon ---

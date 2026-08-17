@@ -128,28 +128,26 @@ def test_lighting_requires_the_commit_frame_to_apply(mock):
     assert control.commit_for("cooler") is None
 
 
-def test_lighting_preamble_arms_before_the_set(mock):
-    """The PHYSICAL-apply crack (capture-diffed + photon-verified on-device 2026-08-16).
+def test_lighting_applies_without_preamble(mock):
+    """A bare SET + commit actuates — the REQUEST_CONFIG preamble is NOT an actuation gate.
 
-    .. test:: Lighting preamble precedes the SET frame
+    .. test:: Lighting applies from a bare SET + commit, no preamble
        :id: T_LIGHT_PREAMBLE
        :links: R_LIGHT_PREAMBLE
 
-       The app opens its Lighting screen with REQUEST_CONFIG (Mode=12, PN=13) + commit; only in
-       a session where that preamble landed does the unit drive the real lamps. `preamble_for`
-       returns the two frames for lighting (None otherwise) and `device.actuate(pre=...)` writes
-       them to the control char before the SET."""
+       Photon-verified on-device 2026-08-16: an awake unit applies a ``SET_BRIGHTNESS`` + commit
+       with no REQUEST_CONFIG preamble. `preamble_for` still returns the app's optional config-pull
+       frames (None for non-lighting), but actuation does not depend on them."""
     funcs = _funcs()
     dev = device.CamperDevice()
     setf = control.build(funcs, "lighting", "kitchen", 8, {})
+    # preamble_for still models the app's optional screen-open config request
     assert control.preamble_for("lighting") == [control.LIGHT_REQUEST_CONFIG, control.LIGHT_COMMIT]
     assert control.preamble_for("cooler") is None
-    d = control.decode_control(funcs["lighting"], control.LIGHT_REQUEST_CONFIG)
-    assert d["Mode"] == 12 and d["ProfileNumber"] == 13          # REQUEST_CONFIG, byte-exact
+    # but a SET + commit with NO preamble (pre=None) applies on its own
     asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False,
-                            follow=control.LIGHT_COMMIT,
-                            pre=control.preamble_for("lighting")))
-    assert mock.decoded("lighting")["BrightnessLSeven"] == 8     # SET still lands after the preamble
+                            follow=control.LIGHT_COMMIT, pre=None))
+    assert mock.decoded("lighting")["BrightnessLSeven"] == 8
 
 
 # --- read_all prefers pushed notifications over a stale latched read ---------

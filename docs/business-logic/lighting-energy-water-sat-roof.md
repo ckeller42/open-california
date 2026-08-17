@@ -189,10 +189,15 @@ elimination.
 
 ### Color enum (`dg/j.java`, wire values 1–10)
 
-`WARM_WHITE, BLOOD_ORANGE, AMBER, PISTACHIO, PEPPERMINT, MINT, AZURE, DARK_BLUE, RED, SALMON`. Only confirmed
-call site is inside the wake-up-light `LightValue` packing (`dg/h.java:656`); no direct `SET_COLOR`(mode 6) call
-site was found in `dg/h.java` — `SET_COLOR` may only be reachable through the (not-fully-decompiled) profile
-save/apply path. `UNVERIFIED`.
+`WARM_WHITE(1), BLOOD_ORANGE(2), AMBER(3), PISTACHIO(4), PEPPERMINT(5), MINT(6), AZURE(7), DARK_BLUE(8),
+RED(9), SALMON(10)` — matches `control.LIGHT_COLORS` byte-for-byte. **CORRECTED 2026-08-17:** there IS a direct
+`SET_COLOR`(Mode 6) call site — `dg/h.java:644` (`n.SET_COLOR` + `v(6, …)`), a **profile-recolour** method:
+`Mode=6`, `LightValue`=colour index, `ProfileNumber`=the *target* profile, and the zones carry that profile's
+brightness (`w10.d.b(kVar2)`), transmitted via the await-response path `A(SET_COLOR, …)`, gated so two profiles
+(likely LIGHTS_OFF/ON) can't be coloured. So SET_COLOR is a real capability, not N/A — but it recolours a
+stored profile. `control._lighting`'s `color` builds `ProfileNumber=9` + sentinel zones, which is NOT what the
+app sends (target profile + its brightness), so our `set lighting color` frame is mis-shaped and likely won't
+actuate as built. The other `dg.j` use is the wake-up-light `LightValue` packing (`dg/h.java:656`).
 
 ### Wake mode enum (`dg/k.java:39-53`)
 

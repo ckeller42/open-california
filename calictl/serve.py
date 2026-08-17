@@ -20,6 +20,21 @@ from pathlib import Path
 from . import protocol, semantics, overrides, mqtt, influx, freshness, history
 from .device import CamperDevice, ConnectionUnavailable
 
+# How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
+# an optimistic "sent" (the lamp itself already reacted; this only bounds the UI confirm latency).
+_FAST_CONFIRM_S = float(os.environ.get("CALICTL_FAST_CONFIRM_S", "1.2"))
+
+# Hold the fast-path persistent BLE session only while the web UI is ACTIVE (a browser polling
+# /api/state every ~2 s, or a recent command). The van allows ONE connection at a time, so a
+# permanently-held session blocks the phone app; after this many seconds without UI activity the
+# daemon RELEASES the session (dropping to brief cold polls) so the app can use the slot.
+_UI_IDLE_S = float(os.environ.get("CALICTL_UI_IDLE_S", "25"))
+
+# When a command arrives and no session is up yet, wait up to this long for the supervisor to bring
+# one up (it's connecting due to the keep-warm nudge) and ride it — rather than racing it with a
+# redundant cold connect that fights over the single BLE slot. Falls back to the cold path on timeout.
+_SESSION_WAIT_S = float(os.environ.get("CALICTL_SESSION_WAIT_S", "6"))
+
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
 
 
@@ -55,9 +70,11 @@ class ServeBackend:
         when the van is parked and then can't be reached at all, so the UI must show the last
         known values *with an "as of" age* and an offline indicator — never a blank or a stale
         number dressed as live. `_meta` is not a function name, so it never renders as a tile."""
+        self._s._note_ui_activity()   # a browser is polling -> the UI is active; hold the session
         out = {}
         for fn, decoded in dict(self._s._last or {}).items():
             out[fn] = semantics.interpret(fn, decoded)
+        semantics.apply_sw_corrections(out)   # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
         # Stale fresh-water: serve the last PLAUSIBLE reading (not the parked latch), flagged stale.
         water = out.get("water")
         if isinstance(water, dict) and isinstance(water.get("fresh"), dict):
@@ -171,6 +188,8 @@ class Server:
         self.interval = interval
         self.influx_enabled = influx_enabled
         self._ble = None                    # asyncio.Lock(); created inside run()'s loop
+        self._wake_session = None            # asyncio.Event(); nudges the supervisor to reconnect NOW
+        self._last_ui_activity = None        # epoch of the last web-UI poll/command (session scoping)
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
@@ -249,6 +268,29 @@ class Server:
         s = self._session
         return s if (self._persistent and s is not None and s.is_up) else None
 
+    def _note_ui_activity(self):
+        """Mark the web UI as active NOW (a browser poll or a command). While active, the daemon
+        holds the fast-path persistent session; going idle releases it (see ``_ui_active``). Called
+        from both the web thread (ServeBackend) and the loop (on_command) — a plain float write is
+        atomic under the GIL."""
+        self._last_ui_activity = time.time()
+
+    def _ui_active(self):
+        """True while the web UI has been used within ``_UI_IDLE_S`` — the window in which the
+        daemon keeps the persistent session up. Idle beyond it -> release the slot for the app."""
+        a = self._last_ui_activity
+        return a is not None and (time.time() - a) < _UI_IDLE_S
+
+    def _nudge_session(self):
+        """Keep-warm: a command wants to actuate. If no session is up, reset the backoff the
+        supervisor grew while the van slept and wake it to reconnect NOW — the user reaching for a
+        control means the van is likely awake, so the session (and the fast path) should come up
+        promptly instead of after a long backoff. No-op when a session is already live."""
+        if (self._persistent and self._wake_session is not None
+                and self._live_session() is None):
+            self._backoff_fails = 0
+            self._wake_session.set()
+
     async def poll(self):
         # One BLE read of every function under the lock; cache the DECODED state
         # (on_command builds full-packet control frames from it) and derive the
@@ -263,6 +305,7 @@ class Server:
             decoded = protocol.decode(self.funcs[fn], data)
             new_last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
+        semantics.apply_sw_corrections(states)   # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
         # Stale-latch guard: when the van is parked/locked the unit stops measuring fresh water and
         # returns a bogus low (true 17 L read back as 1 L). A fresh drop from the last PLAUSIBLE
         # reading with no matching grey rise is physically impossible -> serve/publish that last
@@ -340,8 +383,26 @@ class Server:
         return True
 
     async def _supervise_session(self) -> None:
-        """Keep the persistent session up; back off while the van is unreachable."""
+        """Hold the persistent session while the web UI is ACTIVE; release the BLE slot when it goes
+        idle (so the phone app can connect); back off while the van is unreachable."""
         while True:
+            if not self._ui_active():
+                # web UI idle -> release the slot for the phone app; the daemon falls back to brief
+                # cold polls, which coexist with the app far better than a permanently-held link.
+                if self._session is not None:
+                    async with self._ble:
+                        await self._session.aclose()
+                    self._session = None
+                    print("persistent session released (web UI idle)", flush=True)
+                self._session_state = "off"
+                # wake early when a command/poll marks activity, else re-check each interval
+                waiter = asyncio.ensure_future(self._wake_session.wait())
+                try:
+                    await asyncio.wait({waiter}, timeout=self.interval)
+                finally:
+                    waiter.cancel()
+                    self._wake_session.clear()
+                continue
             if self._session is not None and self._session.is_up:
                 await asyncio.sleep(self.interval)
                 continue
@@ -349,7 +410,17 @@ class Server:
                 ok = await self._session_connect_once()
             if not ok:
                 idx = min(self._backoff_fails, len(self.SESSION_BACKOFF)) - 1
-                await asyncio.sleep(self.SESSION_BACKOFF[max(0, idx)])
+                # sleep the backoff, but wake IMMEDIATELY if a command nudges us (keep-warm): the
+                # user reaching for a control means the van is likely awake now, so don't make them
+                # wait out a backoff that grew during a long deep-sleep.
+                sleeper = asyncio.ensure_future(asyncio.sleep(self.SESSION_BACKOFF[max(0, idx)]))
+                waker = asyncio.ensure_future(self._wake_session.wait())
+                try:
+                    await asyncio.wait({sleeper, waker}, return_when=asyncio.FIRST_COMPLETED)
+                finally:
+                    sleeper.cancel()
+                    waker.cancel()
+                    self._wake_session.clear()
 
     async def on_command(self, function, what, value):
         """Build + write a control frame, then read back and report applied-ness.
@@ -370,6 +441,15 @@ class Server:
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
             print("read-only: refusing command %s/%s" % (function, what), flush=True)
             return None
+        self._note_ui_activity()   # a command counts as active use -> hold the session
+        self._nudge_session()      # keep-warm: bring the fast-path session up now if it isn't
+        # Prefer the fast persistent session over a redundant cold connect: the nudge just told the
+        # supervisor to connect, so wait briefly (OUTSIDE the _ble lock, so the supervisor can take
+        # it) for the session to come up rather than racing it cold over the single slot.
+        if self._persistent and self._live_session() is None:
+            deadline = time.monotonic() + _SESSION_WAIT_S
+            while time.monotonic() < deadline and self._live_session() is None:
+                await asyncio.sleep(0.2)
         # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
@@ -408,14 +488,26 @@ class Server:
             if frame is None:
                 return None
             sess = self._live_session()
-            if sess is not None:
-                post = await sess.actuate(self.funcs[function], frame, verify=True,
-                                          follow=control.commit_for(function),
-                                          pre=control.preamble_for(function))
-            else:
-                post = await self.dev.actuate(self.funcs[function], frame, verify=True,
-                                              follow=control.commit_for(function),
-                                              pre=control.preamble_for(function))
+            # Lighting actuates from a bare SET on an awake unit (photon-verified 2026-08-16), so
+            # the fast path drops the two things that made it slow: the REQUEST_CONFIG preamble
+            # (not an actuation gate — the app's E() writes DIRECT and never sends it) and the
+            # blocking echo-readback. The lamp reacts in ~0.3 s; confirmation comes from the real
+            # 1502 Mode-4 notification, not the write-through echo. cooler/roof keep the armed +
+            # verified path (their heartbeat gate, issue #2, is untouched).
+            is_light = function == "lighting"
+            pre = None if is_light else control.preamble_for(function)
+            target = sess if sess is not None else self.dev
+            # Snapshot the 1502 notification BEFORE the write: the unit's Mode-4 ramp push arrives
+            # within the ~0.3 s write window, so a snapshot taken afterwards would already contain it
+            # and look stale -> the confirm would miss it.
+            before = None
+            if is_light and getattr(sess, "_notif", None) is not None:
+                before = sess._notif.get(str(self.funcs[function].state_char).lower())
+            post = await target.actuate(self.funcs[function], frame,
+                                        verify=not is_light,
+                                        follow=control.commit_for(function), pre=pre)
+            if is_light:
+                return await self._confirm_lighting(sess, function, what, value, before)
             if post is None:
                 return None
             self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
@@ -423,15 +515,36 @@ class Server:
             _, got, want = _set_check(function, what, value, interp, post)
             if got is None and want is None:   # no table entry for this target
                 return None
-            if function == "lighting":
-                # the lighting state char is a write-through ECHO — a matching readback proves
-                # only that the frame arrived, never that the lamp lit (CLAUDE.md, 2026-08-16).
-                # An echo MISMATCH is still a real failure (link/refusal), so report False; a
-                # match is honestly "unknown". Upgrading to real verification needs the 1502
-                # Mode-4 ramp-notification layout decoded first (it differs from the control
-                # frame layout) — an open RE task.
-                return None if got == want else False
             return got == want
+
+    async def _confirm_lighting(self, sess, function, what, value, before):
+        """Confirm a fast lighting write from the unit's real 1502 Mode-4 notification.
+
+        The SET + commit already went out (bare frame, no arm, no preamble); the lamp reacts in
+        ~0.3 s. Wait briefly (``CALICTL_FAST_CONFIRM_S``) for a state-char push newer than
+        ``before`` (snapshotted before the write) — the Mode-4 ramp notification carries the REAL
+        brightness, unlike the write-through echo readback — update the served cache from it and
+        report applied-ness. Returns ``True`` on a matching notification, else ``None`` (optimistic
+        "sent"); never a false negative for lighting. No live session or no push -> ``None`` (the
+        cold path can't cheaply confirm; the next poll reconciles).
+        """
+        from .cli import _set_check   # lazy
+        f = self.funcs[function]
+        notif = getattr(sess, "_notif", None)
+        if notif is None:
+            return None
+        key = str(f.state_char).lower()
+        deadline = time.monotonic() + _FAST_CONFIRM_S
+        while time.monotonic() < deadline:
+            cur = notif.get(key)
+            if cur is not None and cur is not before:          # a fresh push arrived
+                decoded = protocol.decode(f, cur)
+                self._last = {**self._last, function: decoded}  # atomic rebind (web thread reads unlocked)
+                interp = semantics.interpret(function, decoded)
+                _, got, want = _set_check(function, what, value, interp, decoded)
+                return True if (got is not None and got == want) else None
+            await asyncio.sleep(0.05)
+        return None
 
     def _maybe_start_mqtt(self, loop):
         """Connect the MQTT client for Home Assistant, or skip gracefully. Returns the client
@@ -517,6 +630,7 @@ class Server:
         self._loop = loop
         asyncio.set_event_loop(loop)
         self._ble = asyncio.Lock()          # the van allows ONE connection; created on this loop
+        self._wake_session = asyncio.Event()   # a command can wake the session supervisor early
 
         # --- MQTT (Home Assistant) — optional; a missing broker must not stop polling+web ---
         self._mqtt = self._maybe_start_mqtt(loop)
@@ -543,8 +657,8 @@ class Server:
                 asyncio.ensure_future(self._supervise_session())
             while True:
                 try:
-                    if self._persistent and self._live_session() is None:
-                        await asyncio.sleep(2)        # supervisor is (re)connecting
+                    if self._persistent and self._session_state == "connecting":
+                        await asyncio.sleep(2)        # supervisor is mid-connect; don't race it cold
                         continue
                     states = await self.poll()
                     print("polled %d functions" % len(states), flush=True)

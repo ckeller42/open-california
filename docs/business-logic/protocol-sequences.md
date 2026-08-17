@@ -78,19 +78,28 @@ sequenceDiagram
     C->>U: disconnect          (heartbeat stops)
 ```
 
-## 2. Lighting SET — REQUEST_CONFIG preamble + SET + commit (cracked 2026-08-16, photon-verified)
+## 2. Lighting SET — SET + commit actuates on an awake unit; optional REQUEST_CONFIG config-pull (settled 2026-08-16, photon-verified)
 
 calictl's SET frame is **byte-identical to the app's**, yet for over a month a calictl SET was
 ACKed (and echoed by the `1502` state char — see the echo caveat below) while the **physical
-lamp stayed dark**. The 2026-08-16 HCI capture of the app *physically* lighting a lamp
-(`tools/capture_diff.py`) found the missing ingredient: on opening its Lighting screen the app
-writes a **REQUEST_CONFIG frame** `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12,
-ProfileNumber=13, all zones=14) followed by the usual `0e00…` commit, to `1501`. **Only in a
-session where this preamble has landed does the unit physically drive the lamps on a later
-SET_BRIGHTNESS.** Photon-verified on Kochen L7 from buspi: 0→dark, 8→80 %, 0→dark
-(owner-watched). calictl sends the preamble via `control.LIGHT_REQUEST_CONFIG` +
+lamp stayed dark**. Settled 2026-08-16: **with the unit awake, a bare SET_BRIGHTNESS + `0e00…`
+commit physically drives the lamps, both directions** — no preamble, no 1003 heartbeat, no arm
+delay (evening trials, 6× photon-confirmed incl. an immediate cold-connection write;
+owner-watched on Kochen L7: 0→dark, 8→80 %, 0→dark). **The real actuation gate is the unit's
+wake/active state.** The same morning's HCI capture of the app lighting a lamp
+(`tools/capture_diff.py`) had suggested a required arming step — on opening its Lighting
+screen the app writes a **REQUEST_CONFIG frame** `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12,
+ProfileNumber=13, all zones=14) + the usual `0e00…` commit to `1501` — but that necessity
+claim was falsified the same evening (the sleepy morning unit + the preamble's ~3.3 s of extra
+delay was a confound). The decompile agrees: the app's set-one-zone `dg/h.java:174 E()` writes
+DIRECT (immediately) and never calls the config request `d0()` (`dg/h.java:471`).
+**REQUEST_CONFIG's real role is a screen-open config pull** — it triggers the unit's
+Mode-tagged config-dump notifications on `1502` (only that dump is gated on it). calictl still
+sends it — app-faithful, harmless, optional — via `control.LIGHT_REQUEST_CONFIG` +
 `control.preamble_for("lighting")` → `device.actuate(..., pre=…)` (frames spaced
 `FOLLOW_DELAY_S` = 0.3 s, then `PRE_SETTLE_S` = 3.0 s arm wait, env `CALICTL_PRE_SETTLE_S`).
+Whether a truly deep-asleep unit needs any arming is still open; the 1003 heartbeat WAS needed
+for cooler/camping actuation (issue #2) — not retested, lighting demonstrably differs.
 
 **Decompile nuance (2026-07-14, still true) — `0e00…` is NOT an app "commit".** The Lighting Mode
 enum (`dg/n`) is `NO_MODE=0, SET_BRIGHTNESS=4, SET_COLOR=6, SET_DOUBLE=8, REQUEST_CONFIG=12,
@@ -105,22 +114,25 @@ REQUEST_CONFIG the unit streams a config dump as **notifications on `1502`**, ta
 `0x0c` config echo, `0x06` color state, `0x08` SET_DOUBLE, `0x10` profile state (profile 8),
 `0x14` wake time, `0x18` system time (ticking unix seconds). After an *applied* SET_BRIGHTNESS
 it notifies **Mode-4 "ramp" frames showing the REAL current brightness stepping to the target**
-(e.g. 01→03→04→05). A plain read of `1502` remains a **write-through echo** of the last SET —
-never proof of actuation.
+(e.g. 01→03→04→05) — a Mode-4 notification is a **normal `1502` state frame, decodable with
+`protocol.decode`**, and it tracked real actuation in every observed case (armed and un-armed
+alike). A plain read of `1502` remains a **write-through echo** of the last SET — never proof
+of actuation.
 
 ```mermaid
 sequenceDiagram
     participant C as calictl
     participant U as Lighting (1501/1502)
-    Note over C,U: (all inside one heartbeat-armed session)
-    C->>U: REQUEST_CONFIG (0d0c… — Mode 12, PN=13, zones=14)
-    C->>U: commit (0e00… = NO_MODE neutral default frame)
-    U--)C: 1502 notifications: config dump (Modes 0x0c/0x06/0x08/0x10/0x14/0x18)
-    Note right of U: session armed for PHYSICAL lighting actuation (~3 s settle)
+    Note over C,U: unit must be AWAKE (the actual actuation gate)
+    opt OPTIONAL app-faithful config pull (calictl still sends it; NOT required to actuate)
+        C->>U: REQUEST_CONFIG (0d0c… — Mode 12, PN=13, zones=14)
+        C->>U: commit (0e00… = NO_MODE neutral default frame)
+        U--)C: 1502 notifications: config dump (Modes 0x0c/0x06/0x08/0x10/0x14/0x18)
+    end
     C->>U: SET_BRIGHTNESS (Mode 4, PN=9, zone=N, others=14)
     C->>U: commit (0e00…) — flushes the single write
     U--)C: 1502 Mode-4 ramp notifications (real brightness → N)
-    Note right of U: lamp PHYSICALLY changes ✅ (photon-verified 2026-08-16)
+    Note right of U: lamp PHYSICALLY changes ✅ (photon-verified 2026-08-16, bare SET incl.)
 ```
 
 ## 3. Roof actuation — press-and-hold move stream, unit self-gated by a 3 s SafetyCounter (`device.actuate_roof`)
