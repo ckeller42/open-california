@@ -194,7 +194,7 @@ const FEATURES = {
         get: (s) => (s.level_roll == null || s.level_pitch == null
           ? "—" : `${fmtDeg(s.level_roll)} / ${fmtDeg(s.level_pitch)}`),
         widget: (s) => bubbleLevel(s.level_roll, s.level_pitch) },
-      { label: "Vehicle clock", get: (s) => s.car_clock ?? "—" },
+      { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },
     ],
     summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
   },
@@ -533,6 +533,7 @@ function energyChart() {
 function render() {
   backEl.hidden = view === "home";
   backEl.onclick = () => goto("home");
+  stopClockTicker();          // any live vehicle-clock ticker belongs to the old DOM; restarted on re-render
   app.innerHTML = "";
   const sp = sessionToggle();
   if (sp) app.appendChild(sp);
@@ -858,6 +859,32 @@ function renderControl(fn, c, s) {
   return row;
 }
 
+// Live vehicle-clock tick. The van's RTC arrives as a per-poll snapshot ("YYYY-MM-DD HH:MM:SS");
+// rather than let it sit frozen between polls, we advance it by real elapsed time. We anchor to the
+// instant the reading was actually taken (now - _meta.age_s), so the displayed clock = RTC value +
+// wall-time since. Re-synced on every poll (render() rebuilds), smooth in between. Because the RTC
+// tracks real time, this stays ~accurate even while the van is asleep — it's cosmetic; liveness is
+// shown by the separate online/offline banner.
+let clockTimer = null;
+function stopClockTicker() { if (clockTimer) { clearInterval(clockTimer); clockTimer = null; } }
+function parseClock(str) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(str || "");
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : null;  // local time
+}
+function fmtClock(ms) {
+  const d = new Date(ms), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function startClockTicker(el) {
+  stopClockTicker();
+  const base = parseClock((STATE.vehicle || {}).car_clock);
+  if (base == null) { el.textContent = "—"; return; }
+  const anchor = Date.now() - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0);
+  const paint = () => { el.textContent = fmtClock(base + (Date.now() - anchor)); };
+  paint();
+  clockTimer = setInterval(paint, 1000);
+}
+
 function renderReadout(r, s) {
   const wrap = document.createElement("div");
   wrap.className = "rowwrap";
@@ -875,6 +902,7 @@ function renderReadout(r, s) {
     val = "—";
   }
   v.textContent = val == null || val === "" ? "—" : String(val);
+  if (r.tick) startClockTicker(v);   // live-advance this value (vehicle clock) between polls
   row.appendChild(label);
   row.appendChild(v);
   wrap.appendChild(row);
