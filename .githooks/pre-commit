@@ -26,7 +26,12 @@ if staged | xargs -r git diff --cached -- | grep -nE '\b[A-HJ-NPR-Z0-9]{17}\b' |
   fail "a VIN appears in the diff — VINs are PII, keep them out of the repo"
 fi
 
-# 4) Tests + coverage guardrail (skip with SKIP_TESTS=1 for docs-only commits).
+# 4a) Doc↔code consistency ALWAYS runs (even for docs-only SKIP_TESTS commits) — it's fast and
+#     docs-only commits are exactly when prose drifts from the dictionary.
+python3 -m pytest tests/test_doc_offset_consistency.py -q >/dev/null || \
+  fail "doc/comment offset citations disagree with the dictionary (see test_doc_offset_consistency)"
+
+# 4b) Full suite + coverage guardrail (skip with SKIP_TESTS=1 for docs-only commits).
 if [ "${SKIP_TESTS:-0}" != "1" ]; then
   python3 -m pytest tests/ -q >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
   python3 -m tools.audit_signals --report >/dev/null 2>&1 || \
