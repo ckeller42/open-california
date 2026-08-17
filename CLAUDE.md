@@ -96,14 +96,18 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   overlapping + the user releasing the button while reading the dialog). The unit checks
   liveness/monotonicity and reports `SafetyCounterValid` (`1402` bit 7); it **withholds the motor
   for ~3 s until the counter validates** and the app arms a **3000 ms** dead-man (perceived ~4 s =
-  3 s + BLE latency — no 4 s constant). **Open gaps (roof NOT-LIVE-VERIFIED until fixed):**
-  `actuate_roof` must (a) generate a live monotonic counter (~+1/500 ms), not echo/fixed-`+1`;
-  (b) account for the ~3 s self-gate (optionally honour `SafetyCounterValid` + the 3 s timeout);
-  (c) re-send at **~1 Hz** while held. **Corrected 2026-08-17 from the source** (`ig/c.java` arms
-  `jn.a(1000L, repeat=true)` for the frame resend — 1 Hz, NOT 500 ms; the 500 ms belongs only to the
-  SafetyCounter increment `w8/a` `500/450/550`, a separate wall-clock rule). The earlier "use ~500 ms
-  cadence, not 1 Hz" note here conflated the counter's 500 ms with the frame cadence. See
-  `protocol-sequences.md` §3 + `docs/business-logic/protocol-alignment.md`.
+  3 s + BLE latency — no 4 s constant). **`actuate_roof` is protocol-correct — re-verified against
+  the source 2026-08-17** (`w8/a` + `b1/d` + `ig/c`): it (a) generates the live monotonic counter
+  `seed + floor(elapsed_ms/500)`, (b) honours the 3 s `SafetyCounterValid` dead-man, and (c) streams
+  at **~500 ms with +1/frame — which is exactly right**. The app pumps frames from a ~500 ms
+  SafetyCounter timer (the primary transmitter, +1/frame) plus a secondary 1000 ms timer that only
+  re-affirms direction (~3 frames/s, deltas 0/+1, never +2); our single 500 ms/+1 stream reproduces
+  the counter-timer sub-stream. (An intraday 2026-08-17 edit wrongly "corrected" this to ~1 Hz/+2 by
+  mistaking the 1000 ms direction-resend for the pump — reverted.) **Still NOT-LIVE-VERIFIED:** calictl
+  has never driven the motor end-to-end; and our roof path additionally runs the 1003 arm-heartbeat +
+  a 3 s `ARM_DELAY_S` pre-arm that the app's roof loop does NOT (its liveness proof is the SafetyCounter
+  itself) — harmless but possibly removable, unverified. See `protocol-sequences.md` §3 +
+  `docs/business-logic/protocol-alignment.md`.
 - **Reads go STALE, and the unit deep-sleeps** (found 2026-07-{09,12}). A bare read returns a
   latched value that decays (fresh-water read 1 L vs true 11 L); `device.read_all`/`read` now run
   the **1003 heartbeat during reads** to keep values fresh + the link alive. But when the van is
