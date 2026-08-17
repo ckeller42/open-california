@@ -104,8 +104,16 @@ class ServeBackend:
             "online": online,
             "read_only": bool(self.read_only),
             "session": session_state if persistent else "off",
+            # "auto" (activity-scoped) or "release" (user tapped Disconnect) — lets the UI show
+            # "Disconnected" distinctly from "Van asleep".
+            "session_mode": (getattr(self._s, "_session_mode", None) or "auto") if persistent else "off",
         }
         return out
+
+    def set_session(self, action):
+        """Bridge the web-UI connection toggle onto the daemon loop (like `command`)."""
+        fut = asyncio.run_coroutine_threadsafe(self._s.set_session_mode(action), self._loop)
+        return fut.result(timeout=15)
 
     def history(self, hours=24):
         """Leisure-battery samples for the last ``hours``, oldest first — read from the daemon's
@@ -190,6 +198,7 @@ class Server:
         self._ble = None                    # asyncio.Lock(); created inside run()'s loop
         self._wake_session = None            # asyncio.Event(); nudges the supervisor to reconnect NOW
         self._last_ui_activity = None        # epoch of the last web-UI poll/command (session scoping)
+        self._session_mode = None            # None = auto (activity-scoped); "release" = user disconnected
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
@@ -277,9 +286,32 @@ class Server:
 
     def _ui_active(self):
         """True while the web UI has been used within ``_UI_IDLE_S`` — the window in which the
-        daemon keeps the persistent session up. Idle beyond it -> release the slot for the app."""
+        daemon keeps the persistent session up. Idle beyond it -> release the slot for the app.
+        A manual "release" (the user tapped Disconnect) forces inactive regardless of polling, so
+        the slot goes to the phone app until they Connect again or issue a command."""
+        if self._session_mode == "release":
+            return False
         a = self._last_ui_activity
         return a is not None and (time.time() - a) < _UI_IDLE_S
+
+    async def set_session_mode(self, action):
+        """Explicit Connect/Disconnect from the web UI (the connection toggle).
+
+        ``connect`` clears any manual release, marks the UI active, and nudges the supervisor to
+        bring the session up NOW (warm the fast path before the first control). ``disconnect`` sets
+        the manual release and wakes the supervisor, which — seeing the UI 'inactive' — aclose()s
+        the session and hands the single BLE slot back to the phone app. Returns the mode + the
+        current session state for the UI.
+        """
+        if action == "connect":
+            self._session_mode = None
+            self._note_ui_activity()
+            self._nudge_session()
+        elif action == "disconnect":
+            self._session_mode = "release"
+            if self._wake_session is not None:
+                self._wake_session.set()   # wake the supervisor to drop the session immediately
+        return {"ok": True, "mode": self._session_mode or "auto", "session": self._session_state}
 
     def _nudge_session(self):
         """Keep-warm: a command wants to actuate. If no session is up, reset the backoff the
@@ -441,6 +473,7 @@ class Server:
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
             print("read-only: refusing command %s/%s" % (function, what), flush=True)
             return None
+        self._session_mode = None  # a command means intent to control -> override any manual Disconnect
         self._note_ui_activity()   # a command counts as active use -> hold the session
         self._nudge_session()      # keep-warm: bring the fast-path session up now if it isn't
         # Prefer the fast persistent session over a redundant cold connect: the nudge just told the

@@ -142,13 +142,17 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 .ec-v-lbl { fill: var(--accent); }
 .ec-a-lbl { fill: var(--ok); }
 .echart-empty { color: var(--muted); font-size: .82rem; padding: 1.4rem .2rem; text-align: center; }
+.echart-sub + .echart-sub { margin-top: .5rem; }
+.echart-subtitle { font-size: .72rem; color: var(--muted); margin-bottom: .1rem; }
 
 /* inferred/unverified lamp identity marker on the Lighting screen */
 .lamp-hint { margin-left: .5rem; font-size: .68rem; font-weight: 400; color: var(--muted);
   border: 1px solid var(--border); border-radius: 6px; padding: 0 .3rem; vertical-align: middle; }
 
 /* persistent-session status pill (read-only) */
-.session-pill { display: inline-block; font-size: .72rem; color: var(--muted);
-  border: 1px solid var(--border); border-radius: 999px; padding: .1rem .6rem; margin-bottom: .6rem; }
+.session-pill { display: inline-block; font-size: .72rem; color: var(--muted); font-family: inherit;
+  background: none; border: 1px solid var(--border); border-radius: 999px; padding: .1rem .6rem;
+  margin-bottom: .6rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.session-pill:disabled { opacity: .5; cursor: default; }
 .session-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
 .session-pill.busy { color: var(--accent); }

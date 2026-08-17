@@ -80,7 +80,8 @@ def make_handler(backend, webui_dir):
                 self._send_bytes(f.read(), _CONTENT_TYPES.get(ext, "application/octet-stream"))
 
         def do_POST(self):
-            if self.path.split("?", 1)[0] != "/api/command":
+            path = self.path.split("?", 1)[0]
+            if path not in ("/api/command", "/api/session"):
                 return self._send_json({"error": "not_found"}, 404)
             ctype = self.headers.get("Content-Type", "")
             if ctype.split(";", 1)[0].strip().lower() != "application/json":
@@ -96,6 +97,17 @@ def make_handler(backend, webui_dir):
                 req = json.loads(self.rfile.read(length) or b"{}")
             except ValueError:
                 return self._send_json({"error": "bad_json"}, 400)
+            if path == "/api/session":
+                # connection toggle: manage the BLE session, not a vehicle write, so it is allowed
+                # even in read-only mode (it never actuates).
+                action = req.get("action")
+                if action not in ("connect", "disconnect"):
+                    return self._send_json({"error": "bad_action"}, 400)
+                try:
+                    return self._send_json(backend.set_session(action))
+                except Exception as e:
+                    print("web: set_session failed: %r" % (e,), flush=True)
+                    return self._send_json({"error": "session_failed"}, 500)
             if backend.read_only:
                 return self._send_json({"error": "read_only"}, 405)
             fn = req.get("function"); what = req.get("what")

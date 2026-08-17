@@ -317,21 +317,35 @@ function offlineBanner() {
   return b;
 }
 
-// Read-only session-state pill (persistent BLE session). Displayed, never toggled — same
-// precedent as the read-only lock: the unauthenticated LAN UI must not flip daemon infra state.
-const SESSION_PILL = {
-  up: { cls: "ok", text: "🟢 Live · fast" },
-  connecting: { cls: "busy", text: "🟡 Connecting" },
-  degraded: { cls: "busy", text: "🟡 Reconnecting" },
-  asleep: { cls: "", text: "⚪ Asleep" },
-};
-function sessionPill() {
-  const st = STATE._meta && STATE._meta.session;
-  if (!st || st === "off") return null;
-  const spec = SESSION_PILL[st] || SESSION_PILL.asleep;
-  const el = document.createElement("div");
+// Connection toggle for the persistent BLE session. The van has ONE BLE slot shared with the
+// phone app, so this both SHOWS the state and lets you Connect (warm the fast path now) or
+// Disconnect (hand the slot back to the app immediately, instead of waiting out the idle release).
+function sessionToggle() {
+  const m = STATE._meta || {};
+  const mode = m.session_mode, st = m.session;
+  if (mode == null || mode === "off") return null;      // persistent session disabled -> no toggle
+  let spec, action;
+  if (mode === "release") { spec = { cls: "", text: "🔌 Disconnected" }; action = "connect"; }
+  else if (st === "up") { spec = { cls: "ok", text: "🟢 Live · fast" }; action = "disconnect"; }
+  else if (st === "connecting" || st === "degraded") { spec = { cls: "busy", text: "🟡 Connecting" }; action = "disconnect"; }
+  else if (st === "asleep") { spec = { cls: "", text: "⚪ Asleep — tap to wake" }; action = "connect"; }
+  else { spec = { cls: "", text: "🔌 Connect" }; action = "connect"; }   // idle in auto mode
+  const el = document.createElement("button");
+  el.type = "button";
   el.className = "session-pill" + (spec.cls ? " " + spec.cls : "");
   el.textContent = spec.text;
+  el.title = action === "connect"
+    ? "Connect the fast BLE session (warm it before controlling)"
+    : "Disconnect — free the BLE slot for the phone app";
+  el.setAttribute("aria-label", el.title);
+  el.onclick = async () => {
+    el.disabled = true;
+    try {
+      await api("/api/session", { method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action }) });
+    } catch (e) { /* the state refresh below reflects whatever actually happened */ }
+    await refreshState(true);
+  };
   return el;
 }
 
@@ -403,36 +417,36 @@ function extent(samples, i, pad) {
   return [lo, hi];
 }
 
-function chartSvg(h) {
+// One series (voltage OR current) on its own axis — the two are split into separate diagrams
+// because they live on very different scales (V ~13-14, A can swing -2..+8), so overlaying them
+// squashes the voltage line flat. cfg: {idx, cls, pad, lblCls, name, unit}.
+function seriesSvg(h, cfg) {
   const samples = (h && h.samples) || [];
-  const vE = extent(samples, 1, 0.4), aE = extent(samples, 2, 2);
-  if (!samples.length || !vE || !aE) return null;
+  const e = extent(samples, cfg.idx, cfg.pad);
+  if (!samples.length || !e) return null;
   const C = CHART, hours = h.hours || 24;
   const t1 = h.now, t0 = t1 - hours * 3600;          // a TRUE 24 h axis: gaps stay gaps
   const plotW = C.w - C.l - C.r, plotH = C.h - C.t - C.b;
   const x = (ts) => C.l + ((ts - t0) / (t1 - t0)) * plotW;
-  const yFor = (e) => (val) => C.t + plotH - ((val - e[0]) / (e[1] - e[0])) * plotH;
-  const yV = yFor(vE), yA = yFor(aE);
-  const draw = (idx, y, cls) => contiguousRuns(samples, h.gap_s || 120).map((run) => {
-    const pts = run.filter((s) => typeof s[idx] === "number" && isFinite(s[idx]));
+  const y = (val) => C.t + plotH - ((val - e[0]) / (e[1] - e[0])) * plotH;
+  const line = contiguousRuns(samples, h.gap_s || 120).map((run) => {
+    const pts = run.filter((s) => typeof s[cfg.idx] === "number" && isFinite(s[cfg.idx]));
     if (!pts.length) return "";
     if (pts.length === 1)                            // a lone sample has no line -- show the point
-      return `<circle class="${cls}-dot" cx="${x(pts[0][0]).toFixed(1)}" cy="${y(pts[0][idx]).toFixed(1)}" r="1.6"/>`;
-    return `<polyline class="${cls}" points="${
-      pts.map((s) => `${x(s[0]).toFixed(1)},${y(s[idx]).toFixed(1)}`).join(" ")}"/>`;
+      return `<circle class="${cfg.cls}-dot" cx="${x(pts[0][0]).toFixed(1)}" cy="${y(pts[0][cfg.idx]).toFixed(1)}" r="1.6"/>`;
+    return `<polyline class="${cfg.cls}" points="${
+      pts.map((s) => `${x(s[0]).toFixed(1)},${y(s[cfg.idx]).toFixed(1)}`).join(" ")}"/>`;
   }).join("");
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${C.w} ${C.h}`);
   svg.setAttribute("class", "echart");
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `Leisure battery, last ${hours} hours`);
+  svg.setAttribute("aria-label", `Leisure battery ${cfg.name}, last ${hours} hours`);
   svg.innerHTML =
     `<line class="ec-axis" x1="${C.l}" y1="${C.t + plotH}" x2="${C.l + plotW}" y2="${C.t + plotH}"/>` +
-    draw(2, yA, "ec-a") + draw(1, yV, "ec-v") +
-    `<text class="ec-lbl ec-v-lbl" x="${C.l - 4}" y="${C.t + 4}" text-anchor="end">${vE[1].toFixed(1)}</text>` +
-    `<text class="ec-lbl ec-v-lbl" x="${C.l - 4}" y="${C.t + plotH}" text-anchor="end">${vE[0].toFixed(1)}</text>` +
-    `<text class="ec-lbl ec-a-lbl" x="${C.l + plotW + 4}" y="${C.t + 4}">${aE[1].toFixed(1)}</text>` +
-    `<text class="ec-lbl ec-a-lbl" x="${C.l + plotW + 4}" y="${C.t + plotH}">${aE[0].toFixed(1)}</text>` +
+    line +
+    `<text class="ec-lbl ${cfg.lblCls}" x="${C.l - 4}" y="${C.t + 4}" text-anchor="end">${e[1].toFixed(1)}</text>` +
+    `<text class="ec-lbl ${cfg.lblCls}" x="${C.l - 4}" y="${C.t + plotH}" text-anchor="end">${e[0].toFixed(1)}</text>` +
     `<text class="ec-lbl" x="${C.l}" y="${C.h - 4}">−${hours} h</text>` +
     `<text class="ec-lbl" x="${C.l + plotW}" y="${C.h - 4}" text-anchor="end">now</text>`;
   return svg;
@@ -444,8 +458,7 @@ function energyChart() {
   card.className = "card echart-card";
   const head = document.createElement("div");
   head.className = "echart-head";
-  head.innerHTML = `<span class="echart-title">Leisure battery — last 24 h</span>` +
-    `<span class="echart-key"><i class="ec-key-v"></i>V <i class="ec-key-a"></i>A</span>`;
+  head.innerHTML = `<span class="echart-title">Leisure battery — last 24 h</span>`;
   const body = document.createElement("div");
   body.className = "echart-body";
   card.append(head, body);
@@ -460,8 +473,19 @@ function energyChart() {
       empty.textContent = "History unavailable.";
       return body.appendChild(empty);
     }
-    const svg = chartSvg(h);
-    if (svg) return body.appendChild(svg);
+    // two separate diagrams: voltage and current live on very different scales
+    const vSvg = seriesSvg(h, { idx: 1, cls: "ec-v", pad: 0.4, lblCls: "ec-v-lbl", name: "voltage" });
+    const aSvg = seriesSvg(h, { idx: 2, cls: "ec-a", pad: 2, lblCls: "ec-a-lbl", name: "current" });
+    if (vSvg || aSvg) {
+      const sub = (title, svg) => {
+        const w = document.createElement("div"); w.className = "echart-sub";
+        const t = document.createElement("div"); t.className = "echart-subtitle"; t.textContent = title;
+        w.append(t); if (svg) w.append(svg);
+        return w;
+      };
+      body.append(sub("Voltage (V)", vSvg), sub("Current (A)", aSvg));
+      return;
+    }
     const seen = STATE._meta && STATE._meta.last_seen;
     empty.textContent = seen
       ? `No data in the last 24 h — van asleep since ${clockText(seen)}.`
@@ -480,7 +504,7 @@ function render() {
   backEl.hidden = view === "home";
   backEl.onclick = () => goto("home");
   app.innerHTML = "";
-  const sp = sessionPill();
+  const sp = sessionToggle();
   if (sp) app.appendChild(sp);
   const ob = offlineBanner();
   if (ob) app.appendChild(ob);
