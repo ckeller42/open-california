@@ -90,6 +90,47 @@ def test_energy_mode_control_frame():
     assert f["energy"].control_char.startswith("00001601")                    # actuate target
 
 
+def test_cooler_quiet_mode_and_schedule_frames():
+    """Cooler quiet Mode + night-schedule/timer branches, decompile-verified from vf/c.java
+    (Mode 0=normal 2=manual-quiet 4=timer-quiet; NightTimerHourOn/Off = raw hour; TimerStart=1).
+    Full-packet, carrying State/Level; NOT yet live-verified."""
+    from calictl import control
+    f = _funcs()
+    last = {"State": 1, "Mode": 0, "Level": 3}
+    assert control.build(f, "cooler", "mode", "quiet", last).hex() == "3d2300000000"        # Mode=2
+    assert control.build(f, "cooler", "mode", "timer_quiet", last).hex() == "3d4300000000"  # Mode=4
+    assert control.build(f, "cooler", "night_on", 22, last).hex() == "3d0300001600"          # byte4=0x16
+    assert control.build(f, "cooler", "night_off", 7, last).hex() == "3d0300000007"          # byte5=0x07
+    assert control.build(f, "cooler", "timer_start", None, last).hex()[:2] != "3d"          # TimerStart flips byte0
+    assert control.build(f, "cooler", "mode", "loud", last) is None                          # unknown mode
+    for bad in (-1, 24):
+        try:
+            control.build(f, "cooler", "night_on", bad, last)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for night hour %d" % bad)
+
+
+def test_airheater_runtime_and_timer_frames():
+    """Air-heater run-time + start-timer branches, decompile-verified from rf/b.java
+    (RunningTime @24, TimerHour @32 / TimerMin @40). Permanent heating is deliberately NOT wired
+    (the app's E3() only writes OFF; the ON value is unknown). NOT live-verified."""
+    from calictl import control
+    f = _funcs()
+    st = {"NormalOperationRequest": 0, "HeatingLevel": 5, "RunningTime": 127,
+          "AirDistribution": 0, "OperationModeAirHeater": 7, "TimerHour": 31, "TimerMin": 63}
+    assert control.build(f, "airheater", "runtime", 60, st).hex() == "3f75003c1f3f"   # byte3=0x3c=60
+    assert control.build(f, "airheater", "timer", "22:30", st).hex() == "3f75007f161e" # byte4=22 byte5=30
+    assert control.build(f, "airheater", "permanent", "on", st) is None               # not wired (ON unknown)
+    try:
+        control.build(f, "airheater", "timer", "24:00", st)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for out-of-range timer")
+
+
 def test_roof_position_name_and_infopopup_alert():
     """Position -> name (ig/c.java l() + hf/b.java: 0/14=closed 1=open 2=middle 15=error else=other)
     and InfoPopUp -> alert (0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked

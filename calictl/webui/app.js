@@ -36,6 +36,10 @@ const optNum = (fn, what, realNum) => {
   const k = qKey(fn, what);
   return k in optimistic ? Number(optimistic[k]) : realNum;
 };
+const optSel = (fn, what, realVal) => {   // optimistic string/enum value (segmented selects)
+  const k = qKey(fn, what);
+  return k in optimistic ? optimistic[k] : realVal;
+};
 const truthy = (v) => v === true || v === 1 || v === "on" || v === "1";
 
 const yn = (b) => (b ? "yes" : "no");
@@ -77,6 +81,17 @@ const FEATURES = {
     controls: [
       { what: "power", kind: "toggle", label: "Refrigerator", state: "on" },
       { what: "level", kind: "slider", label: "Cooling level", state: "level", min: 1, max: 5 },
+      { what: "mode", kind: "select", label: "Quiet mode",
+        options: [{ value: "normal", label: "Normal" }, { value: "quiet", label: "Quiet" }, { value: "timer_quiet", label: "Timer quiet" }],
+        current: (s) => (s.mode === 2 ? "quiet" : s.mode === 4 ? "timer_quiet" : "normal"),
+        confirm: () => "Set the cooler's quiet mode? Not yet verified on the van. Continue?" },
+      { what: "night_on", kind: "hour", label: "Quiet from", current: (s) => 0,
+        confirm: (h) => `Set quiet-schedule start to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
+      { what: "night_off", kind: "hour", label: "Quiet until", current: (s) => 0,
+        confirm: (h) => `Set quiet-schedule end to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
+      { what: "__cooltimer", kind: "buttons", label: "Cooling timer",
+        actions: [{ what: "timer_start", label: "Arm" }, { what: "timer_cancel", label: "Cancel" }],
+        confirm: (b) => `${b.label} the cooling timer? Not yet verified on the van. Continue?` },
     ],
     readouts: [
       { label: "Fridge door", get: (s) => (s.door_open ? "⚠ Open" : "Closed") },
@@ -106,6 +121,8 @@ const FEATURES = {
     controls: [
       { what: "power", kind: "toggle", label: "Parking heater", state: "running" },
       { what: "level", kind: "slider", label: "Heating level (10 = HI)", state: "level", min: 1, max: 10 },
+      { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 0, max: 120, unit: "min" },
+      { what: "timer", kind: "time", label: "Start at", current: (s) => null },
     ],
     readouts: [
       { label: "Level", get: (s) => (s.level == null ? "—" : (s.level >= 10 ? "HI" : s.level)) },
@@ -133,6 +150,13 @@ const FEATURES = {
   },
   energy: {
     title: "Energy", icon: "🔋", chart: true,
+    controls: [
+      { what: "mode", kind: "select", label: "Energy mode",
+        options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max charge" }, { value: "eco", label: "Eco" }],
+        current: (s) => ({ 0: "normal", 1: "max_charge", 2: "eco" })[s.energy_mode],
+        disabled: (s) => !!s.energy_mode_locked,
+        confirm: () => "Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?" },
+    ],
     readouts: [
       { label: "Living battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
       { label: "Living voltage", get: (s) => withUnit(s.batt2_v, "V") },
@@ -701,14 +725,22 @@ function renderControl(fn, c, s) {
   row.appendChild(label);
   const isPending = pending_is(fn, c.what);
   if (isPending) row.appendChild(spinner());
+  const ro = readOnly() || (c.disabled ? !!c.disabled(s) : false);
+  // fire() applies a per-control "not verified" confirm (c.confirm) on top of the feature-level
+  // one in act(); c.confirm(value) returns the prompt, or null/false to skip.
+  const fire = (val) => {
+    const msg = typeof c.confirm === "function" ? c.confirm(val) : c.confirm;
+    if (msg && !confirm(msg)) return;
+    act(fn, c.what, val);
+  };
   if (c.kind === "toggle") {
     const on = optOn(fn, c.what, !!s[c.state]);
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
     sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", c.label);
     sw.setAttribute("aria-checked", on ? "true" : "false");
-    sw.disabled = readOnly();
-    sw.onclick = () => act(fn, c.what, on ? "off" : "on");
+    sw.disabled = ro;
+    sw.onclick = () => fire(on ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
     const val = optNum(fn, c.what, s[c.state] != null ? s[c.state] : c.min);
@@ -717,14 +749,64 @@ function renderControl(fn, c, s) {
     inp.min = c.min;
     inp.max = c.max;
     inp.value = val;
-    inp.disabled = readOnly();
+    inp.disabled = ro;
     const out = document.createElement("span");
     out.className = "sval";
-    out.textContent = val;
-    inp.oninput = () => (out.textContent = inp.value);
-    inp.onchange = () => act(fn, c.what, Number(inp.value));
+    out.textContent = val + (c.unit ? " " + c.unit : "");
+    inp.oninput = () => (out.textContent = inp.value + (c.unit ? " " + c.unit : ""));
+    inp.onchange = () => fire(Number(inp.value));
     row.appendChild(inp);
     row.appendChild(out);
+  } else if (c.kind === "select") {              // segmented multi-choice (e.g. energy/cooler mode)
+    const cur = optSel(fn, c.what, c.current ? c.current(s) : null);
+    const grp = document.createElement("div");
+    grp.className = "segmented";
+    for (const opt of c.options) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "seg" + (opt.value === cur ? " on" : "");
+      b.textContent = opt.label;
+      b.disabled = ro;
+      b.setAttribute("aria-pressed", opt.value === cur ? "true" : "false");
+      b.onclick = () => fire(opt.value);
+      grp.appendChild(b);
+    }
+    row.appendChild(grp);
+  } else if (c.kind === "hour") {                // 0-23 hour picker (cooler night schedule)
+    const cur = optNum(fn, c.what, c.current ? c.current(s) : 0);
+    const sel = document.createElement("select");
+    sel.disabled = ro;
+    for (let h = 0; h < 24; h++) {
+      const o = document.createElement("option");
+      o.value = h; o.textContent = String(h).padStart(2, "0") + ":00";
+      if (h === cur) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => fire(Number(sel.value));
+    row.appendChild(sel);
+  } else if (c.kind === "time") {                // HH:MM time-of-day (air-heater start timer)
+    const inp = document.createElement("input");
+    inp.type = "time";
+    inp.disabled = ro;
+    if (c.current && c.current(s)) inp.value = c.current(s);
+    inp.onchange = () => { if (inp.value) fire(inp.value); };
+    row.appendChild(inp);
+  } else if (c.kind === "buttons") {             // momentary action buttons (cooler on/off timer)
+    const grp = document.createElement("div");
+    grp.className = "segmented";
+    for (const b of c.actions) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "seg";
+      btn.textContent = b.label;
+      btn.disabled = ro;
+      btn.onclick = () => {
+        if (c.confirm && !confirm(typeof c.confirm === "function" ? c.confirm(b) : c.confirm)) return;
+        act(fn, b.what, b.value != null ? b.value : null);
+      };
+      grp.appendChild(btn);
+    }
+    row.appendChild(grp);
   }
   return row;
 }

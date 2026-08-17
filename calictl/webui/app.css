@@ -83,7 +83,21 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 
 /* slider */
 input[type=range] { flex: 1; accent-color: var(--accent); }
-.sval { min-width: 1.6rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sval { min-width: 1.6rem; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* segmented multi-choice + momentary action buttons */
+.segmented { display: inline-flex; flex-wrap: wrap; gap: 3px; margin-left: auto; }
+.seg { font: inherit; font-size: .82rem; padding: .34rem .62rem; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--card); color: var(--fg); cursor: pointer;
+  transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.seg.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.seg:disabled { opacity: .5; cursor: default; }
+
+/* hour <select> + time input */
+.row select, .row input[type=time] { font: inherit; margin-left: auto; padding: .3rem .5rem;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--fg);
+  font-variant-numeric: tabular-nums; }
+.row input[type=time]:disabled, .row select:disabled { opacity: .5; }
 
 /* buttons (roof) */
 .btnrow { display: flex; gap: .5rem; padding: .8rem 0; }

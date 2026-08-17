@@ -14,6 +14,21 @@ def _truthy(value) -> bool:
     return str(value).strip().lower() in ("on", "true", "1")
 
 
+def _hhmm(value):
+    """Parse a time-of-day into (hour, minute). Accepts ``"HH:MM"``/``"H:M"`` or a 2-item
+    (hour, minute) sequence. Raises ValueError on anything out of 0-23 / 0-59."""
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        hh, mm = int(value[0]), int(value[1])
+    else:
+        parts = str(value).strip().split(":")
+        if len(parts) != 2:
+            raise ValueError("time must be HH:MM, got %r" % value)
+        hh, mm = int(parts[0]), int(parts[1])
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        raise ValueError("time out of range (0-23:0-59), got %r" % value)
+    return hh, mm
+
+
 def camping_values(**changes) -> dict:
     """Only the changed field is set; every other camping field stays at the
     leave-unchanged sentinel 3 (the lights are inverted, so carrying a state
@@ -86,10 +101,16 @@ def _cooler_values(state: dict, **changes) -> dict:
     return vals
 
 
+# Cooler Mode enum (vf/c.java: readback J0()=Mode==2, P1()=Mode==4): 0=normal (quiet off),
+# 2=manual quiet, 4=timer-based quiet. Staged by vf/c.f(this, <n>) via T1(0)/x0(2)/k0(4).
+COOLER_MODES = {"normal": 0, "quiet": 2, "timer_quiet": 4}
+
+
 def _cooler(funcs, what, value, last):
-    # `power` on/off flips State (encode validates State in {0,1}); `level` sets the
-    # cooling intensity 1-5. Everything else carries current state, so only the
-    # targeted field changes.
+    # `power` on/off flips State (encode validates State in {0,1}); `level` sets the cooling
+    # intensity 1-5; `mode` sets the quiet Mode enum; the timer/night branches arm the cooler's
+    # scheduling (all decompile-verified from vf/c.java, NOT yet live-verified). Everything else
+    # carries current state, so only the targeted field changes.
     if what == "power":
         ch = {"State": 1 if _truthy(value) else 0}
     elif what == "level":
@@ -97,6 +118,20 @@ def _cooler(funcs, what, value, last):
         if not 1 <= lvl <= 5:
             raise ValueError("cooler level must be 1-5, got %r" % value)
         ch = {"Level": lvl}
+    elif what == "mode":                       # quiet mode (vf/c.java T1/x0/k0 -> Mode 0/2/4)
+        key = str(value).strip().lower()
+        if key not in COOLER_MODES:
+            return None
+        ch = {"Mode": COOLER_MODES[key]}
+    elif what == "timer_start":                # arm cooling-start timer (vf/c.java:193 D())
+        ch = {"TimerStart": 1}
+    elif what == "timer_cancel":               # cancel it (vf/c.java:251 X0())
+        ch = {"TimerCancel": 1}
+    elif what in ("night_on", "night_off"):    # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
+        hr = int(value)
+        if not 0 <= hr <= 23:
+            raise ValueError("night timer hour must be 0-23, got %r" % value)
+        ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
     else:
         return None
     return protocol.encode(funcs["cooler"], _cooler_values(last, **ch),
@@ -289,6 +324,17 @@ def _airheater(funcs, what, value, last):
         if not 0 <= lvl <= 15:
             raise ValueError("airheater level must be 0-15, got %r" % value)
         ch = {"HeatingLevel": lvl}
+    elif what == "runtime":                    # RunningTime, minutes (rf/b.java:199 D4()); no app bound
+        rt = int(value)
+        if not 0 <= rt <= 255:
+            raise ValueError("airheater runtime must be 0-255, got %r" % value)
+        ch = {"RunningTime": rt}
+    elif what == "timer":                       # start-at TimerHour:TimerMin (rf/b.java:165 B0())
+        hh, mm = _hhmm(value)
+        ch = {"TimerHour": hh, "TimerMin": mm}
+    # NB: "permanent heating" is intentionally NOT wired — the app's E3() only ever writes
+    # PermanentOperationRequest=0 (OFF/cancel); no ON write site exists in rf/b.java, so the
+    # ON value is unknown. Don't guess a write that arms a fuel-burning heater.
     else:
         return None
     return protocol.encode(funcs["airheater"], _airheater_values(last, **ch),
