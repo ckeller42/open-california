@@ -1,0 +1,25 @@
+docs/business-logic/control-and-actuation.md
+  s_a7757c7c919f20::t_a56cc5099693bd 268
+tests/test_doc_offset_consistency.py
+  s_a7757c7c919f20::t_47d7eb25b30245 1-73
+docs/business-logic/protocol-alignment.md
+  s_a7757c7c919f20::t_25c1cc72a01aab 20
+docs/business-logic/evidence-ledger.md
+  s_a7757c7c919f20::t_d44de77313d0f2 1-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "cc5f7a30cfbfd1187087ec682d1b8853cd835c94",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
