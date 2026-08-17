@@ -46,7 +46,7 @@ CONTROL_OFFSETS = {
     # so `set` isn't wired for them yet; this just completes the frame layout. Enum value
     # semantics remain UNVERIFIED. See docs/business-logic/re-gap-inventory.md §A3.
     "roof": {                       # jg/a.java f() — 5-byte frame (Up@6/Down@4 already placed)
-        "SafetyCounter": (8, 32),   # app->unit echo/handshake; roof move needs a ~1 Hz heartbeat
+        "SafetyCounter": (8, 32),   # app-GENERATED monotonic BE-uint32 (~+1/500ms), NOT unit-echoed
     },
     "roofaircondition": {           # lg/a.java f() case0 — 3-byte frame (State@6 already placed)
         "Mode": (8, 4), "FanSpeed": (12, 4), "Temperature": (16, 8),

@@ -81,8 +81,11 @@ functions:
     state_services: [1600, 1602]
     control_source: pg/a.java   # control char 1601
     control_fields:
-      - {name: OperationMode, offset: MERGED_AMBIGUOUS, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
-      - {name: Movement, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
+      # 1601 branch of the merged pg/a class (case0=stairs 1801, default=energy 1601). The old
+      # OperationMode/Movement names were the STAIRS layout mis-copied here; the energy builder's
+      # real fields are EnergyModeSet + DisplayRefresh. Decompile-derived, no wire capture yet.
+      - {name: EnergyModeSet, offset: 2, width: 2, default: 3, raw_range: 0..3, value_semantics: "0=normal 1=? 2=? , 3=leave-unchanged (UNVERIFIED, needs capture)"}
+      - {name: DisplayRefresh, offset: 7, width: 1, default: 0, value_semantics: UNVERIFIED}
     state_fields:
       - {name: LandNotAvailable, offset: 0, width: 1}
       - {name: LandDefect, offset: 1, width: 1}
@@ -191,7 +194,7 @@ functions:
     control_fields:
       - {name: ProfileNumber, offset: 4, width: 4, default: 14, raw_range: 0..15, value_semantics: UNVERIFIED}
       - {name: Mode, offset: 8, width: 8, default: 0, raw_range: 0..255, value_semantics: UNVERIFIED}
-      - {name: Timestamp, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
+      - {name: Timestamp, offset: 16, width: 32, default: 0, value_semantics: "epoch/monotonic stamp, offset read from dg/h.java builder (decompile-derived)"}
       - {name: LightValue, offset: 48, width: 16, default: 0, raw_range: 0..65535, value_semantics: UNVERIFIED}
       - {name: BrightnessLOne, offset: 68, width: 4, default: 14, raw_range: 0..15, value_semantics: UNVERIFIED}
       - {name: BrightnessLTwo, offset: 64, width: 4, default: 14, raw_range: 0..15, value_semantics: UNVERIFIED}
@@ -254,7 +257,7 @@ functions:
     control_fields:
       - {name: Up, offset: 6, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
       - {name: Down, offset: 4, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
-      - {name: SafetyCounter, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
+      - {name: SafetyCounter, offset: 8, width: 32, default: 0, value_semantics: "app-generated monotonic BE-uint32, ~+1/500ms (NOT unit-echoed); see overrides.py + device.actuate_roof"}
     state_fields:
       - {name: Position, offset: 0, width: 4}
       - {name: Installed, offset: 6, width: 1}

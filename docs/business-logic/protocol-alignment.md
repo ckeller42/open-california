@@ -112,3 +112,38 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
 - **Alerts / fault codes**: already complete in `alert-states.md`.
 - **Wake / liveness**: only the `1003` heartbeat on BLE (Exlap "Alive" tokens belong to the WiFi
   transport). No door/terminal signal is *written*; ignition/leveling are *read* from `1004`.
+
+## Full call-stack cross-check (2026-08-17)
+
+A 5-agent audit re-derived every field + command from the app's decompiled decode/send
+methods and view-model scales, then reconciled against our dictionary/semantics/control and
+the wire captures. Corrections applied:
+
+- **`general` (char 1001) decode was dead.** `state_fields` had no offsets, so `general()`
+  returned `{}` and `amb_sw_version` was always `None` — which silently disabled the DC-DC
+  **+2** correction (gated on `AmbSwVersion ∈ {0409,0410}`) in live operation; only the unit
+  test kept it "passing" by injecting the string directly. Fixed: offsets added
+  (`AmbSwVersion@0/32`, `CmSwVersion@32/32`, `CommunicationVersion@64/8`) **and** an ASCII
+  decode — the SW versions are 4 ASCII bytes (`0x30343130 → "0410"`), not numeric. **Live-verified
+  on-device 2026-08-17:** `amb_sw_version: 0410`, and `energy.dcdc_current` now reads `0` (raw
+  `-2` **+2**) instead of the stale `-2`.
+
+- **`satelliteantenna.system_on`** used `bool(System)`, but `System` is a 2-bit **enum** and the
+  app getter is `System == 1`; values 2/3 wrongly read "on". Fixed to `== 1`; raw `system` surfaced.
+
+- **Cooler night-timer sentinels stay `0`, NOT the `v()` class-defaults (`3`/`31`).** The audit
+  proposed `NightTimerSet=3`/hours=`31` from the app's builder defaults, but the **real captured
+  power-on frame** (`tests/scenarios/cooler/power-on`) sends `0` — the capture-diff test caught the
+  divergence. Wire capture is ground truth over decompiled-default inference.
+
+- **`energy` control fields renamed** `OperationMode→EnergyModeSet`(@2/w2/def3),
+  `Movement→DisplayRefresh`(@7/w1). The old names were the **stairs (1801)** layout mis-copied into
+  energy; both share the merged `pg/a` R8 class (case0=stairs, default=energy 1601). Decompile-derived,
+  **no wire capture yet** — `set energy mode` is intentionally NOT wired until a capture confirms the
+  frame (same discipline as the cooler correction above).
+
+- **`roof.SafetyCounter` de-flagged** to `@8/w32`: app-**generated** monotonic BE-uint32 (~+1/500 ms),
+  **not** unit-echoed. Stale "~1 Hz heartbeat / echo / send 0" comments in `control.py`/`overrides.py`
+  corrected to match `device.actuate_roof` (which was already right).
+
+- **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).

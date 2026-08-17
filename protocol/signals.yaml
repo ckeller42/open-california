@@ -521,7 +521,7 @@ cooler:
       unit: null
 energy:
   control:
-    Movement:
+    DisplayRefresh:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
         \ command surfacing deferred while control writes are blocked (issue #2)"
@@ -529,7 +529,7 @@ energy:
         app: null
         gui: null
         vwdoc: null
-    OperationMode:
+    EnergyModeSet:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
         \ command surfacing deferred while control writes are blocked (issue #2)"
