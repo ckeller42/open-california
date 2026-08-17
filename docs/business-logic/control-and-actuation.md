@@ -219,9 +219,11 @@ because it is instructive RE:
   app-faithful-but-optional** (the app sends it on screen open via `d0()`, not per write): it
   costs ~3.3 s and is harmless, so the shipped code keeps it — but it is not what makes the
   lamps switch.
-- **Still open:** SET_COLOR on-device apply (the app exposes no colour control — possibly
-  N/A); whether a deep-asleep unit needs any arming at all; pinning the exact wake-state
-  determinant with controlled trials (awake duration, parked vs active).
+- **Still open:** SET_COLOR on-device apply — the app DOES have colour control (`dg/h.java:644`,
+  a profile-recolour: Mode 6, LightValue=colour, ProfileNumber=target profile + its brightness),
+  but our `set lighting color` frame is mis-shaped vs the app's (PN=9 + sentinel zones) so it
+  likely won't actuate as built; whether a deep-asleep unit needs any arming at all; pinning the
+  exact wake-state determinant with controlled trials (awake duration, parked vs active).
 
 **Lighting frame layout** (16 bytes / 128 bits): `ProfileNumber@4/w4`, `Mode@8/w8`
 (4=SET_BRIGHTNESS, 16=SET_PROFILE), `Timestamp@16/w32` (`sg.a()` no-arg, default 0 — part of

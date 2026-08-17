@@ -74,6 +74,7 @@ class ServeBackend:
         out = {}
         for fn, decoded in dict(self._s._last or {}).items():
             out[fn] = semantics.interpret(fn, decoded)
+        semantics.apply_sw_corrections(out)   # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
         # Stale fresh-water: serve the last PLAUSIBLE reading (not the parked latch), flagged stale.
         water = out.get("water")
         if isinstance(water, dict) and isinstance(water.get("fresh"), dict):
@@ -304,6 +305,7 @@ class Server:
             decoded = protocol.decode(self.funcs[fn], data)
             new_last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
+        semantics.apply_sw_corrections(states)   # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
         # Stale-latch guard: when the van is parked/locked the unit stops measuring fresh water and
         # returns a bogus low (true 17 L read back as 1 L). A fresh drop from the last PLAUSIBLE
         # reading with no matching grey rise is physically impossible -> serve/publish that last

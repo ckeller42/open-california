@@ -77,6 +77,31 @@ java -Xmx1500m -jar ~/tools/apktool.jar d -r -f "$WORK/$PKG.apk" -o "$OUT/smali"
 smali never lies; decompilers guess. When both Java views disagree or emit "bad code", read the
 `.smali` and hand-trace the bytecode.
 
+**baksmali's niche (and limits):** it is a *disassembler*, not a decompiler — 1:1 register-level
+Dalvik assembly, the ground truth for **one method** when a decompiler mangles it (obfuscated
+coroutine state-machines and `--show-bad-code` methods are the usual reasons). It is verbose and
+type-poor, so it's for *confirming* a specific routine, never for understanding a whole subsystem,
+and it does **no** cross-method analysis. We get it via apktool (bundles baksmali); a standalone
+runnable jar isn't distributed and isn't on trixie apt, so apktool is the pragmatic source.
+
+## Level 4 — cross-method data-flow / call-graph (SootUp)
+
+The decompilers and baksmali all show you **one method at a time**. When the question spans methods
+— *"where does this 1502-notification value flow to?"*, *"which version field feeds the +2 scale
+correction?"*, *"what actually calls `E()`?"*, or tracing anything through the obfuscated
+coroutine/`Flow` reconciliation layer — reach for **SootUp** (the modern Soot rewrite). It lifts
+bytecode to **Jimple** (a typed 3-address IR, cleaner than jadx's `switch(label)` coroutine
+machines) and gives a **call graph** + **inter-procedural def-use / data-flow**.
+
+- **Input:** feed it the **dex2jar JAR** (`~/tools/<app>.jar`) — JVM bytecode is SootUp's solid
+  path; skip the DEX frontend.
+- **It's a library, not a CLI:** drive it with a small Java/Kotlin analysis (Gradle, JDK 17+) via
+  the SootUp API (`JavaView` → call graph → CFG / def-use). Higher setup cost than the decompilers.
+- **Won't recover names** (metadata's stripped) — combine with the mapping.
+- **Only reach for it** for cross-method data-flow / call-graph questions; for "read one method,"
+  jadx/vineflower/smali are faster. It's the tool for the one hard gap (async reconciliation), not
+  a general step.
+
 ## The durable deobfuscation layer (renames + doc-comments that survive re-decompiles)
 
 R8 renames everything to `a.b`, `E()`, `d0()`. The fix is a **jadx mappings file** you own and
@@ -93,6 +118,13 @@ re-apply on every decompile, so meaningful names + docs are never lost:
     emitting mapping entries; then hand-curate the ones that matter. Re-run as coverage grows.
 - **Editing interactively:** jadx-gui rename (`n`) + "Add comment" persist into the mappings file
   ("Save mappings as…"); the headless runs then pick them up. Keep the file in the private repo.
+- **STANDING RULE — the mapping grows monotonically.** Whenever *any* analysis (a manual read, an
+  LLM pass, a SootUp call-graph/data-flow trace) reaches an obfuscated class or method that is NOT
+  yet in the mapping, name it and add a one-line doc-comment **verified against the source**, then
+  append it to the mapping. Never leave a just-understood class un-named: the next pass should start
+  more readable than the last. If a name is only a hypothesis, say so in the comment (`?`), don't
+  invent certainty. This applies to subagents too — an analysis task that touches new classes must
+  fold its findings back into `mapping.<fmt>`.
 - Result: `git diff` after a vendor app update shows what actually changed in *named* terms.
 
 ## The private per-app analysis repo
