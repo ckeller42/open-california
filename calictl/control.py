@@ -14,6 +14,21 @@ def _truthy(value) -> bool:
     return str(value).strip().lower() in ("on", "true", "1")
 
 
+def _hhmm(value):
+    """Parse a time-of-day into (hour, minute). Accepts ``"HH:MM"``/``"H:M"`` or a 2-item
+    (hour, minute) sequence. Raises ValueError on anything out of 0-23 / 0-59."""
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        hh, mm = int(value[0]), int(value[1])
+    else:
+        parts = str(value).strip().split(":")
+        if len(parts) != 2:
+            raise ValueError("time must be HH:MM, got %r" % value)
+        hh, mm = int(parts[0]), int(parts[1])
+    if not (0 <= hh <= 23 and 0 <= mm <= 59):
+        raise ValueError("time out of range (0-23:0-59), got %r" % value)
+    return hh, mm
+
+
 def camping_values(**changes) -> dict:
     """Only the changed field is set; every other camping field stays at the
     leave-unchanged sentinel 3 (the lights are inverted, so carrying a state
@@ -41,6 +56,32 @@ def _camping(funcs, what, value, last):
     return protocol.encode(funcs["campingmode"], camping_values(**ch), frame_bytes=1)
 
 
+# energy (char 1601, pg/a.java f() DEFAULT/energy branch) — set the power-management mode.
+# The frame is 1 byte: EnergyModeSet @2/w2 carries the mode; DisplayRefresh @7/w1 stays 0 (the
+# app's energy-VM mode setter, xf/d.java:389, only stages EnergyModeSet and writes DIRECT —
+# a one-shot actuate, no commit/preamble). Mode ordinals match the read side (semantics.energy
+# `energy_mode`, enum bf/c.java). DECOMPILE-DERIVED, not yet wire-captured / live-verified.
+ENERGY_MODES = {"normal": 0, "max_charge": 1, "eco": 2}
+ENERGY_MODE_UNCHANGED = 3   # 2-bit leave-unchanged sentinel (pg/a v())
+
+
+def _energy(funcs, what, value, last):
+    """Build the energy (char 1601) control frame. ``what`` == ``mode``; ``value`` is one of
+    ``normal`` / ``max_charge`` / ``eco`` (case-insensitive). Returns None for anything else.
+
+    Decompile-derived from the app's own energy setter (``xf/d.java:389`` stages
+    ``EnergyModeSet`` = the mode ordinal, ``DisplayRefresh`` stays 0) and the shared
+    ``EnergyMode`` enum (``bf/c.java``); NOT yet verified on the wire or on-device."""
+    if what != "mode":
+        return None
+    key = str(value).strip().lower()
+    if key not in ENERGY_MODES:
+        return None
+    vals = {"EnergyModeSet": ENERGY_MODES[key], "DisplayRefresh": 0}
+    return protocol.encode(funcs["energy"], vals,
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["energy"])
+
+
 def _cooler_values(state: dict, **changes) -> dict:
     """Full-packet cooler control values: carry current State/Mode/Level and the
     schedule (writing the current schedule back = no change), timer ACTION fields
@@ -48,7 +89,11 @@ def _cooler_values(state: dict, **changes) -> dict:
     vals = dict(
         State=state.get("State", 1), Mode=state.get("Mode", 4),
         Level=state.get("Level", 3),
-        TimerStart=3, TimerCancel=3, NightTimerSet=0,   # no-op actions
+        # no-op actions. NB: the cross-check (2026-08-17) suggested NightTimerSet=3 / hours=31 from
+        # the app's v() class-defaults, but the REAL captured app power-on frame (tests/scenarios/
+        # cooler/power-on) sends NightTimerSet=0 and the hour bytes 0 — the wire capture is ground
+        # truth, so these stay 0. (A good example of capture > decompiled-default inference.)
+        TimerStart=3, TimerCancel=3, NightTimerSet=0,
         NightTimerHourOff=0, NightTimerHourOn=0,
         TimerHour=state.get("TimerHourSet", 0), TimerMin=state.get("TimerMinSet", 0),
     )
@@ -56,10 +101,16 @@ def _cooler_values(state: dict, **changes) -> dict:
     return vals
 
 
+# Cooler Mode enum (vf/c.java: readback J0()=Mode==2, P1()=Mode==4): 0=normal (quiet off),
+# 2=manual quiet, 4=timer-based quiet. Staged by vf/c.f(this, <n>) via T1(0)/x0(2)/k0(4).
+COOLER_MODES = {"normal": 0, "quiet": 2, "timer_quiet": 4}
+
+
 def _cooler(funcs, what, value, last):
-    # `power` on/off flips State (encode validates State in {0,1}); `level` sets the
-    # cooling intensity 1-5. Everything else carries current state, so only the
-    # targeted field changes.
+    # `power` on/off flips State (encode validates State in {0,1}); `level` sets the cooling
+    # intensity 1-5; `mode` sets the quiet Mode enum; the timer/night branches arm the cooler's
+    # scheduling (all decompile-verified from vf/c.java, NOT yet live-verified). Everything else
+    # carries current state, so only the targeted field changes.
     if what == "power":
         ch = {"State": 1 if _truthy(value) else 0}
     elif what == "level":
@@ -67,13 +118,32 @@ def _cooler(funcs, what, value, last):
         if not 1 <= lvl <= 5:
             raise ValueError("cooler level must be 1-5, got %r" % value)
         ch = {"Level": lvl}
+    elif what == "mode":                       # quiet mode (vf/c.java T1/x0/k0 -> Mode 0/2/4)
+        key = str(value).strip().lower()
+        if key not in COOLER_MODES:
+            return None
+        ch = {"Mode": COOLER_MODES[key]}
+    elif what == "timer_set":                  # start-at TimerHour:TimerMin (vf/c.java:635 y0())
+        hh, mm = _hhmm(value)
+        ch = {"TimerHour": hh, "TimerMin": mm}
+    elif what == "timer_start":                # arm cooling-start timer (vf/c.java:193 D())
+        ch = {"TimerStart": 1}
+    elif what == "timer_cancel":               # cancel it (vf/c.java:251 X0())
+        ch = {"TimerCancel": 1}
+    elif what in ("night_on", "night_off"):    # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
+        hr = int(value)
+        if not 0 <= hr <= 23:
+            raise ValueError("night timer hour must be 0-23, got %r" % value)
+        ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
     else:
         return None
     return protocol.encode(funcs["cooler"], _cooler_values(last, **ch),
                            frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"])
 
 
-LIGHT_MODE_SET_BRIGHTNESS = 4    # dg/n.java Mode enum (0=no-op, 4=SET_BRIGHTNESS, 16=SET_PROFILE)
+# dg/n.java Mode enum (full, verified 2026-08-17): 0=NO_MODE, 4=SET_BRIGHTNESS, 6=SET_COLOR,
+# 8=SET_DOUBLE, 12=REQUEST_CONFIG, 16=SET_PROFILE, 20=WAKEUP_TIME, 24=SYSTEM_TIME, 28=PREVIEW.
+LIGHT_MODE_SET_BRIGHTNESS = 4
 LIGHT_MODE_SET_COLOR = 6         # recolour the active profile: LightValue = palette index (1-10)
 LIGHT_MODE_SET_PROFILE = 16      # switch active profile (payload carries the ProfileNumber)
 # Profile-number enum (dg/l.java mirrors ef/k.java): 0=LIGHTS_OFF, 1-7=FAVORITE1-7, 8=DOOR_CONTACT,
@@ -179,6 +249,23 @@ def _lighting(funcs, what, value, last):
     if what == "profile":
         vals = {**base, "Mode": LIGHT_MODE_SET_PROFILE, "ProfileNumber": int(value),
                 **{z: LIGHT_UNCHANGED for z in zone_fields}}
+    elif what == "save_profile":
+        # Save the CURRENT lighting into a favorite (dg/h.java:564 l3 applyProfileBrightness):
+        # SET_BRIGHTNESS with ProfileNumber = the favorite N (NOT the live-view 9), every equipped
+        # zone carrying its current brightness (read from `last`), NOT_EQUIPPED zones left at 14.
+        # This is how the app DEFINES a favorite. Decompile-derived; NOT yet wire-verified.
+        n = int(value)
+        if not 1 <= n <= 7:
+            raise ValueError("save_profile target must be a favorite 1-7, got %r" % value)
+        from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
+        real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
+        st = last or {}
+        zones = {}
+        for z in zone_fields:
+            cur = st.get(z)
+            zones[z] = cur if (z in real and isinstance(cur, int) and 0 <= cur <= LIGHT_MAX_SET) \
+                else LIGHT_UNCHANGED
+        vals = {**base, "Mode": LIGHT_MODE_SET_BRIGHTNESS, "ProfileNumber": n, **zones}
     elif what == "color":                   # recolour the active profile (LightValue = palette idx)
         idx = LIGHT_COLORS.get(str(value).lower().replace("_", "-"))
         if idx is None:
@@ -259,6 +346,17 @@ def _airheater(funcs, what, value, last):
         if not 0 <= lvl <= 15:
             raise ValueError("airheater level must be 0-15, got %r" % value)
         ch = {"HeatingLevel": lvl}
+    elif what == "runtime":                    # RunningTime, minutes (rf/b.java:199 D4()); no app bound
+        rt = int(value)
+        if not 0 <= rt <= 255:
+            raise ValueError("airheater runtime must be 0-255, got %r" % value)
+        ch = {"RunningTime": rt}
+    elif what == "timer":                       # start-at TimerHour:TimerMin (rf/b.java:165 B0())
+        hh, mm = _hhmm(value)
+        ch = {"TimerHour": hh, "TimerMin": mm}
+    # NB: "permanent heating" is intentionally NOT wired — the app's E3() only ever writes
+    # PermanentOperationRequest=0 (OFF/cancel); no ON write site exists in rf/b.java, so the
+    # ON value is unknown. Don't guess a write that arms a fuel-burning heater.
     else:
         return None
     return protocol.encode(funcs["airheater"], _airheater_values(last, **ch),
@@ -384,12 +482,16 @@ def _livingroomheater(funcs, what, value, last):
 
 
 # roof (char 1401, jg/a.java f()) — SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
-# The move needs a ~1 Hz heartbeat (ig/c.java re-sends Up/Down at 1 Hz until STOP);
-# a single frame will NOT complete travel. The heartbeat is driven by
-# device.actuate_roof, NOT the one-shot device.actuate.
+# Press-and-hold: while the button is held the app RE-SENDS the move frame at ~1 Hz
+# (ig/c.java arms jn.a(1000L, repeat=true)), then STOP on release; a single frame will
+# NOT complete travel. The resend is driven by device.actuate_roof, NOT device.actuate.
 #   OPEN = Up1/Down0    CLOSE = Up0/Down1    STOP = Up0/Down0
-# SafetyCounter (32-bit) is an app<->unit echo/handshake; its increment rule is
-# UNVERIFIED, so we send 0 and resend the identical move frame each tick.
+# SafetyCounter (32-bit) is APP-GENERATED, not echoed from the unit: a monotonic
+# BE-uint32 advancing ~+1 every 500 ms of elapsed time (w8/a, constructed 500/450/550) —
+# a wall-clock rule INDEPENDENT of the ~1 Hz frame cadence, so consecutive frames step
+# the counter by ~+2. device.actuate_roof supplies it; a fixed 0 is valid only for a lone
+# STOP. The unit validates liveness/monotonicity (SafetyCounterValid, 1402 bit 7) and
+# withholds the motor ~3 s (ig/c jn.a(3000L) dead-man) until it validates.
 ROOF_MOVES = {"open": (1, 0), "close": (0, 1), "stop": (0, 0)}   # -> (Up, Down)
 
 
@@ -397,8 +499,9 @@ def roof_frame(funcs, direction: str, counter: int = 0) -> bytes:
     """Build one roof (char 1401) move frame. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
 
     ``direction`` is ``open``/``close``/``stop`` (Up/Down per ``ROOF_MOVES``);
-    ``counter`` fills the 32-bit ``SafetyCounter`` (echo/handshake, increment rule
-    UNVERIFIED). Raises ValueError on an unknown direction."""
+    ``counter`` fills the 32-bit ``SafetyCounter`` (app-generated monotonic BE-uint32,
+    ~+1 per 500 ms of elapsed time; advanced by device.actuate_roof). Raises ValueError
+    on an unknown direction."""
     if direction not in ROOF_MOVES:
         raise ValueError("roof direction must be open/close/stop, got %r" % direction)
     up, down = ROOF_MOVES[direction]
@@ -409,8 +512,8 @@ def roof_frame(funcs, direction: str, counter: int = 0) -> bytes:
 
 def _roof(funcs, what, value, last):
     """Generic builder entry for roof: ``what`` is the direction (open/close/stop);
-    ``value`` is unused. Returns ONE move frame — the CLI drives the 1 Hz heartbeat
-    via ``device.actuate_roof``. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED."""
+    ``value`` is unused. Returns ONE move frame — device.actuate_roof re-sends it at
+    ~1 Hz while held. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED."""
     if what not in ROOF_MOVES:
         return None
     return roof_frame(funcs, what)
@@ -418,7 +521,8 @@ def _roof(funcs, what, value, last):
 
 BUILDERS = {"campingmode": _camping, "cooler": _cooler, "lighting": _lighting,
             "airheater": _airheater, "roofaircondition": _roofaircondition,
-            "stairs": _stairs, "livingroomheater": _livingroomheater, "roof": _roof}
+            "stairs": _stairs, "livingroomheater": _livingroomheater, "roof": _roof,
+            "energy": _energy}
 
 
 def build(funcs, function, what, value, last_decoded):

@@ -99,7 +99,11 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   3 s + BLE latency — no 4 s constant). **Open gaps (roof NOT-LIVE-VERIFIED until fixed):**
   `actuate_roof` must (a) generate a live monotonic counter (~+1/500 ms), not echo/fixed-`+1`;
   (b) account for the ~3 s self-gate (optionally honour `SafetyCounterValid` + the 3 s timeout);
-  (c) use ~500 ms cadence, not 1 Hz. See `protocol-sequences.md` §3.
+  (c) re-send at **~1 Hz** while held. **Corrected 2026-08-17 from the source** (`ig/c.java` arms
+  `jn.a(1000L, repeat=true)` for the frame resend — 1 Hz, NOT 500 ms; the 500 ms belongs only to the
+  SafetyCounter increment `w8/a` `500/450/550`, a separate wall-clock rule). The earlier "use ~500 ms
+  cadence, not 1 Hz" note here conflated the counter's 500 ms with the frame cadence. See
+  `protocol-sequences.md` §3 + `docs/business-logic/protocol-alignment.md`.
 - **Reads go STALE, and the unit deep-sleeps** (found 2026-07-{09,12}). A bare read returns a
   latched value that decays (fresh-water read 1 L vs true 11 L); `device.read_all`/`read` now run
   the **1003 heartbeat during reads** to keep values fresh + the link alive. But when the van is

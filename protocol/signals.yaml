@@ -521,7 +521,7 @@ cooler:
       unit: null
 energy:
   control:
-    Movement:
+    DisplayRefresh:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
         \ command surfacing deferred while control writes are blocked (issue #2)"
@@ -529,10 +529,11 @@ energy:
         app: null
         gui: null
         vwdoc: null
-    OperationMode:
+    EnergyModeSet:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+      reason: "control command field (not telemetry) \u2014 now wired as `set energy mode`\
+        \ (control._energy, char 1601: 0=normal 1=max_charge 2=eco, 3=leave-unchanged).\
+        \ Decompile-derived (xf/d.java:389 + enum bf/c.java), not yet wire/live-verified."
       sources:
         app: null
         gui: null

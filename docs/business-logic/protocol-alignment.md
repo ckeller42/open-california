@@ -112,3 +112,44 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
 - **Alerts / fault codes**: already complete in `alert-states.md`.
 - **Wake / liveness**: only the `1003` heartbeat on BLE (Exlap "Alive" tokens belong to the WiFi
   transport). No door/terminal signal is *written*; ignition/leveling are *read* from `1004`.
+
+## Full call-stack cross-check (2026-08-17)
+
+A 5-agent audit re-derived every field + command from the app's decompiled decode/send
+methods and view-model scales, then reconciled against our dictionary/semantics/control and
+the wire captures. Corrections applied:
+
+- **`general` (char 1001) decode was dead.** `state_fields` had no offsets, so `general()`
+  returned `{}` and `amb_sw_version` was always `None` — which silently disabled the DC-DC
+  **+2** correction (gated on `AmbSwVersion ∈ {0409,0410}`) in live operation; only the unit
+  test kept it "passing" by injecting the string directly. Fixed: offsets added
+  (`AmbSwVersion@0/32`, `CmSwVersion@32/32`, `CommunicationVersion@64/8`) **and** an ASCII
+  decode — the SW versions are 4 ASCII bytes (`0x30343130 → "0410"`), not numeric. **Live-verified
+  on-device 2026-08-17:** `amb_sw_version: 0410`, and `energy.dcdc_current` now reads `0` (raw
+  `-2` **+2**) instead of the stale `-2`.
+
+- **`satelliteantenna.system_on`** used `bool(System)`, but `System` is a 2-bit **enum** and the
+  app getter is `System == 1`; values 2/3 wrongly read "on". Fixed to `== 1`; raw `system` surfaced.
+
+- **Cooler night-timer sentinels stay `0`, NOT the `v()` class-defaults (`3`/`31`).** The audit
+  proposed `NightTimerSet=3`/hours=`31` from the app's builder defaults, but the **real captured
+  power-on frame** (`tests/scenarios/cooler/power-on`) sends `0` — the capture-diff test caught the
+  divergence. Wire capture is ground truth over decompiled-default inference.
+
+- **`energy` control fields renamed** `OperationMode→EnergyModeSet`(@2/w2/def3),
+  `Movement→DisplayRefresh`(@7/w1). The old names were the **stairs (1801)** layout mis-copied into
+  energy; both share the merged `pg/a` R8 class (case0=stairs, default=energy 1601). Decompile-derived,
+  **no wire capture yet** — `set energy mode` is intentionally NOT wired until a capture confirms the
+  frame (same discipline as the cooler correction above).
+
+- **`roof.SafetyCounter` de-flagged** to `@8/w32`: app-**generated** monotonic BE-uint32, **not**
+  unit-echoed. Verified against the source there are **two distinct cadences**: the move frame is
+  **re-sent at ~1 Hz** while held (`ig/c.java` arms `jn.a(1000L, repeat=true)`), while the
+  SafetyCounter *value* advances **~+1 per 500 ms of elapsed time** (`w8/a`, constructed `500/450/550`)
+  — a wall-clock rule independent of the frame cadence, so consecutive frames step it ~+2. The stale
+  `control.py`/`overrides.py` comments said the counter was a unit **echo** we "send 0" — corrected to
+  app-generated. (NB: an interim edit briefly mislabelled the *frame* cadence as ~500 ms by conflating
+  it with the counter's 500 ms; the frame resend is ~1 Hz, per `ig/c`. CLAUDE.md's roof open-gap "(c)
+  use ~500 ms cadence, not 1 Hz" rests on the same conflation — the app's own cadence is ~1 Hz.)
+
+- **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).

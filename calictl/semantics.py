@@ -131,6 +131,12 @@ def cooler(d: dict) -> dict:
         "level": d.get("Level"),        # 1-5 cooling level
         "mode": d.get("Mode"),
         "timer_active": bool(d.get("TimerState")),
+        # Readback of the schedule the unit currently holds (state char, NOT the control echo):
+        "quiet_from": d.get("NightTimerHourOn"),    # quiet-mode schedule start hour (0-23)
+        "quiet_to": d.get("NightTimerHourOff"),     # quiet-mode schedule end hour (0-23)
+        "quiet_scheduled": bool(d.get("NightTimerSet")),
+        "timer_hour": d.get("TimerHourSet"),        # configured cooling-timer start time
+        "timer_min": d.get("TimerMinSet"),
         "fault": fault,                 # None | "error" | "emergency" | "door_open"
         "door_open": fault == "door_open",
         "error": bool(fault),           # back-compat: any active fault
@@ -147,7 +153,12 @@ def airheater(d: dict) -> dict:
         "error_code": d.get("ErrorCode"),
         "mode": d.get("OperationModeAirHeater"),
         "air_distribution": d.get("AirDistribution"),
-        "running_time": d.get("RunningTime"),
+        "running_time": d.get("RunningTime"),           # configured run duration (min)
+        # Timer readback the unit reports (state char 1702; cross-checked bit-exact vs the app's
+        # rf/b.java:~395 decoder: RunningTime@24, TimerHour@32, TimerMin@40, RunningTimeinAction@48):
+        "timer_hour": d.get("TimerHour"),               # configured start-at hour
+        "timer_min": d.get("TimerMin"),
+        "running_time_remaining": d.get("RunningTimeinAction"),   # counts down while heating
     }
 
 
@@ -236,13 +247,22 @@ def lighting(d: dict) -> dict:
     return out
 
 
+def _sw_ascii(v):
+    """AmbSwVersion/CmSwVersion are 4 ASCII bytes packed into a 32-bit field -> a 4-char string
+    (e.g. 0x30343130 -> "0410"), NOT a numeric ÷100 value (verified vs the app's zf/d.g()
+    2026-08-17). Returns the decoded string, or None if absent/non-printable."""
+    if not isinstance(v, int):
+        return None
+    s = bytes([(v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF]).decode("ascii", "replace")
+    return s if s.isprintable() else None
+
+
 def general(d: dict) -> dict:
-    # SwVersion-style fields are raw (÷100 for display); left raw here.
     return {
         "installed": True,
-        "comm_version": d.get("CommunicationVersion"),
-        "cm_sw_version": d.get("CmSwVersion"),
-        "amb_sw_version": d.get("AmbSwVersion"),
+        "comm_version": d.get("CommunicationVersion"),      # 1-byte int
+        "cm_sw_version": _sw_ascii(d.get("CmSwVersion")),    # 4 ASCII bytes -> "0207"
+        "amb_sw_version": _sw_ascii(d.get("AmbSwVersion")),  # 4 ASCII bytes -> "0410" (feeds the +2 gate)
     }
 
 
@@ -278,7 +298,10 @@ def satelliteantenna(d: dict) -> dict:
         "dish": d.get("Dish"),
         "satellite": d.get("SatelliteSelection"),
         "signal_level": d.get("SignalLevel"),
-        "system_on": bool(d.get("System")),
+        # System is a 2-bit ENUM, not a bool — the app's getter is `System == 1` (mg/f.java),
+        # so values 2/3 are NOT "on". `bool()` (any-nonzero) was wrong for 2/3. Also surface the raw.
+        "system": d.get("System"),
+        "system_on": d.get("System") == 1,
         "error": bool(d.get("Error")),
     }
 

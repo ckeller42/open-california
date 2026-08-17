@@ -73,6 +73,86 @@ def test_airheater_level_range_1_to_10():
             raise AssertionError("expected ValueError for out-of-range HeatingLevel=%d" % bad)
 
 
+def test_energy_mode_control_frame():
+    """`set energy mode <normal|max_charge|eco>` builds the 1-byte char-1601 frame with
+    EnergyModeSet @2/w2 (0/1/2) and DisplayRefresh @7/w1 = 0. Decompile-derived from the app's
+    own energy-VM setter (xf/d.java:389 stages EnergyModeSet = the mode ordinal, DisplayRefresh
+    stays 0) + the shared EnergyMode enum (bf/c.java: 0=normal 1=max_charge 2=eco); NOT yet
+    wire-captured / live-verified."""
+    from calictl import control
+    f = _funcs()
+    assert control.build(f, "energy", "mode", "normal", {}).hex() == "00"      # EnergyModeSet=0
+    assert control.build(f, "energy", "mode", "max_charge", {}).hex() == "10"  # EnergyModeSet=1 -> bits2,3=01
+    assert control.build(f, "energy", "mode", "eco", {}).hex() == "20"         # EnergyModeSet=2 -> bits2,3=10
+    assert control.build(f, "energy", "mode", "Eco ", {}).hex() == "20"        # case/space-insensitive
+    assert control.build(f, "energy", "mode", "turbo", {}) is None            # unknown mode
+    assert control.build(f, "energy", "off", "eco", {}) is None               # unknown action
+    assert f["energy"].control_char.startswith("00001601")                    # actuate target
+
+
+def test_cooler_quiet_mode_and_schedule_frames():
+    """Cooler quiet Mode + night-schedule/timer branches, decompile-verified from vf/c.java
+    (Mode 0=normal 2=manual-quiet 4=timer-quiet; NightTimerHourOn/Off = raw hour; TimerStart=1).
+    Full-packet, carrying State/Level; NOT yet live-verified."""
+    from calictl import control
+    f = _funcs()
+    last = {"State": 1, "Mode": 0, "Level": 3}
+    assert control.build(f, "cooler", "mode", "quiet", last).hex() == "3d2300000000"        # Mode=2
+    assert control.build(f, "cooler", "mode", "timer_quiet", last).hex() == "3d4300000000"  # Mode=4
+    assert control.build(f, "cooler", "night_on", 22, last).hex() == "3d0300001600"          # byte4=0x16
+    assert control.build(f, "cooler", "night_off", 7, last).hex() == "3d0300000007"          # byte5=0x07
+    assert control.build(f, "cooler", "timer_set", "06:45", last).hex() == "3d03062d0000"   # TimerHour=6 TimerMin=45
+    assert control.build(f, "cooler", "timer_start", None, last).hex()[:2] != "3d"          # TimerStart flips byte0
+    assert control.build(f, "cooler", "mode", "loud", last) is None                          # unknown mode
+    for bad in (-1, 24):
+        try:
+            control.build(f, "cooler", "night_on", bad, last)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for night hour %d" % bad)
+
+
+def test_airheater_runtime_and_timer_frames():
+    """Air-heater run-time + start-timer branches, decompile-verified from rf/b.java
+    (RunningTime @24, TimerHour @32 / TimerMin @40). Permanent heating is deliberately NOT wired
+    (the app's E3() only writes OFF; the ON value is unknown). NOT live-verified."""
+    from calictl import control
+    f = _funcs()
+    st = {"NormalOperationRequest": 0, "HeatingLevel": 5, "RunningTime": 127,
+          "AirDistribution": 0, "OperationModeAirHeater": 7, "TimerHour": 31, "TimerMin": 63}
+    assert control.build(f, "airheater", "runtime", 60, st).hex() == "3f75003c1f3f"   # byte3=0x3c=60
+    assert control.build(f, "airheater", "timer", "22:30", st).hex() == "3f75007f161e" # byte4=22 byte5=30
+    assert control.build(f, "airheater", "permanent", "on", st) is None               # not wired (ON unknown)
+    try:
+        control.build(f, "airheater", "timer", "24:00", st)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for out-of-range timer")
+
+
+def test_lighting_save_favorite_frame():
+    """`save_profile` writes the CURRENT lighting into a favorite (dg/h.java:564 l3): SET_BRIGHTNESS
+    with ProfileNumber = the favorite N (not the live-view 9), real zones carrying their current
+    brightness (from `last`), non-equipped zones = 14. Decompile-derived, NOT live-verified."""
+    from calictl import control
+    f = _funcs()
+    last = {"BrightnessLSeven": 5, "BrightnessLFive": 8, "BrightnessLThree": 2}
+    fr = control.build(f, "lighting", "save_profile", 3, last)
+    assert fr[0] == 0x03            # ProfileNumber = 3 (the favorite, not 9)
+    assert fr[1] == 0x04            # Mode = SET_BRIGHTNESS
+    assert fr.hex().endswith("eeeeeeee")   # L9-L16 not-equipped -> unchanged (14)
+    assert "e2e8e5" in fr.hex()    # L3=2, L5=8, L7=5 carried (each real zone's current brightness)
+    for bad in (0, 8):
+        try:
+            control.build(f, "lighting", "save_profile", bad, last)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("expected ValueError for save_profile slot %d" % bad)
+
+
 def test_roof_position_name_and_infopopup_alert():
     """Position -> name (ig/c.java l() + hf/b.java: 0/14=closed 1=open 2=middle 15=error else=other)
     and InfoPopUp -> alert (0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked
@@ -212,6 +292,19 @@ def test_energy_batt1_sentinel_nulled():
     off = bytes.fromhex("00d0500400ff810000fe18033083fffdfffe000001ff")
     e = semantics.energy(P.decode(f["energy"], off))
     assert e["batt1_v"] is None and e["batt2_v"] == 13.1
+
+
+def test_general_decodes_sw_version_strings_and_drives_plus2():
+    # general (char 1001) had UNPLACED fields -> decoded to {} -> amb_sw_version None -> the +2
+    # correction could never fire live. With offsets + ASCII decode it yields the real strings.
+    f = _funcs()
+    raw = bytes.fromhex("303431303032303702")            # "0410" | "0207" | 0x02
+    g = semantics.general(P.decode(f["general"], raw))
+    assert g["amb_sw_version"] == "0410" and g["cm_sw_version"] == "0207" and g["comm_version"] == 2
+    # and it now feeds the +2 gate for real (this van is 0410)
+    st = {"general": g, "energy": {"dcdc_current": -2}}
+    semantics.apply_sw_corrections(st)
+    assert st["energy"]["dcdc_current"] == 0
 
 
 def test_dcdc_sw_correction():

@@ -235,6 +235,40 @@ Extend actuation via `control.BUILDERS`.
 
 ---
 
+## 5. Control command surface (`control.BUILDERS`, updated 2026-08-17)
+
+Every command below is a full-packet write on the function's control char. Those marked
+**DV** are decompile-verified (frame byte-checked against the app's own setter) but **not yet
+live-verified on the van** — the web UI guards each with a "not verified" confirm.
+
+| Function | `what` | Effect / field | Source | Status |
+|---|---|---|---|---|
+| cooler | `power` / `level` | State / Level 1-5 | `vf/c` U0/X1 | live-verified |
+| cooler | `mode` | quiet Mode 0=normal/2=quiet/4=timer | `vf/c` T1/x0/k0 | DV |
+| cooler | `night_on` / `night_off` | NightTimerHourOn/Off (0-23) | `vf/c` c0/Y2 | DV |
+| cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | DV |
+| cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | DV |
+| airheater | `power` / `level` | NormalOperationRequest 1/0 / HeatingLevel | `rf/b` C2/q4 | live (power capture 07-08) |
+| airheater | `runtime` | RunningTime (min) | `rf/b` D4 | DV |
+| airheater | `timer` | TimerHour:TimerMin (HH:MM) | `rf/b` B0 | DV |
+| energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | DV |
+| lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |
+| lighting | `profile` | SET_PROFILE, ProfileNumber (Fav 1-7, 10 wake, 11 interior) | `dg/h` u0 | DV (activate) |
+| lighting | `save_profile` | SET_BRIGHTNESS w/ ProfileNumber=N + all zones (define a favorite) | `dg/h` l3 | DV |
+| campingmode | `master`/`lights`/`usb` | State / lights (inverted) / UsbCharger | `tf/a` | live-verified |
+| roof | `open`/`close`/`stop` | Up/Down + app-gen SafetyCounter | `ig/c` | not-live-verified |
+
+**Not wired (deliberately):** airheater `permanent` (the app's `E3()` only writes OFF; ON value
+unknown — won't arm a fuel burner on a guess), lighting wake-up **time** (`m0`, Mode 20 — the
+LightValue bitmask packing is unverified; needs a capture), lighting `color` (frame mis-shaped +
+not on this variant).
+
+**State readback surfaced** (decoded straight from the state chars, cross-checked against the
+app decoders): cooler `quiet_from`/`quiet_to`/`timer_hour`/`timer_min` (`vf/c.java:321 e()`,
+bit-exact `NightTimerHourOn@48`/`Off@56`); energy `energy_mode` (`bf/c.java`).
+
+---
+
 ## Key files
 
 - Callback / lifecycle: `qd/f.java`, `jb/b.java` (cases 18, 24)

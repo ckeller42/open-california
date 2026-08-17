@@ -36,6 +36,10 @@ const optNum = (fn, what, realNum) => {
   const k = qKey(fn, what);
   return k in optimistic ? Number(optimistic[k]) : realNum;
 };
+const optSel = (fn, what, realVal) => {   // optimistic string/enum value (segmented selects)
+  const k = qKey(fn, what);
+  return k in optimistic ? optimistic[k] : realVal;
+};
 const truthy = (v) => v === true || v === 1 || v === "on" || v === "1";
 
 const yn = (b) => (b ? "yes" : "no");
@@ -77,10 +81,28 @@ const FEATURES = {
     controls: [
       { what: "power", kind: "toggle", label: "Refrigerator", state: "on" },
       { what: "level", kind: "slider", label: "Cooling level", state: "level", min: 1, max: 5 },
+      { what: "mode", kind: "select", label: "Quiet mode",
+        options: [{ value: "normal", label: "Normal" }, { value: "quiet", label: "Quiet" }, { value: "timer_quiet", label: "Timer quiet" }],
+        current: (s) => (s.mode === 2 ? "quiet" : s.mode === 4 ? "timer_quiet" : "normal"),
+        confirm: () => "Set the cooler's quiet mode? Not yet verified on the van. Continue?" },
+      { what: "night_on", kind: "hour", label: "Quiet from", current: (s) => s.quiet_from ?? 0,
+        confirm: (h) => `Set quiet-schedule start to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
+      { what: "night_off", kind: "hour", label: "Quiet until", current: (s) => s.quiet_to ?? 0,
+        confirm: (h) => `Set quiet-schedule end to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
+      { what: "timer_set", kind: "time", label: "Timer start at",
+        current: (s) => (s.timer_hour != null && s.timer_min != null)
+          ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null,
+        confirm: (t) => `Set the cooling-timer start to ${t}? Not yet verified on the van. Continue?` },
+      { what: "__cooltimer", kind: "buttons", label: "Cooling timer",
+        actions: [{ what: "timer_start", label: "Arm" }, { what: "timer_cancel", label: "Cancel" }],
+        confirm: (b) => `${b.label} the cooling timer? Not yet verified on the van. Continue?` },
     ],
     readouts: [
       { label: "Fridge door", get: (s) => (s.door_open ? "⚠ Open" : "Closed") },
       { label: "Timer", get: (s) => onoff(s.timer_active) },
+      { label: "Quiet schedule", get: (s) => (s.quiet_scheduled || s.quiet_from || s.quiet_to)
+        ? `${String(s.quiet_from ?? 0).padStart(2, "0")}:00 → ${String(s.quiet_to ?? 0).padStart(2, "0")}:00`
+          + (s.quiet_scheduled ? "" : " (off)") : "off" },
     ],
     // `fault` is the cooler's 2-bit Error enum, only meaningful while powered on (vf/c.java):
     // door_open | emergency | error. Surface it as a banner so a fault is obvious at a glance.
@@ -106,10 +128,16 @@ const FEATURES = {
     controls: [
       { what: "power", kind: "toggle", label: "Parking heater", state: "running" },
       { what: "level", kind: "slider", label: "Heating level (10 = HI)", state: "level", min: 1, max: 10 },
+      { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 0, max: 120, unit: "min" },
+      { what: "timer", kind: "time", label: "Start at",
+        current: (s) => (s.timer_hour != null && s.timer_min != null)
+          ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null },
     ],
     readouts: [
       { label: "Level", get: (s) => (s.level == null ? "—" : (s.level >= 10 ? "HI" : s.level)) },
       { label: "Running time", get: (s) => withUnit(s.running_time, "min") },
+      { label: "Timer start", get: (s) => (s.timer_hour != null && s.timer_min != null && (s.timer_hour || s.timer_min))
+        ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : "off" },
       { label: "Error code", get: (s) => s.error_code ?? "—" },
     ],
     summary: (s) => (s.running ? `Running${s.level != null ? " · " + (s.level >= 10 ? "HI" : s.level) : ""}` : "Off"),
@@ -133,6 +161,13 @@ const FEATURES = {
   },
   energy: {
     title: "Energy", icon: "🔋", chart: true,
+    controls: [
+      { what: "mode", kind: "select", label: "Energy mode",
+        options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max charge" }, { value: "eco", label: "Eco" }],
+        current: (s) => ({ 0: "normal", 1: "max_charge", 2: "eco" })[s.energy_mode],
+        disabled: (s) => !!s.energy_mode_locked,
+        confirm: () => "Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?" },
+    ],
     readouts: [
       { label: "Living battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
       { label: "Living voltage", get: (s) => withUnit(s.batt2_v, "V") },
@@ -168,7 +203,7 @@ const FEATURES = {
         get: (s) => (s.level_roll == null || s.level_pitch == null
           ? "—" : `${fmtDeg(s.level_roll)} / ${fmtDeg(s.level_pitch)}`),
         widget: (s) => bubbleLevel(s.level_roll, s.level_pitch) },
-      { label: "Vehicle clock", get: (s) => s.car_clock ?? "—" },
+      { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },
     ],
     summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
   },
@@ -318,8 +353,12 @@ function offlineBanner() {
 }
 
 // Connection toggle for the persistent BLE session. The van has ONE BLE slot shared with the
-// phone app, so this both SHOWS the state and lets you Connect (warm the fast path now) or
-// Disconnect (hand the slot back to the app immediately, instead of waiting out the idle release).
+// phone app, so this both SHOWS the state and lets you Disconnect (hand the slot back to the app
+// immediately, instead of waiting out the idle release) or reconnect after you have.
+// It is shown ONLY when a session is actually held/connecting, the van is asleep, or you chose to
+// disconnect. When the session is merely idle in auto mode the daemon is still polling normally —
+// showing a "Connect" button there falsely reads as "no connection", so we hide it (the fast path
+// warms automatically the moment you interact). The main status pill still shows live/offline.
 function sessionToggle() {
   const m = STATE._meta || {};
   const mode = m.session_mode, st = m.session;
@@ -329,7 +368,7 @@ function sessionToggle() {
   else if (st === "up") { spec = { cls: "ok", text: "🟢 Live · fast" }; action = "disconnect"; }
   else if (st === "connecting" || st === "degraded") { spec = { cls: "busy", text: "🟡 Connecting" }; action = "disconnect"; }
   else if (st === "asleep") { spec = { cls: "", text: "⚪ Asleep — tap to wake" }; action = "connect"; }
-  else { spec = { cls: "", text: "🔌 Connect" }; action = "connect"; }   // idle in auto mode
+  else return null;   // idle in auto mode while polling normally — not a disconnection, don't imply one
   const el = document.createElement("button");
   el.type = "button";
   el.className = "session-pill" + (spec.cls ? " " + spec.cls : "");
@@ -503,6 +542,7 @@ function energyChart() {
 function render() {
   backEl.hidden = view === "home";
   backEl.onclick = () => goto("home");
+  stopClockTicker();          // any live vehicle-clock ticker belongs to the old DOM; restarted on re-render
   app.innerHTML = "";
   const sp = sessionToggle();
   if (sp) app.appendChild(sp);
@@ -613,7 +653,52 @@ function renderLighting(s) {
   msw.setAttribute("role", "switch"); msw.setAttribute("aria-label", "All lights");
   msw.setAttribute("aria-checked", allOn ? "true" : "false"); msw.disabled = readOnly();
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
-  mrow.appendChild(msw); mc.appendChild(mrow); app.appendChild(mc);
+  mrow.appendChild(msw); mc.appendChild(mrow);
+
+  // Profile activator (the app's profileSelector -> SET_PROFILE / ProfileNumber). Favorites are
+  // user-saved scenes on the unit (content unknown to us; we can only activate by number) + the
+  // wake-up light. LIGHTS_ON/OFF (12/0) are the master toggle above, so they're not listed here.
+  const prow = document.createElement("div"); prow.className = "row";
+  const plbl = document.createElement("span"); plbl.className = "lbl"; plbl.textContent = "Activate profile";
+  prow.appendChild(plbl);
+  if (pending_is("lighting", "profile")) prow.appendChild(spinner());
+  const psel = document.createElement("select");
+  psel.disabled = readOnly();
+  const opt0 = document.createElement("option");
+  opt0.value = ""; opt0.textContent = "Choose…"; opt0.selected = true; psel.appendChild(opt0);
+  const PROFILES = [[1, "Favorite 1"], [2, "Favorite 2"], [3, "Favorite 3"], [4, "Favorite 4"],
+                    [5, "Favorite 5"], [6, "Favorite 6"], [7, "Favorite 7"],
+                    [11, "Interior light"], [10, "Wake-up light"]];
+  for (const [n, lab] of PROFILES) {
+    const o = document.createElement("option"); o.value = n; o.textContent = lab; psel.appendChild(o);
+  }
+  psel.onchange = () => {
+    if (psel.value === "") return;
+    command("lighting", "profile", Number(psel.value));
+    psel.value = "";   // it's a momentary action, not a persistent selection
+  };
+  prow.appendChild(psel); mc.appendChild(prow);
+
+  // Save the CURRENT lamp levels into a favorite slot (the app's l3 applyProfileBrightness).
+  const srow = document.createElement("div"); srow.className = "row";
+  const slbl = document.createElement("span"); slbl.className = "lbl"; slbl.textContent = "Save current as";
+  srow.appendChild(slbl);
+  if (pending_is("lighting", "save_profile")) srow.appendChild(spinner());
+  const ssel = document.createElement("select");
+  ssel.disabled = readOnly();
+  const s0 = document.createElement("option"); s0.value = ""; s0.textContent = "Favorite…"; s0.selected = true; ssel.appendChild(s0);
+  for (let n = 1; n <= 7; n++) {
+    const o = document.createElement("option"); o.value = n; o.textContent = "Favorite " + n; ssel.appendChild(o);
+  }
+  ssel.onchange = () => {
+    if (ssel.value === "") return;
+    const n = Number(ssel.value);
+    ssel.value = "";
+    if (!confirm(`Overwrite Favorite ${n} with the current lamp levels? This writes to the unit and is not yet verified on the van. Continue?`)) return;
+    command("lighting", "save_profile", n);
+  };
+  srow.appendChild(ssel); mc.appendChild(srow);
+  app.appendChild(mc);
 
   // lamp sliders, grouped like the app (always controllable)
   for (const grp of LIGHT_LAMPS) {
@@ -697,14 +782,22 @@ function renderControl(fn, c, s) {
   row.appendChild(label);
   const isPending = pending_is(fn, c.what);
   if (isPending) row.appendChild(spinner());
+  const ro = readOnly() || (c.disabled ? !!c.disabled(s) : false);
+  // fire() applies a per-control "not verified" confirm (c.confirm) on top of the feature-level
+  // one in act(); c.confirm(value) returns the prompt, or null/false to skip.
+  const fire = (val) => {
+    const msg = typeof c.confirm === "function" ? c.confirm(val) : c.confirm;
+    if (msg && !confirm(msg)) return;
+    act(fn, c.what, val);
+  };
   if (c.kind === "toggle") {
     const on = optOn(fn, c.what, !!s[c.state]);
     const sw = document.createElement("button");
     sw.className = "switch" + (isPending ? " pending" : "");
     sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", c.label);
     sw.setAttribute("aria-checked", on ? "true" : "false");
-    sw.disabled = readOnly();
-    sw.onclick = () => act(fn, c.what, on ? "off" : "on");
+    sw.disabled = ro;
+    sw.onclick = () => fire(on ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
     const val = optNum(fn, c.what, s[c.state] != null ? s[c.state] : c.min);
@@ -713,16 +806,92 @@ function renderControl(fn, c, s) {
     inp.min = c.min;
     inp.max = c.max;
     inp.value = val;
-    inp.disabled = readOnly();
+    inp.disabled = ro;
     const out = document.createElement("span");
     out.className = "sval";
-    out.textContent = val;
-    inp.oninput = () => (out.textContent = inp.value);
-    inp.onchange = () => act(fn, c.what, Number(inp.value));
+    out.textContent = val + (c.unit ? " " + c.unit : "");
+    inp.oninput = () => (out.textContent = inp.value + (c.unit ? " " + c.unit : ""));
+    inp.onchange = () => fire(Number(inp.value));
     row.appendChild(inp);
     row.appendChild(out);
+  } else if (c.kind === "select") {              // segmented multi-choice (e.g. energy/cooler mode)
+    const cur = optSel(fn, c.what, c.current ? c.current(s) : null);
+    const grp = document.createElement("div");
+    grp.className = "segmented";
+    for (const opt of c.options) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "seg" + (opt.value === cur ? " on" : "");
+      b.textContent = opt.label;
+      b.disabled = ro;
+      b.setAttribute("aria-pressed", opt.value === cur ? "true" : "false");
+      b.onclick = () => fire(opt.value);
+      grp.appendChild(b);
+    }
+    row.appendChild(grp);
+  } else if (c.kind === "hour") {                // 0-23 hour picker (cooler night schedule)
+    const cur = optNum(fn, c.what, c.current ? c.current(s) : 0);
+    const sel = document.createElement("select");
+    sel.disabled = ro;
+    for (let h = 0; h < 24; h++) {
+      const o = document.createElement("option");
+      o.value = h; o.textContent = String(h).padStart(2, "0") + ":00";
+      if (h === cur) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => fire(Number(sel.value));
+    row.appendChild(sel);
+  } else if (c.kind === "time") {                // HH:MM time-of-day (air-heater start timer)
+    const inp = document.createElement("input");
+    inp.type = "time";
+    inp.disabled = ro;
+    if (c.current && c.current(s)) inp.value = c.current(s);
+    inp.onchange = () => { if (inp.value) fire(inp.value); };
+    row.appendChild(inp);
+  } else if (c.kind === "buttons") {             // momentary action buttons (cooler on/off timer)
+    const grp = document.createElement("div");
+    grp.className = "segmented";
+    for (const b of c.actions) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "seg";
+      btn.textContent = b.label;
+      btn.disabled = ro;
+      btn.onclick = () => {
+        if (c.confirm && !confirm(typeof c.confirm === "function" ? c.confirm(b) : c.confirm)) return;
+        act(fn, b.what, b.value != null ? b.value : null);
+      };
+      grp.appendChild(btn);
+    }
+    row.appendChild(grp);
   }
   return row;
+}
+
+// Live vehicle-clock tick. The van's RTC arrives as a per-poll snapshot ("YYYY-MM-DD HH:MM:SS");
+// rather than let it sit frozen between polls, we advance it by real elapsed time. We anchor to the
+// instant the reading was actually taken (now - _meta.age_s), so the displayed clock = RTC value +
+// wall-time since. Re-synced on every poll (render() rebuilds), smooth in between. Because the RTC
+// tracks real time, this stays ~accurate even while the van is asleep — it's cosmetic; liveness is
+// shown by the separate online/offline banner.
+let clockTimer = null;
+function stopClockTicker() { if (clockTimer) { clearInterval(clockTimer); clockTimer = null; } }
+function parseClock(str) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(str || "");
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : null;  // local time
+}
+function fmtClock(ms) {
+  const d = new Date(ms), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function startClockTicker(el) {
+  stopClockTicker();
+  const base = parseClock((STATE.vehicle || {}).car_clock);
+  if (base == null) { el.textContent = "—"; return; }
+  const anchor = Date.now() - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0);
+  const paint = () => { el.textContent = fmtClock(base + (Date.now() - anchor)); };
+  paint();
+  clockTimer = setInterval(paint, 1000);
 }
 
 function renderReadout(r, s) {
@@ -742,6 +911,7 @@ function renderReadout(r, s) {
     val = "—";
   }
   v.textContent = val == null || val === "" ? "—" : String(val);
+  if (r.tick) startClockTicker(v);   // live-advance this value (vehicle clock) between polls
   row.appendChild(label);
   row.appendChild(v);
   wrap.appendChild(row);

@@ -81,8 +81,12 @@ functions:
     state_services: [1600, 1602]
     control_source: pg/a.java   # control char 1601
     control_fields:
-      - {name: OperationMode, offset: MERGED_AMBIGUOUS, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
-      - {name: Movement, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
+      # 1601/energy branch of the merged pg/a class (case0=stairs 1801, default=energy 1601).
+      # Field names + offsets are the app's OWN energy-VM log (xf/d.java:389 "DisplayRefresh: ..
+      # EnergyModeSet: ..") and the f() bit layout — NOT the stairs "OperationMode/Movement" log on
+      # pg/a.A(). Decompile-derived (setter + enum), not yet wire-captured / live-verified.
+      - {name: EnergyModeSet, offset: 2, width: 2, default: 3, raw_range: 0..3, value_semantics: "0=normal 1=max_charge 2=eco (enum bf/c.java, same as read EnergyMode), 3=leave-unchanged"}
+      - {name: DisplayRefresh, offset: 7, width: 1, default: 0, value_semantics: "app mode setter (xf/d.java:389) leaves this 0; purpose unverified"}
     state_fields:
       - {name: LandNotAvailable, offset: 0, width: 1}
       - {name: LandDefect, offset: 1, width: 1}
@@ -129,9 +133,13 @@ functions:
     control_fields:
       []   # no unambiguous control model (see control_models_unresolved)
     state_fields:
-      - {name: AmbSwVersion}
-      - {name: CmSwVersion}
-      - {name: CommunicationVersion}
+      # Offsets added 2026-08-17 (were UNPLACED -> general decoded to {} -> amb_sw_version None,
+      # which silently killed the DC-DC +2 correction). Verified vs the app's ag/c.c() (guard >=72
+      # bits): AmbSwVersion/CmSwVersion are 4 ASCII bytes each (a 4-char string, see semantics.general),
+      # CommunicationVersion is a 1-byte int.
+      - {name: AmbSwVersion, offset: 0, width: 32}
+      - {name: CmSwVersion, offset: 32, width: 32}
+      - {name: CommunicationVersion, offset: 64, width: 8}
   vehicle:
     # MANUAL addition (char 1004). NOT emitted by tools/extract_protocol — 1004 has
     # no structured debug-log — so preserve this block across regeneration. Bit layout
@@ -187,7 +195,7 @@ functions:
     control_fields:
       - {name: ProfileNumber, offset: 4, width: 4, default: 14, raw_range: 0..15, value_semantics: UNVERIFIED}
       - {name: Mode, offset: 8, width: 8, default: 0, raw_range: 0..255, value_semantics: UNVERIFIED}
-      - {name: Timestamp, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
+      - {name: Timestamp, offset: 16, width: 32, default: 0, value_semantics: "epoch/monotonic stamp, offset read from dg/h.java builder (decompile-derived)"}
       - {name: LightValue, offset: 48, width: 16, default: 0, raw_range: 0..65535, value_semantics: UNVERIFIED}
       - {name: BrightnessLOne, offset: 68, width: 4, default: 14, raw_range: 0..15, value_semantics: UNVERIFIED}
       - {name: BrightnessLTwo, offset: 64, width: 4, default: 14, raw_range: 0..15, value_semantics: UNVERIFIED}
@@ -250,7 +258,7 @@ functions:
     control_fields:
       - {name: Up, offset: 6, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
       - {name: Down, offset: 4, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
-      - {name: SafetyCounter, offset: MERGED_AMBIGUOUS, width: UNKNOWN, default: UNKNOWN, value_semantics: UNVERIFIED}
+      - {name: SafetyCounter, offset: 8, width: 32, default: 0, value_semantics: "app-generated monotonic BE-uint32, ~+1/500ms (NOT unit-echoed); see overrides.py + device.actuate_roof"}
     state_fields:
       - {name: Position, offset: 0, width: 4}
       - {name: Installed, offset: 6, width: 1}
