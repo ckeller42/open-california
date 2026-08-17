@@ -318,8 +318,12 @@ function offlineBanner() {
 }
 
 // Connection toggle for the persistent BLE session. The van has ONE BLE slot shared with the
-// phone app, so this both SHOWS the state and lets you Connect (warm the fast path now) or
-// Disconnect (hand the slot back to the app immediately, instead of waiting out the idle release).
+// phone app, so this both SHOWS the state and lets you Disconnect (hand the slot back to the app
+// immediately, instead of waiting out the idle release) or reconnect after you have.
+// It is shown ONLY when a session is actually held/connecting, the van is asleep, or you chose to
+// disconnect. When the session is merely idle in auto mode the daemon is still polling normally —
+// showing a "Connect" button there falsely reads as "no connection", so we hide it (the fast path
+// warms automatically the moment you interact). The main status pill still shows live/offline.
 function sessionToggle() {
   const m = STATE._meta || {};
   const mode = m.session_mode, st = m.session;
@@ -329,7 +333,7 @@ function sessionToggle() {
   else if (st === "up") { spec = { cls: "ok", text: "🟢 Live · fast" }; action = "disconnect"; }
   else if (st === "connecting" || st === "degraded") { spec = { cls: "busy", text: "🟡 Connecting" }; action = "disconnect"; }
   else if (st === "asleep") { spec = { cls: "", text: "⚪ Asleep — tap to wake" }; action = "connect"; }
-  else { spec = { cls: "", text: "🔌 Connect" }; action = "connect"; }   // idle in auto mode
+  else return null;   // idle in auto mode while polling normally — not a disconnection, don't imply one
   const el = document.createElement("button");
   el.type = "button";
   el.className = "session-pill" + (spec.cls ? " " + spec.cls : "");
