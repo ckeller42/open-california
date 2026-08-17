@@ -1,0 +1,33 @@
+calictl/webui/app.js
+  s_a7757c7c919f20::t_ae6354bf9e911f 124-125
+  s_a7757c7c919f20::t_f117cbf0f16281 153-159
+  s_a7757c7c919f20::t_f37f03a3ff6038 93-94
+  s_a7757c7c919f20::t_7a046a9170f8b5 728-735,742-743,752,755-757,760-802,807-809
+  s_a7757c7c919f20::t_7f7737fd5ccd43 39-42
+  s_a7757c7c919f20::t_09534f7df93535 803-806
+  s_a7757c7c919f20::t_cbdc351c876dcd 84-92
+calictl/webui/app.css
+  s_a7757c7c919f20::t_45af940088c543 86-100
+calictl/control.py
+  s_a7757c7c919f20::t_726a6b059b386f 327-337
+  s_a7757c7c919f20::t_7b783d1053c90e 104-108,110-113,121-134
+  s_a7757c7c919f20::t_28f6fd26363195 17-31
+tests/test_calictl.py
+  s_a7757c7c919f20::t_9283d3e2db02bb 93-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f0610d8a72fd9482a373ad527e9e7631b764ad11",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
