@@ -1,0 +1,31 @@
+protocol/signals.yaml
+  s_a7757c7c919f20::t_6a646af7d9fdb5 524,532
+calictl/overrides.py
+  s_a7757c7c919f20::t_ef5d1a9057fbca 49
+calictl/control.py
+  s_a7757c7c919f20::t_7251f76b70d9b9 420-421
+  s_a7757c7c919f20::t_9b49a49da80e42 391-393,395-399
+  s_a7757c7c919f20::t_6b010360b74887 407-409
+protocol/dictionary.yaml
+  s_a7757c7c919f20::t_ef2a627dd84631 84-88
+  s_a7757c7c919f20::t_1995cbcbb4f114 197
+  s_a7757c7c919f20::t_8aae049dd8f7b5 260
+docs/business-logic/protocol-alignment.md
+  s_a7757c7c919f20::t_d1809506b58512 115-149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "756d5f0647fb5b307ea562c3b160252766d2c8d5",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
