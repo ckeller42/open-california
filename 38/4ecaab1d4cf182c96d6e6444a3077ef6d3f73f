@@ -1,0 +1,20 @@
+.claude/skills/decompile-app/SKILL.md
+  s_a7757c7c919f20::t_5f157216c2fe12 62-65
+  s_a7757c7c919f20::t_18e3a3169d38f7 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "384ecaab1d4cf182c96d6e6444a3077ef6d3f73f",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
