@@ -1,0 +1,23 @@
+calictl/control.py
+  s_a7757c7c919f20::t_ec3a7cbca32576 126-128
+tests/test_calictl.py
+  s_a7757c7c919f20::t_fee9d45c10b1e3 104
+calictl/webui/app.js
+  s_a7757c7c919f20::t_b8deb1fc2337db 92-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ebcdec9720b2db58b9cbb0de4b5385a83f900630",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
