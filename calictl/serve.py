@@ -213,6 +213,12 @@ class Server:
         # of SD-card writes). The GUI reads this instead of Influx -- see calictl/history.py.
         self._history_cache = os.environ.get(
             "CALICTL_HISTORY_CACHE", os.path.expanduser("~/.cache/calictl/history.jsonl"))
+        # Durable per-poll OUTCOME log so telemetry gaps can be classified after the fact (van
+        # deep-sleep vs our-side BLE/daemon failure vs Influx-write failure). One tiny JSONL line
+        # per poll cycle; a poll gap with matching "asleep" rows = deep sleep, "ble_error" rows =
+        # connection loss while awake, and NO rows at all = the daemon itself was down.
+        self._outcomes_cache = os.environ.get(
+            "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl"))
         self._appends = 0                   # appends since the last trim rewrite
         self._load_last()                   # AFTER the defaults: it restores _water_good/_water_stale_since
         self._mqtt = None
@@ -252,6 +258,18 @@ class Server:
             os.replace(tmp, self._state_cache)
         except OSError:
             pass
+
+    def _record_outcome(self, outcome, detail=""):
+        """Append this poll cycle's OUTCOME to the durable log so a later gap can be classified.
+        Never raises. ``outcome`` is one of ok / asleep / ble_error / error; the session state +
+        consecutive-fail count are recorded alongside so `tools.analyze_battery --diagnose` can tell
+        van deep-sleep (asleep) from an our-side connection loss (ble_error) from a dead daemon
+        (no rows at all)."""
+        rec = {"ts": round(time.time(), 1), "outcome": outcome,
+               "session": self._session_state, "fails": self._backoff_fails}
+        if detail:
+            rec["detail"] = str(detail)[:120]
+        history.append_jsonl(self._outcomes_cache, rec)
 
     def _record_history(self, energy):
         """Record one leisure-battery sample for the web UI's 24 h chart. Never raises.
@@ -695,12 +713,17 @@ class Server:
                         continue
                     states = await self.poll()
                     print("polled %d functions" % len(states), flush=True)
+                    self._record_outcome("ok")
                 except ConnectionUnavailable as e:
                     print("poll skipped: %s" % e, flush=True)
-                except Exception:
+                    # van unreachable: "asleep" once the supervisor's backoff hit the cap (deep
+                    # sleep), else a transient connection loss while it may still be awake.
+                    self._record_outcome("asleep" if self._session_state == "asleep" else "ble_error", e)
+                except Exception as e:
                     import traceback
                     print("poll error:", flush=True)
                     traceback.print_exc()
+                    self._record_outcome("error", e)
                 await asyncio.sleep(self.interval)
 
         try:
