@@ -108,10 +108,11 @@ Every action setter does `field.o(value); A()/B(); y(true)`. `m2.a.y(boolean z11
   `e0..h0=3, i0=7, j0=7, k0=30, l0=62, m0=31, n0=31`. `v()` (`sf/a.java:242-269`) resets all
   slots to those sentinels. Zeroing sibling fields yields a different frame that can be
   rejected or that stomps `State→0` ("nothing happens").
-- **Frame lengths:** fridge/heater 48 bits → **6 bytes**; camping 24 bits → **3 bytes**
-  (`lg/a.java:66`); lighting 128 bits → **16 bytes**. Target char is the per-feature
-  **control** UUID `n()` (fridge `00001101` `sf/a.java:274`, camping `00001201`
-  `lg/a.java:29`), distinct from its status/read char.
+- **Frame lengths:** fridge/heater 48 bits → **6 bytes**; camping 8 bits → **1 byte**
+  (`tf/a.java`; `lg/a.java` is the R8-merged roof-AC branch, not camping); lighting 128 bits →
+  **16 bytes**. Target char is the per-feature **control** UUID `n()` (fridge `00001101`
+  `sf/a.java:274`, camping `00001201`), distinct from its status/read char.
+  (`overrides.CONTROL_FRAME_BYTES`: cooler/airheater 6, campingmode 1, lighting 16, roof 5.)
 
 **Cadence — one-shot release, only roof repeats.** The `jn.a` timer's 3rd ctor arg is the
 **repeat flag**:
@@ -120,9 +121,11 @@ Every action setter does `field.o(value); A()/B(); y(true)`. `m2.a.y(boolean z11
   (reset all slots to sentinel) then writes **one** idle/release frame. It is a plain delay,
   not gated on any read-back, and **not needed** for cooler/camping (sentinels mean
   "don't change", so it never undoes a persisted setpoint).
-- Roof movement heartbeat: `ig/c.java:674` / `:764` `jn.a(1000L, …, true, false)` →
-  **repeating 1 Hz**. This is the roof's hold-to-move keep-alive — a *different* mechanism,
-  and the only feature that repeats. Other repeating timers: `dg/d.java:146`
+- Roof movement keep-alive: the PRIMARY frame pump is the **~500 ms SafetyCounter timer**
+  (`w8/a`, +1/frame, value `seed + floor(elapsed_ms/500)`, `b1/d.java:352`), NOT the 1000 ms
+  timer. The `ig/c.java:674` / `:764` `jn.a(1000L, …, true, false)` timer also repeats but only
+  **re-affirms direction** — it doesn't touch the counter. Net ~3 frames/s, counter deltas 0/+1,
+  never +2. See §3 (Roof) + `protocol-alignment.md`. Other repeating timers: `dg/d.java:146`
   `jn.a(100L,…,true,true)`, `dg/d.java:164` `jn.a(1000L,…,true,true)`, `pf/k.java:457`
   `jn.a(30000L,…,true,false)`.
 
@@ -146,7 +149,7 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
 | **cooler** | `power` on/off, `level` 1-5 | ✅ actuates | State 0↔1, Level applied. |
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). |
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
-| **airheater** | `power`, `level` 0-15 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
+| **airheater** | `power`, `level` 1-10 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
 | **roof** | not wired | — | Needs the 1 Hz move-heartbeat loop (§3); not installed here. |
 | roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
 
@@ -265,7 +268,7 @@ not on this variant).
 
 **State readback surfaced** (decoded straight from the state chars, cross-checked against the
 app decoders): cooler `quiet_from`/`quiet_to`/`timer_hour`/`timer_min` (`vf/c.java:321 e()`,
-bit-exact `NightTimerHourOn@48`/`Off@56`); energy `energy_mode` (`bf/c.java`).
+bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`bf/c.java`).
 
 ---
 

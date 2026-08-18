@@ -1,0 +1,40 @@
+# Evidence ledger — how strongly is each protocol fact proven?
+
+Every protocol claim in this repo sits at one of three **evidence tiers**. The goal is to drive
+everything toward the top tier. The decompile tells us what the app *intends*; only a wire capture
+proves what actually happens.
+
+| Tier | Meaning | How it's checked |
+|---|---|---|
+| **CAPTURE** | Matched byte-for-byte against a real HCI/PacketLogger capture of the app | `tests/scenarios/<fn>/*.yaml` + `tests/test_capture_diff.py` |
+| **DECOMPILE** | Grounded in the app's decompiled decode/setter + the enigma mapping, but never seen on the wire | agent cross-checks; `mapping.enigma` (54 verified classes) |
+| **DEVICE** | Physically observed on the van (photons / a human at the hardware), frame not necessarily diffed | owner report, dated |
+
+Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ catalog),
+`test_doc_offset_consistency.py` (prose/comment `Field@offset` citations ↔ dictionary),
+`test_capture_diff.py` (our frames ↔ captured app frames).
+
+## Owed a capture (currently DECOMPILE-only — do not trust as verified)
+
+| Fact | Tier now | Capture that would verify it |
+|---|---|---|
+| cooler `mode` quiet 0/2/4, `night_on`/`night_off`, `timer_set`, `timer_start`/`cancel` | DECOMPILE | app: set quiet mode + a night schedule + a timer → diff 1101 frames |
+| airheater `runtime`, `timer` | DECOMPILE | app: set run-time + a start timer → diff 1701 frames |
+| airheater **permanent-ON** (NOT wired — only OFF is known) | unknown | app: enable permanent heating → learn the ON value |
+| energy `mode` (EnergyModeSet 0/1/2) | DECOMPILE | app: switch eco/normal/max → diff 1601 frames |
+| lighting `profile` activate + `save_profile` (favorite define) | DECOMPILE | app: activate a favorite; edit+save a favorite → diff 1501 frames |
+| lighting **wake-up TIME** (`m0`, Mode 20 — LightValue bitmask packing unknown) | unknown | app: arm a wake-up alarm → learn the Timestamp + LightValue packing |
+| roof drive end-to-end (frames match app; motor never driven by calictl) | DECOMPILE + partial DEVICE | calictl drives the roof with ignition on, owner-watched |
+| roof: whether the 1003 heartbeat + 3 s ARM_DELAY_S pre-arm is needed (app doesn't do it) | unknown | trial with/without on an awake unit |
+
+## Already at CAPTURE / DEVICE (examples, keep as the model)
+
+- cooler power/level frames, airheater on/off — CAPTURE (HCI 2026-07-08/14; `tests/scenarios/`).
+- cooler NightTimer sentinels = 0 — CAPTURE (the captured power-on frame beat the decompiled `v()` default).
+- lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
+- general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
+
+Captures come from the Mac "bar" (PacketLogger/tshark) or buspi HCI. When one lands: add a
+`tests/scenarios/<fn>/<case>.yaml`, assert our frame matches in `test_capture_diff.py`, flip the row
+to CAPTURE, and drop the GUI "not verified" confirm for that control. See the memory
+`capture-evidence-tier`.

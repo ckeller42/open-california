@@ -1580,25 +1580,25 @@ livingroomheater:
     TemperatureAir:
       confidence: medium
       decision: surface
-      kind: temperature
+      kind: raw
       name: air_temp
       scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
-      unit: "\xB0C"
+      unit: null
     TemperatureWater:
       confidence: medium
       decision: surface
-      kind: temperature
-      name: water_temp
+      kind: flag
+      name: water_temp_flag
       scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
-      unit: "\xB0C"
+      unit: null
     Variant:
       decision: omit
       reason: control/telemetry field with no GUI or getter evidence; not surfaced
@@ -1761,14 +1761,14 @@ roofaircondition:
     Temperature:
       confidence: medium
       decision: surface
-      kind: temperature
+      kind: raw
       name: target_temp
       scale: UNVERIFIED
       sources:
         app: null
         gui: null
         vwdoc: null
-      unit: "\xB0C"
+      unit: null
 satelliteantenna:
   control:
     Dish:

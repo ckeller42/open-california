@@ -115,16 +115,19 @@ def energy(d: dict) -> dict:
     }
 
 
-# Cooler Error is a 2-bit enum (bits 0-1 of char 1102), interpreted by the app ONLY while
-# the fridge is powered on (vf/c.java gates the alert on State). 0=ok, 1=generic error,
-# 2=emergency operation, 3=door open (COOLER_ERROR/EMERGENCY_OPERATION/DOOR_OPEN IDs).
+# Cooler Error is a 2-bit enum (bits 0-1 of char 1102): 0=ok, 1=generic error, 2=emergency
+# operation, 3=door open (COOLER_ERROR/EMERGENCY_OPERATION/DOOR_OPEN IDs). The app surfaces it
+# whenever the box is INSTALLED — vf/c.java:423 gates the error-notification dispatch on the
+# Installed bit (state bit 4), NOT on State (power, bit 7); the UI error flags H()/h0() are
+# ungated. So a fault on an installed-but-powered-off fridge (e.g. door open, Error==3) still shows.
 _COOLER_FAULT = {1: "error", 2: "emergency", 3: "door_open"}
 
 
 def cooler(d: dict) -> dict:
     on = d.get("State") == 1
-    # Error bits are only meaningful powered-on; off -> no fault (stale/undefined otherwise).
-    fault = _COOLER_FAULT.get(d.get("Error")) if on else None
+    # Fault is gated on Installed, not power — mirrors the app (vf/c.java:423). Fixed 2026-08-17
+    # from the consistency audit: gating on State hid faults on an installed-but-off fridge.
+    fault = _COOLER_FAULT.get(d.get("Error")) if d.get("Installed") else None
     return {
         "installed": bool(d.get("Installed")),
         "on": on,
@@ -266,15 +269,23 @@ def general(d: dict) -> dict:
     }
 
 
+# Living-room-heater Error is a 4-value enum (fg/b.java:314-461 dispatch), NOT a plain bool:
+_LRHEATER_ERROR = {1: "heater_error", 2: "gas_empty", 3: "fuel_empty", 4: "window_open"}
+
+
 def livingroomheater(d: dict) -> dict:
+    err = d.get("Error")
     return {
         "installed": bool(d.get("Installed")),
         "air_on": bool(d.get("StateAir")),
         "water_on": bool(d.get("StateWater")),
-        "air_temp": d.get("TemperatureAir"),        # scale UNVERIFIED
-        "water_temp": d.get("TemperatureWater"),    # scale UNVERIFIED
+        "air_temp": d.get("TemperatureAir"),        # 8-bit raw 0-255, scale UNVERIFIED (no unit)
+        # State TemperatureWater is a 1-BIT boolean flag (fg/b.java:238 subList(5,6)), NOT a
+        # temperature — surface it as a flag; its exact meaning is UNVERIFIED.
+        "water_temp_flag": bool(d.get("TemperatureWater")),
         "mode": d.get("Mode"),
-        "error": bool(d.get("Error")),
+        "error_code": _LRHEATER_ERROR.get(err) if err else None,   # heater/gas/fuel/window enum
+        "error": bool(err),                          # back-compat: any non-zero
     }
 
 

@@ -17,7 +17,7 @@ InteriorLight`); `2001/2002` = roof-A/C (`State/FanSpeed/Mode/Temperature`). All
 - **`vehicle` (1004) byte-0 was wrong** (hand-added, not extractor-emitted). App subList slices:
   `CarVariant 0/4`, `CarLevelPopUp 4/2`, **`TerminalOneFive 7/1`** (bit 6 spare) — we had them at
   `3/4 · 1/2 · 0/1`. **Fixed** in `dictionary.yaml`. Proof from committed captures:
-  - `017e0608…` (leveling non-zero → ignition ON): only `T15@7` decodes ignition = True.
+  - `017e0608…` (leveling non-zero → ignition ON): only `TerminalOneFive@7` decodes ignition = True.
   - `047e06…` (parked): CarVariant is `0` with the new layout in **both** frames (consistent),
     vs `0`/`2` with the old (the old read a `CarLevelPopUp` bit as variant).
   This is why the Vehicle screen always showed "Ignition Off" even ignition-on. Guarded by
@@ -143,13 +143,16 @@ the wire captures. Corrections applied:
   frame (same discipline as the cooler correction above).
 
 - **`roof.SafetyCounter` de-flagged** to `@8/w32`: app-**generated** monotonic BE-uint32, **not**
-  unit-echoed. Verified against the source there are **two distinct cadences**: the move frame is
-  **re-sent at ~1 Hz** while held (`ig/c.java` arms `jn.a(1000L, repeat=true)`), while the
-  SafetyCounter *value* advances **~+1 per 500 ms of elapsed time** (`w8/a`, constructed `500/450/550`)
-  — a wall-clock rule independent of the frame cadence, so consecutive frames step it ~+2. The stale
-  `control.py`/`overrides.py` comments said the counter was a unit **echo** we "send 0" — corrected to
-  app-generated. (NB: an interim edit briefly mislabelled the *frame* cadence as ~500 ms by conflating
-  it with the counter's 500 ms; the frame resend is ~1 Hz, per `ig/c`. CLAUDE.md's roof open-gap "(c)
-  use ~500 ms cadence, not 1 Hz" rests on the same conflation — the app's own cadence is ~1 Hz.)
+  unit-echoed. Full drive-loop re-verified from `w8/a` + `b1/d` + `ig/c` (2026-08-17): the app pumps
+  1401 frames from **TWO timers** — the PRIMARY transmitter is a **~500 ms SafetyCounter timer**
+  (`w8/a`, ctor `500`=tick-ms / `450-550`=fire-jitter; each fire writes a frame carrying counter +1,
+  value = `seed + floor(elapsed_ms/500)`, `b1/d.java:352`), plus a **secondary 1000 ms timer** that
+  only re-affirms direction (`ig/c` `jn.a(1000L)`). Net ~3 frames/s, consecutive counter deltas 0/+1,
+  **never +2**. **Our `device.actuate_roof` (500 ms, +1/frame) is protocol-correct** — it reproduces
+  the app's counter-timer sub-stream exactly (we simply omit the 1000 ms duplicate re-sends), with the
+  same wall-clock counter trajectory the unit validates (`SafetyCounterValid`, 1402 bit 7). The old
+  `control.py`/`overrides.py` "unit echo / send 0" comments were corrected to app-generated. (An earlier
+  same-day edit wrongly rewrote the model as ~1 Hz/+2 by mistaking the 1000 ms direction-resend for the
+  pump — that was itself wrong and has been reverted; the implementation never needed a change.)
 
 - **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).

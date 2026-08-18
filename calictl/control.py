@@ -319,14 +319,14 @@ def _airheater(funcs, what, value, last):
     """Build an airheater (parking heater) control frame.
 
     ``power`` on/off drives ``NormalOperationRequest`` (1=on, 0=off); ``level`` sets
-    ``HeatingLevel`` 0-15. Full-packet, MSB-first, like cooler. VERIFIED against the real
+    ``HeatingLevel`` 1-10 (10=HI). Full-packet, MSB-first, like cooler. VERIFIED against the real
     app by HCI capture (2026-07-08): calictl's on/off frames match byte-for-byte —
     on ``3d7b007f1f3f``, off ``3c7b007f1f3f`` (``NormalOperationRequest`` 1/0, other fields
     at their leave-unchanged sentinels).
 
     :param funcs: loaded + overridden Function map.
     :param what: ``"power"`` or ``"level"``.
-    :param value: on/off token for power, or 0-15 for level.
+    :param value: on/off token for power, or 1-10 (10=HI) for level.
     :param last: current decoded airheater state (carried into the frame).
     :returns: the 6-byte control frame, or ``None`` for an unknown target.
 
@@ -337,14 +337,16 @@ def _airheater(funcs, what, value, last):
 
        ``calictl`` shall build a full-packet airheater (char 1701) control frame
        for ``power`` (via ``NormalOperationRequest`` = 1/0) and ``level`` (via
-       ``HeatingLevel`` 0-15), carrying current state for untargeted fields.
+       ``HeatingLevel`` 1-10), carrying current state for untargeted fields.
     """
     if what == "power":
         ch = {"NormalOperationRequest": 1 if _truthy(value) else 0}
     elif what == "level":
         lvl = int(value)
-        if not 0 <= lvl <= 15:
-            raise ValueError("airheater level must be 0-15, got %r" % value)
+        # App-settable range is 1-10 (rf/b.java:783 q4 stages HeatingLevel only if 0<i<=10; 11 is
+        # the leave-unchanged/commit sentinel). 0-15 is the raw field WIDTH, not the exposed range.
+        if not 1 <= lvl <= 10:
+            raise ValueError("airheater HeatingLevel must be 1-10 (10=HI), got %r" % value)
         ch = {"HeatingLevel": lvl}
     elif what == "runtime":                    # RunningTime, minutes (rf/b.java:199 D4()); no app bound
         rt = int(value)
@@ -482,16 +484,20 @@ def _livingroomheater(funcs, what, value, last):
 
 
 # roof (char 1401, jg/a.java f()) — SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
-# Press-and-hold: while the button is held the app RE-SENDS the move frame at ~1 Hz
-# (ig/c.java arms jn.a(1000L, repeat=true)), then STOP on release; a single frame will
-# NOT complete travel. The resend is driven by device.actuate_roof, NOT device.actuate.
+# Press-and-hold: while held, a single frame will NOT complete travel, so the move frame is
+# re-sent until STOP on release. The re-send is driven by device.actuate_roof, NOT device.actuate.
 #   OPEN = Up1/Down0    CLOSE = Up0/Down1    STOP = Up0/Down0
-# SafetyCounter (32-bit) is APP-GENERATED, not echoed from the unit: a monotonic
-# BE-uint32 advancing ~+1 every 500 ms of elapsed time (w8/a, constructed 500/450/550) —
-# a wall-clock rule INDEPENDENT of the ~1 Hz frame cadence, so consecutive frames step
-# the counter by ~+2. device.actuate_roof supplies it; a fixed 0 is valid only for a lone
-# STOP. The unit validates liveness/monotonicity (SafetyCounterValid, 1402 bit 7) and
-# withholds the motor ~3 s (ig/c jn.a(3000L) dead-man) until it validates.
+# The app runs TWO timers on the 1401 char (verified 2026-08-17, w8/a + b1/d + ig/c):
+#   (1) the PRIMARY frame pump is a ~500 ms SafetyCounter timer (w8/a, ctor 500=tick-ms /
+#       450-550=fire-period jitter): each fire writes a frame carrying counter +1;
+#   (2) a secondary 1000 ms timer (ig/c jn.a(1000L)) only RE-AFFIRMS the direction — it does
+#       not touch the counter. Net ~3 frames/s, consecutive counter deltas 0 or +1, NEVER +2.
+# SafetyCounter (32-bit) is APP-GENERATED, not echoed: a monotonic BE-uint32 = seed +
+# floor(elapsed_ms/500) (b1/d.java:352), a pure wall-clock rule. device.actuate_roof streams at
+# ~500 ms with +1/frame — exactly the app's counter-timer sub-stream (we simply omit the 1000 ms
+# duplicate re-sends); protocol-correct, same counter trajectory the unit validates. A fixed 0 is
+# valid only for a lone STOP. The unit withholds the motor until SafetyCounterValid (1402 bit 7);
+# a one-shot 3000 ms dead-man (ig/c) flags an error if it never validates.
 ROOF_MOVES = {"open": (1, 0), "close": (0, 1), "stop": (0, 0)}   # -> (Up, Down)
 
 
@@ -513,7 +519,8 @@ def roof_frame(funcs, direction: str, counter: int = 0) -> bytes:
 def _roof(funcs, what, value, last):
     """Generic builder entry for roof: ``what`` is the direction (open/close/stop);
     ``value`` is unused. Returns ONE move frame — device.actuate_roof re-sends it at
-    ~1 Hz while held. SAFETY-SENSITIVE + NOT-LIVE-VERIFIED."""
+    ~500 ms with a +1/frame SafetyCounter while held (the app's counter-timer sub-stream).
+    SAFETY-SENSITIVE + NOT-LIVE-VERIFIED."""
     if what not in ROOF_MOVES:
         return None
     return roof_frame(funcs, what)

@@ -36,20 +36,23 @@ def test_decode_cooler():
     assert c["on"] is True and c["level"] == 4 and c["timer_active"] is False
 
 
-def test_cooler_error_is_power_gated_2bit_enum():
-    """Error is a 2-bit enum (bits 0-1 of char 1102), interpreted only while powered on
-    (vf/c.java): 0=ok 1=error 2=emergency 3=door_open. Off -> no fault regardless of bits."""
+def test_cooler_error_is_installed_gated_2bit_enum():
+    """Error is a 2-bit enum (bits 0-1 of char 1102): 0=ok 1=error 2=emergency 3=door_open. The app
+    gates the fault on INSTALLED, not power (vf/c.java:423 dispatches on the Installed bit, not
+    State), so a fault on an installed-but-powered-off fridge still surfaces. Not installed -> none."""
     f = _funcs()
     d = P.decode(f["cooler"], COOLER)
-    d["State"] = 1
-    for raw, tag in [(0, None), (1, "error"), (2, "emergency"), (3, "door_open")]:
-        d["Error"] = raw
-        c = semantics.cooler(d)
-        assert c["fault"] == tag
-        assert c["error"] is bool(tag)
-        assert c["door_open"] is (raw == 3)
-    # powered off: bits are stale/undefined -> never surface a fault
-    d["State"] = 0; d["Error"] = 3
+    d["Installed"] = 1
+    for state in (1, 0):                       # fault shows regardless of power, as long as installed
+        d["State"] = state
+        for raw, tag in [(0, None), (1, "error"), (2, "emergency"), (3, "door_open")]:
+            d["Error"] = raw
+            c = semantics.cooler(d)
+            assert c["fault"] == tag
+            assert c["error"] is bool(tag)
+            assert c["door_open"] is (raw == 3)
+    # not installed: the Error bits are meaningless -> never surface a fault
+    d["Installed"] = 0; d["Error"] = 3
     off = semantics.cooler(d)
     assert off["fault"] is None and off["error"] is False and off["door_open"] is False
 
