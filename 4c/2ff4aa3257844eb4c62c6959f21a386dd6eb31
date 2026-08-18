@@ -1,0 +1,25 @@
+tools/analyze_battery.py
+  s_a7757c7c919f20::t_528e1e4e2a7d18 112-120
+tests/test_analyze_battery.py
+  s_a7757c7c919f20::t_81ff1cfed2ef8c 48-52
+calictl/device.py
+  s_a7757c7c919f20::t_04f59959ecaccf 145-148
+docs/business-logic/value-freshness.md
+  s_a7757c7c919f20::t_8bcff6187b0fe0 67-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "4c2ff4aa3257844eb4c62c6959f21a386dd6eb31",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
