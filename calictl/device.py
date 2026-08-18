@@ -54,6 +54,11 @@ PRE_SETTLE_S = float(os.environ.get("CALICTL_PRE_SETTLE_S", "3.0"))      # arm w
 # only for actuation. So the read path runs the same heartbeat: this warm-up lets the measurement
 # refresh before the read pass. Live-verified on-device 2026-07-09 (1 L -> 11 L, link held 64 s).
 HEARTBEAT_WARMUP_S = float(os.environ.get("CALICTL_HEARTBEAT_WARMUP_S", "2.0"))
+# Water's true level arrives ONLY as a heartbeat-driven 00001302 NOTIFICATION (qg/b never writes,
+# there's no 1301 control char — traced 2026-08-18); a bare read returns the stale latch (~1 L). So
+# after the normal read, keep the 1003 heartbeat ticking and WAIT this long for a fresh water push
+# (the app ticks 1003 continuously; we must give the unit time to re-measure + push). 0 disables.
+WATER_PUSH_WAIT_S = float(os.environ.get("CALICTL_WATER_PUSH_WAIT_S", "18.0"))
 
 # Functions whose state char is PUSH-ONLY for freshness: a bare read returns a stale latch and
 # the true value arrives only as a notification (water 1302, decompile-confirmed 2026-07-14).
@@ -202,6 +207,10 @@ class CamperDevice:
                         await asyncio.sleep(0.8)
                 if not client.is_connected:
                     break
+            # Push-only freshness: water's true level is delivered as a heartbeat-driven 1302
+            # NOTIFICATION, not the instantaneous read (which returns the stale latch). If water only
+            # yielded a read, keep the heartbeat running and wait for the fresh push to land.
+            await self._await_water_push(client, funcs, out, notif)
         finally:
             stop.set()
             try:
@@ -210,6 +219,30 @@ class CamperDevice:
                 pass
             await self._safe_disconnect(client)
         return out
+
+    async def _await_water_push(self, client, funcs, out, notif):
+        """Wait (heartbeat still ticking) for a FRESH water 1302 push, replacing the stale read.
+
+        Exits as soon as a new notification arrives (the freshly-measured level) or after
+        ``WATER_PUSH_WAIT_S``. A no-op when water isn't in the table or the wait is disabled. Never
+        raises — on any trouble the earlier (stale) read stands."""
+        import time as _t
+        wait_s = float(os.environ.get("CALICTL_WATER_PUSH_WAIT_S", WATER_PUSH_WAIT_S))  # read live (testable)
+        wf = funcs.get("water")
+        if wf is None or not wf.state_char or wait_s <= 0 or not client.is_connected:
+            return
+        key = str(wf.state_char).lower()
+        seen0 = notif.get(key)                  # the latch push (if any) from the initial subscribe
+        deadline = _t.monotonic() + wait_s
+        try:
+            while _t.monotonic() < deadline and client.is_connected:
+                await asyncio.sleep(0.5)
+                p = notif.get(key)
+                if p is not None and p != seen0:   # a NEW push = the fresh re-measurement
+                    out["water"] = p
+                    return
+        except Exception as e:
+            print("water push-wait aborted: %r" % e, flush=True)
 
     async def read(self, func) -> bytes:
         """Read one function's state char under a live 1003 heartbeat (fresh, not the stale
