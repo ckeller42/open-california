@@ -1,0 +1,25 @@
+docs/business-logic/control-and-actuation.md
+  s_a7757c7c919f20::t_3e3fca0af74092 111-115
+  s_a7757c7c919f20::t_d27bfdd953df57 124-128
+  s_a7757c7c919f20::t_e387566eae6012 152
+calictl/control.py
+  s_a7757c7c919f20::t_e387566eae6012 322,329,340
+  s_a7757c7c919f20::t_930e6dc26ff2a8 346-348
+  s_a7757c7c919f20::t_c5763717e02b42 349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "531471f0f7575daf66c9e169de6883cf5746893d",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
