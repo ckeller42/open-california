@@ -78,7 +78,7 @@ async def poll_states(funcs, dev) -> dict:
             for name, data in raw.items()}
 
 
-def field_series(field: str, function: str, *, days: float = 7.0, every: str = "1h"):
+def field_series(field: str, function: str, *, days: float = 7.0, every: str = "1h", fn: str = "mean"):
     """Read a recent time series of one ``camper`` field from InfluxDB.
 
     A general Influx read helper (not used by the web UI, which is Influx-free). Lazy
@@ -88,20 +88,25 @@ def field_series(field: str, function: str, *, days: float = 7.0, every: str = "
     :param field: the flattened field key (e.g. ``"fresh_liters"``).
     :param function: the ``function`` tag (e.g. ``"water"``).
     :param days: look-back window in days.
-    :param every: `aggregateWindow` bucket (mean), to bound the row count.
+    :param every: `aggregateWindow` bucket, to bound the row count.
+    :param fn: aggregate function — ``"mean"`` for charts, ``"last"`` for reliability analysis
+        (``last`` keeps the ACTUAL sampled value per window, so a frozen/latched reading isn't
+        smoothed away; ``mean`` would hide freezes).
     :returns: ``[(epoch_seconds, value)]`` ascending, or ``[]``.
     """
     token = os.environ.get("INFLUXDB_TOKEN")
     if not token:
         return []
+    if fn not in ("mean", "last", "max", "min", "first"):
+        raise ValueError("unsupported aggregate fn %r" % fn)
     url = os.environ.get("INFLUX_URL", "http://localhost:8086")
     org = os.environ.get("INFLUX_ORG", "home")
     bucket = os.environ.get("INFLUX_BUCKET", "buspi")
     flux = (
         'from(bucket:"%s") |> range(start:-%gd) '
         '|> filter(fn:(r)=>r._measurement=="camper" and r.function=="%s" and r._field=="%s") '
-        '|> aggregateWindow(every:%s, fn:mean, createEmpty:false) |> keep(columns:["_time","_value"])'
-        % (bucket, days, function, field, every)
+        '|> aggregateWindow(every:%s, fn:%s, createEmpty:false) |> keep(columns:["_time","_value"])'
+        % (bucket, days, function, field, every, fn)
     )
     try:
         from influxdb_client import InfluxDBClient
