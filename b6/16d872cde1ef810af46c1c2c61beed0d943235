@@ -1,0 +1,21 @@
+tools/hooks/README.md
+  s_a7757c7c919f20::t_9e021e755ac84e 27-33
+tools/hooks/enigma-update-reminder.py
+  s_a7757c7c919f20::t_5b768059e81ae0 1-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b616d872cde1ef810af46c1c2c61beed0d943235",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
