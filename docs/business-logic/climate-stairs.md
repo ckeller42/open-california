@@ -301,7 +301,7 @@ Both setters end `A(); y(true)` — full-packet resend of both fields.
   Semantic labels (`AUTOMATIC`/`MANUAL` or similar) `UNVERIFIED` — no `lf`-package enum class
   exists for it (unlike RoofAirCondition/LivingRoomHeater, which have `jf.c`/`ff.b`).
 - `Movement`: `1` and `2` are the two drive directions; direction-to-value mapping `UNVERIFIED`.
-- Read-back-only `InfoPopUp` field (`og/b.java:187-201`, 4-bit but only 3 values meaningful):
+- Read-back-only `InfoPopUp` field (`og/b.java:187-201`, 2-bit (bits 2-3), only 3 values meaningful):
   `0=none, 1=STAIRS_STEPS_OR_SENSOR_JAMMED, 2=STAIRS_CONTROL_DENIED`. Both trigger user-facing
   warning notifications/dialogs; this is vehicle-reported fault/refusal state, not settable.
 - Read-back-only `Installed` and `Sensor` booleans (UI display only), and read-back `State`

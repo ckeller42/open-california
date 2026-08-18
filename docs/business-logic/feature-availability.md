@@ -89,7 +89,7 @@ first bit of byte 0. The `Installed` field's index is given as the literal Java
 | **Water** (fresh+waste, one unit) | `VehicleData`/water widget | `00001300`/`00001302` | index `[6,7)` (byte0) | FreshWaterUnit,**Installed**,FreshWaterInfoPopUp(4b),FreshWaterLevel(8b),FreshWaterVolume(8b),WasteWater... | `qg/b.java:117,129` (`f22310e0`→`f22321q0`), `qg/b.java:230` (wiring), returned at `qg/b.java:184` |
 | **SatelliteAntenna** | `SatelliteAntennaScreen` | `00001900`/`00001902` | index `[7,8)` (byte0) | **Installed**,System(2b),Error(4b),Dish(4b),SatelliteSelection(4b),SignalLevel(8b) | `mg/f.java:142,161` (`l0`→`E0`), `mg/f.java:384-386` (wiring), returned at `mg/f.java:303` |
 | **LivingRoomHeater** | `LivingRoomHeaterScreen` | `00002100`/`00002102` | index `[4,5)` (byte0) | StateAir,StateWater,TemperatureWater,**Installed**,Variant(2b),Mode(4b),Error(4b),TemperatureAir(8b) | `fg/b.java:122` (`f8229h0`→`f8237q0`), `fg/b.java:262-263` (wiring), returned at `fg/b.java:213` |
-| **AirHeater** (parking heater) | `AirHeaterScreen` | `00001700`/`00001702` | index `[3,4)` (byte0) | ...,FaultTriggerBit,**Installed**,AirDistribution(2b),ErrorCode(4b),HeatingLevel(4b),... | `rf/b.java:124,138` (`f23029g0`→`f23042u0`), `rf/b.java:408-409` (wiring), returned at `rf/b.java:322` |
+| **AirHeater** (parking heater) | `AirHeaterScreen` | `00001700`/`00001702` | index `[3,4)` (byte0) | AirDistribution(2b),**Installed**,FaultTriggerBit,...,HeatingLevel(4b),ErrorCode(4b),... | `rf/b.java:124,138` (`f23029g0`→`f23042u0`), `rf/b.java:408-409` (wiring), returned at `rf/b.java:322` |
 
 Notes on the table:
 

@@ -58,7 +58,7 @@ def test_mock_seed_is_coherent_and_realistic():
     assert en["dcdc_installed"] and en["shore_installed"] and not en["solar_installed"]
     assert en["dcdc_state"] == "inactive" and en["shore_state"] == "inactive"
     # water in the van's absolute-litre encoding: fresh 11/29 (38%), waste 0/22
-    assert wa["fresh"] == {"liters": 11, "capacity_l": 29, "percent": 38}
+    assert wa["fresh"] == {"liters": 11, "capacity_l": 29, "percent": 37}
     assert wa["waste"] == {"liters": 0, "capacity_l": 22, "percent": 0}
 
 

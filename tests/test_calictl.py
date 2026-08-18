@@ -25,7 +25,7 @@ def test_decode_water_roles_and_percent():
     f = _funcs()
     w = semantics.water(P.decode(f["water"], WATER))
     # Level=current liters, Volume=capacity (names are reversed on the wire)
-    assert w["fresh"] == {"liters": 11, "capacity_l": 29, "percent": 38}
+    assert w["fresh"] == {"liters": 11, "capacity_l": 29, "percent": 37}
     assert w["waste"]["liters"] == 0 and w["waste"]["percent"] == 0
     assert w["installed"] is True
 

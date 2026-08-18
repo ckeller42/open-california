@@ -24,16 +24,17 @@ InteriorLight`); `2001/2002` = roof-A/C (`State/FanSpeed/Mode/Temperature`). All
   `test_capture_verified::test_vehicle_leveling_is_degrees` (+ ignition assertion) and
   `test_calictl::test_vehicle_decode_char_1004`.
 - All other 13 functions' state layouts match exactly.
-- `general` (1001) intentionally omits the opaque SW-version/VIN ASCII strings (not bitfields).
+- `general` (1001) surfaces the 3 SW-version fields (`AmbSwVersion`/`CmSwVersion` = 4 ASCII bytes,
+  `CommunicationVersion` = u8); only char 1002 (opaque VIN hash) is omitted.
 
 ## Control — outstanding items (recorded, not yet applied)
 
 | function | status | detail |
 |---|---|---|
 | campingmode, roofAC, lighting, roof, airheater, LR-heater, stairs | ✅ aligned | offsets match |
-| **cooler `1101` timers** | ⚠️ CONFLICT | app subList → contiguous `TimerHour 16/8, TimerMin 24/8, NightTimerHourOn 32/8, NightTimerHourOff 40/8`; our `overrides.py` (from an earlier direct read of `sf/a.java`) has `NightTimerHourOff 20/4 · TimerHour 24 · TimerMin 32 · NightTimerHourOn 40`. **Unverified either way** (night-timer write never live-tested). Resolve by a careful re-read + live test before trusting cooler timers. |
-| **satellite `1901`** | ➕ missing | app adds `DishStop 7/1, Wlan 6/1, System 2/2, Dish 0/2` (we have only `SatelliteSelection 12/4`). Uninstalled here → can't verify; add when it matters. |
-| **energy `1601`** | ⚠️ likely wrong | our `OperationMode/Movement` duplicate the `stairs` model; app writes `EnergyModeSet` + `DisplayRefresh` (offsets route through `Lxf/d;` ViewModel, unresolved). Energy is read-only telemetry for us; re-derive before adding any energy control. |
+| **cooler `1101` timers** | ✅ aligned | see **RESOLVED 2026-07-12** below — `overrides.py` now has the contiguous `TimerHour 16/8, TimerMin 24/8, NightTimerHourOn 32/8, NightTimerHourOff 40/8` matching the app's `f()` default branch byte-for-byte. (The old `20/4 · 24 · 32 · 40` values no longer exist in the code.) |
+| **satellite `1901`** | ✅ aligned | see **RESOLVED 2026-07-12** below — offsets `Dish 0/2, System 2/2, Wlan 6/1, DishStop 7/1` (+ `SatelliteSelection 12/4`) now live in `overrides.py`, matching the app. Uninstalled here → not live-verifiable. |
+| **energy `1601`** | ✅ aligned (decompile-derived, wire-capture pending) | fields renamed + placed + wired: dictionary has `EnergyModeSet 2/2` + `DisplayRefresh 7/1`, `control.py` `_energy` builds the frame and `set energy mode normal\|max_charge\|eco` is registered in `BUILDERS`. Decompile-verified vs the app (`pg/a` default: `EnergyModeSet@2/2`, `DisplayRefresh@7`, 1 byte); not yet live-captured. |
 
 ## Control gaps — RESOLVED 2026-07-12 (decompile push)
 
@@ -46,10 +47,11 @@ Proven directly from the `f()` frame builders:
 - **satellite `1901` — RESOLVED** (the `MERGED_AMBIGUOUS` offsets): `Dish 0/2, System 2/2,
   Wlan 6/1, DishStop 7/1` (+ existing `SatelliteSelection 12/4`). Added to `overrides.py`.
   Uninstalled here → not live-verifiable.
-- **energy `1601` — documented (not applied).** The app's real energy write is
-  **`EnergyModeSet 2/2` + `DisplayRefresh 7/1`** (`Lpg/a;` default / `Lxf/d;` d4). Our dictionary's
-  `OperationMode/Movement` is a mis-map of the *stairs* fields; left `MERGED_AMBIGUOUS` (unplaced,
-  so no wrong frame is built). We don't actuate energy, so this stays documentation-only.
+- **energy `1601` — applied (decompile-derived, wire-capture pending).** The app's real energy write is
+  **`EnergyModeSet 2/2` + `DisplayRefresh 7/1`** (`Lpg/a;` default / `Lxf/d;` d4). These fields are now
+  **placed** in the dictionary (no longer `MERGED_AMBIGUOUS`) — the old `OperationMode/Movement` stairs
+  mis-map is gone — and `set energy mode` **is wired**: `control.py` `_energy` builds the frame and it is
+  registered in `control.BUILDERS`. Decompile-verified vs the app; not yet confirmed by a live wire capture.
 
 ## Lighting modes — FULLY DECODED 2026-07-12
 
@@ -93,8 +95,9 @@ Review flags resolved by the app's intent:
   simplification (should be an enum) but not a polarity bug.
 - **energy `WarnLevelTwo`:** the app *derives* it (suppresses when a source is active); our
   `faults[]` lists the raw bit — a minor over-report, not a bug.
-- `energy_mode` eco/normal/max order + the source-state/warning display *labels* stay INFERRED
-  (bound in undecompiled Compose UI) — but all are surfaced as raw ints, so no runtime risk.
+- `energy_mode` ordinal order is **source-confirmed** (0=normal / 1=max_charge / 2=eco / 3=error, from
+  `bf/c.java` + the read getter `l()` + the setter `d4()`) — no longer inferred. Only the source-state/warning
+  display *labels* stay INFERRED (bound in undecompiled Compose UI); all are surfaced as raw ints, so no runtime risk.
 
 Genuinely still need a **live measurement** (not code): power magnitudes' absolute unit,
 `target_temp`'s real-world unit, and satellite/stairs end-to-end (uninstalled here).
@@ -138,9 +141,9 @@ the wire captures. Corrections applied:
 
 - **`energy` control fields renamed** `OperationMode→EnergyModeSet`(@2/w2/def3),
   `Movement→DisplayRefresh`(@7/w1). The old names were the **stairs (1801)** layout mis-copied into
-  energy; both share the merged `pg/a` R8 class (case0=stairs, default=energy 1601). Decompile-derived,
-  **no wire capture yet** — `set energy mode` is intentionally NOT wired until a capture confirms the
-  frame (same discipline as the cooler correction above).
+  energy; both share the merged `pg/a` R8 class (case0=stairs, default=energy 1601). The fields are now
+  **placed** and `set energy mode` **is wired** (`control.py` `_energy` in `control.BUILDERS`); the frame is
+  **decompile-derived, not yet live-verified** — flagged as such until a wire capture confirms it.
 
 - **`roof.SafetyCounter` de-flagged** to `@8/w32`: app-**generated** monotonic BE-uint32, **not**
   unit-echoed. Full drive-loop re-verified from `w8/a` + `b1/d` + `ig/c` (2026-08-17): the app pumps

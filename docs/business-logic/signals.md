@@ -166,9 +166,9 @@ stay `UNVERIFIED` because this van can't exercise them live.
 
 | signal(s) | what we know | do NOT assume |
 |---|---|---|
-| `batt2_current`, `dcdc_current`, `shore_current`, `solar_current` | raw **signed** integers (8- or 16-bit). Sign/direction plausible; magnitude scale unknown. 14 d telemetry: batt2_current −49…318 (mean ~0, balanced), dcdc −2…29, dcdc_power 0…45; **solar/shore read the `511` sentinel** when not fitted (§4). | Not confirmed amps. Grafana labels them **"raw, unverified scale"**, not "A". A `511` reading is *no data*, not a huge current. |
+| `batt2_current`, `dcdc_current`, `shore_current`, `solar_current` | mixed signedness: `batt2_current` (ITwoBattBemAfs) and `dcdc_current` (IDcdcAfs) are **signed** 16-bit two's-complement; `shore_current` (ILandAfs) and `solar_current` (IPvAfs) are **unsigned** 16-bit (`sg.a` type 1 = signed vs type 3 = unsigned, `yf/a.java:88-91`). Magnitude scale unknown. 14 d telemetry: batt2_current −49…318 (mean ~0, balanced), dcdc −2…29, dcdc_power 0…45; **solar/shore read the `511` sentinel** when not fitted (§4). | Not confirmed amps. Grafana labels them **"raw, unverified scale"**, not "A". A `511` reading is *no data*, not a huge current. |
 | `air_temp`, `water_temp` (LR-heater), `target_temp` (roof-A/C) | **RESOLVED 2026-07-12** (semantics verified against the app): the app applies **no arithmetic scale** — these are **coarse levels** (`air_temp`/`water_temp` 4-bit 0–15, `target_temp` 8-bit), same category as SoC, **not °C**. | **Do NOT label °C** — a level/setpoint index. |
-| `energy_mode` | 0/1/2 → eco/normal/max **order inferred** from GUI string keys (`energyMode_eco/normal/max`), not observed live. | The 0↔eco mapping order is a guess until confirmed. |
+| `energy_mode` | 0=normal / 1=max_charge / 2=eco (3=error, read-only), **CONFIRMED** from source (`bf/c.java` enum + read getter `l()` + setter `d4()`, `xf/d.java`). | Not the old `0=eco` ordering — that was inverted vs source. |
 
 **How to verify a scale.** (1) Drive a known state (a measured shore-charging current, a
 thermometer at the heater sensor, a battery monitor's %). (2) `python3 -m calictl get energy`
@@ -186,7 +186,7 @@ van, so polarity cannot be live-verified**:
 
 | function | evidence | status |
 |---|---|---|
-| `satelliteantenna` | inverted readback in `mg/f.java` | boolean polarity UNVERIFIED — resolve when a sat-equipped vehicle is available |
+| `satelliteantenna` | the only `!((Boolean)…)` in `mg/f.java:399` negates the derived `I0` composite (`System==1`), not any surfaced field | surfaced booleans **statically verified non-inverted**: `system_on`=`System==1` (`mg/f.java:162`), `installed`=raw `f17097b` (no negation). Only the uninstalled `Error`-enum granularity stays unconfirmable — a conservative flag |
 | `stairs` | inverted setter + readback in `og/b.java` | `extended`/`obstacle_sensor` polarity UNVERIFIED — resolve when a stairs-equipped vehicle is available |
 
 These stay flagged **on purpose** — the check honestly reports real, unresolved risk. Do not

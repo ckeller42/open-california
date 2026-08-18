@@ -150,7 +150,7 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). |
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
 | **airheater** | `power`, `level` 1-10 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
-| **roof** | not wired | — | Needs the 1 Hz move-heartbeat loop (§3); not installed here. |
+| **roof** | not wired | — | Needs the ~500 ms SafetyCounter move loop (§3); not installed here. |
 | roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
 
 **Lighting — SOLVED 2026-08-16: physical actuation works; the real gate is the unit's
