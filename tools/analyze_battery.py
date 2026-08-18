@@ -109,9 +109,15 @@ def classify_gap(start, end, outcomes):
         return (f"VAN DEEP-SLEEP — {c.get('asleep', 0)}/{n} cycles reported 'asleep' "
                 "(unit stopped advertising; expected while parked)", dict(c))
     if c.get("ble_error", 0) + c.get("error", 0) >= n * 0.5:
-        return (f"OUR-SIDE CONNECTION/BLE FAILURE — {c.get('ble_error', 0) + c.get('error', 0)}/{n} "
-                "cycles errored below the deep-sleep threshold (slot contention with the phone app, "
-                "hci0 trouble, or a transient link drop — the van may have been awake)", dict(c))
+        hrs = (end - start) / 3600
+        # A LONG unbroken run of DeviceNotFound (won't self-resolve like deep sleep) points at the
+        # unit's Bluetooth being switched OFF in its settings, or a hard link problem — not a blip.
+        kind = ("UNIT BLUETOOTH DISABLED / hard link problem" if hrs >= 0.5
+                else "OUR-SIDE CONNECTION/BLE FAILURE")
+        return (f"{kind} — {c.get('ble_error', 0) + c.get('error', 0)}/{n} cycles errored "
+                f"(DeviceNotFound) over {hrs:.1f}h. Short runs = phone-app slot contention / hci0 / "
+                "a transient drop; a long persistent run = the unit's BLE is off (re-enable in its "
+                "settings) — either way the van, not buspi", dict(c))
     if c.get("ok", 0) >= n * 0.5:
         return (f"INFLUX-WRITE FAILURE? — {c.get('ok', 0)}/{n} cycles polled OK yet no battery row "
                 "was stored (network to Influx / token / bucket), i.e. NOT a real telemetry gap", dict(c))
