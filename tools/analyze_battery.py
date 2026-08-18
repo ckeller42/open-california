@@ -171,8 +171,14 @@ def analyze(days=7.0, every="1m", gap_min=10.0, outcomes_path=None):
     import time
     from calictl import influx, history
     if outcomes_path is None:
-        outcomes_path = os.environ.get(
-            "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl"))
+        outcomes_path = os.environ.get("CALICTL_OUTCOMES_CACHE")
+        if not outcomes_path:
+            # Resolve under the INVOKING user's home even when run via sudo (needed to read the
+            # Influx token in /etc/buspi): sudo sets HOME=/root, but the daemon (and its log) live
+            # under the original user, exposed as SUDO_USER.
+            sudo_user = os.environ.get("SUDO_USER")
+            home = os.path.expanduser("~" + sudo_user) if sudo_user else os.path.expanduser("~")
+            outcomes_path = os.path.join(home, ".cache", "calictl", "poll_outcomes.jsonl")
     # A reference series (leisure %) drives the polling-gap analysis (shared clock for all fields).
     ref = influx.field_series("soc2_pct", "energy", days=days, every=every, fn="last")
     print(f"=== Battery reliability over {days:g} days (every {every}, aggregate=last) ===")
@@ -183,13 +189,17 @@ def analyze(days=7.0, every="1m", gap_min=10.0, outcomes_path=None):
     gaps = polling_gaps([t for t, _ in ref], gap_min * 60)
     total_gap = sum(d for *_, d in gaps)
     outcomes = history.load_jsonl(outcomes_path, since=ref[0][0] - 3600)
-    have_log = bool(outcomes)
+    log_start = min((r["ts"] for r in outcomes if "ts" in r), default=None)
     print(f"Polling: {len(ref)} windows; {len(gaps)} gaps >{gap_min:g}m "
           f"totalling {_fmt_dur(total_gap)} ({total_gap / (days * 864):.0f}% of the window)."
-          + ("" if have_log else "  [no poll-outcome log yet — causes below are age-inferred only]"))
+          + ("" if outcomes else "  [poll-outcome log empty/unreadable at %s]" % outcomes_path))
     for a, b, d in gaps:
         when = f"{time.strftime('%a %m-%d %H:%M', time.localtime(a))} .. {time.strftime('%H:%M', time.localtime(b))}"
-        cause = classify_gap(a, b, outcomes)[0] if have_log else "(cause unknown — enable the poll-outcome log)"
+        if log_start is not None and b < log_start:
+            cause = "predates the poll-outcome log (started %s) — cause not recorded" % \
+                    time.strftime("%m-%d %H:%M", time.localtime(log_start))
+        else:
+            cause = classify_gap(a, b, outcomes)[0]
         print(f"  {when}  {_fmt_dur(d)}  -> {cause}")
     print()
 
