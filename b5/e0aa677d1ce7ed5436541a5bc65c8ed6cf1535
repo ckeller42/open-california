@@ -1,0 +1,24 @@
+calictl/semantics.py
+  s_a7757c7c919f20::t_4a1e7fd98b58a0 272-275,277,282-285,287-288
+protocol/signals.yaml
+  s_a7757c7c919f20::t_df0d29056f59d4 1583,1590,1594-1595,1601
+  s_a7757c7c919f20::t_13fadb3e03f07d 1764,1771
+calictl/mqtt.py
+  s_a7757c7c919f20::t_cfeb47ce5e6ed5 85-88,92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b5e0aa677d1ce7ed5436541a5bc65c8ed6cf1535",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
