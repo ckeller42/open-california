@@ -89,6 +89,35 @@ def polling_gaps(timestamps, gap_s):
     return gaps
 
 
+def classify_gap(start, end, outcomes):
+    """Classify a telemetry gap from the daemon's poll-OUTCOME records overlapping ``[start, end]``.
+
+    Distinguishes the failure states behind a gap: van deep-sleep (expected) vs an our-side
+    connection loss (van may have been awake) vs the daemon being down vs Influx-write failure.
+
+    :param outcomes: list of ``{"ts", "outcome", ...}`` from the daemon's poll-outcomes log.
+    :returns: ``(label, counts)``.
+    """
+    from collections import Counter
+    rows = [r for r in outcomes if start - 90 <= r.get("ts", 0) <= end + 90]
+    if not rows:
+        return ("DAEMON-DOWN — no poll attempts were logged in this window, so the daemon itself "
+                "was not running (crash / restart / Pi reboot / a manual redeploy)", {})
+    c = Counter(r.get("outcome") for r in rows)
+    n = len(rows)
+    if c.get("asleep", 0) >= n * 0.5:
+        return (f"VAN DEEP-SLEEP — {c.get('asleep', 0)}/{n} cycles reported 'asleep' "
+                "(unit stopped advertising; expected while parked)", dict(c))
+    if c.get("ble_error", 0) + c.get("error", 0) >= n * 0.5:
+        return (f"OUR-SIDE CONNECTION/BLE FAILURE — {c.get('ble_error', 0) + c.get('error', 0)}/{n} "
+                "cycles errored below the deep-sleep threshold (slot contention with the phone app, "
+                "hci0 trouble, or a transient link drop — the van may have been awake)", dict(c))
+    if c.get("ok", 0) >= n * 0.5:
+        return (f"INFLUX-WRITE FAILURE? — {c.get('ok', 0)}/{n} cycles polled OK yet no battery row "
+                "was stored (network to Influx / token / bucket), i.e. NOT a real telemetry gap", dict(c))
+    return (f"MIXED — {dict(c)}", dict(c))
+
+
 def age_summary(age_series, stale_at=AGE_STALE_SENTINEL):
     """How often the unit itself reported its battery data stale (age at the 255 sentinel)."""
     if not age_series:
@@ -130,9 +159,20 @@ def _fmt_dur(sec):
     return f"{h:.1f}h" if h >= 1 else f"{sec / 60:.0f}m"
 
 
-def analyze(days=7.0, every="1m", gap_min=10.0):
-    """Query InfluxDB and print the reliability report. Returns the per-field summary dict."""
-    from calictl import influx
+def analyze(days=7.0, every="1m", gap_min=10.0, outcomes_path=None):
+    """Query InfluxDB and print the reliability report. Returns the per-field summary dict.
+
+    When the daemon's poll-outcome log is readable (``outcomes_path``, default
+    ``~/.cache/calictl/poll_outcomes.jsonl``), each gap is CLASSIFIED — van deep-sleep vs an
+    our-side BLE/connection failure vs the daemon being down vs an Influx-write failure — instead
+    of being assumed to be deep sleep.
+    """
+    import os
+    import time
+    from calictl import influx, history
+    if outcomes_path is None:
+        outcomes_path = os.environ.get(
+            "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl"))
     # A reference series (leisure %) drives the polling-gap analysis (shared clock for all fields).
     ref = influx.field_series("soc2_pct", "energy", days=days, every=every, fn="last")
     print(f"=== Battery reliability over {days:g} days (every {every}, aggregate=last) ===")
@@ -142,11 +182,15 @@ def analyze(days=7.0, every="1m", gap_min=10.0):
         return {}
     gaps = polling_gaps([t for t, _ in ref], gap_min * 60)
     total_gap = sum(d for *_, d in gaps)
-    print(f"Polling: {len(ref)} windows; {len(gaps)} deep-sleep gaps >{gap_min:g}m "
-          f"totalling {_fmt_dur(total_gap)} ({total_gap / (days * 864):.0f}% of the window).")
-    if gaps:
-        longest = max(gaps, key=lambda g: g[2])
-        print(f"  longest gap: {_fmt_dur(longest[2])}")
+    outcomes = history.load_jsonl(outcomes_path, since=ref[0][0] - 3600)
+    have_log = bool(outcomes)
+    print(f"Polling: {len(ref)} windows; {len(gaps)} gaps >{gap_min:g}m "
+          f"totalling {_fmt_dur(total_gap)} ({total_gap / (days * 864):.0f}% of the window)."
+          + ("" if have_log else "  [no poll-outcome log yet — causes below are age-inferred only]"))
+    for a, b, d in gaps:
+        when = f"{time.strftime('%a %m-%d %H:%M', time.localtime(a))} .. {time.strftime('%H:%M', time.localtime(b))}"
+        cause = classify_gap(a, b, outcomes)[0] if have_log else "(cause unknown — enable the poll-outcome log)"
+        print(f"  {when}  {_fmt_dur(d)}  -> {cause}")
     print()
 
     age = influx.field_series("age_min", "energy", days=days, every=every, fn="last")

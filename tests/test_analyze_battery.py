@@ -39,6 +39,18 @@ def test_age_summary_flags_sentinel_stale():
     assert a["max_fresh_age_min"] == 10
 
 
+def test_classify_gap_distinguishes_the_failure_states():
+    # gap window 1000..5000
+    assert "DAEMON-DOWN" in ab.classify_gap(1000, 5000, [])[0]                      # no rows
+    assert "DAEMON-DOWN" in ab.classify_gap(1000, 5000, [{"ts": 50, "outcome": "ok"}])[0]  # rows outside
+    asleep = [{"ts": t, "outcome": "asleep"} for t in range(1000, 5000, 500)]
+    assert "VAN DEEP-SLEEP" in ab.classify_gap(1000, 5000, asleep)[0]
+    ble = [{"ts": t, "outcome": "ble_error"} for t in range(1000, 5000, 500)]
+    assert "OUR-SIDE" in ab.classify_gap(1000, 5000, ble)[0]
+    ok = [{"ts": t, "outcome": "ok"} for t in range(1000, 5000, 500)]
+    assert "INFLUX-WRITE" in ab.classify_gap(1000, 5000, ok)[0]
+
+
 def test_verdict_labels_a_frozen_reading_stale_risk():
     frozen = [(i * 3600, 90) for i in range(48)]   # never changes over 2 days
     v = ab.verdict("Leisure SoC % [soc2_pct]", ab.summarize_field(frozen))
