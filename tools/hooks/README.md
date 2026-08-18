@@ -24,3 +24,10 @@ Add to `.claude/settings.local.json` (or `.claude/settings.json`):
 }
 ```
 Test: `echo '{"tool_input":{"file_path":"calictl/semantics.py"}}' | python3 tools/hooks/dashboard-sync-reminder.py`
+
+## enigma-update-reminder.py (PostToolUse: Bash)
+
+Fires when a Bash command reads/greps/traces the decompiled app sources (or runs jadx/baksmali/
+vineflower) — injects a reminder to record any newly-understood class/method into the private
+`mapping.enigma` (the standing "mapping grows monotonically" rule). Stays silent while you're
+editing the mapping itself or on unrelated commands. Wire it as a PostToolUse `Bash` matcher.
