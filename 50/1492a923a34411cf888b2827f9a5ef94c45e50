@@ -1,0 +1,24 @@
+tests/conftest.py
+  s_a7757c7c919f20::t_03e153e21d3056 9-11
+calictl/device.py
+  s_a7757c7c919f20::t_d04264ac543845 57-61
+  s_a7757c7c919f20::t_8e7b516641298e 210-213,223-229,231,233-235,237-245
+  s_a7757c7c919f20::t_b51ced5f3a4e7e 230,232,236
+  s_a7757c7c919f20::t_314e53d5b7e530 246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "501492a923a34411cf888b2827f9a5ef94c45e50",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
