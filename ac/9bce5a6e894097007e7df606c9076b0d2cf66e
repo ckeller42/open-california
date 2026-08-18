@@ -1,0 +1,50 @@
+docs/business-logic/protocol-alignment.md
+  s_a7757c7c919f20::t_a33f154ec0cc50 35-37
+  s_a7757c7c919f20::t_c535e7e35b0315 144-146
+  s_a7757c7c919f20::t_ab18bde2708b77 27-28
+  s_a7757c7c919f20::t_aa751f33e85903 50-54
+  s_a7757c7c919f20::t_ac3580a2c866e2 98-100
+docs/business-logic/climate-stairs.md
+  s_a7757c7c919f20::t_0edf3b8dc3891c 304
+docs/business-logic/status-states-audit.md
+  s_a7757c7c919f20::t_26f274cecb1aad 109
+docs/business-logic/control-and-actuation.md
+  s_a7757c7c919f20::t_3447b9d3873df6 153
+docs/business-logic/lighting-energy-water-sat-roof.md
+  s_a7757c7c919f20::t_5ce7f7713cc7a2 79-94
+  s_a7757c7c919f20::t_09e579b044e72e 100
+  s_a7757c7c919f20::t_ecbe0699470232 54
+  s_a7757c7c919f20::t_acec05a8ded28a 127
+  s_a7757c7c919f20::t_5f21e3b0fb0da1 148
+  s_a7757c7c919f20::t_33ea07e892a379 285
+  s_a7757c7c919f20::t_1412a2231b267f 247-251
+  s_a7757c7c919f20::t_a4cf65d2bd94de 379
+  s_a7757c7c919f20::t_40b6ad4669fc82 424-426
+  s_a7757c7c919f20::t_00c9410d07e207 331
+  s_a7757c7c919f20::t_6d0038ffd4dd62 36
+  s_a7757c7c919f20::t_7e5f843c14bbe6 408-415
+docs/business-logic/signals.md
+  s_a7757c7c919f20::t_9ac328317f9078 189
+  s_a7757c7c919f20::t_dceb235373533e 171
+  s_a7757c7c919f20::t_be4e70dcf07f90 169
+protocol/signals.yaml
+  s_a7757c7c919f20::t_c64522f0cf7526 6-7,15-16,24-25,33-34,42-43,51-52,60-61,69-70,78-79,87-88,232-233,241-242,250-251,259-260,331-332,340-341,349-350,358-359,367-368,376-377,385-386,394-395,403-404,412-413,551-552,1136-1137,1145-1146,1154-1155,1163-1164,1172-1173,1181-1182,1190-1191,1199-1200,1208-1209,1217-1218,1226-1227,1235-1236,1244-1245,1253-1254,1262-1263,1271-1272,1280-1281,1289-1290,1298-1299,1307-1308,1535-1536,1544-1545,1553-1554,1562-1563,1571-1572,1665-1666,1674-1675,1683-1684,1732-1733,1741-1742,1750-1751,1759-1760,1834-1835,1843-1844,1852-1853,1861-1862,1870-1871,1945-1946,1954-1955
+docs/business-logic/feature-availability.md
+  s_a7757c7c919f20::t_48ced80b61c87c 92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ac9bce5a6e894097007e7df606c9076b0d2cf66e",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
