@@ -192,7 +192,10 @@ LIGHT_ZONES = {
     "reading-1": "BrightnessLTwo", "reading-2": "BrightnessLOne", "reading-3": "BrightnessLFour",
     "kitchen": "BrightnessLSeven", "roof-ambient": "BrightnessLEight", "outside-rear": "BrightnessLThree",
     "kitchen-ambient": "BrightnessLFive",   # CONFIRMED 2026-08-16 capture: Küche Ambientelicht slider moved L5
-    "roof-reading": "BrightnessLSix",        # L6 — Aufstelldach Leselicht by elimination (solid now L5 is pinned)
+    "roof-reading": "BrightnessLSix",        # L6 by elimination — BUT the decompile (dg/h.java E()
+    #   case19 ROOF_READING->BrightnessLNine) points at L9, not L6 (L6=KITCHEN_CABINETS/case16).
+    #   NEEDS an on-van slider capture before remapping (evidence-ledger); as built, set
+    #   lighting roof-reading writes the L6 wire field. See van-checklist memory.
 }
 
 
@@ -366,11 +369,14 @@ def _airheater(funcs, what, value, last):
 
 
 # --- roof / roof-A/C / stairs / LR-heater ------------------------------------
-# ALL FOUR ARE NOT-LIVE-VERIFIED. None is installed on this van (see CLAUDE.md
-# "Known state"), so enum polarity + carried-field behaviour are UNVERIFIED —
-# statically transcribed from each function's app builder f() (re-gap §A3) and
-# offset-resolved in overrides.py. encode() validates bit-widths; it does NOT
-# validate that these enum values mean what the app names imply.
+# ALL FOUR ARE NOT-LIVE-VERIFIED (none installed on this van; see CLAUDE.md "Known state").
+# Their frames are offset-resolved in overrides.py; encode() validates bit-widths only. Enum
+# meanings vary in confidence: roof-A/C Mode (jf/c.java: 0=AUTOMATIC/1=MANUAL_COOLING/
+# 2=MANUAL_HEATING/3=VENTING) + FanSpeed (jf/b.java: 0-4=LEVEL_0..AUTO) are STATICALLY VERIFIED
+# against the app getters (2026-07-12, readback clamp kg/b.java:318-326) — only Temperature's unit
+# and live actuation are unverified. Stairs/LR-heater enum polarity is likewise statically checked
+# (see semantics.py). "Statically transcribed, meaning unverified" applies to the raw carried
+# fields, not these confirmed enums.
 
 
 def _roofac_values(state: dict, **changes) -> dict:
@@ -415,7 +421,10 @@ def _roofaircondition(funcs, what, value, last):
                            frame_bytes=overrides.CONTROL_FRAME_BYTES["roofaircondition"])
 
 
-STAIRS_MOVEMENT = {"extend": 2, "retract": 1, "stop": 0}   # pg/a.java Movement enum (UNVERIFIED)
+# og/b.java:289 h1() emits only Movement 2 or 1 (z11?2:1); 0 is the field's power-up/sentinel
+# default (never an app-sent action). So extend=2/retract=1 are app-confirmed VALUES; only the
+# extend-vs-retract LABEL is unverified, and stop=0 is inferred (the sentinel), not app-emitted.
+STAIRS_MOVEMENT = {"extend": 2, "retract": 1, "stop": 0}
 
 
 def _stairs_values(state: dict, **changes) -> dict:
@@ -555,12 +564,13 @@ def commit_for(function):
     return LIGHT_COMMIT if function == "lighting" else None
 
 
-# Session-arm preamble — THE 2026-08-16 CRACK of the lighting-apply gap. The app opens its
-# Lighting screen with a REQUEST_CONFIG (Mode=12, ProfileNumber=13) + commit; only in a session
-# where this preamble has landed does the unit PHYSICALLY drive the lamps on a later
-# SET_BRIGHTNESS (it also then streams real Mode-4 ramp notifications on 1502). Without it a SET
-# is ACKed and echoed but the load never switches — the byte-identical-frames mystery. Verified
-# with photons on-device 2026-08-16 (Kochen L7: 0 -> dark, 8 -> 80%, 0 -> dark).
+# Screen-open config pull — NOT an actuation gate. The app opens its Lighting screen with a
+# REQUEST_CONFIG (Mode=12, ProfileNumber=13) + commit; this is the app's config request, app-faithful
+# and harmless, but it is NOT what makes the lamps switch. A bare SET_BRIGHTNESS + 0e00 commit
+# actuates an awake unit — the set-one-zone method dg/h.java:174 E() writes the SET frame DIRECT and
+# never calls the config request d0() (dg/h.java:471). The real gate is the unit's wake-state.
+# (See preamble_for() below + control-and-actuation.md §4; the earlier "THE CRACK / load never
+# switches without it" narrative was a wake-state confound, corrected 2026-08-16 eve.)
 LIGHT_REQUEST_CONFIG = bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee")
 
 

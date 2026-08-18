@@ -21,7 +21,9 @@ def _signed(v: int, width: int) -> int:
 
 
 def _pct(cur: int, cap: int) -> int | None:
-    return round(cur * 100 / cap) if cap else None
+    # Integer TRUNCATION, matching the app exactly (qg/b.java:424 i() = (level*100)/volume is Java
+    # int-division). round() gave 38% where the app shows 37% for 11/29 L. Verified 2026-08-17.
+    return (cur * 100) // cap if cap else None
 
 
 def water(d: dict) -> dict:
@@ -34,7 +36,7 @@ def water(d: dict) -> dict:
         if unit:
             liters, pct = level, _pct(level, volume)
         else:
-            pct, liters = level, round(volume * level / 100)
+            pct, liters = level, (volume * level) // 100   # truncate, like the app (qg/b.java:414 h())
         return {"liters": liters, "capacity_l": volume, "percent": pct}
     return {
         "installed": bool(d.get("Installed")),
@@ -65,7 +67,8 @@ def energy(d: dict) -> dict:
     def soc_pct(level):
         return level * 10 if isinstance(level, int) and 0 <= level <= 10 else None
 
-    def src_state(v):   # bf/a.java: 0=inactive 1=active 2=standby 6=init 7/else=error
+    def src_state(v):   # xf/d.java:203 k(): raw 0=inactive 1=active 2=standby 6=init, else=error
+        #   (bf/a.java holds the enum; its ordinals differ from these wire values)
         return None if v is None else {0: "inactive", 1: "active", 2: "standby", 6: "init"}.get(v, "error")
 
     soc1, soc2 = d.get("SocOneBattAfs"), d.get("SocTwoBattAfs")
@@ -318,13 +321,15 @@ def satelliteantenna(d: dict) -> dict:
 
 
 def stairs(d: dict) -> dict:
-    # UNVERIFIED polarity: og/b.java has an inverted readback getter (!((Boolean)…)) plus
-    # inverted setters — one of these booleans is likely inverted. Stairs is NOT installed
-    # on this van -> can't confirm which. See docs/business-logic/signal-scales.md.
+    # Inversion RESOLVED (og/b.java): the inverted readback getter is specifically OperationMode —
+    # f3() = p.b(!OperationMode) (og/b.java:101). State (extended, v4()) and Sensor (obstacle_sensor,
+    # S0()) getters are NON-inverted. We surface `mode` as the RAW OperationMode bit, which is the
+    # logical COMPLEMENT of the app's displayed mode indicator. Stairs is NOT installed here, so the
+    # meaning of OperationMode is still unconfirmed; left raw + documented rather than inverted blind.
     return {
         "installed": bool(d.get("Installed")),
         "extended": bool(d.get("State")),
-        "mode": d.get("OperationMode"),
+        "mode": d.get("OperationMode"),         # raw bit; app indicator = its inverse (og/b.java:101)
         "obstacle_sensor": bool(d.get("Sensor")),
     }
 

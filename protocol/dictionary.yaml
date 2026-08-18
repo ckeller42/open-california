@@ -256,8 +256,8 @@ functions:
     state_services: [1400, 1402]
     control_source: jg/a.java   # control char 1401
     control_fields:
-      - {name: Up, offset: 6, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
-      - {name: Down, offset: 4, width: 2, default: 3, raw_range: 0..3, value_semantics: UNVERIFIED}
+      - {name: Up, offset: 6, width: 2, default: 3, raw_range: 0..3, value_semantics: "Up=1 => OPEN command (byte 0x01); app-verified polarity ig/c.java n2()/e1(), PHYSICAL actuation NOT-LIVE-VERIFIED"}
+      - {name: Down, offset: 4, width: 2, default: 3, raw_range: 0..3, value_semantics: "Down=1 => CLOSE command (byte 0x04); stop=Up0/Down0 (0x00). App-verified, PHYSICAL NOT-LIVE-VERIFIED"}
       - {name: SafetyCounter, offset: 8, width: 32, default: 0, value_semantics: "app-generated monotonic BE-uint32, ~+1/500ms (NOT unit-echoed); see overrides.py + device.actuate_roof"}
     state_fields:
       - {name: Position, offset: 0, width: 4}
