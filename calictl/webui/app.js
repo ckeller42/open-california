@@ -367,7 +367,16 @@ const FEATURES = {
       { label: "Shore power", get: (s) => (s.shore_installed ? `${s.shore_state} (${s.shore_power} W · ${s.shore_current} A)` : "—") },
       { label: "Solar", get: (s) => (s.solar_installed ? `${s.solar_state} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
       { label: "Warnings", get: (s) => (s.faults && s.faults.length ? s.faults.join(", ") : "none") },
+      // The unit reports its own battery-values age; 255 = the stale sentinel (starter subsystem
+      // asleep). Show it so an outdated starter reading is visible, not trusted silently.
+      { label: "Battery data age", get: (s) => (s.stale ? "🕒 stale (starter asleep)"
+        : s.age_min != null ? `${s.age_min} min` : "—") },
     ],
+    // Soft note (not a fault): the starter battery is only measured engine-on, so its values latch
+    // stale when parked. The leisure battery stays live. Mirrors the water stale-hold pattern.
+    note: (s) => (s.stale ? "🕒 Starter-battery values are stale — that subsystem only measures "
+      + "with the engine on, so it holds the last reading while parked. The leisure battery stays live."
+      : null),
     summary: (s) => (s.soc2_pct != null ? `Battery ${s.soc2_pct}%` : ""),
   },
   roof: {

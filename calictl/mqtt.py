@@ -58,6 +58,13 @@ ENTITY_SPECS: dict[str, list] = {
         EntitySpec("sensor", "batt1_v", "Starter Battery", {"unit_of_measurement": "V", "device_class": "voltage"}),
         EntitySpec("binary_sensor", "dcdc_charging", "DC-DC Charging", {**_BIN, "device_class": "battery_charging"}),
         EntitySpec("sensor", "energy_mode", "Energy Mode", {"icon": "mdi:lightning-bolt"}),
+        # Freshness: the unit's OWN battery-values age (minutes; 255 => stale/subsystem asleep) +
+        # a derived stale flag, so a frozen starter reading is visible rather than trusted blindly.
+        EntitySpec("sensor", "age_min", "Battery Values Age",
+                   {"unit_of_measurement": "min", "icon": "mdi:clock-alert-outline",
+                    "entity_category": "diagnostic"}),
+        EntitySpec("binary_sensor", "stale", "Starter Battery Data Stale",
+                   {**_BIN, "device_class": "problem", "entity_category": "diagnostic"}),
     ],
     "cooler": [
         EntitySpec("binary_sensor", "on", "Fridge On", {**_BIN, "icon": "mdi:fridge"}),
