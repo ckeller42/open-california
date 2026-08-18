@@ -1,0 +1,28 @@
+tools/analyze_battery.py
+  s_a7757c7c919f20::t_80ca8c0f0adb57 162-175,185-193
+  s_a7757c7c919f20::t_f0d69190ebdeeb 92-120
+calictl/history.py
+  s_a7757c7c919f20::t_a7f4f7a851e17f 67-107
+tests/test_analyze_battery.py
+  s_a7757c7c919f20::t_8232f99d5e12f9 42-53
+calictl/serve.py
+  s_a7757c7c919f20::t_7797c6fe3d890f 262-273
+  s_a7757c7c919f20::t_9fa092b928214c 216-221
+  s_a7757c7c919f20::t_3aaa14938f0837 716,719-722,726
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "889c83fffb132107254a3de2429f8aaf03b8b2fe",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
