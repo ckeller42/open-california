@@ -319,14 +319,14 @@ def _airheater(funcs, what, value, last):
     """Build an airheater (parking heater) control frame.
 
     ``power`` on/off drives ``NormalOperationRequest`` (1=on, 0=off); ``level`` sets
-    ``HeatingLevel`` 0-15. Full-packet, MSB-first, like cooler. VERIFIED against the real
+    ``HeatingLevel`` 1-10 (10=HI). Full-packet, MSB-first, like cooler. VERIFIED against the real
     app by HCI capture (2026-07-08): calictl's on/off frames match byte-for-byte —
     on ``3d7b007f1f3f``, off ``3c7b007f1f3f`` (``NormalOperationRequest`` 1/0, other fields
     at their leave-unchanged sentinels).
 
     :param funcs: loaded + overridden Function map.
     :param what: ``"power"`` or ``"level"``.
-    :param value: on/off token for power, or 0-15 for level.
+    :param value: on/off token for power, or 1-10 (10=HI) for level.
     :param last: current decoded airheater state (carried into the frame).
     :returns: the 6-byte control frame, or ``None`` for an unknown target.
 
@@ -337,14 +337,16 @@ def _airheater(funcs, what, value, last):
 
        ``calictl`` shall build a full-packet airheater (char 1701) control frame
        for ``power`` (via ``NormalOperationRequest`` = 1/0) and ``level`` (via
-       ``HeatingLevel`` 0-15), carrying current state for untargeted fields.
+       ``HeatingLevel`` 1-10), carrying current state for untargeted fields.
     """
     if what == "power":
         ch = {"NormalOperationRequest": 1 if _truthy(value) else 0}
     elif what == "level":
         lvl = int(value)
-        if not 0 <= lvl <= 15:
-            raise ValueError("airheater level must be 0-15, got %r" % value)
+        # App-settable range is 1-10 (rf/b.java:783 q4 stages HeatingLevel only if 0<i<=10; 11 is
+        # the leave-unchanged/commit sentinel). 0-15 is the raw field WIDTH, not the exposed range.
+        if not 1 <= lvl <= 10:
+            raise ValueError("airheater HeatingLevel must be 1-10 (10=HI), got %r" % value)
         ch = {"HeatingLevel": lvl}
     elif what == "runtime":                    # RunningTime, minutes (rf/b.java:199 D4()); no app bound
         rt = int(value)
