@@ -1,0 +1,1 @@
+{"compilerOptions":{"checkJs":true,"lib":["dom","es2021"],"target":"es2021","noEmit":true},"include":["app.js"]}

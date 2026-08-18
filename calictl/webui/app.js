@@ -1,3 +1,4 @@
+// @ts-check
 // OpenCalifornia web UI — curated camper Vehicle-tab controls, driven by /api/state.
 //
 // Rather than mechanically render the reverse-engineered screen spec, each feature is a
@@ -5,59 +6,243 @@
 // plus the data readouts pulled from the interpreted /api/state. Labels are our own neutral
 // English (no VW app text). Actuation is slow (BLE), so every command shows a spinner on the
 // tapped control and a result toast; idle polls don't re-render (no flicker).
-const app = document.getElementById("app");
-const titleEl = document.getElementById("title");
-const backEl = document.getElementById("back");
-const statusEl = document.getElementById("status");
+// ---------------------------------------------------------------------------------------------
+// Type model (editor-only; JSDoc `@typedef`s — no runtime effect). These mirror the REAL shapes
+// produced by calictl/semantics.py (per-function interpret) + serve.py::state() (`_meta`) and the
+// /api/command contract in serve.py::command() + web.py. Field types match the Python: a key that
+// is `d.get(...)`-nullable in semantics is typed `<T> | null`. `FnState` is one broad union of
+// every function's interpreted leaves (all optional) so the FEATURES lambdas that read `s.<leaf>`
+// are type-checked against the actual key names — a renamed/typo'd state key surfaces as an error.
+//
+/**
+ * A water tank, from `semantics.water`'s inner `tank()` (fresh / waste). All three numbers are
+ * `None`-tolerant in Python. `stale` is stamped on by `serve.state()` when the held reading is old.
+ * @typedef {{ liters: number|null, capacity_l: number|null, percent: number|null, stale?: boolean }} Tank
+ */
+/**
+ * `serve.state()::_meta`. `session`/`session_mode` are `"off"` unless the persistent session is on.
+ * @typedef {Object} Meta
+ * @property {number|null} last_seen        epoch seconds of the last successful poll (null = none yet)
+ * @property {number|null} age_s            seconds since last_seen (null = none yet)
+ * @property {boolean} online               van currently reachable
+ * @property {boolean} read_only            daemon rejects control writes
+ * @property {'off'|'connecting'|'up'|'degraded'|'asleep'} session   persistent BLE session state
+ * @property {'off'|'auto'|'release'} session_mode                    activity-scoped vs user-disconnected
+ */
+/**
+ * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
+ * carries its own function's keys, hence every field is optional. Grouped by source interpreter.
+ * @typedef {Object} FnState
+ * @property {boolean} [installed]
+ * // cooler (semantics.cooler)
+ * @property {boolean} [on]
+ * @property {number|null} [level]
+ * @property {number|null} [mode]
+ * @property {boolean} [timer_active]
+ * @property {number|null} [quiet_from]
+ * @property {number|null} [quiet_to]
+ * @property {boolean} [quiet_scheduled]
+ * @property {number|null} [timer_hour]
+ * @property {number|null} [timer_min]
+ * @property {string|null} [fault]
+ * @property {boolean} [door_open]
+ * @property {boolean} [error]
+ * // campingmode (semantics.campingmode)
+ * @property {boolean} [master_on]
+ * @property {boolean} [usb_charger]
+ * @property {boolean} [lights_on]
+ * @property {boolean} [outputs_controllable]
+ * @property {boolean} [enable]
+ * // lighting (semantics.lighting): brightness_zone_1..16 read dynamically -> see note at renderLighting
+ * @property {number|null} [profile]
+ * @property {boolean} [any_on]
+ * // airheater (semantics.airheater)
+ * @property {boolean} [running]
+ * @property {boolean} [permanent]
+ * @property {number|null} [error_code]
+ * @property {number|null} [air_distribution]
+ * @property {number|null} [running_time]
+ * @property {number|null} [running_time_remaining]
+ * // water (semantics.water) + serve.state() stale-hold
+ * @property {Tank} [fresh]
+ * @property {Tank} [waste]
+ * @property {number|null} [stale_since]
+ * // energy (semantics.energy)
+ * @property {boolean} [stale]
+ * @property {number|null} [age_min]
+ * @property {number|null} [batt1_v]
+ * @property {number|null} [batt1_current]
+ * @property {number|null} [soc1_level]
+ * @property {number|null} [soc1_pct]
+ * @property {number|null} [batt2_v]
+ * @property {number|null} [batt2_current]
+ * @property {number|null} [soc2_level]
+ * @property {number|null} [soc2_pct]
+ * @property {number|null} [batt2_remaining_h]
+ * @property {number|null} [batt2_remaining_min]
+ * @property {boolean} [dcdc_charging]
+ * @property {string|null} [dcdc_state]
+ * @property {string|null} [shore_state]
+ * @property {string|null} [solar_state]
+ * @property {number} [dcdc_power]
+ * @property {number} [shore_power]
+ * @property {number} [solar_power]
+ * @property {number|null} [dcdc_current]
+ * @property {number|null} [shore_current]
+ * @property {number|null} [solar_current]
+ * @property {boolean} [dcdc_installed]
+ * @property {boolean} [shore_installed]
+ * @property {boolean} [solar_installed]
+ * @property {number|null} [energy_mode]
+ * @property {boolean} [energy_mode_locked]
+ * @property {number|null} [warning_level]
+ * @property {boolean} [warning_active]
+ * @property {boolean} [derating_temp_active]
+ * @property {boolean} [sleep_warning]
+ * @property {string[]} [faults]
+ * // roof (semantics.roof)
+ * @property {number|null} [position]
+ * @property {string|null} [position_name]
+ * @property {string|null} [alert]
+ * @property {boolean} [safety_valid]
+ * // vehicle (semantics.vehicle)
+ * @property {boolean} [ignition_on]
+ * @property {number|null} [car_variant]
+ * @property {number|null} [level_popup]
+ * @property {number|null} [level_roll]
+ * @property {number|null} [level_pitch]
+ * @property {string|null} [car_clock]
+ */
+/**
+ * Full `/api/state` payload: one `FnState` per function, plus the non-function `_meta` block.
+ * @typedef {{ [fn: string]: FnState } & { _meta?: Meta }} State
+ */
+/**
+ * A queued/in-flight control command (`command()` -> POST /api/command). `value` is the token or
+ * numeric level; `key` = `qKey(fn, what)`.
+ * @typedef {{ fn: string, what: string, value: string|number|null, key: string }} CommandItem
+ */
+/**
+ * `/api/command` success response (serve.py::command()). Error paths (web.py) return `{ error }`
+ * only, so every field is optional here. `applied`: true=verified, false=not applied, null=sent
+ * but not remotely verifiable.
+ * @typedef {{ ok?: boolean, applied?: boolean|null, state?: FnState|null, error?: string|null, function?: string }} CommandResponse
+ * @typedef {{ samples: number[][], gap_s: number, now: number, hours: number, error?: string }} BattHistory
+ * @typedef {{ idx: number, cls: string, pad: number, lblCls: string, name: string, unit?: string }} SeriesCfg
+ */
+//
+// --- FEATURES config shapes -------------------------------------------------------------------
+/**
+ * A control's per-control confirm gate: a function returning the prompt (or null/false to skip),
+ * or a bare string. The callback arg varies by kind (value for most, the action object for buttons).
+ * @typedef {((v?: any) => (string|null|false|undefined)) | string} ConfirmSpec
+ * @typedef {{ value: string, label: string }} SelectOption
+ * @typedef {{ what: string, label: string, value?: string|number|null }} ButtonAction
+ * @typedef {{ what: string, label: string, confirm?: ConfirmSpec, disabled?: (s: FnState) => (boolean|undefined) }} ControlBase
+ * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState }} ToggleControl
+ * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, unit?: string }} SliderControl
+ * @typedef {ControlBase & { kind: 'select', options: SelectOption[], current?: (s: FnState) => (string|null|undefined) }} SelectControl
+ * @typedef {ControlBase & { kind: 'hour', current?: (s: FnState) => number }} HourControl
+ * @typedef {ControlBase & { kind: 'time', current?: (s: FnState) => (string|null) }} TimeControl
+ * @typedef {ControlBase & { kind: 'buttons', actions: ButtonAction[] }} ButtonsControl
+ * @typedef {ToggleControl|SliderControl|SelectControl|HourControl|TimeControl|ButtonsControl} Control
+ */
+/**
+ * A live readout row. `get` formats the value; `bar` (0-100) draws a fill; `widget` returns a
+ * richer node (the leveling bubble); `tick` live-advances the value (vehicle clock).
+ * @typedef {{ label: string, get: (s: FnState) => (string|number|null|undefined), bar?: (s: FnState) => (number|null|undefined), widget?: (s: FnState) => (Node|null), tick?: boolean }} Readout
+ */
+/**
+ * A curated feature card. `lighting`/`roof` swap in a custom renderer; `chart` appends the battery
+ * chart; `warn`/`note` are dynamic banners; `confirm` is a feature-level actuation gate.
+ * @typedef {Object} Feature
+ * @property {string} title
+ * @property {string} [icon]
+ * @property {Control[]} [controls]
+ * @property {Readout[]} [readouts]
+ * @property {(s: FnState) => string} [summary]
+ * @property {(s: FnState) => (string|null)} [warn]
+ * @property {(s: FnState) => (string|null)} [note]
+ * @property {(w: string) => string} [confirm]
+ * @property {boolean} [lighting]
+ * @property {boolean} [roof]
+ * @property {boolean} [chart]
+ */
 
+const app = /** @type {HTMLElement} */ (document.getElementById("app"));
+const titleEl = /** @type {HTMLElement} */ (document.getElementById("title"));
+const backEl = /** @type {HTMLElement} */ (document.getElementById("back"));
+const statusEl = /** @type {HTMLElement} */ (document.getElementById("status"));
+
+/** @type {State} */
 let STATE = {};
 let view = "home";
 // Command queue: BLE writes are serial, so we send one at a time but keep the GUI fluid.
 // Tapping a control enqueues it and shows an OPTIMISTIC value immediately; re-changing the
 // same control prunes its still-queued command so rapid changes coalesce to the latest value.
+/** @type {CommandItem[]} */
 let queue = [];          // [{fn, what, value, key}] waiting to send (prunable)
+/** @type {CommandItem|null} */
 let inflight = null;     // {fn, what, value, key} currently POSTing (NOT prunable)
+/** @type {Record<string, string|number|null>} */
 const optimistic = {};   // key -> intended value, shown until the real state catches up
 let lastRender = "";     // signature of the last paint, to skip idle re-renders
 
+/** @type {(fn: string, what: string) => string} */
 const qKey = (fn, what) => fn + "·" + what;
 const hasWork = () => !!inflight || queue.length > 0;
 // a control has a command queued or in flight -> show a pending badge
+/**
+ * @param {string} fn
+ * @param {string} what
+ * @returns {boolean}
+ */
 function pending_is(fn, what) {
   const k = qKey(fn, what);
   return (inflight && inflight.key === k) || queue.some((c) => c.key === k);
 }
 // optimistic overlay: the user's intended value wins until the command settles + state refreshes
+/** @type {(fn: string, what: string, realOn: boolean) => boolean} */
 const optOn = (fn, what, realOn) => {
   const k = qKey(fn, what);
   return k in optimistic ? truthy(optimistic[k]) : realOn;
 };
+/** @type {(fn: string, what: string, realNum: number) => number} */
 const optNum = (fn, what, realNum) => {
   const k = qKey(fn, what);
   return k in optimistic ? Number(optimistic[k]) : realNum;
 };
+/** @type {(fn: string, what: string, realVal: any) => any} */
 const optSel = (fn, what, realVal) => {   // optimistic string/enum value (segmented selects)
   const k = qKey(fn, what);
   return k in optimistic ? optimistic[k] : realVal;
 };
+/** @type {(v: unknown) => boolean} */
 const truthy = (v) => v === true || v === 1 || v === "on" || v === "1";
 
+/** @type {(b: unknown) => string} */
 const yn = (b) => (b ? "yes" : "no");
+/** @type {(b: unknown) => string} */
 const onoff = (b) => (b ? "On" : "Off");
 // Format a numeric value with a unit, but never print "null V"/"undefined %": a null/undefined
 // reading (e.g. starter battery when engine-off) renders as an em-dash instead.
+/** @type {(v: number|null|undefined, u: string) => string} */
 const withUnit = (v, u) => (v == null ? "—" : `${v} ${u}`);
+/** @type {(t: Tank|null|undefined) => string} */
 const tank = (t) => (t && t.percent != null ? `${t.percent}%  (${t.liters}/${t.capacity_l} L)` : "—");
 // dg/i brightness enum -> display: 0-10 are real levels, 11=device default, >=13 is no-reading
 // (13=NOT_EQUIPPED, 14=post-reset sentinel) — never show those raw numbers next to a 0-10 slider
+/** @type {(v: number|null|undefined) => string} */
 const brightnessText = (v) => (v == null || v >= 13 ? "—" : v === 11 ? "def" : String(v));
 
 // Feature specs. `controls[].what` are /api/command tokens (calictl/control.py BUILDERS);
 // `state` is the interpreted /api/state key (calictl/semantics.py). `confirm` gates fuel/
 // motion actuators behind a dialog. `readouts[].get(state)` formats a live value.
+/** @type {(s: string) => string} */
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ") : s);
 
 // Cooler fault-enum -> banner text (see semantics.cooler / vf/c.java). Absent/"" = no fault.
+/** @type {Record<string, string>} */
 const COOLER_FAULT_MSG = {
   door_open: "⚠ Fridge door is open",
   emergency: "⚠ Cooler in emergency operation",
@@ -65,6 +250,7 @@ const COOLER_FAULT_MSG = {
 };
 
 // Roof InfoPopUp alert -> banner text (see semantics.roof / ig/c.java).
+/** @type {Record<string, string>} */
 const ROOF_ALERT_MSG = {
   child_lock: "⚠ Roof child lock active",
   error: "⚠ Roof error",
@@ -75,6 +261,7 @@ const ROOF_ALERT_MSG = {
 };
 
 const ORDER = ["cooler", "campingmode", "lighting", "airheater", "water", "energy", "roof", "vehicle"];
+/** @type {Record<string, Feature>} */
 const FEATURES = {
   cooler: {
     title: "Cooler", icon: "❄️",
@@ -106,8 +293,8 @@ const FEATURES = {
     ],
     // `fault` is the cooler's 2-bit Error enum, only meaningful while powered on (vf/c.java):
     // door_open | emergency | error. Surface it as a banner so a fault is obvious at a glance.
-    warn: (s) => (COOLER_FAULT_MSG[s.fault] || null),
-    summary: (s) => (COOLER_FAULT_MSG[s.fault] || (s.on ? `On · level ${s.level}` : "Off")),
+    warn: (s) => (COOLER_FAULT_MSG[/** @type {string} */ (s.fault)] || null),
+    summary: (s) => (COOLER_FAULT_MSG[/** @type {string} */ (s.fault)] || (s.on ? `On · level ${s.level}` : "Off")),
   },
   campingmode: {
     title: "Camping mode", icon: "🏕️",
@@ -164,7 +351,7 @@ const FEATURES = {
     controls: [
       { what: "mode", kind: "select", label: "Energy mode",
         options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max charge" }, { value: "eco", label: "Eco" }],
-        current: (s) => ({ 0: "normal", 1: "max_charge", 2: "eco" })[s.energy_mode],
+        current: (s) => (/** @type {Record<number, string>} */ ({ 0: "normal", 1: "max_charge", 2: "eco" }))[/** @type {number} */ (s.energy_mode)],
         disabled: (s) => !!s.energy_mode_locked,
         confirm: () => "Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?" },
     ],
@@ -209,16 +396,29 @@ const FEATURES = {
   },
 };
 
+/**
+ * @param {string} path
+ * @param {RequestInit} [opts]
+ * @returns {Promise<any>}
+ */
 async function api(path, opts) {
   const r = await fetch(path, opts);
   return r.json();
 }
 
+/**
+ * @param {string} text
+ * @param {string} [kind]
+ */
 function setStatus(text, kind) {
   statusEl.textContent = text;
   statusEl.className = "pill" + (kind ? " " + kind : "");
 }
 
+/**
+ * @param {string} fn
+ * @returns {boolean}
+ */
 function installed(fn) {
   const s = STATE[fn];
   return !s || s.installed !== false;
@@ -228,14 +428,19 @@ function installed(fn) {
 // CALICTL_ENABLE_WRITES=1). The UI disables every control and shows a banner when true.
 const readOnly = () => !!(STATE._meta && STATE._meta.read_only);
 
+/**
+ * @param {string} msg
+ * @param {string} [kind]
+ */
 function toast(msg, kind) {
   const d = document.createElement("div");
   d.className = "toast" + (kind ? " " + kind : "");
   d.textContent = msg;
-  document.getElementById("toasts").appendChild(d);
+  (/** @type {HTMLElement} */ (document.getElementById("toasts"))).appendChild(d);
   setTimeout(() => d.remove(), 4000);
 }
 
+/** @param {boolean} [force] */
 async function refreshState(force) {
   let next;
   try {
@@ -253,7 +458,7 @@ async function refreshState(force) {
   }
   // don't repaint out from under a slider the user is actively dragging (optimistic values +
   // the queue keep the rest fresh; a forced refresh after a command still repaints).
-  if (!force && document.activeElement && document.activeElement.type === "range") return;
+  if (!force && document.activeElement && /** @type {HTMLInputElement} */ (document.activeElement).type === "range") return;
   const sig = view + "|" + JSON.stringify(next);
   if (!force && sig === lastRender) return; // nothing changed -> no flicker
   lastRender = sig;
@@ -263,6 +468,11 @@ async function refreshState(force) {
 // Enqueue a command. Shows the intended value immediately (optimistic) and coalesces rapid
 // changes to the same control: any still-queued command for it is pruned so only the latest
 // value is sent (the in-flight one can't be un-sent). Then the queue drains one at a time.
+/**
+ * @param {string} fn
+ * @param {string} what
+ * @param {string|number|null} value
+ */
 function command(fn, what, value) {
   if (readOnly()) { toast("Read-only mode — writes are disabled", "warn"); return; }
   const key = qKey(fn, what);
@@ -278,9 +488,10 @@ function command(fn, what, value) {
 // frontend already showed any confirm dialog; the backend only needs it for roof/airheater.
 async function processQueue() {
   if (inflight || !queue.length) return;
-  inflight = queue.shift();
+  inflight = /** @type {CommandItem} */ (queue.shift());
   setStatus("Sending…", "busy");
   render();
+  /** @type {CommandResponse} */
   let res;
   try {
     res = await api("/api/command", {
@@ -307,18 +518,28 @@ async function processQueue() {
 }
 
 // Actuate a control, gating fuel/motion features behind a confirm() dialog.
+/**
+ * @param {string} fn
+ * @param {string} what
+ * @param {string|number|null} value
+ */
 function act(fn, what, value) {
   const f = FEATURES[fn];
   if (f && f.confirm && !confirm(f.confirm(what))) return;
   command(fn, what, value);
 }
 
+/** @param {string} v */
 function goto(v) {
   view = v;
   lastRender = "";
   render();
 }
 
+/**
+ * @param {number|null|undefined} sec
+ * @returns {string}
+ */
 function agoText(sec) {
   if (sec == null) return "unknown";
   if (sec < 90) return "just now";
@@ -330,6 +551,10 @@ function agoText(sec) {
 
 // Absolute wall-clock label from epoch seconds (undefined -> null). Shows a date too when the
 // timestamp is not from today, so a days-old "last seen" isn't mistaken for this morning.
+/**
+ * @param {number|null|undefined} epochSec
+ * @returns {string|null}
+ */
 function clockText(epochSec) {
   if (epochSec == null) return null;
   const d = new Date(epochSec * 1000);
@@ -360,7 +585,7 @@ function offlineBanner() {
 // showing a "Connect" button there falsely reads as "no connection", so we hide it (the fast path
 // warms automatically the moment you interact). The main status pill still shows live/offline.
 function sessionToggle() {
-  const m = STATE._meta || {};
+  const m = /** @type {Meta} */ (STATE._meta || {});
   const mode = m.session_mode, st = m.session;
   if (mode == null || mode === "off") return null;      // persistent session disabled -> no toggle
   let spec, action;
@@ -388,13 +613,20 @@ function sessionToggle() {
   return el;
 }
 
+/** @type {(d: number) => string} */
 const fmtDeg = (d) => (d > 0 ? "+" : "") + d + "°";
 
 // A spirit-level "bubble" for the 2-axis van leveling: a target with a bubble offset by roll (x)
 // and pitch (y). Returns null when there's no reading (ignition off) so the row just shows "—".
+/**
+ * @param {number|null|undefined} roll
+ * @param {number|null|undefined} pitch
+ * @returns {HTMLDivElement|null}
+ */
 function bubbleLevel(roll, pitch) {
   if (roll == null || pitch == null) return null;
   const MAX = 6, R = 70, ring = 64, br = 13, reach = ring - br;   // ±6° maps to the outer ring
+  /** @type {(v: number) => number} */
   const clamp = (v) => Math.max(-1, Math.min(1, v / MAX));
   const bx = (R + clamp(roll) * reach).toFixed(1);
   const by = (R - clamp(pitch) * reach).toFixed(1);               // +pitch (nose up) => bubble up
@@ -420,6 +652,7 @@ function bubbleLevel(roll, pitch) {
 // samples -- refetching that on every tick would be pointless traffic.
 const CHART = { w: 320, h: 132, l: 34, r: 34, t: 10, b: 18 };
 const HISTORY_TTL_MS = 60000;
+/** @type {BattHistory|null} */
 let HISTORY = null, HISTORY_TS = 0;
 
 async function loadHistory() {
@@ -432,6 +665,11 @@ async function loadHistory() {
 // Split samples into runs that are contiguous in time. A jump longer than `gapS` means the van
 // was asleep (or the daemon was down), so the line BREAKS there. Joining across it would draw a
 // voltage the battery never actually held -- the chart would be inventing data.
+/**
+ * @param {number[][]} samples
+ * @param {number} gapS
+ * @returns {number[][][]}
+ */
 function contiguousRuns(samples, gapS) {
   const runs = [];
   let cur = [];
@@ -445,6 +683,12 @@ function contiguousRuns(samples, gapS) {
 
 // Min/max of column `i`, widened to at least `pad` so a dead-flat line renders mid-plot
 // instead of dividing by a zero range.
+/**
+ * @param {number[][]} samples
+ * @param {number} i
+ * @param {number} pad
+ * @returns {number[]|null}
+ */
 function extent(samples, i, pad) {
   let lo = Infinity, hi = -Infinity;
   for (const s of samples) {
@@ -459,6 +703,11 @@ function extent(samples, i, pad) {
 // One series (voltage OR current) on its own axis — the two are split into separate diagrams
 // because they live on very different scales (V ~13-14, A can swing -2..+8), so overlaying them
 // squashes the voltage line flat. cfg: {idx, cls, pad, lblCls, name, unit}.
+/**
+ * @param {BattHistory} h
+ * @param {SeriesCfg} cfg
+ * @returns {SVGSVGElement|null}
+ */
 function seriesSvg(h, cfg) {
   const samples = (h && h.samples) || [];
   const e = extent(samples, cfg.idx, cfg.pad);
@@ -466,7 +715,9 @@ function seriesSvg(h, cfg) {
   const C = CHART, hours = h.hours || 24;
   const t1 = h.now, t0 = t1 - hours * 3600;          // a TRUE 24 h axis: gaps stay gaps
   const plotW = C.w - C.l - C.r, plotH = C.h - C.t - C.b;
+  /** @type {(ts: number) => number} */
   const x = (ts) => C.l + ((ts - t0) / (t1 - t0)) * plotW;
+  /** @type {(val: number) => number} */
   const y = (val) => C.t + plotH - ((val - e[0]) / (e[1] - e[0])) * plotH;
   const line = contiguousRuns(samples, h.gap_s || 120).map((run) => {
     const pts = run.filter((s) => typeof s[cfg.idx] === "number" && isFinite(s[cfg.idx]));
@@ -501,6 +752,7 @@ function energyChart() {
   const body = document.createElement("div");
   body.className = "echart-body";
   card.append(head, body);
+  /** @param {BattHistory|null|undefined} h */
   const paint = (h) => {
     body.innerHTML = "";
     const empty = document.createElement("div");
@@ -516,6 +768,7 @@ function energyChart() {
     const vSvg = seriesSvg(h, { idx: 1, cls: "ec-v", pad: 0.4, lblCls: "ec-v-lbl", name: "voltage" });
     const aSvg = seriesSvg(h, { idx: 2, cls: "ec-a", pad: 2, lblCls: "ec-a-lbl", name: "current" });
     if (vSvg || aSvg) {
+      /** @param {string} title @param {SVGSVGElement|null} svg */
       const sub = (title, svg) => {
         const w = document.createElement("div"); w.className = "echart-sub";
         const t = document.createElement("div"); t.className = "echart-subtitle"; t.textContent = title;
@@ -561,6 +814,11 @@ function render() {
 // The app's "California Status" overview card: fresh/grey water + leisure battery, at a glance.
 // A row is emitted only when its data is present (installed + non-null), so a truncated poll or
 // an uninstalled tank never renders a "— / — l" ghost row.
+/**
+ * @param {string} label
+ * @param {string} value
+ * @returns {HTMLDivElement}
+ */
 function sumRow(label, value) {
   const row = document.createElement("div"); row.className = "row";
   const l = document.createElement("span"); l.className = "lbl"; l.textContent = label;
@@ -570,13 +828,16 @@ function sumRow(label, value) {
 }
 
 function renderSummary() {
+  /** @type {HTMLDivElement[]} */
   const rows = [];
+  /** @type {FnState} */
   const w = STATE.water || {};
   if (installed("water")) {
     const f = w.fresh, g = w.waste;
     if (f && f.liters != null) rows.push(sumRow("Fresh water", `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}`));
     if (g && g.liters != null) rows.push(sumRow("Grey water", `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}`));
   }
+  /** @type {FnState} */
   const e = STATE.energy || {};
   if (e.soc2_pct != null) {
     const h = e.batt2_remaining_h;
@@ -597,6 +858,7 @@ function renderDashboard() {
   for (const fn of ORDER) {
     if (!installed(fn)) continue;
     const f = FEATURES[fn];
+    /** @type {FnState} */
     const s = STATE[fn] || {};
     const tile = document.createElement("button");
     // A feature's own warn(s) doubles as the dashboard alert signal (cooler fault, roof alert):
@@ -618,6 +880,7 @@ function renderDashboard() {
 // Matches the app's 8-lamp layout (screenshots 2026-07-15). L5=Küche Ambient was capture-
 // confirmed 2026-08-16; L6 (roof reading) is solid by elimination but its lamp only powers with
 // the roof open, so `hint` flags that. See control.LIGHT_ZONES.
+/** @type {{ group: string, lamps: { label: string, what: string, zone: number, hint?: string }[] }[]} */
 const LIGHT_LAMPS = [
   { group: "Reading lights", lamps: [
     { label: "Left", what: "reading-1", zone: 2 },
@@ -633,6 +896,7 @@ const LIGHT_LAMPS = [
 ];
 const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NOT_EQUIPPED — never send)
 
+/** @param {FnState} s */
 function renderLighting(s) {
   titleEl.textContent = "Lighting";
   // Actuation is photon-verified (2026-08-16): a bare SET+commit drives the lamps on an awake
@@ -666,11 +930,12 @@ function renderLighting(s) {
   psel.disabled = readOnly();
   const opt0 = document.createElement("option");
   opt0.value = ""; opt0.textContent = "Choose…"; opt0.selected = true; psel.appendChild(opt0);
+  /** @type {[number, string][]} */
   const PROFILES = [[1, "Favorite 1"], [2, "Favorite 2"], [3, "Favorite 3"], [4, "Favorite 4"],
                     [5, "Favorite 5"], [6, "Favorite 6"], [7, "Favorite 7"],
                     [11, "Interior light"], [10, "Wake-up light"]];
   for (const [n, lab] of PROFILES) {
-    const o = document.createElement("option"); o.value = n; o.textContent = lab; psel.appendChild(o);
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = lab; psel.appendChild(o);
   }
   psel.onchange = () => {
     if (psel.value === "") return;
@@ -688,7 +953,7 @@ function renderLighting(s) {
   ssel.disabled = readOnly();
   const s0 = document.createElement("option"); s0.value = ""; s0.textContent = "Favorite…"; s0.selected = true; ssel.appendChild(s0);
   for (let n = 1; n <= 7; n++) {
-    const o = document.createElement("option"); o.value = n; o.textContent = "Favorite " + n; ssel.appendChild(o);
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = "Favorite " + n; ssel.appendChild(o);
   }
   ssel.onchange = () => {
     if (ssel.value === "") return;
@@ -712,15 +977,17 @@ function renderLighting(s) {
         const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = lamp.hint;
         lbl.appendChild(hh);
       }
-      const real = s["brightness_zone_" + lamp.zone];
+      // brightness_zone_1..16 are read by dynamic key (see FnState note); cast the state to an
+      // index map so the computed-key read type-checks (the leaf itself is a nullable number).
+      const real = (/** @type {Record<string, number|null|undefined>} */ (s))["brightness_zone_" + lamp.zone];
       const val = optNum("lighting", lamp.what, real != null ? real : 0);
       const isPending = pending_is("lighting", lamp.what);
       row.appendChild(lbl);
       if (isPending) row.appendChild(spinner());
-      const inp = document.createElement("input"); inp.type = "range"; inp.min = 0; inp.max = LIGHT_MAX;
+      const inp = document.createElement("input"); inp.type = "range"; inp.min = /** @type {any} */ (0); inp.max = /** @type {any} */ (LIGHT_MAX);
       // readback can carry enum values past the settable range (11=default, 13/14 markers):
       // clamp the thumb (11 ≈ full) but zero it for the no-reading markers; label shows the truth
-      inp.value = val >= 13 ? 0 : Math.min(val, LIGHT_MAX);
+      inp.value = /** @type {any} */ (val >= 13 ? 0 : Math.min(val, LIGHT_MAX));
       inp.disabled = readOnly();
       inp.setAttribute("aria-label", grp.group + " " + lamp.label + " brightness");
       const out = document.createElement("span"); out.className = "sval";
@@ -734,11 +1001,14 @@ function renderLighting(s) {
   }
 }
 
+/** @param {string} fn */
 function renderFeature(fn) {
   const f = FEATURES[fn];
+  /** @type {FnState} */
   const s = STATE[fn] || {};
   titleEl.textContent = f.title;
   if (f.warn) {                         // dynamic FAULT banner (e.g. fridge door open) — red/alert
+    /** @type {string|null} */
     let w;
     try { w = f.warn(s); } catch (e) { w = null; }
     if (w) {
@@ -748,6 +1018,7 @@ function renderFeature(fn) {
     }
   }
   if (f.note) {                         // soft INFO banner (e.g. water stale) — muted, not a fault
+    /** @type {string|null} */
     let n;
     try { n = f.note(s); } catch (e) { n = null; }
     if (n) {
@@ -773,6 +1044,12 @@ function renderFeature(fn) {
   if (f.chart) app.appendChild(energyChart());
 }
 
+/**
+ * @param {string} fn
+ * @param {Control} c
+ * @param {FnState} s
+ * @returns {HTMLDivElement}
+ */
 function renderControl(fn, c, s) {
   const row = document.createElement("div");
   row.className = "row";
@@ -785,6 +1062,7 @@ function renderControl(fn, c, s) {
   const ro = readOnly() || (c.disabled ? !!c.disabled(s) : false);
   // fire() applies a per-control "not verified" confirm (c.confirm) on top of the feature-level
   // one in act(); c.confirm(value) returns the prompt, or null/false to skip.
+  /** @param {string|number} val */
   const fire = (val) => {
     const msg = typeof c.confirm === "function" ? c.confirm(val) : c.confirm;
     if (msg && !confirm(msg)) return;
@@ -800,12 +1078,12 @@ function renderControl(fn, c, s) {
     sw.onclick = () => fire(on ? "off" : "on");
     row.appendChild(sw);
   } else if (c.kind === "slider") {
-    const val = optNum(fn, c.what, s[c.state] != null ? s[c.state] : c.min);
+    const val = optNum(fn, c.what, /** @type {number} */ (s[c.state] != null ? s[c.state] : c.min));
     const inp = document.createElement("input");
     inp.type = "range";
-    inp.min = c.min;
-    inp.max = c.max;
-    inp.value = val;
+    inp.min = /** @type {any} */ (c.min);
+    inp.max = /** @type {any} */ (c.max);
+    inp.value = /** @type {any} */ (val);
     inp.disabled = ro;
     const out = document.createElement("span");
     out.className = "sval";
@@ -835,7 +1113,7 @@ function renderControl(fn, c, s) {
     sel.disabled = ro;
     for (let h = 0; h < 24; h++) {
       const o = document.createElement("option");
-      o.value = h; o.textContent = String(h).padStart(2, "0") + ":00";
+      o.value = /** @type {any} */ (h); o.textContent = String(h).padStart(2, "0") + ":00";
       if (h === cur) o.selected = true;
       sel.appendChild(o);
     }
@@ -845,7 +1123,7 @@ function renderControl(fn, c, s) {
     const inp = document.createElement("input");
     inp.type = "time";
     inp.disabled = ro;
-    if (c.current && c.current(s)) inp.value = c.current(s);
+    if (c.current && c.current(s)) inp.value = /** @type {string} */ (c.current(s));
     inp.onchange = () => { if (inp.value) fire(inp.value); };
     row.appendChild(inp);
   } else if (c.kind === "buttons") {             // momentary action buttons (cooler on/off timer)
@@ -858,7 +1136,7 @@ function renderControl(fn, c, s) {
       btn.textContent = b.label;
       btn.disabled = ro;
       btn.onclick = () => {
-        if (c.confirm && !confirm(typeof c.confirm === "function" ? c.confirm(b) : c.confirm)) return;
+        if (c.confirm && !confirm(/** @type {string} */ (typeof c.confirm === "function" ? c.confirm(b) : c.confirm))) return;
         act(fn, b.what, b.value != null ? b.value : null);
       };
       grp.appendChild(btn);
@@ -874,19 +1152,26 @@ function renderControl(fn, c, s) {
 // wall-time since. Re-synced on every poll (render() rebuilds), smooth in between. Because the RTC
 // tracks real time, this stays ~accurate even while the van is asleep — it's cosmetic; liveness is
 // shown by the separate online/offline banner.
+/** @type {ReturnType<typeof setInterval>|null} */
 let clockTimer = null;
 function stopClockTicker() { if (clockTimer) { clearInterval(clockTimer); clockTimer = null; } }
+/**
+ * @param {string|null|undefined} str
+ * @returns {number|null}
+ */
 function parseClock(str) {
   const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(str || "");
   return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : null;  // local time
 }
+/** @param {number} ms */
 function fmtClock(ms) {
-  const d = new Date(ms), p = (n) => String(n).padStart(2, "0");
+  const d = new Date(ms), p = (/** @type {number} */ n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
+/** @param {HTMLElement} el */
 function startClockTicker(el) {
   stopClockTicker();
-  const base = parseClock((STATE.vehicle || {}).car_clock);
+  const base = parseClock(/** @type {FnState} */ (STATE.vehicle || {}).car_clock);
   if (base == null) { el.textContent = "—"; return; }
   const anchor = Date.now() - (STATE._meta && STATE._meta.age_s ? STATE._meta.age_s * 1000 : 0);
   const paint = () => { el.textContent = fmtClock(base + (Date.now() - anchor)); };
@@ -894,6 +1179,11 @@ function startClockTicker(el) {
   clockTimer = setInterval(paint, 1000);
 }
 
+/**
+ * @param {Readout} r
+ * @param {FnState} s
+ * @returns {HTMLDivElement}
+ */
 function renderReadout(r, s) {
   const wrap = document.createElement("div");
   wrap.className = "rowwrap";
@@ -904,6 +1194,7 @@ function renderReadout(r, s) {
   label.textContent = r.label;
   const v = document.createElement("span");
   v.className = "val";
+  /** @type {string|number|null|undefined} */
   let val;
   try {
     val = r.get(s);
@@ -916,6 +1207,7 @@ function renderReadout(r, s) {
   row.appendChild(v);
   wrap.appendChild(row);
   if (r.bar) {
+    /** @type {number|null|undefined} */
     let p;
     try {
       p = r.bar(s);
@@ -933,6 +1225,7 @@ function renderReadout(r, s) {
     }
   }
   if (r.widget) {                    // optional richer visual (e.g. the leveling bubble)
+    /** @type {Node|null} */
     let node;
     try { node = r.widget(s); } catch (e) { node = null; }
     if (node) wrap.appendChild(node);
