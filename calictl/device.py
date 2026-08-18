@@ -142,8 +142,10 @@ class CamperDevice:
                     await asyncio.to_thread(_adapter_reset, self.adapter)
                 await asyncio.sleep(4)
         raise ConnectionUnavailable(
-            "no BLE session to %s after retries (%s). If ignition is on, the "
-            "phone app may hold the single connection slot." % (self.addr, type(last).__name__))
+            "no BLE session to %s after retries (%s). Causes: the unit deep-slept (parked/idle — "
+            "wakes on door/ignition), the phone app holds the single connection slot, or the unit's "
+            "Bluetooth is DISABLED in its settings (persistent DeviceNotFound that won't self-resolve "
+            "until re-enabled)." % (self.addr, type(last).__name__))
 
     async def read_all(self, funcs: dict) -> dict[str, bytes]:
         """One session: read every function's state characteristic, under a live 1003 heartbeat

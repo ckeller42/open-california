@@ -64,3 +64,19 @@ values** and **fixes the mid-poll link drops**. Stdlib-only, no new transport. S
 `R_READ_HEARTBEAT_REFRESH` in `calictl/device.py` ← `T_READ_HEARTBEAT_REFRESH`
 (`tests/test_mock_integration.py`); the mock models "reads are stale until a heartbeat arms the
 session."
+
+## Connection failure modes (why buspi shows offline)
+
+A `BleakDeviceNotFoundError` / "no BLE session after retries" means the unit isn't reachable — and
+buspi's own stack is usually fine (check `hciconfig hci0` = UP RUNNING). The distinct causes, now
+recorded per-poll in `poll_outcomes.jsonl` and classified by `tools.analyze_battery`:
+
+- **Van deep-sleep** — parked/idle, the unit stops advertising; **self-resolves** on the next wake
+  (door/ignition). Expected. `outcome: asleep` once the supervisor backoff hits the cap.
+- **Phone holds the single BLE slot** — the CaliforniaOnTour app is connected, so the unit stops
+  advertising; **resolves when the app disconnects**. `outcome: ble_error`, short run.
+- **Unit Bluetooth DISABLED** (in the unit's own settings) — persistent `DeviceNotFound` that
+  **will NOT self-resolve** until re-enabled; then buspi reconnects on the next poll. Shows as a
+  long unbroken `ble_error` run (observed 2026-08-18). NOT a buspi fault.
+- **Daemon down / Pi reboot** — no `poll_outcomes` rows at all for the window.
+- **Influx-write failure** — polls succeed (`outcome: ok`) but nothing is stored: a *false* gap.
