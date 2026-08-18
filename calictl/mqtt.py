@@ -82,12 +82,14 @@ ENTITY_SPECS: dict[str, list] = {
     "livingroomheater": [
         EntitySpec("binary_sensor", "air_on", "LR Heater Air", {**_BIN, "icon": "mdi:heat-wave"}),
         EntitySpec("binary_sensor", "water_on", "LR Heater Water", {**_BIN, "icon": "mdi:water-boiler"}),
-        EntitySpec("sensor", "air_temp", "LR Heater Air Temp", {"unit_of_measurement": "°C", "device_class": "temperature"}),
-        EntitySpec("sensor", "water_temp", "LR Heater Water Temp", {"unit_of_measurement": "°C", "device_class": "temperature"}),
+        # air_temp scale is UNVERIFIED (8-bit raw) -> no unit/device_class (CLAUDE.md rule);
+        # water_temp is a 1-bit flag, not a temperature.
+        EntitySpec("sensor", "air_temp", "LR Heater Air Temp (raw)", {"icon": "mdi:thermometer"}),
+        EntitySpec("binary_sensor", "water_temp_flag", "LR Heater Water Temp Flag", {**_BIN}),
     ],
     "roofaircondition": [
         EntitySpec("binary_sensor", "on", "Roof A/C On", {**_BIN, "icon": "mdi:air-conditioner"}),
-        EntitySpec("sensor", "target_temp", "Roof A/C Target Temp", {"unit_of_measurement": "°C", "device_class": "temperature"}),
+        EntitySpec("sensor", "target_temp", "Roof A/C Target Temp (raw)", {"icon": "mdi:thermometer"}),
         EntitySpec("sensor", "fan_speed", "Roof A/C Fan", {"icon": "mdi:fan"}),
     ],
     "satelliteantenna": [
