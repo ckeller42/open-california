@@ -115,16 +115,19 @@ def energy(d: dict) -> dict:
     }
 
 
-# Cooler Error is a 2-bit enum (bits 0-1 of char 1102), interpreted by the app ONLY while
-# the fridge is powered on (vf/c.java gates the alert on State). 0=ok, 1=generic error,
-# 2=emergency operation, 3=door open (COOLER_ERROR/EMERGENCY_OPERATION/DOOR_OPEN IDs).
+# Cooler Error is a 2-bit enum (bits 0-1 of char 1102): 0=ok, 1=generic error, 2=emergency
+# operation, 3=door open (COOLER_ERROR/EMERGENCY_OPERATION/DOOR_OPEN IDs). The app surfaces it
+# whenever the box is INSTALLED — vf/c.java:423 gates the error-notification dispatch on the
+# Installed bit (state bit 4), NOT on State (power, bit 7); the UI error flags H()/h0() are
+# ungated. So a fault on an installed-but-powered-off fridge (e.g. door open, Error==3) still shows.
 _COOLER_FAULT = {1: "error", 2: "emergency", 3: "door_open"}
 
 
 def cooler(d: dict) -> dict:
     on = d.get("State") == 1
-    # Error bits are only meaningful powered-on; off -> no fault (stale/undefined otherwise).
-    fault = _COOLER_FAULT.get(d.get("Error")) if on else None
+    # Fault is gated on Installed, not power — mirrors the app (vf/c.java:423). Fixed 2026-08-17
+    # from the consistency audit: gating on State hid faults on an installed-but-off fridge.
+    fault = _COOLER_FAULT.get(d.get("Error")) if d.get("Installed") else None
     return {
         "installed": bool(d.get("Installed")),
         "on": on,
