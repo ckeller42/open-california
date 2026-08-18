@@ -1,0 +1,28 @@
+calictl/influx.py
+  s_a7757c7c919f20::t_121399a39029e6 81,91-94,100-101,108-109
+calictl/mqtt.py
+  s_a7757c7c919f20::t_5da2d225f2b4aa 61-67
+calictl/webui/app.js
+  s_a7757c7c919f20::t_6a4de5da801542 370-373,375-379
+tools/analyze_battery.py
+  s_a7757c7c919f20::t_ae47d4f890cc27 44,46-47,51-55,57-60
+  s_a7757c7c919f20::t_c6bf3c211e6cd6 1-43,45,48-50,56,61-179
+tests/test_analyze_battery.py
+  s_a7757c7c919f20::t_5a3891966dff9d 1-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "66d5098b6b1b8428fbd0b4db98a3891e880da4f1",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
