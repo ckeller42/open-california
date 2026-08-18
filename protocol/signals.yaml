@@ -3,7 +3,8 @@ airheater:
     AirDistribution:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -11,7 +12,8 @@ airheater:
     HeatingLevel:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -19,7 +21,8 @@ airheater:
     NormalOperationRequest:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -27,7 +30,8 @@ airheater:
     OperationModeAirHeater:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -35,7 +39,8 @@ airheater:
     OperationModeCombined:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -43,7 +48,8 @@ airheater:
     PermanentOperationConfirmation:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -51,7 +57,8 @@ airheater:
     PermanentOperationRequest:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -59,7 +66,8 @@ airheater:
     RunningTime:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -67,7 +75,8 @@ airheater:
     TimerHour:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -75,7 +84,8 @@ airheater:
     TimerMin:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -219,7 +229,8 @@ campingmode:
     InteriorLight:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -227,7 +238,8 @@ campingmode:
     OutsideLight:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -235,7 +247,8 @@ campingmode:
     State:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -243,7 +256,8 @@ campingmode:
     UsbCharger:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -314,7 +328,8 @@ cooler:
     Level:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -322,7 +337,8 @@ cooler:
     Mode:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -330,7 +346,8 @@ cooler:
     NightTimerHourOff:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -338,7 +355,8 @@ cooler:
     NightTimerHourOn:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -346,7 +364,8 @@ cooler:
     NightTimerSet:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -354,7 +373,8 @@ cooler:
     State:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -362,7 +382,8 @@ cooler:
     TimerCancel:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -370,7 +391,8 @@ cooler:
     TimerHour:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -378,7 +400,8 @@ cooler:
     TimerMin:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -386,7 +409,8 @@ cooler:
     TimerStart:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -524,7 +548,8 @@ energy:
     DisplayRefresh:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1108,7 +1133,8 @@ lighting:
     BrightnessLEight:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1116,7 +1142,8 @@ lighting:
     BrightnessLFive:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1124,7 +1151,8 @@ lighting:
     BrightnessLFour:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1132,7 +1160,8 @@ lighting:
     BrightnessLNine:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1140,7 +1169,8 @@ lighting:
     BrightnessLOne:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1148,7 +1178,8 @@ lighting:
     BrightnessLOneFive:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1156,7 +1187,8 @@ lighting:
     BrightnessLOneFour:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1164,7 +1196,8 @@ lighting:
     BrightnessLOneOne:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1172,7 +1205,8 @@ lighting:
     BrightnessLOneSix:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1180,7 +1214,8 @@ lighting:
     BrightnessLOneThree:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1188,7 +1223,8 @@ lighting:
     BrightnessLOneTwo:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1196,7 +1232,8 @@ lighting:
     BrightnessLOneZero:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1204,7 +1241,8 @@ lighting:
     BrightnessLSeven:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1212,7 +1250,8 @@ lighting:
     BrightnessLSix:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1220,7 +1259,8 @@ lighting:
     BrightnessLThree:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1228,7 +1268,8 @@ lighting:
     BrightnessLTwo:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1236,7 +1277,8 @@ lighting:
     LightValue:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1244,7 +1286,8 @@ lighting:
     Mode:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1252,7 +1295,8 @@ lighting:
     ProfileNumber:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1260,7 +1304,8 @@ lighting:
     Timestamp:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1487,7 +1532,8 @@ livingroomheater:
     Mode:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1495,7 +1541,8 @@ livingroomheater:
     StateAir:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1503,7 +1550,8 @@ livingroomheater:
     StateWater:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1511,7 +1559,8 @@ livingroomheater:
     TemperatureAir:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1519,7 +1568,8 @@ livingroomheater:
     TemperatureWater:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1612,7 +1662,8 @@ roof:
     Down:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1620,7 +1671,8 @@ roof:
     SafetyCounter:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1628,7 +1680,8 @@ roof:
     Up:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1676,7 +1729,8 @@ roofaircondition:
     FanSpeed:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1684,7 +1738,8 @@ roofaircondition:
     Mode:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1692,7 +1747,8 @@ roofaircondition:
     State:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1700,7 +1756,8 @@ roofaircondition:
     Temperature:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1774,7 +1831,8 @@ satelliteantenna:
     Dish:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1782,7 +1840,8 @@ satelliteantenna:
     DishStop:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1790,7 +1849,8 @@ satelliteantenna:
     SatelliteSelection:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1798,7 +1858,8 @@ satelliteantenna:
     System:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1806,7 +1867,8 @@ satelliteantenna:
     Wlan:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1880,7 +1942,8 @@ stairs:
     Movement:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null
@@ -1888,7 +1951,8 @@ stairs:
     OperationMode:
       decision: omit
       reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ command surfacing deferred while control writes are blocked (issue #2)"
+        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
+        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
       sources:
         app: null
         gui: null

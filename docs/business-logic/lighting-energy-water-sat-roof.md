@@ -33,7 +33,7 @@ setters) + `dg/h.java` (feature class, service `00001500-...`, `dg/a.java:73`).
 
 Log line format confirms names/order: `eg/a.java:116-129` (`A()`).
 
-### Command enum — `dg/n.java:39-56`
+### Command enum — `dg/n.java:20-31`
 
 | Name | Wire value |
 |---|---|
@@ -51,7 +51,7 @@ Log line format confirms names/order: `eg/a.java:116-129` (`A()`).
 (see `P0` below), no call site for `SYSTEM_TIME` was found (`UNVERIFIED` — likely used only during BLE pairing/clock
 sync, not in the reviewed classes).
 
-### Brightness value enum — `dg/i.java:27-46`
+### Brightness value enum — `dg/i.java:20-43`
 
 Each `BrightnessLxx` field (and `LightValue` when packed, see Wake-up) carries a `dg.i` wire value, not a raw
 percentage:
@@ -76,28 +76,28 @@ really is this `dg.i` enum, not a raw 0-13 scale — the app's 50 % slider produ
 
 | Setter (`dg/a.java`) | Control field | Zone name (BrightnessL…) |
 |---|---|---|
-| `j` (:167) | `f7186h0` | One |
-| `r` (:255) | `f7187i0` | Two |
-| `q` (:244) | `f7188j0` | Three |
-| `h` (:145) | `f7189k0` | Four |
-| `g` (:134) | `l0`      | Five |
-| `p` (:233) | `f7190m0` | Six |
-| `o` (:222) | `f7191n0` | Seven |
-| `f` (:123) | `f7192o0` | Eight |
-| `i` (:156) | `f7193p0` | Nine |
-| `n` (:211) | `f7194q0` | OneZero (10) |
-| `k` (:178) | `f7195r0` | OneOne (11) |
-| `m` (:200) | `f7196s0` | OneTwo (12) |
-| `l` (:189) | `f7197t0` | OneThree (13) |
-| `s` (:266) | `f7185g0` (LightValue) | n/a |
-| `v` (:277) | `f7183e0` (Mode) | n/a |
-| `w` (:288) | `f7182d0` (ProfileNumber) | n/a |
+| `j` (:203) | `f7186h0` | One |
+| `r` (:291) | `f7187i0` | Two |
+| `q` | `f7188j0` | Three |
+| `h` | `f7189k0` | Four |
+| `g` | `l0`      | Five |
+| `p` | `f7190m0` | Six |
+| `o` | `f7191n0` | Seven |
+| `f` | `f7192o0` | Eight |
+| `i` | `f7193p0` | Nine |
+| `n` | `f7194q0` | OneZero (10) |
+| `k` | `f7195r0` | OneOne (11) |
+| `m` | `f7196s0` | OneTwo (12) |
+| `l` | `f7197t0` | OneThree (13) |
+| `s` (:302) | `f7185g0` (LightValue) | n/a |
+| `v` (:313) | `f7183e0` (Mode) | n/a |
+| `w` (:324) | `f7182d0` (ProfileNumber) | n/a |
 
 **No setter was found for zones 14–16** (`BrightnessLOneFour/Five/Six`, fields `f7198u0/f7199v0/f7200w0`) —
 `UNVERIFIED`, likely reserved for a vehicle variant not exercised by the reviewed UI code path (`dg/h.java`'s
 zone dispatcher only covers 13 physical positions).
 
-Named light positions (`ef/i.java:27-114`, 29 values total; UI dispatch in `dg/h.java:170-264` `E()` and
+Named light positions (`ef/i.java:27-114`, 29 values total; UI dispatch in `dg/h.java:174` `E()` and
 `:689-717` `p0()`, `switch(iVar.ordinal())`) map ordinals onto the 13 wired zones above — the switch has
 duplicate `case` labels (e.g. `0` and `11` both drive zone One) because two different vehicle-generation light
 layouts (e.g. reading-light-only layouts vs. roof/kitchen-equipped ones) reuse the same physical BLE channel:
@@ -124,7 +124,7 @@ elimination.
 
 ### Action → field map
 
-1. **Set one zone's brightness (`E(ef.i zone, dg.i level, boolean stage)`, `dg/h.java:170-264`)**
+1. **Set one zone's brightness (`E(ef.i zone, dg.i level, boolean stage)`, `dg/h.java:174`)**
    - `w(9, PENDING)` → ProfileNumber = 9 (staged only, not sent)
    - `v(4, PENDING)` → Mode = `SET_BRIGHTNESS`(4) (staged only)
    - dispatch on `zone.ordinal()` → call the matching setter above with `(level.wireValue, DIRECT-or-PENDING)`.
@@ -145,7 +145,7 @@ elimination.
    `ProfileNumber = allOn ? 12 : 0` sent `DIRECT`. ProfileNumber 12 = `LIGHTS_ON` and 0 = `LIGHTS_OFF` per the
    `dg.l`/`ef.k` profile enum (below) — i.e. a master "all lights on/off" toggle implemented as a profile select.
 
-5. **`Q3()` (`dg/h.java:339-354`)**: Mode = `PREVIEW`(28) staged, `ProfileNumber = 10` (`LIVE_VIEW`) and
+5. **`Q3()` (`dg/h.java:339-354`)**: Mode = `PREVIEW`(28) staged, `ProfileNumber = 10` (`WAKEUP_LIGHT`) and
    `LightValue = 1` sent `DIRECT`; schedules a 5000 ms one-shot (`jn.a`) after which local UI state reverts.
    This is the "preview a light configuration for 5 seconds" action.
 
@@ -244,8 +244,11 @@ Post-processing (`xf/a.java:328-390`, `xf/d.java`) derives UI values from the ra
 - SOC (state of charge) percentages: raw value × 10 → percent (`xf/a.java:333-337`, fields A0/B0 → ×10).
 - Voltage fields (`U*BemAfs`): raw ÷ 10 → volts (`:351-362`).
 - Power fields (`P*Afs`): raw × 10 → watts (`:363-374`).
-- Battery/DC-DC/Land/PV state fields (`StateDcdcAfs` etc.) decode through `d.k(int)` → `bf.a` enum:
-  `INACTIVE`(0), `ACTIVE`(1), `STANDBY`(2), `INIT`(3), `ERROR`(4) (`bf/a.java`).
+- Battery/DC-DC/Land/PV state fields (`StateDcdcAfs` etc.) decode through `d.k(int)` (`xf/d.java:203-217`)
+  by **wire value**: raw `0`→`INACTIVE`, `1`→`ACTIVE`, `2`→`STANDBY`, `6`→`INIT`, and **every other raw
+  value** (incl. `3`/`4`/`5`/`7`)→`ERROR`. The `INACTIVE`(0)/`ACTIVE`(1)/`STANDBY`(2)/`INIT`(3)/`ERROR`(4)
+  numbers in `bf/a.java` are the enum's Java **ordinals**, not the raw field values `k()` switches on (on the
+  wire `INIT` is `6`, and raw `3`/`4` decode to `ERROR`).
 - `S()`/`T()`/`I3()`/`p4()` (`xf/d.java:247-620`) are **local-only** "acknowledge warning" toggles (dismiss a
   banner in the UI); they do not transmit over BLE.
 
@@ -279,7 +282,7 @@ for this service — confirmed no `sg.a.o(...)` + `.y(true)` send pattern anywhe
 | FreshWaterInfoPopUp | 4 | `cf.a` enum: `EMPTY`(0), `ONE_THIRD_FULL`(1), `TWO_THIRD_FULL`(2), `FULL`(3), `OTHER`(4) |
 | FreshWaterLevel | 8 | **primary value**: if unit=ABSOLUTE → current liters; if unit=PERCENT → current 0–100% |
 | FreshWaterVolume | 8 | **tank capacity** (liters), used as the percent denominator (⚠️ name is misleading — this is NOT the current volume) |
-| WasteWaterUnit | 1 | same 3-mode flag for the waste tank (`nf.b`: `DISCRETE`/`ABSOLUTE`/`PERCENT`) |
+| WasteWaterUnit | 1 | display-unit flag: `false`→`nf.b.PERCENT`, `true`→`nf.b.ABSOLUTE` (`nf.b` enum is `ONLY_EMPTY_FULL`/`ABSOLUTE`/`PERCENT`; only the latter two are selected by this 1-bit field) |
 | WasteWaterInfoPopUp | 2 | discrete waste-tank status code |
 | WasteWaterLevel | 8 | primary value (current liters or %), mirrors FreshWaterLevel |
 | WasteWaterVolume | 8 | tank capacity (liters), mirrors FreshWaterVolume |
@@ -325,7 +328,7 @@ populated in `e(...)`, log `"<-- Incoming Data for SatelliteAntenna"` at `mg/f.j
 | Wlan | `f9329i0` | 1 (bool) | false | enable/disable the antenna's WLAN AP |
 | System | `f9325e0` | 2 | 3 | receiver system on/off (0/1 observed) |
 | Dish | `f9326f0` | 2 | 0 | dish movement command (1/2 observed) |
-| SatelliteSelection | `f9327g0` | 6 | 0 | which satellite to search for/lock onto (1–11) |
+| SatelliteSelection | `f9327g0` | 4 | 0 | which satellite to search for/lock onto (1–11) |
 
 ### Actions (all in `mg/f.java`)
 
@@ -373,7 +376,7 @@ the action-dispatch interface).
 |---|---|---|---|---|
 | Up | `f14584d0` | 2 | 3 (idle sentinel) | commanded lift direction: up |
 | Down | `f14585e0` | 2 | 3 (idle sentinel) | commanded lift direction: down |
-| SafetyCounter | `f14586f0` | 32 | 0 | control-side counter field (not used by the reviewed action methods — the safety handshake actually read by the app is a separate boolean in the *state* model, see below) |
+| SafetyCounter | `f14586f0` | 32 | 0 | app-generated monotonic BE-uint32, `seed + floor(elapsed_ms/500)`, streamed by the `w8/a` ~500 ms timer (`w8/a.java:49-60` + `b1/d.java:353`) — the **primary 1401 transmitter**, NOT unit-echoed. The unit acks the stream via the state-side `SafetyCounterValid` (1402 bit 7), a complement, not a replacement (see below) |
 
 ### Movement setters (`ig/c.java:266-283`)
 
@@ -402,11 +405,14 @@ together in one write, `y(false)` (write-without-response semantics, inferred).
 
 `R3()` ("Starting SafetyCounter") is called when a movement begins; it schedules a one-shot 3000 ms check
 (`ig/b.java` default case): if after 3 seconds the *state model's* SafetyCounter/ack flag is still falsy, the app
-logs `"SafetyCounter is invalid after 3 seconds."` and raises a UI warning flag. This is a dead-man's-switch
-acknowledgement from the vehicle confirming the motor actually responded to the Up/Down command — a client
-re-implementing roof control on another vehicle should expect (and check for) this ack, and must keep re-sending
-Up/Down at ~1 Hz while the roof is in motion, matching this app's behavior, or the real vehicle firmware may stop
-the motor.
+logs `"SafetyCounter is invalid after 3 seconds."` and raises a UI warning flag. The app **generates** the
+outgoing `SafetyCounter` itself; the value it waits up to 3000 ms for is the vehicle's state bit
+`SafetyCounterValid` (1402 bit 7) confirming the motor accepted the live counter stream — a client
+re-implementing roof control on another vehicle should generate that counter and check for `SafetyCounterValid`.
+The move-frame cadence is **~500 ms**, not 1 Hz: the primary transmitter is the `w8/a` SafetyCounter timer
+(~500 ms, +1/frame; `w8/a.java:49-60` + `b1/d.java:353`); a **secondary** 1000 ms `ig/c` timer
+(`ig/c.java:776`) only re-affirms direction (net ~3 frames/s, consecutive counter deltas 0/+1). Cross-reference
+`protocol-sequences.md` §3.
 
 ### Roof-state enum (readback, `hf/b.java`)
 
@@ -415,7 +421,9 @@ the motor.
 ### Correct command recipes
 
 - **"roof up" / open**: if state != OPEN and ≥1000 ms since last command → send `{Down:0, Up:1}` once, then
-  repeat `{Down:0, Up:1}` every 1000 ms until stopped or fully open; expect a SafetyCounter ack within 3000 ms.
+  repeat `{Down:0, Up:1}` every ~500 ms (primary `w8/a` SafetyCounter-timer pump; a secondary 1000 ms timer only
+  re-affirms direction) until stopped or fully open; the app generates the outgoing `SafetyCounter` and waits up
+  to 3000 ms for the unit's `SafetyCounterValid` (1402 bit 7).
 - **"roof down" / close**: same shape with `{Down:1, Up:0}`.
 - **"roof stop"**: send `{Down:0, Up:0}` once; cancel the local repeat timer.
 
