@@ -257,6 +257,17 @@ class Server:
                                               automation.AUTO_CAMPER_MIN_SOC))
         self._ac_window_s = float(os.environ.get("CALICTL_AUTO_CAMPER_WINDOW_S",
                                                 automation.AUTO_CAMPER_WINDOW_S))
+        # Camping/ignition transition OBSERVER (always on, NEVER actuates). Logs every change in
+        # ignition + camping substates to the journal, and BURSTS the poll rate for a window after
+        # an engine start so the shed is captured at fine resolution (the 30 s cadence aliases it —
+        # ignition-on and camping-off land in the same sample). This is the evidence-gathering that
+        # must precede enabling auto-camper: it characterises whether the unit sheds camping once or
+        # flip-flops. See docs/business-logic/auto-camper-mode.md.
+        self._obs_prev = None               # last observed {ignition, master_on, usb_charger, lights_on, enable}
+        self._obs_ign_edge = None           # wall time of the last ignition 0->1 (for Δ-since-start)
+        self._burst_until = None            # monotonic deadline while fast-polling, else None
+        self._burst_interval = float(os.environ.get("CALICTL_OBSERVE_BURST_INTERVAL_S", "3"))
+        self._burst_window_s = float(os.environ.get("CALICTL_OBSERVE_BURST_S", "180"))
 
     def _load_last(self):
         """Load the persisted last-known decoded state (best-effort; missing/corrupt -> empty)."""
@@ -378,6 +389,58 @@ class Server:
         print("auto-camper: %s" % ("ENABLED" if self._auto_camper else "disabled"), flush=True)
         return self._auto_camper
 
+    @staticmethod
+    def _obs_fmt(v):
+        """0/1 for a bool, '-' for missing, else the raw value — compact for one journal line."""
+        if v is None:
+            return "-"
+        if isinstance(v, bool):
+            return "1" if v else "0"
+        return str(v)
+
+    def _observe_transitions(self, states):
+        """PASSIVE evidence-gathering (never actuates): log every change in ignition + camping
+        substates to the journal, and start a fast-poll burst after an engine start so the shed is
+        captured at fine resolution. Runs every poll regardless of the auto-camper toggle.
+
+        Why: at the 30 s cadence, engine-start and the camping shed alias into one sample, so we
+        cannot tell a single clean shed from a flip-flop. Bursting to ~3 s around the engine edge
+        de-aliases it (and densifies the InfluxDB series there for the analyzer). Transitions only,
+        so the journal stays readable. See tools/analyze_camping.py + auto-camper-mode.md.
+
+        Two "engine on" signals are tracked, because they differ: ``ignition`` is Terminal-15 (the
+        ignition switch — can be on with the engine NOT running, e.g. accessory) while
+        ``dcdc_charging`` is the DC-DC converter active = alternator feeding the leisure battery =
+        the engine actually RUNNING. Recording both lets the analyzer see which one the camping shed
+        follows. An engine-start burst triggers on a rising edge of EITHER."""
+        veh = states.get("vehicle") or {}
+        camp = states.get("campingmode") or {}
+        e = states.get("energy") or {}
+        cur = {"ignition": veh.get("ignition_on"),            # Terminal-15 (ignition switch)
+               "dcdc_charging": e.get("dcdc_charging"),       # DC-DC active = alternator = engine RUNNING
+               "master_on": camp.get("master_on"),
+               "usb_charger": camp.get("usb_charger"),
+               "lights_on": camp.get("lights_on"),
+               "enable": camp.get("enable")}                  # camp.enable = terminal-15 as the camping fn sees it
+        now = time.time()
+        prev, self._obs_prev = self._obs_prev, cur
+        if prev is None:
+            return                                # first poll: baseline only, nothing to compare
+        engine_rise = ((bool(cur["ignition"]) and not bool(prev["ignition"]))
+                       or (bool(cur["dcdc_charging"]) and not bool(prev["dcdc_charging"])))
+        if engine_rise:                            # engine start on EITHER signal -> stamp + fast-poll burst
+            self._obs_ign_edge = now
+            self._burst_until = time.monotonic() + self._burst_window_s
+        changed = [k for k in cur if cur[k] != prev[k]]
+        if not changed:
+            return
+        dt = "%.0f" % (now - self._obs_ign_edge) if self._obs_ign_edge else "-"
+        parts = ", ".join("%s %s->%s" % (k, self._obs_fmt(prev[k]), self._obs_fmt(cur[k])) for k in changed)
+        print("camping-watch: %s (ign=%s dcdc=%s dcdc_A=%s batt2_A=%s dt_eng=%ss soc=%s)"
+              % (parts, self._obs_fmt(cur["ignition"]), self._obs_fmt(cur["dcdc_charging"]),
+                 self._obs_fmt(e.get("dcdc_current")), self._obs_fmt(e.get("batt2_current")),
+                 dt, self._obs_fmt(e.get("soc2_pct"))), flush=True)
+
     async def _auto_camper_step(self, states):
         """Re-enable camper mode + rear USB after the ENGINE disables it, gated on battery health and
         bounded retries (never fights load-shedding, never loops). Runs each poll AFTER the read (the
@@ -389,18 +452,43 @@ class Server:
             return
         camp = states.get("campingmode") or {}
         e = states.get("energy") or {}
+        camping_on = camp.get("master_on")
+        soc = e.get("soc2_pct")
         warning = bool(e.get("sleep_warning") or e.get("warning_active")
                        or (e.get("warning_level") or 0) >= 1)
+        prev_armed = self._ac_armed_until is not None
+        rising = bool(ign) and not bool(self._ac_prev_ignition)
         d = automation.auto_camper_decide(
             ignition_on=ign, prev_ignition=self._ac_prev_ignition,
-            camping_on=camp.get("master_on"), soc=e.get("soc2_pct"), warning=warning,
+            camping_on=camping_on, soc=soc, warning=warning,
             now=time.monotonic(), armed_until=self._ac_armed_until, fails=self._ac_fails,
             min_soc=self._ac_min_soc, window_s=self._ac_window_s)
         self._ac_armed_until = d["armed_until"]
         self._ac_fails = d["fails"]
         self._ac_prev_ignition = d["prev_ignition"]
+
+        # Classify the event for the journal line below. "idle" = nothing notable this poll -> silent
+        # (keeps the journal readable; the raw values are in InfluxDB regardless).
+        if rising:
+            event = "engine_start_armed"
+        elif d["actuate"]:
+            event = "reasserting"
+        elif d["notice"]:
+            event = "stood_down" if "battery" in d["notice"] else "gave_up"
+        elif prev_armed and d["armed_until"] is None:
+            event = "confirmed_on"          # camper mode came on -> we disarmed, success
+        else:
+            event = "idle"
+
+        if event != "idle":
+            # One rich line to the JOURNAL (systemd captures stdout) — the inputs are on the line so
+            # a session is analysable with `journalctl -u calictl --grep auto-camper`. journald is
+            # persistent + retention-tuned on buspi (see deploy notes), so no bespoke log file.
+            print("auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d)"
+                  % (event, d["notice"] or event.replace("_", " "), ign, camping_on, soc, warning,
+                     self._ac_fails), flush=True)
+
         if d["notice"]:
-            print("auto-camper: %s" % d["notice"], flush=True)
             self._ac_notice = {"ts": round(time.time(), 1), "msg": d["notice"]}
         if d["actuate"]:
             if self._read_only:
@@ -408,7 +496,6 @@ class Server:
                 self._ac_armed_until = None   # can't act -> don't spin
                 return
             try:
-                print("auto-camper: re-enabling camper mode + rear USB (attempt %d)" % self._ac_fails, flush=True)
                 await self.on_command("campingmode", "master", "on")
                 await self.on_command("campingmode", "usb", "on")
             except Exception as ex:           # BLE hiccup etc. -> counts as a failed attempt via fails
@@ -456,6 +543,12 @@ class Server:
             self._last_ok_ts = time.time()
             self._save_last()
             self._record_history(states.get("energy"))
+            try:
+                self._observe_transitions(states)      # PASSIVE: log camping/ignition changes + burst
+            except Exception:
+                import traceback
+                print("camping-watch error:", flush=True)
+                traceback.print_exc()
             try:
                 await self._auto_camper_step(states)   # re-enable camper+USB after an engine start
             except Exception:
@@ -803,7 +896,15 @@ class Server:
                     print("poll error:", flush=True)
                     traceback.print_exc()
                     self._record_outcome("error", e)
-                await asyncio.sleep(self.interval)
+                # Fast-poll burst: after an engine-start edge the observer sets _burst_until; poll at
+                # the short interval until it expires, so the camping shed is captured finely.
+                nap = self.interval
+                if self._burst_until is not None:
+                    if time.monotonic() < self._burst_until:
+                        nap = min(nap, self._burst_interval)
+                    else:
+                        self._burst_until = None       # window elapsed -> back to the normal cadence
+                await asyncio.sleep(nap)
 
         try:
             loop.run_until_complete(_forever())
