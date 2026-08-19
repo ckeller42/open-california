@@ -1,0 +1,19 @@
+docs/business-logic/value-freshness.md
+  s_a7757c7c919f20::t_80ef291229f50a 83-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "023c2b3a924b4dec5860b3791a9538c88f914a26",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
