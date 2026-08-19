@@ -1,12 +1,23 @@
-# Auto camper mode — re-enable camper + USB after an engine start
+# Auto camper mode — restore camping after you park
+
+> **⚠️ REDESIGN IN PROGRESS (2026-08-19).** The original premise below — *re-enable camper mode
+> **during** an engine start so USB-C stays on **through the drive*** — was **DISPROVEN on hardware.**
+> The unit **refuses to enable camping mode while the vehicle is driven** (write returns
+> `applied:false`, no `1202` push, and the unit's console shows *"nicht während der Fahrt verfügbar"*
+> — a firmware **stationary gate**, `control-and-actuation.md` §4). So the feature is being redesigned
+> to **restore camping once the vehicle is stationary again** (re-enable on the ignition **falling**
+> edge / park, not the rising edge). The `auto_camper_decide` logic + trigger described below is the
+> OLD design and is **not correct** for this constraint; the observer/monitoring sections at the end
+> are still valid and are how the gate was confirmed. The exact "stationary" predicate (Terminal-15 vs
+> road-speed vs parking-brake) is under decompile review before the trigger is rewritten.
 
 A calictl-only feature (**not in the VW app**): the camper unit **drops camper mode when the engine
-starts** (ignition / terminal-15 goes on). "Auto camper mode" re-asserts camper mode + the rear USB
-ports after that — so USB-C power and the camper outputs stay on through an engine start — while
-**respecting a manual off** and, critically, **never fighting the unit's battery protection.**
+starts** (ignition / terminal-15 goes on) and **will not let it back on until the vehicle is
+stationary again.** "Auto camper mode" restores camper mode + the rear USB ports **once you park** —
+so you don't have to re-toggle it after every drive — while **respecting a manual off** and,
+critically, **never fighting the unit's battery protection.**
 
-Toggle it on the web-UI **Camping** card ("Auto re-enable after engine start"). The setting persists
-across daemon restarts. It is off by default.
+Toggle it on the web-UI **Camping** card. The setting persists across daemon restarts. Off by default.
 
 ## How it decides (pure logic: `calictl/automation.py::auto_camper_decide`)
 
@@ -106,13 +117,13 @@ around the edge and **flags a flip-flop** (≥2 `master_on` transitions within `
   only then; the 30 s poll observer + fast-poll burst remain the always-on baseline. The push lines
   also **confirm the unit's push channel on this specific unit** (decompile-asserted, not yet observed
   here).
-- **The shed is firmware-side, not an app interlock.** The camping control path has no
-  ignition/Terminal-15 check; but the app ships a **"camping mode only possible when stationary"**
-  dialog (`dialog_info_campingMode_onlyPossibleWhenStationary_*`). So the unit itself disables
-  camping while moving/engine-on. **Implication for auto-camper:** re-asserting *during* the drive
-  will likely be **refused by firmware** (a source of the very flip-flop we guard against) — the
-  feature probably only succeeds once **stationary / engine off**. The observation will confirm
-  which, and may move the correct trigger from "after engine start" to "once stationary again."
+- **The shed is firmware-side, not an app interlock** — CONFIRMED by a live write test (2026-08-19).
+  The app ships a **"camping mode only possible when stationary"** dialog
+  (`dialog_info_campingMode_onlyPossibleWhenStationary_*`); writing `campingmode master=on` with the
+  engine running was **refused by the unit** (`applied:false`, no `1202` push, the unit's console
+  popped *"nicht während der Fahrt verfügbar"*). So re-asserting *during* the drive is **impossible**,
+  not merely flip-flop-prone. This is what moves the trigger from "after engine start" to **"once
+  stationary again"** (redesign — see the banner at the top).
 
 ## Logging & analysis
 
