@@ -17,7 +17,7 @@ import os
 import time
 from pathlib import Path
 
-from . import protocol, semantics, overrides, mqtt, influx, freshness, history
+from . import protocol, semantics, overrides, mqtt, influx, freshness, history, automation
 from .device import CamperDevice, ConnectionUnavailable
 
 # How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
@@ -107,6 +107,13 @@ class ServeBackend:
             # "auto" (activity-scoped) or "release" (user tapped Disconnect) — lets the UI show
             # "Disconnected" distinctly from "Van asleep".
             "session_mode": (getattr(self._s, "_session_mode", None) or "auto") if persistent else "off",
+            # Auto camper mode: the toggle, whether it's actively re-asserting, and a one-time
+            # give-up/stand-down notice the web UI shows as a toast.
+            "auto_camper": {
+                "enabled": bool(getattr(self._s, "_auto_camper", False)),
+                "armed": getattr(self._s, "_ac_armed_until", None) is not None,
+                "notice": getattr(self._s, "_ac_notice", None),
+            },
         }
         return out
 
@@ -114,6 +121,11 @@ class ServeBackend:
         """Bridge the web-UI connection toggle onto the daemon loop (like `command`)."""
         fut = asyncio.run_coroutine_threadsafe(self._s.set_session_mode(action), self._loop)
         return fut.result(timeout=15)
+
+    def set_auto_camper(self, on):
+        """Toggle the auto-camper feature (a persisted setting; actuation still respects read-only).
+        Runs synchronously — it only flips a flag + persists, no BLE."""
+        return {"ok": True, "auto_camper": self._s.set_auto_camper(on)}
 
     def history(self, hours=24):
         """Leisure-battery samples for the last ``hours``, oldest first — read from the daemon's
@@ -220,6 +232,7 @@ class Server:
         self._outcomes_cache = os.environ.get(
             "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl"))
         self._appends = 0                   # appends since the last trim rewrite
+        self._auto_camper = False           # default BEFORE _load_last so a persisted value survives
         self._load_last()                   # AFTER the defaults: it restores _water_good/_water_stale_since
         self._mqtt = None
         self._iw = None                     # influx write_api
@@ -233,6 +246,17 @@ class Server:
         self._session = None
         self._session_state = "off"        # off|connecting|up|degraded|asleep
         self._backoff_fails = 0
+        # Auto camper mode (re-enable camper+USB after the engine disables it). See automation.py +
+        # docs/business-logic/auto-camper-mode.md. The `_auto_camper` toggle is loaded above (persists);
+        # the rest is per-arm-cycle runtime state.
+        self._ac_prev_ignition = None       # previous poll's ignition (for the rising-edge trigger)
+        self._ac_armed_until = None         # monotonic deadline while re-asserting, else None
+        self._ac_fails = 0                  # consecutive re-asserts this arm cycle
+        self._ac_notice = None              # {ts, msg} for a one-time give-up log + web toast
+        self._ac_min_soc = int(os.environ.get("CALICTL_AUTO_CAMPER_MIN_SOC",
+                                              automation.AUTO_CAMPER_MIN_SOC))
+        self._ac_window_s = float(os.environ.get("CALICTL_AUTO_CAMPER_WINDOW_S",
+                                                automation.AUTO_CAMPER_WINDOW_S))
 
     def _load_last(self):
         """Load the persisted last-known decoded state (best-effort; missing/corrupt -> empty)."""
@@ -243,6 +267,7 @@ class Server:
             self._last_ok_ts = blob.get("ts")
             self._water_good = blob.get("water_good")      # last plausible water survives restarts
             self._water_stale_since = blob.get("water_stale_since")
+            self._auto_camper = bool(blob.get("auto_camper", False))   # toggle survives restarts
         except (OSError, ValueError):
             pass
 
@@ -254,7 +279,8 @@ class Server:
             with open(tmp, "w") as f:
                 json.dump({"ts": self._last_ok_ts, "last": self._last,
                            "water_good": self._water_good,
-                           "water_stale_since": self._water_stale_since}, f)
+                           "water_stale_since": self._water_stale_since,
+                           "auto_camper": self._auto_camper}, f)
             os.replace(tmp, self._state_cache)
         except OSError:
             pass
@@ -341,6 +367,53 @@ class Server:
             self._backoff_fails = 0
             self._wake_session.set()
 
+    def set_auto_camper(self, on):
+        """Toggle the auto-camper feature (persisted). Disabling clears any in-flight arm. Returns
+        the new state. See automation.auto_camper_decide + docs/business-logic/auto-camper-mode.md."""
+        self._auto_camper = bool(on)
+        if not self._auto_camper:
+            self._ac_armed_until = None
+            self._ac_fails = 0
+        self._save_last()
+        print("auto-camper: %s" % ("ENABLED" if self._auto_camper else "disabled"), flush=True)
+        return self._auto_camper
+
+    async def _auto_camper_step(self, states):
+        """Re-enable camper mode + rear USB after the ENGINE disables it, gated on battery health and
+        bounded retries (never fights load-shedding, never loops). Runs each poll AFTER the read (the
+        BLE lock is free), actuates via on_command under that lock. Never raises out of the poll."""
+        veh = states.get("vehicle") or {}
+        ign = veh.get("ignition_on")
+        if not self._auto_camper:
+            self._ac_prev_ignition = ign      # keep the edge tracked so enabling mid-drive won't misfire
+            return
+        camp = states.get("campingmode") or {}
+        e = states.get("energy") or {}
+        warning = bool(e.get("sleep_warning") or e.get("warning_active")
+                       or (e.get("warning_level") or 0) >= 1)
+        d = automation.auto_camper_decide(
+            ignition_on=ign, prev_ignition=self._ac_prev_ignition,
+            camping_on=camp.get("master_on"), soc=e.get("soc2_pct"), warning=warning,
+            now=time.monotonic(), armed_until=self._ac_armed_until, fails=self._ac_fails,
+            min_soc=self._ac_min_soc, window_s=self._ac_window_s)
+        self._ac_armed_until = d["armed_until"]
+        self._ac_fails = d["fails"]
+        self._ac_prev_ignition = d["prev_ignition"]
+        if d["notice"]:
+            print("auto-camper: %s" % d["notice"], flush=True)
+            self._ac_notice = {"ts": round(time.time(), 1), "msg": d["notice"]}
+        if d["actuate"]:
+            if self._read_only:
+                print("auto-camper: camper mode is off but writes are read-only; not re-enabling", flush=True)
+                self._ac_armed_until = None   # can't act -> don't spin
+                return
+            try:
+                print("auto-camper: re-enabling camper mode + rear USB (attempt %d)" % self._ac_fails, flush=True)
+                await self.on_command("campingmode", "master", "on")
+                await self.on_command("campingmode", "usb", "on")
+            except Exception as ex:           # BLE hiccup etc. -> counts as a failed attempt via fails
+                print("auto-camper: actuation failed: %r" % ex, flush=True)
+
     async def poll(self):
         # One BLE read of every function under the lock; cache the DECODED state
         # (on_command builds full-packet control frames from it) and derive the
@@ -383,6 +456,12 @@ class Server:
             self._last_ok_ts = time.time()
             self._save_last()
             self._record_history(states.get("energy"))
+            try:
+                await self._auto_camper_step(states)   # re-enable camper+USB after an engine start
+            except Exception:
+                import traceback
+                print("auto-camper step error:", flush=True)
+                traceback.print_exc()
         # MQTT discovery for newly-seen installed functions
         inst = installed_from(states)
         new = inst - self._published

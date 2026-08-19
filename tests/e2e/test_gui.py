@@ -228,3 +228,15 @@ def test_open_control_survives_a_state_poll(page):
     # if refreshState re-rendered, the marked <select> was replaced -> marker gone / focus lost
     assert sel.get_attribute("data-probe") == "keep", "the open <select> was destroyed by a state poll"
     assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
+
+
+def test_auto_camper_toggle_present_and_flips(page):
+    """The Auto-camper toggle renders on the Camping card and flips (a persisted daemon setting,
+    not a BLE write — so it works over the mock without actuation)."""
+    page.get_by_text("Camping mode", exact=True).first.click()
+    expect(page.get_by_text("Auto re-enable after engine start")).to_be_visible()
+    # the last .switch on the camping screen is the auto-camper toggle (after master/lights/usb)
+    sw = page.locator('button[aria-label="Auto camper mode"]')
+    expect(sw).to_have_attribute("aria-checked", "false")
+    sw.click()
+    expect(sw).to_have_attribute("aria-checked", "true", timeout=8000)

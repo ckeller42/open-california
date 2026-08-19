@@ -28,6 +28,7 @@
  * @property {boolean} read_only            daemon rejects control writes
  * @property {'off'|'connecting'|'up'|'degraded'|'asleep'} session   persistent BLE session state
  * @property {'off'|'auto'|'release'} session_mode                    activity-scoped vs user-disconnected
+ * @property {{enabled:boolean, armed:boolean, notice:?{ts:number,msg:string}}} [auto_camper] auto-camper toggle + notice
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -187,6 +188,7 @@ let inflight = null;     // {fn, what, value, key} currently POSTing (NOT prunab
 /** @type {Record<string, string|number|null>} */
 const optimistic = {};   // key -> intended value, shown until the real state catches up
 let lastRender = "";     // signature of the last paint, to skip idle re-renders
+let lastAcNotice = 0;    // ts of the last auto-camper notice shown as a toast (dedupe)
 
 /** @type {(fn: string, what: string) => string} */
 const qKey = (fn, what) => fn + "·" + what;
@@ -463,6 +465,10 @@ async function refreshState(force) {
     return;
   }
   STATE = next;
+  // Auto-camper give-up/stand-down notice: the daemon stamps a one-time {ts,msg} when it stands
+  // down (low battery) or gives up (keeps dropping). Show it as a toast once.
+  const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
+  if (acn && acn.ts && acn.ts > lastAcNotice) { lastAcNotice = acn.ts; toast(acn.msg, "warn"); }
   // "live" = the van is currently reachable; "offline" = daemon can't reach it (van asleep),
   // matching the banner. The web UI itself is up either way — this reflects the vehicle link.
   if (!hasWork()) {
@@ -1051,6 +1057,7 @@ function renderFeature(fn) {
     app.appendChild(card);
   }
   if (f.roof) app.appendChild(roofControls());
+  if (fn === "campingmode") app.appendChild(autoCamperCard());
   if (f.readouts && f.readouts.length) {
     const card = document.createElement("div");
     card.className = "card";
@@ -1253,6 +1260,39 @@ function spinner() {
   const s = document.createElement("span");
   s.className = "spinner";
   return s;
+}
+
+// Auto camper mode toggle — a daemon SETTING (not a per-poll control), rendered on the Camping
+// card. Re-enables camper mode + rear USB after the engine disables it; stands down on low battery.
+function autoCamperCard() {
+  const ac = (STATE._meta && STATE._meta.auto_camper) || {};
+  const card = document.createElement("div"); card.className = "card";
+  const row = document.createElement("div"); row.className = "row";
+  const lbl = document.createElement("span"); lbl.className = "lbl";
+  lbl.textContent = "Auto re-enable after engine start" + (ac.armed ? "  ⟳ working…" : "");
+  row.appendChild(lbl);
+  const sw = document.createElement("button");
+  sw.className = "switch";
+  sw.setAttribute("role", "switch"); sw.setAttribute("aria-label", "Auto camper mode");
+  sw.setAttribute("aria-checked", ac.enabled ? "true" : "false");
+  sw.disabled = readOnly();
+  sw.onclick = async () => {
+    sw.disabled = true;
+    try {
+      await api("/api/auto_camper", { method: "POST", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ enabled: !ac.enabled }) });
+      toast(ac.enabled ? "Auto camper off" : "Auto camper on", "ok");
+    } catch (e) { toast("Couldn't change auto camper", "error"); }
+    await refreshState(true);
+  };
+  row.appendChild(sw); card.appendChild(row);
+  const sub = document.createElement("div");
+  sub.style.cssText = "padding: 0 1rem .7rem; color: var(--muted); font-size: .8rem; line-height: 1.35;";
+  sub.textContent = "Keeps camper mode + rear USB on through engine starts (the unit drops them when "
+    + "the ignition comes on). Respects a manual off, and stands down on low battery so it never "
+    + "fights the unit's power saving.";
+  card.appendChild(sub);
+  return card;
 }
 
 function roofControls() {

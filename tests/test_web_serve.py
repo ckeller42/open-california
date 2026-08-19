@@ -550,3 +550,18 @@ def test_maybe_start_mqtt_survives_no_broker(monkeypatch):
     monkeypatch.setenv("MQTT_PORT", "1")   # nothing listens on port 1 -> connect refused
     s = serve.Server(influx_enabled=False)
     assert s._maybe_start_mqtt(loop=None) is None   # graceful None, never raises
+
+
+def test_auto_camper_toggle_persists_and_surfaces():
+    """The auto-camper toggle flips + persists to the state cache and shows in _meta.auto_camper.
+    (conftest points CALICTL_STATE_CACHE at a per-test temp, shared by both Server instances.)"""
+    from calictl import serve
+    s = serve.Server()
+    be = serve.ServeBackend(s, loop=None)
+    assert be.state()["_meta"]["auto_camper"]["enabled"] is False   # off by default
+    assert be.set_auto_camper(True)["auto_camper"] is True
+    assert be.state()["_meta"]["auto_camper"]["enabled"] is True
+    s2 = serve.Server()                                             # fresh load from the same cache
+    assert s2._auto_camper is True
+    be2 = serve.ServeBackend(s2, loop=None)
+    assert be2.set_auto_camper(False)["auto_camper"] is False       # and back off
