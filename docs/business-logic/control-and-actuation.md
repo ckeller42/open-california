@@ -147,11 +147,27 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
 | Feature | `set` wired | On-device | Notes |
 |---|---|---|---|
 | **cooler** | `power` on/off, `level` 1-5 | ✅ actuates | State 0↔1, Level applied. |
-| **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). |
+| **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates **when stationary** | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). **REFUSED while driving** — see the stationary gate below. |
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
 | **airheater** | `power`, `level` 1-10 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
 | **roof** | not wired | — | Needs the ~500 ms SafetyCounter move loop (§3); not installed here. |
 | roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
+
+**Camping mode — a firmware STATIONARY GATE (live-verified 2026-08-19).** Turning camping mode
+**on is refused by the unit while the vehicle is being driven** — a write of `campingmode master=on`
+with the engine running does NOT take: the daemon's actuation returns `applied:false` (its verify
+reads the state unchanged), no genuine `1202` push reports a change, and the **unit's own console
+display pops _"Diese Funktion ist während der Fahrt nicht verfügbar"_** ("not available while
+driving"). This is the decompile's `dialog_info_campingMode_onlyPossibleWhenStationary` gate,
+enforced **unit-side** (not just an app UI block). Conversely, an engine start **sheds** camping —
+`master_on`→0 and `lights_on`→0 (and the rear USB with them, since USB is master-gated — see
+`signals.md`) — **cleanly, once, no flip-flop** (captured on both the 30 s poll and the genuine
+`1202` push channel, which is hereby **confirmed on real hardware**: the unit pushes camping state
+on `1202` and ignition on `1004`, exactly as the app subscribes). Implication for the `auto-camper`
+feature: re-enabling camping *during* a drive is impossible; the only viable moment is once the
+vehicle is **stationary again**. The exact "stationary" predicate (Terminal-15 vs road-speed vs
+parking-brake) is under decompile review; see `auto-camper-mode.md`. NB the BLE link also **drops
+for ~1 min at the engine crank** — buspi cannot reach the unit right at the start edge.
 
 **Lighting — SOLVED 2026-08-16: physical actuation works; the real gate is the unit's
 WAKE/active state, not any arming frame (photon-verified).** The gap's long history, kept
@@ -258,7 +274,7 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |
 | lighting | `profile` | SET_PROFILE, ProfileNumber (Fav 1-7, 10 wake, 11 interior) | `dg/h` u0 | DV (activate) |
 | lighting | `save_profile` | SET_BRIGHTNESS w/ ProfileNumber=N + all zones (define a favorite) | `dg/h` l3 | DV |
-| campingmode | `master`/`lights`/`usb` | State / lights (inverted) / UsbCharger | `tf/a` | live-verified |
+| campingmode | `master`/`lights`/`usb` | State / lights (inverted) / UsbCharger | `tf/a` | live-verified (on **only when stationary** — §4 gate) |
 | roof | `open`/`close`/`stop` | Up/Down + app-gen SafetyCounter | `ig/c` | not-live-verified |
 
 **Not wired (deliberately):** airheater `permanent` (the app's `E3()` only writes OFF; ON value

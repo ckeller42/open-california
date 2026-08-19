@@ -126,6 +126,16 @@ inverted, master-gated); `usb_charger`/`master_on` unchanged (normal); `OutsideL
 (tied to `InteriorLight`); catalog scale marked `inverted-combined`; HA entity → single
 "Camping Lights", USB → "Rear USB Ports".
 
+**USB is PHYSICALLY master-gated (owner-confirmed 2026-08-19).** The `usb_charger` field is only
+the retained SETTING bit — it stays `1` even when camping master is off, but the **rear USB ports
+are then physically dead**. So `usb_charger` alone is a misleading "is USB powered?" signal; true
+power is `master_on AND usb_charger`. This showed up in the engine-start observation: when the unit
+sheds camping (`master_on`→0), `usb_charger` does *not* transition, yet the ports lose power. A
+derived `usb_powered = master_on and usb_charger` is the honest signal to surface (see
+`auto-camper-mode.md`). Corollary of the master gate: since camping mode itself is **refused while
+driving** (the stationary gate, `control-and-actuation.md` §4), rear USB **cannot** be kept powered
+while the vehicle is driven.
+
 **Guardrail hardening (done).** `tools/app_setters.py` now flags any field whose app setter is
 inverted/combined as **`SEMANTIC-REVIEW-NEEDED`** (the side branch in §1's diagram) — so a
 naive `bool(field)` interpreter can't silently disagree with the app. Presence + scale are
