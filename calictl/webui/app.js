@@ -332,19 +332,23 @@ const FEATURES = {
   water: {
     title: "Water", icon: "💧",
     readouts: [
-      { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  🕒 stale" : ""),
+      { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  🕒 last measured" : ""),
         bar: (s) => s.fresh && s.fresh.percent },
-      { label: "Waste water", get: (s) => tank(s.waste) + (s.waste && s.waste.stale ? "  🕒 stale" : ""),
+      { label: "Waste water", get: (s) => tank(s.waste) + (s.waste && s.waste.stale ? "  🕒 last measured" : ""),
         bar: (s) => s.waste && s.waste.percent },
     ],
-    // The water sensor only measures while the van's water system is on; parked/asleep the unit
-    // latches stale values and the daemon holds the last plausible reading for BOTH tanks. Soft
-    // `note` (informational) — NOT a `warn` (fault); a parked van is normal, not a fault.
+    // Water is READ-ONLY on BLE (char 1302) and the unit only re-measures while the van's water
+    // system runs — confirmed 2026-08-19: no BLE activity (not even the 1003 heartbeat) triggers a
+    // refresh, so the char just holds the LAST MEASURED level until the pump/system next runs. This
+    // is a soft `note` (informational, expected while parked) — NOT a `warn`/fault. See
+    // docs/business-logic/value-freshness.md.
     note: (s) => ((s.fresh && s.fresh.stale) || (s.waste && s.waste.stale)
-      ? "🕒 Water levels are stale — the van's water system is off (held since "
-        + (s.stale_since ? agoText(Math.round(Date.now() / 1000 - s.stale_since)) + ")" : "last active measurement)")
+      ? "🕒 Showing the LAST MEASURED water level"
+        + (s.stale_since ? " (" + agoText(Math.round(Date.now() / 1000 - s.stale_since)) + " ago)" : "")
+        + " — the BLE level only refreshes while the van's water system is running, so it lags until "
+        + "the pump next runs. It's read correctly, just not live."
       : null),
-    summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%${s.fresh.stale ? " (stale)" : ""}` : ""),
+    summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%${s.fresh.stale ? " (last meas.)" : ""}` : ""),
   },
   energy: {
     title: "Energy", icon: "🔋", chart: true,
