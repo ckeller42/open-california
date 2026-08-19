@@ -1263,13 +1263,14 @@ function spinner() {
 }
 
 // Auto camper mode toggle — a daemon SETTING (not a per-poll control), rendered on the Camping
-// card. Re-enables camper mode + rear USB after the engine disables it; stands down on low battery.
+// card. Restores camper mode + rear USB once you PARK (the unit refuses camping-on while driving);
+// stands down on low battery. `armed` = a restore is owed (the engine shed camping).
 function autoCamperCard() {
   const ac = (STATE._meta && STATE._meta.auto_camper) || {};
   const card = document.createElement("div"); card.className = "card";
   const row = document.createElement("div"); row.className = "row";
   const lbl = document.createElement("span"); lbl.className = "lbl";
-  lbl.textContent = "Auto re-enable after engine start" + (ac.armed ? "  ⟳ working…" : "");
+  lbl.textContent = "Restore camping after you park" + (ac.armed ? "  ⟳ will restore on park" : "");
   row.appendChild(lbl);
   const sw = document.createElement("button");
   sw.className = "switch";
@@ -1288,9 +1289,10 @@ function autoCamperCard() {
   row.appendChild(sw); card.appendChild(row);
   const sub = document.createElement("div");
   sub.style.cssText = "padding: 0 1rem .7rem; color: var(--muted); font-size: .8rem; line-height: 1.35;";
-  sub.textContent = "Keeps camper mode + rear USB on through engine starts (the unit drops them when "
-    + "the ignition comes on). Respects a manual off, and stands down on low battery so it never "
-    + "fights the unit's power saving.";
+  sub.textContent = "The unit drops camper mode when the engine starts and won't allow it back on "
+    + "while driving. This turns camper mode + rear USB back on once you park (ignition off), if the "
+    + "engine had shed it. Respects a manual off, and stands down on low battery so it never fights "
+    + "the unit's power saving.";
   card.appendChild(sub);
   return card;
 }
