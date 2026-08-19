@@ -1,0 +1,20 @@
+calictl/webui/app.js
+  s_a7757c7c919f20::t_6bb6383687414b 335,337,340-344,346-349
+  s_a7757c7c919f20::t_b9461f5a2a58a5 351
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "edd0f898e1351f04796bf7e1607cbad11e393b10",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
