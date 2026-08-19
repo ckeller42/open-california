@@ -2,6 +2,28 @@ import asyncio
 from calictl import serve, protocol, overrides, control
 
 
+def test_observer_logs_transitions_and_bursts_on_engine_start(capsys):
+    """The passive camping observer: first poll is a silent baseline; a later change logs one
+    'camping-watch' line; and an engine-start edge (ignition OR dcdc_charging rising) starts the
+    fast-poll burst. It NEVER actuates and runs regardless of the auto-camper toggle."""
+    s = serve.Server(influx_enabled=False)
+    assert s._auto_camper is False           # observer is independent of the feature toggle
+    base = {"vehicle": {"ignition_on": False},
+            "energy": {"dcdc_charging": False, "soc2_pct": 80, "dcdc_current": 0, "batt2_current": 0.0},
+            "campingmode": {"master_on": True, "usb_charger": True, "lights_on": False, "enable": False}}
+    s._observe_transitions(base)             # baseline poll -> nothing logged, no burst
+    assert s._burst_until is None
+    assert capsys.readouterr().out == ""
+    # engine start: ignition + dcdc rise, camping sheds -> one log line + a burst armed
+    started = {"vehicle": {"ignition_on": True},
+               "energy": {"dcdc_charging": True, "soc2_pct": 80, "dcdc_current": 30, "batt2_current": 12.0},
+               "campingmode": {"master_on": False, "usb_charger": False, "lights_on": False, "enable": True}}
+    s._observe_transitions(started)
+    out = capsys.readouterr().out
+    assert "camping-watch:" in out and "master_on 1->0" in out and "ignition 0->1" in out
+    assert s._burst_until is not None        # fast-poll burst armed by the engine-start edge
+
+
 def test_meta_session_state_reflects_supervisor(monkeypatch):
     """_meta.session mirrors the supervisor's state machine; online == (session up)."""
     from calictl import serve
