@@ -1,0 +1,26 @@
+docs/business-logic/signals.md
+  s_a7757c7c919f20::t_77579facbd9d0d 129-138
+docs/business-logic/control-and-actuation.md
+  s_a7757c7c919f20::t_bd468d54b7d18b 150
+  s_a7757c7c919f20::t_ff0d5bf7bbe072 156-171
+  s_a7757c7c919f20::t_e2a7f433c1581f 277
+docs/business-logic/auto-camper-mode.md
+  s_a7757c7c919f20::t_9637011013880f 120-126
+  s_a7757c7c919f20::t_957b3010e822cd 1-12,15-18,20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "8f4847ab9c1189bf76ad3dbc416423b5f0e7d91e",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
