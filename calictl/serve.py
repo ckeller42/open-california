@@ -268,6 +268,12 @@ class Server:
         self._burst_until = None            # monotonic deadline while fast-polling, else None
         self._burst_interval = float(os.environ.get("CALICTL_OBSERVE_BURST_INTERVAL_S", "3"))
         self._burst_window_s = float(os.environ.get("CALICTL_OBSERVE_BURST_S", "180"))
+        # Notification-driven observer: when the persistent session is up, the unit PUSHES camping
+        # state on char 1202 (and ignition on 1004) — decompile-confirmed. Log those the instant they
+        # arrive (full resolution, no poll wait). Reverse-map state-char UUID -> function name.
+        self._push_char_to_fn = {str(f.state_char).lower(): name
+                                 for name, f in self.funcs.items() if f.state_char}
+        self._push_prev = {}                # last pushed value per tracked field (for change detection)
 
     def _load_last(self):
         """Load the persisted last-known decoded state (best-effort; missing/corrupt -> empty)."""
@@ -441,6 +447,31 @@ class Server:
                  self._obs_fmt(e.get("dcdc_current")), self._obs_fmt(e.get("batt2_current")),
                  dt, self._obs_fmt(e.get("soc2_pct"))), flush=True)
 
+    # camping/ignition fields we watch on a push, per function (mirrors _observe_transitions).
+    _PUSH_FIELDS = {"campingmode": ("master_on", "usb_charger", "lights_on", "enable"),
+                    "vehicle": ("ignition_on",)}
+
+    def _on_ble_push(self, uuid, data):
+        """Fired IN THE BLE LOOP the instant a status char pushes a notification (persistent session
+        only). Logs camping/ignition changes at full resolution — this both CONFIRMS the unit's push
+        channel on THIS unit (decompile said 1202 pushes; never yet observed here) and catches toggles
+        between polls. Passive, sync, best-effort: never actuates, never raises into bleak. The 30 s
+        poll observer (_observe_transitions) remains the reliable baseline; this is the fast overlay,
+        tagged `camping-push` so the two channels are distinguishable in the journal."""
+        fn = self._push_char_to_fn.get(uuid)
+        fields = self._PUSH_FIELDS.get(fn)
+        if not fields:
+            return                            # not a char we watch (only campingmode / vehicle)
+        interp = semantics.interpret(fn, protocol.decode(self.funcs[fn], data))
+        cur = {k: interp.get(k) for k in fields}
+        changed = {k: (self._push_prev[k], v) for k, v in cur.items()
+                   if k in self._push_prev and self._push_prev[k] != v}
+        self._push_prev.update(cur)
+        if changed:
+            parts = ", ".join("%s %s->%s" % (k, self._obs_fmt(o), self._obs_fmt(n))
+                              for k, (o, n) in changed.items())
+            print("camping-push[%s]: %s" % (fn, parts), flush=True)
+
     async def _auto_camper_step(self, states):
         """Re-enable camper mode + rear USB after the ENGINE disables it, gated on battery health and
         bounded retries (never fights load-shedding, never loops). Runs each poll AFTER the read (the
@@ -589,7 +620,7 @@ class Server:
             except Exception:
                 pass
             self._session = None
-        sess = device.PersistentSession(self.dev)
+        sess = device.PersistentSession(self.dev, on_push=self._on_ble_push)
         try:
             await sess.start()
         except Exception as e:

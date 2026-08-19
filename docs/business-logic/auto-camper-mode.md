@@ -98,9 +98,14 @@ around the edge and **flags a flip-flop** (≥2 `master_on` transitions within `
   fields `State`/`UsbCharger`/`Outside`+`InteriorLight`/`Enable`/`Installed`), and the app
   **subscribes to notifications** on it (`jb/b.java:142` `td.c` subscribe; router `pf/j.java:105`) —
   exactly like lighting's `1502`. So the engine-start shed arrives as an **unsolicited `1202`
-  notification**; ignition (`1004`) is pushed too. calictl already reads `1202`, so a
-  **notification-subscription observer is the superior follow-up** to the fast-poll burst (full
-  resolution, zero polling) if the burst proves too coarse.
+  notification**; ignition (`1004`) is pushed too. calictl already reads `1202`. **This is now
+  wired:** `serve.Server._on_ble_push` (via `device._subscribe_all(..., on_push=)` on the persistent
+  session) logs `camping-push[...]` the instant a `1202`/`1004` notification changes camping or
+  ignition — full resolution, no poll wait. **Caveat:** the persistent session is only held while the
+  **web UI is active** (otherwise the BLE slot is released for the phone), so the push overlay fires
+  only then; the 30 s poll observer + fast-poll burst remain the always-on baseline. The push lines
+  also **confirm the unit's push channel on this specific unit** (decompile-asserted, not yet observed
+  here).
 - **The shed is firmware-side, not an app interlock.** The camping control path has no
   ignition/Terminal-15 check; but the app ships a **"camping mode only possible when stationary"**
   dialog (`dialog_info_campingMode_onlyPossibleWhenStationary_*`). So the unit itself disables

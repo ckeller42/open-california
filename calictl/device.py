@@ -520,7 +520,7 @@ class CamperDevice:
                 pass
 
     @staticmethod
-    async def _subscribe_all(client, sink: dict | None = None) -> int:
+    async def _subscribe_all(client, sink: dict | None = None, on_push=None) -> int:
         """start_notify on every notifiable/indicatable characteristic — the app
         subscribes all status chars before control writes are honoured. Returns the
         count; individual failures are swallowed (best-effort handshake).
@@ -529,11 +529,22 @@ class CamperDevice:
         lowercased char UUID. Some chars are **push-only for freshness** — notably water
         (``1302``): a bare read returns a stale latch, and the true level arrives only as a
         notification (decompile-confirmed 2026-07-14). Readers prefer ``sink`` over a bare read.
+
+        When ``on_push(uuid_lower, data)`` is given, it is called for EVERY notification (in
+        addition to the sink) — the daemon uses it to log camping/ignition changes the instant
+        the unit pushes them (the app subscribes camping state on ``1202``, decompile-confirmed),
+        rather than waiting for the next poll. It must be sync + fast; its exceptions are swallowed.
         """
         def _handler(sender, data):
+            u = str(getattr(sender, "uuid", sender)).lower()
+            b = bytes(data)
             if sink is not None:
-                u = str(getattr(sender, "uuid", sender)).lower()
-                sink[u] = bytes(data)
+                sink[u] = b
+            if on_push is not None:
+                try:
+                    on_push(u, b)
+                except Exception:
+                    pass
         n = 0
         for svc in client.services:
             for ch in svc.characteristics:
@@ -568,10 +579,11 @@ class PersistentSession:
        arm-delay per action), and reads stay fresh continuously.
     """
 
-    def __init__(self, dev: "CamperDevice"):
+    def __init__(self, dev: "CamperDevice", on_push=None):
         self._dev = dev
         self._client = None
         self._notif: dict[str, bytes] = {}
+        self._on_push = on_push        # optional sync callback(uuid_lower, data) fired on each push
         self._stop = None
         self._beat = None
 
@@ -588,7 +600,7 @@ class PersistentSession:
             except Exception:
                 pass
         self._notif = {}
-        await self._dev._subscribe_all(client, self._notif)
+        await self._dev._subscribe_all(client, self._notif, on_push=self._on_push)
         self._stop = asyncio.Event()
         self._beat = asyncio.create_task(self._dev._heartbeat(client, self._stop))
         await asyncio.sleep(HEARTBEAT_WARMUP_S)     # let the arm + first measurement register

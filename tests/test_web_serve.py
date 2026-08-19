@@ -24,6 +24,30 @@ def test_observer_logs_transitions_and_bursts_on_engine_start(capsys):
     assert s._burst_until is not None        # fast-poll burst armed by the engine-start edge
 
 
+def test_push_observer_logs_camping_change(capsys, monkeypatch):
+    """Notification-driven overlay: a pushed 1202 frame that changes camping master logs one
+    'camping-push' line; the first push is a silent baseline; a non-watched char is ignored.
+    Change-detection is what we test here (decode/interpret are covered elsewhere)."""
+    s = serve.Server(influx_enabled=False)
+    ch = str(s.funcs["campingmode"].state_char).lower()
+    seq = [{"master_on": True, "usb_charger": True, "lights_on": False, "enable": False},
+           {"master_on": False, "usb_charger": True, "lights_on": False, "enable": False}]
+    i = {"n": 0}
+
+    def fake_interp(fn, decoded):
+        r = seq[min(i["n"], len(seq) - 1)]
+        i["n"] += 1
+        return r
+    monkeypatch.setattr(serve.semantics, "interpret", fake_interp)
+    monkeypatch.setattr(serve.protocol, "decode", lambda f, d: d)
+    s._on_ble_push(ch, b"\x00")                 # baseline push -> silent
+    assert capsys.readouterr().out == ""
+    s._on_ble_push(ch, b"\x00")                 # master 1->0 -> one line
+    assert "camping-push[campingmode]: master_on 1->0" in capsys.readouterr().out
+    s._on_ble_push("0000dead-0000-1000-8000-00805f9b34fb", b"\x00")   # unwatched char -> ignored
+    assert capsys.readouterr().out == ""
+
+
 def test_meta_session_state_reflects_supervisor(monkeypatch):
     """_meta.session mirrors the supervisor's state machine; online == (session up)."""
     from calictl import serve
