@@ -80,3 +80,22 @@ recorded per-poll in `poll_outcomes.jsonl` and classified by `tools.analyze_batt
   long unbroken `ble_error` run (observed 2026-08-18). NOT a buspi fault.
 - **Daemon down / Pi reboot** — no `poll_outcomes` rows at all for the window.
 - **Influx-write failure** — polls succeed (`outcome: ok`) but nothing is stored: a *false* gap.
+
+## Water freshness — the settled conclusion (2026-08-19)
+
+Traced end-to-end. Water is READ-ONLY on char `1302` (no `1301` control char, `qg/b` never writes),
+and the app interprets `FreshWaterLevel` LITERALLY — `qg/b.h()/i()` = liters/percent with **no floor,
+clamp, or 1→0 mapping** (so the app displaying 0 means it received `Level=0`; a read of 1 is a stale
+value, not a floor). Our decode matches the app bit-for-bit (`FreshWaterLevel@8/w8`, `FreshWaterVolume@16/w8`…).
+
+**The `1003` heartbeat does NOT refresh water** — DISPROVEN 2026-08-19: subscribed to `1302` with the
+heartbeat running for 60 s → **0 notifications**; reads always return the same value. The unit pushes
+`1302` only on an actual measured CHANGE, and it re-measures when its **own water system is active**,
+NOT in response to any BLE activity we can send. (The heartbeat's real, still-valid role is keeping
+the LINK alive during a read — not driving measurement.)
+
+**So there is no BLE-side fix**: buspi reads the char faithfully; the value it holds is the unit's
+last measurement and self-corrects only when the unit next re-measures (water system on). The phone
+app reads the same char and sees the same value; a physical control-panel "0" is that panel's own
+continuously-sampled sensor, which the BLE char lags. The honest surface is the **stale flag** +
+"last measured" — never a fabricated floor-correction.
