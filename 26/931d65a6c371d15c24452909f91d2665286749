@@ -1,0 +1,35 @@
+tools/analyze_camping.py
+  s_a7757c7c919f20::t_375a99a47ed354 1-177
+tests/test_web_serve.py
+  s_a7757c7c919f20::t_07c6c73b11a672 5-26
+calictl/serve.py
+  s_a7757c7c919f20::t_42862d6049217c 406-407,409-415,419-424,429-431,439-442
+  s_a7757c7c919f20::t_7edf147dd8dfb3 547-551
+  s_a7757c7c919f20::t_db5ff5921b8ac0 392-405,408,416-418,425-428,432-438,443
+  s_a7757c7c919f20::t_f259026618858a 260-270
+  s_a7757c7c919f20::t_369e72e59718fa 899-907
+  s_a7757c7c919f20::t_b6b10433e8d7e7 546
+tests/test_analyze_camping.py
+  s_a7757c7c919f20::t_e956a8bd2adb33 19
+  s_a7757c7c919f20::t_35987d1fb08c5d 1-18,20-54
+docs/business-logic/auto-camper-mode.md
+  s_a7757c7c919f20::t_690735ef5e10b1 145-146
+  s_a7757c7c919f20::t_1c825e3b1b0355 66-94
+  s_a7757c7c919f20::t_c16af361ecb434 95-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "26931d65a6c371d15c24452909f91d2665286749",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
