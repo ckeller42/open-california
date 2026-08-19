@@ -1,0 +1,29 @@
+tests/test_web_serve.py
+  s_a7757c7c919f20::t_6a513cc0d43fb3 27-50
+docs/business-logic/auto-camper-mode.md
+  s_a7757c7c919f20::t_1dee3e31027fd0 101-108
+calictl/device.py
+  s_a7757c7c919f20::t_bd836fb40ede21 523,532-536,539-540,542-547
+  s_a7757c7c919f20::t_3d09df1aa40eca 582,586
+  s_a7757c7c919f20::t_a9221cc3215724 603
+calictl/serve.py
+  s_a7757c7c919f20::t_2c73372444c488 271-276
+  s_a7757c7c919f20::t_1a4598beafdc86 623
+  s_a7757c7c919f20::t_b81c6292734118 450-474
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "94cf292d6583ccf363d1477942e0f813a00c1238",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
