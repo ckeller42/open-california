@@ -63,6 +63,32 @@ Each stand-down or give-up is **logged** (`auto-camper: …`) and surfaced once 
 - **Actuation is app-faithful** — the same `campingmode` master/USB frames the manual controls use
   (verified on-device), one-shot latch, under the single `serve` BLE lock (after the poll read).
 
+## Logging & analysis
+
+Every notable decision is logged to **stdout → the systemd journal** (no bespoke log file — the
+journal is the system log, and on buspi it is persistent). One line per notable event, with the
+decision inputs on the line so you can see *why* it acted or stood down:
+
+```
+auto-camper[<event>]: <msg> (ignition=.. camping=.. soc=.. warn=.. fails=..)
+```
+
+Events: `engine_start_armed`, `reasserting`, `confirmed_on`, `stood_down`, `gave_up`. Idle polls
+log nothing. Review a van session with:
+
+```
+journalctl -u calictl.service --grep auto-camper          # human-readable
+journalctl -u calictl.service --grep auto-camper -o json   # structured (JSON per record)
+```
+
+The raw **values** (`ignition_on`, `soc2_pct`, the battery-warning flags, camper `master_on`) are
+already written to **InfluxDB every poll** via `influx.points_for` — so the picture is InfluxDB for
+the continuous values + the journal for what the feature decided with them.
+
+**Retention:** journald on buspi is persistent (`/var/log/journal`) but ships with a small default
+cap (~a day of calictl history). A drop-in (`/etc/systemd/journald.conf.d/calictl.conf`, deployed via
+`calictl/deploy/`) raises `SystemMaxUse` + `MaxRetentionSec` so a session stays analysable for weeks.
+
 ## Config
 
 | Env | Default | Meaning |

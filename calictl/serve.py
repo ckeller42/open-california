@@ -389,18 +389,43 @@ class Server:
             return
         camp = states.get("campingmode") or {}
         e = states.get("energy") or {}
+        camping_on = camp.get("master_on")
+        soc = e.get("soc2_pct")
         warning = bool(e.get("sleep_warning") or e.get("warning_active")
                        or (e.get("warning_level") or 0) >= 1)
+        prev_armed = self._ac_armed_until is not None
+        rising = bool(ign) and not bool(self._ac_prev_ignition)
         d = automation.auto_camper_decide(
             ignition_on=ign, prev_ignition=self._ac_prev_ignition,
-            camping_on=camp.get("master_on"), soc=e.get("soc2_pct"), warning=warning,
+            camping_on=camping_on, soc=soc, warning=warning,
             now=time.monotonic(), armed_until=self._ac_armed_until, fails=self._ac_fails,
             min_soc=self._ac_min_soc, window_s=self._ac_window_s)
         self._ac_armed_until = d["armed_until"]
         self._ac_fails = d["fails"]
         self._ac_prev_ignition = d["prev_ignition"]
+
+        # Classify the event for the journal line below. "idle" = nothing notable this poll -> silent
+        # (keeps the journal readable; the raw values are in InfluxDB regardless).
+        if rising:
+            event = "engine_start_armed"
+        elif d["actuate"]:
+            event = "reasserting"
+        elif d["notice"]:
+            event = "stood_down" if "battery" in d["notice"] else "gave_up"
+        elif prev_armed and d["armed_until"] is None:
+            event = "confirmed_on"          # camper mode came on -> we disarmed, success
+        else:
+            event = "idle"
+
+        if event != "idle":
+            # One rich line to the JOURNAL (systemd captures stdout) — the inputs are on the line so
+            # a session is analysable with `journalctl -u calictl --grep auto-camper`. journald is
+            # persistent + retention-tuned on buspi (see deploy notes), so no bespoke log file.
+            print("auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d)"
+                  % (event, d["notice"] or event.replace("_", " "), ign, camping_on, soc, warning,
+                     self._ac_fails), flush=True)
+
         if d["notice"]:
-            print("auto-camper: %s" % d["notice"], flush=True)
             self._ac_notice = {"ts": round(time.time(), 1), "msg": d["notice"]}
         if d["actuate"]:
             if self._read_only:
@@ -408,7 +433,6 @@ class Server:
                 self._ac_armed_until = None   # can't act -> don't spin
                 return
             try:
-                print("auto-camper: re-enabling camper mode + rear USB (attempt %d)" % self._ac_fails, flush=True)
                 await self.on_command("campingmode", "master", "on")
                 await self.on_command("campingmode", "usb", "on")
             except Exception as ex:           # BLE hiccup etc. -> counts as a failed attempt via fails
