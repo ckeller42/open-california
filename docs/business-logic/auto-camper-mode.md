@@ -1,15 +1,15 @@
 # Auto camper mode — restore camping after you park
 
-> **⚠️ REDESIGN IN PROGRESS (2026-08-19).** The original premise below — *re-enable camper mode
-> **during** an engine start so USB-C stays on **through the drive*** — was **DISPROVEN on hardware.**
-> The unit **refuses to enable camping mode while the vehicle is driven** (write returns
-> `applied:false`, no `1202` push, and the unit's console shows *"nicht während der Fahrt verfügbar"*
-> — a firmware **stationary gate**, `control-and-actuation.md` §4). So the feature is being redesigned
-> to **restore camping once the vehicle is stationary again** (re-enable on the ignition **falling**
-> edge / park, not the rising edge). The `auto_camper_decide` logic + trigger described below is the
-> OLD design and is **not correct** for this constraint; the observer/monitoring sections at the end
-> are still valid and are how the gate was confirmed. The exact "stationary" predicate (Terminal-15 vs
-> road-speed vs parking-brake) is under decompile review before the trigger is rewritten.
+> **DESIGN NOTE (2026-08-19).** The original idea — *re-enable camper mode **during** an engine start
+> so USB-C stays on **through the drive*** — was **DISPROVEN on hardware.** The unit **refuses camping
+> mode while the vehicle is driven** (write returns `applied:false`, no `1202` push, and the unit's
+> console shows *"nicht während der Fahrt verfügbar"* — a firmware **stationary gate**,
+> `control-and-actuation.md` §4). The decompile confirms the app has **no** speed/brake/gear signal —
+> only Terminal-15 — and the gate is enforced **unit-side**; the camping `enable` bit mirrors ignition
+> (reads 1 while driving = blocked). So the feature now **restores camping once you park** (ignition
+> **falling** edge). **Not yet live-verified:** that the unit accepts the camping-on write *immediately*
+> after ignition-off (a brief post-park lock is possible) — the retry window covers it, but a
+> park-then-write test is still owed. Feature stays **off by default** until that is confirmed.
 
 A calictl-only feature (**not in the VW app**): the camper unit **drops camper mode when the engine
 starts** (ignition / terminal-15 goes on) and **will not let it back on until the vehicle is
@@ -19,56 +19,62 @@ critically, **never fighting the unit's battery protection.**
 
 Toggle it on the web-UI **Camping** card. The setting persists across daemon restarts. Off by default.
 
-## How it decides (pure logic: `calictl/automation.py::auto_camper_decide`)
+## How it decides (pure logic: `calictl/automation.py::auto_camper_restore_decide`)
 
-The rule can only tell "the engine disabled it" from "you disabled it" by **timing relative to the
-ignition edge**, so it keys off the ignition **rising edge**:
+Because the unit refuses camping-on while driving, the rule waits for you to **park** and restores
+the config the engine took away:
 
-1. **Arm on engine start.** When ignition goes off→on, arm a re-assert for a bounded window
-   (`CALICTL_AUTO_CAMPER_WINDOW_S`, default 120 s). The unit disables camper mode a few seconds
-   *after* ignition-on, so a one-shot at the edge could be undone — hence a window, not a single try.
-2. **While armed and camper mode is off, re-assert** `campingmode master=on` + `usb=on` each poll —
-   unless a guard fires (below). Disarm the instant camper mode is confirmed **on**.
-3. **Manual off is respected.** A camper-off with **no recent ignition edge** never triggers anything
-   (we're only armed right after an engine start), so switching camper mode off yourself sticks.
+1. **Arm on the engine shed.** On the ignition **rising** edge, if camper mode was on just before,
+   remember the pre-drive config (`{master, usb, lights}`) and mark a **restore owed**. The actual
+   shed may land a poll or two later (the BLE link can drop at the crank); the pre-edge snapshot is
+   the truth we restore to.
+2. **Restore on the ignition FALLING edge (park).** When ignition goes on→off with a restore owed,
+   open a bounded window (`CALICTL_AUTO_CAMPER_WINDOW_S`, default 120 s) and write the remembered
+   config — `campingmode master=on` (+ `usb` / `lights` to match) — re-asserting each poll until it
+   sticks. The window exists in case the unit lingers in its driving-lock for a moment after parking.
+3. **Manual off is respected.** A camper-off while the ignition is **steady off** (not an engine
+   shed) clears any owed restore — switching camper mode off yourself sticks.
 
 ## The two safety guards (why it can't loop or drain the battery)
 
 **Guard 1 — battery gate (defer to the unit's protection).**
-Before any re-assert, the leisure battery must be healthy: `soc2_pct ≥ CALICTL_AUTO_CAMPER_MIN_SOC`
+Before any restore write, the leisure battery must be healthy: `soc2_pct ≥ CALICTL_AUTO_CAMPER_MIN_SOC`
 (default **20 %**) **AND** no `sleep_warning` / `warning_active` / `warning_level ≥ 1`
-(`SleepWarning` / `WarningLevelActive` / `WarningLevelTwo` from the energy state). If the battery is
-low or warning, the unit shed camper mode **to protect itself** — the feature **stands down** and
-does not re-enable. Re-checked every poll, so a mid-window battery drop stops it immediately. When
-the battery recovers, the next engine start re-arms.
+(`SleepWarning` / `WarningLevelActive` / `WarningLevelTwo`). If the battery is low or warning, the
+feature **stands down** and does not restore — it never fights the unit's power-saving. Re-checked
+every poll.
 
 **Guard 2 — bounded retries / back-off (catch-all).**
-Even on a healthy-looking battery, re-asserts are capped at `CALICTL_AUTO_CAMPER_MAX_FAILS`
-(default **3**) per arm cycle. If camper mode keeps dropping despite that — a low-power state we
-can't see cleanly (firmware quirk, thermal derating, an unmapped protection) — the feature
-**gives up for that ignition cycle** instead of hammering the unit and draining the battery. The
-window is a further backstop: if camper mode never stays on within it, it gives up too.
+Restore writes are capped at `CALICTL_AUTO_CAMPER_MAX_FAILS` (default **3**) per park cycle. If the
+unit keeps refusing after park (a lingering driving-lock, or an unseen low-power state), the feature
+**gives up for that park** instead of hammering the unit. The window is a further backstop: if
+camping never comes back within it, it gives up too.
 
-**The three "camper mode went off" causes therefore resolve as:**
+**The "camper mode went off" causes resolve as:**
 
 | Cause | Signal | Action |
 |---|---|---|
-| Engine start | ignition rising edge, battery healthy, within window | **re-assert** (master + USB) |
-| Manual off | no ignition edge (not armed) | **ignore** — your off sticks |
-| Low-battery load-shed | SoC < min / a warning flag, **or** repeated re-drops | **stand down** — never fights protection |
+| Engine start | camper-on → off on the ignition **rising** edge | **remember** it (owe a restore) |
+| You parked (restore owed) | ignition **falling** edge, battery healthy, within window | **restore** master (+usb/lights) |
+| Manual off | camper-on → off with ignition **steady off** | **clear the debt** — your off sticks |
+| Low-battery load-shed | SoC < min / a warning flag, **or** repeated refusals after park | **stand down** — never fights protection |
 
-## When it stands down / gives up
+## When it stands down / gives up / succeeds
 
-Each stand-down or give-up is **logged** (`auto-camper: …`) and surfaced once to the web UI as a
-**toast** (`_meta.auto_camper.notice = {ts, msg}`, deduped by `ts`). Examples:
+Each notable step is **logged** (`auto-camper[<event>]: …`, events `armed_engine_shed` / `restoring`
+/ `restored` / `stood_down` / `gave_up`) and the notice is surfaced once to the web UI as a **toast**
+(`_meta.auto_camper.notice = {ts, msg}`, deduped by `ts`). Examples:
 
-- "Auto camper stood down: battery low / warning (SoC 12%) — not re-enabling."
-- "Auto camper gave up: camper mode keeps dropping (likely low-power) — standing down."
+- "Auto camper: camping restored after park."
+- "Auto camper stood down: battery low / warning (SoC 12%) — not restoring."
+- "Auto camper gave up: camping would not re-enable after park."
+
+`_meta.auto_camper.armed` is true while a restore is **owed** (engine shed camping, not yet back).
 
 ## Guarantees
 
 - **Never an endless loop** — bounded by both `MAX_FAILS` and the window (unit-tested end-to-end in
-  `tests/test_automation.py::test_no_loop_full_cycle`).
+  `tests/test_automation.py::test_no_loop_full_cycle_engine_shed_then_park_then_refused`).
 - **Never fights battery protection** — Guard 1 stands down on any known low-battery signal.
 - **Respects read-only mode** — if writes are disabled, it logs intent and does not actuate.
 - **Actuation is app-faithful** — the same `campingmode` master/USB frames the manual controls use
@@ -156,7 +162,7 @@ cap (~a day of calictl history). A drop-in (`/etc/systemd/journald.conf.d/calict
 | Env | Default | Meaning |
 |---|---|---|
 | `CALICTL_AUTO_CAMPER_MIN_SOC` | 20 | leisure-battery % floor below which it stands down |
-| `CALICTL_AUTO_CAMPER_WINDOW_S` | 120 | re-assert window after an engine start |
+| `CALICTL_AUTO_CAMPER_WINDOW_S` | 120 | restore retry window after you park |
 | `CALICTL_AUTO_CAMPER_MAX_FAILS` | 3 | consecutive re-asserts before giving up for the cycle |
 | `CALICTL_OBSERVE_BURST_INTERVAL_S` | 3 | poll interval during the post-engine-start observation burst |
 | `CALICTL_OBSERVE_BURST_S` | 180 | how long the fast-poll burst lasts after an engine-start edge |

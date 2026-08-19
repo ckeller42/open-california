@@ -234,7 +234,7 @@ def test_auto_camper_toggle_present_and_flips(page):
     """The Auto-camper toggle renders on the Camping card and flips (a persisted daemon setting,
     not a BLE write — so it works over the mock without actuation)."""
     page.get_by_text("Camping mode", exact=True).first.click()
-    expect(page.get_by_text("Auto re-enable after engine start")).to_be_visible()
+    expect(page.get_by_text("Restore camping after you park")).to_be_visible()
     # the last .switch on the camping screen is the auto-camper toggle (after master/lights/usb)
     sw = page.locator('button[aria-label="Auto camper mode"]')
     expect(sw).to_have_attribute("aria-checked", "false")
