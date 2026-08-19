@@ -209,3 +209,22 @@ def test_energy_chart_draws_from_daemon_history_not_influx(page, base_url):
     drawn = page.locator("svg.echart polyline.ec-v, svg.echart circle.ec-v-dot").count()
     assert drawn >= 1, "no voltage series rendered"
     assert "History unavailable" not in page.locator("#app").inner_text()
+
+
+def test_open_control_survives_a_state_poll(page):
+    """Regression: a live state poll must NOT re-render and destroy a control the user is
+    interacting with. The 2s poll rebuilds #app (app.innerHTML=""), which used to slam an open
+    <select> (Activate profile / Save current as) shut mid-selection. refreshState() skips the
+    repaint while a <select>/time/range control is focused. We mark the focused <select>, wait
+    through 2+ poll cycles (the mock's telemetry changes each poll, so a repaint WOULD otherwise
+    fire), and assert the SAME element is still there — a repaint would have replaced it, losing
+    the marker (and, in a browser, closing the dropdown)."""
+    page.get_by_text("Lighting", exact=True).first.click()
+    sel = page.locator("select").first                 # the 'Activate profile' dropdown
+    expect(sel).to_be_visible()
+    sel.evaluate("el => { el.dataset.probe = 'keep'; el.focus(); }")
+    assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
+    page.wait_for_timeout(5000)                         # span 2+ poll cycles
+    # if refreshState re-rendered, the marked <select> was replaced -> marker gone / focus lost
+    assert sel.get_attribute("data-probe") == "keep", "the open <select> was destroyed by a state poll"
+    assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
