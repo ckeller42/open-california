@@ -1,0 +1,26 @@
+calictl/deploy/journald-calictl.conf
+  s_a7757c7c919f20::t_13b8bd2595688e 1-19
+calictl/serve.py
+  s_a7757c7c919f20::t_0b45ff31a5e051 421-423
+  s_a7757c7c919f20::t_772fab6654c295 407-408
+  s_a7757c7c919f20::t_5e9032ea1a79a9 392-393,396-397,400,406,409-420,424-427
+docs/business-logic/auto-camper-mode.md
+  s_a7757c7c919f20::t_ef5910b7be14c0 68-70,72-83,85-90
+  s_a7757c7c919f20::t_a0aeba7e01a641 66-67,71,84,91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5ca9431d64ed70b83683a6cfdf66a7097435177e",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
