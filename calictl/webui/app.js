@@ -469,9 +469,12 @@ async function refreshState(force) {
     const vanOnline = !STATE._meta || STATE._meta.online;
     setStatus(vanOnline ? "live" : "offline", vanOnline ? "ok" : "warn");
   }
-  // don't repaint out from under a slider the user is actively dragging (optimistic values +
-  // the queue keep the rest fresh; a forced refresh after a command still repaints).
-  if (!force && document.activeElement && /** @type {HTMLInputElement} */ (document.activeElement).type === "range") return;
+  // don't repaint out from under a control the user is actively using — a poll-driven re-render
+  // rebuilds the DOM (app.innerHTML="") and would slam an OPEN <select> dropdown shut, or interrupt
+  // a slider drag / time entry. Skip while such a control is focused; optimistic values + the queue
+  // keep the rest fresh, and a forced refresh after a command still repaints.
+  const ae = /** @type {HTMLInputElement} */ (document.activeElement);
+  if (!force && ae && (ae.type === "range" || ae.type === "time" || ae.tagName === "SELECT")) return;
   const sig = view + "|" + JSON.stringify(next);
   if (!force && sig === lastRender) return; // nothing changed -> no flicker
   lastRender = sig;
