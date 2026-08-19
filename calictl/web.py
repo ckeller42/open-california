@@ -81,7 +81,7 @@ def make_handler(backend, webui_dir):
 
         def do_POST(self):
             path = self.path.split("?", 1)[0]
-            if path not in ("/api/command", "/api/session"):
+            if path not in ("/api/command", "/api/session", "/api/auto_camper"):
                 return self._send_json({"error": "not_found"}, 404)
             ctype = self.headers.get("Content-Type", "")
             if ctype.split(";", 1)[0].strip().lower() != "application/json":
@@ -108,6 +108,16 @@ def make_handler(backend, webui_dir):
                 except Exception as e:
                     print("web: set_session failed: %r" % (e,), flush=True)
                     return self._send_json({"error": "session_failed"}, 500)
+            if path == "/api/auto_camper":
+                # a SETTING toggle (persisted), not a vehicle write — allowed even in read-only;
+                # the feature's own actuation still checks read-only before it acts.
+                if not isinstance(req.get("enabled"), bool):
+                    return self._send_json({"error": "bad_enabled"}, 400)
+                try:
+                    return self._send_json(backend.set_auto_camper(req["enabled"]))
+                except Exception as e:
+                    print("web: set_auto_camper failed: %r" % (e,), flush=True)
+                    return self._send_json({"error": "auto_camper_failed"}, 500)
             if backend.read_only:
                 return self._send_json({"error": "read_only"}, 405)
             fn = req.get("function"); what = req.get("what")
