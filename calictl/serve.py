@@ -275,6 +275,8 @@ class Server:
         self._burst_until = None            # monotonic deadline while fast-polling, else None
         self._burst_interval = float(os.environ.get("CALICTL_OBSERVE_BURST_INTERVAL_S", "3"))
         self._burst_window_s = float(os.environ.get("CALICTL_OBSERVE_BURST_S", "180"))
+        # RE probe: log the raw F000/F001 general-purpose diagnostic register to InfluxDB (opt-in).
+        self._store_gp = os.environ.get("CALICTL_STORE_GENERALPURPOSE", "").lower() in ("1", "true", "yes")
         # Notification-driven observer: when the persistent session is up, the unit PUSHES camping
         # state on char 1202 (and ignition on 1004) — decompile-confirmed. Log those the instant they
         # arrive (full resolution, no poll wait). Reverse-map state-char UUID -> function name.
@@ -621,9 +623,16 @@ class Server:
             # Store only INSTALLED functions (same set MQTT publishes). The uninstalled ones
             # (satellite / living-room heater / roof-A/C / stairs / generalpurposesignals) emit
             # only raw pass-through fields (WordZeroFour, System, ...) — pure noise on this van.
+            store = set(inst)
+            # RE probe (opt-in): the F000/F001 "general purpose signals" register is a raw 21-cell
+            # vendor diagnostic dump (anonymous Bit/Byte/Word/Dword cells) the app only reads. With
+            # CALICTL_STORE_GENERALPURPOSE set, log it to InfluxDB so its cells can be correlated
+            # against events over time to decode what the unit puts there. Off by default (noise).
+            if self._store_gp and "generalpurposesignals" in states:
+                store.add("generalpurposesignals")
             self._iw.write(bucket=os.environ.get("INFLUX_BUCKET", "buspi"),
                            org=os.environ.get("INFLUX_ORG", "home"),
-                           record=influx.points_for({fn: states[fn] for fn in inst}))
+                           record=influx.points_for({fn: states[fn] for fn in store}))
         return states
 
     async def _session_connect_once(self) -> bool:
