@@ -373,9 +373,11 @@ const FEATURES = {
       { label: "Shore power", get: (s) => (s.shore_installed ? `${s.shore_state} (${s.shore_power} W · ${s.shore_current} A)` : "—") },
       { label: "Solar", get: (s) => (s.solar_installed ? `${s.solar_state} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
       { label: "Warnings", get: (s) => (s.faults && s.faults.length ? s.faults.join(", ") : "none") },
-      // The unit reports its own battery-values age; 255 = the stale sentinel (starter subsystem
-      // asleep). Show it so an outdated starter reading is visible, not trusted silently.
-      { label: "Battery data age", get: (s) => (s.stale ? "🕒 stale (starter asleep)"
+      // The unit reports an age ONLY for the STARTER battery (AgeOneBattValuesMinutes); 255 = the
+      // stale sentinel (starter subsystem asleep). The leisure battery has no such field — it is
+      // measured continuously, so its freshness is just the daemon's read age. Label it as STARTER
+      // so it isn't mistaken for the leisure data.
+      { label: "Starter data age", get: (s) => (s.stale ? "🕒 stale (starter asleep)"
         : s.age_min != null ? `${s.age_min} min` : "—") },
     ],
     // Soft note (not a fault): the starter battery is only measured engine-on, so its values latch
