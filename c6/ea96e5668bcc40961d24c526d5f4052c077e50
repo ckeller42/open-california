@@ -1,0 +1,24 @@
+calictl/serve.py
+  s_a7757c7c919f20::t_c7ea58c7f70d49 278-279
+  s_a7757c7c919f20::t_034b510cc4d5ad 626-632,635
+tests/test_web_serve.py
+  s_a7757c7c919f20::t_d463a7a9870ce6 51-60
+docs/business-logic/unexposed-commands.md
+  s_a7757c7c919f20::t_65a9ced77746a5 1-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c6ea96e5668bcc40961d24c526d5f4052c077e50",
+  "prompts": {},
+  "sessions": {
+    "s_a7757c7c919f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cabeef98-4812-480e-afab-74a58bcc255b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "ckeller <w2b8s5cdz5@privaterelay.appleid.com>"
+    }
+  }
+}
