@@ -48,6 +48,16 @@ def test_push_observer_logs_camping_change(capsys, monkeypatch):
     assert capsys.readouterr().out == ""
 
 
+def test_store_generalpurpose_env_flag(monkeypatch):
+    """The F000/F001 diagnostic-register RE probe is opt-in via CALICTL_STORE_GENERALPURPOSE."""
+    monkeypatch.setenv("CALICTL_STORE_GENERALPURPOSE", "1")
+    assert serve.Server(influx_enabled=False)._store_gp is True
+    monkeypatch.setenv("CALICTL_STORE_GENERALPURPOSE", "no")
+    assert serve.Server(influx_enabled=False)._store_gp is False
+    monkeypatch.delenv("CALICTL_STORE_GENERALPURPOSE", raising=False)
+    assert serve.Server(influx_enabled=False)._store_gp is False
+
+
 def test_meta_session_state_reflects_supervisor(monkeypatch):
     """_meta.session mirrors the supervisor's state machine; online == (session up)."""
     from calictl import serve
