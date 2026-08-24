@@ -15,6 +15,7 @@ import calictl.device
 import calictl.influx
 import calictl.mqtt
 import calictl.overrides
+import calictl.postcheck
 import calictl.protocol  # noqa: E401,F401
 import calictl.semantics
 import calictl.serve
