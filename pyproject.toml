@@ -1,0 +1,38 @@
+# Dev-tooling config only (lint + type-check). Intentionally NO [project]/packaging table: the
+# runtime is stdlib-only and installed via git checkout, not pip — see CLAUDE.md. ruff + mypy are
+# DEV tools (CI + pre-commit), never imported by the runtime.
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = [".worktrees", "docs", "decompile"]
+
+[tool.ruff.lint]
+# Conservative, high-signal set: pyflakes (F, real bugs), pycodestyle (E/W), isort (I),
+# flake8-bugbear (B, likely bugs), pyupgrade (UP). Expand later once green.
+select = ["F", "E", "W", "I", "B", "UP"]
+ignore = [
+  "E501",    # line length is enforced by the formatter target, not the linter (long tables/URLs)
+  "E741",    # ambiguous var names (l/O/I) — the decompile-derived code mirrors app single-letters
+  "UP031",   # %-formatting is the house style throughout (212 sites) — a deliberate choice, not a bug
+  "E702",    # `a; b` one-liner init blocks are house style (87 sites)
+  "E701",    # `if x: return` one-liners are house style
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]        # asserts + test scaffolding are laxer
+"tools/**" = ["B008"]
+
+[tool.mypy]
+python_version = "3.11"
+# The runtime lazily imports bleak/paho/influxdb_client/yaml INSIDE functions (stdlib-only at import
+# top-level), and they aren't installed in CI — so don't fail on their missing stubs.
+ignore_missing_imports = true
+# Pragmatic: catch REAL type errors (None-safety, bad returns, the int(None) class of bug) without
+# demanding full annotations on this partially-typed codebase. Tighten incrementally.
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+files = ["calictl"]
+exclude = "(^|/)(tests|tools|docs)/"

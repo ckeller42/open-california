@@ -46,17 +46,7 @@ jobs:
           diff -q /tmp/screens.json calictl/webui/screens.json \
             || { echo "::error::screens.json stale — run python -m tools.build_web"; exit 1; }
       - name: Runtime is stdlib-only at import
-        run: |
-          python - <<'PY'
-          import sys
-          import calictl.protocol, calictl.semantics, calictl.device, calictl.serve
-          import calictl.control, calictl.cli, calictl.mqtt, calictl.influx, calictl.overrides
-          import calictl.web
-          banned = {"bleak", "paho", "paho.mqtt", "influxdb_client", "yaml"}
-          leaked = banned & set(sys.modules)
-          assert not leaked, "runtime pulled non-stdlib at import: %s" % sorted(leaked)
-          print("import-clean:", sorted(banned), "not imported")
-          PY
+        run: python -m tools.check_import_clean   # shared with tools/ci.sh + the pre-commit hook
 
   no-vendor-material:
     runs-on: ubuntu-latest

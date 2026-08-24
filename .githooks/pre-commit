@@ -31,9 +31,33 @@ fi
 python3 -m pytest tests/test_doc_offset_consistency.py -q >/dev/null || \
   fail "doc/comment offset citations disagree with the dictionary (see test_doc_offset_consistency)"
 
-# 4b) Full suite + coverage guardrail (skip with SKIP_TESTS=1 for docs-only commits).
+# 4c) Fast CI guards that ALWAYS run (quick; catch drift docs-only commits cause too): runtime stays
+#     stdlib-only at import, and the built web assets match source when the UI/semantics changed.
+python3 -m tools.check_import_clean >/dev/null || \
+  fail "runtime pulled a non-stdlib dep at import (see tools/check_import_clean.py)"
+if git diff --cached --name-only | grep -qE '^(calictl/webui/|calictl/semantics\.py|ui/)'; then
+  if ! python3 -m tools.build_web --out /tmp/oc_hook_screens.json >/dev/null 2>&1 \
+       || ! diff -q /tmp/oc_hook_screens.json calictl/webui/screens.json >/dev/null; then
+    fail "web assets stale — run: python3 -m tools.build_web"
+  fi
+fi
+
+# 4d) ruff lint — NON-BLOCKING for now (the codebase isn't ruff-green yet; the tooling PR fixes that,
+#     then this flips to a hard gate). Warn so regressions are visible without blocking. Whole-repo
+#     check is sub-second, so no need to thread the staged file list (avoids word-split footguns).
+if python3 -m ruff --version >/dev/null 2>&1; then
+  python3 -m ruff check --quiet . >/dev/null 2>&1 || \
+    echo "pre-commit: ruff has warnings (non-blocking — run: tools/ci.sh lint)" >&2
+fi
+
+# 4b) Full suite + coverage guardrail (skip with SKIP_TESTS=1 for docs-only commits). Parallel when
+#     pytest-xdist is installed (tools/ci.sh dev), else serial.
 if [ "${SKIP_TESTS:-0}" != "1" ]; then
-  python3 -m pytest tests/ -q >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
+  if python3 -c "import xdist" 2>/dev/null; then
+    python3 -m pytest tests/ -q -n auto >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
+  else
+    python3 -m pytest tests/ -q >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
+  fi
   python3 -m tools.audit_signals --report >/dev/null 2>&1 || \
     fail "signal-coverage/semantic-review audit failed"
 fi
