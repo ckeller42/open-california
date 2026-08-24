@@ -8,8 +8,19 @@
 #
 # Runtime is stdlib-only; dev tools are in requirements-dev.txt.
 set -euo pipefail
-PY=${PY:-python3}
 cd "$(dirname "$0")/.."
+
+# Prefer a python that meets the project floor (3.11+); the bare `python3` may be an EOL system 3.9
+# (as on stock macOS). Override with PY=... Prefers 3.13 to match buspi. Ordered newest-first.
+if [ -z "${PY:-}" ]; then
+  for _p in python3.13 python3.12 python3.11 python3; do
+    if command -v "$_p" >/dev/null 2>&1 \
+       && "$_p" -c 'import sys; raise SystemExit(0 if sys.version_info>=(3,11) else 1)' 2>/dev/null; then
+      PY="$_p"; break
+    fi
+  done
+  : "${PY:?need Python >= 3.11 (project floor); only found $(python3 --version 2>&1)}"
+fi
 
 test_suite() {   # parallel when pytest-xdist is present (tools/ci.sh dev), else serial
   if "$PY" -c 'import xdist' 2>/dev/null; then
