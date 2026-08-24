@@ -14,6 +14,7 @@ import calictl.control  # noqa: E401,F401
 import calictl.device
 import calictl.influx
 import calictl.mqtt
+import calictl.observer
 import calictl.overrides
 import calictl.postcheck
 import calictl.protocol  # noqa: E401,F401

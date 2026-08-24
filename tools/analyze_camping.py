@@ -3,7 +3,7 @@ enabling auto-camper mode.
 
 Pulls the ignition / DC-DC-charging / camping-substate series from InfluxDB and, for each engine
 start, reports how camping mode moved and whether it FLIP-FLOPPED. The daemon's observer
-(:meth:`calictl.serve.Server._observe_transitions`) bursts the poll rate to ~3 s around an engine
+(:meth:`calictl.observer.CampingObserver.observe`) bursts the poll rate to ~3 s around an engine
 edge, so the InfluxDB series is fine-grained exactly here — this tool reads that back.
 
 Two "engine on" signals, because they differ:

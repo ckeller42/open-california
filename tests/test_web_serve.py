@@ -1,36 +1,45 @@
 import asyncio
 
-from calictl import control, overrides, protocol, serve
+from calictl import control, observer, overrides, protocol, serve
+
+
+def _funcs():
+    f = protocol.load(); overrides.apply(f); return f
 
 
 def test_observer_logs_transitions_and_bursts_on_engine_start(capsys):
-    """The passive camping observer: first poll is a silent baseline; a later change logs one
-    'camping-watch' line; and an engine-start edge (ignition OR dcdc_charging rising) starts the
-    fast-poll burst. It NEVER actuates and runs regardless of the auto-camper toggle."""
-    s = serve.Server(influx_enabled=False)
-    assert s._auto_camper is False           # observer is independent of the feature toggle
+    """CampingObserver: first poll is a silent baseline; a later change logs one 'camping-watch'
+    line; and an engine-start edge (ignition OR dcdc_charging rising) starts the fast-poll burst.
+    It NEVER actuates — a unit test of the extracted observer, no Server scaffolding needed.
+
+    .. test:: The observer logs transitions and bursts on an engine-start edge
+       :id: T_CAMPING_OBSERVER
+       :links: R_CAMPING_OBSERVER
+    """
+    obs = observer.CampingObserver(_funcs())
     base = {"vehicle": {"ignition_on": False},
             "energy": {"dcdc_charging": False, "soc2_pct": 80, "dcdc_current": 0, "batt2_current": 0.0},
             "campingmode": {"master_on": True, "usb_charger": True, "lights_on": False, "enable": False}}
-    s._observe_transitions(base)             # baseline poll -> nothing logged, no burst
-    assert s._burst_until is None
+    obs.observe(base)                        # baseline poll -> nothing logged, no burst
+    assert obs.bursting is False
     assert capsys.readouterr().out == ""
     # engine start: ignition + dcdc rise, camping sheds -> one log line + a burst armed
     started = {"vehicle": {"ignition_on": True},
                "energy": {"dcdc_charging": True, "soc2_pct": 80, "dcdc_current": 30, "batt2_current": 12.0},
                "campingmode": {"master_on": False, "usb_charger": False, "lights_on": False, "enable": True}}
-    s._observe_transitions(started)
+    obs.observe(started)
     out = capsys.readouterr().out
     assert "camping-watch:" in out and "master_on 1->0" in out and "ignition 0->1" in out
-    assert s._burst_until is not None        # fast-poll burst armed by the engine-start edge
+    assert obs.bursting is True              # fast-poll burst armed by the engine-start edge
 
 
 def test_push_observer_logs_camping_change(capsys, monkeypatch):
-    """Notification-driven overlay: a pushed 1202 frame that changes camping master logs one
+    """CampingObserver.on_push: a pushed 1202 frame that changes camping master logs one
     'camping-push' line; the first push is a silent baseline; a non-watched char is ignored.
     Change-detection is what we test here (decode/interpret are covered elsewhere)."""
-    s = serve.Server(influx_enabled=False)
-    ch = str(s.funcs["campingmode"].state_char).lower()
+    funcs = _funcs()
+    obs = observer.CampingObserver(funcs)
+    ch = str(funcs["campingmode"].state_char).lower()
     seq = [{"master_on": True, "usb_charger": True, "lights_on": False, "enable": False},
            {"master_on": False, "usb_charger": True, "lights_on": False, "enable": False}]
     i = {"n": 0}
@@ -39,13 +48,13 @@ def test_push_observer_logs_camping_change(capsys, monkeypatch):
         r = seq[min(i["n"], len(seq) - 1)]
         i["n"] += 1
         return r
-    monkeypatch.setattr(serve.semantics, "interpret", fake_interp)
-    monkeypatch.setattr(serve.protocol, "decode", lambda f, d: d)
-    s._on_ble_push(ch, b"\x00")                 # baseline push -> silent
+    monkeypatch.setattr(observer.semantics, "interpret", fake_interp)
+    monkeypatch.setattr(observer.protocol, "decode", lambda f, d: d)
+    obs.on_push(ch, b"\x00")                    # baseline push -> silent
     assert capsys.readouterr().out == ""
-    s._on_ble_push(ch, b"\x00")                 # master 1->0 -> one line
+    obs.on_push(ch, b"\x00")                    # master 1->0 -> one line
     assert "camping-push[campingmode]: master_on 1->0" in capsys.readouterr().out
-    s._on_ble_push("0000dead-0000-1000-8000-00805f9b34fb", b"\x00")   # unwatched char -> ignored
+    obs.on_push("0000dead-0000-1000-8000-00805f9b34fb", b"\x00")   # unwatched char -> ignored
     assert capsys.readouterr().out == ""
 
 
