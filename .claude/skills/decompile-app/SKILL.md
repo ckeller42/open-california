@@ -53,16 +53,20 @@ Fetch + unpack an APK: `apkeep -a "$PKG" -d apk-pure "$WORK"` then
 **jadx (primary, DEX→Java, Kotlin-aware):**
 ```sh
 JAVA_OPTS=-Xmx2g ~/tools/jadx/bin/jadx --show-bad-code --no-res -j 2 \
-  --mappings-path "$OUT/mapping.mapping" \
+  --mappings-path "$OUT/mapping.enigma" \
   -d "$OUT" "$WORK"/dex/classes*.dex
 ```
 - **`--show-bad-code` is REQUIRED.** Without it jadx *silently* skips large/obfuscated methods,
   printing `"Method dump skipped, instruction units count: N"` — you lose exactly the dense
   state-machine methods you most need. Always pass it.
 - `--mappings-path <file>` applies your durable rename+doc layer (next section) on every run
-  (jadx 1.5.6: the flag is `--mappings-path`, NOT `--rename-mappings`; jadx auto-detects **Enigma**
-  by a `.mapping` extension, so name the file `*.mapping` or the load is silently skipped — keep the
-  canonical file that name, e.g. `mapping.mapping`).
+  (jadx 1.5.6: the flag is `--mappings-path`, NOT `--rename-mappings`). **The canonical file for
+  this project is `mapping.enigma`** (Enigma format — human-diffable; it is what the analysis repo
+  and the mapping-update hook both use). jadx detects the mapping format, but a wrong path or a
+  format it doesn't recognise loads as a **silent no-op** — so **always verify the load actually
+  took**: after a re-decompile, grep the regenerated source for a known rename (e.g.
+  `CampingmodeViewModel`); if it isn't there, the mapping wasn't applied — fix the path/format
+  before trusting the tree.
 - Long job; run detached (`setsid … </dev/null >log 2>&1 &`) so an ssh drop doesn't kill it; poll
   the log for a completion marker.
 
@@ -87,12 +91,13 @@ type-poor, so it's for *confirming* a specific routine, never for understanding 
 and it does **no** cross-method analysis. We get it via apktool (bundles baksmali); a standalone
 runnable jar isn't distributed and isn't on trixie apt, so apktool is the pragmatic source.
 
-## Level 4 — cross-method data-flow / call-graph (SootUp)
+## Level 4 — cross-method data-flow / call-graph / callstack traces (SootUp, a.k.a. "swoop")
 
 The decompilers and baksmali all show you **one method at a time**. When the question spans methods
-— *"where does this 1502-notification value flow to?"*, *"which version field feeds the +2 scale
-correction?"*, *"what actually calls `E()`?"*, or tracing anything through the obfuscated
-coroutine/`Flow` reconciliation layer — reach for **SootUp** (the modern Soot rewrite). It lifts
+— a **callstack trace** (*"what actually calls `E()`?"*), *"where does this 1502-notification value
+flow to?"*, *"which version field feeds the +2 scale correction?"*, or tracing anything through the
+obfuscated coroutine/`Flow` reconciliation layer — reach for **SootUp** (the modern Soot rewrite;
+sometimes spoken/written as **"swoop"**). It lifts
 bytecode to **Jimple** (a typed 3-address IR, cleaner than jadx's `switch(label)` coroutine
 machines) and gives a **call graph** + **inter-procedural def-use / data-flow**.
 
@@ -105,22 +110,65 @@ machines) and gives a **call graph** + **inter-procedural def-use / data-flow**.
   jadx/vineflower/smali are faster. It's the tool for the one hard gap (async reconciliation), not
   a general step.
 
+## Level 5 — dynamic analysis (Frida), when static hits a wall
+
+Everything above is **static**. When the app **encrypts strings** (grep finds nothing; the field
+name only exists at runtime), when you need the **real runtime callstack / the exact bytes** a
+method emits, or when control flow is too tangled to follow by hand — **run it and hook it** with
+**Frida**. Static and dynamic are complementary: static tells you *where* to hook, dynamic gives you
+*ground truth* the decompiler can't.
+
+- **Setup:** `frida-server` on a **rooted device or emulator** running the app; drive from the host
+  with `frida`/`frida-trace` (`pip install frida-tools`). Caveat for *this* project: the app talks to
+  the **real camper over BLE**, so meaningful dynamic runs need the phone near the van (or a BLE
+  mock) — heavier than static, so reserve it for the questions static genuinely can't answer.
+- **Dump decrypted strings** — the highest-value use against obfuscation: hook the decryptor (or
+  just `java.lang.StringBuilder`/`String` construction) and log plaintext as the app restores it;
+  or `Fridump` the process memory and grep it for field names/opcodes/keys.
+- **Trace a method + its callstack at runtime** — `frida-trace -U -j 'com.pkg.*!*writeCharacteristic*'`,
+  or a hook that logs args + `Thread.currentThread().getStackTrace()`. This is the dynamic twin of
+  the SootUp callstack trace: hook the BLE **write** and you see the exact frame bytes *and* who
+  built them, live — often faster than untangling the coroutine layer statically.
+- **Lift the decryptor instead of running it** — if the app has a self-contained string-decrypt
+  method, copy its decompiled body into a standalone Java/Kotlin file and run it over the obfuscated
+  literals offline (no device needed). Works when the decryptor doesn't depend on runtime state.
+
+## Native libraries (`.so`) — Ghidra / radare2
+
+JNI/attestation logic (e.g. a `System.loadLibrary("Native")` crypto/anti-tamper blob) is **native
+ARM**, invisible to the Java decompilers. Pull `lib/<abi>/*.so` from the APK and open it in **Ghidra**
+(or radare2/Cutter) to read the `Java_<pkg>_<Class>_<method>` JNI exports. Reserve for questions that
+actually reach into native code (request signing, key derivation, root checks); most protocol work
+stays in the Java/Kotlin layer.
+
 ## The durable deobfuscation layer (renames + doc-comments that survive re-decompiles)
 
 R8 renames everything to `a.b`, `E()`, `d0()`. The fix is a **jadx mappings file** you own and
 re-apply on every decompile, so meaningful names + docs are never lost:
 
-- **Format:** jadx reads/writes Enigma / Tiny2 mappings and its own `.jobf`. Pick one (Enigma is
-  human-diffable) and keep it at `$OUT/mapping.<fmt>`. It carries **both** renames *and* javadoc
-  comments — jadx reapplies the comments into the regenerated source.
+- **Format:** jadx reads/writes Enigma / Tiny2 mappings and its own `.jobf`. This project uses
+  **Enigma** (human-diffable), kept at **`$OUT/mapping.enigma`**. It carries **both** renames *and*
+  javadoc comments — jadx reapplies the comments into the regenerated source. (Enigma line format:
+  `CLASS a/b MeaningfulName`, then tab-indented `\tCOMMENT …` / `\tFIELD …` / `\tMETHOD …`.)
 - **Author it two ways (A+C):**
   - **A — hand-curate** the load-bearing classes as you understand them (`dg.h`→`LightingControl`,
     `E`→`setZoneBrightness`, `ag.b`→`LivenessCounter1003`), adding a one-line doc-comment on each.
   - **C — seed at scale with an LLM pass:** dispatch an agent over the fresh sources to infer names
     + short doc-comments from method bodies, string constants, and any plaintext debug-log methods,
     emitting mapping entries; then hand-curate the ones that matter. Re-run as coverage grows.
+    (Off-the-shelf LLM-deobfuscators like **Androidmeda** do the same job; our agent pass is the
+    same idea, integrated with the mapping file — but always **verify inferred names against the
+    source**, LLM renames are hypotheses until checked.)
 - **Editing interactively:** jadx-gui rename (`n`) + "Add comment" persist into the mappings file
   ("Save mappings as…"); the headless runs then pick them up. Keep the file in the private repo.
+- **Committing/pushing the mapping (this project's buspi setup):** the analysis repo lives on buspi
+  and GitHub auth is the **`gh` credential helper scoped to the `pi` user** — so run the git
+  add/commit/push **as `pi`, NOT under `sudo`** (`sudo` runs as root, which has no credential helper
+  and fails `could not read Username for 'https://github.com'`). Push target is the PRIVATE
+  `ckeller42/californiaontour-re`.
+- **Subagents doing citation-only reads:** a task told to *only cite* (not modify buspi) must NOT
+  edit/commit the mapping even though the PostToolUse hook nags to — the explicit task constraint
+  wins; the agent reports the new names for a **separate** recording pass instead.
 - **STANDING RULE — the mapping grows monotonically.** Whenever *any* analysis (a manual read, an
   LLM pass, a SootUp call-graph/data-flow trace) reaches an obfuscated class or method that is NOT
   yet in the mapping, name it and add a one-line doc-comment **verified against the source**, then
