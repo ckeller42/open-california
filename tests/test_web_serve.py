@@ -623,6 +623,19 @@ def test_auto_camper_toggle_persists_and_surfaces():
     assert be2.set_auto_camper(False)["auto_camper"] is False       # and back off
 
 
+def test_load_last_survives_corrupt_auto_camper_state():
+    """A present-but-null / garbage auto_camper_state must not crash Server.__init__ (the loader's
+    documented 'missing/corrupt -> defaults' contract). Regression for the int(None) TypeError."""
+    import json
+    import os
+    from calictl import serve
+    cache = os.environ["CALICTL_STATE_CACHE"]          # conftest points this at a per-test temp
+    with open(cache, "w") as f:
+        json.dump({"auto_camper": True, "auto_camper_state": {"fails": None, "owe_restore": None}}, f)
+    s = serve.Server()                                  # must not raise
+    assert s._ac_fails == 0 and s._ac_owe_restore is False   # safe defaults applied
+
+
 def test_auto_camper_restore_debt_survives_restart():
     """The restore-after-park DEBT (owe_restore + pre_drive + wall-clock deadline + edge state) is
     persisted, so a daemon restart / buspi reboot mid-drive doesn't silently drop a pending restore.

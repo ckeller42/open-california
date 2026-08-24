@@ -305,12 +305,12 @@ class Server:
             self._ac_owe_restore = bool(ac.get("owe_restore", False))
             self._ac_pre_drive = ac.get("pre_drive")
             self._ac_restore_until = ac.get("restore_until")
-            self._ac_fails = int(ac.get("fails", 0))
+            self._ac_fails = int(ac.get("fails") or 0)   # `or 0` also handles a present-but-null value
             self._ac_prev_ignition = ac.get("prev_ignition")
             self._ac_prev_master = ac.get("prev_master")
             self._ac_prev_usb = ac.get("prev_usb")
             self._ac_prev_lights = ac.get("prev_lights")
-        except (OSError, ValueError):
+        except (OSError, ValueError, TypeError):   # missing/corrupt cache -> keep the defaults, never crash __init__
             pass
 
     def _save_last(self):
@@ -621,7 +621,6 @@ class Server:
             # growing mid-iteration (RuntimeError). Reference assignment is atomic (GIL).
             self._last = new_last
             self._last_ok_ts = time.time()
-            self._save_last()
             self._record_history(states.get("energy"))
             try:
                 self._observe_transitions(states)      # PASSIVE: log camping/ignition changes + burst
@@ -635,6 +634,10 @@ class Server:
                 import traceback
                 print("auto-camper step error:", flush=True)
                 traceback.print_exc()
+            # Persist AFTER the auto-camper step so a restore debt armed THIS poll is saved this poll,
+            # not next — closes the one-poll window where a restart right after engine-start would
+            # otherwise still drop the just-armed restore. The step never mutates `_last`.
+            self._save_last()
         # MQTT discovery for newly-seen installed functions
         inst = installed_from(states)
         new = inst - self._published
