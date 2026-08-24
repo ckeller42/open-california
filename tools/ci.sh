@@ -31,6 +31,10 @@ vendor_check() {
   [ -z "$bad" ] || { echo "vendor/binary material committed:"; echo "$bad"; exit 1; }
   echo "no vendor material committed"
 }
+screenshots() {   # regenerate docs/screenshots from the live UI over the mock (needs Playwright +
+                  # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.
+  "$PY" -m tools.ux_gallery --out docs/screenshots
+}
 lint()      { "$PY" -m ruff check . || true; }   # NON-blocking until the codebase is ruff-green
 typecheck() { "$PY" -m mypy calictl || true; }   # best-effort (None-safety / bad returns)
 dev() {
@@ -46,8 +50,9 @@ case "${1:-ci}" in
   typecheck)     typecheck;;
   audit)         audit;;
   web-fresh)     web_fresh;;
+  screenshots)   screenshots;;
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|lint|typecheck|audit|web-fresh|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|lint|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check|dev]"; exit 2;;
 esac
