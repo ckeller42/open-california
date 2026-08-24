@@ -190,3 +190,21 @@ def test_read_all_only_trusts_sticky_push_for_push_only_funcs(monkeypatch):
     assert out["cooler"] == live_cooler_raw          # LIVE read wins for a non-push-only func
     assert out["cooler"] != stale_cooler_raw
     assert out["water"] == water_push_raw            # water still uses the sticky push
+
+
+def test_read_char_retry_reports_disconnect_on_successful_read():
+    """.. test:: _read_char_with_retry reports link-down even when the read itself succeeds
+       :id: T_READ_RETRY_POST_READ_DISCONNECT
+       :links: R_READ_RETRY_SHARED
+
+       A read can return bytes while the disconnect callback has already flipped ``is_connected``
+       (an asyncio race). The helper must report ``link_up=False`` so the caller aborts the cycle
+       before the next func — faithfully reproducing the originals' post-read
+       ``if not is_connected: break`` (which a naive extraction dropped).
+    """
+    class _ReadOkButDropped:
+        is_connected = False                       # link already down...
+        async def read_gatt_char(self, char):
+            return b"\x01\x02"                      # ...but the read still returns bytes
+    data, up = asyncio.run(device._read_char_with_retry(_ReadOkButDropped(), "cooler", "1102"))
+    assert data == b"\x01\x02" and up is False     # data kept, but caller told to stop

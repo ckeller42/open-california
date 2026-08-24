@@ -126,8 +126,11 @@ async def _read_char_with_retry(client, name, char):
     two byte-identical copies of this loop).
 
     :returns: ``(data, link_up)`` — ``data`` is the raw bytes on success, or ``None`` when the 3
-        attempts were exhausted while the link was still up (caller skips that func). ``link_up`` is
-        False once the client has dropped mid-read, signalling the caller to stop reading the rest.
+        attempts were exhausted (caller skips that func). ``link_up`` reports the client's ACTUAL
+        connection state at return (on every path, incl. a successful read), so the caller's
+        ``if not up: break`` faithfully reproduces the originals' unconditional post-read
+        ``if not is_connected: break`` — a read can succeed while the disconnect callback has already
+        flipped ``is_connected`` (asyncio race), and the cycle must still abort before the next func.
 
     .. req:: One shared state-read retry policy
        :id: R_READ_RETRY_SHARED
@@ -139,7 +142,8 @@ async def _read_char_with_retry(client, name, char):
     """
     for attempt in range(3):
         try:
-            return bytes(await client.read_gatt_char(char)), True
+            data = bytes(await client.read_gatt_char(char))
+            return data, getattr(client, "is_connected", False)   # report the post-read link state
         except Exception as e:
             if not getattr(client, "is_connected", False):
                 # link dropped mid-session: don't burn ~30 s of futile retries under the serve lock
@@ -148,7 +152,7 @@ async def _read_char_with_retry(client, name, char):
             if attempt == 2:
                 print("read_all: %s failed after retries: %r" % (name, e), flush=True)
             await asyncio.sleep(0.8)
-    return None, True
+    return None, getattr(client, "is_connected", False)
 
 
 class CamperDevice:
