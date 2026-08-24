@@ -1,6 +1,9 @@
 """Harvest per-field scale multipliers + enums from the decompiled app."""
 from __future__ import annotations
-import os, re
+
+import os
+import re
+
 
 def scales(root: str) -> dict:
     out = {}

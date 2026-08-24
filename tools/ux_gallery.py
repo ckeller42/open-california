@@ -107,7 +107,7 @@ def main(argv=None):
     try:
         import playwright  # noqa: F401
     except ImportError:
-        raise SystemExit("needs playwright: pip install playwright && python -m playwright install chromium")
+        raise SystemExit("needs playwright: pip install playwright && python -m playwright install chromium") from None
     paths = capture(args.out)
     print("wrote %d screenshots to %s" % (len(paths), args.out))
 

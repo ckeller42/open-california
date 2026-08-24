@@ -1,5 +1,3 @@
-import json
-import pytest
 from tools import build_web
 
 
@@ -66,6 +64,7 @@ def test_no_intra_screen_label_collisions():
     defect (e.g. infoPage_battery_value_text and
     infoPage_outsideTemperature_value_text both humanizing to "Value")."""
     import collections
+
     import yaml
 
     data = build_web.build()

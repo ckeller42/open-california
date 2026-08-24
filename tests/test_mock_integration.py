@@ -17,8 +17,8 @@ import types
 
 import pytest
 
-from calictl import protocol, control, overrides, device
-from tools.mock_unit import MockCamperUnit, MockBleakClient, MockDisconnect
+from calictl import control, device, overrides, protocol
+from tools.mock_unit import MockBleakClient, MockCamperUnit, MockDisconnect
 
 
 @pytest.fixture
@@ -79,8 +79,7 @@ def test_set_cooler_level(mock):
 
 
 def test_set_campingmode_master(mock):
-    from calictl import cli
-    from calictl import semantics
+    from calictl import cli, semantics
     assert cli.main(["set", "campingmode", "master", "on"]) == 0
     interp = semantics.interpret("campingmode", mock.decoded("campingmode"))
     assert interp["master_on"] is True
@@ -164,7 +163,8 @@ def test_read_all_heartbeat_refreshes_stale_read(mock):
        :status: passing
     """
     import asyncio
-    from calictl import protocol, device
+
+    from calictl import device, protocol
     mock.state["water"]["FreshWaterLevel"] = 11             # the truth (revealed once armed)
     mock.read_latch["water"] = {"FreshWaterLevel": 1}       # a bare read returns the stale latch
     funcs = mock.funcs
@@ -182,7 +182,8 @@ def test_read_all_prefers_water_notification_over_stale_read(mock):
     ``qg/b`` reads the level from the 1302 notification, not a bare read). A bare read returns the
     stale latch; ``read_all`` now subscribes and prefers the pushed value."""
     import asyncio
-    from calictl import protocol, device
+
+    from calictl import device, protocol
     mock.state["water"]["FreshWaterLevel"] = 1               # bare read = stale latch
     mock.notify_push["water"] = {"FreshWaterLevel": 11}      # the unit pushes the truth
     funcs = mock.funcs
@@ -245,7 +246,7 @@ def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
     """Influx should store only INSTALLED functions (same set MQTT publishes). The uninstalled
     ones (satellite / living-room heater / roof-A/C / stairs / generalpurposesignals) emit only
     raw pass-through fields (WordZeroFour, System, ...) — noise that must not reach the dashboard."""
-    from calictl import serve, influx
+    from calictl import influx, serve
     captured = {}
     monkeypatch.setattr(influx, "points_for",
                         lambda states: (captured.__setitem__("fns", set(states)) or []))
@@ -294,7 +295,8 @@ def test_read_only_is_default_and_refuses_writes(mock):
 
 def test_mock_drop_and_wake_models_deep_sleep():
     import asyncio
-    from tools.mock_unit import MockCamperUnit, MockBleakClient, MockDisconnect
+
+    from tools.mock_unit import MockBleakClient, MockCamperUnit, MockDisconnect
     unit = MockCamperUnit()
     client = MockBleakClient.bind(unit)("MO:CK", timeout=1)
 

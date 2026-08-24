@@ -4,7 +4,8 @@ Shared by the CLI (`calictl set`) and the daemon (`serve.on_command`) so both
 build identical frames. Frames are written under a 1003 liveness heartbeat
 (`device.actuate`), which is what arms actuation on-device (issue #2)."""
 from __future__ import annotations
-from . import protocol, overrides
+
+from . import overrides, protocol
 
 LIGHT_ON, LIGHT_OFF = 0, 1   # camping lights inverted (app K0 writes (!on)?1:0). VERIFY live.
 SENTINEL = 3                 # 2-bit "leave unchanged" (sg.a default)

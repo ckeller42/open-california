@@ -18,9 +18,8 @@ from __future__ import annotations
 import asyncio
 import os
 
-from . import protocol, semantics, overrides, mqtt
-from .device import CamperDevice, ConnectionUnavailable
-
+from . import mqtt, overrides, protocol, semantics
+from .device import CamperDevice
 
 # Alert enums are strings (dropped by Influx), but we still want them charted in Grafana.
 # Emit a numeric `<key>_code` for these curated fields so a state-timeline can map code->label.

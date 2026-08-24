@@ -3,7 +3,7 @@
 The owner captured the CaliforniaOnTour app driving the van (idevicebtlogger). These pin the
 frames that capture verified, so a refactor can't silently drift from the app.
 """
-from calictl import protocol, overrides, control
+from calictl import control, overrides, protocol
 
 
 def _f():

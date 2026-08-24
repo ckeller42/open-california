@@ -8,7 +8,7 @@ Deterministic — no real capture, no tshark, no BLE. They validate the tested c
 """
 import pytest
 
-from calictl import protocol, control, overrides
+from calictl import control, overrides, protocol
 from tools import capture_diff
 from tools.capture_diff import Scenario
 

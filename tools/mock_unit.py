@@ -35,7 +35,7 @@ it stays importable in the bleak-less test environment (a project hard rule).
 """
 from __future__ import annotations
 
-from calictl import protocol, control, overrides, device
+from calictl import control, device, overrides, protocol
 
 # short UUIDs the mock advertises / recognises, beyond the per-function chars.
 _VERSION_SHORT = "1001"
@@ -192,7 +192,7 @@ class MockCamperUnit:
                 try:
                     protocol.check_value(func, cf.name, cf.width, ctrl[cf.name], cf.valid)
                 except ValueError as e:
-                    raise MockDisconnect("out-of-range write to %s: %s" % (fn, e))
+                    raise MockDisconnect("out-of-range write to %s: %s" % (fn, e)) from e
 
         # 2) apply layer — gated on the 1003 heartbeat (issue #2). Without a live
         #    heartbeat the write is ACKed and ignored.
@@ -267,7 +267,7 @@ class MockBleakClient:
         self.is_connected = False
 
     @classmethod
-    def bind(cls, unit: MockCamperUnit) -> type["MockBleakClient"]:
+    def bind(cls, unit: MockCamperUnit) -> type[MockBleakClient]:
         cls.unit = unit
         return cls
 
@@ -285,7 +285,7 @@ class MockBleakClient:
         chars = [_Char(device.VERSION_CHAR, ["read"]),
                  _Char(device.AUTH_CHAR, ["read"]),
                  _Char(device.HEARTBEAT_CHAR, ["write"])]
-        for fn, f in unit.funcs.items():
+        for _fn, f in unit.funcs.items():
             if f.state_char:
                 chars.append(_Char(f.state_char, ["read", "notify"]))
             if f.control_char:

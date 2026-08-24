@@ -1,5 +1,6 @@
 """calictl protocol/semantics/encode tests — driven by real live captures."""
-from calictl import protocol as P, semantics, overrides
+from calictl import overrides, semantics
+from calictl import protocol as P
 
 # Frames captured live from the owner's vehicle (see docs/business-logic).
 WATER = bytes.fromhex("030b1d010016")
@@ -390,7 +391,8 @@ def test_full_parity_devices_and_installed_gating():
 
 
 def test_camping_lights_control_frame():
-    from calictl import protocol as P, overrides, control
+    from calictl import control, overrides
+    from calictl import protocol as P
     funcs = P.load(); overrides.apply(funcs)
     # app's single "Lights" toggle writes BOTH light fields together, inverted (on -> 0)
     frame = control.build(funcs, "campingmode", "lights", "on", {})

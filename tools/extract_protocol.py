@@ -19,6 +19,7 @@ Usage:  python3 extract_protocol.py <decompile/.../sources> [out.yaml]
 Stdlib only. Output holds protocol facts only (names, bits) — no app source.
 """
 from __future__ import annotations
+
 import os
 import re
 import sys

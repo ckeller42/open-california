@@ -1,6 +1,9 @@
 """Load + validate the signal catalog (protocol/signals.yaml)."""
 from __future__ import annotations
-import os, yaml
+
+import os
+
+import yaml
 
 _DEFAULT = os.path.join(os.path.dirname(__file__), "..", "protocol", "signals.yaml")
 
@@ -38,7 +41,7 @@ def dictionary_keys(funcs) -> set:
     return out
 
 def emitted_state_names(fn, funcs) -> set:
-    from calictl import semantics, mqtt
+    from calictl import mqtt, semantics
     func = funcs[fn]
     zero = {sf.name: 0 for sf in func.state_fields if sf.placed}
     return set(mqtt.flatten(semantics.interpret(fn, zero)))

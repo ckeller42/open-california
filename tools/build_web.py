@@ -5,6 +5,7 @@ overlay (--strings a pre-extracted APK .cvr JSON map of label_key->real text) is
 committed. See docs/superpowers/specs/2026-07-08-app-replica-webserver-design.md.
 """
 from __future__ import annotations
+
 import argparse
 import json
 import re
@@ -63,7 +64,7 @@ def resolve_label(label_key, labels, strings=None):
 
 
 def build(strings=None):
-    import yaml   # lazy: tooling only
+    import yaml  # lazy: tooling only
     labels = yaml.safe_load(LABELS_FILE.read_text()) or {}
     screens = {}
     for name in CONTROL_SCREENS:

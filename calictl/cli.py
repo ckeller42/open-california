@@ -44,7 +44,7 @@ import json
 import os
 import sys
 
-from . import protocol, semantics, overrides
+from . import overrides, protocol, semantics
 from .device import CamperDevice, ConnectionUnavailable
 
 
@@ -101,7 +101,7 @@ async def cmd_raw(funcs, dev, args):
 def _set_check(function, what, value, interp, decoded):
     """Post-write success check: (label, got, want). `got == want` -> OK. Reads the
     targeted field from the interpreted state (or the raw decode for cooler numerics)."""
-    from . import control       # lazy (stdlib-only import rule); needed for the lighting rows
+    from . import control  # lazy (stdlib-only import rule); needed for the lighting rows
     on = str(value).strip().lower() in ("on", "true", "1")
     if function == "lighting" and what != "power":
         return _lighting_check(what, value, interp)
@@ -234,7 +234,7 @@ def build_parser():
     s.add_argument("function"); s.add_argument("what")
     # value is optional: `set roof open|close|stop` takes no value (the direction is `what`).
     s.add_argument("value", nargs="?", default=None)
-    i = sub.add_parser("influx", help="single InfluxDB test write; the serve daemon does this continuously")
+    sub.add_parser("influx", help="single InfluxDB test write; the serve daemon does this continuously")
     sv = sub.add_parser("serve", help="unified daemon: one BLE owner -> InfluxDB + MQTT + commands")
     sv.add_argument("--interval", type=float, default=30.0)
     sv.add_argument("--no-influx", action="store_true", help="skip InfluxDB writes")

@@ -1,5 +1,6 @@
 import asyncio
-from calictl import serve, protocol, overrides, control
+
+from calictl import control, overrides, protocol, serve
 
 
 def test_observer_logs_transitions_and_bursts_on_engine_start(capsys):
@@ -74,9 +75,11 @@ def test_meta_session_state_reflects_supervisor(monkeypatch):
 def test_supervise_session_backoff_to_asleep(monkeypatch):
     """Repeated connect failures (parked van) escalate the state to 'asleep' without spinning."""
     import asyncio
-    from calictl import serve, device
-    from tools.mock_unit import MockCamperUnit, MockBleakClient
-    import sys, types
+    import sys
+    import types
+
+    from calictl import serve
+    from tools.mock_unit import MockBleakClient, MockCamperUnit
     unit = MockCamperUnit(); unit.drop()                 # asleep from the start
     fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
     sys.modules["bleak"] = fake
@@ -105,9 +108,12 @@ def test_supervise_session_backoff_to_asleep(monkeypatch):
 def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
     """_supervise_session's own loop: connect fails (asleep), it escalates to 'asleep' and
     backs off (up to the 60s cap) rather than spinning."""
-    import asyncio, sys, types
+    import asyncio
+    import sys
+    import types
+
     from calictl import serve
-    from tools.mock_unit import MockCamperUnit, MockBleakClient
+    from tools.mock_unit import MockBleakClient, MockCamperUnit
     unit = MockCamperUnit(); unit.drop()                     # asleep from the start
     fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
     sys.modules["bleak"] = fake
@@ -221,9 +227,8 @@ def test_water_baseline_persists_across_restart(monkeypatch, tmp_path):
 def test_water_good_baseline_needs_no_influx(monkeypatch):
     """The stale guard's baseline is the in-memory/persisted _water_good — no Influx. A live
     plausible read establishes it; a later impossible drop is flagged without any Influx call."""
-    from calictl import freshness
     # influx must never be consulted by the stale path
-    from calictl import influx
+    from calictl import freshness, influx
     def _boom(*a, **k):
         raise AssertionError("stale detection must not call influx.field_series")
     monkeypatch.setattr(influx, "field_series", _boom)
@@ -249,6 +254,7 @@ def test_state_read_is_safe_while_poll_rebinds_last(monkeypatch):
     on-publish), never mutate the live dict in place -- otherwise a concurrent dict() copy raises
     'dictionary changed size during iteration' and a real applied write can surface as a 500."""
     import threading
+
     from tools.mock_unit import MockCamperUnit
     u = MockCamperUnit()
     safe = ["cooler", "campingmode", "lighting", "water", "vehicle", "energy"]
@@ -361,9 +367,12 @@ def test_reconnect_closes_the_old_session_no_leak(monkeypatch):
     """FIX (final review): _session_connect_once must aclose() the outgoing session before
     replacing it. Without this, every drop->reconnect cycle leaks the old session's heartbeat
     task (runs forever, `_stop` never set) and its BleakClient (never disconnected)."""
-    import asyncio, sys, types
-    from calictl import serve, device
-    from tools.mock_unit import MockCamperUnit, MockBleakClient
+    import asyncio
+    import sys
+    import types
+
+    from calictl import device, serve
+    from tools.mock_unit import MockBleakClient, MockCamperUnit
 
     unit = MockCamperUnit()
     fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
@@ -398,7 +407,8 @@ def test_reconnect_closes_the_old_session_no_leak(monkeypatch):
 def test_on_command_uses_persistent_session_when_up(monkeypatch):
     """When a session is up, on_command writes through it (arm-free), not dev.actuate."""
     import asyncio
-    from calictl import serve, protocol, overrides, control
+
+    from calictl import overrides, protocol, serve
     funcs = protocol.load(); overrides.apply(funcs)
     s = serve.Server(influx_enabled=False)
     s._persistent = True
@@ -429,6 +439,7 @@ def test_session_toggle_disconnect_and_connect():
     """The connection toggle: Disconnect forces the session inactive (frees the slot for the app)
     even while the browser keeps polling; Connect clears the release and marks the UI active."""
     import asyncio
+
     from calictl import serve
     s = serve.Server(influx_enabled=False)
     s._persistent = True
@@ -465,6 +476,7 @@ def test_meta_exposes_session_mode():
 def test_ui_active_window():
     """The session-scoping window: fresh activity -> active; stale or never-used -> idle."""
     import time
+
     from calictl import serve
     s = serve.Server(influx_enabled=False)
     assert s._ui_active() is False                      # never used
@@ -478,6 +490,7 @@ def test_supervise_releases_session_when_ui_idle(monkeypatch):
     """App-friendliness: when the web UI is idle, the supervisor RELEASES the held session so the
     phone app can use the single BLE slot."""
     import asyncio
+
     from calictl import serve
     s = serve.Server("MO:CK", influx_enabled=False)
     s._persistent = True
@@ -511,7 +524,8 @@ def test_on_command_nudges_session_when_down(monkeypatch):
     """Keep-warm: a command with no live session resets the grown backoff and wakes the
     supervisor to reconnect now, so the fast-path session comes up promptly."""
     import asyncio
-    from calictl import serve, protocol, overrides
+
+    from calictl import overrides, protocol, serve
     funcs = protocol.load(); overrides.apply(funcs)
     s = serve.Server(influx_enabled=False)
     s._persistent = True
@@ -537,7 +551,8 @@ def test_on_command_lighting_is_fast_path_confirmed_by_notification(monkeypatch)
     """Lighting takes the fast path: NO preamble, NO blocking readback (verify=False); the write
     returns immediately and applied-ness comes from the unit's real 1502 Mode-4 notification."""
     import asyncio
-    from calictl import serve, protocol, overrides
+
+    from calictl import overrides, protocol, serve
     funcs = protocol.load(); overrides.apply(funcs)
     s = serve.Server(influx_enabled=False)
     s._persistent = True
@@ -628,6 +643,7 @@ def test_load_last_survives_corrupt_auto_camper_state():
     documented 'missing/corrupt -> defaults' contract). Regression for the int(None) TypeError."""
     import json
     import os
+
     from calictl import serve
     cache = os.environ["CALICTL_STATE_CACHE"]          # conftest points this at a per-test temp
     with open(cache, "w") as f:

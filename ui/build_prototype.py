@@ -24,7 +24,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 try:
     import yaml
@@ -56,11 +56,11 @@ KNOWN_WIDGET_TYPES = {
 # Loading
 # --------------------------------------------------------------------------
 
-def load_screens() -> List[Dict[str, Any]]:
+def load_screens() -> list[dict[str, Any]]:
     """Load and lightly validate every ui/screens/*.yaml file. Never raises
     on a single bad file — warns to stderr and skips it instead, since this
     generator must keep working while real screen specs are still landing."""
-    screens: List[Dict[str, Any]] = []
+    screens: list[dict[str, Any]] = []
     if not SCREENS_DIR.is_dir():
         print(f"warning: no screens directory at {SCREENS_DIR}", file=sys.stderr)
         return screens
@@ -87,7 +87,7 @@ def load_screens() -> List[Dict[str, Any]]:
     return screens
 
 
-def load_dictionary() -> Optional[Dict[str, Any]]:
+def load_dictionary() -> dict[str, Any] | None:
     """Optional cross-reference for field offsets/widths/ranges. Absence is
     fine — traceability annotations just fall back to the raw field/action
     names from the screen spec."""
@@ -103,8 +103,8 @@ def load_dictionary() -> Optional[Dict[str, Any]]:
     return data
 
 
-def lookup_dictionary_field(dictionary: Optional[Dict[str, Any]], function: Optional[str],
-                             field: Optional[str]) -> Optional[Dict[str, Any]]:
+def lookup_dictionary_field(dictionary: dict[str, Any] | None, function: str | None,
+                             field: str | None) -> dict[str, Any] | None:
     if not dictionary or not function or not field:
         return None
     functions = dictionary.get("functions") or {}
@@ -128,7 +128,7 @@ def _camel_to_words(token: str) -> str:
     return token
 
 
-def humanize_label(label_key: Optional[str], screen: str, widget_id: Optional[str] = None) -> str:
+def humanize_label(label_key: str | None, screen: str, widget_id: str | None = None) -> str:
     """Turn e.g. 'coolboxPage_coolingLevelSlider_coolingLevel_text' into
     'Cooling Level' by stripping the '<screen>Page_<widget>_...' prefix and
     trailing '_text', then splitting remaining camelCase tokens into words."""
@@ -166,7 +166,7 @@ def js_str(value: Any) -> str:
     return json.dumps(str(value))
 
 
-def parse_range(range_str: Optional[str]) -> Tuple[float, float, float]:
+def parse_range(range_str: str | None) -> tuple[float, float, float]:
     if range_str:
         m = re.search(r"(-?\d+(?:\.\d+)?)\s*\.\.\s*(-?\d+(?:\.\d+)?)", str(range_str))
         if m:
@@ -186,7 +186,7 @@ def slugify(value: str) -> str:
 # Icons (inline SVG, embedded — no external references)
 # --------------------------------------------------------------------------
 
-_ICON_CACHE: Dict[str, str] = {}
+_ICON_CACHE: dict[str, str] = {}
 
 
 def _clean_svg_markup(markup: str) -> str:
@@ -194,7 +194,7 @@ def _clean_svg_markup(markup: str) -> str:
     markup = re.sub(r"<!DOCTYPE[^>]*>", "", markup, flags=re.IGNORECASE)
     markup = re.sub(r"<!--.*?-->", "", markup, flags=re.DOTALL)
     # Drop hard-coded width/height on the root <svg> so CSS controls sizing.
-    def _strip_wh(m: "re.Match[str]") -> str:
+    def _strip_wh(m: re.Match[str]) -> str:
         tag = m.group(0)
         tag = re.sub(r'\s(?:width|height)="[^"]*"', "", tag)
         return tag
@@ -213,7 +213,7 @@ def _placeholder_icon(name: str) -> str:
     )
 
 
-def load_icon(name: Optional[str]) -> str:
+def load_icon(name: str | None) -> str:
     """Return an inline <svg> markup string: the real app icon from
     ui/assets/svg/<name>.svg if present, otherwise a neutral placeholder
     glyph. Cached since the same icon can appear on several screens."""
@@ -234,7 +234,7 @@ def load_icon(name: Optional[str]) -> str:
     return markup
 
 
-def icon_span(name: Optional[str], css_class: str = "icon") -> str:
+def icon_span(name: str | None, css_class: str = "icon") -> str:
     if not name:
         return ""
     return f'<span class="{css_class}" title="{esc(name)}">{load_icon(name)}</span>'
@@ -244,8 +244,8 @@ def icon_span(name: Optional[str], css_class: str = "icon") -> str:
 # Control-binding traceability annotation
 # --------------------------------------------------------------------------
 
-def format_binding(controls: Optional[Dict[str, Any]], function: Optional[str],
-                    dictionary: Optional[Dict[str, Any]]) -> str:
+def format_binding(controls: dict[str, Any] | None, function: str | None,
+                    dictionary: dict[str, Any] | None) -> str:
     if not controls or not isinstance(controls, dict):
         return ""
     field = controls.get("field")
@@ -270,7 +270,7 @@ def format_binding(controls: Optional[Dict[str, Any]], function: Optional[str],
     return f'<div class="binding">&rarr; {esc(core)}{esc(extra)}</div>'
 
 
-def constraint_note(widget: Dict[str, Any]) -> str:
+def constraint_note(widget: dict[str, Any]) -> str:
     constraints = widget.get("constraints")
     if not constraints:
         return ""
@@ -281,8 +281,8 @@ def constraint_note(widget: Dict[str, Any]) -> str:
 # Widget rendering
 # --------------------------------------------------------------------------
 
-def render_widget(screen: str, widget: Dict[str, Any], function: Optional[str],
-                   dictionary: Optional[Dict[str, Any]]) -> str:
+def render_widget(screen: str, widget: dict[str, Any], function: str | None,
+                   dictionary: dict[str, Any] | None) -> str:
     wtype = widget.get("type", "label")
     wid = widget.get("id") or slugify(widget.get("label_key") or wtype)
     dom_id = f"{slugify(screen)}-{slugify(wid)}"
@@ -433,7 +433,7 @@ def render_widget(screen: str, widget: Dict[str, Any], function: Optional[str],
 # Screen / navigation assembly
 # --------------------------------------------------------------------------
 
-def render_screen(screen_def: Dict[str, Any], dictionary: Optional[Dict[str, Any]]) -> str:
+def render_screen(screen_def: dict[str, Any], dictionary: dict[str, Any] | None) -> str:
     name = screen_def["screen"]
     slug = slugify(name)
     title = humanize_label(screen_def.get("title_key"), name) or name.capitalize()
@@ -466,7 +466,7 @@ def render_screen(screen_def: Dict[str, Any], dictionary: Optional[Dict[str, Any
     </section>"""
 
 
-def render_home(screens: List[Dict[str, Any]]) -> str:
+def render_home(screens: list[dict[str, Any]]) -> str:
     if screens:
         cards = "".join(
             f'''<button type="button" class="home-card" onclick="showScreen({js_str(s["screen"])})">
@@ -493,7 +493,7 @@ def render_home(screens: List[Dict[str, Any]]) -> str:
     </section>"""
 
 
-def render_side_nav(screens: List[Dict[str, Any]]) -> str:
+def render_side_nav(screens: list[dict[str, Any]]) -> str:
     items = "".join(
         f'''<button type="button" class="navlink" data-target="{esc(s["screen"])}"
              onclick="showScreen({js_str(s["screen"])})">
@@ -1000,7 +1000,7 @@ function toggleBindings(checked) {
 """
 
 
-def build_html(screens: List[Dict[str, Any]], dictionary: Optional[Dict[str, Any]]) -> str:
+def build_html(screens: list[dict[str, Any]], dictionary: dict[str, Any] | None) -> str:
     home_html = render_home(screens)
     screens_html = "".join(render_screen(s, dictionary) for s in screens)
     side_nav_html = render_side_nav(screens)

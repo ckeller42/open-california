@@ -17,6 +17,9 @@ ignore = [
   "UP031",   # %-formatting is the house style throughout (212 sites) — a deliberate choice, not a bug
   "E702",    # `a; b` one-liner init blocks are house style (87 sites)
   "E701",    # `if x: return` one-liners are house style
+  "B905",    # zip(strict=) needs py3.10+; the working local interpreter is 3.9 and the 4 sites are
+             #   either the intentional `x, x[1:]` pairwise idiom or equal-length-by-construction —
+             #   low signal here, not worth the version-compat friction.
 ]
 
 [tool.ruff.lint.per-file-ignores]

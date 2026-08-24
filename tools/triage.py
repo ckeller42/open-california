@@ -8,7 +8,11 @@ everything not surfaced is omitted with a concrete, category-based reason.
 Run: `python3 -m tools.triage`  (rewrites protocol/signals.yaml)
 """
 from __future__ import annotations
-import os, yaml
+
+import os
+
+import yaml
+
 from tools import catalog
 
 # field -> (canonical_name, unit, scale, kind).  scale "raw" or a multiplier or UNVERIFIED.

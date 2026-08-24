@@ -4,7 +4,9 @@
 If a signal-defining file was just edited, inject a reminder to update + push the
 dashboards. Reads the PostToolUse event JSON on stdin; prints additionalContext.
 """
-import sys, json, os
+import json
+import os
+import sys
 
 try:
     data = json.load(sys.stdin)

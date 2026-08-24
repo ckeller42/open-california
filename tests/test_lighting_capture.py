@@ -5,7 +5,7 @@ earlier static guesses got wrong: unchanged zones are ``14`` (0xe), not 0, and t
 switch is Mode 16. These tests pin ``control._lighting`` to the exact bytes the app sends, so
 the crack can never silently regress.
 """
-from calictl import protocol, overrides, control
+from calictl import control, overrides, protocol
 
 
 def _f():

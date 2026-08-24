@@ -1,6 +1,5 @@
 import http.client
 import json
-import threading
 import urllib.request
 from pathlib import Path
 

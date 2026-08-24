@@ -8,10 +8,17 @@ Exits non-zero (and prints the leaked modules) if any banned module is imported 
 """
 import sys
 
-import calictl.protocol, calictl.semantics, calictl.device, calictl.serve  # noqa: E401,F401
-import calictl.control, calictl.cli, calictl.mqtt, calictl.influx, calictl.overrides  # noqa: E401,F401
-import calictl.web  # noqa: F401
 import calictl.automation  # noqa: F401
+import calictl.cli
+import calictl.control  # noqa: E401,F401
+import calictl.device
+import calictl.influx
+import calictl.mqtt
+import calictl.overrides
+import calictl.protocol  # noqa: E401,F401
+import calictl.semantics
+import calictl.serve
+import calictl.web  # noqa: F401
 
 BANNED = {"bleak", "paho", "paho.mqtt", "influxdb_client", "yaml"}
 

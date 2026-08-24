@@ -10,7 +10,8 @@ raw byte. `decode` slices named fields out; `encode` packs them back.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
+from dataclasses import field as dc_field
 from pathlib import Path
 
 _FIELD_RE = re.compile(r"-\s*\{(?P<body>[^}]*)\}")
@@ -149,7 +150,7 @@ def _in_valid(val: int, valid) -> bool:
     return lo <= val <= hi
 
 
-def check_value(func: "Function", name: str, width: int, val: int, valid=None) -> None:
+def check_value(func: Function, name: str, width: int, val: int, valid=None) -> None:
     """Raise ValueError if `val` won't fit `width` bits, or violates a curated
     semantic `valid` constraint. Guards against two failure modes: a value wider
     than its field silently corrupting the frame (``_bits_of`` masks low bits), and

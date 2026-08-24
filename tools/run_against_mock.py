@@ -19,6 +19,7 @@ The single ``MockCamperUnit`` persists across calictl's connect-per-operation ca
 from __future__ import annotations
 
 import os
+
 # Set a mock BLE address before anything imports calictl.device (which resolves
 # DEFAULT_ADDR from the environment at import time). The mock ignores the value.
 os.environ.setdefault("CALICTL_ADDR", "MO:CK:CA:MP:ER:00")
@@ -26,7 +27,7 @@ os.environ.setdefault("CALICTL_ADDR", "MO:CK:CA:MP:ER:00")
 import sys
 import types
 
-from tools.mock_unit import MockCamperUnit, MockBleakClient
+from tools.mock_unit import MockBleakClient, MockCamperUnit
 
 
 def install_fake_bleak(unit: MockCamperUnit | None = None) -> MockCamperUnit:

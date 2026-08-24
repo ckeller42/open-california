@@ -7,7 +7,7 @@ import types
 
 import pytest
 
-from calictl import device, protocol, overrides
+from calictl import device, overrides, protocol
 
 
 class _Char:
@@ -145,7 +145,7 @@ def test_actuate_on_arm_false_skips_handshake_and_arm_delay(monkeypatch):
     """The persistent fast path: given a live heartbeat, a write must NOT replay the
     handshake or wait ARM_DELAY_S -- that is the entire latency win."""
     from calictl import control
-    from tools.mock_unit import MockCamperUnit, MockBleakClient
+    from tools.mock_unit import MockBleakClient, MockCamperUnit
     funcs = protocol.load(); overrides.apply(funcs)
     unit = MockCamperUnit(); unit.armed = True            # heartbeat already ticking
     client = MockBleakClient.bind(unit)("MO:CK", timeout=1)

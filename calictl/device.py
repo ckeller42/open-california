@@ -135,6 +135,7 @@ class CamperDevice:
         in solix-env) handle the cascade without touching the adapter.
         """
         import os
+
         from bleak import BleakClient  # lazy
         if reset_on_fail is None:
             reset_on_fail = os.environ.get("CALICTL_ADAPTER_RESET") == "1"
@@ -420,6 +421,7 @@ class CamperDevice:
         """
         import random
         import time
+
         from . import protocol  # lazy
         if not func.control_char:
             raise ValueError("%s has no control characteristic" % func.name)
@@ -516,7 +518,7 @@ class CamperDevice:
                 pass  # keep beating; a dropped tick is tolerable within the arm window
             try:
                 await asyncio.wait_for(stop.wait(), HEARTBEAT_PERIOD_S)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
     @staticmethod
@@ -579,7 +581,7 @@ class PersistentSession:
        arm-delay per action), and reads stay fresh continuously.
     """
 
-    def __init__(self, dev: "CamperDevice", on_push=None):
+    def __init__(self, dev: CamperDevice, on_push=None):
         self._dev = dev
         self._client = None
         self._notif: dict[str, bytes] = {}

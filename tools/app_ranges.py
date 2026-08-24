@@ -59,7 +59,7 @@ def inconsistencies(funcs) -> list[str]:
 
 
 def main(argv=None):
-    from calictl import protocol, overrides
+    from calictl import overrides, protocol
     funcs = protocol.load(); overrides.apply(funcs)
     lines = audit(funcs)
     print("\n".join(lines))

@@ -23,11 +23,10 @@ from __future__ import annotations
 
 import argparse
 import subprocess
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from calictl import protocol, control, overrides
+from calictl import control, overrides, protocol
 
 # ATT write opcodes (method bits): 0x12 Write Request, 0x52 Write Command.
 _ATT_WRITE_OPCODES = {0x12, 0x52}
@@ -55,7 +54,7 @@ class Scenario:
     state: dict = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, name: str, d: dict) -> "Scenario":
+    def from_dict(cls, name: str, d: dict) -> Scenario:
         return cls(name=name, function=d["function"], what=d["what"], value=d["value"],
                    control_char=str(d["control_char"]), capture_label=d.get("capture_label", ""),
                    handle=d.get("handle"), state=d.get("state") or {})
@@ -63,7 +62,7 @@ class Scenario:
 
 def load_scenario(name: str, root: str | Path | None = None) -> Scenario:
     """Load `tools/scenarios/<name>.yaml` (needs PyYAML — this is tooling, deps allowed)."""
-    import yaml   # lazy: keep the module importable in the bleak/yaml-less test env
+    import yaml  # lazy: keep the module importable in the bleak/yaml-less test env
     base = Path(root) if root else Path(__file__).resolve().parent / "scenarios"
     path = base / (name + ".yaml")
     return Scenario.from_dict(name, yaml.safe_load(path.read_text()))
@@ -93,7 +92,7 @@ def extract_att_writes(path: str | Path, tshark: str = "tshark") -> list[tuple[i
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     except FileNotFoundError:
         raise SystemExit("tshark not found — install Wireshark CLI, or use --frames. "
-                         "See .claude/skills/capture-and-diff/SKILL.md")
+                         "See .claude/skills/capture-and-diff/SKILL.md") from None
     if res.returncode != 0:
         raise SystemExit("tshark failed: %s" % res.stderr.strip())
     return _parse_tshark_fields(res.stdout)

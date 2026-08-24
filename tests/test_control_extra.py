@@ -12,7 +12,8 @@ this only proves the frame layout + value packing, not on-device behaviour.
 """
 import pytest
 
-from calictl import protocol as P, overrides, control
+from calictl import control, overrides
+from calictl import protocol as P
 
 
 def _funcs():
@@ -154,8 +155,9 @@ def test_int_range_helper_validates_and_traces():
        :id: T_CONTROL_INT_RANGE
        :links: R_CONTROL_INT_RANGE
     """
-    from calictl import control
     import pytest
+
+    from calictl import control
     assert control._int_range("3", 1, 5, "cooler level") == 3     # str coerced
     assert control._int_range(0, 0, 23, "night hour") == 0        # inclusive bounds
     assert control._int_range(23, 0, 23, "night hour") == 23
