@@ -1,6 +1,7 @@
 import asyncio
-from calictl import device, protocol, overrides, control
-from tools.mock_unit import MockCamperUnit, MockBleakClient
+
+from calictl import control, device, overrides, protocol
+from tools.mock_unit import MockBleakClient, MockCamperUnit
 
 
 def _funcs():
@@ -28,7 +29,8 @@ def test_persistent_session_starts_armed_and_actuates_without_arm_delay(monkeypa
     async def _run():
         dev = device.CamperDevice("MO:CK")
         # inject the mock bleak module so _session() builds a MockBleakClient
-        import sys, types
+        import sys
+        import types
         fake = types.ModuleType("bleak")
         fake.BleakClient = MockBleakClient.bind(unit)
         sys.modules["bleak"] = fake

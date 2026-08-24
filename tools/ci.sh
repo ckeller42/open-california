@@ -35,7 +35,7 @@ screenshots() {   # regenerate docs/screenshots from the live UI over the mock (
                   # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.
   "$PY" -m tools.ux_gallery --out docs/screenshots
 }
-lint()      { "$PY" -m ruff check . || true; }   # NON-blocking until the codebase is ruff-green
+lint()      { "$PY" -m ruff check .; }           # hard gate — the codebase is ruff-green
 typecheck() { "$PY" -m mypy calictl || true; }   # best-effort (None-safety / bad returns)
 dev() {
   "$PY" -m pip install -r requirements-dev.txt
@@ -44,7 +44,7 @@ dev() {
 }
 
 case "${1:-ci}" in
-  ci)            test_suite; audit; web_fresh; import_clean; vendor_check; echo "local CI: OK";;
+  ci)            lint; test_suite; audit; web_fresh; import_clean; vendor_check; echo "local CI: OK";;
   test)          test_suite;;
   lint)          lint;;
   typecheck)     typecheck;;

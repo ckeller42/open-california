@@ -42,12 +42,12 @@ if git diff --cached --name-only | grep -qE '^(calictl/webui/|calictl/semantics\
   fi
 fi
 
-# 4d) ruff lint — NON-BLOCKING for now (the codebase isn't ruff-green yet; the tooling PR fixes that,
-#     then this flips to a hard gate). Warn so regressions are visible without blocking. Whole-repo
-#     check is sub-second, so no need to thread the staged file list (avoids word-split footguns).
+# 4d) ruff lint — HARD GATE (the codebase is ruff-green). Whole-repo check is sub-second. If ruff
+#     isn't installed, skip with a note rather than block (run `tools/ci.sh dev` to install it).
 if python3 -m ruff --version >/dev/null 2>&1; then
-  python3 -m ruff check --quiet . >/dev/null 2>&1 || \
-    echo "pre-commit: ruff has warnings (non-blocking — run: tools/ci.sh lint)" >&2
+  python3 -m ruff check --quiet . || fail "ruff found lint errors (run: tools/ci.sh lint)"
+else
+  echo "pre-commit: ruff not installed — skipping lint (tools/ci.sh dev installs it)" >&2
 fi
 
 # 4b) Full suite + coverage guardrail (skip with SKIP_TESTS=1 for docs-only commits). Parallel when

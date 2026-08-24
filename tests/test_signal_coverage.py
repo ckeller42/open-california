@@ -1,6 +1,11 @@
-import pytest, sys, os
+import os
+import sys
+
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tools import catalog
+
 
 def test_catalog_schema_surface_needs_name(tmp_path):
     p = tmp_path / "s.yaml"
@@ -19,7 +24,7 @@ def test_catalog_loads_valid():
     assert "energy" in c and "state" in c["energy"]
 
 def test_dictionary_keys_and_emitted():
-    from calictl import protocol, overrides
+    from calictl import overrides, protocol
     from tools import catalog
     f = protocol.load(); overrides.apply(f)
     dk = catalog.dictionary_keys(f)
@@ -31,7 +36,7 @@ def test_dictionary_keys_and_emitted():
 
 # --- Guardrail: the three invariants that prevent a silent drop/mislabel ---
 def _guard_funcs():
-    from calictl import protocol, overrides
+    from calictl import overrides, protocol
     f = protocol.load(); overrides.apply(f); return f
 
 

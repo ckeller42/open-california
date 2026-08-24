@@ -15,7 +15,6 @@ from an inbound topic back to a ``(function, what)`` that ``control.build`` acce
 """
 from calictl import mqtt
 
-
 # Every actuatable (function, what) that control.BUILDERS supports.
 EXPECTED = {
     ("cooler", "power"), ("cooler", "level"),
@@ -91,7 +90,7 @@ def test_read_only_sensors_carry_expire_after_for_freshness():
     battery = [c for t, c in cfgs.items() if "/sensor/" in t and c.get("unique_id", "").endswith("soc2_level")]
     assert battery and battery[0]["expire_after"] == mqtt.EXPIRE_AFTER_S
     # command entities must NOT carry expire_after (they're command-driven, not polled)
-    for t, c in mqtt.render_discovery().items():
+    for _t, c in mqtt.render_discovery().items():
         if "command_topic" in c:
             assert "expire_after" not in c
 

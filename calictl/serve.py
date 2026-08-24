@@ -17,7 +17,7 @@ import os
 import time
 from pathlib import Path
 
-from . import protocol, semantics, overrides, mqtt, influx, freshness, history, automation
+from . import automation, freshness, history, influx, mqtt, overrides, protocol, semantics
 from .device import CamperDevice, ConnectionUnavailable
 
 # How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
@@ -841,7 +841,7 @@ class Server:
         "sent"); never a false negative for lighting. No live session or no push -> ``None`` (the
         cold path can't cheaply confirm; the next poll reconciles).
         """
-        from .cli import _set_check   # lazy
+        from .cli import _set_check  # lazy
         f = self.funcs[function]
         notif = getattr(sess, "_notif", None)
         if notif is None:

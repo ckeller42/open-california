@@ -175,7 +175,8 @@ def analyze(days=7.0, every="1m", gap_min=10.0, outcomes_path=None):
     """
     import os
     import time
-    from calictl import influx, history
+
+    from calictl import history, influx
     if outcomes_path is None:
         outcomes_path = os.environ.get("CALICTL_OUTCOMES_CACHE")
         if not outcomes_path:

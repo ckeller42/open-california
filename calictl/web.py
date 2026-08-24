@@ -5,6 +5,7 @@ Never opens BLE: state comes from the poll cache and commands go through the inj
 assets in calictl/webui/ plus a small JSON API. Stdlib-only.
 """
 from __future__ import annotations
+
 import json
 import os
 import posixpath

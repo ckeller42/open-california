@@ -27,7 +27,7 @@ import types
 
 import pytest
 
-from calictl import device, protocol, overrides, control
+from calictl import control, device, overrides, protocol
 
 # roof state payloads for the readback / validation read (char 1402):
 _STATE_INVALID = bytes(16)            # SafetyCounterValid bit clear

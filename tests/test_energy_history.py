@@ -1,7 +1,7 @@
 """The daemon's energy-history recording + the /api/history read path (both Influx-free)."""
 import time
 
-from calictl import serve, history
+from calictl import history, serve
 
 
 def _server(tmp_path, monkeypatch):

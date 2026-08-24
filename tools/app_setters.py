@@ -12,7 +12,9 @@ same class as the setters. Best-effort + stdlib-only; results are review flags, 
 gospel (the decompiled tree is R8-obfuscated).
 """
 from __future__ import annotations
-import os, re
+
+import os
+import re
 
 _INV_WRITE = re.compile(r"!\s*\w+\s*\?\s*1\s*:\s*0|!\s*\w+\s*\?\s*0\s*:\s*1")   # setter inverts value
 _INV_READ = re.compile(r"!\s*\(\(Boolean\)")   # readback getter inverts a field (the READ risk)

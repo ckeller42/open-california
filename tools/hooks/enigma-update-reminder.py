@@ -9,8 +9,8 @@ was learned into ``mapping.enigma`` — the standing "mapping grows monotonicall
 
 Reads the PostToolUse event JSON on stdin; prints additionalContext when it fires.
 """
-import sys
 import json
+import sys
 
 try:
     data = json.load(sys.stdin)

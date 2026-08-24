@@ -21,7 +21,7 @@ import argparse
 import asyncio
 import time
 
-from calictl import protocol, overrides, device
+from calictl import device, overrides, protocol
 
 
 async def run(seconds: float, tick: float = 5.0) -> None:

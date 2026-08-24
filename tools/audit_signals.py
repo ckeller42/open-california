@@ -1,7 +1,13 @@
 """Four-source auditor: seed/update the catalog and report discrepancies."""
 from __future__ import annotations
-import glob, os, re, sys
+
+import glob
+import os
+import re
+import sys
+
 from tools import catalog
+
 
 def gui_keys(ui_dir) -> dict:
     out = {}
@@ -85,7 +91,8 @@ def seed(funcs, cat, app, gui) -> dict:
 
 def main(argv=None):
     import yaml
-    from calictl import protocol, overrides
+
+    from calictl import overrides, protocol
     argv = argv or sys.argv[1:]
     root = os.path.join(os.path.dirname(__file__), "..")
     funcs = protocol.load(); overrides.apply(funcs)
