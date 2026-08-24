@@ -42,6 +42,7 @@ Control frames
 --------------
 
 .. autofunction:: calictl.control._airheater
+.. autofunction:: calictl.control._int_range
 .. autofunction:: calictl.control.commit_for
 .. autofunction:: calictl.control.preamble_for
 
@@ -59,3 +60,4 @@ Tests
 .. autofunction:: tests.test_mock_integration.test_read_all_heartbeat_refreshes_stale_read
 .. autofunction:: tests.test_mock_integration.test_lighting_applies_without_preamble
 .. autofunction:: tests.test_automation.test_no_loop_full_cycle_engine_shed_then_park_then_refused
+.. autofunction:: tests.test_control_extra.test_int_range_helper_validates_and_traces

@@ -14,6 +14,34 @@ def _truthy(value) -> bool:
     return str(value).strip().lower() in ("on", "true", "1")
 
 
+def _int_range(value, lo, hi, label):
+    """Coerce ``value`` to int and require ``lo <= v <= hi``, else a uniform ValueError.
+
+    Replaces ~10 hand-rolled ``int(value)`` + bound-check + bespoke-``ValueError`` blocks across the
+    builders (cooler level, night hour, air-heater level/runtime, roof-A/C fan/mode/temp, …) with one
+    validated helper, so the operator error is consistent. Sites whose message carries extra semantics
+    (lighting brightness's ``0=off, 1-10=10%..100%``) keep their own inline check.
+
+    .. req:: Uniform int-range validation for control values
+       :id: R_CONTROL_INT_RANGE
+       :status: implemented
+       :tags: control, validation
+
+       Numeric control arguments shall be coerced to int and rejected with a ValueError naming the
+       field and the accepted range when out of bounds, via a single shared helper.
+
+    :param value: the operator-supplied value (str/int).
+    :param lo: inclusive lower bound.
+    :param hi: inclusive upper bound.
+    :param label: field name for the error message (e.g. ``"cooler level"``).
+    :returns: the validated int.
+    """
+    v = int(value)
+    if not lo <= v <= hi:
+        raise ValueError("%s must be %d-%d, got %r" % (label, lo, hi, value))
+    return v
+
+
 def _hhmm(value):
     """Parse a time-of-day into (hour, minute). Accepts ``"HH:MM"``/``"H:M"`` or a 2-item
     (hour, minute) sequence. Raises ValueError on anything out of 0-23 / 0-59."""
@@ -114,9 +142,7 @@ def _cooler(funcs, what, value, last):
     if what == "power":
         ch = {"State": 1 if _truthy(value) else 0}
     elif what == "level":
-        lvl = int(value)
-        if not 1 <= lvl <= 5:
-            raise ValueError("cooler level must be 1-5, got %r" % value)
+        lvl = _int_range(value, 1, 5, "cooler level")
         ch = {"Level": lvl}
     elif what == "mode":                       # quiet mode (vf/c.java T1/x0/k0 -> Mode 0/2/4)
         key = str(value).strip().lower()
@@ -131,9 +157,7 @@ def _cooler(funcs, what, value, last):
     elif what == "timer_cancel":               # cancel it (vf/c.java:251 X0())
         ch = {"TimerCancel": 1}
     elif what in ("night_on", "night_off"):    # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
-        hr = int(value)
-        if not 0 <= hr <= 23:
-            raise ValueError("night timer hour must be 0-23, got %r" % value)
+        hr = _int_range(value, 0, 23, "night timer hour")
         ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
     else:
         return None
@@ -257,9 +281,7 @@ def _lighting(funcs, what, value, last):
         # SET_BRIGHTNESS with ProfileNumber = the favorite N (NOT the live-view 9), every equipped
         # zone carrying its current brightness (read from `last`), NOT_EQUIPPED zones left at 14.
         # This is how the app DEFINES a favorite. Decompile-derived; NOT yet wire-verified.
-        n = int(value)
-        if not 1 <= n <= 7:
-            raise ValueError("save_profile target must be a favorite 1-7, got %r" % value)
+        n = _int_range(value, 1, 7, "save_profile favorite")
         from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
         real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
         st = last or {}
@@ -345,16 +367,12 @@ def _airheater(funcs, what, value, last):
     if what == "power":
         ch = {"NormalOperationRequest": 1 if _truthy(value) else 0}
     elif what == "level":
-        lvl = int(value)
         # App-settable range is 1-10 (rf/b.java:783 q4 stages HeatingLevel only if 0<i<=10; 11 is
         # the leave-unchanged/commit sentinel). 0-15 is the raw field WIDTH, not the exposed range.
-        if not 1 <= lvl <= 10:
-            raise ValueError("airheater HeatingLevel must be 1-10 (10=HI), got %r" % value)
+        lvl = _int_range(value, 1, 10, "airheater HeatingLevel (10=HI)")
         ch = {"HeatingLevel": lvl}
     elif what == "runtime":                    # RunningTime, minutes (rf/b.java:199 D4()); no app bound
-        rt = int(value)
-        if not 0 <= rt <= 255:
-            raise ValueError("airheater runtime must be 0-255, got %r" % value)
+        rt = _int_range(value, 0, 255, "airheater runtime")
         ch = {"RunningTime": rt}
     elif what == "timer":                       # start-at TimerHour:TimerMin (rf/b.java:165 B0())
         hh, mm = _hhmm(value)
@@ -401,19 +419,13 @@ def _roofaircondition(funcs, what, value, last):
     if what == "power":
         ch = {"State": 1 if _truthy(value) else 0}
     elif what == "fanspeed":
-        v = int(value)
-        if not 0 <= v <= 4:
-            raise ValueError("roofaircondition fanspeed must be 0-4, got %r" % value)
+        v = _int_range(value, 0, 4, "roofaircondition fanspeed")
         ch = {"FanSpeed": v}
     elif what == "mode":
-        v = int(value)
-        if not 0 <= v <= 3:
-            raise ValueError("roofaircondition mode must be 0-3, got %r" % value)
+        v = _int_range(value, 0, 3, "roofaircondition mode")
         ch = {"Mode": v}
     elif what == "temperature":
-        v = int(value)
-        if not 0 <= v <= 255:
-            raise ValueError("roofaircondition temperature must be 0-255, got %r" % value)
+        v = _int_range(value, 0, 255, "roofaircondition temperature")
         ch = {"Temperature": v}
     else:
         return None
@@ -447,9 +459,7 @@ def _stairs(funcs, what, value, last):
             raise ValueError("stairs move must be extend/retract/stop, got %r" % value)
         ch = {"Movement": STAIRS_MOVEMENT[v]}
     elif what == "mode":
-        m = int(value)
-        if not 0 <= m <= 3:
-            raise ValueError("stairs mode must be 0-3, got %r" % value)
+        m = _int_range(value, 0, 3, "stairs mode")
         ch = {"OperationMode": m}
     else:
         return None
@@ -482,9 +492,7 @@ def _livingroomheater(funcs, what, value, last):
     elif what == "water":
         ch = {"StateWater": 1 if _truthy(value) else 0}
     elif what in ("temperature", "temperatureair"):
-        v = int(value)
-        if not 0 <= v <= 255:
-            raise ValueError("livingroomheater temperature must be 0-255, got %r" % value)
+        v = _int_range(value, 0, 255, "livingroomheater temperature")
         ch = {"TemperatureAir": v}
     else:
         return None
