@@ -24,6 +24,7 @@ Energy history
 Device / reads
 --------------
 
+.. autofunction:: calictl.device._read_char_with_retry
 .. automethod:: calictl.device.CamperDevice.read_all
 .. automethod:: calictl.device.CamperDevice.actuate
 .. automethod:: calictl.device.CamperDevice.actuate_roof

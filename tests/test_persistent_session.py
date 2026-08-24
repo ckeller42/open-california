@@ -126,7 +126,7 @@ def test_persistent_read_all_logs_after_exhausted_retries(monkeypatch, capsys):
 def test_persistent_read_all_breaks_on_disconnect_mid_loop(monkeypatch):
     """.. test:: PersistentSession.read_all aborts the cycle on a genuine link drop
        :id: T_PERSISTENT_READ_ALL_BREAK
-       :links: R_PERSISTENT_SESSION
+       :links: R_PERSISTENT_SESSION, R_READ_RETRY_SHARED
 
        Mirrors ``_read_all_on``: don't burn retries/remaining funcs once the client itself
        reports disconnected.
