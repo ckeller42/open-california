@@ -110,6 +110,37 @@ machines) and gives a **call graph** + **inter-procedural def-use / data-flow**.
   jadx/vineflower/smali are faster. It's the tool for the one hard gap (async reconciliation), not
   a general step.
 
+## Level 5 — dynamic analysis (Frida), when static hits a wall
+
+Everything above is **static**. When the app **encrypts strings** (grep finds nothing; the field
+name only exists at runtime), when you need the **real runtime callstack / the exact bytes** a
+method emits, or when control flow is too tangled to follow by hand — **run it and hook it** with
+**Frida**. Static and dynamic are complementary: static tells you *where* to hook, dynamic gives you
+*ground truth* the decompiler can't.
+
+- **Setup:** `frida-server` on a **rooted device or emulator** running the app; drive from the host
+  with `frida`/`frida-trace` (`pip install frida-tools`). Caveat for *this* project: the app talks to
+  the **real camper over BLE**, so meaningful dynamic runs need the phone near the van (or a BLE
+  mock) — heavier than static, so reserve it for the questions static genuinely can't answer.
+- **Dump decrypted strings** — the highest-value use against obfuscation: hook the decryptor (or
+  just `java.lang.StringBuilder`/`String` construction) and log plaintext as the app restores it;
+  or `Fridump` the process memory and grep it for field names/opcodes/keys.
+- **Trace a method + its callstack at runtime** — `frida-trace -U -j 'com.pkg.*!*writeCharacteristic*'`,
+  or a hook that logs args + `Thread.currentThread().getStackTrace()`. This is the dynamic twin of
+  the SootUp callstack trace: hook the BLE **write** and you see the exact frame bytes *and* who
+  built them, live — often faster than untangling the coroutine layer statically.
+- **Lift the decryptor instead of running it** — if the app has a self-contained string-decrypt
+  method, copy its decompiled body into a standalone Java/Kotlin file and run it over the obfuscated
+  literals offline (no device needed). Works when the decryptor doesn't depend on runtime state.
+
+## Native libraries (`.so`) — Ghidra / radare2
+
+JNI/attestation logic (e.g. a `System.loadLibrary("Native")` crypto/anti-tamper blob) is **native
+ARM**, invisible to the Java decompilers. Pull `lib/<abi>/*.so` from the APK and open it in **Ghidra**
+(or radare2/Cutter) to read the `Java_<pkg>_<Class>_<method>` JNI exports. Reserve for questions that
+actually reach into native code (request signing, key derivation, root checks); most protocol work
+stays in the Java/Kotlin layer.
+
 ## The durable deobfuscation layer (renames + doc-comments that survive re-decompiles)
 
 R8 renames everything to `a.b`, `E()`, `d0()`. The fix is a **jadx mappings file** you own and
@@ -125,6 +156,9 @@ re-apply on every decompile, so meaningful names + docs are never lost:
   - **C — seed at scale with an LLM pass:** dispatch an agent over the fresh sources to infer names
     + short doc-comments from method bodies, string constants, and any plaintext debug-log methods,
     emitting mapping entries; then hand-curate the ones that matter. Re-run as coverage grows.
+    (Off-the-shelf LLM-deobfuscators like **Androidmeda** do the same job; our agent pass is the
+    same idea, integrated with the mapping file — but always **verify inferred names against the
+    source**, LLM renames are hypotheses until checked.)
 - **Editing interactively:** jadx-gui rename (`n`) + "Add comment" persist into the mappings file
   ("Save mappings as…"); the headless runs then pick them up. Keep the file in the private repo.
 - **Committing/pushing the mapping (this project's buspi setup):** the analysis repo lives on buspi
