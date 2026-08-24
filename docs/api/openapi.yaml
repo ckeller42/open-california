@@ -1,0 +1,358 @@
+# OpenAPI 3.1 spec for the calictl daemon's embedded web API (calictl/web.py).
+#
+# Hand-written and kept honest by tests/test_openapi_coverage.py, which fails CI if the routes,
+# the POST allowlist, or the CONFIRM_REQUIRED set here drift from calictl/web.py.
+#
+# View it:  npx @redocly/cli preview docs/api/openapi.yaml
+#           (or any Swagger UI / Redoc / VS Code OpenAPI extension)
+#
+# The server is a stdlib http.server embedded in `serve`; it NEVER opens BLE — reads come from the
+# poll cache, writes bridge to serve.on_command under the daemon's BLE lock. It is UNAUTHENTICATED
+# and meant only for a trusted LAN.
+openapi: 3.1.0
+info:
+  title: calictl web API
+  version: "1.0.0"
+  description: |
+    JSON API embedded in the `calictl serve` daemon, backing the app-replica web UI (and any
+    other LAN client). Read endpoints return the last poll-cache state without touching BLE;
+    write endpoints (`/api/command`) bridge to the BLE control path under the daemon's single-owner
+    lock. **Unauthenticated — expose only on a trusted LAN.**
+
+    Per-function state fields (cooler/energy/water/…) are documented in the signal catalog
+    (`protocol/signals.yaml`) and `docs/business-logic/signals.md`, not enumerated here; this spec
+    fixes the API *envelope* (routes, request/response shapes, status codes).
+  x-confirm-required: [roof, airheater]   # functions whose /api/command POST needs confirm:true
+servers:
+  - url: http://buspi:8088
+    description: buspi (in-vehicle Raspberry Pi), default web port
+  - url: http://localhost:8088
+    description: local / same-host
+paths:
+  /api/state:
+    get:
+      summary: Full interpreted state of every function, plus a _meta block
+      description: |
+        Interpreted state for every function in the poll cache — no BLE read. Includes a `_meta`
+        block with the last-successful-poll time, an `online` flag, read-only status, BLE session
+        state, and the auto-camper toggle. `_meta` is not a function name, so a client must skip it
+        when iterating functions. Values may be stale when the van is parked (see `_meta.age_s`).
+      responses:
+        "200":
+          description: Current state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/State" }
+        "500":
+          description: Failed to build state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: state_failed }
+  /api/history:
+    get:
+      summary: Leisure-battery samples for a recent window (for the 24 h chart)
+      description: |
+        Voltage/current samples from the daemon's own append-only history file (NOT InfluxDB — the
+        UI is Influx-free by design), oldest first. `gap_s` tells the client where to break the
+        plotted line (the van deep-sleeps for days when parked; an absent stretch means "no data").
+      parameters:
+        - name: h
+          in: query
+          required: false
+          description: Window size in hours, clamped server-side to 1..48 (default 24).
+          schema: { type: integer, minimum: 1, maximum: 48, default: 24 }
+      responses:
+        "200":
+          description: Samples in the window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/History" }
+        "500":
+          description: Failed to read history.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: history_failed }
+  /api/screens:
+    get:
+      summary: Machine-usable UI screen specs
+      description: The authored `ui/screens` specs the web UI renders from, as a JSON document.
+      responses:
+        "200":
+          description: Screen specs.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /api/command:
+    post:
+      summary: Actuate a vehicle control (the only writing endpoint)
+      description: |
+        Bridge a control write to the BLE path under the daemon's lock. Safety-sensitive functions
+        (`x-confirm-required`: currently `roof`, `airheater`) require `confirm: true`. Rejected with
+        `405 read_only` when the daemon runs read-only. `applied` is the daemon's own verify-read of
+        the resulting state: `true` = the state char actually changed, `false` = the unit did not
+        take the write (e.g. the camping stationary gate), `null` = not verifiable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommandRequest" }
+            examples:
+              coolerPower: { value: { function: cooler, what: power, value: "on" } }
+              roofOpen:    { value: { function: roof, what: open, value: "on", confirm: true } }
+      responses:
+        "200":
+          description: Command executed (see `applied` for whether the unit took it).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommandResult" }
+        "400":
+          description: >
+            Malformed request — `bad_request` (bad/oversized Content-Length),
+            `bad_json` (unparseable body), `missing_function_or_what`, or `confirm_required`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                missing: { value: { error: missing_function_or_what } }
+                confirm: { value: { error: confirm_required } }
+        "404":
+          description: Path not a POST route.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: not_found }
+        "405":
+          description: Writes disabled (daemon is read-only).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: read_only }
+        "415":
+          description: Content-Type is not application/json.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: unsupported_media_type }
+        "500":
+          description: Command failed server-side.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: command_failed }
+  /api/session:
+    post:
+      summary: Connect or disconnect the BLE session (not a vehicle write)
+      description: |
+        Manage the persistent BLE session. `connect` warms the fast path; `disconnect` hands the
+        single BLE slot back to the phone app. Allowed even in read-only mode (it never actuates).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SessionRequest" }
+            example: { action: connect }
+      responses:
+        "200":
+          description: New session mode + state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResult" }
+        "400":
+          description: action not in {connect, disconnect}.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: bad_action }
+        "415":
+          description: Content-Type is not application/json.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: unsupported_media_type }
+        "500":
+          description: Session change failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: session_failed }
+  /api/auto_camper:
+    post:
+      summary: Toggle the auto-camper (restore-camping-after-park) setting
+      description: |
+        A persisted daemon SETTING, not a vehicle write — allowed even in read-only mode (the
+        feature's own actuation still checks read-only when it later acts). See
+        `docs/business-logic/auto-camper-mode.md`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AutoCamperRequest" }
+            example: { enabled: true }
+      responses:
+        "200":
+          description: New toggle state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AutoCamperResult" }
+        "400":
+          description: enabled is not a boolean.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: bad_enabled }
+        "415":
+          description: Content-Type is not application/json.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: unsupported_media_type }
+        "500":
+          description: Toggle failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: auto_camper_failed }
+components:
+  schemas:
+    Error:
+      type: object
+      description: Error envelope. `error` is a stable machine token; exception text is never leaked.
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [state_failed, history_failed, not_found, unsupported_media_type, bad_request,
+                 bad_json, read_only, missing_function_or_what, confirm_required, command_failed,
+                 bad_action, session_failed, bad_enabled, auto_camper_failed]
+    State:
+      type: object
+      description: |
+        One key per installed function (e.g. `cooler`, `energy`, `water`, `campingmode`, `vehicle`,
+        `lighting`, …) whose value is that function's interpreted state, plus a reserved `_meta`
+        key. Per-function fields are defined in the signal catalog; every function object carries at
+        least `installed`.
+      properties:
+        _meta: { $ref: "#/components/schemas/Meta" }
+      additionalProperties:
+        $ref: "#/components/schemas/FunctionState"
+    FunctionState:
+      type: object
+      description: A single function's interpreted state. Fields are function-specific (see signals.yaml).
+      properties:
+        installed: { type: boolean }
+      additionalProperties: true
+    Meta:
+      type: object
+      description: Non-function metadata about the poll cache + session.
+      required: [last_seen, age_s, online, read_only, session, session_mode, auto_camper]
+      properties:
+        last_seen:
+          type: [number, "null"]
+          description: Epoch seconds of the last successful poll, or null if never.
+        age_s:
+          type: [integer, "null"]
+          description: Seconds since last_seen (null if never polled).
+        online:
+          type: boolean
+          description: Whether the van is currently reachable (session up, or poll recent enough).
+        read_only:
+          type: boolean
+          description: True if the daemon rejects control writes.
+        session:
+          type: string
+          description: BLE session state.
+          enum: [off, connecting, up, degraded, asleep]
+        session_mode:
+          type: string
+          description: '"auto" (activity-scoped), "release" (user disconnected), or "off".'
+          enum: [auto, release, off]
+        auto_camper: { $ref: "#/components/schemas/AutoCamperMeta" }
+    AutoCamperMeta:
+      type: object
+      required: [enabled, armed, notice]
+      properties:
+        enabled: { type: boolean, description: The persisted toggle. }
+        armed:
+          type: boolean
+          description: A restore is owed (the engine shed camping and it hasn't been restored yet).
+        notice:
+          description: One-time stand-down/give-up notice for the UI toast, or null.
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                ts: { type: number }
+                msg: { type: string }
+    History:
+      type: object
+      required: [samples, gap_s, now, hours]
+      properties:
+        samples:
+          type: array
+          description: '[epoch_s, volts, amps] triples, oldest first.'
+          items:
+            type: array
+            items: { type: number }
+            minItems: 3
+            maxItems: 3
+        gap_s:
+          type: number
+          description: Absence longer than this = break the plotted line (van asleep), not held flat.
+        now: { type: number, description: Server epoch seconds at query time. }
+        hours: { type: integer, description: The effective (clamped) window. }
+    CommandRequest:
+      type: object
+      required: [function, what]
+      properties:
+        function:
+          type: string
+          description: Target function (e.g. cooler, campingmode, lighting, roof).
+        what:
+          type: string
+          description: The control on that function (e.g. power, level, master, open).
+        value:
+          description: Requested value; type depends on the control (string/number/bool).
+        confirm:
+          type: boolean
+          default: false
+          description: Required true for x-confirm-required functions (roof, airheater).
+    CommandResult:
+      type: object
+      required: [ok, applied, state, error, function]
+      properties:
+        ok: { type: boolean }
+        applied:
+          type: [boolean, "null"]
+          description: Verify-read result — true=state changed, false=unit refused, null=unverifiable.
+        state:
+          description: The function's interpreted state after the write.
+          $ref: "#/components/schemas/FunctionState"
+        error:
+          type: [string, "null"]
+          description: Per-command error detail, or null on success.
+        function: { type: string }
+    SessionRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [connect, disconnect] }
+    SessionResult:
+      type: object
+      required: [ok, mode, session]
+      properties:
+        ok: { type: boolean }
+        mode: { type: string, enum: [auto, release] }
+        session: { type: string, enum: [off, connecting, up, degraded, asleep] }
+    AutoCamperRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+    AutoCamperResult:
+      type: object
+      required: [ok, auto_camper]
+      properties:
+        ok: { type: boolean }
+        auto_camper: { type: boolean, description: The new toggle state. }
