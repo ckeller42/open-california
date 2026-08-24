@@ -83,8 +83,13 @@ def test_window_expiry_gives_up():
 
 
 def test_no_loop_full_cycle_engine_shed_then_park_then_refused():
-    # engine start (arm) -> drive -> park -> unit keeps refusing the restore: exactly MAX_FAILS
-    # writes, then one give-up, then quiet. Proves it can't loop.
+    """End-to-end: engine start (arm) -> drive -> park -> unit keeps refusing the restore: exactly
+    MAX_FAILS writes, then one give-up, then quiet. Proves it can't loop.
+
+    .. test:: Restore-after-park arms, retries bounded, and never loops
+       :id: T_AUTO_CAMPER_RESTORE
+       :links: R_AUTO_CAMPER_RESTORE
+    """
     st = dict(owe_restore=False, pre_drive=None, restore_until=None, fails=0)
     pign, pm, pusb, plt = False, True, False, False   # camping WAS on before the drive
     now, acts, notices = 0.0, 0, 0
