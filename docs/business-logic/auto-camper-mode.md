@@ -95,7 +95,7 @@ Each notable step is **logged** (`auto-camper[<event>]: …`, events `armed_engi
 Before auto-camper is switched on, the daemon **passively observes** what the unit does to camping
 mode on an engine start — to confirm it sheds cleanly and does **not flip-flop** (which would make an
 auto-re-enable fight the unit). This runs **always, regardless of the toggle, and never actuates**
-(`serve.Server._observe_transitions`).
+(`observer.CampingObserver.observe`).
 
 **Two "engine on" signals, because they differ:**
 
@@ -126,7 +126,7 @@ around the edge and **flags a flip-flop** (≥2 `master_on` transitions within `
   **subscribes to notifications** on it (`jb/b.java:142` `td.c` subscribe; router `pf/j.java:105`) —
   exactly like lighting's `1502`. So the engine-start shed arrives as an **unsolicited `1202`
   notification**; ignition (`1004`) is pushed too. calictl already reads `1202`. **This is now
-  wired:** `serve.Server._on_ble_push` (via `device._subscribe_all(..., on_push=)` on the persistent
+  wired:** `observer.CampingObserver.on_push` (via `device._subscribe_all(..., on_push=)` on the persistent
   session) logs `camping-push[...]` the instant a `1202`/`1004` notification changes camping or
   ignition — full resolution, no poll wait. **Caveat:** the persistent session is only held while the
   **web UI is active** (otherwise the BLE slot is released for the phone), so the push overlay fires

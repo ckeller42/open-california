@@ -17,7 +17,7 @@ import os
 import time
 from pathlib import Path
 
-from . import automation, freshness, history, influx, mqtt, overrides, protocol, semantics
+from . import automation, freshness, history, influx, mqtt, observer, overrides, protocol, semantics
 from .device import CamperDevice, ConnectionUnavailable
 
 # How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
@@ -263,25 +263,13 @@ class Server:
                                                 automation.AUTO_CAMPER_MAX_FAILS))
         self._ac_window_s = float(os.environ.get("CALICTL_AUTO_CAMPER_WINDOW_S",
                                                 automation.AUTO_CAMPER_WINDOW_S))
-        # Camping/ignition transition OBSERVER (always on, NEVER actuates). Logs every change in
-        # ignition + camping substates to the journal, and BURSTS the poll rate for a window after
-        # an engine start so the shed is captured at fine resolution (the 30 s cadence aliases it —
-        # ignition-on and camping-off land in the same sample). This is the evidence-gathering that
-        # must precede enabling auto-camper: it characterises whether the unit sheds camping once or
-        # flip-flops. See docs/business-logic/auto-camper-mode.md.
-        self._obs_prev = None               # last observed {ignition, master_on, usb_charger, lights_on, enable}
-        self._obs_ign_edge = None           # wall time of the last ignition 0->1 (for Δ-since-start)
-        self._burst_until = None            # monotonic deadline while fast-polling, else None
-        self._burst_interval = float(os.environ.get("CALICTL_OBSERVE_BURST_INTERVAL_S", "3"))
-        self._burst_window_s = float(os.environ.get("CALICTL_OBSERVE_BURST_S", "180"))
+        # Camping/ignition transition OBSERVER (always on, NEVER actuates) — a self-contained unit
+        # (calictl/observer.py). It logs ignition+camping transitions, bursts the poll rate after an
+        # engine start (the 30 s cadence otherwise aliases engine-on and the shed into one sample),
+        # and logs the unit's 1202/1004 pushes. See docs/business-logic/auto-camper-mode.md.
+        self._observer = observer.CampingObserver(self.funcs)
         # RE probe: log the raw F000/F001 general-purpose diagnostic register to InfluxDB (opt-in).
         self._store_gp = os.environ.get("CALICTL_STORE_GENERALPURPOSE", "").lower() in ("1", "true", "yes")
-        # Notification-driven observer: when the persistent session is up, the unit PUSHES camping
-        # state on char 1202 (and ignition on 1004) — decompile-confirmed. Log those the instant they
-        # arrive (full resolution, no poll wait). Reverse-map state-char UUID -> function name.
-        self._push_char_to_fn = {str(f.state_char).lower(): name
-                                 for name, f in self.funcs.items() if f.state_char}
-        self._push_prev = {}                # last pushed value per tracked field (for change detection)
         # Load persisted state LAST — it must run AFTER every default above so it can override them
         # (_water_good, the _auto_camper toggle, and the restore-after-park debt). Running it earlier
         # would let the defaults clobber the loaded values.
@@ -430,83 +418,6 @@ class Server:
         print("auto-camper: %s" % ("ENABLED" if self._auto_camper else "disabled"), flush=True)
         return self._auto_camper
 
-    @staticmethod
-    def _obs_fmt(v):
-        """0/1 for a bool, '-' for missing, else the raw value — compact for one journal line."""
-        if v is None:
-            return "-"
-        if isinstance(v, bool):
-            return "1" if v else "0"
-        return str(v)
-
-    def _observe_transitions(self, states):
-        """PASSIVE evidence-gathering (never actuates): log every change in ignition + camping
-        substates to the journal, and start a fast-poll burst after an engine start so the shed is
-        captured at fine resolution. Runs every poll regardless of the auto-camper toggle.
-
-        Why: at the 30 s cadence, engine-start and the camping shed alias into one sample, so we
-        cannot tell a single clean shed from a flip-flop. Bursting to ~3 s around the engine edge
-        de-aliases it (and densifies the InfluxDB series there for the analyzer). Transitions only,
-        so the journal stays readable. See tools/analyze_camping.py + auto-camper-mode.md.
-
-        Two "engine on" signals are tracked, because they differ: ``ignition`` is Terminal-15 (the
-        ignition switch — can be on with the engine NOT running, e.g. accessory) while
-        ``dcdc_charging`` is the DC-DC converter active = alternator feeding the leisure battery =
-        the engine actually RUNNING. Recording both lets the analyzer see which one the camping shed
-        follows. An engine-start burst triggers on a rising edge of EITHER."""
-        veh = states.get("vehicle") or {}
-        camp = states.get("campingmode") or {}
-        e = states.get("energy") or {}
-        cur = {"ignition": veh.get("ignition_on"),            # Terminal-15 (ignition switch)
-               "dcdc_charging": e.get("dcdc_charging"),       # DC-DC active = alternator = engine RUNNING
-               "master_on": camp.get("master_on"),
-               "usb_charger": camp.get("usb_charger"),
-               "lights_on": camp.get("lights_on"),
-               "enable": camp.get("enable")}                  # camp.enable = terminal-15 as the camping fn sees it
-        now = time.time()
-        prev, self._obs_prev = self._obs_prev, cur
-        if prev is None:
-            return                                # first poll: baseline only, nothing to compare
-        engine_rise = ((bool(cur["ignition"]) and not bool(prev["ignition"]))
-                       or (bool(cur["dcdc_charging"]) and not bool(prev["dcdc_charging"])))
-        if engine_rise:                            # engine start on EITHER signal -> stamp + fast-poll burst
-            self._obs_ign_edge = now
-            self._burst_until = time.monotonic() + self._burst_window_s
-        changed = [k for k in cur if cur[k] != prev[k]]
-        if not changed:
-            return
-        dt = "%.0f" % (now - self._obs_ign_edge) if self._obs_ign_edge else "-"
-        parts = ", ".join("%s %s->%s" % (k, self._obs_fmt(prev[k]), self._obs_fmt(cur[k])) for k in changed)
-        print("camping-watch: %s (ign=%s dcdc=%s dcdc_A=%s batt2_A=%s dt_eng=%ss soc=%s)"
-              % (parts, self._obs_fmt(cur["ignition"]), self._obs_fmt(cur["dcdc_charging"]),
-                 self._obs_fmt(e.get("dcdc_current")), self._obs_fmt(e.get("batt2_current")),
-                 dt, self._obs_fmt(e.get("soc2_pct"))), flush=True)
-
-    # camping/ignition fields we watch on a push, per function (mirrors _observe_transitions).
-    _PUSH_FIELDS = {"campingmode": ("master_on", "usb_charger", "lights_on", "enable"),
-                    "vehicle": ("ignition_on",)}
-
-    def _on_ble_push(self, uuid, data):
-        """Fired IN THE BLE LOOP the instant a status char pushes a notification (persistent session
-        only). Logs camping/ignition changes at full resolution — this both CONFIRMS the unit's push
-        channel on THIS unit (decompile said 1202 pushes; never yet observed here) and catches toggles
-        between polls. Passive, sync, best-effort: never actuates, never raises into bleak. The 30 s
-        poll observer (_observe_transitions) remains the reliable baseline; this is the fast overlay,
-        tagged `camping-push` so the two channels are distinguishable in the journal."""
-        fn = self._push_char_to_fn.get(uuid)
-        fields = self._PUSH_FIELDS.get(fn)
-        if not fields:
-            return                            # not a char we watch (only campingmode / vehicle)
-        interp = semantics.interpret(fn, protocol.decode(self.funcs[fn], data))
-        cur = {k: interp.get(k) for k in fields}
-        changed = {k: (self._push_prev[k], v) for k, v in cur.items()
-                   if k in self._push_prev and self._push_prev[k] != v}
-        self._push_prev.update(cur)
-        if changed:
-            parts = ", ".join("%s %s->%s" % (k, self._obs_fmt(o), self._obs_fmt(n))
-                              for k, (o, n) in changed.items())
-            print("camping-push[%s]: %s" % (fn, parts), flush=True)
-
     def _ac_track_prev(self, ign, master, usb, lights):
         """Roll the auto-camper previous-state snapshot (edge detection for the next poll)."""
         self._ac_prev_ignition, self._ac_prev_master = ign, master
@@ -623,7 +534,7 @@ class Server:
             self._last_ok_ts = time.time()
             self._record_history(states.get("energy"))
             try:
-                self._observe_transitions(states)      # PASSIVE: log camping/ignition changes + burst
+                self._observer.observe(states)          # PASSIVE: log camping/ignition changes + burst
             except Exception:
                 import traceback
                 print("camping-watch error:", flush=True)
@@ -679,7 +590,7 @@ class Server:
             except Exception:
                 pass
             self._session = None
-        sess = device.PersistentSession(self.dev, on_push=self._on_ble_push)
+        sess = device.PersistentSession(self.dev, on_push=self._observer.on_push)
         try:
             await sess.start()
         except Exception as e:
@@ -986,15 +897,9 @@ class Server:
                     print("poll error:", flush=True)
                     traceback.print_exc()
                     self._record_outcome("error", e)
-                # Fast-poll burst: after an engine-start edge the observer sets _burst_until; poll at
-                # the short interval until it expires, so the camping shed is captured finely.
-                nap = self.interval
-                if self._burst_until is not None:
-                    if time.monotonic() < self._burst_until:
-                        nap = min(nap, self._burst_interval)
-                    else:
-                        self._burst_until = None       # window elapsed -> back to the normal cadence
-                await asyncio.sleep(nap)
+                # Fast-poll burst after an engine start is owned by the observer (poll_interval
+                # returns the short cadence while a burst window is active, else self.interval).
+                await asyncio.sleep(self._observer.poll_interval(self.interval))
 
         try:
             loop.run_until_complete(_forever())
