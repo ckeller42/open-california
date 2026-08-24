@@ -145,3 +145,22 @@ def test_roof_bad_direction_raises():
     with pytest.raises(ValueError):
         control.roof_frame(f, "sideways")
     assert control.build(f, "roof", "sideways", None, {}) is None
+
+
+def test_int_range_helper_validates_and_traces():
+    """The shared control int-range validator: coerces valid values, rejects out-of-range/garbage.
+
+    .. test:: _int_range coerces valid ints and rejects out-of-range/non-numeric
+       :id: T_CONTROL_INT_RANGE
+       :links: R_CONTROL_INT_RANGE
+    """
+    from calictl import control
+    import pytest
+    assert control._int_range("3", 1, 5, "cooler level") == 3     # str coerced
+    assert control._int_range(0, 0, 23, "night hour") == 0        # inclusive bounds
+    assert control._int_range(23, 0, 23, "night hour") == 23
+    for bad in (0, 6, -1):                                          # out of 1..5
+        with pytest.raises(ValueError):
+            control._int_range(bad, 1, 5, "cooler level")
+    with pytest.raises(ValueError):                                # non-numeric
+        control._int_range("nope", 1, 5, "cooler level")
