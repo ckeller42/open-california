@@ -119,6 +119,42 @@ def _sleep_blocking(sec: float) -> None:
     time.sleep(sec)
 
 
+async def _read_char_with_retry(client, name, char):
+    """Read one state characteristic with the standard 3x / 0.8 s-backoff retry and a mid-loop
+    disconnect abort. The single home for the read retry/abort/log policy, shared by
+    :meth:`CamperDevice._read_all_on` and :meth:`PersistentSession.read_all` (which previously kept
+    two byte-identical copies of this loop).
+
+    :returns: ``(data, link_up)`` — ``data`` is the raw bytes on success, or ``None`` when the 3
+        attempts were exhausted (caller skips that func). ``link_up`` reports the client's ACTUAL
+        connection state at return (on every path, incl. a successful read), so the caller's
+        ``if not up: break`` faithfully reproduces the originals' unconditional post-read
+        ``if not is_connected: break`` — a read can succeed while the disconnect callback has already
+        flipped ``is_connected`` (asyncio race), and the cycle must still abort before the next func.
+
+    .. req:: One shared state-read retry policy
+       :id: R_READ_RETRY_SHARED
+       :status: implemented
+       :tags: ble, reads
+
+       The per-op and persistent read paths shall share one retry/abort/log implementation, so the
+       "3 tries, 0.8 s backoff, abort the cycle on disconnect" behaviour cannot drift between them.
+    """
+    for attempt in range(3):
+        try:
+            data = bytes(await client.read_gatt_char(char))
+            return data, getattr(client, "is_connected", False)   # report the post-read link state
+        except Exception as e:
+            if not getattr(client, "is_connected", False):
+                # link dropped mid-session: don't burn ~30 s of futile retries under the serve lock
+                print("read_all: link dropped at %s; aborting cycle" % name, flush=True)
+                return None, False
+            if attempt == 2:
+                print("read_all: %s failed after retries: %r" % (name, e), flush=True)
+            await asyncio.sleep(0.8)
+    return None, getattr(client, "is_connected", False)
+
+
 class CamperDevice:
     def __init__(self, addr: str = DEFAULT_ADDR, *, adapter: str = "hci0",
                  connect_timeout: float = 30.0):
@@ -196,20 +232,10 @@ class CamperDevice:
                 if pushed is not None:                # a fresh notification beats the stale latch
                     out[name] = pushed
                     continue
-                for attempt in range(3):
-                    try:
-                        out[name] = bytes(await client.read_gatt_char(f.state_char))
-                        break
-                    except Exception as e:
-                        if not client.is_connected:
-                            # link dropped mid-session: don't burn ~30 s of futile retries
-                            # (3 chars x 0.8 s x remaining funcs) under the serve BLE lock.
-                            print("read_all: link dropped at %s; aborting cycle" % name, flush=True)
-                            break
-                        if attempt == 2:
-                            print("read_all: %s failed after retries: %r" % (name, e), flush=True)
-                        await asyncio.sleep(0.8)
-                if not client.is_connected:
+                data, up = await _read_char_with_retry(client, name, f.state_char)
+                if data is not None:
+                    out[name] = data
+                if not up:
                     break
             # Push-only freshness: water's true level is delivered as a heartbeat-driven 1302
             # NOTIFICATION, not the instantaneous read (which returns the stale latch). If water only
@@ -631,19 +657,10 @@ class PersistentSession:
                 if pushed is not None:
                     out[name] = pushed
                     continue
-            for attempt in range(3):
-                try:
-                    out[name] = bytes(await client.read_gatt_char(f.state_char))
-                    break
-                except Exception as e:
-                    if not getattr(client, "is_connected", False):
-                        # link dropped mid-session: don't burn retries/remaining funcs
-                        print("read_all: link dropped at %s; aborting cycle" % name, flush=True)
-                        break
-                    if attempt == 2:
-                        print("read_all: %s failed after retries: %r" % (name, e), flush=True)
-                    await asyncio.sleep(0.8)
-            if not getattr(client, "is_connected", False):
+            data, up = await _read_char_with_retry(client, name, f.state_char)
+            if data is not None:
+                out[name] = data
+            if not up:
                 break
         return out
 
