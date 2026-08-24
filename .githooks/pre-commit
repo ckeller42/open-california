@@ -6,6 +6,18 @@
 # MAC getting committed) and keeps the suite + coverage guardrail green before a commit.
 set -euo pipefail
 
+# Prefer a python meeting the project floor (3.11+); bare `python3` may be an EOL system 3.9.
+# Override with PY=... Prefers 3.13 (buspi). Mirrors tools/ci.sh.
+if [ -z "${PY:-}" ]; then
+  for _p in python3.13 python3.12 python3.11 python3; do
+    if command -v "$_p" >/dev/null 2>&1 \
+       && "$_p" -c 'import sys; raise SystemExit(0 if sys.version_info>=(3,11) else 1)' 2>/dev/null; then
+      PY="$_p"; break
+    fi
+  done
+  : "${PY:?need Python >= 3.11 (project floor); only found $(python3 --version 2>&1)}"
+fi
+
 staged() { git diff --cached --name-only --diff-filter=ACM; }
 
 fail() { echo "pre-commit: BLOCKED — $1" >&2; exit 1; }
@@ -28,24 +40,24 @@ fi
 
 # 4a) Doc↔code consistency ALWAYS runs (even for docs-only SKIP_TESTS commits) — it's fast and
 #     docs-only commits are exactly when prose drifts from the dictionary.
-python3 -m pytest tests/test_doc_offset_consistency.py -q >/dev/null || \
+"$PY" -m pytest tests/test_doc_offset_consistency.py -q >/dev/null || \
   fail "doc/comment offset citations disagree with the dictionary (see test_doc_offset_consistency)"
 
 # 4c) Fast CI guards that ALWAYS run (quick; catch drift docs-only commits cause too): runtime stays
 #     stdlib-only at import, and the built web assets match source when the UI/semantics changed.
-python3 -m tools.check_import_clean >/dev/null || \
+"$PY" -m tools.check_import_clean >/dev/null || \
   fail "runtime pulled a non-stdlib dep at import (see tools/check_import_clean.py)"
 if git diff --cached --name-only | grep -qE '^(calictl/webui/|calictl/semantics\.py|ui/)'; then
-  if ! python3 -m tools.build_web --out /tmp/oc_hook_screens.json >/dev/null 2>&1 \
+  if ! "$PY" -m tools.build_web --out /tmp/oc_hook_screens.json >/dev/null 2>&1 \
        || ! diff -q /tmp/oc_hook_screens.json calictl/webui/screens.json >/dev/null; then
-    fail "web assets stale — run: python3 -m tools.build_web"
+    fail "web assets stale — run: tools/ci.sh web-fresh"
   fi
 fi
 
 # 4d) ruff lint — HARD GATE (the codebase is ruff-green). Whole-repo check is sub-second. If ruff
 #     isn't installed, skip with a note rather than block (run `tools/ci.sh dev` to install it).
-if python3 -m ruff --version >/dev/null 2>&1; then
-  python3 -m ruff check --quiet . || fail "ruff found lint errors (run: tools/ci.sh lint)"
+if "$PY" -m ruff --version >/dev/null 2>&1; then
+  "$PY" -m ruff check --quiet . || fail "ruff found lint errors (run: tools/ci.sh lint)"
 else
   echo "pre-commit: ruff not installed — skipping lint (tools/ci.sh dev installs it)" >&2
 fi
@@ -53,12 +65,12 @@ fi
 # 4b) Full suite + coverage guardrail (skip with SKIP_TESTS=1 for docs-only commits). Parallel when
 #     pytest-xdist is installed (tools/ci.sh dev), else serial.
 if [ "${SKIP_TESTS:-0}" != "1" ]; then
-  if python3 -c "import xdist" 2>/dev/null; then
-    python3 -m pytest tests/ -q -n auto >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
+  if "$PY" -c "import xdist" 2>/dev/null; then
+    "$PY" -m pytest tests/ -q -n auto >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
   else
-    python3 -m pytest tests/ -q >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
+    "$PY" -m pytest tests/ -q >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
   fi
-  python3 -m tools.audit_signals --report >/dev/null 2>&1 || \
+  "$PY" -m tools.audit_signals --report >/dev/null 2>&1 || \
     fail "signal-coverage/semantic-review audit failed"
 fi
 
