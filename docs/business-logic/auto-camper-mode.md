@@ -35,6 +35,16 @@ the config the engine took away:
 3. **Manual off is respected.** A camper-off while the ignition is **steady off** (not an engine
    shed) clears any owed restore — switching camper mode off yourself sticks.
 
+**Survives a restart.** The restore *debt* (`owe_restore` + the remembered `pre_drive` + a
+**wall-clock** retry deadline + the ignition-edge state) is persisted to the state cache each poll,
+so a daemon restart or buspi reboot **between engine-start and park** does not silently drop a
+pending restore — it resumes on load (a deadline that already elapsed is correctly judged expired).
+
+**Known limit — manual-off *while driving*.** Manual-off is only recognised while the ignition is
+steady off. If you could turn camper mode off *mid-drive* meaning it to stay off, the restore would
+still fire at park. In practice the unit force-holds camper mode off while driving (the stationary
+gate), so this state isn't reachable — noted for completeness, not a live case.
+
 ## The two safety guards (why it can't loop or drain the battery)
 
 **Guard 1 — battery gate (defer to the unit's protection).**

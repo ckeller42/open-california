@@ -42,6 +42,15 @@ def test_park_triggers_restore_write():
     assert r["fails"] == 1
 
 
+def test_ignition_bounce_does_not_reclobber_pre_drive():
+    # already owe a restore (remembered usb=True); a second ignition rising edge while the shed has
+    # landed (prev_usb now False) must NOT overwrite the remembered pre-drive config (crank bounce).
+    pre = {"master": True, "usb": True, "lights": False}
+    r = _d(ignition_on=True, prev_ignition=False, prev_master=True, prev_usb=False, prev_lights=False,
+           owe_restore=True, pre_drive=pre)
+    assert r["pre_drive"] == pre        # the `not owe_restore` arm guard held — usb=True preserved
+
+
 def test_restore_confirmed_disarms():
     # parked, camping now reads on -> success, debt cleared, no further write.
     r = _d(ignition_on=False, prev_ignition=False, master_on=True, owe_restore=True,

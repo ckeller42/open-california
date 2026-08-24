@@ -55,7 +55,10 @@ def auto_camper_restore_decide(*, ignition_on, prev_ignition, master_on, prev_ma
         ``prev_*`` are captured as the pre-drive config when arming).
     :param soc: leisure-battery percent (``soc2_pct``) or None.
     :param warning: True if any battery warning is set.
-    :param now: monotonic seconds.
+    :param now: seconds on a consistent clock. serve passes **wall-clock** (``time.time()``) so the
+        ``restore_until`` deadline survives a daemon restart / buspi reboot mid-cycle (the restore
+        debt is persisted). The function only ever compares ``now`` against ``restore_until``, so any
+        consistent clock works — but persistence requires wall-clock.
     :param owe_restore: do we currently owe a restore (armed)?
     :param pre_drive: remembered ``{"master","usb","lights"}`` to restore, or None.
     :param restore_until: retry-window deadline (monotonic) while restoring, or None.
@@ -74,8 +77,9 @@ def auto_camper_restore_decide(*, ignition_on, prev_ignition, master_on, prev_ma
 
     # ARM: engine just started (ignition rising) and camping was on before -> we owe a restore of the
     # pre-drive config. The shed itself may land a poll or two later (BLE can drop at the crank); the
-    # prev_* snapshot from before the edge is the pre-drive truth.
-    if ign and not pign and pm:
+    # prev_* snapshot from before the edge is the pre-drive truth. `not owe_restore` guards an
+    # ignition bounce at the crank (0->1->0->1) from re-capturing pre_drive off an already-shed read.
+    if ign and not pign and pm and not owe_restore:
         owe_restore = True
         pre_drive = {"master": True, "usb": bool(prev_usb), "lights": bool(prev_lights)}
         restore_until = None
