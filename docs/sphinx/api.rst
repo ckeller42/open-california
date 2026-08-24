@@ -45,6 +45,12 @@ Control frames
 .. autofunction:: calictl.control.commit_for
 .. autofunction:: calictl.control.preamble_for
 
+Automation
+----------
+
+.. autofunction:: calictl.automation.auto_camper_restore_decide
+.. automethod:: calictl.serve.Server._auto_camper_step
+
 Tests
 -----
 
@@ -52,3 +58,4 @@ Tests
 .. autofunction:: tests.test_calictl.test_airheater_control_frame
 .. autofunction:: tests.test_mock_integration.test_read_all_heartbeat_refreshes_stale_read
 .. autofunction:: tests.test_mock_integration.test_lighting_applies_without_preamble
+.. autofunction:: tests.test_automation.test_no_loop_full_cycle_engine_shed_then_park_then_refused

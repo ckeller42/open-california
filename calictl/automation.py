@@ -67,6 +67,16 @@ def auto_camper_restore_decide(*, ignition_on, prev_ignition, master_on, prev_ma
         notice, restored, prev_ignition, prev_master, prev_usb, prev_lights}`` — ``actuate`` True
         means write ``restore_config`` (master + optional usb/lights); ``restored`` True on a
         confirmed success; ``notice`` is a one-line message to log + toast (else None).
+
+    .. req:: Restore camping mode after parking, bounded and battery-safe
+       :id: R_AUTO_CAMPER_RESTORE
+       :status: implemented
+       :tags: automation, camping, control
+
+       The unit refuses camping-on while driving, so the daemon shall remember the pre-drive
+       camping config when the engine sheds it and re-assert it on the ignition falling edge
+       (parked), within a bounded retry window, standing down on low battery / warning and never
+       looping — so a manual off is respected and the unit's power-saving is never fought.
     """
     ign, pign = bool(ignition_on), bool(prev_ignition)
     m, pm = bool(master_on), bool(prev_master)
