@@ -5,6 +5,16 @@ on:
     branches: [main, vwcamper-control]
   pull_request:
 
+# Cancel superseded runs on the same ref (rapid pushes stop paying for old commits). Read-only
+# jobs, so cancelling mid-run is safe.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: no CI job writes to the repo (the screenshots workflow keeps its own write scope).
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -18,13 +28,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
       - name: Install test/tooling deps (runtime is stdlib-only)
-        run: pip install pytest pyyaml
-      - name: Test suite
-        run: python -m pytest tests/ -q
+        run: pip install -r requirements-dev.txt
+      - name: Test suite (parallel; conftest isolates state per-test so it's xdist-safe)
+        run: python -m pytest tests/ -q -n auto
+      # The next three checks are Python-version-independent -> run once (on the deploy target 3.13)
+      # instead of 3x. The import-cleanliness guard stays on ALL versions (a stdlib layout can differ).
       - name: Signal-coverage + semantic-review audit
+        if: matrix.python == '3.13'
         run: python -m tools.audit_signals --report
       - name: Web assets are fresh (screens.json == build_web output)
+        if: matrix.python == '3.13'
         run: |
           python -m tools.build_web --out /tmp/screens.json
           diff -q /tmp/screens.json calictl/webui/screens.json \
@@ -78,9 +94,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install deps + Chromium
-        run: |
-          pip install pytest pyyaml playwright
-          python -m playwright install --with-deps chromium
+          cache: pip
+          cache-dependency-path: requirements-e2e.txt
+      - name: Install deps
+        run: pip install -r requirements-e2e.txt
+      - name: Playwright version (for the browser cache key)
+        run: echo "PW_VERSION=$(python -m playwright --version | awk '{print $2}')" >> "$GITHUB_ENV"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ env.PW_VERSION }}
+      - name: Install Chromium (browser from cache when present; apt --with-deps only on miss)
+        run: python -m playwright install ${{ steps.pw-cache.outputs.cache-hit == 'true' && 'chromium' || '--with-deps chromium' }}
       - name: GUI end-to-end (web UI over the mock unit)
         run: python -m pytest tests/e2e -q
