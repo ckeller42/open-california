@@ -747,7 +747,7 @@ class Server:
             path ignores this; `ServeBackend.command` surfaces it to the web UI.
         """
         from . import control  # lazy
-        from .cli import _set_check  # lazy; reuse the CLI's post-write field check
+        from .postcheck import set_check  # lazy; shared post-write field check (no daemon->CLI import)
         if self._read_only:
             # SAFE DEFAULT: no vehicle writes unless writes were explicitly enabled. Central gate,
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
@@ -781,7 +781,7 @@ class Server:
                     await self.dev.actuate(f, stop_frame, verify=True)
                 else:
                     await self.dev.actuate_roof(f, move_frame, stop_frame, verify=True)
-                # roof has no _set_check row -- keep the honest "not applied" (unknown).
+                # roof has no set_check row -- keep the honest "not applied" (unknown).
                 return None
             last = self._last.get(function)
             if not last:
@@ -825,7 +825,7 @@ class Server:
                 return None
             self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
             interp = semantics.interpret(function, post)
-            _, got, want = _set_check(function, what, value, interp, post)
+            _, got, want = set_check(function, what, value, interp, post)
             if got is None and want is None:   # no table entry for this target
                 return None
             return got == want
@@ -841,7 +841,7 @@ class Server:
         "sent"); never a false negative for lighting. No live session or no push -> ``None`` (the
         cold path can't cheaply confirm; the next poll reconciles).
         """
-        from .cli import _set_check  # lazy
+        from .postcheck import set_check  # lazy
         f = self.funcs[function]
         notif = getattr(sess, "_notif", None)
         if notif is None:
@@ -854,7 +854,7 @@ class Server:
                 decoded = protocol.decode(f, cur)
                 self._last = {**self._last, function: decoded}  # atomic rebind (web thread reads unlocked)
                 interp = semantics.interpret(function, decoded)
-                _, got, want = _set_check(function, what, value, interp, decoded)
+                _, got, want = set_check(function, what, value, interp, decoded)
                 return True if (got is not None and got == want) else None
             await asyncio.sleep(0.05)
         return None
