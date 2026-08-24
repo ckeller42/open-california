@@ -232,8 +232,7 @@ class Server:
         self._outcomes_cache = os.environ.get(
             "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl"))
         self._appends = 0                   # appends since the last trim rewrite
-        self._auto_camper = False           # default BEFORE _load_last so a persisted value survives
-        self._load_last()                   # AFTER the defaults: it restores _water_good/_water_stale_since
+        self._auto_camper = False           # default; _load_last (moved below the _ac_* defaults) restores it
         self._mqtt = None
         self._iw = None                     # influx write_api
         self._loop = None
@@ -255,7 +254,7 @@ class Server:
         self._ac_prev_lights = None         # previous poll's camping lights (captured as pre-drive config)
         self._ac_owe_restore = False        # do we owe a restore (engine shed camping that was on)?
         self._ac_pre_drive = None           # remembered {master,usb,lights} to restore after park
-        self._ac_restore_until = None       # monotonic retry-window deadline while restoring, else None
+        self._ac_restore_until = None       # WALL-CLOCK retry-window deadline while restoring (persisted), else None
         self._ac_fails = 0                  # restore attempts this cycle
         self._ac_notice = None              # {ts, msg} for a one-time log + web toast
         self._ac_min_soc = int(os.environ.get("CALICTL_AUTO_CAMPER_MIN_SOC",
@@ -283,6 +282,10 @@ class Server:
         self._push_char_to_fn = {str(f.state_char).lower(): name
                                  for name, f in self.funcs.items() if f.state_char}
         self._push_prev = {}                # last pushed value per tracked field (for change detection)
+        # Load persisted state LAST — it must run AFTER every default above so it can override them
+        # (_water_good, the _auto_camper toggle, and the restore-after-park debt). Running it earlier
+        # would let the defaults clobber the loaded values.
+        self._load_last()
 
     def _load_last(self):
         """Load the persisted last-known decoded state (best-effort; missing/corrupt -> empty)."""
@@ -294,6 +297,19 @@ class Server:
             self._water_good = blob.get("water_good")      # last plausible water survives restarts
             self._water_stale_since = blob.get("water_stale_since")
             self._auto_camper = bool(blob.get("auto_camper", False))   # toggle survives restarts
+            # Restore-after-park DEBT survives a restart/reboot mid-drive (else a buspi reboot between
+            # engine-start and park silently drops the pending restore). restore_until is wall-clock,
+            # so a stale window is correctly judged expired on load. prev_ignition is persisted too so
+            # the park (falling) edge is still detected across the restart.
+            ac = blob.get("auto_camper_state") or {}
+            self._ac_owe_restore = bool(ac.get("owe_restore", False))
+            self._ac_pre_drive = ac.get("pre_drive")
+            self._ac_restore_until = ac.get("restore_until")
+            self._ac_fails = int(ac.get("fails", 0))
+            self._ac_prev_ignition = ac.get("prev_ignition")
+            self._ac_prev_master = ac.get("prev_master")
+            self._ac_prev_usb = ac.get("prev_usb")
+            self._ac_prev_lights = ac.get("prev_lights")
         except (OSError, ValueError):
             pass
 
@@ -306,7 +322,18 @@ class Server:
                 json.dump({"ts": self._last_ok_ts, "last": self._last,
                            "water_good": self._water_good,
                            "water_stale_since": self._water_stale_since,
-                           "auto_camper": self._auto_camper}, f)
+                           "auto_camper": self._auto_camper,
+                           # restore-after-park debt (see _load_last) — survives restart mid-cycle
+                           "auto_camper_state": {
+                               "owe_restore": self._ac_owe_restore,
+                               "pre_drive": self._ac_pre_drive,
+                               "restore_until": self._ac_restore_until,
+                               "fails": self._ac_fails,
+                               "prev_ignition": self._ac_prev_ignition,
+                               "prev_master": self._ac_prev_master,
+                               "prev_usb": self._ac_prev_usb,
+                               "prev_lights": self._ac_prev_lights,
+                           }}, f)
             os.replace(tmp, self._state_cache)
         except OSError:
             pass
@@ -508,7 +535,7 @@ class Server:
             ignition_on=ign, prev_ignition=self._ac_prev_ignition,
             master_on=master, prev_master=self._ac_prev_master,
             usb_on=usb, lights_on=lights, prev_usb=self._ac_prev_usb, prev_lights=self._ac_prev_lights,
-            soc=soc, warning=warning, now=time.monotonic(),
+            soc=soc, warning=warning, now=time.time(),   # WALL-CLOCK: restore_until must survive a restart
             owe_restore=self._ac_owe_restore, pre_drive=self._ac_pre_drive,
             restore_until=self._ac_restore_until, fails=self._ac_fails,
             min_soc=self._ac_min_soc, max_fails=self._ac_max_fails, window_s=self._ac_window_s)

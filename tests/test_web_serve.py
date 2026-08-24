@@ -621,3 +621,23 @@ def test_auto_camper_toggle_persists_and_surfaces():
     assert s2._auto_camper is True
     be2 = serve.ServeBackend(s2, loop=None)
     assert be2.set_auto_camper(False)["auto_camper"] is False       # and back off
+
+
+def test_auto_camper_restore_debt_survives_restart():
+    """The restore-after-park DEBT (owe_restore + pre_drive + wall-clock deadline + edge state) is
+    persisted, so a daemon restart / buspi reboot mid-drive doesn't silently drop a pending restore.
+    Also verifies _load_last runs AFTER the _ac_* defaults (else they'd clobber the loaded debt)."""
+    from calictl import serve
+    s = serve.Server()
+    s._ac_owe_restore = True
+    s._ac_pre_drive = {"master": True, "usb": True, "lights": False}
+    s._ac_restore_until = 9_999_999_999.0        # wall-clock (far future) — survives the reload
+    s._ac_fails = 2
+    s._ac_prev_ignition = True                    # mid-drive when saved -> park edge detectable on reload
+    s._save_last()
+    s2 = serve.Server()                           # "restart" — same cache path (conftest-isolated)
+    assert s2._ac_owe_restore is True
+    assert s2._ac_pre_drive == {"master": True, "usb": True, "lights": False}
+    assert s2._ac_restore_until == 9_999_999_999.0
+    assert s2._ac_fails == 2
+    assert s2._ac_prev_ignition is True
