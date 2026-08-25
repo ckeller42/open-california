@@ -9,6 +9,7 @@ source YAML, then regenerate:
 | `reference.md` | `python3 -m tools.gen_protocol_reference --out docs/protocol/reference.md` |
 | `frame-layouts.md` | `python3 -m tools.gen_frame_layouts --out docs/protocol/frame-layouts.md` |
 | `vwcamper.lua` | `python3 -m tools.gen_wireshark_dissector --out docs/protocol/vwcamper.lua` |
+| `signal-matrix.md` | `python3 -m tools.gen_signal_matrix --out docs/protocol/signal-matrix.md` |
 
 `tests/test_protocol_views.py` fails CI if a committed file here doesn't match a fresh
 regeneration, so a stale view can't merge silently.

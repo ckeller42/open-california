@@ -76,3 +76,21 @@ def test_wireshark_dissector_is_non_trivial():
         "expected many ProtoField definitions (one per surfaced state field), got %d"
         % proto_field_count
     )
+
+
+def test_signal_matrix_md_matches_signals_yaml(tmp_path):
+    from tools import gen_signal_matrix
+
+    committed = ROOT / "docs" / "protocol" / "signal-matrix.md"
+    assert committed.exists(), (
+        "run: python3 -m tools.gen_signal_matrix --out docs/protocol/signal-matrix.md"
+    )
+
+    fresh = gen_signal_matrix.build()
+    out = tmp_path / "signal-matrix.md"
+    out.write_text(fresh)
+
+    assert out.read_text() == committed.read_text(), (
+        "docs/protocol/signal-matrix.md is stale — regenerate with "
+        "`python3 -m tools.gen_signal_matrix --out docs/protocol/signal-matrix.md`"
+    )
