@@ -10,9 +10,9 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | PermanentOperationRequestConfirmation | NormalOperation | PermanentOperation | FaultTriggerBit | Installed | · | AirDistribution | AirDistribution |
-| 1 | ErrorCode | ErrorCode | ErrorCode | ErrorCode | HeatingLevel | HeatingLevel | HeatingLevel | HeatingLevel |
-| 2 | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater | OperationModeCombined | OperationModeCombined | OperationModeCombined | OperationModeCombined |
+| 0 | AirDistribution | AirDistribution | · | Installed | FaultTriggerBit | PermanentOperation | NormalOperation | PermanentOperationRequestConfirmation |
+| 1 | HeatingLevel | HeatingLevel | HeatingLevel | HeatingLevel | ErrorCode | ErrorCode | ErrorCode | ErrorCode |
+| 2 | OperationModeCombined | OperationModeCombined | OperationModeCombined | OperationModeCombined | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater |
 | 3 | RunningTime | RunningTime | RunningTime | RunningTime | RunningTime | RunningTime | RunningTime | RunningTime |
 | 4 | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour | TimerHour |
 | 5 | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin | TimerMin |
@@ -22,8 +22,8 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | NormalOperationRequest | NormalOperationRequest | PermanentOperationConfirmation | PermanentOperationConfirmation | PermanentOperationRequest | PermanentOperationRequest | AirDistribution | AirDistribution |
-| 1 | HeatingLevel | HeatingLevel | HeatingLevel | HeatingLevel | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater |
+| 0 | AirDistribution | AirDistribution | PermanentOperationRequest | PermanentOperationRequest | PermanentOperationConfirmation | PermanentOperationConfirmation | NormalOperationRequest | NormalOperationRequest |
+| 1 | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater | OperationModeAirHeater | HeatingLevel | HeatingLevel | HeatingLevel | HeatingLevel |
 
 **Ambiguous offset (not shown in map):** OperationModeCombined, RunningTime, TimerHour, TimerMin
 
@@ -33,13 +33,13 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | State | UsbCharger | OutsideLight | InteriorLight | Enable | Installed | · | · |
+| 0 | · | · | Installed | Enable | InteriorLight | OutsideLight | UsbCharger | State |
 
 ### Control frame (control_source: lg/a.java)
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | State | State | · | · | · | · | · | · |
+| 0 | · | · | · | · | · | · | State | State |
 
 **Ambiguous offset (not shown in map):** UsbCharger, OutsideLight, InteriorLight
 
@@ -49,8 +49,8 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | State | TimerState | TimerElapsed | Installed | NightTimerSet | · | Error | Error |
-| 1 | Level | Level | Level | Level | Mode | Mode | Mode | Mode |
+| 0 | Error | Error | · | NightTimerSet | Installed | TimerElapsed | TimerState | State |
+| 1 | Mode | Mode | Mode | Mode | Level | Level | Level | Level |
 | 2 | TimerHourSet | TimerHourSet | TimerHourSet | TimerHourSet | TimerHourSet | TimerHourSet | TimerHourSet | TimerHourSet |
 | 3 | TimerMinSet | TimerMinSet | TimerMinSet | TimerMinSet | TimerMinSet | TimerMinSet | TimerMinSet | TimerMinSet |
 | 4 | TimerCounterHour | TimerCounterHour | TimerCounterHour | TimerCounterHour | TimerCounterHour | TimerCounterHour | TimerCounterHour | TimerCounterHour |
@@ -62,8 +62,8 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | State | State | TimerStart | TimerStart | TimerCancel | TimerCancel | NightTimerSet | NightTimerSet |
-| 1 | Level | Level | Level | Level | Mode | Mode | Mode | Mode |
+| 0 | NightTimerSet | NightTimerSet | TimerCancel | TimerCancel | TimerStart | TimerStart | State | State |
+| 1 | Mode | Mode | Mode | Mode | Level | Level | Level | Level |
 
 **Ambiguous offset (not shown in map):** TimerHour, TimerMin, NightTimerHourOn, NightTimerHourOff
 
@@ -73,11 +73,11 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | TwoBattNotCharged | TwoBattSwitchAtCharging | TwoBattSwitchAtWorkshop | WarningLevelActive | DcdcDefect | EnergyModeNotSelectable | LandDefect | LandNotAvailable |
-| 1 | PvDefect | SleepWarning | CurrentDeratingTemperature | SystemError | EmpInstalled | PvInstalled | LadInstalled | DcdcInstalled |
-| 2 | WarningLevelTwo | WarningLevelTwo | EnergyMode | EnergyMode | SocOneBattAfs | SocOneBattAfs | SocOneBattAfs | SocOneBattAfs |
-| 3 | SocTwoBattAfs | SocTwoBattAfs | SocTwoBattAfs | SocTwoBattAfs | StateDcdcAfs | StateDcdcAfs | StateDcdcAfs | StateDcdcAfs |
-| 4 | StateLandAfs | StateLandAfs | StateLandAfs | StateLandAfs | StatePvAfs | StatePvAfs | StatePvAfs | StatePvAfs |
+| 0 | LandNotAvailable | LandDefect | EnergyModeNotSelectable | DcdcDefect | WarningLevelActive | TwoBattSwitchAtWorkshop | TwoBattSwitchAtCharging | TwoBattNotCharged |
+| 1 | DcdcInstalled | LadInstalled | PvInstalled | EmpInstalled | SystemError | CurrentDeratingTemperature | SleepWarning | PvDefect |
+| 2 | SocOneBattAfs | SocOneBattAfs | SocOneBattAfs | SocOneBattAfs | EnergyMode | EnergyMode | WarningLevelTwo | WarningLevelTwo |
+| 3 | StateDcdcAfs | StateDcdcAfs | StateDcdcAfs | StateDcdcAfs | SocTwoBattAfs | SocTwoBattAfs | SocTwoBattAfs | SocTwoBattAfs |
+| 4 | StatePvAfs | StatePvAfs | StatePvAfs | StatePvAfs | StateLandAfs | StateLandAfs | StateLandAfs | StateLandAfs |
 | 5 | AgeOneBattValuesMinutes | AgeOneBattValuesMinutes | AgeOneBattValuesMinutes | AgeOneBattValuesMinutes | AgeOneBattValuesMinutes | AgeOneBattValuesMinutes | AgeOneBattValuesMinutes | AgeOneBattValuesMinutes |
 | 6 | IOneBattBemAfs | IOneBattBemAfs | IOneBattBemAfs | IOneBattBemAfs | IOneBattBemAfs | IOneBattBemAfs | IOneBattBemAfs | IOneBattBemAfs |
 | 7 | PDcdcAfs | PDcdcAfs | PDcdcAfs | PDcdcAfs | PDcdcAfs | PDcdcAfs | PDcdcAfs | PDcdcAfs |
@@ -100,7 +100,7 @@ Bit numbering is **MSB-first** (`calictl/protocol.py:to_bits`): frame-bit index 
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | DisplayRefresh | · | · | · | EnergyModeSet | EnergyModeSet | · | · |
+| 0 | · | · | EnergyModeSet | EnergyModeSet | · | · | · | DisplayRefresh |
 
 ## general
 
@@ -128,7 +128,7 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | BitZeroOne | BitZeroTwo | BitZeroThree | BitZeroFour | BitZeroFive | BitZeroSix | BitZeroSeven | BitZeroEight |
+| 0 | BitZeroEight | BitZeroSeven | BitZeroSix | BitZeroFive | BitZeroFour | BitZeroThree | BitZeroTwo | BitZeroOne |
 | 1 | ByteZeroOne | ByteZeroOne | ByteZeroOne | ByteZeroOne | ByteZeroOne | ByteZeroOne | ByteZeroOne | ByteZeroOne |
 | 2 | ByteZeroTwo | ByteZeroTwo | ByteZeroTwo | ByteZeroTwo | ByteZeroTwo | ByteZeroTwo | ByteZeroTwo | ByteZeroTwo |
 | 3 | ByteZeroThree | ByteZeroThree | ByteZeroThree | ByteZeroThree | ByteZeroThree | ByteZeroThree | ByteZeroThree | ByteZeroThree |
@@ -160,7 +160,7 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | ProfileNumber | ProfileNumber | ProfileNumber | ProfileNumber | · | · | · | · |
+| 0 | · | · | · | · | ProfileNumber | ProfileNumber | ProfileNumber | ProfileNumber |
 | 1 | Mode | Mode | Mode | Mode | Mode | Mode | Mode | Mode |
 | 2 | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp |
 | 3 | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp |
@@ -168,20 +168,20 @@ _(no positionally-resolved fields)_
 | 5 | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp |
 | 6 | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue |
 | 7 | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue |
-| 8 | BrightnessLOne | BrightnessLOne | BrightnessLOne | BrightnessLOne | BrightnessLTwo | BrightnessLTwo | BrightnessLTwo | BrightnessLTwo |
-| 9 | BrightnessLThree | BrightnessLThree | BrightnessLThree | BrightnessLThree | BrightnessLFour | BrightnessLFour | BrightnessLFour | BrightnessLFour |
-| 10 | BrightnessLFive | BrightnessLFive | BrightnessLFive | BrightnessLFive | BrightnessLSix | BrightnessLSix | BrightnessLSix | BrightnessLSix |
-| 11 | BrightnessLSeven | BrightnessLSeven | BrightnessLSeven | BrightnessLSeven | BrightnessLEight | BrightnessLEight | BrightnessLEight | BrightnessLEight |
-| 12 | BrightnessLNine | BrightnessLNine | BrightnessLNine | BrightnessLNine | BrightnessLOneZero | BrightnessLOneZero | BrightnessLOneZero | BrightnessLOneZero |
-| 13 | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneTwo |
-| 14 | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneFour |
-| 15 | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneSix |
+| 8 | BrightnessLTwo | BrightnessLTwo | BrightnessLTwo | BrightnessLTwo | BrightnessLOne | BrightnessLOne | BrightnessLOne | BrightnessLOne |
+| 9 | BrightnessLFour | BrightnessLFour | BrightnessLFour | BrightnessLFour | BrightnessLThree | BrightnessLThree | BrightnessLThree | BrightnessLThree |
+| 10 | BrightnessLSix | BrightnessLSix | BrightnessLSix | BrightnessLSix | BrightnessLFive | BrightnessLFive | BrightnessLFive | BrightnessLFive |
+| 11 | BrightnessLEight | BrightnessLEight | BrightnessLEight | BrightnessLEight | BrightnessLSeven | BrightnessLSeven | BrightnessLSeven | BrightnessLSeven |
+| 12 | BrightnessLOneZero | BrightnessLOneZero | BrightnessLOneZero | BrightnessLOneZero | BrightnessLNine | BrightnessLNine | BrightnessLNine | BrightnessLNine |
+| 13 | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneOne |
+| 14 | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneThree |
+| 15 | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneFive |
 
 ### Control frame (control_source: eg/a.java)
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | ProfileNumber | ProfileNumber | ProfileNumber | ProfileNumber | · | · | · | · |
+| 0 | · | · | · | · | ProfileNumber | ProfileNumber | ProfileNumber | ProfileNumber |
 | 1 | Mode | Mode | Mode | Mode | Mode | Mode | Mode | Mode |
 | 2 | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp |
 | 3 | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp |
@@ -189,14 +189,14 @@ _(no positionally-resolved fields)_
 | 5 | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp | Timestamp |
 | 6 | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue |
 | 7 | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue | LightValue |
-| 8 | BrightnessLOne | BrightnessLOne | BrightnessLOne | BrightnessLOne | BrightnessLTwo | BrightnessLTwo | BrightnessLTwo | BrightnessLTwo |
-| 9 | BrightnessLThree | BrightnessLThree | BrightnessLThree | BrightnessLThree | BrightnessLFour | BrightnessLFour | BrightnessLFour | BrightnessLFour |
-| 10 | BrightnessLFive | BrightnessLFive | BrightnessLFive | BrightnessLFive | BrightnessLSix | BrightnessLSix | BrightnessLSix | BrightnessLSix |
-| 11 | BrightnessLSeven | BrightnessLSeven | BrightnessLSeven | BrightnessLSeven | BrightnessLEight | BrightnessLEight | BrightnessLEight | BrightnessLEight |
-| 12 | BrightnessLNine | BrightnessLNine | BrightnessLNine | BrightnessLNine | BrightnessLOneZero | BrightnessLOneZero | BrightnessLOneZero | BrightnessLOneZero |
-| 13 | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneTwo |
-| 14 | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneFour |
-| 15 | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneSix |
+| 8 | BrightnessLTwo | BrightnessLTwo | BrightnessLTwo | BrightnessLTwo | BrightnessLOne | BrightnessLOne | BrightnessLOne | BrightnessLOne |
+| 9 | BrightnessLFour | BrightnessLFour | BrightnessLFour | BrightnessLFour | BrightnessLThree | BrightnessLThree | BrightnessLThree | BrightnessLThree |
+| 10 | BrightnessLSix | BrightnessLSix | BrightnessLSix | BrightnessLSix | BrightnessLFive | BrightnessLFive | BrightnessLFive | BrightnessLFive |
+| 11 | BrightnessLEight | BrightnessLEight | BrightnessLEight | BrightnessLEight | BrightnessLSeven | BrightnessLSeven | BrightnessLSeven | BrightnessLSeven |
+| 12 | BrightnessLOneZero | BrightnessLOneZero | BrightnessLOneZero | BrightnessLOneZero | BrightnessLNine | BrightnessLNine | BrightnessLNine | BrightnessLNine |
+| 13 | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneTwo | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneOne | BrightnessLOneOne |
+| 14 | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneFour | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneThree | BrightnessLOneThree |
+| 15 | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneSix | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneFive | BrightnessLOneFive |
 
 ## livingroomheater
 
@@ -204,8 +204,8 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | StateAir | StateWater | TemperatureWater | Installed | · | · | Variant | Variant |
-| 1 | Mode | Mode | Mode | Mode | Error | Error | Error | Error |
+| 0 | Variant | Variant | · | · | Installed | TemperatureWater | StateWater | StateAir |
+| 1 | Error | Error | Error | Error | Mode | Mode | Mode | Mode |
 | 2 | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir | TemperatureAir |
 
 ### Control frame (control_source: gg/a.java)
@@ -213,7 +213,7 @@ _(no positionally-resolved fields)_
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
 | 0 | · | · | · | · | · | · | · | · |
-| 1 | Mode | Mode | Mode | Mode | · | · | · | · |
+| 1 | · | · | · | · | Mode | Mode | Mode | Mode |
 
 **Ambiguous offset (not shown in map):** StateAir, StateWater, TemperatureWater, TemperatureAir
 
@@ -223,14 +223,14 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | SafetyCounterValid | Installed | · | · | Position | Position | Position | Position |
-| 1 | InfoPopUp | InfoPopUp | InfoPopUp | InfoPopUp | · | · | · | · |
+| 0 | Position | Position | Position | Position | · | · | Installed | SafetyCounterValid |
+| 1 | · | · | · | · | InfoPopUp | InfoPopUp | InfoPopUp | InfoPopUp |
 
 ### Control frame (control_source: jg/a.java)
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | Up | Up | Down | Down | · | · | · | · |
+| 0 | · | · | · | · | Down | Down | Up | Up |
 | 1 | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter |
 | 2 | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter |
 | 3 | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter | SafetyCounter |
@@ -242,15 +242,15 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | State | Installed | · | · | Mode | Mode | Error | Error |
-| 1 | Fanspeed | Fanspeed | Fanspeed | Fanspeed | · | · | · | · |
+| 0 | Error | Error | Mode | Mode | · | · | Installed | State |
+| 1 | · | · | · | · | Fanspeed | Fanspeed | Fanspeed | Fanspeed |
 | 2 | Temperature | Temperature | Temperature | Temperature | Temperature | Temperature | Temperature | Temperature |
 
 ### Control frame (control_source: lg/a.java)
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | State | State | · | · | · | · | · | · |
+| 0 | · | · | · | · | · | · | State | State |
 
 **Ambiguous offset (not shown in map):** FanSpeed, Mode, Temperature
 
@@ -260,8 +260,8 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | Installed | · | System | System | Error | Error | Error | Error |
-| 1 | Dish | Dish | Dish | Dish | SatelliteSelection | SatelliteSelection | SatelliteSelection | SatelliteSelection |
+| 0 | Error | Error | Error | Error | System | System | · | Installed |
+| 1 | SatelliteSelection | SatelliteSelection | SatelliteSelection | SatelliteSelection | Dish | Dish | Dish | Dish |
 | 2 | SignalLevel | SignalLevel | SignalLevel | SignalLevel | SignalLevel | SignalLevel | SignalLevel | SignalLevel |
 
 ### Control frame (control_source: gg/a.java)
@@ -269,7 +269,7 @@ _(no positionally-resolved fields)_
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
 | 0 | · | · | · | · | · | · | · | · |
-| 1 | SatelliteSelection | SatelliteSelection | SatelliteSelection | SatelliteSelection | · | · | · | · |
+| 1 | · | · | · | · | SatelliteSelection | SatelliteSelection | SatelliteSelection | SatelliteSelection |
 
 **Ambiguous offset (not shown in map):** DishStop, Wlan, System, Dish
 
@@ -279,7 +279,7 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | Installed | OperationMode | State | Sensor | InfoPopUp | InfoPopUp | · | · |
+| 0 | · | · | InfoPopUp | InfoPopUp | Sensor | State | OperationMode | Installed |
 
 ### Control frame (control_source: pg/a.java)
 
@@ -293,7 +293,7 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | TerminalOneFive | · | CarLevelPopUp | CarLevelPopUp | CarVariant | CarVariant | CarVariant | CarVariant |
+| 0 | CarVariant | CarVariant | CarVariant | CarVariant | CarLevelPopUp | CarLevelPopUp | · | TerminalOneFive |
 | 1 | CarTimeYear | CarTimeYear | CarTimeYear | CarTimeYear | CarTimeYear | CarTimeYear | CarTimeYear | CarTimeYear |
 | 2 | CarTimeMonth | CarTimeMonth | CarTimeMonth | CarTimeMonth | CarTimeMonth | CarTimeMonth | CarTimeMonth | CarTimeMonth |
 | 3 | CarTimeDay | CarTimeDay | CarTimeDay | CarTimeDay | CarTimeDay | CarTimeDay | CarTimeDay | CarTimeDay |
@@ -315,10 +315,10 @@ _(no positionally-resolved fields)_
 
 | byte | bit 7 | bit 6 | bit 5 | bit 4 | bit 3 | bit 2 | bit 1 | bit 0 |
 |---|---|---|---|---|---|---|---|---|
-| 0 | FreshWaterUnit | Installed | · | · | FreshWaterInfoPopUp | FreshWaterInfoPopUp | FreshWaterInfoPopUp | FreshWaterInfoPopUp |
+| 0 | FreshWaterInfoPopUp | FreshWaterInfoPopUp | FreshWaterInfoPopUp | FreshWaterInfoPopUp | · | · | Installed | FreshWaterUnit |
 | 1 | FreshWaterLevel | FreshWaterLevel | FreshWaterLevel | FreshWaterLevel | FreshWaterLevel | FreshWaterLevel | FreshWaterLevel | FreshWaterLevel |
 | 2 | FreshWaterVolume | FreshWaterVolume | FreshWaterVolume | FreshWaterVolume | FreshWaterVolume | FreshWaterVolume | FreshWaterVolume | FreshWaterVolume |
-| 3 | WasteWaterUnit | · | · | · | WasteWaterInfoPopUp | WasteWaterInfoPopUp | · | · |
+| 3 | · | · | WasteWaterInfoPopUp | WasteWaterInfoPopUp | · | · | · | WasteWaterUnit |
 | 4 | WasteWaterLevel | WasteWaterLevel | WasteWaterLevel | WasteWaterLevel | WasteWaterLevel | WasteWaterLevel | WasteWaterLevel | WasteWaterLevel |
 | 5 | WasteWaterVolume | WasteWaterVolume | WasteWaterVolume | WasteWaterVolume | WasteWaterVolume | WasteWaterVolume | WasteWaterVolume | WasteWaterVolume |
 

@@ -62,7 +62,7 @@ def _grid_table(grid) -> list[str]:
     sep = "|" + "---|" * (len(_BIT_COLS) + 1)
     lines = [header, sep]
     for byte_idx, row in enumerate(grid):
-        cells = [cell if cell else "·" for cell in row]
+        cells = [row[b] if row[b] else "·" for b in _BIT_COLS]
         lines.append("| %d | " % byte_idx + " | ".join(cells) + " |")
     return lines
 
