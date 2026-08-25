@@ -128,3 +128,52 @@ def test_no_loop_full_cycle_restore_succeeds():
         restored += 1 if r["restored"] else 0
         now += 10.0
     assert restored == 1 and st["owe_restore"] is False and acts >= 1
+
+
+def test_autocamper_step_restores_via_injected_actuate():
+    """AutoCamper.step drives the pure decision AND actuates through an INJECTED coroutine (no BLE):
+    engine start (arm) -> park -> it calls actuate('campingmode','master','on'). Previously this glue
+    was only reachable via the mock daemon; the extraction makes it a plain unit test.
+
+    .. test:: AutoCamper restores after park via the injected actuate coroutine
+       :id: T_AUTO_CAMPER_CONTROLLER
+       :links: R_AUTO_CAMPER_CONTROLLER
+    """
+    import asyncio
+    ac = A.AutoCamper()
+    ac.set_enabled(True)
+    calls = []
+
+    async def fake_actuate(function, what, value):
+        calls.append((function, what, value))
+
+    def step(states, now):
+        asyncio.run(ac.step(states, actuate=fake_actuate, read_only=False, now=now))
+
+    on = {"vehicle": {"ignition_on": False},
+          "campingmode": {"master_on": True, "usb_charger": False, "lights_on": False}, "energy": {}}
+    driving = {"vehicle": {"ignition_on": True}, "campingmode": {"master_on": False}, "energy": {}}
+    parked = {"vehicle": {"ignition_on": False}, "campingmode": {"master_on": False},
+              "energy": {"soc2_pct": 80}}
+    step(on, 100.0)          # baseline: camping on, stationary
+    step(driving, 110.0)     # engine start -> arm the restore
+    assert ac.owe_restore is True and ac.pre_drive == {"master": True, "usb": False, "lights": False}
+    step(parked, 120.0)      # park -> restore fires the injected actuate
+    assert ("campingmode", "master", "on") in calls
+
+
+def test_autocamper_persistence_round_trip():
+    """to_state_dict / load round-trips the restore debt (what serve persists across a restart)."""
+    ac = A.AutoCamper()
+    ac.owe_restore = True
+    ac.pre_drive = {"master": True, "usb": True, "lights": False}
+    ac.restore_until = 5.0
+    ac.fails = 2
+    ac.prev_ignition = True
+    ac2 = A.AutoCamper()
+    ac2.load(True, ac.to_state_dict())
+    assert ac2.enabled is True and ac2.owe_restore is True and ac2.fails == 2
+    assert ac2.pre_drive == {"master": True, "usb": True, "lights": False} and ac2.prev_ignition is True
+    # corrupt/null fails must not crash (mirrors serve._load_last contract)
+    ac3 = A.AutoCamper(); ac3.load(True, {"fails": None, "owe_restore": None})
+    assert ac3.fails == 0 and ac3.owe_restore is False

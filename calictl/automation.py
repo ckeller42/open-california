@@ -20,6 +20,9 @@ ignition (it reads 1 while driving = blocked), so ignition-off IS the "stationar
 """
 from __future__ import annotations
 
+import os
+import time
+
 # Defaults (all env-tunable in serve). window_s: how long AFTER PARKING to keep trying the restore
 # (covers a brief post-park driving-lock); max_fails: attempts before concluding the unit won't take
 # it and giving up; min_soc: below this leisure-battery %, assume the unit is protecting the battery
@@ -131,3 +134,145 @@ def auto_camper_restore_decide(*, ignition_on, prev_ignition, master_on, prev_ma
             "pre_drive": pre_drive, "restore_until": restore_until, "fails": fails,
             "notice": notice, "restored": restored, "prev_ignition": ign, "prev_master": m,
             "prev_usb": bool(usb_on), "prev_lights": bool(lights_on)}
+
+
+class AutoCamper:
+    """Stateful restore-after-park CONTROLLER — owns the auto-camper toggle + the per-cycle restore
+    state, drives the pure :func:`auto_camper_restore_decide`, does the journal logging, and actuates
+    via an INJECTED coroutine (so it never touches BLE itself). Extracted from :class:`serve.Server`,
+    which previously held ~13 ``_ac_*`` fields + the step + persistence inline.
+
+    :param min_soc / max_fails / window_s: guard params; default from the ``CALICTL_AUTO_CAMPER_*``
+        env vars (falling back to the module constants).
+
+    .. req:: Restore-after-park is a self-contained, injectable controller
+       :id: R_AUTO_CAMPER_CONTROLLER
+       :status: implemented
+       :tags: automation, camping
+
+       The restore-after-park state + step + persistence shall live in one unit that actuates through
+       an injected coroutine (never opening BLE), so it is unit-testable without the daemon.
+    """
+
+    def __init__(self, *, min_soc=None, max_fails=None, window_s=None):
+        self.enabled = False
+        self.prev_ignition = None
+        self.prev_master = None
+        self.prev_usb = None
+        self.prev_lights = None
+        self.owe_restore = False
+        self.pre_drive = None            # remembered {master,usb,lights} to restore after park
+        self.restore_until = None        # WALL-CLOCK deadline while restoring (persisted), else None
+        self.fails = 0
+        self.notice = None               # {ts, msg} — one-time log + web toast
+        self.min_soc = int(min_soc if min_soc is not None
+                           else os.environ.get("CALICTL_AUTO_CAMPER_MIN_SOC", AUTO_CAMPER_MIN_SOC))
+        self.max_fails = int(max_fails if max_fails is not None
+                             else os.environ.get("CALICTL_AUTO_CAMPER_MAX_FAILS", AUTO_CAMPER_MAX_FAILS))
+        self.window_s = float(window_s if window_s is not None
+                              else os.environ.get("CALICTL_AUTO_CAMPER_WINDOW_S", AUTO_CAMPER_WINDOW_S))
+
+    def set_enabled(self, on):
+        """Toggle the feature (returns the new state). Disabling clears any owed restore. Persistence
+        + the ENABLED/disabled log line are the caller's job (serve)."""
+        self.enabled = bool(on)
+        if not self.enabled:
+            self.owe_restore, self.restore_until, self.fails = False, None, 0
+        return self.enabled
+
+    def _track_prev(self, ign, master, usb, lights):
+        """Roll the previous-state snapshot (edge detection for the next poll)."""
+        self.prev_ignition, self.prev_master = ign, master
+        self.prev_usb, self.prev_lights = usb, lights
+
+    async def step(self, states, *, actuate, read_only, now=None):
+        """One poll's restore-after-park decision + logging + actuation. Runs AFTER the read (the BLE
+        lock is free). ``actuate(function, what, value)`` is an injected coroutine (serve passes
+        ``on_command``) — this NEVER touches BLE directly. ``now`` defaults to wall-clock
+        ``time.time()`` (the deadline must survive a restart). Never raises out of the poll."""
+        veh = states.get("vehicle") or {}
+        camp = states.get("campingmode") or {}
+        e = states.get("energy") or {}
+        ign = veh.get("ignition_on")
+        master = camp.get("master_on")
+        usb = camp.get("usb_charger")
+        lights = camp.get("lights_on")
+        if not self.enabled:
+            self._track_prev(ign, master, usb, lights)   # keep edges tracked so a mid-cycle enable won't misfire
+            return
+        soc = e.get("soc2_pct")
+        warning = bool(e.get("sleep_warning") or e.get("warning_active")
+                       or (e.get("warning_level") or 0) >= 1)
+        d = auto_camper_restore_decide(
+            ignition_on=ign, prev_ignition=self.prev_ignition,
+            master_on=master, prev_master=self.prev_master,
+            usb_on=usb, lights_on=lights, prev_usb=self.prev_usb, prev_lights=self.prev_lights,
+            soc=soc, warning=warning, now=now if now is not None else time.time(),
+            owe_restore=self.owe_restore, pre_drive=self.pre_drive,
+            restore_until=self.restore_until, fails=self.fails,
+            min_soc=self.min_soc, max_fails=self.max_fails, window_s=self.window_s)
+        armed_before = self.owe_restore
+        self.owe_restore = d["owe_restore"]
+        self.pre_drive = d["pre_drive"]
+        self.restore_until = d["restore_until"]
+        self.fails = d["fails"]
+        self._track_prev(d["prev_ignition"], d["prev_master"], d["prev_usb"], d["prev_lights"])
+
+        # Classify the event for the journal line. "idle" = nothing notable -> silent.
+        if d["owe_restore"] and not armed_before:
+            event = "armed_engine_shed"
+        elif d["restored"]:
+            event = "restored"
+        elif d["actuate"]:
+            event = "restoring"
+        elif d["notice"]:
+            event = "stood_down" if "battery" in d["notice"] else "gave_up"
+        else:
+            event = "idle"
+        if event != "idle":
+            print("auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d owe=%s)"
+                  % (event, d["notice"] or event.replace("_", " "), ign, master, soc, warning,
+                     self.fails, d["owe_restore"]), flush=True)
+        if d["notice"]:
+            self.notice = {"ts": round(time.time(), 1), "msg": d["notice"]}
+
+        if d["actuate"]:
+            cfg = d["restore_config"] or {}
+            if read_only:
+                print("auto-camper: parked with a restore owed but writes are read-only; not restoring",
+                      flush=True)
+                self.owe_restore, self.restore_until = False, None   # can't act -> don't spin
+                return
+            try:
+                await actuate("campingmode", "master", "on")        # master first (gates USB+lights)
+                if cfg.get("usb"):
+                    await actuate("campingmode", "usb", "on")
+                if cfg.get("lights"):
+                    await actuate("campingmode", "lights", "on")
+            except Exception as ex:           # BLE hiccup etc. -> counts as a failed attempt via fails
+                print("auto-camper: restore actuation failed: %r" % ex, flush=True)
+
+    def snapshot(self):
+        """The ``_meta.auto_camper`` block for the web UI: toggle, whether a restore is owed, notice."""
+        return {"enabled": self.enabled, "armed": bool(self.owe_restore), "notice": self.notice}
+
+    def to_state_dict(self):
+        """The persisted per-cycle restore debt (survives a restart mid-cycle)."""
+        return {"owe_restore": self.owe_restore, "pre_drive": self.pre_drive,
+                "restore_until": self.restore_until, "fails": self.fails,
+                "prev_ignition": self.prev_ignition, "prev_master": self.prev_master,
+                "prev_usb": self.prev_usb, "prev_lights": self.prev_lights}
+
+    def load(self, enabled, state):
+        """Restore the toggle + per-cycle debt from a persisted blob (best-effort; missing/null ->
+        defaults, so a corrupt cache never crashes). ``fails`` uses ``or 0`` to survive a null value."""
+        self.enabled = bool(enabled)
+        ac = state or {}
+        self.owe_restore = bool(ac.get("owe_restore", False))
+        self.pre_drive = ac.get("pre_drive")
+        self.restore_until = ac.get("restore_until")
+        self.fails = int(ac.get("fails") or 0)
+        self.prev_ignition = ac.get("prev_ignition")
+        self.prev_master = ac.get("prev_master")
+        self.prev_usb = ac.get("prev_usb")
+        self.prev_lights = ac.get("prev_lights")
