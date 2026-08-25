@@ -109,11 +109,7 @@ class ServeBackend:
             "session_mode": (getattr(self._s, "_session_mode", None) or "auto") if persistent else "off",
             # Auto camper mode: the toggle, whether it's actively re-asserting, and a one-time
             # give-up/stand-down notice the web UI shows as a toast.
-            "auto_camper": {
-                "enabled": bool(getattr(self._s, "_auto_camper", False)),
-                "armed": bool(getattr(self._s, "_ac_owe_restore", False)),   # a restore is owed (engine shed camping)
-                "notice": getattr(self._s, "_ac_notice", None),
-            },
+            "auto_camper": self._s._autocamper.snapshot(),
         }
         return out
 
@@ -232,7 +228,6 @@ class Server:
         self._outcomes_cache = os.environ.get(
             "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl"))
         self._appends = 0                   # appends since the last trim rewrite
-        self._auto_camper = False           # default; _load_last (moved below the _ac_* defaults) restores it
         self._mqtt = None
         self._iw = None                     # influx write_api
         self._loop = None
@@ -245,24 +240,10 @@ class Server:
         self._session = None
         self._session_state = "off"        # off|connecting|up|degraded|asleep
         self._backoff_fails = 0
-        # Auto camper mode — RESTORE camping after you park (the unit refuses camping-on while driving;
-        # see automation.py + docs/business-logic/auto-camper-mode.md). The `_auto_camper` toggle is
-        # loaded above (persists); the rest is runtime state for the restore state machine.
-        self._ac_prev_ignition = None       # previous poll's ignition (edge detection)
-        self._ac_prev_master = None         # previous poll's camping master (shed vs manual-off)
-        self._ac_prev_usb = None            # previous poll's camping USB (captured as pre-drive config)
-        self._ac_prev_lights = None         # previous poll's camping lights (captured as pre-drive config)
-        self._ac_owe_restore = False        # do we owe a restore (engine shed camping that was on)?
-        self._ac_pre_drive = None           # remembered {master,usb,lights} to restore after park
-        self._ac_restore_until = None       # WALL-CLOCK retry-window deadline while restoring (persisted), else None
-        self._ac_fails = 0                  # restore attempts this cycle
-        self._ac_notice = None              # {ts, msg} for a one-time log + web toast
-        self._ac_min_soc = int(os.environ.get("CALICTL_AUTO_CAMPER_MIN_SOC",
-                                              automation.AUTO_CAMPER_MIN_SOC))
-        self._ac_max_fails = int(os.environ.get("CALICTL_AUTO_CAMPER_MAX_FAILS",
-                                                automation.AUTO_CAMPER_MAX_FAILS))
-        self._ac_window_s = float(os.environ.get("CALICTL_AUTO_CAMPER_WINDOW_S",
-                                                automation.AUTO_CAMPER_WINDOW_S))
+        # Auto camper mode — RESTORE camping after you park (the unit refuses camping-on while driving).
+        # A self-contained controller (automation.AutoCamper): owns the toggle + per-cycle restore
+        # debt + step; actuates through on_command (injected). See auto-camper-mode.md. Loaded below.
+        self._autocamper = automation.AutoCamper()
         # Camping/ignition transition OBSERVER (always on, NEVER actuates) — a self-contained unit
         # (calictl/observer.py). It logs ignition+camping transitions, bursts the poll rate after an
         # engine start (the 30 s cadence otherwise aliases engine-on and the shed into one sample),
@@ -284,20 +265,7 @@ class Server:
             self._last_ok_ts = blob.get("ts")
             self._water_good = blob.get("water_good")      # last plausible water survives restarts
             self._water_stale_since = blob.get("water_stale_since")
-            self._auto_camper = bool(blob.get("auto_camper", False))   # toggle survives restarts
-            # Restore-after-park DEBT survives a restart/reboot mid-drive (else a buspi reboot between
-            # engine-start and park silently drops the pending restore). restore_until is wall-clock,
-            # so a stale window is correctly judged expired on load. prev_ignition is persisted too so
-            # the park (falling) edge is still detected across the restart.
-            ac = blob.get("auto_camper_state") or {}
-            self._ac_owe_restore = bool(ac.get("owe_restore", False))
-            self._ac_pre_drive = ac.get("pre_drive")
-            self._ac_restore_until = ac.get("restore_until")
-            self._ac_fails = int(ac.get("fails") or 0)   # `or 0` also handles a present-but-null value
-            self._ac_prev_ignition = ac.get("prev_ignition")
-            self._ac_prev_master = ac.get("prev_master")
-            self._ac_prev_usb = ac.get("prev_usb")
-            self._ac_prev_lights = ac.get("prev_lights")
+            self._autocamper.load(blob.get("auto_camper"), blob.get("auto_camper_state"))
         except (OSError, ValueError, TypeError):   # missing/corrupt cache -> keep the defaults, never crash __init__
             pass
 
@@ -310,18 +278,8 @@ class Server:
                 json.dump({"ts": self._last_ok_ts, "last": self._last,
                            "water_good": self._water_good,
                            "water_stale_since": self._water_stale_since,
-                           "auto_camper": self._auto_camper,
-                           # restore-after-park debt (see _load_last) — survives restart mid-cycle
-                           "auto_camper_state": {
-                               "owe_restore": self._ac_owe_restore,
-                               "pre_drive": self._ac_pre_drive,
-                               "restore_until": self._ac_restore_until,
-                               "fails": self._ac_fails,
-                               "prev_ignition": self._ac_prev_ignition,
-                               "prev_master": self._ac_prev_master,
-                               "prev_usb": self._ac_prev_usb,
-                               "prev_lights": self._ac_prev_lights,
-                           }}, f)
+                           "auto_camper": self._autocamper.enabled,
+                           "auto_camper_state": self._autocamper.to_state_dict()}, f)
             os.replace(tmp, self._state_cache)
         except OSError:
             pass
@@ -411,86 +369,10 @@ class Server:
     def set_auto_camper(self, on):
         """Toggle the auto-camper feature (persisted). Disabling clears any owed restore. Returns the
         new state. See automation.auto_camper_restore_decide + docs/business-logic/auto-camper-mode.md."""
-        self._auto_camper = bool(on)
-        if not self._auto_camper:
-            self._ac_owe_restore, self._ac_restore_until, self._ac_fails = False, None, 0
+        enabled = self._autocamper.set_enabled(on)
         self._save_last()
-        print("auto-camper: %s" % ("ENABLED" if self._auto_camper else "disabled"), flush=True)
-        return self._auto_camper
-
-    def _ac_track_prev(self, ign, master, usb, lights):
-        """Roll the auto-camper previous-state snapshot (edge detection for the next poll)."""
-        self._ac_prev_ignition, self._ac_prev_master = ign, master
-        self._ac_prev_usb, self._ac_prev_lights = usb, lights
-
-    async def _auto_camper_step(self, states):
-        """RESTORE camping mode after you park. The unit refuses camping-on while driving (firmware
-        stationary gate), so this remembers the pre-drive config when the engine sheds it, then
-        re-enables it on the ignition FALLING edge (parked), gated on battery health and bounded
-        retries (never fights power-saving, never loops). Runs each poll AFTER the read (the BLE lock
-        is free), actuates via on_command under that lock. Never raises out of the poll."""
-        veh = states.get("vehicle") or {}
-        camp = states.get("campingmode") or {}
-        e = states.get("energy") or {}
-        ign = veh.get("ignition_on")
-        master = camp.get("master_on")
-        usb = camp.get("usb_charger")
-        lights = camp.get("lights_on")
-        if not self._auto_camper:
-            self._ac_track_prev(ign, master, usb, lights)   # keep edges tracked so a mid-cycle enable won't misfire
-            return
-        soc = e.get("soc2_pct")
-        warning = bool(e.get("sleep_warning") or e.get("warning_active")
-                       or (e.get("warning_level") or 0) >= 1)
-        d = automation.auto_camper_restore_decide(
-            ignition_on=ign, prev_ignition=self._ac_prev_ignition,
-            master_on=master, prev_master=self._ac_prev_master,
-            usb_on=usb, lights_on=lights, prev_usb=self._ac_prev_usb, prev_lights=self._ac_prev_lights,
-            soc=soc, warning=warning, now=time.time(),   # WALL-CLOCK: restore_until must survive a restart
-            owe_restore=self._ac_owe_restore, pre_drive=self._ac_pre_drive,
-            restore_until=self._ac_restore_until, fails=self._ac_fails,
-            min_soc=self._ac_min_soc, max_fails=self._ac_max_fails, window_s=self._ac_window_s)
-        armed_before = self._ac_owe_restore
-        self._ac_owe_restore = d["owe_restore"]
-        self._ac_pre_drive = d["pre_drive"]
-        self._ac_restore_until = d["restore_until"]
-        self._ac_fails = d["fails"]
-        self._ac_track_prev(d["prev_ignition"], d["prev_master"], d["prev_usb"], d["prev_lights"])
-
-        # Classify the event for the journal line. "idle" = nothing notable -> silent (values are in
-        # InfluxDB regardless). armed = engine shed camping we owe back; restoring = a write attempt.
-        if d["owe_restore"] and not armed_before:
-            event = "armed_engine_shed"
-        elif d["restored"]:
-            event = "restored"
-        elif d["actuate"]:
-            event = "restoring"
-        elif d["notice"]:
-            event = "stood_down" if "battery" in d["notice"] else "gave_up"
-        else:
-            event = "idle"
-        if event != "idle":
-            print("auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d owe=%s)"
-                  % (event, d["notice"] or event.replace("_", " "), ign, master, soc, warning,
-                     self._ac_fails, d["owe_restore"]), flush=True)
-        if d["notice"]:
-            self._ac_notice = {"ts": round(time.time(), 1), "msg": d["notice"]}
-
-        if d["actuate"]:
-            cfg = d["restore_config"] or {}
-            if self._read_only:
-                print("auto-camper: parked with a restore owed but writes are read-only; not restoring",
-                      flush=True)
-                self._ac_owe_restore, self._ac_restore_until = False, None   # can't act -> don't spin
-                return
-            try:
-                await self.on_command("campingmode", "master", "on")        # master first (gates USB+lights)
-                if cfg.get("usb"):
-                    await self.on_command("campingmode", "usb", "on")
-                if cfg.get("lights"):
-                    await self.on_command("campingmode", "lights", "on")
-            except Exception as ex:           # BLE hiccup etc. -> counts as a failed attempt via fails
-                print("auto-camper: restore actuation failed: %r" % ex, flush=True)
+        print("auto-camper: %s" % ("ENABLED" if enabled else "disabled"), flush=True)
+        return enabled
 
     async def poll(self):
         # One BLE read of every function under the lock; cache the DECODED state
@@ -540,7 +422,7 @@ class Server:
                 print("camping-watch error:", flush=True)
                 traceback.print_exc()
             try:
-                await self._auto_camper_step(states)   # re-enable camper+USB after an engine start
+                await self._autocamper.step(states, actuate=self.on_command, read_only=self._read_only)   # re-enable camper+USB after an engine start
             except Exception:
                 import traceback
                 print("auto-camper step error:", flush=True)

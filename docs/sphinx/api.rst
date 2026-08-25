@@ -53,6 +53,8 @@ Automation
 ----------
 
 .. autofunction:: calictl.automation.auto_camper_restore_decide
+.. autoclass:: calictl.automation.AutoCamper
+   :members: step, set_enabled, snapshot, to_state_dict, load
 .. autoclass:: calictl.observer.CampingObserver
    :members: observe, on_push, poll_interval
 .. automethod:: calictl.serve.Server._auto_camper_step
@@ -65,6 +67,7 @@ Tests
 .. autofunction:: tests.test_mock_integration.test_read_all_heartbeat_refreshes_stale_read
 .. autofunction:: tests.test_mock_integration.test_lighting_applies_without_preamble
 .. autofunction:: tests.test_automation.test_no_loop_full_cycle_engine_shed_then_park_then_refused
+.. autofunction:: tests.test_automation.test_autocamper_step_restores_via_injected_actuate
 .. autofunction:: tests.test_web_serve.test_observer_logs_transitions_and_bursts_on_engine_start
 .. autofunction:: tests.test_control_extra.test_int_range_helper_validates_and_traces
 .. autofunction:: tests.test_persistent_session.test_read_char_retry_reports_disconnect_on_successful_read
