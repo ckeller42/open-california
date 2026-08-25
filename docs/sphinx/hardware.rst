@@ -150,9 +150,9 @@ tested against:
        decompile-verified — untested end-to-end because buspi was offline during the capture
        window, not because the unit lacks one
    * - roof
-     - yes
-     - pop-top roof installed; frame is decompile-verified byte-for-byte against the app, but
-       the motor has never been driven end-to-end by this project (not-live-verified)
+     - no
+     - not installed on this van (pop-top); the actuation frame is decompile-derived and
+       protocol-documented, but has never been live-tested — see the note below
    * - stairs
      - no
      - not installed on this van
@@ -171,6 +171,14 @@ tested against:
 
 A different van's equipment profile will surface a different subset — the ``Installed`` bits
 make this self-describing at runtime (``calictl status`` only shows what's actually on board).
+
+.. note::
+
+   ``CLAUDE.md``'s "Known state" equipment list omits the pop-top roof from its explicit
+   not-installed set, while ``docs/business-logic/control-and-actuation.md`` §4 states the
+   roof is **not installed here**. This page follows the explicit §4 statement — roof is
+   listed as not installed above — but the two sources disagree and should be reconciled
+   against the live ``roof.Installed`` bit the next time the reference van is reachable.
 
 Per-function verification tier
 -------------------------------
@@ -202,8 +210,8 @@ physically happened).
        readback is a write-through echo and is *not* itself proof — see the caveat below
    * - roof
      - decompile-verified only
-     - installed (pop-top) on the reference van; frame matches the app byte-for-byte; motor
-       has never been driven end-to-end by this project
+     - not installed (pop-top) on the reference van; the actuation frame matches the app
+       byte-for-byte, but the motor has never been driven end-to-end by this project
    * - airheater
      - decompile-verified / partially live
      - installed on the reference van; power capture observed; level/timer/runtime setters

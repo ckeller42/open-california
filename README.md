@@ -83,13 +83,14 @@ every step without changing anything. Full guide: **[docs/raspberry-pi-setup.md]
 
 - **Vehicle:** VW California **T7** camper control unit, over its vendor BLE GATT service.
 - **Equipment installed** on the reference van (varies by van; not-installed functions are
-  gated off automatically): cooler, camping mode, water, energy, lighting, air heater, and the
-  pop-top roof. **Not installed** here — stairs, living-room heater, roof-A/C, satellite,
+  gated off automatically): cooler, camping mode, water, energy, lighting, and air heater.
+  **Not installed** here — the pop-top roof, stairs, living-room heater, roof-A/C, satellite,
   solar; those functions are decompile/static-verified only, not live-tested.
-- **Control writes live-actuation-verified** on that van: cooler, camping mode, lighting. Roof
-  and air heater are installed but not yet live-verified (roof's frame is protocol-derived;
-  air heater's setters are decompile-verified but buspi was offline during its capture window)
-  — the five not-installed functions above are untested on real hardware entirely.
+- **Control writes live-actuation-verified** on that van: cooler, camping mode, lighting. Air
+  heater is installed but not yet live-verified end-to-end (setters are decompile-verified;
+  buspi was offline during its capture window). Roof's actuation frame is protocol-documented
+  from the decompile, but the pop-top isn't installed here, so it's untested like the other
+  not-installed functions.
 - **Host:** a Raspberry Pi ("buspi", Debian 13, aarch64), Python 3.13, BlueZ via `bleak`.
 
 Full GATT service/characteristic map, software-version fields, the equipment/verification
