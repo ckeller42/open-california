@@ -68,6 +68,20 @@ def test_store_generalpurpose_env_flag(monkeypatch):
     assert serve.Server(influx_enabled=False)._store_gp is False
 
 
+def test_persistent_flag_is_single_source_of_truth(monkeypatch):
+    """Server._persistent and the SessionSupervisor's flag must never diverge: Server._persistent
+    is a property over the supervisor's, so a post-construction toggle propagates. Guards against
+    the split-brain where run()/state() (server flag) and live_session()/nudge() (supervisor flag)
+    would disagree. Uses CALICTL_PERSISTENT_SESSION=0 so a diverged copy would be observable rather
+    than masked by the env-unset default of True."""
+    monkeypatch.setenv("CALICTL_PERSISTENT_SESSION", "0")
+    s = serve.Server(influx_enabled=False)
+    assert s._persistent is False and s._sessions._persistent is False   # both read the env
+    s._persistent = True                                                 # runtime/test toggle
+    assert s._sessions._persistent is True                               # propagated, not shadowed
+    assert s._persistent is s._sessions._persistent                      # one source of truth
+
+
 def test_meta_session_state_reflects_supervisor(monkeypatch):
     """_meta.session mirrors the supervisor's state machine; online == (session up)."""
     from calictl import serve

@@ -231,7 +231,7 @@ class Server:
         self._httpd = None
         # Persistent armed session (fast actuation). Default on; CALICTL_PERSISTENT_SESSION=0
         # falls back to the connect-per-op model. See docs/.../persistent-ble-session-design.md.
-        self._persistent = os.environ.get("CALICTL_PERSISTENT_SESSION", "1") != "0"
+        persistent = os.environ.get("CALICTL_PERSISTENT_SESSION", "1") != "0"
         # Camping/ignition transition OBSERVER (always on, NEVER actuates) — a self-contained unit
         # (calictl/observer.py). It logs ignition+camping transitions, bursts the poll rate after an
         # engine start (the 30 s cadence otherwise aliases engine-on and the shed into one sample),
@@ -239,9 +239,11 @@ class Server:
         # Constructed before the session supervisor, which subscribes to its on_push.
         self._observer = observer.CampingObserver(self.funcs)
         # Persistent-BLE-session lifecycle lives in its own supervisor (calictl/session.py). It owns
-        # the session state + wake event; the daemon shares its _ble lock (attached in run()).
+        # the session state + wake event; the daemon shares its _ble lock (attached in run()). The
+        # supervisor is the SINGLE owner of the persistent-on flag — Server._persistent is a property
+        # over it (below), so there is no second copy to drift out of sync.
         self._sessions = session.SessionSupervisor(self.dev, interval=self.interval,
-                                                   persistent=self._persistent,
+                                                   persistent=persistent,
                                                    on_push=self._observer.on_push, ui_idle_s=_UI_IDLE_S)
         # Auto camper mode — RESTORE camping after you park (the unit refuses camping-on while driving).
         # A self-contained controller (automation.AutoCamper): owns the toggle + per-cycle restore
@@ -316,6 +318,18 @@ class Server:
     # --- persistent-session delegates -> calictl/session.py::SessionSupervisor ---------------------
     # These stay on Server as thin pass-throughs so the many callers (poll/on_command/ServeBackend)
     # keep their existing call sites; the session state + lifecycle live wholly in self._sessions.
+    @property
+    def _persistent(self):
+        """Whether the persistent fast-path session is enabled. The supervisor is the SINGLE owner
+        of this flag; this property reads/writes it through so the daemon (run/on_command) and the
+        supervisor (live_session/nudge) can never see different values. Writable so a test or a
+        runtime toggle stays consistent across both."""
+        return self._sessions._persistent
+
+    @_persistent.setter
+    def _persistent(self, value):
+        self._sessions._persistent = value
+
     def _live_session(self):
         """The persistent session if it's currently up, else None (use the per-op path)."""
         return self._sessions.live_session()
