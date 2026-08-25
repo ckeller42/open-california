@@ -50,3 +50,6 @@ calictl/webui/icons/
 
 # local git worktrees (e.g. fork sessions)
 .worktrees/
+
+# subagent-driven-development scratch workspaces
+.superpowers/
