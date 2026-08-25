@@ -48,3 +48,31 @@ def test_frame_layouts_md_matches_dictionary(tmp_path):
         "docs/protocol/frame-layouts.md is stale — regenerate with "
         "`python3 -m tools.gen_frame_layouts --out docs/protocol/frame-layouts.md`"
     )
+
+
+def test_wireshark_dissector_matches_dictionary(tmp_path):
+    from tools import gen_wireshark_dissector
+
+    committed = ROOT / "docs" / "protocol" / "vwcamper.lua"
+    assert committed.exists(), (
+        "run: python3 -m tools.gen_wireshark_dissector --out docs/protocol/vwcamper.lua"
+    )
+
+    fresh = gen_wireshark_dissector.build()
+    out = tmp_path / "vwcamper.lua"
+    out.write_text(fresh)
+
+    assert out.read_text() == committed.read_text(), (
+        "docs/protocol/vwcamper.lua is stale — regenerate with "
+        "`python3 -m tools.gen_wireshark_dissector --out docs/protocol/vwcamper.lua`"
+    )
+
+
+def test_wireshark_dissector_is_non_trivial():
+    text = (ROOT / "docs" / "protocol" / "vwcamper.lua").read_text()
+    assert "Proto(" in text
+    proto_field_count = sum(1 for line in text.splitlines() if "ProtoField." in line)
+    assert proto_field_count >= 20, (
+        "expected many ProtoField definitions (one per surfaced state field), got %d"
+        % proto_field_count
+    )
