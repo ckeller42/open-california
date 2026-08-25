@@ -79,6 +79,23 @@ curl -fsSL https://raw.githubusercontent.com/ckeller42/open-california/main/inst
 Pairing is interactive (type the passkey the camper shows). `sh install.sh --dry-run` previews
 every step without changing anything. Full guide: **[docs/raspberry-pi-setup.md](docs/raspberry-pi-setup.md)**.
 
+## Tested on
+
+- **Vehicle:** VW California **T7** camper control unit, over its vendor BLE GATT service.
+- **Equipment installed** on the reference van (varies by van; not-installed functions are
+  gated off automatically): cooler, camping mode, water, energy, lighting, and air heater.
+  **Not installed** here — the pop-top roof, stairs, living-room heater, roof-A/C, satellite,
+  solar; those functions are decompile/static-verified only, not live-tested.
+- **Control writes live-actuation-verified** on that van: cooler, camping mode, lighting. Air
+  heater is installed but not yet live-verified end-to-end (setters are decompile-verified;
+  buspi was offline during its capture window). Roof's actuation frame is protocol-documented
+  from the decompile, but the pop-top isn't installed here, so it's untested like the other
+  not-installed functions.
+- **Host:** a Raspberry Pi ("buspi", Debian 13, aarch64), Python 3.13, BlueZ via `bleak`.
+
+Full GATT service/characteristic map, software-version fields, the equipment/verification
+tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardware.html)**.
+
 ## How it works
 
 - **Stdlib-only at import** — the runtime pulls no third-party packages until it actually needs a
