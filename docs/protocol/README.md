@@ -7,6 +7,7 @@ source YAML, then regenerate:
 | File | Generator |
 |---|---|
 | `reference.md` | `python3 -m tools.gen_protocol_reference --out docs/protocol/reference.md` |
+| `frame-layouts.md` | `python3 -m tools.gen_frame_layouts --out docs/protocol/frame-layouts.md` |
 
 `tests/test_protocol_views.py` fails CI if a committed file here doesn't match a fresh
 regeneration, so a stale view can't merge silently.

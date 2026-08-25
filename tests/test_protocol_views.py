@@ -30,3 +30,21 @@ def test_reference_md_matches_dictionary(tmp_path):
         "docs/protocol/reference.md is stale — regenerate with "
         "`python3 -m tools.gen_protocol_reference --out docs/protocol/reference.md`"
     )
+
+
+def test_frame_layouts_md_matches_dictionary(tmp_path):
+    from tools import gen_frame_layouts
+
+    committed = ROOT / "docs" / "protocol" / "frame-layouts.md"
+    assert committed.exists(), (
+        "run: python3 -m tools.gen_frame_layouts --out docs/protocol/frame-layouts.md"
+    )
+
+    fresh = gen_frame_layouts.build()
+    out = tmp_path / "frame-layouts.md"
+    out.write_text(fresh)
+
+    assert out.read_text() == committed.read_text(), (
+        "docs/protocol/frame-layouts.md is stale — regenerate with "
+        "`python3 -m tools.gen_frame_layouts --out docs/protocol/frame-layouts.md`"
+    )
