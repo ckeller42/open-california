@@ -145,11 +145,14 @@ tested against:
      - yes
      - 16 addressable zones
    * - airheater
-     - no
-     - not installed on this van; frame/offsets known, untested live
+     - yes
+     - installed; ``power`` setter capture-observed, level/timer/runtime setters
+       decompile-verified — untested end-to-end because buspi was offline during the capture
+       window, not because the unit lacks one
    * - roof
-     - no
-     - not installed on this van; frame protocol-derived, untested live
+     - yes
+     - pop-top roof installed; frame is decompile-verified byte-for-byte against the app, but
+       the motor has never been driven end-to-end by this project (not-live-verified)
    * - stairs
      - no
      - not installed on this van
@@ -199,11 +202,13 @@ physically happened).
        readback is a write-through echo and is *not* itself proof — see the caveat below
    * - roof
      - decompile-verified only
-     - frame matches the app byte-for-byte; motor has never been driven end-to-end by this
-       project; not installed on the reference van
+     - installed (pop-top) on the reference van; frame matches the app byte-for-byte; motor
+       has never been driven end-to-end by this project
    * - airheater
      - decompile-verified / partially live
-     - power capture observed; level/timer/runtime setters are decompile-verified, untested
+     - installed on the reference van; power capture observed; level/timer/runtime setters
+       are decompile-verified but untested end-to-end — buspi was offline during the capture
+       window, not an equipment gap
    * - energy
      - decompile-verified only
      - mode setter (normal/max-charge/eco) matches the app; not live-actuated
