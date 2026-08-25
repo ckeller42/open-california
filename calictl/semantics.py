@@ -177,7 +177,11 @@ def campingmode(d: dict) -> dict:
     return {
         "installed": bool(d.get("Installed")),
         "master_on": master,
-        "usb_charger": bool(d.get("UsbCharger")),                 # normal: on=1
+        "usb_charger": bool(d.get("UsbCharger")),                 # raw field, normal: on=1
+        # DERIVED truth: the rear USB is physically OFF whenever master is off, even though the
+        # UsbCharger field keeps reading 1 (owner-confirmed 2026-08-19). Gate the raw field by
+        # master so consumers (UI/MQTT/HA) get "is USB actually powered", not the latched field.
+        "usb_powered": master and bool(d.get("UsbCharger")),
         # inverted+combined AND only meaningful while master on (fields default to 0
         # when camping is off, which would otherwise read as a false "lit").
         "lights_on": master and d.get("InteriorLight") == 0 and d.get("OutsideLight") == 0,
