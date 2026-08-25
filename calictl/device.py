@@ -318,6 +318,35 @@ class CamperDevice:
         finally:
             await self._safe_disconnect(client)
 
+    async def _arm(self, client, stop, label, noun):
+        """Replay the connect handshake (version + auth reads, subscribe-all) and start the 1003
+        liveness heartbeat, then wait ``ARM_DELAY_S`` so the unit registers it before the first
+        write. Returns the heartbeat task. ``label``/``noun`` tag the weak-handshake warning
+        (``"actuate"``/``"write"`` for control, ``"actuate_roof"``/``"move"`` for the roof). One home
+        for the arm prologue that ``_actuate_on`` and ``actuate_roof`` previously duplicated verbatim.
+
+        .. req:: One shared actuation arm prologue
+           :id: R_ACTUATE_ARM
+           :status: implemented
+           :tags: ble, control
+
+           The handshake + heartbeat-start + arm-delay that arms a write (issue #2's 1003 gate) shall
+           live in one place, shared by the control and roof actuation paths.
+        """
+        auth_ok = 0
+        for uuid in (VERSION_CHAR, AUTH_CHAR):
+            try:
+                await client.read_gatt_char(uuid); auth_ok += 1
+            except Exception:
+                pass
+        n = await self._subscribe_all(client)
+        if auth_ok < 2 or n == 0:
+            print("%s: weak handshake (auth-reads=%d/2, subscribed=%d) — %s may be ignored"
+                  % (label, auth_ok, n, noun), flush=True)
+        beat = asyncio.create_task(self._heartbeat(client, stop))
+        await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
+        return beat
+
     async def _actuate_on(self, client, func, frame: bytes, *, follow: bytes | None = None,
                           verify: bool = True, arm: bool = True,
                           pre: list | None = None) -> dict | None:
@@ -343,18 +372,7 @@ class CamperDevice:
         beat = None
         try:
             if arm:
-                auth_ok = 0
-                for uuid in (VERSION_CHAR, AUTH_CHAR):
-                    try:
-                        await client.read_gatt_char(uuid); auth_ok += 1
-                    except Exception:
-                        pass
-                n = await self._subscribe_all(client)
-                if auth_ok < 2 or n == 0:
-                    print("actuate: weak handshake (auth-reads=%d/2, subscribed=%d) — write may "
-                          "be ignored" % (auth_ok, n), flush=True)
-                beat = asyncio.create_task(self._heartbeat(client, stop))
-                await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
+                beat = await self._arm(client, stop, "actuate", "write")
             if pre:
                 for p in pre:
                     await client.write_gatt_char(func.control_char, p, response=True)
@@ -472,18 +490,7 @@ class CamperDevice:
                 return True   # transient write error on a live link: keep driving
 
         try:
-            auth_ok = 0
-            for uuid in (VERSION_CHAR, AUTH_CHAR):
-                try:
-                    await client.read_gatt_char(uuid); auth_ok += 1
-                except Exception:
-                    pass
-            n = await self._subscribe_all(client)
-            if auth_ok < 2 or n == 0:
-                print("actuate_roof: weak handshake (auth-reads=%d/2, subscribed=%d) — move "
-                      "may be ignored" % (auth_ok, n), flush=True)
-            beat = asyncio.create_task(self._heartbeat(client, stop))
-            await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
+            beat = await self._arm(client, stop, "actuate_roof", "move")
 
             # Stream the move frame with the live time-derived counter until the safety cap. The
             # unit self-gates motion for the first ~validate_s until the counter validates; we
