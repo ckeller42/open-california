@@ -73,10 +73,10 @@ def test_meta_session_state_reflects_supervisor(monkeypatch):
     from calictl import serve
     s = serve.Server(influx_enabled=False)
     s._persistent = True
-    s._session_state = "up"
+    s._sessions.session_state = "up"
     st = serve.ServeBackend(s, loop=None).state()
     assert st["_meta"]["session"] == "up" and st["_meta"]["online"] is True
-    s._session_state = "asleep"
+    s._sessions.session_state = "asleep"
     st = serve.ServeBackend(s, loop=None).state()
     assert st["_meta"]["session"] == "asleep" and st["_meta"]["online"] is False
 
@@ -107,11 +107,11 @@ def test_supervise_session_backoff_to_asleep(monkeypatch):
         s._ble = asyncio.Lock()
         # run a bounded number of supervisor iterations
         for _ in range(5):
-            await s._session_connect_once()
-        return s._session_state
+            await s._sessions._connect_once()
+        return s._sessions.session_state
     state = asyncio.run(_run())
     assert state == "asleep"
-    assert s._backoff_fails >= serve.Server.ASLEEP_AFTER
+    assert s._sessions._backoff_fails >= s._sessions.ASLEEP_AFTER
 
 
 def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
@@ -148,7 +148,7 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
     # the loop, so a raise propagates out (the backoff now runs in a child task via asyncio.wait, so
     # a raise there would be trapped). 8 iterations is enough to escalate to 'asleep' and reach the
     # 60 s backoff cap.
-    real_connect = s._session_connect_once
+    real_connect = s._sessions._connect_once
     _n = {"i": 0}
     async def counting_connect():
         _n["i"] += 1
@@ -156,17 +156,17 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
         if _n["i"] >= 8:
             raise _Stop
         return ok
-    monkeypatch.setattr(s, "_session_connect_once", counting_connect)
+    monkeypatch.setattr(s._sessions, "_connect_once", counting_connect)
 
     async def _run():
         s._ble = asyncio.Lock()
-        s._wake_session = asyncio.Event()          # keep-warm nudge target (never set in this test)
+        s._sessions.attach(s._ble)          # keep-warm nudge target (never set in this test)
         s._note_ui_activity()                       # UI active -> supervisor attempts connects (vs idle-release)
         try:
-            await s._supervise_session()
+            await s._sessions.supervise()
         except _Stop:
             pass
-        return s._session_state, sleeps
+        return s._sessions.session_state, sleeps
     state, sleeps = asyncio.run(_run())
     assert state == "asleep"                                 # escalated after ASLEEP_AFTER fails
     assert 60 in sleeps and all(x > 0 for x in sleeps)       # capped backoff, never a 0-sleep spin
@@ -398,15 +398,15 @@ def test_reconnect_closes_the_old_session_no_leak(monkeypatch):
 
     async def _run():
         s._ble = asyncio.Lock()
-        assert await s._session_connect_once() is True     # first connect -> up
-        old = s._session
+        assert await s._sessions._connect_once() is True     # first connect -> up
+        old = s._sessions._session
         assert old.is_up is True
         assert old._stop.is_set() is False
         unit.drop(); unit.wake()                            # link cycles; van reachable again
-        ok = await s._session_connect_once()                # reconnect
+        ok = await s._sessions._connect_once()                # reconnect
         assert ok is True
-        assert s._session is not old                        # a NEW session object
-        assert s._session.is_up is True
+        assert s._sessions._session is not old                        # a NEW session object
+        assert s._sessions._session.is_up is True
         assert old._stop.is_set() is True                   # old session was closed, not leaked
         return True
 
@@ -434,7 +434,7 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
         calls["dev"] += 1
         return None
     monkeypatch.setattr(s.dev, "actuate", dev_actuate)
-    s._session = FakeSession()
+    s._sessions._session = FakeSession()
 
     async def _run():
         s._ble = asyncio.Lock()
@@ -454,31 +454,31 @@ def test_session_toggle_disconnect_and_connect():
     s._persistent = True
 
     async def _disc():
-        s._ble = asyncio.Lock(); s._wake_session = asyncio.Event()
+        s._ble = asyncio.Lock(); s._sessions.attach(s._ble)
         s._note_ui_activity()                       # UI is being polled (active)
-        assert s._ui_active() is True
+        assert s._sessions._ui_active() is True
         r = await s.set_session_mode("disconnect")
         return r
     r = asyncio.run(_disc())
     assert r["mode"] == "release"
-    assert s._session_mode == "release"
-    assert s._ui_active() is False                  # release overrides activity -> slot freed
+    assert s._sessions._session_mode == "release"
+    assert s._sessions._ui_active() is False                  # release overrides activity -> slot freed
 
     async def _conn():
-        s._wake_session = asyncio.Event()
+        s._sessions.attach(s._ble)
         return await s.set_session_mode("connect")
     r = asyncio.run(_conn())
-    assert r["mode"] == "auto" and s._session_mode is None
-    assert s._ui_active() is True                   # connect re-marked activity
+    assert r["mode"] == "auto" and s._sessions._session_mode is None
+    assert s._sessions._ui_active() is True                   # connect re-marked activity
 
 
 def test_meta_exposes_session_mode():
     from calictl import serve
     s = serve.Server(influx_enabled=False)
     s._persistent = True
-    s._session_mode = "release"
+    s._sessions._session_mode = "release"
     assert serve.ServeBackend(s, loop=None).state()["_meta"]["session_mode"] == "release"
-    s._session_mode = None
+    s._sessions._session_mode = None
     assert serve.ServeBackend(s, loop=None).state()["_meta"]["session_mode"] == "auto"
 
 
@@ -488,28 +488,36 @@ def test_ui_active_window():
 
     from calictl import serve
     s = serve.Server(influx_enabled=False)
-    assert s._ui_active() is False                      # never used
+    assert s._sessions._ui_active() is False                      # never used
     s._note_ui_activity()
-    assert s._ui_active() is True                       # just now
-    s._last_ui_activity = time.time() - (serve._UI_IDLE_S + 5)
-    assert s._ui_active() is False                      # gone idle -> release the slot
+    assert s._sessions._ui_active() is True                       # just now
+    s._sessions._last_ui_activity = time.time() - (serve._UI_IDLE_S + 5)
+    assert s._sessions._ui_active() is False                      # gone idle -> release the slot
 
 
 def test_supervise_releases_session_when_ui_idle(monkeypatch):
     """App-friendliness: when the web UI is idle, the supervisor RELEASES the held session so the
-    phone app can use the single BLE slot."""
+    phone app can use the single BLE slot.
+
+    .. test:: SessionSupervisor releases the BLE slot when the web UI goes idle
+       :id: T_SESSION_SUPERVISOR
+       :links: R_SESSION_SUPERVISOR
+
+       Exercises :meth:`calictl.session.SessionSupervisor.supervise` — an idle UI drives one
+       ``aclose()`` of the held session and drops the state to ``off``.
+    """
     import asyncio
 
     from calictl import serve
     s = serve.Server("MO:CK", influx_enabled=False)
     s._persistent = True
-    s._last_ui_activity = None                          # idle (never used)
+    s._sessions._last_ui_activity = None                          # idle (never used)
     closed = {"n": 0}
     class FakeSess:
         is_up = True
         async def aclose(self):
             closed["n"] += 1
-    s._session = FakeSess()
+    s._sessions._session = FakeSess()
 
     class _Stop(Exception):
         pass
@@ -519,12 +527,12 @@ def test_supervise_releases_session_when_ui_idle(monkeypatch):
 
     async def _run():
         s._ble = asyncio.Lock()
-        s._wake_session = asyncio.Event()
+        s._sessions.attach(s._ble)
         try:
-            await s._supervise_session()
+            await s._sessions.supervise()
         except _Stop:
             pass
-        return closed["n"], s._session, s._session_state
+        return closed["n"], s._sessions._session, s._sessions.session_state
     n, sess, state = asyncio.run(_run())
     assert n == 1 and sess is None and state == "off"   # released, slot freed
 
@@ -539,8 +547,8 @@ def test_on_command_nudges_session_when_down(monkeypatch):
     s = serve.Server(influx_enabled=False)
     s._persistent = True
     s._read_only = False
-    s._session = None                       # no live session (van was asleep)
-    s._backoff_fails = 3                     # backoff grew during the sleep
+    s._sessions._session = None                       # no live session (van was asleep)
+    s._sessions._backoff_fails = 3                     # backoff grew during the sleep
     s._last = {"lighting": {"ProfileNumber": 9}}
     monkeypatch.setattr(serve, "_SESSION_WAIT_S", 0.1)   # don't idle the full wait-for-session window
     async def dev_actuate(*a, **k):
@@ -549,9 +557,9 @@ def test_on_command_nudges_session_when_down(monkeypatch):
 
     async def _run():
         s._ble = asyncio.Lock()
-        s._wake_session = asyncio.Event()
+        s._sessions.attach(s._ble)
         await s.on_command("lighting", "kitchen", 8)
-        return s._wake_session.is_set(), s._backoff_fails
+        return s._sessions._wake.is_set(), s._sessions._backoff_fails
     was_set, fails = asyncio.run(_run())
     assert was_set is True and fails == 0    # supervisor prodded, backoff reset
 
@@ -582,7 +590,7 @@ def test_on_command_lighting_is_fast_path_confirmed_by_notification(monkeypatch)
                 self._notif[key] = fresh
             asyncio.ensure_future(push())
             return None
-    s._session = FakeSession()
+    s._sessions._session = FakeSession()
 
     async def _run():
         s._ble = asyncio.Lock()

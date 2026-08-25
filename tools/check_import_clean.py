@@ -20,6 +20,7 @@ import calictl.postcheck
 import calictl.protocol  # noqa: E401,F401
 import calictl.semantics
 import calictl.serve
+import calictl.session  # noqa: F401
 import calictl.web  # noqa: F401
 
 BANNED = {"bleak", "paho", "paho.mqtt", "influxdb_client", "yaml"}
