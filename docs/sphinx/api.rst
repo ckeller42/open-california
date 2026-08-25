@@ -25,6 +25,7 @@ Device / reads
 --------------
 
 .. autofunction:: calictl.device._read_char_with_retry
+.. automethod:: calictl.device.CamperDevice._arm
 .. automethod:: calictl.device.CamperDevice.read_all
 .. automethod:: calictl.device.CamperDevice.actuate
 .. automethod:: calictl.device.CamperDevice.actuate_roof
@@ -67,3 +68,4 @@ Tests
 .. autofunction:: tests.test_web_serve.test_observer_logs_transitions_and_bursts_on_engine_start
 .. autofunction:: tests.test_control_extra.test_int_range_helper_validates_and_traces
 .. autofunction:: tests.test_persistent_session.test_read_char_retry_reports_disconnect_on_successful_read
+.. autofunction:: tests.test_device.test_actuate_arms_then_writes

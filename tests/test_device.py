@@ -77,6 +77,10 @@ def _cooler():
 
 
 def test_actuate_arms_then_writes(fake_bleak):
+    """.. test:: Actuation runs the shared arm prologue (handshake + heartbeat) before writing
+       :id: T_ACTUATE_ARM
+       :links: R_ACTUATE_ARM
+    """
     f = _cooler()
     frame = bytes.fromhex("3d4300000000")
     post = asyncio.run(device.CamperDevice("AA:BB:CC:DD:EE:FF").actuate(f, frame, verify=True))
