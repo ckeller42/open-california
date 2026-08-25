@@ -72,7 +72,7 @@ def _semantic_review(entry) -> str:
 
 def _rows(catalog):
     rows = []
-    for fn in catalog:
+    for fn in sorted(catalog):
         kinds = catalog.get(fn) or {}
         for category in sorted(kinds):
             fields = kinds.get(category) or {}

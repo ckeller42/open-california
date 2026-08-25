@@ -220,15 +220,6 @@ Totals: 228 fields catalogued, 91 surfaced, 137 omitted, 1 flagged for review.
 | stairs | state | OperationMode | surface | mode | high | — | — | — |
 | stairs | state | Sensor | surface | obstacle_sensor | high | — | — | — |
 | stairs | state | State | surface | extended | high | — | — | — |
-| water | state | FreshWaterInfoPopUp | omit | — | — | — | — | UI transient popup flag, not telemetry |
-| water | state | FreshWaterLevel | surface | fresh_percent | high | vwdoc | — | — |
-| water | state | FreshWaterUnit | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
-| water | state | FreshWaterVolume | surface | fresh_capacity_l | high | — | — | — |
-| water | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
-| water | state | WasteWaterInfoPopUp | omit | — | — | — | — | UI transient popup flag, not telemetry |
-| water | state | WasteWaterLevel | surface | waste_percent | high | vwdoc | — | — |
-| water | state | WasteWaterUnit | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
-| water | state | WasteWaterVolume | surface | waste_capacity_l | high | — | — | — |
 | vehicle | state | CarLevelPitch | surface | level_pitch | medium | app | — | — |
 | vehicle | state | CarLevelPopUp | surface | level_popup | medium | app | — | — |
 | vehicle | state | CarLevelRoll | surface | level_roll | medium | app | — | — |
@@ -240,3 +231,12 @@ Totals: 228 fields catalogued, 91 surfaced, 137 omitted, 1 flagged for review.
 | vehicle | state | CarTimeYear | omit | — | — | app | — | car-clock component (year+1900) — combined into the car_clock output by semantics.vehicle |
 | vehicle | state | CarVariant | surface | car_variant | medium | app | — | — |
 | vehicle | state | TerminalOneFive | surface | ignition_on | high | app | — | — |
+| water | state | FreshWaterInfoPopUp | omit | — | — | — | — | UI transient popup flag, not telemetry |
+| water | state | FreshWaterLevel | surface | fresh_percent | high | vwdoc | — | — |
+| water | state | FreshWaterUnit | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
+| water | state | FreshWaterVolume | surface | fresh_capacity_l | high | — | — | — |
+| water | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
+| water | state | WasteWaterInfoPopUp | omit | — | — | — | — | UI transient popup flag, not telemetry |
+| water | state | WasteWaterLevel | surface | waste_percent | high | vwdoc | — | — |
+| water | state | WasteWaterUnit | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
+| water | state | WasteWaterVolume | surface | waste_capacity_l | high | — | — | — |
