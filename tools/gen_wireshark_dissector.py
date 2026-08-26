@@ -54,15 +54,20 @@ def _layout(field):
     its offset/width doesn't fit a single-byte or whole-byte-aligned shape (see module
     docstring) — such a field is skipped with a comment rather than mis-masked."""
     offset, width = field["offset"], field["width"]
+    # `signed: true` (structured key in dictionary.yaml, issue #108) -> ProtoField.intN so
+    # e.g. the vehicle leveling angles and battery currents display as negative values.
+    # Only whole-byte shapes carry it (all signed fields are 8/16-bit aligned); a signed
+    # sub-byte field would fall back to uintN + the mask (none exist today).
+    signed = bool(field.get("signed"))
     byte_off, bit_in_byte = offset // 8, offset % 8
     if width in (1, 2, 4, 8) and bit_in_byte + width <= 8:
         high_bit = 7 - bit_in_byte
         low_bit = high_bit - width + 1
         mask = ((1 << width) - 1) << low_bit
-        ftype = "bool" if width == 1 else "uint8"
+        ftype = "bool" if width == 1 else ("int8" if signed and width == 8 else "uint8")
         return byte_off, 1, mask, ftype
     if width in (16, 32) and bit_in_byte == 0:
-        ftype = "uint16" if width == 16 else "uint32"
+        ftype = ("int16" if signed else "uint16") if width == 16 else ("int32" if signed else "uint32")
         return byte_off, width // 8, (1 << width) - 1, ftype
     return None
 
