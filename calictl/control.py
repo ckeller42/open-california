@@ -118,12 +118,17 @@ def _cooler_values(state: dict, **changes) -> dict:
     vals = dict(
         State=state.get("State", 1), Mode=state.get("Mode", 4),
         Level=state.get("Level", 3),
-        # no-op actions. NB: the cross-check (2026-08-17) suggested NightTimerSet=3 / hours=31 from
-        # the app's v() class-defaults, but the REAL captured app power-on frame (tests/scenarios/
-        # cooler/power-on) sends NightTimerSet=0 and the hour bytes 0 — the wire capture is ground
-        # truth, so these stay 0. (A good example of capture > decompiled-default inference.)
-        TimerStart=3, TimerCancel=3, NightTimerSet=0,
-        NightTimerHourOff=0, NightTimerHourOn=0,
+        # Timer ACTIONS stay at their no-op sentinels; the night-schedule VALUES must carry the
+        # CURRENT state. LIVE-VERIFIED 2026-08-26 (issue #99 write test): the unit takes the hour
+        # bytes LITERALLY — a night_off write that carried NightTimerHourOn=0 clobbered a just-set
+        # quiet_from 22 back to 0 (1102 push: "quiet_from 22->0"). The old hard-coded zeros came
+        # from the app's power-on capture, but that van had NO schedule set — 0 simply WAS the
+        # current value there, so the capture couldn't distinguish "send 0" from "send current".
+        # NightTimerSet is carried for the same reason (a literal 0 would disarm a set schedule).
+        TimerStart=3, TimerCancel=3,
+        NightTimerSet=state.get("NightTimerSet", 0),
+        NightTimerHourOn=state.get("NightTimerHourOn", 0),
+        NightTimerHourOff=state.get("NightTimerHourOff", 0),
         TimerHour=state.get("TimerHourSet", 0), TimerMin=state.get("TimerMinSet", 0),
     )
     vals.update(changes)
@@ -160,6 +165,8 @@ def _cooler(funcs, what, value, last):
     elif what in ("night_on", "night_off"):    # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
         hr = _int_range(value, 0, 23, "night timer hour")
         ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
+    elif what == "night_set":                  # ARM/disarm the quiet schedule (vf/c.java:263 X1())
+        ch = {"NightTimerSet": 1 if _truthy(value) else 0}
     else:
         return None
     return protocol.encode(funcs["cooler"], _cooler_values(last, **ch),

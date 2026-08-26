@@ -58,6 +58,32 @@ def test_push_observer_logs_camping_change(capsys, monkeypatch):
     assert capsys.readouterr().out == ""
 
 
+def test_push_observer_logs_cooler_quiet_time_change(capsys, monkeypatch):
+    """A pushed 1102 cooler frame that changes the quiet-time schedule logs one line — the live
+    probe for whether the unit BROADCASTS night-timer changes (issue #99). First push = baseline."""
+    funcs = _funcs()
+    obs = observer.CampingObserver(funcs)
+    ch = str(funcs["cooler"].state_char).lower()
+    seq = [{"on": True, "level": 3, "quiet_scheduled": False, "quiet_from": 0, "quiet_to": 0,
+            "timer_active": False},
+           {"on": True, "level": 3, "quiet_scheduled": True, "quiet_from": 22, "quiet_to": 6,
+            "timer_active": False}]
+    i = {"n": 0}
+
+    def fake_interp(fn, decoded):
+        r = seq[min(i["n"], len(seq) - 1)]
+        i["n"] += 1
+        return r
+    monkeypatch.setattr(observer.semantics, "interpret", fake_interp)
+    monkeypatch.setattr(observer.protocol, "decode", lambda f, d: d)
+    obs.on_push(ch, b"\x00")                    # baseline push -> silent
+    assert capsys.readouterr().out == ""
+    obs.on_push(ch, b"\x00")                    # quiet time enabled 22->6 -> one line
+    out = capsys.readouterr().out
+    assert "camping-push[cooler]:" in out
+    assert "quiet_scheduled 0->1" in out and "quiet_from 0->22" in out and "quiet_to 0->6" in out
+
+
 def test_store_generalpurpose_env_flag(monkeypatch):
     """The F000/F001 diagnostic-register RE probe is opt-in via CALICTL_STORE_GENERALPURPOSE."""
     monkeypatch.setenv("CALICTL_STORE_GENERALPURPOSE", "1")
