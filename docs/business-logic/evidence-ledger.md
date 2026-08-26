@@ -18,7 +18,9 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 
 | Fact | Tier now | Capture that would verify it |
 |---|---|---|
-| cooler `mode` quiet 0/2/4, `night_on`/`night_off`, `timer_set`, `timer_start`/`cancel` | DECOMPILE | app: set quiet mode + a night schedule + a timer → diff 1101 frames |
+| cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | DECOMPILE | app: set + arm a cooling timer → diff 1101 frames |
+| cooler `mode` quiet=2 (manual quiet; 4=timer_quiet is DEVICE) | DECOMPILE | app: toggle manual quiet → diff 1101 frames |
+| cooler `night_set` frame accepted but the state bit never flipped — arm semantics unproven | DEVICE (write) / unknown (effect) | observe `quiet_scheduled 0->1` at window entry (observer armed, schedule 22–06), else capture the app's enable toggle |
 | airheater `runtime`, `timer` | DECOMPILE | app: set run-time + a start timer → diff 1701 frames |
 | airheater **permanent-ON** (NOT wired — only OFF is known) | unknown | app: enable permanent heating → learn the ON value |
 | energy `mode` (EnergyModeSet 0/1/2) | DECOMPILE | app: switch eco/normal/max → diff 1601 frames |
@@ -30,7 +32,16 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 ## Already at CAPTURE / DEVICE (examples, keep as the model)
 
 - cooler power/level frames, airheater on/off — CAPTURE (HCI 2026-07-08/14; `tests/scenarios/`).
-- cooler NightTimer sentinels = 0 — CAPTURE (the captured power-on frame beat the decompiled `v()` default).
+- cooler `night_on`/`night_off` + `mode` timer_quiet(4) — DEVICE (live writes 2026-08-26, PR #112): hours
+  + Mode are stored on the unit (survive reconnects) and every change is **broadcast as an unsolicited
+  1102 notification**.
+- cooler night-schedule bytes are **LITERAL, not optional** — DEVICE (2026-08-26): a frame carrying
+  `NightTimerHourOn=0` clobbered a just-set 22 (unit pushed `quiet_from 22->0`). ⚠️ CORRECTS the earlier
+  ledger line "NightTimer sentinels = 0 — CAPTURE": the captured power-on frame *did* send 0s, but that
+  van had **no schedule set**, so 0 was simply the current value — the capture never showed that 0 means
+  leave-unchanged (it doesn't; the leave-unchanged sentinels are `v()`'s 31/3, and the app re-sends them
+  in its 500 ms post-write neutral frame). **A capture only validates the state it was taken in.**
+  `_cooler_values` now carries the current schedule in every write.
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
 

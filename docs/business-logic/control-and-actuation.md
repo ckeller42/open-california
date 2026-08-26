@@ -146,7 +146,7 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
 
 | Feature | `set` wired | On-device | Notes |
 |---|---|---|---|
-| **cooler** | `power` on/off, `level` 1-5 | ✅ actuates | State 0↔1, Level applied. |
+| **cooler** | `power` on/off, `level` 1-5, `mode`, `night_on`/`night_off` 0-23, `night_set`, timers | ✅ actuates (schedule live 2026-08-26) | State 0↔1, Level applied. Night schedule + Mode=4 stored on the unit (survive reconnects) and **broadcast on 1102** per change. ⚠️ Hour bytes are LITERAL — every write must carry the current schedule (`_cooler_values` does; hard-coded 0s used to clobber it). `night_set` write accepted but the `NightTimerSet` state bit never flipped (suspected edge-triggered at window entry — observer watching). |
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates **when stationary** | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). **REFUSED while driving** — see the stationary gate below. |
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
 | **airheater** | `power`, `level` 1-10 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
@@ -263,8 +263,9 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | Function | `what` | Effect / field | Source | Status |
 |---|---|---|---|---|
 | cooler | `power` / `level` | State / Level 1-5 | `vf/c` U0/X1 | live-verified |
-| cooler | `mode` | quiet Mode 0=normal/2=quiet/4=timer | `vf/c` T1/x0/k0 | DV |
-| cooler | `night_on` / `night_off` | NightTimerHourOn/Off (0-23) | `vf/c` c0/Y2 | DV |
+| cooler | `mode` | quiet Mode 0=normal/2=quiet/4=timer | `vf/c` T1/x0/k0 | 4=timer_quiet **live (08-26)**; 0/2 DV |
+| cooler | `night_on` / `night_off` | NightTimerHourOn/Off (0-23) | `vf/c` c0/Y2 | **live (08-26)** — stored + 1102-broadcast; bytes LITERAL (carry current) |
+| cooler | `night_set` | NightTimerSet 1/0 (arm/disarm schedule) | `vf/c` X1 | write accepted, state bit unmoved — arm semantics OPEN |
 | cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | DV |
 | cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | DV |
 | airheater | `power` / `level` | NormalOperationRequest 1/0 / HeatingLevel | `rf/b` C2/q4 | live (power capture 07-08) |
