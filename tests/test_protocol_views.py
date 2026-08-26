@@ -109,3 +109,79 @@ def test_signal_matrix_md_matches_signals_yaml(tmp_path):
         "docs/protocol/signal-matrix.md is stale — regenerate with "
         "`python3 -m tools.gen_signal_matrix --out docs/protocol/signal-matrix.md`"
     )
+
+
+# --- independent-correctness checks (issue #107) -------------------------------------------------
+# The freshness tests above only regen-diff: a WRONG-but-self-consistent generator passes them
+# (exactly how the original mirror-reversed bit grid slipped through its own test). These two
+# checks parse the COMMITTED output text and compare it against dictionary.yaml directly — no
+# generator code in the loop.
+
+def _dict_functions():
+    import yaml
+    doc = yaml.safe_load((ROOT / "protocol" / "dictionary.yaml").read_text())
+    return doc.get("functions", doc)
+
+
+def test_reference_rows_match_dictionary_independently():
+    """Every placed state/control field appears in its function's reference.md section with
+    the exact offset and width cells from dictionary.yaml."""
+    text = (ROOT / "docs" / "protocol" / "reference.md").read_text()
+    funcs = _dict_functions()
+    checked = 0
+    for fn, spec in funcs.items():
+        start = text.find("\n## %s\n" % fn)
+        assert start >= 0, "reference.md: missing section for %s" % fn
+        end = text.find("\n## ", start + 1)
+        section = text[start:end if end > 0 else len(text)]
+        for f in spec.get("state_fields", []) + spec.get("control_fields", []):
+            if not (isinstance(f.get("offset"), int) and isinstance(f.get("width"), int)):
+                continue
+            rows = [ln for ln in section.splitlines()
+                    if ln.startswith("| %s |" % f["name"])]
+            assert rows, "reference.md[%s]: no row for %s" % (fn, f["name"])
+            ok = any(ln.split("|")[2].strip() == str(f["offset"])
+                     and ln.split("|")[3].strip() == str(f["width"]) for ln in rows)
+            assert ok, "reference.md[%s]: %s row disagrees with dictionary (want off=%s w=%s): %r" % (
+                fn, f["name"], f["offset"], f["width"], rows)
+            checked += 1
+    assert checked > 50, "suspiciously few rows checked (%d)" % checked
+
+
+def test_frame_layout_grid_matches_dictionary_independently():
+    """Every bit of every placed state field sits in the RIGHT grid cell of frame-layouts.md.
+    Codec is MSB-first: absolute bit o -> row o//8, column index o%%8 (columns run bit7..bit0).
+    This is the check that would have caught the original mirror-reversed grid instantly."""
+    text = (ROOT / "docs" / "protocol" / "frame-layouts.md").read_text()
+    funcs = _dict_functions()
+    checked = 0
+    for fn, spec in funcs.items():
+        start = text.find("\n## %s\n" % fn)
+        assert start >= 0, "frame-layouts.md: missing section for %s" % fn
+        end = text.find("\n## ", start + 1)
+        section = text[start:end if end > 0 else len(text)]
+        st = section.find("### State frame")
+        if st < 0:
+            continue
+        st_end = section.find("### ", st + 4)
+        state_block = section[st:st_end if st_end > 0 else len(section)]
+        # parse the grid: rows "| <byte> | c7 | c6 | ... | c0 |"
+        grid = {}
+        for ln in state_block.splitlines():
+            cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+            if len(cells) == 9 and cells[0].isdigit():
+                grid[int(cells[0])] = cells[1:]
+        if not grid:
+            continue
+        for f in spec.get("state_fields", []):
+            if not (isinstance(f.get("offset"), int) and isinstance(f.get("width"), int)):
+                continue
+            for k in range(f["width"]):
+                o = f["offset"] + k
+                row, col = o // 8, o % 8
+                assert row in grid, "frame-layouts.md[%s]: no grid row for byte %d" % (fn, row)
+                assert grid[row][col] == f["name"], (
+                    "frame-layouts.md[%s]: byte %d bit-col %d should be %s, grid says %r"
+                    % (fn, row, 7 - col, f["name"], grid[row][col]))
+                checked += 1
+    assert checked > 100, "suspiciously few grid cells checked (%d)" % checked

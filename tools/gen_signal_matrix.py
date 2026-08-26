@@ -36,6 +36,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from tools._view_common import load_catalog
+
 ROOT = Path(__file__).resolve().parent.parent
 SIGNALS_FILE = ROOT / "protocol" / "signals.yaml"
 OUT_FILE = ROOT / "docs" / "protocol" / "signal-matrix.md"
@@ -95,9 +97,8 @@ def _rows(catalog):
 
 def build(signals_path=None) -> str:
     """Render the Markdown signal matrix from signals.yaml. Returns the file text."""
-    import yaml  # lazy: tooling only, not the calictl runtime
 
-    catalog = yaml.safe_load(Path(signals_path or SIGNALS_FILE).read_text()) or {}
+    catalog = load_catalog(signals_path)
 
     rows = _rows(catalog)
     total = len(rows)

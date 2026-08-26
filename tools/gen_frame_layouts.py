@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from tools._view_common import char_uuid, is_placed, load_functions
+
 ROOT = Path(__file__).resolve().parent.parent
 DICT_FILE = ROOT / "protocol" / "dictionary.yaml"
 OUT_FILE = ROOT / "docs" / "protocol" / "frame-layouts.md"
@@ -23,16 +25,8 @@ OUT_FILE = ROOT / "docs" / "protocol" / "frame-layouts.md"
 _BIT_COLS = tuple(range(7, -1, -1))  # bit 7 (MSB) .. bit 0 (LSB), per byte
 
 
-def _char_uuid(short) -> str:
-    # Mirrors calictl.protocol._char_uuid: a BLE characteristic short id -> full 128-bit UUID.
-    return "0000%s-6c77-4b7d-bbf6-a5e587701f3d" % str(short).lower()
 
 
-def _is_placed(field) -> bool:
-    # Mirrors calictl.protocol.Field.placed: only an int offset + int width can be
-    # positioned in the frame. MERGED_AMBIGUOUS offsets (and UNKNOWN widths, which only
-    # ever appear alongside them) can't be.
-    return isinstance(field.get("offset"), int) and isinstance(field.get("width"), int)
 
 
 def _byte_grid(fields):
@@ -42,8 +36,8 @@ def _byte_grid(fields):
     (or None for an unused/gap bit), and `ambiguous` lists the fields that could not be
     positionally resolved.
     """
-    placed = [f for f in fields if _is_placed(f)]
-    ambiguous = [f for f in fields if not _is_placed(f)]
+    placed = [f for f in fields if is_placed(f)]
+    ambiguous = [f for f in fields if not is_placed(f)]
     if not placed:
         return [], ambiguous
     total_bits = max(f["offset"] + f["width"] for f in placed)
@@ -84,10 +78,8 @@ def _frame_section(title, fields) -> list[str]:
 
 def build(dict_path=None) -> str:
     """Render the Markdown frame bit-layout doc from dictionary.yaml. Returns the file text."""
-    import yaml  # lazy: tooling only, not the calictl runtime
 
-    doc = yaml.safe_load(Path(dict_path or DICT_FILE).read_text())
-    funcs = doc.get("functions", doc)
+    funcs = load_functions(dict_path)
 
     lines = [
         "# Protocol frame bit-layouts",
@@ -107,7 +99,7 @@ def build(dict_path=None) -> str:
         if not isinstance(spec, dict):
             continue
         services = spec.get("state_services") or []
-        uuids = ", ".join(_char_uuid(s) for s in services) if services else "—"
+        uuids = ", ".join(char_uuid(s) for s in services) if services else "—"
         control_source = spec.get("control_source") or "—"
         lines.append("## %s" % name)
         lines.append("")
