@@ -115,12 +115,10 @@ def test_cooler_quiet_mode_and_schedule_frames():
     assert fr[4] == 22 and fr[5] == 6 and (fr[0] >> 6) == 1      # power-on carries the schedule
     fr = control.build(f, "cooler", "night_off", 7, armed)
     assert fr[4] == 22 and fr[5] == 7                            # editing one hour keeps the other
-    # night_set ARMS the schedule (app X1() vf/c.java:263), carrying the current hours + Mode
-    fr = control.build(f, "cooler", "night_set", "on",
-                       {"State": 1, "Mode": 4, "Level": 3,
-                        "NightTimerHourOn": 22, "NightTimerHourOff": 6})
-    assert fr.hex() == "7d4300001606"
-    assert control.build(f, "cooler", "night_set", "off", armed)[0] >> 6 == 0
+    # ARM scheduled quiet via Mode=4 (the app's "Automatischer Flüstermodus" path), carrying hours.
+    # There is intentionally NO night_set command — the app never writes cooler NightTimerSet.
+    assert control.build(f, "cooler", "night_set", "on", armed) is None
+    assert control.build(f, "cooler", "mode", "timer_quiet", armed)[4] == 22   # Mode=4 carries the window
     assert control.build(f, "cooler", "timer_start", None, last).hex()[:2] != "3d"          # TimerStart flips byte0
     assert control.build(f, "cooler", "mode", "loud", last) is None                          # unknown mode
     for bad in (-1, 24):
@@ -626,3 +624,23 @@ def test_water_stale_latch_guard():
     assert freshness.implausible_water_drop(w(0, 2), w(10, 9)) is False
     # grey fall alone (fresh flat) was never a latch candidate; still plausible
     assert freshness.implausible_water_drop(w(10, 2), w(10, 9)) is False
+
+
+def test_cooler_quiet_scheduled_follows_mode_not_nighttimerset():
+    """DISPLAY-CONFIRMED 2026-08-26 on the unit's own Flüstermodus (Kühlbox) screen: TWO sub-toggles
+    "Ein/Aus" (manual) and "Automatisch" (scheduled, "Geplant von 22:00 bis 06:00"). With Mode=4 the
+    "Automatisch" toggle was the lit one and NightTimerSet read 0 — so the scheduled-quiet state is
+    L0 = (Mode==4) (vf/c.java:168/409), Ein/Aus = K0 = (Mode==2), and NightTimerSet is NOT the arm
+    bit. quiet_scheduled derives from Mode; quiet_mode names it (off/manual/scheduled)."""
+    from calictl import semantics
+    # the exact live state behind the photo
+    c = semantics.cooler({"Installed": 1, "State": 1, "Level": 3, "Mode": 4,
+                          "NightTimerHourOn": 22, "NightTimerHourOff": 6, "NightTimerSet": 0})
+    assert c["quiet_scheduled"] is True          # scheduled despite NightTimerSet=0
+    assert c["quiet_mode"] == "scheduled"
+    assert c["quiet_from"] == 22 and c["quiet_to"] == 6
+    # manual quiet (Mode 2 = app K0) and off (Mode 0)
+    assert semantics.cooler({"Mode": 2})["quiet_mode"] == "manual"
+    assert semantics.cooler({"Mode": 2})["quiet_scheduled"] is False
+    assert semantics.cooler({"Mode": 0})["quiet_mode"] == "off"
+    assert semantics.cooler({"Mode": 0})["quiet_scheduled"] is False
