@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from tools._view_common import char_uuid, load_functions
+
 ROOT = Path(__file__).resolve().parent.parent
 DICT_FILE = ROOT / "protocol" / "dictionary.yaml"
 OUT_FILE = ROOT / "docs" / "protocol" / "reference.md"
@@ -18,9 +20,6 @@ OUT_FILE = ROOT / "docs" / "protocol" / "reference.md"
 _COLUMNS = ("offset", "width", "default", "raw_range", "value_semantics")
 
 
-def _char_uuid(short) -> str:
-    # Mirrors calictl.protocol._char_uuid: a BLE characteristic short id -> full 128-bit UUID.
-    return "0000%s-6c77-4b7d-bbf6-a5e587701f3d" % str(short).lower()
 
 
 def _cell(col, value) -> str:
@@ -45,10 +44,8 @@ def _field_table(fields) -> list[str]:
 
 def build(dict_path=None) -> str:
     """Render the Markdown reference from dictionary.yaml. Returns the file text."""
-    import yaml  # lazy: tooling only, not the calictl runtime
 
-    doc = yaml.safe_load(Path(dict_path or DICT_FILE).read_text())
-    funcs = doc.get("functions", doc)
+    funcs = load_functions(dict_path)
 
     lines = [
         "# Protocol reference",
@@ -62,7 +59,7 @@ def build(dict_path=None) -> str:
         if not isinstance(spec, dict):
             continue
         services = spec.get("state_services") or []
-        uuids = ", ".join(_char_uuid(s) for s in services) if services else "—"
+        uuids = ", ".join(char_uuid(s) for s in services) if services else "—"
         control_source = spec.get("control_source") or "—"
         lines.append("## %s" % name)
         lines.append("")

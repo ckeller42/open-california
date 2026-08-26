@@ -26,14 +26,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from tools._view_common import char_uuid, is_placed, load_functions
+
 ROOT = Path(__file__).resolve().parent.parent
 DICT_FILE = ROOT / "protocol" / "dictionary.yaml"
 OUT_FILE = ROOT / "docs" / "protocol" / "vwcamper.lua"
 
 
-def _char_uuid(short) -> str:
-    # Mirrors calictl.protocol._char_uuid: a BLE characteristic short id -> full 128-bit UUID.
-    return "0000%s-6c77-4b7d-bbf6-a5e587701f3d" % str(short).lower()
 
 
 def _state_char_short(services):
@@ -45,8 +44,6 @@ def _state_char_short(services):
     return next((s for s in shorts if s.endswith("02")), shorts[1] if len(shorts) > 1 else None)
 
 
-def _is_placed(field) -> bool:
-    return isinstance(field.get("offset"), int) and isinstance(field.get("width"), int)
 
 
 def _layout(field):
@@ -82,10 +79,8 @@ def _lua_ident(*parts) -> str:
 
 def build(dict_path=None) -> str:
     """Render the Lua dissector source from dictionary.yaml. Returns the file text."""
-    import yaml  # lazy: tooling only, not the calictl runtime
 
-    doc = yaml.safe_load(Path(dict_path or DICT_FILE).read_text())
-    funcs = doc.get("functions", doc)
+    funcs = load_functions(dict_path)
 
     field_decls: list[str] = []
     char_entries: list[tuple[str, str, list[tuple[str, int, int]]]] = []  # (uuid, name, [(ident, byte, len)])
@@ -97,14 +92,14 @@ def build(dict_path=None) -> str:
             continue
         state_fields = spec.get("state_fields") or []
         short = _state_char_short(spec.get("state_services"))
-        uuid = _char_uuid(short) if short else None
+        uuid = char_uuid(short) if short else None
 
         field_decls.append("-- %s%s" % (name, " (state char %s)" % uuid if uuid else " (no resolvable state char)"))
         entries: list[tuple[str, int, int]] = []
         skipped = []
         for f in state_fields:
             fname = f.get("name", "—")
-            if not _is_placed(f):
+            if not is_placed(f):
                 skipped.append(fname)
                 continue
             layout = _layout(f)
