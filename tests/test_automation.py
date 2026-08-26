@@ -177,3 +177,39 @@ def test_autocamper_persistence_round_trip():
     # corrupt/null fails must not crash (mirrors serve._load_last contract)
     ac3 = A.AutoCamper(); ac3.load(True, {"fails": None, "owe_restore": None})
     assert ac3.fails == 0 and ac3.owe_restore is False
+
+
+def test_missing_ignition_read_freezes_the_machine():
+    """LIVE BUG 2026-08-26: a missed vehicle read (ignition_on=None) was bool()-coerced to False,
+    fabricating a falling edge — the journal shows `ignition 1->-` firing an immediate 'restored'.
+    Had camping been shed at that moment, the restore would have run WHILE DRIVING (unit refuses,
+    burning the give-up budget), and the phantom None->1 re-arm could capture a shed pre_drive or
+    silently drop the debt. A None read must FREEZE the machine: no edges, no window countdown,
+    prevs unchanged, debt kept."""
+    r = _d(ignition_on=None, prev_ignition=True, prev_master=True, master_on=False,
+           owe_restore=True, pre_drive={"master": True, "usb": True, "lights": False})
+    assert r["actuate"] is False
+    assert r["owe_restore"] is True                       # debt kept
+    assert r["restore_until"] is None                     # no phantom park window
+    assert r["prev_ignition"] is True                     # prev NOT clobbered to False
+    assert r["prev_master"] is True
+    assert r["notice"] is None and r["restored"] is False
+
+
+def test_missing_camping_read_does_not_fabricate_manual_cancel():
+    """master_on=None (campingmode read missing) + bool() used to look like camping on->off while
+    parked = a 'manual cancel' that dropped the restore debt. None must freeze instead."""
+    r = _d(ignition_on=False, prev_ignition=False, master_on=None, prev_master=True,
+           owe_restore=True, pre_drive={"master": True, "usb": False, "lights": False})
+    assert r["owe_restore"] is True                       # debt survives the read gap
+    assert r["prev_master"] is True
+    assert r["actuate"] is False
+
+
+def test_restore_window_survives_a_read_gap():
+    """Mid-restore (window open), one bad poll must not give up, actuate, or advance anything."""
+    r = _d(ignition_on=None, prev_ignition=False, master_on=None, prev_master=False,
+           owe_restore=True, pre_drive={"master": True, "usb": True, "lights": False},
+           restore_until=1300.0, fails=1, now=1200.0)
+    assert r["owe_restore"] is True and r["restore_until"] == 1300.0
+    assert r["fails"] == 1 and r["actuate"] is False

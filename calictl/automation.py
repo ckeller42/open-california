@@ -81,6 +81,18 @@ def auto_camper_restore_decide(*, ignition_on, prev_ignition, master_on, prev_ma
        (parked), within a bounded retry window, standing down on low battery / warning and never
        looping — so a manual off is respected and the unit's power-saving is never fought.
     """
+    # A read gap (vehicle or campingmode missing this poll) carries NO information — FREEZE the
+    # machine rather than bool()-coercing None to False, which fabricates edges. Live 2026-08-26:
+    # `ignition 1->-` fired a phantom park-restore (mid-drive it would burn the give-up budget),
+    # and the `None->1` re-arm can capture a shed pre_drive / silently drop the debt; a None
+    # master similarly faked a "manual cancel". Nothing can be actuated during a gap anyway;
+    # prevs stay at the last KNOWN values and the window doesn't tick.
+    if ignition_on is None or master_on is None:
+        return {"actuate": False, "restore_config": None, "owe_restore": owe_restore,
+                "pre_drive": pre_drive, "restore_until": restore_until, "fails": fails,
+                "notice": None, "restored": False, "prev_ignition": prev_ignition,
+                "prev_master": prev_master, "prev_usb": prev_usb, "prev_lights": prev_lights}
+
     ign, pign = bool(ignition_on), bool(prev_ignition)
     m, pm = bool(master_on), bool(prev_master)
     actuate = False
@@ -181,9 +193,17 @@ class AutoCamper:
         return self.enabled
 
     def _track_prev(self, ign, master, usb, lights):
-        """Roll the previous-state snapshot (edge detection for the next poll)."""
-        self.prev_ignition, self.prev_master = ign, master
-        self.prev_usb, self.prev_lights = usb, lights
+        """Roll the previous-state snapshot (edge detection for the next poll). A ``None`` read
+        (missed function this poll) keeps the LAST-KNOWN value — otherwise enabling the feature
+        right after a read gap would hand ``decide()`` a None prev and fabricate an edge."""
+        if ign is not None:
+            self.prev_ignition = ign
+        if master is not None:
+            self.prev_master = master
+        if usb is not None:
+            self.prev_usb = usb
+        if lights is not None:
+            self.prev_lights = lights
 
     async def step(self, states, *, actuate, read_only, now=None):
         """One poll's restore-after-park decision + logging + actuation. Runs AFTER the read (the BLE
