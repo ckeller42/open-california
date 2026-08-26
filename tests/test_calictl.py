@@ -106,6 +106,15 @@ def test_cooler_quiet_mode_and_schedule_frames():
     assert control.build(f, "cooler", "night_on", 22, last).hex() == "3d0300001600"          # byte4=0x16
     assert control.build(f, "cooler", "night_off", 7, last).hex() == "3d0300000007"          # byte5=0x07
     assert control.build(f, "cooler", "timer_set", "06:45", last).hex() == "3d03062d0000"   # TimerHour=6 TimerMin=45
+    # LIVE-VERIFIED 2026-08-26 (issue #99): the unit takes the night-schedule bytes LITERALLY —
+    # hard-coded zeros clobbered a just-set quiet_from (1102 push "quiet_from 22->0"). So with a
+    # schedule in the current state, EVERY cooler write must carry it (change only the target).
+    armed = {"State": 1, "Mode": 0, "Level": 3,
+             "NightTimerSet": 1, "NightTimerHourOn": 22, "NightTimerHourOff": 6}
+    fr = control.build(f, "cooler", "power", "on", armed)
+    assert fr[4] == 22 and fr[5] == 6 and (fr[0] >> 6) == 1      # power-on carries the schedule
+    fr = control.build(f, "cooler", "night_off", 7, armed)
+    assert fr[4] == 22 and fr[5] == 7                            # editing one hour keeps the other
     assert control.build(f, "cooler", "timer_start", None, last).hex()[:2] != "3d"          # TimerStart flips byte0
     assert control.build(f, "cooler", "mode", "loud", last) is None                          # unknown mode
     for bad in (-1, 24):
