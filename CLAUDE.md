@@ -121,7 +121,9 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon
   `extract_protocol`; preserve on regen). **byte-0 was FIXED 2026-07-12** (`TerminalOneFive` is
   bit **7**, not 0 — ignition had always decoded "off"; `CarVariant 0/4`, `CarLevelPopUp 4/2`).
   Dynamic fields (leveling, RTC) only read while ignition is on. `general` repointed 1002→1001.
-- **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar. Their
+- **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar. (The
+  pop-top **roof IS installed** — live `roof.Installed=1` 2026-08-26, issue #106 — but its motor
+  has never been driven by calictl.) Their
   `Installed`-gated; polarities can't be live-verified here — but the **semantics were verified
   statically against the app's getters 2026-07-12** (no bugs; stairs `extended`/`obstacle_sensor`
   non-inverted, satellite `System` is a 2-bit enum). See `docs/business-logic/protocol-alignment.md`.

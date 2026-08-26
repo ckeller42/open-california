@@ -150,9 +150,10 @@ tested against:
        decompile-verified — untested end-to-end because buspi was offline during the capture
        window, not because the unit lacks one
    * - roof
-     - no
-     - not installed on this van (pop-top); the actuation frame is decompile-derived and
-       protocol-documented, but has never been live-tested — see the note below
+     - yes
+     - installed (pop-top) — settled by the live ``roof.Installed=1`` bit 2026-08-26; the
+       actuation frame is decompile-derived and protocol-documented, but the motor has never
+       been live-driven by this project — see the note below
    * - stairs
      - no
      - not installed on this van
@@ -174,11 +175,12 @@ make this self-describing at runtime (``calictl status`` only shows what's actua
 
 .. note::
 
-   ``CLAUDE.md``'s "Known state" equipment list omits the pop-top roof from its explicit
-   not-installed set, while ``docs/business-logic/control-and-actuation.md`` §4 states the
-   roof is **not installed here**. This page follows the explicit §4 statement — roof is
-   listed as not installed above — but the two sources disagree and should be reconciled
-   against the live ``roof.Installed`` bit the next time the reference van is reachable.
+   A former conflict between ``CLAUDE.md`` (which omitted the roof from its not-installed
+   list) and ``control-and-actuation.md`` §4 (which said "not installed here") was **resolved
+   2026-08-26 against the live unit**: ``roof.Installed = 1`` — the pop-top IS installed
+   (issue #106; the §4 claim had likely conflated it with the roof *A/C*, which is absent).
+   Installed does **not** mean actuation-verified: the roof motor has never been driven by
+   this project (needs ignition ON + an owner watching).
 
 Per-function verification tier
 -------------------------------
@@ -210,8 +212,9 @@ physically happened).
        readback is a write-through echo and is *not* itself proof — see the caveat below
    * - roof
      - decompile-verified only
-     - not installed (pop-top) on the reference van; the actuation frame matches the app
-       byte-for-byte, but the motor has never been driven end-to-end by this project
+     - installed (live ``Installed=1``, 2026-08-26) but never driven: the actuation frame
+       matches the app byte-for-byte, yet no end-to-end motor test has been run (needs
+       ignition ON + an owner watching)
    * - airheater
      - decompile-verified / partially live
      - installed on the reference van; power capture observed; level/timer/runtime setters
