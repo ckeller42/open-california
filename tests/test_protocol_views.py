@@ -78,6 +78,21 @@ def test_wireshark_dissector_is_non_trivial():
     )
 
 
+def test_wireshark_dissector_signed_fields(tmp_path):
+    """Fields carrying `signed: true` in dictionary.yaml render as ProtoField.intN, not uintN
+    (issue #108) — e.g. the vehicle leveling angles and the signed battery currents."""
+    from tools import gen_wireshark_dissector
+    text = gen_wireshark_dissector.build()
+    for ident, ftype in (("carlevelroll", "int16"), ("carlevelpitch", "int16"),
+                         ("itwobattbemafs", "int16"), ("idcdcafs", "int16"),
+                         ("ionebattbemafs", "int8"), ("pdcdcafs", "int8")):
+        line = next((ln for ln in text.splitlines()
+                     if "ProtoField." in ln and ident in ln.lower()), None)
+        assert line is not None, "no ProtoField line for %s" % ident
+        assert "ProtoField.%s(" % ftype in line, (
+            "%s should be ProtoField.%s, got: %s" % (ident, ftype, line.strip()))
+
+
 def test_signal_matrix_md_matches_signals_yaml(tmp_path):
     from tools import gen_signal_matrix
 
