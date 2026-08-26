@@ -165,6 +165,8 @@ def _cooler(funcs, what, value, last):
     elif what in ("night_on", "night_off"):    # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
         hr = _int_range(value, 0, 23, "night timer hour")
         ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
+    elif what == "night_set":                  # ARM/disarm the quiet schedule (vf/c.java:263 X1())
+        ch = {"NightTimerSet": 1 if _truthy(value) else 0}
     else:
         return None
     return protocol.encode(funcs["cooler"], _cooler_values(last, **ch),

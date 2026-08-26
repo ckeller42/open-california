@@ -115,6 +115,12 @@ def test_cooler_quiet_mode_and_schedule_frames():
     assert fr[4] == 22 and fr[5] == 6 and (fr[0] >> 6) == 1      # power-on carries the schedule
     fr = control.build(f, "cooler", "night_off", 7, armed)
     assert fr[4] == 22 and fr[5] == 7                            # editing one hour keeps the other
+    # night_set ARMS the schedule (app X1() vf/c.java:263), carrying the current hours + Mode
+    fr = control.build(f, "cooler", "night_set", "on",
+                       {"State": 1, "Mode": 4, "Level": 3,
+                        "NightTimerHourOn": 22, "NightTimerHourOff": 6})
+    assert fr.hex() == "7d4300001606"
+    assert control.build(f, "cooler", "night_set", "off", armed)[0] >> 6 == 0
     assert control.build(f, "cooler", "timer_start", None, last).hex()[:2] != "3d"          # TimerStart flips byte0
     assert control.build(f, "cooler", "mode", "loud", last) is None                          # unknown mode
     for bad in (-1, 24):
