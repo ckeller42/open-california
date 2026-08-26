@@ -124,15 +124,18 @@ wrong. Two compounding causes:
 **Fix applied.** `lights_on = master and InteriorLight == 0 and OutsideLight == 0` (combined,
 inverted, master-gated); `usb_charger`/`master_on` unchanged (normal); `OutsideLight` omitted
 (tied to `InteriorLight`); catalog scale marked `inverted-combined`; HA entity → single
-"Camping Lights", USB → "Rear USB Ports".
+"Camping Lights". The read-only "Rear USB Ports" indicator (HA binary_sensor + the Grafana
+"Rear USB power" stat) reads the DERIVED `usb_powered`, not the raw `usb_charger` (see next).
 
 **USB is PHYSICALLY master-gated (owner-confirmed 2026-08-19).** The `usb_charger` field is only
 the retained SETTING bit — it stays `1` even when camping master is off, but the **rear USB ports
 are then physically dead**. So `usb_charger` alone is a misleading "is USB powered?" signal; true
 power is `master_on AND usb_charger`. This showed up in the engine-start observation: when the unit
-sheds camping (`master_on`→0), `usb_charger` does *not* transition, yet the ports lose power. A
-derived `usb_powered = master_on and usb_charger` is the honest signal to surface (see
-`auto-camper-mode.md`). Corollary of the master gate: since camping mode itself is **refused while
+sheds camping (`master_on`→0), `usb_charger` does *not* transition, yet the ports lose power.
+**Implemented (#109):** `semantics.campingmode` now emits `usb_powered = master_on and usb_charger`
+(alongside the raw `usb_charger`, which the controllable "Rear USB Ports Switch" still reflects as the
+toggle SETTING). The read-only power indicators surface `usb_powered`. Corollary of the master gate:
+since camping mode itself is **refused while
 driving** (the stationary gate, `control-and-actuation.md` §4), rear USB **cannot** be kept powered
 while the vehicle is driven.
 

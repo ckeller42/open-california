@@ -194,6 +194,9 @@ def test_camping_lights_combined_inverted_and_gated():
     f = _funcs()
     c = semantics.campingmode(P.decode(f["campingmode"], CAMPING))  # 0x32: State=0,USB=1,Int=Out=0,Enable=1
     assert c["master_on"] is False and c["usb_charger"] is True
+    # owner-confirmed 2026-08-19: rear USB is physically OFF while master is off even though the
+    # UsbCharger field still reads 1 -> the derived usb_powered gates the raw field by master.
+    assert c["usb_powered"] is False                   # raw usb_charger lies; derived is truthful
     assert c["outputs_controllable"] is False          # lights/USB only toggle when master on
     assert c["lights_on"] is False                     # gated off when camping mode off
     assert c["enable"] is True
@@ -201,6 +204,7 @@ def test_camping_lights_combined_inverted_and_gated():
     d = P.decode(f["campingmode"], CAMPING); d["State"] = 1
     d["InteriorLight"] = 0; d["OutsideLight"] = 0
     assert semantics.campingmode(d)["lights_on"] is True
+    assert semantics.campingmode(d)["usb_powered"] is True   # master on + UsbCharger=1 -> really powered
     d["InteriorLight"] = 1; d["OutsideLight"] = 1
     assert semantics.campingmode(d)["lights_on"] is False   # fields=1 -> not lit
 

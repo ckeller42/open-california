@@ -71,7 +71,10 @@ ENTITY_SPECS: dict[str, list] = {
         EntitySpec("sensor", "level", "Fridge Level", {"icon": "mdi:snowflake"}),
     ],
     "campingmode": [
-        EntitySpec("binary_sensor", "usb_charger", "Rear USB Ports", {**_BIN, "icon": "mdi:usb"}),
+        # Read-only power indicator: the DERIVED usb_powered (master AND UsbCharger), not the raw
+        # UsbCharger field, which reads "on" even while master gates the port physically off. The
+        # controllable "Rear USB Ports Switch" below still reflects the raw toggle setting you set.
+        EntitySpec("binary_sensor", "usb_powered", "Rear USB Ports", {**_BIN, "icon": "mdi:usb"}),
         EntitySpec("binary_sensor", "lights_on", "Camping Lights", {**_BIN, "icon": "mdi:lightbulb"}),
     ],
     "airheater": [
