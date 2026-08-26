@@ -26,8 +26,12 @@ import time
 from . import protocol, semantics
 
 # camping/ignition fields watched on a push, per function (mirrors what `observe` tracks).
+# cooler: probes whether the unit BROADCASTS night-timer/quiet-time changes on 1102 (issue #99)
+# — a push here the moment the app writes a quiet time is the wire proof.
 _PUSH_FIELDS = {"campingmode": ("master_on", "usb_charger", "lights_on", "enable"),
-                "vehicle": ("ignition_on",)}
+                "vehicle": ("ignition_on",),
+                "cooler": ("on", "level", "quiet_scheduled", "quiet_from", "quiet_to",
+                           "timer_active")}
 
 
 def _fmt(v):
