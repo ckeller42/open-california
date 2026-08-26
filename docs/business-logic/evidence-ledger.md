@@ -19,8 +19,8 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 | Fact | Tier now | Capture that would verify it |
 |---|---|---|
 | cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | DECOMPILE | app: set + arm a cooling timer → diff 1101 frames |
-| cooler `mode` quiet=2 / normal=0 — unit ACCEPTS + persists both in-session (live 2026-08-26; 4=timer_quiet restart-proven), but no push observed for mode and no physical confirm (nobody listened to the compressor) | DECOMPILE+ | a human at the fridge during a quiet toggle, or the app capture |
-| cooler `night_set` frame accepted but the state bit never flipped — arm semantics unproven | DEVICE (write) / unknown (effect) | observe `quiet_scheduled 0->1` at window entry (observer armed, schedule 22–06), else capture the app's enable toggle |
+| cooler `mode` quiet=2(manual)/4=scheduled — DISPLAY-CONFIRMED 2026-08-26: the unit's Flüstermodus screen shows "Ein/Aus"(manual=Mode2) + "Automatisch"(scheduled=Mode4) toggles; scheduled quiet = Mode 4 (vf/c L0), decompile-cross-checked end to end (yh/e QuietModeViewModel). No physical compressor-audible confirm yet | DEVICE (display) | a human hearing the compressor quieten in the window |
+| cooler `NightTimerSet` bit — meaning UNKNOWN: decoded (1102 bit3) + plumbed into a StateFlow (vf/c D3) but NEVER rendered (dead-end, zero UI consumers) and NEVER written by any cooler path (only air-heater rf/b.H3 stages that shared frame slot). Not the schedule-arm bit. Not surfaced under a guessed name | DECOMPILE | a capture correlating the bit against the live quiet window |
 | airheater `runtime`, `timer` | DECOMPILE | app: set run-time + a start timer → diff 1701 frames |
 | airheater **permanent-ON** (NOT wired — only OFF is known) | unknown | app: enable permanent heating → learn the ON value |
 | energy `mode` (EnergyModeSet 0/1/2) | DECOMPILE | app: switch eco/normal/max → diff 1601 frames |

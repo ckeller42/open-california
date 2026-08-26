@@ -165,8 +165,12 @@ def _cooler(funcs, what, value, last):
     elif what in ("night_on", "night_off"):    # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
         hr = _int_range(value, 0, 23, "night timer hour")
         ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
-    elif what == "night_set":                  # ARM/disarm the quiet schedule (vf/c.java:263 X1())
-        ch = {"NightTimerSet": 1 if _truthy(value) else 0}
+    # NB: to ARM scheduled ("Automatisch") quiet, use `mode timer_quiet` (Mode=4) — that is the app's
+    # own path (the "Automatischer Flüstermodus" toggle stages Mode). There is deliberately NO
+    # `night_set` command: the app NEVER writes the cooler NightTimerSet bit (verified 2026-08-26 —
+    # the only writer of that shared frame slot is the AIR-HEATER VM rf/b.H3; on the cooler it's
+    # read-only/unit-driven). An earlier night_set here rested on a mis-citation ("vf/c.X1") that is
+    # actually setCoolingLevel — retracted rather than ship an off-protocol write.
     else:
         return None
     return protocol.encode(funcs["cooler"], _cooler_values(last, **ch),

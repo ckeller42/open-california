@@ -124,6 +124,9 @@ def energy(d: dict) -> dict:
 # Installed bit (state bit 4), NOT on State (power, bit 7); the UI error flags H()/h0() are
 # ungated. So a fault on an installed-but-powered-off fridge (e.g. door open, Error==3) still shows.
 _COOLER_FAULT = {1: "error", 2: "emergency", 3: "door_open"}
+# Cooler quiet ("Flüstermodus") Mode enum (vf/c.java: K0=Mode==2 manual, L0=Mode==4 scheduled):
+# 0=off, 2=manual quiet, 4=scheduled quiet (the night window). Drives the app's scheduled display.
+_COOLER_QUIET = {0: "off", 2: "manual", 4: "scheduled"}
 
 
 def cooler(d: dict) -> dict:
@@ -136,11 +139,16 @@ def cooler(d: dict) -> dict:
         "on": on,
         "level": d.get("Level"),        # 1-5 cooling level
         "mode": d.get("Mode"),
-        "timer_active": bool(d.get("TimerState")),
-        # Readback of the schedule the unit currently holds (state char, NOT the control echo):
-        "quiet_from": d.get("NightTimerHourOn"),    # quiet-mode schedule start hour (0-23)
-        "quiet_to": d.get("NightTimerHourOff"),     # quiet-mode schedule end hour (0-23)
-        "quiet_scheduled": bool(d.get("NightTimerSet")),
+        "timer_active": bool(d.get("TimerState")),   # the cooling-start COUNTDOWN timer (TimerState), NOT quiet
+        # Quiet ("Flüstermodus") mode. DISPLAY+DECOMPILE-CONFIRMED 2026-08-26: the app's scheduled
+        # state is Mode==4 (vf/c.java:168 L0, :167 K0=Mode==2 manual) — NOT NightTimerSet, which read
+        # 0 while the unit's own screen showed "Flüstermodus — Geplant von 22:00 bis 06:00". So
+        # quiet_scheduled follows Mode, not the (unconfirmed-meaning) NightTimerSet bit, which we no
+        # longer surface under a guessed name (it's still in the raw decoded state).
+        "quiet_mode": _COOLER_QUIET.get(d.get("Mode")),   # None | "off" | "manual" | "scheduled"
+        "quiet_scheduled": d.get("Mode") == 4,
+        "quiet_from": d.get("NightTimerHourOn"),    # quiet schedule start hour (0-23; meaningful when scheduled)
+        "quiet_to": d.get("NightTimerHourOff"),     # quiet schedule end hour (0-23)
         "timer_hour": d.get("TimerHourSet"),        # configured cooling-timer start time
         "timer_min": d.get("TimerMinSet"),
         "fault": fault,                 # None | "error" | "emergency" | "door_open"
