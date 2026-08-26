@@ -19,7 +19,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 | Fact | Tier now | Capture that would verify it |
 |---|---|---|
 | cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | DECOMPILE | app: set + arm a cooling timer → diff 1101 frames |
-| cooler `mode` quiet=2 (manual quiet; 4=timer_quiet is DEVICE) | DECOMPILE | app: toggle manual quiet → diff 1101 frames |
+| cooler `mode` quiet=2 / normal=0 — unit ACCEPTS + persists both in-session (live 2026-08-26; 4=timer_quiet restart-proven), but no push observed for mode and no physical confirm (nobody listened to the compressor) | DECOMPILE+ | a human at the fridge during a quiet toggle, or the app capture |
 | cooler `night_set` frame accepted but the state bit never flipped — arm semantics unproven | DEVICE (write) / unknown (effect) | observe `quiet_scheduled 0->1` at window entry (observer armed, schedule 22–06), else capture the app's enable toggle |
 | airheater `runtime`, `timer` | DECOMPILE | app: set run-time + a start timer → diff 1701 frames |
 | airheater **permanent-ON** (NOT wired — only OFF is known) | unknown | app: enable permanent heating → learn the ON value |
