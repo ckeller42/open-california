@@ -17,7 +17,7 @@ import os
 import time
 from pathlib import Path
 
-from . import automation, freshness, history, influx, mqtt, observer, overrides, protocol, semantics
+from . import automation, freshness, history, influx, mqtt, observer, overrides, protocol, semantics, session
 from .device import CamperDevice, ConnectionUnavailable
 
 # How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
@@ -90,7 +90,8 @@ class ServeBackend:
         ts = self._s._last_ok_ts
         age = (time.time() - ts) if ts else None
         persistent = getattr(self._s, "_persistent", False)
-        session_state = getattr(self._s, "_session_state", "off")
+        sup = getattr(self._s, "_sessions", None)
+        session_state = sup.session_state if sup is not None else "off"
         # Session state drives online only once the persistent machinery is active (past "off");
         # before the supervisor has run, or when persistence is off, use the poll-recency rule so
         # the pre-persistent behaviour (and its tests) still hold.
@@ -106,7 +107,7 @@ class ServeBackend:
             "session": session_state if persistent else "off",
             # "auto" (activity-scoped) or "release" (user tapped Disconnect) — lets the UI show
             # "Disconnected" distinctly from "Van asleep".
-            "session_mode": (getattr(self._s, "_session_mode", None) or "auto") if persistent else "off",
+            "session_mode": (sup.mode if sup is not None else "auto") if persistent else "off",
             # Auto camper mode: the toggle, whether it's actively re-asserting, and a one-time
             # give-up/stand-down notice the web UI shows as a toast.
             "auto_camper": self._s._autocamper.snapshot(),
@@ -195,18 +196,12 @@ async def dry_run(addr=None):
 
 
 class Server:
-    SESSION_BACKOFF = (5, 10, 30, 60)   # reconnect backoff seconds, capped
-    ASLEEP_AFTER = 4                     # consecutive fails at cap -> label 'asleep'
-
     def __init__(self, addr=None, *, interval=30.0, influx_enabled=True):
         self.funcs = protocol.load(); overrides.apply(self.funcs)
         self.dev = CamperDevice(addr) if addr else CamperDevice()
         self.interval = interval
         self.influx_enabled = influx_enabled
-        self._ble = None                    # asyncio.Lock(); created inside run()'s loop
-        self._wake_session = None            # asyncio.Event(); nudges the supervisor to reconnect NOW
-        self._last_ui_activity = None        # epoch of the last web-UI poll/command (session scoping)
-        self._session_mode = None            # None = auto (activity-scoped); "release" = user disconnected
+        self._ble = None                    # asyncio.Lock(); created inside run()'s loop (shared)
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
@@ -236,19 +231,24 @@ class Server:
         self._httpd = None
         # Persistent armed session (fast actuation). Default on; CALICTL_PERSISTENT_SESSION=0
         # falls back to the connect-per-op model. See docs/.../persistent-ble-session-design.md.
-        self._persistent = os.environ.get("CALICTL_PERSISTENT_SESSION", "1") != "0"
-        self._session = None
-        self._session_state = "off"        # off|connecting|up|degraded|asleep
-        self._backoff_fails = 0
-        # Auto camper mode — RESTORE camping after you park (the unit refuses camping-on while driving).
-        # A self-contained controller (automation.AutoCamper): owns the toggle + per-cycle restore
-        # debt + step; actuates through on_command (injected). See auto-camper-mode.md. Loaded below.
-        self._autocamper = automation.AutoCamper()
+        persistent = os.environ.get("CALICTL_PERSISTENT_SESSION", "1") != "0"
         # Camping/ignition transition OBSERVER (always on, NEVER actuates) — a self-contained unit
         # (calictl/observer.py). It logs ignition+camping transitions, bursts the poll rate after an
         # engine start (the 30 s cadence otherwise aliases engine-on and the shed into one sample),
         # and logs the unit's 1202/1004 pushes. See docs/business-logic/auto-camper-mode.md.
+        # Constructed before the session supervisor, which subscribes to its on_push.
         self._observer = observer.CampingObserver(self.funcs)
+        # Persistent-BLE-session lifecycle lives in its own supervisor (calictl/session.py). It owns
+        # the session state + wake event; the daemon shares its _ble lock (attached in run()). The
+        # supervisor is the SINGLE owner of the persistent-on flag — Server._persistent is a property
+        # over it (below), so there is no second copy to drift out of sync.
+        self._sessions = session.SessionSupervisor(self.dev, interval=self.interval,
+                                                   persistent=persistent,
+                                                   on_push=self._observer.on_push, ui_idle_s=_UI_IDLE_S)
+        # Auto camper mode — RESTORE camping after you park (the unit refuses camping-on while driving).
+        # A self-contained controller (automation.AutoCamper): owns the toggle + per-cycle restore
+        # debt + step; actuates through on_command (injected). See auto-camper-mode.md. Loaded below.
+        self._autocamper = automation.AutoCamper()
         # RE probe: log the raw F000/F001 general-purpose diagnostic register to InfluxDB (opt-in).
         self._store_gp = os.environ.get("CALICTL_STORE_GENERALPURPOSE", "").lower() in ("1", "true", "yes")
         # Load persisted state LAST — it must run AFTER every default above so it can override them
@@ -291,7 +291,7 @@ class Server:
         van deep-sleep (asleep) from an our-side connection loss (ble_error) from a dead daemon
         (no rows at all)."""
         rec = {"ts": round(time.time(), 1), "outcome": outcome,
-               "session": self._session_state, "fails": self._backoff_fails}
+               "session": self._sessions.session_state, "fails": self._sessions._backoff_fails}
         if detail:
             rec["detail"] = str(detail)[:120]
         history.append_jsonl(self._outcomes_cache, rec)
@@ -315,56 +315,37 @@ class Server:
                 self._appends = 0
                 history.trim(self._history_cache)
 
+    # --- persistent-session delegates -> calictl/session.py::SessionSupervisor ---------------------
+    # These stay on Server as thin pass-throughs so the many callers (poll/on_command/ServeBackend)
+    # keep their existing call sites; the session state + lifecycle live wholly in self._sessions.
+    @property
+    def _persistent(self):
+        """Whether the persistent fast-path session is enabled. The supervisor is the SINGLE owner
+        of this flag; this property reads/writes it through so the daemon (run/on_command) and the
+        supervisor (live_session/nudge) can never see different values. Writable so a test or a
+        runtime toggle stays consistent across both."""
+        return self._sessions._persistent
+
+    @_persistent.setter
+    def _persistent(self, value):
+        self._sessions._persistent = value
+
     def _live_session(self):
         """The persistent session if it's currently up, else None (use the per-op path)."""
-        s = self._session
-        return s if (self._persistent and s is not None and s.is_up) else None
+        return self._sessions.live_session()
 
     def _note_ui_activity(self):
-        """Mark the web UI as active NOW (a browser poll or a command). While active, the daemon
-        holds the fast-path persistent session; going idle releases it (see ``_ui_active``). Called
-        from both the web thread (ServeBackend) and the loop (on_command) — a plain float write is
-        atomic under the GIL."""
-        self._last_ui_activity = time.time()
-
-    def _ui_active(self):
-        """True while the web UI has been used within ``_UI_IDLE_S`` — the window in which the
-        daemon keeps the persistent session up. Idle beyond it -> release the slot for the app.
-        A manual "release" (the user tapped Disconnect) forces inactive regardless of polling, so
-        the slot goes to the phone app until they Connect again or issue a command."""
-        if self._session_mode == "release":
-            return False
-        a = self._last_ui_activity
-        return a is not None and (time.time() - a) < _UI_IDLE_S
+        """Mark the web UI active NOW (a browser poll or a command) — see SessionSupervisor."""
+        self._sessions.note_activity()
 
     async def set_session_mode(self, action):
-        """Explicit Connect/Disconnect from the web UI (the connection toggle).
-
-        ``connect`` clears any manual release, marks the UI active, and nudges the supervisor to
-        bring the session up NOW (warm the fast path before the first control). ``disconnect`` sets
-        the manual release and wakes the supervisor, which — seeing the UI 'inactive' — aclose()s
-        the session and hands the single BLE slot back to the phone app. Returns the mode + the
-        current session state for the UI.
-        """
-        if action == "connect":
-            self._session_mode = None
-            self._note_ui_activity()
-            self._nudge_session()
-        elif action == "disconnect":
-            self._session_mode = "release"
-            if self._wake_session is not None:
-                self._wake_session.set()   # wake the supervisor to drop the session immediately
-        return {"ok": True, "mode": self._session_mode or "auto", "session": self._session_state}
+        """Explicit Connect/Disconnect from the web UI (the connection toggle). Delegates to the
+        supervisor and returns the mode + current session state for the UI."""
+        return await self._sessions.set_mode(action)
 
     def _nudge_session(self):
-        """Keep-warm: a command wants to actuate. If no session is up, reset the backoff the
-        supervisor grew while the van slept and wake it to reconnect NOW — the user reaching for a
-        control means the van is likely awake, so the session (and the fast path) should come up
-        promptly instead of after a long backoff. No-op when a session is already live."""
-        if (self._persistent and self._wake_session is not None
-                and self._live_session() is None):
-            self._backoff_fails = 0
-            self._wake_session.set()
+        """Keep-warm: a command wants to actuate — wake the supervisor to reconnect NOW if down."""
+        self._sessions.nudge()
 
     def set_auto_camper(self, on):
         """Toggle the auto-camper feature (persisted). Disabling clears any owed restore. Returns the
@@ -458,75 +439,6 @@ class Server:
                            record=influx.points_for({fn: states[fn] for fn in store}))
         return states
 
-    async def _session_connect_once(self) -> bool:
-        """One connect attempt for the supervisor. Updates _session_state + _backoff_fails.
-        Returns True if the session came up."""
-        from . import device  # lazy
-        self._session_state = "connecting"
-        if self._session is not None:
-            # Close the outgoing session before replacing it: otherwise its heartbeat task
-            # (self._stop never set) loops forever and its BleakClient is never disconnected —
-            # an unbounded leak on every drop->reconnect cycle.
-            try:
-                await self._session.aclose()
-            except Exception:
-                pass
-            self._session = None
-        sess = device.PersistentSession(self.dev, on_push=self._observer.on_push)
-        try:
-            await sess.start()
-        except Exception as e:
-            self._backoff_fails += 1
-            self._session = None
-            self._session_state = "asleep" if self._backoff_fails >= self.ASLEEP_AFTER else "degraded"
-            print("session connect failed (%d): %s" % (self._backoff_fails, e), flush=True)
-            return False
-        self._session = sess
-        self._session_state = "up"
-        self._backoff_fails = 0
-        print("persistent session up", flush=True)
-        return True
-
-    async def _supervise_session(self) -> None:
-        """Hold the persistent session while the web UI is ACTIVE; release the BLE slot when it goes
-        idle (so the phone app can connect); back off while the van is unreachable."""
-        while True:
-            if not self._ui_active():
-                # web UI idle -> release the slot for the phone app; the daemon falls back to brief
-                # cold polls, which coexist with the app far better than a permanently-held link.
-                if self._session is not None:
-                    async with self._ble:
-                        await self._session.aclose()
-                    self._session = None
-                    print("persistent session released (web UI idle)", flush=True)
-                self._session_state = "off"
-                # wake early when a command/poll marks activity, else re-check each interval
-                waiter = asyncio.ensure_future(self._wake_session.wait())
-                try:
-                    await asyncio.wait({waiter}, timeout=self.interval)
-                finally:
-                    waiter.cancel()
-                    self._wake_session.clear()
-                continue
-            if self._session is not None and self._session.is_up:
-                await asyncio.sleep(self.interval)
-                continue
-            async with self._ble:
-                ok = await self._session_connect_once()
-            if not ok:
-                idx = min(self._backoff_fails, len(self.SESSION_BACKOFF)) - 1
-                # sleep the backoff, but wake IMMEDIATELY if a command nudges us (keep-warm): the
-                # user reaching for a control means the van is likely awake now, so don't make them
-                # wait out a backoff that grew during a long deep-sleep.
-                sleeper = asyncio.ensure_future(asyncio.sleep(self.SESSION_BACKOFF[max(0, idx)]))
-                waker = asyncio.ensure_future(self._wake_session.wait())
-                try:
-                    await asyncio.wait({sleeper, waker}, return_when=asyncio.FIRST_COMPLETED)
-                finally:
-                    sleeper.cancel()
-                    waker.cancel()
-                    self._wake_session.clear()
-
     async def on_command(self, function, what, value):
         """Build + write a control frame, then read back and report applied-ness.
 
@@ -546,9 +458,10 @@ class Server:
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
             print("read-only: refusing command %s/%s" % (function, what), flush=True)
             return None
-        self._session_mode = None  # a command means intent to control -> override any manual Disconnect
-        self._note_ui_activity()   # a command counts as active use -> hold the session
-        self._nudge_session()      # keep-warm: bring the fast-path session up now if it isn't
+        # A command means intent to control: clear any manual Disconnect, mark active (hold the
+        # session), and keep-warm nudge the supervisor up now if it isn't. set_mode("connect") does
+        # exactly those three; its return dict is irrelevant here.
+        await self._sessions.set_mode("connect")
         # Prefer the fast persistent session over a redundant cold connect: the nudge just told the
         # supervisor to connect, so wait briefly (OUTSIDE the _ble lock, so the supervisor can take
         # it) for the session to come up rather than racing it cold over the single slot.
@@ -736,7 +649,9 @@ class Server:
         self._loop = loop
         asyncio.set_event_loop(loop)
         self._ble = asyncio.Lock()          # the van allows ONE connection; created on this loop
-        self._wake_session = asyncio.Event()   # a command can wake the session supervisor early
+        # Hand the loop-created shared lock to the session supervisor (which also creates its own
+        # loop-bound wake event in attach()). Both must be born on THIS loop, hence not in __init__.
+        self._sessions.attach(self._ble)
 
         # --- MQTT (Home Assistant) — optional; a missing broker must not stop polling+web ---
         self._mqtt = self._maybe_start_mqtt(loop)
@@ -760,10 +675,10 @@ class Server:
 
         async def _forever():
             if self._persistent:
-                asyncio.ensure_future(self._supervise_session())
+                asyncio.ensure_future(self._sessions.supervise())
             while True:
                 try:
-                    if self._persistent and self._session_state == "connecting":
+                    if self._persistent and self._sessions.session_state == "connecting":
                         await asyncio.sleep(2)        # supervisor is mid-connect; don't race it cold
                         continue
                     states = await self.poll()
@@ -773,7 +688,7 @@ class Server:
                     print("poll skipped: %s" % e, flush=True)
                     # van unreachable: "asleep" once the supervisor's backoff hit the cap (deep
                     # sleep), else a transient connection loss while it may still be awake.
-                    self._record_outcome("asleep" if self._session_state == "asleep" else "ble_error", e)
+                    self._record_outcome("asleep" if self._sessions.session_state == "asleep" else "ble_error", e)
                 except Exception as e:
                     import traceback
                     print("poll error:", flush=True)

@@ -57,6 +57,8 @@ Automation
    :members: step, set_enabled, snapshot, to_state_dict, load
 .. autoclass:: calictl.observer.CampingObserver
    :members: observe, on_push, poll_interval
+.. autoclass:: calictl.session.SessionSupervisor
+   :members: attach, live_session, note_activity, set_mode, nudge, supervise, mode
 .. automethod:: calictl.serve.Server._auto_camper_step
 
 Tests
@@ -72,3 +74,4 @@ Tests
 .. autofunction:: tests.test_control_extra.test_int_range_helper_validates_and_traces
 .. autofunction:: tests.test_persistent_session.test_read_char_retry_reports_disconnect_on_successful_read
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
+.. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
