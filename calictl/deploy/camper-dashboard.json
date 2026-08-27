@@ -943,6 +943,172 @@
      "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"roof\" and r._field == \"alert_code\")\n  |> last()"
     }
    ]
+  },
+  {
+   "id": 23,
+   "type": "stat",
+   "title": "Fridge quiet mode",
+   "gridPos": {
+    "h": 6,
+    "w": 6,
+    "x": 0,
+    "y": 60
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Off",
+         "color": "text"
+        },
+        "2": {
+         "text": "Manual",
+         "color": "blue"
+        },
+        "4": {
+         "text": "Scheduled",
+         "color": "blue"
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       },
+       {
+        "color": "blue",
+        "value": 2
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"cooler\" and r._field == \"mode\")\n  |> last()"
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "type": "stat",
+   "title": "Fridge quiet window (from \u2192 to, h)",
+   "gridPos": {
+    "h": 6,
+    "w": 6,
+    "x": 6,
+    "y": 60
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [],
+     "thresholds": {
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       }
+      ]
+     },
+     "unit": "h"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"cooler\" and r._field == \"quiet_from\")\n  |> last()"
+    },
+    {
+     "refId": "B",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"cooler\" and r._field == \"quiet_to\")\n  |> last()"
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "type": "stat",
+   "title": "Roof",
+   "gridPos": {
+    "h": 6,
+    "w": 6,
+    "x": 12,
+    "y": 60
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Closed",
+         "color": "green"
+        },
+        "1": {
+         "text": "Open",
+         "color": "orange"
+        },
+        "2": {
+         "text": "Middle",
+         "color": "orange"
+        },
+        "14": {
+         "text": "Closed",
+         "color": "green"
+        },
+        "15": {
+         "text": "Error",
+         "color": "red"
+        }
+       }
+      }
+     ],
+     "thresholds": {
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "red",
+        "value": 15
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"roof\" and r._field == \"position\")\n  |> last()"
+    }
+   ]
   }
  ]
 }
