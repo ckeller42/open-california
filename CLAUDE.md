@@ -37,6 +37,9 @@ Raspberry Pi (`buspi`), feeding
   (`python3 -m tools.audit_signals --report` → `SEMANTIC-REVIEW-NEEDED`), verify the polarity
   against `ui/screens/*.yaml` / the decompiled getter, not a naive `bool(field)`. (This is
   how the camping-lights inversion was missed — see `docs/business-logic/signals.md`.)
+  **The unit's own on-screen display is the ground truth** — an owner photo of the camper screen
+  catches mislabels that a readback echo hides (`usb_powered`, `quiet_scheduled`=Mode 4-not-NightTimerSet,
+  the lamp-map — all caught by the screen, cross-checked against a decompile call-stack).
 - **Grafana dashboards don't auto-update.** After changing surfaced signals, edit
   `calictl/deploy/camper-dashboard.json` and push to Pi **and** Cloud via `push_dashboard.py`.
   A PostToolUse hook (`tools/hooks/dashboard-sync-reminder.py`) reminds you.
@@ -52,7 +55,12 @@ python3 -m pytest tests/ -q                          # the suite (keep green)
 DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + semantic-review
 python3 -m calictl status                            # live read of all functions (needs BLE + free slot)
 python3 -m calictl serve [--dry-run]                 # the unified daemon
+curl -s localhost:8088/api/state                     # buspi: live decoded state via the RUNNING daemon
 ```
+When the daemon is up it OWNS the single BLE slot — read live state via its web API on **:8088**
+(`/api/state`; **not** 8080) or the cache `~/.cache/calictl/last_state.json`; never open a 2nd BLE
+connection. Warm the fast session first with `POST /api/session {"action":"connect"}` (auto-releases
+after ~25 s idle).
 
 ## Known state
 
