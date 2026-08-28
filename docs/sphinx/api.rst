@@ -57,6 +57,9 @@ Automation
    :members: step, set_enabled, snapshot, to_state_dict, load
 .. autoclass:: calictl.observer.CampingObserver
    :members: observe, on_push, poll_interval
+.. autofunction:: calictl.firmware.write_snapshot
+.. autofunction:: calictl.firmware.changed
+.. autofunction:: calictl.anchors.check
 .. autoclass:: calictl.session.SessionSupervisor
    :members: attach, live_session, note_activity, set_mode, nudge, supervise, mode
 .. automethod:: calictl.serve.Server._auto_camper_step
@@ -75,3 +78,5 @@ Tests
 .. autofunction:: tests.test_persistent_session.test_read_char_retry_reports_disconnect_on_successful_read
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
+.. autofunction:: tests.test_firmware_anchors.test_firmware_snapshot_captures_raw_frames
+.. autofunction:: tests.test_firmware_anchors.test_anchors_flag_implausible_decode

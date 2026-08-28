@@ -136,6 +136,11 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
   background: color-mix(in srgb, var(--muted) 14%, var(--card)); color: var(--muted);
   border: 1px solid var(--border); }
 
+/* Warning banner — untested firmware / plausibility-anchor violations (possible decode drift). */
+.fwwarn { margin-bottom: .9rem; padding: .7rem 1rem; border-radius: 12px; font-size: .85rem;
+  background: color-mix(in srgb, var(--warn) 14%, var(--card)); color: var(--warn);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); }
+
 /* --- 24 h leisure-battery chart -------------------------------------------- */
 .echart-card { padding: .8rem 1rem 1rem; }
 .echart-head { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .4rem; }

@@ -8,10 +8,12 @@ Exits non-zero (and prints the leaked modules) if any banned module is imported 
 """
 import sys
 
+import calictl.anchors  # noqa: F401
 import calictl.automation  # noqa: F401
 import calictl.cli
 import calictl.control  # noqa: E401,F401
 import calictl.device
+import calictl.firmware  # noqa: F401
 import calictl.influx
 import calictl.mqtt
 import calictl.observer

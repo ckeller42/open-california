@@ -731,3 +731,48 @@ def test_auto_camper_restore_debt_survives_restart():
     assert ac2.restore_until == 9_999_999_999.0
     assert ac2.fails == 2
     assert ac2.prev_ignition is True
+
+
+def test_meta_firmware_block_and_untested_flag():
+    """_meta.firmware surfaces the version identity + the untested flag from general()."""
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    s._last = {"general": {"AmbSwVersion": None, "CommunicationVersion": 3}}  # comm 3 -> untested
+    meta = serve.ServeBackend(s, loop=None).state()["_meta"]
+    assert meta["firmware"]["comm_version"] == 3
+    assert meta["firmware"]["untested"] is True
+    assert "0409/0410" in meta["firmware"]["tested"]
+    assert isinstance(meta["anchors"], list)
+
+
+def test_poll_captures_raw_frames_on_firmware_change(tmp_path, monkeypatch):
+    """A version change between polls dumps a raw-frame snapshot; an unchanged version does not."""
+    import asyncio
+
+    from calictl import overrides, protocol, serve
+    funcs = protocol.load(); overrides.apply(funcs)
+    s = serve.Server(influx_enabled=False)
+    s._read_only = True
+    s._fw_snapshot_dir = str(tmp_path)
+    # first poll establishes the baseline (amb 0410), no capture; second poll sees 0411 -> capture
+    raws = [
+        {"general": bytes([0x30, 0x34, 0x31, 0x30, 0x30, 0x32, 0x30, 0x37, 0x02])},   # "0410"/"0207"/2
+        {"general": bytes([0x30, 0x34, 0x31, 0x31, 0x30, 0x32, 0x30, 0x37, 0x02])},   # "0411"
+    ]
+    seq = iter(raws)
+
+    async def fake_read_all(fns):
+        return next(seq)
+    monkeypatch.setattr(s.dev, "read_all", fake_read_all)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        await s.poll()          # first-ever -> BASELINE snapshot (0410)
+        n_after_1 = len(list(tmp_path.glob("fw-baseline-*.json")))
+        await s.poll()          # 0411 -> DRIFT snapshot
+        return n_after_1, len(list(tmp_path.glob("fw-drift-*.json")))
+    n_base, n_drift = asyncio.run(_run())
+    assert n_base == 1 and n_drift == 1                          # baseline captured, then the drift
+    snap = list(tmp_path.glob("fw-drift-0411-*.json"))[0].read_text()
+    assert "30343131" in snap                                   # the raw "0411" bytes captured
+    assert s._fw_seen == ("0411", 2)
