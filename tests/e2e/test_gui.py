@@ -27,6 +27,15 @@ sync_api = pytest.importorskip("playwright.sync_api")
 sync_playwright = sync_api.sync_playwright
 expect = sync_api.expect
 
+# Skip (don't ERROR) when Playwright is installed but its browser binary isn't — a dev who ran
+# `pip install playwright` without `playwright install chromium` should get a clean skip, and the
+# stdlib matrix stays green; the CI `gui-e2e` job installs the browser and runs these for real.
+try:
+    with sync_playwright() as _p:
+        _p.chromium.launch().close()
+except Exception as _e:  # noqa: BLE001 — any launch failure (missing executable, deps) -> skip the module
+    pytest.skip("Playwright chromium browser not installed: %s" % _e, allow_module_level=True)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 

@@ -114,6 +114,14 @@ These are read-only, surfaced signals (no control fields on this function); they
 right thing to check first when a capture or a field's behavior doesn't match what's
 documented here — the protocol has visibly drifted across firmware revisions once already.
 
+Because of that drift, the daemon **monitors the firmware/protocol version**: it flags
+``firmware_untested`` (surfaced in ``_meta.firmware`` and as a Vehicle-page warning) when the
+unit runs anything outside the validated set (``AmbSwVersion`` 0409/0410, ``CommunicationVersion``
+2), captures a raw-frame snapshot on the first-seen firmware and again on any change (so a future
+correction is derivable from the wire evidence), and runs plausibility anchors that alarm if a
+decoded value falls out of physical range (a likely sign of a post-update offset shift). See
+``calictl/firmware.py`` and ``calictl/anchors.py``.
+
 Equipment profile
 ------------------
 

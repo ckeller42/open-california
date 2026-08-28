@@ -57,10 +57,10 @@ python3 -m calictl status                            # live read of all function
 python3 -m calictl serve [--dry-run]                 # the unified daemon
 curl -s localhost:8088/api/state                     # buspi: live decoded state via the RUNNING daemon
 ```
-When the daemon is up it OWNS the single BLE slot — read live state via its web API on **:8088**
-(`/api/state`; **not** 8080) or the cache `~/.cache/calictl/last_state.json`; never open a 2nd BLE
-connection. Warm the fast session first with `POST /api/session {"action":"connect"}` (auto-releases
-after ~25 s idle).
+When the daemon is up it OWNS the single BLE slot — read live state via its web API `/api/state`
+(**buspi runs `--web 8088`**; the CLI default is 8080) or the cache `~/.cache/calictl/last_state.json`;
+never open a 2nd BLE connection. Warm the fast session first with `POST /api/session {"action":"connect"}`
+(auto-releases after ~25 s idle).
 
 ## Known state
 

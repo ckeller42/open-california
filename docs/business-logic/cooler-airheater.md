@@ -109,11 +109,10 @@ transmits whatever Level/Mode/timer values are currently held in the model.
   own UI: `0` (via `T1`), `2` (via `x0`), `4` (via `k0`). Two derived booleans:
   - `J0()` → `Mode == 2` (`vf/c.java:167, 218-221`)
   - `P1()` → `Mode == 4` (`vf/c.java:168, 223-226`)
-  Cross-referenced against string-resource keys `coolboxPage_quietModeWidget_manualQuietMode_text`
-  and `..._timerBasedQuietMode_text`: strong inference (not 100% proven textually) —
-  **Mode 0 = normal cooling (quiet mode off), Mode 2 = manual Quiet Mode active, Mode 4 =
-  timer-based Quiet Mode active.** UNVERIFIED: exact label-to-value binding (2 vs 4 could be
-  swapped relative to the true UI labels), but the on/off boundary (Mode 0 = off) is solid.
+  **DISPLAY-CONFIRMED 2026-08-26** (the unit's Flüstermodus screen: two toggles "Ein/Aus" +
+  "Automatisch") + call-stack (`vf/c` K0/L0 → QuietModeViewModel `yh/e`):
+  **Mode 0 = off, Mode 2 = manual Quiet ("Ein/Aus"), Mode 4 = scheduled Quiet ("Automatischer
+  Flüstermodus").** `quiet_scheduled` is derived from Mode 4, NOT `NightTimerSet` (a dead-end bit).
 - **Error** (read-back field, not directly settable): `0` = none, `1` = Error, `2` = Emergency
   operation, `3` = Door open (`vf/c.java:408, 420-437` dispatches to
   `COOLER_ERROR_NOTIFICATION_ID` / `COOLER_EMERGENCY_OPERATION_NOTIFICATION_ID` /

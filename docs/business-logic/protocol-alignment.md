@@ -134,10 +134,12 @@ the wire captures. Corrections applied:
 - **`satelliteantenna.system_on`** used `bool(System)`, but `System` is a 2-bit **enum** and the
   app getter is `System == 1`; values 2/3 wrongly read "on". Fixed to `== 1`; raw `system` surfaced.
 
-- **Cooler night-timer sentinels stay `0`, NOT the `v()` class-defaults (`3`/`31`).** The audit
-  proposed `NightTimerSet=3`/hours=`31` from the app's builder defaults, but the **real captured
-  power-on frame** (`tests/scenarios/cooler/power-on`) sends `0` — the capture-diff test caught the
-  divergence. Wire capture is ground truth over decompiled-default inference.
+- **Cooler night-schedule bytes are LITERAL, not leave-unchanged sentinels** (corrected
+  2026-08-26). The audit proposed `NightTimerSet=3`/hours=`31` from the app builder defaults, and
+  the captured power-on frame sends `0` — but that capture van simply had **no schedule set**, so
+  `0` was the *current* value, not a sentinel. Live proof: a write carrying `NightTimerHourOn=0`
+  **clobbered** a set `quiet_from=22`. So `_cooler_values` now carries the current schedule in
+  every write. Lesson: a capture only validates the state it was taken in.
 
 - **`energy` control fields renamed** `OperationMode→EnergyModeSet`(@2/w2/def3),
   `Movement→DisplayRefresh`(@7/w1). The old names were the **stairs (1801)** layout mis-copied into

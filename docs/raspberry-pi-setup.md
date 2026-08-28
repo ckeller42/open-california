@@ -109,11 +109,13 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
 #   then open http://<pi-hostname-or-ip>:8080
 ```
 
-- `--read-only` serves the dashboard with controls disabled.
+- The daemon is **read-only by default** (controls disabled) — pass `--enable-writes` (or
+  `CALICTL_ENABLE_WRITES=1`) to allow control writes.
 - The UI is **unauthenticated** — expose it only on a trusted LAN (same posture as the
   Home Assistant / Grafana stack), never on the open internet.
-- Uninstalled features are hidden; roof control asks for confirmation; lighting shows a
-  "not applied" note (BLE lighting actuation is still unsolved).
+- Uninstalled features are hidden; roof control asks for confirmation. Lighting writes DO
+  actuate the lamps, but the state-char readback is a write-through echo, so the UI says
+  "Sent — check the lamp" rather than confirming from the readback.
 - Labels are neutral by default. To render your app's exact text, rebuild the screen data
   against your own APK strings — `python3 -m tools.build_web --strings <apk.cvr.json>`
   (local only; never committed, like the icons).

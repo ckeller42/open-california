@@ -148,10 +148,11 @@ journal is the system log, and on buspi it is persistent). One line per notable 
 decision inputs on the line so you can see *why* it acted or stood down:
 
 ```
-auto-camper[<event>]: <msg> (ignition=.. camping=.. soc=.. warn=.. fails=..)
+auto-camper[<event>]: <msg> (ignition=.. camping=.. soc=.. warn=.. fails=.. owe=..)
 ```
 
-Events: `engine_start_armed`, `reasserting`, `confirmed_on`, `stood_down`, `gave_up`. Idle polls
+Events: `armed_engine_shed`, `restoring`, `restored`, `stood_down`, `gave_up` (the restore-after-park
+model — the unit refuses camping-on while driving, so there's no reassert-during-drive). Idle polls
 log nothing. Review a van session with:
 
 ```

@@ -44,6 +44,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   `_cooler_values` now carries the current schedule in every write.
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
+- roof `Installed=1` — DEVICE (live read 2026-08-26, #106): the pop-top IS installed (motor never driven).
 
 Captures come from the Mac "bar" (PacketLogger/tshark) or buspi HCI. When one lands: add a
 `tests/scenarios/<fn>/<case>.yaml`, assert our frame matches in `test_capture_diff.py`, flip the row

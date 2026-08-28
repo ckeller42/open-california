@@ -776,3 +776,39 @@ def test_poll_captures_raw_frames_on_firmware_change(tmp_path, monkeypatch):
     snap = list(tmp_path.glob("fw-drift-0411-*.json"))[0].read_text()
     assert "30343131" in snap                                   # the raw "0411" bytes captured
     assert s._fw_seen == ("0411", 2)
+
+
+def test_web_server_binds_without_reverse_dns(tmp_path, monkeypatch):
+    """serve_http MUST NOT block on socket.getfqdn. On a host with slow/absent reverse-DNS (macOS,
+    some CI runners, a parked van with no uplink) that lookup hangs for tens of seconds or forever,
+    stalling the daemon before the web UI binds (root-caused 2026-08-28 via a faulthandler dump).
+    We sabotage getfqdn to prove server_bind never calls it, and that the server binds + serves at once.
+
+    .. test:: The web server binds without a reverse-DNS lookup
+       :id: T_WEB_NO_REVERSE_DNS
+       :links: R_WEB_NO_REVERSE_DNS
+    """
+    import json
+    import socket
+    import urllib.request
+
+    from calictl import web
+
+    def _boom(*a, **k):
+        raise AssertionError("server_bind called socket.getfqdn — it would hang on a slow resolver")
+    monkeypatch.setattr(socket, "getfqdn", _boom)
+
+    class _Backend:
+        read_only = True
+
+        def state(self):
+            return {"_meta": {"read_only": True}}
+
+    httpd = web.serve_http(_Backend(), str(tmp_path), host="127.0.0.1", port=0)  # port 0 = ephemeral
+    try:
+        port = httpd.server_address[1]
+        with urllib.request.urlopen("http://127.0.0.1:%d/api/state" % port, timeout=3) as r:
+            assert r.status == 200
+            assert "_meta" in json.load(r)
+    finally:
+        httpd.shutdown()

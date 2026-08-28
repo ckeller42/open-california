@@ -52,6 +52,10 @@ LIGHT_MODE_COMMIT = 0        # the 0e00… commit/apply frame (HCI-verified 2026
 # Per-function initial decoded state. Installed flags on so semantics reports the
 # function as present; loads start OFF. Functions absent here start all-zero.
 DEFAULT_SEED = {
+    # general (char 1001): firmware/protocol identity. Realistic reference-van values so the UI
+    # renders a clean "0410 · 0207 · 2 ✓ tested" (not a false untested-firmware warning). The SW
+    # fields are 4 ASCII bytes packed as a 32-bit int: "0410" = 0x30343130, "0207" = 0x30323037.
+    "general": {"AmbSwVersion": 0x30343130, "CmSwVersion": 0x30323037, "CommunicationVersion": 2},
     "cooler": {"Installed": 1, "State": 0, "Mode": 4, "Level": 3},
     "campingmode": {"Installed": 1, "State": 0, "UsbCharger": 0,
                     "InteriorLight": 0, "OutsideLight": 0},

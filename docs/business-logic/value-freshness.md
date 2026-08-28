@@ -41,8 +41,10 @@ bug, a drain, or a sensor fault (`FreshWaterInfoPopUp = 0` = valid).
 
 ## Root cause (live-verified)
 
-The **`00001003` liveness heartbeat** — a +1 4-byte-BE counter — is what drives the unit's
-sensor-measurement loop **and** keeps the link alive. It is not only for actuation: the app ticks
+The **`00001003` liveness heartbeat** — a +1 4-byte-BE counter — **keeps the link alive** so a
+read returns a fresh value instead of a stale latch. (It does NOT itself drive every subsystem's
+measurement — see the water note below, where the heartbeat was DISPROVEN as a water refresh; a
+subsystem re-measures only while it's powered/awake.) It is not only for actuation: the app ticks
 it **continuously (~0.7 s) the entire time it is connected**. A characteristic read returns the
 last latched value; without the heartbeat running, that value decays to a stale reading and, after
 ~15 s with no heartbeat, the van drops the connection.
