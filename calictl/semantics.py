@@ -281,6 +281,9 @@ def general(d: dict) -> dict:
         "comm_version": d.get("CommunicationVersion"),      # 1-byte int
         "cm_sw_version": _sw_ascii(d.get("CmSwVersion")),    # 4 ASCII bytes -> "0207"
         "amb_sw_version": _sw_ascii(d.get("AmbSwVersion")),  # 4 ASCII bytes -> "0410" (feeds the +2 gate)
+        # True when the unit runs firmware/protocol the project hasn't validated -> UI warning +
+        # arms the drift capture (serve.poll). See _TESTED_AMB_SW / _TESTED_COMM.
+        "firmware_untested": _firmware_untested(_sw_ascii(d.get("AmbSwVersion")), d.get("CommunicationVersion")),
     }
 
 
@@ -426,6 +429,22 @@ def interpret(function: str, decoded: dict) -> dict:
 # the app 2026-08-17: xf/d.java:171 gates on `["0409","0410"]`, and the field is AmbSwVersion (not
 # Cm/Communication) — resolved by SootUp def-use through gj/b -> pf/k -> zf/d.g() -> cVar.f1297a.
 _DCDC_PLUS2_SW = frozenset({"0409", "0410"})
+
+# Firmware/protocol versions the project has been VALIDATED against (own-vehicle testing +
+# decompile). Anything outside this is surfaced as "untested" so a user on newer firmware knows the
+# decode/semantics may have drifted, and it arms the fw-drift raw-frame capture (see serve.poll).
+_TESTED_AMB_SW = frozenset({"0409", "0410"})   # camper-unit ("Ambiente") firmware builds seen here
+_TESTED_COMM = 2                                # CommunicationVersion = the protocol structure version
+
+
+def _firmware_untested(amb_sw_version, comm_version) -> bool:
+    """True if the live firmware/protocol version is one the project has NOT validated against.
+    Unknown (None) reads return False — don't warn on a missing/partial general read."""
+    if amb_sw_version is None and comm_version is None:
+        return False
+    amb_bad = amb_sw_version is not None and amb_sw_version not in _TESTED_AMB_SW
+    comm_bad = comm_version is not None and comm_version != _TESTED_COMM
+    return amb_bad or comm_bad
 
 
 def apply_sw_corrections(states: dict) -> dict:

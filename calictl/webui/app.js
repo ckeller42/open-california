@@ -408,6 +408,13 @@ const FEATURES = {
           ? "—" : `${fmtDeg(s.level_roll)} / ${fmtDeg(s.level_pitch)}`),
         widget: (s) => bubbleLevel(s.level_roll, s.level_pitch) },
       { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },
+      { label: "Firmware (amb · cm · comm)",
+        get: () => {
+          const fw = (STATE._meta && STATE._meta.firmware) || {};
+          if (fw.amb_sw_version == null && fw.comm_version == null) return "—";
+          return `${fw.amb_sw_version ?? "?"} · ${fw.cm_sw_version ?? "?"} · ${fw.comm_version ?? "?"}`
+            + (fw.untested ? "  ⚠ untested" : "  ✓ tested");
+        } },
     ],
     summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
   },
@@ -829,6 +836,21 @@ function render() {
     const b = document.createElement("div");
     b.className = "readonly";
     b.textContent = "🔒 Read-only — control is disabled on this daemon.";
+    app.appendChild(b);
+  }
+  const fw = STATE._meta && STATE._meta.firmware;
+  if (fw && fw.untested) {
+    const b = document.createElement("div");
+    b.className = "fwwarn";
+    b.textContent = `⚠ Untested firmware — unit reports amb ${fw.amb_sw_version ?? "?"} · comm ${fw.comm_version ?? "?"} `
+      + `(this project was validated on ${fw.tested}). Decode/semantics may have drifted; treat readings with care.`;
+    app.appendChild(b);
+  }
+  const anc = (STATE._meta && STATE._meta.anchors) || [];
+  if (anc.length) {
+    const b = document.createElement("div");
+    b.className = "fwwarn";
+    b.textContent = "⚠ Implausible reading(s): " + anc.join("; ") + " — possible decode drift.";
     app.appendChild(b);
   }
   if (view === "home") renderDashboard();

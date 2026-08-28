@@ -337,6 +337,19 @@ def test_dcdc_sw_correction():
     # a non-listed version -> untouched
     assert semantics.apply_sw_corrections(
         {"general": {"amb_sw_version": "0207"}, "energy": {"dcdc_current": 5}})["energy"]["dcdc_current"] == 5
+
+
+def test_general_firmware_untested_flag():
+    """firmware_untested is False on a version the project was validated against (amb 0409/0410,
+    comm 2) and True on anything else — the trigger for the UI warning + the fw-drift capture."""
+    from calictl import semantics
+    assert semantics._firmware_untested("0410", 2) is False
+    assert semantics._firmware_untested("0409", 2) is False
+    assert semantics._firmware_untested("0411", 2) is True     # newer amb build -> untested
+    assert semantics._firmware_untested("0410", 3) is True     # protocol (comm) bumped -> untested
+    assert semantics._firmware_untested(None, None) is False   # unknown -> don't cry wolf
+    g = semantics.general({"AmbSwVersion": None, "CommunicationVersion": 2})
+    assert "firmware_untested" in g
     # dcdc not present (source not installed) -> no-op; missing general context -> no-op
     assert semantics.apply_sw_corrections(
         {"general": {"amb_sw_version": "0410"}, "energy": {"dcdc_current": None}})["energy"]["dcdc_current"] is None

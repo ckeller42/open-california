@@ -17,7 +17,20 @@ import os
 import time
 from pathlib import Path
 
-from . import automation, freshness, history, influx, mqtt, observer, overrides, protocol, semantics, session
+from . import (
+    anchors,
+    automation,
+    firmware,
+    freshness,
+    history,
+    influx,
+    mqtt,
+    observer,
+    overrides,
+    protocol,
+    semantics,
+    session,
+)
 from .device import CamperDevice, ConnectionUnavailable
 
 # How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
@@ -111,8 +124,26 @@ class ServeBackend:
             # Auto camper mode: the toggle, whether it's actively re-asserting, and a one-time
             # give-up/stand-down notice the web UI shows as a toast.
             "auto_camper": self._s._autocamper.snapshot(),
+            # Firmware/protocol identity + whether it's a version the project has validated (the UI
+            # shows the versions on the Vehicle page and warns when untested).
+            "firmware": self._firmware_meta(out.get("general")),
+            # Plausibility-anchor violations (empty = all decoded values in physical range). A
+            # non-empty list hints at a decode drift — see calictl/firmware.py drift capture.
+            "anchors": anchors.check(out),
         }
         return out
+
+    @staticmethod
+    def _firmware_meta(general):
+        """The `_meta.firmware` block from the interpreted `general` state (None-safe)."""
+        g = general or {}
+        return {
+            "amb_sw_version": g.get("amb_sw_version"),
+            "cm_sw_version": g.get("cm_sw_version"),
+            "comm_version": g.get("comm_version"),
+            "untested": bool(g.get("firmware_untested")),
+            "tested": "amb 0409/0410 · comm 2",   # what this project was validated against
+        }
 
     def set_session(self, action):
         """Bridge the web-UI connection toggle onto the daemon loop (like `command`)."""
@@ -249,6 +280,13 @@ class Server:
         # A self-contained controller (automation.AutoCamper): owns the toggle + per-cycle restore
         # debt + step; actuates through on_command (injected). See auto-camper-mode.md. Loaded below.
         self._autocamper = automation.AutoCamper()
+        # Firmware/protocol drift: remember the last-seen (amb_sw, comm) identity (persisted) so a
+        # CHANGE triggers a raw-frame capture (calictl/firmware.py) — the only moment the old-firmware
+        # wire data is recoverable. Plus plausibility anchors (calictl/anchors.py) surfaced in _meta.
+        self._fw_seen = None
+        self._anchors = []                  # last poll's plausibility-anchor violations (for _meta)
+        self._fw_snapshot_dir = os.environ.get(
+            "CALICTL_FW_SNAPSHOT_DIR", os.path.expanduser("~/.cache/calictl/fw-snapshots"))
         # RE probe: log the raw F000/F001 general-purpose diagnostic register to InfluxDB (opt-in).
         self._store_gp = os.environ.get("CALICTL_STORE_GENERALPURPOSE", "").lower() in ("1", "true", "yes")
         # Load persisted state LAST — it must run AFTER every default above so it can override them
@@ -266,6 +304,8 @@ class Server:
             self._water_good = blob.get("water_good")      # last plausible water survives restarts
             self._water_stale_since = blob.get("water_stale_since")
             self._autocamper.load(blob.get("auto_camper"), blob.get("auto_camper_state"))
+            fw = blob.get("fw_seen")
+            self._fw_seen = tuple(fw) if isinstance(fw, list) else fw
         except (OSError, ValueError, TypeError):   # missing/corrupt cache -> keep the defaults, never crash __init__
             pass
 
@@ -279,7 +319,8 @@ class Server:
                            "water_good": self._water_good,
                            "water_stale_since": self._water_stale_since,
                            "auto_camper": self._autocamper.enabled,
-                           "auto_camper_state": self._autocamper.to_state_dict()}, f)
+                           "auto_camper_state": self._autocamper.to_state_dict(),
+                           "fw_seen": list(self._fw_seen) if self._fw_seen else None}, f)
             os.replace(tmp, self._state_cache)
         except OSError:
             pass
@@ -370,6 +411,34 @@ class Server:
             new_last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
         semantics.apply_sw_corrections(states)   # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
+        # Firmware/protocol DRIFT: if the (amb_sw, comm) identity changed since we last saw it, dump a
+        # raw-frame snapshot NOW — the old-firmware wire bytes vanish once the unit updates, and that
+        # snapshot is the only thing that makes a new correction derivable. Log either way; remember +
+        # persist the identity so a restart doesn't re-capture.
+        cur_fw = firmware.current(states)
+        if self._fw_seen is None and cur_fw != (None, None):
+            # First firmware ever seen -> BASELINE snapshot. A future drift diff needs the OLD-side
+            # frames, and this is the only time we can bank them before the unit updates.
+            try:
+                print("firmware baseline (amb %s comm %s) -> %s" % (cur_fw[0], cur_fw[1],
+                      firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="baseline")), flush=True)
+            except Exception as e:
+                print("firmware baseline snapshot failed: %s" % e, flush=True)
+        elif firmware.changed(self._fw_seen, cur_fw):
+            print("FIRMWARE CHANGED: amb %s->%s comm %s->%s — capturing raw frames"
+                  % (self._fw_seen[0], cur_fw[0], self._fw_seen[1], cur_fw[1]), flush=True)
+            try:
+                print("firmware drift snapshot -> %s"
+                      % firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="drift"), flush=True)
+            except Exception as e:
+                print("firmware snapshot failed: %s" % e, flush=True)
+        if cur_fw != (None, None):
+            self._fw_seen = cur_fw
+        # Plausibility anchors: a decode drift (e.g. a firmware offset shift) pushes a value out of
+        # physical range — surface it in _meta + log so it's caught, not published as truth.
+        self._anchors = anchors.check(states)
+        if self._anchors:
+            print("plausibility anchors tripped: %s" % "; ".join(self._anchors), flush=True)
         # Stale-latch guard: when the van is parked/locked the unit stops measuring fresh water and
         # returns a bogus low (true 17 L read back as 1 L). A fresh drop from the last PLAUSIBLE
         # reading with no matching grey rise is physically impossible -> serve/publish that last
