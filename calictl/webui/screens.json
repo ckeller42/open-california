@@ -335,7 +335,7 @@
           "id": "zoneBrightnessSlider",
           "type": "slider",
           "label": "Brightness",
-          "range": "0..11 settable (4-bit dg/i.java enum: 0=OFF, 1-10=10..100% in 10% steps, 11=DEFAULT; 13=NOT_EQUIPPED read-only, 14=leave-unchanged sentinel — capture-confirmed 2026-08-16, 'on'=10)",
+          "range": "0..11 settable (4-bit enum: 0=OFF, 1-10=10..100% in 10% steps, 11=DEFAULT; 13=NOT_EQUIPPED read-only, 14=leave-unchanged sentinel — capture-confirmed 2026-08-16, 'on'=10)",
           "controls": {
             "field": "BrightnessLOne..BrightnessLOneSix (per selected zone, index-to-area mapping UNVERIFIED)",
             "action": "SET_BRIGHTNESS"

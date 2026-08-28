@@ -620,6 +620,20 @@ html, body {
   flex-wrap: wrap;
 }
 
+.re-banner {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto 16px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #5a5a5a;
+  background: rgba(120, 120, 120, 0.08);
+  border: 1px solid rgba(120, 120, 120, 0.25);
+  border-radius: 8px;
+}
+.re-banner code { font-size: 11px; }
+
 .toolbar h1 {
   font-size: 1.05rem;
   font-weight: 600;
@@ -1031,6 +1045,12 @@ def build_html(screens: list[dict[str, Any]], dictionary: dict[str, Any] | None)
       </button>
     </div>
   </div>
+
+  <p class="re-banner">Reverse-engineering spec preview &mdash; an independent, hardware-function-driven
+  interface derived from the camper's BLE control surface (see <code>docs/UI-DESIGN-RATIONALE.md</code>).
+  This is developer documentation, not the control app: the actual UI is served by the daemon from
+  <code>calictl/webui</code>. Technical notes cite the vendor app by factual reference only (symbol /
+  key names / file:line), never reproduced text or artwork.</p>
 
   <div class="app">
     <div class="nav-backdrop" onclick="closeSideNav()"></div>
