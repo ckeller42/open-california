@@ -50,7 +50,9 @@ A `command_enums:` section lists the app's command vocabularies (e.g. lighting's
 `SET_BRIGHTNESS`/`SET_COLOR`/`SET_PROFILE`) for `Mode`-style value semantics;
 everything else stays `value_semantics: UNVERIFIED`.
 
-**Reproduce** end-to-end with `tools/decompile.sh` (apkeep → dex → jadx), then
+**Reproduce**: the decompile pipeline (apkeep → dex → jadx) + the enigma name-map are kept in a
+private own-vehicle-RE repo (they analyse the VW-copyrighted app locally); this repo ships the
+RESULT (`protocol/dictionary.yaml`). Regenerate the dictionary from local decompiled sources with
 `python3 tools/extract_protocol.py <sources> protocol/dictionary.yaml`. A
 dictionary-driven frame builder lives in `tools/build_frame.py` (refuses to build
 when required fields are `MERGED_AMBIGUOUS`/`UNKNOWN`).

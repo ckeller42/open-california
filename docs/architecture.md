@@ -8,7 +8,7 @@ surface/omit decisions live in `protocol/signals.yaml`.
 
 ```mermaid
 flowchart LR
-  APK["VW APK (local only,\ngit-ignored)"] -->|tools/decompile.sh + extract_protocol| DICT[protocol/dictionary.yaml]
+  APK["VW APK (local only,\ngit-ignored)"] -->|private RE pipeline + extract_protocol| DICT[protocol/dictionary.yaml]
   DICT --> LOAD["protocol.load()\n+ overrides.apply()"]
   OVR[overrides.py\nmanual offsets/ranges] --> LOAD
   LOAD --> DECODE["protocol.decode\n(MSB-first bits)"]

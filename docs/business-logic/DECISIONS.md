@@ -187,5 +187,5 @@ hypothesis below. `vehicle` char 1004 modeled; `general` repointed 1002→1001.
 sub-fields) instead of the `subList` slices; a subList-spine rework recovered Energy (17→36
 fields) and the rest. Roof/Lighting were absent because jadx's normal pass skipped their
 state-decode methods ("Method dump skipped"); a `--show-bad-code` re-decompile of `ig/c` and
-`dg/a` recovered them, and `decompile.sh` now passes that flag. **Dictionary is 13 functions, 0
+`dg/a` recovered them, and the (private) decompile pipeline now passes that flag. **Dictionary is 13 functions, 0
 unresolved, all with state fields.** (Full audit: `status-states-audit.md`.)

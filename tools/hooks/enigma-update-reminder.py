@@ -36,6 +36,6 @@ if reads_decompile and not edits_mapping:
            "the class + method names and a doc-comment (with class.java:line cites) in "
            "~/src/californiaontour-decompile/mapping.enigma on buspi, then commit + push to "
            "ckeller42/californiaontour-re. Standing rule: the mapping GROWS MONOTONICALLY — never let a "
-           "fresh understanding go unrecorded. (See the decompile-app skill.)")
+           "fresh understanding go unrecorded. (Decompile pipeline + skill live in the private RE repo.)")
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
                                              "additionalContext": msg}}))

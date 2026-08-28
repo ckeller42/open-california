@@ -15,7 +15,7 @@ on debug-log variable names (missed struct sub-fields) instead of the `subList`
 slices; reworking it to a subList spine recovered Energy (17→36) and the rest.
 Roof/Lighting were genuinely absent because jadx's normal pass skipped their
 state-decode methods ("Method dump skipped") — a `--show-bad-code` re-decompile
-of `ig/c` and `dg/a` recovered them; `decompile.sh` now passes that flag.
+of `ig/c` and `dg/a` recovered them; the (private) decompile pipeline now passes that flag.
 **Dictionary is now 13 functions, 0 unresolved, all with state fields.** Energy
 telemetry (SoC/V/A/W) and Water (`Level`=current, `Volume`=capacity) are
 additionally **live-verified** against the vehicle. The original verdict below
