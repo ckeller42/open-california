@@ -193,7 +193,9 @@ def test_read_all_only_trusts_sticky_push_for_push_only_funcs(monkeypatch):
 
 
 def test_read_char_retry_reports_disconnect_on_successful_read():
-    """.. test:: _read_char_with_retry reports link-down even when the read itself succeeds
+    """A read can succeed while ``is_connected`` has already flipped false — report link-down anyway.
+
+    .. test:: _read_char_with_retry reports link-down even when the read itself succeeds
        :id: T_READ_RETRY_POST_READ_DISCONNECT
        :links: R_READ_RETRY_SHARED
 

@@ -77,7 +77,9 @@ def _cooler():
 
 
 def test_actuate_arms_then_writes(fake_bleak):
-    """.. test:: Actuation runs the shared arm prologue (handshake + heartbeat) before writing
+    """Actuation runs the shared arm prologue (handshake + heartbeat) before the control write.
+
+    .. test:: Actuation runs the shared arm prologue (handshake + heartbeat) before writing
        :id: T_ACTUATE_ARM
        :links: R_ACTUATE_ARM
     """

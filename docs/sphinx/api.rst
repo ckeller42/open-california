@@ -15,7 +15,6 @@ Semantics
 Energy history
 --------------
 
-.. automodule:: calictl.history
 .. autofunction:: calictl.history.append
 .. autofunction:: calictl.history.load
 .. autofunction:: calictl.history.trim
@@ -55,11 +54,21 @@ Automation
 .. autofunction:: calictl.automation.auto_camper_restore_decide
 .. autoclass:: calictl.automation.AutoCamper
    :members: step, set_enabled, snapshot, to_state_dict, load
+.. automodule:: calictl.observer
+   :no-members:
 .. autoclass:: calictl.observer.CampingObserver
    :members: observe, on_push, poll_interval
+.. automodule:: calictl.firmware
+   :no-members:
 .. autofunction:: calictl.firmware.write_snapshot
 .. autofunction:: calictl.firmware.changed
+.. automodule:: calictl.anchors
+   :no-members:
 .. autofunction:: calictl.anchors.check
+.. automodule:: calictl.session
+   :no-members:
+.. autoclass:: calictl.web._NoResolveHTTPServer
+   :no-members:
 .. autoclass:: calictl.session.SessionSupervisor
    :members: attach, live_session, note_activity, set_mode, nudge, supervise, mode
 
