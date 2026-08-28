@@ -6,7 +6,7 @@ actuate for real today. Dead-end hypotheses ruled out along the way are in
 [`DECISIONS.md`](DECISIONS.md).
 
 All `file:line` citations are under the JADX decompile
-(`…/scratchpad/decompile/src/sources` = CLEAN, `…/decompile/bad/sources` = method bodies
+(the decompiled sources (clean pass) = CLEAN, the decompiled sources (bad-code pass) = method bodies
 jadx dropped from the clean pass). VW material: citations only.
 
 ---

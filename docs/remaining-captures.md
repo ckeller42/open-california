@@ -226,5 +226,5 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 
 ## Out of reach even at the van (WiFi, not BLE)
 - **Exlap data-body schemas** — need the camper's WiFi AP up + an Exlap/TCP capture on
-  `192.168.2.1`; a separate transport, not a BLE capture.
+  `<camper-AP-ip>`; a separate transport, not a BLE capture.
 - **Uninstalled features** (satellite/stairs/roof-A/C/LR-heater) — no hardware on this van.

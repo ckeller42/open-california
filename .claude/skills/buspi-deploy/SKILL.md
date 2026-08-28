@@ -5,7 +5,7 @@ description: Sync calictl changes to the buspi Raspberry Pi (the BLE owner), res
 
 # Deploy + live-verify on buspi
 
-buspi (`ssh buspi`, also Tailscale `100.118.206.17`) is the **single BLE owner**. It runs
+buspi (`ssh buspi`, also Tailscale (LAN address redacted)) is the **single BLE owner**. It runs
 `calictl serve` as a systemd unit under `~/solix-env`; the van allows buspi + the phone app
 connected at once, but only ONE controller writes reliably.
 

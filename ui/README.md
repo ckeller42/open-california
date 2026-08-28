@@ -9,7 +9,7 @@ this pass — the per-feature `Installed`-bit visibility mechanism in
 `feature-availability.md`).
 
 Decompiled source root used throughout:
-`.../scratchpad/decompile/src/sources` (see individual YAML file headers for
+`the decompiled sources (local)` (see individual YAML file headers for
 exact file:line citations).
 
 ## How this maps to the rest of the repo

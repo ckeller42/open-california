@@ -3,7 +3,7 @@
 Scope: own-vehicle interoperability, i.e. every BLE characteristic the CaliforniaOnTour
 app *reads/subscribes to* as vehicle status, compared against
 `protocol/dictionary.yaml`. Sources: decompiled app at
-`/private/tmp/claude-501/-Users-ckeller-src-open-california/b137c4a5-b11b-4b8b-b6d6-16b437dd2993/scratchpad/decompile/src/sources`
+`the decompiled sources (local, git-ignored)`
 (re-decompiled two classes with `--show-bad-code` where JADX's normal pass failed —
 noted inline). All camper-protocol characteristics share the UUID suffix
 `-6C77-4B7D-BBF6-A5E587701F3D` ("Exlap" protocol).

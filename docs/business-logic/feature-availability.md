@@ -6,7 +6,7 @@ X" — so the integration only creates entities for hardware that's actually fit
 fixed list for "a California".
 
 Source root (all `file:line` below are relative to this):
-`.../scratchpad/decompile/src/sources`
+`the decompiled sources (local)`
 
 This document is the cross-feature roll-up. Per-feature bit-level protocol detail (control
 frames, command recipes, enums) already lives in the sibling docs in this folder

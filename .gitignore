@@ -53,3 +53,6 @@ calictl/webui/icons/
 
 # subagent-driven-development scratch workspaces
 .superpowers/
+
+# internal dev planning artifacts — kept local, not published
+docs/superpowers/

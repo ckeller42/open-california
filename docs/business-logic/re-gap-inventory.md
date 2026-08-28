@@ -25,8 +25,8 @@ Compiled 2026-07-07 from a three-way decompile audit (BLE protocol, feature/doma
 logic, session/auth/infra), each diffed against the current baseline: `protocol/
 dictionary.yaml` (13 functions), `protocol/signals.yaml`, `ui/screens/*.yaml` (18
 screens), and the `docs/business-logic/*.md` writeups. Citations are `file:line`
-under the JADX decompile (`…/scratchpad/decompile/src/sources` = CLEAN,
-`…/decompile/bad/sources` = method bodies jadx dropped from clean). VW material:
+under the JADX decompile (the decompiled sources (clean pass) = CLEAN,
+the decompiled sources (bad-code pass) = method bodies jadx dropped from clean). VW material:
 citations only.
 
 **Codec master key** (resolves most "width UNVERIFIED" statically): every field is an
@@ -247,8 +247,8 @@ channel** (VW "Exchange of Live Automotive Parameters", MIB head-unit path) with
 login/subscribe handshake — entirely outside our BLE model. Decode `AbstractInterface.java`,
 `command/*`, `ContentStream.java`; capture discovery on 28500.
 - **Live probe 2026-07-07 (buspi, van parked/off): NOT reachable.** buspi is on a GL.iNet
-  travel router (`192.168.8.0/24`, gw `.8.1` nginx). WiFi scan shows no camper AP (only the
-  home SSID); a full `192.168.8.0/24` sweep found no host with **tcp/28500**; a 12 s passive
+  travel router (`<router-LAN>/24`, gw `<router-gw>` nginx). WiFi scan shows no camper AP (only the
+  home SSID); a full `<router-LAN>/24` sweep found no host with **tcp/28500**; a 12 s passive
   **udp/28500** listen got 0 beacons. So EXLAP is the MIB **infotainment** subsystem (distinct
   from the BLE camper unit) and its WiFi is down while the vehicle is off. Pursuing it needs
   (a) vehicle infotainment WiFi up (ignition on) + buspi joined to *that* SSID, and (b) the UDP
@@ -298,7 +298,7 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
 
 ---
 
-## Files to decode next (bodies in `…/decompile/bad/sources/`)
+## Files to decode next (bodies in the decompiled sources (bad-code pass))
 - `w10/l.java`, `w10/d.java` — lighting profile→wire-value table (~~unblocks A1 / `set lighting`~~
   A1 resolved 2026-08-16 without it; still useful for profile-number semantics, e.g. A=9).
 - `ag/a.java`, `ag/d.java`, `mg/f.java`, `jg/b.java` — chars 1004/1002/1903–1905 (A2, static).
