@@ -31,6 +31,14 @@ vehicle.
   on a vehicle you own or are authorised to operate, and not to circumvent any technical protection
   measure or to build a competing product. **This is a statement of the project's position, not
   legal advice**; you are responsible for compliance in your own jurisdiction.
+- **Non-commercial project.** The maintainers develop and publish this project as a
+  non-monetised hobby / interoperability effort — they do **not** sell it, bundle it with
+  hardware, or otherwise supply it in the course of a commercial activity. The **MIT licence**,
+  as an open-source licence, does permit *others* to use, modify, and even sell the software; the
+  maintainers cannot and do not restrict that downstream, but make no such commercial use
+  themselves. (Relevant to the free-and-open-source-software carve-outs in the EU Cyber
+  Resilience Act and the new Product Liability Directive, which turn on whether *your own* supply
+  is commercial, not on what the licence theoretically permits downstream.)
 
 ## No warranty — use at your own risk
 
