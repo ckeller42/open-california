@@ -325,13 +325,8 @@ class CamperDevice:
         (``"actuate"``/``"write"`` for control, ``"actuate_roof"``/``"move"`` for the roof). One home
         for the arm prologue that ``_actuate_on`` and ``actuate_roof`` previously duplicated verbatim.
 
-        .. req:: One shared actuation arm prologue
-           :id: R_ACTUATE_ARM
-           :status: implemented
-           :tags: ble, control
-
-           The handshake + heartbeat-start + arm-delay that arms a write (issue #2's 1003 gate) shall
-           live in one place, shared by the control and roof actuation paths.
+        This is the single home for the ``R_ACTUATE_ARM`` prologue (handshake + heartbeat-start +
+        arm-delay, issue #2's 1003 gate), shared by the control and roof actuation paths.
         """
         auth_ok = 0
         for uuid in (VERSION_CHAR, AUTH_CHAR):

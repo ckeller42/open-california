@@ -42,3 +42,7 @@ html_static_path = ["_static"]
 html_logo = "_static/logo.png"
 html_favicon = "_static/favicon.ico"
 exclude_patterns = ["_build"]
+
+# The needs_extra_links config is deprecated in sphinx-needs 5 but its replacement
+# (needs_links) uses a different schema; keep the working config + silence the one warning.
+suppress_warnings = ["needs.deprecated"]
