@@ -39,12 +39,12 @@ Session foundation — connect, authenticate, subscribe
     sequenceDiagram
         participant C as calictl (buspi)
         participant U as Camper unit
-        Note over C,U: link is BONDED (LE pairing done once; the unit's RPA is resolved via the bond)
+        Note over C,U: link is BONDED (LE pairing done once — the unit's RPA is resolved via the bond)
         C->>U: connect (retry on the le-connection-abort cascade)
         C->>U: discoverServices + requestMtu
         C->>U: read 1001 (VERSION)
-        Note over C: app aborts the session if VERSION empty or > 2
-        C->>U: read 1004 (AUTH — passive read over the bonded link; empty → reconnect)
+        Note over C: app aborts the session if VERSION empty or version greater than 2
+        C->>U: read 1004 (AUTH — passive read over the bonded link, empty → reconnect)
         loop every notifiable / indicatable char
             C->>U: write CCCD (0100 notify / 0200 indicate)
         end
@@ -68,7 +68,7 @@ Notifications
         participant U as Camper unit
         C->>U: write CCCD=0100 on a status char (subscribe)
         U-->>C: notify(status char, payload)  [on state change]
-        Note over C: calictl no-ops the payload; it reads state chars directly
+        Note over C: calictl no-ops the payload — it reads state chars directly
 
 Heartbeat-armed control write
 -----------------------------
@@ -94,7 +94,7 @@ Heartbeat-armed control write
         C->>U: connect (bonded link)
         C->>U: read 1001 (VERSION) + read 1004 (AUTH)
         C->>U: subscribe (see S_SEQ_CONNECT)
-        loop every ~500 ms (calictl: warm-up ~3 s, then across the write; app: continuous)
+        loop every ~500 ms (calictl warm-up ~3 s, then across the write — app continuous)
             C-)U: write 1003 = N, N+1, N+2 …  (monotonic +1)
         end
         Note over U: armed — actuation writes honoured
@@ -157,7 +157,7 @@ Lighting SET — SET + neutral flush on an awake unit; optional REQUEST_CONFIG c
         participant C as calictl
         participant U as Lighting (1501/1502)
         Note over C,U: unit must be AWAKE (the actual actuation gate)
-        opt OPTIONAL app-faithful config pull (calictl still sends it; NOT required to actuate)
+        opt OPTIONAL app-faithful config pull (calictl still sends it — NOT required to actuate)
             C->>U: REQUEST_CONFIG (0d0c… — Mode 12, PN=13, zones=14)
             C->>U: flush (0e00… = NO_MODE neutral default frame)
             U--)C: 1502 notifications: config dump (Mode-tagged)
@@ -198,11 +198,11 @@ Roof actuation (press-and-hold move stream, unit self-gated by a 3 s SafetyCount
         participant C as calictl
         participant U as Roof (1401 / state 1402)
         Note over C,U: ignition ON, roof path clear
-        Note over C,U: user presses & HOLDS open/close
+        Note over C,U: user presses and HOLDS open/close
         loop press-and-hold, move frames @ ~500 ms
             C->>U: move frame [0x01 open / 0x04 close] + app-generated monotonic SafetyCounter (+1/500 ms)
         end
-        Note right of U: unit validates SafetyCounter (~3 s); motor withheld until valid → 1402 bit 7
+        Note right of U: unit validates SafetyCounter (~3 s) — motor withheld until valid → 1402 bit 7
         Note over C,U: after ~3 s pop-top travels while frames continue
         C->>U: STOP frame [0x00] on release / end (or frames cease → dead-man halt)
         Note right of U: halts
@@ -269,7 +269,7 @@ Fresh state read under heartbeat
         loop ~500 ms (warm-up ~2 s, then read)
             C-)U: write 1003 heartbeat
         end
-        U-->>C: notify 1302 → water (push-driven; only fires on pump activity)
+        U-->>C: notify 1302 → water (push-driven — only fires on pump activity)
         Note over U: heartbeat keeps link up + refreshes re-read chars (1102/1602/1902/1004)
         C->>U: read state_char (prefer a pushed value over the bare read)
         C->>U: disconnect
