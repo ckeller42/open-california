@@ -3,8 +3,8 @@
 Dated record of resolved reverse-engineering questions and the dead ends ruled out along the
 way. Open gaps live in [`re-gap-inventory.md`](re-gap-inventory.md); the current write/frame
 model is in [`control-and-actuation.md`](control-and-actuation.md). Citations are `file:line`
-under the JADX decompile (`…/scratchpad/decompile/src/sources` = CLEAN,
-`…/decompile/bad/sources` = bad-code pass). Newest first.
+under the JADX decompile (the decompiled sources (clean pass) = CLEAN,
+the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 

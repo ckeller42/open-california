@@ -32,7 +32,7 @@ bug, a drain, or a sensor fault (`FreshWaterInfoPopUp = 0` = valid).
 ## What it is NOT (ruled out along the way)
 
 - **Not Exlap / WiFi.** The app *does* ship an Exlap client (`de.exlap.*`, XML over a
-  `socket://192.168.2.1` TCP transport to the camper's WiFi AP), but that is a **separate path**,
+  `socket://`<camper-AP-ip>` TCP transport to the camper's WiFi AP), but that is a **separate path**,
   code-disjoint from the camper BLE stack, and is **not** how the app reads the vehicle tab here.
   The van's WiFi AP wasn't even broadcasting. (Earlier notes that guessed an Exlap/WiFi fix were
   wrong.)

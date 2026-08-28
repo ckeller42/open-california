@@ -8,7 +8,7 @@ event**: it fires when a decoded state field crosses into an "abnormal" value, a
 cleared when the field returns to normal — it is not itself part of the BLE control frame.
 
 Source root for all `file:line` citations:
-`.../scratchpad/decompile/src/sources`
+`the decompiled sources (local)`
 
 Cross-ref: `protocol/dictionary.yaml` (this repo) for the raw bit offsets of the trigger fields.
 

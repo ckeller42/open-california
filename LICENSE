@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 ckeller42
+Copyright (c) 2026 ckeller42 and the open-california contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,9 @@ SOFTWARE.
 
 ---
 
-Note: this license applies to the original work in this repository (the `calictl`
-code, tooling, and documentation). No Volkswagen material is included. The Software
-is used at your own risk with no warranty and no liability — see DISCLAIMER.md.
+NOTE: This is an independent, own-vehicle interoperability project and is NOT
+affiliated with, endorsed by, or connected to Volkswagen AG. "Volkswagen",
+"VW", and "California" are trademarks of Volkswagen AG, used here only
+nominatively to identify the product this software interoperates with. No
+Volkswagen binaries, decompiled sources, firmware, manuals, or artwork are
+distributed. See DISCLAIMER.md.

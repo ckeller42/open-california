@@ -4,7 +4,7 @@ Reverse-engineered from the decompiled VW CaliforniaOnTour app (JADX output). Go
 fidelity to build own-vehicle-compatible BLE commands.
 
 Source root (all `file:line` below are relative to this):
-`.../scratchpad/decompile/src/sources`
+`the decompiled sources (local)`
 
 ## Shared architecture
 
