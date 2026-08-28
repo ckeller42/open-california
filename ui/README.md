@@ -1,12 +1,21 @@
 # VW CaliforniaOnTour GUI spec (`ui/screens/*.yaml`)
 
-Machine-usable reconstruction of the CaliforniaOnTour Android app's screens,
-for building a replica GUI. Extracted from the decompiled APK (JADX output),
-cross-referenced against `protocol/dictionary.yaml` (BLE field dictionary)
-and `docs/business-logic/*.md` (reverse-engineered per-feature business
-logic: exact enums, setter methods, full-packet-resend rules, and — new in
-this pass — the per-feature `Installed`-bit visibility mechanism in
-`feature-availability.md`).
+Machine-usable **specs for calictl's own, independent hardware-control
+interface** — one screen per installed camper subsystem, with controls
+dictated by each function's BLE protocol fields (see
+`docs/UI-DESIGN-RATIONALE.md` for the screen→subsystem→field→safety mapping).
+This is an interoperability/RE artifact, **not a visual replica** of the
+vendor app: the information architecture is driven by the hardware surface,
+while the appearance, wording, icons and layout are independently designed.
+
+These YAMLs are the RE *source of truth* — they cross-reference the decompiled
+APK (JADX output) and `mapping.enigma` **by citation** (file:line + symbol,
+never reproduced code), the BLE field dictionary (`protocol/dictionary.yaml`),
+and the per-feature business-logic notes (`docs/business-logic/*.md`: exact
+enums, setter methods, full-packet-resend rules, and the per-feature
+`Installed`-bit visibility mechanism in `feature-availability.md`). That
+traceability lives here in the RE spec, not in the distributed end-user
+prototype.
 
 Decompiled source root used throughout:
 `the decompiled sources (local)` (see individual YAML file headers for
@@ -87,7 +96,7 @@ section) if/when someone writes `living-room-heater.yaml`.
 | — (Energy has no dedicated nav-route class; surfaced as a dashboard tile + `infoPage_*` detail screen) | NavigationConnectivity | `energy.yaml` |
 | — (Water likewise has no dedicated nav-route class; dashboard tiles only) | NavigationConnectivity | `water.yaml` |
 
-### Out of scope for this vehicle-control replica (other app tabs, not part of any agent's task)
+### Out of scope for this hardware-control interface (other app tabs, not modeled)
 
 These exist in the same APK but belong to campsite-discovery/trip-planning/
 account-adjacent features unrelated to vehicle BLE control — listed here

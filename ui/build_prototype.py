@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""Generate a self-contained, clickable HTML prototype of the VW California
-camper-control GUI from ``ui/screens/*.yaml`` screen specs.
+"""Generate a self-contained, clickable HTML preview of calictl's independent
+camper hardware-control interface from ``ui/screens/*.yaml`` screen specs.
+
+The interface is derived from the camper's BLE hardware surface (one screen per
+installed subsystem, controls dictated by each function's protocol fields), not
+copied from the vendor app's visual design. See ``docs/UI-DESIGN-RATIONALE.md``.
 
 Usage:
     python3 ui/build_prototype.py
@@ -1010,13 +1014,13 @@ def build_html(screens: list[dict[str, Any]], dictionary: dict[str, Any] | None)
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VW California — GUI Prototype</title>
+<title>calictl — camper hardware-control interface</title>
 <style>{CSS}</style>
 </head>
 <body>
 <div class="page">
   <div class="toolbar">
-    <h1>VW California &mdash; GUI Prototype</h1>
+    <h1>calictl &mdash; camper hardware-control interface</h1>
     <div class="toolbar-controls">
       <label class="toggle-label">
         <input type="checkbox" onchange="toggleBindings(this.checked)">
