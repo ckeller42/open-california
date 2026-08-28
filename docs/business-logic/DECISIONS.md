@@ -126,8 +126,9 @@ Mac; the phone had the iOS Bluetooth-logging profile). This resolved three gaps 
   all satellite-option-gated (not installed here).
 - **Control models — DONE for all four** (`re-gap` §A3). roof/roofAC/stairs/LR-heater MERGED
   offsets resolved from their `f()` builders and added to `overrides.py` (+ frame bytes). Setter
-  values + roof's ~1 Hz move-heartbeat documented. `set` not wired (not installed; roof needs
-  the heartbeat loop). Enum semantics still UNVERIFIED.
+  values + roof's ~1 Hz move-heartbeat documented. `set` not wired (roof IS installed — live
+  `Installed=1`, #106 — but the motor has never been driven; roofAC/stairs/LR-heater not
+  installed here). Enum semantics still UNVERIFIED.
 - **Energy semantics — CORRECTED + live-verified** (`semantics.energy`): batt2 current /10,
   SoC→%, source powers ×10 (0 when not installed — the PPv=254 sentinel), shore/solar current
   unsigned /10, source-state enum, `energy_mode` un-inverted, warning level, expanded faults.

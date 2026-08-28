@@ -37,7 +37,7 @@ unit's own `0x2901` descriptors label every pair "Control"/"State".
 ## Machine-readable dictionary
 
 The full per-function field map is auto-extracted from the app by
-**`tools/extract_protocol.py`** into **`protocol/dictionary.yaml`** (11 functions).
+**`tools/extract_protocol.py`** into **`protocol/dictionary.yaml`** (14 functions).
 Extraction is **object-keyed** (`f23982e0`…) so name/width/default/offset stay
 aligned even for the shared fridge/heater control model; the right name-set is
 chosen by state-field overlap.
@@ -53,16 +53,16 @@ everything else stays `value_semantics: UNVERIFIED`.
 **Reproduce**: the decompile pipeline (apkeep → dex → jadx) + the enigma name-map are kept in a
 private own-vehicle-RE repo (they analyse the VW-copyrighted app locally); this repo ships the
 RESULT (`protocol/dictionary.yaml`). Regenerate the dictionary from local decompiled sources with
-`python3 tools/extract_protocol.py <sources> protocol/dictionary.yaml`. A
-dictionary-driven frame builder lives in `tools/build_frame.py` (refuses to build
-when required fields are `MERGED_AMBIGUOUS`/`UNKNOWN`).
+`python3 tools/extract_protocol.py <sources> protocol/dictionary.yaml`. The
+dictionary-driven frame builder is `calictl.protocol.encode` + `calictl/control.py`
+(they refuse to build when a required field is `MERGED_AMBIGUOUS`/`UNKNOWN`).
 
 ## Frame format
 
 State and Control values are **bit-packed structures**: a value is a bit array
 sliced/packed into fields at hardcoded bit offsets, per subsystem.
 
-**Encoding** (see `tools/encode.py`):
+**Encoding** (see `calictl/protocol.py`):
 - field value → bits: low `n` bits, **MSB-first**
 - bits → bytes: **MSB-first** (`bit 0 → byte0 0x80`)
 - round-trip verified against the app's LSB-first decoder
@@ -88,18 +88,21 @@ any bonded central has full, replayable control.
   model's *defaults* was tested against the unit and **did not toggle power** —
   it was a garbage command (`Level=7` is out of the 1-5 range; `TimerStart/Cancel/
   NightTimerSet=3` = three conflicting timer actions). The unit ignored power and
-  stored stray bytes. The `fd770f1e3e1f` frame in `tools/encode.py` is therefore
-  a **structural example only, not a working command.**
+  stored stray bytes. The `fd770f1e3e1f` frame is therefore a **structural example
+  only, not a working command** — which is why `calictl/control.py` carries the
+  *current* state and zeroes the timer-action fields.
 - **Correct power toggle:** set `State`, set all timer-**action** fields
   (`TimerStart`,`TimerCancel`,`NightTimerSet`) to `0` (no-op), and carry the
   *current* `Level`/`Mode` (read from State) rather than defaults. Verify against
   State `1102` byte0 `08↔09`.
 
-## Status / open items
+## Status
 
-- Fridge State power bit + Control frame structure: **confirmed / derived**.
-- Fridge ON/OFF frames: **derived, not yet live-verified** (write `3d7b007f1f3f`,
-  expect `1102` byte0 `08→09`).
-- Other services: same extraction method applies (per-service decode `e()` +
-  control model `f()`), not yet run.
-- Setpoint/mode field semantics for non-power bytes: not yet fully mapped.
+This "fridge" section is the original worked example. It has since been superseded by
+live on-device results — see `docs/business-logic/control-and-actuation.md` (per-feature
+tiers) and `docs/business-logic/evidence-ledger.md` for the current truth. In short:
+
+- Fridge (cooler) **power + level are live-actuation-verified** on the reference van
+  (not just derived); `night_on`/`night_off` + quiet-mode (Mode 4) actuate and broadcast.
+- The extraction method (per-service decode `e()` + control model `f()`) has been run for
+  all 14 functions — the field map is `protocol/dictionary.yaml`, catalogued in `signals.yaml`.

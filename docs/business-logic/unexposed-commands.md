@@ -32,11 +32,14 @@ one at a time with a human watching the unit (writes are actuations).
    already uses (`dg/h.java:870`), so `SYSTEM_TIME` is almost certainly "push phone clock → unit
    RTC". The `vehicle`/1004 decode exposes a unit RTC (`CarTime`), corroborating a settable clock.
    Cleanest, highest-value; same write mechanism as a proven path, no special arming.
-2. **Cooler `NightTimerSet` bit** — char `1101` @bit0-1 (`sf/a` `f23985h0`, sentinel 3). The cooler
-   VM configures the night-timer *schedule* (`NightTimerHourOn`/`Off`) but never stages this
-   arm/enable bit → likely the "activate night timer" latch. **Live-testable on this van** (cooler
-   installed, actuation proven). The same merged slot is air-heater `AirDistribution` (which *is*
-   used), so the field is real.
+2. ~~**Cooler `NightTimerSet` bit**~~ — **RETRACTED / do NOT test-write** (2026-08-26). Once thought
+   the "activate night timer" latch, but the app **never stages this bit on the cooler** — the only
+   writer of that shared `1101` @bit0-1 slot is the AIR-HEATER VM (`rf/b.H3`); on the cooler it's a
+   read-only, unrendered dead-end bit (`vf/c` decodes it to a flow with zero UI consumers). The
+   schedule is armed by **`Mode==4`** ("Automatischer Flüstermodus"), not this bit — verified DEVICE
+   (unit screen + call-stack) and the within-window hypothesis was REFUTED live (bit read 0 with the
+   unit RTC inside the armed window). The `night_set` command was retracted; the old `vf/c.X1` cite
+   is actually `setCoolingLevel`. See `evidence-ledger.md` + `control-and-actuation.md` §5.
 3. **Energy `DisplayRefresh` bit** — char `1601` @bit7 (`pg/a` `f21228f0`, 1-bit, default false).
    `xf/d.d4()` (set energy mode) never touches it. Effect unknown ("refresh display/telemetry?").
    The same merged slot is stairs `Movement` (used). Low-risk to try; unknown result. NB this is

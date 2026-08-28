@@ -136,9 +136,8 @@ that flips (marks fresh-vs-stale). Cloud unlock does NOT wake it.
 ```
 ssh buspi 'cd /home/pi/open-california && python3 -m calictl get vehicle'   # ignition ON => ignition_on: true  (bit-7 fix)
 ssh buspi 'cd /home/pi/open-california && python3 -m calictl get water'     # ignition ON => fresh ~11 L; OFF later => decays
-# cooler night-timer: set one in the app, capture, then decode-only:
-#   python3 -c 'from calictl import protocol,overrides,control as c;f=protocol.load();overrides.apply(f);print(c.decode_control(f["cooler"], bytes.fromhex("<app-frame>")))'
-#   -> confirm TimerHour/TimerMin land at the corrected offsets (16/24/32/40)
+# cooler night-timer: DONE (2026-08-26) — night_on/night_off + quiet Mode 4 live-verified,
+#   readable + 1102-broadcast; schedule bytes are LITERAL. See control-and-actuation.md §5.
 ```
 
 **5. Roof control (SAFETY-SENSITIVE — REQUIRES IGNITION ON; only with the roof physically clear).**
@@ -208,7 +207,7 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 ## Priority 4 — verify the frames we just fixed/decoded (decoded-but-UNVERIFIED)
 - **vehicle ignition byte-0**: ignition ON → confirm `ignition_on` reads True (the bit-7 fix).
 - **water ↔ ignition**: ignition on → 11 L; off → decays.
-- **cooler night-timer** (corrected offsets 16/24/32/40): set a night-timer, capture, confirm.
+- ~~**cooler night-timer**~~ — DONE (2026-08-26): night_on/off + quiet Mode 4 live-verified.
 - ~~**SET_COLOR** (Mode 6)~~: **dropped** — the app exposes no colour control (decompile-confirmed
   2026-07-13), so there is no colour write to capture.
 

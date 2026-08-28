@@ -9,9 +9,37 @@ from __future__ import annotations
 import json
 import os
 import posixpath
+import socketserver
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
+
+
+class _NoResolveHTTPServer(ThreadingHTTPServer):
+    """A ThreadingHTTPServer that does NOT reverse-resolve its bind address.
+
+    The stdlib ``HTTPServer.server_bind`` calls ``socket.getfqdn(host)`` to set ``server_name``.
+    On a host with slow or absent reverse-DNS (macOS dev machines, some CI runners, a van with no
+    uplink) that lookup can **block for tens of seconds or hang indefinitely** — stalling the daemon
+    before the web UI ever binds (root-caused 2026-08-28 via a faulthandler stack dump). ``server_name``
+    is only used by the CGI machinery, which this server never serves, so binding the socket and
+    setting ``server_name`` to the literal host is sufficient and instant.
+
+    .. req:: The web server binds without a reverse-DNS lookup
+       :id: R_WEB_NO_REVERSE_DNS
+       :status: implemented
+       :tags: web, robustness
+
+       ``serve_http`` shall bind its listening socket without calling ``socket.getfqdn`` (or any
+       reverse-DNS lookup), so a slow or absent resolver cannot stall the daemon before the web UI
+       comes up.
+    """
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)   # bind the socket; skip the getfqdn() reverse lookup
+        host, port = self.server_address[:2]
+        self.server_name = host
+        self.server_port = port
 
 ROOF_FUNCTION = "roof"
 # Safety-sensitive / not-live-verified targets that require an explicit client
@@ -138,8 +166,12 @@ def make_handler(backend, webui_dir):
 
 
 def serve_http(backend, webui_dir, host="0.0.0.0", port=8080):
-    """Create a ThreadingHTTPServer and start serving in a daemon thread. Returns it."""
-    httpd = ThreadingHTTPServer((host, port), make_handler(backend, webui_dir))
+    """Create the web server and start serving in a daemon thread. Returns it.
+
+    Uses :class:`_NoResolveHTTPServer` so binding never blocks on a reverse-DNS lookup — a slow/absent
+    resolver would otherwise hang the whole daemon before the web UI comes up.
+    """
+    httpd = _NoResolveHTTPServer((host, port), make_handler(backend, webui_dir))
     print("web UI is UNAUTHENTICATED — expose only on a trusted LAN", flush=True)
     Thread(target=httpd.serve_forever, name="calictl-web", daemon=True).start()
     return httpd

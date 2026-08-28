@@ -23,8 +23,10 @@
 The camper control unit only talks to the vendor's iOS/Android app — so from Linux, Home
 Assistant, or a script there's simply no way to see the water level or turn on the fridge.
 **Open California** reverse-engineers its Bluetooth-LE protocol into a clean, **stdlib-only**
-toolkit: full telemetry, *real* control writes, and a self-hosted **web UI + Home Assistant +
-Grafana**, all from a Raspberry Pi.
+toolkit: full telemetry, *real* control writes, and a built-in **web UI** — plus first-class
+integration with **[Home Assistant](calictl/deploy/homeassistant/HOMEASSISTANT.md)** (MQTT
+discovery) and **[Grafana](calictl/deploy/GRAFANA.md)** (via InfluxDB), all self-hosted on a
+Raspberry Pi.
 
 <p align="center">
   <img src="docs/screenshots/light_00_dashboard.png" width="230" alt="Dashboard — status overview + feature tiles">
@@ -103,14 +105,14 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   BLE/MQTT/InfluxDB connection, so tests run anywhere.
 - **One BLE owner** — a single daemon holds the vehicle's single connection slot, serialized by an
   `asyncio.Lock`; control writes never race a poll.
-- **Dictionary-driven** — every field is extracted into `protocol/dictionary.yaml` and has a
-  catalog decision in `protocol/signals.yaml`; a dropped or unaccounted field **fails CI**. Manual
-  bit offsets live only in `overrides.py`.
+- **Dictionary-driven** — every field is extracted into [`protocol/dictionary.yaml`](protocol/dictionary.yaml)
+  and has a catalog decision in [`protocol/signals.yaml`](protocol/signals.yaml); a dropped or
+  unaccounted field **fails CI**. Manual bit offsets live only in [`overrides.py`](calictl/overrides.py).
 
 Contributor guide and hard rules: **[CLAUDE.md](CLAUDE.md)**. Reverse-engineering notes (control
 recipes, the write gate, value-freshness, signal scales): **[docs/business-logic/](docs/business-logic/)**.
 
 ## License
 
-**[MIT](LICENSE)** — covers the original work here (`calictl` code, tooling, docs); no VW material
-is included. No warranty, no liability — see **[DISCLAIMER.md](DISCLAIMER.md)**.
+**[MIT](LICENSE)** — covers the original work here ([`calictl`](calictl/) code, tooling, docs); no
+VW material is included. No warranty, no liability — see **[DISCLAIMER.md](DISCLAIMER.md)**.

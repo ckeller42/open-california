@@ -25,8 +25,9 @@ info:
   x-confirm-required: [roof, airheater]   # functions whose /api/command POST needs confirm:true
 servers:
   - url: http://buspi:8088
-    description: buspi (in-vehicle Raspberry Pi), default web port
-  - url: http://localhost:8088
+    description: buspi (in-vehicle Raspberry Pi) — runs `calictl serve --web 8088`
+  - url: http://localhost:8080
+    description: local default (the CLI `--web` port defaults to 8080)
     description: local / same-host
 paths:
   /api/state:
@@ -246,7 +247,7 @@ components:
     Meta:
       type: object
       description: Non-function metadata about the poll cache + session.
-      required: [last_seen, age_s, online, read_only, session, session_mode, auto_camper]
+      required: [last_seen, age_s, online, read_only, session, session_mode, auto_camper, firmware, anchors]
       properties:
         last_seen:
           type: [number, "null"]
@@ -269,6 +270,19 @@ components:
           description: '"auto" (activity-scoped), "release" (user disconnected), or "off".'
           enum: [auto, release, off]
         auto_camper: { $ref: "#/components/schemas/AutoCamperMeta" }
+        firmware:
+          type: object
+          description: Camper-unit firmware/protocol identity + whether it's a version the project has validated.
+          properties:
+            amb_sw_version: { type: [string, "null"], description: Camper-unit ("Ambiente") firmware build, e.g. "0410". }
+            cm_sw_version: { type: [string, "null"], description: Control-module firmware build, e.g. "0207". }
+            comm_version: { type: [integer, "null"], description: CommunicationVersion (protocol-structure version). }
+            untested: { type: boolean, description: True if the firmware/protocol is outside the validated set (amb 0409/0410, comm 2). }
+            tested: { type: string, description: The versions this project was validated against. }
+        anchors:
+          type: array
+          items: { type: string }
+          description: Plausibility-anchor violations (empty = all decoded values in physical range; non-empty hints at a decode drift).
     AutoCamperMeta:
       type: object
       required: [enabled, armed, notice]
