@@ -109,8 +109,10 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   and has a catalog decision in [`protocol/signals.yaml`](protocol/signals.yaml); a dropped or
   unaccounted field **fails CI**. Manual bit offsets live only in [`overrides.py`](calictl/overrides.py).
 
-Contributor guide and hard rules: **[CLAUDE.md](CLAUDE.md)**. Reverse-engineering notes (control
-recipes, the write gate, value-freshness, signal scales): **[docs/business-logic/](docs/business-logic/)**.
+New here? Start with **[ARCHITECTURE.md](ARCHITECTURE.md)** — the five-minute map of the data flow and
+where each concern lives. Contributor rules and hard invariants: **[CLAUDE.md](CLAUDE.md)**.
+Reverse-engineering notes (control recipes, the write gate, value-freshness, signal scales):
+**[docs/business-logic/](docs/business-logic/)**.
 
 ## License
 
