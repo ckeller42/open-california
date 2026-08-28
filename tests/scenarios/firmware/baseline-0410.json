@@ -1,0 +1,22 @@
+{
+ "note": "Canonical raw-frame BASELINE for camper-unit firmware amb 0410 / cm 0207 / comm 2. Diff a future firmware capture (calictl/firmware.py drift snapshot) against this to spot moved offsets / changed enums / flipped scales. Raw BLE frames per function char (MSB-first hex).",
+ "amb_sw_version": "0410",
+ "cm_sw_version": "0207",
+ "comm_version": 2,
+ "raw_frames_hex": {
+  "airheater": "1050003c0c0000",
+  "campingmode": "2f",
+  "cooler": "0943000000001606",
+  "energy": "00d0800a0025810000fe0e3a3088ffd9fffe000001ff",
+  "general": "303431303032303702",
+  "vehicle": "047e071c12070100000000",
+  "generalpurposesignals": "000000000000000000000000000000000000000000",
+  "lighting": "0c1000000000000000000000d00ddddd",
+  "livingroomheater": "000114",
+  "roof": "0200",
+  "roofaircondition": "100000",
+  "satelliteantenna": "000000",
+  "stairs": "00",
+  "water": "030e1d010716"
+ }
+}
