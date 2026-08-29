@@ -6,8 +6,7 @@ recorder), these drive the whole runtime — cli.cmd_set / serve.on_command / de
   * cooler power on/off actually flips the mocked state (arm-gate honoured);
   * a write without the 1003 heartbeat changes nothing (the gate);
   * an out-of-range write drops the link (MockDisconnect);
-  * lighting SET applies only with the commit frame (and the REQUEST_CONFIG arm preamble
-    precedes it — the 2026-08-16 crack of the physical-apply gap);
+  * lighting SET applies only with the commit frame (the physical-apply gap crack);
   * a set is reflected by a subsequent read within the same process.
 All with no bleak/BLE — the fake `bleak` module is backed by the mock.
 """
@@ -116,36 +115,23 @@ def test_lighting_requires_the_commit_frame_to_apply(mock):
     dev = device.CamperDevice()
     setf = control.build(funcs, "lighting", "kitchen", 8, {})   # self-carries ProfileNumber=9
     # SET alone (armed session, no commit) -> ACKed, NOT applied
-    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False,
-                            pre=control.preamble_for("lighting")))
+    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 0
     # SET + commit -> applied
-    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False, follow=control.LIGHT_COMMIT,
-                            pre=control.preamble_for("lighting")))
+    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False, follow=control.LIGHT_COMMIT))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
     assert control.commit_for("lighting") == control.LIGHT_COMMIT
     assert control.commit_for("cooler") is None
 
 
 def test_lighting_applies_without_preamble(mock):
-    """A bare SET + commit actuates — the REQUEST_CONFIG preamble is NOT an actuation gate.
-
-    .. test:: Lighting applies from a bare SET + commit, no preamble
-       :id: T_LIGHT_PREAMBLE
-       :links: R_LIGHT_PREAMBLE
-
-       Photon-verified on-device 2026-08-16: an awake unit applies a ``SET_BRIGHTNESS`` + commit
-       with no REQUEST_CONFIG preamble. `preamble_for` still returns the app's optional config-pull
-       frames (None for non-lighting), but actuation does not depend on them."""
+    """A bare SET + commit actuates — the app's REQUEST_CONFIG screen-open pull is NOT an
+    actuation gate (photon-verified on-device 2026-08-16), and calictl no longer sends it."""
     funcs = _funcs()
     dev = device.CamperDevice()
     setf = control.build(funcs, "lighting", "kitchen", 8, {})
-    # preamble_for still models the app's optional screen-open config request
-    assert control.preamble_for("lighting") == [control.LIGHT_REQUEST_CONFIG, control.LIGHT_COMMIT]
-    assert control.preamble_for("cooler") is None
-    # but a SET + commit with NO preamble (pre=None) applies on its own
     asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False,
-                            follow=control.LIGHT_COMMIT, pre=None))
+                            follow=control.LIGHT_COMMIT))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
 
 

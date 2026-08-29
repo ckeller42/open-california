@@ -107,7 +107,7 @@ Lighting SET — SET + neutral flush on an awake unit; optional REQUEST_CONFIG c
 
 .. spec:: Lighting SET, then a neutral flush frame; optional REQUEST_CONFIG config-pull preamble
    :id: S_SEQ_LIGHT_COMMIT
-   :links: R_LIGHT_PREAMBLE, R_LIGHT_COMMIT
+   :links: R_LIGHT_COMMIT
 
    calictl's SET frame is byte-identical to the app's, yet for over a month a calictl SET was
    ACKed (and echoed by the ``1502`` state char — see the echo caveat below) while the **physical
@@ -124,9 +124,9 @@ Lighting SET — SET + neutral flush on an awake unit; optional REQUEST_CONFIG c
    ``dg/h.java:174`` ``E()`` writes DIRECT (immediately) and never calls the config request
    ``d0()`` (``dg/h.java:471``). **REQUEST_CONFIG's real role is a screen-open config pull** —
    it triggers the unit's Mode-tagged config-dump notifications on ``1502``; only that dump is
-   gated on it. calictl still sends the preamble — app-faithful, harmless, **optional** — via
-   ``control.LIGHT_REQUEST_CONFIG`` + :py:func:`calictl.control.preamble_for` →
-   ``device.actuate(..., pre=…)``, and the flush via
+   gated on it. calictl **no longer sends it** on any path (retired 2026-08-29 — it only added
+   ~3.3 s); the frame is kept here as the RE record:
+   ``0d0c000000000000eeeeeeeeeeeeeeee``. The flush goes via
    ``device.actuate(..., follow=control.LIGHT_COMMIT)``, see
    :py:func:`calictl.control.commit_for`. Still open: whether a truly deep-asleep unit needs any
    arming (the 1003 heartbeat WAS needed for cooler/camping actuation, issue #2 — not retested;
@@ -157,7 +157,7 @@ Lighting SET — SET + neutral flush on an awake unit; optional REQUEST_CONFIG c
         participant C as calictl
         participant U as Lighting (1501/1502)
         Note over C,U: unit must be AWAKE (the actual actuation gate)
-        opt OPTIONAL app-faithful config pull (calictl still sends it — NOT required to actuate)
+        opt APP-ONLY screen-open config pull (calictl does not send it — not required to actuate)
             C->>U: REQUEST_CONFIG (0d0c… — Mode 12, PN=13, zones=14)
             C->>U: flush (0e00… = NO_MODE neutral default frame)
             U--)C: 1502 notifications: config dump (Mode-tagged)

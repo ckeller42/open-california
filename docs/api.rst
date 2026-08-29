@@ -46,7 +46,6 @@ Control frames
 .. autofunction:: calictl.control._int_range
 .. autofunction:: calictl.postcheck.set_check
 .. autofunction:: calictl.control.commit_for
-.. autofunction:: calictl.control.preamble_for
 
 Automation
 ----------

@@ -584,41 +584,11 @@ def commit_for(function):
     return LIGHT_COMMIT if function == "lighting" else None
 
 
-# Screen-open config pull — NOT an actuation gate. The app opens its Lighting screen with a
-# REQUEST_CONFIG (Mode=12, ProfileNumber=13) + commit; this is the app's config request, app-faithful
-# and harmless, but it is NOT what makes the lamps switch. A bare SET_BRIGHTNESS + 0e00 commit
-# actuates an awake unit — the set-one-zone method dg/h.java:174 E() writes the SET frame DIRECT and
-# never calls the config request d0() (dg/h.java:471). The real gate is the unit's wake-state.
-# (See preamble_for() below + control-and-actuation.md §4; the earlier "THE CRACK / load never
-# switches without it" narrative was a wake-state confound, corrected 2026-08-16 eve.)
-LIGHT_REQUEST_CONFIG = bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee")
-
-
-def preamble_for(function):
-    """The app's optional screen-open config-request frames, or None. Lighting is the only one:
-    :data:`LIGHT_REQUEST_CONFIG` + :data:`LIGHT_COMMIT`, mirroring what the app writes when its
-    Lighting screen opens. Callers may pass this as ``device.actuate(..., pre=preamble_for(fn))``.
-
-    NOT an actuation gate. Photon-verified on-device 2026-08-16: a bare ``SET_BRIGHTNESS`` +
-    commit actuates an awake unit with no preamble (the app's ``dg/h.java`` ``E()`` writes DIRECT
-    and never sends it; the earlier "preamble required" result was a wake-state confound). The
-    daemon's fast lighting path omits it; the CLI still sends it (harmless — it also pulls a fresh
-    config dump on the 1502 notifications).
-
-    :param function: the function name (e.g. ``"lighting"``).
-    :returns: list of frames to write (in order) before the SET frame, or ``None``.
-
-    .. req:: The lighting REQUEST_CONFIG preamble is an optional config pull, not an actuation gate
-       :id: R_LIGHT_PREAMBLE
-       :status: implemented
-       :tags: control, lighting
-
-       ``preamble_for`` shall return :data:`LIGHT_REQUEST_CONFIG` + :data:`LIGHT_COMMIT` for
-       lighting (None otherwise), replicating the app's screen-open config request. Actuation
-       shall NOT depend on it: a bare SET + commit applies on an awake unit (photon-verified
-       2026-08-16), so the daemon's fast path omits it.
-    """
-    return [LIGHT_REQUEST_CONFIG, LIGHT_COMMIT] if function == "lighting" else None
+# Screen-open config pull — retired. The app opens its Lighting screen with a REQUEST_CONFIG
+# (0d0c000000000000eeeeeeeeeeeeeeee, Mode=12 PN=13) + commit; photon-verified 2026-08-16 that it is
+# NOT an actuation gate (a bare SET + 0e00 commit actuates an awake unit; the app's dg/h.java E()
+# writes DIRECT and never sends it). calictl no longer sends it on any path — the frame is kept
+# in docs/protocol-sequences.rst as the RE record.
 
 
 def decode_control(func, frame: bytes) -> dict:

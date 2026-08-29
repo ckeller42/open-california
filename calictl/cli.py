@@ -160,8 +160,7 @@ async def cmd_set(funcs, dev, args):
     if frame is None:
         print("unknown target %r for %s" % (args.what, fn), file=sys.stderr); return 2
     print("writing %s to %s control (heartbeat-armed) ..." % (frame.hex(), fn))
-    post = await dev.actuate(f, frame, verify=True, follow=control.commit_for(fn),
-                             pre=control.preamble_for(fn))
+    post = await dev.actuate(f, frame, verify=True, follow=control.commit_for(fn))
     if post is None:
         print("write sent, no readback"); return 1
     interp = semantics.interpret(fn, post)

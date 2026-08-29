@@ -58,7 +58,6 @@ def base_url():
     env = dict(os.environ,
                CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
                CALICTL_ARM_DELAY_S="0.3", CALICTL_SETTLE_S="0.3", CALICTL_HEARTBEAT_PERIOD_S="0.1",
-               CALICTL_PRE_SETTLE_S="0.1",  # lighting arm preamble wait — real default 3 s
                CALICTL_FAST_CONFIRM_S="0.2",  # lighting fast-path Mode-4 confirm window (real default 1.2 s)
                CALICTL_SESSION_WAIT_S="0.3",  # don't idle waiting for a session in the mock e2e
                CALICTL_HEARTBEAT_WARMUP_S="0", CALICTL_STATE_CACHE="/tmp/calictl_e2e_state.json",
