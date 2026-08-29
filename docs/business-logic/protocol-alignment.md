@@ -156,8 +156,7 @@ the wire captures. Corrections applied:
   **never +2**. **Our `device.actuate_roof` (500 ms, +1/frame) is protocol-correct** — it reproduces
   the app's counter-timer sub-stream exactly (we simply omit the 1000 ms duplicate re-sends), with the
   same wall-clock counter trajectory the unit validates (`SafetyCounterValid`, 1402 bit 7). The old
-  `control.py`/`overrides.py` "unit echo / send 0" comments were corrected to app-generated. (An earlier
-  same-day edit wrongly rewrote the model as ~1 Hz/+2 by mistaking the 1000 ms direction-resend for the
-  pump — that was itself wrong and has been reverted; the implementation never needed a change.)
+  `control.py`/`overrides.py` "unit echo / send 0" comments were corrected to app-generated. (The
+  roof-counter decision history is in `DECISIONS.md`.)
 
 - **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).
