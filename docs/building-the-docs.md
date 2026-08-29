@@ -12,9 +12,9 @@ broken/missing trace a build-time failure.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 # HTML (warnings-as-errors keeps traceability honest):
-.venv/bin/python -m sphinx -b html  -W docs/sphinx docs/sphinx/_build/html
+.venv/bin/python -m sphinx -b html  -W docs docs/_build/html
 # needs.json (machine-readable traceability export):
-.venv/bin/python -m sphinx -b needs    docs/sphinx docs/sphinx/_build/needs
+.venv/bin/python -m sphinx -b needs    docs docs/_build/needs
 ```
 
 ## Conventions

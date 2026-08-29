@@ -32,7 +32,7 @@ The vendor's trademarks appear only nominatively, to identify the vehicle the in
 
 ## Per-screen map (design + traceability)
 
-Char bases per subsystem are in `docs/sphinx/hardware.rst`; field bit-layout is
+Char bases per subsystem are in `docs/hardware.rst`; field bit-layout is
 `protocol/dictionary.yaml`; per-feature RE notes are `docs/business-logic/*.md`.
 
 | Screen | Subsystem / `Installed` source | Core widgets → why (functional) | Trace (protocol field · decompile/enigma) |

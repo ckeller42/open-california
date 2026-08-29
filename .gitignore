@@ -56,3 +56,4 @@ calictl/webui/icons/
 
 # internal dev planning artifacts — kept local, not published
 docs/superpowers/
+docs/_build/

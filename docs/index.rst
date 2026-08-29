@@ -1,5 +1,5 @@
-open-california — requirements & API
-====================================
+open-california — documentation
+===============================
 
 .. danger::
 
@@ -11,18 +11,50 @@ open-california — requirements & API
    Volkswagen**; no VW intellectual property is distributed. MIT-licensed; see ``LICENSE``
    and ``DISCLAIMER.md``.
 
-
-Requirements are authored as ``sphinx-needs`` objects **inside code docstrings**
-(``.. req::``) and traced to the tests that verify them (``.. test:: … :links:``),
+Reverse-engineered control + monitoring for the VW California T7 camper unit over BLE.
+Start with :doc:`architecture` for the five-minute map; the requirement traceability at the
+bottom of this page is generated from ``sphinx-needs`` objects authored **inside code
+docstrings** (``.. req::``) and traced to the tests that verify them (``.. test:: … :links:``),
 so a failing or missing link surfaces at doc-build time next to the code.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
+   :caption: Getting started
+
+   architecture
+   raspberry-pi-setup
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Reference
 
    hardware
+   protocol
    protocol-sequences
+   protocol/reference
+   protocol/frame-layouts
+   protocol/signal-matrix
    screenshots
    api
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Reverse-engineering notes
+   :glob:
+
+   business-logic/control-and-actuation
+   business-logic/signals
+   business-logic/evidence-ledger
+   business-logic/DECISIONS
+   business-logic/*
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Appendix
+
+   UI-DESIGN-RATIONALE
+   remaining-captures
+   building-the-docs
 
 Requirement traceability
 ------------------------

@@ -1,7 +1,7 @@
 # docs — index
 
-Start with **[architecture.md](architecture.md)** (the pipeline + control path + BLE
-connect/actuate diagrams). Root **[../README.md](../README.md)** is the project front door;
+Start with **[../ARCHITECTURE.md](../ARCHITECTURE.md)** (the pipeline + control path + arm
+state machine, and the module walkthrough). Root **[../README.md](../README.md)** is the project front door;
 **[../CLAUDE.md](../CLAUDE.md)** holds the hard rules. Requirement traceability builds from
 docstrings via **[sphinx/](sphinx/)** (`sphinx -b html`).
 
@@ -9,7 +9,7 @@ docstrings via **[sphinx/](sphinx/)** (`sphinx -b html`).
 
 | Doc | Covers |
 |---|---|
-| [architecture.md](architecture.md) | end-to-end pipeline, control path, connect+actuate + heartbeat diagrams |
+| [../ARCHITECTURE.md](../ARCHITECTURE.md) | end-to-end pipeline, control path, arm state machine, module walkthrough |
 | [control-and-actuation.md](business-logic/control-and-actuation.md) | **the write gate — SOLVED**: 1003 liveness heartbeat + connect handshake, the full-packet frame model, per-feature actuation status |
 | [signals.md](business-logic/signals.md) | the catalog guardrail (surface/omit + coverage) and scales (several UNVERIFIED) |
 | [alert-states.md](business-logic/alert-states.md) | per-function alert/error decode + ack keys (incl. roof InfoPopUp, clock-sync) |

@@ -9,7 +9,7 @@ import os
 import sys
 
 # repo root on the path so autodoc can import calictl.* and tests.*
-sys.path.insert(0, os.path.abspath("../.."))
+sys.path.insert(0, os.path.abspath(".."))
 
 project = "open-california"
 author = "open-california"
@@ -18,7 +18,13 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx_needs",
     "sphinxcontrib.mermaid",   # protocol sequence diagrams (client-side mermaid.js, no Java)
+    "myst_parser",             # the markdown docs (business-logic/, protocol.md, ...) on the site
 ]
+
+# myst: render ```mermaid fences through sphinxcontrib.mermaid; allow heading anchors for
+# the markdown docs' internal links.
+myst_fence_as_directive = ["mermaid"]
+myst_heading_anchors = 3
 
 # autodoc must not pull the lazily-imported runtime stack (hard rule: stdlib-only import)
 autodoc_mock_imports = ["bleak", "paho", "influxdb_client", "yaml", "pytest"]
@@ -41,8 +47,17 @@ html_theme = "alabaster"
 html_static_path = ["_static"]
 html_logo = "_static/logo.png"
 html_favicon = "_static/favicon.ico"
-exclude_patterns = ["_build"]
+# The per-directory README.md files are GitHub-browse navigation, redundant with the site toctrees.
+exclude_patterns = ["_build", "api/openapi.yaml", "README.md", "api/README.md", "protocol/README.md"]
+
+# The lab-notebook markdown links freely to code files and repo paths that are not part of the
+# rendered site (calictl/*.py, protocol/dictionary.yaml, ...). Those degrade to plain links; do
+# not fail the -W build over them. Genuine doc-to-doc links still resolve and are checked.
+
 
 # The needs_extra_links config is deprecated in sphinx-needs 5 but its replacement
 # (needs_links) uses a different schema; keep the working config + silence the one warning.
-suppress_warnings = ["needs.deprecated"]
+# - needs.deprecated: needs_extra_links works but its needs_links replacement has a different schema
+# - myst.xref_missing / myst.header: the lab-notebook markdown links to code files/repo paths that are
+#   not rendered pages (they degrade to plain links) and uses pragmatic heading levels
+suppress_warnings = ["needs.deprecated", "myst.xref_missing", "myst.header"]
