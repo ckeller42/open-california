@@ -13,5 +13,6 @@ OUT="${1:-$DOCS/_build/site}"
 mkdir -p "$OUT/business-logic"
 cp -R "$DOCS/_build/evidence/business-logic/." "$OUT/business-logic/"
 # The interactive LikeC4 model (architecture + protocol-sequence dynamic views) at /model/.
-npx -y likec4 build -o "$OUT/model" --base ./ "$DOCS/likec4"
+# Pinned exactly: an unpinned npx would execute whatever npm serves next (supply chain).
+npx -y likec4@1.59.2 build -o "$OUT/model" --base ./ "$DOCS/likec4"
 echo "site -> $OUT"
