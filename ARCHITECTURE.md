@@ -3,7 +3,7 @@
 `open-california` turns the VW California camper's Bluetooth-LE control unit into clean signals and
 real control, from a Raspberry Pi. This is the five-minute map: the pipeline, where each concern
 lives, and how to extend it. For the deep provenance behind any claim, follow the links into
-[`docs/business-logic/`](docs/business-logic/).
+[`docs/business-logic/`](https://ckeller42.github.io/open-california/business-logic/index.html).
 
 ## The pipeline — how a byte becomes a signal
 
@@ -23,7 +23,7 @@ flowchart LR
 
 (How `dictionary.yaml` came to exist — extraction from the vendor app with `tools/extract_protocol` —
 is a one-time reverse-engineering *process*, not part of this runtime picture; it is documented in
-[`docs/business-logic/`](docs/business-logic/).)
+[`docs/business-logic/`](https://ckeller42.github.io/open-california/business-logic/index.html).)
 
 One daemon (`serve.py`) owns the single BLE connection and drives that pipeline:
 
@@ -82,7 +82,7 @@ device, or the unit's genuine `1502` notifications. Full per-step sequence diagr
 handshake, heartbeat-armed write, lighting, roof, range rejection) are in the
 [rendered protocol sequences](https://ckeller42.github.io/open-california/protocol-sequences.html);
 recipes and per-feature history in
-[`control-and-actuation.md`](docs/business-logic/control-and-actuation.md).
+[`control-and-actuation.md`](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html).
 
 ## The signal catalog (why nothing silently drifts)
 
@@ -92,7 +92,7 @@ name) or `omit` (with a reason). A field that is dropped or unaccounted **fails 
 (`tools/audit_signals`) also flags where an app setter/getter is inverted or combined — because
 **semantics correctness is not auto-checked**. A naive `bool(field)` can mislabel a signal (that is
 how the camping-lights inversion slipped through). Verify polarity against the app's own getter or
-the unit's on-screen display, not a guess. See [`signals.md`](docs/business-logic/signals.md).
+the unit's on-screen display, not a guess. See [`signals.md`](https://ckeller42.github.io/open-california/business-logic/signals.html).
 
 ## Add a signal (the loop)
 
@@ -114,7 +114,7 @@ the unit's on-screen display, not a guess. See [`signals.md`](docs/business-logi
 - **The BLE codec is MSB-first**, and control frames are full-packet (resend every field).
 - **Evidence over assertion.** Tag every protocol claim by how it was verified — DEVICE (watched on
   hardware) / CAPTURE (on the wire) / DECOMPILE (from the app) / UNVERIFIED — and never put a unit on
-  an unverified scale. The [`evidence-ledger.md`](docs/business-logic/evidence-ledger.md) is the
+  an unverified scale. The [`evidence-ledger.md`](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html) is the
   running record.
 
 ## Where to read next
@@ -123,8 +123,8 @@ the unit's on-screen display, not a guess. See [`signals.md`](docs/business-logi
 |---|---|
 | Run it on a Pi | [`docs/raspberry-pi-setup.md`](docs/raspberry-pi-setup.md) |
 | The wire protocol + frame format | [`docs/protocol.md`](docs/protocol.md) |
-| Control recipes + the arm gate | [`docs/business-logic/control-and-actuation.md`](docs/business-logic/control-and-actuation.md) |
+| Control recipes + the arm gate | [`docs/business-logic/control-and-actuation.md`](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html) |
 | Sequence diagrams | the [rendered docs](https://ckeller42.github.io/open-california/protocol-sequences.html) |
-| Per-signal provenance + scales | [`docs/business-logic/signals.md`](docs/business-logic/signals.md) |
+| Per-signal provenance + scales | [`docs/business-logic/signals.md`](https://ckeller42.github.io/open-california/business-logic/signals.html) |
 | The tested hardware + GATT map | the [hardware reference](https://ckeller42.github.io/open-california/hardware.html) |
 | Contributor rules + hard invariants | [`CLAUDE.md`](CLAUDE.md) |

@@ -39,22 +39,18 @@ so a failing or missing link surfaces at doc-build time next to the code.
 
 .. toctree::
    :maxdepth: 1
-   :caption: Reverse-engineering notes
-   :glob:
-
-   business-logic/control-and-actuation
-   business-logic/signals
-   business-logic/evidence-ledger
-   business-logic/DECISIONS
-   business-logic/*
-
-.. toctree::
-   :maxdepth: 1
    :caption: Appendix
 
    UI-DESIGN-RATIONALE
-   remaining-captures
    building-the-docs
+
+Reverse-engineering lab notes
+-----------------------------
+
+The dated RE lab notes — how each protocol fact was established, with captures, decompile
+citations and dead ends — are **evidence, not product documentation**. They are published
+separately from these docs: `Reverse-engineering notes <business-logic/index.html>`_
+(also browsable `in the repository <https://github.com/ckeller42/open-california/tree/main/docs/business-logic>`_).
 
 Requirement traceability
 ------------------------

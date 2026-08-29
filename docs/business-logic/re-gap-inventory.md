@@ -4,7 +4,7 @@
 > **resolved** — see **`protocol-alignment.md`** (cooler-timer offsets, satellite `1901`, vehicle
 > byte-0, all lighting modes) and **`value-freshness.md`** (the stale-read / deep-sleep behavior)
 > for the current state. The BLE protocol is now ~98%; the residual is van-gated (see
-> `docs/remaining-captures.md`).
+> `remaining-captures.md`).
 >
 > **UPDATE (2026-07-13):** `A1` (lighting on-device apply) is **RESOLVED** — the unit applies a
 > SET only after a **commit frame** `0e00000000000000eeeeeeeeeeeeeeee` (Mode 0); our SET frames
