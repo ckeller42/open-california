@@ -577,13 +577,10 @@ class Server:
                 return None
             sess = self._live_session()
             # Lighting actuates from a bare SET on an awake unit (photon-verified 2026-08-16), so
-            # the fast path drops the two things that made it slow: the REQUEST_CONFIG preamble
-            # (not an actuation gate — the app's E() writes DIRECT and never sends it) and the
-            # blocking echo-readback. The lamp reacts in ~0.3 s; confirmation comes from the real
+            # its path skips the blocking echo-readback. The lamp reacts in ~0.3 s; confirmation comes from the real
             # 1502 Mode-4 notification, not the write-through echo. cooler/roof keep the armed +
             # verified path (their heartbeat gate, issue #2, is untouched).
             is_light = function == "lighting"
-            pre = None if is_light else control.preamble_for(function)
             target = sess if sess is not None else self.dev
             # Snapshot the 1502 notification BEFORE the write: the unit's Mode-4 ramp push arrives
             # within the ~0.3 s write window, so a snapshot taken afterwards would already contain it
@@ -593,7 +590,7 @@ class Server:
                 before = sess._notif.get(str(self.funcs[function].state_char).lower())
             post = await target.actuate(self.funcs[function], frame,
                                         verify=not is_light,
-                                        follow=control.commit_for(function), pre=pre)
+                                        follow=control.commit_for(function))
             if is_light:
                 return await self._confirm_lighting(sess, function, what, value, before)
             if post is None:

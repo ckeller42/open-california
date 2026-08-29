@@ -228,16 +228,12 @@ because it is instructive RE:
   (read-only marker for absent zones), 14=leave-unchanged sentinel. Our old code wrote 13 as
   "on"/max — NOT_EQUIPPED garbage. Fixed: `LIGHT_ON_BRIGHTNESS=10`, settable range 0-11, GUI
   slider max 10. (Capture-confirmed: 50 % app slider = wire `5`.)
-- **Where it lives:** `control.LIGHT_REQUEST_CONFIG` (the frame);
-  `control.preamble_for(function)` returns `[LIGHT_REQUEST_CONFIG, LIGHT_COMMIT]` for
-  lighting; `device.actuate(..., pre=preamble_for(fn))` writes them before the SET with
-  `FOLLOW_DELAY_S` (0.3 s) gaps, then a `PRE_SETTLE_S` (3.0 s, env `CALICTL_PRE_SETTLE_S`) arm
-  wait. All three call sites (serve persistent + cold, cli) pass it. Requirement
-  `R_LIGHT_PREAMBLE` (`control.preamble_for` docstring) ← `T_LIGHT_PREAMBLE`
-  (`tests/test_mock_integration.py`). **Since 2026-08-16 evening this is known to be
-  app-faithful-but-optional** (the app sends it on screen open via `d0()`, not per write): it
-  costs ~3.3 s and is harmless, so the shipped code keeps it — but it is not what makes the
-  lamps switch.
+- **Where it lives: nowhere anymore — retired 2026-08-29** (see `DECISIONS.md`). Known
+  app-faithful-but-optional since the 2026-08-16 evening correction (the app sends it on screen
+  open via `d0()`, not per write); it cost ~3.3 s per set and was never what makes the lamps
+  switch, so `preamble_for`/`LIGHT_REQUEST_CONFIG`/`device.actuate(pre=…)` were removed. The
+  frame (`0d0c000000000000eeeeeeeeeeeeeeee`) stays documented in `protocol-sequences` as the RE
+  record.
 - **Still open:** SET_COLOR on-device apply — the app DOES have colour control (`dg/h.java:644`,
   a profile-recolour: Mode 6, LightValue=colour, ProfileNumber=target profile + its brightness),
   but our `set lighting color` frame is mis-shaped vs the app's (PN=9 + sentinel zones) so it

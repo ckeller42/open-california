@@ -74,9 +74,9 @@ zones=14) triggers the unit's Mode-tagged config dump + Mode-4 brightness-ramp
 **notifications on `1502`** — the truthful feedback channel (a Mode-4 notification is a
 normal state frame, `protocol.decode` reads it; the state-char readback remains a
 write-through echo). Brightness is the `dg/i.java` enum (0=OFF, 1-10=10–100 %, 11=DEFAULT,
-13=NOT_EQUIPPED, 14=unchanged), not a raw 0-13 scale. calictl still sends the preamble —
-app-faithful, harmless, optional (`control.preamble_for`, `device.actuate(..., pre=…)`,
-`R_LIGHT_PREAMBLE`). Full story: **`control-and-actuation.md` §4**.
+13=NOT_EQUIPPED, 14=unchanged), not a raw 0-13 scale. The optional REQUEST_CONFIG preamble was
+retired from calictl 2026-08-29 (never an actuation gate). Full story:
+**`control-and-actuation.md` §4**.
 
 Earlier layers of this gap (kept for history): the 2026-07-08 capture nailed the 14-sentinel
 (unchanged zones = `14`, NOT 0) and Mode-16 profile switch; the "profile must be ACTIVE" rule

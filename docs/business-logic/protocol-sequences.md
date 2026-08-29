@@ -94,10 +94,9 @@ claim was falsified the same evening (the sleepy morning unit + the preamble's ~
 delay was a confound). The decompile agrees: the app's set-one-zone `dg/h.java:174 E()` writes
 DIRECT (immediately) and never calls the config request `d0()` (`dg/h.java:471`).
 **REQUEST_CONFIG's real role is a screen-open config pull** — it triggers the unit's
-Mode-tagged config-dump notifications on `1502` (only that dump is gated on it). calictl still
-sends it — app-faithful, harmless, optional — via `control.LIGHT_REQUEST_CONFIG` +
-`control.preamble_for("lighting")` → `device.actuate(..., pre=…)` (frames spaced
-`FOLLOW_DELAY_S` = 0.3 s, then `PRE_SETTLE_S` = 3.0 s arm wait, env `CALICTL_PRE_SETTLE_S`).
+Mode-tagged config-dump notifications on `1502` (only that dump is gated on it). calictl
+**no longer sends it** on any path (retired 2026-08-29 — it only added ~3.3 s; frame
+`0d0c000000000000eeeeeeeeeeeeeeee` kept as the RE record).
 Whether a truly deep-asleep unit needs any arming is still open; the 1003 heartbeat WAS needed
 for cooler/camping actuation (issue #2) — not retested, lighting demonstrably differs.
 
@@ -124,7 +123,7 @@ sequenceDiagram
     participant C as calictl
     participant U as Lighting (1501/1502)
     Note over C,U: unit must be AWAKE (the actual actuation gate)
-    opt OPTIONAL app-faithful config pull (calictl still sends it — NOT required to actuate)
+    opt APP-ONLY screen-open config pull (calictl does not send it — not required to actuate)
         C->>U: REQUEST_CONFIG (0d0c… — Mode 12, PN=13, zones=14)
         C->>U: commit (0e00… = NO_MODE neutral default frame)
         U--)C: 1502 notifications: config dump (Modes 0x0c/0x06/0x08/0x10/0x14/0x18)
