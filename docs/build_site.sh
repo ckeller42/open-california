@@ -12,4 +12,6 @@ OUT="${1:-$DOCS/_build/site}"
 "$PY" -m sphinx -b html -W -t evidence "$DOCS" "$DOCS/_build/evidence"
 mkdir -p "$OUT/business-logic"
 cp -R "$DOCS/_build/evidence/business-logic/." "$OUT/business-logic/"
+# The interactive LikeC4 model (architecture + protocol-sequence dynamic views) at /model/.
+npx -y likec4 build -o "$OUT/model" --base ./ "$DOCS/likec4"
 echo "site -> $OUT"

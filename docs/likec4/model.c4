@@ -1,0 +1,70 @@
+specification {
+  element system
+  element component
+  element datastore
+  element external
+}
+
+model {
+  unit = external 'Camper unit' {
+    description 'VW California control unit — BLE GATT'
+  }
+  calictl = system 'calictl daemon (buspi)' {
+    description 'Single BLE owner — poll, decode, interpret, fan out'
+
+    device = component 'device.py' {
+      description 'BLE owner · 1003 heartbeat keeps reads fresh'
+    }
+    codec = component 'protocol.py' {
+      description 'MSB-first bit codec (dictionary-driven)'
+    }
+    dict = datastore 'dictionary.yaml + signals.yaml' {
+      description 'Extracted field map + surface/omit catalog (CI guardrail)'
+    }
+    semantics = component 'semantics.py' {
+      description 'Interpret + derive signals'
+    }
+    serve = component 'serve.py' {
+      description 'Daemon — poll, cache, fan-out'
+    }
+    control = component 'control.py' {
+      description 'Full-packet control frames'
+    }
+    webui = component 'Web UI' {
+      description 'Served dashboard + /api/state'
+    }
+  }
+  ha = external 'Home Assistant' {
+    description 'MQTT discovery'
+  }
+  influx = datastore 'InfluxDB' {
+    description 'Energy history'
+  }
+  grafana = external 'Grafana' {
+    description 'Dashboards'
+  }
+
+  unit -> calictl.device 'raw frames'
+  calictl.device -> calictl.codec 'raw bytes'
+  calictl.dict -> calictl.codec 'bit layout'
+  calictl.codec -> calictl.semantics 'decoded fields'
+  calictl.semantics -> calictl.serve 'signals'
+  calictl.serve -> calictl.webui 'state'
+  calictl.serve -> ha 'MQTT'
+  calictl.serve -> influx 'points'
+  calictl.serve -> calictl.control 'set command'
+  calictl.control -> calictl.device 'full-packet frame'
+  calictl.device -> unit 'write · 1003-armed'
+  influx -> grafana 'dashboards'
+}
+
+views {
+  view index {
+    title 'calictl — system landscape'
+    include *
+  }
+  view daemon of calictl {
+    title 'calictl — inside the daemon'
+    include *
+  }
+}

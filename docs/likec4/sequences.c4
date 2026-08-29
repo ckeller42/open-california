@@ -1,0 +1,72 @@
+// Protocol sequences as LikeC4 dynamic views — the interactive complement to the CANONICAL
+// mermaid diagrams in docs/protocol-sequences.rst (which carry the sphinx-needs spec links).
+// LikeC4 dynamic views have no loop/opt/alt constructs; repetition and branching are named
+// in step labels instead.
+
+views {
+
+  dynamic view seqConnect {
+    title '1 · Connect + handshake + subscribe'
+    unit -> calictl.device 'bonded link (RPA resolved via the bond)'
+    calictl.device -> unit 'read 1001 VERSION (abort if empty or version greater than 2)'
+    calictl.device -> unit 'read 1004 AUTH (passive read, empty means reconnect)'
+    calictl.device -> unit 'loop: write CCCD on every notifiable char'
+  }
+
+  dynamic view seqNotify {
+    title '2 · Notifications (handshake requirement, not the data path)'
+    calictl.device -> unit 'subscribe (CCCD=0100) on a status char'
+    unit -> calictl.device 'notify on state change — calictl no-ops the payload, reads state chars directly'
+  }
+
+  dynamic view seqArmedWrite {
+    title '3 · Heartbeat-armed control write (issue 2)'
+    calictl.device -> unit 'connect + handshake + subscribe-all'
+    calictl.device -> unit 'loop ~0.6 s: write 1003 = +1 BE counter (arm window)'
+    calictl.control -> calictl.device 'full-packet SET frame (unchanged fields = current values)'
+    calictl.device -> unit 'write control char — armed, unit honours it'
+    unit -> calictl.device 'state notification (one-shot arm: the load latches)'
+  }
+
+  dynamic view seqLighting {
+    title '4 · Lighting SET (awake unit — no preamble, no heartbeat)'
+    calictl.serve -> calictl.control 'set lighting zone N'
+    calictl.control -> calictl.device 'SET_BRIGHTNESS (Mode 4, PN=9) + 0e00 flush'
+    calictl.device -> unit 'bare write — actuates an AWAKE unit'
+    unit -> calictl.device '1502 Mode-4 ramp notifications (the truthful feedback; readback is an echo)'
+  }
+
+  dynamic view seqRoof {
+    title '5 · Roof press-and-hold (ignition ON — never live-driven)'
+    calictl.control -> calictl.device 'move frame: direction + app-generated SafetyCounter'
+    calictl.device -> unit 'loop ~500 ms while held: move frame, counter +1 per frame'
+    unit -> calictl.device 'validates counter ~3 s (1402 bit 7) then motor runs'
+    calictl.device -> unit 'STOP frame on release (or frames cease — dead-man halt)'
+  }
+
+  dynamic view seqRangeReject {
+    title '6 · Range validation (two layers)'
+    calictl.serve -> calictl.control 'set command'
+    calictl.control -> calictl.codec 'encode + check_value (width + semantic range)'
+    calictl.codec -> calictl.control 'out of range: raise — frame NEVER written'
+    calictl.control -> calictl.device 'in range: frame'
+    calictl.device -> unit 'write control char'
+    unit -> calictl.device 'unit-side reject: ATT 0x0E + link drop (else ACK)'
+  }
+
+  dynamic view seqFreshRead {
+    title '7 · Fresh state read under the heartbeat'
+    calictl.device -> unit 'connect + subscribe-all'
+    calictl.device -> unit 'loop ~500 ms: 1003 heartbeat (keeps link + re-read chars fresh)'
+    unit -> calictl.device '1302 water push (only on pump activity)'
+    calictl.device -> unit 'read state chars (a pushed value wins over the bare read)'
+  }
+
+  dynamic view seqDeepSleep {
+    title '8 · Deep-sleep and wake (parked van)'
+    calictl.device -> unit 'connect: DeviceNotFound — parked unit deep-sleeps, stops advertising'
+    calictl.serve -> calictl.webui 'serve last-known state + offline banner'
+    unit -> calictl.device 'door / ignition wakes the unit — advertising resumes'
+    calictl.device -> unit 'connect OK — polling resumes with fresh reads'
+  }
+}
