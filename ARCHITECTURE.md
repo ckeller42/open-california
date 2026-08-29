@@ -9,8 +9,8 @@ lives, and how to extend it. For the deep provenance behind any claim, follow th
 
 ```mermaid
 flowchart LR
-  APK["VW APK (local only,<br/>git-ignored)"] -->|private RE pipeline + extract_protocol| DICT[protocol/dictionary.yaml]
-  DICT --> LOAD["protocol.load()<br/>+ overrides.apply()"]
+  U[("Camper unit<br/>BLE GATT")] -->|raw frames| DECODE
+  DICT[protocol/dictionary.yaml] --> LOAD["protocol.load()<br/>+ overrides.apply()"]
   OVR["overrides.py<br/>manual offsets/ranges"] --> LOAD
   LOAD --> DECODE["protocol.decode<br/>(MSB-first bits)"]
   DECODE --> SEM["semantics.interpret<br/>(per-function meaning)"]
@@ -20,6 +20,10 @@ flowchart LR
   DICT -. every field needs a decision .-> GUARD[["tests/test_signal_coverage<br/>+ tools.audit_signals"]]
   CAT -. CI fails on drift .-> GUARD
 ```
+
+(How `dictionary.yaml` came to exist — extraction from the vendor app with `tools/extract_protocol` —
+is a one-time reverse-engineering *process*, not part of this runtime picture; it is documented in
+[`docs/business-logic/`](docs/business-logic/).)
 
 One daemon (`serve.py`) owns the single BLE connection and drives that pipeline:
 
