@@ -52,6 +52,11 @@ citations and dead ends — are **evidence, not product documentation**. They ar
 separately from these docs: `Reverse-engineering notes <business-logic/index.html>`_
 (also browsable `in the repository <https://github.com/ckeller42/open-california/tree/main/docs/business-logic>`_).
 
+There is also an **interactive LikeC4 model** of the runtime — the architecture plus the eight
+protocol sequences as explorable dynamic views: `model <model/index.html>`_ (source:
+``docs/likec4/*.c4``, validated in the docs build; the mermaid diagrams in
+:doc:`protocol-sequences` stay canonical and carry the requirement links).
+
 Requirement traceability
 ------------------------
 
