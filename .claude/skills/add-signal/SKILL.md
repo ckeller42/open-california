@@ -7,7 +7,7 @@ description: Surface a new BLE signal in calictl end-to-end (catalog → semanti
 
 The pipeline is `dictionary.yaml → protocol.decode → semantics.interpret → signals.yaml
 catalog → influx/mqtt`. Every dictionary field MUST have a catalog decision or CI fails.
-See `docs/architecture.md`.
+See `ARCHITECTURE.md`.
 
 ## Steps
 

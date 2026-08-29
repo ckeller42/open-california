@@ -111,8 +111,8 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   `:id: R_<NAME>` in the implementing code, `.. test::` with `:id: T_<NAME>` +
   `:links: R_<NAME>` in the verifying test's docstring (the link is the trace). Example:
   `calictl.semantics.vehicle` (`R_VEHICLE_1004`) ← `tests/…test_vehicle_decode_char_1004`
-  (`T_VEHICLE_DECODE`). Add each autodoc'd target to `docs/sphinx/api.rst`.
-- Build/verify the trace: `docs/sphinx/README.md` (`sphinx -b html -W` and `-b needs`; a
+  (`T_VEHICLE_DECODE`). Add each autodoc'd target to `docs/api.rst`.
+- Build/verify the trace: `docs/building-the-docs.md` (`sphinx -b html -W` and `-b needs`; a
   resolved trace shows up as the req's `links_back` in `needs.json`). `needs_id_required=True`.
 
 ## Working style

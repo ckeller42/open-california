@@ -1,7 +1,0 @@
-# Doc toolchain for the sphinx-needs requirement/traceability build.
-# Build:  python -m venv .venv && .venv/bin/pip install -r requirements.txt
-#         .venv/bin/python -m sphinx -b html   docs/sphinx docs/sphinx/_build/html
-#         .venv/bin/python -m sphinx -b needs  docs/sphinx docs/sphinx/_build/needs
-sphinx>=7,<8
-sphinx-needs>=5,<6
-sphinxcontrib-mermaid>=1,<2   # .. mermaid:: sequence diagrams (docs/sphinx/protocol-sequences.rst)

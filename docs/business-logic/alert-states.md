@@ -66,11 +66,11 @@ stateDiagram-v2
   Alerting --> Normal: value == 0\n(clears all _ID for this field)
   state Alerting {
     [*] --> Raise
-    Raise: raise <ID> (in-app record)\n+ <ID>_NOTIFICATION_ID (banner)
+    Raise: raise ID (in-app record)\n+ ID_NOTIFICATION_ID (banner)
     Raise --> HA
-    HA: HA binary_sensor <ID> = on\n(device_class problem)
+    HA: HA binary_sensor ID = on\n(device_class problem)
   }
-  note right of Normal: value 0 = HA binary_sensor off\nmirrors app dVar.e(<ID>) clear
+  note right of Normal: value 0 = HA binary_sensor off\nmirrors app dVar.e(ID) clear
 ```
 
 ---

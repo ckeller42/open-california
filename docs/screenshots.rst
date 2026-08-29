@@ -11,7 +11,7 @@ Dashboard
 
 The status overview (fresh/grey water + leisure battery) plus feature tiles.
 
-.. image:: ../screenshots/light_00_dashboard.png
+.. image:: screenshots/light_00_dashboard.png
    :width: 300
    :alt: Dashboard — California Status overview and feature tiles
 
@@ -20,28 +20,28 @@ Energy
 
 Leisure + starter battery, voltages, **currents**, and the DC-DC / shore / solar sources.
 
-.. image:: ../screenshots/light_06_Energy.png
+.. image:: screenshots/light_06_Energy.png
    :width: 300
    :alt: Energy screen
 
 Water
 -----
 
-.. image:: ../screenshots/light_05_Water.png
+.. image:: screenshots/light_05_Water.png
    :width: 300
    :alt: Water screen — fresh and grey tanks
 
 Lighting
 --------
 
-.. image:: ../screenshots/light_03_Lighting.png
+.. image:: screenshots/light_03_Lighting.png
    :width: 300
    :alt: Lighting screen — profile + per-lamp control
 
 Vehicle
 -------
 
-.. image:: ../screenshots/light_07_Vehicle.png
+.. image:: screenshots/light_07_Vehicle.png
    :width: 300
    :alt: Vehicle screen — ignition, leveling, clock
 

@@ -16,7 +16,8 @@ class of bug. Keep it stdlib-only so the whole suite still runs without third-pa
 import re
 from pathlib import Path
 
-_DOCS = Path(__file__).resolve().parent.parent / "docs" / "sphinx"
+_ROOT = Path(__file__).resolve().parent.parent
+_DOCS = _ROOT / "docs"
 
 # arrow / cross / async tokens and inline HTML we must NOT flag when we look for stray < > & etc.
 _ARROWS = re.compile(r"--?(>>|\)|->|x|>)|<br\s*/?>|&(amp|lt|gt|nbsp);")
@@ -63,18 +64,47 @@ def _offending(lineno, line):
     return None
 
 
+def _mermaid_fences(md_text):
+    """Yield (start_line, [(lineno, line), ...]) for every ```mermaid fence in a markdown document."""
+    lines = md_text.split("\n")
+    i = 0
+    while i < len(lines):
+        if lines[i].strip().startswith("```mermaid"):
+            i += 1
+            body = []
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                body.append((i + 1, lines[i]))
+                i += 1
+            yield body
+        else:
+            i += 1
+
+
+def _md_sources():
+    """Markdown files whose mermaid fences render in a browser (GitHub and/or the Sphinx site)."""
+    yield from sorted(_ROOT.glob("*.md"))
+    yield from sorted(_DOCS.rglob("*.md"))
+
+
 def test_docs_mermaid_blocks_have_no_browser_breaking_chars():
-    """Every ``.. mermaid::`` block in docs/sphinx/*.rst must be free of characters mermaid.js
-    rejects in free text — otherwise the diagram builds clean but renders as "Syntax error in text"
-    on the live docs site (regression guard for the 2026-08-28 protocol-sequences breakage).
+    """Every mermaid diagram — ``.. mermaid::`` in docs/*.rst AND ```mermaid fences in markdown —
+    must be free of characters mermaid.js rejects in free text, otherwise it builds clean but
+    renders as "Syntax error in text" in the browser (regression guard for the 2026-08-28
+    protocol-sequences breakage; markdown fences render on GitHub and, via myst, on the site).
     """
     problems = []
-    for rst in sorted(_DOCS.glob("*.rst")):
+    for rst in sorted(_DOCS.rglob("*.rst")):
         for _start, body in _mermaid_blocks(rst.read_text()):
             for lineno, line in body:
                 reason = _offending(lineno, line)
                 if reason:
-                    problems.append(f"{rst.name}:{lineno}: {reason}\n      {line.strip()}")
+                    problems.append(f"{rst.relative_to(_ROOT)}:{lineno}: {reason}\n      {line.strip()}")
+    for md in _md_sources():
+        for body in _mermaid_fences(md.read_text()):
+            for lineno, line in body:
+                reason = _offending(lineno, line)
+                if reason:
+                    problems.append(f"{md.relative_to(_ROOT)}:{lineno}: {reason}\n      {line.strip()}")
     assert not problems, (
         "mermaid diagram(s) contain characters that render as 'Syntax error in text' in the browser "
         "(sphinx -W cannot catch this — it only emits the source):\n" + "\n".join(problems)
