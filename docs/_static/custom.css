@@ -1,0 +1,2 @@
+/* the logo PNG has black corners (square app-icon canvas); clip to the icon squircle */
+.sidebar-logo { border-radius: 22%; }

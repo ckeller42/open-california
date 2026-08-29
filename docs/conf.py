@@ -45,6 +45,7 @@ needs_extra_links = [
 ]
 html_theme = "furo"
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 html_logo = "_static/logo.png"
 html_favicon = "_static/favicon.ico"
 # The per-directory README.md files are GitHub-browse navigation, redundant with the site toctrees.
