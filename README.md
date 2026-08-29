@@ -90,10 +90,9 @@ every step without changing anything. Full guide: **[docs/raspberry-pi-setup.md]
   **Not installed** here — stairs, living-room heater, roof-A/C, satellite, solar; those
   functions are decompile/static-verified only, not live-tested.
 - **Control writes live-actuation-verified** on that van: cooler, camping mode, lighting. Air
-  heater is installed but not yet live-verified end-to-end (setters are decompile-verified;
-  buspi was offline during its capture window). Roof's actuation frame is protocol-documented
-  from the decompile, but the pop-top isn't installed here, so it's untested like the other
-  not-installed functions.
+  heater is installed but not yet verified end-to-end (setters are decompile-verified). The pop-top
+  roof is installed but its motor has **never been driven** by this project (its actuation frame is
+  decompile-documented). Full per-function verification tiers are in the [hardware reference](https://ckeller42.github.io/open-california/hardware.html).
 - **Host:** a Raspberry Pi ("buspi", Debian 13, aarch64), Python 3.13, BlueZ via `bleak`.
 
 Full GATT service/characteristic map, software-version fields, the equipment/verification
