@@ -8,6 +8,20 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-08-17 — roof SafetyCounter model re-verified (and an intraday mis-edit reverted)
+
+- **`actuate_roof`'s 500 ms / +1-per-frame stream confirmed protocol-correct** against fresh
+  source (`w8/a` + `b1/d` + `ig/c`): the app pumps move frames from a ~500 ms SafetyCounter
+  timer (the primary transmitter, +1/frame) plus a **secondary 1000 ms timer that only
+  re-affirms direction** (~3 frames/s net, consecutive counter deltas 0/+1, never +2). Our
+  single 500 ms/+1 stream reproduces the counter-timer sub-stream with the same wall-clock
+  counter trajectory the unit validates.
+- **Intraday mis-edit, reverted the same day:** an edit wrongly rewrote the model as
+  ~1 Hz / +2-per-frame by mistaking the 1000 ms direction-resend for the pump. That reading
+  was itself wrong and was reverted; **the implementation never needed a change.** Recorded
+  here so the current model in `protocol-alignment.md` stays clean prose with this changelog
+  holding the history.
+
 ## 2026-08-16 (evening) — CORRECTION: the REQUEST_CONFIG preamble is NOT the actuation gate; the unit's wake-state is
 
 Supersedes the *mechanism* claimed in the morning entry below (the "preamble arms actuation"
