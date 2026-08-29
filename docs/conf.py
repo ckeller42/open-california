@@ -43,7 +43,7 @@ needs_types = [
 needs_extra_links = [
     dict(option="verifies", incoming="verified by", outgoing="verifies"),
 ]
-html_theme = "alabaster"
+html_theme = "furo"
 html_static_path = ["_static"]
 html_logo = "_static/logo.png"
 html_favicon = "_static/favicon.ico"
@@ -77,5 +77,7 @@ if tags.has("evidence"):  # noqa: F821 — `tags` is injected by Sphinx into con
                         "api/**", "assets/**", "protocol/**", "screenshots/**"]
     html_title = "open-california — RE lab notes (evidence)"
     html_theme_options = {
-        "description": "Reverse-engineering lab notes — evidence, not product documentation.",
+        "announcement": ("Reverse-engineering <strong>lab notes — evidence, not product "
+                         "documentation</strong>. <a href='https://ckeller42.github.io/open-california/'>"
+                         "Back to the docs</a>."),
     }

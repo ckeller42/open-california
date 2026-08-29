@@ -6,3 +6,4 @@ sphinx>=7,<8
 sphinx-needs>=5,<6
 sphinxcontrib-mermaid>=1,<2   # mermaid diagrams (client-side, .. mermaid:: + ```mermaid fences)
 myst-parser>=2,<5             # the markdown docs (business-logic/, protocol.md, ...) on the site
+furo>=2024.1                  # the theme — modern, dark-mode, announcement banner
