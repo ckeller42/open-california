@@ -48,7 +48,11 @@ html_static_path = ["_static"]
 html_logo = "_static/logo.png"
 html_favicon = "_static/favicon.ico"
 # The per-directory README.md files are GitHub-browse navigation, redundant with the site toctrees.
-exclude_patterns = ["_build", "api/openapi.yaml", "README.md", "api/README.md", "protocol/README.md"]
+# Main (product-docs) build: the reverse-engineering lab notes are NOT part of this build —
+# they are rendered by the separate "evidence" build below onto the same business-logic/ URLs,
+# so links keep working while the product docs' nav + search stay free of lab notes.
+exclude_patterns = ["_build", "api/openapi.yaml", "README.md", "api/README.md", "protocol/README.md",
+                    "business-logic/**"]
 
 # The lab-notebook markdown links freely to code files and repo paths that are not part of the
 # rendered site (calictl/*.py, protocol/dictionary.yaml, ...). Those degrade to plain links; do
@@ -61,3 +65,17 @@ exclude_patterns = ["_build", "api/openapi.yaml", "README.md", "api/README.md", 
 # - myst.xref_missing / myst.header: the lab-notebook markdown links to code files/repo paths that are
 #   not rendered pages (they degrade to plain links) and uses pragmatic heading levels
 suppress_warnings = ["needs.deprecated", "myst.xref_missing", "myst.header"]
+
+
+# ---------------------------------------------------------------------------
+# The "evidence" build (sphinx-build -t evidence): renders ONLY the reverse-engineering lab
+# notes (docs/business-logic/), visually marked as evidence, published into the same Pages
+# artifact at business-logic/ by docs/build_site.sh. Everything else stays out of this build.
+if tags.has("evidence"):  # noqa: F821 — `tags` is injected by Sphinx into conf.py
+    root_doc = "business-logic/index"
+    exclude_patterns = ["_build", "*.rst", "*.md",
+                        "api/**", "assets/**", "protocol/**", "screenshots/**"]
+    html_title = "open-california — RE lab notes (evidence)"
+    html_theme_options = {
+        "description": "Reverse-engineering lab notes — evidence, not product documentation.",
+    }

@@ -33,7 +33,7 @@ jobs:
       - name: Install doc toolchain
         run: pip install -r docs/requirements.txt
       - name: Build HTML (warnings are errors)
-        run: python -m sphinx -b html -W docs docs/_build/html
+        run: sh docs/build_site.sh docs/_build/html   # product docs + the separate evidence build, merged
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/_build/html
