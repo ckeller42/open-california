@@ -86,8 +86,12 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   (no confirmation phase). Direction bytes match the app (open `0x01`/stop `0x00`/close `0x04`). The
   **SafetyCounter is app-generated** (monotonic BE-uint32, ~+1 per 500 ms), NOT echoed; the unit
   withholds the motor ~3 s until it validates (`1402` bit 7). `actuate_roof` is protocol-correct but
-  **has NEVER driven a real motor** — and our path adds a 1003 heartbeat + `ARM_DELAY_S` the app's roof
-  loop omits (harmless, maybe removable, unverified). See `protocol-alignment.md` + `protocol-sequences`.
+  **has NEVER driven a real motor**. App-faithful arm (fixed #150): it handshakes (reads+subscribe)
+  then streams the counter IMMEDIATELY — NO 1003 heartbeat, NO `ARM_DELAY_S` pre-arm (a gap would make
+  the unit see a fresh counter and withhold the motor another ~3 s); the counter IS the liveness proof.
+  `_handshake` = no-heartbeat/no-delay arm; old `_arm` (heartbeat+delay) still serves cooler/camping.
+  GUI is press-and-hold (release → STOP via lock-free `_roof_stop`). See `protocol-alignment.md` +
+  `protocol-sequences`.
 - **Reads go stale + the unit deep-sleeps.** A bare read returns a decaying latch (fresh-water 1 L vs
   true 11 L) unless the 1003 heartbeat runs during reads (`device.read_all`/`read` do). Parked, the
   unit deep-sleeps and stops advertising — buspi can't connect for days until physical use wakes it, so
