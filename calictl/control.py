@@ -242,6 +242,16 @@ LIGHT_ZONES = {
 # (owner-confirmed 2026-08-30): the pop-top roof reading light (L9) is unpowered while the roof is
 # down; the cooler cooling-timer can only be set while the fridge is OFF.
 _ROOF_CLOSED_POSITIONS = (0, 14)   # matches semantics._ROOF_POS closed values
+# Terminal Position for each move direction (semantics._ROOF_POS: 1=open, 0/14=closed). When a move
+# reaches its target limit, device.actuate_roof ceases the counter stream (app-faithful auto-stop) —
+# best-effort courtesy on top of the unit's own limit switches; None = no known limit (don't poll).
+_ROOF_LIMIT_POSITIONS = {"open": frozenset({1}), "close": frozenset(_ROOF_CLOSED_POSITIONS)}
+
+
+def roof_limit_positions(direction):
+    """The set of terminal roof ``Position`` values for a move ``direction`` (open/close), or
+    ``None`` for any other direction. Used to auto-stop travel when the roof reaches its limit."""
+    return _ROOF_LIMIT_POSITIONS.get(direction)
 
 
 def command_precondition(function, what, value, states):

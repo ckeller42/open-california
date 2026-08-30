@@ -583,7 +583,8 @@ class Server:
                     self._roof_stop = asyncio.Event()
                 self._roof_stop.clear()
                 await self.dev.actuate_roof(self.funcs["roof"], move_frame, stop_frame,
-                                            verify=True, stop_event=self._roof_stop)
+                                            verify=True, stop_event=self._roof_stop,
+                                            limit_positions=control.roof_limit_positions(what))
                 # roof has no set_check row -- keep the honest "not applied" (unknown).
                 return None
             last = self._last.get(function)
