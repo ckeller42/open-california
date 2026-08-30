@@ -102,6 +102,11 @@ Heartbeat-armed control write
         C->>U: read state_char (verify)
         C->>U: disconnect (heartbeat stops)
 
+Interactive version of this sequence (from the LikeC4 model, ``docs/likec4/sequences.c4``):
+
+.. likec4-view:: seqArmedWrite
+   :height: 420px
+
 Lighting SET — SET + neutral flush on an awake unit; optional REQUEST_CONFIG config-pull (settled 2026-08-16)
 -------------------------------------------------------------------------------------------------------------
 
