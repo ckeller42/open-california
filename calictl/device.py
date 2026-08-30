@@ -317,16 +317,10 @@ class CamperDevice:
         finally:
             await self._safe_disconnect(client)
 
-    async def _arm(self, client, stop, label, noun):
-        """Replay the connect handshake (version + auth reads, subscribe-all) and start the 1003
-        liveness heartbeat, then wait ``ARM_DELAY_S`` so the unit registers it before the first
-        write. Returns the heartbeat task. ``label``/``noun`` tag the weak-handshake warning
-        (``"actuate"``/``"write"`` for control, ``"actuate_roof"``/``"move"`` for the roof). One home
-        for the arm prologue that ``_actuate_on`` and ``actuate_roof`` previously duplicated verbatim.
-
-        This is the single home for the ``R_ACTUATE_ARM`` prologue (handshake + heartbeat-start +
-        arm-delay, issue #2's 1003 gate), shared by the control and roof actuation paths.
-        """
+    async def _handshake(self, client, label, noun):
+        """Replay the connect handshake (version + auth reads, subscribe-all) so a write is honoured
+        and notifications flow. NO heartbeat, NO arm-delay — that's the caller's choice. ``label``/
+        ``noun`` tag the weak-handshake warning."""
         auth_ok = 0
         for uuid in (VERSION_CHAR, AUTH_CHAR):
             try:
@@ -337,6 +331,18 @@ class CamperDevice:
         if auth_ok < 2 or n == 0:
             print("%s: weak handshake (auth-reads=%d/2, subscribed=%d) — %s may be ignored"
                   % (label, auth_ok, n, noun), flush=True)
+
+    async def _arm(self, client, stop, label, noun):
+        """Handshake, then start the 1003 liveness heartbeat and wait ``ARM_DELAY_S`` so the unit
+        registers it before the first write. Returns the heartbeat task. This is the
+        ``R_ACTUATE_ARM`` prologue (issue #2's 1003 gate) for the CONTROL actuation path.
+
+        NB the ROOF path does NOT use this: the app streams its SafetyCounter immediately with no
+        1003 heartbeat and no pre-write sleep (the counter itself is the roof's liveness proof, and
+        a 3 s pre-arm gap would make the unit see a fresh counter and withhold the motor another
+        ~3 s — verified against the decompiled roof driver 2026-08-30). Roof uses ``_handshake``.
+        """
+        await self._handshake(client, label, noun)
         beat = asyncio.create_task(self._heartbeat(client, stop))
         await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
         return beat
@@ -384,6 +390,7 @@ class CamperDevice:
                            period_s: float = ROOF_MOVE_PERIOD_S,
                            validate_s: float = ROOF_SAFETY_VALIDATE_S,
                            counter_seed: int | None = None,
+                           stop_event=None,
                            verify: bool = True) -> dict | None:
         """Drive a roof OPEN/CLOSE move by streaming move frames, then force STOP.
 
@@ -474,7 +481,11 @@ class CamperDevice:
                 return True   # transient write error on a live link: keep driving
 
         try:
-            beat = await self._arm(client, stop, "actuate_roof", "move")
+            # App-faithful roof arm (decompile-verified 2026-08-30): handshake ONLY — no 1003
+            # heartbeat, no ARM_DELAY_S pre-arm sleep. The app streams the SafetyCounter immediately
+            # on button press; a pre-arm gap would make the unit see a fresh counter and withhold
+            # the motor another ~3 s. The counter IS the roof's liveness proof.
+            await self._handshake(client, "actuate_roof", "move")
 
             # Stream the move frame with the live time-derived counter until the safety cap. The
             # unit self-gates motion for the first ~validate_s until the counter validates; we
@@ -482,7 +493,9 @@ class CamperDevice:
             start = time.monotonic()
             deadline = start + max_duration_s
             validate_checked = False
-            while time.monotonic() < deadline:
+            # stop_event lets a hold-to-move UI (or a 'stop' command) interrupt travel:
+            # set lock-free by another coroutine, checked each frame -> break -> STOP.
+            while time.monotonic() < deadline and not (stop_event is not None and stop_event.is_set()):
                 if not await _send(move_frame):
                     print("actuate_roof: link dropped mid-move — sending STOP", flush=True)
                     break

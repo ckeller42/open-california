@@ -1022,8 +1022,14 @@ function renderLighting(s) {
     for (const lamp of grp.lamps) {
       const row = document.createElement("div"); row.className = "row";
       const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = lamp.label;
-      if (lamp.hint) {
-        const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = lamp.hint;
+      // roof reading light (L9) is physically unpowered while the pop-top is down — reflect the
+      // server-side precondition (control.command_precondition) so the slider isn't a silent no-op.
+      const roofPos = (STATE.roof || {}).position_name;
+      const roofBlocked = lamp.what === "roof-reading"
+        && !(roofPos === "open" || roofPos === "middle" || roofPos == null);
+      const hintText = roofBlocked ? "roof must be open" : lamp.hint;
+      if (hintText) {
+        const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = hintText;
         lbl.appendChild(hh);
       }
       // brightness_zone_1..16 are read by dynamic key (see FnState note); cast the state to an
@@ -1037,7 +1043,7 @@ function renderLighting(s) {
       // readback can carry enum values past the settable range (11=default, 13/14 markers):
       // clamp the thumb (11 ≈ full) but zero it for the no-reading markers; label shows the truth
       inp.value = /** @type {any} */ (val >= 13 ? 0 : Math.min(val, LIGHT_MAX));
-      inp.disabled = readOnly();
+      inp.disabled = readOnly() || roofBlocked;
       inp.setAttribute("aria-label", grp.group + " " + lamp.label + " brightness");
       const out = document.createElement("span"); out.className = "sval";
       out.textContent = brightnessText(val);
@@ -1339,10 +1345,26 @@ function roofControls() {
     b.textContent = dir;
     b.disabled = readOnly();
     if (pending_is("roof", dir)) b.appendChild(spinner());
-    b.onclick = () => {
-      if (confirm(`Roof ${dir}: this physically moves the pop-top (UNVERIFIED on this vehicle). Ensure the path is clear. Continue?`))
+    if (dir === "stop") {
+      b.onclick = () => command("roof", "stop", null);
+    } else {
+      // PRESS-AND-HOLD: the pop-top moves only while the button is held; releasing sends STOP
+      // (interrupts the in-flight move server-side via _roof_stop). Mirrors the vehicle's own
+      // hold-to-move control. Still UNVERIFIED end-to-end on this van.
+      let armed = false;
+      const start = (ev) => {
+        ev.preventDefault();
+        if (readOnly() || armed) return;
+        if (!confirm(`Roof ${dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?`)) return;
+        armed = true;
         command("roof", dir, null);
-    };
+      };
+      const end = () => { if (armed) { armed = false; command("roof", "stop", null); } };
+      b.addEventListener("pointerdown", start);
+      b.addEventListener("pointerup", end);
+      b.addEventListener("pointerleave", end);
+      b.addEventListener("pointercancel", end);
+    }
     btns.appendChild(b);
   }
   card.appendChild(btns);
