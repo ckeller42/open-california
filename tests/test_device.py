@@ -173,3 +173,22 @@ def test_actuate_on_arm_false_skips_handshake_and_arm_delay(monkeypatch):
     assert device.ARM_DELAY_S not in slept          # no 3s arm wait
     assert post is not None and post.get("State") == 1   # write applied
     assert unit.decoded("cooler")["State"] == 1
+
+
+def test_actuate_roof_stops_when_event_set(fake_bleak):
+    import asyncio as _a
+
+    from calictl import control, overrides, protocol
+    funcs = protocol.load(); overrides.apply(funcs)
+    f = funcs["roof"]
+    move = control.roof_frame(funcs, "open"); stop = control.roof_frame(funcs, "stop")
+    ev = _a.Event(); ev.set()                       # already-set -> loop must not stream, just STOP
+    async def _run():
+        dev = device.CamperDevice("AA:BB:CC:DD:EE:FF")
+        await dev.actuate_roof(f, move, stop, verify=False, validate_s=None, stop_event=ev)
+        return fake_bleak.instances[-1]
+    cli = asyncio.run(_run())
+    # byte 0 is the direction (bytes 1-4 are the live counter); with the event pre-set the move
+    # loop never streams an open frame (dir 0x01) — only the STOP frame (dir 0x00) is written.
+    dirs = [d[0] for op, u, d in cli.calls if op == "write" and u == f.control_char]
+    assert 0x01 not in dirs and 0x00 in dirs

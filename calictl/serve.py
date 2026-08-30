@@ -244,6 +244,7 @@ class Server:
         self._ble = None                    # asyncio.Lock(); created inside run()'s loop (shared)
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
+        self._roof_stop = None              # asyncio.Event (lazy, loop-bound): interrupts an in-flight roof move
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
         # Persist the last-known state so a restart while the van is asleep still shows the last
         # real values (the unit can be unreachable for days when parked). Env-overridable path.
@@ -536,6 +537,23 @@ class Server:
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
             print("read-only: refusing command %s/%s" % (function, what), flush=True)
             return None
+        # ROOF STOP short-circuits everything: a hold-to-move release must interrupt an in-flight
+        # open/close (which HOLDS the _ble lock) immediately, so it flips the move loop's event
+        # lock-free — never waiting on the session/lock. The in-flight loop then breaks + writes its
+        # own STOP. If no move is in flight, send a real STOP under the lock.
+        if function == "roof" and what == "stop":
+            moving = self._roof_stop is not None and not self._roof_stop.is_set()
+            if self._roof_stop is not None:
+                self._roof_stop.set()
+            if moving:
+                return None
+            async with self._ble:
+                try:
+                    stop_frame = control.roof_frame(self.funcs, "stop")
+                except ValueError:
+                    return None
+                await self.dev.actuate(self.funcs["roof"], stop_frame, verify=True)
+            return None
         # A command means intent to control: clear any manual Disconnect, mark active (hold the
         # session), and keep-warm nudge the supervisor up now if it isn't. set_mode("connect") does
         # exactly those three; its return dict is irrelevant here.
@@ -554,17 +572,18 @@ class Server:
                 # SAFETY-SENSITIVE: a single roof frame won't complete travel and has
                 # no guaranteed STOP, so roof must stream the move frame with a live
                 # SafetyCounter, bounded then always STOP (device.actuate_roof), never the
-                # one-shot device.actuate. Mirrors cli._set_roof. `what` = direction (open/close/stop).
+                # one-shot device.actuate. `what` = direction (open/close). Press-and-hold: the GUI
+                # streams the move while held and sends "stop" on release (interrupts via _roof_stop).
                 try:
                     move_frame = control.roof_frame(self.funcs, what)
                     stop_frame = control.roof_frame(self.funcs, "stop")
                 except ValueError:
                     return None
-                f = self.funcs["roof"]
-                if what == "stop":
-                    await self.dev.actuate(f, stop_frame, verify=True)
-                else:
-                    await self.dev.actuate_roof(f, move_frame, stop_frame, verify=True)
+                if self._roof_stop is None:
+                    self._roof_stop = asyncio.Event()
+                self._roof_stop.clear()
+                await self.dev.actuate_roof(self.funcs["roof"], move_frame, stop_frame,
+                                            verify=True, stop_event=self._roof_stop)
                 # roof has no set_check row -- keep the honest "not applied" (unknown).
                 return None
             last = self._last.get(function)

@@ -360,7 +360,7 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
     s._read_only = False                                 # writes enabled for this actuation test
     calls = {"actuate_roof": None, "actuate": None}
 
-    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True):
+    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True, stop_event=None):
         calls["actuate_roof"] = (f.name, move_frame, stop_frame)
         return None
 
@@ -827,3 +827,28 @@ def test_command_surfaces_precondition_refusal_without_actuating():
     assert res["ok"] is True and res["applied"] is False
     assert "refused" in res and "roof" in res["refused"].lower()
     # a NON-gated command with loop=None would raise (proves the gate short-circuited before scheduling)
+
+
+def test_roof_stop_sets_event_lockfree_to_interrupt_inflight_move():
+    """A hold-to-move release ('stop') must interrupt an in-flight open/close that HOLDS the _ble
+    lock — so 'stop' flips the shared event WITHOUT acquiring the lock. Simulate a move in flight
+    (lock held, event clear) and assert the stop command sets the event and returns without blocking
+    on the lock."""
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    s._read_only = False
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._roof_stop = asyncio.Event()          # a move is 'in flight': event clear
+        await s._ble.acquire()                  # the move loop holds the lock
+        try:
+            # stop must NOT block on the held lock; it just flips the event
+            await asyncio.wait_for(s.on_command("roof", "stop", None), timeout=1.0)
+        finally:
+            s._ble.release()
+        return s._roof_stop.is_set()
+
+    assert asyncio.run(_run()) is True          # event set -> in-flight loop will break + STOP
