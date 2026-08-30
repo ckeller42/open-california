@@ -227,11 +227,12 @@ LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
 LIGHT_ZONES = {
     "reading-1": "BrightnessLTwo", "reading-2": "BrightnessLOne", "reading-3": "BrightnessLFour",
     "kitchen": "BrightnessLSeven", "roof-ambient": "BrightnessLEight", "outside-rear": "BrightnessLThree",
-    "kitchen-ambient": "BrightnessLFive",   # CONFIRMED 2026-08-16 capture: Küche Ambientelicht slider moved L5
-    "roof-reading": "BrightnessLSix",        # L6 by elimination — BUT the decompile (dg/h.java E()
-    #   case19 ROOF_READING->BrightnessLNine) points at L9, not L6 (L6=KITCHEN_CABINETS/case16).
-    #   NEEDS an on-van slider capture before remapping (evidence-ledger); as built, set
-    #   lighting roof-reading writes the L6 wire field. See van-checklist memory.
+    "kitchen-ambient": "BrightnessLFive",    # Küche Ambientelicht (capture 2026-08-16 + isolation)
+    "kitchen-cabinet": "BrightnessLSix",     # Küche Schrank — DEVICE 2026-08-30 (owner-watched write
+    #   lit the cabinet; matches decompile L6=KITCHEN_CABINETS/case16). Was mislabelled "roof-reading".
+    "roof-reading": "BrightnessLNine",       # Dach Lesen (L9) — corrected: decompile case19
+    #   ROOF_READING->BrightnessLNine, and L9 isolation lit the roof reading lamp 2026-08-30.
+    "entrance": "BrightnessLOneTwo",         # Eingang (L12) — DEVICE 2026-08-30 isolation.
 }
 
 

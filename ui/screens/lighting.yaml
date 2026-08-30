@@ -9,8 +9,8 @@
 #                   wake-up-light colour picker)
 # All zone brightness sliders map to the 16-zone BrightnessLOne..BrightnessLOneSix
 # control fields (control char 1501, source eg/a.java); order of the 16 zones to
-# vehicle areas is UNVERIFIED (needs live-traffic capture to confirm which zone
-# index corresponds to which named area, per generation).
+# vehicle areas: L1-L9 + L12 DEVICE-mapped 2026-08-30 (single-light isolation); see
+# control.LIGHT_ZONES + evidence-ledger. Other generations' layouts still per-model.
 screen: lighting
 title_key: lighting_pageTitle_lighting_text
 function: lighting  # service 1500/1502, control 1501 (eg/a.java) — see dictionary control_models_unresolved

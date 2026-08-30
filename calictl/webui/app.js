@@ -923,22 +923,24 @@ function renderDashboard() {
 
 // Lighting lamps, grouped like the app (from the HCI capture + screenshots). `what` is the
 // control API zone key (control.LIGHT_ZONES); `zone` is the interpreted brightness_zone_<N>.
-// Matches the app's 8-lamp layout (screenshots 2026-07-15). L5=Küche Ambient was capture-
-// confirmed 2026-08-16; L6 (roof reading) is solid by elimination but its lamp only powers with
-// the roof open, so `hint` flags that. See control.LIGHT_ZONES.
+// Full van lamp map — DEVICE-confirmed 2026-08-30 by single-light isolation + owner-watched
+// writes (each lamp turned on alone, wire zone read). See control.LIGHT_ZONES.
 /** @type {{ group: string, lamps: { label: string, what: string, zone: number, hint?: string }[] }[]} */
 const LIGHT_LAMPS = [
   { group: "Reading lights", lamps: [
     { label: "Left", what: "reading-1", zone: 2 },
     { label: "Right", what: "reading-2", zone: 1 },
-    { label: "Passenger", what: "reading-3", zone: 4 } ] },
+    { label: "Front", what: "reading-3", zone: 4 } ] },
   { group: "Kitchen", lamps: [
     { label: "Ambient", what: "kitchen-ambient", zone: 5 },
+    { label: "Cabinet", what: "kitchen-cabinet", zone: 6 },
     { label: "Cooking", what: "kitchen", zone: 7 } ] },
   { group: "Pop-roof", lamps: [
     { label: "Ambient", what: "roof-ambient", zone: 8 },
-    { label: "Reading", what: "roof-reading", zone: 6, hint: "roof open only" } ] },
-  { group: "Outside", lamps: [{ label: "Rear", what: "outside-rear", zone: 3 }] },
+    { label: "Reading", what: "roof-reading", zone: 9 } ] },
+  { group: "Ambient / outside", lamps: [
+    { label: "Rear surround", what: "outside-rear", zone: 3 },
+    { label: "Entrance", what: "entrance", zone: 12 } ] },
 ];
 const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NOT_EQUIPPED — never send)
 

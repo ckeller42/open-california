@@ -253,7 +253,7 @@ _LZONES = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seve
 # Zones that physically exist on the reference van. Zone 9 = the pop-top roof READING light —
 # DEVICE-proven 2026-08-30 by single-light isolation (unit screen "Dach" on -> zone_9=2, all
 # else 0/13). Zone 12 also reads 0 (not 13) but has no proven fixture yet — excluded until shown.
-_REAL_LIGHT_ZONES = frozenset(range(1, 10))
+_REAL_LIGHT_ZONES = frozenset((1, 2, 3, 4, 5, 6, 7, 8, 9, 12))  # full van lamp set, DEVICE-mapped 2026-08-30 (L12=Eingang)
 
 
 def lighting(d: dict) -> dict:
