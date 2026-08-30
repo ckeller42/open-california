@@ -86,6 +86,10 @@ ROOF_MAX_TRAVEL_S = float(os.environ.get("CALICTL_ROOF_MAX_TRAVEL_S", "30.0"))  
 ROOF_SAFETY_TICK_MS = 500                 # counter increments +1 per this many ms of wall-clock
 ROOF_SAFETY_VALIDATE_S = 3.0              # dead-man: counter must validate within ~3 s, else error
 ROOF_SAFETY_SEED_MAX = 1_000_000          # app seeds a random SafetyCounter in [1, this]
+# Auto-stop at limit: while a move streams, poll the roof Position at this cadence and cease the
+# stream when it reaches the direction's terminal Position (app-faithful; the unit's own limit
+# switches remain the real safety). Throttled so the poll-reads don't crowd out the counter frames.
+ROOF_LIMIT_POLL_S = float(os.environ.get("CALICTL_ROOF_LIMIT_POLL_S", "1.0"))
 
 
 def _roof_safety_counter(seed: int, elapsed_ms: float, tick_ms: int = ROOF_SAFETY_TICK_MS) -> int:
@@ -391,6 +395,7 @@ class CamperDevice:
                            validate_s: float = ROOF_SAFETY_VALIDATE_S,
                            counter_seed: int | None = None,
                            stop_event=None,
+                           limit_positions=None,
                            verify: bool = True) -> dict | None:
         """Drive a roof OPEN/CLOSE move by streaming move frames, then force STOP.
 
@@ -440,6 +445,14 @@ class CamperDevice:
             many seconds the move is aborted (STOP) as the app does. ``None`` disables the check.
         :param counter_seed: optional explicit SafetyCounter seed (else a random app-style seed);
             handy for deterministic tests.
+        :param stop_event: an ``asyncio.Event`` a hold-to-move UI (or a ``stop`` command) sets to
+            interrupt travel — checked each frame; set lock-free by another coroutine. ``None`` = no
+            interrupt.
+        :param limit_positions: terminal roof ``Position`` values for this direction
+            (``control.roof_limit_positions``). While moving, the roof ``Position`` is polled every
+            ``ROOF_LIMIT_POLL_S`` and the stream ceases (-> STOP) once it lands in this set — an
+            app-faithful auto-stop at the open/closed limit. ``None`` disables the poll; a flaky
+            read never stops the move on its own (the bounded cap + STOP stay the real safety net).
         :param verify: read the state char back after STOP.
         :returns: post-STOP state decode, or None when ``verify`` is false.
 
@@ -493,6 +506,7 @@ class CamperDevice:
             start = time.monotonic()
             deadline = start + max_duration_s
             validate_checked = False
+            last_limit_poll = start
             # stop_event lets a hold-to-move UI (or a 'stop' command) interrupt travel:
             # set lock-free by another coroutine, checked each frame -> break -> STOP.
             while time.monotonic() < deadline and not (stop_event is not None and stop_event.is_set()):
@@ -505,6 +519,17 @@ class CamperDevice:
                     if not await self._roof_counter_valid(client, func):
                         print("actuate_roof: SafetyCounter invalid after %.0fs — aborting move "
                               "(STOP)" % validate_s, flush=True)
+                        break
+                # Auto-stop at the limit: once the roof reaches this direction's terminal Position,
+                # cease the stream (-> STOP) instead of running to the travel cap. Best-effort — a
+                # None read (flaky) just keeps driving until the cap.
+                if (limit_positions and func.state_char
+                        and (time.monotonic() - last_limit_poll) >= ROOF_LIMIT_POLL_S):
+                    last_limit_poll = time.monotonic()
+                    pos = await self._roof_position(client, func)
+                    if pos is not None and pos in limit_positions:
+                        print("actuate_roof: roof reached limit position %s — ceasing (STOP)"
+                              % pos, flush=True)
                         break
                 await asyncio.sleep(period_s)
             # ALWAYS force a STOP (best-effort even if the link is flaky), with the live counter.
@@ -535,6 +560,18 @@ class CamperDevice:
             return bool(dec.get("SafetyCounterValid", 1))
         except Exception:
             return True
+
+    @staticmethod
+    async def _roof_position(client, func):
+        """Read the roof state char and return the raw ``Position`` (0-15), or ``None`` on any
+        read/decode failure — so a flaky read never spuriously stops a move (the caller keeps
+        driving to the bounded cap instead). Cheap: the unit is awake while the counter streams."""
+        from . import protocol  # lazy
+        try:
+            raw = bytes(await client.read_gatt_char(func.state_char))
+            return protocol.decode(func, raw).get("Position")
+        except Exception:
+            return None
 
     async def _heartbeat(self, client, stop) -> None:
         """Write a monotonic +1 4-byte big-endian counter to HEARTBEAT_CHAR every

@@ -195,8 +195,12 @@ Roof actuation (press-and-hold move stream, unit self-gated by a 3 s SafetyCount
    :py:meth:`calictl.device.CamperDevice.actuate_roof`, which now generates a live monotonic
    BE-uint32 counter from a random seed (~+1 every 500 ms), streams move frames at ~500 ms
    cadence, honours ``SafetyCounterValid`` (``1402`` bit 7) and mirrors the app's 3000 ms
-   dead-man for the ~3 s unit self-gate — **mock-tested only; it has never driven a real roof**,
-   so roof actuation stays NOT-LIVE-VERIFIED until a live at-the-van test.
+   dead-man for the ~3 s unit self-gate. It also polls the roof ``Position`` (``1402``) at ~1 s and
+   **ceases the stream once it reaches the direction's terminal Position** (open ``1`` / closed
+   ``0``/``14``) — an app-faithful auto-stop at the limit, best-effort on top of the unit's own
+   limit switches (a flaky read never stops the move on its own; the bounded cap + STOP stay the
+   safety net). **Mock-tested only; it has never driven a real roof**, so roof actuation stays
+   NOT-LIVE-VERIFIED until a live at-the-van test.
 
 .. mermaid::
 
@@ -207,10 +211,12 @@ Roof actuation (press-and-hold move stream, unit self-gated by a 3 s SafetyCount
         Note over C,U: user presses and HOLDS open/close
         loop press-and-hold, move frames @ ~500 ms
             C->>U: move frame [0x01 open / 0x04 close] + app-generated monotonic SafetyCounter (+1/500 ms)
+            C->>U: poll Position (1402) every ~1 s
+            Note right of U: at limit Position (open 1 / closed 0,14) calictl ceases the stream
         end
         Note right of U: unit validates SafetyCounter (~3 s) — motor withheld until valid → 1402 bit 7
         Note over C,U: after ~3 s pop-top travels while frames continue
-        C->>U: STOP frame [0x00] on release / end (or frames cease → dead-man halt)
+        C->>U: STOP frame [0x00] on release / end / limit reached (or frames cease → dead-man halt)
         Note right of U: halts
 
 Range validation and the 0x0E link drop

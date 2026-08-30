@@ -360,8 +360,9 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
     s._read_only = False                                 # writes enabled for this actuation test
     calls = {"actuate_roof": None, "actuate": None}
 
-    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True, stop_event=None):
-        calls["actuate_roof"] = (f.name, move_frame, stop_frame)
+    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True, stop_event=None,
+                                limit_positions=None):
+        calls["actuate_roof"] = (f.name, move_frame, stop_frame, limit_positions)
         return None
 
     async def fake_actuate(f, frame, verify=True):
@@ -379,10 +380,12 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
     assert result is None                     # roof has no _set_check row
     assert calls["actuate_roof"] is not None
     assert calls["actuate"] is None
-    _, move_frame, stop_frame = calls["actuate_roof"]
+    _, move_frame, stop_frame, limit_positions = calls["actuate_roof"]
     funcs = protocol.load(); overrides.apply(funcs)
     assert move_frame == control.roof_frame(funcs, "open")
     assert stop_frame == control.roof_frame(funcs, "stop")
+    # the open-move carries its terminal limit so travel auto-stops at the open position
+    assert limit_positions == control.roof_limit_positions("open")
 
 
 def test_on_command_roof_stop_routes_to_actuate(monkeypatch):

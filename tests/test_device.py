@@ -192,3 +192,34 @@ def test_actuate_roof_stops_when_event_set(fake_bleak):
     # loop never streams an open frame (dir 0x01) — only the STOP frame (dir 0x00) is written.
     dirs = [d[0] for op, u, d in cli.calls if op == "write" and u == f.control_char]
     assert 0x01 not in dirs and 0x00 in dirs
+
+
+def test_actuate_roof_stops_at_limit_position(fake_bleak, monkeypatch):
+    """A move ceases (-> STOP) as soon as the roof Position reaches the direction's limit, rather
+    than running to the travel cap.
+
+    .. test:: Roof travel auto-stops at the limit position
+       :id: T_ROOF_LIMIT_STOP
+       :links: R_ROOF_ACTUATE
+    """
+    from calictl import control, overrides, protocol
+    funcs = protocol.load(); overrides.apply(funcs)
+    f = funcs["roof"]
+    move = control.roof_frame(funcs, "open"); stop = control.roof_frame(funcs, "stop")
+    # Position is the 4-bit field at offset 0 (MSB-first) -> high nibble. 0x10 -> Position 1 = "open",
+    # the terminal for an "open" move. State-char reads report already-at-limit; other reads = zeros.
+    open_payload = bytes([0x10]) + bytes(15)
+    async def _read(self, uuid):
+        self.calls.append(("read", str(uuid), None))
+        return open_payload if str(uuid) == f.state_char else bytes(6)
+    monkeypatch.setattr(fake_bleak, "read_gatt_char", _read)
+    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.0)   # poll after every frame
+    async def _run():
+        dev = device.CamperDevice("AA:BB:CC:DD:EE:FF")
+        await dev.actuate_roof(f, move, stop, verify=False, validate_s=None,
+                               limit_positions=control.roof_limit_positions("open"))
+        return fake_bleak.instances[-1]
+    cli = asyncio.run(_run())
+    dirs = [d[0] for op, u, d in cli.calls if op == "write" and u == f.control_char]
+    # reached the open limit right after the first frame -> exactly one move (0x01), then STOP (0x00)
+    assert dirs.count(0x01) == 1 and dirs[-1] == 0x00
