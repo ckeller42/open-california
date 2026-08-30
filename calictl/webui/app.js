@@ -1330,6 +1330,15 @@ function autoCamperCard() {
   return card;
 }
 
+// Re-press debounce (app-faithful, cross-check #2 2026-08-30). A move-start restarts the app's
+// SafetyCounter from a fresh random seed; if a release is followed by an immediate re-press the unit
+// sees a brand-new counter and withholds the motor another ~3 s. The app ignores a roof press within
+// ~1 s of the last one, so button jitter can't stutter the drive. Module-level (not per-render): the
+// state view re-renders every 2 s and would otherwise reset a closure-scoped timestamp. STOP is never
+// debounced — a release must always cease the move.
+const ROOF_REPRESS_MS = 1000;
+let roofLastMoveStart = 0;
+
 function roofControls() {
   const card = document.createElement("div");
   card.className = "card";
@@ -1355,8 +1364,10 @@ function roofControls() {
       const start = (ev) => {
         ev.preventDefault();
         if (readOnly() || armed) return;
+        if (Date.now() - roofLastMoveStart < ROOF_REPRESS_MS) return;  // debounce a too-quick re-press
         if (!confirm(`Roof ${dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?`)) return;
         armed = true;
+        roofLastMoveStart = Date.now();
         command("roof", dir, null);
       };
       const end = () => { if (armed) { armed = false; command("roof", "stop", null); } };
