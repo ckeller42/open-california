@@ -250,7 +250,10 @@ _LZONES = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seve
 # L1-L8 are the installed lamps on this van (reading/kitchen/roof-ambient/outside — confirmed
 # by the HCI capture 2026-07-08). L9-L16 read constant not-installed defaults (0 or 13) that
 # ignore SET_BRIGHTNESS, so they must NOT count toward "any light on".
-_REAL_LIGHT_ZONES = frozenset(range(1, 9))
+# Zones that physically exist on the reference van. Zone 9 = the pop-top roof READING light —
+# DEVICE-proven 2026-08-30 by single-light isolation (unit screen "Dach" on -> zone_9=2, all
+# else 0/13). Zone 12 also reads 0 (not 13) but has no proven fixture yet — excluded until shown.
+_REAL_LIGHT_ZONES = frozenset(range(1, 10))
 
 
 def lighting(d: dict) -> dict:
@@ -259,7 +262,10 @@ def lighting(d: dict) -> dict:
     for suf, num in _LZONES.items():
         v = d.get("BrightnessL" + suf)
         out["brightness_zone_%d" % num] = v
-        if v and v not in (13, 14) and num in _REAL_LIGHT_ZONES:   # 13=NOT_EQUIPPED, 14=sentinel
+        if v and v not in (13, 14):   # 13=NOT_EQUIPPED, 14=leave-unchanged — real brightness only
+            # No zone whitelist: not-equipped zones always read 13, so they exclude themselves.
+            # DEVICE-proven 2026-08-30: zone 9 is the pop-top READING light (was wrongly excluded
+            # by a 1..8 whitelist -> any_on lied False while the lamp burned).
             any_on = True
     out["any_on"] = any_on
     return out

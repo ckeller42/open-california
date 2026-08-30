@@ -50,3 +50,7 @@ Captures come from the Mac "bar" (PacketLogger/tshark) or buspi HCI. When one la
 `tests/scenarios/<fn>/<case>.yaml`, assert our frame matches in `test_capture_diff.py`, flip the row
 to CAPTURE, and drop the GUI "not verified" confirm for that control. See the memory
 `capture-evidence-tier`.
+- lighting **zone 9 = pop-top roof READING light** — DEVICE (2026-08-30, single-light isolation:
+  unit screen "Dach Ein/Aus" on, live read `zone_9=2`, all other zones 0/13). Exposed an `any_on`
+  bug (a zones-1..8 whitelist excluded it — fixed same day). NB conflicts with the 2026-08-27
+  "pop-roof = zone 5" toggle note — likely two distinct roof fixtures; map still needs the full pass.
