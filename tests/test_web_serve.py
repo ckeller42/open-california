@@ -812,3 +812,18 @@ def test_web_server_binds_without_reverse_dns(tmp_path, monkeypatch):
             assert "_meta" in json.load(r)
     finally:
         httpd.shutdown()
+
+
+def test_command_surfaces_precondition_refusal_without_actuating():
+    """A physical-precondition refusal (roof-reading while roof closed) must reach the web client
+    as a distinct `refused` reason, NOT be scheduled as a BLE write. Regression: the reason used to
+    collapse into on_command's None and the UI showed a misleading 'Sent — check the lamp'.
+    loop=None proves nothing was scheduled (run_coroutine_threadsafe would raise)."""
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    s._read_only = False
+    s._last = {"roof": {"Position": 0}}                 # roof closed
+    res = serve.ServeBackend(s, loop=None, read_only=False).command("lighting", "roof-reading", 8)
+    assert res["ok"] is True and res["applied"] is False
+    assert "refused" in res and "roof" in res["refused"].lower()
+    # a NON-gated command with loop=None would raise (proves the gate short-circuited before scheduling)

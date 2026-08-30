@@ -201,6 +201,15 @@ class ServeBackend:
             or None>, "error": None}``. ``applied`` mirrors `on_command`'s
             return: whether the readback showed the change took effect.
         """
+        # Physical-precondition refusal (roof-reading needs roof up, cooler timer needs fridge off):
+        # surface the reason as a distinct `refused` field and DON'T schedule a BLE write — otherwise
+        # the outcome collapses into on_command's None and the UI misreports it as "Sent". on_command
+        # keeps its own gate for the MQTT/HA path.
+        from . import control  # lazy
+        reason = control.command_precondition(function, what, value, self._s._last or {})
+        if reason:
+            return {"ok": True, "applied": False, "refused": reason, "state": None,
+                    "error": None, "function": function}
         fut = asyncio.run_coroutine_threadsafe(
             self._s.on_command(function, what, value), self._loop)
         applied = fut.result(timeout=90)   # on_command returns applied-ness

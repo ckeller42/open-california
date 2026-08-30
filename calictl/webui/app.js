@@ -127,7 +127,7 @@
  * `/api/command` success response (serve.py::command()). Error paths (web.py) return `{ error }`
  * only, so every field is optional here. `applied`: true=verified, false=not applied, null=sent
  * but not remotely verifiable.
- * @typedef {{ ok?: boolean, applied?: boolean|null, state?: FnState|null, error?: string|null, function?: string }} CommandResponse
+ * @typedef {{ ok?: boolean, applied?: boolean|null, refused?: string, state?: FnState|null, error?: string|null, function?: string }} CommandResponse
  * @typedef {{ samples: number[][], gap_s: number, now: number, hours: number, error?: string }} BattHistory
  * @typedef {{ idx: number, cls: string, pad: number, lblCls: string, name: string, unit?: string }} SeriesCfg
  */
@@ -535,7 +535,8 @@ async function processQueue() {
   }
   const done = inflight;
   inflight = null;
-  if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
+  if (res && res.ok && res.refused) toast(res.refused, "warn");   // physical precondition not met
+  else if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
   // applied === null: sent + acknowledged but not verifiable remotely. For lighting the state
   // char is a write-through echo, so only the lamp itself is proof — say so. Other functions
   // that return null (e.g. roof, which has no readback check) keep the neutral phrasing.
