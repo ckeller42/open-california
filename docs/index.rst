@@ -53,9 +53,12 @@ separately from these docs: `Reverse-engineering notes <business-logic/index.htm
 (also browsable `in the repository <https://github.com/ckeller42/open-california/tree/main/docs/business-logic>`_).
 
 There is also an **interactive LikeC4 model** of the runtime — the architecture plus the eight
-protocol sequences as explorable dynamic views: `model <model/index.html>`_ (source:
+protocol sequences as explorable dynamic views: `open the full model <model/index.html>`_ (source:
 ``docs/likec4/*.c4``, validated in the docs build; the mermaid diagrams in
 :doc:`protocol-sequences` stay canonical and carry the requirement links).
+
+.. likec4-view:: index
+   :height: 520px
 
 Requirement traceability
 ------------------------

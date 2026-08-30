@@ -10,6 +10,7 @@ import sys
 
 # repo root on the path so autodoc can import calictl.* and tests.*
 sys.path.insert(0, os.path.abspath(".."))
+sys.path.insert(0, os.path.abspath("_ext"))
 
 project = "open-california"
 author = "open-california"
@@ -19,6 +20,7 @@ extensions = [
     "sphinx_needs",
     "sphinxcontrib.mermaid",   # protocol sequence diagrams (client-side mermaid.js, no Java)
     "myst_parser",             # the markdown docs (business-logic/, protocol.md, ...) on the site
+    "likec4_embed",            # .. likec4-view:: <id> — iframe embeds of the built /model/ viewer
 ]
 
 # myst: render ```mermaid fences through sphinxcontrib.mermaid; allow heading anchors for
