@@ -154,6 +154,15 @@ async def cmd_set(funcs, dev, args):
     cur = protocol.decode(f, await dev.read(f))
     print("current %s: %s" % (fn, json.dumps(semantics.interpret(fn, cur), default=str)))
     try:
+        gate_state = {fn: cur}                 # `cur` is the freshly-read target state
+        if fn == "lighting" and args.what == "roof-reading":
+            try:
+                gate_state["roof"] = protocol.decode(funcs["roof"], await dev.read(funcs["roof"]))
+            except Exception:
+                pass                           # unknown roof state -> allow (can't prove it's down)
+        reason = control.command_precondition(fn, args.what, args.value, gate_state)
+        if reason:
+            print(reason, file=sys.stderr); return 2
         frame = control.build(funcs, fn, args.what, args.value, cur)
     except ValueError as e:
         print(str(e), file=sys.stderr); return 2

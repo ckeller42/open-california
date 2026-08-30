@@ -295,3 +295,10 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
 - Release timer: `b1/d.java:234-245`; roof heartbeat `ig/c.java:674,764`
 - Op params: `qd/{q,l,m,p}.java`, `td/{a,b,c,d}.java`
 - 1003 counter: `ag/b.java`, written app-side `t0/c.java:264`
+
+- **Write preconditions (`control.command_precondition`, 2026-08-30):** two actions the unit/UI only
+  honour in a given state, refused with a reason instead of a silent no-op — the pop-top **roof
+  reading light (L9)** needs the roof raised (`roof.Position` not closed), and the **cooler cooling
+  timer** (`timer_set`/`timer_start`) can only be set while the fridge is off (`cooler.State==0`).
+  Enforced in `serve.on_command` + `cli` (unknown gating state allows the write — can't prove it's
+  blocked). Both DEVICE-confirmed at the van.

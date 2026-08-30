@@ -572,6 +572,10 @@ class Server:
                 except ConnectionUnavailable as e:
                     print("command %s skipped (no state read): %s" % (function, e), flush=True)
                     return None
+            reason = control.command_precondition(function, what, value, self._last)
+            if reason:
+                print("refusing %s/%s: %s" % (function, what, reason), flush=True)
+                return None
             frame = control.build(self.funcs, function, what, value, last)
             if frame is None:
                 return None
