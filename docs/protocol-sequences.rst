@@ -106,6 +106,7 @@ Interactive version of this sequence (from the LikeC4 model, ``docs/likec4/seque
 
 .. likec4-view:: seqArmedWrite
    :height: 420px
+   :mode: sequence
 
 Lighting SET — SET + neutral flush on an awake unit; optional REQUEST_CONFIG config-pull (settled 2026-08-16)
 -------------------------------------------------------------------------------------------------------------
