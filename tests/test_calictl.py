@@ -582,7 +582,7 @@ def test_cli_set_check_all_rows():
 
 def test_cli_max_zone():
     from calictl import postcheck  # _max_zone moved here from cli (post-write applied-check)
-    # only real zones L1-L8 count; L9-L16 (here 10=13, 16=8) are the unchanged-sentinel range
+    # real zones are L1-L9 + L12 (full van map); L10/L11/L13-L16 are the unchanged-sentinel range
     interp = {"brightness_zone_1": 0, "brightness_zone_7": 9, "brightness_zone_10": 13, "brightness_zone_16": 8}
     assert postcheck._max_zone(interp) == 9
     assert postcheck._max_zone({}) == 0

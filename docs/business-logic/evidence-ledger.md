@@ -54,3 +54,8 @@ to CAPTURE, and drop the GUI "not verified" confirm for that control. See the me
   unit screen "Dach Ein/Aus" on, live read `zone_9=2`, all other zones 0/13). Exposed an `any_on`
   bug (a zones-1..8 whitelist excluded it — fixed same day). NB conflicts with the 2026-08-27
   "pop-roof = zone 5" toggle note — likely two distinct roof fixtures; map still needs the full pass.
+- lighting **full 10-lamp map** — DEVICE (2026-08-30, single-light isolation + owner-watched writes):
+  L1=Lesen-R, L2=Lesen-L, L3=Umgebung-hinten, L4=Lesen-vorne, L5=Küche-Ambient, L6=Küche-Schrank,
+  L7=Küche-Kochen, L8=Dach-Ambient, L9=Dach-Lesen, L12=Eingang. Fixed the roof-reading mislabel
+  (was L6→ now L9; L6=cabinet) and added L12 to the real-zone set. The L6 write was calictl→unit,
+  owner-confirmed the cabinet lamp lit (bonus live actuation check).

@@ -20,12 +20,12 @@ def test_set_brightness_one_zone_matches_app_frame():
 
 
 def test_inferred_zones_l5_l6_target_the_right_fields():
-    # The GUI's 8-lamp layout adds L5 (Küche Ambientelicht) and L6 (Aufstelldach Leselicht),
-    # inferred by elimination. The lamp *identity* is unverified, but the friendly-key -> field
-    # wiring must be exact: kitchen-ambient -> BrightnessLFive, roof-reading -> BrightnessLSix,
-    # every other zone left at the 14 sentinel.
+    # Full lamp map DEVICE-confirmed 2026-08-30 (single-light isolation + owner-watched writes):
+    # kitchen-ambient=L5, kitchen-cabinet=L6, roof-reading=L9 (was mislabelled L6), entrance=L12.
+    # The friendly-key -> field wiring must be exact; every other zone left at the 14 sentinel.
     f = _f()
-    for what, field in (("kitchen-ambient", "BrightnessLFive"), ("roof-reading", "BrightnessLSix")):
+    for what, field in (("kitchen-ambient", "BrightnessLFive"), ("kitchen-cabinet", "BrightnessLSix"),
+                        ("roof-reading", "BrightnessLNine"), ("entrance", "BrightnessLOneTwo")):
         d = control.decode_control(f["lighting"], control.build(f, "lighting", what, 6, {"ProfileNumber": 9}))
         assert d[field] == 6
         others = [v for k, v in d.items() if k.startswith("Brightness") and k != field]
@@ -35,8 +35,8 @@ def test_inferred_zones_l5_l6_target_the_right_fields():
 def test_gui_lamp_keys_all_resolve_to_control_zones():
     # Guard the GUI<->control contract: every `what` the Lighting screen can send must be a real
     # LIGHT_ZONES key, or the slider would 400. (app.js LIGHT_LAMPS is the source; mirrored here.)
-    gui_keys = {"reading-1", "reading-2", "reading-3", "kitchen-ambient", "kitchen",
-                "roof-ambient", "roof-reading", "outside-rear"}
+    gui_keys = {"reading-1", "reading-2", "reading-3", "kitchen-ambient", "kitchen-cabinet",
+                "kitchen", "roof-ambient", "roof-reading", "outside-rear", "entrance"}
     assert gui_keys <= set(control.LIGHT_ZONES), gui_keys - set(control.LIGHT_ZONES)
 
 
