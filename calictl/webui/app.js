@@ -937,7 +937,7 @@ const LIGHT_LAMPS = [
     { label: "Cooking", what: "kitchen", zone: 7 } ] },
   { group: "Pop-roof", lamps: [
     { label: "Ambient", what: "roof-ambient", zone: 8 },
-    { label: "Reading", what: "roof-reading", zone: 9 } ] },
+    { label: "Reading", what: "roof-reading", zone: 9, hint: "roof open only" } ] },
   { group: "Ambient / outside", lamps: [
     { label: "Rear surround", what: "outside-rear", zone: 3 },
     { label: "Entrance", what: "entrance", zone: 12 } ] },

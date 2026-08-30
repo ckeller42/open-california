@@ -59,3 +59,10 @@ to CAPTURE, and drop the GUI "not verified" confirm for that control. See the me
   L7=Küche-Kochen, L8=Dach-Ambient, L9=Dach-Lesen, L12=Eingang. Fixed the roof-reading mislabel
   (was L6→ now L9; L6=cabinet) and added L12 to the real-zone set. The L6 write was calictl→unit,
   owner-confirmed the cabinet lamp lit (bonus live actuation check).
+- roof **Position decode + L9=roof-reading** — DEVICE (2026-08-30, roof physically opened): live read
+  `roof.Position=1 -> position_name "open"` (first live confirm — roof was never driven before), and a
+  `roof-reading`(L9) write lit the pop-top reading lamp only with the roof up. Gates the write: L9 is
+  unpowered while the roof is closed.
+- cooler **cooling-timer decode** — DEVICE (2026-08-30, owner set Startzeit 09:00): live wire
+  `timer_active=True, timer_hour=9, timer_min=0` matched the unit screen (was decompile-only). The
+  timer can only be armed while the fridge is off — gated.

@@ -166,3 +166,26 @@ def test_int_range_helper_validates_and_traces():
             control._int_range(bad, 1, 5, "cooler level")
     with pytest.raises(ValueError):                                # non-numeric
         control._int_range("nope", 1, 5, "cooler level")
+
+
+def test_command_precondition_roof_reading_needs_raised_roof():
+    from calictl import control
+    # roof closed (0/14) -> ON write refused; open/middle/unknown -> allowed; OFF always allowed.
+    assert control.command_precondition("lighting", "roof-reading", 8, {"roof": {"Position": 0}})
+    assert control.command_precondition("lighting", "roof-reading", 8, {"roof": {"Position": 14}})
+    assert control.command_precondition("lighting", "roof-reading", 8, {"roof": {"Position": 1}}) is None
+    assert control.command_precondition("lighting", "roof-reading", 8, {"roof": {"Position": 2}}) is None
+    assert control.command_precondition("lighting", "roof-reading", 8, {}) is None          # unknown -> allow
+    assert control.command_precondition("lighting", "roof-reading", 0, {"roof": {"Position": 0}}) is None  # OFF ok
+    assert control.command_precondition("lighting", "kitchen", 8, {"roof": {"Position": 0}}) is None       # other zone
+
+
+def test_command_precondition_cooler_timer_needs_fridge_off():
+    from calictl import control
+    on = {"cooler": {"State": 1}}
+    off = {"cooler": {"State": 0}}
+    for what in ("timer_set", "timer_start"):
+        assert control.command_precondition("cooler", what, 9, on)        # fridge on -> refuse
+        assert control.command_precondition("cooler", what, 9, off) is None
+        assert control.command_precondition("cooler", what, 9, {}) is None  # unknown -> allow
+    assert control.command_precondition("cooler", "power", "on", on) is None  # non-timer unaffected

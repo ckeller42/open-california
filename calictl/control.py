@@ -236,6 +236,44 @@ LIGHT_ZONES = {
 }
 
 
+# --- physical preconditions for a write -------------------------------------
+# Some actions are refused by the hardware/UI unless another subsystem is in a given state, so a
+# frame the unit ACKs still does nothing. Refuse-with-reason beats a silent no-op. Two known gates
+# (owner-confirmed 2026-08-30): the pop-top roof reading light (L9) is unpowered while the roof is
+# down; the cooler cooling-timer can only be set while the fridge is OFF.
+_ROOF_CLOSED_POSITIONS = (0, 14)   # matches semantics._ROOF_POS closed values
+
+
+def command_precondition(function, what, value, states):
+    """Return a human reason to refuse a control write, or ``None`` to allow it.
+
+    :param function: target function (``"lighting"``, ``"cooler"``, ...).
+    :param what: the targeted control key.
+    :param value: requested value (context-dependent).
+    :param states: mapping function-name -> DECODED state (e.g. ``serve._last`` or a fresh decode).
+    :returns: a reason string when the write should be refused, else ``None``. Only blocks when the
+        gating state is POSITIVELY wrong; unknown/absent state allows the write (can't prove it's
+        blocked, and the write is otherwise harmless).
+    """
+    if function == "lighting" and what == "roof-reading":
+        try:
+            on = int(value) > 0            # brightness 0-11; only an ON write is gated
+        except (TypeError, ValueError):
+            on = False
+        pos = (states.get("roof") or {}).get("Position")
+        if on and pos in _ROOF_CLOSED_POSITIONS:
+            return "the pop-top roof reading light needs the roof raised (roof is closed)"
+    if function == "cooler" and what in ("timer_set", "timer_start"):
+        if (states.get("cooler") or {}).get("State") == 1:   # fridge currently ON
+            return "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+    return None
+
+
+# Back-compat alias (older callers used the lighting-only name).
+def lighting_precondition(what, value, states):
+    return command_precondition("lighting", what, value, states)
+
+
 def _all_real_zones(zone_fields, b):
     """Value ``b`` for the REAL lamp zones (L1-L8), the unchanged sentinel elsewhere.
 
