@@ -220,7 +220,7 @@ LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
 #     reading trio L2/L1/L4 (Links/Rechts/Beifahrer — group confirmed, the split is best-effort),
 #     "kitchen" = L7 (the Küche *Kochen*/cooking light), "roof-ambient" = L8, "outside-rear" = L3.
 #   INFERRED by elimination (2026-07-15 screenshots): the app shows this van has 8 lamps, and
-#     semantics._REAL_LIGHT_ZONES says exactly 8 zones are real (L1-L8). Six are pinned above; the
+#     semantics._REAL_LIGHT_ZONES says 9 zones are real (L1-L9; L9 = roof reading light). Six are pinned above; the
 #     app's two remaining rows are Küche *Ambientelicht* and Aufstelldach *Leselicht*, so they must
 #     be the two unpinned zones L5/L6 — but WHICH is which is unverified. The GUI marks these
 #     unverified; a single slider drag on-device (watch which lamp lights) will confirm/swap them.
@@ -240,7 +240,7 @@ def _all_real_zones(zone_fields, b):
 
     ``power``/``all`` used to write every one of the 16 control zones — including the
     never-equipped L9-L16, which only coincidentally looked right while "on" was the 13
-    NOT_EQUIPPED marker. Only L1-L8 exist on this van (semantics._REAL_LIGHT_ZONES); the
+    NOT_EQUIPPED marker. Only L1-L9 exist on this van (semantics._REAL_LIGHT_ZONES); the
     app's "Alle Lichter" frame is uncaptured, so stay conservative: never touch phantom zones.
     """
     from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
