@@ -62,3 +62,63 @@ def test_send_passkey_ignores_an_already_resolved_future():
         return t._passkey_future.result()
 
     assert asyncio.run(_run()) == 1
+
+
+class _FakeChar:
+    def __init__(self, uuid, readable=True):
+        self.uuid = uuid
+        self.properties = ["read"] if readable else []
+
+
+class _FakeService:
+    def __init__(self, characteristics):
+        self.characteristics = characteristics
+
+
+class _FakeClient:
+    """Pre-connected fake so verify() never touches its `client is None or not
+    connected` branch -- that's the only place `from bleak import BleakClient`
+    is imported, so this keeps the test bleak-free."""
+
+    def __init__(self, services, unreadable_uuids=()):
+        self.is_connected = True
+        self.services = services
+        self._unreadable = set(unreadable_uuids)
+
+    async def read_gatt_char(self, uuid):
+        if uuid in self._unreadable:
+            raise RuntimeError("read failed: %s" % uuid)
+
+    async def disconnect(self):
+        pass
+
+
+def test_verify_returns_none_when_zero_state_chars_are_readable():
+    """An unbonded RPA link can ACK the connection + version/auth reads yet drop
+    every state-char read -- verify() must fail closed (None), not report a
+    hollow "0 readable" success (the gap the review caught)."""
+    from calictl import device as device_mod
+
+    t = BluezTransport()
+    t._client = _FakeClient(services=[_FakeService([_FakeChar("0000f001")])],
+                             unreadable_uuids={"0000f001"})
+    assert asyncio.run(t.verify()) is None
+    # sanity: VERSION/AUTH themselves are readable in this fixture (only the state char isn't)
+    assert device_mod.VERSION_CHAR not in t._client._unreadable
+
+
+def test_verify_returns_positive_count_when_chars_are_readable():
+    t = BluezTransport()
+    t._client = _FakeClient(services=[
+        _FakeService([_FakeChar("0000f001"), _FakeChar("0000f002", readable=False)]),
+    ])
+    assert asyncio.run(t.verify()) == 1
+
+
+def test_verify_returns_none_when_version_or_auth_read_fails():
+    from calictl import device as device_mod
+
+    t = BluezTransport()
+    t._client = _FakeClient(services=[_FakeService([_FakeChar("0000f001")])],
+                             unreadable_uuids={device_mod.VERSION_CHAR})
+    assert asyncio.run(t.verify()) is None

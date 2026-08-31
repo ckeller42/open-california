@@ -89,13 +89,21 @@ injected.
 ## Verify-policy caveat
 
 `EV_VERIFY_OK` carries `arg = readable-char count` — but the SM treats that count as an opaque
-number; it does not know or care what "enough" means. The **20/20-readable-characteristics**
-heuristic (bonded devices can read every characteristic; an unbonded link drops mid-read) is
-**buspi transport policy** decided inside `pairing_bluez.py::verify()`, not SM data. The ESP
-equivalent almost certainly won't enumerate a whole GATT table — it would do a single encrypted
-read of one known auth characteristic and treat success/failure as `EV_VERIFY_OK`/`EV_VERIFY_FAIL`
-directly. Don't port the "20" number itself; port the *shape* (an encrypted read after `EV_PAIR_OK`
-that classifies into `EV_VERIFY_OK`/`EV_VERIFY_FAIL`).
+number; it does not know or care what "enough" means. Classifying a readable-char count into
+`EV_VERIFY_OK`/`EV_VERIFY_FAIL` is **buspi transport policy** decided inside
+`pairing_bluez.py::verify()`, not SM data. The **actual shipped policy**: `verify()` reads
+`VERSION_CHAR` + `AUTH_CHAR` (must both succeed) and then attempts every other readable-flagged
+characteristic, counting successes; it returns `None` (→ `EV_VERIFY_FAIL`) if the version/auth
+reads fail **or** the readable-count comes back `0` (an unbonded RPA link can ACK the connection
+and even the version/auth reads yet drop every real state-char read — a bare positive-vs-`None`
+check without the zero-count guard would misclassify that as bonded). A positive count returns
+as `EV_VERIFY_OK`. The full **20/20-readable-characteristics** signature (all state chars
+readable, the strongest bonded/unbonded discriminator seen so far) is a stronger version of this
+same check that the #157 van session will confirm live; today's shipped threshold is only
+`count > 0`, not `count == 20`. The ESP equivalent almost certainly won't enumerate a whole GATT
+table — it would do a single encrypted read of one known auth characteristic and treat
+success/failure as `EV_VERIFY_OK`/`EV_VERIFY_FAIL` directly. Port the *shape* (an encrypted read
+after `EV_PAIR_OK` that fails closed on any read problem), not the specific count threshold.
 
 ## Exclusion model (single BLE owner rule, CLAUDE.md)
 
@@ -110,8 +118,10 @@ flow; doing so would freeze `/api/state` (and every other read) for that entire 
   parts of it) whenever a pairing flow is active (state not in `idle`/`bonded`/`error`) — a
   second bleak `connect()` against `hci0` mid-pairing is exactly what the single-BLE-owner rule
   (`serve` is the only reader — CLAUDE.md) forbids.
-- The `_ble` lock itself is only taken for the short bleak operations inside `pairing_bluez.py`
-  (connect/pair/verify), never held across the whole state machine.
+- `pairing_bluez.py` never touches `serve.py`'s `_ble` lock at all — the pairing transport opens
+  its own `bleak.BleakScanner`/`BleakClient` directly. The `_ble` lock is **never taken** by the
+  pairing flow; exclusion is entirely the supervisor-park + poll-skip pair above, not lock
+  sharing.
 
 ## NOT-LIVE-VERIFIED
 

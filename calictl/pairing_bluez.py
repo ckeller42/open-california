@@ -310,14 +310,23 @@ class BluezTransport:
 
     # --- verify: connect + read VERSION/AUTH + count readable state chars ---
     async def verify(self):
-        from bleak import BleakClient
+        """Verify policy: version+auth reads must succeed AND at least one state
+        characteristic must be readable, else the link is treated as unbonded/dropped.
 
+        :returns: the readable-char count (> 0) on success, ``None`` on any read
+            failure (version/auth char, or zero readable state chars — an unbonded
+            RPA link that ACKs the connection but drops every real read). The full
+            20/20-readable-characteristics signature this policy approximates is
+            confirmed against real hardware in the #157 van session, not here.
+        """
         from calictl import device as device_mod
 
         client = self._client
         owns_client = False
         try:
             if client is None or not client.is_connected:
+                from bleak import BleakClient
+
                 client = BleakClient(self._found_device)
                 await client.connect()
                 owns_client = True
@@ -333,7 +342,7 @@ class BluezTransport:
                         count += 1
                     except Exception:
                         pass
-            return count
+            return count if count > 0 else None
         except Exception:
             return None
         finally:

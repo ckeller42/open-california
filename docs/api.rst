@@ -105,3 +105,5 @@ Guided pairing (issue #154, #157)
 .. automodule:: calictl.pairing
 .. automodule:: calictl.pairing_bluez
 .. automodule:: tests.test_pairing_sm
+.. automodule:: tests.test_pairing_runner
+.. automodule:: tests.test_pairing_bluez_transport
