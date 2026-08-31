@@ -15,13 +15,52 @@ Hard-won connection lessons baked in:
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import subprocess
+from pathlib import Path
+
+
+def resolve_addr() -> str:
+    """Resolve the unit's BLE address from env override or bonded pairing cache.
+
+    The vehicle's BLE identity address is owner-specific PII — never hardcode a real one.
+    Resolution order:
+
+    1. ``CALICTL_ADDR`` environment variable, if set and non-empty.
+    2. Pairing cache file (``CALICTL_PAIRING_CACHE``, defaulting to
+       ``~/.cache/calictl/pairing.json``): extract the ``address`` field if the file
+       exists and is valid JSON.
+    3. Placeholder ``"AA:BB:CC:DD:EE:FF"`` if all else fails.
+
+    Any read errors (missing file, malformed JSON, missing field, empty string) are
+    silently skipped and fall through to the next option.
+
+    :returns: The resolved BLE address as a string.
+    """
+    env_addr = os.environ.get("CALICTL_ADDR", "").strip()
+    if env_addr:
+        return env_addr
+
+    cache_path_str = os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
+    cache_path = Path(cache_path_str)
+
+    try:
+        cache_text = cache_path.read_text()
+        cache_data = json.loads(cache_text)
+        cached_addr = cache_data.get("address", "").strip()
+        if cached_addr:
+            return cached_addr
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, AttributeError):
+        pass
+
+    return "AA:BB:CC:DD:EE:FF"
+
 
 # The vehicle's BLE identity address is owner-specific PII — never hardcode a real one.
 # Set CALICTL_ADDR in the environment (buspi: /etc/buspi/calictl.env) or pass --addr;
-# the repo default is a non-functional placeholder.
-DEFAULT_ADDR = os.environ.get("CALICTL_ADDR", "AA:BB:CC:DD:EE:FF")
+# the repo default is a non-functional placeholder. Resolved via pairing cache as fallback.
+DEFAULT_ADDR = resolve_addr()
 
 
 # --- non-function GATT chars (deliberately absent from dictionary.yaml) --------

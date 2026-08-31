@@ -223,3 +223,53 @@ def test_actuate_roof_stops_at_limit_position(fake_bleak, monkeypatch):
     dirs = [d[0] for op, u, d in cli.calls if op == "write" and u == f.control_char]
     # reached the open limit right after the first frame -> exactly one move (0x01), then STOP (0x00)
     assert dirs.count(0x01) == 1 and dirs[-1] == 0x00
+
+
+def test_resolve_addr_prefers_env(monkeypatch):
+    """CALICTL_ADDR env var takes precedence over the pairing cache."""
+    monkeypatch.setenv("CALICTL_ADDR", "11:22:33:44:55:66")
+    monkeypatch.delenv("CALICTL_PAIRING_CACHE", raising=False)
+    assert device.resolve_addr() == "11:22:33:44:55:66"
+
+
+def test_resolve_addr_uses_cache_when_no_env(monkeypatch, tmp_path):
+    """Falls back to the pairing cache when CALICTL_ADDR is not set."""
+    monkeypatch.delenv("CALICTL_ADDR", raising=False)
+    cache_file = tmp_path / "pairing.json"
+    cache_file.write_text('{"address": "aa:bb:cc:dd:ee:ff"}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache_file))
+    assert device.resolve_addr() == "aa:bb:cc:dd:ee:ff"
+
+
+def test_resolve_addr_placeholder_when_file_missing(monkeypatch):
+    """Falls back to the placeholder when the cache file does not exist."""
+    monkeypatch.delenv("CALICTL_ADDR", raising=False)
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", "/nonexistent/path/pairing.json")
+    assert device.resolve_addr() == "AA:BB:CC:DD:EE:FF"
+
+
+def test_resolve_addr_placeholder_on_malformed_json(monkeypatch, tmp_path):
+    """Falls back to the placeholder when the cache JSON is malformed."""
+    monkeypatch.delenv("CALICTL_ADDR", raising=False)
+    cache_file = tmp_path / "pairing.json"
+    cache_file.write_text("not valid json {")
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache_file))
+    assert device.resolve_addr() == "AA:BB:CC:DD:EE:FF"
+
+
+def test_resolve_addr_placeholder_on_missing_address_field(monkeypatch, tmp_path):
+    """Falls back to the placeholder when the cache JSON has no 'address' field."""
+    monkeypatch.delenv("CALICTL_ADDR", raising=False)
+    cache_file = tmp_path / "pairing.json"
+    cache_file.write_text('{"wrong_field": "11:22:33:44:55:66"}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache_file))
+    assert device.resolve_addr() == "AA:BB:CC:DD:EE:FF"
+
+
+def test_resolve_addr_placeholder_on_empty_address(monkeypatch, tmp_path):
+    """Falls back to the placeholder when the cached address string is empty."""
+    monkeypatch.delenv("CALICTL_ADDR", raising=False)
+    cache_file = tmp_path / "pairing.json"
+    cache_file.write_text('{"address": ""}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache_file))
+    assert device.resolve_addr() == "AA:BB:CC:DD:EE:FF"
