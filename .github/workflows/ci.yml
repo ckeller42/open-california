@@ -107,7 +107,7 @@ jobs:
       - name: Generated C header is fresh
         run: python -m tools.gen_c_dict --check
       - name: Vectors + differential parity (compiles csrc/)
-        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py -q
+        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py -q
 
   gui-e2e:
     runs-on: ubuntu-latest

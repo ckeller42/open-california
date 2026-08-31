@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "codec.h"
+#include "ports.h"
 
 static int hexval(int c)
 {
@@ -106,6 +107,25 @@ static void op_encode(void)
     putchar('\n');
 }
 
+/* F <nf|-> <pf|-> <ng|-> <pg|->  ('-' = missing liters value) */
+static void op_freshness(void)
+{
+    int32_t v[4] = {0, 0, 0, 0};
+    uint8_t have = 0;
+    for (int i = 0; i < 4; i++) {
+        const char *tok = strtok(NULL, " ");
+        if (!tok) { puts("ERR parse"); return; }
+        if (strcmp(tok, "-") == 0)
+            continue;
+        char *end;
+        long x = strtol(tok, &end, 10);
+        if (*end) { puts("ERR parse"); return; }
+        v[i] = (int32_t)x;
+        have |= (uint8_t)(1u << i);
+    }
+    printf("OK %d\n", freshness_implausible_drop(v[0], v[1], v[2], v[3], have));
+}
+
 int main(void)
 {
     char line[4096];
@@ -118,6 +138,8 @@ int main(void)
             op_decode();
         else if (strcmp(op, "E") == 0)
             op_encode();
+        else if (strcmp(op, "F") == 0)
+            op_freshness();
         else
             puts("ERR parse");
     }

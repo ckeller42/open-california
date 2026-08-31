@@ -1,0 +1,21 @@
+{
+ "version": 1,
+ "comment": "Sequence vectors for the water stale-latch guard (calictl/freshness.py). Values are liters; null = missing. expect: true = the fresh drop is the parked latch (hold last plausible), false = plausible reading.",
+ "cases": [
+  {"id": "drop-grey-frozen-latch", "new": {"fresh": 15, "waste": 3}, "prev": {"fresh": 17, "waste": 3}, "expect": true},
+  {"id": "drop-grey-rise-live", "new": {"fresh": 15, "waste": 4}, "prev": {"fresh": 17, "waste": 3}, "expect": false},
+  {"id": "drop-grey-fall-dump-live", "new": {"fresh": 15, "waste": 2}, "prev": {"fresh": 17, "waste": 9}, "expect": false},
+  {"id": "refill-plausible", "new": {"fresh": 17, "waste": 3}, "prev": {"fresh": 15, "waste": 3}, "expect": false},
+  {"id": "same-plausible", "new": {"fresh": 17, "waste": 3}, "prev": {"fresh": 17, "waste": 3}, "expect": false},
+  {"id": "fresh-missing-new", "new": {"fresh": null, "waste": 3}, "prev": {"fresh": 17, "waste": 3}, "expect": false},
+  {"id": "fresh-missing-prev", "new": {"fresh": 15, "waste": 3}, "prev": {"fresh": null, "waste": 3}, "expect": false},
+  {"id": "drop-grey-missing-new-latch", "new": {"fresh": 15, "waste": null}, "prev": {"fresh": 17, "waste": 3}, "expect": true},
+  {"id": "drop-grey-missing-prev-latch", "new": {"fresh": 15, "waste": 3}, "prev": {"fresh": 17, "waste": null}, "expect": true},
+  {"id": "drop-grey-missing-both-latch", "new": {"fresh": 15, "waste": null}, "prev": {"fresh": 17, "waste": null}, "expect": true},
+  {"id": "decay-to-one-liter-latch", "new": {"fresh": 1, "waste": 0}, "prev": {"fresh": 17, "waste": 0}, "expect": true},
+  {"id": "one-liter-step-latch", "new": {"fresh": 1, "waste": 5}, "prev": {"fresh": 2, "waste": 5}, "expect": true},
+  {"id": "no-drop-grey-moving", "new": {"fresh": 17, "waste": 4}, "prev": {"fresh": 17, "waste": 3}, "expect": false},
+  {"id": "rise-grey-missing", "new": {"fresh": 11, "waste": null}, "prev": {"fresh": 1, "waste": null}, "expect": false},
+  {"id": "zero-tanks-plausible", "new": {"fresh": 0, "waste": 0}, "prev": {"fresh": 0, "waste": 0}, "expect": false}
+ ]
+}

@@ -11,41 +11,13 @@ C codec. A later task adds the seeded differential fuzz pass on top.
    :links: R_CODEC_XLANG_PARITY
 """
 import json
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from calictl import overrides, protocol
 
-ROOT = Path(__file__).resolve().parent.parent
-CSRC = ROOT / "csrc"
-VECTORS = ROOT / "tests" / "vectors" / "camper_codec.json"
-CC_ARGS = ["-std=c99", "-Wall", "-Wextra", "-Werror", "-O1"]
-
-
-@pytest.fixture(scope="session")
-def codec_cli(tmp_path_factory):
-    cc = shutil.which("cc") or shutil.which("gcc")
-    if not cc:
-        pytest.skip("no C compiler on this machine (the codec-parity CI job enforces)")
-    srcs = [s for s in (CSRC / "codec.c", CSRC / "ports.c", CSRC / "codec_cli.c")
-            if s.is_file()]
-    exe = tmp_path_factory.mktemp("codec") / "codec_cli"
-    subprocess.run([cc, *CC_ARGS, *map(str, srcs), "-o", str(exe)], check=True)
-    return exe
-
-
-def run_cli(exe, lines):
-    """One batched subprocess: returns exactly one output line per input line."""
-    proc = subprocess.run([str(exe)], input="\n".join(lines) + "\n",
-                          capture_output=True, text=True, timeout=120)
-    assert proc.returncode == 0, proc.stderr
-    out = proc.stdout.splitlines()
-    assert len(out) == len(lines), "line-count mismatch: %d in, %d out" % (
-        len(lines), len(out))
-    return out
+VECTORS = Path(__file__).resolve().parent / "vectors" / "camper_codec.json"
 
 
 def _parse_ok_fields(line):
@@ -66,7 +38,7 @@ def test_decode_vectors_triple_parity(codec_cli):
     funcs = _funcs()
     vecs = json.loads(VECTORS.read_text())["decode"]
     lines = ["D %s %s" % (v["function"], v["raw_hex"] or "-") for v in vecs]
-    for vec, out in zip(vecs, run_cli(codec_cli, lines)):
+    for vec, out in zip(vecs, codec_cli(lines)):
         c_fields = _parse_ok_fields(out)
         assert c_fields is not None, "%s: C said %r" % (vec["id"], out)
         py = protocol.decode(funcs[vec["function"]], bytes.fromhex(vec["raw_hex"]))
@@ -82,7 +54,7 @@ def test_encode_vectors_triple_parity(codec_cli):
     """Byte-identical encode, and error parity: Python raises ⇔ C answers ERR."""
     funcs = _funcs()
     vecs = json.loads(VECTORS.read_text())["encode"]
-    for vec, out in zip(vecs, run_cli(codec_cli, [_encode_line(v) for v in vecs])):
+    for vec, out in zip(vecs, codec_cli([_encode_line(v) for v in vecs])):
         f = funcs[vec["function"]]
         if vec.get("error"):
             with pytest.raises(ValueError):
@@ -128,7 +100,7 @@ def test_seeded_differential_fuzz(codec_cli):
         ops.append(("E", fn, (vals, fb)))
         kv = " ".join("%s=%d" % (k, v) for k, v in vals.items())
         lines.append(("E %s %d %s" % (fn, fb, kv)).rstrip())
-    for (kind, fn, payload), got in zip(ops, run_cli(codec_cli, lines)):
+    for (kind, fn, payload), got in zip(ops, codec_cli(lines)):
         if kind == "D":
             assert _parse_ok_fields(got) == protocol.decode(funcs[fn], payload), (fn, payload.hex())
         else:
@@ -144,5 +116,5 @@ def test_seeded_differential_fuzz(codec_cli):
 def test_malformed_lines_never_crash(codec_cli):
     junk = ["", "X", "D", "E cooler", "D nosuch 00", "D cooler zz",
             "E cooler 6 State=abc", "E cooler 999 State=1", "E nosuch 6 A=1"]
-    for line, got in zip(junk, run_cli(codec_cli, junk)):
+    for line, got in zip(junk, codec_cli(junk)):
         assert got.startswith("ERR "), (line, got)
