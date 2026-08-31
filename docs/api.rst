@@ -88,3 +88,13 @@ Tests
 .. autofunction:: tests.test_firmware_anchors.test_firmware_snapshot_captures_raw_frames
 .. autofunction:: tests.test_firmware_anchors.test_anchors_flag_implausible_decode
 .. autofunction:: tests.test_web_serve.test_web_server_binds_without_reverse_dns
+
+Cross-language codec (issue #156)
+---------------------------------
+
+.. automodule:: tools.gen_codec_vectors
+.. automodule:: tools.gen_c_dict
+.. automodule:: tests.test_codec_vectors
+.. automodule:: tests.test_codec_parity
+.. automodule:: tests.test_gen_c_dict
+.. automodule:: tests.test_ports_parity

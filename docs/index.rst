@@ -34,6 +34,7 @@ so a failing or missing link surfaces at doc-build time next to the code.
    protocol/reference
    protocol/frame-layouts
    protocol/signal-matrix
+   cross-language-codec
    screenshots
    api
 

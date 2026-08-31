@@ -107,6 +107,10 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
 - **Dictionary-driven** — every field is extracted into [`protocol/dictionary.yaml`](protocol/dictionary.yaml)
   and has a catalog decision in [`protocol/signals.yaml`](protocol/signals.yaml); a dropped or
   unaccounted field **fails CI**. Manual bit offsets live only in [`overrides.py`](calictl/overrides.py).
+- **One dictionary, two languages** — the same dictionary also generates the C codec tables in
+  [`csrc/`](csrc/) for the planned ESP32 satellite (`python3 -m tools.gen_c_dict`; **never hand-edit
+  `csrc/codec_dict.h`**). Golden vectors + a seeded differential fuzz harness keep the Python and C
+  codecs byte-identical in CI (`codec-parity` job) — see [`csrc/README.md`](csrc/README.md).
 
 New here? Start with **[ARCHITECTURE.md](ARCHITECTURE.md)** — the five-minute map of the data flow and
 where each concern lives. Contributor rules and hard invariants: **[CLAUDE.md](CLAUDE.md)**.
