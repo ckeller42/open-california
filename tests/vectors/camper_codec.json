@@ -1,0 +1,5043 @@
+{
+ "version": 1,
+ "generated_by": "tools/gen_codec_vectors.py",
+ "decode": [
+  {
+   "id": "airheater/state/AirDistribution/onehot",
+   "function": "airheater",
+   "raw_hex": "c0",
+   "expect": {
+    "AirDistribution": 3,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0
+   }
+  },
+  {
+   "id": "airheater/state/Installed/onehot",
+   "function": "airheater",
+   "raw_hex": "10",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0
+   }
+  },
+  {
+   "id": "airheater/state/FaultTriggerBit/onehot",
+   "function": "airheater",
+   "raw_hex": "08",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 1,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0
+   }
+  },
+  {
+   "id": "airheater/state/PermanentOperation/onehot",
+   "function": "airheater",
+   "raw_hex": "04",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 1,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0
+   }
+  },
+  {
+   "id": "airheater/state/NormalOperation/onehot",
+   "function": "airheater",
+   "raw_hex": "02",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 1,
+    "PermanentOperationRequestConfirmation": 0
+   }
+  },
+  {
+   "id": "airheater/state/PermanentOperationRequestConfirmation/onehot",
+   "function": "airheater",
+   "raw_hex": "01",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 1
+   }
+  },
+  {
+   "id": "airheater/state/HeatingLevel/onehot",
+   "function": "airheater",
+   "raw_hex": "00f0",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 15,
+    "ErrorCode": 0
+   }
+  },
+  {
+   "id": "airheater/state/ErrorCode/onehot",
+   "function": "airheater",
+   "raw_hex": "000f",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 15
+   }
+  },
+  {
+   "id": "airheater/state/OperationModeCombined/onehot",
+   "function": "airheater",
+   "raw_hex": "0000f0",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 15,
+    "OperationModeAirHeater": 0
+   }
+  },
+  {
+   "id": "airheater/state/OperationModeAirHeater/onehot",
+   "function": "airheater",
+   "raw_hex": "00000f",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 15
+   }
+  },
+  {
+   "id": "airheater/state/RunningTime/onehot",
+   "function": "airheater",
+   "raw_hex": "000000ff",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 255
+   }
+  },
+  {
+   "id": "airheater/state/TimerHour/onehot",
+   "function": "airheater",
+   "raw_hex": "00000000ff",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 255
+   }
+  },
+  {
+   "id": "airheater/state/TimerMin/onehot",
+   "function": "airheater",
+   "raw_hex": "0000000000ff",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 255
+   }
+  },
+  {
+   "id": "airheater/state/RunningTimeinAction/onehot",
+   "function": "airheater",
+   "raw_hex": "000000000000ff",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 255
+   }
+  },
+  {
+   "id": "airheater/state/mixed",
+   "function": "airheater",
+   "raw_hex": "a5acb3bac1c8cf",
+   "expect": {
+    "AirDistribution": 2,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 1,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 1,
+    "HeatingLevel": 10,
+    "ErrorCode": 12,
+    "OperationModeCombined": 11,
+    "OperationModeAirHeater": 3,
+    "RunningTime": 186,
+    "TimerHour": 193,
+    "TimerMin": 200,
+    "RunningTimeinAction": 207
+   }
+  },
+  {
+   "id": "airheater/state/truncated",
+   "function": "airheater",
+   "raw_hex": "000000000000",
+   "expect": {
+    "AirDistribution": 0,
+    "Installed": 0,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0
+   }
+  },
+  {
+   "id": "campingmode/state/Installed/onehot",
+   "function": "campingmode",
+   "raw_hex": "20",
+   "expect": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "campingmode/state/Enable/onehot",
+   "function": "campingmode",
+   "raw_hex": "10",
+   "expect": {
+    "Installed": 0,
+    "Enable": 1,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "campingmode/state/InteriorLight/onehot",
+   "function": "campingmode",
+   "raw_hex": "08",
+   "expect": {
+    "Installed": 0,
+    "Enable": 0,
+    "InteriorLight": 1,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "campingmode/state/OutsideLight/onehot",
+   "function": "campingmode",
+   "raw_hex": "04",
+   "expect": {
+    "Installed": 0,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 1,
+    "UsbCharger": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "campingmode/state/UsbCharger/onehot",
+   "function": "campingmode",
+   "raw_hex": "02",
+   "expect": {
+    "Installed": 0,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 1,
+    "State": 0
+   }
+  },
+  {
+   "id": "campingmode/state/State/onehot",
+   "function": "campingmode",
+   "raw_hex": "01",
+   "expect": {
+    "Installed": 0,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 1
+   }
+  },
+  {
+   "id": "campingmode/state/mixed",
+   "function": "campingmode",
+   "raw_hex": "a5",
+   "expect": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 1,
+    "UsbCharger": 0,
+    "State": 1
+   }
+  },
+  {
+   "id": "cooler/state/Error/onehot",
+   "function": "cooler",
+   "raw_hex": "c0",
+   "expect": {
+    "Error": 3,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "cooler/state/NightTimerSet/onehot",
+   "function": "cooler",
+   "raw_hex": "10",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 1,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "cooler/state/Installed/onehot",
+   "function": "cooler",
+   "raw_hex": "08",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "cooler/state/TimerElapsed/onehot",
+   "function": "cooler",
+   "raw_hex": "04",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 1,
+    "TimerState": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "cooler/state/TimerState/onehot",
+   "function": "cooler",
+   "raw_hex": "02",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 1,
+    "State": 0
+   }
+  },
+  {
+   "id": "cooler/state/State/onehot",
+   "function": "cooler",
+   "raw_hex": "01",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 1
+   }
+  },
+  {
+   "id": "cooler/state/Mode/onehot",
+   "function": "cooler",
+   "raw_hex": "00f0",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 15,
+    "Level": 0
+   }
+  },
+  {
+   "id": "cooler/state/Level/onehot",
+   "function": "cooler",
+   "raw_hex": "000f",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 0,
+    "Level": 15
+   }
+  },
+  {
+   "id": "cooler/state/TimerHourSet/onehot",
+   "function": "cooler",
+   "raw_hex": "0000ff",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 0,
+    "Level": 0,
+    "TimerHourSet": 255
+   }
+  },
+  {
+   "id": "cooler/state/TimerMinSet/onehot",
+   "function": "cooler",
+   "raw_hex": "000000ff",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 0,
+    "Level": 0,
+    "TimerHourSet": 0,
+    "TimerMinSet": 255
+   }
+  },
+  {
+   "id": "cooler/state/TimerCounterHour/onehot",
+   "function": "cooler",
+   "raw_hex": "00000000ff",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 0,
+    "Level": 0,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 255
+   }
+  },
+  {
+   "id": "cooler/state/TimerCounterMin/onehot",
+   "function": "cooler",
+   "raw_hex": "0000000000ff",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 0,
+    "Level": 0,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 255
+   }
+  },
+  {
+   "id": "cooler/state/NightTimerHourOn/onehot",
+   "function": "cooler",
+   "raw_hex": "000000000000ff",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 0,
+    "Level": 0,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 255
+   }
+  },
+  {
+   "id": "cooler/state/NightTimerHourOff/onehot",
+   "function": "cooler",
+   "raw_hex": "00000000000000ff",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 0,
+    "Level": 0,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 255
+   }
+  },
+  {
+   "id": "cooler/state/mixed",
+   "function": "cooler",
+   "raw_hex": "a5acb3bac1c8cfd6",
+   "expect": {
+    "Error": 2,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 1,
+    "TimerState": 0,
+    "State": 1,
+    "Mode": 10,
+    "Level": 12,
+    "TimerHourSet": 179,
+    "TimerMinSet": 186,
+    "TimerCounterHour": 193,
+    "TimerCounterMin": 200,
+    "NightTimerHourOn": 207,
+    "NightTimerHourOff": 214
+   }
+  },
+  {
+   "id": "cooler/state/truncated",
+   "function": "cooler",
+   "raw_hex": "00000000000000",
+   "expect": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 0,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 0,
+    "Level": 0,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0
+   }
+  },
+  {
+   "id": "energy/state/LandNotAvailable/onehot",
+   "function": "energy",
+   "raw_hex": "80",
+   "expect": {
+    "LandNotAvailable": 1,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0
+   }
+  },
+  {
+   "id": "energy/state/LandDefect/onehot",
+   "function": "energy",
+   "raw_hex": "40",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 1,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0
+   }
+  },
+  {
+   "id": "energy/state/EnergyModeNotSelectable/onehot",
+   "function": "energy",
+   "raw_hex": "20",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 1,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0
+   }
+  },
+  {
+   "id": "energy/state/DcdcDefect/onehot",
+   "function": "energy",
+   "raw_hex": "10",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 1,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0
+   }
+  },
+  {
+   "id": "energy/state/WarningLevelActive/onehot",
+   "function": "energy",
+   "raw_hex": "08",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 1,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0
+   }
+  },
+  {
+   "id": "energy/state/TwoBattSwitchAtWorkshop/onehot",
+   "function": "energy",
+   "raw_hex": "04",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 1,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0
+   }
+  },
+  {
+   "id": "energy/state/TwoBattSwitchAtCharging/onehot",
+   "function": "energy",
+   "raw_hex": "02",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 1,
+    "TwoBattNotCharged": 0
+   }
+  },
+  {
+   "id": "energy/state/TwoBattNotCharged/onehot",
+   "function": "energy",
+   "raw_hex": "01",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 1
+   }
+  },
+  {
+   "id": "energy/state/DcdcInstalled/onehot",
+   "function": "energy",
+   "raw_hex": "0080",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0
+   }
+  },
+  {
+   "id": "energy/state/LadInstalled/onehot",
+   "function": "energy",
+   "raw_hex": "0040",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0
+   }
+  },
+  {
+   "id": "energy/state/PvInstalled/onehot",
+   "function": "energy",
+   "raw_hex": "0020",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 1,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0
+   }
+  },
+  {
+   "id": "energy/state/EmpInstalled/onehot",
+   "function": "energy",
+   "raw_hex": "0010",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 1,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0
+   }
+  },
+  {
+   "id": "energy/state/SystemError/onehot",
+   "function": "energy",
+   "raw_hex": "0008",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 1,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0
+   }
+  },
+  {
+   "id": "energy/state/CurrentDeratingTemperature/onehot",
+   "function": "energy",
+   "raw_hex": "0004",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 1,
+    "SleepWarning": 0,
+    "PvDefect": 0
+   }
+  },
+  {
+   "id": "energy/state/SleepWarning/onehot",
+   "function": "energy",
+   "raw_hex": "0002",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 1,
+    "PvDefect": 0
+   }
+  },
+  {
+   "id": "energy/state/PvDefect/onehot",
+   "function": "energy",
+   "raw_hex": "0001",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 1
+   }
+  },
+  {
+   "id": "energy/state/SocOneBattAfs/onehot",
+   "function": "energy",
+   "raw_hex": "0000f0",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 15,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0
+   }
+  },
+  {
+   "id": "energy/state/EnergyMode/onehot",
+   "function": "energy",
+   "raw_hex": "00000c",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 3,
+    "WarningLevelTwo": 0
+   }
+  },
+  {
+   "id": "energy/state/WarningLevelTwo/onehot",
+   "function": "energy",
+   "raw_hex": "000003",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 3
+   }
+  },
+  {
+   "id": "energy/state/StateDcdcAfs/onehot",
+   "function": "energy",
+   "raw_hex": "000000f0",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 15,
+    "SocTwoBattAfs": 0
+   }
+  },
+  {
+   "id": "energy/state/SocTwoBattAfs/onehot",
+   "function": "energy",
+   "raw_hex": "0000000f",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 15
+   }
+  },
+  {
+   "id": "energy/state/StatePvAfs/onehot",
+   "function": "energy",
+   "raw_hex": "00000000f0",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 15,
+    "StateLandAfs": 0
+   }
+  },
+  {
+   "id": "energy/state/StateLandAfs/onehot",
+   "function": "energy",
+   "raw_hex": "000000000f",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 15
+   }
+  },
+  {
+   "id": "energy/state/AgeOneBattValuesMinutes/onehot",
+   "function": "energy",
+   "raw_hex": "0000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255
+   }
+  },
+  {
+   "id": "energy/state/IOneBattBemAfs/onehot",
+   "function": "energy",
+   "raw_hex": "000000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 255
+   }
+  },
+  {
+   "id": "energy/state/PDcdcAfs/onehot",
+   "function": "energy",
+   "raw_hex": "00000000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 255
+   }
+  },
+  {
+   "id": "energy/state/PLandAfs/onehot",
+   "function": "energy",
+   "raw_hex": "0000000000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 255
+   }
+  },
+  {
+   "id": "energy/state/PPvAfs/onehot",
+   "function": "energy",
+   "raw_hex": "000000000000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 255
+   }
+  },
+  {
+   "id": "energy/state/tTwoBattRemainingh/onehot",
+   "function": "energy",
+   "raw_hex": "00000000000000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 255
+   }
+  },
+  {
+   "id": "energy/state/tTwoBattRemainingmin/onehot",
+   "function": "energy",
+   "raw_hex": "0000000000000000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 0,
+    "tTwoBattRemainingmin": 255
+   }
+  },
+  {
+   "id": "energy/state/UOneBattBemAfs/onehot",
+   "function": "energy",
+   "raw_hex": "000000000000000000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 0,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 255
+   }
+  },
+  {
+   "id": "energy/state/UTwoBattBemAfs/onehot",
+   "function": "energy",
+   "raw_hex": "00000000000000000000000000ff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 0,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 0,
+    "UTwoBattBemAfs": 255
+   }
+  },
+  {
+   "id": "energy/state/ITwoBattBemAfs/onehot",
+   "function": "energy",
+   "raw_hex": "0000000000000000000000000000ffff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 0,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 0,
+    "UTwoBattBemAfs": 0,
+    "ITwoBattBemAfs": 65535
+   }
+  },
+  {
+   "id": "energy/state/IDcdcAfs/onehot",
+   "function": "energy",
+   "raw_hex": "00000000000000000000000000000000ffff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 0,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 0,
+    "UTwoBattBemAfs": 0,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 65535
+   }
+  },
+  {
+   "id": "energy/state/ILandAfs/onehot",
+   "function": "energy",
+   "raw_hex": "000000000000000000000000000000000000ffff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 0,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 0,
+    "UTwoBattBemAfs": 0,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 65535
+   }
+  },
+  {
+   "id": "energy/state/IPvAfs/onehot",
+   "function": "energy",
+   "raw_hex": "0000000000000000000000000000000000000000ffff",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 0,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 0,
+    "UTwoBattBemAfs": 0,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 65535
+   }
+  },
+  {
+   "id": "energy/state/mixed",
+   "function": "energy",
+   "raw_hex": "a5acb3bac1c8cfd6dde4ebf2f900070e151c232a3138",
+   "expect": {
+    "LandNotAvailable": 1,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 1,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 1,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 1,
+    "DcdcInstalled": 1,
+    "LadInstalled": 0,
+    "PvInstalled": 1,
+    "EmpInstalled": 0,
+    "SystemError": 1,
+    "CurrentDeratingTemperature": 1,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 11,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 3,
+    "StateDcdcAfs": 11,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 12,
+    "StateLandAfs": 1,
+    "AgeOneBattValuesMinutes": 200,
+    "IOneBattBemAfs": 207,
+    "PDcdcAfs": 214,
+    "PLandAfs": 221,
+    "PPvAfs": 228,
+    "tTwoBattRemainingh": 235,
+    "tTwoBattRemainingmin": 242,
+    "UOneBattBemAfs": 249,
+    "UTwoBattBemAfs": 0,
+    "ITwoBattBemAfs": 1806,
+    "IDcdcAfs": 5404,
+    "ILandAfs": 9002,
+    "IPvAfs": 12600
+   }
+  },
+  {
+   "id": "energy/state/truncated",
+   "function": "energy",
+   "raw_hex": "0000000000000000000000000000000000000000",
+   "expect": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 0,
+    "LadInstalled": 0,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 0,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 0,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 0,
+    "IOneBattBemAfs": 0,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 0,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 0,
+    "UTwoBattBemAfs": 0,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0
+   }
+  },
+  {
+   "id": "general/state/AmbSwVersion/onehot",
+   "function": "general",
+   "raw_hex": "ffffffff",
+   "expect": {
+    "AmbSwVersion": 4294967295
+   }
+  },
+  {
+   "id": "general/state/CmSwVersion/onehot",
+   "function": "general",
+   "raw_hex": "00000000ffffffff",
+   "expect": {
+    "AmbSwVersion": 0,
+    "CmSwVersion": 4294967295
+   }
+  },
+  {
+   "id": "general/state/CommunicationVersion/onehot",
+   "function": "general",
+   "raw_hex": "0000000000000000ff",
+   "expect": {
+    "AmbSwVersion": 0,
+    "CmSwVersion": 0,
+    "CommunicationVersion": 255
+   }
+  },
+  {
+   "id": "general/state/mixed",
+   "function": "general",
+   "raw_hex": "a5acb3bac1c8cfd6dd",
+   "expect": {
+    "AmbSwVersion": 2779558842,
+    "CmSwVersion": 3251163094,
+    "CommunicationVersion": 221
+   }
+  },
+  {
+   "id": "general/state/truncated",
+   "function": "general",
+   "raw_hex": "0000000000000000",
+   "expect": {
+    "AmbSwVersion": 0,
+    "CmSwVersion": 0
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/BitZeroEight/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "80",
+   "expect": {
+    "BitZeroEight": 1,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/BitZeroSeven/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "40",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 1,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/BitZeroSix/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "20",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 1,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/BitZeroFive/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "10",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 1,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/BitZeroFour/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "08",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 1,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/BitZeroThree/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "04",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 1,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/BitZeroTwo/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "02",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 1,
+    "BitZeroOne": 0
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/BitZeroOne/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "01",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 1
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/ByteZeroOne/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "00ff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 255
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/ByteZeroTwo/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "0000ff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 255
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/ByteZeroThree/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "000000ff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 255
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/ByteZeroFour/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "00000000ff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 255
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/ByteZeroFive/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "0000000000ff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 255
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/ByteZeroSix/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "000000000000ff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 255
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/ByteZeroSeven/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "00000000000000ff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 0,
+    "ByteZeroSeven": 255
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/ByteZeroEight/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "0000000000000000ff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 0,
+    "ByteZeroSeven": 0,
+    "ByteZeroEight": 255
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/WordZeroOne/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "000000000000000000ffff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 0,
+    "ByteZeroSeven": 0,
+    "ByteZeroEight": 0,
+    "WordZeroOne": 65535
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/WordZeroTwo/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "0000000000000000000000ffff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 0,
+    "ByteZeroSeven": 0,
+    "ByteZeroEight": 0,
+    "WordZeroOne": 0,
+    "WordZeroTwo": 65535
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/WordZeroThree/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "00000000000000000000000000ffff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 0,
+    "ByteZeroSeven": 0,
+    "ByteZeroEight": 0,
+    "WordZeroOne": 0,
+    "WordZeroTwo": 0,
+    "WordZeroThree": 65535
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/WordZeroFour/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "000000000000000000000000000000ffff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 0,
+    "ByteZeroSeven": 0,
+    "ByteZeroEight": 0,
+    "WordZeroOne": 0,
+    "WordZeroTwo": 0,
+    "WordZeroThree": 0,
+    "WordZeroFour": 65535
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/DwordZeroOne/onehot",
+   "function": "generalpurposesignals",
+   "raw_hex": "0000000000000000000000000000000000ffffffff",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 0,
+    "ByteZeroSeven": 0,
+    "ByteZeroEight": 0,
+    "WordZeroOne": 0,
+    "WordZeroTwo": 0,
+    "WordZeroThree": 0,
+    "WordZeroFour": 0,
+    "DwordZeroOne": 4294967295
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/mixed",
+   "function": "generalpurposesignals",
+   "raw_hex": "a5acb3bac1c8cfd6dde4ebf2f900070e151c232a31",
+   "expect": {
+    "BitZeroEight": 1,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 1,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 1,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 1,
+    "ByteZeroOne": 172,
+    "ByteZeroTwo": 179,
+    "ByteZeroThree": 186,
+    "ByteZeroFour": 193,
+    "ByteZeroFive": 200,
+    "ByteZeroSix": 207,
+    "ByteZeroSeven": 214,
+    "ByteZeroEight": 221,
+    "WordZeroOne": 58603,
+    "WordZeroTwo": 62201,
+    "WordZeroThree": 7,
+    "WordZeroFour": 3605,
+    "DwordZeroOne": 472066609
+   }
+  },
+  {
+   "id": "generalpurposesignals/state/truncated",
+   "function": "generalpurposesignals",
+   "raw_hex": "0000000000000000000000000000000000",
+   "expect": {
+    "BitZeroEight": 0,
+    "BitZeroSeven": 0,
+    "BitZeroSix": 0,
+    "BitZeroFive": 0,
+    "BitZeroFour": 0,
+    "BitZeroThree": 0,
+    "BitZeroTwo": 0,
+    "BitZeroOne": 0,
+    "ByteZeroOne": 0,
+    "ByteZeroTwo": 0,
+    "ByteZeroThree": 0,
+    "ByteZeroFour": 0,
+    "ByteZeroFive": 0,
+    "ByteZeroSix": 0,
+    "ByteZeroSeven": 0,
+    "ByteZeroEight": 0,
+    "WordZeroOne": 0,
+    "WordZeroTwo": 0,
+    "WordZeroThree": 0,
+    "WordZeroFour": 0
+   }
+  },
+  {
+   "id": "lighting/state/ProfileNumber/onehot",
+   "function": "lighting",
+   "raw_hex": "0f",
+   "expect": {
+    "ProfileNumber": 15
+   }
+  },
+  {
+   "id": "lighting/state/Mode/onehot",
+   "function": "lighting",
+   "raw_hex": "00ff",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 255
+   }
+  },
+  {
+   "id": "lighting/state/Timestamp/onehot",
+   "function": "lighting",
+   "raw_hex": "0000ffffffff",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 4294967295
+   }
+  },
+  {
+   "id": "lighting/state/LightValue/onehot",
+   "function": "lighting",
+   "raw_hex": "000000000000ffff",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 65535
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLTwo/onehot",
+   "function": "lighting",
+   "raw_hex": "0000000000000000f0",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 15,
+    "BrightnessLOne": 0
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLOne/onehot",
+   "function": "lighting",
+   "raw_hex": "00000000000000000f",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 15
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLFour/onehot",
+   "function": "lighting",
+   "raw_hex": "000000000000000000f0",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 15,
+    "BrightnessLThree": 0
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLThree/onehot",
+   "function": "lighting",
+   "raw_hex": "0000000000000000000f",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 15
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLSix/onehot",
+   "function": "lighting",
+   "raw_hex": "00000000000000000000f0",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 15,
+    "BrightnessLFive": 0
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLFive/onehot",
+   "function": "lighting",
+   "raw_hex": "000000000000000000000f",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 15
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLEight/onehot",
+   "function": "lighting",
+   "raw_hex": "0000000000000000000000f0",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 15,
+    "BrightnessLSeven": 0
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLSeven/onehot",
+   "function": "lighting",
+   "raw_hex": "00000000000000000000000f",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 15
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLOneZero/onehot",
+   "function": "lighting",
+   "raw_hex": "000000000000000000000000f0",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 15,
+    "BrightnessLNine": 0
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLNine/onehot",
+   "function": "lighting",
+   "raw_hex": "0000000000000000000000000f",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLNine": 15
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLOneTwo/onehot",
+   "function": "lighting",
+   "raw_hex": "00000000000000000000000000f0",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 15,
+    "BrightnessLOneOne": 0
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLOneOne/onehot",
+   "function": "lighting",
+   "raw_hex": "000000000000000000000000000f",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 15
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLOneFour/onehot",
+   "function": "lighting",
+   "raw_hex": "0000000000000000000000000000f0",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 0,
+    "BrightnessLOneFour": 15,
+    "BrightnessLOneThree": 0
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLOneThree/onehot",
+   "function": "lighting",
+   "raw_hex": "00000000000000000000000000000f",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 0,
+    "BrightnessLOneFour": 0,
+    "BrightnessLOneThree": 15
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLOneSix/onehot",
+   "function": "lighting",
+   "raw_hex": "000000000000000000000000000000f0",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 0,
+    "BrightnessLOneFour": 0,
+    "BrightnessLOneThree": 0,
+    "BrightnessLOneSix": 15,
+    "BrightnessLOneFive": 0
+   }
+  },
+  {
+   "id": "lighting/state/BrightnessLOneFive/onehot",
+   "function": "lighting",
+   "raw_hex": "0000000000000000000000000000000f",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 0,
+    "BrightnessLOneFour": 0,
+    "BrightnessLOneThree": 0,
+    "BrightnessLOneSix": 0,
+    "BrightnessLOneFive": 15
+   }
+  },
+  {
+   "id": "lighting/state/mixed",
+   "function": "lighting",
+   "raw_hex": "a5acb3bac1c8cfd6dde4ebf2f900070e",
+   "expect": {
+    "ProfileNumber": 5,
+    "Mode": 172,
+    "Timestamp": 3015360968,
+    "LightValue": 53206,
+    "BrightnessLTwo": 13,
+    "BrightnessLOne": 13,
+    "BrightnessLFour": 14,
+    "BrightnessLThree": 4,
+    "BrightnessLSix": 14,
+    "BrightnessLFive": 11,
+    "BrightnessLEight": 15,
+    "BrightnessLSeven": 2,
+    "BrightnessLOneZero": 15,
+    "BrightnessLNine": 9,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 0,
+    "BrightnessLOneFour": 0,
+    "BrightnessLOneThree": 7,
+    "BrightnessLOneSix": 0,
+    "BrightnessLOneFive": 14
+   }
+  },
+  {
+   "id": "lighting/state/truncated",
+   "function": "lighting",
+   "raw_hex": "000000000000000000000000000000",
+   "expect": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 0,
+    "BrightnessLOneFour": 0,
+    "BrightnessLOneThree": 0
+   }
+  },
+  {
+   "id": "livingroomheater/state/Variant/onehot",
+   "function": "livingroomheater",
+   "raw_hex": "c0",
+   "expect": {
+    "Variant": 3,
+    "Installed": 0,
+    "TemperatureWater": 0,
+    "StateWater": 0,
+    "StateAir": 0
+   }
+  },
+  {
+   "id": "livingroomheater/state/Installed/onehot",
+   "function": "livingroomheater",
+   "raw_hex": "08",
+   "expect": {
+    "Variant": 0,
+    "Installed": 1,
+    "TemperatureWater": 0,
+    "StateWater": 0,
+    "StateAir": 0
+   }
+  },
+  {
+   "id": "livingroomheater/state/TemperatureWater/onehot",
+   "function": "livingroomheater",
+   "raw_hex": "04",
+   "expect": {
+    "Variant": 0,
+    "Installed": 0,
+    "TemperatureWater": 1,
+    "StateWater": 0,
+    "StateAir": 0
+   }
+  },
+  {
+   "id": "livingroomheater/state/StateWater/onehot",
+   "function": "livingroomheater",
+   "raw_hex": "02",
+   "expect": {
+    "Variant": 0,
+    "Installed": 0,
+    "TemperatureWater": 0,
+    "StateWater": 1,
+    "StateAir": 0
+   }
+  },
+  {
+   "id": "livingroomheater/state/StateAir/onehot",
+   "function": "livingroomheater",
+   "raw_hex": "01",
+   "expect": {
+    "Variant": 0,
+    "Installed": 0,
+    "TemperatureWater": 0,
+    "StateWater": 0,
+    "StateAir": 1
+   }
+  },
+  {
+   "id": "livingroomheater/state/Error/onehot",
+   "function": "livingroomheater",
+   "raw_hex": "00f0",
+   "expect": {
+    "Variant": 0,
+    "Installed": 0,
+    "TemperatureWater": 0,
+    "StateWater": 0,
+    "StateAir": 0,
+    "Error": 15,
+    "Mode": 0
+   }
+  },
+  {
+   "id": "livingroomheater/state/Mode/onehot",
+   "function": "livingroomheater",
+   "raw_hex": "000f",
+   "expect": {
+    "Variant": 0,
+    "Installed": 0,
+    "TemperatureWater": 0,
+    "StateWater": 0,
+    "StateAir": 0,
+    "Error": 0,
+    "Mode": 15
+   }
+  },
+  {
+   "id": "livingroomheater/state/TemperatureAir/onehot",
+   "function": "livingroomheater",
+   "raw_hex": "0000ff",
+   "expect": {
+    "Variant": 0,
+    "Installed": 0,
+    "TemperatureWater": 0,
+    "StateWater": 0,
+    "StateAir": 0,
+    "Error": 0,
+    "Mode": 0,
+    "TemperatureAir": 255
+   }
+  },
+  {
+   "id": "livingroomheater/state/mixed",
+   "function": "livingroomheater",
+   "raw_hex": "a5acb3",
+   "expect": {
+    "Variant": 2,
+    "Installed": 0,
+    "TemperatureWater": 1,
+    "StateWater": 0,
+    "StateAir": 1,
+    "Error": 10,
+    "Mode": 12,
+    "TemperatureAir": 179
+   }
+  },
+  {
+   "id": "livingroomheater/state/truncated",
+   "function": "livingroomheater",
+   "raw_hex": "0000",
+   "expect": {
+    "Variant": 0,
+    "Installed": 0,
+    "TemperatureWater": 0,
+    "StateWater": 0,
+    "StateAir": 0,
+    "Error": 0,
+    "Mode": 0
+   }
+  },
+  {
+   "id": "roof/state/Position/onehot",
+   "function": "roof",
+   "raw_hex": "f0",
+   "expect": {
+    "Position": 15,
+    "Installed": 0,
+    "SafetyCounterValid": 0
+   }
+  },
+  {
+   "id": "roof/state/Installed/onehot",
+   "function": "roof",
+   "raw_hex": "02",
+   "expect": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 0
+   }
+  },
+  {
+   "id": "roof/state/SafetyCounterValid/onehot",
+   "function": "roof",
+   "raw_hex": "01",
+   "expect": {
+    "Position": 0,
+    "Installed": 0,
+    "SafetyCounterValid": 1
+   }
+  },
+  {
+   "id": "roof/state/InfoPopUp/onehot",
+   "function": "roof",
+   "raw_hex": "000f",
+   "expect": {
+    "Position": 0,
+    "Installed": 0,
+    "SafetyCounterValid": 0,
+    "InfoPopUp": 15
+   }
+  },
+  {
+   "id": "roof/state/mixed",
+   "function": "roof",
+   "raw_hex": "a5ac",
+   "expect": {
+    "Position": 10,
+    "Installed": 0,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 12
+   }
+  },
+  {
+   "id": "roof/state/truncated",
+   "function": "roof",
+   "raw_hex": "00",
+   "expect": {
+    "Position": 0,
+    "Installed": 0,
+    "SafetyCounterValid": 0
+   }
+  },
+  {
+   "id": "roofaircondition/state/Error/onehot",
+   "function": "roofaircondition",
+   "raw_hex": "c0",
+   "expect": {
+    "Error": 3,
+    "Mode": 0,
+    "Installed": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "roofaircondition/state/Mode/onehot",
+   "function": "roofaircondition",
+   "raw_hex": "30",
+   "expect": {
+    "Error": 0,
+    "Mode": 3,
+    "Installed": 0,
+    "State": 0
+   }
+  },
+  {
+   "id": "roofaircondition/state/Installed/onehot",
+   "function": "roofaircondition",
+   "raw_hex": "02",
+   "expect": {
+    "Error": 0,
+    "Mode": 0,
+    "Installed": 1,
+    "State": 0
+   }
+  },
+  {
+   "id": "roofaircondition/state/State/onehot",
+   "function": "roofaircondition",
+   "raw_hex": "01",
+   "expect": {
+    "Error": 0,
+    "Mode": 0,
+    "Installed": 0,
+    "State": 1
+   }
+  },
+  {
+   "id": "roofaircondition/state/Fanspeed/onehot",
+   "function": "roofaircondition",
+   "raw_hex": "000f",
+   "expect": {
+    "Error": 0,
+    "Mode": 0,
+    "Installed": 0,
+    "State": 0,
+    "Fanspeed": 15
+   }
+  },
+  {
+   "id": "roofaircondition/state/Temperature/onehot",
+   "function": "roofaircondition",
+   "raw_hex": "0000ff",
+   "expect": {
+    "Error": 0,
+    "Mode": 0,
+    "Installed": 0,
+    "State": 0,
+    "Fanspeed": 0,
+    "Temperature": 255
+   }
+  },
+  {
+   "id": "roofaircondition/state/mixed",
+   "function": "roofaircondition",
+   "raw_hex": "a5acb3",
+   "expect": {
+    "Error": 2,
+    "Mode": 2,
+    "Installed": 0,
+    "State": 1,
+    "Fanspeed": 12,
+    "Temperature": 179
+   }
+  },
+  {
+   "id": "roofaircondition/state/truncated",
+   "function": "roofaircondition",
+   "raw_hex": "0000",
+   "expect": {
+    "Error": 0,
+    "Mode": 0,
+    "Installed": 0,
+    "State": 0,
+    "Fanspeed": 0
+   }
+  },
+  {
+   "id": "satelliteantenna/state/Error/onehot",
+   "function": "satelliteantenna",
+   "raw_hex": "f0",
+   "expect": {
+    "Error": 15,
+    "System": 0,
+    "Installed": 0
+   }
+  },
+  {
+   "id": "satelliteantenna/state/System/onehot",
+   "function": "satelliteantenna",
+   "raw_hex": "0c",
+   "expect": {
+    "Error": 0,
+    "System": 3,
+    "Installed": 0
+   }
+  },
+  {
+   "id": "satelliteantenna/state/Installed/onehot",
+   "function": "satelliteantenna",
+   "raw_hex": "01",
+   "expect": {
+    "Error": 0,
+    "System": 0,
+    "Installed": 1
+   }
+  },
+  {
+   "id": "satelliteantenna/state/SatelliteSelection/onehot",
+   "function": "satelliteantenna",
+   "raw_hex": "00f0",
+   "expect": {
+    "Error": 0,
+    "System": 0,
+    "Installed": 0,
+    "SatelliteSelection": 15,
+    "Dish": 0
+   }
+  },
+  {
+   "id": "satelliteantenna/state/Dish/onehot",
+   "function": "satelliteantenna",
+   "raw_hex": "000f",
+   "expect": {
+    "Error": 0,
+    "System": 0,
+    "Installed": 0,
+    "SatelliteSelection": 0,
+    "Dish": 15
+   }
+  },
+  {
+   "id": "satelliteantenna/state/SignalLevel/onehot",
+   "function": "satelliteantenna",
+   "raw_hex": "0000ff",
+   "expect": {
+    "Error": 0,
+    "System": 0,
+    "Installed": 0,
+    "SatelliteSelection": 0,
+    "Dish": 0,
+    "SignalLevel": 255
+   }
+  },
+  {
+   "id": "satelliteantenna/state/mixed",
+   "function": "satelliteantenna",
+   "raw_hex": "a5acb3",
+   "expect": {
+    "Error": 10,
+    "System": 1,
+    "Installed": 1,
+    "SatelliteSelection": 10,
+    "Dish": 12,
+    "SignalLevel": 179
+   }
+  },
+  {
+   "id": "satelliteantenna/state/truncated",
+   "function": "satelliteantenna",
+   "raw_hex": "0000",
+   "expect": {
+    "Error": 0,
+    "System": 0,
+    "Installed": 0,
+    "SatelliteSelection": 0,
+    "Dish": 0
+   }
+  },
+  {
+   "id": "stairs/state/InfoPopUp/onehot",
+   "function": "stairs",
+   "raw_hex": "30",
+   "expect": {
+    "InfoPopUp": 3,
+    "Sensor": 0,
+    "State": 0,
+    "OperationMode": 0,
+    "Installed": 0
+   }
+  },
+  {
+   "id": "stairs/state/Sensor/onehot",
+   "function": "stairs",
+   "raw_hex": "08",
+   "expect": {
+    "InfoPopUp": 0,
+    "Sensor": 1,
+    "State": 0,
+    "OperationMode": 0,
+    "Installed": 0
+   }
+  },
+  {
+   "id": "stairs/state/State/onehot",
+   "function": "stairs",
+   "raw_hex": "04",
+   "expect": {
+    "InfoPopUp": 0,
+    "Sensor": 0,
+    "State": 1,
+    "OperationMode": 0,
+    "Installed": 0
+   }
+  },
+  {
+   "id": "stairs/state/OperationMode/onehot",
+   "function": "stairs",
+   "raw_hex": "02",
+   "expect": {
+    "InfoPopUp": 0,
+    "Sensor": 0,
+    "State": 0,
+    "OperationMode": 1,
+    "Installed": 0
+   }
+  },
+  {
+   "id": "stairs/state/Installed/onehot",
+   "function": "stairs",
+   "raw_hex": "01",
+   "expect": {
+    "InfoPopUp": 0,
+    "Sensor": 0,
+    "State": 0,
+    "OperationMode": 0,
+    "Installed": 1
+   }
+  },
+  {
+   "id": "stairs/state/mixed",
+   "function": "stairs",
+   "raw_hex": "a5",
+   "expect": {
+    "InfoPopUp": 2,
+    "Sensor": 0,
+    "State": 1,
+    "OperationMode": 0,
+    "Installed": 1
+   }
+  },
+  {
+   "id": "vehicle/state/CarVariant/onehot",
+   "function": "vehicle",
+   "raw_hex": "f0",
+   "expect": {
+    "CarVariant": 15,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0
+   }
+  },
+  {
+   "id": "vehicle/state/CarLevelPopUp/onehot",
+   "function": "vehicle",
+   "raw_hex": "0c",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 3,
+    "TerminalOneFive": 0
+   }
+  },
+  {
+   "id": "vehicle/state/TerminalOneFive/onehot",
+   "function": "vehicle",
+   "raw_hex": "01",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 1
+   }
+  },
+  {
+   "id": "vehicle/state/CarTimeYear/onehot",
+   "function": "vehicle",
+   "raw_hex": "00ff",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 255
+   }
+  },
+  {
+   "id": "vehicle/state/CarTimeMonth/onehot",
+   "function": "vehicle",
+   "raw_hex": "0000ff",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 0,
+    "CarTimeMonth": 255
+   }
+  },
+  {
+   "id": "vehicle/state/CarTimeDay/onehot",
+   "function": "vehicle",
+   "raw_hex": "000000ff",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 0,
+    "CarTimeMonth": 0,
+    "CarTimeDay": 255
+   }
+  },
+  {
+   "id": "vehicle/state/CarTimeHour/onehot",
+   "function": "vehicle",
+   "raw_hex": "00000000ff",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 0,
+    "CarTimeMonth": 0,
+    "CarTimeDay": 0,
+    "CarTimeHour": 255
+   }
+  },
+  {
+   "id": "vehicle/state/CarTimeMinute/onehot",
+   "function": "vehicle",
+   "raw_hex": "0000000000ff",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 0,
+    "CarTimeMonth": 0,
+    "CarTimeDay": 0,
+    "CarTimeHour": 0,
+    "CarTimeMinute": 255
+   }
+  },
+  {
+   "id": "vehicle/state/CarTimeSecond/onehot",
+   "function": "vehicle",
+   "raw_hex": "000000000000ff",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 0,
+    "CarTimeMonth": 0,
+    "CarTimeDay": 0,
+    "CarTimeHour": 0,
+    "CarTimeMinute": 0,
+    "CarTimeSecond": 255
+   }
+  },
+  {
+   "id": "vehicle/state/CarLevelRoll/onehot",
+   "function": "vehicle",
+   "raw_hex": "00000000000000ffff",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 0,
+    "CarTimeMonth": 0,
+    "CarTimeDay": 0,
+    "CarTimeHour": 0,
+    "CarTimeMinute": 0,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65535
+   }
+  },
+  {
+   "id": "vehicle/state/CarLevelPitch/onehot",
+   "function": "vehicle",
+   "raw_hex": "000000000000000000ffff",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 0,
+    "CarTimeMonth": 0,
+    "CarTimeDay": 0,
+    "CarTimeHour": 0,
+    "CarTimeMinute": 0,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 0,
+    "CarLevelPitch": 65535
+   }
+  },
+  {
+   "id": "vehicle/state/mixed",
+   "function": "vehicle",
+   "raw_hex": "a5acb3bac1c8cfd6dde4eb",
+   "expect": {
+    "CarVariant": 10,
+    "CarLevelPopUp": 1,
+    "TerminalOneFive": 1,
+    "CarTimeYear": 172,
+    "CarTimeMonth": 179,
+    "CarTimeDay": 186,
+    "CarTimeHour": 193,
+    "CarTimeMinute": 200,
+    "CarTimeSecond": 207,
+    "CarLevelRoll": 55005,
+    "CarLevelPitch": 58603
+   }
+  },
+  {
+   "id": "vehicle/state/truncated",
+   "function": "vehicle",
+   "raw_hex": "000000000000000000",
+   "expect": {
+    "CarVariant": 0,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 0,
+    "CarTimeMonth": 0,
+    "CarTimeDay": 0,
+    "CarTimeHour": 0,
+    "CarTimeMinute": 0,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 0
+   }
+  },
+  {
+   "id": "water/state/FreshWaterInfoPopUp/onehot",
+   "function": "water",
+   "raw_hex": "f0",
+   "expect": {
+    "FreshWaterInfoPopUp": 15,
+    "Installed": 0,
+    "FreshWaterUnit": 0
+   }
+  },
+  {
+   "id": "water/state/Installed/onehot",
+   "function": "water",
+   "raw_hex": "02",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 0
+   }
+  },
+  {
+   "id": "water/state/FreshWaterUnit/onehot",
+   "function": "water",
+   "raw_hex": "01",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 0,
+    "FreshWaterUnit": 1
+   }
+  },
+  {
+   "id": "water/state/FreshWaterLevel/onehot",
+   "function": "water",
+   "raw_hex": "00ff",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 0,
+    "FreshWaterUnit": 0,
+    "FreshWaterLevel": 255
+   }
+  },
+  {
+   "id": "water/state/FreshWaterVolume/onehot",
+   "function": "water",
+   "raw_hex": "0000ff",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 0,
+    "FreshWaterUnit": 0,
+    "FreshWaterLevel": 0,
+    "FreshWaterVolume": 255
+   }
+  },
+  {
+   "id": "water/state/WasteWaterInfoPopUp/onehot",
+   "function": "water",
+   "raw_hex": "00000030",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 0,
+    "FreshWaterUnit": 0,
+    "FreshWaterLevel": 0,
+    "FreshWaterVolume": 0,
+    "WasteWaterInfoPopUp": 3,
+    "WasteWaterUnit": 0
+   }
+  },
+  {
+   "id": "water/state/WasteWaterUnit/onehot",
+   "function": "water",
+   "raw_hex": "00000001",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 0,
+    "FreshWaterUnit": 0,
+    "FreshWaterLevel": 0,
+    "FreshWaterVolume": 0,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1
+   }
+  },
+  {
+   "id": "water/state/WasteWaterLevel/onehot",
+   "function": "water",
+   "raw_hex": "00000000ff",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 0,
+    "FreshWaterUnit": 0,
+    "FreshWaterLevel": 0,
+    "FreshWaterVolume": 0,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 0,
+    "WasteWaterLevel": 255
+   }
+  },
+  {
+   "id": "water/state/WasteWaterVolume/onehot",
+   "function": "water",
+   "raw_hex": "0000000000ff",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 0,
+    "FreshWaterUnit": 0,
+    "FreshWaterLevel": 0,
+    "FreshWaterVolume": 0,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 0,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 255
+   }
+  },
+  {
+   "id": "water/state/mixed",
+   "function": "water",
+   "raw_hex": "a5acb3bac1c8",
+   "expect": {
+    "FreshWaterInfoPopUp": 10,
+    "Installed": 0,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 172,
+    "FreshWaterVolume": 179,
+    "WasteWaterInfoPopUp": 3,
+    "WasteWaterUnit": 0,
+    "WasteWaterLevel": 193,
+    "WasteWaterVolume": 200
+   }
+  },
+  {
+   "id": "water/state/truncated",
+   "function": "water",
+   "raw_hex": "0000000000",
+   "expect": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 0,
+    "FreshWaterUnit": 0,
+    "FreshWaterLevel": 0,
+    "FreshWaterVolume": 0,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 0,
+    "WasteWaterLevel": 0
+   }
+  }
+ ],
+ "encode": [
+  {
+   "id": "airheater/encode/defaults-explicit-sentinel",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b007f1f3f"
+  },
+  {
+   "id": "airheater/encode/defaults-implicit",
+   "function": "airheater",
+   "values": {},
+   "frame_bytes": 6,
+   "expect_hex": "3f7b007f1f3f"
+  },
+  {
+   "id": "airheater/encode/NormalOperationRequest/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b007f1f3f"
+  },
+  {
+   "id": "airheater/encode/PermanentOperationConfirmation/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b007f1f3f"
+  },
+  {
+   "id": "airheater/encode/PermanentOperationRequest/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b007f1f3f"
+  },
+  {
+   "id": "airheater/encode/AirDistribution/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 3,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "ff7b007f1f3f"
+  },
+  {
+   "id": "airheater/encode/HeatingLevel/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b007f1f3f"
+  },
+  {
+   "id": "airheater/encode/OperationModeAirHeater/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 15,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3ffb007f1f3f"
+  },
+  {
+   "id": "airheater/encode/OperationModeCombined/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 15,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b0f7f1f3f"
+  },
+  {
+   "id": "airheater/encode/RunningTime/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 255,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b00ff1f3f"
+  },
+  {
+   "id": "airheater/encode/TimerHour/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 255,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b007fff3f"
+  },
+  {
+   "id": "airheater/encode/TimerMin/max",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 255
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3f7b007f1fff"
+  },
+  {
+   "id": "airheater/encode/err-width-overflow",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 11,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 256,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "error": true
+  },
+  {
+   "id": "airheater/encode/err-invalid-HeatingLevel-0",
+   "function": "airheater",
+   "values": {
+    "NormalOperationRequest": 3,
+    "PermanentOperationConfirmation": 3,
+    "PermanentOperationRequest": 3,
+    "AirDistribution": 0,
+    "HeatingLevel": 0,
+    "OperationModeAirHeater": 7,
+    "OperationModeCombined": 0,
+    "RunningTime": 127,
+    "TimerHour": 31,
+    "TimerMin": 63
+   },
+   "frame_bytes": 6,
+   "error": true
+  },
+  {
+   "id": "campingmode/encode/defaults-explicit-sentinel",
+   "function": "campingmode",
+   "values": {
+    "State": 3,
+    "UsbCharger": 3,
+    "OutsideLight": 3,
+    "InteriorLight": 3
+   },
+   "frame_bytes": 1,
+   "expect_hex": "ff"
+  },
+  {
+   "id": "campingmode/encode/defaults-implicit",
+   "function": "campingmode",
+   "values": {},
+   "frame_bytes": 1,
+   "expect_hex": "ff"
+  },
+  {
+   "id": "campingmode/encode/State/max",
+   "function": "campingmode",
+   "values": {
+    "State": 3,
+    "UsbCharger": 3,
+    "OutsideLight": 3,
+    "InteriorLight": 3
+   },
+   "frame_bytes": 1,
+   "expect_hex": "ff"
+  },
+  {
+   "id": "campingmode/encode/UsbCharger/max",
+   "function": "campingmode",
+   "values": {
+    "State": 3,
+    "UsbCharger": 3,
+    "OutsideLight": 3,
+    "InteriorLight": 3
+   },
+   "frame_bytes": 1,
+   "expect_hex": "ff"
+  },
+  {
+   "id": "campingmode/encode/OutsideLight/max",
+   "function": "campingmode",
+   "values": {
+    "State": 3,
+    "UsbCharger": 3,
+    "OutsideLight": 3,
+    "InteriorLight": 3
+   },
+   "frame_bytes": 1,
+   "expect_hex": "ff"
+  },
+  {
+   "id": "campingmode/encode/InteriorLight/max",
+   "function": "campingmode",
+   "values": {
+    "State": 3,
+    "UsbCharger": 3,
+    "OutsideLight": 3,
+    "InteriorLight": 3
+   },
+   "frame_bytes": 1,
+   "expect_hex": "ff"
+  },
+  {
+   "id": "campingmode/encode/err-width-overflow",
+   "function": "campingmode",
+   "values": {
+    "State": 4,
+    "UsbCharger": 3,
+    "OutsideLight": 3,
+    "InteriorLight": 3
+   },
+   "frame_bytes": 1,
+   "error": true
+  },
+  {
+   "id": "cooler/encode/defaults-explicit-sentinel",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc771e3e1f1f"
+  },
+  {
+   "id": "cooler/encode/defaults-implicit",
+   "function": "cooler",
+   "values": {
+    "State": 0
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc771e3e1f1f"
+  },
+  {
+   "id": "cooler/encode/State/max",
+   "function": "cooler",
+   "values": {
+    "State": 1,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fd771e3e1f1f"
+  },
+  {
+   "id": "cooler/encode/TimerStart/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc771e3e1f1f"
+  },
+  {
+   "id": "cooler/encode/TimerCancel/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc771e3e1f1f"
+  },
+  {
+   "id": "cooler/encode/NightTimerSet/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc771e3e1f1f"
+  },
+  {
+   "id": "cooler/encode/Level/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 15,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc7f1e3e1f1f"
+  },
+  {
+   "id": "cooler/encode/Mode/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 15,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fcf71e3e1f1f"
+  },
+  {
+   "id": "cooler/encode/TimerHour/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 255,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc77ff3e1f1f"
+  },
+  {
+   "id": "cooler/encode/TimerMin/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 255,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc771eff1f1f"
+  },
+  {
+   "id": "cooler/encode/NightTimerHourOn/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 255,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc771e3eff1f"
+  },
+  {
+   "id": "cooler/encode/NightTimerHourOff/max",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 255
+   },
+   "frame_bytes": 6,
+   "expect_hex": "fc771e3e1fff"
+  },
+  {
+   "id": "cooler/encode/err-width-overflow",
+   "function": "cooler",
+   "values": {
+    "State": 0,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 256,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "error": true
+  },
+  {
+   "id": "cooler/encode/err-invalid-State-2",
+   "function": "cooler",
+   "values": {
+    "State": 2,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 3,
+    "Level": 7,
+    "Mode": 7,
+    "TimerHour": 30,
+    "TimerMin": 62,
+    "NightTimerHourOn": 31,
+    "NightTimerHourOff": 31
+   },
+   "frame_bytes": 6,
+   "error": true
+  },
+  {
+   "id": "energy/encode/defaults-explicit-sentinel",
+   "function": "energy",
+   "values": {
+    "EnergyModeSet": 3,
+    "DisplayRefresh": 0
+   },
+   "frame_bytes": 1,
+   "expect_hex": "30"
+  },
+  {
+   "id": "energy/encode/defaults-implicit",
+   "function": "energy",
+   "values": {},
+   "frame_bytes": 1,
+   "expect_hex": "30"
+  },
+  {
+   "id": "energy/encode/EnergyModeSet/max",
+   "function": "energy",
+   "values": {
+    "EnergyModeSet": 3,
+    "DisplayRefresh": 0
+   },
+   "frame_bytes": 1,
+   "expect_hex": "30"
+  },
+  {
+   "id": "energy/encode/DisplayRefresh/max",
+   "function": "energy",
+   "values": {
+    "EnergyModeSet": 3,
+    "DisplayRefresh": 1
+   },
+   "frame_bytes": 1,
+   "expect_hex": "31"
+  },
+  {
+   "id": "energy/encode/err-width-overflow",
+   "function": "energy",
+   "values": {
+    "EnergyModeSet": 4,
+    "DisplayRefresh": 0
+   },
+   "frame_bytes": 1,
+   "error": true
+  },
+  {
+   "id": "lighting/encode/defaults-explicit-sentinel",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/defaults-implicit",
+   "function": "lighting",
+   "values": {},
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/ProfileNumber/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 15,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0f00000000000000eeeeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/Mode/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 28,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e1c000000000000eeeeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/Timestamp/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 4294967295,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00ffffffff0000eeeeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/LightValue/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 65535,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e0000000000ffffeeeeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLOne/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 15,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000efeeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLTwo/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 15,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000feeeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLThree/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 15,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeefeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLFour/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 15,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eefeeeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLFive/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 15,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeefeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLSix/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 15,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeefeeeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLSeven/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 15,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeefeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLEight/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 15,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeefeeeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLNine/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 15,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeefeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLOneZero/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 15,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeefeeeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLOneOne/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 15,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeeeefeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLOneTwo/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 15,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeeefeeeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLOneThree/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 15,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeeeeeefee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLOneFour/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 15,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeeeeefeee"
+  },
+  {
+   "id": "lighting/encode/BrightnessLOneFive/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 15,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeeeeeeeef"
+  },
+  {
+   "id": "lighting/encode/BrightnessLOneSix/max",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 15
+   },
+   "frame_bytes": 16,
+   "expect_hex": "0e00000000000000eeeeeeeeeeeeeefe"
+  },
+  {
+   "id": "lighting/encode/err-width-overflow",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 0,
+    "Timestamp": 4294967296,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "error": true
+  },
+  {
+   "id": "lighting/encode/err-invalid-Mode-1",
+   "function": "lighting",
+   "values": {
+    "ProfileNumber": 14,
+    "Mode": 1,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLOne": 14,
+    "BrightnessLTwo": 14,
+    "BrightnessLThree": 14,
+    "BrightnessLFour": 14,
+    "BrightnessLFive": 14,
+    "BrightnessLSix": 14,
+    "BrightnessLSeven": 14,
+    "BrightnessLEight": 14,
+    "BrightnessLNine": 14,
+    "BrightnessLOneZero": 14,
+    "BrightnessLOneOne": 14,
+    "BrightnessLOneTwo": 14,
+    "BrightnessLOneThree": 14,
+    "BrightnessLOneFour": 14,
+    "BrightnessLOneFive": 14,
+    "BrightnessLOneSix": 14
+   },
+   "frame_bytes": 16,
+   "error": true
+  },
+  {
+   "id": "livingroomheater/encode/defaults-explicit-sentinel",
+   "function": "livingroomheater",
+   "values": {
+    "StateAir": 3,
+    "StateWater": 3,
+    "TemperatureWater": 3,
+    "Mode": 5,
+    "TemperatureAir": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "3f0500"
+  },
+  {
+   "id": "livingroomheater/encode/defaults-implicit",
+   "function": "livingroomheater",
+   "values": {},
+   "frame_bytes": 3,
+   "expect_hex": "3f0500"
+  },
+  {
+   "id": "livingroomheater/encode/StateAir/max",
+   "function": "livingroomheater",
+   "values": {
+    "StateAir": 3,
+    "StateWater": 3,
+    "TemperatureWater": 3,
+    "Mode": 5,
+    "TemperatureAir": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "3f0500"
+  },
+  {
+   "id": "livingroomheater/encode/StateWater/max",
+   "function": "livingroomheater",
+   "values": {
+    "StateAir": 3,
+    "StateWater": 3,
+    "TemperatureWater": 3,
+    "Mode": 5,
+    "TemperatureAir": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "3f0500"
+  },
+  {
+   "id": "livingroomheater/encode/TemperatureWater/max",
+   "function": "livingroomheater",
+   "values": {
+    "StateAir": 3,
+    "StateWater": 3,
+    "TemperatureWater": 3,
+    "Mode": 5,
+    "TemperatureAir": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "3f0500"
+  },
+  {
+   "id": "livingroomheater/encode/Mode/max",
+   "function": "livingroomheater",
+   "values": {
+    "StateAir": 3,
+    "StateWater": 3,
+    "TemperatureWater": 3,
+    "Mode": 15,
+    "TemperatureAir": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "3f0f00"
+  },
+  {
+   "id": "livingroomheater/encode/TemperatureAir/max",
+   "function": "livingroomheater",
+   "values": {
+    "StateAir": 3,
+    "StateWater": 3,
+    "TemperatureWater": 3,
+    "Mode": 5,
+    "TemperatureAir": 255
+   },
+   "frame_bytes": 3,
+   "expect_hex": "3f05ff"
+  },
+  {
+   "id": "livingroomheater/encode/err-width-overflow",
+   "function": "livingroomheater",
+   "values": {
+    "StateAir": 3,
+    "StateWater": 3,
+    "TemperatureWater": 3,
+    "Mode": 5,
+    "TemperatureAir": 256
+   },
+   "frame_bytes": 3,
+   "error": true
+  },
+  {
+   "id": "roof/encode/defaults-explicit-sentinel",
+   "function": "roof",
+   "values": {
+    "Up": 3,
+    "Down": 3,
+    "SafetyCounter": 0
+   },
+   "frame_bytes": 5,
+   "expect_hex": "0f00000000"
+  },
+  {
+   "id": "roof/encode/defaults-implicit",
+   "function": "roof",
+   "values": {},
+   "frame_bytes": 5,
+   "expect_hex": "0f00000000"
+  },
+  {
+   "id": "roof/encode/Up/max",
+   "function": "roof",
+   "values": {
+    "Up": 3,
+    "Down": 3,
+    "SafetyCounter": 0
+   },
+   "frame_bytes": 5,
+   "expect_hex": "0f00000000"
+  },
+  {
+   "id": "roof/encode/Down/max",
+   "function": "roof",
+   "values": {
+    "Up": 3,
+    "Down": 3,
+    "SafetyCounter": 0
+   },
+   "frame_bytes": 5,
+   "expect_hex": "0f00000000"
+  },
+  {
+   "id": "roof/encode/SafetyCounter/max",
+   "function": "roof",
+   "values": {
+    "Up": 3,
+    "Down": 3,
+    "SafetyCounter": 4294967295
+   },
+   "frame_bytes": 5,
+   "expect_hex": "0fffffffff"
+  },
+  {
+   "id": "roof/encode/err-width-overflow",
+   "function": "roof",
+   "values": {
+    "Up": 3,
+    "Down": 3,
+    "SafetyCounter": 4294967296
+   },
+   "frame_bytes": 5,
+   "error": true
+  },
+  {
+   "id": "roofaircondition/encode/defaults-explicit-sentinel",
+   "function": "roofaircondition",
+   "values": {
+    "State": 3,
+    "FanSpeed": 7,
+    "Mode": 7,
+    "Temperature": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "037700"
+  },
+  {
+   "id": "roofaircondition/encode/defaults-implicit",
+   "function": "roofaircondition",
+   "values": {},
+   "frame_bytes": 3,
+   "expect_hex": "037700"
+  },
+  {
+   "id": "roofaircondition/encode/State/max",
+   "function": "roofaircondition",
+   "values": {
+    "State": 3,
+    "FanSpeed": 7,
+    "Mode": 7,
+    "Temperature": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "037700"
+  },
+  {
+   "id": "roofaircondition/encode/FanSpeed/max",
+   "function": "roofaircondition",
+   "values": {
+    "State": 3,
+    "FanSpeed": 15,
+    "Mode": 7,
+    "Temperature": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "037f00"
+  },
+  {
+   "id": "roofaircondition/encode/Mode/max",
+   "function": "roofaircondition",
+   "values": {
+    "State": 3,
+    "FanSpeed": 7,
+    "Mode": 15,
+    "Temperature": 0
+   },
+   "frame_bytes": 3,
+   "expect_hex": "03f700"
+  },
+  {
+   "id": "roofaircondition/encode/Temperature/max",
+   "function": "roofaircondition",
+   "values": {
+    "State": 3,
+    "FanSpeed": 7,
+    "Mode": 7,
+    "Temperature": 255
+   },
+   "frame_bytes": 3,
+   "expect_hex": "0377ff"
+  },
+  {
+   "id": "roofaircondition/encode/err-width-overflow",
+   "function": "roofaircondition",
+   "values": {
+    "State": 3,
+    "FanSpeed": 7,
+    "Mode": 7,
+    "Temperature": 256
+   },
+   "frame_bytes": 3,
+   "error": true
+  },
+  {
+   "id": "satelliteantenna/encode/defaults-explicit-sentinel",
+   "function": "satelliteantenna",
+   "values": {
+    "DishStop": 0,
+    "Wlan": 0,
+    "System": 3,
+    "Dish": 0,
+    "SatelliteSelection": 0
+   },
+   "frame_bytes": 2,
+   "expect_hex": "3000"
+  },
+  {
+   "id": "satelliteantenna/encode/defaults-implicit",
+   "function": "satelliteantenna",
+   "values": {
+    "DishStop": 0,
+    "Wlan": 0
+   },
+   "frame_bytes": 2,
+   "expect_hex": "3000"
+  },
+  {
+   "id": "satelliteantenna/encode/DishStop/max",
+   "function": "satelliteantenna",
+   "values": {
+    "DishStop": 1,
+    "Wlan": 0,
+    "System": 3,
+    "Dish": 0,
+    "SatelliteSelection": 0
+   },
+   "frame_bytes": 2,
+   "expect_hex": "3100"
+  },
+  {
+   "id": "satelliteantenna/encode/Wlan/max",
+   "function": "satelliteantenna",
+   "values": {
+    "DishStop": 0,
+    "Wlan": 1,
+    "System": 3,
+    "Dish": 0,
+    "SatelliteSelection": 0
+   },
+   "frame_bytes": 2,
+   "expect_hex": "3200"
+  },
+  {
+   "id": "satelliteantenna/encode/System/max",
+   "function": "satelliteantenna",
+   "values": {
+    "DishStop": 0,
+    "Wlan": 0,
+    "System": 3,
+    "Dish": 0,
+    "SatelliteSelection": 0
+   },
+   "frame_bytes": 2,
+   "expect_hex": "3000"
+  },
+  {
+   "id": "satelliteantenna/encode/Dish/max",
+   "function": "satelliteantenna",
+   "values": {
+    "DishStop": 0,
+    "Wlan": 0,
+    "System": 3,
+    "Dish": 3,
+    "SatelliteSelection": 0
+   },
+   "frame_bytes": 2,
+   "expect_hex": "f000"
+  },
+  {
+   "id": "satelliteantenna/encode/SatelliteSelection/max",
+   "function": "satelliteantenna",
+   "values": {
+    "DishStop": 0,
+    "Wlan": 0,
+    "System": 3,
+    "Dish": 0,
+    "SatelliteSelection": 15
+   },
+   "frame_bytes": 2,
+   "expect_hex": "300f"
+  },
+  {
+   "id": "satelliteantenna/encode/err-width-overflow",
+   "function": "satelliteantenna",
+   "values": {
+    "DishStop": 0,
+    "Wlan": 0,
+    "System": 3,
+    "Dish": 0,
+    "SatelliteSelection": 16
+   },
+   "frame_bytes": 2,
+   "error": true
+  },
+  {
+   "id": "stairs/encode/defaults-explicit-sentinel",
+   "function": "stairs",
+   "values": {
+    "OperationMode": 3,
+    "Movement": 0
+   },
+   "frame_bytes": 1,
+   "expect_hex": "03"
+  },
+  {
+   "id": "stairs/encode/defaults-implicit",
+   "function": "stairs",
+   "values": {},
+   "frame_bytes": 1,
+   "expect_hex": "03"
+  },
+  {
+   "id": "stairs/encode/OperationMode/max",
+   "function": "stairs",
+   "values": {
+    "OperationMode": 3,
+    "Movement": 0
+   },
+   "frame_bytes": 1,
+   "expect_hex": "03"
+  },
+  {
+   "id": "stairs/encode/Movement/max",
+   "function": "stairs",
+   "values": {
+    "OperationMode": 3,
+    "Movement": 3
+   },
+   "frame_bytes": 1,
+   "expect_hex": "0f"
+  },
+  {
+   "id": "stairs/encode/err-width-overflow",
+   "function": "stairs",
+   "values": {
+    "OperationMode": 4,
+    "Movement": 0
+   },
+   "frame_bytes": 1,
+   "error": true
+  },
+  {
+   "id": "cooler/encode/real-power-on",
+   "function": "cooler",
+   "values": {
+    "State": 1,
+    "TimerStart": 3,
+    "TimerCancel": 3,
+    "NightTimerSet": 0,
+    "Level": 3,
+    "Mode": 4,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "frame_bytes": 6,
+   "expect_hex": "3d4300000000"
+  }
+ ]
+}
