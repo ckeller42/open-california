@@ -50,9 +50,11 @@ export CALICTL_ADDR=$(sudo grep -oP "(?<=CALICTL_ADDR=).*" /etc/buspi/calictl.en
 ~/solix-env/bin/python -m calictl get cooler      # or pass --addr "$CALICTL_ADDR"
 ```
 
-### One-time migration: env → cache (PR #163, pending)
-So that the wizard's unpair actually survives a reboot on buspi (env-first would otherwise
-re-target the removed bond), make the pairing cache the source and stop setting the env var:
+### One-time migration: env → cache (APPLIED on buspi 2026-08-31; procedure kept for re-provisioning)
+So that the wizard's unpair actually survives a reboot (env-first would otherwise re-target the
+removed bond), make the pairing cache the source and stop setting the env var. Already done on the
+current buspi (cache seeded, `CALICTL_ADDR` removed, daemon polling from cache; env backed up at
+`/etc/buspi/calictl.env.bak-pre-cache-migration`). Re-run only on a fresh box:
 ```sh
 # 1) seed the cache from the current env addr (cache is home-owned; the read needs the box
 #    sudo password, so this is interactive) — additive, no risk
