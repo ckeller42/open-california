@@ -93,6 +93,12 @@ def make_handler(backend, webui_dir):
                     return self._send_json({"error": "history_failed"}, 500)
             if path == "/api/screens":
                 return self._send_bytes(backend.screens_bytes(), "application/json")
+            if path == "/api/pairing":
+                try:
+                    return self._send_json(backend.pairing_snapshot())
+                except Exception as e:  # log server-side only; never leak exception text to client
+                    print("web: pairing snapshot failed: %r" % (e,), flush=True)
+                    return self._send_json({"error": "pairing_failed"}, 500)
             return self._serve_static(path)
 
         def _serve_static(self, path):
@@ -110,7 +116,7 @@ def make_handler(backend, webui_dir):
 
         def do_POST(self):
             path = self.path.split("?", 1)[0]
-            if path not in ("/api/command", "/api/session", "/api/auto_camper"):
+            if path not in ("/api/command", "/api/session", "/api/auto_camper", "/api/pairing"):
                 return self._send_json({"error": "not_found"}, 404)
             ctype = self.headers.get("Content-Type", "")
             if ctype.split(";", 1)[0].strip().lower() != "application/json":
@@ -147,6 +153,22 @@ def make_handler(backend, webui_dir):
                 except Exception as e:
                     print("web: set_auto_camper failed: %r" % (e,), flush=True)
                     return self._send_json({"error": "auto_camper_failed"}, 500)
+            if path == "/api/pairing":
+                # connection management (like /api/session), not a vehicle write — allowed even in
+                # read-only mode.
+                action = req.get("action")
+                if action not in ("start", "passkey", "cancel", "reset"):
+                    return self._send_json({"error": "bad_action"}, 400)
+                if action == "reset" and not req.get("confirm"):
+                    return self._send_json({"error": "confirm_required"}, 400)
+                value = req.get("value")
+                if action == "passkey" and not (isinstance(value, str) and len(value) == 6 and value.isdigit()):
+                    return self._send_json({"error": "bad_passkey"}, 400)
+                try:
+                    return self._send_json(backend.pairing_command(action, value))
+                except Exception as e:
+                    print("web: pairing command failed: %r" % (e,), flush=True)
+                    return self._send_json({"error": "pairing_failed"}, 500)
             if backend.read_only:
                 return self._send_json({"error": "read_only"}, 405)
             fn = req.get("function"); what = req.get("what")

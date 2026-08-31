@@ -23,6 +23,8 @@ import urllib.request
 
 import pytest
 
+from tools.mock_unit import FakePairingTransport
+
 sync_api = pytest.importorskip("playwright.sync_api")
 sync_playwright = sync_api.sync_playwright
 expect = sync_api.expect
@@ -47,45 +49,56 @@ def _free_port():
     return port
 
 
-@pytest.fixture(scope="module")
-def base_url():
-    port = _free_port()
-    for stale in ("/tmp/calictl_e2e_history.jsonl", "/tmp/calictl_e2e_state.json"):
-        try:                       # a previous run's samples must not make this one pass
-            os.unlink(stale)
-        except OSError:
-            pass
+def _start_daemon(port, extra_env):
+    """Launch `tools.run_against_mock serve --web <port>` and block until `/api/state` reports
+    the mock's installed functions -- the subprocess-launch + readiness-poll dance shared by
+    `base_url` (one server for the whole module) and `pairing_url` (a fresh one per test, so the
+    guided-pairing wizard's server-side state machine can't leak between tests)."""
     env = dict(os.environ,
                CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
                CALICTL_ARM_DELAY_S="0.3", CALICTL_SETTLE_S="0.3", CALICTL_HEARTBEAT_PERIOD_S="0.1",
                CALICTL_FAST_CONFIRM_S="0.2",  # lighting fast-path Mode-4 confirm window (real default 1.2 s)
                CALICTL_SESSION_WAIT_S="0.3",  # don't idle waiting for a session in the mock e2e
-               CALICTL_HEARTBEAT_WARMUP_S="0", CALICTL_STATE_CACHE="/tmp/calictl_e2e_state.json",
-               # BOTH caches must be redirected: the daemon appends an energy sample per poll, so
-               # without this the suite writes mock data into the developer's real ~/.cache.
-               CALICTL_HISTORY_CACHE="/tmp/calictl_e2e_history.jsonl",
+               CALICTL_HEARTBEAT_WARMUP_S="0",
                CALICTL_ENABLE_WRITES="1",  # e2e exercises control writes -> not read-only
                CALICTL_PERSISTENT_SESSION="1")  # default, explicit for the session-pill test's intent
+    env.update(extra_env)
     proc = subprocess.Popen(
         [sys.executable, "-m", "tools.run_against_mock", "serve",
          "--web", str(port), "--interval", "1", "--no-influx"],
         cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     url = "http://127.0.0.1:%d" % port
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError("server exited early:\n" + proc.stdout.read().decode())
+        try:
+            with urllib.request.urlopen(url + "/api/state", timeout=1) as r:
+                if len([k for k, v in json.load(r).items() if isinstance(v, dict)
+                        and v.get("installed")]) >= 5:
+                    return proc, url
+        except Exception:
+            pass
+        time.sleep(0.5)
+    raise RuntimeError("server did not become ready in time")
+
+
+@pytest.fixture(scope="module")
+def base_url():
+    port = _free_port()
+    for stale in ("/tmp/calictl_e2e_history.jsonl", "/tmp/calictl_e2e_state.json", "/tmp/calictl_e2e_pairing.json"):
+        try:                       # a previous run's samples must not make this one pass
+            os.unlink(stale)
+        except OSError:
+            pass
+    # BOTH caches must be redirected: the daemon appends an energy sample per poll, so without
+    # this the suite writes mock data into the developer's real ~/.cache. Same for the pairing
+    # cache -- it's only read as a `pairing_snapshot()` fallback before any wizard run, but a
+    # real cached address there would falsely suppress the "prominent setup card" case.
+    proc, url = _start_daemon(port, {"CALICTL_STATE_CACHE": "/tmp/calictl_e2e_state.json",
+                                      "CALICTL_HISTORY_CACHE": "/tmp/calictl_e2e_history.jsonl",
+                                      "CALICTL_PAIRING_CACHE": "/tmp/calictl_e2e_pairing.json"})
     try:
-        deadline = time.time() + 30
-        while time.time() < deadline:
-            if proc.poll() is not None:
-                raise RuntimeError("server exited early:\n" + proc.stdout.read().decode())
-            try:
-                with urllib.request.urlopen(url + "/api/state", timeout=1) as r:
-                    if len([k for k, v in json.load(r).items() if isinstance(v, dict)
-                            and v.get("installed")]) >= 5:
-                        break
-            except Exception:
-                pass
-            time.sleep(0.5)
-        else:
-            raise RuntimeError("server did not become ready in time")
         yield url
     finally:
         proc.terminate()
@@ -101,6 +114,35 @@ def page(base_url):
         browser = p.chromium.launch()
         pg = browser.new_page()
         pg.goto(base_url)
+        yield pg
+        browser.close()
+
+
+@pytest.fixture
+def pairing_url(tmp_path):
+    """A dedicated daemon per pairing test (own port + caches): the guided-pairing wizard is a
+    server-side state machine (`calictl.pairing`), so sharing the module-scoped `base_url` server
+    across pairing tests would let one test's end state (e.g. bonded) leak into the next."""
+    port = _free_port()
+    proc, url = _start_daemon(port, {"CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+                                      "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+                                      "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json")})
+    try:
+        yield url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+
+
+@pytest.fixture
+def pairing_page(pairing_url):
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        pg.goto(pairing_url)
         yield pg
         browser.close()
 
@@ -236,6 +278,61 @@ def test_open_control_survives_a_state_poll(page):
     # if refreshState re-rendered, the marked <select> was replaced -> marker gone / focus lost
     assert sel.get_attribute("data-probe") == "keep", "the open <select> was destroyed by a state poll"
     assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
+
+
+def _open_and_start_pairing(page):
+    page.get_by_role("button", name="Bluetooth setup / re-pair").click()
+    page.get_by_role("checkbox", name="I'm on that screen").check()
+    page.get_by_role("button", name="Start").click()
+
+
+def _complete_bonding(page):
+    """Drive the wizard through to `bonded` against `tools.mock_unit.FakePairingTransport`."""
+    _open_and_start_pairing(page)
+    passkey = page.locator("#pairing-passkey")
+    expect(passkey).to_be_visible(timeout=10000)
+    passkey.fill(str(FakePairingTransport.RIGHT_PASSKEY))
+    page.get_by_role("button", name="Send").click()
+    expect(page.get_by_text("CALICTL_ADDR=" + FakePairingTransport.FOUND_ADDR)).to_be_visible(timeout=10000)
+
+
+def test_pairing_wizard_reaches_bonded(pairing_page):
+    """The full happy path: Setup card -> checkbox -> Start -> passkey -> bonded, showing the
+    address and the env line to persist it (design spec step 2)."""
+    _complete_bonding(pairing_page)
+    assert FakePairingTransport.FOUND_ADDR in pairing_page.locator("#app").inner_text()
+
+
+def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
+    """A wrong passkey each attempt: the real SM (`calictl.pairing`) retries up to MAX_ATTEMPTS
+    times (cycling back through scanning/connecting/waiting_passkey) before giving up -> `error`
+    with a Retry button (design spec step 2's error case)."""
+    page = pairing_page
+    _open_and_start_pairing(page)
+    passkey = page.locator("#pairing-passkey")
+    for _ in range(3):   # calictl.pairing.MAX_ATTEMPTS
+        expect(passkey).to_be_visible(timeout=10000)
+        passkey.fill("000000")
+        page.get_by_role("button", name="Send").click()
+        # Wait for THIS attempt to actually register server-side (the passkey input disappears --
+        # to scanning/connecting on a retry, or straight to error) before sending the next one.
+        # Without this, a fast double-click can hit the same stale "waiting_passkey" input/button
+        # twice before the first POST's response re-renders, and the SM silently no-ops a
+        # "passkey" event that doesn't arrive in `waiting_passkey` -- undercounting attempts.
+        expect(passkey).to_be_hidden(timeout=10000)
+    expect(page.get_by_role("button", name="Retry")).to_be_visible(timeout=10000)
+    assert "pairing_failed" not in page.locator("#app").inner_text()   # friendly text, not the raw enum
+    assert "Pairing failed" in page.locator("#app").inner_text()
+
+
+def test_pairing_wizard_reset_demands_confirm_then_idle(pairing_page):
+    """The reset/re-pair button gates on a native confirm() (design spec step 3); accepting it
+    removes the bond and returns the wizard to `idle`."""
+    page = pairing_page
+    page.on("dialog", lambda d: d.accept())   # Playwright auto-dismisses confirm() with no listener
+    _complete_bonding(page)
+    page.get_by_role("button", name="Bluetooth reset / re-pair").click()
+    expect(page.get_by_role("checkbox", name="I'm on that screen")).to_be_visible(timeout=10000)
 
 
 def test_auto_camper_toggle_present_and_flips(page):

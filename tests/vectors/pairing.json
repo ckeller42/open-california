@@ -1,0 +1,80 @@
+{
+  "cases": [
+    {
+      "id": "happy-path",
+      "start": [0, 0, 0],
+      "steps": [
+        {"ev": 0, "state": [1, 0, 0], "actions": [[0, 0]]},
+        {"ev": 1, "state": [2, 0, 0], "actions": [[1, 0], [2, 0]]},
+        {"ev": 2, "state": [4, 0, 0], "actions": [[3, 0]]},
+        {"ev": 3, "state": [3, 0, 0], "actions": []},
+        {"ev": 4, "arg": 123456, "state": [4, 0, 0], "actions": [[4, 123456]]},
+        {"ev": 5, "state": [5, 0, 0], "actions": [[5, 0]]},
+        {"ev": 7, "arg": 20, "state": [6, 0, 0], "actions": [[6, 0]]}
+      ]
+    },
+    {
+      "id": "wrong-passkey-thrice",
+      "start": [4, 0, 0],
+      "steps": [
+        {"ev": 6, "state": [1, 1, 0], "actions": [[7, 0], [0, 0]]},
+        {"ev": 1, "state": [2, 1, 0], "actions": [[1, 0], [2, 0]]},
+        {"ev": 2, "state": [4, 1, 0], "actions": [[3, 0]]},
+        {"ev": 6, "state": [1, 2, 0], "actions": [[7, 0], [0, 0]]},
+        {"ev": 1, "state": [2, 2, 0], "actions": [[1, 0], [2, 0]]},
+        {"ev": 2, "state": [4, 2, 0], "actions": [[3, 0]]},
+        {"ev": 6, "state": [7, 3, 2], "actions": [[7, 0]]}
+      ]
+    },
+    {
+      "id": "timeout-in-waiting-passkey",
+      "start": [3, 0, 0],
+      "steps": [
+        {"ev": 9, "state": [7, 0, 1], "actions": [[7, 0]]}
+      ]
+    },
+    {
+      "id": "timeout-in-scanning",
+      "start": [1, 0, 0],
+      "steps": [
+        {"ev": 9, "state": [7, 0, 1], "actions": [[1, 0]]}
+      ]
+    },
+    {
+      "id": "cancel-mid-pairing",
+      "start": [4, 0, 0],
+      "steps": [
+        {"ev": 10, "state": [0, 0, 0], "actions": [[7, 0]]}
+      ]
+    },
+    {
+      "id": "reset-from-bonded",
+      "start": [6, 0, 0],
+      "steps": [
+        {"ev": 11, "state": [8, 0, 0], "actions": [[8, 0]]},
+        {"ev": 12, "state": [0, 0, 0], "actions": []}
+      ]
+    },
+    {
+      "id": "retry-from-error",
+      "start": [7, 3, 2],
+      "steps": [
+        {"ev": 0, "state": [1, 0, 0], "actions": [[0, 0]]}
+      ]
+    },
+    {
+      "id": "timeout-in-resetting",
+      "start": [8, 0, 0],
+      "steps": [
+        {"ev": 9, "state": [7, 0, 1], "actions": []}
+      ]
+    },
+    {
+      "id": "cancel-from-bonded",
+      "start": [6, 0, 0],
+      "steps": [
+        {"ev": 10, "state": [0, 0, 0], "actions": []}
+      ]
+    }
+  ]
+}

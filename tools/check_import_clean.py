@@ -18,6 +18,8 @@ import calictl.influx
 import calictl.mqtt
 import calictl.observer
 import calictl.overrides
+import calictl.pairing  # noqa: F401
+import calictl.pairing_bluez  # noqa: F401
 import calictl.postcheck
 import calictl.protocol  # noqa: E401,F401
 import calictl.semantics
@@ -25,7 +27,7 @@ import calictl.serve
 import calictl.session  # noqa: F401
 import calictl.web  # noqa: F401
 
-BANNED = {"bleak", "paho", "paho.mqtt", "influxdb_client", "yaml"}
+BANNED = {"bleak", "paho", "paho.mqtt", "influxdb_client", "yaml", "dbus_fast"}
 
 
 def main() -> int:
