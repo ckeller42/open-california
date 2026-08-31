@@ -215,6 +215,65 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example: { error: auto_camper_failed }
+  /api/pairing:
+    get:
+      summary: Guided-pairing wizard state
+      description: |
+        Read-only snapshot of the guided BLE-pairing state machine (no BLE, no bridging onto the
+        daemon loop). Before any wizard run this process lifetime, `state` is `idle` and `address`
+        falls back to the persisted pairing cache (`~/.cache/calictl/pairing.json`), NOT the
+        operator's `CALICTL_ADDR` override.
+      responses:
+        "200":
+          description: Current pairing-wizard state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairingState" }
+    post:
+      summary: Drive the guided-pairing wizard (not a vehicle write)
+      description: |
+        `start` parks the persistent-session supervisor (single BLE owner) before arming the
+        wizard; `passkey` forwards a 6-digit passkey typed by the user; `cancel` abandons the
+        in-progress attempt; `reset` removes an existing bond (requires `confirm: true`). Allowed
+        even in read-only mode — connection/bond management, not a control write.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PairingRequest" }
+            examples:
+              start:   { value: { action: start } }
+              passkey: { value: { action: passkey, value: "123456" } }
+              reset:   { value: { action: reset, confirm: true } }
+      responses:
+        "200":
+          description: New pairing-wizard state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairingState" }
+        "400":
+          description: >
+            `bad_action` (not one of start/passkey/cancel/reset), `confirm_required` (reset
+            without `confirm: true`), or `bad_passkey` (value is not exactly 6 digits).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                badAction: { value: { error: bad_action } }
+                confirm:   { value: { error: confirm_required } }
+                badPasskey: { value: { error: bad_passkey } }
+        "415":
+          description: Content-Type is not application/json.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: unsupported_media_type }
+        "500":
+          description: Pairing command failed server-side.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: pairing_failed }
 components:
   schemas:
     Error:
@@ -226,7 +285,8 @@ components:
           type: string
           enum: [state_failed, history_failed, not_found, unsupported_media_type, bad_request,
                  bad_json, read_only, missing_function_or_what, confirm_required, command_failed,
-                 bad_action, session_failed, bad_enabled, auto_camper_failed]
+                 bad_action, session_failed, bad_enabled, auto_camper_failed, bad_passkey,
+                 pairing_failed]
     State:
       type: object
       description: |
@@ -370,3 +430,32 @@ components:
       properties:
         ok: { type: boolean }
         auto_camper: { type: boolean, description: The new toggle state. }
+    PairingRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [start, passkey, cancel, reset] }
+        value:
+          type: string
+          description: 'Exactly 6 digits — required for action=passkey.'
+        confirm:
+          type: boolean
+          default: false
+          description: Required true for action=reset (it removes the existing bond).
+    PairingState:
+      type: object
+      required: [state, attempts, error, address]
+      properties:
+        state:
+          type: string
+          enum: [idle, scanning, connecting, waiting_passkey, pairing, verifying, bonded, error, resetting]
+        attempts: { type: integer, description: Pair attempts made this run (resets on success/reset). }
+        error:
+          type: [string, "null"]
+          enum: [null, timeout, pairing_failed, verify_failed]
+        address:
+          type: [string, "null"]
+          description: >
+            The bonded device's BLE address once known. If `state` is `bonded` and `address` is
+            null, the bond itself succeeded but the address-cache write failed. Before any wizard
+            run this process lifetime, falls back to the persisted pairing-cache address.

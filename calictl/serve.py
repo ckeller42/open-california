@@ -57,6 +57,20 @@ def installed_from(states: dict) -> set:
     return {fn for fn, i in states.items() if i.get("installed")}
 
 
+def _pairing_cache_address():
+    """Best-effort read of the persisted pairing-cache ``address`` (``CALICTL_PAIRING_CACHE``,
+    default ``~/.cache/calictl/pairing.json``) — used ONLY as a `pairing_snapshot()` fallback
+    display value before a wizard runner exists. Deliberately NOT `CALICTL_ADDR` (that's the
+    operator's own connection override, unrelated to what the pairing flow last bonded). Any
+    read error (missing/corrupt file) -> None."""
+    path = os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
+    try:
+        with open(path) as f:
+            return json.load(f).get("address") or None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 class ServeBackend:
     """Adapts a running `Server` to `calictl.web`'s backend interface.
 
@@ -155,6 +169,16 @@ class ServeBackend:
         Runs synchronously — it only flips a flag + persists, no BLE."""
         return {"ok": True, "auto_camper": self._s.set_auto_camper(on)}
 
+    def pairing_snapshot(self):
+        """Read-only pairing-wizard snapshot for `GET /api/pairing` — no BLE, thread-safe like
+        `state()` (just reads `self._s._pairing`, never touches the loop)."""
+        return self._s.pairing_snapshot()
+
+    def pairing_command(self, action, value):
+        """Bridge a pairing-wizard action onto the daemon loop (like `set_session`)."""
+        fut = asyncio.run_coroutine_threadsafe(self._s.pairing_command(action, value), self._loop)
+        return fut.result(timeout=30)
+
     def history(self, hours=24):
         """Leisure-battery samples for the last ``hours``, oldest first — read from the daemon's
         own append-only file, NOT from InfluxDB (the GUI stays Influx-free by design).
@@ -245,6 +269,7 @@ class Server:
         self._published = set()             # functions whose discovery is sent
         self._last = {}                     # function -> last DECODED state (for commands)
         self._roof_stop = None              # asyncio.Event (lazy, loop-bound): interrupts an in-flight roof move
+        self._pairing = None                # pairing_bluez.PairingRunner (lazy: created on first /api/pairing use)
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
         # Persist the last-known state so a restart while the van is asleep still shows the last
         # real values (the unit can be unreachable for days when parked). Env-overridable path.
@@ -405,6 +430,59 @@ class Server:
         self._save_last()
         print("auto-camper: %s" % ("ENABLED" if enabled else "disabled"), flush=True)
         return enabled
+
+    def pairing_snapshot(self):
+        """Thread-safe read of the guided-pairing wizard's state for `GET /api/pairing`.
+
+        :returns: `self._pairing.snapshot()` if a wizard run has ever started this
+            process lifetime, else the idle default with `address` falling back to
+            the persisted pairing-cache address (see `_pairing_cache_address`).
+        """
+        if self._pairing is not None:
+            return self._pairing.snapshot()
+        return {"state": "idle", "attempts": 0, "error": None, "address": _pairing_cache_address()}
+
+    def _ensure_pairing_runner(self):
+        """Lazily construct the `PairingRunner` + `BluezTransport` pair on first use. Construction
+        alone touches no bleak/dbus_fast (both are lazy inside the transport's methods), so this is
+        cheap and safe to call even on a dev box with no BLE stack installed."""
+        if self._pairing is None:
+            from . import pairing_bluez  # lazy: keeps bleak/dbus_fast off calictl.serve's import path
+            transport = pairing_bluez.BluezTransport()
+            self._pairing = pairing_bluez.PairingRunner(transport)
+            transport.on_event = self._pairing.handle
+        return self._pairing
+
+    async def pairing_command(self, action, value):
+        """Drive the guided-pairing wizard for `POST /api/pairing` (action already validated by
+        `web.py`: one of start/passkey/cancel/reset, passkey pre-checked as 6 digits, reset's
+        `confirm` flag already gated).
+
+        On "start", parks the persistent-session supervisor FIRST (`set_mode("disconnect")`)
+        before arming the runner. RULING (single BLE owner, see CLAUDE.md): a guided-pairing flow
+        can run for minutes (user must physically confirm a passkey), so it does NOT hold
+        `self._ble` for its duration — that would freeze `/api/state` for the whole flow. Instead,
+        parking the supervisor is the exclusion mechanism: it won't reconnect until the wizard ends
+        (user hits Connect again, or `reset`/`cancel` lets a later poll cycle re-establish).
+
+        :param action: "start" | "passkey" | "cancel" | "reset".
+        :param value: passkey digit-string for "passkey"; unused otherwise.
+        """
+        if action == "start":
+            self._ensure_pairing_runner()
+            await self._sessions.set_mode("disconnect")
+            await self._pairing.start()
+        elif action == "passkey":
+            if self._pairing is None:
+                return
+            await self._pairing.enter_passkey(int(value))
+        elif action == "cancel":
+            if self._pairing is None:
+                return
+            await self._pairing.cancel()
+        elif action == "reset":
+            self._ensure_pairing_runner()
+            await self._pairing.reset()
 
     async def poll(self):
         # One BLE read of every function under the lock; cache the DECODED state

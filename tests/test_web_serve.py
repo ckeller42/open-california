@@ -878,3 +878,182 @@ def test_roof_stop_sets_event_lockfree_to_interrupt_inflight_move():
         return s._roof_stop.is_set()
 
     assert asyncio.run(_run()) is True          # event set -> in-flight loop will break + STOP
+
+
+# --- guided pairing: serve.py wiring (task 5) ------------------------------------------------
+
+def test_pairing_snapshot_idle_with_no_runner_falls_back_to_cache_address(monkeypatch, tmp_path):
+    """No wizard has run yet this process -> idle default, address read from the persisted
+    pairing cache (NOT CALICTL_ADDR — that's the operator's own override)."""
+    from calictl import serve
+    cache = tmp_path / "pairing.json"
+    cache.write_text('{"address": "AA:BB:CC:DD:EE:FF"}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
+    s = serve.Server(influx_enabled=False)
+    assert s._pairing is None
+    assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None,
+                                     "address": "AA:BB:CC:DD:EE:FF"}
+
+
+def test_pairing_snapshot_idle_with_no_cache_file(monkeypatch, tmp_path):
+    from calictl import serve
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
+    s = serve.Server(influx_enabled=False)
+    assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None, "address": None}
+
+
+def test_pairing_snapshot_uses_runner_when_present():
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+
+    class FakeRunner:
+        def snapshot(self):
+            return {"state": "waiting_passkey", "attempts": 0, "error": None, "address": None}
+    s._pairing = FakeRunner()
+    assert s.pairing_snapshot()["state"] == "waiting_passkey"
+
+
+def test_pairing_command_start_parks_supervisor_before_starting(monkeypatch):
+    """A pairing flow must own the radio: `set_mode("disconnect")` parks the persistent-session
+    supervisor BEFORE the runner starts (single-BLE-owner rule)."""
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    calls = []
+
+    class FakeRunner:
+        async def start(self):
+            calls.append("start")
+    s._pairing = FakeRunner()
+
+    async def fake_set_mode(action):
+        calls.append(("set_mode", action))
+        return {"mode": "release"}
+    monkeypatch.setattr(s._sessions, "set_mode", fake_set_mode)
+
+    asyncio.run(s.pairing_command("start", None))
+    assert calls == [("set_mode", "disconnect"), "start"]
+
+
+def test_pairing_command_passkey_forwards_int():
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    seen = {}
+
+    class FakeRunner:
+        async def enter_passkey(self, pk):
+            seen["pk"] = pk
+    s._pairing = FakeRunner()
+
+    asyncio.run(s.pairing_command("passkey", "123456"))
+    assert seen["pk"] == 123456
+
+
+def test_pairing_command_reset_with_confirm_calls_runner_reset():
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    calls = []
+
+    class FakeRunner:
+        async def reset(self):
+            calls.append("reset")
+    s._pairing = FakeRunner()
+
+    asyncio.run(s.pairing_command("reset", None))
+    assert calls == ["reset"]
+
+
+def test_pairing_command_passkey_and_cancel_are_noop_without_a_runner():
+    """No runner yet (wizard never started) -> passkey/cancel are safe no-ops, never crash."""
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    asyncio.run(s.pairing_command("passkey", "123456"))
+    asyncio.run(s.pairing_command("cancel", None))
+    assert s._pairing is None
+
+
+def test_pairing_command_reset_creates_a_runner_when_none_exists():
+    """reset with no runner still creates one (BluezTransport construction is stdlib-only —
+    bleak/dbus_fast are lazy inside its methods) so remove_bond can actually run."""
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    assert s._pairing is None
+    asyncio.run(s.pairing_command("reset", None))
+    assert s._pairing is not None
+    assert s.pairing_snapshot()["state"] == "idle"   # RESET -> RESET_DONE settles back to idle
+
+
+# --- guided pairing: web.py /api/pairing routing (task 5) ------------------------------------
+
+def test_pairing_web_api_routes(tmp_path):
+    """web.py's /api/pairing contract: GET returns the backend snapshot; allowed in read-only
+    (contrast: /api/command 405); reset needs confirm; passkey format is checked before the
+    backend is ever called; unknown action rejected."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    from calictl import web
+
+    calls = []
+
+    class _Backend:
+        read_only = True   # a read-only Server must still accept pairing POSTs
+
+        def pairing_snapshot(self):
+            return {"state": "idle", "attempts": 0, "error": None, "address": None}
+
+        def pairing_command(self, action, value):
+            calls.append((action, value))
+            return {"ok": True}
+
+    httpd = web.serve_http(_Backend(), str(tmp_path), host="127.0.0.1", port=0)
+    base = "http://127.0.0.1:%d" % httpd.server_address[1]
+
+    def post(path, body):
+        req = urllib.request.Request(base + path, data=json.dumps(body).encode(),
+                                      headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=3) as r:
+                return r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+
+    try:
+        with urllib.request.urlopen(base + "/api/pairing", timeout=3) as r:
+            assert json.load(r) == {"state": "idle", "attempts": 0, "error": None, "address": None}
+
+        status, _ = post("/api/pairing", {"action": "start"})
+        assert status == 200 and calls == [("start", None)]
+
+        status, _ = post("/api/pairing", {"action": "passkey", "value": "123456"})
+        assert status == 200 and calls[-1] == ("passkey", "123456")
+
+        for bad in ("12ab56", "12345", 123456):
+            status, body = post("/api/pairing", {"action": "passkey", "value": bad})
+            assert status == 400 and body["error"] == "bad_passkey"
+        assert calls[-1] == ("passkey", "123456")   # none of the bad values reached the backend
+
+        status, body = post("/api/pairing", {"action": "reset"})
+        assert status == 400 and body["error"] == "confirm_required"
+
+        status, _ = post("/api/pairing", {"action": "reset", "confirm": True})
+        assert status == 200 and calls[-1] == ("reset", None)
+
+        status, body = post("/api/pairing", {"action": "bogus"})
+        assert status == 400 and body["error"] == "bad_action"
+
+        # contrast: the SAME read-only backend still refuses /api/command
+        status, body = post("/api/command", {"function": "cooler", "what": "power", "value": "on"})
+        assert status == 405 and body["error"] == "read_only"
+    finally:
+        httpd.shutdown()
