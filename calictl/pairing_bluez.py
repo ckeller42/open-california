@@ -12,10 +12,9 @@
 """
 import asyncio
 import json
-import os
-import pathlib
 
 from calictl import pairing
+from calictl.device import pairing_cache_path
 from calictl.pairing import (
     ACT_CONNECT,
     ACT_DISCONNECT,
@@ -191,15 +190,6 @@ class PairingRunner:
 
 
 AGENT_PATH = "/org/calictl/pairing_agent"
-
-
-def _pairing_cache_path():
-    """The persisted-bond cache file (``CALICTL_PAIRING_CACHE``, default ``~/.cache/calictl/
-    pairing.json``) — the same path :func:`calictl.device.resolve_addr` reads as its fallback,
-    so writing it on bond and clearing it on unpair is what makes both survive a reboot."""
-    return pathlib.Path(
-        os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
-    )
 
 
 class BluezTransport:
@@ -390,7 +380,7 @@ class BluezTransport:
                 addr = variant.value
             except Exception:
                 pass  # fall back to the address discovered during scan
-            cache_path = _pairing_cache_path()
+            cache_path = pairing_cache_path()
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_text(json.dumps({"address": addr}))
             return addr
@@ -420,7 +410,7 @@ class BluezTransport:
         # no-ops off-hardware), and best-effort: a cache-clear failure must not surface as a
         # pairing error.
         try:
-            _pairing_cache_path().unlink(missing_ok=True)
+            pairing_cache_path().unlink(missing_ok=True)
         except OSError:
             pass
 

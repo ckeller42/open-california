@@ -225,6 +225,22 @@ def test_actuate_roof_stops_at_limit_position(fake_bleak, monkeypatch):
     assert dirs.count(0x01) == 1 and dirs[-1] == 0x00
 
 
+def test_pairing_cache_path_is_xdg_state_not_cache(monkeypatch, tmp_path):
+    """The bond is durable STATE -> $XDG_STATE_HOME/calictl/pairing.json, never ~/.cache
+    (XDG permits cache deletion). CALICTL_PAIRING_CACHE overrides the whole path."""
+    monkeypatch.delenv("CALICTL_PAIRING_CACHE", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    p = device.pairing_cache_path()
+    assert p == tmp_path / "state" / "calictl" / "pairing.json"
+    assert ".cache" not in str(p)
+    # no XDG_STATE_HOME -> ~/.local/state default
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    assert str(device.pairing_cache_path()).endswith("/.local/state/calictl/pairing.json")
+    # explicit override wins over everything
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "override.json"))
+    assert device.pairing_cache_path() == tmp_path / "override.json"
+
+
 def test_resolve_addr_prefers_env(monkeypatch):
     """CALICTL_ADDR env var takes precedence over the pairing cache."""
     monkeypatch.setenv("CALICTL_ADDR", "11:22:33:44:55:66")

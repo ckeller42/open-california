@@ -41,8 +41,9 @@ ssh buspi 'sudo -n systemctl start calictl.service && sleep 2 && systemctl is-ac
 
 The real BLE address is NOT in the code (placeholder `AA:BB:CC:DD:EE:FF`). `device.resolve_addr()`
 resolves it, in order: **1.** `CALICTL_ADDR` env → **2.** the pairing cache
-`~/.cache/calictl/pairing.json` (written by the guided-pairing wizard's `persist_bond()`, cleared
-by unpair — reboot-durable) → **3.** placeholder. The systemd unit currently loads `CALICTL_ADDR`
+`~/.local/state/calictl/pairing.json` (XDG_STATE_HOME — durable state, NOT `~/.cache`; written by
+the guided-pairing wizard's `persist_bond()`, cleared by unpair — reboot-durable) → **3.**
+placeholder. The systemd unit currently loads `CALICTL_ADDR`
 from `/etc/buspi/calictl.env`; a manual `calictl` run has no env, so source it (without printing
 it) first, or rely on the cache once migrated:
 ```sh
@@ -59,7 +60,7 @@ current buspi (cache seeded, `CALICTL_ADDR` removed, daemon polling from cache; 
 # 1) seed the cache from the current env addr (cache is home-owned; the read needs the box
 #    sudo password, so this is interactive) — additive, no risk
 ssh -t buspi 'A=$(sudo grep -oP "(?<=CALICTL_ADDR=).*" /etc/buspi/calictl.env) && \
-           mkdir -p ~/.cache/calictl && printf "{\"address\": \"%s\"}" "$A" > ~/.cache/calictl/pairing.json'
+           mkdir -p ~/.local/state/calictl && printf "{\"address\": \"%s\"}" "$A" > ~/.local/state/calictl/pairing.json'
 # 2) verify resolution still finds it with NO env set
 ssh buspi 'cd ~/open-california && env -u CALICTL_ADDR ~/solix-env/bin/python -c \
            "from calictl.device import resolve_addr; print(resolve_addr()[:8]+\"…\")"'
