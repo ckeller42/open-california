@@ -1012,12 +1012,15 @@ function pairingCard() {
     ok.textContent = p.address ? ("✓ Paired — " + p.address) : "bonded — address cache unavailable (see logs)";
     card.appendChild(ok);
     if (p.address) {
+      const saved = document.createElement("div"); saved.className = "note";
+      saved.textContent = "Saved to the daemon — survives a reboot. No further action needed.";
+      card.appendChild(saved);
       const envRow = document.createElement("div"); envRow.className = "row";
       const code = document.createElement("code"); code.textContent = "CALICTL_ADDR=" + p.address;
       envRow.appendChild(code);
       card.appendChild(envRow);
       const note = document.createElement("div"); note.className = "note";
-      note.textContent = "The daemon is already using this address live — add that line to /etc/buspi/calictl.env only to make it permanent across reinstalls (pairing.json already survives a plain restart).";
+      note.textContent = "Advanced: only needed if you reflash the Pi (a fresh install wipes the saved bond). Set it in /etc/buspi/calictl.env to survive that.";
       card.appendChild(note);
     }
   } else if (p.state === "error") {

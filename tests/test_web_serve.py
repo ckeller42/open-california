@@ -940,19 +940,32 @@ def test_roof_stop_sets_event_lockfree_to_interrupt_inflight_move():
 
 def test_pairing_snapshot_idle_with_no_runner_falls_back_to_cache_address(monkeypatch, tmp_path):
     """No wizard has run yet this process -> idle default, address read from the persisted
-    pairing cache (NOT CALICTL_ADDR — that's the operator's own override)."""
+    pairing cache (preferred over CALICTL_ADDR when both are set)."""
     from calictl import serve
     cache = tmp_path / "pairing.json"
     cache.write_text('{"address": "AA:BB:CC:DD:EE:FF"}')
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
+    monkeypatch.setenv("CALICTL_ADDR", "11:22:33:44:55:66")
     s = serve.Server(influx_enabled=False)
     assert s._pairing is None
     assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None,
                                      "address": "AA:BB:CC:DD:EE:FF"}
 
 
+def test_pairing_snapshot_idle_falls_back_to_env_addr(monkeypatch, tmp_path):
+    """No wizard, no pairing cache, but CALICTL_ADDR is configured (the buspi case) ->
+    the env address surfaces so the web UI offers Unpair for that bond."""
+    from calictl import serve
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
+    monkeypatch.setenv("CALICTL_ADDR", "11:22:33:44:55:66")
+    s = serve.Server(influx_enabled=False)
+    assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None,
+                                     "address": "11:22:33:44:55:66"}
+
+
 def test_pairing_snapshot_idle_with_no_cache_file(monkeypatch, tmp_path):
     from calictl import serve
+    monkeypatch.delenv("CALICTL_ADDR", raising=False)
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
     s = serve.Server(influx_enabled=False)
     assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None, "address": None}

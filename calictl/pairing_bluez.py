@@ -193,6 +193,15 @@ class PairingRunner:
 AGENT_PATH = "/org/calictl/pairing_agent"
 
 
+def _pairing_cache_path():
+    """The persisted-bond cache file (``CALICTL_PAIRING_CACHE``, default ``~/.cache/calictl/
+    pairing.json``) — the same path :func:`calictl.device.resolve_addr` reads as its fallback,
+    so writing it on bond and clearing it on unpair is what makes both survive a reboot."""
+    return pathlib.Path(
+        os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
+    )
+
+
 class BluezTransport:
     """Real BlueZ transport for :class:`PairingRunner`: bleak scan/GATT + a dbus-fast agent.
 
@@ -381,9 +390,7 @@ class BluezTransport:
                 addr = variant.value
             except Exception:
                 pass  # fall back to the address discovered during scan
-            cache_path = pathlib.Path(
-                os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
-            )
+            cache_path = _pairing_cache_path()
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_text(json.dumps({"address": addr}))
             return addr
@@ -408,6 +415,14 @@ class BluezTransport:
             self._found_device = None
             self._address = None
             self._client = None
+        # Clear the persisted address too, else resolve_addr() re-reads it after a reboot and the
+        # daemon re-targets the bond we just removed. Independent of the bluez call above (which
+        # no-ops off-hardware), and best-effort: a cache-clear failure must not surface as a
+        # pairing error.
+        try:
+            _pairing_cache_path().unlink(missing_ok=True)
+        except OSError:
+            pass
 
     async def aclose(self):
         """Unregister the D-Bus agent and drop the system-bus connection (call at flow end)."""

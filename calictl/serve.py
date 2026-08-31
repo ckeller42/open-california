@@ -437,11 +437,15 @@ class Server:
 
         :returns: `self._pairing.snapshot()` if a wizard run has ever started this
             process lifetime, else the idle default with `address` falling back to
-            the persisted pairing-cache address (see `_pairing_cache_address`).
+            the persisted pairing-cache address (see `_pairing_cache_address`), then
+            to the operator's `CALICTL_ADDR`. The env fallback is what makes the web
+            UI's Unpair entry appear for a bond configured outside the wizard (the
+            buspi deploy bonds via `/etc/buspi/*.env`, not the guided flow).
         """
         if self._pairing is not None:
             return self._pairing.snapshot()
-        return {"state": "idle", "attempts": 0, "error": None, "address": _pairing_cache_address()}
+        address = _pairing_cache_address() or os.environ.get("CALICTL_ADDR", "").strip() or None
+        return {"state": "idle", "attempts": 0, "error": None, "address": address}
 
     def _ensure_pairing_runner(self):
         """Lazily construct the `PairingRunner` + `BluezTransport` pair on first use. Construction

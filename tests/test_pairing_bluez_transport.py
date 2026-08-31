@@ -122,3 +122,22 @@ def test_verify_returns_none_when_version_or_auth_read_fails():
     t._client = _FakeClient(services=[_FakeService([_FakeChar("0000f001")])],
                              unreadable_uuids={device_mod.VERSION_CHAR})
     assert asyncio.run(t.verify()) is None
+
+
+def test_remove_bond_clears_the_pairing_cache(monkeypatch, tmp_path):
+    """Unpair (ACT_REMOVE_BOND -> remove_bond) must delete the persisted pairing cache, else the
+    address survives a reboot and the daemon re-targets the bond the user just removed. The dbus
+    half no-ops on a dev box (no system bus / dbus_fast); the cache clear must run regardless."""
+    cache = tmp_path / "pairing.json"
+    cache.write_text('{"address": "AA:BB:CC:DD:EE:FF"}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
+    t = BluezTransport()
+    asyncio.run(t.remove_bond())
+    assert not cache.exists()
+
+
+def test_remove_bond_is_a_noop_when_no_cache_exists(monkeypatch, tmp_path):
+    """Unpair when nothing was ever persisted (no wizard bond) must not raise."""
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
+    t = BluezTransport()
+    asyncio.run(t.remove_bond())  # no exception

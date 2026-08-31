@@ -147,6 +147,32 @@ def pairing_page(pairing_url):
         browser.close()
 
 
+@pytest.fixture
+def unconfigured_pairing_page(tmp_path):
+    """A daemon with NO configured bond: `CALICTL_ADDR` blanked and no pairing cache, so the
+    idle `pairing_snapshot()` reports `address: null`. This is the true first-run/unbonded
+    scenario — the one where the menu's Unpair entry must stay hidden until a wizard bond lands
+    (unlike the default e2e daemon, which always carries a mock `CALICTL_ADDR`)."""
+    port = _free_port()
+    proc, url = _start_daemon(port, {"CALICTL_ADDR": "",
+                                     "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+                                     "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json")})
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            pg = browser.new_page()
+            pg.goto(url)
+            yield pg
+            browser.close()
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+
+
 def test_dashboard_shows_installed_tiles_and_hides_uninstalled(page):
     # installed features render as tiles; the uninstalled roof (mock has no pop-top) does not.
     for name in ("Cooler", "Camping mode", "Water", "Energy"):
@@ -332,15 +358,16 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
     assert "Pairing failed" in page.locator("#app").inner_text()
 
 
-def test_pairing_hidden_until_opened_from_menu(pairing_page):
+def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
     """UX: when the daemon is reachable there is NO pairing card in the main flow — the entry
-    point is the topbar context menu only. Unpair is hidden there too until a bond exists."""
-    page = pairing_page
+    point is the topbar context menu only. Unpair is hidden there too until a bond exists (this
+    daemon has no CALICTL_ADDR and no pairing cache, so no bond is configured)."""
+    page = unconfigured_pairing_page
     expect(page.get_by_role("button", name="Menu")).to_be_visible()
     assert "Bluetooth" not in page.locator("#app").inner_text()
     page.get_by_role("button", name="Menu").click()
     expect(page.get_by_role("button", name="Bluetooth pairing…")).to_be_visible()
-    # no bond yet in this fresh server -> no Unpair entry
+    # no bond configured in this daemon -> no Unpair entry
     expect(page.get_by_role("button", name="Unpair…")).to_have_count(0)
 
 
