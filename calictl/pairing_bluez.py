@@ -26,8 +26,10 @@ from calictl.pairing import (
     ACT_START_SCAN,
     ACT_STOP_SCAN,
     ACT_VERIFY,
+    BONDED,
     ERR_NAMES,
     ERR_NONE,
+    ERROR,
     EV_CANCEL,
     EV_CONNECTED,
     EV_DEVICE_FOUND,
@@ -66,6 +68,7 @@ class PairingRunner:
         self._ps = PairingState(IDLE, 0, ERR_NONE)
         self._timer_task = None
         self.address = None
+        self.on_bonded = None  # optional sync callable(address); fired once persist_bond lands
 
     @property
     def state(self):
@@ -77,10 +80,27 @@ class PairingRunner:
             self.address = None  # don't let a stale bond address survive an abandon/reset
         old = self._ps
         self._ps, actions = step(self._ps, ev, arg)
-        if self._ps != old:
+        mine = self._ps   # THIS frame's own transition target -- ACT_VERIFY dispatches a NESTED
+        # handle() call (VERIFYING -> BONDED/ERROR) from inside the loop below, which mutates
+        # self._ps out from under us; comparing against `self._ps` after the loop would see the
+        # nested call's state and double-fire the cleanup below. `mine` pins what THIS call
+        # actually transitioned to, so each frame closes the transport at most once.
+        if mine != old:
             self._rearm_timer()
         for act, act_arg in actions:
             await self._dispatch(act, act_arg)
+        # Flow-end cleanup: bonded/error/idle (cancel or post-reset) all mean the radio is free
+        # again -- unregister our KeyboardOnly D-Bus agent so it doesn't squat as the system
+        # default for the daemon's whole remaining lifetime (hci0 is shared; another host's pair
+        # attempt would otherwise block on OUR passkey future forever). Best-effort: transports
+        # without aclose() (e.g. FakeTransport in tests) are skipped via hasattr.
+        if mine != old and mine.st in (BONDED, ERROR, IDLE):
+            aclose = getattr(self._transport, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception as e:
+                    print("pairing: transport aclose failed: %r" % e, flush=True)
 
     def _rearm_timer(self):
         if self._timer_task is not None:
@@ -138,6 +158,8 @@ class PairingRunner:
                 await self.handle(EV_VERIFY_FAIL)
         elif act == ACT_PERSIST_BOND:
             self.address = result
+            if result is not None and self.on_bonded is not None:
+                self.on_bonded(result)
 
     async def start(self):
         await self.handle(EV_START)

@@ -842,13 +842,20 @@ async function pairingFetch() {
   try { PAIRING = await api("/api/pairing"); } catch (e) { /* transient -- keep the last snapshot */ }
 }
 
+// Terminal snapshot states: no flow is mid-flight, so nothing will change again until the user
+// acts (Start/Retry/reset). Polling every 1 s forever after that would just be a background
+// fetch loop running even once the user has navigated away.
+const PAIRING_TERMINAL_STATES = new Set(["bonded", "error", "idle"]);
+
 function startPairingPoll() {
   if (pairingTimer) return;
   pairingTimer = setInterval(async () => {
     await pairingFetch();
     const ae = document.activeElement;
-    if (ae && ae.id === "pairing-passkey") return;   // don't clobber the user mid-type
-    if (view === "home") render();                   // the card only shows on the dashboard
+    if (!(ae && ae.id === "pairing-passkey")) {      // don't clobber the user mid-type
+      if (view === "home") render();                 // the card only shows on the dashboard
+    }
+    if (PAIRING && PAIRING_TERMINAL_STATES.has(PAIRING.state)) stopPairingPoll();
   }, 1000);
 }
 function stopPairingPoll() {
@@ -868,6 +875,7 @@ const PAIRING_ERROR_MSG = {
  * @param {boolean} [confirmFlag]
  */
 async function pairingAction(action, value, confirmFlag) {
+  if (action === "start" || action === "reset") startPairingPoll();  // re-arm: a new flow begins
   /** @type {Record<string, any>} */
   const body = { action };
   if (value !== undefined) body.value = value;
@@ -969,15 +977,17 @@ function pairingCard() {
     card.appendChild(row);
   } else if (p.state === "bonded") {
     const ok = document.createElement("div"); ok.className = "note";
-    ok.textContent = "✓ Paired — " + p.address;
+    ok.textContent = p.address ? ("✓ Paired — " + p.address) : "bonded — address cache unavailable (see logs)";
     card.appendChild(ok);
-    const envRow = document.createElement("div"); envRow.className = "row";
-    const code = document.createElement("code"); code.textContent = "CALICTL_ADDR=" + p.address;
-    envRow.appendChild(code);
-    card.appendChild(envRow);
-    const note = document.createElement("div"); note.className = "note";
-    note.textContent = "Already cached for this session — add that line to /etc/buspi/calictl.env to persist it across restarts.";
-    card.appendChild(note);
+    if (p.address) {
+      const envRow = document.createElement("div"); envRow.className = "row";
+      const code = document.createElement("code"); code.textContent = "CALICTL_ADDR=" + p.address;
+      envRow.appendChild(code);
+      card.appendChild(envRow);
+      const note = document.createElement("div"); note.className = "note";
+      note.textContent = "The daemon is already using this address live — add that line to /etc/buspi/calictl.env only to make it permanent across reinstalls (pairing.json already survives a plain restart).";
+      card.appendChild(note);
+    }
   } else if (p.state === "error") {
     const errRow = document.createElement("div"); errRow.className = "warn";
     errRow.textContent = "Error: " + (PAIRING_ERROR_MSG[/** @type {string} */ (p.error)] || p.error || "unknown");

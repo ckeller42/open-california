@@ -270,6 +270,7 @@ class Server:
         self._last = {}                     # function -> last DECODED state (for commands)
         self._roof_stop = None              # asyncio.Event (lazy, loop-bound): interrupts an in-flight roof move
         self._pairing = None                # pairing_bluez.PairingRunner (lazy: created on first /api/pairing use)
+        self._poll_skipped_for_pairing = False  # edge-detect so the skip/resume log prints once per flow
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
         # Persist the last-known state so a restart while the van is asleep still shows the last
         # real values (the unit can be unreachable for days when parked). Env-overridable path.
@@ -451,7 +452,18 @@ class Server:
             transport = pairing_bluez.BluezTransport()
             self._pairing = pairing_bluez.PairingRunner(transport)
             transport.on_event = self._pairing.handle
+            self._pairing.on_bonded = self._on_pairing_bonded
         return self._pairing
+
+    def _on_pairing_bonded(self, address):
+        """Adopt a freshly-bonded address into the RUNNING daemon (no restart needed) --
+        called by the runner the moment `persist_bond()` lands an address. `self.dev` is the
+        SAME object the poll loop, `_sessions` (SessionSupervisor), and every actuate path hold
+        a reference to, so mutating its `.addr` here is enough for all of them to pick it up on
+        their next connect -- no separate cache to keep in sync. `CALICTL_ADDR` / pairing.json
+        remain how this survives a process restart."""
+        self.dev.addr = address
+        print("pairing: bonded to %s -- daemon now targets it live" % address, flush=True)
 
     async def pairing_command(self, action, value):
         """Drive the guided-pairing wizard for `POST /api/pairing` (action already validated by
@@ -495,8 +507,13 @@ class Server:
         # single-owner rule forbids. Skip the WHOLE read (not just parts) while a wizard run is
         # actively mid-flight; idle/bonded/error means no flow is using the radio -> poll resumes.
         if self._pairing is not None and self._pairing.snapshot()["state"] not in ("idle", "bonded", "error"):
-            print("poll skipped: pairing in progress", flush=True)
+            if not self._poll_skipped_for_pairing:
+                self._poll_skipped_for_pairing = True
+                print("poll skipped: pairing in progress", flush=True)
             return {}
+        if self._poll_skipped_for_pairing:
+            self._poll_skipped_for_pairing = False
+            print("poll resumed: pairing flow ended", flush=True)
         # One BLE read of every function under the lock; cache the DECODED state
         # (on_command builds full-packet control frames from it) and derive the
         # INTERPRETED state for MQTT + InfluxDB.

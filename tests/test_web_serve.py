@@ -1057,6 +1057,46 @@ def test_pairing_command_reset_creates_a_runner_when_none_exists():
     assert s.pairing_snapshot()["state"] == "idle"   # RESET -> RESET_DONE settles back to idle
 
 
+# --- fix-wave: adopt the bonded address into the RUNNING daemon (blocker) --------------------
+
+def test_ensure_pairing_runner_wires_on_bonded_to_adopt_the_address():
+    """`_ensure_pairing_runner` must hook `runner.on_bonded` to `Server._on_pairing_bonded` --
+    else a real bond never reaches `self.dev.addr` and polling keeps targeting the old address
+    until a restart."""
+    from calictl import serve
+    s = serve.Server(addr="11:11:11:11:11:11", influx_enabled=False)
+    runner = s._ensure_pairing_runner()
+    assert runner.on_bonded == s._on_pairing_bonded
+    runner.on_bonded("AA:BB:CC:DD:EE:FF")
+    assert s.dev.addr == "AA:BB:CC:DD:EE:FF"
+
+
+def test_pairing_command_start_adopts_bonded_address_from_a_fake_runner():
+    """End-to-end through `pairing_command`: a runner that reports BONDED+address (here a fake
+    standing in for a real flow reaching persist_bond) must update the live `Server.dev.addr` --
+    no daemon restart required. `self.dev` is shared by reference with `_sessions`/poll/actuate,
+    so this one mutation is enough for all of them."""
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(addr="11:11:11:11:11:11", influx_enabled=False)
+
+    class FakeRunner:
+        on_bonded = None
+
+        async def start(self):
+            self.on_bonded("22:22:22:22:22:22")   # simulate reaching BONDED with a fresh address
+
+        def snapshot(self):
+            return {"state": "bonded", "attempts": 0, "error": None, "address": "22:22:22:22:22:22"}
+    fake = FakeRunner()
+    fake.on_bonded = s._on_pairing_bonded   # mirrors the wiring _ensure_pairing_runner does
+    s._pairing = fake
+
+    asyncio.run(s.pairing_command("start", None))
+    assert s.dev.addr == "22:22:22:22:22:22"
+
+
 # --- guided pairing: web.py /api/pairing routing (task 5) ------------------------------------
 
 def test_pairing_web_api_routes(tmp_path):

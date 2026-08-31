@@ -61,6 +61,10 @@ class FakeTransport:
         self.calls.append("remove_bond")
         self._maybe_raise("remove_bond")
 
+    async def aclose(self):
+        self.calls.append("aclose")
+        self._maybe_raise("aclose")
+
 
 async def _drive_happy_path(runner, pk=123456):
     await runner.start()
@@ -79,8 +83,10 @@ def test_happy_path_call_sequence():
         return t.calls, r.state, r.snapshot()
 
     calls, state, snap = asyncio.run(_run())
+    # Reaching BONDED also closes the transport (agent lifecycle: the D-Bus KeyboardOnly agent
+    # must not squat as the system default past this flow's end).
     assert calls == ["start_scan", "stop_scan", "connect", "pair",
-                      "send_passkey:123456", "verify", "persist_bond"]
+                      "send_passkey:123456", "verify", "persist_bond", "aclose"]
     assert state == pairing.PairingState(pairing.BONDED, 0, pairing.ERR_NONE)
 
 
@@ -119,7 +125,8 @@ def test_timeout_timer_fires_and_cleans_up(monkeypatch):
         return t.calls, r.state
 
     calls, state = asyncio.run(_run())
-    assert calls == ["start_scan", "stop_scan"]  # cleanup(SCANNING) = [ACT_STOP_SCAN]
+    # cleanup(SCANNING) = [ACT_STOP_SCAN]; landing in ERROR also closes the transport.
+    assert calls == ["start_scan", "stop_scan", "aclose"]
     assert state == pairing.PairingState(pairing.ERROR, 0, pairing.ERR_TIMEOUT)
 
 
@@ -183,7 +190,7 @@ def test_transport_exception_on_verify_injects_verify_fail():
         return t.calls, r.state
 
     calls, state = asyncio.run(_run())
-    assert calls[-1] == "disconnect"
+    assert calls[-2:] == ["disconnect", "aclose"]   # ERROR also closes the transport
     assert state == pairing.PairingState(pairing.ERROR, 0, pairing.ERR_VERIFY)
 
 
@@ -221,7 +228,8 @@ def test_reset_injects_reset_done_after_remove_bond():
         return t.calls, r.state
 
     calls, state = asyncio.run(_run())
-    assert calls[-1] == "remove_bond"
+    # remove_bond (RESETTING's entry action), then IDLE (RESET_DONE) closes the transport again.
+    assert calls[-2:] == ["remove_bond", "aclose"]
     assert state == pairing.PairingState(pairing.IDLE, 0, pairing.ERR_NONE)
 
 
@@ -234,7 +242,8 @@ def test_persist_bond_exception_stays_bonded_with_no_address():
         return t.calls, r.state, r.snapshot()
 
     calls, state, snap = asyncio.run(_run())
-    assert calls[-1] == "persist_bond"
+    # persist_bond's own failure is swallowed (bond is intact); BONDED still closes the transport.
+    assert calls[-2:] == ["persist_bond", "aclose"]
     assert state == pairing.PairingState(pairing.BONDED, 0, pairing.ERR_NONE)
     assert snap["address"] is None
 
@@ -263,6 +272,72 @@ def test_cancel_clears_stale_address():
     assert snap["address"] is None
 
 
+def test_on_bonded_callback_fires_with_the_persisted_address():
+    """`runner.on_bonded` (wired by serve.py to adopt the address into the running daemon) must
+    fire once persist_bond lands a real address -- not on the BONDED state transition itself
+    (which happens one step earlier, before persist_bond has run)."""
+    async def _run():
+        seen = []
+        t = FakeTransport(bond_address="AA:BB:CC:DD:EE:FF")
+        r = PairingRunner(t)
+        r.on_bonded = lambda addr: seen.append(addr)
+        await _drive_happy_path(r)
+        return seen
+
+    seen = asyncio.run(_run())
+    assert seen == ["AA:BB:CC:DD:EE:FF"]
+
+
+def test_on_bonded_callback_does_not_fire_when_persist_bond_yields_no_address():
+    async def _run():
+        seen = []
+        t = FakeTransport()
+        t.raise_on.add("persist_bond")
+        r = PairingRunner(t)
+        r.on_bonded = lambda addr: seen.append(addr)
+        await _drive_happy_path(r)
+        return seen
+
+    assert asyncio.run(_run()) == []
+
+
+def test_aclose_is_skipped_when_the_transport_has_none():
+    """Guard: a transport without `aclose` (only the dbus_fast-backed BluezTransport has one)
+    must not crash the flow-end cleanup."""
+    class BareTransport:
+        def __init__(self):
+            self.calls = []
+
+        async def stop_scan(self):
+            self.calls.append("stop_scan")
+
+        async def start_scan(self):
+            self.calls.append("start_scan")
+
+    async def _run():
+        t = BareTransport()
+        r = PairingRunner(t)
+        await r.start()
+        await r.cancel()  # SCANNING -> IDLE: must not raise despite no aclose() on the transport
+        return r.state
+
+    state = asyncio.run(_run())
+    assert state == pairing.PairingState(pairing.IDLE, 0, pairing.ERR_NONE)
+
+
+def test_aclose_exception_is_logged_not_raised(capsys):
+    async def _run():
+        t = FakeTransport()
+        t.raise_on.add("aclose")
+        r = PairingRunner(t)
+        await _drive_happy_path(r)  # must not raise
+        return r.state
+
+    state = asyncio.run(_run())
+    assert state == pairing.PairingState(pairing.BONDED, 0, pairing.ERR_NONE)
+    assert "aclose" in capsys.readouterr().out
+
+
 def test_cancel_stops_and_returns_idle():
     async def _run():
         t = FakeTransport()
@@ -272,5 +347,6 @@ def test_cancel_stops_and_returns_idle():
         return t.calls, r.state
 
     calls, state = asyncio.run(_run())
-    assert calls == ["start_scan", "stop_scan"]
+    # idle-via-cancel also closes the transport (agent lifecycle).
+    assert calls == ["start_scan", "stop_scan", "aclose"]
     assert state == pairing.PairingState(pairing.IDLE, 0, pairing.ERR_NONE)

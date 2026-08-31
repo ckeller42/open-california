@@ -449,7 +449,7 @@ components:
         state:
           type: string
           enum: [idle, scanning, connecting, waiting_passkey, pairing, verifying, bonded, error, resetting]
-        attempts: { type: integer, description: Pair attempts made this run (resets on success/reset). }
+        attempts: { type: integer, description: Pair attempts made this run (carries into `bonded` on success; resets only on action=start, action=cancel, or action=reset). }
         error:
           type: [string, "null"]
           enum: [null, timeout, pairing_failed, verify_failed]
