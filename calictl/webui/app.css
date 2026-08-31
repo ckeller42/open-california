@@ -177,3 +177,8 @@ label.row { cursor: pointer; }
 .session-pill:disabled { opacity: .5; cursor: default; }
 .session-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
 .session-pill.busy { color: var(--accent); }
+
+#menu { font-size: 1.4rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 .3rem; }
+.menupop { position: absolute; top: 2.6rem; right: .4rem; z-index: 40; background: var(--card, #fff); border: 1px solid rgba(128,128,128,.35); border-radius: .5rem; box-shadow: 0 4px 14px rgba(0,0,0,.25); padding: .25rem; display: flex; flex-direction: column; min-width: 11rem; }
+.menupop button { background: none; border: 0; font: inherit; color: inherit; text-align: left; padding: .5rem .7rem; border-radius: .35rem; cursor: pointer; }
+.menupop button:hover { background: rgba(128,128,128,.15); }
