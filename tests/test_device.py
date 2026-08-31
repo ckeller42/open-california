@@ -273,3 +273,15 @@ def test_resolve_addr_placeholder_on_empty_address(monkeypatch, tmp_path):
     cache_file.write_text('{"address": ""}')
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache_file))
     assert device.resolve_addr() == "AA:BB:CC:DD:EE:FF"
+
+
+def test_resolve_addr_placeholder_on_oserror(monkeypatch, tmp_path):
+    """Falls back to the placeholder when the cache path is unreadable (OSError/IsADirectoryError).
+
+    Simulates a permission-denied or directory-read scenario by pointing to a directory
+    instead of a file, which raises IsADirectoryError on read_text().
+    """
+    monkeypatch.delenv("CALICTL_ADDR", raising=False)
+    # Point the cache path to a directory, not a file -> IsADirectoryError on read_text()
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path))
+    assert device.resolve_addr() == "AA:BB:CC:DD:EE:FF"

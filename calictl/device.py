@@ -51,7 +51,10 @@ def resolve_addr() -> str:
         cached_addr = cache_data.get("address", "").strip()
         if cached_addr:
             return cached_addr
-    except (FileNotFoundError, json.JSONDecodeError, KeyError, AttributeError):
+    except Exception:
+        # Import-time safety: ANY cache read error (missing file, permission denied,
+        # malformed JSON, encoding error, etc.) must fall through silently to the
+        # placeholder, never break the import of calictl.
         pass
 
     return "AA:BB:CC:DD:EE:FF"
