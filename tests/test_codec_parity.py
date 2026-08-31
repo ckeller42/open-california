@@ -1,0 +1,95 @@
+"""Python ⇄ C codec parity — the differential harness for issue #156.
+
+Compiles ``csrc/`` once per test session (skipped cleanly when no C compiler is on
+the machine — CI is the enforcement point) and drives the batched ``codec_cli``
+via one subprocess per test: all input lines written, stdin closed, all output
+read. Every golden vector is asserted THREE ways: vector expect == Python codec ==
+C codec. A later task adds the seeded differential fuzz pass on top.
+
+.. test:: Golden vectors pass the C codec identically to Python
+   :id: T_CODEC_PARITY_GOLDEN
+   :links: R_CODEC_XLANG_PARITY
+"""
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from calictl import overrides, protocol
+
+ROOT = Path(__file__).resolve().parent.parent
+CSRC = ROOT / "csrc"
+VECTORS = ROOT / "tests" / "vectors" / "camper_codec.json"
+CC_ARGS = ["-std=c99", "-Wall", "-Wextra", "-Werror", "-O1"]
+
+
+@pytest.fixture(scope="session")
+def codec_cli(tmp_path_factory):
+    cc = shutil.which("cc") or shutil.which("gcc")
+    if not cc:
+        pytest.skip("no C compiler on this machine (the codec-parity CI job enforces)")
+    srcs = [s for s in (CSRC / "codec.c", CSRC / "ports.c", CSRC / "codec_cli.c")
+            if s.is_file()]
+    exe = tmp_path_factory.mktemp("codec") / "codec_cli"
+    subprocess.run([cc, *CC_ARGS, *map(str, srcs), "-o", str(exe)], check=True)
+    return exe
+
+
+def run_cli(exe, lines):
+    """One batched subprocess: returns exactly one output line per input line."""
+    proc = subprocess.run([str(exe)], input="\n".join(lines) + "\n",
+                          capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout.splitlines()
+    assert len(out) == len(lines), "line-count mismatch: %d in, %d out" % (
+        len(lines), len(out))
+    return out
+
+
+def _parse_ok_fields(line):
+    """'OK Name=1 Other=2' -> {'Name': 1, 'Other': 2}; None when not OK."""
+    if not line.startswith("OK"):
+        return None
+    return {k: int(v) for k, v in
+            (part.split("=", 1) for part in line.split()[1:])}
+
+
+def _funcs():
+    f = protocol.load()
+    overrides.apply(f)
+    return f
+
+
+def test_decode_vectors_triple_parity(codec_cli):
+    funcs = _funcs()
+    vecs = json.loads(VECTORS.read_text())["decode"]
+    lines = ["D %s %s" % (v["function"], v["raw_hex"] or "-") for v in vecs]
+    for vec, out in zip(vecs, run_cli(codec_cli, lines)):
+        c_fields = _parse_ok_fields(out)
+        assert c_fields is not None, "%s: C said %r" % (vec["id"], out)
+        py = protocol.decode(funcs[vec["function"]], bytes.fromhex(vec["raw_hex"]))
+        assert c_fields == py == vec["expect"], vec["id"]
+
+
+def _encode_line(vec):
+    kv = " ".join("%s=%d" % (k, v) for k, v in vec["values"].items())
+    return ("E %s %d %s" % (vec["function"], vec["frame_bytes"], kv)).rstrip()
+
+
+def test_encode_vectors_triple_parity(codec_cli):
+    """Byte-identical encode, and error parity: Python raises ⇔ C answers ERR."""
+    funcs = _funcs()
+    vecs = json.loads(VECTORS.read_text())["encode"]
+    for vec, out in zip(vecs, run_cli(codec_cli, [_encode_line(v) for v in vecs])):
+        f = funcs[vec["function"]]
+        if vec.get("error"):
+            with pytest.raises(ValueError):
+                protocol.encode(f, vec["values"], frame_bytes=vec["frame_bytes"])
+            assert out.startswith("ERR "), "%s: C accepted an invalid encode: %r" % (
+                vec["id"], out)
+        else:
+            py_hex = protocol.encode(f, vec["values"],
+                                     frame_bytes=vec["frame_bytes"]).hex()
+            assert out == "OK " + py_hex and py_hex == vec["expect_hex"], vec["id"]

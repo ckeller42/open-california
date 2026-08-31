@@ -53,27 +53,32 @@ _HEADER = """\
 #define CODEC_F_HAS_DEFAULT 0x01
 #define CODEC_F_HAS_VALID   0x02  /* valid_mask bit v set => raw value v allowed */
 
-typedef struct {
+/* Plain struct tags (no typedefs — codec.h owns the codec_func_t typedef and
+ * forward-declares the tag, C99-clean): these static tables stay private to
+ * codec.c, the only includer of this header. */
+struct codec_field {
     const char *name;
     uint16_t offset;      /* bit offset, MSB-first */
     uint8_t  width;       /* 1..32 bits */
     uint8_t  flags;
     uint32_t def;         /* raw default when CODEC_F_HAS_DEFAULT */
     uint32_t valid_mask;  /* when CODEC_F_HAS_VALID */
-} codec_field_t;
+};
 
-typedef struct {
+struct codec_func {
     const char *name;
     uint8_t frame_bytes;  /* pinned control frame length; 0 = no control frame */
-    const codec_field_t *state_fields;
+    const struct codec_field *state_fields;
     uint8_t n_state;
-    const codec_field_t *ctrl_fields;
+    const struct codec_field *ctrl_fields;
     uint8_t n_ctrl;
-} codec_func_t;
+};
 """
 
 
 def _field_row(f) -> str:
+    assert 1 <= f.width <= 32, \
+        "%s: width %d exceeds the uint32 field model" % (f.name, f.width)
     flags, dflt, mask = [], 0, 0
     if isinstance(f.default, int):
         flags.append("CODEC_F_HAS_DEFAULT")
@@ -99,7 +104,7 @@ def generate() -> str:
         fn = funcs[name]
         state = [f for f in fn.state_fields if f.placed]
         if state:
-            out.append("static const codec_field_t %s_STATE[] = {" % name.upper())
+            out.append("static const struct codec_field %s_STATE[] = {" % name.upper())
             out.extend(_field_row(f) for f in state)
             out.append("};")
         if name in overrides.CONTROL_FRAME_BYTES:
@@ -107,12 +112,12 @@ def generate() -> str:
             assert not unplaced, \
                 "%s: unplaced control fields %s — a pinned-length function must be " \
                 "fully placed (fix overrides), refusing a half-frame table" % (name, unplaced)
-            out.append("static const codec_field_t %s_CTRL[] = {" % name.upper())
+            out.append("static const struct codec_field %s_CTRL[] = {" % name.upper())
             out.extend(_field_row(f) for f in fn.control_fields)
             out.append("};")
             max_fields = max(max_fields, len(fn.control_fields))
         max_fields = max(max_fields, len(state))
-    out.append("\nstatic const codec_func_t CODEC_FUNCS[] = {")
+    out.append("\nstatic const struct codec_func CODEC_FUNCS[] = {")
     for name in sorted(funcs):
         fn = funcs[name]
         state = [f for f in fn.state_fields if f.placed]

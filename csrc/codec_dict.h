@@ -9,25 +9,28 @@
 #define CODEC_F_HAS_DEFAULT 0x01
 #define CODEC_F_HAS_VALID   0x02  /* valid_mask bit v set => raw value v allowed */
 
-typedef struct {
+/* Plain struct tags (no typedefs — codec.h owns the codec_func_t typedef and
+ * forward-declares the tag, C99-clean): these static tables stay private to
+ * codec.c, the only includer of this header. */
+struct codec_field {
     const char *name;
     uint16_t offset;      /* bit offset, MSB-first */
     uint8_t  width;       /* 1..32 bits */
     uint8_t  flags;
     uint32_t def;         /* raw default when CODEC_F_HAS_DEFAULT */
     uint32_t valid_mask;  /* when CODEC_F_HAS_VALID */
-} codec_field_t;
+};
 
-typedef struct {
+struct codec_func {
     const char *name;
     uint8_t frame_bytes;  /* pinned control frame length; 0 = no control frame */
-    const codec_field_t *state_fields;
+    const struct codec_field *state_fields;
     uint8_t n_state;
-    const codec_field_t *ctrl_fields;
+    const struct codec_field *ctrl_fields;
     uint8_t n_ctrl;
-} codec_func_t;
+};
 
-static const codec_field_t AIRHEATER_STATE[] = {
+static const struct codec_field AIRHEATER_STATE[] = {
     {"AirDistribution", 0, 2, 0, 0u, 0x00000000u},
     {"Installed", 3, 1, 0, 0u, 0x00000000u},
     {"FaultTriggerBit", 4, 1, 0, 0u, 0x00000000u},
@@ -43,7 +46,7 @@ static const codec_field_t AIRHEATER_STATE[] = {
     {"TimerMin", 40, 8, 0, 0u, 0x00000000u},
     {"RunningTimeinAction", 48, 8, 0, 0u, 0x00000000u},
 };
-static const codec_field_t AIRHEATER_CTRL[] = {
+static const struct codec_field AIRHEATER_CTRL[] = {
     {"NormalOperationRequest", 6, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"PermanentOperationConfirmation", 4, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"PermanentOperationRequest", 2, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
@@ -55,7 +58,7 @@ static const codec_field_t AIRHEATER_CTRL[] = {
     {"TimerHour", 32, 8, CODEC_F_HAS_DEFAULT, 31u, 0x00000000u},
     {"TimerMin", 40, 8, CODEC_F_HAS_DEFAULT, 63u, 0x00000000u},
 };
-static const codec_field_t CAMPINGMODE_STATE[] = {
+static const struct codec_field CAMPINGMODE_STATE[] = {
     {"Installed", 2, 1, 0, 0u, 0x00000000u},
     {"Enable", 3, 1, 0, 0u, 0x00000000u},
     {"InteriorLight", 4, 1, 0, 0u, 0x00000000u},
@@ -63,13 +66,13 @@ static const codec_field_t CAMPINGMODE_STATE[] = {
     {"UsbCharger", 6, 1, 0, 0u, 0x00000000u},
     {"State", 7, 1, 0, 0u, 0x00000000u},
 };
-static const codec_field_t CAMPINGMODE_CTRL[] = {
+static const struct codec_field CAMPINGMODE_CTRL[] = {
     {"State", 6, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"UsbCharger", 4, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"OutsideLight", 2, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"InteriorLight", 0, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
 };
-static const codec_field_t COOLER_STATE[] = {
+static const struct codec_field COOLER_STATE[] = {
     {"Error", 0, 2, 0, 0u, 0x00000000u},
     {"NightTimerSet", 3, 1, 0, 0u, 0x00000000u},
     {"Installed", 4, 1, 0, 0u, 0x00000000u},
@@ -85,7 +88,7 @@ static const codec_field_t COOLER_STATE[] = {
     {"NightTimerHourOn", 48, 8, 0, 0u, 0x00000000u},
     {"NightTimerHourOff", 56, 8, 0, 0u, 0x00000000u},
 };
-static const codec_field_t COOLER_CTRL[] = {
+static const struct codec_field COOLER_CTRL[] = {
     {"State", 6, 2, CODEC_F_HAS_DEFAULT|CODEC_F_HAS_VALID, 3u, 0x00000003u},
     {"TimerStart", 4, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"TimerCancel", 2, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
@@ -97,7 +100,7 @@ static const codec_field_t COOLER_CTRL[] = {
     {"NightTimerHourOn", 32, 8, CODEC_F_HAS_DEFAULT, 31u, 0x00000000u},
     {"NightTimerHourOff", 40, 8, CODEC_F_HAS_DEFAULT, 31u, 0x00000000u},
 };
-static const codec_field_t ENERGY_STATE[] = {
+static const struct codec_field ENERGY_STATE[] = {
     {"LandNotAvailable", 0, 1, 0, 0u, 0x00000000u},
     {"LandDefect", 1, 1, 0, 0u, 0x00000000u},
     {"EnergyModeNotSelectable", 2, 1, 0, 0u, 0x00000000u},
@@ -135,16 +138,16 @@ static const codec_field_t ENERGY_STATE[] = {
     {"ILandAfs", 144, 16, 0, 0u, 0x00000000u},
     {"IPvAfs", 160, 16, 0, 0u, 0x00000000u},
 };
-static const codec_field_t ENERGY_CTRL[] = {
+static const struct codec_field ENERGY_CTRL[] = {
     {"EnergyModeSet", 2, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"DisplayRefresh", 7, 1, CODEC_F_HAS_DEFAULT, 0u, 0x00000000u},
 };
-static const codec_field_t GENERAL_STATE[] = {
+static const struct codec_field GENERAL_STATE[] = {
     {"AmbSwVersion", 0, 32, 0, 0u, 0x00000000u},
     {"CmSwVersion", 32, 32, 0, 0u, 0x00000000u},
     {"CommunicationVersion", 64, 8, 0, 0u, 0x00000000u},
 };
-static const codec_field_t GENERALPURPOSESIGNALS_STATE[] = {
+static const struct codec_field GENERALPURPOSESIGNALS_STATE[] = {
     {"BitZeroEight", 0, 1, 0, 0u, 0x00000000u},
     {"BitZeroSeven", 1, 1, 0, 0u, 0x00000000u},
     {"BitZeroSix", 2, 1, 0, 0u, 0x00000000u},
@@ -167,7 +170,7 @@ static const codec_field_t GENERALPURPOSESIGNALS_STATE[] = {
     {"WordZeroFour", 120, 16, 0, 0u, 0x00000000u},
     {"DwordZeroOne", 136, 32, 0, 0u, 0x00000000u},
 };
-static const codec_field_t LIGHTING_STATE[] = {
+static const struct codec_field LIGHTING_STATE[] = {
     {"ProfileNumber", 4, 4, 0, 0u, 0x00000000u},
     {"Mode", 8, 8, 0, 0u, 0x00000000u},
     {"Timestamp", 16, 32, 0, 0u, 0x00000000u},
@@ -189,7 +192,7 @@ static const codec_field_t LIGHTING_STATE[] = {
     {"BrightnessLOneSix", 120, 4, 0, 0u, 0x00000000u},
     {"BrightnessLOneFive", 124, 4, 0, 0u, 0x00000000u},
 };
-static const codec_field_t LIGHTING_CTRL[] = {
+static const struct codec_field LIGHTING_CTRL[] = {
     {"ProfileNumber", 4, 4, CODEC_F_HAS_DEFAULT, 14u, 0x00000000u},
     {"Mode", 8, 8, CODEC_F_HAS_DEFAULT|CODEC_F_HAS_VALID, 0u, 0x11111151u},
     {"Timestamp", 16, 32, CODEC_F_HAS_DEFAULT, 0u, 0x00000000u},
@@ -211,7 +214,7 @@ static const codec_field_t LIGHTING_CTRL[] = {
     {"BrightnessLOneFive", 124, 4, CODEC_F_HAS_DEFAULT, 14u, 0x00000000u},
     {"BrightnessLOneSix", 120, 4, CODEC_F_HAS_DEFAULT, 14u, 0x00000000u},
 };
-static const codec_field_t LIVINGROOMHEATER_STATE[] = {
+static const struct codec_field LIVINGROOMHEATER_STATE[] = {
     {"Variant", 0, 2, 0, 0u, 0x00000000u},
     {"Installed", 4, 1, 0, 0u, 0x00000000u},
     {"TemperatureWater", 5, 1, 0, 0u, 0x00000000u},
@@ -221,25 +224,25 @@ static const codec_field_t LIVINGROOMHEATER_STATE[] = {
     {"Mode", 12, 4, 0, 0u, 0x00000000u},
     {"TemperatureAir", 16, 8, 0, 0u, 0x00000000u},
 };
-static const codec_field_t LIVINGROOMHEATER_CTRL[] = {
+static const struct codec_field LIVINGROOMHEATER_CTRL[] = {
     {"StateAir", 6, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"StateWater", 4, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"TemperatureWater", 2, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"Mode", 12, 4, CODEC_F_HAS_DEFAULT, 5u, 0x00000000u},
     {"TemperatureAir", 16, 8, CODEC_F_HAS_DEFAULT, 0u, 0x00000000u},
 };
-static const codec_field_t ROOF_STATE[] = {
+static const struct codec_field ROOF_STATE[] = {
     {"Position", 0, 4, 0, 0u, 0x00000000u},
     {"Installed", 6, 1, 0, 0u, 0x00000000u},
     {"SafetyCounterValid", 7, 1, 0, 0u, 0x00000000u},
     {"InfoPopUp", 12, 4, 0, 0u, 0x00000000u},
 };
-static const codec_field_t ROOF_CTRL[] = {
+static const struct codec_field ROOF_CTRL[] = {
     {"Up", 6, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"Down", 4, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"SafetyCounter", 8, 32, CODEC_F_HAS_DEFAULT, 0u, 0x00000000u},
 };
-static const codec_field_t ROOFAIRCONDITION_STATE[] = {
+static const struct codec_field ROOFAIRCONDITION_STATE[] = {
     {"Error", 0, 2, 0, 0u, 0x00000000u},
     {"Mode", 2, 2, 0, 0u, 0x00000000u},
     {"Installed", 6, 1, 0, 0u, 0x00000000u},
@@ -247,13 +250,13 @@ static const codec_field_t ROOFAIRCONDITION_STATE[] = {
     {"Fanspeed", 12, 4, 0, 0u, 0x00000000u},
     {"Temperature", 16, 8, 0, 0u, 0x00000000u},
 };
-static const codec_field_t ROOFAIRCONDITION_CTRL[] = {
+static const struct codec_field ROOFAIRCONDITION_CTRL[] = {
     {"State", 6, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"FanSpeed", 12, 4, CODEC_F_HAS_DEFAULT, 7u, 0x00000000u},
     {"Mode", 8, 4, CODEC_F_HAS_DEFAULT, 7u, 0x00000000u},
     {"Temperature", 16, 8, CODEC_F_HAS_DEFAULT, 0u, 0x00000000u},
 };
-static const codec_field_t SATELLITEANTENNA_STATE[] = {
+static const struct codec_field SATELLITEANTENNA_STATE[] = {
     {"Error", 0, 4, 0, 0u, 0x00000000u},
     {"System", 4, 2, 0, 0u, 0x00000000u},
     {"Installed", 7, 1, 0, 0u, 0x00000000u},
@@ -261,25 +264,25 @@ static const codec_field_t SATELLITEANTENNA_STATE[] = {
     {"Dish", 12, 4, 0, 0u, 0x00000000u},
     {"SignalLevel", 16, 8, 0, 0u, 0x00000000u},
 };
-static const codec_field_t SATELLITEANTENNA_CTRL[] = {
+static const struct codec_field SATELLITEANTENNA_CTRL[] = {
     {"DishStop", 7, 1, 0, 0u, 0x00000000u},
     {"Wlan", 6, 1, 0, 0u, 0x00000000u},
     {"System", 2, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"Dish", 0, 2, CODEC_F_HAS_DEFAULT, 0u, 0x00000000u},
     {"SatelliteSelection", 12, 4, CODEC_F_HAS_DEFAULT, 0u, 0x00000000u},
 };
-static const codec_field_t STAIRS_STATE[] = {
+static const struct codec_field STAIRS_STATE[] = {
     {"InfoPopUp", 2, 2, 0, 0u, 0x00000000u},
     {"Sensor", 4, 1, 0, 0u, 0x00000000u},
     {"State", 5, 1, 0, 0u, 0x00000000u},
     {"OperationMode", 6, 1, 0, 0u, 0x00000000u},
     {"Installed", 7, 1, 0, 0u, 0x00000000u},
 };
-static const codec_field_t STAIRS_CTRL[] = {
+static const struct codec_field STAIRS_CTRL[] = {
     {"OperationMode", 6, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"Movement", 4, 2, CODEC_F_HAS_DEFAULT, 0u, 0x00000000u},
 };
-static const codec_field_t VEHICLE_STATE[] = {
+static const struct codec_field VEHICLE_STATE[] = {
     {"CarVariant", 0, 4, 0, 0u, 0x00000000u},
     {"CarLevelPopUp", 4, 2, 0, 0u, 0x00000000u},
     {"TerminalOneFive", 7, 1, 0, 0u, 0x00000000u},
@@ -292,7 +295,7 @@ static const codec_field_t VEHICLE_STATE[] = {
     {"CarLevelRoll", 56, 16, 0, 0u, 0x00000000u},
     {"CarLevelPitch", 72, 16, 0, 0u, 0x00000000u},
 };
-static const codec_field_t WATER_STATE[] = {
+static const struct codec_field WATER_STATE[] = {
     {"FreshWaterInfoPopUp", 0, 4, 0, 0u, 0x00000000u},
     {"Installed", 6, 1, 0, 0u, 0x00000000u},
     {"FreshWaterUnit", 7, 1, 0, 0u, 0x00000000u},
@@ -304,7 +307,7 @@ static const codec_field_t WATER_STATE[] = {
     {"WasteWaterVolume", 40, 8, 0, 0u, 0x00000000u},
 };
 
-static const codec_func_t CODEC_FUNCS[] = {
+static const struct codec_func CODEC_FUNCS[] = {
     {"airheater", 6, AIRHEATER_STATE, 14, AIRHEATER_CTRL, 10},
     {"campingmode", 1, CAMPINGMODE_STATE, 6, CAMPINGMODE_CTRL, 4},
     {"cooler", 6, COOLER_STATE, 14, COOLER_CTRL, 10},
