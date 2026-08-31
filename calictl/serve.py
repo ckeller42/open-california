@@ -467,6 +467,9 @@ class Server:
 
         :param action: "start" | "passkey" | "cancel" | "reset".
         :param value: passkey digit-string for "passkey"; unused otherwise.
+        :returns: the post-action `pairing_snapshot()` (same shape as `GET /api/pairing`), so the
+            wizard UI can render the new step straight off the `POST` response without an extra
+            round-trip.
         """
         if action == "start":
             self._ensure_pairing_runner()
@@ -474,15 +477,16 @@ class Server:
             await self._pairing.start()
         elif action == "passkey":
             if self._pairing is None:
-                return
+                return self.pairing_snapshot()
             await self._pairing.enter_passkey(int(value))
         elif action == "cancel":
             if self._pairing is None:
-                return
+                return self.pairing_snapshot()
             await self._pairing.cancel()
         elif action == "reset":
             self._ensure_pairing_runner()
             await self._pairing.reset()
+        return self.pairing_snapshot()
 
     async def poll(self):
         # Single BLE owner rule (CLAUDE.md): a pairing flow OWNS the radio while active (design

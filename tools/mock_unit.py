@@ -30,12 +30,22 @@ Because a mock can only encode already-decoded behaviour, it is a regression har
 executable documentation — NOT an oracle. New protocol truth comes from Phase 2's
 capture of the real app (`tools/capture_diff.py`).
 
-Imports only stdlib + ``calictl.{protocol,control,overrides}`` (no bleak, no PyYAML), so
-it stays importable in the bleak-less test environment (a project hard rule).
+Imports only stdlib + ``calictl.{protocol,control,overrides,pairing}`` (no bleak, no PyYAML;
+``calictl.pairing`` is itself stdlib-only), so it stays importable in the bleak-less test
+environment (a project hard rule).
 """
 from __future__ import annotations
 
+import asyncio
+
 from calictl import control, device, overrides, protocol
+from calictl.pairing import (
+    EV_CONNECTED,
+    EV_DEVICE_FOUND,
+    EV_PAIR_FAIL,
+    EV_PAIR_OK,
+    EV_PASSKEY_REQUESTED,
+)
 
 # short UUIDs the mock advertises / recognises, beyond the per-function chars.
 _VERSION_SHORT = "1001"
@@ -324,3 +334,60 @@ class MockBleakClient:
 
     async def stop_notify(self, uuid):
         return None
+
+
+class FakePairingTransport:
+    """Deterministic stand-in for `calictl.pairing_bluez.BluezTransport`, for the guided-pairing
+    web-wizard e2e (no dbus/BlueZ in CI/dev sandboxes). Same async transport contract
+    (`calictl.pairing_bluez.PairingRunner`'s docstring): scripts the happy path (scan -> connect
+    -> pair -> waiting_passkey -> passkey ``RIGHT_PASSKEY`` -> bonded at ``FOUND_ADDR``) and the
+    wrong-passkey path (-> ``EV_PAIR_FAIL``, which the real SM retries up to
+    ``pairing.MAX_ATTEMPTS`` times before giving up -> ``error``/``pairing_failed``). Timings are
+    short but non-zero so a 1 s poll observes every state transition. Installed in place of the
+    real module by `tools.run_against_mock.install_fake_pairing_transport`.
+    """
+
+    FOUND_ADDR = "AA:BB:CC:DD:EE:FF"
+    RIGHT_PASSKEY = 123456
+
+    def __init__(self, on_event=None):
+        self.on_event = on_event
+
+    async def _emit(self, ev, arg=0):
+        if self.on_event is not None:
+            await self.on_event(ev, arg)
+
+    async def start_scan(self):
+        asyncio.ensure_future(self._device_found_soon())
+
+    async def _device_found_soon(self):
+        await asyncio.sleep(0.5)
+        await self._emit(EV_DEVICE_FOUND)
+
+    async def stop_scan(self):
+        pass
+
+    async def connect(self):
+        await asyncio.sleep(0.1)
+        await self._emit(EV_CONNECTED)
+
+    async def pair(self):
+        await asyncio.sleep(0.1)
+        await self._emit(EV_PASSKEY_REQUESTED)
+
+    async def send_passkey(self, pk):
+        await asyncio.sleep(0.2)
+        await self._emit(EV_PAIR_OK if pk == self.RIGHT_PASSKEY else EV_PAIR_FAIL)
+
+    async def verify(self):
+        await asyncio.sleep(0.1)
+        return 5   # any int = "verified"; the real transport counts readable state chars
+
+    async def persist_bond(self):
+        return self.FOUND_ADDR
+
+    async def disconnect(self):
+        pass
+
+    async def remove_bond(self):
+        pass

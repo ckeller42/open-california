@@ -93,11 +93,13 @@ input[type=range] { flex: 1; accent-color: var(--accent); }
 .seg.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .seg:disabled { opacity: .5; cursor: default; }
 
-/* hour <select> + time input */
-.row select, .row input[type=time] { font: inherit; margin-left: auto; padding: .3rem .5rem;
+/* hour <select> + time input + pairing-wizard passkey input */
+.row select, .row input[type=time], .row input[type=text] { font: inherit; margin-left: auto; padding: .3rem .5rem;
   border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--fg);
   font-variant-numeric: tabular-nums; }
 .row input[type=time]:disabled, .row select:disabled { opacity: .5; }
+.row input[type=text] { max-width: 8rem; letter-spacing: .15em; }
+label.row { cursor: pointer; }
 
 /* buttons (roof) */
 .btnrow { display: flex; gap: .5rem; padding: .8rem 0; }

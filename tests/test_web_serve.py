@@ -981,6 +981,9 @@ def test_pairing_command_start_parks_supervisor_before_starting(monkeypatch):
     class FakeRunner:
         async def start(self):
             calls.append("start")
+
+        def snapshot(self):   # pairing_command's return value (matches GET /api/pairing's shape)
+            return {"state": "scanning", "attempts": 0, "error": None, "address": None}
     s._pairing = FakeRunner()
 
     async def fake_set_mode(action):
@@ -1002,6 +1005,9 @@ def test_pairing_command_passkey_forwards_int():
     class FakeRunner:
         async def enter_passkey(self, pk):
             seen["pk"] = pk
+
+        def snapshot(self):
+            return {"state": "pairing", "attempts": 0, "error": None, "address": None}
     s._pairing = FakeRunner()
 
     asyncio.run(s.pairing_command("passkey", "123456"))
@@ -1018,6 +1024,9 @@ def test_pairing_command_reset_with_confirm_calls_runner_reset():
     class FakeRunner:
         async def reset(self):
             calls.append("reset")
+
+        def snapshot(self):
+            return {"state": "idle", "attempts": 0, "error": None, "address": None}
     s._pairing = FakeRunner()
 
     asyncio.run(s.pairing_command("reset", None))
@@ -1070,7 +1079,7 @@ def test_pairing_web_api_routes(tmp_path):
 
         def pairing_command(self, action, value):
             calls.append((action, value))
-            return {"ok": True}
+            return {"state": "idle", "attempts": 0, "error": None, "address": None}
 
     httpd = web.serve_http(_Backend(), str(tmp_path), host="127.0.0.1", port=0)
     base = "http://127.0.0.1:%d" % httpd.server_address[1]

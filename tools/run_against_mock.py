@@ -27,7 +27,7 @@ os.environ.setdefault("CALICTL_ADDR", "MO:CK:CA:MP:ER:00")
 import sys
 import types
 
-from tools.mock_unit import MockBleakClient, MockCamperUnit
+from tools.mock_unit import FakePairingTransport, MockBleakClient, MockCamperUnit
 
 
 def install_fake_bleak(unit: MockCamperUnit | None = None) -> MockCamperUnit:
@@ -40,8 +40,21 @@ def install_fake_bleak(unit: MockCamperUnit | None = None) -> MockCamperUnit:
     return unit
 
 
+def install_fake_pairing_transport() -> None:
+    """Monkeypatch ``calictl.pairing_bluez.BluezTransport`` to
+    `tools.mock_unit.FakePairingTransport`, so a guided-pairing flow run through this mock harness
+    scripts a deterministic event sequence instead of touching real BlueZ/dbus (unavailable in
+    CI/dev sandboxes). ``PairingRunner`` (same module) is transport-agnostic and stays the real
+    one -- only the concrete transport ``calictl.serve._ensure_pairing_runner`` constructs is
+    swapped. Importing ``pairing_bluez`` itself is safe here: per its own docstring, only
+    ``BluezTransport``'s methods lazy-import bleak/dbus_fast, and we're replacing the whole class."""
+    from calictl import pairing_bluez
+    pairing_bluez.BluezTransport = FakePairingTransport
+
+
 def main(argv=None) -> int:
     install_fake_bleak()
+    install_fake_pairing_transport()
     from calictl import cli
     return cli.main(argv)
 

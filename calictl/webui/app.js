@@ -489,7 +489,8 @@ async function refreshState(force) {
   // a slider drag / time entry. Skip while such a control is focused; optimistic values + the queue
   // keep the rest fresh, and a forced refresh after a command still repaints.
   const ae = /** @type {HTMLInputElement} */ (document.activeElement);
-  if (!force && ae && (ae.type === "range" || ae.type === "time" || ae.tagName === "SELECT")) return;
+  if (!force && ae && (ae.type === "range" || ae.type === "time" || ae.tagName === "SELECT"
+      || ae.id === "pairing-passkey")) return;   // don't clobber a mid-typed pairing passkey either
   const sig = view + "|" + JSON.stringify(next);
   if (!force && sig === lastRender) return; // nothing changed -> no flicker
   lastRender = sig;
@@ -824,6 +825,186 @@ function energyChart() {
   return card;
 }
 
+// --- Guided BLE pairing wizard --------------------------------------------------------------
+// Client owns no state machine of its own: `PAIRING` is just the last polled `/api/pairing`
+// snapshot ({state, attempts, error, address} — calictl.pairing.STATE_NAMES/ERR_NAMES), and the
+// card renders whichever step that names. `pairingOpen`/`pairingReady` are pure UI toggles.
+// Poll at 1 s ONLY while the card is open (a wizard flow expects snappy feedback); the ambient
+// dashboard poll stays at 2 s. See .superpowers/sdd/2026-08-31-guided-pairing.
+let pairingOpen = false;
+let pairingReady = false;              // "I'm on that screen" checkbox
+/** @type {{state:string, attempts:number, error:string|null, address:string|null}|null} */
+let PAIRING = null;
+/** @type {ReturnType<typeof setInterval>|null} */
+let pairingTimer = null;
+
+async function pairingFetch() {
+  try { PAIRING = await api("/api/pairing"); } catch (e) { /* transient -- keep the last snapshot */ }
+}
+
+function startPairingPoll() {
+  if (pairingTimer) return;
+  pairingTimer = setInterval(async () => {
+    await pairingFetch();
+    const ae = document.activeElement;
+    if (ae && ae.id === "pairing-passkey") return;   // don't clobber the user mid-type
+    if (view === "home") render();                   // the card only shows on the dashboard
+  }, 1000);
+}
+function stopPairingPoll() {
+  if (pairingTimer) { clearInterval(pairingTimer); pairingTimer = null; }
+}
+
+/** @type {Record<string, string>} */
+const PAIRING_ERROR_MSG = {
+  timeout: "Timed out waiting for the camper unit.",
+  pairing_failed: "Pairing failed.",
+  verify_failed: "Could not verify the bond.",
+};
+
+/**
+ * @param {string} action
+ * @param {string} [value]
+ * @param {boolean} [confirmFlag]
+ */
+async function pairingAction(action, value, confirmFlag) {
+  /** @type {Record<string, any>} */
+  const body = { action };
+  if (value !== undefined) body.value = value;
+  if (confirmFlag) body.confirm = true;
+  let res;
+  try {
+    res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) { toast("Pairing request failed", "error"); return; }
+  if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
+  else toast("Pairing: " + ((res && res.error) || "request failed"), "warn");
+  render();
+}
+
+// The "Bluetooth setup / re-pair" card: collapsed to one button until opened (or auto-opened by
+// renderDashboard when offline + unpaired), then walks the polled state through its steps.
+function pairingCard() {
+  const card = document.createElement("div");
+  card.className = "card";
+  if (!pairingOpen) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "row";
+    btn.style.cssText = "width:100%; background:none; border:0; font:inherit; text-align:left; cursor:pointer; color:inherit;";
+    btn.textContent = "Bluetooth setup / re-pair";
+    btn.onclick = async () => {
+      pairingOpen = true;
+      await pairingFetch();
+      startPairingPoll();
+      render();
+    };
+    card.appendChild(btn);
+    return card;
+  }
+  const head = document.createElement("div"); head.className = "row";
+  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = "Bluetooth setup";
+  head.appendChild(hlbl);
+  const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
+  closeBtn.textContent = "Close";
+  closeBtn.onclick = () => { pairingOpen = false; stopPairingPoll(); render(); };
+  head.appendChild(closeBtn);
+  card.appendChild(head);
+
+  const p = PAIRING || { state: "idle", attempts: 0, error: null, address: null };
+  if (p.state === "idle") {
+    const instr = document.createElement("div"); instr.className = "note";
+    instr.textContent = "On the camper panel open Bluetooth → ‘Gerät verbinden’.";
+    card.appendChild(instr);
+    const crow = document.createElement("label"); crow.className = "row";
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "pairing-ready";
+    cb.checked = pairingReady;
+    cb.onchange = () => { pairingReady = cb.checked; render(); };
+    const clbl = document.createElement("span"); clbl.textContent = "I'm on that screen";
+    crow.append(cb, clbl);
+    card.appendChild(crow);
+    const btns = document.createElement("div"); btns.className = "btnrow";
+    const startBtn = document.createElement("button"); startBtn.type = "button"; startBtn.className = "btn";
+    startBtn.textContent = "Start"; startBtn.disabled = !pairingReady;
+    startBtn.onclick = () => pairingAction("start");
+    btns.appendChild(startBtn);
+    card.appendChild(btns);
+  } else if (p.state === "scanning" || p.state === "connecting") {
+    const row = document.createElement("div"); row.className = "row";
+    row.appendChild(spinner());
+    const lbl = document.createElement("span"); lbl.className = "lbl";
+    lbl.textContent = p.state === "scanning" ? "Searching for the camper unit…" : "Connecting…";
+    row.appendChild(lbl);
+    card.appendChild(row);
+    const btns = document.createElement("div"); btns.className = "btnrow";
+    const cancelBtn = document.createElement("button"); cancelBtn.type = "button"; cancelBtn.className = "btn";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.onclick = () => pairingAction("cancel");
+    btns.appendChild(cancelBtn);
+    card.appendChild(btns);
+  } else if (p.state === "waiting_passkey") {
+    const instr = document.createElement("div"); instr.className = "note";
+    instr.textContent = "Read it from the camper's screen — a fresh code each attempt.";
+    card.appendChild(instr);
+    const row = document.createElement("div"); row.className = "row";
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.inputMode = "numeric"; inp.pattern = "[0-9]{6}"; inp.maxLength = 6;
+    inp.id = "pairing-passkey";
+    inp.placeholder = "123456";
+    row.appendChild(inp);
+    const sendBtn = document.createElement("button"); sendBtn.type = "button"; sendBtn.className = "btn";
+    sendBtn.textContent = "Send";
+    sendBtn.onclick = () => {
+      const v = inp.value.trim();
+      if (!/^[0-9]{6}$/.test(v)) { toast("Enter exactly 6 digits", "warn"); return; }
+      pairingAction("passkey", v);
+    };
+    row.appendChild(sendBtn);
+    card.appendChild(row);
+  } else if (p.state === "pairing" || p.state === "verifying" || p.state === "resetting") {
+    const row = document.createElement("div"); row.className = "row";
+    row.appendChild(spinner());
+    const lbl = document.createElement("span"); lbl.className = "lbl";
+    lbl.textContent = p.state === "pairing" ? "Pairing…" : p.state === "verifying" ? "Verifying…" : "Resetting…";
+    row.appendChild(lbl);
+    card.appendChild(row);
+  } else if (p.state === "bonded") {
+    const ok = document.createElement("div"); ok.className = "note";
+    ok.textContent = "✓ Paired — " + p.address;
+    card.appendChild(ok);
+    const envRow = document.createElement("div"); envRow.className = "row";
+    const code = document.createElement("code"); code.textContent = "CALICTL_ADDR=" + p.address;
+    envRow.appendChild(code);
+    card.appendChild(envRow);
+    const note = document.createElement("div"); note.className = "note";
+    note.textContent = "Already cached for this session — add that line to /etc/buspi/calictl.env to persist it across restarts.";
+    card.appendChild(note);
+  } else if (p.state === "error") {
+    const errRow = document.createElement("div"); errRow.className = "warn";
+    errRow.textContent = "Error: " + (PAIRING_ERROR_MSG[/** @type {string} */ (p.error)] || p.error || "unknown");
+    card.appendChild(errRow);
+    const btns = document.createElement("div"); btns.className = "btnrow";
+    const retryBtn = document.createElement("button"); retryBtn.type = "button"; retryBtn.className = "btn";
+    retryBtn.textContent = "Retry";
+    retryBtn.onclick = () => pairingAction("start");
+    btns.appendChild(retryBtn);
+    card.appendChild(btns);
+  }
+  // reset/re-pair: available whenever a bond exists to lose, on top of whatever step is showing
+  // above (e.g. still visible next to an "error" from a re-pair attempt on an already-bonded unit).
+  if (p.state !== "resetting" && (p.state === "bonded" || p.address)) {
+    const rbtns = document.createElement("div"); rbtns.className = "btnrow";
+    const resetBtn = document.createElement("button"); resetBtn.type = "button"; resetBtn.className = "btn";
+    resetBtn.textContent = "Bluetooth reset / re-pair";
+    resetBtn.onclick = () => {
+      if (!confirm("This removes the working bond; telemetry stops until re-paired. Continue?")) return;
+      pairingAction("reset", undefined, true);
+    };
+    rbtns.appendChild(resetBtn);
+    card.appendChild(rbtns);
+  }
+  return card;
+}
+
 function render() {
   backEl.hidden = view === "home";
   backEl.onclick = () => goto("home");
@@ -898,6 +1079,11 @@ function renderSummary() {
 
 function renderDashboard() {
   titleEl.textContent = "Vehicle";
+  // Prominent = the daemon can't reach the van AND no bond exists yet -- the exact moment a
+  // fresh/re-paired install needs the wizard most. Otherwise it's a small collapsed card at
+  // the end (re-pair after a bond loss, or just poking at it out of curiosity).
+  const prominent = !!(STATE._meta && STATE._meta.online === false && PAIRING && PAIRING.address == null);
+  if (prominent) app.appendChild(pairingCard());
   const summary = renderSummary();
   if (summary) app.appendChild(summary);
   const grid = document.createElement("div");
@@ -920,6 +1106,7 @@ function renderDashboard() {
     grid.appendChild(tile);
   }
   app.appendChild(grid);
+  if (!prominent) app.appendChild(pairingCard());
 }
 
 // Lighting lamps, grouped like the app (from the HCI capture + screenshots). `what` is the
@@ -1384,6 +1571,13 @@ function roofControls() {
 
 async function main() {
   await refreshState(true);
+  await pairingFetch();      // one-off: needed just to decide the setup card's prominence (see
+                              // renderDashboard); the recurring 1 s poll only runs while it's open.
+  if (STATE._meta && STATE._meta.online === false && PAIRING && PAIRING.address == null) {
+    pairingOpen = true;
+    startPairingPoll();
+  }
+  render();
   setInterval(() => refreshState(false), 2000);
 }
 main();
