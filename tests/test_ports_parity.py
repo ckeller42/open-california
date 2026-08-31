@@ -48,3 +48,95 @@ def _f_line(c):
 def test_freshness_c_port_parity(codec_cli):
     for c, out in zip(_fresh_cases(), codec_cli([_f_line(c) for c in _fresh_cases()])):
         assert out == "OK %d" % int(c["expect"]), (c["id"], out)
+
+
+# --- anchors ---------------------------------------------------------------------
+
+# Python violation-message prefix -> the C port's stable bitmask ID (csrc/ports.h)
+_ANCHOR_ID = {"leisure battery": 1 << 0, "leisure SoC": 1 << 1,
+              "cooler level": 1 << 2, "cooler quiet_from": 1 << 3,
+              "cooler quiet_to": 1 << 4, "roof position": 1 << 5,
+              "vehicle level_roll": 1 << 6, "vehicle level_pitch": 1 << 7}
+
+# flat sweep key -> (states path, needs-installed gate)
+_ANCHOR_KEYS = ("batt2_v", "soc2_level", "cooler_installed", "cooler_level",
+                "quiet_from", "quiet_to", "roof_installed", "roof_position",
+                "level_roll", "level_pitch")
+
+
+def _anchor_states(case):
+    """Flat sweep dict -> the interpreted-states shape anchors.check consumes."""
+    st = {"energy": {}, "cooler": {}, "roof": {}, "vehicle": {}}
+    for k, v in case.items():
+        if k in ("batt2_v", "soc2_level"):
+            st["energy"][k] = v
+        elif k == "cooler_installed":
+            st["cooler"]["installed"] = bool(v)
+        elif k in ("cooler_level", "quiet_from", "quiet_to"):
+            st["cooler"]["level" if k == "cooler_level" else k] = v
+        elif k == "roof_installed":
+            st["roof"]["installed"] = bool(v)
+        elif k == "roof_position":
+            st["roof"]["position"] = v
+        else:
+            st["vehicle"][k] = v
+    return st
+
+
+def _py_anchor_mask(case):
+    from calictl import anchors
+    mask = 0
+    for msg in anchors.check(_anchor_states(case)):
+        mask |= next(v for k, v in _ANCHOR_ID.items() if msg.startswith(k))
+    return mask
+
+
+def _anchor_sweep():
+    """Deterministic below/at/mid/at/above sweep per anchor + installed gates +
+    combined and all-absent cases. Boundary floats use exactly-representable
+    .0/.5 values so float(C) and double(Python) agree on every verdict."""
+    cases = []
+    for k, lo, hi, gate in (("batt2_v", 8.0, 16.0, None),
+                            ("soc2_level", 0, 15, None),
+                            ("cooler_level", 1, 5, {"cooler_installed": 1}),
+                            ("quiet_from", 0, 23, {"cooler_installed": 1}),
+                            ("quiet_to", 0, 23, {"cooler_installed": 1}),
+                            ("roof_position", 0, 15, {"roof_installed": 1})):
+        step = 0.5 if isinstance(lo, float) else 1
+        for v in (lo - step, lo, (lo + hi) / 2 if isinstance(lo, float) else (lo + hi) // 2,
+                  hi, hi + step):
+            cases.append({k: v, **(gate or {})})
+    for k in ("level_roll", "level_pitch"):
+        for v in (-95.5, -90.0, 0.0, 90.0, 90.5):
+            cases.append({k: v})
+    # installed gates OFF: out-of-range values must NOT fire
+    cases.append({"cooler_installed": 0, "cooler_level": 9, "quiet_from": 25})
+    cases.append({"roof_installed": 0, "roof_position": 20})
+    # combined multi-violation + all-absent
+    cases.append({"batt2_v": 3.0, "soc2_level": 99, "cooler_installed": 1,
+                  "cooler_level": 0, "quiet_to": 30, "roof_installed": 1,
+                  "roof_position": 16, "level_roll": 180.0, "level_pitch": -180.0})
+    cases.append({})
+    return cases
+
+
+def _a_line(case):
+    kv = " ".join("%s=%s" % (k, case[k]) for k in _ANCHOR_KEYS if k in case)
+    return ("A " + kv).rstrip()
+
+
+def test_anchors_c_port_parity(codec_cli):
+    """Differential sweep: Python anchors.check (the oracle, mapped to stable IDs)
+    must equal the C port's violation bitmask on every case.
+
+    .. test:: Plausibility-anchor C port matches the Python original
+       :id: T_PORT_ANCHORS_PARITY
+       :links: R_PORT_ANCHORS
+    """
+    cases = _anchor_sweep()
+    fired = 0
+    for case, out in zip(cases, codec_cli([_a_line(c) for c in cases])):
+        py = _py_anchor_mask(case)
+        assert out == "OK %d" % py, (case, out, py)
+        fired += bool(py)
+    assert fired >= 15  # the sweep genuinely exercises violations (17 today)
