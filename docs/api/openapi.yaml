@@ -221,7 +221,7 @@ paths:
       description: |
         Read-only snapshot of the guided BLE-pairing state machine (no BLE, no bridging onto the
         daemon loop). Before any wizard run this process lifetime, `state` is `idle` and `address`
-        falls back to the persisted pairing cache (`~/.cache/calictl/pairing.json`), NOT the
+        falls back to the persisted pairing cache (`~/.local/state/calictl/pairing.json`), NOT the
         operator's `CALICTL_ADDR` override.
       responses:
         "200":

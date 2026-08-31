@@ -12,10 +12,9 @@
 """
 import asyncio
 import json
-import os
-import pathlib
 
 from calictl import pairing
+from calictl.device import pairing_cache_path
 from calictl.pairing import (
     ACT_CONNECT,
     ACT_DISCONNECT,
@@ -381,9 +380,7 @@ class BluezTransport:
                 addr = variant.value
             except Exception:
                 pass  # fall back to the address discovered during scan
-            cache_path = pathlib.Path(
-                os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
-            )
+            cache_path = pairing_cache_path()
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_text(json.dumps({"address": addr}))
             return addr
@@ -408,6 +405,14 @@ class BluezTransport:
             self._found_device = None
             self._address = None
             self._client = None
+        # Clear the persisted address too, else resolve_addr() re-reads it after a reboot and the
+        # daemon re-targets the bond we just removed. Independent of the bluez call above (which
+        # no-ops off-hardware), and best-effort: a cache-clear failure must not surface as a
+        # pairing error.
+        try:
+            pairing_cache_path().unlink(missing_ok=True)
+        except OSError:
+            pass
 
     async def aclose(self):
         """Unregister the D-Bus agent and drop the system-bus connection (call at flow end)."""

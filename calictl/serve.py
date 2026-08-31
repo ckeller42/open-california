@@ -31,7 +31,7 @@ from . import (
     semantics,
     session,
 )
-from .device import CamperDevice, ConnectionUnavailable
+from .device import CamperDevice, ConnectionUnavailable, pairing_cache_path
 
 # How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
 # an optimistic "sent" (the lamp itself already reacted; this only bounds the UI confirm latency).
@@ -59,13 +59,12 @@ def installed_from(states: dict) -> set:
 
 def _pairing_cache_address():
     """Best-effort read of the persisted pairing-cache ``address`` (``CALICTL_PAIRING_CACHE``,
-    default ``~/.cache/calictl/pairing.json``) — used ONLY as a `pairing_snapshot()` fallback
-    display value before a wizard runner exists. Deliberately NOT `CALICTL_ADDR` (that's the
-    operator's own connection override, unrelated to what the pairing flow last bonded). Any
+    default ``~/.local/state/calictl/pairing.json``) — used ONLY as a `pairing_snapshot()`
+    fallback display value before a wizard runner exists. Deliberately NOT `CALICTL_ADDR` (that's
+    the operator's own connection override, unrelated to what the pairing flow last bonded). Any
     read error (missing/corrupt file) -> None."""
-    path = os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
     try:
-        with open(path) as f:
+        with open(pairing_cache_path()) as f:
             return json.load(f).get("address") or None
     except (OSError, ValueError, AttributeError):
         return None
@@ -437,11 +436,15 @@ class Server:
 
         :returns: `self._pairing.snapshot()` if a wizard run has ever started this
             process lifetime, else the idle default with `address` falling back to
-            the persisted pairing-cache address (see `_pairing_cache_address`).
+            the persisted pairing-cache address (see `_pairing_cache_address`), then
+            to the operator's `CALICTL_ADDR`. The env fallback is what makes the web
+            UI's Unpair entry appear for a bond configured outside the wizard (the
+            buspi deploy bonds via `/etc/buspi/*.env`, not the guided flow).
         """
         if self._pairing is not None:
             return self._pairing.snapshot()
-        return {"state": "idle", "attempts": 0, "error": None, "address": _pairing_cache_address()}
+        address = _pairing_cache_address() or os.environ.get("CALICTL_ADDR", "").strip() or None
+        return {"state": "idle", "attempts": 0, "error": None, "address": address}
 
     def _ensure_pairing_runner(self):
         """Lazily construct the `PairingRunner` + `BluezTransport` pair on first use. Construction

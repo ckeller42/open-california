@@ -21,6 +21,22 @@ import subprocess
 from pathlib import Path
 
 
+def pairing_cache_path() -> Path:
+    """Path to the persisted-bond file — the single source of truth for its location.
+
+    The bonded address is durable **state**: it must survive between runs (that's the whole
+    point of persisting it), so per the XDG Base Directory spec it belongs under
+    ``$XDG_STATE_HOME`` (default ``~/.local/state``), NOT ``~/.cache`` — the spec permits cache
+    to be deleted at any time, and a cache-clean silently unpairing the unit would be a bug.
+    ``CALICTL_PAIRING_CACHE`` overrides the whole path (tests point it at a tmp file).
+    """
+    override = os.environ.get("CALICTL_PAIRING_CACHE")
+    if override:
+        return Path(override)
+    state_home = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
+    return Path(state_home) / "calictl" / "pairing.json"
+
+
 def resolve_addr() -> str:
     """Resolve the unit's BLE address from env override or bonded pairing cache.
 
@@ -28,8 +44,8 @@ def resolve_addr() -> str:
     Resolution order:
 
     1. ``CALICTL_ADDR`` environment variable, if set and non-empty.
-    2. Pairing cache file (``CALICTL_PAIRING_CACHE``, defaulting to
-       ``~/.cache/calictl/pairing.json``): extract the ``address`` field if the file
+    2. Pairing cache file (:func:`pairing_cache_path`, default
+       ``~/.local/state/calictl/pairing.json``): extract the ``address`` field if the file
        exists and is valid JSON.
     3. Placeholder ``"AA:BB:CC:DD:EE:FF"`` if all else fails.
 
@@ -42,11 +58,8 @@ def resolve_addr() -> str:
     if env_addr:
         return env_addr
 
-    cache_path_str = os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
-    cache_path = Path(cache_path_str)
-
     try:
-        cache_text = cache_path.read_text()
+        cache_text = pairing_cache_path().read_text()
         cache_data = json.loads(cache_text)
         cached_addr = cache_data.get("address", "").strip()
         if cached_addr:
