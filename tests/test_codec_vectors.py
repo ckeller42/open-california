@@ -38,6 +38,14 @@ def test_vector_file_exists_and_versioned():
     assert v["version"] == 1 and v["decode"] and v["encode"]
 
 
+def test_checked_in_vectors_are_fresh():
+    """A dictionary/overrides edit without a vector regen fails here (and in the
+    pre-commit / codec-parity ``--check``), so a NEW field can never ship
+    uncovered — regenerate with ``python3 -m tools.gen_codec_vectors``."""
+    from tools import gen_codec_vectors
+    assert gen_codec_vectors.render() == VECTORS.read_text()
+
+
 def test_decode_vectors_pass_python_codec():
     funcs, v = _funcs(), _vectors()
     for vec in v["decode"]:

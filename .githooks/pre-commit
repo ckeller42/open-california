@@ -54,6 +54,15 @@ if git diff --cached --name-only | grep -qE '^(calictl/webui/|calictl/semantics\
   fi
 fi
 
+# 4e) Cross-language codec artifacts (issue #156): a dictionary/overrides edit must ship with
+#     regenerated golden vectors + C header, or the codec-parity CI job fails anyway — catch it here.
+if git diff --cached --name-only | grep -qE '^(protocol/dictionary\.yaml|calictl/overrides\.py)$'; then
+  "$PY" -m tools.gen_codec_vectors --check >/dev/null 2>&1 || \
+    fail "golden codec vectors stale — run: $PY -m tools.gen_codec_vectors (and stage tests/vectors/camper_codec.json)"
+  "$PY" -m tools.gen_c_dict --check >/dev/null 2>&1 || \
+    fail "csrc/codec_dict.h stale — run: $PY -m tools.gen_c_dict (and stage csrc/codec_dict.h)"
+fi
+
 # 4d) ruff lint — HARD GATE (the codebase is ruff-green). Whole-repo check is sub-second. If ruff
 #     isn't installed, skip with a note rather than block (run `tools/ci.sh dev` to install it).
 if "$PY" -m ruff --version >/dev/null 2>&1; then
