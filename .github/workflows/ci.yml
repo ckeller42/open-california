@@ -106,6 +106,8 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Generated C header is fresh
         run: python -m tools.gen_c_dict --check
+      - name: Golden vectors are fresh
+        run: python -m tools.gen_codec_vectors --check
       - name: Vectors + differential parity (compiles csrc/)
         run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py -q
 

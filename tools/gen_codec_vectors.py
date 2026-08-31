@@ -202,13 +202,26 @@ def generate() -> dict:
             "decode": decode, "encode": encode}
 
 
-def main() -> None:
+def render() -> str:
+    """The exact checked-in file content for the current dictionary/overrides."""
+    return json.dumps(generate(), indent=1, sort_keys=False) + "\n"
+
+
+def main() -> int:
+    import sys
+    text = render()
+    if "--check" in sys.argv:
+        if not OUT.is_file() or OUT.read_text() != text:
+            print("STALE: %s does not match a fresh regeneration — run "
+                  "python3 -m tools.gen_codec_vectors" % OUT, file=sys.stderr)
+            return 1
+        print("fresh: %s" % OUT)
+        return 0
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    data = generate()
-    OUT.write_text(json.dumps(data, indent=1, sort_keys=False) + "\n")
-    print("wrote %s (%d decode, %d encode vectors)"
-          % (OUT, len(data["decode"]), len(data["encode"])))
+    OUT.write_text(text)
+    print("wrote %s" % OUT)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
