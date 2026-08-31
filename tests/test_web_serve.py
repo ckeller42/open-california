@@ -804,6 +804,62 @@ def test_poll_captures_raw_frames_on_firmware_change(tmp_path, monkeypatch):
     assert s._fw_seen == ("0411", 2)
 
 
+def test_poll_skips_ble_read_while_pairing_active(monkeypatch):
+    """Single BLE owner rule: a pairing flow mid-flight (scanning/connecting/.../resetting) OWNS
+    the radio, so the periodic poll must skip its BLE read entirely -- not just part of it -- or
+    it becomes a second BLE actor against hci0 fighting the wizard for the connection."""
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    called = {"n": 0}
+
+    async def fake_read_all(fns):
+        called["n"] += 1
+        return {}
+    monkeypatch.setattr(s.dev, "read_all", fake_read_all)
+
+    class FakeRunner:
+        def __init__(self, state):
+            self._state = state
+        def snapshot(self):
+            return {"state": self._state, "attempts": 0, "error": None, "address": None}
+
+    for state in ("scanning", "connecting", "waiting_passkey", "pairing", "verifying", "resetting"):
+        s._pairing = FakeRunner(state)
+        result = asyncio.run(s.poll())
+        assert result == {}
+    assert called["n"] == 0    # NO device read happened for any active pairing state
+
+
+def test_poll_proceeds_when_pairing_idle_bonded_or_error(monkeypatch):
+    """idle/bonded/error mean no flow is actively using the radio -> polling resumes as before."""
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    called = {"n": 0}
+
+    async def fake_read_all(fns):
+        called["n"] += 1
+        return {}
+    monkeypatch.setattr(s.dev, "read_all", fake_read_all)
+
+    class FakeRunner:
+        def __init__(self, state):
+            self._state = state
+        def snapshot(self):
+            return {"state": self._state, "attempts": 0, "error": None, "address": None}
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        for pairing in (None, FakeRunner("idle"), FakeRunner("bonded"), FakeRunner("error")):
+            s._pairing = pairing
+            await s.poll()
+    asyncio.run(_run())
+    assert called["n"] == 4   # every non-active state (including no runner) reached the BLE read
+
+
 def test_web_server_binds_without_reverse_dns(tmp_path, monkeypatch):
     """serve_http MUST NOT block on socket.getfqdn. On a host with slow/absent reverse-DNS (macOS,
     some CI runners, a parked van with no uplink) that lookup hangs for tens of seconds or forever,

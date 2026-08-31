@@ -485,6 +485,14 @@ class Server:
             await self._pairing.reset()
 
     async def poll(self):
+        # Single BLE owner rule (CLAUDE.md): a pairing flow OWNS the radio while active (design
+        # spec, transport section: "the poll loop skips while pairing is active"). Polling opens
+        # its OWN bleak connect -- a second BLE actor against hci0 mid-pairing is exactly what the
+        # single-owner rule forbids. Skip the WHOLE read (not just parts) while a wizard run is
+        # actively mid-flight; idle/bonded/error means no flow is using the radio -> poll resumes.
+        if self._pairing is not None and self._pairing.snapshot()["state"] not in ("idle", "bonded", "error"):
+            print("poll skipped: pairing in progress", flush=True)
+            return {}
         # One BLE read of every function under the lock; cache the DECODED state
         # (on_command builds full-packet control frames from it) and derive the
         # INTERPRETED state for MQTT + InfluxDB.
