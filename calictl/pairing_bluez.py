@@ -66,6 +66,8 @@ class PairingRunner:
 
     async def handle(self, ev, arg=0):
         """Advance the SM by one event, dispatch its actions, (re)arm the timeout timer."""
+        if ev in (EV_CANCEL, EV_RESET):
+            self.address = None  # don't let a stale bond address survive an abandon/reset
         old = self._ps
         self._ps, actions = step(self._ps, ev, arg)
         if self._ps != old:
@@ -108,6 +110,12 @@ class PairingRunner:
             elif act == ACT_REMOVE_BOND:
                 await t.remove_bond()
         except Exception as e:
+            if act == ACT_PERSIST_BOND:
+                # BlueZ owns the real bond regardless of this cache write -- the bond
+                # itself is intact, only our convenience address cache failed. Stay
+                # BONDED; self.address stays None (see snapshot()'s docstring).
+                print("pairing: address-cache write failed, bond itself is intact: %r" % e, flush=True)
+                return
             print("pairing: transport action %d failed: %r" % (act, e), flush=True)
             if act in _PAIR_FAIL_ACTS:
                 await self.handle(EV_PAIR_FAIL)
@@ -138,6 +146,13 @@ class PairingRunner:
         await self.handle(EV_PASSKEY_ENTERED, pk)
 
     def snapshot(self):
+        """Return the SM state as plain names/values for a UI to render.
+
+        :returns: ``{"state", "attempts", "error", "address"}``. If ``state`` is
+            ``"bonded"`` and ``address`` is ``None``, the bond itself succeeded but the
+            address-cache write (``transport.persist_bond()``) failed -- pairing is
+            still fully bonded, just without a cached address.
+        """
         return {
             "state": STATE_NAMES[self._ps.st],
             "attempts": self._ps.attempts,

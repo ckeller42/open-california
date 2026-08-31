@@ -225,6 +225,44 @@ def test_reset_injects_reset_done_after_remove_bond():
     assert state == pairing.PairingState(pairing.IDLE, 0, pairing.ERR_NONE)
 
 
+def test_persist_bond_exception_stays_bonded_with_no_address():
+    async def _run():
+        t = FakeTransport()
+        t.raise_on.add("persist_bond")
+        r = PairingRunner(t)
+        await _drive_happy_path(r)  # must not raise
+        return t.calls, r.state, r.snapshot()
+
+    calls, state, snap = asyncio.run(_run())
+    assert calls[-1] == "persist_bond"
+    assert state == pairing.PairingState(pairing.BONDED, 0, pairing.ERR_NONE)
+    assert snap["address"] is None
+
+
+def test_reset_clears_stale_address():
+    async def _run():
+        t = FakeTransport(bond_address="AA:BB:CC:DD:EE:FF")
+        r = PairingRunner(t)
+        await _drive_happy_path(r)  # -> BONDED, address set
+        await r.reset()
+        return r.snapshot()
+
+    snap = asyncio.run(_run())
+    assert snap["address"] is None
+
+
+def test_cancel_clears_stale_address():
+    async def _run():
+        t = FakeTransport(bond_address="AA:BB:CC:DD:EE:FF")
+        r = PairingRunner(t)
+        await _drive_happy_path(r)  # -> BONDED, address set
+        await r.cancel()
+        return r.snapshot()
+
+    snap = asyncio.run(_run())
+    assert snap["address"] is None
+
+
 def test_cancel_stops_and_returns_idle():
     async def _run():
         t = FakeTransport()
