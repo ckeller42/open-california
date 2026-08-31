@@ -51,6 +51,9 @@ Raspberry Pi.
   (lighting, roof, and range-rejection have their own [sequence diagrams](https://ckeller42.github.io/open-california/protocol-sequences.html)).
 - **Fits your stack** — one BLE-owning daemon fans out to **InfluxDB/Grafana** and **Home
   Assistant** (MQTT), and serves the web UI above — same process, one connection.
+- **Guides you through pairing** — a web wizard walks through first-run pairing and re-pair
+  (type the passkey shown on the camper's own screen), built on a platform-free pairing state
+  machine that doubles as the model for a future ESP32 touchscreen flow.
 
 ## Quickstart
 

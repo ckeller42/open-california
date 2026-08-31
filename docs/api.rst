@@ -98,3 +98,10 @@ Cross-language codec (issue #156)
 .. automodule:: tests.test_codec_parity
 .. automodule:: tests.test_gen_c_dict
 .. automodule:: tests.test_ports_parity
+
+Guided pairing (issue #154, #157)
+----------------------------------
+
+.. automodule:: calictl.pairing
+.. automodule:: calictl.pairing_bluez
+.. automodule:: tests.test_pairing_sm

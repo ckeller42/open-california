@@ -55,7 +55,7 @@ html_favicon = "_static/favicon.ico"
 # they are rendered by the separate "evidence" build below onto the same business-logic/ URLs,
 # so links keep working while the product docs' nav + search stay free of lab notes.
 exclude_patterns = ["_build", "api/openapi.yaml", "README.md", "api/README.md", "protocol/README.md",
-                    "business-logic/**"]
+                    "business-logic/**", "superpowers/**"]
 
 # The lab-notebook markdown links freely to code files and repo paths that are not part of the
 # rendered site (calictl/*.py, protocol/dictionary.yaml, ...). Those degrade to plain links; do
@@ -77,7 +77,7 @@ suppress_warnings = ["needs.deprecated", "myst.xref_missing", "myst.header"]
 if tags.has("evidence"):  # noqa: F821 — `tags` is injected by Sphinx into conf.py
     root_doc = "business-logic/index"
     exclude_patterns = ["_build", "*.rst", "*.md",
-                        "api/**", "assets/**", "protocol/**", "screenshots/**"]
+                        "api/**", "assets/**", "protocol/**", "screenshots/**", "superpowers/**"]
     html_title = "open-california — RE lab notes (evidence)"
     html_theme_options = {
         "announcement": ("Reverse-engineering <strong>lab notes — evidence, not product "
