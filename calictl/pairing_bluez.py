@@ -11,6 +11,9 @@
    concrete BlueZ transport in this same module, with its own lazy imports).
 """
 import asyncio
+import json
+import os
+import pathlib
 
 from calictl import pairing
 from calictl.pairing import (
@@ -26,8 +29,12 @@ from calictl.pairing import (
     ERR_NAMES,
     ERR_NONE,
     EV_CANCEL,
+    EV_CONNECTED,
+    EV_DEVICE_FOUND,
     EV_PAIR_FAIL,
+    EV_PAIR_OK,
     EV_PASSKEY_ENTERED,
+    EV_PASSKEY_REQUESTED,
     EV_RESET,
     EV_RESET_DONE,
     EV_START,
@@ -159,3 +166,227 @@ class PairingRunner:
             "error": ERR_NAMES[self._ps.error],
             "address": self.address,
         }
+
+
+AGENT_PATH = "/org/calictl/pairing_agent"
+
+
+class BluezTransport:
+    """Real BlueZ transport for :class:`PairingRunner`: bleak scan/GATT + a dbus-fast agent.
+
+    .. req:: BlueZ transport for guided pairing
+       :id: R_PAIRING_BLUEZ_TRANSPORT
+
+       Implements the runner's transport contract (``start_scan``/``stop_scan``/
+       ``connect``/``pair``/``send_passkey``/``verify``/``persist_bond``/
+       ``disconnect``/``remove_bond``) against real BlueZ: `bleak` for
+       scanning + GATT reads, `dbus_fast` for the ``org.bluez.Agent1``
+       KeyboardOnly passkey agent and the ``Device1``/``Adapter1`` pair /
+       remove-device calls. Every ``bleak``/``dbus_fast`` import is lazy
+       (inside methods), so importing this module stays stdlib-only.
+       **NOT-LIVE-VERIFIED**: no dbus/BLE stack in CI, so only the
+       stdlib-only plumbing (construction, the ``_passkey_future`` hookup) is
+       test-covered here; the dbus/bleak call sequence is exercised against
+       real hardware in the #157 van session.
+
+    :param on_event: async ``callable(ev, arg=0)`` fed pairing-SM events as
+        the transport observes them (device found, connected, passkey
+        requested, pair success) — normally :meth:`PairingRunner.handle`.
+        The runner's constructor takes the transport, so wire this up after
+        both exist: ``t = BluezTransport(); r = PairingRunner(t);
+        t.on_event = r.handle``.
+    :param device_name: BLE advertised name to scan for.
+    :param adapter_path: BlueZ adapter D-Bus object path.
+    """
+
+    def __init__(self, on_event=None, device_name="VWCAMPER", adapter_path="/org/bluez/hci0"):
+        self.on_event = on_event
+        self._device_name = device_name
+        self._adapter_path = adapter_path
+        self._address = None       # discovered device's BLE address (identity, once bonded)
+        self._found_device = None  # bleak BLEDevice set by the scan detection callback
+        self._scanner = None
+        self._client = None        # bleak BleakClient set by connect()
+        self._bus = None           # dbus_fast system MessageBus, set by _ensure_bus()
+        self._agent = None
+        self._agent_mgr = None
+        self._passkey_future = None  # resolved by send_passkey(); awaited by the dbus agent
+
+    async def _emit(self, ev, arg=0):
+        if self.on_event is not None:
+            await self.on_event(ev, arg)
+
+    # --- scan --------------------------------------------------------------
+    async def start_scan(self):
+        from bleak import BleakScanner
+
+        async def _on_detect(device, adv_data):
+            if self._found_device is not None or device.name != self._device_name:
+                return
+            self._found_device = device
+            self._address = device.address
+            await self._emit(EV_DEVICE_FOUND)
+
+        self._found_device = None
+        self._scanner = BleakScanner(detection_callback=_on_detect)
+        await self._scanner.start()
+
+    async def stop_scan(self):
+        if self._scanner is not None:
+            await self._scanner.stop()
+            self._scanner = None
+
+    # --- connect -------------------------------------------------------------
+    async def connect(self):
+        from bleak import BleakClient
+
+        self._client = BleakClient(self._found_device)
+        await self._client.connect()
+        await self._emit(EV_CONNECTED)
+
+    def _device_path(self):
+        if not self._address:
+            raise RuntimeError("no discovered device address")
+        return "%s/dev_%s" % (self._adapter_path, self._address.replace(":", "_").upper())
+
+    async def _ensure_bus(self):
+        if self._bus is not None:
+            return self._bus
+        from dbus_fast import BusType
+        from dbus_fast.aio import MessageBus
+
+        self._bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        return self._bus
+
+    async def _get_interface(self, path, iface):
+        bus = await self._ensure_bus()
+        intro = await bus.introspect("org.bluez", path)
+        obj = bus.get_proxy_object("org.bluez", path, intro)
+        return obj.get_interface(iface)
+
+    # --- pairing agent (LE Passkey Entry, KeyboardOnly: we SEND the passkey) --
+    async def _ensure_agent(self):
+        if self._agent is not None:
+            return
+        from dbus_fast.service import ServiceInterface, method
+
+        transport = self
+
+        class _PairingAgent(ServiceInterface):
+            def __init__(self):
+                super().__init__("org.bluez.Agent1")
+
+            @method()
+            async def RequestPasskey(self, device: "o") -> "u":  # noqa: N802,N803,F821
+                transport._passkey_future = asyncio.get_running_loop().create_future()
+                await transport._emit(EV_PASSKEY_REQUESTED)
+                return await transport._passkey_future
+
+            @method()
+            def Cancel(self):  # noqa: N802
+                if transport._passkey_future is not None and not transport._passkey_future.done():
+                    transport._passkey_future.cancel()
+
+            @method()
+            def Release(self):  # noqa: N802
+                pass
+
+        bus = await self._ensure_bus()
+        self._agent = _PairingAgent()
+        bus.export(AGENT_PATH, self._agent)
+        self._agent_mgr = await self._get_interface("/org/bluez", "org.bluez.AgentManager1")
+        await self._agent_mgr.call_register_agent(AGENT_PATH, "KeyboardOnly")
+        await self._agent_mgr.call_request_default_agent(AGENT_PATH)
+
+    async def pair(self):
+        await self._ensure_agent()
+        device_iface = await self._get_interface(self._device_path(), "org.bluez.Device1")
+        await device_iface.call_pair()
+        await self._emit(EV_PAIR_OK)
+
+    async def send_passkey(self, pk):
+        if self._passkey_future is not None and not self._passkey_future.done():
+            self._passkey_future.set_result(pk)
+
+    # --- verify: connect + read VERSION/AUTH + count readable state chars ---
+    async def verify(self):
+        from bleak import BleakClient
+
+        from calictl import device as device_mod
+
+        client = self._client
+        owns_client = False
+        try:
+            if client is None or not client.is_connected:
+                client = BleakClient(self._found_device)
+                await client.connect()
+                owns_client = True
+            await client.read_gatt_char(device_mod.VERSION_CHAR)
+            await client.read_gatt_char(device_mod.AUTH_CHAR)
+            count = 0
+            for service in client.services:
+                for char in service.characteristics:
+                    if "read" not in char.properties:
+                        continue
+                    try:
+                        await client.read_gatt_char(char.uuid)
+                        count += 1
+                    except Exception:
+                        pass
+            return count
+        except Exception:
+            return None
+        finally:
+            if owns_client:
+                await client.disconnect()
+
+    # --- bond persistence / teardown -----------------------------------------
+    async def persist_bond(self):
+        try:
+            addr = self._address
+            try:
+                props = await self._get_interface(self._device_path(), "org.freedesktop.DBus.Properties")
+                variant = await props.call_get("org.bluez.Device1", "Address")
+                addr = variant.value
+            except Exception:
+                pass  # fall back to the address discovered during scan
+            cache_path = pathlib.Path(
+                os.environ.get("CALICTL_PAIRING_CACHE", os.path.expanduser("~/.cache/calictl/pairing.json"))
+            )
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps({"address": addr}))
+            return addr
+        except Exception:
+            return None
+
+    async def disconnect(self):
+        if self._client is not None:
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+            self._client = None
+
+    async def remove_bond(self):
+        try:
+            adapter = await self._get_interface(self._adapter_path, "org.bluez.Adapter1")
+            await adapter.call_remove_device(self._device_path())
+        except Exception:
+            pass
+        finally:
+            self._found_device = None
+            self._address = None
+            self._client = None
+
+    async def aclose(self):
+        """Unregister the D-Bus agent and drop the system-bus connection (call at flow end)."""
+        try:
+            if self._agent_mgr is not None:
+                await self._agent_mgr.call_unregister_agent(AGENT_PATH)
+        except Exception:
+            pass
+        if self._bus is not None:
+            self._bus.disconnect()
+            self._bus = None
+        self._agent = None
+        self._agent_mgr = None
