@@ -280,8 +280,15 @@ def test_open_control_survives_a_state_poll(page):
     assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
 
 
+def _open_pairing_via_menu(page):
+    """The wizard lives behind the topbar context menu — no card in the main flow when the
+    daemon is paired/online (UX: the guided flow is only prominent on true first-run)."""
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("button", name="Bluetooth pairing…").click()
+
+
 def _open_and_start_pairing(page):
-    page.get_by_role("button", name="Bluetooth setup / re-pair").click()
+    _open_pairing_via_menu(page)
     page.get_by_role("checkbox", name="I'm on that screen").check()
     page.get_by_role("button", name="Start").click()
 
@@ -323,6 +330,32 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
     expect(page.get_by_role("button", name="Retry")).to_be_visible(timeout=10000)
     assert "pairing_failed" not in page.locator("#app").inner_text()   # friendly text, not the raw enum
     assert "Pairing failed" in page.locator("#app").inner_text()
+
+
+def test_pairing_hidden_until_opened_from_menu(pairing_page):
+    """UX: when the daemon is reachable there is NO pairing card in the main flow — the entry
+    point is the topbar context menu only. Unpair is hidden there too until a bond exists."""
+    page = pairing_page
+    expect(page.get_by_role("button", name="Menu")).to_be_visible()
+    assert "Bluetooth" not in page.locator("#app").inner_text()
+    page.get_by_role("button", name="Menu").click()
+    expect(page.get_by_role("button", name="Bluetooth pairing…")).to_be_visible()
+    # no bond yet in this fresh server -> no Unpair entry
+    expect(page.get_by_role("button", name="Unpair…")).to_have_count(0)
+
+
+def test_menu_unpair_workflow_after_bonding(pairing_page):
+    """The explicit unpair workflow: after bonding, the context menu gains 'Unpair…' which
+    confirm()s, removes the bond (reset), and leaves the wizard open guiding a re-pair."""
+    page = pairing_page
+    page.on("dialog", lambda d: d.accept())
+    _complete_bonding(page)
+    page.get_by_role("button", name="Menu").click()
+    unpair = page.get_by_role("button", name="Unpair…")
+    expect(unpair).to_be_visible()
+    unpair.click()
+    # reset drives the SM resetting -> idle; the wizard stays open showing the guided first step
+    expect(page.get_by_role("checkbox", name="I'm on that screen")).to_be_visible(timeout=10000)
 
 
 def test_pairing_wizard_reset_demands_confirm_then_idle(pairing_page):

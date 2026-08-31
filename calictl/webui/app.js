@@ -174,6 +174,42 @@ const app = /** @type {HTMLElement} */ (document.getElementById("app"));
 const titleEl = /** @type {HTMLElement} */ (document.getElementById("title"));
 const backEl = /** @type {HTMLElement} */ (document.getElementById("back"));
 const statusEl = /** @type {HTMLElement} */ (document.getElementById("status"));
+const menuEl = /** @type {HTMLElement} */ (document.getElementById("menu"));
+
+// --- topbar context menu (UX: pairing chrome lives here, not in the main flow) ---------------
+let menuPop = /** @type {?HTMLElement} */ (null);
+
+function closeMenu() {
+  if (menuPop) { menuPop.remove(); menuPop = null; }
+}
+
+menuEl.onclick = (ev) => {
+  ev.stopPropagation();
+  if (menuPop) { closeMenu(); return; }
+  menuPop = document.createElement("div");
+  menuPop.className = "menupop";
+  const pair = document.createElement("button");
+  pair.type = "button";
+  pair.textContent = "Bluetooth pairing…";
+  pair.onclick = () => { closeMenu(); openPairingWizard(); };
+  menuPop.appendChild(pair);
+  // Unpair only makes sense once a bond exists (PAIRING is fetched at load + while the wizard polls).
+  if (PAIRING && PAIRING.address) {
+    const unpair = document.createElement("button");
+    unpair.type = "button";
+    unpair.textContent = "Unpair…";
+    unpair.onclick = async () => {
+      closeMenu();
+      if (!confirm("Unpair removes the working bond; telemetry stops until re-paired. Continue?")) return;
+      await openPairingWizard();               // show the flow while the reset runs
+      pairingAction("reset", undefined, true); // then guides straight into re-pairing (idle step)
+    };
+    menuPop.appendChild(unpair);
+  }
+  document.body.appendChild(menuPop);
+  // close on any outside click/tap (registered after this event finishes bubbling)
+  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+};
 
 /** @type {State} */
 let STATE = {};
@@ -889,26 +925,22 @@ async function pairingAction(action, value, confirmFlag) {
   render();
 }
 
-// The "Bluetooth setup / re-pair" card: collapsed to one button until opened (or auto-opened by
-// renderDashboard when offline + unpaired), then walks the polled state through its steps.
+// Open the wizard on demand (from the topbar context menu, or auto on true first-run).
+async function openPairingWizard() {
+  pairingOpen = true;
+  if (view !== "home") goto("home");   // the card renders on the dashboard only
+  await pairingFetch();
+  startPairingPoll();
+  render();
+}
+
+// The guided-pairing card. UX: invisible in the normal paired+online flow — it renders ONLY
+// while open (entry point: the ⋮ menu) or auto-prominently on true first-run (offline + no
+// bond), so a working installation never shows pairing chrome.
 function pairingCard() {
+  if (!pairingOpen) return null;
   const card = document.createElement("div");
   card.className = "card";
-  if (!pairingOpen) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "row";
-    btn.style.cssText = "width:100%; background:none; border:0; font:inherit; text-align:left; cursor:pointer; color:inherit;";
-    btn.textContent = "Bluetooth setup / re-pair";
-    btn.onclick = async () => {
-      pairingOpen = true;
-      await pairingFetch();
-      startPairingPoll();
-      render();
-    };
-    card.appendChild(btn);
-    return card;
-  }
   const head = document.createElement("div"); head.className = "row";
   const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = "Bluetooth setup";
   head.appendChild(hlbl);
@@ -1090,10 +1122,11 @@ function renderSummary() {
 function renderDashboard() {
   titleEl.textContent = "Vehicle";
   // Prominent = the daemon can't reach the van AND no bond exists yet -- the exact moment a
-  // fresh/re-paired install needs the wizard most. Otherwise it's a small collapsed card at
-  // the end (re-pair after a bond loss, or just poking at it out of curiosity).
+  // fresh/re-paired install needs the wizard most (main() auto-opens it then). Any other time
+  // the card exists only while opened from the ⋮ menu, at the end of the dashboard.
   const prominent = !!(STATE._meta && STATE._meta.online === false && PAIRING && PAIRING.address == null);
-  if (prominent) app.appendChild(pairingCard());
+  const pc = pairingCard();   // null unless open
+  if (prominent && pc) app.appendChild(pc);
   const summary = renderSummary();
   if (summary) app.appendChild(summary);
   const grid = document.createElement("div");
@@ -1116,7 +1149,7 @@ function renderDashboard() {
     grid.appendChild(tile);
   }
   app.appendChild(grid);
-  if (!prominent) app.appendChild(pairingCard());
+  if (!prominent && pc) app.appendChild(pc);
 }
 
 // Lighting lamps, grouped like the app (from the HCI capture + screenshots). `what` is the
