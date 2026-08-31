@@ -1,0 +1,22 @@
+{
+ "version": 1,
+ "comment": "Tick-timeline vectors for the roof SafetyCounter formula (device._roof_safety_counter + _beat_bytes): counter = (seed + elapsed_ms // tick_ms) & 0xFFFFFFFF, beat = 4-byte big-endian. Integer milliseconds only (the C port takes uint64 ms). Expectations hand-derived from the app's spec, not computed via device.py.",
+ "cases": [
+  {"id": "basic-500ms-cadence", "seed": 999998, "tick_ms": 500,
+   "timeline_ms": [0, 250, 499, 500, 999, 1000, 1500, 2000],
+   "expect": [999998, 999998, 999998, 999999, 999999, 1000000, 1000001, 1000002],
+   "expect_beat_hex": ["000f423e", "000f423e", "000f423e", "000f423f", "000f423f", "000f4240", "000f4241", "000f4242"]},
+  {"id": "wrap-at-2p32", "seed": 4294967290, "tick_ms": 500,
+   "timeline_ms": [0, 500, 1000, 1500, 2000, 2500, 3000, 3500],
+   "expect": [4294967290, 4294967291, 4294967292, 4294967293, 4294967294, 4294967295, 0, 1],
+   "expect_beat_hex": ["fffffffa", "fffffffb", "fffffffc", "fffffffd", "fffffffe", "ffffffff", "00000000", "00000001"]},
+  {"id": "seed-min", "seed": 1, "tick_ms": 500,
+   "timeline_ms": [0, 499, 500],
+   "expect": [1, 1, 2],
+   "expect_beat_hex": ["00000001", "00000001", "00000002"]},
+  {"id": "long-elapsed-49-days", "seed": 7, "tick_ms": 500,
+   "timeline_ms": [4294967000],
+   "expect": [8589941],
+   "expect_beat_hex": ["00831275"]}
+ ]
+}

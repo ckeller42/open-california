@@ -140,3 +140,51 @@ def test_anchors_c_port_parity(codec_cli):
         assert out == "OK %d" % py, (case, out, py)
         fired += bool(py)
     assert fired >= 15  # the sweep genuinely exercises violations (17 today)
+
+
+# --- roof SafetyCounter ----------------------------------------------------------
+
+def _counter_cases():
+    return json.loads((VDIR / "safety_counter.json").read_text())["cases"]
+
+
+def test_safety_counter_vectors_pass_python_oracle():
+    """Hand-derived tick timelines (incl. the 2^32 wrap and a 49-day elapsed) must
+    match the Python original exactly.
+
+    .. test:: SafetyCounter formula vectors pass the Python original
+       :id: T_PORT_SAFETY_COUNTER_PARITY
+       :links: R_PORT_SAFETY_COUNTER
+    """
+    from calictl import device
+    for c in _counter_cases():
+        for t, exp, beat in zip(c["timeline_ms"], c["expect"], c["expect_beat_hex"]):
+            got = device._roof_safety_counter(c["seed"], float(t), c["tick_ms"])
+            assert got == exp, (c["id"], t)
+            assert device._beat_bytes(got).hex() == beat, (c["id"], t)
+
+
+def test_safety_counter_c_port_parity(codec_cli):
+    lines, flat = [], []
+    for c in _counter_cases():
+        for t, exp, beat in zip(c["timeline_ms"], c["expect"], c["expect_beat_hex"]):
+            lines.append("C %d %d %d" % (c["seed"], c["tick_ms"], t))
+            flat.append((c["id"], t, exp, beat))
+    for (cid, t, exp, beat), out in zip(flat, codec_cli(lines)):
+        assert out == "OK %d %s" % (exp, beat), (cid, t, out)
+
+
+def test_safety_counter_delta_invariant_both_sides(codec_cli):
+    """App invariant: at the 500 ms pump cadence consecutive counters step exactly
+    +1; at a faster cadence deltas are only 0 or +1, never +2 — asserted on the
+    Python and C sequences alike (and the two sequences are identical)."""
+    from calictl import device
+    seed, tick = 424242, 500
+    for period, allowed in ((500, {1}), (250, {0, 1})):
+        ts = [i * period for i in range(60)]
+        py = [device._roof_safety_counter(seed, float(t), tick) for t in ts]
+        c_out = codec_cli(["C %d %d %d" % (seed, tick, t) for t in ts])
+        c = [int(line.split()[1]) for line in c_out]
+        assert c == py
+        deltas = {b - a for a, b in zip(py, py[1:])}
+        assert deltas <= allowed, (period, deltas)

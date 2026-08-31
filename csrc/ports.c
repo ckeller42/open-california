@@ -48,3 +48,18 @@ uint32_t anchors_check(const anchors_in_t *in)
         out |= ANCHOR_LEVEL_PITCH;
     return out;
 }
+
+/* Exact formula of device._roof_safety_counter (mask AFTER the add, in 64-bit,
+ * so a seed near 2^32 wraps identically to Python's & 0xFFFFFFFF). */
+uint32_t roof_safety_counter(uint32_t seed, uint64_t elapsed_ms, uint32_t tick_ms)
+{
+    return (uint32_t)(((uint64_t)seed + elapsed_ms / tick_ms) & 0xFFFFFFFFu);
+}
+
+void roof_beat_bytes(uint32_t ctr, uint8_t out[4])
+{
+    out[0] = (uint8_t)(ctr >> 24);
+    out[1] = (uint8_t)(ctr >> 16);
+    out[2] = (uint8_t)(ctr >> 8);
+    out[3] = (uint8_t)ctr;
+}

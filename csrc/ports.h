@@ -51,4 +51,14 @@ typedef struct {
 
 uint32_t anchors_check(const anchors_in_t *in);   /* violation bitmask; 0 = clean */
 
+/* Roof SafetyCounter — port of device._roof_safety_counter / _beat_bytes.
+ * The app-generated liveness proof for roof travel: counter = (seed +
+ * elapsed_ms / tick_ms) & 0xFFFFFFFF, streamed big-endian in the move frame at
+ * ~500 ms cadence (consecutive deltas 0 or +1, never +2). `elapsed_ms` is
+ * integer milliseconds (uint64_t — no float-floor parity trap; ~49-day rollover
+ * of a 32-bit ms clock is the caller's concern). The 500 ms pump ORCHESTRATION
+ * (timers, dead-man, STOP) is platform-native and NOT ported. */
+uint32_t roof_safety_counter(uint32_t seed, uint64_t elapsed_ms, uint32_t tick_ms);
+void     roof_beat_bytes(uint32_t ctr, uint8_t out[4]);   /* 4-byte big-endian */
+
 #endif /* PORTS_H */
