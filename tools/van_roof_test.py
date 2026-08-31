@@ -208,7 +208,9 @@ def preflight(dae: Daemon) -> dict:
     print("  probing write path (harmless STOP)…")
     probe = dae.roof_stop()
     if probe.get("error") == "read_only":
-        sys.exit("  daemon is READ-ONLY — restart it with --enable-writes for a roof test.")
+        sys.exit("  daemon is READ-ONLY. On buspi, run `bash tools/roof_test_session.sh` instead — it\n"
+                 "  enables writes for the test and reverts to read-only on exit. (Or restart serve\n"
+                 "  with --enable-writes / CALICTL_ENABLE_WRITES=1.)")
     print("  write path OK (%s)" % json.dumps(probe))
     print("  warming BLE session…", dae.post("/api/session", {"action": "connect"}))
     return {"online": meta.get("online"), "as_of": meta.get("as_of"),
