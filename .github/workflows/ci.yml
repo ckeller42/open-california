@@ -90,6 +90,25 @@ jobs:
           sh -n install.sh
           shellcheck install.sh
 
+  # Python <-> C codec parity (issue #156): the generated header must be fresh and
+  # every golden vector + the seeded fuzz pass must agree between calictl.protocol
+  # and the host-compiled csrc/ codec. gcc is preinstalled on ubuntu-latest.
+  codec-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install deps
+        run: pip install -r requirements-dev.txt
+      - name: Generated C header is fresh
+        run: python -m tools.gen_c_dict --check
+      - name: Vectors + differential parity (compiles csrc/)
+        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py -q
+
   gui-e2e:
     runs-on: ubuntu-latest
     steps:
