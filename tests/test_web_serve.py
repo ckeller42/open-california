@@ -415,6 +415,29 @@ def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
     assert calls["actuate_roof"] is None
 
 
+def test_on_command_refuses_precondition_without_actuating(monkeypatch):
+    """Characterization: on_command's OWN precondition gate (the MQTT/HA path — the web
+    backend gates earlier and separately). Roof-reading with the roof closed must return
+    None and never build/actuate."""
+    s = serve.Server(influx_enabled=False)
+    s._read_only = False
+    s._last = {"lighting": {"BrightnessLNine": 0}, "roof": {"Position": 0, "Installed": 1}}
+    called = {"actuate": False}
+
+    async def fake_actuate(*a, **k):
+        called["actuate"] = True
+        return None
+
+    monkeypatch.setattr(s.dev, "actuate", fake_actuate)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "roof-reading", 5)
+
+    assert asyncio.run(_run()) is None
+    assert called["actuate"] is False
+
+
 def test_reconnect_closes_the_old_session_no_leak(monkeypatch):
     """FIX (final review): _session_connect_once must aclose() the outgoing session before
     replacing it. Without this, every drop->reconnect cycle leaks the old session's heartbeat

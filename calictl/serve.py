@@ -531,29 +531,13 @@ class Server:
             path ignores this; `ServeBackend.command` surfaces it to the web UI.
         """
         from . import control  # lazy
-        from .postcheck import set_check  # lazy; shared post-write field check (no daemon->CLI import)
         if self._read_only:
             # SAFE DEFAULT: no vehicle writes unless writes were explicitly enabled. Central gate,
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
             print("read-only: refusing command %s/%s" % (function, what), flush=True)
             return None
-        # ROOF STOP short-circuits everything: a hold-to-move release must interrupt an in-flight
-        # open/close (which HOLDS the _ble lock) immediately, so it flips the move loop's event
-        # lock-free — never waiting on the session/lock. The in-flight loop then breaks + writes its
-        # own STOP. If no move is in flight, send a real STOP under the lock.
         if function == "roof" and what == "stop":
-            moving = self._roof_stop is not None and not self._roof_stop.is_set()
-            if self._roof_stop is not None:
-                self._roof_stop.set()
-            if moving:
-                return None
-            async with self._ble:
-                try:
-                    stop_frame = control.roof_frame(self.funcs, "stop")
-                except ValueError:
-                    return None
-                await self.dev.actuate(self.funcs["roof"], stop_frame, verify=True)
-            return None
+            return await self._roof_stop_command()
         # A command means intent to control: clear any manual Disconnect, mark active (hold the
         # session), and keep-warm nudge the supervisor up now if it isn't. set_mode("connect") does
         # exactly those three; its return dict is irrelevant here.
@@ -569,71 +553,111 @@ class Server:
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
             if function == "roof":
-                # SAFETY-SENSITIVE: a single roof frame won't complete travel and has
-                # no guaranteed STOP, so roof must stream the move frame with a live
-                # SafetyCounter, bounded then always STOP (device.actuate_roof), never the
-                # one-shot device.actuate. `what` = direction (open/close). Press-and-hold: the GUI
-                # streams the move while held and sends "stop" on release (interrupts via _roof_stop).
-                try:
-                    move_frame = control.roof_frame(self.funcs, what)
-                    stop_frame = control.roof_frame(self.funcs, "stop")
-                except ValueError:
-                    return None
-                if self._roof_stop is None:
-                    self._roof_stop = asyncio.Event()
-                self._roof_stop.clear()
-                await self.dev.actuate_roof(self.funcs["roof"], move_frame, stop_frame,
-                                            verify=True, stop_event=self._roof_stop,
-                                            limit_positions=control.roof_limit_positions(what))
-                # roof has no set_check row -- keep the honest "not applied" (unknown).
+                return await self._roof_move(what)
+            last = await self._ensure_last(function)
+            if last is None:
                 return None
-            last = self._last.get(function)
-            if not last:
-                # cold cache -> a full-packet frame built from field DEFAULTS would carry
-                # e.g. cooler State=1 (fridge ON) or lighting ProfileNumber=0 (silent no-op).
-                # Read the live state first so untargeted fields carry the real values.
-                try:
-                    sess = self._live_session()
-                    raw = await (sess.read_one(self.funcs[function]) if sess is not None
-                                 else self.dev.read(self.funcs[function]))
-                    last = protocol.decode(self.funcs[function], raw)
-                    self._last = {**self._last, function: last}   # atomic rebind (web thread reads unlocked)
-                except ConnectionUnavailable as e:
-                    print("command %s skipped (no state read): %s" % (function, e), flush=True)
-                    return None
             reason = control.command_precondition(function, what, value, self._last)
             if reason:
                 print("refusing %s/%s: %s" % (function, what, reason), flush=True)
                 return None
-            frame = control.build(self.funcs, function, what, value, last)
-            if frame is None:
+            return await self._actuate_checked(function, what, value, last)
+
+    async def _roof_stop_command(self):
+        """ROOF STOP short-circuits everything: a hold-to-move release must interrupt an in-flight
+        open/close (which HOLDS the _ble lock) immediately, so it flips the move loop's event
+        lock-free — never waiting on the session/lock. The in-flight loop then breaks + writes its
+        own STOP. If no move is in flight, send a real STOP under the lock."""
+        from . import control  # lazy
+        moving = self._roof_stop is not None and not self._roof_stop.is_set()
+        if self._roof_stop is not None:
+            self._roof_stop.set()
+        if moving:
+            return None
+        async with self._ble:
+            try:
+                stop_frame = control.roof_frame(self.funcs, "stop")
+            except ValueError:
                 return None
+            await self.dev.actuate(self.funcs["roof"], stop_frame, verify=True)
+        return None
+
+    async def _roof_move(self, what):
+        """SAFETY-SENSITIVE: a single roof frame won't complete travel and has no guaranteed STOP,
+        so roof must stream the move frame with a live SafetyCounter, bounded then always STOP
+        (device.actuate_roof), never the one-shot device.actuate. ``what`` = direction (open/close).
+        Press-and-hold: the GUI streams the move while held and sends "stop" on release (interrupts
+        via _roof_stop). Caller holds the _ble lock."""
+        from . import control  # lazy
+        try:
+            move_frame = control.roof_frame(self.funcs, what)
+            stop_frame = control.roof_frame(self.funcs, "stop")
+        except ValueError:
+            return None
+        if self._roof_stop is None:
+            self._roof_stop = asyncio.Event()
+        self._roof_stop.clear()
+        await self.dev.actuate_roof(self.funcs["roof"], move_frame, stop_frame,
+                                    verify=True, stop_event=self._roof_stop,
+                                    limit_positions=control.roof_limit_positions(what))
+        # roof has no set_check row -- keep the honest "not applied" (unknown).
+        return None
+
+    async def _ensure_last(self, function):
+        """The function's cached decoded state, live-read on a cold cache — a full-packet frame
+        built from field DEFAULTS would carry e.g. cooler State=1 (fridge ON) or lighting
+        ProfileNumber=0 (silent no-op), so untargeted fields must carry the real values. Returns
+        the decode, or None when the unit is unreachable (skip the command). Caller holds the
+        _ble lock."""
+        last = self._last.get(function)
+        if last:
+            return last
+        try:
             sess = self._live_session()
-            # Lighting actuates from a bare SET on an awake unit (photon-verified 2026-08-16), so
-            # its path skips the blocking echo-readback. The lamp reacts in ~0.3 s; confirmation comes from the real
-            # 1502 Mode-4 notification, not the write-through echo. cooler/roof keep the armed +
-            # verified path (their heartbeat gate, issue #2, is untouched).
-            is_light = function == "lighting"
-            target = sess if sess is not None else self.dev
-            # Snapshot the 1502 notification BEFORE the write: the unit's Mode-4 ramp push arrives
-            # within the ~0.3 s write window, so a snapshot taken afterwards would already contain it
-            # and look stale -> the confirm would miss it.
-            before = None
-            if is_light and getattr(sess, "_notif", None) is not None:
-                before = sess._notif.get(str(self.funcs[function].state_char).lower())
-            post = await target.actuate(self.funcs[function], frame,
-                                        verify=not is_light,
-                                        follow=control.commit_for(function))
-            if is_light:
-                return await self._confirm_lighting(sess, function, what, value, before)
-            if post is None:
-                return None
-            self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
-            interp = semantics.interpret(function, post)
-            _, got, want = set_check(function, what, value, interp, post)
-            if got is None and want is None:   # no table entry for this target
-                return None
-            return got == want
+            raw = await (sess.read_one(self.funcs[function]) if sess is not None
+                         else self.dev.read(self.funcs[function]))
+            last = protocol.decode(self.funcs[function], raw)
+            self._last = {**self._last, function: last}   # atomic rebind (web thread reads unlocked)
+            return last
+        except ConnectionUnavailable as e:
+            print("command %s skipped (no state read): %s" % (function, e), flush=True)
+            return None
+
+    async def _actuate_checked(self, function, what, value, last):
+        """Build the full-packet frame, write it (fast path for lighting), and report applied-ness
+        from the readback + postcheck table. Caller holds the _ble lock and has already passed the
+        precondition gate."""
+        from . import control  # lazy
+        from .postcheck import set_check  # lazy; shared post-write field check (no daemon->CLI import)
+        frame = control.build(self.funcs, function, what, value, last)
+        if frame is None:
+            return None
+        sess = self._live_session()
+        # Lighting actuates from a bare SET on an awake unit (photon-verified 2026-08-16), so
+        # its path skips the blocking echo-readback. The lamp reacts in ~0.3 s; confirmation comes from the real
+        # 1502 Mode-4 notification, not the write-through echo. cooler/roof keep the armed +
+        # verified path (their heartbeat gate, issue #2, is untouched).
+        is_light = function == "lighting"
+        target = sess if sess is not None else self.dev
+        # Snapshot the 1502 notification BEFORE the write: the unit's Mode-4 ramp push arrives
+        # within the ~0.3 s write window, so a snapshot taken afterwards would already contain it
+        # and look stale -> the confirm would miss it.
+        before = None
+        if is_light and getattr(sess, "_notif", None) is not None:
+            before = sess._notif.get(str(self.funcs[function].state_char).lower())
+        post = await target.actuate(self.funcs[function], frame,
+                                    verify=not is_light,
+                                    follow=control.commit_for(function))
+        if is_light:
+            return await self._confirm_lighting(sess, function, what, value, before)
+        if post is None:
+            return None
+        self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
+        interp = semantics.interpret(function, post)
+        _, got, want = set_check(function, what, value, interp, post)
+        if got is None and want is None:   # no table entry for this target
+            return None
+        return got == want
 
     async def _confirm_lighting(self, sess, function, what, value, before):
         """Confirm a fast lighting write from the unit's real 1502 Mode-4 notification.
