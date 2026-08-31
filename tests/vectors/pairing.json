@@ -61,6 +61,20 @@
       "steps": [
         {"ev": 0, "state": [1, 0, 0], "actions": [[0, 0]]}
       ]
+    },
+    {
+      "id": "timeout-in-resetting",
+      "start": [8, 0, 0],
+      "steps": [
+        {"ev": 9, "state": [7, 0, 1], "actions": []}
+      ]
+    },
+    {
+      "id": "cancel-from-bonded",
+      "start": [6, 0, 0],
+      "steps": [
+        {"ev": 10, "state": [0, 0, 0], "actions": []}
+      ]
     }
   ]
 }
