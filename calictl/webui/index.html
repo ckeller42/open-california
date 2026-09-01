@@ -21,12 +21,12 @@
 <body>
 <header id="topbar">
   <button id="back" hidden aria-label="Back">‹</button>
-  <h1 id="title">Vehicle</h1>
-  <span id="status" class="pill">…</span>
-  <button id="menu" aria-label="Menu">⋮</button>
+  <h1 id="title" tabindex="-1">Vehicle</h1>
+  <span id="status" class="pill" aria-live="polite">…</span>
+  <button id="menu" aria-label="Menu" aria-haspopup="menu" aria-expanded="false">⋮</button>
 </header>
 <div id="app"></div>
-<div id="toasts"></div>
+<div id="toasts" aria-live="polite" role="status"></div>
 <script src="/strings.de.js"></script>
 <script src="/app.js"></script>
 </body>

@@ -371,6 +371,23 @@ def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
     expect(page.get_by_role("button", name="Unpair…")).to_have_count(0)
 
 
+def test_menu_a11y_escape_closes_and_lang_syncs(page):
+    """a11y: the ⋮ menu tracks aria-expanded and closes on Escape; switching language keeps
+    <html lang> in sync for screen readers."""
+    menu = page.get_by_role("button", name="Menu")
+    expect(menu).to_have_attribute("aria-expanded", "false")
+    menu.click()
+    expect(menu).to_have_attribute("aria-expanded", "true")
+    page.keyboard.press("Escape")
+    expect(page.locator(".menupop")).to_have_count(0)
+    expect(menu).to_have_attribute("aria-expanded", "false")
+    # language toggle keeps <html lang> honest
+    assert page.evaluate("document.documentElement.lang") == "en"
+    menu.click()
+    page.get_by_role("button", name="Deutsch").click()
+    assert page.evaluate("document.documentElement.lang") == "de"
+
+
 def test_menu_unpair_workflow_after_bonding(pairing_page):
     """The explicit unpair workflow: after bonding, the context menu gains 'Unpair…' which
     confirm()s, removes the bond (reset), and leaves the wizard open guiding a re-pair."""
