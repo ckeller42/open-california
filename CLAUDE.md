@@ -107,7 +107,9 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   static-verified against the app's getters — no live check possible here). The pop-top **roof IS
   installed** (`roof.Installed=1`, #106) but its motor has never been driven by calictl.
 - **buspi:** `sudo` needs the Pi password; `serve` runs under `~/solix-env`; secrets in
-  `/etc/buspi/*.env` (root 0600). A parked unit is unreachable (deep-sleep, above).
+  `/etc/buspi/*.env` (root 0600). A parked unit is unreachable (deep-sleep, above). The web UI is
+  also fronted by HTTPS on the tailnet via `tailscale serve` (tailnet-only, never `funnel`) — see
+  the `buspi-deploy` skill + `docs/raspberry-pi-setup.md` "Remote access over Tailscale".
 
 ## Documentation (sphinx + sphinx-needs)
 
