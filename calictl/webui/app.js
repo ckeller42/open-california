@@ -183,6 +183,7 @@ try {
   const stored = localStorage.getItem("calictl.lang");
   LANG = stored || (navigator.language && navigator.language.toLowerCase().startsWith("de") ? "de" : "en");
 } catch (e) { /* private mode / blocked storage -> English default */ }
+document.documentElement.lang = LANG;   // keep <html lang> in sync for screen readers / hyphenation
 
 /** Translate an English source string. @param {string|null|undefined} s @returns {string|null|undefined} */
 function t(s) {
@@ -199,6 +200,7 @@ function tf(s, subs) {
 /** @param {string} l */
 function setLang(l) {
   LANG = l;
+  document.documentElement.lang = l;
   try { localStorage.setItem("calictl.lang", l); } catch (e) { /* storage blocked */ }
   closeMenu();
   render();
@@ -207,8 +209,15 @@ function setLang(l) {
 // --- topbar context menu (UX: pairing chrome lives here, not in the main flow) ---------------
 let menuPop = /** @type {?HTMLElement} */ (null);
 
+/** @param {KeyboardEvent} ev */
+function onMenuKey(ev) {
+  if (ev.key === "Escape") { closeMenu(); menuEl.focus(); }
+}
+
 function closeMenu() {
   if (menuPop) { menuPop.remove(); menuPop = null; }
+  menuEl.setAttribute("aria-expanded", "false");
+  document.removeEventListener("keydown", onMenuKey);
 }
 
 menuEl.onclick = (ev) => {
@@ -241,6 +250,9 @@ menuEl.onclick = (ev) => {
   lang.onclick = () => { setLang(LANG === "de" ? "en" : "de"); };
   menuPop.appendChild(lang);
   document.body.appendChild(menuPop);
+  menuEl.setAttribute("aria-expanded", "true");
+  /** @type {HTMLButtonElement} */ (menuPop.firstElementChild).focus();   // keyboard lands in the menu
+  document.addEventListener("keydown", onMenuKey);                        // Escape closes it
   // close on any outside click/tap (registered after this event finishes bubbling)
   setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
 };
@@ -639,6 +651,7 @@ function goto(v) {
   view = v;
   lastRender = "";
   render();
+  titleEl.focus();   // move focus to the new screen's heading so keyboard/SR users follow the nav
 }
 
 /**

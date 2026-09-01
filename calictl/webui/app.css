@@ -24,6 +24,9 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
   padding-left: calc(1rem + env(safe-area-inset-left));
   padding-right: calc(1rem + env(safe-area-inset-right)); }
 #topbar h1 { font-size: 1.15rem; font-weight: 650; margin: 0; }
+/* the heading is focused programmatically on navigation (a11y); don't flash a ring for that,
+   but keep it for genuine keyboard focus. */
+#title:focus:not(:focus-visible) { outline: none; }
 #back { font-size: 1.6rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 .2rem; }
 .pill { margin-left: auto; font-size: .72rem; color: var(--muted); border: 1px solid var(--border);
   border-radius: 999px; padding: .15rem .55rem; white-space: nowrap; }
