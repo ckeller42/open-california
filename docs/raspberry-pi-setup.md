@@ -112,7 +112,8 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
 - The daemon is **read-only by default** (controls disabled) — pass `--enable-writes` (or
   `CALICTL_ENABLE_WRITES=1`) to allow control writes.
 - The UI is **unauthenticated** — expose it only on a trusted LAN (same posture as the
-  Home Assistant / Grafana stack), never on the open internet.
+  Home Assistant / Grafana stack), never on the open internet. To reach it **remotely**, use
+  Tailscale (see below) — a private, encrypted overlay — rather than port-forwarding.
 - Uninstalled features are hidden; roof control asks for confirmation. Lighting writes DO
   actuate the lamps, but the state-char readback is a write-through echo, so the UI says
   "Sent — check the lamp" rather than confirming from the readback.
@@ -122,6 +123,49 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
 
 To enable it under systemd, append `--web 8080` to the unit's `ExecStart` and restart
 (`sudo systemctl daemon-reload && sudo systemctl restart calictl`).
+
+### Remote access over Tailscale (HTTPS)
+
+The web UI is plain HTTP and unauthenticated, so it must stay on a trusted network. To reach it
+from **outside that network** — your phone on cellular, say — put it on a
+[Tailscale](https://tailscale.com) tailnet instead of forwarding a port. Tailscale is a private,
+encrypted (WireGuard) overlay network between your own devices; `tailscale serve` then fronts the
+daemon with a **valid HTTPS certificate** and exposes it **only to devices on your tailnet**.
+
+This is optional and changes no code — it's Pi-side configuration.
+
+**One-time setup:**
+
+1. **Install Tailscale on the Pi and log in** — `curl -fsSL https://tailscale.com/install.sh | sh`
+   then `sudo tailscale up`. Install it on the phone/laptop you'll browse from too, on the same
+   tailnet. (In the admin console, keep **MagicDNS** enabled — on by default.)
+2. **Enable Serve + HTTPS for the tailnet** (once per tailnet, as an admin): in the
+   [admin console](https://login.tailscale.com/admin) enable **HTTPS Certificates** (DNS page) and
+   **Serve** (the first `tailscale serve` prints a one-click enable link if it isn't on yet).
+3. **Front the daemon** — with the port you gave `--web` (e.g. `8080`):
+
+   ```sh
+   sudo tailscale serve --bg 8080
+   ```
+
+   First run provisions a Let's Encrypt cert (~30–60 s). It prints your URL:
+
+   ```
+   https://<pi-name>.<your-tailnet>.ts.net/   →  proxy http://127.0.0.1:8080
+   ```
+
+Open that `https://…` URL from any device on your tailnet — clean padlock, encrypted, no browser
+warning. The config **persists across reboots**; the plain `http://<pi>:<port>` LAN path keeps
+working alongside it. Check it with `tailscale serve status`; remove it with
+`sudo tailscale serve --https=443 off`.
+
+- **Use `serve`, never `funnel`.** `tailscale funnel` would publish the same unauthenticated,
+  write-capable UI to the **entire public internet** — anyone could actuate the heater/roof. Serve
+  keeps it tailnet-only.
+- **Access is device-based, not a password.** Anyone whose device is on your tailnet can reach it;
+  share access by adding their device (or sharing the node) — there's no in-app login.
+- `tailscale serve`/`cert` need root; if you don't want `sudo` each time, run
+  `sudo tailscale set --operator=$USER` once.
 
 ## Troubleshooting
 

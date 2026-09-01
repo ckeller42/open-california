@@ -77,3 +77,11 @@ ssh -t buspi 'sudo sed -i "/^CALICTL_ADDR=/d" /etc/buspi/calictl.env && sudo -n 
 - The APK lives at `buspi:~/apks/de.volkswagen.CaliforniaOnTour.apk` (gitignored source).
 - `sudo` on buspi needs the box password EXCEPT restart/stop/start of `calictl.service` (passwordless, scoped `deploy/calictl-restart.sudoers`); secrets in `/etc/buspi/*.env` (root, 0600).
 - Grafana dashboards don't auto-update; push from buspi with `deploy/push_dashboard.py`.
+- The web UI **can** be served over **HTTPS on the tailnet** via `tailscale serve` (proxying
+  `127.0.0.1:8088`) at `https://<pi-name>.<tailnet>.ts.net/` — tailnet-only, valid LE cert,
+  persistent across reboots (survives a `tailscaled` restart, verified). It's a toggle the owner
+  flips; **check current state with `sudo tailscale serve status`** rather than assuming. Enable:
+  `sudo tailscale serve --bg 8088`; disable: `sudo tailscale serve --https=443 off` (all need
+  sudo/the box password). **Never `tailscale funnel`** it (that publishes the unauthenticated,
+  write-capable UI to the public internet; confirm `AllowFunnel` is None). User-facing setup
+  guide: `docs/raspberry-pi-setup.md` → "Remote access over Tailscale".
