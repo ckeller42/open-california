@@ -176,6 +176,34 @@ const backEl = /** @type {HTMLElement} */ (document.getElementById("back"));
 const statusEl = /** @type {HTMLElement} */ (document.getElementById("status"));
 const menuEl = /** @type {HTMLElement} */ (document.getElementById("menu"));
 
+// --- i18n: EN (source strings are the keys) + a DE override map (webui/strings.de.js) --------
+// A missing DE key falls back to its English source, so partial coverage never breaks the UI.
+let LANG = "en";
+try {
+  const stored = localStorage.getItem("calictl.lang");
+  LANG = stored || (navigator.language && navigator.language.toLowerCase().startsWith("de") ? "de" : "en");
+} catch (e) { /* private mode / blocked storage -> English default */ }
+
+/** Translate an English source string. @param {string|null|undefined} s @returns {string|null|undefined} */
+function t(s) {
+  if (LANG !== "de" || !s) return s;
+  const m = /** @type {Record<string,string>|undefined} */ (/** @type {any} */ (window).STRINGS_DE);
+  return (m && m[s]) || s;
+}
+/** Translate a template with {name} placeholders. @param {string} s @param {Record<string,any>} subs */
+function tf(s, subs) {
+  let r = /** @type {string} */ (t(s));
+  for (const k in subs) r = r.split("{" + k + "}").join(String(subs[k]));
+  return r;
+}
+/** @param {string} l */
+function setLang(l) {
+  LANG = l;
+  try { localStorage.setItem("calictl.lang", l); } catch (e) { /* storage blocked */ }
+  closeMenu();
+  render();
+}
+
 // --- topbar context menu (UX: pairing chrome lives here, not in the main flow) ---------------
 let menuPop = /** @type {?HTMLElement} */ (null);
 
@@ -190,22 +218,28 @@ menuEl.onclick = (ev) => {
   menuPop.className = "menupop";
   const pair = document.createElement("button");
   pair.type = "button";
-  pair.textContent = "Bluetooth pairing…";
+  pair.textContent = /** @type {string} */ (t("Bluetooth pairing…"));
   pair.onclick = () => { closeMenu(); openPairingWizard(); };
   menuPop.appendChild(pair);
   // Unpair only makes sense once a bond exists (PAIRING is fetched at load + while the wizard polls).
   if (PAIRING && PAIRING.address) {
     const unpair = document.createElement("button");
     unpair.type = "button";
-    unpair.textContent = "Unpair…";
+    unpair.textContent = /** @type {string} */ (t("Unpair…"));
     unpair.onclick = async () => {
       closeMenu();
-      if (!confirm("Unpair removes the working bond; telemetry stops until re-paired. Continue?")) return;
+      if (!confirm(/** @type {string} */ (t("Unpair removes the working bond; telemetry stops until re-paired. Continue?")))) return;
       await openPairingWizard();               // show the flow while the reset runs
       pairingAction("reset", undefined, true); // then guides straight into re-pairing (idle step)
     };
     menuPop.appendChild(unpair);
   }
+  // Language toggle: label names the language you'd switch TO.
+  const lang = document.createElement("button");
+  lang.type = "button";
+  lang.textContent = LANG === "de" ? "English" : "Deutsch";
+  lang.onclick = () => { setLang(LANG === "de" ? "en" : "de"); };
+  menuPop.appendChild(lang);
   document.body.appendChild(menuPop);
   // close on any outside click/tap (registered after this event finishes bubbling)
   setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
@@ -259,9 +293,9 @@ const optSel = (fn, what, realVal) => {   // optimistic string/enum value (segme
 const truthy = (v) => v === true || v === 1 || v === "on" || v === "1";
 
 /** @type {(b: unknown) => string} */
-const yn = (b) => (b ? "yes" : "no");
+const yn = (b) => /** @type {string} */ (t(b ? "yes" : "no"));
 /** @type {(b: unknown) => string} */
-const onoff = (b) => (b ? "On" : "Off");
+const onoff = (b) => /** @type {string} */ (t(b ? "On" : "Off"));
 // Format a numeric value with a unit, but never print "null V"/"undefined %": a null/undefined
 // reading (e.g. starter battery when engine-off) renders as an em-dash instead.
 /** @type {(v: number|null|undefined, u: string) => string} */
@@ -309,18 +343,18 @@ const FEATURES = {
       { what: "mode", kind: "select", label: "Quiet mode",
         options: [{ value: "normal", label: "Normal" }, { value: "quiet", label: "Quiet" }, { value: "timer_quiet", label: "Timer quiet" }],
         current: (s) => (s.mode === 2 ? "quiet" : s.mode === 4 ? "timer_quiet" : "normal"),
-        confirm: () => "Set the cooler's quiet mode? Not yet verified on the van. Continue?" },
+        confirm: () => t("Set the cooler's quiet mode? Not yet verified on the van. Continue?") },
       { what: "night_on", kind: "hour", label: "Quiet from", current: (s) => s.quiet_from ?? 0,
-        confirm: (h) => `Set quiet-schedule start to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
+        confirm: (h) => tf("Set quiet-schedule start to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
       { what: "night_off", kind: "hour", label: "Quiet until", current: (s) => s.quiet_to ?? 0,
-        confirm: (h) => `Set quiet-schedule end to ${String(h).padStart(2, "0")}:00? Not verified on the van. Continue?` },
+        confirm: (h) => tf("Set quiet-schedule end to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
       { what: "timer_set", kind: "time", label: "Timer start at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
           ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null,
-        confirm: (t) => `Set the cooling-timer start to ${t}? Not yet verified on the van. Continue?` },
+        confirm: (v) => tf("Set the cooling-timer start to {t}? Not yet verified on the van. Continue?", { t: v }) },
       { what: "__cooltimer", kind: "buttons", label: "Cooling timer",
         actions: [{ what: "timer_start", label: "Arm" }, { what: "timer_cancel", label: "Cancel" }],
-        confirm: (b) => `${b.label} the cooling timer? Not yet verified on the van. Continue?` },
+        confirm: (b) => tf("{b} the cooling timer? Not yet verified on the van. Continue?", { b: t(b.label) }) },
     ],
     readouts: [
       { label: "Fridge door", get: (s) => (s.door_open ? "⚠ Open" : "Closed") },
@@ -332,7 +366,7 @@ const FEATURES = {
     // `fault` is the cooler's 2-bit Error enum, only meaningful while powered on (vf/c.java):
     // door_open | emergency | error. Surface it as a banner so a fault is obvious at a glance.
     warn: (s) => (COOLER_FAULT_MSG[/** @type {string} */ (s.fault)] || null),
-    summary: (s) => (COOLER_FAULT_MSG[/** @type {string} */ (s.fault)] || (s.on ? `On · level ${s.level}` : "Off")),
+    summary: (s) => (t(COOLER_FAULT_MSG[/** @type {string} */ (s.fault)]) || (s.on ? `${t("On")} · ${t("level")} ${s.level}` : t("Off"))),
   },
   campingmode: {
     title: "Camping mode", icon: "🏕️",
@@ -349,7 +383,7 @@ const FEATURES = {
     summary: (s) => onoff(s.any_on),
   },
   airheater: {
-    title: "Air heater", icon: "🔥", confirm: (w) => `Start the fuel-burning parking heater (${w})? It is not live-verified. Continue?`,
+    title: "Air heater", icon: "🔥", confirm: (w) => tf("Start the fuel-burning parking heater ({w})? It is not live-verified. Continue?", { w: w }),
     controls: [
       { what: "power", kind: "toggle", label: "Parking heater", state: "running" },
       { what: "level", kind: "slider", label: "Heating level (10 = HI)", state: "level", min: 1, max: 10 },
@@ -365,7 +399,7 @@ const FEATURES = {
         ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : "off" },
       { label: "Error code", get: (s) => s.error_code ?? "—" },
     ],
-    summary: (s) => (s.running ? `Running${s.level != null ? " · " + (s.level >= 10 ? "HI" : s.level) : ""}` : "Off"),
+    summary: (s) => (s.running ? `${t("Running")}${s.level != null ? " · " + (s.level >= 10 ? "HI" : s.level) : ""}` : t("Off")),
   },
   water: {
     title: "Water", icon: "💧",
@@ -380,13 +414,15 @@ const FEATURES = {
     // refresh, so the char just holds the LAST MEASURED level until the pump/system next runs. This
     // is a soft `note` (informational, expected while parked) — NOT a `warn`/fault. See
     // docs/business-logic/value-freshness.md.
-    note: (s) => ((s.fresh && s.fresh.stale) || (s.waste && s.waste.stale)
-      ? "🕒 Showing the LAST MEASURED water level"
-        + (s.stale_since ? " (" + agoText(Math.round(Date.now() / 1000 - s.stale_since)) + " ago)" : "")
-        + " — the BLE level only refreshes while the van's water system is running, so it lags until "
-        + "the pump next runs. It's read correctly, just not live."
-      : null),
-    summary: (s) => (s.fresh ? `Fresh ${s.fresh.percent}%${s.fresh.stale ? " (last meas.)" : ""}` : ""),
+    note: (s) => {
+      if (!((s.fresh && s.fresh.stale) || (s.waste && s.waste.stale))) return null;
+      // agoText already ends in "ago" — just wrap it in parens (no extra " ago").
+      const ago = s.stale_since ? " (" + agoText(Math.round(Date.now() / 1000 - s.stale_since)) + ")" : "";
+      return tf("🕒 Showing the LAST MEASURED water level{ago} — the BLE level only refreshes while "
+        + "the van's water system is running, so it lags until the pump next runs. It's read correctly, "
+        + "just not live.", { ago: ago });
+    },
+    summary: (s) => (s.fresh ? `${t("Fresh")} ${s.fresh.percent}%${s.fresh.stale ? " " + t("(last meas.)") : ""}` : ""),
   },
   energy: {
     title: "Energy", icon: "🔋", chart: true,
@@ -395,7 +431,7 @@ const FEATURES = {
         options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max charge" }, { value: "eco", label: "Eco" }],
         current: (s) => (/** @type {Record<number, string>} */ ({ 0: "normal", 1: "max_charge", 2: "eco" }))[/** @type {number} */ (s.energy_mode)],
         disabled: (s) => !!s.energy_mode_locked,
-        confirm: () => "Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?" },
+        confirm: () => t("Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?") },
     ],
     readouts: [
       { label: "Living battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
@@ -405,9 +441,9 @@ const FEATURES = {
       { label: "Starter battery", get: (s) => (s.soc1_pct != null ? `${s.soc1_pct}%` : "—"), bar: (s) => s.soc1_pct },
       { label: "Starter voltage", get: (s) => withUnit(s.batt1_v, "V") },
       { label: "Starter current", get: (s) => withUnit(s.batt1_current, "A") },
-      { label: "DC-DC charger", get: (s) => (s.dcdc_installed ? `${s.dcdc_state} (${s.dcdc_power} W · ${s.dcdc_current} A)` : "—") },
-      { label: "Shore power", get: (s) => (s.shore_installed ? `${s.shore_state} (${s.shore_power} W · ${s.shore_current} A)` : "—") },
-      { label: "Solar", get: (s) => (s.solar_installed ? `${s.solar_state} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
+      { label: "DC-DC charger", get: (s) => (s.dcdc_installed ? `${t(s.dcdc_state)} (${s.dcdc_power} W · ${s.dcdc_current} A)` : "—") },
+      { label: "Shore power", get: (s) => (s.shore_installed ? `${t(s.shore_state)} (${s.shore_power} W · ${s.shore_current} A)` : "—") },
+      { label: "Solar", get: (s) => (s.solar_installed ? `${t(s.solar_state)} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
       { label: "Warnings", get: (s) => (s.faults && s.faults.length ? s.faults.join(", ") : "none") },
       // The unit reports an age ONLY for the STARTER battery (AgeOneBattValuesMinutes); 255 = the
       // stale sentinel (starter subsystem asleep). The leisure battery has no such field — it is
@@ -421,7 +457,7 @@ const FEATURES = {
     note: (s) => (s.stale ? "🕒 Starter-battery values are stale — that subsystem only measures "
       + "with the engine on, so it holds the last reading while parked. The leisure battery stays live."
       : null),
-    summary: (s) => (s.soc2_pct != null ? `Battery ${s.soc2_pct}%` : ""),
+    summary: (s) => (s.soc2_pct != null ? `${t("Battery")} ${s.soc2_pct}%` : ""),
   },
   roof: {
     title: "Roof", icon: "🚐", roof: true,
@@ -433,7 +469,7 @@ const FEATURES = {
     // InfoPopUp alert -> a banner (ig/c.java): child lock, sensor error, low battery, etc.
     warn: (s) => (s.alert ? ROOF_ALERT_MSG[s.alert] || `⚠ Roof: ${s.alert}` : null),
     summary: (s) => (s.alert ? `⚠ ${s.alert.replace(/_/g, " ")}`
-                     : (s && s.position_name ? cap(s.position_name) : "")),
+                     : (s && s.position_name ? /** @type {string} */ (t(cap(s.position_name))) : "")),
   },
   vehicle: {
     title: "Vehicle", icon: "🚗",
@@ -449,10 +485,10 @@ const FEATURES = {
           const fw = (STATE._meta && STATE._meta.firmware) || {};
           if (fw.amb_sw_version == null && fw.comm_version == null) return "—";
           return `${fw.amb_sw_version ?? "?"} · ${fw.cm_sw_version ?? "?"} · ${fw.comm_version ?? "?"}`
-            + (fw.untested ? "  ⚠ untested" : "  ✓ tested");
+            + (fw.untested ? t("  ⚠ untested") : t("  ✓ tested"));
         } },
     ],
-    summary: (s) => (s.ignition_on ? "Ignition on" : "Parked"),
+    summary: (s) => /** @type {string} */ (t(s.ignition_on ? "Ignition on" : "Parked")),
   },
 };
 
@@ -471,7 +507,7 @@ async function api(path, opts) {
  * @param {string} [kind]
  */
 function setStatus(text, kind) {
-  statusEl.textContent = text;
+  statusEl.textContent = /** @type {string} */ (t(text));
   statusEl.className = "pill" + (kind ? " " + kind : "");
 }
 
@@ -495,7 +531,7 @@ const readOnly = () => !!(STATE._meta && STATE._meta.read_only);
 function toast(msg, kind) {
   const d = document.createElement("div");
   d.className = "toast" + (kind ? " " + kind : "");
-  d.textContent = msg;
+  d.textContent = /** @type {string} */ (t(msg));
   (/** @type {HTMLElement} */ (document.getElementById("toasts"))).appendChild(d);
   setTimeout(() => d.remove(), 4000);
 }
@@ -610,12 +646,12 @@ function goto(v) {
  * @returns {string}
  */
 function agoText(sec) {
-  if (sec == null) return "unknown";
-  if (sec < 90) return "just now";
+  if (sec == null) return /** @type {string} */ (t("unknown"));
+  if (sec < 90) return /** @type {string} */ (t("just now"));
   const m = Math.round(sec / 60);
-  if (m < 90) return m + " min ago";
+  if (m < 90) return tf("{m} min ago", { m: m });
   const h = Math.round(m / 60);
-  return h < 48 ? h + " h ago" : Math.round(h / 24) + " d ago";
+  return h < 48 ? tf("{h} h ago", { h: h }) : tf("{d} d ago", { d: Math.round(h / 24) });
 }
 
 // Absolute wall-clock label from epoch seconds (undefined -> null). Shows a date too when the
@@ -627,9 +663,10 @@ function agoText(sec) {
 function clockText(epochSec) {
   if (epochSec == null) return null;
   const d = new Date(epochSec * 1000);
-  const t = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const loc = LANG === "de" ? "de-DE" : [];   // 24-hour clock + localized date in German
+  const t = d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" });
   const sameDay = d.toDateString() === new Date().toDateString();
-  return sameDay ? t : `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${t}`;
+  return sameDay ? t : `${d.toLocaleDateString(loc, { month: "short", day: "numeric" })} ${t}`;
 }
 
 // The camper unit deep-sleeps when the van is parked and becomes unreachable — so when the daemon
@@ -641,8 +678,8 @@ function offlineBanner() {
   const b = document.createElement("div");
   b.className = "offline";
   b.textContent = m.last_seen
-    ? `Offline — van asleep. Last data ${clockText(m.last_seen)} (${agoText(m.age_s)}).`
-    : `Offline — no data yet (van asleep since the monitor started). Checked ${clockText(Date.now() / 1000)}.`;
+    ? tf("Offline — van asleep. Last data {clock} ({ago}).", { clock: clockText(m.last_seen), ago: agoText(m.age_s) })
+    : tf("Offline — no data yet (van asleep since the monitor started). Checked {clock}.", { clock: clockText(Date.now() / 1000) });
   return b;
 }
 
@@ -666,10 +703,10 @@ function sessionToggle() {
   const el = document.createElement("button");
   el.type = "button";
   el.className = "session-pill" + (spec.cls ? " " + spec.cls : "");
-  el.textContent = spec.text;
-  el.title = action === "connect"
+  el.textContent = /** @type {string} */ (t(spec.text));
+  el.title = /** @type {string} */ (t(action === "connect"
     ? "Connect the fast BLE session (warm it before controlling)"
-    : "Disconnect — free the BLE slot for the phone app";
+    : "Disconnect — free the BLE slot for the phone app"));
   el.setAttribute("aria-label", el.title);
   el.onclick = async () => {
     el.disabled = true;
@@ -710,7 +747,7 @@ function bubbleLevel(roll, pitch) {
     `<line x1="${R}" y1="6" x2="${R}" y2="${2 * R - 6}" class="bl-cross"/>` +
     `<line x1="6" y1="${R}" x2="${2 * R - 6}" y2="${R}" class="bl-cross"/>` +
     `<circle cx="${bx}" cy="${by}" r="${br}" class="bl-bubble"/></svg>` +
-    `<div class="bl-nums">roll ${fmtDeg(roll)} · pitch ${fmtDeg(pitch)}${level ? " · level ✓" : ""}</div>`;
+    `<div class="bl-nums">${t("roll")} ${fmtDeg(roll)} · ${t("pitch")} ${fmtDeg(pitch)}${level ? " · " + t("level ✓") : ""}</div>`;
   return wrap;
 }
 
@@ -807,7 +844,7 @@ function seriesSvg(h, cfg) {
     `<text class="ec-lbl ${cfg.lblCls}" x="${C.l - 4}" y="${C.t + 4}" text-anchor="end">${e[1].toFixed(1)}</text>` +
     `<text class="ec-lbl ${cfg.lblCls}" x="${C.l - 4}" y="${C.t + plotH}" text-anchor="end">${e[0].toFixed(1)}</text>` +
     `<text class="ec-lbl" x="${C.l}" y="${C.h - 4}">−${hours} h</text>` +
-    `<text class="ec-lbl" x="${C.l + plotW}" y="${C.h - 4}" text-anchor="end">now</text>`;
+    `<text class="ec-lbl" x="${C.l + plotW}" y="${C.h - 4}" text-anchor="end">${t("now")}</text>`;
   return svg;
 }
 
@@ -817,7 +854,7 @@ function energyChart() {
   card.className = "card echart-card";
   const head = document.createElement("div");
   head.className = "echart-head";
-  head.innerHTML = `<span class="echart-title">Leisure battery — last 24 h</span>`;
+  head.innerHTML = `<span class="echart-title">${t("Leisure battery — last 24 h")}</span>`;
   const body = document.createElement("div");
   body.className = "echart-body";
   card.append(head, body);
@@ -830,7 +867,7 @@ function energyChart() {
     // window -- otherwise a broken endpoint reports itself as "van asleep", blaming the van
     // for a bug on our side.
     if (!h || h.error) {
-      empty.textContent = "History unavailable.";
+      empty.textContent = /** @type {string} */ (t("History unavailable."));
       return body.appendChild(empty);
     }
     // two separate diagrams: voltage and current live on very different scales
@@ -844,19 +881,19 @@ function energyChart() {
         w.append(t); if (svg) w.append(svg);
         return w;
       };
-      body.append(sub("Voltage (V)", vSvg), sub("Current (A)", aSvg));
+      body.append(sub(/** @type {string} */ (t("Voltage (V)")), vSvg), sub(/** @type {string} */ (t("Current (A)")), aSvg));
       return;
     }
     const seen = STATE._meta && STATE._meta.last_seen;
     empty.textContent = seen
-      ? `No data in the last 24 h — van asleep since ${clockText(seen)}.`
-      : "No data yet — history builds while the van is awake.";
+      ? tf("No data in the last 24 h — van asleep since {clock}.", { clock: clockText(seen) })
+      : /** @type {string} */ (t("No data yet — history builds while the van is awake."));
     body.appendChild(empty);
   };
   if (HISTORY && Date.now() - HISTORY_TS < HISTORY_TTL_MS) paint(HISTORY);
   else {
-    body.textContent = "Loading…";
-    loadHistory().then(paint).catch(() => { body.textContent = "History unavailable."; });
+    body.textContent = /** @type {string} */ (t("Loading…"));
+    loadHistory().then(paint).catch(() => { body.textContent = /** @type {string} */ (t("History unavailable.")); });
   }
   return card;
 }
@@ -942,10 +979,10 @@ function pairingCard() {
   const card = document.createElement("div");
   card.className = "card";
   const head = document.createElement("div"); head.className = "row";
-  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = "Bluetooth setup";
+  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = /** @type {string} */ (t("Bluetooth setup"));
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
-  closeBtn.textContent = "Close";
+  closeBtn.textContent = /** @type {string} */ (t("Close"));
   closeBtn.onclick = () => { pairingOpen = false; stopPairingPoll(); render(); };
   head.appendChild(closeBtn);
   card.appendChild(head);
@@ -953,18 +990,18 @@ function pairingCard() {
   const p = PAIRING || { state: "idle", attempts: 0, error: null, address: null };
   if (p.state === "idle") {
     const instr = document.createElement("div"); instr.className = "note";
-    instr.textContent = "On the camper panel open Bluetooth → ‘Gerät verbinden’.";
+    instr.textContent = /** @type {string} */ (t("On the camper panel open Bluetooth → ‘Gerät verbinden’."));
     card.appendChild(instr);
     const crow = document.createElement("label"); crow.className = "row";
     const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "pairing-ready";
     cb.checked = pairingReady;
     cb.onchange = () => { pairingReady = cb.checked; render(); };
-    const clbl = document.createElement("span"); clbl.textContent = "I'm on that screen";
+    const clbl = document.createElement("span"); clbl.textContent = /** @type {string} */ (t("I'm on that screen"));
     crow.append(cb, clbl);
     card.appendChild(crow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const startBtn = document.createElement("button"); startBtn.type = "button"; startBtn.className = "btn";
-    startBtn.textContent = "Start"; startBtn.disabled = !pairingReady;
+    startBtn.textContent = /** @type {string} */ (t("Start")); startBtn.disabled = !pairingReady;
     startBtn.onclick = () => pairingAction("start");
     btns.appendChild(startBtn);
     card.appendChild(btns);
@@ -972,18 +1009,18 @@ function pairingCard() {
     const row = document.createElement("div"); row.className = "row";
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
-    lbl.textContent = p.state === "scanning" ? "Searching for the camper unit…" : "Connecting…";
+    lbl.textContent = /** @type {string} */ (t(p.state === "scanning" ? "Searching for the camper unit…" : "Connecting…"));
     row.appendChild(lbl);
     card.appendChild(row);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const cancelBtn = document.createElement("button"); cancelBtn.type = "button"; cancelBtn.className = "btn";
-    cancelBtn.textContent = "Cancel";
+    cancelBtn.textContent = /** @type {string} */ (t("Cancel"));
     cancelBtn.onclick = () => pairingAction("cancel");
     btns.appendChild(cancelBtn);
     card.appendChild(btns);
   } else if (p.state === "waiting_passkey") {
     const instr = document.createElement("div"); instr.className = "note";
-    instr.textContent = "Read it from the camper's screen — a fresh code each attempt.";
+    instr.textContent = /** @type {string} */ (t("Read it from the camper's screen — a fresh code each attempt."));
     card.appendChild(instr);
     const row = document.createElement("div"); row.className = "row";
     const inp = document.createElement("input");
@@ -992,7 +1029,7 @@ function pairingCard() {
     inp.placeholder = "123456";
     row.appendChild(inp);
     const sendBtn = document.createElement("button"); sendBtn.type = "button"; sendBtn.className = "btn";
-    sendBtn.textContent = "Send";
+    sendBtn.textContent = /** @type {string} */ (t("Send"));
     sendBtn.onclick = () => {
       const v = inp.value.trim();
       if (!/^[0-9]{6}$/.test(v)) { toast("Enter exactly 6 digits", "warn"); return; }
@@ -1004,32 +1041,32 @@ function pairingCard() {
     const row = document.createElement("div"); row.className = "row";
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
-    lbl.textContent = p.state === "pairing" ? "Pairing…" : p.state === "verifying" ? "Verifying…" : "Resetting…";
+    lbl.textContent = /** @type {string} */ (t(p.state === "pairing" ? "Pairing…" : p.state === "verifying" ? "Verifying…" : "Resetting…"));
     row.appendChild(lbl);
     card.appendChild(row);
   } else if (p.state === "bonded") {
     const ok = document.createElement("div"); ok.className = "note";
-    ok.textContent = p.address ? ("✓ Paired — " + p.address) : "bonded — address cache unavailable (see logs)";
+    ok.textContent = p.address ? (t("✓ Paired — ") + p.address) : /** @type {string} */ (t("bonded — address cache unavailable (see logs)"));
     card.appendChild(ok);
     if (p.address) {
       const saved = document.createElement("div"); saved.className = "note";
-      saved.textContent = "Saved to the daemon — survives a reboot. No further action needed.";
+      saved.textContent = /** @type {string} */ (t("Saved to the daemon — survives a reboot. No further action needed."));
       card.appendChild(saved);
       const envRow = document.createElement("div"); envRow.className = "row";
       const code = document.createElement("code"); code.textContent = "CALICTL_ADDR=" + p.address;
       envRow.appendChild(code);
       card.appendChild(envRow);
       const note = document.createElement("div"); note.className = "note";
-      note.textContent = "Advanced: only needed if you reflash the Pi (a fresh install wipes the saved bond). Set it in /etc/buspi/calictl.env to survive that.";
+      note.textContent = /** @type {string} */ (t("Advanced: only needed if you reflash the Pi (a fresh install wipes the saved bond). Set it in /etc/buspi/calictl.env to survive that."));
       card.appendChild(note);
     }
   } else if (p.state === "error") {
     const errRow = document.createElement("div"); errRow.className = "warn";
-    errRow.textContent = "Error: " + (PAIRING_ERROR_MSG[/** @type {string} */ (p.error)] || p.error || "unknown");
+    errRow.textContent = t("Error: ") + (t(PAIRING_ERROR_MSG[/** @type {string} */ (p.error)]) || p.error || t("unknown"));
     card.appendChild(errRow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const retryBtn = document.createElement("button"); retryBtn.type = "button"; retryBtn.className = "btn";
-    retryBtn.textContent = "Retry";
+    retryBtn.textContent = /** @type {string} */ (t("Retry"));
     retryBtn.onclick = () => pairingAction("start");
     btns.appendChild(retryBtn);
     card.appendChild(btns);
@@ -1039,9 +1076,9 @@ function pairingCard() {
   if (p.state !== "resetting" && (p.state === "bonded" || p.address)) {
     const rbtns = document.createElement("div"); rbtns.className = "btnrow";
     const resetBtn = document.createElement("button"); resetBtn.type = "button"; resetBtn.className = "btn";
-    resetBtn.textContent = "Bluetooth reset / re-pair";
+    resetBtn.textContent = /** @type {string} */ (t("Bluetooth reset / re-pair"));
     resetBtn.onclick = () => {
-      if (!confirm("This removes the working bond; telemetry stops until re-paired. Continue?")) return;
+      if (!confirm(/** @type {string} */ (t("This removes the working bond; telemetry stops until re-paired. Continue?")))) return;
       pairingAction("reset", undefined, true);
     };
     rbtns.appendChild(resetBtn);
@@ -1062,22 +1099,22 @@ function render() {
   if (readOnly()) {
     const b = document.createElement("div");
     b.className = "readonly";
-    b.textContent = "🔒 Read-only — control is disabled on this daemon.";
+    b.textContent = /** @type {string} */ (t("🔒 Read-only — control is disabled on this daemon."));
     app.appendChild(b);
   }
   const fw = STATE._meta && STATE._meta.firmware;
   if (fw && fw.untested) {
     const b = document.createElement("div");
     b.className = "fwwarn";
-    b.textContent = `⚠ Untested firmware — unit reports amb ${fw.amb_sw_version ?? "?"} · comm ${fw.comm_version ?? "?"} `
-      + `(this project was validated on ${fw.tested}). Decode/semantics may have drifted; treat readings with care.`;
+    b.textContent = tf("⚠ Untested firmware — unit reports amb {amb} · comm {comm} (this project was validated on {tested}). Decode/semantics may have drifted; treat readings with care.",
+      { amb: fw.amb_sw_version ?? "?", comm: fw.comm_version ?? "?", tested: fw.tested });
     app.appendChild(b);
   }
   const anc = (STATE._meta && STATE._meta.anchors) || [];
   if (anc.length) {
     const b = document.createElement("div");
     b.className = "fwwarn";
-    b.textContent = "⚠ Implausible reading(s): " + anc.join("; ") + " — possible decode drift.";
+    b.textContent = tf("⚠ Implausible reading(s): {list} — possible decode drift.", { list: anc.join("; ") });
     app.appendChild(b);
   }
   if (view === "home") renderDashboard();
@@ -1107,14 +1144,14 @@ function renderSummary() {
   const w = STATE.water || {};
   if (installed("water")) {
     const f = w.fresh, g = w.waste;
-    if (f && f.liters != null) rows.push(sumRow("Fresh water", `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}`));
-    if (g && g.liters != null) rows.push(sumRow("Grey water", `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}`));
+    if (f && f.liters != null) rows.push(sumRow(/** @type {string} */ (t("Fresh water")), `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}`));
+    if (g && g.liters != null) rows.push(sumRow(/** @type {string} */ (t("Grey water")), `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}`));
   }
   /** @type {FnState} */
   const e = STATE.energy || {};
   if (e.soc2_pct != null) {
     const h = e.batt2_remaining_h;
-    rows.push(sumRow("Second battery", `${e.soc2_pct}%` + (h ? ` · ${h} h` : "")));
+    rows.push(sumRow(/** @type {string} */ (t("Second battery")), `${e.soc2_pct}%` + (h ? ` · ${h} h` : "")));
   }
   if (!rows.length) return null;
   const card = document.createElement("div"); card.className = "card summary";
@@ -1123,7 +1160,7 @@ function renderSummary() {
 }
 
 function renderDashboard() {
-  titleEl.textContent = "Vehicle";
+  titleEl.textContent = /** @type {string} */ (t("Vehicle"));
   // Prominent = the daemon can't reach the van AND no bond exists yet -- the exact moment a
   // fresh/re-paired install needs the wizard most (main() auto-opens it then). Any other time
   // the card exists only while opened from the ⋮ menu, at the end of the dashboard.
@@ -1145,7 +1182,7 @@ function renderDashboard() {
     const alertMsg = f.warn ? f.warn(s) : null;
     tile.className = "tile" + (alertMsg ? " alert" : "");
     tile.innerHTML = (alertMsg ? `<div class="tbadge">⚠</div>` : "") +
-      `<div class="ti">${f.icon || ""}</div><div class="tt">${f.title}</div>` +
+      `<div class="ti">${f.icon || ""}</div><div class="tt">${t(f.title)}</div>` +
       `<div class="tv">${f.summary ? f.summary(s) || "" : ""}</div>`;
     if (alertMsg) tile.title = alertMsg;
     tile.onclick = () => goto(fn);
@@ -1180,7 +1217,7 @@ const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NO
 
 /** @param {FnState} s */
 function renderLighting(s) {
-  titleEl.textContent = "Lighting";
+  titleEl.textContent = /** @type {string} */ (t("Lighting"));
   // Actuation is photon-verified (2026-08-16): a bare SET+commit drives the lamps on an awake
   // unit, so the daemon's fast path skips the arm/preamble and lamps respond in well under a
   // second (like the app). No latency caveat needed; the command confirms from the 1502 Mode-4
@@ -1192,7 +1229,7 @@ function renderLighting(s) {
   const allOn = optOn("lighting", "power", !!s.any_on);
   const mc = document.createElement("div"); mc.className = "card";
   const mrow = document.createElement("div"); mrow.className = "row";
-  const mlbl = document.createElement("span"); mlbl.className = "lbl"; mlbl.textContent = "All lights";
+  const mlbl = document.createElement("span"); mlbl.className = "lbl"; mlbl.textContent = /** @type {string} */ (t("All lights"));
   mrow.appendChild(mlbl);
   if (pending_is("lighting", "power")) mrow.appendChild(spinner());
   const msw = document.createElement("button"); msw.className = "switch";
@@ -1205,19 +1242,21 @@ function renderLighting(s) {
   // user-saved scenes on the unit (content unknown to us; we can only activate by number) + the
   // wake-up light. LIGHTS_ON/OFF (12/0) are the master toggle above, so they're not listed here.
   const prow = document.createElement("div"); prow.className = "row";
-  const plbl = document.createElement("span"); plbl.className = "lbl"; plbl.textContent = "Activate profile";
+  const plbl = document.createElement("span"); plbl.className = "lbl"; plbl.textContent = /** @type {string} */ (t("Activate profile"));
   prow.appendChild(plbl);
   if (pending_is("lighting", "profile")) prow.appendChild(spinner());
   const psel = document.createElement("select");
   psel.disabled = readOnly();
   const opt0 = document.createElement("option");
-  opt0.value = ""; opt0.textContent = "Choose…"; opt0.selected = true; psel.appendChild(opt0);
+  opt0.value = ""; opt0.textContent = /** @type {string} */ (t("Choose…")); opt0.selected = true; psel.appendChild(opt0);
   /** @type {[number, string][]} */
   const PROFILES = [[1, "Favorite 1"], [2, "Favorite 2"], [3, "Favorite 3"], [4, "Favorite 4"],
                     [5, "Favorite 5"], [6, "Favorite 6"], [7, "Favorite 7"],
                     [11, "Interior light"], [10, "Wake-up light"]];
   for (const [n, lab] of PROFILES) {
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = lab; psel.appendChild(o);
+    // "Favorite N" -> translate the word, keep the number; named profiles have their own keys.
+    const labT = /^Favorite \d+$/.test(lab) ? t("Favorite") + " " + lab.split(" ")[1] : t(lab);
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = /** @type {string} */ (labT); psel.appendChild(o);
   }
   psel.onchange = () => {
     if (psel.value === "") return;
@@ -1228,20 +1267,20 @@ function renderLighting(s) {
 
   // Save the CURRENT lamp levels into a favorite slot (the app's l3 applyProfileBrightness).
   const srow = document.createElement("div"); srow.className = "row";
-  const slbl = document.createElement("span"); slbl.className = "lbl"; slbl.textContent = "Save current as";
+  const slbl = document.createElement("span"); slbl.className = "lbl"; slbl.textContent = /** @type {string} */ (t("Save current as"));
   srow.appendChild(slbl);
   if (pending_is("lighting", "save_profile")) srow.appendChild(spinner());
   const ssel = document.createElement("select");
   ssel.disabled = readOnly();
-  const s0 = document.createElement("option"); s0.value = ""; s0.textContent = "Favorite…"; s0.selected = true; ssel.appendChild(s0);
+  const s0 = document.createElement("option"); s0.value = ""; s0.textContent = /** @type {string} */ (t("Favorite…")); s0.selected = true; ssel.appendChild(s0);
   for (let n = 1; n <= 7; n++) {
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = "Favorite " + n; ssel.appendChild(o);
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Favorite") + " " + n; ssel.appendChild(o);
   }
   ssel.onchange = () => {
     if (ssel.value === "") return;
     const n = Number(ssel.value);
     ssel.value = "";
-    if (!confirm(`Overwrite Favorite ${n} with the current lamp levels? This writes to the unit and is not yet verified on the van. Continue?`)) return;
+    if (!confirm(tf("Overwrite Favorite {n} with the current lamp levels? This writes to the unit and is not yet verified on the van. Continue?", { n: n }))) return;
     command("lighting", "save_profile", n);
   };
   srow.appendChild(ssel); mc.appendChild(srow);
@@ -1251,10 +1290,10 @@ function renderLighting(s) {
   for (const grp of LIGHT_LAMPS) {
     const card = document.createElement("div"); card.className = "card";
     const h = document.createElement("div"); h.className = "note"; h.style.padding = ".6rem 0 0";
-    h.textContent = grp.group; card.appendChild(h);
+    h.textContent = /** @type {string} */ (t(grp.group)); card.appendChild(h);
     for (const lamp of grp.lamps) {
       const row = document.createElement("div"); row.className = "row";
-      const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = lamp.label;
+      const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = /** @type {string} */ (t(lamp.label));
       // roof reading light (L9) is physically unpowered while the pop-top is down — reflect the
       // server-side precondition (control.command_precondition) so the slider isn't a silent no-op.
       const roofPos = (STATE.roof || {}).position_name;
@@ -1262,7 +1301,7 @@ function renderLighting(s) {
         && !(roofPos === "open" || roofPos === "middle" || roofPos == null);
       const hintText = roofBlocked ? "roof must be open" : lamp.hint;
       if (hintText) {
-        const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = hintText;
+        const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = /** @type {string} */ (t(hintText));
         lbl.appendChild(hh);
       }
       // brightness_zone_1..16 are read by dynamic key (see FnState note); cast the state to an
@@ -1294,14 +1333,14 @@ function renderFeature(fn) {
   const f = FEATURES[fn];
   /** @type {FnState} */
   const s = STATE[fn] || {};
-  titleEl.textContent = f.title;
+  titleEl.textContent = /** @type {string} */ (t(f.title));
   if (f.warn) {                         // dynamic FAULT banner (e.g. fridge door open) — red/alert
     /** @type {string|null} */
     let w;
     try { w = f.warn(s); } catch (e) { w = null; }
     if (w) {
       const b = document.createElement("div");
-      b.className = "warn"; b.textContent = w;
+      b.className = "warn"; b.textContent = /** @type {string} */ (t(w));
       app.appendChild(b);
     }
   }
@@ -1311,7 +1350,7 @@ function renderFeature(fn) {
     try { n = f.note(s); } catch (e) { n = null; }
     if (n) {
       const b = document.createElement("div");
-      b.className = "note"; b.textContent = n;
+      b.className = "note"; b.textContent = /** @type {string} */ (t(n));
       app.appendChild(b);
     }
   }
@@ -1344,7 +1383,7 @@ function renderControl(fn, c, s) {
   row.className = "row";
   const label = document.createElement("span");
   label.className = "lbl";
-  label.textContent = c.label;
+  label.textContent = /** @type {string} */ (t(c.label));
   row.appendChild(label);
   const isPending = pending_is(fn, c.what);
   if (isPending) row.appendChild(spinner());
@@ -1389,7 +1428,7 @@ function renderControl(fn, c, s) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "seg" + (opt.value === cur ? " on" : "");
-      b.textContent = opt.label;
+      b.textContent = /** @type {string} */ (t(opt.label));
       b.disabled = ro;
       b.setAttribute("aria-pressed", opt.value === cur ? "true" : "false");
       b.onclick = () => fire(opt.value);
@@ -1422,7 +1461,7 @@ function renderControl(fn, c, s) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "seg";
-      btn.textContent = b.label;
+      btn.textContent = /** @type {string} */ (t(b.label));
       btn.disabled = ro;
       btn.onclick = () => {
         if (c.confirm && !confirm(/** @type {string} */ (typeof c.confirm === "function" ? c.confirm(b) : c.confirm))) return;
@@ -1480,7 +1519,7 @@ function renderReadout(r, s) {
   row.className = "row ro";
   const label = document.createElement("span");
   label.className = "lbl";
-  label.textContent = r.label;
+  label.textContent = /** @type {string} */ (t(r.label));
   const v = document.createElement("span");
   v.className = "val";
   /** @type {string|number|null|undefined} */
@@ -1490,7 +1529,7 @@ function renderReadout(r, s) {
   } catch (e) {
     val = "—";
   }
-  v.textContent = val == null || val === "" ? "—" : String(val);
+  v.textContent = val == null || val === "" ? "—" : /** @type {string} */ (t(String(val)));
   if (r.tick) startClockTicker(v);   // live-advance this value (vehicle clock) between polls
   row.appendChild(label);
   row.appendChild(v);
@@ -1536,7 +1575,7 @@ function autoCamperCard() {
   const card = document.createElement("div"); card.className = "card";
   const row = document.createElement("div"); row.className = "row";
   const lbl = document.createElement("span"); lbl.className = "lbl";
-  lbl.textContent = "Restore camping after you park" + (ac.armed ? "  ⟳ will restore on park" : "");
+  lbl.textContent = t("Restore camping after you park") + (ac.armed ? "  " + t("⟳ will restore on park") : "");
   row.appendChild(lbl);
   const sw = document.createElement("button");
   sw.className = "switch";
@@ -1555,10 +1594,10 @@ function autoCamperCard() {
   row.appendChild(sw); card.appendChild(row);
   const sub = document.createElement("div");
   sub.style.cssText = "padding: 0 1rem .7rem; color: var(--muted); font-size: .8rem; line-height: 1.35;";
-  sub.textContent = "The unit drops camper mode when the engine starts and won't allow it back on "
+  sub.textContent = /** @type {string} */ (t("The unit drops camper mode when the engine starts and won't allow it back on "
     + "while driving. This turns camper mode + rear USB back on once you park (ignition off), if the "
     + "engine had shed it. Respects a manual off, and stands down on low battery so it never fights "
-    + "the unit's power saving.";
+    + "the unit's power saving."));
   card.appendChild(sub);
   return card;
 }
@@ -1577,14 +1616,14 @@ function roofControls() {
   card.className = "card";
   const warn = document.createElement("div");
   warn.className = "warn";
-  warn.textContent = "Roof control is safety-sensitive and not live-verified.";
+  warn.textContent = /** @type {string} */ (t("Roof control is safety-sensitive and not live-verified."));
   card.appendChild(warn);
   const btns = document.createElement("div");
   btns.className = "btnrow";
   for (const dir of ["open", "close", "stop"]) {
     const b = document.createElement("button");
     b.className = "btn";
-    b.textContent = dir;
+    b.textContent = /** @type {string} */ (t(dir));
     b.disabled = readOnly();
     if (pending_is("roof", dir)) b.appendChild(spinner());
     if (dir === "stop") {
@@ -1598,7 +1637,7 @@ function roofControls() {
         ev.preventDefault();
         if (readOnly() || armed) return;
         if (Date.now() - roofLastMoveStart < ROOF_REPRESS_MS) return;  // debounce a too-quick re-press
-        if (!confirm(`Roof ${dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?`)) return;
+        if (!confirm(tf("Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?", { dir: t(dir) }))) return;
         armed = true;
         roofLastMoveStart = Date.now();
         command("roof", dir, null);

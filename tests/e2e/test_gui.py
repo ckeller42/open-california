@@ -405,3 +405,21 @@ def test_auto_camper_toggle_present_and_flips(page):
     expect(sw).to_have_attribute("aria-checked", "false")
     sw.click()
     expect(sw).to_have_attribute("aria-checked", "true", timeout=8000)
+
+
+def test_language_toggle_to_german(page):
+    """The ⋮ menu language toggle switches the served UI to German and persists the choice across
+    a reload (localStorage); toggling back restores English."""
+    expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("button", name="Deutsch").click()
+    expect(page.get_by_text("Kühlbox", exact=True).first).to_be_visible()
+    assert page.get_by_text("Cooler", exact=True).count() == 0
+    # persists across a reload
+    page.reload()
+    expect(page.get_by_text("Kühlbox", exact=True).first).to_be_visible()
+    # toggle back to English
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_role("button", name="English").click()
+    expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
+    assert page.get_by_text("Kühlbox", exact=True).count() == 0
