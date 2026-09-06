@@ -130,3 +130,8 @@ Read `docs/business-logic/` before changing decode/semantics. Follow the existin
 dictionary-driven pattern; put manual offsets only in `overrides.py`. When surfacing a new
 signal: catalog it (`tools/triage.py`) → emit it in `semantics` → update dashboard + HA →
 run the auditor. Prefer small, test-backed changes.
+
+- **Claude automation is committed as a skill or a `tools/` script, never in `.claude/` config.**
+  `.claude/*` is gitignored **except `.claude/skills/`** — `.claude/settings.json` and
+  `.claude/agents/` are per-user (untracked). Hook *scripts* live in `tools/hooks/` (shared); their
+  wiring lives in the gitignored `settings.local.json` (per-user, like the existing hooks).

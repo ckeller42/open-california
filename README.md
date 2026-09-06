@@ -82,7 +82,7 @@ curl -fsSL https://raw.githubusercontent.com/ckeller42/open-california/main/inst
 ```
 
 Pairing is interactive (type the passkey the camper shows). `sh install.sh --dry-run` previews
-every step without changing anything. Full guide: **[docs/raspberry-pi-setup.md](docs/raspberry-pi-setup.md)**.
+every step without changing anything. Full guide: **[Raspberry Pi setup](https://ckeller42.github.io/open-california/raspberry-pi-setup.html)**.
 
 ## Tested on
 
@@ -115,7 +115,7 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   `csrc/codec_dict.h`**). Golden vectors + a seeded differential fuzz harness keep the Python and C
   codecs byte-identical in CI (`codec-parity` job) — see [`csrc/README.md`](csrc/README.md).
 
-New here? Start with **[ARCHITECTURE.md](ARCHITECTURE.md)** — the five-minute map of the data flow and
+New here? Start with **[the architecture map](https://ckeller42.github.io/open-california/architecture.html)** — the five-minute map of the data flow and
 where each concern lives. Contributor rules and hard invariants: **[CLAUDE.md](CLAUDE.md)**.
 Reverse-engineering notes (control recipes, the write gate, value-freshness, signal scales):
 **[docs/business-logic/](docs/business-logic/)**.
