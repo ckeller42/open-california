@@ -24,3 +24,5 @@ Per-function state fields (cooler/energy/water/…) live in the signal catalog
 | POST | `/api/command` | Actuate a control (the only writing endpoint) |
 | POST | `/api/session` | Connect/disconnect the BLE session |
 | POST | `/api/auto_camper` | Toggle the restore-camping-after-park setting |
+| GET | `/api/pairing` | Guided-pairing wizard state |
+| POST | `/api/pairing` | Drive the pairing wizard (`start`/`passkey`/`cancel`/`reset`; not a vehicle write) |

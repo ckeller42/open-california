@@ -54,6 +54,8 @@ Raspberry Pi.
 - **Guides you through pairing** — a web wizard walks through first-run pairing and re-pair
   (type the passkey shown on the camper's own screen), built on a platform-free pairing state
   machine that doubles as the model for a future ESP32 touchscreen flow.
+- **English or German** — switch the web UI language from the ⋮ menu; it follows the browser
+  language on first load and remembers your choice per browser.
 
 ## Quickstart
 

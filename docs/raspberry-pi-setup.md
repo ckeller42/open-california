@@ -125,9 +125,9 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
 - Uninstalled features are hidden; roof control asks for confirmation. Lighting writes DO
   actuate the lamps, but the state-char readback is a write-through echo, so the UI says
   "Sent — check the lamp" rather than confirming from the readback.
-- Labels are neutral by default. To render your app's exact text, rebuild the screen data
-  against your own APK strings — `python3 -m tools.build_web --strings <apk.cvr.json>`
-  (local only; never committed, like the icons).
+- The UI is in **English by default**; the ⋮ menu has a **Deutsch / English** entry that switches
+  the language. On first load it follows the browser language (German browsers start in German);
+  your choice is remembered per browser (`localStorage`).
 
 To enable it under systemd, append `--web 8080` to the unit's `ExecStart` and restart
 (`sudo systemctl daemon-reload && sudo systemctl restart calictl`).

@@ -3,9 +3,9 @@
 //
 // Rather than mechanically render the reverse-engineered screen spec, each feature is a
 // small hand-authored spec: the actual controls (mapped to the /api/command `what` tokens)
-// plus the data readouts pulled from the interpreted /api/state. Labels are our own neutral
-// English (no VW app text). Actuation is slow (BLE), so every command shows a spinner on the
-// tapped control and a result toast; idle polls don't re-render (no flicker).
+// plus the data readouts pulled from the interpreted /api/state. Labels are English source
+// strings; German comes from strings.de.js via t(). Actuation is slow (BLE), so every command
+// shows a spinner on the tapped control and a result toast; idle polls don't re-render (no flicker).
 // ---------------------------------------------------------------------------------------------
 // Type model (editor-only; JSDoc `@typedef`s — no runtime effect). These mirror the REAL shapes
 // produced by calictl/semantics.py (per-function interpret) + serve.py::state() (`_meta`) and the
