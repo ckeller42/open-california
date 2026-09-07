@@ -1,8 +1,10 @@
 """Per-function control-frame builders (full-packet, dictionary-driven).
 
 Shared by the CLI (`calictl set`) and the daemon (`serve.on_command`) so both
-build identical frames. Frames are written under a 1003 liveness heartbeat
-(`device.actuate`), which is what arms actuation on-device (issue #2)."""
+build identical frames. Cooler/camping frames are written under a 1003 liveness heartbeat
+(`device.actuate` -> `_arm`), which is what arms actuation on-device (issue #2); the daemon's
+lighting path writes bare on an awake unit (persistent session, `arm=False`); roof streams its
+own SafetyCounter after a plain handshake (`device.actuate_roof`, no heartbeat)."""
 from __future__ import annotations
 
 from . import overrides, protocol
@@ -188,8 +190,8 @@ LIGHT_MODE_SET_PROFILE = 16      # switch active profile (payload carries the Pr
 LIGHT_PROFILE_ALL_ON = 12        # LIGHTS_ON  — the app's "Alle Lichter" master ON  (dg/h.java:323 Q())
 LIGHT_PROFILE_ALL_OFF = 0        # LIGHTS_OFF — the app's "Alle Lichter" master OFF
 # Colour palette (dg/j.java, decompile 2026-07-12): SET_COLOR carries ONE index in LightValue for
-# the whole target profile — not RGB. On-device apply is UNVERIFIED (same lighting-apply gap as
-# SET_BRIGHTNESS, re-gap A1); the frame layout is byte-decoded from the app.
+# the whole target profile — not RGB. On-device apply is UNVERIFIED (the app exposes no colour
+# control, so there is nothing to capture against); the frame layout is byte-decoded from the app.
 LIGHT_COLORS = {
     "warm-white": 1, "blood-orange": 2, "amber": 3, "pistachio": 4, "peppermint": 5,
     "mint": 6, "azure": 7, "dark-blue": 8, "red": 9, "salmon": 10,
@@ -208,22 +210,21 @@ LIGHT_MAX_SET = 11               # highest settable value (11 = DEFAULT brightne
 # a profile was activated; the real gate was always "PN=9 in the frame", not "a profile is active".
 LIGHT_BRIGHTNESS_PROFILE = 9
 
-# Lighting COMMIT/APPLY frame. HCI-verified 2026-07-13: the app follows every SET_BRIGHTNESS /
-# SET_PROFILE with this exact frame, and the unit only APPLIES the change once it lands (Mode 0,
-# ProfileNumber + all zones = the 14 "unchanged" sentinel). This is the fix for the old
-# lighting-apply gap — our SET frames were already byte-identical to the app's; only this commit
-# was missing. Sent as the `follow` frame of device.actuate for every lighting write.
+# Lighting neutral FLUSH frame (HCI-seen 2026-07-13 after the app's SET_BRIGHTNESS / SET_PROFILE).
+# NOT an app "commit": it is the builder's default frame — Mode 0 = NO_MODE, ProfileNumber + all
+# zones = the 14 "unchanged" sentinel. The app self-flushes by streaming frames (~500 ms); calictl
+# writes once, so it sends this neutral frame to flush its single SET. The real actuation gate is
+# the unit's wake state (photon-verified 2026-08-16); readback is a write-through echo, never proof.
+# Sent as the `follow` frame of device.actuate for every lighting write.
 LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
 
 # Friendly zone key -> BrightnessL control field. Two provenance tiers:
 #   CONFIRMED by the 2026-07-08 HCI capture (which nibble tracked each dragged slider):
 #     reading trio L2/L1/L4 (Links/Rechts/Beifahrer — group confirmed, the split is best-effort),
 #     "kitchen" = L7 (the Küche *Kochen*/cooking light), "roof-ambient" = L8, "outside-rear" = L3.
-#   INFERRED by elimination (2026-07-15 screenshots): the app shows this van has 8 lamps, and
-#     semantics._REAL_LIGHT_ZONES says 9 zones are real (L1-L9; L9 = roof reading light). Six are pinned above; the
-#     app's two remaining rows are Küche *Ambientelicht* and Aufstelldach *Leselicht*, so they must
-#     be the two unpinned zones L5/L6 — but WHICH is which is unverified. The GUI marks these
-#     unverified; a single slider drag on-device (watch which lamp lights) will confirm/swap them.
+#   DEVICE-confirmed (2026-08-30 single-light isolation + owner-watched writes, evidence-ledger.md):
+#     L5 = Küche Ambient, L6 = Küche Schrank, L9 = Dach Lesen, L12 = Eingang. The full real set is
+#     semantics._REAL_LIGHT_ZONES = {1..9, 12}; the older "L5/L6 by elimination" inference is superseded.
 LIGHT_ZONES = {
     "reading-1": "BrightnessLTwo", "reading-2": "BrightnessLOne", "reading-3": "BrightnessLFour",
     "kitchen": "BrightnessLSeven", "roof-ambient": "BrightnessLEight", "outside-rear": "BrightnessLThree",
@@ -285,12 +286,13 @@ def lighting_precondition(what, value, states):
 
 
 def _all_real_zones(zone_fields, b):
-    """Value ``b`` for the REAL lamp zones (L1-L8), the unchanged sentinel elsewhere.
+    """Value ``b`` for the REAL lamp zones (``semantics._REAL_LIGHT_ZONES`` = L1-L9 + L12), the
+    unchanged sentinel elsewhere.
 
     ``power``/``all`` used to write every one of the 16 control zones — including the
-    never-equipped L9-L16, which only coincidentally looked right while "on" was the 13
-    NOT_EQUIPPED marker. Only L1-L9 exist on this van (semantics._REAL_LIGHT_ZONES); the
-    app's "Alle Lichter" frame is uncaptured, so stay conservative: never touch phantom zones.
+    never-equipped ones (L10/L11, L13-L16), which only coincidentally looked right while "on" was
+    the 13 NOT_EQUIPPED marker. The app's "Alle Lichter" frame is uncaptured, so stay
+    conservative: never touch phantom zones.
     """
     from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
     real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
@@ -312,11 +314,13 @@ def _lighting(funcs, what, value, last):
       * ``"power"`` -> app-faithful master toggle: SET_PROFILE selecting LIGHTS_ON (12) / LIGHTS_OFF
         (0), like the app's "Alle Lichter" switch (dg/h.java:323 ``Q()``) — restores the saved
         on-state, not a forced 100%.
-      * ``"all"`` -> set every REAL zone (L1-L8) to ``value`` (a calictl convenience, not an app
-        action); never-equipped zones (L9-L16) always get the unchanged sentinel.
+      * ``"all"`` -> set every REAL zone (``semantics._REAL_LIGHT_ZONES``: L1-L9 + L12) to
+        ``value`` (a calictl convenience, not an app action); never-equipped zones always get the
+        unchanged sentinel.
       * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = target ProfileNumber.
       * ``"color"`` -> SET_COLOR (Mode 6); ``value`` = a ``LIGHT_COLORS`` name; recolours the
-        active profile (LightValue = palette index 1-10). On-device apply UNVERIFIED (re-gap A1).
+        active profile (LightValue = palette index 1-10). On-device apply UNVERIFIED (app has no
+        colour UI to capture against).
     """
     f = funcs["lighting"]
     zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
@@ -616,19 +620,21 @@ def build(funcs, function, what, value, last_decoded):
 
 
 def commit_for(function):
-    """The follow/commit frame a function needs after a SET, or None. Lighting is the only one:
-    the unit applies a SET_BRIGHTNESS/SET_PROFILE only once :data:`LIGHT_COMMIT` lands right after
-    it (HCI-verified 2026-07-13, and confirmed on-device via readback). Callers pass this as
+    """The follow/flush frame a function needs after a SET, or None. Lighting is the only one:
+    :data:`LIGHT_COMMIT` is the neutral NO_MODE default frame that flushes calictl's single
+    SET_BRIGHTNESS/SET_PROFILE write (the app self-flushes by streaming; HCI-seen 2026-07-13).
+    Actuation itself is gated on the unit being awake, and is confirmed by the ``1502`` Mode-4
+    push — not by the readback echo. Callers pass this as
     ``device.actuate(..., follow=commit_for(fn))``.
 
-    .. req:: Apply lighting changes with the commit frame
+    .. req:: Flush lighting changes with the neutral follow frame
        :id: R_LIGHT_COMMIT
        :status: implemented
        :tags: control, lighting
 
-       For lighting, ``calictl`` shall follow every SET_BRIGHTNESS/SET_PROFILE with the commit
-       frame :data:`LIGHT_COMMIT` (``0e00…``); the unit applies the staged change only once it
-       lands. Diagram: :need:`S_SEQ_LIGHT_COMMIT`.
+       For lighting, ``calictl`` shall follow every SET_BRIGHTNESS/SET_PROFILE with the neutral
+       flush frame :data:`LIGHT_COMMIT` (``0e00…``, NO_MODE + all-unchanged), standing in for the
+       app's continuous frame stream. Diagram: :need:`S_SEQ_LIGHT_COMMIT`.
     """
     return LIGHT_COMMIT if function == "lighting" else None
 

@@ -394,7 +394,8 @@ together in one write, `y(false)` (write-without-response semantics, inferred).
   open/close command (debounce, `in.a.a()` timestamp check). Otherwise: `f(0)` (Down=0), `g(1)` (Up=1, sent),
   set local flags `opening=true/closing=false`, and start a **1000 ms repeating timer** (`ig/b.java` case 0)
   that keeps re-sending `Down=0, Up=1` every second for as long as `opening` stays true — the roof requires a
-  continuous "move" heartbeat, not a single command.
+  continuous "move" heartbeat, not a single command. (This `ig/c` timer only re-affirms direction; the
+  primary ~500 ms transmitter is the `w8/a` SafetyCounter pump — see the cadence note below.)
 - **Close (`e1()`, `ig/c.java:239-266`)**: mirror of Open — no-op if already `CLOSED`, same 1000 ms debounce
   ("Blocked roof usage (close) ..."), otherwise `f(1)` (Down=1), `g(0)` (Up=0, sent), flags
   `closing=true/opening=false`, same 1-second repeating heartbeat resending `Down=1, Up=0`.
@@ -416,7 +417,9 @@ The move-frame cadence is **~500 ms**, not 1 Hz: the primary transmitter is the 
 
 ### Roof-state enum (readback, `hf/b.java`)
 
-`CLOSED`(0), `OPEN`(1), `MIDDLE_POSITION`(2), `OTHER`(3), `INIT`(4), `ERROR`(5).
+`CLOSED`(0), `OPEN`(1), `MIDDLE_POSITION`(2), `OTHER`(3), `INIT`(4), `ERROR`(5) — these are the app's
+enum **ordinals**, not wire values. On the wire (`Position@0/w4`, `ig/c.java l()`, `semantics._ROOF_POS`):
+`0`/`14` = closed, `1` = open, `2` = middle, `15` = error, `3-13` = other/transitional.
 
 ### Correct command recipes
 

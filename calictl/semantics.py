@@ -247,12 +247,11 @@ _LZONES = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seve
            "OneFour": 14, "OneFive": 15, "OneSix": 16}
 
 
-# L1-L8 are the installed lamps on this van (reading/kitchen/roof-ambient/outside — confirmed
-# by the HCI capture 2026-07-08). L9-L16 read constant not-installed defaults (0 or 13) that
-# ignore SET_BRIGHTNESS, so they must NOT count toward "any light on".
-# Zones that physically exist on the reference van. Zone 9 = the pop-top roof READING light —
-# DEVICE-proven 2026-08-30 by single-light isolation (unit screen "Dach" on -> zone_9=2, all
-# else 0/13). Zone 12 also reads 0 (not 13) but has no proven fixture yet — excluded until shown.
+# Zones that physically exist on the reference van: L1-L8 (reading/kitchen/roof-ambient/outside,
+# HCI capture 2026-07-08), L9 = pop-top roof READING light and L12 = Eingang (both DEVICE-proven
+# 2026-08-30 by single-light isolation). The never-equipped zones (L10/L11, L13-L16) read constant
+# not-installed defaults (0 or 13) that ignore SET_BRIGHTNESS, so they must NOT count toward
+# "any light on".
 _REAL_LIGHT_ZONES = frozenset((1, 2, 3, 4, 5, 6, 7, 8, 9, 12))  # full van lamp set, DEVICE-mapped 2026-08-30 (L12=Eingang)
 
 

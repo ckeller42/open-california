@@ -23,7 +23,7 @@ unit's own `0x2901` descriptors label every pair "Control"/"State".
 |---|---|---|---|
 | 1000 | Vehicle (Info/VIN/Car_Info/Counter) | 1700 | AIR_HEATER (parking heater) |
 | 1100 | COOLER / fridge | 1800 | STAIRS (electric step) |
-| 1200 | LIGHT | 1900 | SAT antenna + WLAN/system |
+| 1200 | CAMPING MODE (`campingmode`: master + lights/USB loads) | 1900 | SAT antenna + WLAN/system |
 | 1300 | FRESH_WATER (tank) | 2000 | ROOF_AIR_CONDITION |
 | 1400 | ROOF (pop-top) | 2100 | LIVING_ROOM_HEATER |
 | 1500 | **INTERIOR LIGHTING** (per-zone brightness/color/profile) | 1600 | ENERGY (battery/solar/DC-DC/shore) |
@@ -31,7 +31,7 @@ unit's own `0x2901` descriptors label every pair "Control"/"State".
 
 > Note on 1500: command enum (`SET_BRIGHTNESS`/`SET_COLOR`/`SET_PROFILE`/`PREVIEW`/
 > `SYSTEM_TIME`/`WAKEUP_TIME`) + control fields `Mode, Timestamp, LightValue,
-> BrightnessL{One,Two,Three}` = the interior LED lighting. There is **no** BLE
+> BrightnessL1…L16` (16 per-zone fields) = the interior LED lighting. There is **no** BLE
 > control for the unit's own touchscreen/panel brightness (that's a local setting).
 
 ## Machine-readable dictionary
@@ -90,11 +90,13 @@ any bonded central has full, replayable control.
   NightTimerSet=3` = three conflicting timer actions). The unit ignored power and
   stored stray bytes. The `fd770f1e3e1f` frame is therefore a **structural example
   only, not a working command** — which is why `calictl/control.py` carries the
-  *current* state and zeroes the timer-action fields.
-- **Correct power toggle:** set `State`, set all timer-**action** fields
-  (`TimerStart`,`TimerCancel`,`NightTimerSet`) to `0` (no-op), and carry the
-  *current* `Level`/`Mode` (read from State) rather than defaults. Verify against
-  State `1102` byte0 `08↔09`.
+  *current* state and leaves the timer-action fields at their no-op sentinels.
+- **Correct power toggle:** set `State`, leave the timer-**action** fields
+  `TimerStart`/`TimerCancel` at the 2-bit leave-unchanged sentinel `3`, carry the
+  *current* `NightTimerSet` + night-schedule hours (a literal `0` would disarm a set
+  schedule — live-verified 2026-08-26), and carry the *current* `Level`/`Mode` (read
+  from State) rather than defaults (live frame `3d43…`). Verify against State `1102`
+  byte0 `08↔09`.
 
 ## Status
 

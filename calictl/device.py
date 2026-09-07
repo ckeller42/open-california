@@ -101,12 +101,13 @@ HEARTBEAT_PERIOD_S = float(os.environ.get("CALICTL_HEARTBEAT_PERIOD_S", "0.6")) 
 ARM_DELAY_S = float(os.environ.get("CALICTL_ARM_DELAY_S", "3.0"))   # let the unit register the heartbeat before writing
 SETTLE_S = float(os.environ.get("CALICTL_SETTLE_S", "2.5"))         # let the actuation take effect before readback
 FOLLOW_DELAY_S = float(os.environ.get("CALICTL_FOLLOW_DELAY_S", "0.3"))  # gap before a commit/follow frame
-# A plain read returns whatever is LATCHED in a state characteristic, which goes STALE: the
-# fresh-water level char read 1 L while the true level was 11 L. The 1003 liveness heartbeat is
-# what drives the unit's sensor-measurement loop AND keeps the link up (an un-heartbeated link is
-# dropped after ~15 s) — the app ticks it continuously (~0.7 s) the whole time it's connected, not
-# only for actuation. So the read path runs the same heartbeat: this warm-up lets the measurement
-# refresh before the read pass. Live-verified on-device 2026-07-09 (1 L -> 11 L, link held 64 s).
+# The 1003 liveness heartbeat keeps the link up (an un-heartbeated link is dropped after ~15 s) and
+# refreshes the chars the app re-reads (1102/1602/1902/1004) — the app ticks it continuously (~0.7 s)
+# the whole time it's connected, not only for actuation. So the read path runs the same heartbeat,
+# with this warm-up before the read pass (link held 64 s on-device 2026-07-09). It does NOT refresh
+# water: the 2026-07-09 "1 L -> 11 L" was correlation (the van was active); water is measurement-
+# gated (unit's water system powered) and its stale latch is handled by freshness.py. See
+# value-freshness.md.
 HEARTBEAT_WARMUP_S = float(os.environ.get("CALICTL_HEARTBEAT_WARMUP_S", "2.0"))
 # Water is push-only on 00001302 (qg/b never writes, no 1301 control char — traced 2026-08-18); a
 # bare read returns the stale latch. HYPOTHESIS (from 2026-07-14 notes): the 1003 liveness heartbeat
@@ -252,25 +253,25 @@ class CamperDevice:
 
     async def read_all(self, funcs: dict) -> dict[str, bytes]:
         """One session: read every function's state characteristic, under a live 1003 heartbeat
-        so the values are FRESH.
+        so the link holds and the re-read chars refresh.
 
         :param funcs: the loaded function table (name -> Function with ``state_char``).
         :returns: ``{function_name: raw_bytes}``; functions with no state char (or whose read
             failed) are omitted.
 
-        A bare read returns whatever is LATCHED in the characteristic, which decays to a stale
-        value (the fresh-water char read 1 L while the true level was 11 L). The 1003 liveness
-        heartbeat is what drives the unit's sensor-measurement loop and keeps the link alive — the
-        app ticks it continuously the whole time it is connected, not only for actuation. So this
-        runs the same ``_heartbeat`` for the duration of the read (with a short warm-up so the
-        measurement refreshes first), all within the one session held under the ``serve`` BLE lock.
+        The 1003 liveness heartbeat keeps the link alive (dropped after ~15 s otherwise) and
+        refreshes the chars the app re-reads — the app ticks it continuously the whole time it is
+        connected, not only for actuation. So this runs the same ``_heartbeat`` for the duration of
+        the read (with a short warm-up), all within the one session held under the ``serve`` BLE
+        lock. It does NOT refresh water: that latch is measurement-gated (water system powered) and
+        guarded in ``freshness.py`` (``R_WATER_STALE_GUARD``); see ``value-freshness.md``.
 
-        .. req:: read_all keeps values fresh with a live 1003 heartbeat
+        .. req:: read_all keeps the link and re-read chars fresh with a live 1003 heartbeat
             :id: R_READ_HEARTBEAT_REFRESH
 
-            The poll must run the 1003 liveness heartbeat while reading, so the unit measures and
-            the link stays up — otherwise a stale latched value (fresh-water 1 L vs the true 11 L)
-            is surfaced and the link is dropped mid-cycle.
+            The poll must run the 1003 liveness heartbeat while reading, so the link stays up and
+            the re-read chars refresh — otherwise the link is dropped mid-cycle. (Water freshness
+            is out of the heartbeat's reach; the stale-guard lives in ``freshness.py``.)
         """
         client = await self._session()
         return await self._read_all_on(client, funcs)
@@ -477,8 +478,9 @@ class CamperDevice:
         it as an error, and so do we (log + STOP early).
 
         Runs in ONE BLE session (single-owner model, held under the ``serve`` lock):
-        connect, replay the connect handshake (version + auth reads, subscribe-all),
-        start the 1003 arm heartbeat, then re-send ``move_frame`` (with the live
+        connect, replay the connect handshake (version + auth reads, subscribe-all via
+        ``_handshake`` — NO 1003 heartbeat, NO ``ARM_DELAY_S``; the SafetyCounter stream
+        itself is the liveness proof), then re-send ``move_frame`` (with the live
         time-derived counter) every ``period_s`` for at most ``max_duration_s`` — a
         bounded travel cap — and then send ``stop_frame``. The unit self-gates the first
         ~3 s via counter validation, so early frames may not move the roof.
@@ -516,7 +518,8 @@ class CamperDevice:
            :status: implemented
            :tags: ble, control, roof, safety
 
-           ``calictl`` shall, in one armed BLE session, stream the roof move frame with a
+           ``calictl`` shall, in one BLE session armed by the handshake alone (no 1003
+           heartbeat, no pre-arm delay), immediately stream the roof move frame with a
            monotonic app-generated SafetyCounter for a bounded maximum duration and then
            unconditionally send a STOP frame — so roof travel is completed but never left
            running unbounded — and shall abort (STOP) if the unit does not validate the

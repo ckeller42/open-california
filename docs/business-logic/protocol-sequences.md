@@ -37,9 +37,11 @@ sequenceDiagram
     Note over C,U: session ready — state reads fresh, writes can be armed
 ```
 
-**Notifications:** after subscribing, the unit pushes notifications on state change. calictl
-subscribes because it's part of the arm handshake, but **no-ops the payloads** and reads state
-chars directly — notifications are a handshake requirement, not calictl's data path.
+**Notifications:** after subscribing, the unit pushes notifications on state change. Subscribing is
+part of the arm handshake, and the pushes **are a calictl data path**: `device._subscribe_all` sinks
+every payload, `read_all` prefers a pushed value over the bare read (water `1302` is push-only,
+`PUSH_ONLY_FUNCS`), the daemon's `on_push` overlays `1202`/`1004` pushes, and the `1502` Mode-4 push
+is the lighting actuation confirm (§Water below; the state-char readback is only an echo).
 
 ```mermaid
 sequenceDiagram
@@ -163,15 +165,17 @@ after 3 s it aborts with an error (and shows a "please wait" dialog,
 latency**. So while the user holds the button, the app keeps streaming **move** frames from the
 start; the roof simply doesn't physically move for the first ~3 s until the unit validates.
 
-The state char `1402` (handle `0x0033`) tracks motion: it emits `03xx` (open side) / `23xx` (close
-side) with the low nibble as motion state (`0c` moving, `08` near-limit, `00` stopped) and **bit 7
-= `SafetyCounterValid`**.
+The state char `1402` (handle `0x0033`) tracks motion, MSB-first per `dictionary.yaml`: byte 0's high
+nibble is `Position@0` (`0`/`14` closed, `1` open, `2` middle, `15` error) and its low bits carry
+`Installed@6` + **`SafetyCounterValid@7`** — so `03xx` = closed + installed + counter valid, `23xx` =
+middle position. Byte 1's low nibble is `InfoPopUp@12` (the alert enum); the `0c`/`08`/`00` values
+seen there in the capture are not yet tied to a decoded meaning.
 
 ```mermaid
 sequenceDiagram
     participant C as calictl
     participant U as Roof (1401 / state 1402)
-    Note over C,U: ignition ON, armed session, roof path clear
+    Note over C,U: ignition ON, handshake done (no 1003 heartbeat), roof path clear
     Note over C,U: user presses and HOLDS open/close
     loop press-and-hold, move frames @ ~500 ms
         C->>U: move frame [0x01 open / 0x04 close] + app-generated monotonic SafetyCounter (+1/500 ms)

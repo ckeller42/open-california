@@ -138,10 +138,11 @@ def test_lighting_applies_without_preamble(mock):
 # --- read_all prefers pushed notifications over a stale latched read ---------
 
 def test_read_all_heartbeat_refreshes_stale_read(mock):
-    """A bare read of the fresh-water char returns the stale latch (1 L), but read_all runs the
-    1003 liveness heartbeat, which arms the unit's measurement loop, so it surfaces the true 11 L.
-    Live-verified on-device 2026-07-09 (bare poll read 1 L; with a continuous heartbeat the same
-    read returned 11 L). The `mock` fixture patches device sleeps to no-ops, so warm-up is instant.
+    """The MOCK unit latches a stale value (1 L) until the 1003 heartbeat ticks, then serves the
+    fresh 11 L — so this pins that read_all runs the heartbeat while reading (link keepalive +
+    re-read refresh). NB on the real unit water is measurement-gated, not heartbeat-driven
+    (value-freshness.md, CORRECTION 2026-07-14); the 1 L / 11 L numbers here are the mock's
+    model only. The `mock` fixture patches device sleeps to no-ops, so warm-up is instant.
 
     .. test:: read_all heartbeat refreshes a stale latched read
        :id: T_READ_HEARTBEAT_REFRESH

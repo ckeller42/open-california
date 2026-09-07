@@ -745,8 +745,9 @@ class Server:
         sess = self._live_session()
         # Lighting actuates from a bare SET on an awake unit (photon-verified 2026-08-16), so
         # its path skips the blocking echo-readback. The lamp reacts in ~0.3 s; confirmation comes from the real
-        # 1502 Mode-4 notification, not the write-through echo. cooler/roof keep the armed +
-        # verified path (their heartbeat gate, issue #2, is untouched).
+        # 1502 Mode-4 notification, not the write-through echo. cooler/camping keep the armed +
+        # verified path (`_arm`: 1003 heartbeat gate, issue #2, untouched); roof goes through
+        # `actuate_roof` (`_handshake` only, no heartbeat).
         is_light = function == "lighting"
         target = sess if sess is not None else self.dev
         # Snapshot the 1502 notification BEFORE the write: the unit's Mode-4 ramp push arrives

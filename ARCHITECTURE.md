@@ -28,8 +28,9 @@ is a one-time reverse-engineering *process*, not part of this runtime picture; i
 One daemon (`serve.py`) owns the single BLE connection and drives that pipeline:
 
 1. **`device.py` — the BLE owner.** Holds the one connection slot (an `asyncio.Lock`), reads each
-   characteristic's raw frame, and ticks the `1003` liveness heartbeat so reads return fresh values
-   instead of a stale latch. Nothing else opens a second BLE connection.
+   characteristic's raw frame, and ticks the `1003` liveness heartbeat so the link stays up and the
+   re-read chars refresh (water is measurement-gated, not heartbeat-driven — `freshness.py` guards
+   its stale latch). Nothing else opens a second BLE connection.
 2. **`protocol.py` — the codec.** Decodes a raw frame into a field dict using the bit layout in
    `protocol/dictionary.yaml` (MSB-first), and encodes control frames the same way. `overrides.py`
    carries the few manual bit offsets the extractor cannot derive.

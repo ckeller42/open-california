@@ -27,7 +27,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 | lighting `profile` activate + `save_profile` (favorite define) | DECOMPILE | app: activate a favorite; edit+save a favorite → diff 1501 frames |
 | lighting **wake-up TIME** (`m0`, Mode 20 — LightValue bitmask packing unknown) | unknown | app: arm a wake-up alarm → learn the Timestamp + LightValue packing |
 | roof drive end-to-end (frames match app; motor never driven by calictl) | DECOMPILE + partial DEVICE | calictl drives the roof with ignition on, owner-watched |
-| roof: whether the 1003 heartbeat + 3 s ARM_DELAY_S pre-arm is needed (app doesn't do it) | unknown | trial with/without on an awake unit |
+| roof: no-heartbeat arm (handshake + immediate SafetyCounter stream, no 1003 / no ARM_DELAY_S) is app-faithful — fixed #150; motor still never driven by calictl | DECOMPILE | first owner-watched roof move confirms the arm on-device |
 
 ## Already at CAPTURE / DEVICE (examples, keep as the model)
 

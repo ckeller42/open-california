@@ -41,7 +41,9 @@ per-command repeat.
 
 **Where it lives in `calictl`:** `device.HEARTBEAT_CHAR` + `device.actuate()` — one BLE
 session under the `serve` lock: arm handshake (§2) → subscribe-all → heartbeat task →
-control write → readback. `calictl set` and `serve.on_command` both route through it.
+control write → readback. `calictl set` routes through it; `serve.on_command` does too when no
+fast session is up, otherwise it writes via `PersistentSession.actuate(arm=False)` (the session's
+heartbeat is already ticking, so the handshake/arm-delay is skipped).
 
 ---
 
@@ -150,7 +152,7 @@ semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` repor
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates **when stationary** | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). **REFUSED while driving** — see the stationary gate below. |
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
 | **airheater** | `power`, `level` 1-10 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
-| **roof** | not wired | installed, never driven | Pop-top IS installed (live `Installed=1`, 2026-08-26 — the earlier "not installed here" claim was wrong, issue #106). Needs the ~500 ms SafetyCounter move loop (§3) + ignition ON; motor never driven by calictl. |
+| **roof** | wired (`control._roof` + `device.actuate_roof`: press-and-hold ~500 ms SafetyCounter stream, auto-stop at the limit) | installed, never driven | Pop-top IS installed (live `Installed=1`, 2026-08-26 — the earlier "not installed here" claim was wrong, issue #106). Protocol-correct (decompile + capture, §3) + needs ignition ON; the motor has NEVER been driven by calictl. |
 | roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
 
 **Camping mode — a firmware STATIONARY GATE (live-verified 2026-08-19).** Turning camping mode

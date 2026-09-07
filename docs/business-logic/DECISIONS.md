@@ -52,6 +52,7 @@ stand.
   **screen-open config pull** (it triggers the Mode-tagged config-dump notifications on
   `1502`); only that dump is gated on it. The preamble stays in the code — app-faithful,
   harmless, ~3.3 s slower (`control.preamble_for`, `R_LIGHT_PREAMBLE`) — but is optional.
+  *Superseded 2026-08-29: preamble retired from calictl entirely (entry above).*
 - **1502 Mode-4 notifications are decodable standard state frames** (`protocol.decode` reads
   them; Mode + real per-zone brightness ramping to target); they fired in armed and un-armed
   sessions alike and tracked real actuation in every observed case — the genuine feedback
@@ -86,7 +87,8 @@ stand.
   14=leave-unchanged sentinel. Settable range 0-11; "power on" = 10. Our old code wrote 13 as max
   — NOT_EQUIPPED garbage.
 - **Lamp map:** L5 = Küche Ambientelicht (capture-confirmed), L7 = Kochen, L6 = Aufstelldach
-  Leselicht (by elimination).
+  Leselicht (by elimination). *Superseded 2026-08-30 (evidence-ledger.md, DEVICE): L6 = Küche
+  Schrank (cabinet), L9 = Dach Lesen (roof reading), L12 = Eingang.*
 - **Water stale-guard unwedged** (`freshness.implausible_water_drop`): the latch signature is a
   fresh drop while grey is **EXACTLY frozen**; any grey movement (rise or fall) is a live
   measurement. The old `<=` comparison wedged the hold for a month after a real grey dump (every
