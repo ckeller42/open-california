@@ -37,10 +37,17 @@ Useful flags: `--dry-run` (preview every step, do nothing), `--no-service` (skip
 1. `apt-get install bluez git python3-venv python3-pip`.
 2. Clones the repo (default `~/open-california`) and builds a venv with `bleak`.
 3. **Guided pairing** (below) — bonds the Pi to the camper and captures its address.
-4. Writes `CALICTL_ADDR` to `/etc/opencalifornia/calictl.env` (root, `0600` — it's your
-   vehicle's identity, kept local, never committed).
+4. Saves the bond to calictl's **pairing cache**, `~/.local/state/calictl/pairing.json`
+   (`0600` — it's your vehicle's identity, kept local, never committed). This is the same file
+   the web UI's pairing wizard maintains, so **Unpair / re-pair from the browser persist across
+   reboots**. Sink credentials (`--with-sinks`) go to `/etc/opencalifornia/calictl.env` (root, `0600`).
 5. Runs `calictl status` to confirm reads, then installs + enables the `calictl` systemd
    service (the read/monitor loop).
+
+> **`CALICTL_ADDR` is a manual override, not the normal config.** calictl resolves it *before*
+> the pairing cache, so if you set it in `calictl.env` the wizard's Unpair/re-pair will appear to
+> work and then silently revert on the next restart. Leave it unset unless you're forcing a target
+> on a dev box.
 
 ## The pairing step
 
@@ -75,11 +82,12 @@ sudo apt-get install -y bluez git python3-venv python3-pip
 git clone https://github.com/ckeller42/open-california ~/open-california
 cd ~/open-california
 python3 -m venv .venv && .venv/bin/pip install bleak
-# pair (see "The pairing step" above), note the identity MAC, then:
-sudo install -d -m755 /etc/opencalifornia
-echo "CALICTL_ADDR=<your-identity-mac>" | sudo tee /etc/opencalifornia/calictl.env
-sudo chmod 600 /etc/opencalifornia/calictl.env
-CALICTL_ADDR=<mac> .venv/bin/python -m calictl status     # verify reads
+# pair (see "The pairing step" above), note the identity MAC, then save the bond to the
+# pairing cache (the file the web wizard's pair/unpair maintain — NOT CALICTL_ADDR, see above):
+mkdir -p ~/.local/state/calictl
+printf '{"address": "%s"}\n' "<your-identity-mac>" > ~/.local/state/calictl/pairing.json
+chmod 600 ~/.local/state/calictl/pairing.json
+.venv/bin/python -m calictl status                        # verify reads (resolves from the cache)
 ```
 Then adapt `calictl/deploy/calictl.service` (paths, `User`, `EnvironmentFile`) and
 `sudo systemctl enable --now calictl`.

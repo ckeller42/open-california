@@ -3,17 +3,26 @@
 buspi already runs **InfluxDB 2** (`:8086`, org `home`, bucket `buspi`) and
 **Grafana** (`:3000`), fed by systemd readers. calictl plugs in the same way.
 
-## 1. Install the reader service
+## 1. The daemon writes to InfluxDB
+
+There is no separate reader service: the one BLE-owning daemon, `calictl serve`
+(`calictl.service`), writes to InfluxDB on every poll **when `INFLUXDB_TOKEN` is set** in its
+environment file — alongside MQTT and the web UI, same process, one connection.
 
 ```bash
-# deps already exist in solix-env (modern bleak + bleak-retry-connector + influxdb_client)
-# calictl + dictionary already deployed at /home/pi/open-california (calictl/, protocol/)
+# in the daemon's env file (/etc/opencalifornia/calictl.env for an install.sh host,
+# /etc/buspi/secrets.env on the legacy buspi host) — root, 0600:
+INFLUXDB_TOKEN=<write token>
+INFLUX_URL=http://localhost:8086      # default
+INFLUX_ORG=home                       # default
+INFLUX_BUCKET=buspi                   # default
 
-sudo cp /home/pi/open-california/calictl/deploy/calictl-influx.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now calictl-influx.service
-journalctl -u calictl-influx -f          # should log "wrote N points" each minute
+sudo systemctl restart calictl.service
+journalctl -u calictl -f              # each poll should show the BLE read + Influx write
 ```
+
+The client lib must be importable by the daemon's Python (`install.sh --with-sinks`, or
+`pip install influxdb-client` into its venv).
 
 It writes to bucket **`buspi`** as measurement **`camper`**, tagged `function`
 (water/energy/cooler/…) and `vehicle=vwcamper`. Every numeric/boolean field of
@@ -49,4 +58,5 @@ from(bucket: "buspi")
   series is expected, not a fault.
 - If ignition is on and the **phone app** is connected, the unit's single BLE
   slot is taken and polls log "poll skipped" — a gap, not a crash.
-- Adjust cadence with `POLL_INTERVAL` (seconds) in the unit's `Environment=`.
+- Adjust cadence with `--interval <seconds>` on the unit's `ExecStart` (`calictl serve
+  --interval 30` is the default); there is no `POLL_INTERVAL` env knob.

@@ -74,8 +74,9 @@ def resolve_addr() -> str:
 
 
 # The vehicle's BLE identity address is owner-specific PII — never hardcode a real one.
-# Set CALICTL_ADDR in the environment (buspi: /etc/buspi/calictl.env) or pass --addr;
-# the repo default is a non-functional placeholder. Resolved via pairing cache as fallback.
+# Normal source is the pairing cache (written by the wizard / install.sh, cleared by unpair);
+# CALICTL_ADDR / --addr are manual overrides only (env wins, so a baked-in env address would
+# silently undo a wizard unpair). The repo default is a non-functional placeholder.
 DEFAULT_ADDR = resolve_addr()
 
 

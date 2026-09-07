@@ -8,7 +8,9 @@ interpreted status. Config via env (EnvironmentFile=/etc/buspi/secrets.env):
   INFLUX_URL      default http://localhost:8086
   INFLUX_ORG      default home
   INFLUX_BUCKET   default buspi
-  POLL_INTERVAL   seconds between writes (default 60)
+
+Write cadence is the daemon's poll cadence (`calictl serve --interval N`, default 30 s);
+there is no POLL_INTERVAL env knob.
 
 `influxdb_client` is imported lazily (only present in solix-env, which also has
 modern bleak + bleak-retry-connector — run calictl from there for this).

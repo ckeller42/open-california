@@ -225,6 +225,28 @@ EOF
   info "Bonded. Identity address captured (kept local, never committed)."
 }
 
+# The bond goes into calictl's pairing cache — the same file the web wizard's pair/unpair
+# maintain — NOT into CALICTL_ADDR. calictl resolves the env var FIRST, so an address baked
+# into calictl.env would silently override every later wizard unpair/re-pair after a restart.
+# CALICTL_ADDR stays a manual override for dev boxes. The cache is per-user state
+# ($XDG_STATE_HOME, default ~/.local/state); the service runs as this same user, so the
+# daemon finds it.
+pairing_cache_file() {
+  printf '%s/calictl/pairing.json' "${XDG_STATE_HOME:-$HOME/.local/state}"
+}
+
+write_pairing_cache() {
+  cache=$(pairing_cache_file)
+  info "Saving the bond to $cache (identity address — local, never committed)"
+  if [ "$DRY_RUN" = 1 ]; then
+    printf '  + write {"address": "%s"} -> %s (0600)\n' "${IDENTITY:-<identity>}" "$cache"
+    return 0
+  fi
+  mkdir -p "$(dirname "$cache")"
+  printf '{"address": "%s"}\n' "$IDENTITY" > "$cache"
+  chmod 600 "$cache"
+}
+
 write_env() {
   envfile="$CONFIG_DIR/calictl.env"
   info "Writing $envfile (root:0600)"
@@ -234,12 +256,14 @@ write_env() {
   fi
   run sudo install -d -m 755 "$CONFIG_DIR"
   if [ "$DRY_RUN" = 1 ]; then
-    printf '  + write CALICTL_ADDR=%s -> %s (0600 root)\n' "${IDENTITY:-<identity>}" "$envfile"
+    printf '  + write %s (0600 root; sink credentials only — the bond lives in the pairing cache)\n' "$envfile"
     [ -n "$MQTT_HOST" ] && printf '  + write MQTT_HOST/PORT/USER/PASSWORD (password hidden) -> %s\n' "$envfile"
     return 0
   fi
   {
-    printf 'CALICTL_ADDR=%s\n' "$IDENTITY"
+    printf '# calictl daemon environment (sink credentials). The BLE bond is NOT here: it lives in\n'
+    printf '# the pairing cache (%s) so the web wizard can pair/unpair.\n' "$(pairing_cache_file)"
+    printf '# CALICTL_ADDR=<mac> is a manual override only — if set, wizard pair/unpair will not persist.\n'
     if [ -n "$MQTT_HOST" ]; then
       printf 'MQTT_HOST=%s\nMQTT_PORT=%s\nMQTT_USER=%s\nMQTT_PASSWORD=%s\n' \
         "$MQTT_HOST" "$MQTT_PORT" "$MQTT_USER" "$MQTT_PASSWORD"
@@ -251,15 +275,15 @@ write_env() {
 verify_reads() {
   info "Verifying BLE reads (calictl status) before starting the daemon"
   if [ "$DRY_RUN" = 1 ]; then printf '  + %s -m calictl status\n' "$DIR/.venv/bin/python"; return 0; fi
-  # shellcheck disable=SC1090
-  CALICTL_ADDR="$IDENTITY" "$DIR/.venv/bin/python" -m calictl status \
+  # No CALICTL_ADDR here on purpose: this proves the daemon's own path (pairing cache) resolves.
+  "$DIR/.venv/bin/python" -m calictl status \
     || die "calictl status failed — the bond may not be complete. See docs/raspberry-pi-setup.md."
 }
 
 install_service() {
   if [ "$NO_SERVICE" = 1 ]; then
     info "Skipping the service (per --no-service). Start the daemon with:"
-    printf '    CALICTL_ADDR=%s %s -m calictl serve\n' "${IDENTITY:-<addr>}" "$DIR/.venv/bin/python"
+    printf '    %s -m calictl serve      # the bond resolves from the pairing cache\n' "$DIR/.venv/bin/python"
     return 0
   fi
   info "Installing the systemd service ($SERVICE_NAME)"
@@ -273,7 +297,7 @@ Wants=bluetooth.target network-online.target
 [Service]
 ExecStart=$DIR/.venv/bin/python -m calictl serve
 WorkingDirectory=$DIR
-EnvironmentFile=$CONFIG_DIR/calictl.env
+EnvironmentFile=-$CONFIG_DIR/calictl.env
 Environment=PYTHONUNBUFFERED=1
 Restart=always
 RestartSec=30
@@ -282,7 +306,7 @@ User=$_user
 [Install]
 WantedBy=multi-user.target"
   if [ "$DRY_RUN" = 1 ]; then
-    printf '  + write systemd unit -> %s (User=%s, EnvironmentFile=%s)\n' "$unit" "$_user" "$CONFIG_DIR/calictl.env"
+    printf '  + write systemd unit -> %s (User=%s, EnvironmentFile=-%s)\n' "$unit" "$_user" "$CONFIG_DIR/calictl.env"
   else
     printf '%s\n' "$_body" | sudo tee "$unit" >/dev/null
     run sudo systemctl daemon-reload
@@ -295,7 +319,8 @@ summary() {
 
 $(info "Done.")
   Repo:     $DIR
-  Env:      $CONFIG_DIR/calictl.env   (CALICTL_ADDR — local, 0600 root)
+  Bond:     $(pairing_cache_file)   (identity address — local, 0600; the web wizard pairs/unpairs here)
+  Env:      $CONFIG_DIR/calictl.env   (sink credentials — local, 0600 root)
   Service:  $( [ "$NO_SERVICE" = 1 ] && echo "not installed (--no-service)" || echo "$SERVICE_NAME (enabled)" )
 
   Try it:
@@ -315,7 +340,7 @@ open-california installer — planned actions${DRY_RUN:+ (DRY RUN)}:
   2. clone/update the repo at            $DIR
   3. create venv + pip install bleak$( [ "$WITH_SINKS" = 1 ] && echo " + MQTT/Influx client deps" )
   4. guided BLE pairing with $DEVICE_NAME (you type the passkey shown on the camper)$( [ "$WITH_SINKS" = 1 ] && printf '\n  4b. prompt for MQTT broker credentials (Home Assistant bridge)' )
-  5. write CALICTL_ADDR$( [ "$WITH_SINKS" = 1 ] && echo " + MQTT_*" ) ->        $CONFIG_DIR/calictl.env   (sudo, 0600)
+  5. save the bond ->                    $(pairing_cache_file)   (0600)$( [ "$WITH_SINKS" = 1 ] && printf '\n     write MQTT_* ->                     %s/calictl.env   (sudo, 0600)' "$CONFIG_DIR" )
   6. verify reads (calictl status), then $( [ "$NO_SERVICE" = 1 ] && echo "skip the service" || echo "enable the $SERVICE_NAME service" )
 EOF
 }
@@ -345,6 +370,7 @@ main() {
   setup_venv
   pair_vehicle
   configure_sinks
+  write_pairing_cache
   write_env
   verify_reads
   install_service

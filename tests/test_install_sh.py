@@ -51,8 +51,11 @@ def test_dry_run_previews_all_steps_and_touches_nothing(tmp_path):
     assert r.returncode == 0, r.stderr
     out = r.stdout
     for marker in ("DRY RUN", "apt-get install", "pip install bleak", "pairing",
-                   "calictl.env", "calictl status", "systemd", "Done."):
+                   "pairing.json", "calictl.env", "calictl status", "systemd", "Done."):
         assert marker in out, "missing %r in dry-run output" % marker
+    # The bond must go to the pairing cache (so the web wizard's unpair/re-pair persist),
+    # never be baked into calictl.env as CALICTL_ADDR (env wins over the cache on restart).
+    assert "CALICTL_ADDR=" not in out.replace("CALICTL_ADDR=<mac>", "")
     assert not target.exists()            # dry-run created nothing
 
 
