@@ -15,7 +15,8 @@ repeated here except where directly relevant to the availability question.
 
 ## TL;DR
 
-There is **no central "capabilities" blob, no `REQUEST_CONFIG` command, and no static
+There is **no central "capabilities" blob, no capabilities-request command (the lighting
+`REQUEST_CONFIG`, Mode 12, only pulls the lighting screen's own config dump), and no static
 VIN/model → feature table** anywhere in the app. Instead:
 
 1. Every accessory function (Cooler, Stairs, RoofAirCondition, Water, SatelliteAntenna,

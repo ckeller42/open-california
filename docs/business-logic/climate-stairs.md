@@ -225,8 +225,8 @@ Feature ViewModel `tf/a.java` (implements `xe.a`):
   outside/interior switches exist in this interface.** Sets `OutsideLight = (!on)?1:0` **and**
   `InteriorLight = (!on)?1:0` to the same value in one call, then `A(); y(true)`. Note the
   inversion: `on=true` writes `0` to both light fields, `on=false` writes `1`.
-  `UNVERIFIED` which raw value (`0` or `1`) the vehicle actually interprets as "lit" — presented
-  exactly as coded so the polarity can be tested empirically.
+  Polarity SETTLED (owner-verified on the unit's screen, `signals.md`): lit iff **both** fields
+  read `0` — the inversion is real, not a decompile artefact.
 - `q0(boolean, ...)` (`tf/a.java:207-209`) — **dead stub.** Returns immediately, touches no field.
   The read-only state struct exposes an `Enable` bit (see below) that this method apparently used
   to set in an earlier version but no longer does in this build.

@@ -94,8 +94,11 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   debounced (would restart the counter → another ~3 s withhold). `actuate_roof` polls `Position`
   (`1402`) ~1 Hz and auto-stops at the limit (open `1` / closed `0`/`14`; `control.roof_limit_positions`)
   — best-effort over the unit's own limit switches. See `protocol-alignment.md` + `protocol-sequences`.
-- **Reads go stale + the unit deep-sleeps.** A bare read returns a decaying latch (fresh-water 1 L vs
-  true 11 L) unless the 1003 heartbeat runs during reads (`device.read_all`/`read` do). Parked, the
+- **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads (`device.read_all`/
+  `read` do) to keep the link up (dropped after ~15 s otherwise) and refresh the re-read chars. It does
+  NOT refresh water: water is measurement-gated (the unit measures only while its water system is
+  powered), so a parked read returns a stale latch — `freshness.implausible_water_drop` holds the last
+  plausible reading and flags it stale (the old "1 L vs 11 L" heartbeat story was correlation). Parked, the
   unit deep-sleeps and stops advertising — buspi can't connect for days until physical use wakes it, so
   access is **inherently intermittent**: `serve` persists last-state + an "as of" timestamp, and the
   web UI shows an offline banner. See `value-freshness.md`.

@@ -14,7 +14,8 @@ mechanism, water being push-driven, and the ``0x0E`` being calictl's own observa
 pass found **no defects** in our implementation and pinned the previously-open constants (1003
 seed 0 / 500 ms; roof 3000 ms dead-man + random counter seed).
 
-Char short-UUIDs: ``1001`` VERSION, ``1003`` HEARTBEAT (liveness/arm counter), ``1004`` AUTH,
+Char short-UUIDs: ``1001`` VERSION, ``1003`` HEARTBEAT (liveness/arm counter), ``1004`` vehicle
+(ignition/variant/RTC/leveling — a handshake read, not an auth exchange),
 plus per-function state/control chars (``1101/1102`` cooler, ``1201`` camping, ``1401/1402``
 roof, ``1501`` lighting).
 
@@ -57,9 +58,11 @@ Notifications
    :id: S_SEQ_NOTIFY
 
    After subscribing, the unit pushes notifications on the status chars when state changes (the
-   app uses these for live updates). calictl subscribes because it is part of the arm handshake,
-   but **no-ops the payloads** and reads the state chars directly — so notifications are a
-   handshake requirement, not calictl's data path.
+   app uses these for live updates). Subscribing is part of the arm handshake, and the pushes
+   ARE a calictl data path: ``device._subscribe_all`` sinks every payload, ``read_all`` prefers a
+   pushed value over the bare read (water ``1302`` is push-only, ``PUSH_ONLY_FUNCS``), the daemon's
+   ``on_push`` overlays ``1202``/``1004`` pushes onto the live state, and the ``1502`` Mode-4 push
+   is the lighting actuation confirm (the state-char readback is only a write-through echo).
 
 .. mermaid::
 

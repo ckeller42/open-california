@@ -106,8 +106,9 @@ in `DECISIONS.md`. **Open leads:**
 airheater (1701) is resolved + wired and the satelliteantenna "wrong width" claim was a false
 alarm (both in `DECISIONS.md`). **Open:** roof (1401 `jg/a.java`), roofAC (2001 `lg/a.java`),
 stairs (1801 `pg/a.java`), LR-heater (2101 `gg/a.java`) — transcribe offsets from each `f()`
-when needed; roof also needs a 1-Hz move-heartbeat loop (`ig/c.java`) so its `set` is more than
-a frame. Field *value semantics* (enum meanings) still need a live pass.
+when needed; roof's ~500 ms SafetyCounter move loop (`ig/c.java` + `w8/a`) is implemented in
+`device.actuate_roof` (press-and-hold, auto-stop at the limit) — protocol-correct but the motor has
+never been driven by calictl. Field *value semantics* (enum meanings) still need a live pass.
 
 ### A4 — 1003 counter cadence / firmware disarm timeout (needs idle capture)
 Char 1003 (`ag/b.java`, 32-bit, `v()` resets to 0) is written app-side via `t0/c.java:264`
@@ -324,7 +325,8 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
   interim "REQUEST_CONFIG preamble is the gate" theory was a wake-state confound). `set
   airheater` confirm still open.
 - **1003 disarm timeout** — heartbeat, stop, actuate after N s (settles arm-window sizing).
-- `set roof` (once the ~1 Hz move-heartbeat loop is implemented).
+- `set roof` — the ~500 ms move loop is implemented (`device.actuate_roof`); still owed: the first
+  owner-watched physical move (ignition ON).
 - Grafana dashboard push (needs the buspi Grafana creds).
 
 **Needs a special vehicle state (not a BLE capture):**
