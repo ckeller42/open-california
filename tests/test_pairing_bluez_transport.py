@@ -141,3 +141,16 @@ def test_remove_bond_is_a_noop_when_no_cache_exists(monkeypatch, tmp_path):
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
     t = BluezTransport()
     asyncio.run(t.remove_bond())  # no exception
+
+
+def test_persist_bond_writes_owner_only_cache(monkeypatch, tmp_path):
+    """The wizard's persist_bond must write the cache 0600 like install.sh does: the identity
+    address is owner PII, and a re-pair must not silently widen the file the installer created
+    owner-only. The dbus Address lookup no-ops on a dev box, so the scan address is persisted."""
+    cache = tmp_path / "state" / "calictl" / "pairing.json"
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
+    t = BluezTransport()
+    t._address = "AA:BB:CC:DD:EE:FF"
+    assert asyncio.run(t.persist_bond()) == "AA:BB:CC:DD:EE:FF"
+    assert cache.read_text() == '{"address": "AA:BB:CC:DD:EE:FF"}'
+    assert cache.stat().st_mode & 0o777 == 0o600

@@ -88,13 +88,25 @@ docker compose up -d mosquitto homeassistant
 docker compose logs -f homeassistant   # wait for "Home Assistant initialized"
 ```
 
-## 5. Install the calictl service
+## 5. (Re)start the calictl service
+
+If you installed with `install.sh`, the `calictl.service` unit **already exists** (rendered for
+your user, venv and `/etc/opencalifornia/calictl.env`) — just restart it so it picks up the MQTT
+credentials:
+
+```bash
+sudo systemctl restart calictl.service
+journalctl -u calictl -f               # should show BLE connect + MQTT publish
+```
+
+**Legacy buspi host only:** the committed `calictl/deploy/calictl.service` is buspi's unit — it
+hardcodes `/home/pi/solix-env`, `/home/pi/open-california` and `/etc/buspi/*.env`. Do **not**
+copy it onto an `install.sh` host (the paths won't exist and the service won't start); on buspi:
 
 ```bash
 sudo cp /home/pi/open-california/calictl/deploy/calictl.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now calictl.service
-journalctl -u calictl -f               # should show BLE connect + MQTT publish
 ```
 
 `calictl serve` now polls the van over BLE, writes to InfluxDB (if

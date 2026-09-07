@@ -437,9 +437,9 @@ class Server:
         :returns: `self._pairing.snapshot()` if a wizard run has ever started this
             process lifetime, else the idle default with `address` falling back to
             the persisted pairing-cache address (see `_pairing_cache_address`), then
-            to the operator's `CALICTL_ADDR`. The env fallback is what makes the web
-            UI's Unpair entry appear for a bond configured outside the wizard (the
-            buspi deploy bonds via `/etc/buspi/*.env`, not the guided flow).
+            to the operator's `CALICTL_ADDR` manual override. The env fallback keeps
+            the web UI's Unpair entry visible for a bond forced via the env var (a dev
+            box); normal installs — buspi included since 2026-08-31 — bond via the cache.
         """
         if self._pairing is not None:
             return self._pairing.snapshot()
