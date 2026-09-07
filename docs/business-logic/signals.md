@@ -159,6 +159,9 @@ confirmed against a live reference. Treat those as *trends*, not calibrated read
 | `batt1_v`, `batt2_v` | ×0.1 | V | app getter + live read; **confirmed over 14 d telemetry**: batt1 12.2–14.8 V (mean 13.08), batt2 ~13.5 V nominal — realistic AGM/lead-acid band |
 | `soc1_level`, `soc2_level` | raw | **0–15 level (NOT %)** | **confirmed over 14 d / 2472 samples**: soc1 ranged 6–14, soc2 10–14, mean ~9–10; **never approached 100 and capped at 14** (the 4-bit max). A percentage would show 60–100 on a parked-van drain; instead it behaves as a coarse level. Grafana shows a 0–15 bar gauge. |
 | water `fresh/waste_percent` | derived (`Level×100/Volume`) | % | live-verified (11 L / 29 L = 38 %) |
+| `batt2_current`, `shore_current`, `solar_current` | ×0.1 | A | **RESOLVED 2026-09-07** against the app view-model: `xf/d.java:159/173/175` divide the raw `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` by `10.0d` and the readout shows amps; binding raw bits→holder `xf/a.java:150-157,239,307`. Signedness unchanged (`batt2` signed, shore/solar unsigned). 511 stays the not-fitted sentinel (§4 below). |
+| `dcdc_current` | raw | A | **RESOLVED 2026-09-07**: `xf/d.java:171` applies **no** divisor (amps as-is), only the `+2` SW-0409/0410 correction (`semantics.apply_sw_corrections`, live-verified −2→0). |
+| `soc1_pct`, `soc2_pct` (derived) | `level×10` for 0–10, else `None` | % | mirrors the app's display math (`xf/a.java:333-337`) — **app-derived, not a sensor %**: the unit does emit levels 11–15 (seen over 14 d), for which the app shows nothing and calictl emits `None`. `soc*_level` stays the truthful value. |
 
 ### Sentinels in the telemetry (raw fields carry "no-data" markers)
 
@@ -179,7 +182,7 @@ stay `UNVERIFIED` because this van can't exercise them live.
 
 | signal(s) | what we know | do NOT assume |
 |---|---|---|
-| `batt2_current`, `dcdc_current`, `shore_current`, `solar_current` | mixed signedness: `batt2_current` (ITwoBattBemAfs) and `dcdc_current` (IDcdcAfs) are **signed** 16-bit two's-complement; `shore_current` (ILandAfs) and `solar_current` (IPvAfs) are **unsigned** 16-bit (`sg.a` type 1 = signed vs type 3 = unsigned, `yf/a.java:88-91`). Magnitude scale unknown. 14 d telemetry: batt2_current −49…318 (mean ~0, balanced), dcdc −2…29, dcdc_power 0…45; **solar/shore read the `511` sentinel** when not fitted (§4). | Not confirmed amps. Grafana labels them **"raw, unverified scale"**, not "A". A `511` reading is *no data*, not a huge current. |
+| ~~currents~~ | **Moved to §4 (RESOLVED 2026-09-07)** — `batt2/shore/solar_current` are ×0.1 A, `dcdc_current` raw A, per the app view-model. Signedness as before: `batt2`/`dcdc` **signed** 16-bit, `shore`/`solar` **unsigned** (`sg.a` type 1 vs 3, `yf/a.java:88-91`). A `511` reading is still the not-fitted sentinel, *no data*, not a huge current. | — |
 | `air_temp`, `water_temp` (LR-heater), `target_temp` (roof-A/C) | **RESOLVED 2026-07-12** (semantics verified against the app): the app applies **no arithmetic scale** — these are **coarse levels** (`air_temp`/`water_temp` 4-bit 0–15, `target_temp` 8-bit), same category as SoC, **not °C**. | **Do NOT label °C** — a level/setpoint index. |
 | `energy_mode` | 0=normal / 1=max_charge / 2=eco (3=error, read-only), **CONFIRMED** from source (`bf/c.java` enum + read getter `l()` + setter `d4()`, `xf/d.java`). | Not the old `0=eco` ordering — that was inverted vs source. |
 

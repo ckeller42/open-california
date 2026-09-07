@@ -537,7 +537,7 @@
   {
    "id": 14,
    "type": "timeseries",
-   "title": "Source currents (raw, unverified scale)",
+   "title": "Source currents (A)",
    "gridPos": {
     "h": 8,
     "w": 8,
@@ -550,7 +550,7 @@
    },
    "fieldConfig": {
     "defaults": {
-     "unit": "none"
+     "unit": "amp"
     },
     "overrides": []
    },

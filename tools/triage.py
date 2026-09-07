@@ -28,7 +28,7 @@ SURFACE = {
         "IOneBattBemAfs": ("batt1_current", "A", "raw", "current"),   # current, not voltage-ranged
         "SocOneBattAfs": ("soc1_level", None, "raw", "level"),
         "UTwoBattBemAfs": ("batt2_v", "V", "0.1", "leisure_battery"),
-        "ITwoBattBemAfs": ("batt2_current", "A", "UNVERIFIED", "current"),
+        "ITwoBattBemAfs": ("batt2_current", "A", "0.1", "current"),   # xf/d.java:159 /10.0d
         "SocTwoBattAfs": ("soc2_level", None, "raw", "level"),
         "tTwoBattRemainingh": ("batt2_remaining_h", "h", "raw", "level"),
         "tTwoBattRemainingmin": ("batt2_remaining_min", "min", "raw", "level"),
@@ -36,9 +36,9 @@ SURFACE = {
         "PDcdcAfs": ("dcdc_power", "W", "raw", "source"),
         "PLandAfs": ("shore_power", "W", "raw", "source"),
         "PPvAfs": ("solar_power", "W", "raw", "source"),
-        "IDcdcAfs": ("dcdc_current", "A", "UNVERIFIED", "source"),
-        "ILandAfs": ("shore_current", "A", "UNVERIFIED", "source"),
-        "IPvAfs": ("solar_current", "A", "UNVERIFIED", "source"),
+        "IDcdcAfs": ("dcdc_current", "A", "raw", "source"),     # xf/d.java:171 no scale (+2 on SW 0409/0410)
+        "ILandAfs": ("shore_current", "A", "0.1", "source"),    # xf/d.java:173 /10.0d
+        "IPvAfs": ("solar_current", "A", "0.1", "source"),      # xf/d.java:175 /10.0d
         "AgeOneBattValuesMinutes": ("age_min", "min", "raw", "level"),
         "EnergyMode": ("energy_mode", None, "raw", "state"),
         "EnergyModeNotSelectable": ("energy_mode_locked", None, "raw", "state"),

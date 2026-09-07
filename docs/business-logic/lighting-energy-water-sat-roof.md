@@ -244,6 +244,9 @@ Post-processing (`xf/a.java:328-390`, `xf/d.java`) derives UI values from the ra
 - SOC (state of charge) percentages: raw value × 10 → percent (`xf/a.java:333-337`, fields A0/B0 → ×10).
 - Voltage fields (`U*BemAfs`): raw ÷ 10 → volts (`:351-362`).
 - Power fields (`P*Afs`): raw × 10 → watts (`:363-374`).
+- Current fields (`I*Afs`): `ITwoBattBemAfs`, `ILandAfs`, `IPvAfs` raw ÷ 10 → amps (`xf/d.java:159,173,175`;
+  holders `M0/O0/P0` bound at `xf/a.java:150-157`); `IDcdcAfs` is **unscaled** (amps as-is) with a `+2`
+  correction when the SW version is 0409/0410 (`xf/d.java:171`). Catalog flipped to verified 2026-09-07.
 - Battery/DC-DC/Land/PV state fields (`StateDcdcAfs` etc.) decode through `d.k(int)` (`xf/d.java:203-217`)
   by **wire value**: raw `0`→`INACTIVE`, `1`→`ACTIVE`, `2`→`STANDBY`, `6`→`INIT`, and **every other raw
   value** (incl. `3`/`4`/`5`/`7`)→`ERROR`. The `INACTIVE`(0)/`ACTIVE`(1)/`STANDBY`(2)/`INIT`(3)/`ERROR`(4)

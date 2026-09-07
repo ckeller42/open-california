@@ -60,10 +60,12 @@ def energy(d: dict) -> dict:
     # *_power fields read a clean 0 when absent, so they're left as-is.
     dcdc_i, shore_i, solar_i = (bool(d.get("DcdcInstalled")), bool(d.get("LadInstalled")),
                                 bool(d.get("PvInstalled")))
-    # Scales/signs/enums verified against the app view-model xf/d.java (2026-07-08):
-    #   powers = raw*10 W (PDcdc signed, PLand/PPv unsigned); ITwoBatt signed /10 A;
-    #   ILand/IPv UNSIGNED /10 A; IDcdc signed, NO /10 (a +2 correction applies for SW
-    #   version 0409/0410 — not wired here, needs the general SW version); SoC 0-10 -> *10 %.
+    # Scales/signs/enums verified against the app view-model xf/d.java (2026-07-08, catalog
+    # flipped to verified 2026-09-07): powers = raw*10 W (PDcdc signed, PLand/PPv unsigned);
+    #   ITwoBatt signed /10 A (:159); ILand/IPv UNSIGNED /10 A (:173/:175); IDcdc signed, NO /10
+    #   (:171; the +2 correction for SW 0409/0410 is applied in apply_sw_corrections()).
+    #   SoC: the app shows level*10 % only for 0-10 — soc*_pct below mirrors that and is None
+    #   for the 11-15 the unit does emit; the catalog keeps soc*_level as the truthful 0-15 value.
     def soc_pct(level):
         return level * 10 if isinstance(level, int) and 0 <= level <= 10 else None
 
