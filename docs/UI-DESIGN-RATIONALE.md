@@ -1,6 +1,7 @@
 # UI design rationale — why the interface looks the way it does
 
-`calictl`'s control interface (`ui/prototype.html`, generated from `ui/screens/*.yaml`)
+`calictl`'s UI spec preview (`ui/prototype.html`, generated from `ui/screens/*.yaml`; the
+*served* web UI is the hand-authored `calictl/webui/`, English with a German toggle)
 is an **independent, hardware-function-driven** interface. Its information architecture is
 dictated by the camper's physical configuration and BLE control surface — not copied from the
 vendor app's expressive design. This document records, per screen, *why* each screen and
