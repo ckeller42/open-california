@@ -51,6 +51,34 @@ Add to `.claude/settings.local.json` (or `.claude/settings.json`):
 ```
 Test: `echo '{"tool_input":{"file_path":"calictl/semantics.py"}}' | python3 tools/hooks/dashboard-sync-reminder.py`
 
+## finding-artifact-sync.py
+A **PostToolUse** hook (matcher `Edit|Write`): a protocol/semantics *finding* usually has to be
+mirrored into several artifacts that do NOT update themselves. When an interpretation/mapping file
+is edited (`calictl/semantics.py`, `calictl/control.py`, `calictl/overrides.py`,
+`protocol/dictionary.yaml`, `protocol/signals.yaml`) it injects a checklist: the web GUI
+(`calictl/webui/app.js`), the RE docs (`docs/business-logic/` note + evidence-ledger tier + a dated
+DECISIONS entry), `ui/screens/*.yaml`, the protocol sequence diagrams, the Grafana dashboard, and
+tests + the auditor. For `dictionary.yaml`/`overrides.py` edits it also flags the REQUIRED codec
+regen (`tools.gen_codec_vectors` + `tools.gen_c_dict`) that the codec-parity CI enforces.
+
+Reads the PostToolUse event JSON on stdin; prints `additionalContext` when relevant,
+otherwise silent.
+
+### Register it (per-user; `.claude/settings.json` is gitignored)
+Add to `.claude/settings.local.json`:
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "Edit|Write",
+        "hooks": [ { "type": "command",
+          "command": "python3 \"$CLAUDE_PROJECT_DIR/tools/hooks/finding-artifact-sync.py\"" } ] }
+    ]
+  }
+}
+```
+Test: `echo '{"tool_input":{"file_path":"protocol/dictionary.yaml"}}' | python3 tools/hooks/finding-artifact-sync.py`
+
 ## enigma-update-reminder.py (PostToolUse: Bash)
 
 Fires when a Bash command reads/greps/traces the decompiled app sources (or runs jadx/baksmali/

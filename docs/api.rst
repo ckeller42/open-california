@@ -15,6 +15,8 @@ Semantics
 Energy history
 --------------
 
+.. automodule:: calictl.history
+   :no-members:
 .. autofunction:: calictl.history.append
 .. autofunction:: calictl.history.load
 .. autofunction:: calictl.history.trim
@@ -44,8 +46,15 @@ Control frames
 
 .. autofunction:: calictl.control._airheater
 .. autofunction:: calictl.control._int_range
+.. automodule:: calictl.postcheck
+   :no-members:
 .. autofunction:: calictl.postcheck.set_check
 .. autofunction:: calictl.control.commit_for
+
+Sinks (MQTT / Home Assistant)
+-----------------------------
+
+.. autofunction:: calictl.mqtt.command_topics
 
 Automation
 ----------
@@ -76,14 +85,21 @@ Tests
 
 .. autofunction:: tests.test_calictl.test_vehicle_decode_char_1004
 .. autofunction:: tests.test_calictl.test_airheater_control_frame
+.. autofunction:: tests.test_calictl.test_roof_position_name_and_infopopup_alert
+.. autofunction:: tests.test_calictl.test_water_stale_latch_guard
+.. autofunction:: tests.test_calictl.test_cli_set_check_all_rows
 .. autofunction:: tests.test_mock_integration.test_read_all_heartbeat_refreshes_stale_read
 .. autofunction:: tests.test_mock_integration.test_lighting_applies_without_preamble
 .. autofunction:: tests.test_automation.test_no_loop_full_cycle_engine_shed_then_park_then_refused
 .. autofunction:: tests.test_automation.test_autocamper_step_restores_via_injected_actuate
 .. autofunction:: tests.test_web_serve.test_observer_logs_transitions_and_bursts_on_engine_start
-.. autofunction:: tests.test_control_extra.test_int_range_helper_validates_and_traces
-.. autofunction:: tests.test_persistent_session.test_read_char_retry_reports_disconnect_on_successful_read
+.. automodule:: tests.test_control_extra
+.. automodule:: tests.test_persistent_session
+.. automodule:: tests.test_roof
+.. automodule:: tests.test_history
+.. automodule:: tests.test_ha
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
+.. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
 .. autofunction:: tests.test_firmware_anchors.test_firmware_snapshot_captures_raw_frames
 .. autofunction:: tests.test_firmware_anchors.test_anchors_flag_implausible_decode

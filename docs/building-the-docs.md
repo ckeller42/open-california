@@ -7,14 +7,15 @@ and the **evidence build** (`-t evidence`, only `business-logic/`, banner-marked
 Requirements and their test traceability are authored **as `sphinx-needs`
 objects inside code docstrings** — `.. req::` next to the implementation,
 `.. test:: … :links: R_*` next to the verifying test — and collected here by
-autodoc. This keeps requirements as close to the code as possible and makes a
-broken/missing trace a build-time failure.
+autodoc. This keeps requirements as close to the code as possible; a `:links:` to a
+nonexistent ID is a build-time failure (`-W`), while a requirement with no test builds clean
+and simply shows an empty `incoming` — check `needs.json` for that.
 
 ## Build
 
 ```sh
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r docs/requirements.txt
 # HTML (warnings-as-errors keeps traceability honest):
 sh docs/build_site.sh                    # full site: product docs + the evidence build, merged
 # (equivalent to the two runs below; PYTHON=... overrides the interpreter)

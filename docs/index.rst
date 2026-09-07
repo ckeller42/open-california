@@ -15,7 +15,8 @@ Reverse-engineered control + monitoring for the VW California T7 camper unit ove
 Start with :doc:`architecture` for the five-minute map; the requirement traceability at the
 bottom of this page is generated from ``sphinx-needs`` objects authored **inside code
 docstrings** (``.. req::``) and traced to the tests that verify them (``.. test:: … :links:``),
-so a failing or missing link surfaces at doc-build time next to the code.
+so a link to a nonexistent requirement fails the doc build (a requirement with no test builds
+clean and shows an empty "incoming" list).
 
 .. toctree::
    :maxdepth: 1

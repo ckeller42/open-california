@@ -50,8 +50,8 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 - **Never commit** the APK, decompiled sources (`decompile/`), VW manuals (`manuals/`), or
   secrets/tokens (`*.env`) — all gitignored. VW material: citations only.
 - **Mermaid diagrams render in the browser, not at build** — `sphinx -W` won't catch a broken
-  one. Keep `;`, `&`, bare `<`/`>`, and label-`:` out of `.. mermaid::` text; the guard
-  `tests/test_mermaid_syntax.py` enforces it.
+  one. Keep `;`, `&`, bare `<`/`>`, and label-`:` out of `.. mermaid::` blocks AND ```mermaid
+  fences (root `*.md` + `docs/**/*.md`); the guard `tests/test_mermaid_syntax.py` lints both.
 
 ## Commands
 

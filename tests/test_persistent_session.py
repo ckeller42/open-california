@@ -9,7 +9,8 @@ def _funcs():
 
 
 def test_persistent_session_starts_armed_and_actuates_without_arm_delay(monkeypatch):
-    """.. test:: Persistent session actuates arm-free
+    """
+    .. test:: Persistent session actuates arm-free
        :id: T_PERSISTENT_SESSION
        :links: R_PERSISTENT_SESSION
 
@@ -52,7 +53,8 @@ def test_persistent_session_starts_armed_and_actuates_without_arm_delay(monkeypa
 
 
 def test_persistent_read_all_retries_transient_failures_and_logs(monkeypatch):
-    """.. test:: PersistentSession.read_all retries a failed live read like the per-op path
+    """
+    .. test:: PersistentSession.read_all retries a failed live read like the per-op path
        :id: T_PERSISTENT_READ_ALL_RETRY
        :links: R_PERSISTENT_SESSION
 
@@ -95,7 +97,8 @@ def test_persistent_read_all_retries_transient_failures_and_logs(monkeypatch):
 
 
 def test_persistent_read_all_logs_after_exhausted_retries(monkeypatch, capsys):
-    """.. test:: PersistentSession.read_all logs (doesn't raise) after 3 failed attempts
+    """
+    .. test:: PersistentSession.read_all logs (doesn't raise) after 3 failed attempts
        :id: T_PERSISTENT_READ_ALL_LOG
        :links: R_PERSISTENT_SESSION
     """
@@ -124,7 +127,8 @@ def test_persistent_read_all_logs_after_exhausted_retries(monkeypatch, capsys):
 
 
 def test_persistent_read_all_breaks_on_disconnect_mid_loop(monkeypatch):
-    """.. test:: PersistentSession.read_all aborts the cycle on a genuine link drop
+    """
+    .. test:: PersistentSession.read_all aborts the cycle on a genuine link drop
        :id: T_PERSISTENT_READ_ALL_BREAK
        :links: R_PERSISTENT_SESSION, R_READ_RETRY_SHARED
 
@@ -157,7 +161,8 @@ def test_persistent_read_all_breaks_on_disconnect_mid_loop(monkeypatch):
 
 
 def test_read_all_only_trusts_sticky_push_for_push_only_funcs(monkeypatch):
-    """.. test:: read_all scopes the sticky-notification cache to PUSH_ONLY_FUNCS
+    """
+    .. test:: read_all scopes the sticky-notification cache to PUSH_ONLY_FUNCS
        :id: T_PERSISTENT_READ_ALL_SCOPED_PUSH
        :links: R_PERSISTENT_SESSION
 

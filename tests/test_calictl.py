@@ -562,6 +562,13 @@ def test_vehicle_decode_char_1004():
 
 
 def test_cli_set_check_all_rows():
+    """Every ``set`` target maps to its resulting-state field via ``postcheck.set_check`` (reached
+    through the CLI's ``_set_check`` alias — the same function the daemon uses).
+
+    .. test:: Post-write applied-check covers every set target
+       :id: T_POST_WRITE_CHECK
+       :links: R_POST_WRITE_CHECK
+    """
     from calictl import cli
     # (function, what, value, interp, decoded) -> (label, got, want)
     assert cli._set_check("cooler", "power", "on", {}, {"State": 1}) == ("State", 1, 1)
