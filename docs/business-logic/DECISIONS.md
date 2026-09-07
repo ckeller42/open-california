@@ -8,6 +8,24 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-09-07 — energy currents: catalog flipped from UNVERIFIED to verified amps
+
+`batt2_current`, `shore_current`, `solar_current` (`ITwoBattBemAfs`, `ILandAfs`, `IPvAfs`) were still
+`scale: UNVERIFIED` in `protocol/signals.yaml` although `semantics.py` had applied ÷10 since 2026-07-08
+and the Grafana leisure-current panel already said "(A)" — a hard-rule violation (unit on an
+unverified scale) that a docs-consistency audit surfaced. Re-derived from the view-model: the raw
+bits 112–128/144–160/160–176 land in holders `M0/O0/P0` (`xf/a.java:150-157,239,307`) and are
+published as `/ 10.0d` (`xf/d.java:159,173,175`; re-published on every notification
+`xf/a.java:345`); the readout string is a `V • A` pair. `IDcdcAfs` (`N0`) is the exception:
+`xf/d.java:171` applies **no** divisor, only the `+2` correction for SW 0409/0410 (already wired in
+`semantics.apply_sw_corrections`, DEVICE-verified 2026-08-17). Catalog now `'0.1'`/`raw` with
+`confidence: high` and the citations in `sources.app`; `tools/triage.py` table updated so a re-triage
+keeps it; the "Source currents (raw, unverified scale)" Grafana panel is now "(A)" `unit: amp`.
+`tools/app_scales.py` cannot harvest this (its regex wants `Name * N`; the app writes
+`.doubleValue() / 10.0d` on an obfuscated holder) — the citation above is the evidence.
+Also recorded: the derived `soc*_pct` is app display math (level×10 for 0–10, `None` above), not a
+sensor percentage; `soc*_level` remains the truthful 0–15 value.
+
 ## 2026-08-29 — lighting REQUEST_CONFIG preamble retired from calictl
 
 The app-faithful screen-open config pull (proven NOT an actuation gate, 2026-08-16 evening

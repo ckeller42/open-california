@@ -46,7 +46,7 @@ widgets:
     range: null
     controls: {field: null, action: null}
     elements: null
-    constraints: "Second/leisure battery charge level. No single dictionary field identified for the percentage itself (service 1600 state_fields are mostly warning/fault bits, not a level value) — UNVERIFIED, may come from a different service."
+    constraints: "Second/leisure battery readout: voltage and current (V • A), NOT a charge percentage. VERIFIED 2026-09-07 against the view-model: UTwoBattBemAfs ÷ 10 → V and ITwoBattBemAfs ÷ 10 → A (xf/d.java:159, binding xf/a.java:154); both from the energy service (1600), see protocol/signals.yaml batt2_v / batt2_current."
 
   - id: chargingSection
     type: section

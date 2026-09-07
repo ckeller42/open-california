@@ -44,6 +44,11 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   `_cooler_values` now carries the current schedule in every write.
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
+- energy current scales — DECOMPILE (2026-09-07): `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` ÷10 → A
+  (`xf/d.java:159,173,175`, holders bound `xf/a.java:150-157,239,307`), `IDcdcAfs` unscaled A + the
+  SW-0409/0410 `+2` (`xf/d.java:171`). Plausibility from 14 d telemetry: `batt2_current` raw −49…318
+  → −4.9…31.8 A with mean ≈ 0 (balanced leisure battery) — consistent, not a calibration. Owed: one
+  metered shore-charging read to upgrade `shore_current` to DEVICE.
 - roof `Installed=1` — DEVICE (live read 2026-08-26, #106): the pop-top IS installed (motor never driven).
 
 Captures come from the Mac "bar" (PacketLogger/tshark) or buspi HCI. When one lands: add a

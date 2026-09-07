@@ -45,8 +45,10 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 - **Grafana dashboards don't auto-update.** After changing surfaced signals, edit
   `calictl/deploy/camper-dashboard.json` and push to Pi **and** Cloud via `push_dashboard.py`.
   A PostToolUse hook (`tools/hooks/dashboard-sync-reminder.py`) reminds you.
-- **Don't label unverified values with a unit.** Several scales are `UNVERIFIED` (SoC is a
-  coarse 0–15 level not %, currents/temps are raw). See `docs/business-logic/signals.md`.
+- **Don't label unverified values with a unit.** SoC is a coarse 0–15 **level**, not % — the
+  derived `soc*_pct` (level×10, `None` above 10) only mirrors the app's display math; temps are
+  raw levels (`UNVERIFIED`). Currents ARE verified amps since 2026-09-07 (`batt2/shore/solar`
+  ×0.1, `dcdc` raw, per the app view-model). See `docs/business-logic/signals.md` §4/§5.
 - **Never commit** the APK, decompiled sources (`decompile/`), VW manuals (`manuals/`), or
   secrets/tokens (`*.env`) — all gitignored. VW material: citations only.
 - **Mermaid diagrams render in the browser, not at build** — `sphinx -W` won't catch a broken
@@ -63,7 +65,8 @@ python3 -m calictl serve [--dry-run]                 # the unified daemon (read-
 curl -s localhost:8088/api/state                     # buspi: live decoded state via the RUNNING daemon
 ```
 When the daemon is up it OWNS the single BLE slot — read live state via its web API `/api/state`
-(**buspi runs `--web 8088`**; the CLI default is 8080) or the cache `~/.cache/calictl/last_state.json`;
+(**buspi runs `--web 8088`** via a systemd drop-in override — the committed unit template has no
+`--web`; the CLI default is 8080) or the cache `~/.cache/calictl/last_state.json`;
 never open a 2nd BLE connection. Warm the fast session first with `POST /api/session {"action":"connect"}`
 (auto-releases after ~25 s idle).
 
@@ -109,7 +112,8 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
 - **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar (semantics
   static-verified against the app's getters — no live check possible here). The pop-top **roof IS
   installed** (`roof.Installed=1`, #106) but its motor has never been driven by calictl.
-- **buspi:** `sudo` needs the Pi password; `serve` runs under `~/solix-env`; secrets in
+- **buspi:** `sudo` needs the Pi password; `serve` runs under `~/solix-env` (the installed unit
+  adds `--web 8088` through a `systemctl edit` drop-in, not the committed template); secrets in
   `/etc/buspi/*.env` (root 0600). A parked unit is unreachable (deep-sleep, above). The web UI can
   optionally be fronted by HTTPS on the tailnet via `tailscale serve` (tailnet-only, never
   `funnel`) — see the `buspi-deploy` skill + `docs/raspberry-pi-setup.md` "Remote access over

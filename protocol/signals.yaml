@@ -635,24 +635,25 @@ energy:
         vwdoc: null
       unit: null
     IDcdcAfs:
-      confidence: medium
+      confidence: high
       decision: surface
       kind: source
       name: dcdc_current
-      scale: UNVERIFIED
+      scale: raw
       sources:
-        app: null
+        app: 'xf/d.java:171 applies NO scale (A as-is) but +2 when the SW version is 0409/0410 (semantics.apply_sw_corrections);
+          binding xf/a.java:150-157; signed'
         gui: null
         vwdoc: null
       unit: A
     ILandAfs:
-      confidence: medium
+      confidence: high
       decision: surface
       kind: source
       name: shore_current
-      scale: UNVERIFIED
+      scale: '0.1'
       sources:
-        app: null
+        app: 'xf/d.java:173 divides by 10.0d -> A; binding xf/a.java:150-157; unsigned (sg.a type 3)'
         gui: null
         vwdoc: null
       unit: A
@@ -668,24 +669,25 @@ energy:
         vwdoc: null
       unit: A
     IPvAfs:
-      confidence: medium
+      confidence: high
       decision: surface
       kind: source
       name: solar_current
-      scale: UNVERIFIED
+      scale: '0.1'
       sources:
-        app: null
+        app: 'xf/d.java:175 divides by 10.0d -> A; binding xf/a.java:150-157; unsigned (sg.a type 3)'
         gui: null
         vwdoc: null
       unit: A
     ITwoBattBemAfs:
-      confidence: medium
+      confidence: high
       decision: surface
       kind: current
       name: batt2_current
-      scale: UNVERIFIED
+      scale: '0.1'
       sources:
-        app: null
+        app: 'xf/d.java:159 divides by 10.0d -> A (republished xf/a.java:345); binding xf/a.java:154,239,307;
+          signed (sg.a type 1)'
         gui: infoPage_battery_value_text
         live: 319
         vwdoc: 'T7 manual: leisure-battery current shown on the control panel'

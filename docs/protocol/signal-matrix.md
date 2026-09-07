@@ -79,11 +79,11 @@ Totals: 228 fields catalogued, 91 surfaced, 137 omitted, 1 flagged for review.
 | energy | state | EmpInstalled | omit | — | — | — | — | EMP feature-availability flag — not a measurement |
 | energy | state | EnergyMode | surface | energy_mode | high | gui | — | — |
 | energy | state | EnergyModeNotSelectable | surface | energy_mode_locked | high | — | — | — |
-| energy | state | IDcdcAfs | surface | dcdc_current | medium | — | — | — |
-| energy | state | ILandAfs | surface | shore_current | medium | — | — | — |
+| energy | state | IDcdcAfs | surface | dcdc_current | high | app | — | — |
+| energy | state | ILandAfs | surface | shore_current | high | app | — | — |
 | energy | state | IOneBattBemAfs | surface | batt1_current | high | — | — | — |
-| energy | state | IPvAfs | surface | solar_current | medium | — | — | — |
-| energy | state | ITwoBattBemAfs | surface | batt2_current | medium | gui, vwdoc, live | — | — |
+| energy | state | IPvAfs | surface | solar_current | high | app | — | — |
+| energy | state | ITwoBattBemAfs | surface | batt2_current | high | app, gui, vwdoc, live | — | — |
 | energy | state | LadInstalled | surface | shore_installed | high | — | — | — |
 | energy | state | LandDefect | omit | — | — | — | — | fault/warning/source-state bit — aggregated into the faults[] / source status, not standalone |
 | energy | state | LandNotAvailable | omit | — | — | — | — | fault/warning/source-state bit — aggregated into the faults[] / source status, not standalone |
