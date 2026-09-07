@@ -299,6 +299,9 @@ ExecStart=$DIR/.venv/bin/python -m calictl serve
 WorkingDirectory=$DIR
 EnvironmentFile=-$CONFIG_DIR/calictl.env
 Environment=PYTHONUNBUFFERED=1
+# Pin the bond file the installer wrote: the service's HOME/XDG_STATE_HOME may differ from the
+# installing shell's, and a mismatch would make the daemon fall back to the placeholder address.
+Environment=CALICTL_PAIRING_CACHE=$(pairing_cache_file)
 Restart=always
 RestartSec=30
 User=$_user
@@ -306,7 +309,8 @@ User=$_user
 [Install]
 WantedBy=multi-user.target"
   if [ "$DRY_RUN" = 1 ]; then
-    printf '  + write systemd unit -> %s (User=%s, EnvironmentFile=-%s)\n' "$unit" "$_user" "$CONFIG_DIR/calictl.env"
+    printf '  + write systemd unit -> %s (User=%s, EnvironmentFile=-%s, CALICTL_PAIRING_CACHE=%s)\n' \
+      "$unit" "$_user" "$CONFIG_DIR/calictl.env" "$(pairing_cache_file)"
   else
     printf '%s\n' "$_body" | sudo tee "$unit" >/dev/null
     run sudo systemctl daemon-reload

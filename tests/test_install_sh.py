@@ -56,6 +56,9 @@ def test_dry_run_previews_all_steps_and_touches_nothing(tmp_path):
     # The bond must go to the pairing cache (so the web wizard's unpair/re-pair persist),
     # never be baked into calictl.env as CALICTL_ADDR (env wins over the cache on restart).
     assert "CALICTL_ADDR=" not in out.replace("CALICTL_ADDR=<mac>", "")
+    # The rendered unit must pin the daemon to the exact bond file the installer wrote — the
+    # service's HOME/XDG_STATE_HOME can differ from the installing shell's.
+    assert "CALICTL_PAIRING_CACHE=" in out
     assert not target.exists()            # dry-run created nothing
 
 

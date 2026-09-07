@@ -383,6 +383,7 @@ class BluezTransport:
             cache_path = pairing_cache_path()
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_text(json.dumps({"address": addr}))
+            cache_path.chmod(0o600)  # the identity address is owner PII (matches install.sh)
             return addr
         except Exception:
             return None
