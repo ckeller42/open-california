@@ -126,7 +126,12 @@ def test_lighting_requires_the_commit_frame_to_apply(mock):
 
 def test_lighting_applies_without_preamble(mock):
     """A bare SET + commit actuates — the app's REQUEST_CONFIG screen-open pull is NOT an
-    actuation gate (photon-verified on-device 2026-08-16), and calictl no longer sends it."""
+    actuation gate (photon-verified on-device 2026-08-16), and calictl no longer sends it.
+
+    .. test:: Lighting set actuates with the bare commit
+       :id: T_LIGHT_COMMIT
+       :links: R_LIGHT_COMMIT
+    """
     funcs = _funcs()
     dev = device.CamperDevice()
     setf = control.build(funcs, "lighting", "kitchen", 8, {})

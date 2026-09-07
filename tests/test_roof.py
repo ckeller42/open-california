@@ -18,6 +18,7 @@ These tests lock in:
     hardware dead-man halting when frames cease, UNVERIFIED, so the STOP attempt is all we assert);
   * the dead-man validation: if SafetyCounterValid is still false after validate_s the move is
     aborted (-> STOP), and it continues when the bit is set.
+
 Move frames carry byte0 == 0x01 (Up); the STOP frame carries byte0 == 0x00 -- that byte
 distinguishes a STOP write from a move write (bytes 1-4 are the live SafetyCounter).
 """

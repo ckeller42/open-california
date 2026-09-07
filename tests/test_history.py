@@ -7,7 +7,8 @@ def _p(tmp_path):
 
 
 def test_append_load_round_trip(tmp_path):
-    """.. test:: Energy history round-trip
+    """
+    .. test:: Energy history round-trip
        :id: T_ENERGY_HISTORY
        :links: R_ENERGY_HISTORY
 

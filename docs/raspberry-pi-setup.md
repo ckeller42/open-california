@@ -9,7 +9,7 @@ passkey you have to type), so the installer walks you through it.
 
 ## Requirements
 
-- Raspberry Pi OS / Debian (any recent version; buspi runs Debian 13 / Python 3.13).
+- Raspberry Pi OS / Debian with Python ≥ 3.11 (Debian 12+ / Raspberry Pi OS Bookworm or newer; buspi runs Debian 13 / Python 3.13).
 - A Bluetooth LE adapter (the Pi's built-in radio is fine).
 - Your own VW California with the Camper Unit, within Bluetooth range.
 - `sudo` rights. ~5 minutes.
@@ -156,7 +156,7 @@ This is optional and changes no code — it's Pi-side configuration.
 
 Open that `https://…` URL from any device on your tailnet — clean padlock, encrypted, no browser
 warning. The config **persists across reboots**; the plain `http://<pi>:<port>` LAN path keeps
-working alongside it. Check it with `tailscale serve status`; remove it with
+working alongside it. Check it with `sudo tailscale serve status`; remove it with
 `sudo tailscale serve --https=443 off`.
 
 - **Use `serve`, never `funnel`.** `tailscale funnel` would publish the same unauthenticated,

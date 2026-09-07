@@ -3,20 +3,15 @@
 Start with **[../ARCHITECTURE.md](../ARCHITECTURE.md)** (the pipeline + control path + arm
 state machine, and the module walkthrough). Root **[../README.md](../README.md)** is the project front door;
 **[../CLAUDE.md](../CLAUDE.md)** holds the hard rules. Requirement traceability builds from
-docstrings via **[sphinx/](sphinx/)** (`sphinx -b html`).
+docstrings via the Sphinx build in this directory (`conf.py`, `api.rst`; how-to in
+[building-the-docs.md](building-the-docs.md)).
 
 ## Reference docs (`business-logic/`)
 
 | Doc | Covers |
 |---|---|
 | [../ARCHITECTURE.md](../ARCHITECTURE.md) | end-to-end pipeline, control path, arm state machine, module walkthrough |
-| [control-and-actuation.md](business-logic/control-and-actuation.md) | **the write gate — SOLVED**: 1003 liveness heartbeat + connect handshake, the full-packet frame model, per-feature actuation status |
-| [signals.md](business-logic/signals.md) | the catalog guardrail (surface/omit + coverage) and scales (several UNVERIFIED) |
-| [alert-states.md](business-logic/alert-states.md) | per-function alert/error decode + ack keys (incl. roof InfoPopUp, clock-sync) |
-| [re-gap-inventory.md](business-logic/re-gap-inventory.md) | open gaps + what needs a capture |
-| [DECISIONS.md](business-logic/DECISIONS.md) | dated RE changelog (resolved questions + dead ends ruled out) |
-| [feature-availability.md](business-logic/feature-availability.md) | `Installed`-gating; which functions publish on which vehicle |
-| [status-states-audit.md](business-logic/status-states-audit.md) | per-characteristic field/offset reference (largely historical) |
+| [business-logic/index.md](business-logic/index.md) | the RE lab notes — the write gate, signal catalog + scales, alert states, evidence ledger, gap inventory, dated DECISIONS changelog, and the per-function notes (all ~20 indexed there) |
 
 ## Function → doc
 
