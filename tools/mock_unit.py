@@ -71,6 +71,12 @@ DEFAULT_SEED = {
                     "InteriorLight": 0, "OutsideLight": 0},
     "airheater": {"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0,
                   "HeatingLevel": 0},
+    # Pop-top FITTED (the real van has one, #106), closed, no InfoPopUp alert, counter valid.
+    # Seeded so the Roof tile + screen render in the e2e suite: the move buttons are the one
+    # safety-sensitive control, and without a roof here CI never executed roofControls() at
+    # all — which is how a ReferenceError shipped to buspi in #174. Reads only; the mock does
+    # not model roof motion.
+    "roof": {"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 1},
     # ProfileNumber 0 = NO active profile: SET_BRIGHTNESS is ACKed but ignored until a profile
     # is activated (SET_PROFILE) — the live-verified precondition. L10-16 hold the constant
     # not-installed default (13) that the real van reports (so any_on must ignore them).

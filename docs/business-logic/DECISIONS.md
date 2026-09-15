@@ -8,6 +8,21 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-09-15 — roof InfoPopUp 5 = DRIVING decoded; web move-gate uses the app's exact block set
+
+A code review of #174 (web UI greys/blocks controls the app forbids) found `semantics._ROOF_ALERT`
+had no entry for InfoPopUp **5 = ROOF_OP_DRIVING** (CRITICAL in `alert-states.md`), so the daemon
+reported `alert=None` while driving and the new web gate left roof open/close **enabled** in the
+one state the app blocks them. Added `5: "driving"` (Influx `alert_code` 7 — appended, never
+renumbered; Grafana mapping added). The web gate no longer keys on "any alert": it mirrors the app's
+`ig/c.java j()` movable-check exactly — blocked on child_lock / error / driving / emergency_locked /
+not_possible / low_battery or `Position == 15`, and **not** on sensor_error, which the app shows but
+still allows a move on. Same review caught that #174 had dropped the `btns` container declaration in
+`roofControls()` (ReferenceError on every Roof render, shipped to buspi): CI never executed that
+function because the e2e mock had no pop-top. The mock now seeds a fitted, closed, alert-free roof
+and an e2e asserts the three move buttons render and are enabled. Camping lights/USB gate now reads
+the OPTIMISTIC master value so they don't stay greyed for the BLE write+readback window after a tap.
+
 ## 2026-09-07 — energy currents: catalog flipped from UNVERIFIED to verified amps
 
 `batt2_current`, `shore_current`, `solar_current` (`ITwoBattBemAfs`, `ILandAfs`, `IPvAfs`) were still

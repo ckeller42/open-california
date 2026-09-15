@@ -174,10 +174,11 @@ def unconfigured_pairing_page(tmp_path):
 
 
 def test_dashboard_shows_installed_tiles_and_hides_uninstalled(page):
-    # installed features render as tiles; the uninstalled roof (mock has no pop-top) does not.
+    # installed features render as tiles (the mock seeds every function the real van has fitted).
     for name in ("Cooler", "Camping mode", "Water", "Energy"):
         expect(page.get_by_text(name, exact=True).first).to_be_visible()
-    assert page.get_by_text("Roof", exact=True).count() == 0
+    # the mock now seeds a fitted pop-top (like the real van), so Roof is a tile too
+    expect(page.get_by_text("Roof", exact=True).first).to_be_visible()
 
 
 def test_water_screen_shows_level_percent(page):
@@ -220,6 +221,18 @@ def test_camping_master_toggle_applies(page):
     sw.click()
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
     expect(page.locator('.switch[aria-checked="true"]').first).to_be_visible()
+
+
+def test_roof_screen_renders_move_buttons(page):
+    # Regression guard for #174: roofControls() referenced an undeclared `btns` and threw a
+    # ReferenceError on every Roof render — shipped to buspi because the mock had no pop-top, so
+    # CI never executed the function. With a fitted roof seeded (Position closed, no InfoPopUp
+    # alert) the screen must render all three controls, and with no alert none may be blocked.
+    page.get_by_text("Roof", exact=True).first.click()
+    for name in ("open", "close", "stop"):
+        expect(page.get_by_role("button", name=name)).to_be_visible()
+        expect(page.get_by_role("button", name=name)).to_be_enabled()
+    expect(page.get_by_text("Alert")).to_be_visible()                 # readouts rendered too
 
 
 def test_lighting_screen_lamps_are_directly_controllable(page):

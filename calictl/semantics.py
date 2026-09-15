@@ -205,8 +205,11 @@ def campingmode(d: dict) -> dict:
 _ROOF_POS = {0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error"}
 # Roof InfoPopUp alert enum (ig/c.java, 4-bit InfoPopUp), only meaningful while installed:
 # 0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked 10=not_possible 11=low_battery.
-_ROOF_ALERT = {1: "child_lock", 4: "error", 6: "sensor_error", 7: "emergency_locked",
+_ROOF_ALERT = {1: "child_lock", 4: "error", 5: "driving", 6: "sensor_error", 7: "emergency_locked",
                10: "not_possible", 11: "low_battery"}
+# InfoPopUp 5 = ROOF_OP_DRIVING (docs/business-logic/alert-states.md): the unit refuses to move the
+# pop-top while driving. It was missing here, so the web UI's move gate saw alert=None and left
+# open/close enabled in exactly the state the app blocks them (found by code review of #174).
 
 
 def roof(d: dict) -> dict:

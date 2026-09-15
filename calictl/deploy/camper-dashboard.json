@@ -918,6 +918,9 @@
         },
         "6": {
          "text": "Low battery"
+        },
+        "7": {
+         "text": "Driving"
         }
        }
       }
