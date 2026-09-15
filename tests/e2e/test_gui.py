@@ -196,6 +196,24 @@ def test_cooler_toggle_gives_feedback_then_applies(page):
     expect(page.locator('.switch[aria-checked="true"]').first).to_be_visible()  # flipped on
 
 
+def test_camping_lights_and_usb_greyed_until_master_on(page):
+    # The app only lets you toggle interior/outside lights + rear USB while camping master is ON
+    # (a UI gate, semantics.campingmode / tf/a.java). With master OFF, both dependent toggles must
+    # render disabled + their whole row greyed (.ctl-off), while the master toggle stays enabled.
+    page.get_by_text("Camping mode", exact=True).first.click()
+    master = page.get_by_role("switch", name="Camping mode")
+    # order-independent: the module-scoped mock is shared, so a prior test may have left master ON.
+    # Drive it OFF first so this test asserts the master-off gate regardless of run order.
+    if master.get_attribute("aria-checked") == "true":
+        master.click()
+        expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
+        expect(master).to_have_attribute("aria-checked", "false")
+    expect(page.get_by_role("switch", name="Interior + outside lights")).to_be_disabled()
+    expect(page.get_by_role("switch", name="Rear USB ports")).to_be_disabled()
+    expect(page.locator(".row.ctl-off")).to_have_count(2)          # exactly lights + usb greyed
+    expect(master).to_be_enabled()                                  # master itself is usable
+
+
 def test_camping_master_toggle_applies(page):
     page.get_by_text("Camping mode", exact=True).first.click()
     sw = page.locator(".switch").first                        # first control = master

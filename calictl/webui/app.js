@@ -51,6 +51,7 @@
  * // campingmode (semantics.campingmode)
  * @property {boolean} [master_on]
  * @property {boolean} [usb_charger]
+ * @property {boolean} [usb_powered]
  * @property {boolean} [lights_on]
  * @property {boolean} [outputs_controllable]
  * @property {boolean} [enable]
@@ -139,7 +140,9 @@
  * @typedef {((v?: any) => (string|null|false|undefined)) | string} ConfirmSpec
  * @typedef {{ value: string, label: string }} SelectOption
  * @typedef {{ what: string, label: string, value?: string|number|null }} ButtonAction
- * @typedef {{ what: string, label: string, confirm?: ConfirmSpec, disabled?: (s: FnState) => (boolean|undefined) }} ControlBase
+ * `disabled(s)` returns true/a-reason-string when the current state forbids the control
+ * (greyed + blocked, mirroring the app), a falsy value when it's available.
+ * @typedef {{ what: string, label: string, confirm?: ConfirmSpec, disabled?: (s: FnState) => (boolean|string|undefined) }} ControlBase
  * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState }} ToggleControl
  * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, unit?: string }} SliderControl
  * @typedef {ControlBase & { kind: 'select', options: SelectOption[], current?: (s: FnState) => (string|null|undefined) }} SelectControl
@@ -384,8 +387,14 @@ const FEATURES = {
     title: "Camping mode", icon: "🏕️",
     controls: [
       { what: "master", kind: "toggle", label: "Camping mode", state: "master_on" },
-      { what: "lights", kind: "toggle", label: "Interior + outside lights", state: "lights_on" },
-      { what: "usb", kind: "toggle", label: "Rear USB ports", state: "usb_charger" },
+      // Lights + rear USB are only actionable in the app while camping master is ON (a UI gate,
+      // confirmed in semantics.campingmode + tf/a.java). Grey them when master is off. USB shows
+      // the DERIVED usb_powered (master AND UsbCharger) so it reads "off" when master is off,
+      // matching the physical state, not the latched UsbCharger field.
+      { what: "lights", kind: "toggle", label: "Interior + outside lights", state: "lights_on",
+        disabled: (s) => !s.master_on && "Turn camping mode on first" },
+      { what: "usb", kind: "toggle", label: "Rear USB ports", state: "usb_powered",
+        disabled: (s) => !s.master_on && "Turn camping mode on first" },
     ],
     readouts: [{ label: "Ignition (terminal-15)", get: (s) => onoff(s.enable) }],
     summary: (s) => onoff(s.master_on),
@@ -1374,7 +1383,7 @@ function renderFeature(fn) {
     for (const c of f.controls) card.appendChild(renderControl(fn, c, s));
     app.appendChild(card);
   }
-  if (f.roof) app.appendChild(roofControls());
+  if (f.roof) app.appendChild(roofControls(s));
   if (fn === "campingmode") app.appendChild(autoCamperCard());
   if (f.readouts && f.readouts.length) {
     const card = document.createElement("div");
@@ -1400,7 +1409,18 @@ function renderControl(fn, c, s) {
   row.appendChild(label);
   const isPending = pending_is(fn, c.what);
   if (isPending) row.appendChild(spinner());
-  const ro = readOnly() || (c.disabled ? !!c.disabled(s) : false);
+  // A control is unavailable when the daemon is read-only, or when its own `disabled(s)`
+  // predicate says the current vehicle state forbids toggling it (mirrors the app, which
+  // greys the same control in the same state). Grey the whole row and block the input.
+  const offReason = c.disabled ? c.disabled(s) : false;
+  const ro = readOnly() || !!offReason;
+  if (ro) {
+    row.classList.add("ctl-off");
+    // a string reason (not just `true`) becomes the row's title/tooltip explaining why
+    const why = readOnly() ? t("Read-only mode — writes are disabled")
+      : (typeof offReason === "string" ? t(offReason) : "");
+    if (why) row.title = why;
+  }
   // fire() applies a per-control "not verified" confirm (c.confirm) on top of the feature-level
   // one in act(); c.confirm(value) returns the prompt, or null/false to skip.
   /** @param {string|number} val */
@@ -1624,20 +1644,26 @@ function autoCamperCard() {
 const ROOF_REPRESS_MS = 1000;
 let roofLastMoveStart = 0;
 
-function roofControls() {
+function roofControls(s) {
+  s = s || {};
   const card = document.createElement("div");
   card.className = "card";
   const warn = document.createElement("div");
   warn.className = "warn";
   warn.textContent = /** @type {string} */ (t("Roof control is safety-sensitive and not live-verified."));
   card.appendChild(warn);
-  const btns = document.createElement("div");
-  btns.className = "btnrow";
+  // The app hard-blocks the roof MOVE (open/close) whenever the unit reports an InfoPopUp
+  // alert (child lock, error, sensor error, emergency-locked, driving/not-possible, low battery)
+  // — ig/c.java j(): movable only when no such alert. Mirror it: grey open/close, keep STOP
+  // always available (release). `s.alert` is that decoded InfoPopUp state (semantics.roof).
+  const moveBlocked = !!s.alert;
   for (const dir of ["open", "close", "stop"]) {
     const b = document.createElement("button");
     b.className = "btn";
     b.textContent = /** @type {string} */ (t(dir));
-    b.disabled = readOnly();
+    const blocked = dir !== "stop" && moveBlocked;
+    b.disabled = readOnly() || blocked;
+    if (blocked) b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
     if (pending_is("roof", dir)) b.appendChild(spinner());
     if (dir === "stop") {
       b.onclick = () => command("roof", "stop", null);
@@ -1648,7 +1674,7 @@ function roofControls() {
       let armed = false;
       const start = (ev) => {
         ev.preventDefault();
-        if (readOnly() || armed) return;
+        if (readOnly() || armed || blocked) return;
         if (Date.now() - roofLastMoveStart < ROOF_REPRESS_MS) return;  // debounce a too-quick re-press
         if (!confirm(tf("Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?", { dir: t(dir) }))) return;
         armed = true;
