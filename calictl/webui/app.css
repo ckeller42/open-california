@@ -69,7 +69,7 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .lbl { flex: 1; }
 /* a control row the current state forbids: grey the label to match the disabled control,
    so the whole row reads as unavailable (set by renderControl when read-only or c.disabled). */
-.row.ctl-off .lbl { opacity: .5; }
+.row.ctl-off .lbl, .row.ctl-off .sval { opacity: .5; }
 .val { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .ro .val { font-weight: 550; color: var(--fg); }
 
