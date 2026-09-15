@@ -287,6 +287,10 @@ window.STRINGS_DE = {
   "This removes the working bond; telemetry stops until re-paired. Continue?":
     "Dies entfernt die bestehende Verbindung; die Telemetrie stoppt bis zur erneuten Kopplung. Fortfahren?",
 
+  // --- disabled-control reasons --------------------------------------------------------------
+  "Turn camping mode on first": "Zuerst Campingmodus einschalten",
+  "Roof move blocked": "Dachbewegung blockiert",
+
   // --- language toggle -----------------------------------------------------------------------
   "Deutsch": "Deutsch",
   "English": "English"
