@@ -30,7 +30,8 @@ from .device import CamperDevice
 _ENUM_CODES: dict[str, dict[str, int]] = {
     "fault": {"error": 1, "emergency": 2, "door_open": 3},
     "alert": {"child_lock": 1, "error": 2, "sensor_error": 3,
-              "emergency_locked": 4, "not_possible": 5, "low_battery": 6},
+              "emergency_locked": 4, "not_possible": 5, "low_battery": 6,
+              "driving": 7},   # appended: never renumber — Grafana value-mappings key on these
 }
 
 

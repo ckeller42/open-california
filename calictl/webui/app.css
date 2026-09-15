@@ -114,7 +114,8 @@ label.row { cursor: pointer; }
 .btnrow { display: flex; gap: .5rem; padding: .8rem 0; }
 .btn { flex: 1; padding: .6rem; border-radius: 10px; border: 1px solid var(--border);
   background: var(--bg); color: inherit; cursor: pointer; text-transform: capitalize; }
-.btn:disabled { opacity: .5; cursor: progress; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }   /* unavailable (read-only / state-blocked) */
+.btn.pending { cursor: progress; }                     /* in-flight write */
 .warn { color: var(--error); font-size: .85rem; padding: .8rem 0 0; }
 .note { color: var(--muted); font-size: .88rem; padding: 0 .2rem; }
 

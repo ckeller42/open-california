@@ -44,6 +44,10 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   `_cooler_values` now carries the current schedule in every write.
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
+- roof InfoPopUp `5` = DRIVING (`_ROOF_ALERT`) + the web move-gate's block set {child_lock, error,
+  driving, emergency_locked, not_possible, low_battery, Position==15} — DECOMPILE (2026-09-15,
+  `ig/c.java` `j()` movable-check; sensor_error is warn-only there). Not yet seen live: the van has
+  never reported 5 while calictl was polling. Owed: one drive with the roof screen open.
 - energy current scales — DECOMPILE (2026-09-07): `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` ÷10 → A
   (`xf/d.java:159,173,175`, holders bound `xf/a.java:150-157,239,307`), `IDcdcAfs` unscaled A + the
   SW-0409/0410 `+2` (`xf/d.java:171`). Plausibility from 14 d telemetry: `batt2_current` raw −49…318

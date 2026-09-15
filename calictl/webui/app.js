@@ -341,11 +341,15 @@ const COOLER_FAULT_MSG = {
 const ROOF_ALERT_MSG = {
   child_lock: "⚠ Roof child lock active",
   error: "⚠ Roof error",
+  driving: "⚠ Roof locked while driving",
   sensor_error: "⚠ Roof sensor error",
   emergency_locked: "⚠ Roof emergency-locked",
   not_possible: "⚠ Roof operation not possible right now",
   low_battery: "⚠ Battery too low to operate roof",
 };
+// The subset of roof alerts on which the app refuses a MOVE (ig/c.java j()). sensor_error is
+// deliberately absent: the app shows it but still allows open/close.
+const ROOF_MOVE_BLOCK = new Set(["child_lock", "error", "driving", "emergency_locked", "not_possible", "low_battery"]);
 
 const ORDER = ["cooler", "campingmode", "lighting", "airheater", "water", "energy", "roof", "vehicle"];
 /** @type {Record<string, Feature>} */
@@ -391,10 +395,13 @@ const FEATURES = {
       // confirmed in semantics.campingmode + tf/a.java). Grey them when master is off. USB shows
       // the DERIVED usb_powered (master AND UsbCharger) so it reads "off" when master is off,
       // matching the physical state, not the latched UsbCharger field.
+      // Gate on the OPTIMISTIC master value (what the master switch itself shows), not the raw
+      // polled state: after tapping master ON the real state lands only after the BLE write +
+      // readback (0.6-3 s live), and greying lights/USB for that window reads as a failed tap.
       { what: "lights", kind: "toggle", label: "Interior + outside lights", state: "lights_on",
-        disabled: (s) => !s.master_on && "Turn camping mode on first" },
+        disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
       { what: "usb", kind: "toggle", label: "Rear USB ports", state: "usb_powered",
-        disabled: (s) => !s.master_on && "Turn camping mode on first" },
+        disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
     ],
     readouts: [{ label: "Ignition (terminal-15)", get: (s) => onoff(s.enable) }],
     summary: (s) => onoff(s.master_on),
@@ -1652,11 +1659,14 @@ function roofControls(s) {
   warn.className = "warn";
   warn.textContent = /** @type {string} */ (t("Roof control is safety-sensitive and not live-verified."));
   card.appendChild(warn);
-  // The app hard-blocks the roof MOVE (open/close) whenever the unit reports an InfoPopUp
-  // alert (child lock, error, sensor error, emergency-locked, driving/not-possible, low battery)
-  // — ig/c.java j(): movable only when no such alert. Mirror it: grey open/close, keep STOP
-  // always available (release). `s.alert` is that decoded InfoPopUp state (semantics.roof).
-  const moveBlocked = !!s.alert;
+  // The app hard-blocks the roof MOVE (open/close) — ig/c.java j() "movable" — when the unit
+  // reports InfoPopUp child_lock / error / driving / emergency_locked / not_possible / low_battery,
+  // or Position == 15 (error). It does NOT block on sensor_error (that one is warn-only in the
+  // app), so gate on an explicit set rather than "any alert". STOP stays available (release).
+  // `s.alert` / `s.position_name` are the decoded InfoPopUp + Position (semantics.roof).
+  const moveBlocked = ROOF_MOVE_BLOCK.has(/** @type {string} */ (s.alert)) || s.position_name === "error";
+  const btns = document.createElement("div");
+  btns.className = "btnrow";
   for (const dir of ["open", "close", "stop"]) {
     const b = document.createElement("button");
     b.className = "btn";

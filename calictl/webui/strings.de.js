@@ -290,6 +290,7 @@ window.STRINGS_DE = {
   // --- disabled-control reasons --------------------------------------------------------------
   "Turn camping mode on first": "Zuerst Campingmodus einschalten",
   "Roof move blocked": "Dachbewegung blockiert",
+  "⚠ Roof locked while driving": "⚠ Dach während der Fahrt gesperrt",
 
   // --- language toggle -----------------------------------------------------------------------
   "Deutsch": "Deutsch",
