@@ -60,6 +60,18 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - name: ruff lint (config in pyproject.toml)
         run: python -m ruff check .
+      # The web UI is hand-authored JS served client-side — no build, so nothing compiles it. A
+      # ReferenceError (an undeclared identifier) once shipped to the Pi because `node --check`
+      # only parses and the e2e mock hadn't rendered that screen. jsconfig.json has checkJs on:
+      # `tsc` catches "Cannot find name" and the like statically. Hard gate, must stay at 0 errors.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: web UI typecheck (tsc --checkJs) + parse
+        run: |
+          npx --yes -p typescript tsc --noEmit -p calictl/webui/jsconfig.json
+          node --check calictl/webui/app.js
+          node --check calictl/webui/strings.de.js
 
   no-vendor-material:
     runs-on: ubuntu-latest

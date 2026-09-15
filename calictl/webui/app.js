@@ -29,6 +29,8 @@
  * @property {'off'|'connecting'|'up'|'degraded'|'asleep'} session   persistent BLE session state
  * @property {'off'|'auto'|'release'} session_mode                    activity-scoped vs user-disconnected
  * @property {{enabled:boolean, armed:boolean, notice:?{ts:number,msg:string}}} [auto_camper] auto-camper toggle + notice
+ * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
+ * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -164,9 +166,9 @@
  * @property {string} [icon]
  * @property {Control[]} [controls]
  * @property {Readout[]} [readouts]
- * @property {(s: FnState) => string} [summary]
- * @property {(s: FnState) => (string|null)} [warn]
- * @property {(s: FnState) => (string|null)} [note]
+ * @property {(s: FnState) => (string|null|undefined)} [summary]
+ * @property {(s: FnState) => (string|null|undefined)} [warn]
+ * @property {(s: FnState) => (string|null|undefined)} [note]
  * @property {(w: string) => string} [confirm]
  * @property {boolean} [lighting]
  * @property {boolean} [roof]
@@ -591,6 +593,7 @@ async function refreshState(force) {
   const ae = /** @type {HTMLInputElement} */ (document.activeElement);
   if (!force && ae && (ae.type === "range" || ae.type === "time" || ae.tagName === "SELECT"
       || ae.id === "pairing-passkey")) return;   // don't clobber a mid-typed pairing passkey either
+  if (roofHold) return;                          // never rebuild the screen under a held roof button
   const sig = view + "|" + JSON.stringify(next);
   if (!force && sig === lastRender) return; // nothing changed -> no flicker
   lastRender = sig;
@@ -612,7 +615,9 @@ function command(fn, what, value) {
   const i = queue.findIndex((c) => c.key === key);   // prune a superseded queued command
   if (i >= 0) queue.splice(i, 1);
   queue.push({ fn, what, value, key });
-  render();
+  // Never rebuild the DOM while a roof move is being held: this render() is what used to
+  // detach the held button under the user's finger (see roofHold). The release repaints.
+  if (!roofHold) render();
   processQueue();
 }
 
@@ -622,7 +627,7 @@ async function processQueue() {
   if (inflight || !queue.length) return;
   inflight = /** @type {CommandItem} */ (queue.shift());
   setStatus("Sending…", "busy");
-  render();
+  if (!roofHold) render();          // same rule as command(): never rebuild under a held roof button
   /** @type {CommandResponse} */
   let res;
   try {
@@ -1091,7 +1096,9 @@ function pairingCard() {
     }
   } else if (p.state === "error") {
     const errRow = document.createElement("div"); errRow.className = "warn";
-    errRow.textContent = t("Error: ") + (t(PAIRING_ERROR_MSG[/** @type {string} */ (p.error)]) || p.error || t("unknown"));
+    const perr = /** @type {string} */ (p.error || "");
+    errRow.textContent = /** @type {string} */ (t("Error: "))
+      + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || perr || /** @type {string} */ (t("unknown")));
     card.appendChild(errRow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const retryBtn = document.createElement("button"); retryBtn.type = "button"; retryBtn.className = "btn";
@@ -1364,7 +1371,7 @@ function renderFeature(fn) {
   const s = STATE[fn] || {};
   titleEl.textContent = /** @type {string} */ (t(f.title));
   if (f.warn) {                         // dynamic FAULT banner (e.g. fridge door open) — red/alert
-    /** @type {string|null} */
+    /** @type {string|null|undefined} */
     let w;
     try { w = f.warn(s); } catch (e) { w = null; }
     if (w) {
@@ -1374,7 +1381,7 @@ function renderFeature(fn) {
     }
   }
   if (f.note) {                         // soft INFO banner (e.g. water stale) — muted, not a fault
-    /** @type {string|null} */
+    /** @type {string|null|undefined} */
     let n;
     try { n = f.note(s); } catch (e) { n = null; }
     if (n) {
@@ -1611,7 +1618,8 @@ function spinner() {
 // card. Restores camper mode + rear USB once you PARK (the unit refuses camping-on while driving);
 // stands down on low battery. `armed` = a restore is owed (the engine shed camping).
 function autoCamperCard() {
-  const ac = (STATE._meta && STATE._meta.auto_camper) || {};
+  const ac = /** @type {{enabled?: boolean, armed?: boolean, notice?: ?{ts:number,msg:string}}} */
+    ((STATE._meta && STATE._meta.auto_camper) || {});
   const card = document.createElement("div"); card.className = "card";
   const row = document.createElement("div"); row.className = "row";
   const lbl = document.createElement("span"); lbl.className = "lbl";
@@ -1650,9 +1658,36 @@ function autoCamperCard() {
 // debounced — a release must always cease the move.
 const ROOF_REPRESS_MS = 1000;
 let roofLastMoveStart = 0;
+// The direction currently being HELD ("open"/"close"), or null. Module-level on purpose: the
+// pointerdown handler's command() used to trigger a synchronous render() that rebuilt the whole
+// screen and DETACHED the held button, so its closure-scoped pointerup never fired and the
+// release never sent STOP — the roof kept moving until the server's Position auto-stop. Now the
+// release is caught at document level (below), independent of which node the pointer lands on,
+// and render() is suppressed while a move is held.
+/** @type {?string} */
+let roofHold = null;
+/** Send STOP once for the held move (idempotent: a second release is a no-op).
+ *
+ * OUT-OF-BAND on purpose: the command queue is single-flight, and the "open"/"close" POST stays
+ * in flight for as long as the server streams the move — so a STOP enqueued behind it would
+ * never be sent until the move it is supposed to interrupt had already ended on its own. The
+ * server handles roof STOP lock-free (`_roof_stop`), so it goes straight to the API. */
+function roofRelease() {
+  if (!roofHold) return;
+  roofHold = null;
+  api("/api/command", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ function: "roof", what: "stop", value: null, confirm: true }),
+  }).catch((e) => toast("Roof STOP failed: " + String(e), "error"));
+  render();                        // the held button may now be repainted
+}
+// Any release anywhere ends the move — the vehicle's own hold-to-move contract.
+document.addEventListener("pointerup", roofRelease);
+document.addEventListener("pointercancel", roofRelease);
 
+/** @param {FnState} s the decoded roof state (caller passes `STATE[fn] || {}`) */
 function roofControls(s) {
-  s = s || {};
   const card = document.createElement("div");
   card.className = "card";
   const warn = document.createElement("div");
@@ -1681,21 +1716,21 @@ function roofControls(s) {
       // PRESS-AND-HOLD: the pop-top moves only while the button is held; releasing sends STOP
       // (interrupts the in-flight move server-side via _roof_stop). Mirrors the vehicle's own
       // hold-to-move control. Still UNVERIFIED end-to-end on this van.
-      let armed = false;
+      /** @param {PointerEvent} ev */
       const start = (ev) => {
         ev.preventDefault();
-        if (readOnly() || armed || blocked) return;
+        if (readOnly() || roofHold || blocked) return;
         if (Date.now() - roofLastMoveStart < ROOF_REPRESS_MS) return;  // debounce a too-quick re-press
         if (!confirm(tf("Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?", { dir: t(dir) }))) return;
-        armed = true;
+        roofHold = dir;                 // set BEFORE command(): it gates render() and the release
         roofLastMoveStart = Date.now();
         command("roof", dir, null);
       };
-      const end = () => { if (armed) { armed = false; command("roof", "stop", null); } };
       b.addEventListener("pointerdown", start);
-      b.addEventListener("pointerup", end);
-      b.addEventListener("pointerleave", end);
-      b.addEventListener("pointercancel", end);
+      // pointerup/pointercancel are handled ONCE at document level (roofRelease) so a release
+      // always sends STOP even if this node was replaced meanwhile; sliding off the button
+      // also ends the move, like letting go of the vehicle's own switch.
+      b.addEventListener("pointerleave", roofRelease);
     }
     btns.appendChild(b);
   }
