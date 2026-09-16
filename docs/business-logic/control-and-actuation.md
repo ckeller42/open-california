@@ -168,6 +168,7 @@ stale read would be re-asserted — see the "carry current state" note in `_cool
 
 | lighting All lights ON | `0c10000000000000eeeeeeeeeeeeeeee` → commit `0e00…ee` | same two frames (`power on` + `LIGHT_COMMIT`) | `SET_PROFILE 12` — **byte-identical** |
 | lighting lamp icon tap (e.g. Left) | `0904000000000000beeeeeeeeeeeeeee` → commit | `reading-1 5` → `0904…5eee…` | `ProfileNumber=9, Mode=4`, one zone nibble — app writes **11 = DEFAULT**, calictl's "on" writes 10 (100 %) |
+| energy mode → Max | `10` → `30` | `10` | `EnergyModeSet=1` — **identical** (the app's selector offered only *Normal* / *Max* on this vehicle profile; *ECO* is availability-gated, `zj/c.N0`) |
 
 Two systematic differences worth knowing: the app leaves cooler `State` and `NightTimerSet` at the
 sentinel `3` in every non-power frame, while calictl writes `State=<current>` and
