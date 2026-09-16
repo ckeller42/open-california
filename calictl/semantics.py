@@ -223,7 +223,11 @@ _ROOF_POS = {0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error"}
 # 11=low_battery. Names are the app's internal IDs; what they MEAN to the user (child_lock = an
 # over-use cooldown, driving = roof open while the vehicle may move) is in alert-states.md.
 _ROOF_ALERT = {1: "child_lock", 4: "error", 5: "driving", 6: "sensor_error", 7: "emergency_locked",
-               10: "not_possible", 11: "low_battery"}
+               10: "not_possible", 11: "low_battery",
+               # Observed 2026-09-16 with the real app against the fake unit (tools/applab):
+               # 2/3/12 -> roof tile "Function currently in use" (app's k() set), 9 -> "Only
+               # possible when stationary" (E0 flow). No dialog, just a refused move + tile text.
+               2: "in_use", 3: "in_use", 12: "in_use", 9: "not_stationary"}
 # InfoPopUp 5 = ROOF_OP_DRIVING (docs/business-logic/alert-states.md): the unit refuses to move the
 # pop-top while driving. It was missing here, so the web UI's move gate saw alert=None and left
 # open/close enabled in exactly the state the app blocks them (found by code review of #174).

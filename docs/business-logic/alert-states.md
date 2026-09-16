@@ -322,15 +322,20 @@ bits 12-15** (`ig/c.java:241-246`). Dispatch `switch(InfoPopUp)` (`:311-638`):
 | 7 | ROOF_EMERGENCY_LOCKED (`emergency_locked`) | HIGH | **yes** | "Please secure the pop-up roof manually and follow the instructions from the operating manual." / "Bitte Aufstelldach manuell sichern…" (`dialog_error_popUpRoof_secureManually_text`) |
 | 10 | ROOF_NOT_POSSIBLE_TEMPORARILY (`not_possible`) | HIGH | **yes** | "The function is currently unavailable." / "Die Funktion ist zurzeit nicht möglich." (`dialog_error_popUpRoof_temporarilyOutOfFunction_text`) |
 | 11 | ROOF_LOW_BATTERY (`low_battery`) | HIGH | **yes** | "Battery low. Run engine." / "Batterie ist schwach. Motorlauf durchführen." (`dialog_warning_popUpRoof_lowBattery_text`) |
+| 2, 3, 12 | (`k()` set → `in_use`) | — | **yes** (tile state) | roof tile reads "Function currently in use" — no dialog (`dialog_info_popUpRoof_functionInUse_*`) |
+| 9 | (`E0` flow → `not_stationary`) | — | **yes** (tile state) | roof tile reads "Only possible when stationary" — no dialog (`dialog_info_popUpRoof_onlyPossibleWhenStationary_*`) |
+| 8, 13, 14 | — | — | no | nothing shown (tile stays "Closed") |
 | — | `Position == 15` | — | **yes** | (position error; no dialog of its own) |
 
 Move-gate = `ig/c.java j()` movable-check (blocks {1,4,5,7,10,11} or `Position==15`); `i()` is the
 warning-only set {6,1,11} shown alongside. Texts resolved 2026-09-16 (`ig/c.java` switch → `ea/j`
-/ `ea/n` string accessors → `.cvr` tables); the web UI's banners (`webui/app.js ROOF_ALERT_MSG`)
-and its `ROOF_MOVE_BLOCK` set mirror this table. InfoPopUp 2, 3, 9, 12 have dedicated flows in
-the app (`k()` = {2,3,12}, `E0`/`z0`/`A0`) whose meaning is not traced — candidates
-`dialog_info_popUpRoof_functionInUse` / `activateIgnition` / `onlyPossibleWhenStationary` /
-`safetyCheck`; calictl maps them to `alert=None`.
+/ `ea/n` string accessors → `.cvr` tables) and **every code 1–15 OBSERVED on the running app**
+the same day (`tools/applab`: the fake unit pushed each `InfoPopUp` value; the app's dialogs and
+roof-tile texts are as tabled). The web UI's banners (`webui/app.js ROOF_ALERT_MSG`) and its
+`ROOF_MOVE_BLOCK` set mirror this table; calictl names 2/3/12 `in_use` and 9 `not_stationary`
+(Influx `alert_code` 8 / 9, appended). The roof page itself also refuses to show its controls
+without terminal 15 ("Switch on the ignition — Please switch on the ignition to operate the
+pop-up roof.", `dialog_info_popUpRoof_activateIgnition_*`).
 
 `ROOF_ERROR`/`ROOF_NOT_POSSIBLE_TEMPORARILY`/`ROOF_OP_DRIVING` are wholly new IDs. Two ack keys
 lack the `_CONFIRMED` suffix (`..._NOT_POSSIBLE_TEMP`, `..._ERROR_WORKSHOP`), which is why a

@@ -321,6 +321,23 @@ Send the full 10-field frame every time (shared-send behavior above).
   pre-emptively). Surfaced by `semantics.airheater` as `error` (`low_battery` / `low_fuel` /
   `system_error` / `heating_time_exceeded` / `not_possible`) next to the raw `error_code`; the
   web UI shows it as a banner. Code→dialog-string pairing beyond the IDs is unresolved.
+
+**Observed on the running app (2026-09-16, `tools/applab` — the real app against a fake unit):**
+
+- Heater page ("Heating"): temperature slider **1–9 + "HI"** (HI = level 10), run-time slider
+  **10–120 min**, *Immediate heating* switch, *Timer: Off* expander, *Permanent Heating* switch
+  **always present** — greyed with "This function can be activated only in the vehicle." while
+  off, live while on. Status line: "Inactive" / "Active • N min remaining" (from
+  `RunningTimeinAction`) / "Active • Continuous heating".
+- *Immediate heating* ON: **no confirmation dialog**; the app writes `3d7b007f1f3f` and, 500 ms
+  later, the neutral `3f7b007f1f3f` (every request field back at sentinel 3). OFF: `3c7b007f1f3f`.
+- *Permanent Heating* OFF (only after "Turn off continuous heating? You can only turn continuous
+  heating on again using the controls in your California." → *Turn off*): `0f7b007f1f3f` +
+  neutral. There is no ON write; the switch is inert when off.
+- The untargeted bytes `7b 00 7f 1f 3f` are the model defaults = leave-unchanged sentinels
+  (HeatingLevel 11, OperationMode 7, RunningTime 127, TimerHour 31, TimerMin 63). calictl's
+  `_airheater_values` re-sends the CURRENT values instead — the unit accepts both; the mock now
+  treats those defaults as "leave unchanged" (`tests/test_mock_fidelity.py`).
 - **Turn off Immediate Heating**: `NormalOperationRequest = 0` (via `C2(false)`).
   `rf/b.java:182-191`.
 - **Turn off Continuous Heating ("Dauerbetrieb")**: `PermanentOperationRequest = 0` (via `E3`,

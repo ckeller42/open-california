@@ -141,6 +141,8 @@ class MockCamperUnit:
         self.online = True     # False models the parked unit deep-asleep (not advertising)
         self.last_beat: int | None = None
         self._pending_light = None                   # staged lighting change, applied on commit
+        self._roof_ctr: int | None = None            # last SafetyCounter seen (roof frames)
+        self._roof_streak = 0                        # consecutive +1 increments observed
         self.writes: list[tuple[str, bytes]] = []   # (function, frame) audit trail
         # Per-function STALE-read overrides: a read returns these until the 1003 heartbeat arms
         # the session (self.armed), after which the true `state` is returned — models the real
@@ -252,15 +254,53 @@ class MockCamperUnit:
                 self._pending_light = None
             return
 
+        # Roof (1401): the app streams `Up/Down/SafetyCounter` every ~500 ms while its roof page is
+        # open (direction 0 = just the counter). The unit raises `SafetyCounterValid` (1402 bit 7)
+        # once it sees the counter incrementing and only then honours a move; a restarted counter
+        # drops validity again (~3 s withhold on the real unit). Motion is modelled coarsely: one
+        # position step per valid move frame (closed 0 -> middle 2 -> open 1 and back).
+        if fn == "roof":
+            ctr = ctrl.get("SafetyCounter")
+            if self._roof_ctr is not None and ctr == self._roof_ctr + 1:
+                self._roof_streak += 1
+            else:
+                self._roof_streak = 0
+            self._roof_ctr = ctr
+            st["SafetyCounterValid"] = 1 if self._roof_streak >= 2 else 0
+            if st["SafetyCounterValid"]:
+                pos = st.get("Position", 0)
+                if ctrl.get("Up") == 1 and ctrl.get("Down") != 1:
+                    st["Position"] = 1 if pos == 2 else (2 if pos in (0, 14) else pos)
+                elif ctrl.get("Down") == 1 and ctrl.get("Up") != 1:
+                    st["Position"] = 0 if pos == 2 else (2 if pos == 1 else pos)
+            return
+
         for cf in func.control_fields:
             if not (cf.placed and cf.name in ctrl):
                 continue
             if cf.width == 2 and ctrl[cf.name] == LEAVE_UNCHANGED_2BIT:
                 continue                          # full-packet "leave unchanged" 2-bit sentinel
-            if func.state_field(cf.name) is None:
+            # Wider fields: the app fills every UNTARGETED field with the model's default (its
+            # `v()` value — heater HeatingLevel 11 / RunningTime 127 / TimerHour 31 / TimerMin 63,
+            # cooler Level 7 / TimerHour 30 ...), which the unit treats as "leave unchanged". Seen
+            # live 2026-09-16: the app's Dauerbetrieb-OFF frame is `0f7b007f1f3f`. Those defaults
+            # are all outside each field's valid range, so nothing legitimate is lost.
+            if cf.width > 2 and cf.default is not None and ctrl[cf.name] == cf.default:
+                continue
+            # `<X>Request` control bits drive the `<X>` state bit (NormalOperationRequest ->
+            # NormalOperation, PermanentOperationRequest -> PermanentOperation).
+            target = cf.name
+            if func.state_field(target) is None and target.endswith("Request"):
+                target = target[: -len("Request")]
+            if func.state_field(target) is None:
                 continue                          # not a name-aligned control→state field
                                                   # (offset-remapped timers are NOT faked)
-            st[cf.name] = ctrl[cf.name]
+            st[target] = ctrl[cf.name]
+        # Immediate heating starts the run-time countdown: RunningTimeinAction (1702) mirrors the
+        # configured RunningTime while NormalOperation is on and reads 0 otherwise (the app's status
+        # bar shows "Active • N min remaining" from it — with 0 it says "0 min remaining").
+        if fn == "airheater" and func.state_field("RunningTimeinAction") is not None:
+            st["RunningTimeinAction"] = st.get("RunningTime", 0) if st.get("NormalOperation") else 0
 
 
 class _Char:
