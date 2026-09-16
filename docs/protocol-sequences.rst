@@ -224,7 +224,11 @@ Roof actuation (press-and-hold move stream, unit self-gated by a 3 s SafetyCount
    APP-OBSERVED 2026-09-16 (``tools/applab``): the app's roof PAGE, as soon as it opens and
    before any button is touched, starts streaming ``[0x00][SafetyCounter]`` (direction *stop*)
    every ~500 ms and expects ``SafetyCounterValid`` back — the counter validation is pre-armed
-   while the page is visible, so a press moves immediately. Without terminal 15 the page shows
+   while the page is visible, so a press moves immediately. **While the button is held the frame
+   rate rises to ~8 frames/s** (~125 ms) with the direction byte set, the counter still advancing
+   only every ~500 ms (four consecutive frames carry the same value — a unit that demanded +1 per
+   frame would drop validity; the mock did, and the app fell back to ``0x00`` after two frames).
+   Without terminal 15 the page shows
    *"Switch on the ignition — Please switch on the ignition to operate the pop-up roof."* and hides
    its controls; ``InfoPopUp`` 9 shows *"Only possible when stationary"*, 2/3/12 *"Function
    currently in use"* (``alert-states.md``).

@@ -55,6 +55,7 @@ _HEARTBEAT_SHORT = "1003"
 LEAVE_UNCHANGED_2BIT = 3   # the sg.a 2-bit "leave unchanged" sentinel (see control.SENTINEL)
 ROOF_STEP_S = 5.0          # seconds of a held valid move per Position step (closed→middle→open)
 ROOF_RELEASE_S = 1.5       # no roof frame for this long = the button was released (app streams @500 ms)
+ROOF_COUNTER_STALE_S = 1.5 # SafetyCounter not incremented for this long = no longer valid
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 LIGHT_MODE_SET_BRIGHTNESS = 4
 LIGHT_MODE_SET_PROFILE = 16
@@ -144,7 +145,8 @@ class MockCamperUnit:
         self.last_beat: int | None = None
         self._pending_light = None                   # staged lighting change, applied on commit
         self._roof_ctr: int | None = None            # last SafetyCounter seen (roof frames)
-        self._roof_streak = 0                        # consecutive +1 increments observed
+        self._roof_streak = 0                        # counter increments observed (monotonic run)
+        self._roof_ctr_advanced = 0.0                # self.now when the counter last incremented
         self._roof_dir: str | None = None            # "up" / "down" while a move frame is held
         self._roof_last_frame = 0.0                  # self.now when the last roof frame arrived
         self._roof_travel = 0.0                      # seconds of valid travel since the last step
@@ -280,8 +282,16 @@ class MockCamperUnit:
                 c.update(TimerCounterHour=left // 60, TimerCounterMin=left % 60)
             changed.add("cooler")
 
-        # roof travel
+        # roof: a counter that stopped arriving is no longer valid (the app reads a stale
+        # SafetyCounterValid=1 as "another user is operating the roof" — observed 2026-09-16)
         r = self.state.get("roof")
+        if r is not None and r.get("SafetyCounterValid") and \
+                self.now - self._roof_last_frame > ROOF_COUNTER_STALE_S:
+            r["SafetyCounterValid"] = 0
+            self._roof_streak = 0
+            self._roof_dir = None
+            changed.add("roof")
+        # roof travel
         if r is not None and self._roof_dir is not None:
             if self.now - self._roof_last_frame > ROOF_RELEASE_S:
                 self._roof_dir = None            # released: frames stopped
@@ -369,12 +379,21 @@ class MockCamperUnit:
         # drops validity again (~3 s withhold on the real unit). Motion is modelled coarsely: one
         # position step per valid move frame (closed 0 -> middle 2 -> open 1 and back).
         if fn == "roof":
+            # SafetyCounter validity = the counter is MONOTONIC and still ADVANCING. The app's
+            # counter is seed + elapsed_ms/500, so it only increments every ~500 ms while frames
+            # arrive at ~500 ms idle and ~125 ms during a press (observed 2026-09-16) — several
+            # frames may carry the SAME value; a decrease/restart invalidates, as does no
+            # increment for ROOF_COUNTER_STALE_S. Two increments seen = validated.
             ctr = ctrl.get("SafetyCounter")
-            if self._roof_ctr is not None and ctr == self._roof_ctr + 1:
+            if self._roof_ctr is None or ctr < self._roof_ctr:
+                self._roof_streak = 0                # first frame / restarted counter
+            elif ctr > self._roof_ctr:
                 self._roof_streak += 1
-            else:
-                self._roof_streak = 0
+                self._roof_ctr_advanced = self.now
             self._roof_ctr = ctr
+            stale = self._roof_streak and (self.now - self._roof_ctr_advanced) > ROOF_COUNTER_STALE_S
+            if stale:
+                self._roof_streak = 0
             st["SafetyCounterValid"] = 1 if self._roof_streak >= 2 else 0
             up, down = ctrl.get("Up") == 1, ctrl.get("Down") == 1
             new_dir = "up" if up and not down else "down" if down and not up else None

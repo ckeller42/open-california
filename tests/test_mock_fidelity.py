@@ -124,6 +124,42 @@ def test_roof_counter_validates_only_when_incrementing():
     assert u.decoded("roof")["SafetyCounterValid"] == 0
 
 
+def test_roof_counter_stays_valid_when_frames_repeat_a_value_at_high_rate():
+    """During a press the app streams ~8 frames/s while its counter (seed + elapsed/500 ms) only
+    increments every ~500 ms — four frames carry the same value. That is still a valid counter
+    (observed 2026-09-16: an earlier per-frame +1 rule dropped validity and the app aborted the
+    move). A frame with a SMALLER counter invalidates; so does a counter frozen for >1.5 s."""
+    f = _funcs()
+    u = _armed_unit(roof={"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 0})
+    c = 500
+    for _ in range(3):                                       # idle stream: +1 per 500 ms frame
+        u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c)); c += 1; u.tick(0.5)
+    assert u.decoded("roof")["SafetyCounterValid"] == 1
+    for i in range(16):                                      # press: 8 Hz, counter +1 every 4 frames
+        u.write(f["roof"].control_char, _roof_frame(f, 1, 0, c + i // 4)); u.tick(0.125)
+    assert u.decoded("roof")["SafetyCounterValid"] == 1
+    u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))            # counter went backwards
+    assert u.decoded("roof")["SafetyCounterValid"] == 0
+    for _ in range(3):
+        c += 10; u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c)); u.tick(0.5)
+    assert u.decoded("roof")["SafetyCounterValid"] == 1                # re-validated
+    u.tick(2.0)
+    u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))            # same value after 2 s idle
+    assert u.decoded("roof")["SafetyCounterValid"] == 0                # frozen counter -> invalid
+
+
+def test_roof_validity_expires_when_the_stream_stops():
+    """Leaving the roof page stops the counter stream; the unit must drop SafetyCounterValid, or
+    the app's next visit sees a stale 1 and says "Function in use — another user…" (observed)."""
+    f = _funcs()
+    u = _armed_unit(roof={"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 0})
+    for c in (10, 11, 12):
+        u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c)); u.tick(0.5)
+    assert u.decoded("roof")["SafetyCounterValid"] == 1
+    assert "roof" in u.tick(2.0)                                # stream gone -> cleared, notified
+    assert u.decoded("roof")["SafetyCounterValid"] == 0
+
+
 def test_roof_travels_on_the_clock_while_a_valid_move_is_held():
     """Motion is time-based (real unit: ~3 s counter validation, then ~10 s per half travel):
     with Up held and the counter valid, Position steps closed -> middle -> open every
@@ -144,9 +180,10 @@ def test_roof_travels_on_the_clock_while_a_valid_move_is_held():
     assert u.decoded("roof")["Position"] == 0                # still within the first step time
     hold(1, 0, 2.0)                                          # 5 s of Up held -> one step
     assert u.decoded("roof")["Position"] == 2
-    u.tick(3.0)                                              # released: no frames -> motion stops
-    assert u.decoded("roof")["Position"] == 2
-    hold(1, 0, 5.0)
+    u.tick(3.0)                                              # released: no frames -> motion stops,
+    assert u.decoded("roof")["Position"] == 2                # and the counter validity expires
+    assert u.decoded("roof")["SafetyCounterValid"] == 0
+    hold(1, 0, 6.5)                                          # ~1 s to re-validate + 5 s of travel
     assert u.decoded("roof")["Position"] == 1                # middle -> open
     hold(1, 0, 5.0)
     assert u.decoded("roof")["Position"] == 1                # open: stays
