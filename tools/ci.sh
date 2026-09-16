@@ -3,7 +3,7 @@
 # may be gated (billing/spending limit), so this is the authoritative LOCAL gate.
 #
 #   tools/ci.sh              # run the full gate (what CI runs, minus gui-e2e)
-#   tools/ci.sh test|lint|typecheck|audit|web-fresh|import-clean|vendor-check
+#   tools/ci.sh test|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check
 #   tools/ci.sh dev          # install dev tooling + activate the pre-commit hook
 #
 # Runtime is stdlib-only; dev tools are in requirements-dev.txt.

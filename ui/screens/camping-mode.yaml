@@ -104,8 +104,13 @@ notes: >
   All four control fields ride the same 1201 BLE characteristic and are
   resent together on every change (full-packet-resend rule, see
   docs/business-logic/climate-stairs.md's shared-plumbing section).
-  "Enable"/"Installed" state_fields (offset 3/2) are hardware-availability
-  flags, not user-facing toggles. There is a dead stub `q0(boolean)`
+  "Installed" (offset 2) is a hardware-availability flag. "Enable" (offset 3)
+  is NOT an availability flag: it mirrors terminal 15 (ignition) — the same
+  bit the vehicle char 1004 carries as TerminalOneFive, arriving one poll
+  later (tf/a.java n0() ignitionTerminal15Flow; live-confirmed 2026-09-16:
+  every ignition 0->1 paired with Enable 0->1 and master 1->0). The app greys
+  the master switch on it ("Only possible when stationary"); the unit sheds
+  camping master when it rises. There is a dead stub `q0(boolean)`
   (tf/a.java:207-209) that touches no field — an apparent leftover from an
   earlier build that used to write the read-only `Enable` bit; no working
   app-level command exists for it (climate-stairs.md:230-232).

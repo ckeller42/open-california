@@ -133,8 +133,14 @@ are then physically dead**. So `usb_charger` alone is a misleading "is USB power
 power is `master_on AND usb_charger`. This showed up in the engine-start observation: when the unit
 sheds camping (`master_on`→0), `usb_charger` does *not* transition, yet the ports lose power.
 **Implemented (#109):** `semantics.campingmode` now emits `usb_powered = master_on and usb_charger`
-(alongside the raw `usb_charger`, which the controllable "Rear USB Ports Switch" still reflects as the
-toggle SETTING). The read-only power indicators surface `usb_powered`. Corollary of the master gate:
+(alongside the raw `usb_charger`). **The two sinks currently disagree on which one the USB toggle
+shows** (open decision, 2026-09-16): the web UI's Rear-USB switch displays `usb_powered`
+(`webui/app.js`, since #174 — it is greyed while master is off, so it reads "off" like the ports),
+while the Home Assistant switch (`mqtt.py` state_key) and the write post-check (`postcheck.py`)
+still key on the retained setting `usb_charger`. With master off the same toggle therefore reads
+OFF in the web UI and ON in HA. Pick one truth (probably `usb_powered` for display and
+`usb_charger` for the post-check, which verifies the SETTING was written). The read-only power
+indicators surface `usb_powered`. Corollary of the master gate:
 since camping mode itself is **refused while
 driving** (the stationary gate, `control-and-actuation.md` §4), rear USB **cannot** be kept powered
 while the vehicle is driven.

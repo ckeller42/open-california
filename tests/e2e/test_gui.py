@@ -11,7 +11,10 @@ The suite launches the REAL daemon + web UI over the in-process mock (`tools.run
 serve --web`), with the actuation delays shrunk via CALICTL_ARM_DELAY_S / CALICTL_SETTLE_S so a
 command takes ~0.6 s — fast, but still long enough to observe the in-flight feedback (the
 "Sending…" status + the result toast). It verifies the exact UX the mechanical first version
-lacked: real data readouts, installed-gating, and action feedback.
+lacked: real data readouts, installed-gating, and action feedback — plus the state-gating the unit
+imposes (camping lights/USB need master, quiet mode needs the box on, roof move-block) and the
+roof press-and-hold → STOP traffic. Every test also doubles as a JS runtime-error gate: the `page`
+fixture fails on any uncaught `pageerror`/console error, and one test opens every tile.
 """
 import json
 import os

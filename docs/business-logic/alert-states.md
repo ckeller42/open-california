@@ -302,10 +302,9 @@ three separate boolean flows:
 | `ROOF_SAFETY_COUNTER_HAS_ERROR_ID` | Roof-lift safety counter reports an error state | `cVar2.f11724e0.e() == te.i.X` | `ij/c.java:100-111` |
 | `ROOF_SPEEDLOCK_ID` | Roof-lift locked because vehicle speed exceeds threshold | boolean flow, raised when `z14` true | `ij/c.java:112-123` |
 
-These map onto `protocol/dictionary.yaml`'s `control_models_unresolved` entry for `jg/a.java`
-(service 1400/1402) — **this file confirms that service does have a resolvable state/alert
-surface** even though its control-side field layout is still ambiguous; worth a follow-up pass to
-resolve `jg/a.java`'s read-back characteristic directly.
+These are the roof-lift **interlock flows** of the app's roof view-model. The 1402 read-back
+characteristic is fully resolved in `protocol/dictionary.yaml` (`Position` bits 0-3, `Installed`
+bit 6, `SafetyCounterValid` bit 7, `InfoPopUp` bits 12-15) — see the second alert surface below.
 
 ### Roof pop-top fault alerts — char `1402`, `ig/c.java` (a SECOND roof alert surface)
 
@@ -313,23 +312,32 @@ Distinct from the `ij/c.java`/`hj.c` interlocks above. The roof-lift status char
 decodes `SafetyCounterValid` bit 7, `Installed` bit 6, `Position` bits 0-3, and **`InfoPopUp`
 bits 12-15** (`ig/c.java:241-246`). Dispatch `switch(InfoPopUp)` (`:311-638`):
 
-| InfoPopUp | Alert `_ID` | In-app sev | Ack pref key |
-|---|---|---|---|
-| 0 | (clears all 6) | — | — |
-| 1 | ROOF_CHILD_LOCK | MEDIUM | BLUETOOTH_ROOF_CHILD_LOCK_CONFIRMED |
-| 4 | ROOF_ERROR | HIGH | BLUETOOTH_ROOF_ERROR_WORKSHOP |
-| 5 | ROOF_OP_DRIVING | **CRITICAL** | (in-app only, every poll) |
-| 6 | ROOF_SENSOR_ERROR | HIGH | BLUETOOTH_ROOF_ERROR_SENSOR_CONFIRMED |
-| 7 | ROOF_EMERGENCY_LOCKED | HIGH | BLUETOOTH_ROOF_EMERGENCY_LOCKED_CONFIRMED |
-| 10 | ROOF_NOT_POSSIBLE_TEMPORARILY | HIGH | BLUETOOTH_ROOF_NOT_POSSIBLE_TEMP |
-| 11 | ROOF_LOW_BATTERY | HIGH | BLUETOOTH_ROOF_LOW_BATTERY_CONFIRMED |
+| InfoPopUp | Alert `_ID` (calictl `alert`) | In-app sev | Blocks move? (`j()`) | What the app tells the user (EN / DE, `.cvr` string) |
+|---|---|---|---|---|
+| 0 | (clears all 6) | — | no | — |
+| 1 | ROOF_CHILD_LOCK (`child_lock`) | MEDIUM | **yes** | "The pop-up roof has been moved too often. System will be available again in a few minutes." / "Aufstelldach wurde zu oft bewegt. System steht in wenigen Minuten wieder zur Verfügung." (`dialog_warning_popUpRoof_childLock_text`) — an **over-use cooldown**, not a child-lock switch |
+| 4 | ROOF_ERROR (`error`) | HIGH | **yes** | "Unknown error in pop-up roof" + "Please visit a workshop." / "Unbekannter Fehler beim Aufstelldach" (`dialog_error_popUpRoof_unknownError_*`) |
+| 5 | ROOF_OP_DRIVING (`driving`) | **CRITICAL** | **yes** | "The pop-up roof is open! Please close the pop-up roof before moving the vehicle." / "Das Aufstelldach ist offen! Bitte schließe das Aufstelldach, bevor das Fahrzeug bewegt wird." (`dialog_criticalError_popUpRoof_roofOpenWhileDriving_text`, deep-links `/vehicle`) |
+| 6 | ROOF_SENSOR_ERROR (`sensor_error`) | HIGH | **no** (warn only, `i()`) | "Please check pop-up roof" + "The pop-up roof is jammed or locked." / "Das Aufstelldach klemmt oder ist blockiert." (`dialog_warning_popUpRoof_roofStuck_text`) |
+| 7 | ROOF_EMERGENCY_LOCKED (`emergency_locked`) | HIGH | **yes** | "Please secure the pop-up roof manually and follow the instructions from the operating manual." / "Bitte Aufstelldach manuell sichern…" (`dialog_error_popUpRoof_secureManually_text`) |
+| 10 | ROOF_NOT_POSSIBLE_TEMPORARILY (`not_possible`) | HIGH | **yes** | "The function is currently unavailable." / "Die Funktion ist zurzeit nicht möglich." (`dialog_error_popUpRoof_temporarilyOutOfFunction_text`) |
+| 11 | ROOF_LOW_BATTERY (`low_battery`) | HIGH | **yes** | "Battery low. Run engine." / "Batterie ist schwach. Motorlauf durchführen." (`dialog_warning_popUpRoof_lowBattery_text`) |
+| — | `Position == 15` | — | **yes** | (position error; no dialog of its own) |
+
+Move-gate = `ig/c.java j()` movable-check (blocks {1,4,5,7,10,11} or `Position==15`); `i()` is the
+warning-only set {6,1,11} shown alongside. Texts resolved 2026-09-16 (`ig/c.java` switch → `ea/j`
+/ `ea/n` string accessors → `.cvr` tables); the web UI's banners (`webui/app.js ROOF_ALERT_MSG`)
+and its `ROOF_MOVE_BLOCK` set mirror this table. InfoPopUp 2, 3, 9, 12 have dedicated flows in
+the app (`k()` = {2,3,12}, `E0`/`z0`/`A0`) whose meaning is not traced — candidates
+`dialog_info_popUpRoof_functionInUse` / `activateIgnition` / `onlyPossibleWhenStationary` /
+`safetyCheck`; calictl maps them to `alert=None`.
 
 `ROOF_ERROR`/`ROOF_NOT_POSSIBLE_TEMPORARILY`/`ROOF_OP_DRIVING` are wholly new IDs. Two ack keys
 lack the `_CONFIRMED` suffix (`..._NOT_POSSIBLE_TEMP`, `..._ERROR_WORKSHOP`), which is why a
 `_CONFIRMED`-only grep missed them. (Severity `f29352x`=CRITICAL resolves only in the BAD root;
 CLEAN renumbered it.) This **resolves** the four `BLUETOOTH_ROOF_*_CONFIRMED` ack constants that
-were previously UNVERIFIED here — they pair with these `1402` `InfoPopUp` values. The `1402`
-`InfoPopUp` layout is worth adding to `dictionary.yaml` (still listed `control_models_unresolved`).
+were previously UNVERIFIED here — they pair with these `1402` `InfoPopUp` values, which
+`protocol/dictionary.yaml` now carries (`InfoPopUp` offset 12, width 4).
 
 ---
 

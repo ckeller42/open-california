@@ -8,6 +8,44 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-09-16 — web UI speaks the unit's vocabulary; roof alert texts say what the codes mean
+
+A full pass of the web UI's labels against the unit's own EN/DE terms (#178): the heater toggle is
+**Immediate heating / Sofortheizen** (was "Parking heater"), **Continuous heating / Dauerbetrieb**
+and the remaining minutes are shown (both were decoded but never rendered), quiet mode is
+Off / Manual / Automatic, energy rows are Second battery / Vehicle power / Solar power, camping's
+refusal reason is "Only possible when stationary". Roof alert banners no longer print the internal
+IDs: InfoPopUp 1 `child_lock` is an **over-use cooldown** ("moved too often — available again in a
+few minutes"), 5 `driving` means **"the pop-up roof is open — close it before moving the
+vehicle"**, 7 `emergency_locked` = "secure the pop-up roof manually", 6 `sensor_error` = "jammed or
+blocked" (all from the `ig/c.java` switch → dialog strings). Three composed values never reached the
+German table (the readout renderer translates the whole string); translated at the call site.
+
+## 2026-09-16 — camping master greyed while the ignition is on; `Enable` = terminal-15 (#177)
+
+The unit sheds camping master when terminal 15 rises and refuses it while driving; the app greys its
+master switch on the same bit (`tf/a.java n0()` ignitionTerminal15Flow). Polarity settled from live
+data: 8 paired transitions in camping-watch — every `ignition 0→1` came with `campingmode.enable 0→1`
+and `master_on 1→0`, `enable` lagging the vehicle char by **one poll**. The web gate reads
+`vehicle.ignition_on` (1004 `TerminalOneFive` bit 7, authoritative) and falls back to
+`campingmode.enable`. An owner screenshot showing "Zündung Aus" with the key on was that one-poll lag
+(the unit itself publishes the key-turn ~15–20 s late). `ui/screens/camping-mode.yaml` had called
+`Enable` a hardware-availability flag — corrected.
+
+## 2026-09-16 — roof hold-release STOP was lost twice over; never-again guards for the #174 class (#176)
+
+Releasing a held roof button did not reliably send STOP, for two independent reasons: (1) the
+command path re-rendered the screen synchronously, detaching the held button before its
+`pointerup` fired — release is now caught once at document level (`roofRelease`, also
+`pointercancel`/`pointerleave`) with no DOM rebuild while `roofHold` is set; (2) even an enqueued
+STOP was **deadlocked**: the web command queue is single-flight and the "open" POST stays in flight
+while the server streams the move, so STOP could only go out after the move ended by itself — STOP
+now goes **out-of-band** straight to `/api/command` (the server handles it lock-free via
+`_roof_stop`). A re-press within 1000 ms is debounced (a restarted counter costs another ~3 s
+withhold). Guards: `tsc --checkJs` is a hard gate (CI `lint`, `tools/ci.sh webcheck`, pre-commit
+4f; baseline 0 errors), the e2e `page` fixture fails any test that raises a `pageerror`, every tile
+is opened once, and the mock seeds every function the van has fitted.
+
 ## 2026-09-16 — air-heater run-time cap 120 min, ErrorCode names, refrigerator-box UI gates
 
 A decompile/string-table pass over the remaining UI semantics (air heater, cooler, energy lock,
