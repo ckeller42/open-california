@@ -138,12 +138,17 @@ From string-resource keys (`rg -o -i "coolboxPage_[a-zA-Z0-9_]+"`); literal Engl
 recoverable (lives in compiled `.cvr` resource blobs, not source) — key names below are strong
 signals of intent, marked UNVERIFIED where the exact literal rule wording matters:
 
-- `coolboxPage_quietModeWidget_quietModeCanOnlyBeSwitchedOn_text` and
-  `..._quietModeCanOnlyBeActivated_text` — a guard exists around turning Quiet Mode on; likely
-  "Quiet Mode can only be switched on [not off] via this control" or an activation
-  precondition (e.g. cooler must already be running). UNVERIFIED exact condition — no runtime
-  `enabled=` guard was found gating `x0()`/`k0()` in `vf/c.java` itself, so this is probably
-  enforced purely in the Compose UI layer (not reachable from these two source files).
+- `coolboxPage_quietModeWidget_quietModeCanOnlyBeActivated_text` — **resolved 2026-09-16** from
+  the string tables: "To activate quiet mode, the refrigerator box must be switched on." /
+  "Um den Flüstermodus zu aktivieren, muss die Kühlbox eingeschaltet sein." A UI-layer gate
+  (no `enabled=` guard around `x0()`/`k0()` in `vf/c.java`); the web UI mirrors it by greying the
+  quiet-mode controls while `State != 1`. Its sibling
+  `..._quietModeCanOnlyBeSwitchedOn_text` = "Quiet mode can be switched on for up to 23 hours."
+  (the manual mode's duration hint, not a gate).
+- `coolboxPage_timerWidget_toSetTimer_text` — "To set the timer, please switch off the
+  refrigerator box above." The inverse gate: the cooling timer is only settable while the box is
+  OFF. calictl enforces it server-side (`control.command_precondition`) and greys the timer
+  controls in the web UI.
 - `coolboxPage_timerWidget_afterTheTimerIsActivated_text`,
   `..._afterContinuingTheBoxWillbeCooled_text`, `..._theBoxWillBeCooled_text`,
   `..._pleaseSetTheTimespan_text` — standard timer lifecycle copy (set → confirm → running →
@@ -304,10 +309,18 @@ literal copy again not recoverable from source, keys used as strong signals:
 
 Send the full 10-field frame every time (shared-send behavior above).
 
-- **Turn on Immediate/Normal Heating for N minutes**: set `RunningTime = N` (via `D4`, only
-  accepted if you also send within its own valid magnitude — no explicit upper bound found
-  besides the natural 8-bit field size), then/also set `NormalOperationRequest = 1` (via
-  `C2(true)`). `rf/b.java:198-218`.
+- **Turn on Immediate/Normal Heating for N minutes**: set `RunningTime = N` (via `D4`, which
+  writes the raw int unclamped — the bound lives in the UI: the app's heating info page states
+  immediate heating "is limited to 120 minutes" (`infoPage_heating_immediate_description`), and
+  the unit reports `ErrorCode 4` HEATING_TIME_EXCEEDED past it. calictl enforces **0–120** in
+  `control._airheater` (`AIRHEATER_MAX_RUNTIME_MIN`); the 8-bit width is not the valid range),
+  then/also set `NormalOperationRequest = 1` (via `C2(true)`). `rf/b.java:198-218`.
+- **ErrorCode (1702) → app fault IDs** (`rf/b.java:461-671`): 1 `AIR_HEATER_LOW_BATTERY`,
+  2 `FUEL_LOW`, 3 `SYSTEM_ERROR`, 4 `HEATING_TIME_EXCEEDED`, 5 `OPERATION_NOT_POSSIBLE`;
+  0 clears. Each drives a dialog AFTER a refused start (the app never greys the heater switch
+  pre-emptively). Surfaced by `semantics.airheater` as `error` (`low_battery` / `low_fuel` /
+  `system_error` / `heating_time_exceeded` / `not_possible`) next to the raw `error_code`; the
+  web UI shows it as a banner. Code→dialog-string pairing beyond the IDs is unresolved.
 - **Turn off Immediate Heating**: `NormalOperationRequest = 0` (via `C2(false)`).
   `rf/b.java:182-191`.
 - **Set heating level (1-10)**: `HeatingLevel` via `q4`; values outside 1-10 are dropped

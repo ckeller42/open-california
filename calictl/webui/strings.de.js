@@ -133,9 +133,14 @@ window.STRINGS_DE = {
   "Start heating at": "Heizen startet um",
   "Level": "Stufe",
   "Timer start": "Timer-Start",
-  "Error code": "Fehlercode",
   "Active • {n} min remaining": "Aktiv • Restlaufzeit: {n} min",
   "Inactive • Timer: {t}": "Inaktiv • Timer: {t}",
+  "⚠ Heater not started — battery low, run the engine": "⚠ Heizung nicht gestartet — Batterie schwach, Motorlauf durchführen",
+  "⚠ Heater not started — fuel level too low": "⚠ Heizung nicht gestartet — Kraftstoffstand zu niedrig",
+  "⚠ Heater fault — please visit a workshop": "⚠ Heizungsfehler — bitte Werkstatt aufsuchen",
+  "⚠ Heating time exceeded — the heater switched off": "⚠ Heizdauer überschritten — die Heizung wurde abgeschaltet",
+  "⚠ Heater currently unavailable": "⚠ Heizung zurzeit nicht verfügbar",
+  "⚠ Heater error": "⚠ Heizungsfehler",
   "Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?":
     "Kraftstoffbetriebene Luftstandheizung starten ({w})? Nicht live-verifiziert. Fortfahren?",
 
@@ -299,6 +304,8 @@ window.STRINGS_DE = {
   // --- disabled-control reasons --------------------------------------------------------------
   "Turn camping mode on first": "Zuerst Campingmodus einschalten",
   "Only possible when stationary": "Nur im Stand möglich",
+  "Switch the refrigerator box on first": "Zuerst die Kühlbox einschalten",
+  "Switch the refrigerator box off first": "Zuerst die Kühlbox ausschalten",
   "Roof move blocked": "Dachbewegung blockiert",
 
   // --- language toggle -----------------------------------------------------------------------

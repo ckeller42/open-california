@@ -8,6 +8,34 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-09-16 — air-heater run-time cap 120 min, ErrorCode names, refrigerator-box UI gates
+
+A decompile/string-table pass over the remaining UI semantics (air heater, cooler, energy lock,
+lighting profiles, roof dialogs) closed three gaps that were live in calictl:
+
+- **Run time is capped at 120 min.** `rf/b.java:199 D4()` writes the raw int unclamped, but the
+  bound lives in the app's UI: its heating info page says immediate heating "is limited to 120
+  minutes" and the unit reports `ErrorCode 4` HEATING_TIME_EXCEEDED beyond it. calictl accepted
+  0–255 (the field width) from CLI/API/HA — now `control.AIRHEATER_MAX_RUNTIME_MIN = 120`. The
+  slider's min/step were not recovered from the Compose code (UNRESOLVED).
+- **ErrorCode has names.** `rf/b.java:461-671`: 1 `AIR_HEATER_LOW_BATTERY`, 2 `FUEL_LOW`,
+  3 `SYSTEM_ERROR`, 4 `HEATING_TIME_EXCEEDED`, 5 `OPERATION_NOT_POSSIBLE`, 0 clears. Each is a
+  dialog the app raises AFTER a refused start — it never greys the heater switch pre-emptively,
+  so calictl doesn't either. `semantics.airheater` now emits `error` (named) beside the raw
+  `error_code`; the web UI shows it as a banner. Code→dialog-string pairing beyond the IDs is
+  unresolved.
+- **Refrigerator-box gates resolved from the string tables**: "To activate quiet mode, the
+  refrigerator box must be switched on." and "To set the timer, please switch off the
+  refrigerator box above." — UI-layer gates (no `enabled=` guard in `vf/c.java`). The web UI now
+  greys the quiet-mode controls while the box is off and the timer controls while it is on (the
+  server already refused the timer write while on via `control.command_precondition`).
+
+Confirmed consistent in the same pass (no change): immediate on/off frames (`C2` writes only
+`NormalOperationRequest`, then the full struct), level 1–10, the cooler `Mode` enum 0/2/4 and its
+readback (`quiet_scheduled` = Mode 4), `NightTimerSet` as a read-only dead end (the shared
+register slot is only ever written by the air heater's `AirDistribution`), the energy-mode enum,
+the lighting profile enum and `SET_PROFILE` 12/0, the roof `j()` block set and position map.
+
 ## 2026-09-15 — roof InfoPopUp 5 = DRIVING decoded; web move-gate uses the app's exact block set
 
 A code review of #174 (web UI greys/blocks controls the app forbids) found `semantics._ROOF_ALERT`

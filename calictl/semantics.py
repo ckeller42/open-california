@@ -159,14 +159,29 @@ def cooler(d: dict) -> dict:
     }
 
 
+# Air-heater ErrorCode (char 1702) -> the app's fault IDs (rf/b.java:461-671: 1 AIR_HEATER_LOW_BATTERY,
+# 2 FUEL_LOW, 3 SYSTEM_ERROR, 4 HEATING_TIME_EXCEEDED, 5 OPERATION_NOT_POSSIBLE; 0 clears). Each
+# maps to a dialog the app shows AFTER a refused write — the heater is never greyed pre-emptively.
+_AIRHEATER_ERROR = {1: "low_battery", 2: "low_fuel", 3: "system_error",
+                    4: "heating_time_exceeded", 5: "not_possible"}
+
+
 def airheater(d: dict) -> dict:
+    """Interpret the air-heater state (char 1702).
+
+    ``running`` is either operation bit; ``permanent`` (continuous heating) can only be
+    started from inside the vehicle. ``error`` names the unit's ``ErrorCode``
+    (:data:`_AIRHEATER_ERROR`); ``error_code`` keeps the raw value.
+    """
+    err = d.get("ErrorCode")
     return {
         "installed": bool(d.get("Installed")),
         # two independent op bits -> a single "running" state (see AirHeater notes)
         "running": bool(d.get("NormalOperation") or d.get("PermanentOperation")),
         "permanent": bool(d.get("PermanentOperation")),
         "level": d.get("HeatingLevel"),
-        "error_code": d.get("ErrorCode"),
+        "error_code": err,
+        "error": None if not err else _AIRHEATER_ERROR.get(err, "unknown"),
         "mode": d.get("OperationModeAirHeater"),
         "air_distribution": d.get("AirDistribution"),
         "running_time": d.get("RunningTime"),           # configured run duration (min)
