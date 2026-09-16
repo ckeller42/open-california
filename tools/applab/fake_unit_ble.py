@@ -51,6 +51,7 @@ from tools.mock_unit import MockCamperUnit, MockDisconnect, _pack_state  # noqa:
 BASE = "-6c77-4b7d-bbf6-a5e587701f3d"
 PASSKEY = int(os.environ.get("FAKE_UNIT_PASSKEY", "123456"))
 HEARTBEAT_TIMEOUT_S = float(os.environ.get("FAKE_UNIT_HEARTBEAT_TIMEOUT_S", "15"))
+PAIRING_GRACE_S = float(os.environ.get("FAKE_UNIT_PAIRING_GRACE_S", "90"))   # before the first beat
 # The unit's char 1002 is NOT an opaque id: it is the LAST 16 bytes of SHA-256(VIN string) — the app
 # hashes the VIN the user typed and compares (ny/c.java case 8: st.u.f(vin).c("SHA-256"), tail 16).
 VIN = os.environ.get("FAKE_UNIT_VIN", "")      # the VIN you type into the app; never committed (PII rule)
@@ -97,6 +98,7 @@ class FakeUnit:
         self.device: Device | None = None
         self.tasks: list = []                # keep task refs (else GC kills them)
         self.last_beat_t: float = 0.0        # monotonic time of the last 1003 write
+        self.seen_beat = False               # a beat arrived on the current link (watchdog arms)
         self.conn = None                     # current Bumble connection (single-link unit)
         for fn, f in self.funcs.items():
             if f.state_char:
@@ -131,17 +133,23 @@ class FakeUnit:
         import time
         self.unit.beat(data)
         self.last_beat_t = time.monotonic()
+        self.seen_beat = True
 
     async def link_watchdog(self, conn) -> None:
         """The real unit drops a link that carries no 1003 liveness heartbeat for ~15 s (and a
         connected peripheral cannot advertise, so a stale link also hides the unit from the app's
-        scan). Mirror it: disconnect when no beat arrived within HEARTBEAT_TIMEOUT_S."""
+        scan). Mirror it: disconnect when no beat arrived within HEARTBEAT_TIMEOUT_S — but only
+        once the link has carried a beat: before that the app may still be in SMP pairing (the
+        passkey dialog on the phone easily takes > 15 s to answer), so the first beat gets a
+        PAIRING_GRACE_S window instead."""
         import time
         self.last_beat_t = time.monotonic()
+        self.seen_beat = False
         while self.conn is conn:
             await asyncio.sleep(1.0)
-            if time.monotonic() - self.last_beat_t > HEARTBEAT_TIMEOUT_S:
-                print(f"### no 1003 heartbeat for {HEARTBEAT_TIMEOUT_S:.0f}s — dropping link", flush=True)
+            limit = HEARTBEAT_TIMEOUT_S if self.seen_beat else PAIRING_GRACE_S
+            if time.monotonic() - self.last_beat_t > limit:
+                print(f"### no 1003 heartbeat for {limit:.0f}s — dropping link", flush=True)
                 try:
                     await conn.disconnect()
                 except Exception as e:  # noqa: BLE001
@@ -273,7 +281,13 @@ async def main():
     async with await open_transport(spec) as hci:
         cfg = DeviceConfiguration(
             name="VWCAMPER",
-            address=Address("C0:FF:EE:CA:11:F0"),
+            # A FRESH static address per run unless pinned with FAKE_UNIT_ADDR: netsimd keeps a
+            # killed fake's radio registered, and a new fake at the SAME address is shadowed by
+            # that stale twin (the phone's scan still sees VWCAMPER, but its connect lands on the
+            # dead entry and times out — cost an hour on 2026-09-16). The phone bonds to the
+            # address, so after a fake restart run the app's Account > Vehicle > "Bluetooth Reset"
+            # and the pairing wizard again.
+            address=Address(os.environ.get("FAKE_UNIT_ADDR") or "C0:FF:EE:CA:%02X:%02X" % tuple(os.urandom(2))),
             keystore="JsonKeyStore",
             irk=bytes.fromhex("865F81FF5A8B486EAAE29A27AD9F77DC"),
             advertising_interval_min=100, advertising_interval_max=100,
@@ -300,7 +314,7 @@ async def main():
             (AdvertisingData.COMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS, UUID(cu("1000")).to_bytes()),
         ]))
         await dev.start_advertising(auto_restart=True, advertising_data=adv, scan_response_data=scan_rsp)
-        print("### VWCAMPER advertising — passkey", f"{PASSKEY:06d}", flush=True)
+        print(f"### VWCAMPER advertising at {cfg.address} — passkey {PASSKEY:06d}", flush=True)
         unit.tasks.append(asyncio.get_event_loop().create_task(unit.console()))
         unit.tasks.append(asyncio.get_event_loop().create_task(unit.clock()))
         await hci.source.terminated
