@@ -115,6 +115,19 @@ Cross-language codec (issue #156)
 .. automodule:: tests.test_gen_c_dict
 .. automodule:: tests.test_ports_parity
 
+BLE trace recorder + replay (real-unit evidence for the mock)
+-------------------------------------------------------------
+
+.. automodule:: calictl.trace
+   :members:
+
+.. automodule:: tools.trace_compare
+   :members:
+
+.. automodule:: tests.test_trace
+.. automodule:: tests.test_trace_compare
+.. automodule:: tests.test_mock_fidelity
+
 Guided pairing (issue #154, #157)
 ----------------------------------
 
