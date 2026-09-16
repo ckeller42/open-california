@@ -29,18 +29,18 @@ airheater:
         vwdoc: null
     OperationModeAirHeater:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 the departure-timer arm: 3 = arm (app 'Start timer',\
+        \ rf/b a2), 0 = stop (j4), 7 = leave unchanged; wired as control.timer_start/timer_cancel\
+        \ (APP-OBSERVED 2026-09-16); the state-side field is surfaced as mode/timer_armed"
       sources:
         app: null
         gui: null
         vwdoc: null
     OperationModeCombined:
       decision: omit
-      reason: "control command field \u2014 definition captured in dictionary/overrides;\
-        \ not surfaced because roof-A/C is not installed on this van / set is not wired\
-        \ (control writes work \u2014 issue #2 solved 2026-07-07)"
+      reason: "control command field \u2014 which device the departure timer drives (df/b enum\
+        \ ordinal+1; 1 = AIR_HEATER on this van), written alongside OperationModeAirHeater=3 by\
+        \ control.timer_start (APP-OBSERVED 2026-09-16); combos 2-7 are Truma/roof-A/C equipment"
       sources:
         app: null
         gui: null

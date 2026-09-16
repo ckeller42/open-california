@@ -244,6 +244,20 @@ LIGHT_ZONES = {
 # down; the cooler cooling-timer can only be set while the fridge is OFF.
 _ROOF_CLOSED_POSITIONS = (0, 14)   # matches semantics._ROOF_POS closed values
 AIRHEATER_MAX_RUNTIME_MIN = 120    # the app's cap on immediate heating (its heating info page)
+# OperationModeAirHeater is the departure-timer arm (app-observed 2026-09-16, tools/applab):
+# 7 = the app's leave-unchanged sentinel in every frame that doesn't target it, 3 = timer armed
+# (rf/b.java a2()), 0 = cancelled (j4()). OperationModeCombined names the device the timer drives
+# (df/b.java enum, ordinal+1): 1 = AIR_HEATER on this van.
+AIRHEATER_MODE_UNCHANGED = 7
+AIRHEATER_MODE_TIMER_ARMED = 3
+AIRHEATER_MODE_IDLE = 0
+AIRHEATER_COMBINED_AIR_HEATER = 1
+# The app's leave-unchanged sentinels for the wide heater fields (its `v()` defaults, all outside
+# each field's valid range; seen in every observed heater frame, e.g. neutral `3f7b007f1f3f`).
+AIRHEATER_LEVEL_UNCHANGED = 11
+AIRHEATER_RUNTIME_UNCHANGED = 127
+AIRHEATER_TIMER_HOUR_UNCHANGED = 31
+AIRHEATER_TIMER_MIN_UNCHANGED = 63
 # Terminal Position for each move direction (semantics._ROOF_POS: 1=open, 0/14=closed). When a move
 # reaches its target limit, device.actuate_roof ceases the counter stream (app-faithful auto-stop) —
 # best-effort courtesy on top of the unit's own limit switches; None = no known limit (don't poll).
@@ -386,21 +400,28 @@ def _lighting(funcs, what, value, last):
 def _airheater_values(state: dict, **changes) -> dict:
     """Full-packet airheater control values (char 1701, ``sf/a.java``).
 
-    The three 2-bit request/confirmation fields default to the leave-unchanged
-    sentinel ``3``; the physical fields (mode/level/air-distribution/running-time)
-    carry current state so a targeted change doesn't disturb them; then ``changes``
-    is applied. Timer fields fall back to their dictionary defaults when the state
-    decode doesn't expose them.
+    Every untargeted field is the app's own leave-unchanged sentinel (its ``v()`` model
+    defaults, observed on the wire 2026-09-16 in every heater frame: 2-bit requests ``3``,
+    ``AirDistribution`` 0, ``OperationModeAirHeater`` 7, ``HeatingLevel`` 11,
+    ``OperationModeCombined`` 0, ``RunningTime`` 127, ``TimerHour`` 31, ``TimerMin`` 63);
+    then ``changes`` is applied. Nothing is carried from ``state``: the unit ignores the
+    sentinels, so calictl's frames equal the app's byte-for-byte — and carrying was WRONG
+    twice over: a readback ``HeatingLevel`` outside the 1-11 set (the mock's idle seed reports
+    0) made the encoder refuse the whole write, and re-sending the state's
+    ``OperationModeAirHeater=0`` would cancel an armed departure timer on an unrelated write.
+
+    :param state: kept for the builder signature; unused.
     """
+    del state
     vals = dict(
         NormalOperationRequest=SENTINEL, PermanentOperationRequest=SENTINEL,
         PermanentOperationConfirmation=SENTINEL,
-        AirDistribution=state.get("AirDistribution", 0),
-        OperationModeAirHeater=state.get("OperationModeAirHeater", 7),
-        HeatingLevel=state.get("HeatingLevel", 11),
+        AirDistribution=0,
+        OperationModeAirHeater=AIRHEATER_MODE_UNCHANGED,
+        HeatingLevel=AIRHEATER_LEVEL_UNCHANGED,
         OperationModeCombined=0,
-        RunningTime=state.get("RunningTime", 127),
-        TimerHour=state.get("TimerHour", 31), TimerMin=state.get("TimerMin", 63),
+        RunningTime=AIRHEATER_RUNTIME_UNCHANGED,
+        TimerHour=AIRHEATER_TIMER_HOUR_UNCHANGED, TimerMin=AIRHEATER_TIMER_MIN_UNCHANGED,
     )
     vals.update(changes)
     return vals
@@ -416,9 +437,10 @@ def _airheater(funcs, what, value, last):
     at their leave-unchanged sentinels).
 
     :param funcs: loaded + overridden Function map.
-    :param what: ``"power"``, ``"level"``, ``"runtime"``, ``"timer"`` or ``"permanent"``.
+    :param what: ``"power"``, ``"level"``, ``"runtime"``, ``"timer"``, ``"timer_start"``,
+        ``"timer_cancel"`` or ``"permanent"``.
     :param value: on/off token for power (off only for permanent), 1-10 for level, minutes
-        for runtime, ``HH:MM`` for timer.
+        for runtime, ``HH:MM`` for timer; ignored for ``timer_start``/``timer_cancel``.
     :param last: current decoded airheater state (carried into the frame).
     :returns: the 6-byte control frame, or ``None`` for an unknown target.
 
@@ -430,10 +452,13 @@ def _airheater(funcs, what, value, last):
        ``calictl`` shall build a full-packet airheater (char 1701) control frame
        for ``power`` (via ``NormalOperationRequest`` = 1/0), ``level`` (via
        ``HeatingLevel`` 1-10), ``runtime`` (``RunningTime`` 0-120 min — the app's cap),
-       ``timer`` (``TimerHour``/``TimerMin``) and ``permanent`` (OFF only:
-       ``PermanentOperationRequest`` = 0; ON is refused because continuous heating can
-       only be started from inside the vehicle), carrying current state for untargeted
-       fields.
+       ``timer`` (``TimerHour``/``TimerMin``), ``timer_start`` (arm the departure timer:
+       ``OperationModeAirHeater`` = 3 + ``OperationModeCombined`` = 1, the app's
+       ``3f3b017f1f3f``), ``timer_cancel`` (``OperationModeAirHeater`` = 0, the app's
+       ``3f0b007f1f3f``) and ``permanent`` (OFF only: ``PermanentOperationRequest`` = 0; ON is
+       refused because continuous heating can only be started from inside the vehicle),
+       carrying current state for untargeted physical fields and the ``7`` sentinel for the
+       timer-arm field.
     """
     if what == "power":
         ch = {"NormalOperationRequest": 1 if _truthy(value) else 0}
@@ -453,6 +478,17 @@ def _airheater(funcs, what, value, last):
     elif what == "timer":                       # start-at TimerHour:TimerMin (rf/b.java:165 B0())
         hh, mm = _hhmm(value)
         ch = {"TimerHour": hh, "TimerMin": mm}
+    elif what == "timer_start":
+        # The heater page's "Start timer" (uh/d.java -> rf/b.java:274-308 a2(AIR_HEATER)): the
+        # departure timer is ARMED by OperationModeAirHeater=3 with OperationModeCombined = the
+        # device combo (AIR_HEATER -> 1; Truma/roof-A/C combos 2-7 are other-model equipment).
+        # App-observed on the wire 2026-09-16: `3f3b017f1f3f`; the unit then shows the timer as
+        # "Inactive • Timer: HH:MM" until TimerHour:TimerMin, when NormalOperation starts.
+        ch = {"OperationModeAirHeater": AIRHEATER_MODE_TIMER_ARMED,
+              "OperationModeCombined": AIRHEATER_COMBINED_AIR_HEATER}
+    elif what == "timer_cancel":
+        # "Stop" on the same widget (rf/b.java:745-749 j4()): Mode back to 0 — `3f0b007f1f3f`.
+        ch = {"OperationModeAirHeater": AIRHEATER_MODE_IDLE}
     elif what == "permanent":
         # Continuous heating ("Dauerbetrieb") is OFF-ONLY from outside the vehicle: the app's E3()
         # (rf/b.java:209-218) only ever writes PermanentOperationRequest=0 — it can only be

@@ -132,15 +132,17 @@ def test_cooler_quiet_mode_and_schedule_frames():
 
 def test_airheater_runtime_and_timer_frames():
     """Air-heater run-time + start-timer branches, decompile-verified from rf/b.java
-    (RunningTime @24, TimerHour @32 / TimerMin @40). Continuous ("permanent") heating is OFF-only:
-    the app's E3() writes PermanentOperationRequest=0 and no ON write site exists, so ON — and any
-    token that isn't a clear "off" — is refused. NOT live-verified."""
+    (RunningTime @24, TimerHour @32 / TimerMin @40) and APP-OBSERVED 2026-09-16 (tools/applab): the
+    run-time slider at 60 writes exactly `3f7b003c1f3f` — every untargeted field at the app's
+    sentinel, nothing carried from the readback (HeatingLevel 5 in `st` must NOT appear).
+    Continuous ("permanent") heating is OFF-only: the app's E3() writes PermanentOperationRequest=0
+    and no ON write site exists, so ON — and any token that isn't a clear "off" — is refused."""
     from calictl import control
     f = _funcs()
-    st = {"NormalOperationRequest": 0, "HeatingLevel": 5, "RunningTime": 127,
-          "AirDistribution": 0, "OperationModeAirHeater": 7, "TimerHour": 31, "TimerMin": 63}
-    assert control.build(f, "airheater", "runtime", 60, st).hex() == "3f75003c1f3f"   # byte3=0x3c=60
-    assert control.build(f, "airheater", "runtime", 120, st).hex() == "3f7500781f3f"  # the app's cap
+    st = {"NormalOperationRequest": 0, "HeatingLevel": 5, "RunningTime": 60,
+          "AirDistribution": 0, "OperationModeAirHeater": 0, "TimerHour": 12, "TimerMin": 0}
+    assert control.build(f, "airheater", "runtime", 60, st).hex() == "3f7b003c1f3f"   # == the app's frame
+    assert control.build(f, "airheater", "runtime", 120, st).hex() == "3f7b00781f3f"  # the app's cap
     for bad in (121, 255):   # the field is 8 bits wide, but the app never asks for more than 120 min
         try:
             control.build(f, "airheater", "runtime", bad, st)
@@ -148,7 +150,7 @@ def test_airheater_runtime_and_timer_frames():
             pass
         else:
             raise AssertionError(f"runtime {bad} accepted (cap is 120 min)")
-    assert control.build(f, "airheater", "timer", "22:30", st).hex() == "3f75007f161e" # byte4=22 byte5=30
+    assert control.build(f, "airheater", "timer", "22:30", st).hex() == "3f7b007f161e" # byte4=22 byte5=30
     # Continuous heating is OFF-only from outside the vehicle (the app's E3() writes only 0):
     off = control.decode_control(f["airheater"], control.build(f, "airheater", "permanent", "off", st))
     assert off["PermanentOperationRequest"] == 0 and off["NormalOperationRequest"] == 3  # 3 = leave unchanged
@@ -186,6 +188,37 @@ def test_lighting_save_favorite_frame():
             pass
         else:
             raise AssertionError("expected ValueError for save_profile slot %d" % bad)
+
+
+def test_airheater_timer_start_and_cancel_match_app_frames():
+    """Heater departure timer arm/cancel, APP-OBSERVED 2026-09-16 (tools/applab): "Start timer" ->
+    ``3f3b017f1f3f`` (OperationModeAirHeater=3 + OperationModeCombined=1 = AIR_HEATER, rf/b.java a2()
+    via the page's timer toggle uh/d), "Stop" -> ``3f0b007f1f3f`` (OperationModeAirHeater=0, j4()).
+    Every other heater write carries the Mode SENTINEL 7 (as the app does), never the state's
+    value — carrying Mode 0 from an idle readback would silently cancel an armed timer.
+
+    .. test:: Air-heater timer arm/cancel frames equal the app's
+       :id: T_AIRHEATER_TIMER_FRAMES
+       :links: R_AIRHEATER_SET
+    """
+    from calictl import control, semantics
+    f = _funcs()
+    idle = {"NormalOperation": 0, "HeatingLevel": 11, "RunningTime": 127, "AirDistribution": 0,
+            "OperationModeAirHeater": 0, "TimerHour": 31, "TimerMin": 63}
+    assert control.build(f, "airheater", "timer_start", None, idle).hex() == "3f3b017f1f3f"
+    assert control.build(f, "airheater", "timer_cancel", None, idle).hex() == "3f0b007f1f3f"
+    # untargeted writes keep Mode at the sentinel even though the state says 0 (or 3 = armed)
+    assert control.build(f, "airheater", "level", 8, idle).hex() == "3f78007f1f3f"
+    assert control.build(f, "airheater", "level", 8, {**idle, "OperationModeAirHeater": 3}).hex() == "3f78007f1f3f"
+    # semantics: Mode 3 == a departure timer is armed (the app's "Inactive • Timer: HH:MM" bar)
+    st = {"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0, "HeatingLevel": 5,
+          "OperationModeAirHeater": 3, "TimerHour": 12, "TimerMin": 0}
+    assert semantics.airheater(st)["timer_armed"] is True
+    assert semantics.airheater({**st, "OperationModeAirHeater": 0})["timer_armed"] is False
+    # post-write check reads the same key
+    from calictl import postcheck
+    assert postcheck.set_check("airheater", "timer_start", None, {"timer_armed": True}, {})[1:] == (True, True)
+    assert postcheck.set_check("airheater", "timer_cancel", None, {"timer_armed": True}, {})[1:] == (True, False)
 
 
 def test_airheater_error_code_names():

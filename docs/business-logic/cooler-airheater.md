@@ -204,8 +204,8 @@ unlike Cooler's single `af.a`). State/read-back characteristic `00001702-...`; l
 | `H3` | `we.b` | `(we.a, uh.b)` | AirDistribution | `1/2/3` from `we.a` enum ordinal+1 | `rf/b.java:220-242` |
 | `q4` | `we.b` | `(int, uh.c)` | HeatingLevel | raw int, **guarded 1 ≤ i ≤ 10, else silently dropped (no send)** | `rf/b.java:771-783` |
 | `B0` | `df.a` | `(m, fz.i)` | TimerHour = `m.f24999a`, TimerMin = `m.f25000b` | raw ints (hour, min) | `rf/b.java:164-175` |
-| `a2` | `df.a` | `(df.b, fz.i)` | OperationModeCombined = ordinal+1 (1-7); **also** sets OperationModeAirHeater(Mode) = `3` as a side effect | `rf/b.java:274-308` |
-| `j4` | `df.a` | `(fz.i)` | OperationModeAirHeater(Mode) = `0` (via `f(this,0)`) | `rf/b.java:745-749, 154-162` |
+| `a2` | `df.a` | `(df.b, fz.i)` | **"Start timer"**: OperationModeCombined = ordinal+1 (AIR_HEATER → 1) **and** OperationModeAirHeater(Mode) = `3` → `3f3b017f1f3f` (APP-OBSERVED 2026-09-16; caller `uh/d.java`) | `rf/b.java:274-308` |
+| `j4` | `df.a` | `(fz.i)` | **timer "Stop"**: OperationModeAirHeater(Mode) = `0` (via `f(this,0)`) → `3f0b007f1f3f` (APP-OBSERVED) | `rf/b.java:745-749, 154-162` |
 
 Note the field-name overlap trap: the wire slot the app calls `TimerHour` for the heater is
 physical slot `l0`, and `TimerMin` is `f23989m0` — **the opposite of the Cooler's slot↔name
@@ -214,16 +214,15 @@ offsets for the Heater.
 
 **No direct "turn Permanent Heating ON" write was found** in `rf/b.java` — `E3()` only ever
 writes `PermanentOperationRequest = 0` (off). The only method that raises `OperationModeAirHeater`
-above 0 is `a2()`, which sets it to `3` while also picking an `OperationModeCombined` device
-combo. UNVERIFIED, but the string-resource keys (`airHeaterPage_permanentHeatingOnDialog_*`,
-`..._permanentHeatingTimerDialog_permanentHeatingWillTurnOff_text`) suggest Permanent Heating is
-entered either via the combined-device selection (`a2`) or is mutually exclusive with arming the
-departure timer (`B0`) — i.e. **starting the timer turns permanent heating off**, per the dialog
-text key. Building an own-vehicle "turn permanent heating on" command from these two files alone
-is not fully verified; treat `a2()`'s effect (Mode=3 + OperationModeCombined) as the best lead.
+above 0 is `a2()` — and running the app showed what it is for: **`a2(AIR_HEATER)` is the heater's
+"Start timer"** (Mode=3 + OperationModeCombined=1, observed 2026-09-16, see the Mode bullet
+above); it has nothing to do with turning Permanent Heating on. The string-resource keys
+(`..._permanentHeatingTimerDialog_permanentHeatingWillTurnOff_text`) say arming the timer
+turns permanent heating off, i.e. the two are mutually exclusive. Permanent Heating ON stays
+in-vehicle-only (no write site in the app).
 
-No explicit "timer start" trigger bit (equivalent to Cooler's `TimerStart`) was found for the
-heater — physical slot `f23983f0` (Cooler's `TimerStart`) is named `PermanentOperationConfirmation`
+The heater's "timer start" trigger is therefore NOT a bit like Cooler's `TimerStart` but the
+`OperationModeAirHeater` value itself — physical slot `f23983f0` (Cooler's `TimerStart`) is named `PermanentOperationConfirmation`
 for the heater and is never written by `rf/b.java`. Inference: writing non-zero
 `TimerHour`/`TimerMin` via `B0()` alone is what arms the heater's departure timer (UNVERIFIED).
 
@@ -244,11 +243,15 @@ for the heater and is never written by `rf/b.java`. Inference: writing non-zero
   This strongly implies these "combined operation" features (Truma heater, roof air-con) are
   **only relevant on vehicles equipped with them** (see model-gating note below) — plain
   AirHeater-only vehicles should never need this method.
-- **OperationModeAirHeater (Mode)**: raw int; confirmed app-driven values are `0` (idle/reset,
-  via `j4`) and `3` (combined-operation active, via `a2`). Values `1`/`2` are referenced in the
-  field's bit layout but no setter in this file writes them directly — likely firmware-reported
-  states for "normal operation running" / "permanent operation running" that mirror
-  `NormalOperationRequest`/`PermanentOperationRequest`. UNVERIFIED.
+- **OperationModeAirHeater (Mode)** — **the departure-timer arm** (APP-OBSERVED 2026-09-16,
+  `tools/applab`): the heater page's "Start timer" runs `uh/d.java` → `a2(df.b.AIR_HEATER)` →
+  Mode `3` + `OperationModeCombined` `1`, wire `3f3b017f1f3f`; its "Stop" runs `j4` → Mode `0`,
+  wire `3f0b007f1f3f`. Readback Mode 3 drives the page's "Timer: On" row and the status bar
+  "Inactive • Timer: HH:MM" (gone after Stop even though TimerHour/TimerMin keep the time). Every
+  other heater frame carries the sentinel `7`. calictl: `timer_start`/`timer_cancel`,
+  `semantics.airheater().timer_armed`. Values `1`/`2` are referenced in the field's bit layout
+  but no setter writes them — likely firmware-reported running states. UNVERIFIED. What the
+  unit reports after the timer fires is also UNVERIFIED (the mock assumes Mode back to 0).
 - **ErrorCode** (read-back only): `0` = none/cleared, `1` = low battery, `2` = low fuel,
   `3` = system error, `4` = heating time exceeded, `5` = operation not possible
   (`rf/b.java:461-711`, dispatches to `AIR_HEATER_LOW_BATTERY_ID` / `AIR_HEATER_FUEL_LOW_ID` /
@@ -355,13 +358,13 @@ Send the full 10-field frame every time (shared-send behavior above).
   found. Expect this to end any active Permanent Heating per the dialog text.
   `rf/b.java:164-175`.
 - **Turn off Permanent Heating**: `PermanentOperationRequest = 0` via `E3`. `rf/b.java:209-218`.
-- **Enable combined operation (Truma/roof-AC equipped vehicles only)**: pick a `df.b` device
-  combo and call `a2()`, which sets `OperationModeCombined` and forces
-  `OperationModeAirHeater(Mode) = 3`. Only meaningful if your vehicle is factory-equipped with
-  the corresponding devices (see Grand California gating note) — sending this on a plain
-  California 6.1/7 is UNVERIFIED/likely meaningless or rejected by firmware.
-  `rf/b.java:274-308`.
-- **Reset heater mode to idle**: `OperationModeAirHeater(Mode) = 0` via `j4`.
+- **Arm the departure timer ("Start timer")**: `a2(df.b.AIR_HEATER)` →
+  `OperationModeAirHeater(Mode) = 3`, `OperationModeCombined = 1`, everything else at the
+  sentinels: **`3f3b017f1f3f`** (APP-OBSERVED 2026-09-16 on a plain AirHeater-only California;
+  `uh/d.java` → `rf/b.java:274-308`). The other `df.b` combos (2-7) name Truma / roof-A/C
+  equipment and are for vehicles that have it. calictl: `set airheater timer_start`.
+- **Stop the departure timer ("Stop")**: `OperationModeAirHeater(Mode) = 0` via `j4` →
+  **`3f0b007f1f3f`** (APP-OBSERVED). calictl: `set airheater timer_cancel`.
   `rf/b.java:745-749`.
 
 ---
@@ -375,5 +378,7 @@ Send the full 10-field frame every time (shared-send behavior above).
   or Permanent Heating buttons are greyed out) — this logic lives in Compose UI files that are
   too obfuscated (single-letter classes/methods shared across the whole app) to reliably
   attribute to Cooler/AirHeater specifically.
-- Whether "Permanent Heating ON" has a direct control-field write anywhere in the app, or is
-  only reachable through `a2()`'s combined-device selection.
+- Whether "Permanent Heating ON" has a direct control-field write anywhere in the app — none
+  found; `a2()` turned out to be the departure-timer arm, not a permanent-heating path (2026-09-16).
+- What `1702` reports once the armed timer fires (Mode stays 3? drops to 0? `NormalOperation`
+  rises?) — needs a real-unit trace across a timer start.

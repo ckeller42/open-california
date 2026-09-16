@@ -271,6 +271,25 @@ def test_heater_continuous_switch_off_only(page):
     assert page.locator(".row.ctl-off", has=cont).count() == 1
 
 
+def test_heater_timer_buttons_arm_and_stop(page):
+    # The heater page's departure timer is armed by OperationModeAirHeater=3 (the app's "Start
+    # timer", 3f3b017f1f3f) and cleared by Mode=0 ("Stop") — app-observed 2026-09-16. Both buttons
+    # render; arming goes through the fuel-burner confirm and lands as "Applied" against the mock.
+    page.get_by_text("Air heater", exact=True).first.click()
+    page.on("dialog", lambda d: d.accept())
+    start, stop = page.get_by_role("button", name="Start timer"), page.get_by_role("button", name="Stop timer")
+    expect(start).to_be_visible()
+    expect(stop).to_be_visible()
+    start.click()
+    expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
+    # readout "Timer" shows the armed start time (mock seed 00:00) only while Mode is 3 …
+    expect(page.get_by_text("00:00", exact=True)).to_be_visible(timeout=15000)
+    stop.click()
+    expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
+    # … and falls back to "off" once the readback shows Mode 0 again.
+    expect(page.get_by_text("00:00", exact=True)).to_have_count(0, timeout=15000)
+
+
 def test_camping_master_toggle_applies(page):
     page.get_by_text("Camping mode", exact=True).first.click()
     sw = page.locator(".switch").first                        # first control = master

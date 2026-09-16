@@ -33,6 +33,9 @@ def set_check(function, what, value, interp, decoded):
                                              control.LIGHT_PROFILE_ALL_ON if on else control.LIGHT_PROFILE_ALL_OFF),
         ("airheater", "power"):     lambda: ("running", interp.get("running"), on),
         ("airheater", "level"):     lambda: ("level", interp.get("level"), int(value)),
+        # departure timer: Mode 3 armed (timer_start) / 0 cleared (timer_cancel) — semantics.timer_armed
+        ("airheater", "timer_start"):  lambda: ("timer_armed", interp.get("timer_armed"), True),
+        ("airheater", "timer_cancel"): lambda: ("timer_armed", interp.get("timer_armed"), False),
         # UNVERIFIED targets (not installed on this van) — interp keys per semantics.py.
         ("roofaircondition", "power"):       lambda: ("on", interp.get("on"), on),
         ("roofaircondition", "fanspeed"):    lambda: ("fan_speed", interp.get("fan_speed"), int(value)),

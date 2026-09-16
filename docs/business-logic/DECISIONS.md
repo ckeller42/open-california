@@ -8,6 +8,24 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-09-16 — heater departure timer = `OperationModeAirHeater` 3 / 0 (`a2` was misread as combined-heater-only)
+
+Running the app's Heating page in the lab: **"Start timer" writes `3f3b017f1f3f`** —
+`OperationModeAirHeater=3` + `OperationModeCombined=1` (`df.b.AIR_HEATER`, ordinal+1) — and the
+widget's **"Stop" writes `3f0b007f1f3f`** (Mode 0). The call stack is the page's timer toggle
+coroutine `uh/d.java` → `d2/h` facade → `rf/b.java` `a2(AIR_HEATER)` / `j4()`. The status bar shows
+"Inactive • Timer: HH:MM" only while Mode is 3. This supersedes the 2026-07 reading that `a2()` was
+a Truma/roof-A/C "combined operation" selector irrelevant to a plain California and that the heater
+had "no timer-start trigger": the trigger is the Mode value, not a bit. Wired as `timer_start` /
+`timer_cancel` (`control._airheater`), `semantics.airheater().timer_armed`, web buttons
+"Start timer" / "Stop timer", mock arms + fires at TimerHour:TimerMin (post-fire Mode UNVERIFIED).
+
+Side finding: calictl used to **carry the readback's HeatingLevel / RunningTime / Mode** into every
+heater frame; the app never does (sentinels 11 / 127 / 7). Carrying was refused outright by the
+encoder when the readback level was outside 1-11 (the mock's idle 0) and would have re-sent Mode 0
+— a timer cancel — on a plain level write. `_airheater_values` now sends the app's sentinels for
+every untargeted field, making all heater frames byte-identical to the app's.
+
 ## 2026-09-16 — the app lab: the real app runs against a fake unit built from our own mock
 
 `tools/applab/` puts the vendor's Android app (emulator, netsim Bluetooth) in front of

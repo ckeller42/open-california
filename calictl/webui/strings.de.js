@@ -135,7 +135,7 @@ window.STRINGS_DE = {
   "Remaining": "Restlaufzeit",
   "Start heating at": "Heizen startet um",
   "Level": "Stufe",
-  "Timer start": "Timer-Start",
+  "Stop timer": "Timer stoppen",
   "Active • {n} min remaining": "Aktiv • Restlaufzeit: {n} min",
   "Inactive • Timer: {t}": "Inaktiv • Timer: {t}",
   "⚠ Heater not started — battery low, run the engine": "⚠ Heizung nicht gestartet — Batterie schwach, Motorlauf durchführen",
