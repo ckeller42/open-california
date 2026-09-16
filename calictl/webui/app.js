@@ -471,7 +471,9 @@ const FEATURES = {
       { label: "Continuous heating", get: (s) => onoff(s.permanent) },
       { label: "Heating temperature", get: (s) => (s.level == null ? "—" : `${t("Level")} ${s.level}`) },
       { label: "Run time", get: (s) => withUnit(s.running_time, "min") },
-      { label: "Remaining", get: (s) => withUnit(s.running_time_remaining, "min") },
+      // RunningTimeinAction only counts down while heating; parked it just echoes the configured
+      // run time (60 = 60 live), which would read as "60 min left" on an idle heater.
+      { label: "Remaining", get: (s) => (s.running ? withUnit(s.running_time_remaining, "min") : "—") },
       { label: "Timer start", get: (s) => (s.timer_hour != null && s.timer_min != null && (s.timer_hour || s.timer_min))
         ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : "off" },
       { label: "Error", get: (s) => (s.error ? `${t(AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || String(s.error))} (${s.error_code})` : t("none")) },
