@@ -148,7 +148,15 @@ def test_airheater_runtime_and_timer_frames():
         else:
             raise AssertionError(f"runtime {bad} accepted (cap is 120 min)")
     assert control.build(f, "airheater", "timer", "22:30", st).hex() == "3f75007f161e" # byte4=22 byte5=30
-    assert control.build(f, "airheater", "permanent", "on", st) is None               # not wired (ON unknown)
+    # Continuous heating is OFF-only from outside the vehicle (the app's E3() writes only 0):
+    off = control.decode_control(f["airheater"], control.build(f, "airheater", "permanent", "off", st))
+    assert off["PermanentOperationRequest"] == 0 and off["NormalOperationRequest"] == 3  # 3 = leave unchanged
+    try:
+        control.build(f, "airheater", "permanent", "on", st)
+    except ValueError as e:
+        assert "inside the vehicle" in str(e)
+    else:
+        raise AssertionError("permanent ON must be refused (no app write site exists)")
     try:
         control.build(f, "airheater", "timer", "24:00", st)
     except ValueError:

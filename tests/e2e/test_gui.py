@@ -258,6 +258,19 @@ def test_cooler_quiet_and_timer_controls_follow_power(page):
     set_power(was_on)                                 # leave the shared mock as we found it
 
 
+def test_heater_continuous_switch_off_only(page):
+    # Continuous heating ("Dauerbetrieb") can only be STARTED from inside the vehicle — the only
+    # remote write is OFF. With it off (mock: PermanentOperation=0) the switch must render greyed
+    # with the reason, while Immediate heating stays usable.
+    page.get_by_text("Air heater", exact=True).first.click()
+    cont = page.get_by_role("switch", name="Continuous heating")
+    expect(cont).to_be_visible()
+    expect(cont).to_have_attribute("aria-checked", "false")
+    expect(cont).to_be_disabled()
+    expect(page.get_by_role("switch", name="Immediate heating")).to_be_enabled()
+    assert page.locator(".row.ctl-off", has=cont).count() == 1
+
+
 def test_camping_master_toggle_applies(page):
     page.get_by_text("Camping mode", exact=True).first.click()
     sw = page.locator(".switch").first                        # first control = master

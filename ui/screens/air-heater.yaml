@@ -87,7 +87,7 @@ widgets:
     controls: {field: PermanentOperationRequest, action: E3}
     elements:
       - canOnlyBeActivated_text
-    constraints: "Per key name: 'can only be activated' under some precondition, UNVERIFIED exact rule (likely requires imediateHeatingWidget off, i.e. NormalOperationRequest/PermanentOperationRequest mutually exclusive). Only the OFF direction (E3, writes 0) was confirmed in code; the ON write path is UNVERIFIED."
+    constraints: "OFF-only switch from the app: E3 writes PermanentOperationRequest=0; NO ON write site exists in rf/b.java (re-confirmed 2026-09-16). ON is started from the in-vehicle controls; the app's ON tap raises permanentHeatingOnDialog ('can only be activated in the vehicle' — infoPage_heating_permanent_description says the same). Whether the Compose Switch is disabled or just opens that dialog on ON: UNRESOLVED (Compose layer). calictl mirrors OFF-only (control._airheater 'permanent', web switch greyed while off)."
 
   - id: permanentHeatingOnDialog
     type: drawer
