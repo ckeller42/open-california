@@ -33,6 +33,7 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | the unit drops a link with no heartbeat ~15 s | unit-side; the fake unit implements it (needed: Android kept a stale bonded link that blocked advertising → "No vehicle found") | NOT TESTABLE (modelled) |
 | a control write is a full-packet frame | every write is the full frame length (6 / 1 / 16 / 1 / 5 bytes) | OBSERVED |
 | untargeted fields = leave-unchanged sentinels | 2-bit fields at 3, wider fields at the model default (`7b 00 7f 1f 3f`, `77 1e 3e 1f 1f`) | OBSERVED — mock fixed to honour them |
+| the 2026-07-05 failed cooler write failed because "model defaults = a garbage command" (Level 7, actions 3) | the app itself sends exactly those defaults in every frame (`fc771e3e1f1f`) and the unit accepts them; the 2026-07-05 write was made **before the 1003 heartbeat arm was known** — the missing arm explains it, not the defaults | CONTRADICTED (explanation superseded; the arm-gate finding of 2026-07-07 stands) |
 | "neutral flush" after a write is a lighting-only mechanism | **every** function gets an all-sentinel frame 500 ms after a write (cooler `ff771e3e1f1f`, heater `3f7b007f1f3f`, camping `ff`, energy `30`, lighting `0e00…`) | CONTRADICTED in spirit → S_SEQ_ACTUATE now documents it for all |
 
 ## Per-function frames (`control-and-actuation.md` recipes vs `control.build`)
