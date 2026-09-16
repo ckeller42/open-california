@@ -227,14 +227,15 @@ class MockCamperUnit:
         v = self.state.get("vehicle")
         ign = bool(v.get("TerminalOneFive")) if v else False
 
-        # RTC — the fields are 1900-based year, then month/day/h/m/s.
+        # RTC — the fields are 1900-based year, 0-BASED month (the app adds 1; verified in the app
+        # lab: CarTimeMonth=9 displayed as October), 1-based day, then h/m/s.
         if v and all(k in v for k in ("CarTimeYear", "CarTimeMonth", "CarTimeDay",
                                        "CarTimeHour", "CarTimeMinute", "CarTimeSecond")):
             try:
-                t = _dt.datetime(1900 + int(v["CarTimeYear"]), int(v["CarTimeMonth"]), int(v["CarTimeDay"]),
+                t = _dt.datetime(1900 + int(v["CarTimeYear"]), int(v["CarTimeMonth"]) + 1, int(v["CarTimeDay"]),
                                  int(v["CarTimeHour"]), int(v["CarTimeMinute"]), int(v["CarTimeSecond"]))
                 t += _dt.timedelta(seconds=dt)
-                v.update(CarTimeYear=t.year - 1900, CarTimeMonth=t.month, CarTimeDay=t.day,
+                v.update(CarTimeYear=t.year - 1900, CarTimeMonth=t.month - 1, CarTimeDay=t.day,
                          CarTimeHour=t.hour, CarTimeMinute=t.minute, CarTimeSecond=t.second)
                 changed.add("vehicle")
             except ValueError:
@@ -420,6 +421,12 @@ class MockCamperUnit:
             target = cf.name
             if func.state_field(target) is None and target.endswith("Request"):
                 target = target[: -len("Request")]
+            # Cooler start time: control TimerHour/TimerMin land in state TimerHourSet/TimerMinSet
+            # (the app's picker writes them alone — ff7704021f1f = 04:02 — and re-reads the *Set*
+            # fields to display "cooling starts at"). Heater keeps the same names on both sides.
+            if fn == "cooler" and cf.name in ("TimerHour", "TimerMin") and func.state_field(cf.name + "Set") is not None:
+                st[cf.name + "Set"] = ctrl[cf.name]
+                continue
             # Cooler timer ACTIONS: TimerStart=1 arms the timer (TimerState=1), TimerCancel=1
             # clears it — the app's frames carry only the action bit (f7771e3e1f1f, observed).
             if fn == "cooler" and cf.name in ("TimerStart", "TimerCancel") and ctrl[cf.name] == 1 \

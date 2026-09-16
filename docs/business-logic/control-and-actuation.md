@@ -159,12 +159,18 @@ stale read would be re-asserted — see the "carry current state" note in `_cool
 | Intent | App frame (then neutral +500 ms) | calictl frame | Targeted field |
 |---|---|---|---|
 | camping master OFF | `fc` → `ff` | `fc` | `State=0` — **identical** |
+| camping lights ON (front-door row icon) | `0f` → `ff` | `lights on` → `0f` | both light bits written 0 = lit (the inverted pair) — **identical**; the "sliding door → rear interior lights" row is display-only (no write on tap) |
+| camping rear USB OFF | `f3` → `ff` | `usb off` → `f3` | `UsbCharger=0` — **identical** |
 | heater immediate ON | `3d7b007f1f3f` → `3f7b007f1f3f` | `3d05003c0c00` | `NormalOperationRequest=1` |
 | heater continuous OFF | `0f7b007f1f3f` → neutral | `0f05003c0c00` | `PermanentOperationRequest=0` |
+| heater temperature slider → 8 | `3f78007f1f3f` → neutral | `level 8` → `3f78003c0c00` | `HeatingLevel=8` (no dialog while inactive) |
+| heater run-time slider → 60 | `3f7b003c1f3f` → neutral | `runtime 60` → `3f75003c1f3f`-style (current level carried) | `RunningTime=60` |
 | cooler OFF | `fc771e3e1f1f` → `ff771e3e1f1f` | `3c4309001606` | `State=0` |
 | cooler manual quiet | `ff271e3e1f1f` | `3d2309001606` | `Mode=2` |
 | cooler automatic quiet | `ff471e3e1f1f` | `3d4309001606` | `Mode=4` |
 | cooler timer start (box off) | `f7771e3e1f1f` | `354309001606` | `TimerStart=1` — app leaves `TimerHour/Min` at 30/62 (the time is written separately when the picker changes) |
+| cooler timer time picker → 04:02 | `ff7704021f1f` | `timer_set 09:30` → `3d43091e1606` | `TimerHour/TimerMin` alone; the unit stores them as `TimerHourSet/TimerMinSet` (the app re-reads those to show "cooling starts at") |
+| cooler level slider → 4 | `ff741e3e1f1f` | `3d4409001606` | `Level=4` |
 
 | lighting All lights ON | `0c10000000000000eeeeeeeeeeeeeeee` → commit `0e00…ee` | same two frames (`power on` + `LIGHT_COMMIT`) | `SET_PROFILE 12` — **byte-identical** |
 | lighting lamp icon tap (e.g. Left) | `0904000000000000beeeeeeeeeeeeeee` → commit | `reading-1 5` → `0904…5eee…` | `ProfileNumber=9, Mode=4`, one zone nibble — app writes **11 = DEFAULT**, calictl's "on" writes 10 (100 %) |

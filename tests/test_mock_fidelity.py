@@ -85,6 +85,18 @@ def test_app_neutral_frame_with_all_2bit_sentinels_is_accepted():
     assert (st["NightTimerHourOn"], st["NightTimerHourOff"]) == (22, 6)
 
 
+def test_cooler_time_picker_frame_sets_the_start_time_fields():
+    """The app's Time picker writes TimerHour/TimerMin alone (ff7704021f1f = 04:02, observed) and
+    then displays the unit's TimerHourSet/TimerMinSet — the mock must map control→state names."""
+    f = _funcs()
+    u = _armed_unit(cooler={"Installed": 1, "State": 0, "Level": 3, "Mode": 4,
+                            "TimerHourSet": 0, "TimerMinSet": 0})
+    u.write(f["cooler"].control_char, bytes.fromhex("ff7704021f1f"))
+    st = u.decoded("cooler")
+    assert (st["TimerHourSet"], st["TimerMinSet"]) == (4, 2)
+    assert st["State"] == 0 and st["Level"] == 3           # sentinels left everything else alone
+
+
 def test_cooler_timer_action_bits_arm_and_clear_the_timer():
     """The app's "Timer" switch (box off) writes only TimerStart=1 with everything else at the
     sentinels (`f7771e3e1f1f`, observed); the unit reports TimerState=1. TimerCancel=1 clears it."""
@@ -207,12 +219,14 @@ def test_subscribe_pushes_the_current_value_once():
 
 
 def test_tick_advances_the_vehicle_clock():
-    u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 8, "CarTimeDay": 28,
+    """CarTimeMonth is 0-based on the wire (the app shows month+1 — app lab 2026-09-16); the
+    month rollover below is 8 (= September) -> 9 (= October) at 23:59:30 + 45 s on the 30th."""
+    u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 8, "CarTimeDay": 30,
                              "CarTimeHour": 23, "CarTimeMinute": 59, "CarTimeSecond": 30,
                              "TerminalOneFive": 0})
     u.tick(45)
     v = u.decoded("vehicle")
-    assert (v["CarTimeDay"], v["CarTimeHour"], v["CarTimeMinute"], v["CarTimeSecond"]) == (29, 0, 0, 15)
+    assert (v["CarTimeMonth"], v["CarTimeDay"], v["CarTimeHour"], v["CarTimeMinute"], v["CarTimeSecond"]) == (9, 1, 0, 0, 15)
 
 
 def test_tick_counts_down_immediate_heating_and_stops_it():
