@@ -696,8 +696,10 @@ class Server:
         """SAFETY-SENSITIVE: a single roof frame won't complete travel and has no guaranteed STOP,
         so roof must stream the move frame with a live SafetyCounter, bounded then always STOP
         (device.actuate_roof), never the one-shot device.actuate. ``what`` = direction (open/close).
-        Press-and-hold: the GUI streams the move while held and sends "stop" on release (interrupts
-        via _roof_stop). Caller holds the _ble lock."""
+        Press-and-hold: the GUI streams the move while held and sends "stop" on release. That STOP
+        arrives OUT-OF-BAND — a separate POST while this move is still in flight — which is why
+        _roof_stop must run lock-free (this coroutine holds the _ble lock for the whole move).
+        Caller holds the _ble lock."""
         from . import control  # lazy
         try:
             move_frame = control.roof_frame(self.funcs, what)

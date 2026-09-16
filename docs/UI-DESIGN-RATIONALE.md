@@ -27,6 +27,8 @@ It serves two purposes at once:
 | icons (vendor drawables are **not** committed; neutral placeholders) | control *type* per field (toggle for a bit, slider for a 0–N level) |
 | layout / composition / navigation shell | value ranges + units (from the protocol field width/scale) |
 | — | safety confirmations imposed by the firmware (roof, heater) |
+| — | controls greyed (with the reason) in states the unit refuses: camping master while terminal 15 is on, camping lights/USB while master is off, roof open/close under a blocking InfoPopUp (`tf/a.java n0()`, `ig/c.java j()`), quiet mode while the refrigerator box is off, its timer while on |
+| — | the vocabulary itself (Immediate heating / Continuous heating, Manual / Automatic quiet mode, Second battery, Vehicle power, …) — the unit's own terms, EN + DE |
 
 The vendor's trademarks appear only nominatively, to identify the vehicle the interface controls
 (see `DISCLAIMER.md`). No vendor icon, string, or layout is reproduced.
@@ -39,12 +41,12 @@ Char bases per subsystem are in `docs/hardware.rst`; field bit-layout is
 | Screen | Subsystem / `Installed` source | Core widgets → why (functional) | Trace (protocol field · decompile/enigma) |
 |---|---|---|---|
 | Cooler | `cooler` char `1100`/`1102`, `Installed` bit | on/off toggle (compressor is on/off); level slider 1–5 (setpoint is a small enum); quiet-mode toggle + schedule; cooling-timer start + Arm/Cancel | `State`/`Level`/`Mode`/`TimerHourSet`·`TimerMinSet`/`NightTimerHourOn`·`Off` · CoolerViewModel `vf/c.e()`/`g()` |
-| Camping mode | `campingmode` char `1200`/`1202` (always shown — `Installed` decoded but not wired, mirrors the app) | master toggle; interior/outside light toggles; USB toggle (each an on/off load) | `State`/`InteriorLight`/`OutsideLight`/`UsbCharger` · `tf/a.java` (`b4()` StateFlow hardcodes visibility TRUE) |
+| Camping mode | `campingmode` char `1200`/`1202` (always shown — `Installed` decoded but not wired, mirrors the app) | master toggle (greyed while terminal 15 is on — the unit refuses camping while not stationary); one combined lighting toggle + USB toggle (each an on/off load), both greyed until master is on | `State`/`InteriorLight`/`OutsideLight`/`UsbCharger`/`Enable`(=terminal 15) · `tf/a.java` (`b4()` StateFlow hardcodes visibility TRUE; `n0()` ignition gate) |
 | Lighting | `lighting` char `1500`/`1502`, `Installed` bit | per-zone brightness sliders (each zone is a 0–10 enum); profile selection | `BrightnessLOne…LOneSix`/`ProfileNumber`/`LightValue` · `eg/a.java`, brightness enum `dg/i.java` |
 | Water | `water` char `1300`/`1302`, `Installed` bit | separate fresh + waste readouts (two independent tank sensors) — read-only | `Level`/`Volume` (fresh + waste) · water decode notes, `docs/business-logic/value-freshness.md` |
 | Energy | `energy` char `1600`/`1602`, `Installed` bit | battery/DC-DC/shore/solar readouts; charge-mode select (firmware exposes a mode enum) | `EnergyModeSet` + battery/current fields · `xf/d.d4()`, `pg/a.java` |
 | Air heater | `airheater` char `1700`/`1702`, `Installed` bit | power toggle; heating-level slider; timer/runtime (firmware exposes level + timer) | `NormalOperation`/`HeatingLevel`/timer fields · `rf/b.java` |
-| Roof (pop-top) | `roof` char `1400`/`1402`, live `Installed=1` | hold-to-move open / stop / close (firmware is press-and-hold with a dead-man safety counter) + **safety confirmation** | direction bytes open `0x01`/stop `0x00`/close `0x04`, SafetyCounter · `ig/c.java` `n2()`, `w8/a`+`b1/d` |
+| Roof (pop-top) | `roof` char `1400`/`1402`, live `Installed=1` | hold-to-move open / stop / close (firmware is press-and-hold with a dead-man safety counter; release anywhere = STOP) + **safety confirmation**; open/close greyed under a blocking `InfoPopUp` (1/4/5/7/10/11 or Position 15 — sensor_error 6 only warns), STOP never greyed | direction bytes open `0x01`/stop `0x00`/close `0x04`, SafetyCounter, `InfoPopUp` · `ig/c.java` `n2()`, `j()` movable-check, `w8/a`+`b1/d` |
 
 **Not-installed subsystems** (stairs, roof-A/C, satellite, living-room heater on the reference van)
 have `Installed=0` and are hidden — their screens exist as specs only, never rendered.

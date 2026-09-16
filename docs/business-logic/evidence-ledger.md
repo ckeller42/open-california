@@ -48,6 +48,15 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   driving, emergency_locked, not_possible, low_battery, Position==15} — DECOMPILE (2026-09-15,
   `ig/c.java` `j()` movable-check; sensor_error is warn-only there). Not yet seen live: the van has
   never reported 5 while calictl was polling. Owed: one drive with the roof screen open.
+- roof InfoPopUp → dialog texts (1 over-use cooldown, 5 roof-open-while-driving, 6 jammed/blocked,
+  7 secure manually, 10 unavailable, 11 low battery/run engine) — DECOMPILE (2026-09-16, `ig/c.java`
+  switch → `ea/j`/`ea/n` string accessors → `.cvr` EN/DE tables).
+- campingmode `Enable` (1202 bit 3) = terminal-15, **one poll behind** 1004 `TerminalOneFive` —
+  DEVICE (2026-09-16, camping-watch: 8 paired `ignition 0→1` / `enable 0→1` / `master_on 1→0`
+  transitions; owner screenshot of the lag). Decompile: `tf/a.java n0()` ignitionTerminal15Flow.
+- air-heater run-time cap 120 min + ErrorCode IDs 1–5; cooler quiet-needs-ON / timer-needs-OFF
+  gates — DECOMPILE + string tables (2026-09-16, `rf/b.java`, `infoPage_heating_immediate_description`,
+  `coolboxPage_*` strings). Not live-provoked.
 - energy current scales — DECOMPILE (2026-09-07): `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` ÷10 → A
   (`xf/d.java:159,173,175`, holders bound `xf/a.java:150-157,239,307`), `IDcdcAfs` unscaled A + the
   SW-0409/0410 `+2` (`xf/d.java:171`). Plausibility from 14 d telemetry: `batt2_current` raw −49…318

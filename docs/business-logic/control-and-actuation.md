@@ -304,3 +304,18 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
   timer** (`timer_set`/`timer_start`) can only be set while the fridge is off (`cooler.State==0`).
   Enforced in `serve.on_command` + `cli` (unknown gating state allows the write — can't prove it's
   blocked). Both DEVICE-confirmed at the van.
+- **Web GUI roof contract (`webui/app.js`, #176):** open/close are **press-and-hold** — `pointerdown`
+  posts the move (the server streams frames + counter until told to stop, `_roof_move`), and the
+  release is caught ONCE at **document** level (`pointerup`/`pointercancel`, plus `pointerleave` on
+  the button) so a re-render can't detach the held button. STOP goes **out-of-band** straight to
+  `/api/command` — the GUI's single-flight command queue would otherwise hold it behind the still
+  in-flight move POST (deadlock until the move ended by itself); the server handles STOP lock-free
+  (`_roof_stop`). No DOM rebuild while `roofHold` is set; a re-press within 1000 ms is debounced (a
+  restarted SafetyCounter costs another ~3 s motor withhold). Open/close are greyed under the app's
+  move-block set (`ROOF_MOVE_BLOCK`, see `alert-states.md`); STOP is never greyed.
+- **Gates are UI-only today** (known gap): `/api/command`, the CLI and HA/MQTT still accept a roof
+  move under a blocking `InfoPopUp`, camping lights/USB with master off, and quiet mode with the
+  refrigerator box off — only the cooler timer-while-on and roof-reading-light rows are refused
+  server-side (`command_precondition`; roof bypasses it in `serve.on_command`). Deeper fix = rows
+  in `command_precondition`. The roof gate also reads the last-polled state without a freshness
+  check (a stale `not_possible` can grey it for a poll while asleep).

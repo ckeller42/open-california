@@ -15,8 +15,8 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `cli` |
 | `protocol/dictionary.yaml` | extracted field map (14 functions, state+control); source of truth for bit layout |
 | `protocol/signals.yaml` | the **signal catalog** — surface/omit decision + provenance per field |
-| `tools/` | `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `hooks/` |
-| `tests/` | pytest; **must stay green** |
+| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `hooks/` |
+| `tests/` | pytest; **must stay green**. `tests/e2e/` = Playwright over the mock daemon; every test fails on an uncaught JS error |
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) — the full provenance behind the terse "Known state" below |
 | `docs/superpowers/` | specs + plans |
 | `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); regenerate locally with `ui/assets/vd2svg.py` from the APK. |
@@ -32,6 +32,12 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
   `asyncio.Lock` in `serve.py` (created **inside** the running loop) serializes all access.
 - **BLE codec is MSB-first**; control frames are **full-packet** (resend every field;
   unchanged fields = the leave-unchanged sentinel, usually `3` for 2-bit).
+- **The web UI is un-built JS; `tsc --checkJs` is its hard gate** (`calictl/webui/jsconfig.json`,
+  baseline **0 errors** — keep it there). `node --check` only parses; an undeclared identifier in a
+  renderer once shipped to buspi because no test rendered that screen. Run `tools/ci.sh webcheck`
+  (also in CI `lint` + pre-commit when webui JS is staged). Any label/enum shown to the user must
+  use the unit's own vocabulary (Sofortheizen / Dauerbetrieb / Flüstermodus …), EN + DE
+  (`strings.de.js`; `tests/test_i18n_de.py` guards literal `t()` keys).
 - **Every dictionary field has a catalog decision** (`surface` w/ name, or `omit` w/ reason).
   A dropped or unaccounted field **fails CI** (`tests/test_signal_coverage.py`).
 - **Semantics correctness isn't auto-checked.** The guardrail validates *presence + scale*,
@@ -59,6 +65,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 
 ```
 python3 -m pytest tests/ -q                          # the suite (keep green)
+tools/ci.sh [ci|webcheck|test|lint|audit|…]          # the local CI gate (what GitHub runs, minus gui-e2e)
 DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + semantic-review
 python3 -m calictl status                            # live read of all functions (needs BLE + free slot)
 python3 -m calictl serve [--dry-run]                 # the unified daemon (read-only unless --enable-writes)
@@ -83,8 +90,9 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   14=leave-unchanged; `LIGHT_ON_BRIGHTNESS=10`, slider max 10). The `1502` **Mode-4 notification** is a
   decodable state frame carrying the real ramping brightness — the truthful feedback channel; the
   state-char **readback is a write-through echo, never proof of actuation**. `set lighting color`
-  (SET_COLOR) is unverified (app exposes no colour control). Extend via `control.BUILDERS`. See
-  `control-and-actuation.md`.
+  (SET_COLOR) is unverified and **mis-shaped vs the app** (the app recolours a stored PROFILE; its
+  colour UI exists but is model-gated — likely Grand-California-only — and excludes profiles
+  DOOR_CONTACT(8)/INTERIOR_LIGHT(11)). Extend via `control.BUILDERS`. See `control-and-actuation.md`.
 - **Roof** (needs ignition ON): press-and-hold — stream move frames while held, STOP/cease on release
   (no confirmation phase). Direction bytes match the app (open `0x01`/stop `0x00`/close `0x04`). The
   **SafetyCounter is app-generated** (monotonic BE-uint32, ~+1 per 500 ms), NOT echoed; the unit

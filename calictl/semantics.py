@@ -219,7 +219,9 @@ def campingmode(d: dict) -> dict:
 # 15=error, everything else (3-13, transitional) = other.
 _ROOF_POS = {0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error"}
 # Roof InfoPopUp alert enum (ig/c.java, 4-bit InfoPopUp), only meaningful while installed:
-# 0=none 1=child_lock 4=error 6=sensor_error 7=emergency_locked 10=not_possible 11=low_battery.
+# 0=none 1=child_lock 4=error 5=driving 6=sensor_error 7=emergency_locked 10=not_possible
+# 11=low_battery. Names are the app's internal IDs; what they MEAN to the user (child_lock = an
+# over-use cooldown, driving = roof open while the vehicle may move) is in alert-states.md.
 _ROOF_ALERT = {1: "child_lock", 4: "error", 5: "driving", 6: "sensor_error", 7: "emergency_locked",
                10: "not_possible", 11: "low_battery"}
 # InfoPopUp 5 = ROOF_OP_DRIVING (docs/business-logic/alert-states.md): the unit refuses to move the
@@ -232,8 +234,10 @@ def roof(d: dict) -> dict:
 
     Adds the app's human-facing readouts on top of the raw ``Position``: a
     ``position_name`` (``closed``/``open``/``middle``/``error``/``other``) and the
-    ``InfoPopUp`` alert enum (child-lock, sensor error, low battery, ...), the alert
-    surfaced only while the roof is installed. Mapping taken from the decompiled roof
+    ``InfoPopUp`` alert enum (child-lock, error, driving, sensor error, emergency-locked,
+    not-possible, low battery), the alert surfaced only while the roof is installed. The
+    app refuses a MOVE on every alert except ``sensor_error`` (which it only shows) — that
+    block set lives in the web UI (``ROOF_MOVE_BLOCK``). Mapping taken from the decompiled roof
     view-model ``ig/c.java`` (``l()`` + the ``InfoPopUp`` branch) and ``hf/b.java``.
 
     :param d: decoded field map for the ``roof`` function (``Position``, ``Installed``,
@@ -247,8 +251,9 @@ def roof(d: dict) -> dict:
        :tags: ble, telemetry, roof
 
        ``calictl`` shall map the roof ``Position`` to a human name and the ``InfoPopUp``
-       field to the app's alert enum (child-lock/error/sensor-error/emergency-locked/
-       not-possible/low-battery), surfacing the alert only while the roof is installed.
+       field to the app's alert enum (child-lock/error/driving/sensor-error/
+       emergency-locked/not-possible/low-battery), surfacing the alert only while the
+       roof is installed.
     """
     installed = bool(d.get("Installed"))
     pos = d.get("Position")

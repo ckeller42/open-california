@@ -133,7 +133,7 @@ widgets:
       - dialog_error_popUpRoof_unknownError_headline / _text
       - dialog_error_popUpRoof_unknownErrorActive_headline_t6 / _text_t6
       - dialog_criticalError_popUpRoof_roofOpenWhileDriving_headline / _text
-    constraints: "Full set of modal dialogs found for this screen; not modeled as individual widgets"
+    constraints: "Full set of modal dialogs found for this screen; not modeled as individual widgets. Move interlock (ig/c.java j()): open/close refused while InfoPopUp in {1 childLock, 4 unknownError, 5 roofOpenWhileDriving, 7 secureManually, 10 temporarilyOutOfFunction, 11 lowBattery} or Position==15; 6 roofStuck only warns. InfoPopUp->dialog map in docs/business-logic/alert-states.md."
 icons:
   - drawable/pop_up_roof
   - drawable/tiltroof

@@ -194,7 +194,12 @@ RED(9), SALMON(10)` — matches `control.LIGHT_COLORS` byte-for-byte. **CORRECTE
 `SET_COLOR`(Mode 6) call site — `dg/h.java:644` (`n.SET_COLOR` + `v(6, …)`), a **profile-recolour** method:
 `Mode=6`, `LightValue`=colour index, `ProfileNumber`=the *target* profile, and the zones carry that profile's
 brightness (`w10.d.b(kVar2)`), transmitted via the await-response path `A(SET_COLOR, …)`, gated so two profiles
-(likely LIGHTS_OFF/ON) can't be coloured. So SET_COLOR is a real capability, not N/A — but it recolours a
+can't be coloured — **resolved 2026-09-16: DOOR_CONTACT(8) and INTERIOR_LIGHT(11)** (`dg/h.java:637-651`
+excludes `f7157f0`/`f7160i0` = `ef/k.java:70-76`), not LIGHTS_OFF/ON as first guessed. The app DOES have a
+colour UI (`lighting_interiorLighting_SectionLightSubline_adjustLightColour_text` "Adjust light colour" +
+10 `lighting_lightColor_*_text` names, rendered by `tt/x9.java`), but it is shown only behind a boolean flow
+whose source is unresolved — sibling keys carry the `_gc` suffix, so it is likely Grand-California-only and
+never appears on a T7. So SET_COLOR is a real capability, not N/A — but it recolours a
 stored profile. `control._lighting`'s `color` builds `ProfileNumber=9` + sentinel zones, which is NOT what the
 app sends (target profile + its brightness), so our `set lighting color` frame is mis-shaped and likely won't
 actuate as built. The other `dg.j` use is the wake-up-light `LightValue` packing (`dg/h.java:656`).
@@ -236,6 +241,14 @@ SystemError, EmpInstalled, PvInstalled, LadInstalled, DcdcInstalled, WarningLeve
 SocOneBattAfs, SocTwoBattAfs, StateDcdcAfs, StateLandAfs, StatePvAfs, AgeOneBattValuesMinutes, IOneBattBemAfs,
 PDcdcAfs, PLandAfs, PPvAfs, tTwoBattRemainingh, tTwoBattRemainingmin, UOneBattBemAfs, UTwoBattBemAfs,
 ITwoBattBemAfs, IDcdcAfs, ILandAfs, IPvAfs`.
+
+**`EnergyModeNotSelectable` is decoded but never READ by the app** (2026-09-16): `yf/a.java:23` holds it and
+`xf/a.java:282` logs it, but the view-model binding `xf/a.java:124-150` skips that one field and nothing
+else references it; the selector's `enabled` flows (`xf/d.java:139-140`) are constant TRUE. calictl's
+`energy_mode_locked` (and the web UI's greyed mode selector) is therefore a **calictl-only** lock on a
+plausible firmware bit, not an app behaviour — keep it, but don't cite the app for it. The selector
+itself (`ak/a.java:704-716`) offers Normal + Max always and **ECO only when `zj/c.N0`** (availability
+flag, source one hop unresolved); calictl offers ECO unconditionally.
 
 ("Land" = shore/landline power, "Pv" = photovoltaic/solar, "Dcdc" = DC-DC converter, "Afs" = raw AFS-scaled
 value, "Two Batt" = second/auxiliary battery, "Emp"/"Lad" = installed-equipment flags.)

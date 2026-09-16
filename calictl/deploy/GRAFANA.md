@@ -30,7 +30,16 @@ the interpreted status becomes a float field (bools → 1/0).
 
 Key fields: `water fresh_percent/waste_percent`, `energy batt2_v/soc2_level/
 dcdc_charging/dcdc_power`, `cooler on/level`, `campingmode usb_charger`,
-`airheater running/level`, `roof position`, plus each function's `installed`.
+`airheater running/level/error_code`, `roof position`, plus each function's `installed`.
+
+String enums are dropped by Influx, so two curated ones are ALSO written as numeric `<key>_code`
+fields (`calictl/influx.py _ENUM_CODES`; 0 = none/ok). **Append-only — never renumber**, the
+dashboard's value mappings key on them:
+
+| field | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| `cooler fault_code` | error | emergency | door_open | | | | |
+| `roof alert_code` | child_lock | error | sensor_error | emergency_locked | not_possible | low_battery | driving |
 
 ## 2. Grafana
 
