@@ -78,6 +78,14 @@ once a second — the unit was seen at ~3 Hz live), `RunningTimeinAction` and
 and the terminal-15 → `campingmode.Enable`/master-shed coupling delay. A difference is a mock bug
 or a new protocol fact — never a reason to touch the trace. Results land in this file's tables.
 
+### First real-unit trace (buspi, van awake, 2026-09-16 17:08–17:20)
+
+| Claim | Observation | Verdict |
+|---|---|---|
+| every state frame round-trips through the dictionary | 14/14 functions, 88 frames: repack == raw for every frame | OBSERVED (dictionary covers every bit the unit sent) |
+| `1602` energy streams ~3×/s while connected | **not observed**: with the persistent session up and the heartbeat ticking, each of the 12 subscribed chars notified **exactly once, right after its CCCD write**, then nothing for the rest of the link (no change-driven push in 150 s; energy values did change between links) | **CONTRADICTED** (the 2026-07 "3×/s" note) → mock/fake now push once on subscribe, not 1 Hz |
+| `1003` heartbeat keeps the link up indefinitely | persistent session came up, was dropped by the unit after ~30–40 s and re-established (`persistent session up` twice within 40 s, no `released` line between) — under investigation with `CALICTL_BLE_TRACE_HEARTBEAT=1` | OPEN |
+
 ## Not testable in the lab (unit-side; keep DEVICE/CAPTURE tier)
 
 `0x0E` link drop on out-of-range values; water measurement-gating / stale latch; deep-sleep and

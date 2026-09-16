@@ -503,13 +503,20 @@ class MockBleakClient:
             raise
 
     async def start_notify(self, uuid, cb):
-        # If the unit has a pending push for this char's function, deliver it immediately (models
-        # the real unit pushing the fresh value on/after subscribe — e.g. water 1302).
+        # The unit pushes a char's CURRENT value once as soon as a client enables notifications
+        # (buspi trace 2026-09-16: one notify per subscribed char right after its CCCD write, then
+        # only on change — it does not stream). A pending `notify_push` (the fresh value of a
+        # push-only char such as water) takes precedence; a function with a stale read-latch armed
+        # pushes nothing (its fresh value only arrives once the heartbeat has run).
         fn = self.unit._state_char.get(str(uuid))
-        if fn is not None and fn in self.unit.notify_push:
+        if fn is None:
+            return None
+        if fn in self.unit.notify_push:
             frame = _pack_state(self.unit.funcs[fn],
                                 {**self.unit.state.get(fn, {}), **self.unit.notify_push[fn]})
             cb(_Char(str(uuid), ["notify"]), frame)
+        elif fn not in self.unit.read_latch:
+            cb(_Char(str(uuid), ["notify"]), self.unit.read(str(uuid)))
         return None
 
     async def stop_notify(self, uuid):
