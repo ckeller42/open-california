@@ -122,7 +122,12 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
 - The UI is **unauthenticated** — expose it only on a trusted LAN (same posture as the
   Home Assistant / Grafana stack), never on the open internet. To reach it **remotely**, use
   Tailscale (see below) — a private, encrypted overlay — rather than port-forwarding.
-- Uninstalled features are hidden; roof control asks for confirmation. Lighting writes DO
+- Uninstalled features are hidden. Controls the unit refuses in the current state are **greyed
+  out with a reason** (hover/long-press the row): camping mode only when stationary (ignition
+  off); camping lights + rear USB only while camping mode is on; roof open/close while a roof
+  alert blocks movement (roof moved too often, low battery, fault, roof open while the vehicle
+  may move). The roof is **press-and-hold**: it moves while the button is held and stops the
+  moment you release (anywhere on the page). Lighting writes DO
   actuate the lamps, but the state-char readback is a write-through echo, so the UI says
   "Sent — check the lamp" rather than confirming from the readback.
 - The UI is in **English by default**; the ⋮ menu has a **Deutsch / English** entry that switches

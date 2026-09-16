@@ -224,7 +224,7 @@ def test_camping_lights_and_usb_greyed_until_master_on(page):
         master.click()
         expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
         expect(master).to_have_attribute("aria-checked", "false")
-    expect(page.get_by_role("switch", name="Interior + outside lights")).to_be_disabled()
+    expect(page.get_by_role("switch", name="Exterior and interior lighting")).to_be_disabled()
     expect(page.get_by_role("switch", name="Rear USB ports")).to_be_disabled()
     expect(page.locator(".row.ctl-off")).to_have_count(2)          # exactly lights + usb greyed
     expect(master).to_be_enabled()                                  # master itself is usable
@@ -313,10 +313,10 @@ def test_lighting_screen_lamps_are_directly_controllable(page):
 
 
 def test_dashboard_summary_card(page):
-    # the app's "California Status" overview: fresh/grey water + leisure battery, above the tiles.
+    # the "California Status" overview: fresh/waste water + second battery, above the tiles.
     card = page.locator(".card.summary")
     expect(card).to_be_visible()
-    for label in ("Fresh water", "Grey water", "Second battery"):
+    for label in ("Fresh water", "Waste water", "Second battery"):
         expect(card.get_by_text(label, exact=True)).to_be_visible()
     # a real "<liters> / <capacity> l" readout, not a spec/ghost row
     import re
@@ -380,13 +380,13 @@ def test_energy_chart_draws_from_daemon_history_not_influx(page, base_url):
 def test_open_control_survives_a_state_poll(page):
     """Regression: a live state poll must NOT re-render and destroy a control the user is
     interacting with. The 2s poll rebuilds #app (app.innerHTML=""), which used to slam an open
-    <select> (Activate profile / Save current as) shut mid-selection. refreshState() skips the
+    <select> (Profile / Save current as) shut mid-selection. refreshState() skips the
     repaint while a <select>/time/range control is focused. We mark the focused <select>, wait
     through 2+ poll cycles (the mock's telemetry changes each poll, so a repaint WOULD otherwise
     fire), and assert the SAME element is still there — a repaint would have replaced it, losing
     the marker (and, in a browser, closing the dropdown)."""
     page.get_by_text("Lighting", exact=True).first.click()
-    sel = page.locator("select").first                 # the 'Activate profile' dropdown
+    sel = page.locator("select").first                 # the 'Profile' dropdown
     expect(sel).to_be_visible()
     sel.evaluate("el => { el.dataset.probe = 'keep'; el.focus(); }")
     assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
@@ -406,7 +406,7 @@ def _open_pairing_via_menu(page):
 def _open_and_start_pairing(page):
     _open_pairing_via_menu(page)
     page.get_by_role("checkbox", name="I'm on that screen").check()
-    page.get_by_role("button", name="Start").click()
+    page.get_by_role("button", name="Connect now").click()
 
 
 def _complete_bonding(page):
@@ -429,7 +429,7 @@ def test_pairing_wizard_reaches_bonded(pairing_page):
 def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
     """A wrong passkey each attempt: the real SM (`calictl.pairing`) retries up to MAX_ATTEMPTS
     times (cycling back through scanning/connecting/waiting_passkey) before giving up -> `error`
-    with a Retry button (design spec step 2's error case)."""
+    with a Try-again button (design spec step 2's error case)."""
     page = pairing_page
     _open_and_start_pairing(page)
     passkey = page.locator("#pairing-passkey")
@@ -443,9 +443,9 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
         # twice before the first POST's response re-renders, and the SM silently no-ops a
         # "passkey" event that doesn't arrive in `waiting_passkey` -- undercounting attempts.
         expect(passkey).to_be_hidden(timeout=10000)
-    expect(page.get_by_role("button", name="Retry")).to_be_visible(timeout=10000)
+    expect(page.get_by_role("button", name="Try again")).to_be_visible(timeout=10000)
     assert "pairing_failed" not in page.locator("#app").inner_text()   # friendly text, not the raw enum
-    assert "Pairing failed" in page.locator("#app").inner_text()
+    assert "Connection failed" in page.locator("#app").inner_text()
 
 
 def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):

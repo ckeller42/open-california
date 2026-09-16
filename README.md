@@ -69,7 +69,8 @@ python3 -m calictl serve --web 8080 --enable-writes   # ...allow control writes 
 
 The **daemon is read-only by default** — it will not write to the vehicle until you pass
 `--enable-writes` (or set `CALICTL_ENABLE_WRITES=1`), so a stray deploy never actuates anything by
-accident. The web UI disables its controls and shows a banner when read-only.
+accident. The web UI disables its controls and shows a banner when read-only, and greys out any
+control the unit refuses in the current state (with the reason as a tooltip).
 
 Only the standard library is imported at load; `bleak` / `paho-mqtt` / `influxdb_client` load
 lazily, only when actually talking to BLE / MQTT / InfluxDB.
