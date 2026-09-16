@@ -458,6 +458,10 @@ def test_numeric_fields_alert_enums_become_codes():
     assert influx.numeric_fields({"alert": "child_lock"})["alert_code"] == 1.0
     assert influx.numeric_fields({"alert": "low_battery"})["alert_code"] == 6.0
     assert influx.numeric_fields({"alert": "in_use"})["alert_code"] == 8.0          # appended 2026-09-16
+    # water fault codes (semantics.water fresh_alert / waste_alert, app dialogs observed 2026-09-16)
+    assert influx.numeric_fields({"fresh_alert": "empty"})["fresh_alert_code"] == 5.0
+    assert influx.numeric_fields({"waste_alert": "full"})["waste_alert_code"] == 1.0
+    assert influx.numeric_fields({"waste_alert": None})["waste_alert_code"] == 0.0
     assert influx.numeric_fields({"alert": "not_stationary"})["alert_code"] == 9.0
     assert influx.numeric_fields({"alert": None})["alert_code"] == 0.0
 
@@ -670,6 +674,23 @@ def test_heartbeat_counter_bytes():
     assert device._beat_bytes(device.HEARTBEAT_START) == bytes.fromhex("00100000")
     assert device._beat_bytes(device.HEARTBEAT_START + 1) == bytes.fromhex("00100001")
     assert device._beat_bytes(0x1_00000000) == bytes.fromhex("00000000")
+
+
+def test_water_alert_codes_follow_the_apps_dialogs():
+    """FreshWaterInfoPopUp / WasteWaterInfoPopUp are the unit's water fault codes (qg/b.java
+    dispatch); every dialog the app pops for them was observed in the app lab 2026-09-16
+    (alert-states.md §5): fresh 1 pump protection, 2 sensor error, 3 and 7 unknown error, 4 pump
+    error, 5 empty, 6 and 8-15 nothing; waste 1 full, 2 sensor error, 3 general error."""
+    from calictl import semantics
+    base = {"Installed": 1, "FreshWaterUnit": 1, "FreshWaterLevel": 11, "FreshWaterVolume": 22,
+            "WasteWaterUnit": 1, "WasteWaterLevel": 3, "WasteWaterVolume": 22}
+    fresh = {1: "pump_protection", 2: "sensor_error", 3: "error", 4: "pump_error", 5: "empty", 7: "error"}
+    for code in range(16):
+        w = semantics.water({**base, "FreshWaterInfoPopUp": code, "WasteWaterInfoPopUp": 0})
+        assert w["fresh_alert"] == fresh.get(code), code
+        assert w["waste_alert"] is None
+    for code, name in {0: None, 1: "full", 2: "sensor_error", 3: "error"}.items():
+        assert semantics.water({**base, "FreshWaterInfoPopUp": 0, "WasteWaterInfoPopUp": code})["waste_alert"] == name
 
 
 def test_water_stale_latch_guard():

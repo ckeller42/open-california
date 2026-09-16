@@ -42,7 +42,17 @@ def water(d: dict) -> dict:
         "installed": bool(d.get("Installed")),
         "fresh": tank(d.get("FreshWaterUnit"), d.get("FreshWaterLevel"), d.get("FreshWaterVolume")),
         "waste": tank(d.get("WasteWaterUnit"), d.get("WasteWaterLevel"), d.get("WasteWaterVolume")),
+        # The unit's water fault codes (qg/b.java dispatch; every dialog text app-observed 2026-09-16,
+        # docs/business-logic/alert-states.md §5). Fresh 3 and 7 are the same "unknown error";
+        # 6 and 8-15 show nothing in the app -> None.
+        "fresh_alert": _FRESH_WATER_ALERT.get(d.get("FreshWaterInfoPopUp")),
+        "waste_alert": _WASTE_WATER_ALERT.get(d.get("WasteWaterInfoPopUp")),
     }
+
+
+_FRESH_WATER_ALERT = {1: "pump_protection", 2: "sensor_error", 3: "error", 7: "error",
+                      4: "pump_error", 5: "empty"}
+_WASTE_WATER_ALERT = {1: "full", 2: "sensor_error", 3: "error"}
 
 
 def energy(d: dict) -> dict:

@@ -167,7 +167,7 @@ confirmed against a live reference. Treat those as *trends*, not calibrated read
 | water `fresh/waste_percent` | derived (`Level×100/Volume`) | % | live-verified (11 L / 29 L = 38 %) |
 | `batt2_current`, `shore_current`, `solar_current` | ×0.1 | A | **RESOLVED 2026-09-07** against the app view-model: `xf/d.java:159/173/175` divide the raw `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` by `10.0d` and the readout shows amps; binding raw bits→holder `xf/a.java:150-157,239,307`. Signedness unchanged (`batt2` signed, shore/solar unsigned). 511 stays the not-fitted sentinel (§4 below). |
 | `dcdc_current` | raw | A | **RESOLVED 2026-09-07**: `xf/d.java:171` applies **no** divisor (amps as-is), only the `+2` SW-0409/0410 correction (`semantics.apply_sw_corrections`, live-verified −2→0). |
-| `soc1_pct`, `soc2_pct` (derived) | `level×10` for 0–10, else `None` | % | mirrors the app's display math (`xf/a.java:333-337`) — **app-derived, not a sensor %**: the unit does emit levels 11–15 (seen over 14 d), for which the app shows nothing and calictl emits `None`. `soc*_level` stays the truthful value. |
+| `soc1_pct`, `soc2_pct` (derived) | `level×10` for 0–10, else `None` | % | mirrors the app's display math (`xf/a.java:333-337`) — **app-derived, not a sensor %**: the unit does emit levels 11–15 (seen over 14 d), for which the app's overview shows **"0 %"** (observed in the app lab 2026-09-16: levels 0–10 → 0–100 %, 11/12/15 → "0 %") and calictl emits `None` (more honest than a fake 0 %). `soc*_level` stays the truthful value. |
 
 ### Sentinels in the telemetry (raw fields carry "no-data" markers)
 

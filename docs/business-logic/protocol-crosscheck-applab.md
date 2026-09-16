@@ -68,6 +68,23 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | InfoPopUp 2/3/9/12 (untraced) | 2/3/12 → tile "Function currently in use", 9 → "Only possible when stationary" | OBSERVED → added |
 | 8/13/14 | nothing shown | OBSERVED |
 
+## Fault dialogs and equipment gating (fake unit `set <fn> <Field>=<v>` while the app watches)
+
+Every fault code the dictionary knows was injected one at a time; the app pops a toast the moment
+the readback changes, on whatever page is open. Texts are verbatim in `alert-states.md` (§4
+energy, §5 water) and `cooler-airheater.md` (heater ErrorCode); the web UI's `*_MSG` tables
+carry them, and `semantics.water` now surfaces `fresh_alert` / `waste_alert`.
+
+| Claim | Observation | Verdict |
+|---|---|---|
+| heater `ErrorCode` 1–5 = low battery / low fuel / system error / heating-time exceeded / not possible | five distinct dialogs; 4 is worded **"Emission limit exceeded"** (switched off automatically, on again at ≥ 5 km/h), 5 **"deactivated"** (not while the engine or the auxiliary water heater runs); `FaultTriggerBit=1` alone shows nothing | OBSERVED (meanings sharpened → web texts) |
+| cooler `Error` 1–3 = error / emergency mode / door open | "Please visit a workshop." / "Refrigerator box in emergency mode." / "Please close the refrigerator box door fully." | OBSERVED identical to `COOLER_FAULT_MSG` |
+| energy flags → alert IDs (alert-states §4) | 11 of 13 flags pop a dialog; `WarningLevelTwo` and `EnergyModeNotSelectable` none. `SleepWarning` = **charging cable still plugged in** | OBSERVED (`SleepWarning` meaning corrected; web "Issues" readout now shows the texts, not flag names) |
+| water `FreshWaterInfoPopUp` 1/2/3+7/4/5, `WasteWaterInfoPopUp` 1/2/3 | all dialogs as tabled; fresh 6 and 8–15 nothing | OBSERVED → fields surfaced (`fresh_alert`, `waste_alert`, catalog + Influx codes) |
+| SoC display = level × 10 % for 0–10, nothing above | 0–10 → 0–100 %; **11, 12, 15 → "0 %"** | OBSERVED (calictl keeps `None` for 11–15) |
+| `Installed=0` hides a function | cooler / heater / roof tiles vanish from the overview the moment their `Installed` bit drops | OBSERVED |
+| stairs / roof-A/C / LR-heater / satellite screens exist in the app (not fitted on this van) | `Installed=1` on the fake unit adds the tiles: **Step** "Folded"; **Living area heating** "Off • Level 20 • Mix 6A (fuel and current)" + **Hot Water Mode** "Off • Eco • Mix 6A (fuel and current)"; **Satellite system** "Aerial switched off"; **roof A/C** renders raw resource keys `!ROOF_AIR_CONDITION` / `!OFF • !LEVEL 0 • !COOLING • !SPEED 0` (unlocalised — the app's roof-A/C surface is unfinished in this build) | OBSERVED (vocabulary for the four unverified functions: Step, Living area heating, Hot Water Mode, Satellite system) |
+
 ## The hardware side: trace the real unit, replay it through the mock
 
 The lab validates the **app**; the unit's own behaviour (push cadence, countdown rates, coupling,
@@ -88,7 +105,7 @@ or a new protocol fact — never a reason to touch the trace. Results land in th
 |---|---|---|
 | every state frame round-trips through the dictionary | 14/14 functions, 88 frames: repack == raw for every frame | OBSERVED (dictionary covers every bit the unit sent) |
 | `1602` energy streams ~3×/s while connected | **not observed**: with the persistent session up and the heartbeat ticking, each of the 12 subscribed chars notified **exactly once, right after its CCCD write**, then nothing for the rest of the link (no change-driven push in 150 s; energy values did change between links) | **CONTRADICTED** (the 2026-07 "3×/s" note) → mock/fake now push once on subscribe, not 1 Hz |
-| `1003` heartbeat keeps the link up indefinitely | persistent session came up, was dropped by the unit after ~30–40 s and re-established (`persistent session up` twice within 40 s, no `released` line between) — under investigation with `CALICTL_BLE_TRACE_HEARTBEAT=1` | OPEN |
+| `1003` heartbeat keeps the link up indefinitely | **no unit-side drop found.** The heartbeat-traced run (524 s, 11 links) shows every link is one calictl **poll cycle**: connect → 12 on-subscribe pushes → 14 reads → 5–7 beats (median gap 0.73 s, max 1.32 s) → calictl's own disconnect 0–0.9 s after the last beat; links are 5–6 s long and start every ~39 s (`POLL_INTERVAL=30` + the cycle). The "up twice within 40 s" was the web-driven persistent session being **released for web-UI idleness** (`persistent session released (web UI idle)` ~3 s to 2 min after each `up`) and re-armed by the next `/api/session` nudge. One genuine `read_all: link dropped at airheater` occurred right after the service restart (hci0 contention on start-up), none afterwards | OBSERVED (resolved; the 30–40 s pattern is calictl's cadence, not the unit) |
 
 ## Not testable in the lab (unit-side; keep DEVICE/CAPTURE tier)
 

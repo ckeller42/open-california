@@ -35,6 +35,9 @@ _ENUM_CODES: dict[str, dict[str, int]] = {
     "alert": {"child_lock": 1, "error": 2, "sensor_error": 3,
               "emergency_locked": 4, "not_possible": 5, "low_battery": 6,
               "driving": 7, "in_use": 8, "not_stationary": 9},
+    # water fault codes (semantics.water fresh_alert / waste_alert, app dialogs observed 2026-09-16)
+    "fresh_alert": {"pump_protection": 1, "sensor_error": 2, "error": 3, "pump_error": 4, "empty": 5},
+    "waste_alert": {"full": 1, "sensor_error": 2, "error": 3},
     # appended: never renumber — Grafana value-mappings key on these
 }
 

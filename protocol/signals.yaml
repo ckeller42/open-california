@@ -2011,12 +2011,17 @@ stairs:
 water:
   state:
     FreshWaterInfoPopUp:
-      decision: omit
-      reason: UI transient popup flag, not telemetry
+      confidence: high
+      decision: surface
+      kind: state
+      name: fresh_alert
+      scale: raw
       sources:
-        app: null
+        app: "qg/b.java:275-358 dispatch; dialog texts app-observed 2026-09-16 (1 pump protection,
+          2 sensor error, 3/7 unknown error, 4 pump error, 5 empty; 6, 8-15 nothing)"
         gui: null
         vwdoc: null
+      unit: null
     FreshWaterLevel:
       confidence: high
       decision: surface
@@ -2056,12 +2061,17 @@ water:
         gui: null
         vwdoc: null
     WasteWaterInfoPopUp:
-      decision: omit
-      reason: UI transient popup flag, not telemetry
+      confidence: high
+      decision: surface
+      kind: state
+      name: waste_alert
+      scale: raw
       sources:
-        app: null
+        app: "qg/b.java:360-412 dispatch; dialog texts app-observed 2026-09-16 (1 tank full,
+          2 sensor error, 3 general error)"
         gui: null
         vwdoc: null
+      unit: null
     WasteWaterLevel:
       confidence: high
       decision: surface
