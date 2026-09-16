@@ -24,11 +24,14 @@ window.STRINGS_DE = {
   "not installed": "nicht verbaut",
   "Open": "Geöffnet",
   "Closed": "Geschlossen",
-  "Middle": "Mittelstellung",
-  "Parked": "Geparkt",
+  "Middle": "Zwischenposition",
+  "Error": "Fehler",
+  "Other": "Unbekannt",
   "Ignition on": "Zündung an",
+  "Ignition off": "Zündung aus",
   "level": "Stufe",
-  "Running": "Läuft",
+  "Active": "Aktiv",
+  "Inactive": "Inaktiv",
   "Fresh": "Frisch",
   "(last meas.)": "(zuletzt gem.)",
   "Battery": "Batterie",
@@ -46,40 +49,39 @@ window.STRINGS_DE = {
   "Roof": "Aufstelldach",
 
   // --- cooler --------------------------------------------------------------------------------
-  "Refrigerator": "Kühlbox",
+  "Refrigerator box": "Kühlbox",
   "Cooling level": "Kühlstufe",
   "Quiet mode": "Flüstermodus",
   "Normal": "Normal",
-  "Quiet": "Flüstermodus",
-  "Timer quiet": "Timer-Flüstermodus",
-  "Quiet from": "Flüstermodus ab",
-  "Quiet until": "Flüstermodus bis",
-  "Timer start at": "Timer-Start um",
-  "Cooling timer": "Kühl-Timer",
-  "Arm": "Aktivieren",
+  "Manual": "Manuell",
+  "Automatic": "Automatisch",
+  "Quiet mode starts at": "Flüstermodus startet um",
+  "Quiet mode ends at": "Flüstermodus endet um",
+  "Cooling starts at": "Kühlen startet um",
+  "Start timer": "Timer starten",
+  "Cancel timer": "Timer abbrechen",
   "Cancel": "Abbrechen",
-  "Fridge door": "Kühlschranktür",
+  "Refrigerator box door": "Kühlbox-Tür",
   "⚠ Open": "⚠ Offen",
   "Timer": "Timer",
-  "Quiet schedule": "Flüsterzeitplan",
-  "⚠ Fridge door is open": "⚠ Kühlschranktür ist offen",
-  "⚠ Cooler in emergency operation": "⚠ Kühlbox im Notbetrieb",
-  "⚠ Cooler error": "⚠ Kühlbox-Fehler",
-  "Set the cooler's quiet mode? Not yet verified on the van. Continue?":
+  "Automatic quiet mode": "Automatischer Flüstermodus",
+  "⚠ Please close the refrigerator box door fully": "⚠ Die Tür der Kühlbox bitte vollständig schließen",
+  "⚠ Refrigerator box in emergency mode": "⚠ Kühlbox im Notbetrieb",
+  "⚠ Refrigerator box error — please visit a workshop": "⚠ Kühlbox-Fehler — bitte Werkstatt aufsuchen",
+  "Set the refrigerator box's quiet mode? Not yet verified on the van. Continue?":
     "Flüstermodus der Kühlbox setzen? Am Fahrzeug noch nicht verifiziert. Fortfahren?",
-  "Set quiet-schedule start to {h}:00? Not verified on the van. Continue?":
-    "Flüsterzeitplan-Start auf {h}:00 setzen? Am Fahrzeug nicht verifiziert. Fortfahren?",
-  "Set quiet-schedule end to {h}:00? Not verified on the van. Continue?":
-    "Flüsterzeitplan-Ende auf {h}:00 setzen? Am Fahrzeug nicht verifiziert. Fortfahren?",
-  "Set the cooling-timer start to {t}? Not yet verified on the van. Continue?":
-    "Kühl-Timer-Start auf {t} setzen? Am Fahrzeug noch nicht verifiziert. Fortfahren?",
-  "{b} the cooling timer? Not yet verified on the van. Continue?":
-    "Kühl-Timer {b}? Am Fahrzeug noch nicht verifiziert. Fortfahren?",
+  "Set the automatic quiet mode start to {h}:00? Not verified on the van. Continue?":
+    "Start des automatischen Flüstermodus auf {h}:00 setzen? Am Fahrzeug nicht verifiziert. Fortfahren?",
+  "Set the automatic quiet mode end to {h}:00? Not verified on the van. Continue?":
+    "Ende des automatischen Flüstermodus auf {h}:00 setzen? Am Fahrzeug nicht verifiziert. Fortfahren?",
+  "Set the timer so cooling starts at {t}? Not yet verified on the van. Continue?":
+    "Timer setzen, damit das Kühlen um {t} startet? Am Fahrzeug noch nicht verifiziert. Fortfahren?",
+  "{b}? Not yet verified on the van. Continue?":
+    "{b}? Am Fahrzeug noch nicht verifiziert. Fortfahren?",
 
   // --- camping mode --------------------------------------------------------------------------
-  "Interior + outside lights": "Innen- und Außenbeleuchtung",
+  "Exterior and interior lighting": "Außen- und Innenbeleuchtung",
   "Rear USB ports": "Hintere USB-Anschlüsse",
-  "Ignition (terminal-15)": "Zündung (Klemme 15)",
   "Restore camping after you park": "Campingmodus nach dem Parken wiederherstellen",
   "⟳ will restore on park": "⟳ wird beim Parken wiederhergestellt",
   ["The unit drops camper mode when the engine starts and won't allow it back on while driving. "
@@ -97,81 +99,84 @@ window.STRINGS_DE = {
 
   // --- lighting ------------------------------------------------------------------------------
   "All lights": "Alle Lichter",
-  "Activate profile": "Profil aktivieren",
+  "Profile": "Profil",
   "Choose…": "Auswählen…",
   "Save current as": "Aktuelles speichern als",
-  "Favorite…": "Favorit…",
-  "Favorite": "Favorit",
-  "Interior light": "Innenlicht",
+  "Profile…": "Profil…",
+  "Interior lighting": "Innenlicht",
   "Wake-up light": "Wecklicht",
   "Reading lights": "Leselichter",
   "Kitchen": "Küche",
-  "Pop-roof": "Aufstelldach",
-  "Ambient / outside": "Ambiente / außen",
+  "Pop-up roof": "Aufstelldach",
+  "Exterior light": "Außenlicht",
   "Left": "Links",
   "Right": "Rechts",
-  "Front": "Vorne",
-  "Ambient": "Ambiente",
+  "Front passenger": "Beifahrer",
+  "Background lighting": "Ambientelicht",
   "Cabinet": "Schrank",
   "Cooking": "Kochen",
-  "Reading": "Lesen",
-  "Rear surround": "Heck-Umfeld",
+  "Reading light": "Leselicht",
+  "Rear surroundings": "Umgebung hinten",
   "Entrance": "Eingang",
-  "roof open only": "nur bei offenem Dach",
-  "roof must be open": "Dach muss offen sein",
-  ["Overwrite Favorite {n} with the current lamp levels? This writes to the unit and is not yet "
+  "only when the pop-up roof is open": "nur bei geöffnetem Aufstelldach",
+  ["Overwrite profile {n} with the current lamp levels? This writes to the unit and is not yet "
     + "verified on the van. Continue?"]:
-    "Favorit {n} mit den aktuellen Lampenwerten überschreiben? Dies schreibt auf die Einheit und ist "
+    "Profil {n} mit den aktuellen Lampenwerten überschreiben? Dies schreibt auf die Einheit und ist "
     + "am Fahrzeug noch nicht verifiziert. Fortfahren?",
 
   // --- air heater ----------------------------------------------------------------------------
-  "Parking heater": "Standheizung",
-  "Heating level (10 = HI)": "Heizstufe (10 = HI)",
+  "Immediate heating": "Sofortheizen",
+  "Continuous heating": "Dauerbetrieb",
+  "Heating temperature": "Heizstufe",
   "Run time": "Laufzeit",
-  "Start at": "Start um",
+  "Remaining": "Restlaufzeit",
+  "Start heating at": "Heizen startet um",
   "Level": "Stufe",
-  "Running time": "Laufzeit",
   "Timer start": "Timer-Start",
   "Error code": "Fehlercode",
-  "Start the fuel-burning parking heater ({w})? It is not live-verified. Continue?":
-    "Kraftstoffbetriebene Standheizung starten ({w})? Nicht live-verifiziert. Fortfahren?",
+  "Active • {n} min remaining": "Aktiv • Restlaufzeit: {n} min",
+  "Inactive • Timer: {t}": "Inaktiv • Timer: {t}",
+  "Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?":
+    "Kraftstoffbetriebene Luftstandheizung starten ({w})? Nicht live-verifiziert. Fortfahren?",
 
   // --- water ---------------------------------------------------------------------------------
   "Fresh water": "Frischwasser",
   "Waste water": "Grauwasser",
-  "Grey water": "Grauwasser",
+  "🕒 last measured": "🕒 zuletzt gemessen",
   "🕒 Showing the LAST MEASURED water level": "🕒 Es wird der ZULETZT GEMESSENE Wasserstand angezeigt",
   "🕒 Showing the LAST MEASURED water level{ago} — the BLE level only refreshes while the van's water system is running, so it lags until the pump next runs. It's read correctly, just not live.":
     "🕒 Es wird der ZULETZT GEMESSENE Wasserstand angezeigt{ago} — der BLE-Wert aktualisiert sich nur, während die Wasseranlage des Fahrzeugs läuft, und hinkt daher hinterher, bis die Pumpe das nächste Mal läuft. Er wird korrekt gelesen, nur nicht live.",
 
   // --- energy --------------------------------------------------------------------------------
   "Energy mode": "Energiemodus",
-  "Max charge": "Maximale Ladung",
-  "Eco": "Eco",
-  "Living battery": "Wohnraumbatterie",
-  "Living voltage": "Wohnraum-Spannung",
-  "Living current": "Wohnraum-Strom",
+  "Max": "MAX",
+  "ECO": "ECO",
+  "Second battery": "Zweitbatterie",
+  "Second battery voltage": "Zweitbatterie-Spannung",
+  "Second battery current": "Zweitbatterie-Strom",
   "Time remaining": "Restzeit",
   "Starter battery": "Starterbatterie",
   "Starter voltage": "Starter-Spannung",
   "Starter current": "Starter-Strom",
-  "DC-DC charger": "DC-DC-Wandler",
+  "Vehicle power": "Fahrzeugstrom",
   "Shore power": "Landstrom",
-  "Solar": "Solar",
-  "Warnings": "Warnungen",
+  "Solar power": "Solarstrom",
+  "Issues": "Probleme",
   "Starter data age": "Alter der Starterdaten",
-  "Second battery": "Zweitbatterie",
   // charger/source state words (dcdc/shore/solar), composed as "<state> (W · A)"
   "active": "aktiv",
   "inactive": "inaktiv",
-  "standby": "Bereitschaft",
+  "standby": "bereit",
   "on": "an",
   "error": "Fehler",
   "🕒 stale (starter asleep)": "🕒 veraltet (Starter im Ruhezustand)",
   "🕒 Starter-battery values are stale — that subsystem only measures with the engine on, so it holds the last reading while parked. The leisure battery stays live.":
-    "🕒 Die Werte der Starterbatterie sind veraltet — dieses Subsystem misst nur bei laufendem Motor und hält daher im geparkten Zustand den letzten Messwert. Die Wohnraumbatterie bleibt live.",
+    "🕒 Die Werte der Starterbatterie sind veraltet — dieses Subsystem misst nur bei laufendem Motor und hält daher im geparkten Zustand den letzten Messwert. Die Zweitbatterie bleibt live.",
   // energy chart
-  "Leisure battery — last 24 h": "Wohnraumbatterie — letzte 24 h",
+  "Second battery — last 24 h": "Zweitbatterie — letzte 24 h",
+  "Second battery {name}, last {hours} hours": "Zweitbatterie {name}, letzte {hours} Stunden",
+  "voltage": "Spannung",
+  "current": "Strom",
   "Voltage (V)": "Spannung (V)",
   "Current (A)": "Strom (A)",
   "now": "jetzt",
@@ -188,12 +193,16 @@ window.STRINGS_DE = {
   "Position": "Position",
   "Safety valid": "Sicherheit gültig",
   "Alert": "Warnung",
-  "⚠ Roof child lock active": "⚠ Dach-Kindersicherung aktiv",
-  "⚠ Roof error": "⚠ Dach-Fehler",
-  "⚠ Roof sensor error": "⚠ Dach-Sensorfehler",
-  "⚠ Roof emergency-locked": "⚠ Dach notverriegelt",
-  "⚠ Roof operation not possible right now": "⚠ Dachbetätigung derzeit nicht möglich",
-  "⚠ Battery too low to operate roof": "⚠ Batterie zu schwach für Dachbetätigung",
+  "⚠ Roof moved too often — available again in a few minutes":
+    "⚠ Aufstelldach wurde zu oft bewegt — in wenigen Minuten wieder verfügbar",
+  "⚠ Pop-up roof error — please visit a workshop": "⚠ Fehler beim Aufstelldach — bitte Werkstatt aufsuchen",
+  "⚠ Pop-up roof is open — close it before moving the vehicle":
+    "⚠ Aufstelldach ist offen — vor Fahrtbeginn schließen",
+  "⚠ Check the pop-up roof — jammed or blocked": "⚠ Aufstelldach prüfen — klemmt oder ist blockiert",
+  "⚠ Secure the pop-up roof manually (see operating manual)":
+    "⚠ Aufstelldach manuell sichern (siehe Bedienungsanleitung)",
+  "⚠ Function currently unavailable": "⚠ Funktion zurzeit nicht möglich",
+  "⚠ Battery low — run the engine": "⚠ Batterie schwach — Motorlauf durchführen",
   "Roof control is safety-sensitive and not live-verified.":
     "Die Dachsteuerung ist sicherheitskritisch und nicht live-verifiziert.",
   "open": "öffnen",
@@ -205,7 +214,7 @@ window.STRINGS_DE = {
 
   // --- vehicle -------------------------------------------------------------------------------
   "Ignition": "Zündung",
-  "Leveling (roll / pitch)": "Nivellierung (Roll / Nick)",
+  "Level indicator (roll / pitch)": "Niveauanzeige (Roll / Nick)",
   "roll": "Roll",
   "pitch": "Nick",
   "level ✓": "eben ✓",
@@ -234,7 +243,7 @@ window.STRINGS_DE = {
   "Sent — the unit didn't confirm it": "Gesendet — die Einheit hat es nicht bestätigt",
   "Command failed": "Befehl fehlgeschlagen",
   "Read-only mode — writes are disabled": "Nur-Lesen-Modus — Schreibzugriffe sind deaktiviert",
-  "Enter exactly 6 digits": "Genau 6 Ziffern eingeben",
+  "The passcode has 6 digits": "Der Passcode hat 6 Ziffern",
   "Pairing request failed": "Kopplungsanfrage fehlgeschlagen",
 
   // --- banners -------------------------------------------------------------------------------
@@ -255,16 +264,16 @@ window.STRINGS_DE = {
   "⚪ Asleep — tap to wake": "⚪ Ruhezustand — zum Aufwecken tippen",
 
   // --- pairing wizard ------------------------------------------------------------------------
-  "Bluetooth setup": "Bluetooth-Einrichtung",
+  "Set up remote control": "Fernsteuerung einrichten",
   "Close": "Schließen",
-  "On the camper panel open Bluetooth → ‘Gerät verbinden’.":
-    "Öffne am Bedienfeld des Campers Bluetooth → ‘Gerät verbinden’.",
+  "On the camper control unit open Settings → Bluetooth and press Pair.":
+    "Wähle in der Camper-Bedieneinheit Setup → Bluetooth und drücke Verbinden.",
   "I'm on that screen": "Ich bin auf diesem Bildschirm",
-  "Start": "Starten",
-  "Searching for the camper unit…": "Suche nach der Camper-Einheit…",
+  "Connect now": "Jetzt verbinden",
+  "Searching…": "Suche…",
   "Connecting…": "Verbindung wird aufgebaut…",
-  "Read it from the camper's screen — a fresh code each attempt.":
-    "Lies ihn vom Bildschirm des Campers ab — bei jedem Versuch ein neuer Code.",
+  "Enter the passcode shown on the camper control unit — a fresh code each attempt.":
+    "Gib den Passcode von der Camper-Bedieneinheit ein — bei jedem Versuch ein neuer Code.",
   "Send": "Senden",
   "Pairing…": "Kopplung läuft…",
   "Verifying…": "Wird geprüft…",
@@ -279,19 +288,18 @@ window.STRINGS_DE = {
     "Fortgeschritten: nur nötig, wenn du den Pi neu aufsetzt (eine Neuinstallation löscht die "
     + "gespeicherte Verbindung). Trage es in /etc/buspi/calictl.env ein, damit es das übersteht.",
   "Error: ": "Fehler: ",
-  "Timed out waiting for the camper unit.": "Zeitüberschreitung beim Warten auf die Camper-Einheit.",
-  "Pairing failed.": "Kopplung fehlgeschlagen.",
+  "No vehicle found.": "Kein Fahrzeug gefunden.",
+  "Connection failed.": "Verbindung fehlgeschlagen.",
   "Could not verify the bond.": "Verbindung konnte nicht verifiziert werden.",
-  "Retry": "Erneut versuchen",
+  "Try again": "Erneut versuchen",
   "Bluetooth reset / re-pair": "Bluetooth zurücksetzen / neu koppeln",
   "This removes the working bond; telemetry stops until re-paired. Continue?":
     "Dies entfernt die bestehende Verbindung; die Telemetrie stoppt bis zur erneuten Kopplung. Fortfahren?",
 
   // --- disabled-control reasons --------------------------------------------------------------
   "Turn camping mode on first": "Zuerst Campingmodus einschalten",
-  "Not available while the ignition is on": "Bei eingeschalteter Zündung nicht verfügbar",
+  "Only possible when stationary": "Nur im Stand möglich",
   "Roof move blocked": "Dachbewegung blockiert",
-  "⚠ Roof locked while driving": "⚠ Dach während der Fahrt gesperrt",
 
   // --- language toggle -----------------------------------------------------------------------
   "Deutsch": "Deutsch",

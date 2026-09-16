@@ -333,21 +333,23 @@ const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " "
 // Cooler fault-enum -> banner text (see semantics.cooler / vf/c.java). Absent/"" = no fault.
 /** @type {Record<string, string>} */
 const COOLER_FAULT_MSG = {
-  door_open: "⚠ Fridge door is open",
-  emergency: "⚠ Cooler in emergency operation",
-  error: "⚠ Cooler error",
+  door_open: "⚠ Please close the refrigerator box door fully",
+  emergency: "⚠ Refrigerator box in emergency mode",
+  error: "⚠ Refrigerator box error — please visit a workshop",
 };
 
-// Roof InfoPopUp alert -> banner text (see semantics.roof / ig/c.java).
+// Roof InfoPopUp alert -> banner text (see semantics.roof / ig/c.java). The enum names are the
+// unit's internal IDs; the texts say what the condition MEANS for the user (child_lock is an
+// over-use cooldown, not a switch; driving = roof open while the vehicle may move).
 /** @type {Record<string, string>} */
 const ROOF_ALERT_MSG = {
-  child_lock: "⚠ Roof child lock active",
-  error: "⚠ Roof error",
-  driving: "⚠ Roof locked while driving",
-  sensor_error: "⚠ Roof sensor error",
-  emergency_locked: "⚠ Roof emergency-locked",
-  not_possible: "⚠ Roof operation not possible right now",
-  low_battery: "⚠ Battery too low to operate roof",
+  child_lock: "⚠ Roof moved too often — available again in a few minutes",
+  error: "⚠ Pop-up roof error — please visit a workshop",
+  driving: "⚠ Pop-up roof is open — close it before moving the vehicle",
+  sensor_error: "⚠ Check the pop-up roof — jammed or blocked",
+  emergency_locked: "⚠ Secure the pop-up roof manually (see operating manual)",
+  not_possible: "⚠ Function currently unavailable",
+  low_battery: "⚠ Battery low — run the engine",
 };
 // The subset of roof alerts on which the app refuses a MOVE (ig/c.java j()). sensor_error is
 // deliberately absent: the app shows it but still allows open/close.
@@ -371,30 +373,32 @@ const FEATURES = {
   cooler: {
     title: "Cooler", icon: "❄️",
     controls: [
-      { what: "power", kind: "toggle", label: "Refrigerator", state: "on" },
+      { what: "power", kind: "toggle", label: "Refrigerator box", state: "on" },
       { what: "level", kind: "slider", label: "Cooling level", state: "level", min: 1, max: 5 },
+      // Mode 0 = quiet mode off, 2 = manual quiet mode, 4 = automatic (timer-based) quiet mode.
       { what: "mode", kind: "select", label: "Quiet mode",
-        options: [{ value: "normal", label: "Normal" }, { value: "quiet", label: "Quiet" }, { value: "timer_quiet", label: "Timer quiet" }],
+        options: [{ value: "normal", label: "Off" }, { value: "quiet", label: "Manual" }, { value: "timer_quiet", label: "Automatic" }],
         current: (s) => (s.mode === 2 ? "quiet" : s.mode === 4 ? "timer_quiet" : "normal"),
-        confirm: () => t("Set the cooler's quiet mode? Not yet verified on the van. Continue?") },
-      { what: "night_on", kind: "hour", label: "Quiet from", current: (s) => s.quiet_from ?? 0,
-        confirm: (h) => tf("Set quiet-schedule start to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
-      { what: "night_off", kind: "hour", label: "Quiet until", current: (s) => s.quiet_to ?? 0,
-        confirm: (h) => tf("Set quiet-schedule end to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
-      { what: "timer_set", kind: "time", label: "Timer start at",
+        confirm: () => t("Set the refrigerator box's quiet mode? Not yet verified on the van. Continue?") },
+      { what: "night_on", kind: "hour", label: "Quiet mode starts at", current: (s) => s.quiet_from ?? 0,
+        confirm: (h) => tf("Set the automatic quiet mode start to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
+      { what: "night_off", kind: "hour", label: "Quiet mode ends at", current: (s) => s.quiet_to ?? 0,
+        confirm: (h) => tf("Set the automatic quiet mode end to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
+      { what: "timer_set", kind: "time", label: "Cooling starts at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
           ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null,
-        confirm: (v) => tf("Set the cooling-timer start to {t}? Not yet verified on the van. Continue?", { t: v }) },
-      { what: "__cooltimer", kind: "buttons", label: "Cooling timer",
-        actions: [{ what: "timer_start", label: "Arm" }, { what: "timer_cancel", label: "Cancel" }],
-        confirm: (b) => tf("{b} the cooling timer? Not yet verified on the van. Continue?", { b: t(b.label) }) },
+        confirm: (v) => tf("Set the timer so cooling starts at {t}? Not yet verified on the van. Continue?", { t: v }) },
+      { what: "__cooltimer", kind: "buttons", label: "Timer",
+        actions: [{ what: "timer_start", label: "Start timer" }, { what: "timer_cancel", label: "Cancel timer" }],
+        confirm: (b) => tf("{b}? Not yet verified on the van. Continue?", { b: t(b.label) }) },
     ],
     readouts: [
-      { label: "Fridge door", get: (s) => (s.door_open ? "⚠ Open" : "Closed") },
+      { label: "Refrigerator box door", get: (s) => (s.door_open ? "⚠ Open" : "Closed") },
       { label: "Timer", get: (s) => onoff(s.timer_active) },
-      { label: "Quiet schedule", get: (s) => (s.quiet_scheduled || s.quiet_from || s.quiet_to)
+      // Composed value: translate the parts here — renderReadout's t() can't match a concatenation.
+      { label: "Automatic quiet mode", get: (s) => (s.quiet_scheduled || s.quiet_from || s.quiet_to)
         ? `${String(s.quiet_from ?? 0).padStart(2, "0")}:00 → ${String(s.quiet_to ?? 0).padStart(2, "0")}:00`
-          + (s.quiet_scheduled ? "" : " (off)") : "off" },
+          + (s.quiet_scheduled ? "" : ` (${t("off")})`) : t("off") },
     ],
     // `fault` is the cooler's 2-bit Error enum, only meaningful while powered on (vf/c.java):
     // door_open | emergency | error. Surface it as a banner so a fault is obvious at a glance.
@@ -410,7 +414,7 @@ const FEATURES = {
       // char (1004 TerminalOneFive, the authoritative decode), falling back to campingmode.enable,
       // which mirrors it one poll later.
       { what: "master", kind: "toggle", label: "Camping mode", state: "master_on",
-        disabled: (s) => ignitionOn(s) && "Not available while the ignition is on" },
+        disabled: (s) => ignitionOn(s) && "Only possible when stationary" },
       // Lights + rear USB are only actionable in the app while camping master is ON (a UI gate,
       // confirmed in semantics.campingmode + tf/a.java). Grey them when master is off. USB shows
       // the DERIVED usb_powered (master AND UsbCharger) so it reads "off" when master is off,
@@ -418,12 +422,12 @@ const FEATURES = {
       // Gate on the OPTIMISTIC master value (what the master switch itself shows), not the raw
       // polled state: after tapping master ON the real state lands only after the BLE write +
       // readback (0.6-3 s live), and greying lights/USB for that window reads as a failed tap.
-      { what: "lights", kind: "toggle", label: "Interior + outside lights", state: "lights_on",
+      { what: "lights", kind: "toggle", label: "Exterior and interior lighting", state: "lights_on",
         disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
       { what: "usb", kind: "toggle", label: "Rear USB ports", state: "usb_powered",
         disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
     ],
-    readouts: [{ label: "Ignition (terminal-15)", get: (s) => onoff(ignitionOn(s)) }],
+    readouts: [{ label: "Ignition", get: (s) => onoff(ignitionOn(s)) }],
     summary: (s) => onoff(s.master_on),
   },
   lighting: {
@@ -431,30 +435,47 @@ const FEATURES = {
     summary: (s) => onoff(s.any_on),
   },
   airheater: {
-    title: "Air heater", icon: "🔥", confirm: (w) => tf("Start the fuel-burning parking heater ({w})? It is not live-verified. Continue?", { w: w }),
+    title: "Air heater", icon: "🔥", confirm: (w) => tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w }),
     controls: [
-      { what: "power", kind: "toggle", label: "Parking heater", state: "running" },
-      { what: "level", kind: "slider", label: "Heating level (10 = HI)", state: "level", min: 1, max: 10 },
+      // "Immediate heating" = NormalOperation (start now, for `runtime` minutes). Continuous
+      // heating (PermanentOperation) can only be started from inside the vehicle, so it is a
+      // readout here, never a toggle.
+      { what: "power", kind: "toggle", label: "Immediate heating", state: "running" },
+      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: 1, max: 10 },
       { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 0, max: 120, unit: "min" },
-      { what: "timer", kind: "time", label: "Start at",
+      { what: "timer", kind: "time", label: "Start heating at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
           ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null },
     ],
     readouts: [
-      { label: "Level", get: (s) => (s.level == null ? "—" : (s.level >= 10 ? "HI" : s.level)) },
-      { label: "Running time", get: (s) => withUnit(s.running_time, "min") },
+      { label: "Continuous heating", get: (s) => onoff(s.permanent) },
+      { label: "Heating temperature", get: (s) => (s.level == null ? "—" : `${t("Level")} ${s.level}`) },
+      { label: "Run time", get: (s) => withUnit(s.running_time, "min") },
+      { label: "Remaining", get: (s) => withUnit(s.running_time_remaining, "min") },
       { label: "Timer start", get: (s) => (s.timer_hour != null && s.timer_min != null && (s.timer_hour || s.timer_min))
         ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : "off" },
       { label: "Error code", get: (s) => s.error_code ?? "—" },
     ],
-    summary: (s) => (s.running ? `${t("Running")}${s.level != null ? " · " + (s.level >= 10 ? "HI" : s.level) : ""}` : t("Off")),
+    // Status line mirrors the heater's own status bar: Active • Continuous heating / Active •
+    // N min remaining / Inactive (• Timer HH:MM when one is armed).
+    summary: (s) => {
+      if (s.running) {
+        if (s.permanent) return `${t("Active")} • ${t("Continuous heating")}`;
+        if (s.running_time_remaining != null) return tf("Active • {n} min remaining", { n: s.running_time_remaining });
+        return /** @type {string} */ (t("Active"));
+      }
+      const timer = (s.timer_hour != null && s.timer_min != null && (s.timer_hour || s.timer_min))
+        ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null;
+      return timer ? tf("Inactive • Timer: {t}", { t: timer }) : /** @type {string} */ (t("Inactive"));
+    },
   },
   water: {
     title: "Water", icon: "💧",
     readouts: [
-      { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  🕒 last measured" : ""),
+      // Composed values: translate the suffix here (renderReadout's t() can't match a concatenation).
+      { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  " + t("🕒 last measured") : ""),
         bar: (s) => s.fresh && s.fresh.percent },
-      { label: "Waste water", get: (s) => tank(s.waste) + (s.waste && s.waste.stale ? "  🕒 last measured" : ""),
+      { label: "Waste water", get: (s) => tank(s.waste) + (s.waste && s.waste.stale ? "  " + t("🕒 last measured") : ""),
         bar: (s) => s.waste && s.waste.percent },
     ],
     // Water is READ-ONLY on BLE (char 1302) and the unit only re-measures while the van's water
@@ -476,23 +497,24 @@ const FEATURES = {
     title: "Energy", icon: "🔋", chart: true,
     controls: [
       { what: "mode", kind: "select", label: "Energy mode",
-        options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max charge" }, { value: "eco", label: "Eco" }],
+        options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max" }, { value: "eco", label: "ECO" }],
         current: (s) => (/** @type {Record<number, string>} */ ({ 0: "normal", 1: "max_charge", 2: "eco" }))[/** @type {number} */ (s.energy_mode)],
         disabled: (s) => !!s.energy_mode_locked,
         confirm: () => t("Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?") },
     ],
     readouts: [
-      { label: "Living battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
-      { label: "Living voltage", get: (s) => withUnit(s.batt2_v, "V") },
-      { label: "Living current", get: (s) => withUnit(s.batt2_current, "A") },
+      { label: "Second battery", get: (s) => (s.soc2_pct != null ? `${s.soc2_pct}%` : "—"), bar: (s) => s.soc2_pct },
+      { label: "Second battery voltage", get: (s) => withUnit(s.batt2_v, "V") },
+      { label: "Second battery current", get: (s) => withUnit(s.batt2_current, "A") },
       { label: "Time remaining", get: (s) => (s.batt2_remaining_h != null ? `${s.batt2_remaining_h} h` : "—") },
       { label: "Starter battery", get: (s) => (s.soc1_pct != null ? `${s.soc1_pct}%` : "—"), bar: (s) => s.soc1_pct },
       { label: "Starter voltage", get: (s) => withUnit(s.batt1_v, "V") },
       { label: "Starter current", get: (s) => withUnit(s.batt1_current, "A") },
-      { label: "DC-DC charger", get: (s) => (s.dcdc_installed ? `${t(s.dcdc_state)} (${s.dcdc_power} W · ${s.dcdc_current} A)` : "—") },
+      // "Vehicle power" = the DC-DC charger fed from the alternator while the engine runs.
+      { label: "Vehicle power", get: (s) => (s.dcdc_installed ? `${t(s.dcdc_state)} (${s.dcdc_power} W · ${s.dcdc_current} A)` : "—") },
       { label: "Shore power", get: (s) => (s.shore_installed ? `${t(s.shore_state)} (${s.shore_power} W · ${s.shore_current} A)` : "—") },
-      { label: "Solar", get: (s) => (s.solar_installed ? `${t(s.solar_state)} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
-      { label: "Warnings", get: (s) => (s.faults && s.faults.length ? s.faults.join(", ") : "none") },
+      { label: "Solar power", get: (s) => (s.solar_installed ? `${t(s.solar_state)} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
+      { label: "Issues", get: (s) => (s.faults && s.faults.length ? s.faults.join(", ") : "none") },
       // The unit reports an age ONLY for the STARTER battery (AgeOneBattValuesMinutes); 255 = the
       // stale sentinel (starter subsystem asleep). The leisure battery has no such field — it is
       // measured continuously, so its freshness is just the daemon's read age. Label it as STARTER
@@ -516,14 +538,14 @@ const FEATURES = {
     ],
     // InfoPopUp alert -> a banner (ig/c.java): child lock, sensor error, low battery, etc.
     warn: (s) => (s.alert ? ROOF_ALERT_MSG[s.alert] || `⚠ Roof: ${s.alert}` : null),
-    summary: (s) => (s.alert ? `⚠ ${s.alert.replace(/_/g, " ")}`
+    summary: (s) => (s.alert ? /** @type {string} */ (t(ROOF_ALERT_MSG[s.alert] || `⚠ ${s.alert.replace(/_/g, " ")}`))
                      : (s && s.position_name ? /** @type {string} */ (t(cap(s.position_name))) : "")),
   },
   vehicle: {
     title: "Vehicle", icon: "🚗",
     readouts: [
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
-      { label: "Leveling (roll / pitch)",
+      { label: "Level indicator (roll / pitch)",
         get: (s) => (s.level_roll == null || s.level_pitch == null
           ? "—" : `${fmtDeg(s.level_roll)} / ${fmtDeg(s.level_pitch)}`),
         widget: (s) => bubbleLevel(s.level_roll, s.level_pitch) },
@@ -536,7 +558,7 @@ const FEATURES = {
             + (fw.untested ? t("  ⚠ untested") : t("  ✓ tested"));
         } },
     ],
-    summary: (s) => /** @type {string} */ (t(s.ignition_on ? "Ignition on" : "Parked")),
+    summary: (s) => /** @type {string} */ (t(s.ignition_on ? "Ignition on" : "Ignition off")),
   },
 };
 
@@ -889,7 +911,7 @@ function seriesSvg(h, cfg) {
   svg.setAttribute("viewBox", `0 0 ${C.w} ${C.h}`);
   svg.setAttribute("class", "echart");
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `Leisure battery ${cfg.name}, last ${hours} hours`);
+  svg.setAttribute("aria-label", tf("Second battery {name}, last {hours} hours", { name: t(cfg.name), hours: hours }));
   svg.innerHTML =
     `<line class="ec-axis" x1="${C.l}" y1="${C.t + plotH}" x2="${C.l + plotW}" y2="${C.t + plotH}"/>` +
     line +
@@ -906,7 +928,7 @@ function energyChart() {
   card.className = "card echart-card";
   const head = document.createElement("div");
   head.className = "echart-head";
-  head.innerHTML = `<span class="echart-title">${t("Leisure battery — last 24 h")}</span>`;
+  head.innerHTML = `<span class="echart-title">${t("Second battery — last 24 h")}</span>`;
   const body = document.createElement("div");
   body.className = "echart-body";
   card.append(head, body);
@@ -989,8 +1011,8 @@ function stopPairingPoll() {
 
 /** @type {Record<string, string>} */
 const PAIRING_ERROR_MSG = {
-  timeout: "Timed out waiting for the camper unit.",
-  pairing_failed: "Pairing failed.",
+  timeout: "No vehicle found.",
+  pairing_failed: "Connection failed.",
   verify_failed: "Could not verify the bond.",
 };
 
@@ -1031,7 +1053,7 @@ function pairingCard() {
   const card = document.createElement("div");
   card.className = "card";
   const head = document.createElement("div"); head.className = "row";
-  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = /** @type {string} */ (t("Bluetooth setup"));
+  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = /** @type {string} */ (t("Set up remote control"));
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
@@ -1042,7 +1064,7 @@ function pairingCard() {
   const p = PAIRING || { state: "idle", attempts: 0, error: null, address: null };
   if (p.state === "idle") {
     const instr = document.createElement("div"); instr.className = "note";
-    instr.textContent = /** @type {string} */ (t("On the camper panel open Bluetooth → ‘Gerät verbinden’."));
+    instr.textContent = /** @type {string} */ (t("On the camper control unit open Settings → Bluetooth and press Pair."));
     card.appendChild(instr);
     const crow = document.createElement("label"); crow.className = "row";
     const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "pairing-ready";
@@ -1053,7 +1075,7 @@ function pairingCard() {
     card.appendChild(crow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const startBtn = document.createElement("button"); startBtn.type = "button"; startBtn.className = "btn";
-    startBtn.textContent = /** @type {string} */ (t("Start")); startBtn.disabled = !pairingReady;
+    startBtn.textContent = /** @type {string} */ (t("Connect now")); startBtn.disabled = !pairingReady;
     startBtn.onclick = () => pairingAction("start");
     btns.appendChild(startBtn);
     card.appendChild(btns);
@@ -1061,7 +1083,7 @@ function pairingCard() {
     const row = document.createElement("div"); row.className = "row";
     row.appendChild(spinner());
     const lbl = document.createElement("span"); lbl.className = "lbl";
-    lbl.textContent = /** @type {string} */ (t(p.state === "scanning" ? "Searching for the camper unit…" : "Connecting…"));
+    lbl.textContent = /** @type {string} */ (t(p.state === "scanning" ? "Searching…" : "Connecting…"));
     row.appendChild(lbl);
     card.appendChild(row);
     const btns = document.createElement("div"); btns.className = "btnrow";
@@ -1072,7 +1094,7 @@ function pairingCard() {
     card.appendChild(btns);
   } else if (p.state === "waiting_passkey") {
     const instr = document.createElement("div"); instr.className = "note";
-    instr.textContent = /** @type {string} */ (t("Read it from the camper's screen — a fresh code each attempt."));
+    instr.textContent = /** @type {string} */ (t("Enter the passcode shown on the camper control unit — a fresh code each attempt."));
     card.appendChild(instr);
     const row = document.createElement("div"); row.className = "row";
     const inp = document.createElement("input");
@@ -1084,7 +1106,7 @@ function pairingCard() {
     sendBtn.textContent = /** @type {string} */ (t("Send"));
     sendBtn.onclick = () => {
       const v = inp.value.trim();
-      if (!/^[0-9]{6}$/.test(v)) { toast("Enter exactly 6 digits", "warn"); return; }
+      if (!/^[0-9]{6}$/.test(v)) { toast("The passcode has 6 digits", "warn"); return; }
       pairingAction("passkey", v);
     };
     row.appendChild(sendBtn);
@@ -1120,7 +1142,7 @@ function pairingCard() {
     card.appendChild(errRow);
     const btns = document.createElement("div"); btns.className = "btnrow";
     const retryBtn = document.createElement("button"); retryBtn.type = "button"; retryBtn.className = "btn";
-    retryBtn.textContent = /** @type {string} */ (t("Retry"));
+    retryBtn.textContent = /** @type {string} */ (t("Try again"));
     retryBtn.onclick = () => pairingAction("start");
     btns.appendChild(retryBtn);
     card.appendChild(btns);
@@ -1199,7 +1221,7 @@ function renderSummary() {
   if (installed("water")) {
     const f = w.fresh, g = w.waste;
     if (f && f.liters != null) rows.push(sumRow(/** @type {string} */ (t("Fresh water")), `${f.liters} / ${f.capacity_l} l${f.stale ? " 🕒" : ""}`));
-    if (g && g.liters != null) rows.push(sumRow(/** @type {string} */ (t("Grey water")), `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}`));
+    if (g && g.liters != null) rows.push(sumRow(/** @type {string} */ (t("Waste water")), `${g.liters} / ${g.capacity_l} l${g.stale ? " 🕒" : ""}`));
   }
   /** @type {FnState} */
   const e = STATE.energy || {};
@@ -1255,16 +1277,16 @@ const LIGHT_LAMPS = [
   { group: "Reading lights", lamps: [
     { label: "Left", what: "reading-1", zone: 2 },
     { label: "Right", what: "reading-2", zone: 1 },
-    { label: "Front", what: "reading-3", zone: 4 } ] },
+    { label: "Front passenger", what: "reading-3", zone: 4 } ] },
   { group: "Kitchen", lamps: [
-    { label: "Ambient", what: "kitchen-ambient", zone: 5 },
+    { label: "Background lighting", what: "kitchen-ambient", zone: 5 },
     { label: "Cabinet", what: "kitchen-cabinet", zone: 6 },
     { label: "Cooking", what: "kitchen", zone: 7 } ] },
-  { group: "Pop-roof", lamps: [
-    { label: "Ambient", what: "roof-ambient", zone: 8 },
-    { label: "Reading", what: "roof-reading", zone: 9, hint: "roof open only" } ] },
-  { group: "Ambient / outside", lamps: [
-    { label: "Rear surround", what: "outside-rear", zone: 3 },
+  { group: "Pop-up roof", lamps: [
+    { label: "Background lighting", what: "roof-ambient", zone: 8 },
+    { label: "Reading light", what: "roof-reading", zone: 9, hint: "only when the pop-up roof is open" } ] },
+  { group: "Exterior light", lamps: [
+    { label: "Rear surroundings", what: "outside-rear", zone: 3 },
     { label: "Entrance", what: "entrance", zone: 12 } ] },
 ];
 const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NOT_EQUIPPED — never send)
@@ -1292,11 +1314,11 @@ function renderLighting(s) {
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow);
 
-  // Profile activator (the app's profileSelector -> SET_PROFILE / ProfileNumber). Favorites are
+  // Profile activator (the app's profileSelector -> SET_PROFILE / ProfileNumber). Profiles 1-7 are
   // user-saved scenes on the unit (content unknown to us; we can only activate by number) + the
   // wake-up light. LIGHTS_ON/OFF (12/0) are the master toggle above, so they're not listed here.
   const prow = document.createElement("div"); prow.className = "row";
-  const plbl = document.createElement("span"); plbl.className = "lbl"; plbl.textContent = /** @type {string} */ (t("Activate profile"));
+  const plbl = document.createElement("span"); plbl.className = "lbl"; plbl.textContent = /** @type {string} */ (t("Profile"));
   prow.appendChild(plbl);
   if (pending_is("lighting", "profile")) prow.appendChild(spinner());
   const psel = document.createElement("select");
@@ -1304,12 +1326,12 @@ function renderLighting(s) {
   const opt0 = document.createElement("option");
   opt0.value = ""; opt0.textContent = /** @type {string} */ (t("Choose…")); opt0.selected = true; psel.appendChild(opt0);
   /** @type {[number, string][]} */
-  const PROFILES = [[1, "Favorite 1"], [2, "Favorite 2"], [3, "Favorite 3"], [4, "Favorite 4"],
-                    [5, "Favorite 5"], [6, "Favorite 6"], [7, "Favorite 7"],
-                    [11, "Interior light"], [10, "Wake-up light"]];
+  const PROFILES = [[1, "Profile 1"], [2, "Profile 2"], [3, "Profile 3"], [4, "Profile 4"],
+                    [5, "Profile 5"], [6, "Profile 6"], [7, "Profile 7"],
+                    [11, "Interior lighting"], [10, "Wake-up light"]];
   for (const [n, lab] of PROFILES) {
-    // "Favorite N" -> translate the word, keep the number; named profiles have their own keys.
-    const labT = /^Favorite \d+$/.test(lab) ? t("Favorite") + " " + lab.split(" ")[1] : t(lab);
+    // "Profile N" -> translate the word, keep the number; named profiles have their own keys.
+    const labT = /^Profile \d+$/.test(lab) ? t("Profile") + " " + lab.split(" ")[1] : t(lab);
     const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = /** @type {string} */ (labT); psel.appendChild(o);
   }
   psel.onchange = () => {
@@ -1326,15 +1348,15 @@ function renderLighting(s) {
   if (pending_is("lighting", "save_profile")) srow.appendChild(spinner());
   const ssel = document.createElement("select");
   ssel.disabled = readOnly();
-  const s0 = document.createElement("option"); s0.value = ""; s0.textContent = /** @type {string} */ (t("Favorite…")); s0.selected = true; ssel.appendChild(s0);
+  const s0 = document.createElement("option"); s0.value = ""; s0.textContent = /** @type {string} */ (t("Profile…")); s0.selected = true; ssel.appendChild(s0);
   for (let n = 1; n <= 7; n++) {
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Favorite") + " " + n; ssel.appendChild(o);
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Profile") + " " + n; ssel.appendChild(o);
   }
   ssel.onchange = () => {
     if (ssel.value === "") return;
     const n = Number(ssel.value);
     ssel.value = "";
-    if (!confirm(tf("Overwrite Favorite {n} with the current lamp levels? This writes to the unit and is not yet verified on the van. Continue?", { n: n }))) return;
+    if (!confirm(tf("Overwrite profile {n} with the current lamp levels? This writes to the unit and is not yet verified on the van. Continue?", { n: n }))) return;
     command("lighting", "save_profile", n);
   };
   srow.appendChild(ssel); mc.appendChild(srow);
@@ -1353,7 +1375,7 @@ function renderLighting(s) {
       const roofPos = (STATE.roof || {}).position_name;
       const roofBlocked = lamp.what === "roof-reading"
         && !(roofPos === "open" || roofPos === "middle" || roofPos == null);
-      const hintText = roofBlocked ? "roof must be open" : lamp.hint;
+      const hintText = roofBlocked ? "only when the pop-up roof is open" : lamp.hint;
       if (hintText) {
         const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = /** @type {string} */ (t(hintText));
         lbl.appendChild(hh);
