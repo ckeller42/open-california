@@ -8,7 +8,7 @@ Every catalogued field, its surface/omit decision, and the evidence behind it. S
 - **provenance**: which of `app` (decompiled getter/setter), `gui` (UI screen spec key), `vwdoc` (vendor manual), `live` (a captured live sample) back this entry — signals.yaml's `sources` map.
 - **semantic-review**: signals.yaml persists **no** dedicated review-status field — `tools/audit_signals.py --report` computes `SEMANTIC-REVIEW-NEEDED` live against a decompile source tree, it isn't stored here. This column is a best-effort proxy: entries whose `scale` mentions "inverted" or "combined" (the only persisted marker of a non-trivial transform, e.g. the camping-lights case) are flagged `needs-review`; run the real auditor for anything authoritative.
 
-Totals: 228 fields catalogued, 91 surfaced, 137 omitted, 1 flagged for review.
+Totals: 228 fields catalogued, 93 surfaced, 135 omitted, 1 flagged for review.
 
 | function | category | field | decision | surfaced-name | confidence | provenance | semantic-review | omit-reason |
 |---|---|---|---|---|---|---|---|---|
@@ -231,12 +231,12 @@ Totals: 228 fields catalogued, 91 surfaced, 137 omitted, 1 flagged for review.
 | vehicle | state | CarTimeYear | omit | — | — | app | — | car-clock component (year+1900) — combined into the car_clock output by semantics.vehicle |
 | vehicle | state | CarVariant | surface | car_variant | medium | app | — | — |
 | vehicle | state | TerminalOneFive | surface | ignition_on | high | app | — | — |
-| water | state | FreshWaterInfoPopUp | omit | — | — | — | — | UI transient popup flag, not telemetry |
+| water | state | FreshWaterInfoPopUp | surface | fresh_alert | high | app | — | — |
 | water | state | FreshWaterLevel | surface | fresh_percent | high | vwdoc | — | — |
 | water | state | FreshWaterUnit | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
 | water | state | FreshWaterVolume | surface | fresh_capacity_l | high | — | — | — |
 | water | state | Installed | omit | — | — | — | — | per-function feature-availability flag — surfaced as the 'installed' key |
-| water | state | WasteWaterInfoPopUp | omit | — | — | — | — | UI transient popup flag, not telemetry |
+| water | state | WasteWaterInfoPopUp | surface | waste_alert | high | app | — | — |
 | water | state | WasteWaterLevel | surface | waste_percent | high | vwdoc | — | — |
 | water | state | WasteWaterUnit | omit | — | — | — | — | control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed) |
 | water | state | WasteWaterVolume | surface | waste_capacity_l | high | — | — | — |

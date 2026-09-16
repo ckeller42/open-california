@@ -308,11 +308,11 @@ for this service — confirmed no `sg.a.o(...)` + `.y(true)` send pattern anywhe
 |---|---|---|
 | FreshWaterUnit | 1 | display-unit flag: `false`→`cf.c.PERCENT`, `true`→`cf.c.ABSOLUTE` (liters) |
 | Installed | 1 | fresh-water sensor installed |
-| FreshWaterInfoPopUp | 4 | `cf.a` enum: `EMPTY`(0), `ONE_THIRD_FULL`(1), `TWO_THIRD_FULL`(2), `FULL`(3), `OTHER`(4) |
+| FreshWaterInfoPopUp | 4 | **fresh-water fault code** (not the `cf.a` fill-level enum an earlier pass guessed): 0 none, 1 pump protection active, 2 fill-level sensor error (emergency pump operation possible), 3 / 7 unknown error, 4 pump error, 5 tank empty, 6 / 8–15 nothing shown — dispatch `qg/b.java:275-358`, every dialog APP-OBSERVED 2026-09-16 (`alert-states.md` §5). calictl `water.fresh_alert` |
 | FreshWaterLevel | 8 | **primary value**: if unit=ABSOLUTE → current liters; if unit=PERCENT → current 0–100% |
 | FreshWaterVolume | 8 | **tank capacity** (liters), used as the percent denominator (⚠️ name is misleading — this is NOT the current volume) |
 | WasteWaterUnit | 1 | display-unit flag: `false`→`nf.b.PERCENT`, `true`→`nf.b.ABSOLUTE` (`nf.b` enum is `ONLY_EMPTY_FULL`/`ABSOLUTE`/`PERCENT`; only the latter two are selected by this 1-bit field) |
-| WasteWaterInfoPopUp | 2 | discrete waste-tank status code |
+| WasteWaterInfoPopUp | 2 | **waste-water fault code**: 0 none, 1 grey-water tank full, 2 fill-level sensor error, 3 general grey-water error (`qg/b.java:360-412`, dialogs APP-OBSERVED 2026-09-16). calictl `water.waste_alert` |
 | WasteWaterLevel | 8 | primary value (current liters or %), mirrors FreshWaterLevel |
 | WasteWaterVolume | 8 | tank capacity (liters), mirrors FreshWaterVolume |
 

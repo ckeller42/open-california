@@ -252,6 +252,21 @@ for the heater and is never written by `rf/b.java`. Inference: writing non-zero
   `semantics.airheater().timer_armed`. Values `1`/`2` are referenced in the field's bit layout
   but no setter writes them — likely firmware-reported running states. UNVERIFIED. What the
   unit reports after the timer fires is also UNVERIFIED (the mock assumes Mode back to 0).
+- **ErrorCode dialogs — APP-OBSERVED 2026-09-16** (fake unit `set airheater ErrorCode=N`, the
+  app pops a toast the moment the readback changes; text verbatim):
+  `1` **Battery voltage too low** — "Your second battery looks low. Please connect to an
+  external power source or charge your second battery." · `2` **Low fuel** — "The auxiliary air
+  heater was switched off because the fuel level is low. It can only be activated again when
+  there is sufficient fuel. Please refuel." · `3` **Auxiliary air heater** — "There seems to be a
+  fault with the auxiliary air heater. Please contact your authorised workshop." · `4` **Emission
+  limit exceeded** — "The vehicle automatically switched off the auxiliary air heater. The
+  auxiliary air heater can be switched on again when the vehicle is moving at a speed of 5 km/h
+  or more." · `5` **Auxiliary air heater deactivated** — "The auxiliary air heater cannot be
+  activated when the engine is running or when the auxiliary water heater is activated. If the
+  auxiliary air heater is active, it will be switched off when the engine is running or when the
+  auxiliary water heater is activated." `FaultTriggerBit=1` alone shows nothing. The web UI's
+  `AIRHEATER_ERROR_MSG` mirrors these titles (so `heating_time_exceeded` reads "Emission limit
+  exceeded", `not_possible` "deactivated — engine / water heater running").
 - **ErrorCode** (read-back only): `0` = none/cleared, `1` = low battery, `2` = low fuel,
   `3` = system error, `4` = heating time exceeded, `5` = operation not possible
   (`rf/b.java:461-711`, dispatches to `AIR_HEATER_LOW_BATTERY_ID` / `AIR_HEATER_FUEL_LOW_ID` /

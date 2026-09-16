@@ -8,6 +8,20 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-09-16 — fault-dialog sweep: every fault code's dialog text, water alerts surfaced
+
+Injecting each fault field on the fake unit while the app watched (`protocol-crosscheck-applab.md`
+"Fault dialogs") gave the unit's own wording for heater `ErrorCode` 1–5, cooler `Error` 1–3, 11 energy
+flags and the water `InfoPopUp` codes. Consequences: web texts now use that vocabulary (heater 4 =
+"Emission limit exceeded", 5 = "deactivated — engine / auxiliary water heater running"; energy
+"Issues" shows dialog texts instead of raw flag names; `SleepWarning` = charging cable still plugged
+in); `FreshWaterInfoPopUp` / `WasteWaterInfoPopUp` were mis-catalogued as "UI transient popup flag,
+not telemetry" — they are the water fault codes (pump protection, sensor fault, tank empty/full) and
+are now surfaced as `water.fresh_alert` / `waste_alert` (+ Influx codes, Grafana stat panels). SoC
+levels 11–15 display as "0 %" in the app (calictl keeps `None`). `Installed=0` hides a tile; the
+four unfitted functions' screens exist (Step, Living area heating / Hot Water Mode, Satellite
+system; roof-A/C renders unlocalised resource keys).
+
 ## 2026-09-16 — heater departure timer = `OperationModeAirHeater` 3 / 0 (`a2` was misread as combined-heater-only)
 
 Running the app's Heating page in the lab: **"Start timer" writes `3f3b017f1f3f`** —

@@ -71,6 +71,8 @@
  * // water (semantics.water) + serve.state() stale-hold
  * @property {Tank} [fresh]
  * @property {Tank} [waste]
+ * @property {string|null} [fresh_alert]
+ * @property {string|null} [waste_alert]
  * @property {number|null} [stale_since]
  * // energy (semantics.energy)
  * @property {boolean} [stale]
@@ -341,13 +343,53 @@ const COOLER_FAULT_MSG = {
 
 // Air-heater ErrorCode name -> banner text (semantics._AIRHEATER_ERROR / rf/b.java). These are the
 // unit's refusals AFTER a start request — the heater switch itself is never greyed pre-emptively.
+// Water fault codes (semantics.water fresh_alert / waste_alert) → the unit's own dialog text,
+// verbatim as the app pops it (app-observed 2026-09-16, tools/applab).
+/** @type {Record<string, string>} */
+const FRESH_WATER_ALERT_MSG = {
+  pump_protection: "⚠ Pump protection is active. Please fill up fresh water.",
+  sensor_error: "⚠ Fill level sensor in fresh water tank. Emergency water pump operation possible. Please visit a workshop.",
+  error: "⚠ Unknown fresh water error.",
+  pump_error: "⚠ Fresh water pump. Please visit a workshop.",
+  empty: "⚠ Fresh water is empty. Please refill the fresh water tank.",
+};
+/** @type {Record<string, string>} */
+const WASTE_WATER_ALERT_MSG = {
+  full: "⚠ Grey water tank is full. Please empty.",
+  sensor_error: "⚠ Fill level sensor in waste water tank. Please visit a workshop.",
+  error: "⚠ General grey water error. Please visit a workshop.",
+};
+
+// Energy fault flags (semantics.energy().faults, raw field names) → the unit's own dialog text,
+// verbatim as the app pops it (app-observed 2026-09-16, tools/applab; title · text).
+/** @type {Record<string, string>} */
+const ENERGY_FAULT_MSG = {
+  WarningLevelActive: "⚠ Battery is flat. Charge now!",
+  SystemError: "⚠ Something wrong with second battery. Please visit a workshop.",
+  SleepWarning: "⚠ The charging cable is still plugged into the vehicle's external socket. Please remove it.",
+  CurrentDeratingTemperature: "⚠ Charging current is limited. Ambient temperature is too high.",
+  LandDefect: "⚠ External power source device not functioning. Please visit a workshop.",
+  DcdcDefect: "⚠ Charging restricted while the vehicle is moving. Please visit a workshop.",
+  PvDefect: "⚠ Solar inverter not working. Please visit a workshop.",
+  TwoBattNotCharged: "⚠ Battery is not charging. Please reduce power consumption.",
+  TwoBattSwitchAtWorkshop: "⚠ Additional battery: deep discharge protection is active. Please visit a workshop.",
+  TwoBattSwitchAtCharging: "⚠ Additional battery: charging required. Power consumers will switch off.",
+  LandNotAvailable: "⚠ External power source is currently unavailable.",
+  WarningLevelTwo: "⚠ Second battery warning level 2",   // no dialog of its own in the app
+};
+
+// The unit's own dialog titles + gist for ErrorCode 1–5 (app-observed 2026-09-16, tools/applab):
+// 1 "Battery voltage too low — your second battery looks low; connect external power or charge",
+// 2 "Low fuel — switched off, activates again with sufficient fuel", 3 "fault, contact workshop",
+// 4 "Emission limit exceeded — switched off automatically; on again at ≥ 5 km/h",
+// 5 "deactivated — not while the engine runs or the auxiliary water heater is active".
 /** @type {Record<string, string>} */
 const AIRHEATER_ERROR_MSG = {
-  low_battery: "⚠ Heater not started — battery low, run the engine",
-  low_fuel: "⚠ Heater not started — fuel level too low",
-  system_error: "⚠ Heater fault — please visit a workshop",
-  heating_time_exceeded: "⚠ Heating time exceeded — the heater switched off",
-  not_possible: "⚠ Heater currently unavailable",
+  low_battery: "⚠ Battery voltage too low — charge the second battery or connect external power",
+  low_fuel: "⚠ Low fuel — the heater switched off, please refuel",
+  system_error: "⚠ Auxiliary air heater fault — please contact your workshop",
+  heating_time_exceeded: "⚠ Emission limit exceeded — the heater switched off, drive ≥ 5 km/h to re-enable",
+  not_possible: "⚠ Heater deactivated — not while the engine or the auxiliary water heater is running",
   unknown: "⚠ Heater error",
 };
 
@@ -523,6 +565,12 @@ const FEATURES = {
       { label: "Waste water", get: (s) => tank(s.waste) + (s.waste && s.waste.stale ? "  " + t("🕒 last measured") : ""),
         bar: (s) => s.waste && s.waste.percent },
     ],
+    // The unit's own water fault dialogs (fresh first, then waste), see alert-states.md §5.
+    warn: (s) => {
+      const f = s.fresh_alert ? FRESH_WATER_ALERT_MSG[/** @type {string} */ (s.fresh_alert)] : null;
+      const w = s.waste_alert ? WASTE_WATER_ALERT_MSG[/** @type {string} */ (s.waste_alert)] : null;
+      return f && w ? `${t(f)} ${t(w)}` : (f || w || null);
+    },
     // Water is READ-ONLY on BLE (char 1302) and the unit only re-measures while the van's water
     // system runs — confirmed 2026-08-19: no BLE activity (not even the 1003 heartbeat) triggers a
     // refresh, so the char just holds the LAST MEASURED level until the pump/system next runs. This
@@ -559,7 +607,9 @@ const FEATURES = {
       { label: "Vehicle power", get: (s) => (s.dcdc_installed ? `${t(s.dcdc_state)} (${s.dcdc_power} W · ${s.dcdc_current} A)` : "—") },
       { label: "Shore power", get: (s) => (s.shore_installed ? `${t(s.shore_state)} (${s.shore_power} W · ${s.shore_current} A)` : "—") },
       { label: "Solar power", get: (s) => (s.solar_installed ? `${t(s.solar_state)} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
-      { label: "Issues", get: (s) => (s.faults && s.faults.length ? s.faults.join(", ") : "none") },
+      // The unit's own dialog texts (ENERGY_FAULT_MSG), never the raw flag names.
+      { label: "Issues", get: (s) => (s.faults && s.faults.length
+        ? s.faults.map((f) => t(ENERGY_FAULT_MSG[/** @type {string} */ (f)] || f)).join(" · ") : t("none")) },
       // The unit reports an age ONLY for the STARTER battery (AgeOneBattValuesMinutes); 255 = the
       // stale sentinel (starter subsystem asleep). The leisure battery has no such field — it is
       // measured continuously, so its freshness is just the daemon's read age. Label it as STARTER

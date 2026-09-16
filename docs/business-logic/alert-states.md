@@ -145,6 +145,22 @@ Trigger fields per dictionary `energy.state_fields` — all single-bit flags on 
 | `ENERGY_SYSTEM_ERROR_ID` | `SystemError` (no offset in extraction — inferred bit 12) | Generic energy-system fault | HIGH | `xf/d.java:465-482` |
 | `ENERGY_SECOND_BATTERY_WARN_LEVEL_TWO_ID` | Computed: `WarningLevelActive` true **and** none of DC/DC-, PV-, shore-power-installed flags report "not installed" (`xf/d.java:527-541`, `m()` helper `xf/d.java:590-600`) | Second-stage low-battery warning (worse than `WARNING_LEVEL_ACTIVE`) | URGENT | `xf/d.java:527-541` |
 
+**APP-OBSERVED dialog texts (2026-09-16, fake unit `set energy <Flag>=1`, verbatim "title — text"):**
+`WarningLevelActive` "Note — Battery is flat. Charge now!" · `SystemError` "Error — Something wrong
+with second battery. Please visit a workshop." · `SleepWarning` "Note — Caution! The charging cable
+is still plugged into the vehicle's external socket. Please remove the charging cable." (so the
+"sleep" flag is the **cable-still-connected** warning, matching `ENERGY_CABLE_STILL_CONNECTED_ID`
+below) · `CurrentDeratingTemperature` "Warning — Charging current is limited. Ambient temperature is
+too high." · `LandDefect` "Error — External power source device not functioning. Please visit a
+workshop." · `DcdcDefect` "Error — Charging restricted while the vehicle is moving. Please visit a
+workshop." · `PvDefect` "Error — Solar inverter not working. Please visit a workshop." ·
+`TwoBattNotCharged` "Warning — Battery is not charging. Please reduce power consumption." ·
+`TwoBattSwitchAtWorkshop` "Error — Additional battery: Deep discharge protection is active. Please
+visit a workshop." · `TwoBattSwitchAtCharging` "Warning — Additional battery: Charging required.
+Power consumers will switch off." · `LandNotAvailable` "Warning — External power source is currently
+unavailable." · `WarningLevelTwo=1` and `EnergyModeNotSelectable=1`: no dialog of their own. The web
+UI's `ENERGY_FAULT_MSG` carries these texts.
+
 ### Secondary/older (`gh/a.java`) — same underlying fields, different widget
 
 | Alert ID | Trigger | Severity | Cite |
@@ -181,6 +197,13 @@ Trigger fields, dictionary `water.state_fields`, both decoded in the shared `rg.
 | 4 | `FRESH_WATER_ERROR_PUMP_ID` | Pump fault | MEDIUM | `qg/b.java:320-330` |
 | 5 | `FRESH_WATER_EMPTY_TANK_ID` | Tank empty | MEDIUM | `qg/b.java:332-344` |
 
+**APP-OBSERVED dialog texts (2026-09-16, fake unit `set water FreshWaterInfoPopUp=N`, verbatim):**
+1 "Pump protection is active. — Please fill up fresh water." · 2 "Error: Fill level sensor in fresh
+water tank. — Emergency water pump operation possible. Please visit a workshop." · 3 and 7 "Error —
+Unknown fresh water error." · 4 "Error — Fresh water pump. Please visit a workshop." · 5 "Fresh water
+is empty — Please refill the fresh water tank." · 6 and 8–15: no dialog. The dialogs pop on the
+vehicle overview the moment the readback changes (no need to open the water page).
+
 ### UsedWater (`WasteWaterInfoPopUp` value → alert)
 
 | Value | Alert ID | Meaning | Severity | Cite |
@@ -189,6 +212,10 @@ Trigger fields, dictionary `water.state_fields`, both decoded in the shared `rg.
 | 1 | `USED_WATER_FULL_ID` | Waste tank full | MEDIUM | `qg/b.java:379-388` |
 | 2 | `USED_WATER_ERROR_SENSOR_ID` | Level-sensor fault | MEDIUM | `qg/b.java:390-399` |
 | 3 | `USED_WATER_ERROR_ID` | Generic fault | MEDIUM | `qg/b.java:401-410` |
+
+**APP-OBSERVED dialog texts (2026-09-16):** 1 "Grey water tank is full — Please empty." ·
+2 "Error — Fill level sensor in waste water tank. Please visit a workshop." · 3 "Error — General
+grey water error. Please visit a workshop."
 
 **Secondary (dashboard) surfaces** — same fields, renamed/regrouped IDs, route
 `californiaontour://app/vehicle`:
