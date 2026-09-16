@@ -14,6 +14,10 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
+from . import log as _log
+
+log = _log.get(__name__)
+
 
 class _NoResolveHTTPServer(ThreadingHTTPServer):
     """A ThreadingHTTPServer that does NOT reverse-resolve its bind address.
@@ -82,14 +86,14 @@ def make_handler(backend, webui_dir):
                 try:
                     return self._send_json(backend.state())
                 except Exception as e:  # log server-side only; never leak exception text to client
-                    print("web: state failed: %r" % (e,), flush=True)
+                    log.warning("web: state failed: %r" % (e,))
                     return self._send_json({"error": "state_failed"}, 500)
             if path == "/api/history":
                 q = urllib.parse.parse_qs(self.path.partition("?")[2])
                 try:
                     return self._send_json(backend.history(q.get("h", ["24"])[0]))
                 except Exception as e:  # log server-side only; never leak exception text to client
-                    print("web: history failed: %r" % (e,), flush=True)
+                    log.warning("web: history failed: %r" % (e,))
                     return self._send_json({"error": "history_failed"}, 500)
             if path == "/api/screens":
                 return self._send_bytes(backend.screens_bytes(), "application/json")
@@ -97,7 +101,7 @@ def make_handler(backend, webui_dir):
                 try:
                     return self._send_json(backend.pairing_snapshot())
                 except Exception as e:  # log server-side only; never leak exception text to client
-                    print("web: pairing snapshot failed: %r" % (e,), flush=True)
+                    log.warning("web: pairing snapshot failed: %r" % (e,))
                     return self._send_json({"error": "pairing_failed"}, 500)
             return self._serve_static(path)
 
@@ -141,7 +145,7 @@ def make_handler(backend, webui_dir):
                 try:
                     return self._send_json(backend.set_session(action))
                 except Exception as e:
-                    print("web: set_session failed: %r" % (e,), flush=True)
+                    log.warning("web: set_session failed: %r" % (e,))
                     return self._send_json({"error": "session_failed"}, 500)
             if path == "/api/auto_camper":
                 # a SETTING toggle (persisted), not a vehicle write — allowed even in read-only;
@@ -151,7 +155,7 @@ def make_handler(backend, webui_dir):
                 try:
                     return self._send_json(backend.set_auto_camper(req["enabled"]))
                 except Exception as e:
-                    print("web: set_auto_camper failed: %r" % (e,), flush=True)
+                    log.warning("web: set_auto_camper failed: %r" % (e,))
                     return self._send_json({"error": "auto_camper_failed"}, 500)
             if path == "/api/pairing":
                 # connection management (like /api/session), not a vehicle write — allowed even in
@@ -167,7 +171,7 @@ def make_handler(backend, webui_dir):
                 try:
                     return self._send_json(backend.pairing_command(action, value))
                 except Exception as e:
-                    print("web: pairing command failed: %r" % (e,), flush=True)
+                    log.warning("web: pairing command failed: %r" % (e,))
                     return self._send_json({"error": "pairing_failed"}, 500)
             if backend.read_only:
                 return self._send_json({"error": "read_only"}, 405)
@@ -180,7 +184,7 @@ def make_handler(backend, webui_dir):
             try:
                 result = backend.command(fn, what, value, confirm=confirm)
             except Exception as e:  # log server-side only; never leak exception text to client
-                print("web: command failed: %r" % (e,), flush=True)
+                log.warning("web: command failed: %r" % (e,))
                 return self._send_json({"error": "command_failed"}, 500)
             return self._send_json(result)
 
@@ -194,6 +198,6 @@ def serve_http(backend, webui_dir, host="0.0.0.0", port=8080):
     resolver would otherwise hang the whole daemon before the web UI comes up.
     """
     httpd = _NoResolveHTTPServer((host, port), make_handler(backend, webui_dir))
-    print("web UI is UNAUTHENTICATED — expose only on a trusted LAN", flush=True)
+    log.warning("web UI is UNAUTHENTICATED — expose only on a trusted LAN")
     Thread(target=httpd.serve_forever, name="calictl-web", daemon=True).start()
     return httpd

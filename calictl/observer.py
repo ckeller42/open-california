@@ -23,7 +23,10 @@ from __future__ import annotations
 import os
 import time
 
+from . import log as _log
 from . import protocol, semantics
+
+log = _log.get(__name__)
 
 # camping/ignition fields watched on a push, per function (mirrors what `observe` tracks).
 # cooler: probes whether the unit BROADCASTS night-timer/quiet-time changes on 1102 (issue #99)
@@ -94,10 +97,10 @@ class CampingObserver:
             return
         dt = "%.0f" % (now - self._obs_ign_edge) if self._obs_ign_edge else "-"
         parts = ", ".join("%s %s->%s" % (k, _fmt(prev[k]), _fmt(cur[k])) for k in changed)
-        print("camping-watch: %s (ign=%s dcdc=%s dcdc_A=%s batt2_A=%s dt_eng=%ss soc=%s)"
+        log.info("camping-watch: %s (ign=%s dcdc=%s dcdc_A=%s batt2_A=%s dt_eng=%ss soc=%s)"
               % (parts, _fmt(cur["ignition"]), _fmt(cur["dcdc_charging"]),
                  _fmt(e.get("dcdc_current")), _fmt(e.get("batt2_current")),
-                 dt, _fmt(e.get("soc2_pct"))), flush=True)
+                 dt, _fmt(e.get("soc2_pct"))))
 
     def on_push(self, uuid, data):
         """Fired IN THE BLE LOOP the instant a status char pushes a notification (persistent session
@@ -116,7 +119,7 @@ class CampingObserver:
         self._push_prev.update(cur)
         if changed:
             parts = ", ".join("%s %s->%s" % (k, _fmt(o), _fmt(n)) for k, (o, n) in changed.items())
-            print("camping-push[%s]: %s" % (fn, parts), flush=True)
+            log.info("camping-push[%s]: %s" % (fn, parts))
 
     def poll_interval(self, default):
         """The nap the poll loop should take: the short burst interval while a burst is active (set

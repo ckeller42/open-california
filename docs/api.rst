@@ -128,6 +128,14 @@ BLE trace recorder + replay (real-unit evidence for the mock)
 .. automodule:: tests.test_trace_compare
 .. automodule:: tests.test_mock_fidelity
 
+Daemon logging
+--------------
+
+.. automodule:: calictl.log
+   :members:
+
+.. automodule:: tests.test_log
+
 Guided pairing (issue #154, #157)
 ----------------------------------
 

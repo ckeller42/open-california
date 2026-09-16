@@ -48,6 +48,10 @@ from calictl.pairing import (
     step,
 )
 
+from . import log as _log
+
+log = _log.get(__name__)
+
 # Actions whose transport-call failure means "the pairing attempt failed" (-> EV_PAIR_FAIL);
 # ACT_VERIFY is handled separately since it also has a non-exception failure mode (None result).
 _PAIR_FAIL_ACTS = (ACT_CONNECT, ACT_PAIR, ACT_SEND_PASSKEY)
@@ -99,7 +103,7 @@ class PairingRunner:
                 try:
                     await aclose()
                 except Exception as e:
-                    print("pairing: transport aclose failed: %r" % e, flush=True)
+                    log.warning("pairing: transport aclose failed: %r" % e)
 
     def _rearm_timer(self):
         if self._timer_task is not None:
@@ -140,9 +144,9 @@ class PairingRunner:
                 # BlueZ owns the real bond regardless of this cache write -- the bond
                 # itself is intact, only our convenience address cache failed. Stay
                 # BONDED; self.address stays None (see snapshot()'s docstring).
-                print("pairing: address-cache write failed, bond itself is intact: %r" % e, flush=True)
+                log.warning("pairing: address-cache write failed, bond itself is intact: %r" % e)
                 return
-            print("pairing: transport action %d failed: %r" % (act, e), flush=True)
+            log.warning("pairing: transport action %d failed: %r" % (act, e))
             if act in _PAIR_FAIL_ACTS:
                 await self.handle(EV_PAIR_FAIL)
             elif act == ACT_VERIFY:

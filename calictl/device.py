@@ -20,7 +20,10 @@ import os
 import subprocess
 from pathlib import Path
 
+from . import log as _log
 from . import trace
+
+log = _log.get(__name__)
 
 
 def pairing_cache_path() -> Path:
@@ -210,10 +213,10 @@ async def _read_char_with_retry(client, name, char):
         except Exception as e:
             if not getattr(client, "is_connected", False):
                 # link dropped mid-session: don't burn ~30 s of futile retries under the serve lock
-                print("read_all: link dropped at %s; aborting cycle" % name, flush=True)
+                log.warning("read_all: link dropped at %s; aborting cycle" % name)
                 return None, False
             if attempt == 2:
-                print("read_all: %s failed after retries: %r" % (name, e), flush=True)
+                log.warning("read_all: %s failed after retries: %r" % (name, e))
             await asyncio.sleep(0.8)
     return None, getattr(client, "is_connected", False)
 
@@ -336,7 +339,7 @@ class CamperDevice:
                     out["water"] = p
                     return
         except Exception as e:
-            print("water push-wait aborted: %r" % e, flush=True)
+            log.warning("water push-wait aborted: %r" % e)
 
     async def read(self, func) -> bytes:
         """Read one function's state char under a live 1003 heartbeat (fresh, not the stale
@@ -394,8 +397,8 @@ class CamperDevice:
                 pass
         n = await self._subscribe_all(client)
         if auth_ok < 2 or n == 0:
-            print("%s: weak handshake (auth-reads=%d/2, subscribed=%d) — %s may be ignored"
-                  % (label, auth_ok, n, noun), flush=True)
+            log.warning("%s: weak handshake (auth-reads=%d/2, subscribed=%d) — %s may be ignored"
+                  % (label, auth_ok, n, noun))
 
     async def _arm(self, client, stop, label, noun):
         """Handshake, then start the 1003 liveness heartbeat and wait ``ARM_DELAY_S`` so the unit
@@ -578,14 +581,14 @@ class CamperDevice:
             # set lock-free by another coroutine, checked each frame -> break -> STOP.
             while time.monotonic() < deadline and not (stop_event is not None and stop_event.is_set()):
                 if not await _send(move_frame):
-                    print("actuate_roof: link dropped mid-move — sending STOP", flush=True)
+                    log.warning("actuate_roof: link dropped mid-move — sending STOP")
                     break
                 if (validate_s is not None and not validate_checked and func.state_char
                         and (time.monotonic() - start) >= validate_s):
                     validate_checked = True
                     if not await self._roof_counter_valid(client, func):
-                        print("actuate_roof: SafetyCounter invalid after %.0fs — aborting move "
-                              "(STOP)" % validate_s, flush=True)
+                        log.warning("actuate_roof: SafetyCounter invalid after %.0fs — aborting move "
+                              "(STOP)" % validate_s)
                         break
                 # Auto-stop at the limit: once the roof reaches this direction's terminal Position,
                 # cease the stream (-> STOP) instead of running to the travel cap. Best-effort — a
@@ -595,8 +598,8 @@ class CamperDevice:
                     last_limit_poll = time.monotonic()
                     pos = await self._roof_position(client, func)
                     if pos is not None and pos in limit_positions:
-                        print("actuate_roof: roof reached limit position %s — ceasing (STOP)"
-                              % pos, flush=True)
+                        log.info("actuate_roof: roof reached limit position %s — ceasing (STOP)"
+                              % pos)
                         break
                 await asyncio.sleep(period_s)
             # ALWAYS force a STOP (best-effort even if the link is flaky), with the live counter.

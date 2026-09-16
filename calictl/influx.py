@@ -20,8 +20,11 @@ from __future__ import annotations
 import asyncio
 import os
 
+from . import log as _log
 from . import mqtt, overrides, protocol, semantics
 from .device import CamperDevice
+
+log = _log.get(__name__)
 
 # Alert enums are strings (dropped by Influx), but we still want them charted in Grafana.
 # Emit a numeric `<key>_code` for these curated fields so a state-timeline can map code->label.
@@ -116,7 +119,7 @@ def field_series(field: str, function: str, *, days: float = 7.0, every: str = "
         with InfluxDBClient(url=url, token=token, org=org) as client:
             tables = client.query_api().query(flux, org=org)
     except Exception as e:   # network down, deps absent, bad query -> no series, never crash
-        print("influx field_series(%s) failed: %r" % (field, e), flush=True)
+        log.warning("influx field_series(%s) failed: %r" % (field, e))
         return []
     out = []
     for table in tables:
@@ -141,7 +144,7 @@ def write_once(addr: str | None = None) -> int:
     bucket = os.environ.get("INFLUX_BUCKET", "buspi")
     token = os.environ.get("INFLUXDB_TOKEN")
     if not token:   # mirror serve.run()'s handling instead of a raw KeyError
-        print("influx disabled: no INFLUXDB_TOKEN")
+        log.warning("influx disabled: no INFLUXDB_TOKEN")
         return 0
     funcs = protocol.load(); overrides.apply(funcs)
     dev = CamperDevice(addr) if addr else CamperDevice()
@@ -149,5 +152,5 @@ def write_once(addr: str | None = None) -> int:
     pts = build_points(states)
     with InfluxDBClient(url=url, token=token, org=org) as client:
         client.write_api(write_options=SYNCHRONOUS).write(bucket=bucket, org=org, record=pts)
-    print("wrote %d points to %s/%s" % (len(pts), bucket, org))
+    log.info("wrote %d points to %s/%s", len(pts), bucket, org)
     return len(pts)

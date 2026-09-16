@@ -31,7 +31,10 @@ from . import (
     semantics,
     session,
 )
+from . import log as _log
 from .device import CamperDevice, ConnectionUnavailable, pairing_cache_path
+
+log = _log.get(__name__)
 
 # How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
 # an optimistic "sent" (the lamp itself already reacted; this only bounds the UI confirm latency).
@@ -244,7 +247,7 @@ async def dry_run(addr=None):
     """Print the MQTT discovery configs + one live poll — no broker, no InfluxDB.
     Backs `calictl serve --dry-run`."""
     funcs = protocol.load(); overrides.apply(funcs)
-    print("# --- HA discovery configs ---")
+    log.warning("# --- HA discovery configs ---")
     for topic, cfg in mqtt.render_discovery().items():
         print(topic, "=>", json.dumps(cfg))
     print("\n# --- one poll ---")
@@ -428,7 +431,7 @@ class Server:
         new state. See automation.auto_camper_restore_decide + docs/business-logic/auto-camper-mode.md."""
         enabled = self._autocamper.set_enabled(on)
         self._save_last()
-        print("auto-camper: %s" % ("ENABLED" if enabled else "disabled"), flush=True)
+        log.info("auto-camper: %s", "ENABLED" if enabled else "disabled")
         return enabled
 
     def pairing_snapshot(self):
@@ -466,7 +469,7 @@ class Server:
         their next connect -- no separate cache to keep in sync. `CALICTL_ADDR` / pairing.json
         remain how this survives a process restart."""
         self.dev.addr = address
-        print("pairing: bonded to %s -- daemon now targets it live" % address, flush=True)
+        log.info("pairing: bonded to %s -- daemon now targets it live" % address)
 
     async def pairing_command(self, action, value):
         """Drive the guided-pairing wizard for `POST /api/pairing` (action already validated by
@@ -512,11 +515,11 @@ class Server:
         if self._pairing is not None and self._pairing.snapshot()["state"] not in ("idle", "bonded", "error"):
             if not self._poll_skipped_for_pairing:
                 self._poll_skipped_for_pairing = True
-                print("poll skipped: pairing in progress", flush=True)
+                log.warning("poll skipped: pairing in progress")
             return {}
         if self._poll_skipped_for_pairing:
             self._poll_skipped_for_pairing = False
-            print("poll resumed: pairing flow ended", flush=True)
+            log.info("poll resumed: pairing flow ended")
         # One BLE read of every function under the lock; cache the DECODED state
         # (on_command builds full-packet control frames from it) and derive the
         # INTERPRETED state for MQTT + InfluxDB.
@@ -540,25 +543,25 @@ class Server:
             # First firmware ever seen -> BASELINE snapshot. A future drift diff needs the OLD-side
             # frames, and this is the only time we can bank them before the unit updates.
             try:
-                print("firmware baseline (amb %s comm %s) -> %s" % (cur_fw[0], cur_fw[1],
-                      firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="baseline")), flush=True)
+                log.info("firmware baseline (amb %s comm %s) -> %s" % (cur_fw[0], cur_fw[1],
+                      firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="baseline")))
             except Exception as e:
-                print("firmware baseline snapshot failed: %s" % e, flush=True)
+                log.warning("firmware baseline snapshot failed: %s" % e)
         elif firmware.changed(self._fw_seen, cur_fw):
-            print("FIRMWARE CHANGED: amb %s->%s comm %s->%s — capturing raw frames"
-                  % (self._fw_seen[0], cur_fw[0], self._fw_seen[1], cur_fw[1]), flush=True)
+            log.warning("FIRMWARE CHANGED: amb %s->%s comm %s->%s — capturing raw frames"
+                  % (self._fw_seen[0], cur_fw[0], self._fw_seen[1], cur_fw[1]))
             try:
-                print("firmware drift snapshot -> %s"
-                      % firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="drift"), flush=True)
+                log.info("firmware drift snapshot -> %s"
+                      % firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="drift"))
             except Exception as e:
-                print("firmware snapshot failed: %s" % e, flush=True)
+                log.warning("firmware snapshot failed: %s" % e)
         if cur_fw != (None, None):
             self._fw_seen = cur_fw
         # Plausibility anchors: a decode drift (e.g. a firmware offset shift) pushes a value out of
         # physical range — surface it in _meta + log so it's caught, not published as truth.
         self._anchors = anchors.check(states)
         if self._anchors:
-            print("plausibility anchors tripped: %s" % "; ".join(self._anchors), flush=True)
+            log.warning("plausibility anchors tripped: %s" % "; ".join(self._anchors))
         # Stale-latch guard: when the van is parked/locked the unit stops measuring fresh water and
         # returns a bogus low (true 17 L read back as 1 L). A fresh drop from the last PLAUSIBLE
         # reading with no matching grey rise is physically impossible -> serve/publish that last
@@ -588,15 +591,11 @@ class Server:
             try:
                 self._observer.observe(states)          # PASSIVE: log camping/ignition changes + burst
             except Exception:
-                import traceback
-                print("camping-watch error:", flush=True)
-                traceback.print_exc()
+                log.exception("camping-watch error:")
             try:
                 await self._autocamper.step(states, actuate=self.on_command, read_only=self._read_only)   # re-enable camper+USB after an engine start
             except Exception:
-                import traceback
-                print("auto-camper step error:", flush=True)
-                traceback.print_exc()
+                log.exception("auto-camper step error:")
             # Persist AFTER the auto-camper step so a restore debt armed THIS poll is saved this poll,
             # not next — closes the one-poll window where a restart right after engine-start would
             # otherwise still drop the just-armed restore. The step never mutates `_last`.
@@ -644,7 +643,7 @@ class Server:
         if self._read_only:
             # SAFE DEFAULT: no vehicle writes unless writes were explicitly enabled. Central gate,
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
-            print("read-only: refusing command %s/%s" % (function, what), flush=True)
+            log.warning("read-only: refusing command %s/%s" % (function, what))
             return None
         if function == "roof" and what == "stop":
             return await self._roof_stop_command()
@@ -669,7 +668,7 @@ class Server:
                 return None
             reason = control.command_precondition(function, what, value, self._last)
             if reason:
-                print("refusing %s/%s: %s" % (function, what, reason), flush=True)
+                log.warning("refusing %s/%s: %s" % (function, what, reason))
                 return None
             return await self._actuate_checked(function, what, value, last)
 
@@ -732,7 +731,7 @@ class Server:
             self._last = {**self._last, function: last}   # atomic rebind (web thread reads unlocked)
             return last
         except ConnectionUnavailable as e:
-            print("command %s skipped (no state read): %s" % (function, e), flush=True)
+            log.warning("command %s skipped (no state read): %s" % (function, e))
             return None
 
     async def _actuate_checked(self, function, what, value, last):
@@ -808,7 +807,7 @@ class Server:
         try:
             import paho.mqtt.client as mqtt_client  # lazy
         except ImportError:
-            print("mqtt: paho-mqtt not installed — skipping MQTT (polling + web only)", flush=True)
+            log.warning("mqtt: paho-mqtt not installed — skipping MQTT (polling + web only)")
             return None
         host = os.environ.get("MQTT_HOST", "localhost")
         port = int(os.environ.get("MQTT_PORT", "1883"))
@@ -829,20 +828,20 @@ class Server:
             c.publish(mqtt.availability_topic(), "online", retain=True)
             for topic in cmd_map:
                 c.subscribe(topic)
-            print("mqtt connected to %s:%d (%d command topics)" % (host, port, len(cmd_map)), flush=True)
+            log.info("mqtt connected to %s:%d (%d command topics)" % (host, port, len(cmd_map)))
 
         def on_message(c, u, msg):
             fn, what = cmd_map.get(msg.topic, (None, None))
             if not fn:
                 return
             value = msg.payload.decode().strip()
-            print("command: %s %s %s" % (fn, what, value), flush=True)
+            log.info("command: %s %s %s" % (fn, what, value))
             fut = asyncio.run_coroutine_threadsafe(self.on_command(fn, what, value), loop)
 
             def _log_command_failure(f, fn=fn, what=what, value=value):
                 exc = f.exception()
                 if exc is not None:
-                    print("command failed: %s %s %s: %r" % (fn, what, value, exc), flush=True)
+                    log.warning("command failed: %s %s %s: %r" % (fn, what, value, exc))
 
             fut.add_done_callback(_log_command_failure)
 
@@ -851,8 +850,8 @@ class Server:
         try:
             cli.connect(host, port, keepalive=60)
         except OSError as e:
-            print("mqtt: connect to %s:%d failed (%s) — skipping MQTT (polling + web only)"
-                  % (host, port, e), flush=True)
+            log.warning("mqtt: connect to %s:%d failed (%s) — skipping MQTT (polling + web only)"
+                  % (host, port, e))
             return None
         cli.loop_start()
         return cli
@@ -871,11 +870,11 @@ class Server:
         try:
             httpd = web.serve_http(backend, _WEBUI_DIR, "0.0.0.0", port)
         except OSError as e:
-            print("web UI failed to start on port %d (%s) — continuing without it"
-                  % (port, e), flush=True)
+            log.warning("web UI failed to start on port %d (%s) — continuing without it"
+                  % (port, e))
             return None
-        print("web UI on http://0.0.0.0:%d%s"
-              % (port, "  (read-only)" if getattr(self, "_read_only", False) else ""), flush=True)
+        log.info("web UI on http://0.0.0.0:%d%s"
+              % (port, "  (read-only)" if getattr(self, "_read_only", False) else ""))
         return httpd
 
     def run(self):
@@ -902,9 +901,9 @@ class Server:
                 org = os.environ.get("INFLUX_ORG", "home")
                 client = InfluxDBClient(url=url, token=token, org=org)
                 self._iw = client.write_api(write_options=SYNCHRONOUS)
-                print("influx -> %s org=%s" % (url, org), flush=True)
+                log.info("influx -> %s org=%s" % (url, org))
             else:
-                print("influx disabled: no INFLUXDB_TOKEN", flush=True)
+                log.warning("influx disabled: no INFLUXDB_TOKEN")
 
         # --- web UI (replica app, embedded) — optional; must never crash the daemon ---
         self._httpd = self._maybe_start_web(loop)
@@ -918,17 +917,15 @@ class Server:
                         await asyncio.sleep(2)        # supervisor is mid-connect; don't race it cold
                         continue
                     states = await self.poll()
-                    print("polled %d functions" % len(states), flush=True)
+                    log.debug("polled %d functions" % len(states))
                     self._record_outcome("ok")
                 except ConnectionUnavailable as e:
-                    print("poll skipped: %s" % e, flush=True)
+                    log.warning("poll skipped: %s" % e)
                     # van unreachable: "asleep" once the supervisor's backoff hit the cap (deep
                     # sleep), else a transient connection loss while it may still be awake.
                     self._record_outcome("asleep" if self._sessions.session_state == "asleep" else "ble_error", e)
                 except Exception as e:
-                    import traceback
-                    print("poll error:", flush=True)
-                    traceback.print_exc()
+                    log.exception("poll error:")
                     self._record_outcome("error", e)
                 # Fast-poll burst after an engine start is owned by the observer (poll_interval
                 # returns the short cadence while a burst window is active, else self.interval).

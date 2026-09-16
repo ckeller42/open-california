@@ -25,6 +25,10 @@ from __future__ import annotations
 import asyncio
 import time
 
+from . import log as _log
+
+log = _log.get(__name__)
+
 
 class SessionSupervisor:
     """Holds the persistent session while the web UI is active; releases the slot when idle; backs
@@ -126,12 +130,12 @@ class SessionSupervisor:
             self._backoff_fails += 1
             self._session = None
             self.session_state = "asleep" if self._backoff_fails >= self.ASLEEP_AFTER else "degraded"
-            print("session connect failed (%d): %s" % (self._backoff_fails, e), flush=True)
+            log.warning("session connect failed (%d): %s" % (self._backoff_fails, e))
             return False
         self._session = sess
         self.session_state = "up"
         self._backoff_fails = 0
-        print("persistent session up", flush=True)
+        log.info("persistent session up")
         return True
 
     async def supervise(self):
@@ -145,7 +149,7 @@ class SessionSupervisor:
                     async with self._ble:
                         await self._session.aclose()
                     self._session = None
-                    print("persistent session released (web UI idle)", flush=True)
+                    log.info("persistent session released (web UI idle)")
                 self.session_state = "off"
                 # wake early when a command/poll marks activity, else re-check each interval
                 waiter = asyncio.ensure_future(self._wake.wait())
