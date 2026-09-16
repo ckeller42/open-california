@@ -130,7 +130,8 @@ every lamp icon in the app's Lighting page wrote one `SET_BRIGHTNESS` frame per 
 `LEight`, roof Reading Light = `LNine` (inert while the roof is closed), Entrance = `LOneTwo`.
 Group icons write all their lamps at once (Reading `L1+L2+L4`, Kitchen `L5+L7`, Roof `L8+L9`,
 Exterior `L3+L12`). The app exposes **no** lamp on `LSix` (calictl's `kitchen-cabinet`, DEVICE-lit
-2026-08-30) — so the "L6 = Aufstelldach Leselicht by elimination" line above is superseded twice
+2026-08-30 and owner-re-confirmed from the web UI 2026-09-16: "Cabinet light toggle worked — keep it",
+so it stays a **web-only** lamp) — so the "L6 = Aufstelldach Leselicht by elimination" line above is superseded twice
 over: L6 is the cabinet light, the roof reading light is L9. Only the owner's 2026-08-27 "roof light
 moved L5" observation remains unexplained.
 

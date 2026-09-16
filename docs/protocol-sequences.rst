@@ -31,8 +31,13 @@ Session foundation — connect, authenticate, subscribe
    char. Decompile-confirmed 2026-07-14 (``pf/g`` handshake, ``s/a1`` GATT dispatcher): the order
    is 1001 → 1004 → subscribe-all; **1004 AUTH is a passive read** ("authentication" is implicit
    over the bonded/encrypted link — an empty read triggers a reconnect; there is no token/challenge
-   write). The ``1002`` VIN char is **not** read or validated during connect (it's an ordinary
-   later state read, not a gate). Implemented by :py:meth:`calictl.device.CamperDevice._session`
+   write). **Correction (APP-OBSERVED 2026-09-16, the real app against ``tools/applab``):** the app
+   DOES gate on ``1002`` — right after ``discoverServices`` + ``requestMtu`` it reads ``1002`` and
+   compares the 16 bytes with ``SHA-256(VIN)[16:32]`` of the VIN the user entered (``d2/g1`` case 7
+   "Starting Vin Check" → ``ny/c`` case 8); a mismatch disconnects ~20 ms later with *"Wrong vehicle
+   found"* and 1001/1004 are never read. calictl skips that step (the bond is its identity) —
+   the unit does not require it; it is the app protecting the user from a neighbour's van.
+   Implemented by :py:meth:`calictl.device.CamperDevice._session`
    + :py:meth:`calictl.device.CamperDevice._subscribe_all`.
 
 .. mermaid::
@@ -43,6 +48,7 @@ Session foundation — connect, authenticate, subscribe
         Note over C,U: link is BONDED (LE pairing done once — the unit's RPA is resolved via the bond)
         C->>U: connect (retry on the le-connection-abort cascade)
         C->>U: discoverServices + requestMtu
+        Note over C,U: app only — read 1002 and compare with SHA-256(VIN) tail 16 bytes, mismatch = disconnect (Wrong vehicle found)
         C->>U: read 1001 (VERSION)
         Note over C: app aborts the session if VERSION empty or version greater than 2
         C->>U: read 1004 (AUTH — passive read over the bonded link, empty → reconnect)
@@ -89,6 +95,15 @@ Heartbeat-armed control write
    liveness *only* — no ignition/mode/enable gate (roof is the one exception, separately gated).
    Implemented by :py:meth:`calictl.device.CamperDevice.actuate`.
 
+   APP-OBSERVED 2026-09-16 (``tools/applab``): the connected app beats ``1003`` continuously at
+   ~750 ms (its 500 ms timer plus GATT round-trips); every control write is a **full-packet frame
+   with the untargeted fields at their leave-unchanged defaults** (2-bit ``3``; wider fields at the
+   model default — heater ``HeatingLevel 11 / RunningTime 127``, cooler ``Level 7 / Mode 7``, timer
+   hours ``30/62/31``), and **500 ms later the app sends a "neutral" frame with EVERY field at its
+   sentinel** (cooler ``ff771e3e1f1f``, heater ``3f7b007f1f3f``, camping ``ff``, energy ``30``,
+   lighting ``0e00…`` — the same flush the lighting flow below calls the commit). The unit accepts
+   both; calictl sends only the targeted frame, carrying current values in the untargeted fields.
+
 .. mermaid::
 
     sequenceDiagram
@@ -101,7 +116,8 @@ Heartbeat-armed control write
             C-)U: write 1003 = N, N+1, N+2 …  (monotonic +1)
         end
         Note over U: armed — actuation writes honoured
-        C->>U: write control_char = SET frame (full-packet)
+        C->>U: write control_char = SET frame (full-packet, untargeted fields = leave-unchanged sentinels)
+        Note over C,U: app only — 500 ms later a neutral all-sentinel frame (cooler ff771e3e1f1f, heater 3f7b007f1f3f)
         C->>U: read state_char (verify)
         C->>U: disconnect (heartbeat stops)
 
@@ -205,12 +221,23 @@ Roof actuation (press-and-hold move stream, unit self-gated by a 3 s SafetyCount
    safety net). **Mock-tested only; it has never driven a real roof**, so roof actuation stays
    NOT-LIVE-VERIFIED until a live at-the-van test.
 
+   APP-OBSERVED 2026-09-16 (``tools/applab``): the app's roof PAGE, as soon as it opens and
+   before any button is touched, starts streaming ``[0x00][SafetyCounter]`` (direction *stop*)
+   every ~500 ms and expects ``SafetyCounterValid`` back — the counter validation is pre-armed
+   while the page is visible, so a press moves immediately. Without terminal 15 the page shows
+   *"Switch on the ignition — Please switch on the ignition to operate the pop-up roof."* and hides
+   its controls; ``InfoPopUp`` 9 shows *"Only possible when stationary"*, 2/3/12 *"Function
+   currently in use"* (``alert-states.md``).
+
 .. mermaid::
 
     sequenceDiagram
         participant C as calictl
         participant U as Roof (1401 / state 1402)
         Note over C,U: ignition ON, roof path clear
+        loop app only — while the roof page is open, before any press
+            C->>U: frame [0x00 stop] + monotonic SafetyCounter every ~500 ms (pre-validates the counter)
+        end
         Note over C,U: user presses and HOLDS open/close
         loop press-and-hold, move frames @ ~500 ms
             C->>U: move frame [0x01 open / 0x04 close] + app-generated monotonic SafetyCounter (+1/500 ms)

@@ -124,18 +124,84 @@ def test_roof_counter_validates_only_when_incrementing():
     assert u.decoded("roof")["SafetyCounterValid"] == 0
 
 
-def test_roof_moves_one_step_per_valid_move_frame():
+def test_roof_travels_on_the_clock_while_a_valid_move_is_held():
+    """Motion is time-based (real unit: ~3 s counter validation, then ~10 s per half travel):
+    with Up held and the counter valid, Position steps closed -> middle -> open every
+    ROOF_STEP_S of tick(); releasing (no frames for >1.5 s) stops it; Down reverses."""
     f = _funcs()
     u = _armed_unit(roof={"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 0})
     c = 100
-    for _ in range(3):                                      # stop frames: validate the counter
-        u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c)); c += 1
-    u.write(f["roof"].control_char, _roof_frame(f, 1, 0, c)); c += 1
-    assert u.decoded("roof")["Position"] == 2              # closed -> middle
-    u.write(f["roof"].control_char, _roof_frame(f, 1, 0, c)); c += 1
-    assert u.decoded("roof")["Position"] == 1              # middle -> open
-    u.write(f["roof"].control_char, _roof_frame(f, 1, 0, c)); c += 1
-    assert u.decoded("roof")["Position"] == 1              # already open: stays
-    u.write(f["roof"].control_char, _roof_frame(f, 0, 1, c)); c += 1
-    u.write(f["roof"].control_char, _roof_frame(f, 0, 1, c)); c += 1
-    assert u.decoded("roof")["Position"] == 0              # open -> middle -> closed
+
+    def hold(up, down, seconds):
+        nonlocal c
+        for _ in range(int(seconds * 2)):                    # a frame every 500 ms, like the app
+            u.write(f["roof"].control_char, _roof_frame(f, up, down, c)); c += 1
+            u.tick(0.5)
+
+    hold(0, 0, 1.5)                                          # counter validates (stop frames)
+    assert u.decoded("roof")["SafetyCounterValid"] == 1
+    hold(1, 0, 3.0)
+    assert u.decoded("roof")["Position"] == 0                # still within the first step time
+    hold(1, 0, 2.0)                                          # 5 s of Up held -> one step
+    assert u.decoded("roof")["Position"] == 2
+    u.tick(3.0)                                              # released: no frames -> motion stops
+    assert u.decoded("roof")["Position"] == 2
+    hold(1, 0, 5.0)
+    assert u.decoded("roof")["Position"] == 1                # middle -> open
+    hold(1, 0, 5.0)
+    assert u.decoded("roof")["Position"] == 1                # open: stays
+    hold(0, 1, 5.0)
+    assert u.decoded("roof")["Position"] == 2                # open -> middle
+    hold(0, 1, 5.0)
+    assert u.decoded("roof")["Position"] == 0
+
+
+def test_tick_advances_the_vehicle_clock():
+    u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 8, "CarTimeDay": 28,
+                             "CarTimeHour": 23, "CarTimeMinute": 59, "CarTimeSecond": 30,
+                             "TerminalOneFive": 0})
+    u.tick(45)
+    v = u.decoded("vehicle")
+    assert (v["CarTimeDay"], v["CarTimeHour"], v["CarTimeMinute"], v["CarTimeSecond"]) == (29, 0, 0, 15)
+
+
+def test_tick_counts_down_immediate_heating_and_stops_it():
+    u = _armed_unit(airheater={"Installed": 1, "NormalOperation": 1, "PermanentOperation": 0,
+                               "HeatingLevel": 5, "RunningTime": 2, "RunningTimeinAction": 2})
+    u.tick(59)
+    assert u.decoded("airheater")["RunningTimeinAction"] == 2
+    u.tick(1)
+    assert u.decoded("airheater")["RunningTimeinAction"] == 1
+    u.tick(60)
+    a = u.decoded("airheater")
+    assert a["RunningTimeinAction"] == 0 and a["NormalOperation"] == 0   # run time over -> off
+
+
+def test_tick_fires_the_cooler_timer_at_its_start_time():
+    u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 9, "CarTimeDay": 16,
+                             "CarTimeHour": 8, "CarTimeMinute": 59, "CarTimeSecond": 0},
+                    cooler={"Installed": 1, "State": 0, "TimerState": 1, "TimerHourSet": 9,
+                            "TimerMinSet": 0, "Level": 3, "Mode": 0})
+    u.tick(30)
+    c = u.decoded("cooler")
+    assert c["State"] == 0 and (c["TimerCounterHour"], c["TimerCounterMin"]) == (0, 1)
+    u.tick(31)
+    c = u.decoded("cooler")
+    assert c["State"] == 1 and c["TimerState"] == 0 and c["TimerElapsed"] == 1
+
+
+def test_ignition_couples_into_camping_and_battery_age():
+    u = _armed_unit(vehicle={"TerminalOneFive": 0, "CarTimeYear": 126, "CarTimeMonth": 9,
+                             "CarTimeDay": 16, "CarTimeHour": 8, "CarTimeMinute": 0, "CarTimeSecond": 0},
+                    campingmode={"Installed": 1, "State": 1, "Enable": 0, "UsbCharger": 1},
+                    energy={"AgeOneBattValuesMinutes": 3})
+    u.tick(120)
+    assert u.decoded("energy")["AgeOneBattValuesMinutes"] == 5       # starter data ages while parked
+    u.state["vehicle"]["TerminalOneFive"] = 1                       # key turned (e.g. via the console)
+    u.tick(1)
+    cm = u.decoded("campingmode")
+    assert cm["Enable"] == 1 and cm["State"] == 0                     # unit sheds camping master
+    assert u.decoded("energy")["AgeOneBattValuesMinutes"] == 0       # starter subsystem awake
+    u.state["vehicle"]["TerminalOneFive"] = 0
+    u.tick(1)
+    assert u.decoded("campingmode")["Enable"] == 0

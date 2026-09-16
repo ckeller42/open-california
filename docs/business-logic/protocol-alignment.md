@@ -109,7 +109,11 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
   `command_enums.dg_n` currently lists names only — a consumer can't build a frame without these.
   (`SET_COLOR`/`SET_DOUBLE` have no calictl support at all.)
 - **Characteristics**: no unread char — only `1000/1001/1002/1004` are literal; all per-function
-  chars are runtime-built and already in the dictionary. `1002` = `SHA-256(VIN)[16:32]` opaque.
+  chars are runtime-built and already in the dictionary. `1002` = `SHA-256(VIN)[16:32]` — the app's
+  **vehicle-identity check**: right after service discovery + MTU it reads `1002` and compares it with
+  the hash of the VIN the user entered (`ny/c.java` case 8); a mismatch disconnects with "Wrong
+  vehicle found" before any other read (APP-OBSERVED 2026-09-16, `tools/applab`). calictl never reads
+  it (the bond is our identity), but a faithful fake unit must serve it.
 - **Exlap `VWN_Camper_*`**: separate WiFi/TCP transport (see `value-freshness.md`), doc-only.
   Objects with no BLE counterpart: `Outside_Temperature`, `CarOptions`, `Connection_Active`.
 - **Alerts / fault codes**: already complete in `alert-states.md`.

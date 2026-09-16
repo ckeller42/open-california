@@ -148,6 +148,17 @@ class FakeUnit:
                     log.warning("disconnect failed: %s", e)
                 return
 
+    async def clock(self) -> None:
+        """Drive the mock's clock once a second (RTC, countdowns, roof travel, ignition coupling —
+        see ``MockCamperUnit.tick``) and notify what changed. Energy (1602) is pushed every tick
+        regardless: the real unit streams it ~3×/s while the app is connected."""
+        while True:
+            await asyncio.sleep(1.0)
+            changed = self.unit.tick(1.0)
+            self.dirty.update(changed)
+            for fn in changed | {"energy"}:
+                self.schedule_notify(fn)
+
     def schedule_notify(self, fn: str) -> None:
         ch = self.chars.get(fn)
         if ch is not None and self.device is not None:
@@ -285,6 +296,7 @@ async def main():
         await dev.start_advertising(auto_restart=True, advertising_data=adv, scan_response_data=scan_rsp)
         print("### VWCAMPER advertising — passkey", f"{PASSKEY:06d}", flush=True)
         unit.tasks.append(asyncio.get_event_loop().create_task(unit.console()))
+        unit.tasks.append(asyncio.get_event_loop().create_task(unit.clock()))
         await hci.source.terminated
 
 

@@ -1318,6 +1318,8 @@ const LIGHT_LAMPS = [
     { label: "Front passenger", what: "reading-3", zone: 4 } ] },
   { group: "Kitchen", lamps: [
     { label: "Background lighting", what: "kitchen-ambient", zone: 5 },
+    // Web-only lamp: the app has no control for L6, but it is real (DEVICE 2026-08-30, owner
+    // re-confirmed 2026-09-16) — keep it.
     { label: "Cabinet", what: "kitchen-cabinet", zone: 6 },
     { label: "Cooking", what: "kitchen", zone: 7 } ] },
   { group: "Pop-up roof", lamps: [
