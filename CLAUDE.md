@@ -70,6 +70,8 @@ DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + s
 python3 -m calictl status                            # live read of all functions (needs BLE + free slot)
 python3 -m calictl serve [--dry-run]                 # the unified daemon (read-only unless --enable-writes)
 curl -s localhost:8088/api/state                     # buspi: live decoded state via the RUNNING daemon
+CALICTL_BLE_TRACE=~/ble.jsonl python3 -m calictl serve …   # record every notify/read/write of the REAL unit (JSONL)
+python3 -m tools.trace_compare ~/ble.jsonl           # replay that trace through the mock: round-trip, cadence, dynamics
 ```
 When the daemon is up it OWNS the single BLE slot — read live state via its web API `/api/state`
 (**buspi runs `--web 8088`** via a systemd drop-in override — the committed unit template has no

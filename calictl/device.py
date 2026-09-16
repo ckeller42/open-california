@@ -20,6 +20,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from . import trace
+
 
 def pairing_cache_path() -> Path:
     """Path to the persisted-bond file — the single source of truth for its location.
@@ -203,6 +205,7 @@ async def _read_char_with_retry(client, name, char):
     for attempt in range(3):
         try:
             data = bytes(await client.read_gatt_char(char))
+            trace.get().read(char, data)
             return data, getattr(client, "is_connected", False)   # report the post-read link state
         except Exception as e:
             if not getattr(client, "is_connected", False):
@@ -240,6 +243,7 @@ class CamperDevice:
             try:
                 client = BleakClient(self.addr, timeout=self.connect_timeout)
                 await client.connect()
+                trace.get().link("connect", self.addr, attempt=attempt)
                 return client
             except Exception as e:  # BleakError / EOFError / dbus abort
                 last = e
@@ -430,13 +434,16 @@ class CamperDevice:
             if arm:
                 beat = await self._arm(client, stop, "actuate", "write")
             await client.write_gatt_char(func.control_char, frame, response=True)
+            trace.get().write(func.control_char, frame)
             if follow is not None:
                 await asyncio.sleep(FOLLOW_DELAY_S)
                 await client.write_gatt_char(func.control_char, follow, response=True)
+                trace.get().write(func.control_char, follow)
             if not verify or not func.state_char:
                 return None
             await asyncio.sleep(SETTLE_S)
             raw = bytes(await client.read_gatt_char(func.state_char))
+            trace.get().read(func.state_char, raw)
             return protocol.decode(func, raw)
         finally:
             stop.set()
@@ -546,6 +553,7 @@ class CamperDevice:
             frame = direction_byte[:1] + ctr.to_bytes(4, "big")
             try:
                 await client.write_gatt_char(func.control_char, frame, response=True)
+                trace.get().write(func.control_char, frame)
                 return True
             except Exception:
                 if not client.is_connected:
@@ -639,6 +647,7 @@ class CamperDevice:
         while not stop.is_set():
             try:
                 await client.write_gatt_char(HEARTBEAT_CHAR, _beat_bytes(ctr), response=True)
+                trace.get().write(HEARTBEAT_CHAR, _beat_bytes(ctr))   # skipped unless asked for
                 ctr += 1
             except Exception:
                 pass  # keep beating; a dropped tick is tolerable within the arm window
@@ -666,6 +675,7 @@ class CamperDevice:
         def _handler(sender, data):
             u = str(getattr(sender, "uuid", sender)).lower()
             b = bytes(data)
+            trace.get().notify(u, b)
             if sink is not None:
                 sink[u] = b
             if on_push is not None:
@@ -686,6 +696,7 @@ class CamperDevice:
 
     @staticmethod
     async def _safe_disconnect(client) -> None:
+        trace.get().link("disconnect", getattr(client, "address", None))
         try:
             await client.disconnect()
         except Exception:

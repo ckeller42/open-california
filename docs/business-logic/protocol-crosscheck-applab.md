@@ -64,6 +64,20 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | InfoPopUp 2/3/9/12 (untraced) | 2/3/12 → tile "Function currently in use", 9 → "Only possible when stationary" | OBSERVED → added |
 | 8/13/14 | nothing shown | OBSERVED |
 
+## The hardware side: trace the real unit, replay it through the mock
+
+The lab validates the **app**; the unit's own behaviour (push cadence, countdown rates, coupling,
+frame bits the dictionary might miss) is validated from a **trace of the real van**: run buspi's
+daemon with `CALICTL_BLE_TRACE=~/ble.jsonl` (`calictl/trace.py` — one JSON line per notify /
+read / write / link event; `CALICTL_BLE_TRACE_HEARTBEAT=1` to include the 1003 beats), let it
+run through a drive / a heater cycle / a roof move, then `python3 -m tools.trace_compare
+~/ble.jsonl`. The report lists: state frames that do **not** round-trip through the dictionary
+(bits the unit uses that we don't model), per-char notification cadence (the mock pushes energy
+once a second — the unit was seen at ~3 Hz live), `RunningTimeinAction` and
+`AgeOneBattValuesMinutes` rates vs the mock's ±1/min, roof `Position` transitions with timings,
+and the terminal-15 → `campingmode.Enable`/master-shed coupling delay. A difference is a mock bug
+or a new protocol fact — never a reason to touch the trace. Results land in this file's tables.
+
 ## Not testable in the lab (unit-side; keep DEVICE/CAPTURE tier)
 
 `0x0E` link drop on out-of-range values; water measurement-gating / stale latch; deep-sleep and
