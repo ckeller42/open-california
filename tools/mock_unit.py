@@ -53,6 +53,9 @@ _AUTH_SHORT = "1004"
 _HEARTBEAT_SHORT = "1003"
 
 LEAVE_UNCHANGED_2BIT = 3   # the sg.a 2-bit "leave unchanged" sentinel (see control.SENTINEL)
+ROOF_STEP_S = 5.0          # seconds of a held valid move per Position step (closed→middle→open)
+ROOF_RELEASE_S = 1.5       # no roof frame for this long = the button was released (app streams @500 ms)
+ROOF_COUNTER_STALE_S = 1.5 # SafetyCounter not incremented for this long = no longer valid
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 LIGHT_MODE_SET_BRIGHTNESS = 4
 LIGHT_MODE_SET_PROFILE = 16
@@ -141,6 +144,15 @@ class MockCamperUnit:
         self.online = True     # False models the parked unit deep-asleep (not advertising)
         self.last_beat: int | None = None
         self._pending_light = None                   # staged lighting change, applied on commit
+        self._roof_ctr: int | None = None            # last SafetyCounter seen (roof frames)
+        self._roof_streak = 0                        # counter increments observed (monotonic run)
+        self._roof_ctr_advanced = 0.0                # self.now when the counter last incremented
+        self._roof_dir: str | None = None            # "up" / "down" while a move frame is held
+        self._roof_last_frame = 0.0                  # self.now when the last roof frame arrived
+        self._roof_travel = 0.0                      # seconds of valid travel since the last step
+        self.now = 0.0                               # the unit's own clock, advanced by tick()
+        self._acc_minute = 0.0                       # sub-minute remainder for per-minute counters
+        self._last_t15: int | None = None            # ignition edge detector (tick)
         self.writes: list[tuple[str, bytes]] = []   # (function, frame) audit trail
         # Per-function STALE-read overrides: a read returns these until the 1003 heartbeat arms
         # the session (self.armed), after which the true `state` is returned — models the real
@@ -193,6 +205,109 @@ class MockCamperUnit:
         """Physical use (door/ignition) wakes the unit; it advertises again."""
         self.online = True
 
+    # --- the clock ------------------------------------------------------------
+    def tick(self, dt: float) -> set[str]:
+        """Advance the unit's own clock by ``dt`` seconds and move everything that moves on it.
+
+        Deterministic (no wall clock): tests call it directly, ``tools/applab/fake_unit_ble.py``
+        calls it once a second. Returns the functions whose state changed, for notification.
+
+        Modelled: the 1004 RTC (`CarTime*`), immediate-heating countdown (`RunningTimeinAction`
+        per minute, `NormalOperation` off at 0), the cooler start timer (`TimerCounter*` counts
+        down to `TimerHourSet:TimerMinSet`, then `State=1`, `TimerState=0`, `TimerElapsed=1`),
+        starter-battery age (`AgeOneBattValuesMinutes` +1/min while the ignition is off, 0 while
+        on, 255 cap), the ignition edge (terminal 15 rising sheds camping master and raises
+        `campingmode.Enable`; falling clears `Enable` — the coupling seen live 2026-09-16), and
+        roof travel (a held valid move steps `Position` every ``ROOF_STEP_S``; no frames for
+        ``ROOF_RELEASE_S`` = released).
+        """
+        import datetime as _dt
+        self.now += dt
+        changed: set[str] = set()
+        v = self.state.get("vehicle")
+        ign = bool(v.get("TerminalOneFive")) if v else False
+
+        # RTC — the fields are 1900-based year, then month/day/h/m/s.
+        if v and all(k in v for k in ("CarTimeYear", "CarTimeMonth", "CarTimeDay",
+                                       "CarTimeHour", "CarTimeMinute", "CarTimeSecond")):
+            try:
+                t = _dt.datetime(1900 + int(v["CarTimeYear"]), int(v["CarTimeMonth"]), int(v["CarTimeDay"]),
+                                 int(v["CarTimeHour"]), int(v["CarTimeMinute"]), int(v["CarTimeSecond"]))
+                t += _dt.timedelta(seconds=dt)
+                v.update(CarTimeYear=t.year - 1900, CarTimeMonth=t.month, CarTimeDay=t.day,
+                         CarTimeHour=t.hour, CarTimeMinute=t.minute, CarTimeSecond=t.second)
+                changed.add("vehicle")
+            except ValueError:
+                pass                                # garbage clock fields: leave them alone
+
+        # ignition edge -> camping + starter-battery freshness
+        if v is not None and self._last_t15 is not None and int(ign) != self._last_t15:
+            cm = self.state.get("campingmode")
+            if cm is not None:
+                cm["Enable"] = int(ign)
+                if ign:
+                    cm["State"] = 0            # the unit sheds camping master when terminal 15 rises
+                changed.add("campingmode")
+        if v is not None:
+            self._last_t15 = int(ign)
+        e = self.state.get("energy")
+        if e is not None and ign and e.get("AgeOneBattValuesMinutes", 0) != 0:
+            e["AgeOneBattValuesMinutes"] = 0
+            changed.add("energy")
+
+        # per-minute counters
+        self._acc_minute += dt
+        while self._acc_minute >= 60:
+            self._acc_minute -= 60
+            a = self.state.get("airheater")
+            if a is not None and a.get("NormalOperation"):
+                left = max(0, int(a.get("RunningTimeinAction") or 0) - 1)
+                a["RunningTimeinAction"] = left
+                if left == 0:
+                    a["NormalOperation"] = 0
+                changed.add("airheater")
+            if e is not None and not ign and "AgeOneBattValuesMinutes" in e:
+                e["AgeOneBattValuesMinutes"] = min(255, int(e["AgeOneBattValuesMinutes"]) + 1)
+                changed.add("energy")
+
+        # cooler start timer
+        c = self.state.get("cooler")
+        if c is not None and c.get("TimerState") == 1 and v is not None and "CarTimeHour" in v:
+            now_m = int(v["CarTimeHour"]) * 60 + int(v["CarTimeMinute"])
+            start_m = int(c.get("TimerHourSet") or 0) * 60 + int(c.get("TimerMinSet") or 0)
+            left = (start_m - now_m) % (24 * 60)
+            if left == 0 or left > 24 * 60 - 2:  # reached (allow the tick to overshoot slightly)
+                c.update(State=1, TimerState=0, TimerElapsed=1, TimerCounterHour=0, TimerCounterMin=0)
+            else:
+                c.update(TimerCounterHour=left // 60, TimerCounterMin=left % 60)
+            changed.add("cooler")
+
+        # roof: a counter that stopped arriving is no longer valid (the app reads a stale
+        # SafetyCounterValid=1 as "another user is operating the roof" — observed 2026-09-16)
+        r = self.state.get("roof")
+        if r is not None and r.get("SafetyCounterValid") and \
+                self.now - self._roof_last_frame > ROOF_COUNTER_STALE_S:
+            r["SafetyCounterValid"] = 0
+            self._roof_streak = 0
+            self._roof_dir = None
+            changed.add("roof")
+        # roof travel
+        if r is not None and self._roof_dir is not None:
+            if self.now - self._roof_last_frame > ROOF_RELEASE_S:
+                self._roof_dir = None            # released: frames stopped
+                self._roof_travel = 0.0
+            else:
+                self._roof_travel += dt
+                if self._roof_travel >= ROOF_STEP_S:
+                    self._roof_travel -= ROOF_STEP_S
+                    pos = r.get("Position", 0)
+                    if self._roof_dir == "up":
+                        r["Position"] = 1 if pos == 2 else (2 if pos in (0, 14) else pos)
+                    else:
+                        r["Position"] = 0 if pos == 2 else (2 if pos == 1 else pos)
+                    changed.add("roof")
+        return changed
+
     # --- control writes ----------------------------------------------------
     def write(self, uuid: str, data: bytes) -> None:
         if uuid == device.HEARTBEAT_CHAR:
@@ -209,6 +324,12 @@ class MockCamperUnit:
         #    value is rejected and the unit drops the ATT link (observed 0x0E).
         for cf in func.control_fields:
             if cf.placed and cf.name in ctrl:
+                # A 2-bit field at 3 is the leave-unchanged sentinel, not a value: the app's
+                # post-write neutral frame carries State=3 on every 2-bit field (cooler
+                # `ff771e3e1f1f`, heater `3f7b007f1f3f`) and the unit accepts it. Curated
+                # `valid` sets (cooler State {0,1}) constrain calictl's OWN commands, not that.
+                if cf.width == 2 and ctrl[cf.name] == LEAVE_UNCHANGED_2BIT:
+                    continue
                 try:
                     protocol.check_value(func, cf.name, cf.width, ctrl[cf.name], cf.valid)
                 except ValueError as e:
@@ -252,15 +373,68 @@ class MockCamperUnit:
                 self._pending_light = None
             return
 
+        # Roof (1401): the app streams `Up/Down/SafetyCounter` every ~500 ms while its roof page is
+        # open (direction 0 = just the counter). The unit raises `SafetyCounterValid` (1402 bit 7)
+        # once it sees the counter incrementing and only then honours a move; a restarted counter
+        # drops validity again (~3 s withhold on the real unit). Motion is modelled coarsely: one
+        # position step per valid move frame (closed 0 -> middle 2 -> open 1 and back).
+        if fn == "roof":
+            # SafetyCounter validity = the counter is MONOTONIC and still ADVANCING. The app's
+            # counter is seed + elapsed_ms/500, so it only increments every ~500 ms while frames
+            # arrive at ~500 ms idle and ~125 ms during a press (observed 2026-09-16) — several
+            # frames may carry the SAME value; a decrease/restart invalidates, as does no
+            # increment for ROOF_COUNTER_STALE_S. Two increments seen = validated.
+            ctr = ctrl.get("SafetyCounter")
+            if self._roof_ctr is None or ctr < self._roof_ctr:
+                self._roof_streak = 0                # first frame / restarted counter
+            elif ctr > self._roof_ctr:
+                self._roof_streak += 1
+                self._roof_ctr_advanced = self.now
+            self._roof_ctr = ctr
+            stale = self._roof_streak and (self.now - self._roof_ctr_advanced) > ROOF_COUNTER_STALE_S
+            if stale:
+                self._roof_streak = 0
+            st["SafetyCounterValid"] = 1 if self._roof_streak >= 2 else 0
+            up, down = ctrl.get("Up") == 1, ctrl.get("Down") == 1
+            new_dir = "up" if up and not down else "down" if down and not up else None
+            if new_dir != self._roof_dir:
+                self._roof_travel = 0.0
+            self._roof_dir = new_dir if st["SafetyCounterValid"] else None
+            self._roof_last_frame = self.now
+            return                                # motion itself happens on the clock: tick()
+
         for cf in func.control_fields:
             if not (cf.placed and cf.name in ctrl):
                 continue
             if cf.width == 2 and ctrl[cf.name] == LEAVE_UNCHANGED_2BIT:
                 continue                          # full-packet "leave unchanged" 2-bit sentinel
-            if func.state_field(cf.name) is None:
+            # Wider fields: the app fills every UNTARGETED field with the model's default (its
+            # `v()` value — heater HeatingLevel 11 / RunningTime 127 / TimerHour 31 / TimerMin 63,
+            # cooler Level 7 / TimerHour 30 ...), which the unit treats as "leave unchanged". Seen
+            # live 2026-09-16: the app's Dauerbetrieb-OFF frame is `0f7b007f1f3f`. Those defaults
+            # are all outside each field's valid range, so nothing legitimate is lost.
+            if cf.width > 2 and cf.default is not None and ctrl[cf.name] == cf.default:
+                continue
+            # `<X>Request` control bits drive the `<X>` state bit (NormalOperationRequest ->
+            # NormalOperation, PermanentOperationRequest -> PermanentOperation).
+            target = cf.name
+            if func.state_field(target) is None and target.endswith("Request"):
+                target = target[: -len("Request")]
+            # Cooler timer ACTIONS: TimerStart=1 arms the timer (TimerState=1), TimerCancel=1
+            # clears it — the app's frames carry only the action bit (f7771e3e1f1f, observed).
+            if fn == "cooler" and cf.name in ("TimerStart", "TimerCancel") and ctrl[cf.name] == 1 \
+                    and func.state_field("TimerState") is not None:
+                st["TimerState"] = 1 if cf.name == "TimerStart" else 0
+                continue
+            if func.state_field(target) is None:
                 continue                          # not a name-aligned control→state field
                                                   # (offset-remapped timers are NOT faked)
-            st[cf.name] = ctrl[cf.name]
+            st[target] = ctrl[cf.name]
+        # Immediate heating starts the run-time countdown: RunningTimeinAction (1702) mirrors the
+        # configured RunningTime while NormalOperation is on and reads 0 otherwise (the app's status
+        # bar shows "Active • N min remaining" from it — with 0 it says "0 min remaining").
+        if fn == "airheater" and func.state_field("RunningTimeinAction") is not None:
+            st["RunningTimeinAction"] = st.get("RunningTime", 0) if st.get("NormalOperation") else 0
 
 
 class _Char:

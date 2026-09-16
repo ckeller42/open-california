@@ -15,7 +15,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `cli` |
 | `protocol/dictionary.yaml` | extracted field map (14 functions, state+control); source of truth for bit layout |
 | `protocol/signals.yaml` | the **signal catalog** — surface/omit decision + provenance per field |
-| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `hooks/` |
+| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `applab/` (the **real app** in an emulator against `mock_unit` served over BLE — screens in any state + app-vs-calictl frame diffs; see its README), `hooks/` |
 | `tests/` | pytest; **must stay green**. `tests/e2e/` = Playwright over the mock daemon; every test fails on an uncaught JS error |
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) — the full provenance behind the terse "Known state" below |
 | `docs/superpowers/` | specs + plans |

@@ -211,6 +211,7 @@ window.STRINGS_DE = {
     "⚠ Aufstelldach manuell sichern (siehe Bedienungsanleitung)",
   "⚠ Function currently unavailable": "⚠ Funktion zurzeit nicht möglich",
   "⚠ Battery low — run the engine": "⚠ Batterie schwach — Motorlauf durchführen",
+  "Function currently in use": "Funktion wird gerade verwendet",
   "Roof control is safety-sensitive and not live-verified.":
     "Die Dachsteuerung ist sicherheitskritisch und nicht live-verifiziert.",
   "open": "öffnen",

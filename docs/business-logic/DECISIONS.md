@@ -8,6 +8,43 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-09-16 — the app lab: the real app runs against a fake unit built from our own mock
+
+`tools/applab/` puts the vendor's Android app (emulator, netsim Bluetooth) in front of
+`fake_unit_ble.py`, a Bumble peripheral that serves `tools/mock_unit.py` over the unit's real GATT
+layout. The app pairs (LE passkey; the fake unit displays 123456), runs its handshake, subscribes,
+heartbeats on `1003` every ~750 ms and renders our baseline frames exactly as calictl decodes them
+(14/29 l, 7/22 l, 100 % • 14 h, 13.6 V • −3.9 A). What it taught us in the first session:
+
+- **`1002` is the VIN fingerprint** `SHA-256(VIN)[16:32]` (was documented from the decompile, now
+  confirmed end-to-end: wrong value → "Wrong vehicle found", right value → pairing proceeds).
+- **The app fills untargeted fields with the model defaults** (the leave-unchanged sentinels, e.g.
+  heater `7b 00 7f 1f 3f`) and follows every write with a neutral all-sentinel frame 500 ms later.
+  Our mock applied 11/127 as values — fixed (`tests/test_mock_fidelity.py`); `<X>Request` bits now
+  drive `<X>` state; immediate heating loads `RunningTimeinAction`.
+- **The roof page streams the SafetyCounter** (`Up=0 Down=0`, +1 per ~500 ms) as soon as it opens
+  and needs `SafetyCounterValid` back — the mock now validates an incrementing counter and steps
+  `Position` per valid move frame. The page hides its controls without terminal 15.
+- **Roof `InfoPopUp` 2/3/12 = "Function currently in use", 9 = "Only possible when stationary"**
+  (tile texts, no dialog); 8/13/14 show nothing. Added as `in_use` / `not_stationary` (Influx codes
+  8/9, web block set, dashboard mapping).
+- **Heater page facts**: slider 1–9 + **HI** (so "HI" is the app's own label for level 10 — restored
+  in the web readout), run time **10–120** (min was UNRESOLVED), no confirmation on immediate ON, the
+  Permanent-Heating switch is always present and inert-greyed when off (#182 matches).
+- **Lighting is byte-identical for All-lights** (`SET_PROFILE 12` + `0e00…` commit); a lamp icon
+  tap writes that lamp's nibble at **11 = DEFAULT** (calictl's "on" uses 10). Tapping every lamp
+  gave the app's lamp → frame-nibble map (Left/Right/Front Passenger = positions 1/2/3, Rear
+  Surroundings 4, Kitchen Background 6, Cooking 8, Roof Background 7, Roof Reading 10, Entrance
+  11, nothing at 5) — **exactly calictl's DEVICE-verified `LIGHT_ZONES`** once the dictionary's
+  odd-in-the-low-nibble layout is applied (position 1 = `LTwo` = `reading-1`, …). The lamp map is
+  now confirmed from both ends; the app exposes no lamp for `kitchen-cabinet` (`LSix`).
+- **Cooler**: OFF `fc771e3e1f1f`, manual quiet `ff271e3e1f1f`, automatic `ff471e3e1f1f`, timer
+  start `f7771e3e1f1f` — the app leaves `State`/`NightTimerSet` at sentinel 3 and never carries
+  timer hours unless that picker was touched; the Timer switch is inert while the box is on.
+  Camping master OFF `fc` is byte-identical to calictl's.
+- The fake unit drops a link with no `1003` heartbeat for 15 s: without that, Android's stale
+  bonded connection kept the peripheral from advertising and the app reported "No vehicle found".
+
 ## 2026-09-16 — continuous heating is an OFF-only switch (no general heater master exists)
 
 Owner asked whether the app has a general heater on/off besides "Sofortheizen". Re-trace of the

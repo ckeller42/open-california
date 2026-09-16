@@ -141,6 +141,55 @@ ATT link** on out-of-range values (cooler `State=3` and lighting `ProfileNumber=
 both → `0x0E`/disconnect). The app does no client-side clamp; validation is firmware-side.
 Mitigation: `protocol.encode` validates every value against its bit-width **and** a curated
 semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` reports coverage.
+Nuance (APP-OBSERVED 2026-09-16, `tools/applab`): the app's own post-write **neutral frame**
+carries every 2-bit field at the sentinel `3` — cooler `ff771e3e1f1f`, heater `3f7b007f1f3f` —
+and its targeted frames carry every untargeted wider field at the model default (cooler Level 7 /
+Mode 7 / TimerHour 30 / TimerMin 62 / NightTimer 31). The unit accepts those from the app, so
+`State=3` *as a leave-unchanged sentinel* is legal; `CONTROL_RANGES` constrains what calictl
+sends as a **command** (never 3), and the 2026-07-05 `0x0E` drop is left as observed. The mock
+(`tools/mock_unit.py`) accepts the sentinel frames like the unit does.
+
+**App-vs-calictl frame diff (APP-OBSERVED 2026-09-16, `tools/applab`).** Same fake unit, the
+app's write vs `control.build()` for the same intent. The **targeted** field is identical in every
+row; the two differ only in how untargeted fields ride along — the app at each field's model
+default (= leave-unchanged sentinel), calictl re-asserting the current decoded value. Both are
+accepted by the unit; calictl's choice re-writes what is already there (harmless, but it means a
+stale read would be re-asserted — see the "carry current state" note in `_cooler_values`).
+
+| Intent | App frame (then neutral +500 ms) | calictl frame | Targeted field |
+|---|---|---|---|
+| camping master OFF | `fc` → `ff` | `fc` | `State=0` — **identical** |
+| heater immediate ON | `3d7b007f1f3f` → `3f7b007f1f3f` | `3d05003c0c00` | `NormalOperationRequest=1` |
+| heater continuous OFF | `0f7b007f1f3f` → neutral | `0f05003c0c00` | `PermanentOperationRequest=0` |
+| cooler OFF | `fc771e3e1f1f` → `ff771e3e1f1f` | `3c4309001606` | `State=0` |
+| cooler manual quiet | `ff271e3e1f1f` | `3d2309001606` | `Mode=2` |
+| cooler automatic quiet | `ff471e3e1f1f` | `3d4309001606` | `Mode=4` |
+| cooler timer start (box off) | `f7771e3e1f1f` | `354309001606` | `TimerStart=1` — app leaves `TimerHour/Min` at 30/62 (the time is written separately when the picker changes) |
+
+| lighting All lights ON | `0c10000000000000eeeeeeeeeeeeeeee` → commit `0e00…ee` | same two frames (`power on` + `LIGHT_COMMIT`) | `SET_PROFILE 12` — **byte-identical** |
+| lighting lamp icon tap (e.g. Left) | `0904000000000000beeeeeeeeeeeeeee` → commit | `reading-1 5` → `0904…5eee…` | `ProfileNumber=9, Mode=4`, one zone nibble — app writes **11 = DEFAULT**, calictl's "on" writes 10 (100 %) |
+| energy mode → Max | `10` → `30` | `10` | `EnergyModeSet=1` — **identical** (the app's selector offered only *Normal* / *Max* on this vehicle profile; *ECO* is availability-gated, `zj/c.N0`) |
+| lighting profile A long-press (save) | `010400000000000000000000e00eeeee` → commit → `0d0c000000000000eeeeeeeeeeeeeeee` → commit | `save_profile 1` → **identical first frame** + `LIGHT_COMMIT` | `ProfileNumber=1, Mode=4` with every real zone's current level; the app then re-pulls config with `REQUEST_CONFIG`(12) at `ProfileNumber=13` (calictl does not — not needed for the save itself). A short tap on an empty slot only shows "Please press and hold". |
+
+Two systematic differences worth knowing: the app leaves cooler `State` and `NightTimerSet` at the
+sentinel `3` in every non-power frame, while calictl writes `State=<current>` and
+`NightTimerSet=0`; and the app never carries timer/night hours — it sends 30/62/31 (sentinels)
+unless that picker was the control touched.
+
+**The app's lamp → frame-nibble map (California/Ocean, tapping every lamp icon, 2026-09-16)**,
+nibble position 1–16 counted from byte 8's high nibble: Reading *Left* 1, *Right* 2, *Front
+Passenger* 3; Exterior *Rear Surroundings* 4, *Entrance* 11; Kitchen *Background Lighting* 6,
+*Cooking* 8; Pop-up roof *Background Lighting* 7, *Reading Light* 10 (its icon writes nothing while
+the roof is closed — "Only available when the pop-up roof is open"); position 5 is touched by no
+lamp (calictl's `kitchen-cabinet`, which the app does not expose). Group icons write all their
+lamps at once (Reading 1+2+3, Kitchen 6+8, Roof 7+10, Exterior 4+11). The dictionary places the
+odd-numbered `BrightnessL<n>` in the LOW nibble of each byte (byte 8 = `L2|L1`, byte 9 = `L4|L3`,
+…), so those positions are exactly calictl's DEVICE-verified `control.LIGHT_ZONES`: Left = `LTwo`
+(`reading-1`), Right = `LOne`, Front Passenger = `LFour` (`reading-3`), Rear Surroundings = `LThree`
+(`outside-rear`), kitchen Background = `LFive` (`kitchen-ambient`), Cooking = `LSeven`, roof
+Background = `LEight`, roof Reading = `LNine`, Entrance = `LOneTwo` — **the app confirms every lamp
+of the map** (see `lighting-energy-water-sat-roof.md` §lamp map; the open question there is only
+the owner's 2026-08-27 "roof light moved L5" observation, which the app's map does not support).
 
 ---
 

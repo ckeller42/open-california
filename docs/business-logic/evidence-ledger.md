@@ -57,6 +57,19 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 - air-heater run-time cap 120 min + ErrorCode IDs 1–5; cooler quiet-needs-ON / timer-needs-OFF
   gates — DECOMPILE + string tables (2026-09-16, `rf/b.java`, `infoPage_heating_immediate_description`,
   `coolboxPage_*` strings). Not live-provoked.
+- **APP-OBSERVED tier (new, 2026-09-16):** the real CaliforniaOnTour app running in an Android
+  emulator against `tools/applab/fake_unit_ble.py` (a Bumble peripheral serving `tools/mock_unit.py`).
+  Not the unit — but the app's genuine frames, dialogs and gates. Rows: `1002` = `SHA-256(VIN)[16:32]`
+  (mismatch → "Wrong vehicle found"); heater ON `3d7b007f1f3f` + neutral `3f7b007f1f3f` @ +500 ms,
+  continuous-heating OFF `0f7b007f1f3f`, untargeted fields at their defaults; roof page streams
+  `Up=0 Down=0 SafetyCounter+1` every ~500 ms and requires `SafetyCounterValid`; roof `InfoPopUp`
+  1–15 → dialog/tile texts (2/3/12 in use, 9 not stationary, 8/13/14 nothing); heater sliders 1–9+HI
+  and 10–120; `1003` heartbeat cadence ~750 ms while the app is connected; lighting All-lights
+  frames byte-identical to calictl's, lamp taps write nibble value 11 (DEFAULT), and the app's lamp →
+  nibble positions confirm calictl's DEVICE-verified `LIGHT_ZONES` for all nine app lamps (the
+  cabinet light `LSix` has no app control); cooler
+  OFF/quiet/timer frames and camping master OFF (`fc`, identical) as tabled in
+  `control-and-actuation.md`.
 - energy current scales — DECOMPILE (2026-09-07): `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` ÷10 → A
   (`xf/d.java:159,173,175`, holders bound `xf/a.java:150-157,239,307`), `IDcdcAfs` unscaled A + the
   SW-0409/0410 `+2` (`xf/d.java:171`). Plausibility from 14 d telemetry: `batt2_current` raw −49…318

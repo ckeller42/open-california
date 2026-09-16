@@ -362,10 +362,14 @@ const ROOF_ALERT_MSG = {
   emergency_locked: "⚠ Secure the pop-up roof manually (see operating manual)",
   not_possible: "⚠ Function currently unavailable",
   low_battery: "⚠ Battery low — run the engine",
+  in_use: "Function currently in use",
+  not_stationary: "Only possible when stationary",
 };
-// The subset of roof alerts on which the app refuses a MOVE (ig/c.java j()). sensor_error is
-// deliberately absent: the app shows it but still allows open/close.
-const ROOF_MOVE_BLOCK = new Set(["child_lock", "error", "driving", "emergency_locked", "not_possible", "low_battery"]);
+// The subset of roof alerts on which the app refuses a MOVE (ig/c.java j(), plus the in-use /
+// not-stationary tile states observed on the real app 2026-09-16). sensor_error is deliberately
+// absent: the app shows it but still allows open/close.
+const ROOF_MOVE_BLOCK = new Set(["child_lock", "error", "driving", "emergency_locked", "not_possible", "low_battery",
+                                 "in_use", "not_stationary"]);
 
 /**
  * Terminal-15 (ignition) — the vehicle char (1004 `TerminalOneFive`, bit 7) is the authoritative
@@ -469,14 +473,16 @@ const FEATURES = {
       { what: "permanent", kind: "toggle", label: "Continuous heating", state: "permanent",
         disabled: (s) => !optOn("airheater", "permanent", !!s.permanent) && "Can only be started from inside the vehicle",
         confirm: (v) => (v === "off" ? t("Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?") : null) },
+      // The app's temperature scale is 1–9 + "HI" (level 10); its run-time slider spans 10–120 min
+      // (both observed on the app's heater page, tools/applab 2026-09-16).
       { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: 1, max: 10 },
-      { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 0, max: 120, unit: "min" },
+      { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 10, max: 120, unit: "min" },
       { what: "timer", kind: "time", label: "Start heating at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
           ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null },
     ],
     readouts: [
-      { label: "Heating temperature", get: (s) => (s.level == null ? "—" : `${t("Level")} ${s.level}`) },
+      { label: "Heating temperature", get: (s) => (s.level == null ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
       { label: "Run time", get: (s) => withUnit(s.running_time, "min") },
       // RunningTimeinAction only counts down while heating; parked it just echoes the configured
       // run time (60 = 60 live), which would read as "60 min left" on an idle heater.
@@ -1312,6 +1318,8 @@ const LIGHT_LAMPS = [
     { label: "Front passenger", what: "reading-3", zone: 4 } ] },
   { group: "Kitchen", lamps: [
     { label: "Background lighting", what: "kitchen-ambient", zone: 5 },
+    // Web-only lamp: the app has no control for L6, but it is real (DEVICE 2026-08-30, owner
+    // re-confirmed 2026-09-16) — keep it.
     { label: "Cabinet", what: "kitchen-cabinet", zone: 6 },
     { label: "Cooking", what: "kitchen", zone: 7 } ] },
   { group: "Pop-up roof", lamps: [

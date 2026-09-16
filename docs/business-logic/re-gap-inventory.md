@@ -141,7 +141,10 @@ Full GATT + identity read from buspi (app closed). Bearing on "can we get the fi
   the repo carries only a placeholder.)
 - **Identity chars:** `1001` SW versions = `303431303032303702` → ASCII "0410"/"0207" + `0x02`
   ⇒ **AmbSwVersion "0410", CmSwVersion "0207", CommunicationVersion 2**. `1004` car-variant =
-  `047e060717142a…`. **`1002` "VIN" returns 16 opaque high-entropy bytes**
+  `047e060717142a…`. **`1002` "VIN" returns 16 high-entropy bytes = `SHA-256(VIN)[16:32]`** (the app's
+  "wrong vehicle" check hashes the VIN the user typed and compares — `ny/c.java` case 8; CONFIRMED
+  2026-09-16 by running the app against `tools/applab/fake_unit_ble.py`: a mismatching value stops it
+  with "Wrong vehicle found", the matching tail-16 lets it pair) —
   (`071dbddf…dfc6`), **NOT a plaintext VIN** — encrypted/hashed vehicle id; no readable VIN or
   part number is exposed over BLE (so official flash-file lookup can't be seeded from BLE alone).
 - **New: `F000` has `F001`[read] + `F002`[WRITE], and the app references `F002` NOWHERE**

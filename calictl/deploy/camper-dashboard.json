@@ -921,6 +921,12 @@
         },
         "7": {
          "text": "Driving"
+        },
+        "8": {
+         "text": "In use"
+        },
+        "9": {
+         "text": "Not stationary"
         }
        }
       }

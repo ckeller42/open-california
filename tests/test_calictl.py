@@ -215,8 +215,11 @@ def test_roof_position_name_and_infopopup_alert():
     for pos, name in [(0, "closed"), (1, "open"), (2, "middle"), (14, "closed"),
                       (15, "error"), (7, "other")]:
         assert semantics.roof({**base, "Position": pos})["position_name"] == name
-    for raw, alert in [(0, None), (1, "child_lock"), (4, "error"), (6, "sensor_error"),
-                       (7, "emergency_locked"), (10, "not_possible"), (11, "low_battery")]:
+    for raw, alert in [(0, None), (1, "child_lock"), (4, "error"), (5, "driving"), (6, "sensor_error"),
+                       (7, "emergency_locked"), (10, "not_possible"), (11, "low_battery"),
+                       # observed on the real app (tools/applab, 2026-09-16): tile texts, no dialog
+                       (2, "in_use"), (3, "in_use"), (12, "in_use"), (9, "not_stationary"),
+                       (8, None), (13, None), (14, None)]:
         assert semantics.roof({**base, "Position": 0, "InfoPopUp": raw})["alert"] == alert
     # not installed -> no alert even if the field is non-zero (matches the app's install gate)
     assert semantics.roof({"Installed": 0, "Position": 0, "InfoPopUp": 4})["alert"] is None
@@ -421,6 +424,8 @@ def test_numeric_fields_alert_enums_become_codes():
     assert influx.numeric_fields({"fault": None})["fault_code"] == 0.0
     assert influx.numeric_fields({"alert": "child_lock"})["alert_code"] == 1.0
     assert influx.numeric_fields({"alert": "low_battery"})["alert_code"] == 6.0
+    assert influx.numeric_fields({"alert": "in_use"})["alert_code"] == 8.0          # appended 2026-09-16
+    assert influx.numeric_fields({"alert": "not_stationary"})["alert_code"] == 9.0
     assert influx.numeric_fields({"alert": None})["alert_code"] == 0.0
 
 
