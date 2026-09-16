@@ -254,6 +254,32 @@ def test_tick_fires_the_cooler_timer_at_its_start_time():
     assert c["State"] == 1 and c["TimerState"] == 0 and c["TimerElapsed"] == 1
 
 
+def test_heater_timer_arm_frame_arms_and_fires_at_the_start_time():
+    """The app's "Start timer" frame (3f3b017f1f3f: Mode=3, Combined=1) must land as
+    OperationModeAirHeater=3 in the state (the app re-reads it as "Timer: On"); "Stop"
+    (3f0b007f1f3f) clears it. Armed, the clock fires the heater at TimerHour:TimerMin
+    (modelled: NormalOperation=1, countdown loaded, Mode back to 0 — the unit's own
+    post-fire Mode value is UNVERIFIED)."""
+    u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 9, "CarTimeDay": 16,
+                             "CarTimeHour": 11, "CarTimeMinute": 59, "CarTimeSecond": 0},
+                    airheater={"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0,
+                               "HeatingLevel": 5, "RunningTime": 60, "RunningTimeinAction": 0,
+                               "OperationModeAirHeater": 0, "OperationModeCombined": 0,
+                               "TimerHour": 12, "TimerMin": 0})
+    ch = _funcs()["airheater"].control_char
+    u.write(ch, bytes.fromhex("3f3b017f1f3f"))
+    a = u.decoded("airheater")
+    assert (a["OperationModeAirHeater"], a["OperationModeCombined"], a["NormalOperation"]) == (3, 1, 0)
+    u.write(ch, bytes.fromhex("3f0b007f1f3f"))
+    assert u.decoded("airheater")["OperationModeAirHeater"] == 0
+    u.write(ch, bytes.fromhex("3f3b017f1f3f"))
+    u.tick(30)
+    assert u.decoded("airheater")["NormalOperation"] == 0            # 11:59:30 — not yet
+    u.tick(31)
+    a = u.decoded("airheater")
+    assert a["NormalOperation"] == 1 and a["RunningTimeinAction"] == 60 and a["OperationModeAirHeater"] == 0
+
+
 def test_ignition_couples_into_camping_and_battery_age():
     u = _armed_unit(vehicle={"TerminalOneFive": 0, "CarTimeYear": 126, "CarTimeMonth": 9,
                              "CarTimeDay": 16, "CarTimeHour": 8, "CarTimeMinute": 0, "CarTimeSecond": 0},

@@ -283,6 +283,19 @@ class MockCamperUnit:
                 c.update(TimerCounterHour=left // 60, TimerCounterMin=left % 60)
             changed.add("cooler")
 
+        # heater departure timer: armed by the app's `3f3b017f1f3f` (OperationModeAirHeater=3,
+        # observed 2026-09-16); at TimerHour:TimerMin the heater starts for RunningTime minutes.
+        # The unit's own post-fire Mode value is UNVERIFIED — modelled as back to 0 (consumed).
+        a = self.state.get("airheater")
+        if a is not None and a.get("OperationModeAirHeater") == 3 and v is not None and "CarTimeHour" in v:
+            now_m = int(v["CarTimeHour"]) * 60 + int(v["CarTimeMinute"])
+            start_m = int(a.get("TimerHour") or 0) * 60 + int(a.get("TimerMin") or 0)
+            left = (start_m - now_m) % (24 * 60)
+            if left == 0 or left > 24 * 60 - 2:
+                a.update(NormalOperation=1, OperationModeAirHeater=0,
+                         RunningTimeinAction=a.get("RunningTime", 0))
+                changed.add("airheater")
+
         # roof: a counter that stopped arriving is no longer valid (the app reads a stale
         # SafetyCounterValid=1 as "another user is operating the roof" — observed 2026-09-16)
         r = self.state.get("roof")

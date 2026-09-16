@@ -41,8 +41,11 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | Intent | App frame | calictl frame | Verdict |
 |---|---|---|---|
 | camping master OFF | `fc` | `fc` | OBSERVED identical |
-| heater immediate ON / OFF | `3d7b007f1f3f` / `3c7b007f1f3f` | `3d05003c0c00` (current values) | CONSISTENT (targeted bits equal; matches the 2026-07-08 HCI capture) |
-| heater continuous OFF | `0f7b007f1f3f` after the confirm dialog | `0f05003c0c00` | CONSISTENT; no ON write exists (switch inert when off) |
+| heater immediate ON / OFF | `3d7b007f1f3f` / `3c7b007f1f3f` | `3d7b007f1f3f` / `3c7b007f1f3f` | OBSERVED identical (was CONSISTENT-only while calictl carried the readback's level/run-time; since 2026-09-16 every untargeted heater field is the app's sentinel) |
+| heater continuous OFF | `0f7b007f1f3f` after the confirm dialog | `0f7b007f1f3f` | OBSERVED identical; no ON write exists (switch inert when off) |
+| heater temperature / run-time sliders | `3f78007f1f3f` (level 8) / `3f7b003c1f3f` (60 min) | same | OBSERVED identical |
+| heater **departure timer** arm / stop | "Start timer" → `3f3b017f1f3f` (`OperationModeAirHeater=3`, `OperationModeCombined=1`); "Stop" → `3f0b007f1f3f` (Mode 0); status bar "Inactive • Timer: 12:00" only while armed | `timer_start` / `timer_cancel` → same bytes (new 2026-09-16) | OBSERVED → **the doc's "a2() is combined-heater-only / no heater timer trigger exists" claim was wrong**; `a2(AIR_HEATER)` IS the timer arm on this AirHeater-only van (`uh/d.java` toggle → `rf/b.java` a2/j4) |
+| heater run-time picker / timer time picker | "Start heating at" wheel: swipes did not move it in the emulator (no frame captured); the slider path `B0` stays decompile-verified | `timer HH:MM` → `3f7b007f161e` | NOT TESTED (picker interaction) |
 | cooler OFF / manual / automatic quiet | `fc771e3e1f1f` / `ff271e3e1f1f` / `ff471e3e1f1f` | `3c4309001606` / `3d2309001606` / `3d4309001606` | CONSISTENT (Mode 2 / 4 confirmed) |
 | cooler timer start | `f7771e3e1f1f` (box off only; hours at sentinel) | `354309001606` | CONSISTENT |
 | lighting All lights ON | `0c10…eeee…` + `0e00…` | same | OBSERVED identical |

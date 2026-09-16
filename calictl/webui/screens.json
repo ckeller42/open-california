@@ -458,8 +458,8 @@
           "label": "Start timer",
           "range": null,
           "controls": {
-            "field": "TimerHour/TimerMin",
-            "action": "B0"
+            "field": "TimerHour/TimerMin (B0); OperationModeAirHeater+OperationModeCombined (a2 arm / j4 stop)",
+            "action": "B0, a2, j4"
           }
         },
         {

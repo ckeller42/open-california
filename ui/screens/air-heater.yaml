@@ -73,12 +73,12 @@ widgets:
     type: timer
     label_key: airHeaterPage_timerWidget_startTimer_text
     range: null
-    controls: {field: "TimerHour/TimerMin", action: B0}
+    controls: {field: "TimerHour/TimerMin (B0); OperationModeAirHeater+OperationModeCombined (a2 arm / j4 stop)", action: "B0, a2, j4"}
     elements:
       - afterTheTimerIsActivated_text
       - heatingWillStart_text
       - startHeatingAt_text
-    constraints: "UNVERIFIED — no distinct start/cancel *_button keys found for this widget (unlike coolbox's timerWidget); starting/cancelling the heating timer may be driven through imediateHeatingWidget's toggle and/or the applyDialog instead"
+    constraints: "OBSERVED on the running app 2026-09-16 (tools/applab): expander row 'Timer: Off/On'; body = explanatory text ('After the timer is activated, the heating starts tomorrow at HH:MM and stays on for N min' / armed: 'The heating starts tomorrow at HH:MM and stays on for N min'), 'Start heating at: HH:MM' picker row, then ONE button — 'Start timer' when off, 'Stop' when armed. Start timer -> uh/d -> rf/b.a2(AIR_HEATER) = OperationModeAirHeater 3 + OperationModeCombined 1 (frame 3f3b017f1f3f); Stop -> j4 = Mode 0 (3f0b007f1f3f). Page status bar reads 'Inactive • Timer: HH:MM' only while armed. No confirm dialog on this path. calictl: timer_start / timer_cancel + semantics timer_armed."
 
   - id: permanentHeatingWidget
     type: toggle

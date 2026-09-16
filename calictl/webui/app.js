@@ -47,6 +47,7 @@
  * @property {boolean} [quiet_scheduled]
  * @property {number|null} [timer_hour]
  * @property {number|null} [timer_min]
+ * @property {boolean} [timer_armed]
  * @property {string|null} [fault]
  * @property {boolean} [door_open]
  * @property {boolean|string|null} [error]   // cooler: any-fault boolean; airheater: named ErrorCode
@@ -462,7 +463,7 @@ const FEATURES = {
     title: "Air heater", icon: "🔥",
     // Fuel-burning: every START prompts. Turning continuous heating OFF is the one write here that
     // can't arm anything, and it has its own prompt below — no feature-level one on top.
-    confirm: (w, v) => (w === "permanent" ? null : tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w })),
+    confirm: (w, v) => (w === "permanent" || w === "timer_cancel" ? null : tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w })),
     controls: [
       // "Immediate heating" = NormalOperation (start now, for `runtime` minutes).
       { what: "power", kind: "toggle", label: "Immediate heating", state: "running" },
@@ -480,6 +481,11 @@ const FEATURES = {
       { what: "timer", kind: "time", label: "Start heating at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
           ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null },
+      // The app's timer widget: "Start timer" arms the departure timer (OperationModeAirHeater=3 +
+      // OperationModeCombined=1, frame 3f3b017f1f3f), "Stop" clears it (Mode=0, 3f0b007f1f3f) —
+      // app-observed 2026-09-16. Armed, the heater starts at "Start heating at" for "Run time".
+      { what: "__heattimer", kind: "buttons", label: "Timer",
+        actions: [{ what: "timer_start", label: "Start timer" }, { what: "timer_cancel", label: "Stop timer" }] },
     ],
     readouts: [
       { label: "Heating temperature", get: (s) => (s.level == null ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
@@ -487,8 +493,9 @@ const FEATURES = {
       // RunningTimeinAction only counts down while heating; parked it just echoes the configured
       // run time (60 = 60 live), which would read as "60 min left" on an idle heater.
       { label: "Remaining", get: (s) => (s.running ? withUnit(s.running_time_remaining, "min") : "—") },
-      { label: "Timer start", get: (s) => (s.timer_hour != null && s.timer_min != null && (s.timer_hour || s.timer_min))
-        ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : "off" },
+      // The unit's own "Timer: On/Off" row: armed = Mode 3 (semantics.timer_armed), not merely a set time.
+      { label: "Timer", get: (s) => (s.timer_armed && s.timer_hour != null && s.timer_min != null)
+        ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : onoff(false) },
       { label: "Error", get: (s) => (s.error ? `${t(AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || String(s.error))} (${s.error_code})` : t("none")) },
     ],
     warn: (s) => (s.error ? AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || `⚠ Heater error ${s.error_code}` : null),
@@ -501,7 +508,8 @@ const FEATURES = {
         if (s.running_time_remaining != null) return tf("Active • {n} min remaining", { n: s.running_time_remaining });
         return /** @type {string} */ (t("Active"));
       }
-      const timer = (s.timer_hour != null && s.timer_min != null && (s.timer_hour || s.timer_min))
+      // "• Timer: HH:MM" only while ARMED (the app drops it after "Stop" even with a time set).
+      const timer = (s.timer_armed && s.timer_hour != null && s.timer_min != null)
         ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null;
       return timer ? tf("Inactive • Timer: {t}", { t: timer }) : /** @type {string} */ (t("Inactive"));
     },

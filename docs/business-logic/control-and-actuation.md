@@ -161,10 +161,12 @@ stale read would be re-asserted — see the "carry current state" note in `_cool
 | camping master OFF | `fc` → `ff` | `fc` | `State=0` — **identical** |
 | camping lights ON (front-door row icon) | `0f` → `ff` | `lights on` → `0f` | both light bits written 0 = lit (the inverted pair) — **identical**; the "sliding door → rear interior lights" row is display-only (no write on tap) |
 | camping rear USB OFF | `f3` → `ff` | `usb off` → `f3` | `UsbCharger=0` — **identical** |
-| heater immediate ON | `3d7b007f1f3f` → `3f7b007f1f3f` | `3d05003c0c00` | `NormalOperationRequest=1` |
-| heater continuous OFF | `0f7b007f1f3f` → neutral | `0f05003c0c00` | `PermanentOperationRequest=0` |
-| heater temperature slider → 8 | `3f78007f1f3f` → neutral | `level 8` → `3f78003c0c00` | `HeatingLevel=8` (no dialog while inactive) |
-| heater run-time slider → 60 | `3f7b003c1f3f` → neutral | `runtime 60` → `3f75003c1f3f`-style (current level carried) | `RunningTime=60` |
+| heater immediate ON | `3d7b007f1f3f` → `3f7b007f1f3f` | `3d7b007f1f3f` | `NormalOperationRequest=1` — **identical** (calictl sends the app's sentinels for every untargeted heater field since 2026-09-16; it used to carry the readback's level/run-time/Mode) |
+| heater continuous OFF | `0f7b007f1f3f` → neutral | `0f7b007f1f3f` | `PermanentOperationRequest=0` — **identical** |
+| heater temperature slider → 8 | `3f78007f1f3f` → neutral | `level 8` → `3f78007f1f3f` | `HeatingLevel=8` — **identical** (no dialog while inactive) |
+| heater run-time slider → 60 | `3f7b003c1f3f` → neutral | `runtime 60` → `3f7b003c1f3f` | `RunningTime=60` — **identical** |
+| heater **Start timer** | `3f3b017f1f3f` → neutral | `timer_start` → `3f3b017f1f3f` | `OperationModeAirHeater=3` + `OperationModeCombined=1` (AIR_HEATER) — **identical**; the page's toggle `uh/d` → `rf/b` `a2(AIR_HEATER)`. The unit then shows "Timer: On" / status "Inactive • Timer: HH:MM" |
+| heater timer **Stop** | `3f0b007f1f3f` → neutral | `timer_cancel` → `3f0b007f1f3f` | `OperationModeAirHeater=0` (`j4`) — **identical**; status back to "Inactive" |
 | cooler OFF | `fc771e3e1f1f` → `ff771e3e1f1f` | `3c4309001606` | `State=0` |
 | cooler manual quiet | `ff271e3e1f1f` | `3d2309001606` | `Mode=2` |
 | cooler automatic quiet | `ff471e3e1f1f` | `3d4309001606` | `Mode=4` |
@@ -206,7 +208,7 @@ the owner's 2026-08-27 "roof light moved L5" observation, which the app's map do
 | **cooler** | `power` on/off, `level` 1-5, `mode` (incl. `timer_quiet`=scheduled), `night_on`/`night_off` 0-23, timers | ✅ actuates (schedule live 2026-08-26) | State 0↔1, Level applied. Scheduled quiet = **Mode 4** (the unit's "Automatischer Flüstermodus" toggle; manual = Mode 2); the window is `NightTimerHourOn/Off`, stored on the unit (survive reconnects) and **broadcast on 1102**. ⚠️ Hour bytes are LITERAL — every write must carry the current schedule (`_cooler_values` does; hard-coded 0s used to clobber it). No `night_set` command: the app never writes cooler `NightTimerSet` (that state bit is read-only/unit-driven; arm via `mode timer_quiet`). |
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates **when stationary** | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). **REFUSED while driving** — see the stationary gate below. |
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
-| **airheater** | `power`, `level` 1-10 | untested | Installed; frame fixed (`re-gap-inventory.md` §A3); buspi was offline. |
+| **airheater** | `power`, `level` 1-10, `runtime` 0-120, `timer` HH:MM, `timer_start`/`timer_cancel`, `permanent` off | frames identical to the app's (applab 2026-09-16); not live-verified on the van | Installed; every untargeted field is the app's sentinel (nothing carried from the readback). |
 | **roof** | wired (`control._roof` + `device.actuate_roof`: press-and-hold ~500 ms SafetyCounter stream, auto-stop at the limit) | installed, never driven | Pop-top IS installed (live `Installed=1`, 2026-08-26 — the earlier "not installed here" claim was wrong, issue #106). Protocol-correct (decompile + capture, §3) + needs ignition ON; the motor has NEVER been driven by calictl. |
 | roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
 
@@ -321,8 +323,9 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | DV |
 | cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | DV |
 | airheater | `power` / `level` | NormalOperationRequest 1/0 / HeatingLevel | `rf/b` C2/q4 | live (power capture 07-08) |
-| airheater | `runtime` | RunningTime (min) | `rf/b` D4 | DV |
+| airheater | `runtime` | RunningTime (min) | `rf/b` D4 | APP-OBSERVED (`3f7b003c1f3f` identical) |
 | airheater | `timer` | TimerHour:TimerMin (HH:MM) | `rf/b` B0 | DV |
+| airheater | `timer_start` / `timer_cancel` | OperationModeAirHeater 3 (+ OperationModeCombined 1) / 0 | `rf/b` a2(AIR_HEATER) / j4 via `uh/d` | APP-OBSERVED (`3f3b017f1f3f` / `3f0b007f1f3f` identical) |
 | energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | DV |
 | lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |
 | lighting | `profile` | SET_PROFILE, ProfileNumber (Fav 1-7, 10 wake, 11 interior) | `dg/h` u0 | DV (activate) |

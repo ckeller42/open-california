@@ -183,6 +183,10 @@ def airheater(d: dict) -> dict:
         "error_code": err,
         "error": None if not err else _AIRHEATER_ERROR.get(err, "unknown"),
         "mode": d.get("OperationModeAirHeater"),
+        # Mode 3 = departure timer ARMED (the app's a2() writes it for "Start timer", j4() writes 0
+        # for "Stop"; readback drives its "Timer: On" row + "Inactive • Timer: HH:MM" status bar —
+        # app-observed 2026-09-16). Other values (1/2 running states?) stay UNVERIFIED.
+        "timer_armed": d.get("OperationModeAirHeater") == 3,
         "air_distribution": d.get("AirDistribution"),
         "running_time": d.get("RunningTime"),           # configured run duration (min)
         # Timer readback the unit reports (state char 1702; cross-checked bit-exact vs the app's
