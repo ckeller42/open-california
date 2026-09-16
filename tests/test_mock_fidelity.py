@@ -193,6 +193,19 @@ def test_roof_travels_on_the_clock_while_a_valid_move_is_held():
     assert u.decoded("roof")["Position"] == 0
 
 
+def test_subscribe_pushes_the_current_value_once():
+    """Real unit (buspi trace 2026-09-16): enabling notifications on a state char yields one
+    notification with the current frame; nothing streams afterwards without a change."""
+    import asyncio
+
+    from tools.mock_unit import MockBleakClient
+    u = _armed_unit(cooler={"Installed": 1, "State": 1, "Level": 3, "Mode": 4})
+    client = MockBleakClient.bind(u)("MO:CK")
+    got = []
+    asyncio.run(client.start_notify(u.funcs["cooler"].state_char, lambda ch, data: got.append(bytes(data))))
+    assert len(got) == 1 and got[0] == u.read(u.funcs["cooler"].state_char)
+
+
 def test_tick_advances_the_vehicle_clock():
     u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 8, "CarTimeDay": 28,
                              "CarTimeHour": 23, "CarTimeMinute": 59, "CarTimeSecond": 30,

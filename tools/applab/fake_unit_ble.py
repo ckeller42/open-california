@@ -150,13 +150,15 @@ class FakeUnit:
 
     async def clock(self) -> None:
         """Drive the mock's clock once a second (RTC, countdowns, roof travel, ignition coupling —
-        see ``MockCamperUnit.tick``) and notify what changed. Energy (1602) is pushed every tick
-        regardless: the real unit streams it ~3×/s while the app is connected."""
+        see ``MockCamperUnit.tick``) and notify what changed. The real unit does NOT stream: a
+        buspi trace (2026-09-16) showed each subscribed char notified exactly once right after its
+        CCCD write and then only on change, so pushes here are change-driven too (plus the
+        on-subscribe push wired in build_services)."""
         while True:
             await asyncio.sleep(1.0)
             changed = self.unit.tick(1.0)
             self.dirty.update(changed)
-            for fn in changed | {"energy"}:
+            for fn in changed:
                 self.schedule_notify(fn)
 
     def schedule_notify(self, fn: str) -> None:
@@ -186,6 +188,10 @@ class FakeUnit:
             st = Characteristic(f.state_char, props, perms,
                                 AttributeValue(read=lambda c, fn=fn: self.read_state(fn)),
                                 [desc("State")])
+            # The unit pushes the current value once as soon as a client enables notifications
+            # (observed on buspi 2026-09-16: one notify per char right after each CCCD write).
+            st.on(Characteristic.EVENT_SUBSCRIPTION,
+                  lambda conn, notify, indicate, fn=fn: notify and self.schedule_notify(fn))
             self.chars[fn] = st
             lst = groups.setdefault(svc, [])
             if f.control_char:

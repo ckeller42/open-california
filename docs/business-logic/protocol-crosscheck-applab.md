@@ -33,6 +33,7 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | the unit drops a link with no heartbeat ~15 s | unit-side; the fake unit implements it (needed: Android kept a stale bonded link that blocked advertising → "No vehicle found") | NOT TESTABLE (modelled) |
 | a control write is a full-packet frame | every write is the full frame length (6 / 1 / 16 / 1 / 5 bytes) | OBSERVED |
 | untargeted fields = leave-unchanged sentinels | 2-bit fields at 3, wider fields at the model default (`7b 00 7f 1f 3f`, `77 1e 3e 1f 1f`) | OBSERVED — mock fixed to honour them |
+| the 2026-07-05 failed cooler write failed because "model defaults = a garbage command" (Level 7, actions 3) | the app itself sends exactly those defaults in every frame (`fc771e3e1f1f`) and the unit accepts them; the 2026-07-05 write was made **before the 1003 heartbeat arm was known** — the missing arm explains it, not the defaults | CONTRADICTED (explanation superseded; the arm-gate finding of 2026-07-07 stands) |
 | "neutral flush" after a write is a lighting-only mechanism | **every** function gets an all-sentinel frame 500 ms after a write (cooler `ff771e3e1f1f`, heater `3f7b007f1f3f`, camping `ff`, energy `30`, lighting `0e00…`) | CONTRADICTED in spirit → S_SEQ_ACTUATE now documents it for all |
 
 ## Per-function frames (`control-and-actuation.md` recipes vs `control.build`)
@@ -77,6 +78,14 @@ once a second — the unit was seen at ~3 Hz live), `RunningTimeinAction` and
 `AgeOneBattValuesMinutes` rates vs the mock's ±1/min, roof `Position` transitions with timings,
 and the terminal-15 → `campingmode.Enable`/master-shed coupling delay. A difference is a mock bug
 or a new protocol fact — never a reason to touch the trace. Results land in this file's tables.
+
+### First real-unit trace (buspi, van awake, 2026-09-16 17:08–17:20)
+
+| Claim | Observation | Verdict |
+|---|---|---|
+| every state frame round-trips through the dictionary | 14/14 functions, 88 frames: repack == raw for every frame | OBSERVED (dictionary covers every bit the unit sent) |
+| `1602` energy streams ~3×/s while connected | **not observed**: with the persistent session up and the heartbeat ticking, each of the 12 subscribed chars notified **exactly once, right after its CCCD write**, then nothing for the rest of the link (no change-driven push in 150 s; energy values did change between links) | **CONTRADICTED** (the 2026-07 "3×/s" note) → mock/fake now push once on subscribe, not 1 Hz |
+| `1003` heartbeat keeps the link up indefinitely | persistent session came up, was dropped by the unit after ~30–40 s and re-established (`persistent session up` twice within 40 s, no `released` line between) — under investigation with `CALICTL_BLE_TRACE_HEARTBEAT=1` | OPEN |
 
 ## Not testable in the lab (unit-side; keep DEVICE/CAPTURE tier)
 
