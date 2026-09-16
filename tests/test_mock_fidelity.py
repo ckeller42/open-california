@@ -71,6 +71,20 @@ def test_immediate_heating_starts_the_remaining_time_countdown():
     assert u.decoded("airheater")["RunningTimeinAction"] == 0
 
 
+def test_app_neutral_frame_with_all_2bit_sentinels_is_accepted():
+    """500 ms after every write the app sends a neutral frame with every 2-bit field at 3 and every
+    wider field at its default (cooler `ff771e3e1f1f`). The unit accepts it; so must the mock — the
+    curated `State in {0,1}` constraint is for calictl's own commands, not for the sentinel."""
+    f = _funcs()
+    u = _armed_unit(cooler={"Installed": 1, "State": 0, "Level": 3, "Mode": 4,
+                            "NightTimerHourOn": 22, "NightTimerHourOff": 6})
+    u.write(f["cooler"].control_char, bytes.fromhex("fc771e3e1f1f"))   # the app's OFF frame
+    u.write(f["cooler"].control_char, bytes.fromhex("ff771e3e1f1f"))   # its neutral follow-up
+    st = u.decoded("cooler")
+    assert st["State"] == 0 and st["Level"] == 3 and st["Mode"] == 4
+    assert (st["NightTimerHourOn"], st["NightTimerHourOff"]) == (22, 6)
+
+
 def test_real_value_equal_to_default_is_not_mistaken_for_a_sentinel_on_2bit_fields():
     """2-bit fields keep the existing rule (3 = leave unchanged; 0/1 are values)."""
     f = _funcs()

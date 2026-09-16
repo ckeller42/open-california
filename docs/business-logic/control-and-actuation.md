@@ -141,6 +141,13 @@ ATT link** on out-of-range values (cooler `State=3` and lighting `ProfileNumber=
 both → `0x0E`/disconnect). The app does no client-side clamp; validation is firmware-side.
 Mitigation: `protocol.encode` validates every value against its bit-width **and** a curated
 semantic range (`overrides.CONTROL_RANGES`); `python3 -m tools.app_ranges` reports coverage.
+Nuance (APP-OBSERVED 2026-09-16, `tools/applab`): the app's own post-write **neutral frame**
+carries every 2-bit field at the sentinel `3` — cooler `ff771e3e1f1f`, heater `3f7b007f1f3f` —
+and its targeted frames carry every untargeted wider field at the model default (cooler Level 7 /
+Mode 7 / TimerHour 30 / TimerMin 62 / NightTimer 31). The unit accepts those from the app, so
+`State=3` *as a leave-unchanged sentinel* is legal; `CONTROL_RANGES` constrains what calictl
+sends as a **command** (never 3), and the 2026-07-05 `0x0E` drop is left as observed. The mock
+(`tools/mock_unit.py`) accepts the sentinel frames like the unit does.
 
 ---
 

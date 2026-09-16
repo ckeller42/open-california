@@ -206,30 +206,35 @@ def test_write_ignored_without_heartbeat_then_applied_with_it():
 
 # --- firmware range validation -> link drop ---------------------------------
 
-def _out_of_range_cooler_frame():
-    """A cooler frame carrying State=3 (rejected 0x0E on-device). Built with the
-    range constraint relaxed so encode will emit it; the unit re-validates."""
+def _out_of_range_frame():
+    """A lighting frame carrying Mode=5 — outside the firmware's Mode enum (dg/n.java), the
+    class of value the unit rejects with 0x0E and a link drop. Built with the range constraint
+    relaxed so encode will emit it; the unit re-validates. (The old example, cooler State=3, is
+    the 2-bit leave-unchanged sentinel: the app's own neutral frame carries it and the unit
+    accepts it — see tests/test_mock_fidelity.py — so it no longer counts as out-of-range.)"""
     relaxed = _funcs()
-    for cf in relaxed["cooler"].control_fields:
-        if cf.name == "State":
+    for cf in relaxed["lighting"].control_fields:
+        if cf.name == "Mode":
             cf.valid = None
-    vals = control._cooler_values({}, State=3)
-    return protocol.encode(relaxed["cooler"], vals, frame_bytes=6)
+    vals = {cf.name: (cf.default or 0) for cf in relaxed["lighting"].control_fields if cf.placed}
+    vals["Mode"] = 5
+    return protocol.encode(relaxed["lighting"], vals,
+                           frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 
 
 def test_out_of_range_write_drops_link_at_unit():
     unit = MockCamperUnit()
     unit.beat((0x00100000).to_bytes(4, "big"))
     with pytest.raises(MockDisconnect):
-        unit.write(unit.funcs["cooler"].control_char, _out_of_range_cooler_frame())
+        unit.write(unit.funcs["lighting"].control_char, _out_of_range_frame())
 
 
 def test_out_of_range_surfaces_through_actuate(mock):
     """The MockDisconnect propagates out of device.actuate (the firmware dropped us)."""
     funcs = _funcs()
-    bad = _out_of_range_cooler_frame()
+    bad = _out_of_range_frame()
     with pytest.raises(MockDisconnect):
-        asyncio.run(device.CamperDevice().actuate(funcs["cooler"], bad, verify=True))
+        asyncio.run(device.CamperDevice().actuate(funcs["lighting"], bad, verify=True))
 
 
 # --- serve.on_command path --------------------------------------------------

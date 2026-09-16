@@ -211,6 +211,12 @@ class MockCamperUnit:
         #    value is rejected and the unit drops the ATT link (observed 0x0E).
         for cf in func.control_fields:
             if cf.placed and cf.name in ctrl:
+                # A 2-bit field at 3 is the leave-unchanged sentinel, not a value: the app's
+                # post-write neutral frame carries State=3 on every 2-bit field (cooler
+                # `ff771e3e1f1f`, heater `3f7b007f1f3f`) and the unit accepts it. Curated
+                # `valid` sets (cooler State {0,1}) constrain calictl's OWN commands, not that.
+                if cf.width == 2 and ctrl[cf.name] == LEAVE_UNCHANGED_2BIT:
+                    continue
                 try:
                     protocol.check_value(func, cf.name, cf.width, ctrl[cf.name], cf.valid)
                 except ValueError as e:
