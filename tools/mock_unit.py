@@ -298,6 +298,12 @@ class MockCamperUnit:
             target = cf.name
             if func.state_field(target) is None and target.endswith("Request"):
                 target = target[: -len("Request")]
+            # Cooler timer ACTIONS: TimerStart=1 arms the timer (TimerState=1), TimerCancel=1
+            # clears it — the app's frames carry only the action bit (f7771e3e1f1f, observed).
+            if fn == "cooler" and cf.name in ("TimerStart", "TimerCancel") and ctrl[cf.name] == 1 \
+                    and func.state_field("TimerState") is not None:
+                st["TimerState"] = 1 if cf.name == "TimerStart" else 0
+                continue
             if func.state_field(target) is None:
                 continue                          # not a name-aligned control→state field
                                                   # (offset-remapped timers are NOT faked)

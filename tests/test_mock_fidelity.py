@@ -85,6 +85,19 @@ def test_app_neutral_frame_with_all_2bit_sentinels_is_accepted():
     assert (st["NightTimerHourOn"], st["NightTimerHourOff"]) == (22, 6)
 
 
+def test_cooler_timer_action_bits_arm_and_clear_the_timer():
+    """The app's "Timer" switch (box off) writes only TimerStart=1 with everything else at the
+    sentinels (`f7771e3e1f1f`, observed); the unit reports TimerState=1. TimerCancel=1 clears it."""
+    f = _funcs()
+    u = _armed_unit(cooler={"Installed": 1, "State": 0, "Level": 3, "Mode": 0, "TimerState": 0,
+                            "TimerHourSet": 9, "TimerMinSet": 0})
+    u.write(f["cooler"].control_char, bytes.fromhex("f7771e3e1f1f"))
+    st = u.decoded("cooler")
+    assert st["TimerState"] == 1 and (st["TimerHourSet"], st["TimerMinSet"]) == (9, 0)
+    u.write(f["cooler"].control_char, bytes.fromhex("df771e3e1f1f"))   # TimerCancel=1 (bits 2-3)
+    assert u.decoded("cooler")["TimerState"] == 0
+
+
 def test_real_value_equal_to_default_is_not_mistaken_for_a_sentinel_on_2bit_fields():
     """2-bit fields keep the existing rule (3 = leave unchanged; 0/1 are values)."""
     f = _funcs()

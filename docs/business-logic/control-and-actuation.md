@@ -149,6 +149,28 @@ Mode 7 / TimerHour 30 / TimerMin 62 / NightTimer 31). The unit accepts those fro
 sends as a **command** (never 3), and the 2026-07-05 `0x0E` drop is left as observed. The mock
 (`tools/mock_unit.py`) accepts the sentinel frames like the unit does.
 
+**App-vs-calictl frame diff (APP-OBSERVED 2026-09-16, `tools/applab`).** Same fake unit, the
+app's write vs `control.build()` for the same intent. The **targeted** field is identical in every
+row; the two differ only in how untargeted fields ride along — the app at each field's model
+default (= leave-unchanged sentinel), calictl re-asserting the current decoded value. Both are
+accepted by the unit; calictl's choice re-writes what is already there (harmless, but it means a
+stale read would be re-asserted — see the "carry current state" note in `_cooler_values`).
+
+| Intent | App frame (then neutral +500 ms) | calictl frame | Targeted field |
+|---|---|---|---|
+| camping master OFF | `fc` → `ff` | `fc` | `State=0` — **identical** |
+| heater immediate ON | `3d7b007f1f3f` → `3f7b007f1f3f` | `3d05003c0c00` | `NormalOperationRequest=1` |
+| heater continuous OFF | `0f7b007f1f3f` → neutral | `0f05003c0c00` | `PermanentOperationRequest=0` |
+| cooler OFF | `fc771e3e1f1f` → `ff771e3e1f1f` | `3c4309001606` | `State=0` |
+| cooler manual quiet | `ff271e3e1f1f` | `3d2309001606` | `Mode=2` |
+| cooler automatic quiet | `ff471e3e1f1f` | `3d4309001606` | `Mode=4` |
+| cooler timer start (box off) | `f7771e3e1f1f` | `354309001606` | `TimerStart=1` — app leaves `TimerHour/Min` at 30/62 (the time is written separately when the picker changes) |
+
+Two systematic differences worth knowing: the app leaves cooler `State` and `NightTimerSet` at the
+sentinel `3` in every non-power frame, while calictl writes `State=<current>` and
+`NightTimerSet=0`; and the app never carries timer/night hours — it sends 30/62/31 (sentinels)
+unless that picker was the control touched.
+
 ---
 
 ## 4. Per-feature actuation status (heartbeat-armed, live 2026-07-07)
