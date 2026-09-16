@@ -166,10 +166,28 @@ stale read would be re-asserted — see the "carry current state" note in `_cool
 | cooler automatic quiet | `ff471e3e1f1f` | `3d4309001606` | `Mode=4` |
 | cooler timer start (box off) | `f7771e3e1f1f` | `354309001606` | `TimerStart=1` — app leaves `TimerHour/Min` at 30/62 (the time is written separately when the picker changes) |
 
+| lighting All lights ON | `0c10000000000000eeeeeeeeeeeeeeee` → commit `0e00…ee` | same two frames (`power on` + `LIGHT_COMMIT`) | `SET_PROFILE 12` — **byte-identical** |
+| lighting lamp icon tap (e.g. Left) | `0904000000000000beeeeeeeeeeeeeee` → commit | `reading-1 5` → `0904…5eee…` | `ProfileNumber=9, Mode=4`, one zone nibble — app writes **11 = DEFAULT**, calictl's "on" writes 10 (100 %) |
+
 Two systematic differences worth knowing: the app leaves cooler `State` and `NightTimerSet` at the
 sentinel `3` in every non-power frame, while calictl writes `State=<current>` and
 `NightTimerSet=0`; and the app never carries timer/night hours — it sends 30/62/31 (sentinels)
 unless that picker was the control touched.
+
+**The app's lamp → frame-nibble map (California/Ocean, tapping every lamp icon, 2026-09-16)**,
+nibble position 1–16 counted from byte 8's high nibble: Reading *Left* 1, *Right* 2, *Front
+Passenger* 3; Exterior *Rear Surroundings* 4, *Entrance* 11; Kitchen *Background Lighting* 6,
+*Cooking* 8; Pop-up roof *Background Lighting* 7, *Reading Light* 10 (its icon writes nothing while
+the roof is closed — "Only available when the pop-up roof is open"); position 5 is touched by no
+lamp (calictl's `kitchen-cabinet`, which the app does not expose). Group icons write all their
+lamps at once (Reading 1+2+3, Kitchen 6+8, Roof 7+10, Exterior 4+11). The dictionary places the
+odd-numbered `BrightnessL<n>` in the LOW nibble of each byte (byte 8 = `L2|L1`, byte 9 = `L4|L3`,
+…), so those positions are exactly calictl's DEVICE-verified `control.LIGHT_ZONES`: Left = `LTwo`
+(`reading-1`), Right = `LOne`, Front Passenger = `LFour` (`reading-3`), Rear Surroundings = `LThree`
+(`outside-rear`), kitchen Background = `LFive` (`kitchen-ambient`), Cooking = `LSeven`, roof
+Background = `LEight`, roof Reading = `LNine`, Entrance = `LOneTwo` — **the app confirms every lamp
+of the map** (see `lighting-energy-water-sat-roof.md` §lamp map; the open question there is only
+the owner's 2026-08-27 "roof light moved L5" observation, which the app's map does not support).
 
 ---
 

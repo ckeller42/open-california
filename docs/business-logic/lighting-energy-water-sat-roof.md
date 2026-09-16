@@ -122,6 +122,18 @@ CONFIRMED (was only inferred from the `KITCHEN_BACKGROUND_LIGHTING`(15) ordinal 
 Kochen = L7* re-confirmed in the same capture; **L6 = Aufstelldach Leselicht** is now solid by
 elimination.
 
+**App-side confirmation, 2026-09-16 (`tools/applab`: the real app against the fake unit):** tapping
+every lamp icon in the app's Lighting page wrote one `SET_BRIGHTNESS` frame per lamp
+(`0904…` + `0e00…` commit, value 11 = DEFAULT), and the nibble each one touched is exactly
+`control.LIGHT_ZONES`: Left = `LTwo`, Right = `LOne`, Front Passenger = `LFour`, Rear Surroundings
+= `LThree`, kitchen Background Lighting = `LFive`, Cooking = `LSeven`, roof Background Lighting =
+`LEight`, roof Reading Light = `LNine` (inert while the roof is closed), Entrance = `LOneTwo`.
+Group icons write all their lamps at once (Reading `L1+L2+L4`, Kitchen `L5+L7`, Roof `L8+L9`,
+Exterior `L3+L12`). The app exposes **no** lamp on `LSix` (calictl's `kitchen-cabinet`, DEVICE-lit
+2026-08-30) — so the "L6 = Aufstelldach Leselicht by elimination" line above is superseded twice
+over: L6 is the cabinet light, the roof reading light is L9. Only the owner's 2026-08-27 "roof light
+moved L5" observation remains unexplained.
+
 ### Action → field map
 
 1. **Set one zone's brightness (`E(ef.i zone, dg.i level, boolean stage)`, `dg/h.java:174`)**

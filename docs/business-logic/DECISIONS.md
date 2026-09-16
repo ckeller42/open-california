@@ -31,6 +31,17 @@ heartbeats on `1003` every ~750 ms and renders our baseline frames exactly as ca
 - **Heater page facts**: slider 1–9 + **HI** (so "HI" is the app's own label for level 10 — restored
   in the web readout), run time **10–120** (min was UNRESOLVED), no confirmation on immediate ON, the
   Permanent-Heating switch is always present and inert-greyed when off (#182 matches).
+- **Lighting is byte-identical for All-lights** (`SET_PROFILE 12` + `0e00…` commit); a lamp icon
+  tap writes that lamp's nibble at **11 = DEFAULT** (calictl's "on" uses 10). Tapping every lamp
+  gave the app's lamp → frame-nibble map (Left/Right/Front Passenger = positions 1/2/3, Rear
+  Surroundings 4, Kitchen Background 6, Cooking 8, Roof Background 7, Roof Reading 10, Entrance
+  11, nothing at 5) — **exactly calictl's DEVICE-verified `LIGHT_ZONES`** once the dictionary's
+  odd-in-the-low-nibble layout is applied (position 1 = `LTwo` = `reading-1`, …). The lamp map is
+  now confirmed from both ends; the app exposes no lamp for `kitchen-cabinet` (`LSix`).
+- **Cooler**: OFF `fc771e3e1f1f`, manual quiet `ff271e3e1f1f`, automatic `ff471e3e1f1f`, timer
+  start `f7771e3e1f1f` — the app leaves `State`/`NightTimerSet` at sentinel 3 and never carries
+  timer hours unless that picker was touched; the Timer switch is inert while the box is on.
+  Camping master OFF `fc` is byte-identical to calictl's.
 - The fake unit drops a link with no `1003` heartbeat for 15 s: without that, Android's stale
   bonded connection kept the peripheral from advertising and the app reported "No vehicle found".
 
