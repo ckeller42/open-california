@@ -353,6 +353,18 @@ const ROOF_ALERT_MSG = {
 // deliberately absent: the app shows it but still allows open/close.
 const ROOF_MOVE_BLOCK = new Set(["child_lock", "error", "driving", "emergency_locked", "not_possible", "low_battery"]);
 
+/**
+ * Terminal-15 (ignition) — the vehicle char (1004 `TerminalOneFive`, bit 7) is the authoritative
+ * decode; `campingmode.enable` (1202 bit 3) mirrors it one poll later. Cross-feature read on
+ * purpose: camping's own copy lagged a key-turn by a full poll in the field (2026-09-16).
+ * @param {FnState} s  the current feature's state (fallback source)
+ */
+const ignitionOn = (s) => {
+  const v = STATE.vehicle;
+  if (v && typeof v.ignition_on === "boolean") return v.ignition_on;
+  return !!s.enable;
+};
+
 const ORDER = ["cooler", "campingmode", "lighting", "airheater", "water", "energy", "roof", "vehicle"];
 /** @type {Record<string, Feature>} */
 const FEATURES = {
@@ -392,7 +404,13 @@ const FEATURES = {
   campingmode: {
     title: "Camping mode", icon: "🏕️",
     controls: [
-      { what: "master", kind: "toggle", label: "Camping mode", state: "master_on" },
+      // The unit sheds camping master when terminal-15 comes on and refuses it while driving
+      // (camping-watch: every `ignition 0->1` pairs with `master_on 1->0`; the app gates its
+      // master switch on the same bit — tf/a.java n0()). Read the ignition from the vehicle
+      // char (1004 TerminalOneFive, the authoritative decode), falling back to campingmode.enable,
+      // which mirrors it one poll later.
+      { what: "master", kind: "toggle", label: "Camping mode", state: "master_on",
+        disabled: (s) => ignitionOn(s) && "Not available while the ignition is on" },
       // Lights + rear USB are only actionable in the app while camping master is ON (a UI gate,
       // confirmed in semantics.campingmode + tf/a.java). Grey them when master is off. USB shows
       // the DERIVED usb_powered (master AND UsbCharger) so it reads "off" when master is off,
@@ -405,7 +423,7 @@ const FEATURES = {
       { what: "usb", kind: "toggle", label: "Rear USB ports", state: "usb_powered",
         disabled: (s) => !optOn("campingmode", "master", !!s.master_on) && "Turn camping mode on first" },
     ],
-    readouts: [{ label: "Ignition (terminal-15)", get: (s) => onoff(s.enable) }],
+    readouts: [{ label: "Ignition (terminal-15)", get: (s) => onoff(ignitionOn(s)) }],
     summary: (s) => onoff(s.master_on),
   },
   lighting: {
