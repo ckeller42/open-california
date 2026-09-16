@@ -230,6 +230,31 @@ def test_camping_lights_and_usb_greyed_until_master_on(page):
     expect(master).to_be_enabled()                                  # master itself is usable
 
 
+def test_cooler_quiet_and_timer_controls_follow_power(page):
+    # The app's own gates: quiet mode is only settable while the refrigerator box is ON; the
+    # cooling timer only while it is OFF. Both rows grey (.ctl-off) with the reason as tooltip.
+    page.get_by_text("Cooler", exact=True).first.click()
+    power = page.get_by_role("switch", name="Refrigerator box")
+    quiet = page.locator("select").first                                   # the Quiet mode <select>
+    start_timer = page.get_by_role("button", name="Start timer")
+    was_on = power.get_attribute("aria-checked") == "true"
+
+    def set_power(on):
+        if (power.get_attribute("aria-checked") == "true") != on:
+            power.click()
+            expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
+            expect(power).to_have_attribute("aria-checked", "true" if on else "false")
+
+    set_power(False)
+    expect(quiet).to_be_disabled()
+    expect(start_timer).to_be_enabled()
+    set_power(True)
+    expect(quiet).to_be_enabled()
+    expect(start_timer).to_be_disabled()
+    expect(power).to_be_enabled()                     # the power switch itself is never gated
+    set_power(was_on)                                 # leave the shared mock as we found it
+
+
 def test_camping_master_toggle_applies(page):
     page.get_by_text("Camping mode", exact=True).first.click()
     sw = page.locator(".switch").first                        # first control = master

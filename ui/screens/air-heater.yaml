@@ -67,7 +67,7 @@ widgets:
     range: null
     controls: {field: RunningTime, action: D4}
     elements: []
-    constraints: "UNVERIFIED range/units — no in-app bounds check found for D4, protocol raw_range is 0..255"
+    constraints: "Minutes, 0..120 — D4 writes the raw int unclamped; the cap is UI-side (infoPage_heating_immediate_description: 'limited to 120 minutes'; unit raises ErrorCode 4 HEATING_TIME_EXCEEDED past it). Slider min/step not recovered from the Compose code. Protocol raw_range is 0..255."
 
   - id: timerWidget
     type: timer

@@ -139,6 +139,14 @@ def test_airheater_runtime_and_timer_frames():
     st = {"NormalOperationRequest": 0, "HeatingLevel": 5, "RunningTime": 127,
           "AirDistribution": 0, "OperationModeAirHeater": 7, "TimerHour": 31, "TimerMin": 63}
     assert control.build(f, "airheater", "runtime", 60, st).hex() == "3f75003c1f3f"   # byte3=0x3c=60
+    assert control.build(f, "airheater", "runtime", 120, st).hex() == "3f7500781f3f"  # the app's cap
+    for bad in (121, 255):   # the field is 8 bits wide, but the app never asks for more than 120 min
+        try:
+            control.build(f, "airheater", "runtime", bad, st)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"runtime {bad} accepted (cap is 120 min)")
     assert control.build(f, "airheater", "timer", "22:30", st).hex() == "3f75007f161e" # byte4=22 byte5=30
     assert control.build(f, "airheater", "permanent", "on", st) is None               # not wired (ON unknown)
     try:
@@ -168,6 +176,19 @@ def test_lighting_save_favorite_frame():
             pass
         else:
             raise AssertionError("expected ValueError for save_profile slot %d" % bad)
+
+
+def test_airheater_error_code_names():
+    """ErrorCode (1702) -> the app's fault IDs (rf/b.java:461-671); 0 = no fault, unknown codes
+    are still surfaced (as "unknown") rather than hidden."""
+    from calictl import semantics
+    base = {"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0, "HeatingLevel": 5}
+    assert semantics.airheater({**base, "ErrorCode": 0})["error"] is None
+    for raw, name in {1: "low_battery", 2: "low_fuel", 3: "system_error",
+                      4: "heating_time_exceeded", 5: "not_possible"}.items():
+        s = semantics.airheater({**base, "ErrorCode": raw})
+        assert s["error"] == name and s["error_code"] == raw
+    assert semantics.airheater({**base, "ErrorCode": 9})["error"] == "unknown"
 
 
 def test_roof_position_name_and_infopopup_alert():

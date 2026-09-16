@@ -243,6 +243,7 @@ LIGHT_ZONES = {
 # (owner-confirmed 2026-08-30): the pop-top roof reading light (L9) is unpowered while the roof is
 # down; the cooler cooling-timer can only be set while the fridge is OFF.
 _ROOF_CLOSED_POSITIONS = (0, 14)   # matches semantics._ROOF_POS closed values
+AIRHEATER_MAX_RUNTIME_MIN = 120    # the app's cap on immediate heating (its heating info page)
 # Terminal Position for each move direction (semantics._ROOF_POS: 1=open, 0/14=closed). When a move
 # reaches its target limit, device.actuate_roof ceases the counter stream (app-faithful auto-stop) —
 # best-effort courtesy on top of the unit's own limit switches; None = no known limit (don't poll).
@@ -426,8 +427,10 @@ def _airheater(funcs, what, value, last):
        :tags: ble, control, airheater
 
        ``calictl`` shall build a full-packet airheater (char 1701) control frame
-       for ``power`` (via ``NormalOperationRequest`` = 1/0) and ``level`` (via
-       ``HeatingLevel`` 1-10), carrying current state for untargeted fields.
+       for ``power`` (via ``NormalOperationRequest`` = 1/0), ``level`` (via
+       ``HeatingLevel`` 1-10), ``runtime`` (``RunningTime`` 0-120 min — the app's cap)
+       and ``timer`` (``TimerHour``/``TimerMin``), carrying current state for
+       untargeted fields.
     """
     if what == "power":
         ch = {"NormalOperationRequest": 1 if _truthy(value) else 0}
@@ -436,8 +439,13 @@ def _airheater(funcs, what, value, last):
         # the leave-unchanged/commit sentinel). 0-15 is the raw field WIDTH, not the exposed range.
         lvl = _int_range(value, 1, 10, "airheater HeatingLevel (10=HI)")
         ch = {"HeatingLevel": lvl}
-    elif what == "runtime":                    # RunningTime, minutes (rf/b.java:199 D4()); no app bound
-        rt = _int_range(value, 0, 255, "airheater runtime")
+    elif what == "runtime":
+        # RunningTime, minutes (rf/b.java:199 D4() writes the raw int). The app caps the run time at
+        # 120 min — its own heating info page says immediate heating is "limited to 120 minutes"
+        # (the fuel-burning heater's emissions limit; the unit raises ErrorCode 4
+        # HEATING_TIME_EXCEEDED past it). Enforce the same bound here so CLI/API/HA can't ask for
+        # what the app never sends; 255 is the field WIDTH, not a valid request.
+        rt = _int_range(value, 0, AIRHEATER_MAX_RUNTIME_MIN, "airheater runtime (minutes)")
         ch = {"RunningTime": rt}
     elif what == "timer":                       # start-at TimerHour:TimerMin (rf/b.java:165 B0())
         hh, mm = _hhmm(value)

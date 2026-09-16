@@ -49,7 +49,7 @@
  * @property {number|null} [timer_min]
  * @property {string|null} [fault]
  * @property {boolean} [door_open]
- * @property {boolean} [error]
+ * @property {boolean|string|null} [error]   // cooler: any-fault boolean; airheater: named ErrorCode
  * // campingmode (semantics.campingmode)
  * @property {boolean} [master_on]
  * @property {boolean} [usb_charger]
@@ -63,7 +63,7 @@
  * // airheater (semantics.airheater)
  * @property {boolean} [running]
  * @property {boolean} [permanent]
- * @property {number|null} [error_code]
+ * @property {number|null} [error_code]   // raw ErrorCode; `error` (above) carries its NAME here
  * @property {number|null} [air_distribution]
  * @property {number|null} [running_time]
  * @property {number|null} [running_time_remaining]
@@ -338,6 +338,18 @@ const COOLER_FAULT_MSG = {
   error: "⚠ Refrigerator box error — please visit a workshop",
 };
 
+// Air-heater ErrorCode name -> banner text (semantics._AIRHEATER_ERROR / rf/b.java). These are the
+// unit's refusals AFTER a start request — the heater switch itself is never greyed pre-emptively.
+/** @type {Record<string, string>} */
+const AIRHEATER_ERROR_MSG = {
+  low_battery: "⚠ Heater not started — battery low, run the engine",
+  low_fuel: "⚠ Heater not started — fuel level too low",
+  system_error: "⚠ Heater fault — please visit a workshop",
+  heating_time_exceeded: "⚠ Heating time exceeded — the heater switched off",
+  not_possible: "⚠ Heater currently unavailable",
+  unknown: "⚠ Heater error",
+};
+
 // Roof InfoPopUp alert -> banner text (see semantics.roof / ig/c.java). The enum names are the
 // unit's internal IDs; the texts say what the condition MEANS for the user (child_lock is an
 // over-use cooldown, not a switch; driving = roof open while the vehicle may move).
@@ -376,20 +388,28 @@ const FEATURES = {
       { what: "power", kind: "toggle", label: "Refrigerator box", state: "on" },
       { what: "level", kind: "slider", label: "Cooling level", state: "level", min: 1, max: 5 },
       // Mode 0 = quiet mode off, 2 = manual quiet mode, 4 = automatic (timer-based) quiet mode.
+      // Quiet mode is only settable while the box is ON; the start timer only while it is OFF
+      // (the server refuses the latter too — control.command_precondition). Both gate on the
+      // OPTIMISTIC power value so the rows follow the switch the moment it is tapped.
       { what: "mode", kind: "select", label: "Quiet mode",
         options: [{ value: "normal", label: "Off" }, { value: "quiet", label: "Manual" }, { value: "timer_quiet", label: "Automatic" }],
         current: (s) => (s.mode === 2 ? "quiet" : s.mode === 4 ? "timer_quiet" : "normal"),
+        disabled: (s) => !optOn("cooler", "power", !!s.on) && "Switch the refrigerator box on first",
         confirm: () => t("Set the refrigerator box's quiet mode? Not yet verified on the van. Continue?") },
       { what: "night_on", kind: "hour", label: "Quiet mode starts at", current: (s) => s.quiet_from ?? 0,
+        disabled: (s) => !optOn("cooler", "power", !!s.on) && "Switch the refrigerator box on first",
         confirm: (h) => tf("Set the automatic quiet mode start to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
       { what: "night_off", kind: "hour", label: "Quiet mode ends at", current: (s) => s.quiet_to ?? 0,
+        disabled: (s) => !optOn("cooler", "power", !!s.on) && "Switch the refrigerator box on first",
         confirm: (h) => tf("Set the automatic quiet mode end to {h}:00? Not verified on the van. Continue?", { h: String(h).padStart(2, "0") }) },
       { what: "timer_set", kind: "time", label: "Cooling starts at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
           ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null,
+        disabled: (s) => optOn("cooler", "power", !!s.on) && "Switch the refrigerator box off first",
         confirm: (v) => tf("Set the timer so cooling starts at {t}? Not yet verified on the van. Continue?", { t: v }) },
       { what: "__cooltimer", kind: "buttons", label: "Timer",
         actions: [{ what: "timer_start", label: "Start timer" }, { what: "timer_cancel", label: "Cancel timer" }],
+        disabled: (s) => optOn("cooler", "power", !!s.on) && "Switch the refrigerator box off first",
         confirm: (b) => tf("{b}? Not yet verified on the van. Continue?", { b: t(b.label) }) },
     ],
     readouts: [
@@ -454,11 +474,13 @@ const FEATURES = {
       { label: "Remaining", get: (s) => withUnit(s.running_time_remaining, "min") },
       { label: "Timer start", get: (s) => (s.timer_hour != null && s.timer_min != null && (s.timer_hour || s.timer_min))
         ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : "off" },
-      { label: "Error code", get: (s) => s.error_code ?? "—" },
+      { label: "Error", get: (s) => (s.error ? `${t(AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || String(s.error))} (${s.error_code})` : t("none")) },
     ],
+    warn: (s) => (s.error ? AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || `⚠ Heater error ${s.error_code}` : null),
     // Status line mirrors the heater's own status bar: Active • Continuous heating / Active •
     // N min remaining / Inactive (• Timer HH:MM when one is armed).
     summary: (s) => {
+      if (s.error) return /** @type {string} */ (t(AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || "⚠ Heater error"));
       if (s.running) {
         if (s.permanent) return `${t("Active")} • ${t("Continuous heating")}`;
         if (s.running_time_remaining != null) return tf("Active • {n} min remaining", { n: s.running_time_remaining });
