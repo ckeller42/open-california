@@ -8,6 +8,19 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-09-16 — continuous heating is an OFF-only switch (no general heater master exists)
+
+Owner asked whether the app has a general heater on/off besides "Sofortheizen". Re-trace of the
+heater page (string keys + `rf/b.java`): the page has exactly **two switches** — Immediate heating
+(`C2` → `NormalOperationRequest` 1/0) and **Continuous heating / Dauerbetrieb** (`E3` →
+`PermanentOperationRequest = 0`, OFF only; no ON write site exists anywhere in the app, which
+documents that it "can only be activated from within the vehicle, but you can use the app to turn
+it off"). No switch writes `OperationModeAirHeater`. calictl now mirrors this: `set airheater
+permanent off` (ON refused with that reason), and the web UI's Continuous-heating row is a switch
+that is live only while it is on and greyed "Can only be started from inside the vehicle"
+otherwise. Whether the app disables its Switch or opens the dialog on an ON tap, and the status-bar
+selection logic, remain UNRESOLVED (Compose layer; buspi was offline for the trace).
+
 ## 2026-09-16 — web UI speaks the unit's vocabulary; roof alert texts say what the codes mean
 
 A full pass of the web UI's labels against the unit's own EN/DE terms (#178): the heater toggle is

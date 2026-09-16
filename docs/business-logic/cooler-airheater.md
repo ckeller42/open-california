@@ -323,6 +323,11 @@ Send the full 10-field frame every time (shared-send behavior above).
   web UI shows it as a banner. Code→dialog-string pairing beyond the IDs is unresolved.
 - **Turn off Immediate Heating**: `NormalOperationRequest = 0` (via `C2(false)`).
   `rf/b.java:182-191`.
+- **Turn off Continuous Heating ("Dauerbetrieb")**: `PermanentOperationRequest = 0` (via `E3`,
+  `rf/b.java:209-218`) — the ONLY remote write for that mode; there is no ON write site anywhere
+  in the app (it is started from the in-vehicle controls; the app's ON tap only raises the
+  "can only be activated in the vehicle" dialog). calictl: `set airheater permanent off`
+  (`on` is refused), web UI: the Continuous-heating switch is live only while it is on.
 - **Set heating level (1-10)**: `HeatingLevel` via `q4`; values outside 1-10 are dropped
   client-side (no send at all) — mirror that guard in your own implementation.
   `rf/b.java:771-783`.

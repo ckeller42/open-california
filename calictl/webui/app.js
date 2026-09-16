@@ -169,7 +169,7 @@
  * @property {(s: FnState) => (string|null|undefined)} [summary]
  * @property {(s: FnState) => (string|null|undefined)} [warn]
  * @property {(s: FnState) => (string|null|undefined)} [note]
- * @property {(w: string) => string} [confirm]
+ * @property {(w: string, v?: string|number|null) => (string|null|undefined)} [confirm]   // null = no prompt for this control
  * @property {boolean} [lighting]
  * @property {boolean} [roof]
  * @property {boolean} [chart]
@@ -455,12 +455,20 @@ const FEATURES = {
     summary: (s) => onoff(s.any_on),
   },
   airheater: {
-    title: "Air heater", icon: "🔥", confirm: (w) => tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w }),
+    title: "Air heater", icon: "🔥",
+    // Fuel-burning: every START prompts. Turning continuous heating OFF is the one write here that
+    // can't arm anything, and it has its own prompt below — no feature-level one on top.
+    confirm: (w, v) => (w === "permanent" ? null : tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w })),
     controls: [
-      // "Immediate heating" = NormalOperation (start now, for `runtime` minutes). Continuous
-      // heating (PermanentOperation) can only be started from inside the vehicle, so it is a
-      // readout here, never a toggle.
+      // "Immediate heating" = NormalOperation (start now, for `runtime` minutes).
       { what: "power", kind: "toggle", label: "Immediate heating", state: "running" },
+      // "Continuous heating" (PermanentOperation) can only be STARTED from inside the vehicle —
+      // the only remote write is OFF (the server refuses "on"). So the switch is live only while
+      // it is on, and greyed with the reason otherwise. Optimistic: stays live for the
+      // write+readback window after tapping it off.
+      { what: "permanent", kind: "toggle", label: "Continuous heating", state: "permanent",
+        disabled: (s) => !optOn("airheater", "permanent", !!s.permanent) && "Can only be started from inside the vehicle",
+        confirm: (v) => (v === "off" ? t("Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?") : null) },
       { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: 1, max: 10 },
       { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 0, max: 120, unit: "min" },
       { what: "timer", kind: "time", label: "Start heating at",
@@ -468,7 +476,6 @@ const FEATURES = {
           ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null },
     ],
     readouts: [
-      { label: "Continuous heating", get: (s) => onoff(s.permanent) },
       { label: "Heating temperature", get: (s) => (s.level == null ? "—" : `${t("Level")} ${s.level}`) },
       { label: "Run time", get: (s) => withUnit(s.running_time, "min") },
       // RunningTimeinAction only counts down while heating; parked it just echoes the configured
@@ -727,7 +734,8 @@ async function processQueue() {
  */
 function act(fn, what, value) {
   const f = FEATURES[fn];
-  if (f && f.confirm && !confirm(f.confirm(what))) return;
+  const msg = f && f.confirm ? f.confirm(what, value) : null;   // null/"" = no feature-level prompt
+  if (msg && !confirm(msg)) return;
   command(fn, what, value);
 }
 

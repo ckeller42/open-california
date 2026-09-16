@@ -132,8 +132,9 @@ def test_cooler_quiet_mode_and_schedule_frames():
 
 def test_airheater_runtime_and_timer_frames():
     """Air-heater run-time + start-timer branches, decompile-verified from rf/b.java
-    (RunningTime @24, TimerHour @32 / TimerMin @40). Permanent heating is deliberately NOT wired
-    (the app's E3() only writes OFF; the ON value is unknown). NOT live-verified."""
+    (RunningTime @24, TimerHour @32 / TimerMin @40). Continuous ("permanent") heating is OFF-only:
+    the app's E3() writes PermanentOperationRequest=0 and no ON write site exists, so ON — and any
+    token that isn't a clear "off" — is refused. NOT live-verified."""
     from calictl import control
     f = _funcs()
     st = {"NormalOperationRequest": 0, "HeatingLevel": 5, "RunningTime": 127,
@@ -148,7 +149,16 @@ def test_airheater_runtime_and_timer_frames():
         else:
             raise AssertionError(f"runtime {bad} accepted (cap is 120 min)")
     assert control.build(f, "airheater", "timer", "22:30", st).hex() == "3f75007f161e" # byte4=22 byte5=30
-    assert control.build(f, "airheater", "permanent", "on", st) is None               # not wired (ON unknown)
+    # Continuous heating is OFF-only from outside the vehicle (the app's E3() writes only 0):
+    off = control.decode_control(f["airheater"], control.build(f, "airheater", "permanent", "off", st))
+    assert off["PermanentOperationRequest"] == 0 and off["NormalOperationRequest"] == 3  # 3 = leave unchanged
+    for bad in ("on", "banana", ""):   # anything that isn't a clear OFF is refused, not sent as OFF
+        try:
+            control.build(f, "airheater", "permanent", bad, st)
+        except ValueError as e:
+            assert "inside the vehicle" in str(e)
+        else:
+            raise AssertionError(f"permanent {bad!r} must be refused (no app write site for ON)")
     try:
         control.build(f, "airheater", "timer", "24:00", st)
     except ValueError:

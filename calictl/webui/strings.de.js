@@ -127,6 +127,9 @@ window.STRINGS_DE = {
   // --- air heater ----------------------------------------------------------------------------
   "Immediate heating": "Sofortheizen",
   "Continuous heating": "Dauerbetrieb",
+  "Can only be started from inside the vehicle": "Kann nur im Fahrzeug aktiviert werden",
+  "Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?":
+    "Dauerbetrieb ausschalten? Er kann nur im Fahrzeug wieder eingeschaltet werden. Fortfahren?",
   "Heating temperature": "Heizstufe",
   "Run time": "Laufzeit",
   "Remaining": "Restlaufzeit",

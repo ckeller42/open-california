@@ -416,8 +416,9 @@ def _airheater(funcs, what, value, last):
     at their leave-unchanged sentinels).
 
     :param funcs: loaded + overridden Function map.
-    :param what: ``"power"`` or ``"level"``.
-    :param value: on/off token for power, or 1-10 (10=HI) for level.
+    :param what: ``"power"``, ``"level"``, ``"runtime"``, ``"timer"`` or ``"permanent"``.
+    :param value: on/off token for power (off only for permanent), 1-10 for level, minutes
+        for runtime, ``HH:MM`` for timer.
     :param last: current decoded airheater state (carried into the frame).
     :returns: the 6-byte control frame, or ``None`` for an unknown target.
 
@@ -428,9 +429,11 @@ def _airheater(funcs, what, value, last):
 
        ``calictl`` shall build a full-packet airheater (char 1701) control frame
        for ``power`` (via ``NormalOperationRequest`` = 1/0), ``level`` (via
-       ``HeatingLevel`` 1-10), ``runtime`` (``RunningTime`` 0-120 min — the app's cap)
-       and ``timer`` (``TimerHour``/``TimerMin``), carrying current state for
-       untargeted fields.
+       ``HeatingLevel`` 1-10), ``runtime`` (``RunningTime`` 0-120 min — the app's cap),
+       ``timer`` (``TimerHour``/``TimerMin``) and ``permanent`` (OFF only:
+       ``PermanentOperationRequest`` = 0; ON is refused because continuous heating can
+       only be started from inside the vehicle), carrying current state for untargeted
+       fields.
     """
     if what == "power":
         ch = {"NormalOperationRequest": 1 if _truthy(value) else 0}
@@ -450,9 +453,16 @@ def _airheater(funcs, what, value, last):
     elif what == "timer":                       # start-at TimerHour:TimerMin (rf/b.java:165 B0())
         hh, mm = _hhmm(value)
         ch = {"TimerHour": hh, "TimerMin": mm}
-    # NB: "permanent heating" is intentionally NOT wired — the app's E3() only ever writes
-    # PermanentOperationRequest=0 (OFF/cancel); no ON write site exists in rf/b.java, so the
-    # ON value is unknown. Don't guess a write that arms a fuel-burning heater.
+    elif what == "permanent":
+        # Continuous heating ("Dauerbetrieb") is OFF-ONLY from outside the vehicle: the app's E3()
+        # (rf/b.java:209-218) only ever writes PermanentOperationRequest=0 — it can only be
+        # STARTED from the in-vehicle controls, and no ON write site exists anywhere in the app.
+        # Mirror that exactly: accept "off", refuse "on" (never guess a write that arms a
+        # fuel-burning heater).
+        if str(value).strip().lower() not in ("off", "false", "0"):
+            raise ValueError("continuous heating can only be started from inside the vehicle; "
+                             "only 'off' is accepted")
+        ch = {"PermanentOperationRequest": 0}
     else:
         return None
     return protocol.encode(funcs["airheater"], _airheater_values(last, **ch),

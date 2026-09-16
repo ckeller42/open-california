@@ -11,8 +11,11 @@
     calictl set lighting all <0-11>               # every real zone to one level
     calictl set lighting profile <N>              # switch the active lighting profile
     calictl set lighting color <name>             # recolour active profile: warm-white/amber/red/azure/... (apply UNVERIFIED)
-    calictl set airheater power on|off
-    calictl set airheater level <0-15>
+    calictl set airheater power on|off            # immediate heating
+    calictl set airheater permanent off           # continuous heating: OFF only (start it from inside the vehicle)
+    calictl set airheater level <1-10>
+    calictl set airheater runtime <0-120>         # minutes
+    calictl set airheater timer HH:MM
     calictl set roofaircondition power on|off       # UNVERIFIED (not installed)
     calictl set roofaircondition fanspeed <0-4>     # UNVERIFIED
     calictl set roofaircondition mode <0-3>         # UNVERIFIED
