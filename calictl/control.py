@@ -459,7 +459,7 @@ def _airheater(funcs, what, value, last):
         # STARTED from the in-vehicle controls, and no ON write site exists anywhere in the app.
         # Mirror that exactly: accept "off", refuse "on" (never guess a write that arms a
         # fuel-burning heater).
-        if _truthy(value):
+        if str(value).strip().lower() not in ("off", "false", "0"):
             raise ValueError("continuous heating can only be started from inside the vehicle; "
                              "only 'off' is accepted")
         ch = {"PermanentOperationRequest": 0}
