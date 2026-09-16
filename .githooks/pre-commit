@@ -71,6 +71,20 @@ else
   echo "pre-commit: ruff not installed — skipping lint (tools/ci.sh dev installs it)" >&2
 fi
 
+# 4f) Web UI typecheck — HARD GATE when webui JS is staged. app.js is un-built, client-side JS:
+#     nothing compiles it, `node --check` only parses, and the e2e mock may not render the screen
+#     you touched — an undeclared identifier (ReferenceError) once reached buspi that way. tsc with
+#     jsconfig.json's checkJs catches it statically. Needs node; skip with a note if absent.
+if git diff --cached --name-only | grep -qE '^calictl/webui/(.*\.js|jsconfig\.json)$'; then
+  if command -v node >/dev/null 2>&1; then
+    npx --yes -p typescript tsc --noEmit -p calictl/webui/jsconfig.json >/dev/null 2>&1 \
+      || fail "web UI typecheck failed (run: tools/ci.sh webcheck)"
+    node --check calictl/webui/app.js >/dev/null 2>&1 || fail "app.js does not parse"
+  else
+    echo "pre-commit: node not installed — skipping web typecheck (CI enforces it)" >&2
+  fi
+fi
+
 # 4b) Full suite + coverage guardrail (skip with SKIP_TESTS=1 for docs-only commits). Parallel when
 #     pytest-xdist is installed (tools/ci.sh dev), else serial.
 if [ "${SKIP_TESTS:-0}" != "1" ]; then

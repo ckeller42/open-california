@@ -48,6 +48,14 @@ screenshots() {   # regenerate docs/screenshots from the live UI over the mock (
 }
 lint()      { "$PY" -m ruff check .; }           # hard gate — the codebase is ruff-green
 typecheck() { "$PY" -m mypy calictl || true; }   # best-effort (None-safety / bad returns)
+webcheck() {   # hard gate: the web UI is un-built JS, so this is its only static check. jsconfig.json
+               # has checkJs on; `tsc` catches undeclared identifiers ("Cannot find name") that
+               # `node --check` (parse only) cannot — one of those once shipped to buspi. Needs node.
+  command -v node >/dev/null || { echo "webcheck: node not found (install Node 22+)"; exit 1; }
+  npx --yes -p typescript tsc --noEmit -p calictl/webui/jsconfig.json
+  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js
+  echo "web UI typecheck: OK"
+}
 dev() {
   "$PY" -m pip install -r requirements-dev.txt
   git config core.hooksPath .githooks
@@ -55,9 +63,10 @@ dev() {
 }
 
 case "${1:-ci}" in
-  ci)            lint; test_suite; audit; web_fresh; import_clean; vendor_check; echo "local CI: OK";;
+  ci)            lint; webcheck; test_suite; audit; web_fresh; import_clean; vendor_check; echo "local CI: OK";;
   test)          test_suite;;
   lint)          lint;;
+  webcheck)      webcheck;;
   typecheck)     typecheck;;
   audit)         audit;;
   web-fresh)     web_fresh;;
@@ -65,5 +74,5 @@ case "${1:-ci}" in
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|lint|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check|dev]"; exit 2;;
 esac

@@ -110,12 +110,27 @@ def base_url():
 
 @pytest.fixture
 def page(base_url):
+    """A page whose uncaught JS errors FAIL the test that produced them.
+
+    The web UI is un-built, client-side JS: a ReferenceError in a renderer only shows up when that
+    screen is actually rendered in a browser. One shipped to buspi (#174: `roofControls()` used an
+    undeclared name; the Roof screen went blank) because no test rendered that screen and nothing
+    else could see it. Now EVERY e2e test doubles as a runtime-error detector: `pageerror`
+    (uncaught exceptions) and console `error`s are collected and asserted empty at teardown.
+    """
     with sync_playwright() as p:
         browser = p.chromium.launch()
         pg = browser.new_page()
+        js_errors = []
+        pg.on("pageerror", lambda err: js_errors.append("pageerror: %s" % err))
+        pg.on("console", lambda msg: js_errors.append("console.error: %s" % msg.text)
+              if msg.type == "error" and "favicon" not in msg.text else None)
         pg.goto(base_url)
-        yield pg
-        browser.close()
+        try:
+            yield pg
+        finally:
+            browser.close()
+        assert not js_errors, "uncaught JS errors during this test:\n  " + "\n  ".join(js_errors)
 
 
 @pytest.fixture
@@ -233,6 +248,50 @@ def test_roof_screen_renders_move_buttons(page):
         expect(page.get_by_role("button", name=name)).to_be_visible()
         expect(page.get_by_role("button", name=name)).to_be_enabled()
     expect(page.get_by_text("Alert")).to_be_visible()                 # readouts rendered too
+
+
+def test_every_tile_renders_without_js_errors(page):
+    # The structural guard for the class of bug that shipped in #174: open EVERY dashboard tile so
+    # every feature renderer actually executes in a browser. Any uncaught exception fails the test
+    # via the `page` fixture's pageerror collector — no screen can silently blank out again.
+    for name in ("Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Roof", "Vehicle"):
+        page.get_by_text(name, exact=True).first.click()
+        expect(page.locator("#title")).to_have_text(name)
+        assert page.locator("#app").inner_text().strip(), "%s screen rendered empty" % name
+        # JS click on the header's #back: deterministic (no pointer actionability / overlay
+        # races) — this test is about renderers throwing, not about hitting the back arrow.
+        page.evaluate("document.getElementById('back').click()")
+    expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()     # back on the dashboard
+
+
+def test_roof_hold_release_sends_stop(page):
+    # The hold-to-move contract: pressing Open streams the move, RELEASING must send STOP. Before the
+    # fix, command() re-rendered synchronously, detaching the held button, so its closure-scoped
+    # pointerup never fired and no STOP went out (the roof kept moving until the server's Position
+    # auto-stop). The release is now caught at document level and the screen is not rebuilt while a
+    # move is held. Assert the actual /api/command traffic: a roof "open" on press, "stop" on release.
+    page.on("dialog", lambda d: d.accept())          # the "path clear?" confirm
+    page.get_by_text("Roof", exact=True).first.click()
+    open_btn = page.get_by_role("button", name="open")
+    expect(open_btn).to_be_enabled()
+
+    def is_cmd(req, what):
+        return "/api/command" in req.url and req.method == "POST" \
+            and '"roof"' in (req.post_data or "") and ('"%s"' % what) in (req.post_data or "")
+
+    open_btn.hover()
+    try:
+        with page.expect_request(lambda r: is_cmd(r, "open"), timeout=10000):
+            page.mouse.down()
+        with page.expect_request(lambda r: is_cmd(r, "stop"), timeout=10000):
+            page.mouse.up()
+    finally:
+        # Never leave the module-scoped mock daemon mid-move: a failed assertion above would
+        # otherwise hold the serve lock and stall every later test's command ("Sending…" forever).
+        page.mouse.up()
+        origin = page.url.split("/", 3)[0] + "//" + page.url.split("/", 3)[2]
+        page.request.post(origin + "/api/command",
+                          data={"function": "roof", "what": "stop", "value": None, "confirm": True})
 
 
 def test_lighting_screen_lamps_are_directly_controllable(page):
