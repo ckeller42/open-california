@@ -23,6 +23,10 @@ from __future__ import annotations
 import os
 import time
 
+from . import log as _log
+
+log = _log.get(__name__)
+
 # Defaults (all env-tunable in serve). window_s: how long AFTER PARKING to keep trying the restore
 # (covers a brief post-park driving-lock); max_fails: attempts before concluding the unit won't take
 # it and giving up; min_soc: below this leisure-battery %, assume the unit is protecting the battery
@@ -250,16 +254,16 @@ class AutoCamper:
         else:
             event = "idle"
         if event != "idle":
-            print("auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d owe=%s)"
+            log.warning("auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d owe=%s)"
                   % (event, d["notice"] or event.replace("_", " "), ign, master, soc, warning,
-                     self.fails, d["owe_restore"]), flush=True)
+                     self.fails, d["owe_restore"]))
         if d["notice"]:
             self.notice = {"ts": round(time.time(), 1), "msg": d["notice"]}
 
         if d["actuate"]:
             cfg = d["restore_config"] or {}
             if read_only:
-                print("auto-camper: parked with a restore owed but writes are read-only; not restoring",
+                log.warning("auto-camper: parked with a restore owed but writes are read-only; not restoring",
                       flush=True)
                 self.owe_restore, self.restore_until = False, None   # can't act -> don't spin
                 return
@@ -270,7 +274,7 @@ class AutoCamper:
                 if cfg.get("lights"):
                     await actuate("campingmode", "lights", "on")
             except Exception as ex:           # BLE hiccup etc. -> counts as a failed attempt via fails
-                print("auto-camper: restore actuation failed: %r" % ex, flush=True)
+                log.warning("auto-camper: restore actuation failed: %r", ex)
 
     def snapshot(self):
         """The ``_meta.auto_camper`` block for the web UI: toggle, whether a restore is owed, notice."""

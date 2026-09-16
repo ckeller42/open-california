@@ -100,6 +100,15 @@ Then adapt `calictl/deploy/calictl.service` (paths, `User`, `EnvironmentFile`) a
 journalctl -u calictl -f                                    # daemon logs
 ```
 
+Log lines carry a level and the module (`INFO calictl.serve: polled 14 functions`; the journal adds
+the timestamp — outside systemd calictl stamps them itself). `CALICTL_LOG_LEVEL=DEBUG` in
+`calictl.env` adds the per-poll chatter; `WARNING` keeps only failures and refusals. To record the
+unit's raw BLE traffic for offline analysis add `CALICTL_BLE_TRACE=/home/pi/ble.jsonl` (one JSON
+line per notification/read/write; `python3 -m tools.trace_compare` replays it against the mock).
+
+```sh
+```
+
 Add Home Assistant / MQTT / InfluxDB / Grafana: `calictl/deploy/homeassistant/HOMEASSISTANT.md`
 and `calictl/deploy/GRAFANA.md`. `install.sh --with-sinks` installs the Python client libs
 **and prompts for the MQTT broker credentials**, writing them to `calictl.env` — so the

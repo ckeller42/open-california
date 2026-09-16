@@ -70,6 +70,7 @@ DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + s
 python3 -m calictl status                            # live read of all functions (needs BLE + free slot)
 python3 -m calictl serve [--dry-run]                 # the unified daemon (read-only unless --enable-writes)
 curl -s localhost:8088/api/state                     # buspi: live decoded state via the RUNNING daemon
+CALICTL_LOG_LEVEL=DEBUG python3 -m calictl serve …         # daemon logs via `logging` (calictl/log.py): level, name, timestamp (dropped under journald)
 CALICTL_BLE_TRACE=~/ble.jsonl python3 -m calictl serve …   # record every notify/read/write of the REAL unit (JSONL)
 python3 -m tools.trace_compare ~/ble.jsonl           # replay that trace through the mock: round-trip, cadence, dynamics
 ```
