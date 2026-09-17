@@ -185,6 +185,13 @@ class MockCamperUnit:
         # Unpowered, the unit stops measuring and FREEZES BOTH tanks at their last reading, which is
         # what `freshness.implausible_water_drop` detects: a fresh-water drop while grey is exactly
         # frozen. Powered, it measures and pushes 1302 on an actual measured CHANGE.
+        # The firmware ACKs some writes and then silently IGNORES them — the nastiest class for a
+        # client, because nothing errors and only a readback reveals it. `driving` is an explicit
+        # mock flag, NOT a derived predicate: the real "is the vehicle stationary" condition
+        # (terminal-15 vs road speed vs parking brake) is still under decompile review, so deriving
+        # it here would encode a guess. See `refusals` for the audit trail.
+        self.driving = False
+        self.refusals: list[tuple[str, str]] = []     # (function, why) for every ACK-and-ignore
         self.water_powered = True                     # False = parked/locked: both tanks freeze
         self._water_latch: dict[str, int] = {}        # the frozen reading, captured when power drops
         self._water_pushed: dict[str, int] = {}       # last values notified, so we push only on change
@@ -421,6 +428,36 @@ class MockCamperUnit:
         return changed
 
     # --- control writes ----------------------------------------------------
+    def _refusal(self, fn: str, ctrl: dict) -> str | None:
+        """Why the unit would ACK this write and then ignore it, or ``None`` to apply it.
+
+        Only DEVICE-confirmed refusals live here. The unit's *reason* for each is its own; what
+        matters for a client is that the write appears to succeed and the state never moves.
+        """
+        # Camping master ON is refused while the vehicle is being driven — live-verified
+        # 2026-08-19: the write did not take, and the unit's own console showed "Diese Funktion ist
+        # während der Fahrt nicht verfügbar". Gated on the explicit `driving` flag, since the real
+        # predicate is still under decompile review.
+        if fn == "campingmode" and self.driving and ctrl.get("State") == 1:
+            return "camping master is refused while driving"
+        # The pop-top reading light (L9) needs the roof raised — the lamp is unpowered when the
+        # roof is down, so the write lands and nothing lights.
+        if fn == "lighting" and ctrl.get("Mode") == LIGHT_MODE_SET_BRIGHTNESS:
+            pos = (self.state.get("roof") or {}).get("Position")
+            zone = ctrl.get("BrightnessLNine")
+            if pos in (0, 14) and zone not in (None, LIGHT_ZONE_UNCHANGED) and zone > 0:
+                return "the pop-top reading light needs the roof raised"
+        # The cooling timer can only be set while the fridge is OFF. Only an actual CHANGE counts:
+        # a full-packet write carries the current timer values back on every unrelated command
+        # (power, level), and the unit obviously does not refuse those.
+        cs = self.state.get("cooler") or {}
+        if fn == "cooler" and cs.get("State") == 1:
+            moves_timer = any(ctrl.get(c) is not None and ctrl.get(c) != cs.get(s)
+                              for c, s in (("TimerHour", "TimerHourSet"), ("TimerMin", "TimerMinSet")))
+            if ctrl.get("TimerStart") == 1 or moves_timer:
+                return "the cooling timer can only be set while the fridge is off"
+        return None
+
     def write(self, uuid: str, data: bytes) -> None:
         if uuid == device.HEARTBEAT_CHAR:
             return self.beat(data)
@@ -451,6 +488,16 @@ class MockCamperUnit:
         #    heartbeat the write is ACKed and ignored.
         if not self.armed:
             return
+
+        # 2b) UNIT-SIDE REFUSALS: parsed fine, armed, ACKed — and then silently not applied. The
+        #     client sees no error, so only a readback reveals it; that is exactly the trap this
+        #     models. All three are DEVICE-confirmed (control-and-actuation.md); calictl mirrors
+        #     them client-side in `control.command_precondition`, and with the mock permissive
+        #     those mirrors could be deleted without any test noticing.
+        refusal = self._refusal(fn, ctrl)
+        if refusal:
+            self.refusals.append((fn, refusal))
+            return                                # ACK, no state change — the silent kind
         st = self.state.setdefault(fn, {})
 
         # Lighting is COMMIT-GATED (HCI-verified 2026-07-13). A SET_PROFILE (Mode 16) or

@@ -410,6 +410,79 @@ def test_water_pushes_1302_only_on_a_measured_change():
     assert pushes == []                            # nothing measured -> nothing notified
 
 
+def test_camping_master_is_acked_but_silently_refused_while_driving():
+    """The firmware refuses camping master ON while the vehicle is being driven — live-verified
+    2026-08-19: the write did not take, `applied:false`, and the unit's own console said "Diese
+    Funktion ist während der Fahrt nicht verfügbar". Nothing errors: the write is ACKed and the
+    state simply never moves, which is the trap. Until the mock could express this, every write
+    that passed range-validation applied, so no test could tell ACK-and-apply from ACK-and-ignore.
+
+    .. test:: Camping master ON is ACKed and ignored while driving
+       :id: T_MOCK_REFUSES_CAMPING_WHILE_DRIVING
+    """
+    from calictl import control
+    f = _funcs()
+    u = _armed_unit(campingmode={"Installed": 1, "State": 0, "UsbCharger": 1})
+    frame = control.build(f, "campingmode", "master", "on", u.decoded("campingmode"))
+
+    u.driving = True
+    u.write(f["campingmode"].control_char, frame)
+    assert u.writes[-1][0] == "campingmode"                  # the unit ACKed it (it was received)
+    assert u.decoded("campingmode")["State"] == 0            # ...and silently did not apply it
+    assert u.refusals and "driving" in u.refusals[-1][1]
+
+    u.driving = False                                        # stationary: the same frame applies
+    u.write(f["campingmode"].control_char, frame)
+    assert u.decoded("campingmode")["State"] == 1
+
+
+def test_roof_reading_light_is_refused_while_the_roof_is_down():
+    """The pop-top reading light (L9) is unpowered with the roof down, so the write lands and
+    nothing lights (DEVICE-confirmed). calictl mirrors this in `control.command_precondition`;
+    with a permissive mock that mirror could be deleted and no test would notice.
+
+    .. test:: L9 brightness is ACKed and ignored with the roof closed
+       :id: T_MOCK_REFUSES_ROOF_LAMP_WHEN_DOWN
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLNine": 0},
+                    roof={"Installed": 1, "Position": 0})          # 0 = closed
+    _commit_brightness(u, "BrightnessLNine", 8)
+    assert u.decoded("lighting")["BrightnessLNine"] == 0           # refused, echo included
+    assert u.refusals and "roof raised" in u.refusals[-1][1]
+
+    u.state["roof"]["Position"] = 1                                # roof open -> the lamp has power
+    _commit_brightness(u, "BrightnessLNine", 8)
+    assert u.decoded("lighting")["BrightnessLNine"] == 8
+
+
+def test_cooling_timer_is_refused_while_the_fridge_is_on_but_power_still_works():
+    """The cooling timer is settable only while the fridge is OFF (DEVICE-confirmed). The refusal
+    must key on an actual timer CHANGE, not on the timer fields being present: calictl's writes are
+    full-packet and carry the current timer values back on every unrelated command, and the unit
+    plainly does not refuse those.
+
+    .. test:: The cooling timer is refused while the fridge runs; unrelated writes are not
+       :id: T_MOCK_REFUSES_COOLER_TIMER_WHEN_ON
+    """
+    from calictl import control
+    f = _funcs()
+    u = _armed_unit(cooler={"Installed": 1, "State": 1, "Level": 3, "Mode": 0,
+                            "TimerHourSet": 7, "TimerMinSet": 0})
+    cur = u.decoded("cooler")
+
+    u.write(f["cooler"].control_char, control.build(f, "cooler", "timer_set", "09:30", cur))
+    assert u.decoded("cooler")["TimerHourSet"] == 7                # refused while the fridge runs
+    assert u.refusals and "fridge is off" in u.refusals[-1][1]
+
+    n = len(u.refusals)                                            # an unrelated write must pass
+    u.write(f["cooler"].control_char, control.build(f, "cooler", "level", 5, cur))
+    assert u.decoded("cooler")["Level"] == 5 and len(u.refusals) == n
+
+    u.state["cooler"]["State"] = 0                                 # fridge off -> the timer sets
+    u.write(f["cooler"].control_char, control.build(f, "cooler", "timer_set", "09:30", u.decoded("cooler")))
+    assert (u.decoded("cooler")["TimerHourSet"], u.decoded("cooler")["TimerMinSet"]) == (9, 30)
+
+
 def test_tick_advances_the_vehicle_clock():
     """CarTimeMonth is 0-based on the wire (the app shows month+1 — app lab 2026-09-16); the
     month rollover below is 8 (= September) -> 9 (= October) at 23:59:30 + 45 s on the 30th."""
