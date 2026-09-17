@@ -189,3 +189,29 @@ def test_command_precondition_cooler_timer_needs_fridge_off():
         assert control.command_precondition("cooler", what, 9, off) is None
         assert control.command_precondition("cooler", what, 9, {}) is None  # unknown -> allow
     assert control.command_precondition("cooler", "power", "on", on) is None  # non-timer unaffected
+
+
+def test_command_precondition_mirrors_the_remaining_web_ui_gates():
+    """The web UI greys state-forbidden controls, but those gates are client-side: the CLI/API/HA
+    paths bypass them. These three families are the ones the UI grays and the server must refuse too
+    — quiet mode needs the fridge ON (the mirror of the timer gate above), camping lights/USB need
+    the camping master ON (the rear USB is physically dead without it, #111), and the energy-mode
+    selector is refused while the unit reports it locked. Unknown state always allows the write."""
+    from calictl import control
+    fridge_on, fridge_off = {"cooler": {"State": 1}}, {"cooler": {"State": 0}}
+    for what in ("mode", "night_on", "night_off"):
+        assert control.command_precondition("cooler", what, 2, fridge_off)        # fridge off -> refuse
+        assert control.command_precondition("cooler", what, 2, fridge_on) is None
+        assert control.command_precondition("cooler", what, 2, {}) is None        # unknown -> allow
+
+    master_on, master_off = {"campingmode": {"State": 1}}, {"campingmode": {"State": 0}}
+    for what in ("lights", "usb"):
+        assert control.command_precondition("campingmode", what, "on", master_off)   # refuse
+        assert control.command_precondition("campingmode", what, "on", master_on) is None
+        assert control.command_precondition("campingmode", what, "on", {}) is None
+    # the master switch itself is never gated here (the firmware refuses it while driving)
+    assert control.command_precondition("campingmode", "master", "on", master_off) is None
+
+    assert control.command_precondition("energy", "mode", "eco", {"energy": {"EnergyModeNotSelectable": 1}})
+    assert control.command_precondition("energy", "mode", "eco", {"energy": {"EnergyModeNotSelectable": 0}}) is None
+    assert control.command_precondition("energy", "mode", "eco", {}) is None
