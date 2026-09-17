@@ -43,6 +43,20 @@ except Exception as _e:  # noqa: BLE001 — any launch failure (missing executab
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# These tests share one module-scoped daemon + a real browser, so they must not be spread across
+# xdist workers: keep the whole module on a single worker (`--dist loadgroup`, set by the pre-commit
+# hook / tools/ci.sh / CI). Without it each worker started its OWN daemon, the module fixture below
+# deleted the shared cache files out from under a peer mid-run, and the latency assertion competed
+# with N browsers — two GUI tests flaked under `-n auto` while passing serially.
+pytestmark = pytest.mark.xdist_group("e2e")
+
+# Cache files the e2e daemon writes, namespaced per xdist worker (`PYTEST_XDIST_WORKER` is unset when
+# running serially). Belt-and-braces alongside the loadgroup marker: it also keeps two CONCURRENT
+# pytest runs (e.g. the pre-commit hook while a manual run is open) from clobbering each other.
+def _cache(name):
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+    return "/tmp/calictl_e2e%s_%s" % ("-" + worker if worker else "", name)
+
 
 def _free_port():
     s = socket.socket()
@@ -89,7 +103,7 @@ def _start_daemon(port, extra_env):
 @pytest.fixture(scope="module")
 def base_url():
     port = _free_port()
-    for stale in ("/tmp/calictl_e2e_history.jsonl", "/tmp/calictl_e2e_state.json", "/tmp/calictl_e2e_pairing.json"):
+    for stale in (_cache("history.jsonl"), _cache("state.json"), _cache("pairing.json")):
         try:                       # a previous run's samples must not make this one pass
             os.unlink(stale)
         except OSError:
@@ -98,9 +112,9 @@ def base_url():
     # this the suite writes mock data into the developer's real ~/.cache. Same for the pairing
     # cache -- it's only read as a `pairing_snapshot()` fallback before any wizard run, but a
     # real cached address there would falsely suppress the "prominent setup card" case.
-    proc, url = _start_daemon(port, {"CALICTL_STATE_CACHE": "/tmp/calictl_e2e_state.json",
-                                      "CALICTL_HISTORY_CACHE": "/tmp/calictl_e2e_history.jsonl",
-                                      "CALICTL_PAIRING_CACHE": "/tmp/calictl_e2e_pairing.json"})
+    proc, url = _start_daemon(port, {"CALICTL_STATE_CACHE": _cache("state.json"),
+                                      "CALICTL_HISTORY_CACHE": _cache("history.jsonl"),
+                                      "CALICTL_PAIRING_CACHE": _cache("pairing.json")})
     try:
         yield url
     finally:

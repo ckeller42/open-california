@@ -24,7 +24,8 @@ fi
 
 test_suite() {   # parallel when pytest-xdist is present (tools/ci.sh dev), else serial
   if "$PY" -c 'import xdist' 2>/dev/null; then
-    "$PY" -m pytest tests/ -q -n auto
+    # --dist loadgroup: the e2e module is one xdist_group (shared daemon + browser) -> single worker.
+    "$PY" -m pytest tests/ -q -n auto --dist loadgroup
   else
     "$PY" -m pytest tests/ -q
   fi

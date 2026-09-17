@@ -33,7 +33,7 @@ jobs:
       - name: Install test/tooling deps (runtime is stdlib-only)
         run: pip install -r requirements-dev.txt
       - name: Test suite (parallel; conftest isolates state per-test so it's xdist-safe)
-        run: python -m pytest tests/ -q -n auto
+        run: python -m pytest tests/ -q -n auto --dist loadgroup
       # The next three checks are Python-version-independent -> run once (on the deploy target 3.13)
       # instead of 3x. The import-cleanliness guard stays on ALL versions (a stdlib layout can differ).
       - name: Signal-coverage + semantic-review audit
