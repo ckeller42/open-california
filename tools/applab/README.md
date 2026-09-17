@@ -128,9 +128,13 @@ What makes a restart survivable (all in `fake_unit_ble.py`):
   (or `pkill -TERM`), never `-9`.
 - **Known limitation** — reconnecting to a *restarted* fake is not fully reliable: netsimd can keep
   the old radio registered at the same address even after a clean `power_off()`, so the app reports
-  *"Connection not possible"* against the new fake. When that happens, restart the emulator too
-  (`labctl.sh down` then `up`) — a fresh netsim clears the twin, and the bond still holds so it's a
-  reconnect, not a re-pair.
+  *"Connection not possible"* against the new fake and the new process logs **nothing at all**
+  (that silence is the giveaway — the packets never reach it). `netsimd` is a **separate process
+  that outlives the emulator**, so killing the emulator alone does not clear it; `labctl.sh down`
+  stops netsimd too, and `labctl.sh status` shows it (netsimd up while the fake is down is the
+  ghost smell). Then `up` again — the bond still holds, so it's a reconnect, not a re-pair.
+  Do **not** work around it by changing `FAKE_UNIT_ADDR`: that escapes the ghost but silently
+  forces a full re-pair.
 - If a re-pair *is* needed (address changed, keystore wiped, or a stuck twin): in the app
   **Account → Vehicle → Bluetooth Reset**, forget `VWCAMPER` in Android's Bluetooth settings (on a
   rootable emulator a stubborn bond clears with BT off + `rm /data/misc/blue*/bt_config.*` + BT on),
