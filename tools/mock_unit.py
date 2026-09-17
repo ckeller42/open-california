@@ -55,7 +55,15 @@ _HEARTBEAT_SHORT = "1003"
 LEAVE_UNCHANGED_2BIT = 3   # the sg.a 2-bit "leave unchanged" sentinel (see control.SENTINEL)
 ROOF_STEP_S = 5.0          # seconds of a held valid move per Position step (closed→middle→open)
 ROOF_RELEASE_S = 1.5       # no roof frame for this long = the button was released (app streams @500 ms)
-ROOF_COUNTER_STALE_S = 1.5 # SafetyCounter not incremented for this long = no longer valid
+ROOF_COUNTER_STALE_S = 1.5
+# The unit drops a link that carries no 1003 beat for this long (on-device 2026-07-09).
+HEARTBEAT_TIMEOUT_S = 15.0
+# The BLE link drops for ~1 min at the engine crank (observed at the van). 0 disables the model.
+CRANK_DROP_S = 60.0
+# The unit withholds the roof motor while it validates a fresh SafetyCounter (~3 s per the app's
+# own dead-man, device.ROOF_SAFETY_VALIDATE_S). SEMI-VERIFIED: calictl has never driven the real
+# motor, so this is a parameter to tune, not a measured fact. 0 disables the withhold.
+ROOF_WITHHOLD_S = 3.0 # SafetyCounter not incremented for this long = no longer valid
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 LIGHT_MODE_SET_BRIGHTNESS = 4
 # Functions the real unit was CONFIRMED to push on change (control-and-actuation.md: the genuine
@@ -151,6 +159,7 @@ class MockCamperUnit:
         self._roof_ctr: int | None = None            # last SafetyCounter seen (roof frames)
         self._roof_streak = 0                        # counter increments observed (monotonic run)
         self._roof_ctr_advanced = 0.0                # self.now when the counter last incremented
+        self._roof_withhold_until = 0.0              # motor withheld until then (see ROOF_WITHHOLD_S)
         self._roof_dir: str | None = None            # "up" / "down" while a move frame is held
         self._roof_last_frame = 0.0                  # self.now when the last roof frame arrived
         self._roof_travel = 0.0                      # seconds of valid travel since the last step
@@ -192,6 +201,18 @@ class MockCamperUnit:
         # it here would encode a guess. See `refusals` for the audit trail.
         self.driving = False
         self.refusals: list[tuple[str, str]] = []     # (function, why) for every ACK-and-ignore
+        # Link liveness. The arm is a one-shot latch, but it does NOT last forever: the unit drops
+        # a link that carries no 1003 beat for ~15 s (on-device 2026-07-09). Only a link that has
+        # actually SEEN a beat can lapse — `_beat_t` stays None when a test arms the unit directly,
+        # so hand-armed fixtures never expire underneath themselves.
+        self._beat_t: float | None = None
+        # ONE connection slot (the phone holding it is why buspi can't connect). OPT-IN: enabling it
+        # globally makes calictl's own roof flow fail, because it opens a second client while the
+        # persistent session still holds one — see test_single_connection_slot for the detail.
+        self.one_slot = False
+        self.holder: object | None = None             # the one connection slot (phone or daemon)
+        self._wake_at: float | None = None            # scheduled re-wake (engine-crank drop)
+        self._crank_drop = False                      # drop the link at the end of this tick
         self.water_powered = True                     # False = parked/locked: both tanks freeze
         self._water_latch: dict[str, int] = {}        # the frozen reading, captured when power drops
         self._water_pushed: dict[str, int] = {}       # last values notified, so we push only on change
@@ -233,6 +254,7 @@ class MockCamperUnit:
         ctr = int.from_bytes(bytes(data), "big")
         self.last_beat = ctr
         self.armed = True
+        self._beat_t = self.now
 
     # --- notifications ---------------------------------------------------------
     def push(self, function: str, values: dict | None = None) -> None:
@@ -271,6 +293,8 @@ class MockCamperUnit:
         """Van parks -> deep sleep: the link dies and the unit stops advertising."""
         self.online = False
         self.armed = False
+        self.holder = None            # the link is gone, so the single slot is free again
+        self._beat_t = None
 
     def wake(self) -> None:
         """Physical use (door/ignition) wakes the unit; it advertises again."""
@@ -320,6 +344,13 @@ class MockCamperUnit:
                 if ign:
                     cm["State"] = 0            # the unit sheds camping master when terminal 15 rises
                 changed.add("campingmode")
+            # The BLE link also drops for ~1 min at the engine crank (observed at the van) — the one
+            # moment calictl both loses the link AND has state changes to reconcile. Deferred to the
+            # END of this tick so the camping-shed notification still goes out first: the field data
+            # (camping-watch) shows every ignition 0->1 paired with master_on 1->0, i.e. the daemon
+            # did observe the shed, so the push cannot be swallowed by the drop.
+            if ign and CRANK_DROP_S:
+                self._crank_drop = True
         if v is not None:
             self._last_t15 = int(ign)
         e = self.state.get("energy")
@@ -419,12 +450,31 @@ class MockCamperUnit:
                 changed.add("water")
                 self.push("water")
 
+        # The arm is a latch, not a subscription: a link that stops beating is dropped after
+        # HEARTBEAT_TIMEOUT_S (on-device 2026-07-09) and the arm goes with it. Without this the mock
+        # stayed armed forever after a single beat, so a daemon whose heartbeat task died mid-write
+        # would still pass every offline test.
+        if self.armed and self._beat_t is not None and self.now - self._beat_t > HEARTBEAT_TIMEOUT_S:
+            self.armed = False
+            self._beat_t = None
+            self.drop()
+
+        # Scheduled re-wake (engine crank): the unit comes back by itself.
+        if self._wake_at is not None and self.now >= self._wake_at:
+            self._wake_at = None
+            self.wake()
+
         # Change-driven pushes, modelled ONLY for the chars the unit was CONFIRMED to push on real
         # hardware: campingmode (1202) and ignition/vehicle (1004) — control-and-actuation.md. The
         # heartbeat-traced buspi run of 2026-09-16 saw NO change-push on the other 12 subscribed
         # chars in 150 s, so pushing everything here would be fiction (protocol-crosscheck-applab).
         for fn in changed & CHANGE_PUSH_FNS:
             self.push(fn)
+
+        if getattr(self, "_crank_drop", False):    # engine crank: notify first, then lose the link
+            self._crank_drop = False
+            self.drop()
+            self._wake_at = self.now + CRANK_DROP_S
         return changed
 
     # --- control writes ----------------------------------------------------
@@ -563,12 +613,19 @@ class MockCamperUnit:
             stale = self._roof_streak and (self.now - self._roof_ctr_advanced) > ROOF_COUNTER_STALE_S
             if stale:
                 self._roof_streak = 0
+            if self._roof_streak >= 2 and not st.get("SafetyCounterValid"):
+                # Counter just validated: the unit WITHHOLDS the motor for ROOF_WITHHOLD_S while it
+                # satisfies itself the stream is live. A restarted counter costs the withhold again,
+                # which is why the GUI debounces a re-press.
+                self._roof_withhold_until = self.now + ROOF_WITHHOLD_S
             st["SafetyCounterValid"] = 1 if self._roof_streak >= 2 else 0
             up, down = ctrl.get("Up") == 1, ctrl.get("Down") == 1
             new_dir = "up" if up and not down else "down" if down and not up else None
             if new_dir != self._roof_dir:
                 self._roof_travel = 0.0
-            self._roof_dir = new_dir if st["SafetyCounterValid"] else None
+            # Valid counter alone does not move the motor — the withhold must also have expired.
+            moving = st["SafetyCounterValid"] and self.now >= self._roof_withhold_until
+            self._roof_dir = new_dir if moving else None
             self._roof_last_frame = self.now
             return                                # motion itself happens on the clock: tick()
 
@@ -644,10 +701,20 @@ class MockBleakClient:
     async def connect(self):
         if self.unit is not None and not self.unit.online:
             raise MockDisconnect("van asleep (not advertising)")
+        # ONE connection slot: while the phone app (or another client) holds it the unit stops
+        # advertising and a second connect fails. calictl's own taxonomy distinguishes this from a
+        # sleeping van (value-freshness.md) — with a mock that let everyone in, "phone holds the
+        # slot" and "van asleep" were the same behaviour and a mis-classification was invisible.
+        if self.unit is not None and self.unit.one_slot and self.unit.holder not in (None, self):
+            raise MockDisconnect("connection slot busy (another client is connected)")
+        if self.unit is not None:
+            self.unit.holder = self
         self.is_connected = True
 
     async def disconnect(self):
         self.is_connected = False
+        if self.unit is not None and self.unit.holder is self:
+            self.unit.holder = None               # release the single slot
         self._unsubscribe_all()                   # a dropped link takes its subscriptions with it
 
     def _unsubscribe_all(self):
