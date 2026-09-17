@@ -371,9 +371,14 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
   (`_roof_stop`). No DOM rebuild while `roofHold` is set; a re-press within 1000 ms is debounced (a
   restarted SafetyCounter costs another ~3 s motor withhold). Open/close are greyed under the app's
   move-block set (`ROOF_MOVE_BLOCK`, see `alert-states.md`); STOP is never greyed.
-- **Gates are UI-only today** (known gap): `/api/command`, the CLI and HA/MQTT still accept a roof
-  move under a blocking `InfoPopUp`, camping lights/USB with master off, and quiet mode with the
-  refrigerator box off — only the cooler timer-while-on and roof-reading-light rows are refused
-  server-side (`command_precondition`; roof bypasses it in `serve.on_command`). Deeper fix = rows
-  in `command_precondition`. The roof gate also reads the last-polled state without a freshness
-  check (a stale `not_possible` can grey it for a poll while asleep).
+- **Most gates are enforced server-side** (`control.command_precondition`, shared by `/api/command`,
+  the CLI and HA/MQTT — the web UI's greying is only the affordance on top): roof reading light needs
+  the roof raised, the cooling timer needs the fridge off, quiet mode + its night schedule need the
+  fridge **on**, camping lights/USB need the camping master on, and the energy mode is refused while
+  the unit reports `EnergyModeNotSelectable`. Each blocks only when the gating state is *positively*
+  wrong — unknown/absent state allows the write. The camping **master** is deliberately not gated
+  (the firmware itself refuses it while driving).
+- **Still UI-only** (known gap): a roof move under a blocking `InfoPopUp` — roof bypasses
+  `command_precondition` in `serve.on_command` (it routes to `_roof_move`/`_roof_stop` first). The
+  roof gate also reads the last-polled state without a freshness check (a stale `not_possible` can
+  grey it for a poll while asleep).

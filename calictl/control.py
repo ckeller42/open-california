@@ -292,6 +292,21 @@ def command_precondition(function, what, value, states):
     if function == "cooler" and what in ("timer_set", "timer_start"):
         if (states.get("cooler") or {}).get("State") == 1:   # fridge currently ON
             return "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+    # The mirror of the above: the quiet mode and its schedule are only settable while the fridge is
+    # ON (the app greys those rows when it is off — APP-OBSERVED, `evidence-ledger.md`). Without this
+    # the CLI/API/HA paths could send what the app never sends; the web UI already greys them.
+    if function == "cooler" and what in ("mode", "night_on", "night_off"):
+        if (states.get("cooler") or {}).get("State") == 0:   # fridge currently OFF
+            return "quiet mode can only be set while the fridge is on (switch the cooler on first)"
+    # Camping lights + rear USB are only actionable while the camping master is ON: the rear USB is
+    # physically dead without it (issue #111) and the light bits read back meaningless.
+    if function == "campingmode" and what in ("lights", "usb"):
+        if (states.get("campingmode") or {}).get("State") == 0:
+            return "camping lights and USB need camping mode on (turn the camping master on first)"
+    # The unit can lock the energy-mode selector (EnergyModeNotSelectable); honour it off-UI too.
+    if function == "energy" and what == "mode":
+        if (states.get("energy") or {}).get("EnergyModeNotSelectable") == 1:
+            return "the unit currently does not allow changing the energy mode"
     return None
 
 
