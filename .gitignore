@@ -63,3 +63,5 @@ docs/_build/
 
 # tools/applab: emulator screenshots are vendor UI captures — never committed
 applab-shots/
+# the fake unit's SMP bond keystore (LTK/IRK for the paired emulator) — per-machine secret state
+tools/applab/.fake_unit_keys.json

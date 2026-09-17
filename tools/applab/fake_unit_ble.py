@@ -27,6 +27,7 @@ import hashlib
 import json
 import logging
 import os
+import signal
 import sys
 
 REPO = os.environ.get("OC_REPO") or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -56,6 +57,10 @@ PAIRING_GRACE_S = float(os.environ.get("FAKE_UNIT_PAIRING_GRACE_S", "90"))   # b
 # hashes the VIN the user typed and compares (ny/c.java case 8: st.u.f(vin).c("SHA-256"), tail 16).
 VIN = os.environ.get("FAKE_UNIT_VIN", "")      # the VIN you type into the app; never committed (PII rule)
 VIN_FINGERPRINT = hashlib.sha256(VIN.encode()).digest()[-16:]
+# Stable identity + bond store so a fake restart does NOT force an app re-pair (see main()).
+FAKE_UNIT_ADDR = os.environ.get("FAKE_UNIT_ADDR", "C0:FF:EE:CA:11:F0")
+KEYSTORE_PATH = os.environ.get(
+    "FAKE_UNIT_KEYSTORE", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".fake_unit_keys.json"))
 BASELINE = os.path.join(REPO, "tests", "scenarios", "firmware", "baseline-0410.json")
 log = logging.getLogger("fake_unit")
 
@@ -236,17 +241,39 @@ class FakeUnit:
 
     # --- scenario console ------------------------------------------------------------
     async def console(self):
+        """Read scenario commands from a FIFO in a background thread and apply them on the loop.
+
+        Reads a named FIFO (``FAKE_UNIT_FIFO``, default ``$TMPDIR/applab/fake_unit.in``) rather than
+        stdin: asyncio's stdin pipe reader raises ``OSError: [Errno 22]`` on macOS when stdin is a
+        FIFO or is redirected under ``nohup``/``labctl``, and the failure fires in a later callback
+        that a try/except around the setup can't catch. A blocking thread on a FIFO path sidesteps
+        the selector entirely and works no matter how the process was launched.
+        """
+        import threading
+
         loop = asyncio.get_event_loop()
-        reader = asyncio.StreamReader()
-        await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
-        while True:
-            line = await reader.readline()
-            if not line:
-                await asyncio.sleep(3600)
-                continue
-            parts = line.decode().strip().split()
-            if not parts:
-                continue
+        path = os.environ.get(
+            "FAKE_UNIT_FIFO", os.path.join(os.environ.get("TMPDIR", "/tmp"), "applab", "fake_unit.in"))
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            if not os.path.exists(path):
+                os.mkfifo(path)
+        except OSError as e:
+            log.info("scenario console disabled (no FIFO at %s: %s)", path, e)
+            return
+        log.info("scenario console: echo commands into %s (set <fn> F=v | raw <fn> <hex> | show <fn> | q)", path)
+
+        def pump():
+            while True:
+                with open(path, encoding="utf-8") as fifo:   # reopen after each writer closes (EOF)
+                    for line in fifo:
+                        loop.call_soon_threadsafe(self._console_line, line)
+
+        threading.Thread(target=pump, daemon=True).start()
+
+    def _console_line(self, line: str):
+        parts = line.strip().split()
+        if parts:
             try:
                 if parts[0] == "q":
                     os._exit(0)
@@ -281,14 +308,21 @@ async def main():
     async with await open_transport(spec) as hci:
         cfg = DeviceConfiguration(
             name="VWCAMPER",
-            # A FRESH static address per run unless pinned with FAKE_UNIT_ADDR: netsimd keeps a
-            # killed fake's radio registered, and a new fake at the SAME address is shadowed by
-            # that stale twin (the phone's scan still sees VWCAMPER, but its connect lands on the
-            # dead entry and times out — cost an hour on 2026-09-16). The phone bonds to the
-            # address, so after a fake restart run the app's Account > Vehicle > "Bluetooth Reset"
-            # and the pairing wizard again.
-            address=Address(os.environ.get("FAKE_UNIT_ADDR") or "C0:FF:EE:CA:%02X:%02X" % tuple(os.urandom(2))),
-            keystore="JsonKeyStore",
+            # STABLE address (override FAKE_UNIT_ADDR): the phone bonds to this address, so keeping it
+            # constant + the persistent keystore below keeps the BOND across a fake restart — the app
+            # then shows "Connect" (a reconnect), not "Set up remote control" (a fresh pair), and no
+            # passkey dialog. CAVEAT: netsimd may still hold the OLD fake's radio at this address after
+            # a restart and shadow the new one (the app then reports "Connection not possible") — the
+            # clean-shutdown power_off() in __main__ reduces but does not eliminate this. If reconnect
+            # to a restarted fake fails, restart the emulator too (`labctl.sh down` then `up`). Always
+            # stop the fake with SIGTERM/SIGINT (never `kill -9`, which guarantees the stale twin).
+            address=Address(FAKE_UNIT_ADDR),
+            # PERSISTENT keystore at a fixed path (override FAKE_UNIT_KEYSTORE): the LTK/IRK from
+            # pairing are written here and reloaded on the next start, so the bond survives a fake
+            # restart. Without a filename Bumble derives the path from the device address AND names
+            # the namespace after it — fine as long as the address is stable (it is), but an explicit
+            # path keeps the keystore next to the lab's other state and easy to wipe for a clean pair.
+            keystore=f"JsonKeyStore:{KEYSTORE_PATH}",
             irk=bytes.fromhex("865F81FF5A8B486EAAE29A27AD9F77DC"),
             advertising_interval_min=100, advertising_interval_max=100,
         )
@@ -314,10 +348,29 @@ async def main():
             (AdvertisingData.COMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS, UUID(cu("1000")).to_bytes()),
         ]))
         await dev.start_advertising(auto_restart=True, advertising_data=adv, scan_response_data=scan_rsp)
-        print(f"### VWCAMPER advertising at {cfg.address} — passkey {PASSKEY:06d}", flush=True)
+        print(f"### VWCAMPER advertising at {cfg.address} — passkey {PASSKEY:06d} "
+              f"(keys {KEYSTORE_PATH})", flush=True)
         unit.tasks.append(asyncio.get_event_loop().create_task(unit.console()))
         unit.tasks.append(asyncio.get_event_loop().create_task(unit.clock()))
-        await hci.source.terminated
+
+        # Clean shutdown: power the radio off so netsimd DROPS this chip. A `kill -9` (or an
+        # un-handled SIGTERM) leaves the chip registered, and the next fake at the same address is
+        # shadowed by that dead twin — the phone scans and sees VWCAMPER but its connect times out.
+        stop = asyncio.Event()
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            try:
+                loop.add_signal_handler(sig, stop.set)
+            except (NotImplementedError, RuntimeError):
+                pass                              # add_signal_handler unsupported on this platform
+        term = asyncio.ensure_future(hci.source.terminated)
+        await asyncio.wait([term, asyncio.ensure_future(stop.wait())],
+                           return_when=asyncio.FIRST_COMPLETED)
+        print("### shutting down — deregistering radio", flush=True)
+        try:
+            await dev.power_off()
+        except Exception as e:  # noqa: BLE001
+            log.warning("power_off failed: %s", e)
 
 
 if __name__ == "__main__":
