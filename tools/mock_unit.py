@@ -180,6 +180,14 @@ class MockCamperUnit:
         self.light_actual: dict[str, int] = {}        # what the lamps are really at (ramped)
         self.light_applies = True                     # False = unit ACKs + echoes but lamps DON'T move
         self._light_ramp: dict[str, int] = {}         # zone -> target, stepped by tick()
+        # WATER is measurement-gated on the van's own WATER SYSTEM being powered — NOT on the 1003
+        # heartbeat (that was correlation; disproven at the van 2026-07-14, value-freshness.md).
+        # Unpowered, the unit stops measuring and FREEZES BOTH tanks at their last reading, which is
+        # what `freshness.implausible_water_drop` detects: a fresh-water drop while grey is exactly
+        # frozen. Powered, it measures and pushes 1302 on an actual measured CHANGE.
+        self.water_powered = True                     # False = parked/locked: both tanks freeze
+        self._water_latch: dict[str, int] = {}        # the frozen reading, captured when power drops
+        self._water_pushed: dict[str, int] = {}       # last values notified, so we push only on change
         # reverse maps: char UUID -> function, for read/write routing
         self._state_char = {f.state_char: fn for fn, f in self.funcs.items() if f.state_char}
         self._control_char = {f.control_char: fn for fn, f in self.funcs.items() if f.control_char}
@@ -192,9 +200,15 @@ class MockCamperUnit:
         fn = self._state_char.get(uuid)
         if fn is not None:
             vals = dict(self.state.get(fn, {}))
-            # Freshness gate (live-verified): a state char decays to a STALE latched value unless
-            # the 1003 liveness heartbeat is running — that drives the unit's measurement loop.
-            # So a read returns the latch until a heartbeat has armed the session, then the truth.
+            # Water: frozen at the last measured reading while the water system is unpowered. This
+            # is the REAL water gate (see `water_powered`); the generic heartbeat latch below is a
+            # different thing — it models the re-read chars the 1003 beat refreshes, and the
+            # heartbeat notably does NOT refresh water.
+            if fn == "water" and not self.water_powered and self._water_latch:
+                vals.update(self._water_latch)
+            # Generic freshness latch: a state char decays to a STALE latched value until the 1003
+            # liveness heartbeat runs during the read (device.read_all/read do this to keep the link
+            # up and refresh the re-read chars), after which the read returns the truth.
             if fn in self.read_latch and not self.armed:
                 vals.update(self.read_latch[fn])
             return _pack_state(self.funcs[fn], vals)
@@ -230,6 +244,21 @@ class MockCamperUnit:
         frame = _pack_state(f, {**self.state.get(function, {}), **(values or {})})
         for cb in list(subs):
             cb(_Char(f.state_char, ["notify"]), frame)
+
+    def set_water_power(self, on: bool) -> None:
+        """Power the van's water system on/off — the real gate on water measurement.
+
+        Switching it OFF freezes both tanks at their current reading (the unit stops measuring, so
+        every later read returns that latch no matter how the true level changes). Switching it ON
+        resumes measurement, and the next :meth:`tick` notifies 1302 if a value actually moved.
+        """
+        on = bool(on)
+        if not on and self.water_powered:
+            w = self.state.get("water", {})
+            self._water_latch = {k: w[k] for k in ("FreshWaterLevel", "WasteWaterLevel") if k in w}
+        elif on:
+            self._water_latch = {}
+        self.water_powered = on
 
     def drop(self) -> None:
         """Van parks -> deep sleep: the link dies and the unit stops advertising."""
@@ -371,6 +400,17 @@ class MockCamperUnit:
                 del self._light_ramp[zone]
             # Mode 4 = the SET_BRIGHTNESS/ramp notification the app confirms on.
             self.push("lighting", {**self.light_actual, "Mode": LIGHT_MODE_SET_BRIGHTNESS})
+
+        # Water: only a POWERED system measures, and the unit notifies 1302 on a measured change
+        # (value-freshness.md; `device._await_water_push` waits for exactly this). Parked, nothing
+        # changes and nothing is pushed — which is why the buspi trace saw no water push at all.
+        w = self.state.get("water")
+        if w is not None and self.water_powered:
+            cur = {k: w[k] for k in ("FreshWaterLevel", "WasteWaterLevel") if k in w}
+            if cur and cur != self._water_pushed:
+                self._water_pushed = cur
+                changed.add("water")
+                self.push("water")
 
         # Change-driven pushes, modelled ONLY for the chars the unit was CONFIRMED to push on real
         # hardware: campingmode (1202) and ignition/vehicle (1004) — control-and-actuation.md. The

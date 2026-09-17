@@ -324,6 +324,92 @@ def test_change_pushes_only_for_the_chars_the_unit_really_pushes():
     assert heater == []
 
 
+def test_water_freezes_both_tanks_while_the_system_is_unpowered():
+    """Water is measurement-gated on the van's WATER SYSTEM, not on the 1003 heartbeat — the
+    2026-07-09 "heartbeat refreshed water" reading was correlation and was disproven at the van
+    (value-freshness.md). Unpowered, the unit stops measuring and freezes BOTH tanks, so a read
+    returns the latch however the true level moves, and an armed heartbeat does NOT thaw it.
+
+    .. test:: Unpowered water freezes both tanks regardless of the heartbeat
+       :id: T_MOCK_WATER_MEASUREMENT_GATE
+    """
+    u = _armed_unit(water={"Installed": 1, "FreshWaterUnit": 1, "FreshWaterVolume": 22,
+                           "FreshWaterLevel": 19, "WasteWaterUnit": 1, "WasteWaterVolume": 22,
+                           "WasteWaterLevel": 3})
+    assert u.armed is True                                   # heartbeat running the whole time
+    u.set_water_power(False)                                 # van parked/locked
+    # the true levels move on (someone drains grey at a dump station) but the unit isn't measuring
+    u.state["water"].update(FreshWaterLevel=11, WasteWaterLevel=0)
+    w = u.decoded("water")
+    assert (w["FreshWaterLevel"], w["WasteWaterLevel"]) == (19, 3)   # BOTH frozen at the latch
+    u.set_water_power(True)                                  # water system on -> it measures again
+    w = u.decoded("water")
+    assert (w["FreshWaterLevel"], w["WasteWaterLevel"]) == (11, 0)
+
+
+def test_unpowered_water_latch_is_exactly_what_the_stale_guard_rejects():
+    """The end-to-end payoff of the gate: what the mock serves while parked is precisely the
+    signature `freshness.implausible_water_drop` exists to catch — fresh dropping while grey is
+    EXACTLY frozen — and what it serves while powered is accepted as a live measurement.
+
+    .. test:: The mock's parked water reading trips R_WATER_STALE_GUARD, the live one does not
+       :id: T_MOCK_WATER_TRIPS_STALE_GUARD
+       :links: R_WATER_STALE_GUARD
+    """
+    from calictl import freshness, semantics
+    u = _armed_unit(water={"Installed": 1, "FreshWaterUnit": 1, "FreshWaterVolume": 22,
+                           "FreshWaterLevel": 19, "WasteWaterUnit": 1, "WasteWaterVolume": 22,
+                           "WasteWaterLevel": 3})
+    plausible = semantics.water(u.decoded("water"))
+
+    # Parked: the unit latches. A later poll sees a LOWER fresh level with grey exactly frozen —
+    # the guard must reject it and the daemon keeps showing the last plausible reading.
+    u.set_water_power(False)
+    u.state["water"]["FreshWaterLevel"] = 1                  # the classic parked-decay reading
+    u._water_latch["FreshWaterLevel"] = 1                    # unit re-latches lower (the ratchet)
+    parked = semantics.water(u.decoded("water"))
+    assert parked["waste"]["liters"] == plausible["waste"]["liters"]   # grey exactly frozen
+    assert freshness.implausible_water_drop(parked, plausible) is True
+
+    # Powered: real usage moves grey too, so the same fresh drop is accepted as live.
+    u.set_water_power(True)
+    u.state["water"].update(FreshWaterLevel=17, WasteWaterLevel=5)
+    live = semantics.water(u.decoded("water"))
+    assert freshness.implausible_water_drop(live, plausible) is False
+
+
+def test_water_pushes_1302_only_on_a_measured_change():
+    """The unit notifies 1302 on an actual measured change (what `device._await_water_push` waits
+    for) — so a powered system that moves pushes, a powered system at rest does not, and a parked
+    one never does however the true level drifts. That last case is why the buspi trace saw no
+    water push at all.
+
+    .. test:: Water notifies only on a measured change, never while unpowered
+       :id: T_MOCK_WATER_PUSH_ON_CHANGE
+    """
+    u = _armed_unit(water={"Installed": 1, "FreshWaterUnit": 1, "FreshWaterVolume": 22,
+                           "FreshWaterLevel": 19, "WasteWaterUnit": 1, "WasteWaterVolume": 22,
+                           "WasteWaterLevel": 3})
+    pushes = []
+    _subscribe(u, "water", pushes)
+    u.tick(1.0)                                    # settle the baseline
+    pushes.clear()
+
+    u.tick(1.0)
+    assert pushes == []                            # powered but nothing moved -> no push
+
+    u.state["water"]["FreshWaterLevel"] = 18       # a tap runs: a real measured change
+    u.tick(1.0)
+    assert len(pushes) == 1
+    assert protocol.decode(_funcs()["water"], pushes[-1])["FreshWaterLevel"] == 18
+
+    pushes.clear()
+    u.set_water_power(False)                       # parked: measurement stops
+    u.state["water"]["FreshWaterLevel"] = 2        # the true level drifts / the unit latches
+    u.tick(60)
+    assert pushes == []                            # nothing measured -> nothing notified
+
+
 def test_tick_advances_the_vehicle_clock():
     """CarTimeMonth is 0-based on the wire (the app shows month+1 — app lab 2026-09-16); the
     month rollover below is 8 (= September) -> 9 (= October) at 23:59:30 + 45 s on the 30th."""
