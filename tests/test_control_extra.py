@@ -215,3 +215,30 @@ def test_command_precondition_mirrors_the_remaining_web_ui_gates():
     assert control.command_precondition("energy", "mode", "eco", {"energy": {"EnergyModeNotSelectable": 1}})
     assert control.command_precondition("energy", "mode", "eco", {"energy": {"EnergyModeNotSelectable": 0}}) is None
     assert control.command_precondition("energy", "mode", "eco", {}) is None
+
+
+def test_command_precondition_roof_move_blocked_but_stop_never_is():
+    """Roof open/close are refused under the same alert set the GUI greys (`ROOF_MOVE_BLOCK` in
+    webui/app.js) and on a Position the unit reports as `error`. STOP is the safety action — it is
+    never gated, under any alert. The unit enforces this itself (it withholds the motor); this is a
+    courtesy refusal so the off-UI paths behave like the app."""
+    from calictl import control
+
+    def state(popup, pos=0, installed=1):
+        return {"roof": {"Installed": installed, "InfoPopUp": popup, "Position": pos}}
+
+    # InfoPopUp -> alert (semantics._ROOF_ALERT): 1 child_lock, 2/3/12 in_use, 4 error, 5 driving,
+    # 7 emergency_locked, 9 not_stationary, 10 not_possible, 11 low_battery
+    for popup in (1, 2, 3, 4, 5, 7, 9, 10, 11, 12):
+        for what in ("open", "close"):
+            assert control.command_precondition("roof", what, None, state(popup)), popup
+        assert control.command_precondition("roof", "stop", None, state(popup)) is None, popup
+    # 6 = sensor_error is deliberately NOT in the block set (the app still allows the move)
+    assert control.command_precondition("roof", "open", None, state(6)) is None
+    assert control.command_precondition("roof", "open", None, state(0)) is None      # no alert
+    # Position 15 = error blocks a move even with no alert
+    assert control.command_precondition("roof", "open", None, state(0, pos=15))
+    assert control.command_precondition("roof", "stop", None, state(0, pos=15)) is None
+    # unknown / not-installed state allows (can't prove it's blocked), per the doctrine
+    assert control.command_precondition("roof", "open", None, {}) is None
+    assert control.command_precondition("roof", "open", None, state(1, installed=0)) is None

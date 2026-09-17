@@ -647,6 +647,16 @@ class Server:
             return None
         if function == "roof" and what == "stop":
             return await self._roof_stop_command()
+        # Roof MOVES gate here, before the session nudge: the roof branch below short-circuits to
+        # _roof_move and would otherwise never reach the precondition check at the bottom (the gap
+        # that left /api/command, CLI and HA able to drive the roof under a blocking InfoPopUp).
+        # Refusing up here also avoids waking the unit for a move we are about to refuse. STOP never
+        # gets here — it returned above — and must never be gated.
+        if function == "roof":
+            reason = control.command_precondition(function, what, value, self._last)
+            if reason:
+                log.warning("refusing %s/%s: %s" % (function, what, reason))
+                return None
         # A command means intent to control: clear any manual Disconnect, mark active (hold the
         # session), and keep-warm nudge the supervisor up now if it isn't. set_mode("connect") does
         # exactly those three; its return dict is irrelevant here.
