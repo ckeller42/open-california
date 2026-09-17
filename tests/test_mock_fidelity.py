@@ -188,14 +188,18 @@ def test_roof_travels_on_the_clock_while_a_valid_move_is_held():
 
     hold(0, 0, 1.5)                                          # counter validates (stop frames)
     assert u.decoded("roof")["SafetyCounterValid"] == 1
+    # A valid counter is NOT enough: the unit withholds the motor ROOF_WITHHOLD_S (~3 s) while it
+    # satisfies itself the stream is live, and only then does travel start.
     hold(1, 0, 3.0)
-    assert u.decoded("roof")["Position"] == 0                # still within the first step time
-    hold(1, 0, 2.0)                                          # 5 s of Up held -> one step
+    assert u.decoded("roof")["Position"] == 0                # still inside the motor withhold
+    hold(1, 0, 5.0)                                          # withhold over + ROOF_STEP_S of travel
     assert u.decoded("roof")["Position"] == 2
     u.tick(3.0)                                              # released: no frames -> motion stops,
     assert u.decoded("roof")["Position"] == 2                # and the counter validity expires
     assert u.decoded("roof")["SafetyCounterValid"] == 0
-    hold(1, 0, 6.5)                                          # ~1 s to re-validate + 5 s of travel
+    # Re-press: the counter restarts, so the withhold is paid AGAIN (~1 s re-validate + 3 s
+    # withhold + 5 s travel) — this is why the GUI debounces a re-press within 1000 ms.
+    hold(1, 0, 9.5)
     assert u.decoded("roof")["Position"] == 1                # middle -> open
     hold(1, 0, 5.0)
     assert u.decoded("roof")["Position"] == 1                # open: stays
@@ -481,6 +485,89 @@ def test_cooling_timer_is_refused_while_the_fridge_is_on_but_power_still_works()
     u.state["cooler"]["State"] = 0                                 # fridge off -> the timer sets
     u.write(f["cooler"].control_char, control.build(f, "cooler", "timer_set", "09:30", u.decoded("cooler")))
     assert (u.decoded("cooler")["TimerHourSet"], u.decoded("cooler")["TimerMinSet"]) == (9, 30)
+
+
+def test_the_arm_lapses_when_the_heartbeat_stops():
+    """The arm is a latch, but not a permanent one: the unit drops a link that carries no 1003 beat
+    for ~15 s (on-device 2026-07-09) and the arm goes with it. The mock previously stayed armed
+    forever after a single beat, so a daemon whose heartbeat task died mid-sequence would still
+    have passed every offline test.
+
+    .. test:: A link that stops beating lapses the arm and drops
+       :id: T_MOCK_ARM_LAPSES
+    """
+    from calictl import device
+    u = MockCamperUnit(seed={"cooler": {"Installed": 1, "State": 0, "Level": 3, "Mode": 0}})
+    u.write(device.HEARTBEAT_CHAR, (1).to_bytes(4, "big"))
+    assert u.armed is True
+    u.tick(10)
+    assert u.armed is True                       # still inside the window
+    u.tick(6)                                    # 16 s since the last beat
+    assert u.armed is False and u.online is False
+
+    # a hand-armed fixture (no beat seen) must NOT expire underneath itself
+    v = _armed_unit(cooler={"Installed": 1, "State": 0})
+    v.tick(120)
+    assert v.armed is True
+
+
+def test_only_one_client_holds_the_connection_slot():
+    """The unit has ONE connection slot — while the phone app holds it the unit stops advertising
+    and a second connect fails. calictl's failure taxonomy distinguishes that from a sleeping van
+    (value-freshness.md); with a mock that let everyone in, the two were indistinguishable and a
+    mis-classification was invisible.
+
+    .. test:: A second client is refused while the slot is held
+       :id: T_MOCK_SINGLE_CONNECTION_SLOT
+    """
+    import asyncio
+
+    from tools.mock_unit import MockBleakClient, MockDisconnect
+    u = _armed_unit(cooler={"Installed": 1, "State": 1})
+    u.one_slot = True                            # opt-in: see the note on MockCamperUnit.one_slot
+    phone, daemon = MockBleakClient.bind(u)("PH:ON:E"), MockBleakClient.bind(u)("DA:EM:ON")
+
+    asyncio.run(phone.connect())
+    try:
+        asyncio.run(daemon.connect())
+    except MockDisconnect as e:
+        assert "slot" in str(e)
+    else:
+        raise AssertionError("second client connected while the slot was held")
+
+    asyncio.run(phone.disconnect())              # phone hangs up -> the slot frees
+    asyncio.run(daemon.connect())
+    assert daemon.is_connected is True
+
+
+def test_the_link_drops_for_a_minute_at_the_engine_crank():
+    """Observed at the van: the BLE link drops for ~1 min when the engine cranks — the one moment
+    calictl both loses the link and has state changes to reconcile. The camping-shed notification
+    still goes out first (field data pairs every ignition 0->1 with master_on 1->0, so the daemon
+    did observe the shed), and the unit comes back by itself.
+
+    .. test:: The engine crank drops the link for ~1 min after notifying the shed
+       :id: T_MOCK_CRANK_DROP
+    """
+    u = _armed_unit(vehicle={"TerminalOneFive": 0, "CarTimeYear": 126, "CarTimeMonth": 8,
+                             "CarTimeDay": 17, "CarTimeHour": 9, "CarTimeMinute": 0,
+                             "CarTimeSecond": 0},
+                    campingmode={"Installed": 1, "State": 1, "Enable": 0})
+    camping = []
+    _subscribe(u, "campingmode", camping)
+    u.tick(1.0)                                   # ignition-edge baseline
+    camping.clear()
+
+    u.state["vehicle"]["TerminalOneFive"] = 1     # crank
+    u.tick(1.0)
+    assert camping, "the camping shed must be notified before the link goes"
+    assert u.decoded("campingmode")["State"] == 0
+    assert u.online is False                      # ...and then the link drops
+
+    u.tick(30)
+    assert u.online is False                      # still down
+    u.tick(31)                                    # ~61 s after the crank
+    assert u.online is True                       # the unit comes back by itself
 
 
 def test_tick_advances_the_vehicle_clock():
