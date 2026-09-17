@@ -96,10 +96,50 @@ adb shell cmd statusbar expand-notifications; python3 tools/applab/adbui.py tap 
 adb shell input tap 536 988; adb shell input text 123456; python3 tools/applab/adbui.py tap "^OK$"
 ```
 
-The bond persists on both sides (Android + Bumble's `JsonKeyStore`), so later sessions
-reconnect without the dance. The peripheral drops a link that carries no `1003` heartbeat for
-15 s (`FAKE_UNIT_HEARTBEAT_TIMEOUT_S`) — like the real unit, and because a connected peripheral
-cannot advertise (a stale link makes the app report *"No vehicle found"*).
+The bond persists on both sides (Android's bond store + the fake's `JsonKeyStore` at
+`tools/applab/.fake_unit_keys.json`, gitignored), so later sessions reconnect without the dance.
+The peripheral drops a link that carries no `1003` heartbeat for 15 s once the link has carried a
+beat (`FAKE_UNIT_HEARTBEAT_TIMEOUT_S`) — like the real unit, and because a connected peripheral
+cannot advertise (a stale link makes the app report *"No vehicle found"*). Before the first beat
+it allows `FAKE_UNIT_PAIRING_GRACE_S` (90 s) so a slow passkey entry doesn't get the link dropped
+mid-pairing.
+
+## Surviving a restart (labctl)
+
+The lab drifts apart across a restart, so use the one-command wrapper instead of relaunching parts
+by hand — **run it yourself**, from a terminal with Removable-Volumes access (an assistant sandbox
+often can't read the external volume):
+
+```sh
+FAKE_UNIT_VIN=<the VIN you paired> tools/applab/labctl.sh up      # emulator + fake + app, idempotent
+tools/applab/labctl.sh status                                     # what's running
+tools/applab/labctl.sh down                                       # stop the fake CLEANLY, then the emulator
+```
+
+What makes a restart survivable (all in `fake_unit_ble.py`):
+
+- **Stable address** (`FAKE_UNIT_ADDR`, default `C0:FF:EE:CA:11:F0`) + **persistent keystore**
+  (`FAKE_UNIT_KEYSTORE`) → the phone's bond still matches after the fake restarts, so the app shows
+  **Connect** (a reconnect), not *Set up remote control* (a fresh pair), and no passkey dialog.
+  Verified: a fresh pair writes `.fake_unit_keys.json` and the app then treats the vehicle as bonded
+  across a fake restart.
+- **Clean shutdown**: the fake powers its radio off on `SIGTERM`/`SIGINT`. A `kill -9` skips this and
+  guarantees a **dead twin** registered at the same address. Always stop it with `labctl.sh down`
+  (or `pkill -TERM`), never `-9`.
+- **Known limitation** — reconnecting to a *restarted* fake is not fully reliable: netsimd can keep
+  the old radio registered at the same address even after a clean `power_off()`, so the app reports
+  *"Connection not possible"* against the new fake. When that happens, restart the emulator too
+  (`labctl.sh down` then `up`) — a fresh netsim clears the twin, and the bond still holds so it's a
+  reconnect, not a re-pair.
+- If a re-pair *is* needed (address changed, keystore wiped, or a stuck twin): in the app
+  **Account → Vehicle → Bluetooth Reset**, forget `VWCAMPER` in Android's Bluetooth settings (on a
+  rootable emulator a stubborn bond clears with BT off + `rm /data/misc/blue*/bt_config.*` + BT on),
+  then rerun `tools/applab/pair_wizard.py` (scripts the wizard sheets + passkey).
+
+> Fragility that remains, by design: macOS may revoke the terminal's access to the external volume
+> (re-grant *Files and Folders → Removable Volumes*), and netsim occasionally needs the emulator
+> fully restarted (above). Budget ~5 min of setup for an occasional deep-dive; the lab isn't meant
+> for routine unattended use.
 
 ## Driving the UI
 
