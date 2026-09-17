@@ -89,7 +89,9 @@ fi
 #     pytest-xdist is installed (tools/ci.sh dev), else serial.
 if [ "${SKIP_TESTS:-0}" != "1" ]; then
   if "$PY" -c "import xdist" 2>/dev/null; then
-    "$PY" -m pytest tests/ -q -n auto >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
+    # --dist loadgroup keeps each xdist_group (the e2e module: one daemon + one browser) on a single
+    # worker; plain `-n auto` spread them and flaked two GUI tests that pass serially.
+    "$PY" -m pytest tests/ -q -n auto --dist loadgroup >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
   else
     "$PY" -m pytest tests/ -q >/dev/null || fail "test suite is RED (SKIP_TESTS=1 to bypass)"
   fi
