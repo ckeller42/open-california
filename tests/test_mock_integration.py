@@ -276,6 +276,43 @@ def test_serve_on_command_actuates(mock):
     assert mock.decoded("cooler")["State"] == 1
 
 
+def test_serve_refuses_a_roof_move_under_a_blocking_alert_but_never_a_stop(mock, monkeypatch):
+    """The roof branch of on_command short-circuits to _roof_move, so it used to skip the
+    precondition check at the bottom entirely — /api/command, the CLI and HA could drive the roof
+    under a blocking InfoPopUp that the GUI greys. The gate now runs BEFORE the session nudge, so a
+    blocked move never reaches _roof_move (and never wakes the unit). STOP is the safety action and
+    must still get through untouched."""
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    s._read_only = False
+    moved, stopped = [], []
+
+    async def _fake_move(what):
+        moved.append(what)
+
+    async def _fake_stop():
+        stopped.append(True)
+
+    monkeypatch.setattr(s, "_roof_move", _fake_move)
+    monkeypatch.setattr(s, "_roof_stop_command", _fake_stop)
+
+    async def _run():
+        s._ble = asyncio.Lock()                          # normally created inside run()'s loop
+        # child_lock (InfoPopUp 1) is in ROOF_MOVE_BLOCK -> refuse; _roof_move is never called
+        s._last["roof"] = {"Installed": 1, "InfoPopUp": 1, "Position": 0}
+        await s.on_command("roof", "open", None)
+        assert moved == [] and stopped == []
+        # a STOP under the very same blocking alert still goes through
+        await s.on_command("roof", "stop", None)
+        assert stopped == [True]
+        # with the alert cleared the move reaches _roof_move again
+        s._last["roof"] = {"Installed": 1, "InfoPopUp": 0, "Position": 0}
+        await s.on_command("roof", "open", None)
+        assert moved == ["open"]
+
+    asyncio.run(_run())
+
+
 def test_read_only_is_default_and_refuses_writes(mock):
     """SAFE DEFAULT: a fresh Server is read-only, so on_command refuses to actuate (and _meta
     reports it). Writes only happen once explicitly enabled (--enable-writes / CALICTL_ENABLE_WRITES)."""

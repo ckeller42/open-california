@@ -7,7 +7,7 @@ lighting path writes bare on an awake unit (persistent session, `arm=False`); ro
 own SafetyCounter after a plain handshake (`device.actuate_roof`, no heartbeat)."""
 from __future__ import annotations
 
-from . import overrides, protocol
+from . import overrides, protocol, semantics
 
 LIGHT_ON, LIGHT_OFF = 0, 1   # camping lights inverted (app K0 writes (!on)?1:0). VERIFY live.
 SENTINEL = 3                 # 2-bit "leave unchanged" (sg.a default)
@@ -262,6 +262,11 @@ AIRHEATER_TIMER_MIN_UNCHANGED = 63
 # reaches its target limit, device.actuate_roof ceases the counter stream (app-faithful auto-stop) —
 # best-effort courtesy on top of the unit's own limit switches; None = no known limit (don't poll).
 _ROOF_LIMIT_POSITIONS = {"open": frozenset({1}), "close": frozenset(_ROOF_CLOSED_POSITIONS)}
+# Alerts (semantics.roof()["alert"]) under which the app refuses a roof MOVE. Must stay in step with
+# `ROOF_MOVE_BLOCK` in webui/app.js — the GUI greys open/close on exactly these. `sensor_error` is
+# deliberately NOT here (the app still allows a move with it); "stop" is never blocked by anything.
+ROOF_MOVE_BLOCK = frozenset({"child_lock", "error", "driving", "emergency_locked", "not_possible",
+                             "low_battery", "in_use", "not_stationary"})
 
 
 def roof_limit_positions(direction):
@@ -307,6 +312,17 @@ def command_precondition(function, what, value, states):
     if function == "energy" and what == "mode":
         if (states.get("energy") or {}).get("EnergyModeNotSelectable") == 1:
             return "the unit currently does not allow changing the energy mode"
+    # Roof MOVES (never "stop" — a stop must always get through; it is the safety action and the web
+    # UI never greys it either) are refused under the same alert set the GUI blocks on
+    # (`ROOF_MOVE_BLOCK` in webui/app.js) plus a Position the unit reports as `error`. The unit
+    # enforces this itself (it withholds the motor), so this is a courtesy refusal that keeps the
+    # off-UI paths honest — it is NOT the safety mechanism.
+    if function == "roof" and what in ("open", "close"):
+        roof = semantics.roof(states.get("roof") or {})
+        if roof["alert"] in ROOF_MOVE_BLOCK:
+            return "the unit reports the roof as %s — move refused" % roof["alert"].replace("_", " ")
+        if roof["position_name"] == "error":
+            return "the unit reports a roof position error — move refused"
     return None
 
 
