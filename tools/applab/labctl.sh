@@ -68,9 +68,16 @@ case "${1:-status}" in
   fake)   pkill -TERM -f 'applab/fake_unit_ble.py' 2>/dev/null && sleep 2 || true; start_fake ;;
   down)   echo "stopping fake cleanly (SIGTERM → netsim drops the radio)…"
           pkill -TERM -f 'applab/fake_unit_ble.py' 2>/dev/null && sleep 3 || true
-          adb emu kill 2>/dev/null || true; echo "lab down" ;;
+          adb emu kill 2>/dev/null || true
+          # netsimd is a SEPARATE long-lived process that outlives the emulator, and it is what
+          # holds a hard-killed fake's radio. Killing the emulator alone leaves that ghost, so a
+          # full `down` takes netsimd with it — otherwise the next `up` is shadowed by the twin.
+          pkill -TERM -f 'emulator/netsimd' 2>/dev/null || true
+          echo "lab down" ;;
   status) echo "emulator: $(emu_up && echo up || echo down)"
           echo "fake:     $(fake_up && echo "up ($(tail -1 "$FAKE_LOG" 2>/dev/null))" || echo down)"
+          # netsimd up while the fake is down is the ghost-radio smell (see README).
+          echo "netsimd:  $(pgrep -f 'emulator/netsimd' >/dev/null && echo up || echo down)"
           echo "scenario: echo 'set airheater ErrorCode=2' > $FAKE_FIFO" ;;
   *) echo "usage: labctl.sh {up|down|status|fake}" >&2; exit 2 ;;
 esac
