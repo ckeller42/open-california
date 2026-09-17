@@ -218,6 +218,112 @@ def test_subscribe_pushes_the_current_value_once():
     assert len(got) == 1 and got[0] == u.read(u.funcs["cooler"].state_char)
 
 
+def _subscribe(unit, fn, sink):
+    import asyncio
+
+    from tools.mock_unit import MockBleakClient
+    client = MockBleakClient.bind(unit)("MO:CK")
+    asyncio.run(client.start_notify(unit.funcs[fn].state_char,
+                                    lambda ch, data: sink.append(bytes(data))))
+    return client
+
+
+def _commit_brightness(unit, zone_field, value):
+    """Drive a real SET_BRIGHTNESS + commit pair through the write path."""
+    f = _funcs()["lighting"]
+    frame_bytes = overrides.CONTROL_FRAME_BYTES["lighting"]
+    zones = {c.name: 14 for c in f.control_fields          # 14 = per-zone leave-unchanged
+             if c.placed and c.name.startswith("BrightnessL")}
+    zones[zone_field] = value
+    unit.write(f.control_char, protocol.encode(
+        f, {"Mode": 4, "ProfileNumber": 9, **zones}, frame_bytes=frame_bytes))
+    unit.write(f.control_char, protocol.encode(
+        f, {"Mode": 0, "ProfileNumber": 0, **{k: 14 for k in zones}}, frame_bytes=frame_bytes))
+
+
+def test_lighting_readback_is_an_echo_while_the_lamps_ramp():
+    """The unit's lighting state char is a write-through ECHO: it reports the WRITTEN value at
+    once, whether or not the lamps moved. The truthful channel is the 1502 Mode-4 ramp
+    notification, which carries the REAL brightness stepping toward the target
+    (control-and-actuation.md; owner-checked 2026-07 when a "confirmed" readback hid dark lamps).
+
+    .. test:: Lighting readback echoes immediately while the real brightness ramps in pushes
+       :id: T_MOCK_LIGHT_ECHO_VS_RAMP
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLOne": 1})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()                                   # drop the one-shot push at subscribe time
+
+    _commit_brightness(u, "BrightnessLOne", 4)
+    # the ECHO is instant — this is exactly what must NOT be treated as proof of actuation
+    assert u.decoded("lighting")["BrightnessLOne"] == 4
+    assert u.light_actual["BrightnessLOne"] == 1             # the lamp is still where it was
+    assert pushes == []                                       # and nothing was notified yet
+
+    seen = []
+    for _ in range(4):                                # ramp 1 -> 2 -> 3 -> 4, one step per tick
+        u.tick(0.5)
+        seen.append(protocol.decode(_funcs()["lighting"], pushes[-1])["BrightnessLOne"])
+    assert seen == [2, 3, 4, 4]                       # steps, then holds at the target
+    assert u.light_actual["BrightnessLOne"] == 4
+    # the ramp frames are Mode 4 — the SET_BRIGHTNESS notification the app confirms on
+    assert protocol.decode(_funcs()["lighting"], pushes[-1])["Mode"] == 4
+
+
+def test_lighting_echo_still_confirms_when_the_lamps_never_move():
+    """The bug this models cost a month in 2026-07: the readback said "applied" while the lamps
+    stayed dark. With the unit not actuating, the echo STILL reports the written value — and the
+    only honest signal, the Mode-4 push, never arrives. Anything that confirms lighting from the
+    readback rather than the notification passes here and lies on the van.
+
+    .. test:: A non-actuating unit still echoes the write but never pushes a ramp
+       :id: T_MOCK_LIGHT_ECHO_LIES
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLOne": 1})
+    u.light_applies = False                           # ACK + echo, but the lamps do not move
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+
+    _commit_brightness(u, "BrightnessLOne", 9)
+    assert u.decoded("lighting")["BrightnessLOne"] == 9      # the echo lies
+    for _ in range(5):
+        u.tick(0.5)
+    assert pushes == []                                       # no ramp notification, ever
+    assert u.light_actual == {}                               # and the lamp really never moved
+
+
+def test_change_pushes_only_for_the_chars_the_unit_really_pushes():
+    """campingmode (1202) and ignition (1004) are confirmed change-push channels on real hardware;
+    the 2026-09-16 buspi trace saw NO change-driven push on the other subscribed chars in 150 s.
+    So a state change must notify for those two and stay silent elsewhere.
+
+    .. test:: Change-driven pushes are modelled only for the confirmed channels
+       :id: T_MOCK_CHANGE_PUSH_SCOPE
+    """
+    u = _armed_unit(vehicle={"TerminalOneFive": 0, "CarTimeYear": 126, "CarTimeMonth": 8,
+                             "CarTimeDay": 16, "CarTimeHour": 12, "CarTimeMinute": 0,
+                             "CarTimeSecond": 0},
+                    campingmode={"Installed": 1, "State": 1, "Enable": 0},
+                    airheater={"Installed": 1, "NormalOperation": 1, "RunningTime": 2,
+                               "RunningTimeinAction": 2, "HeatingLevel": 5})
+    camping, heater = [], []
+    _subscribe(u, "campingmode", camping)
+    _subscribe(u, "airheater", heater)
+    u.tick(1.0)                                       # establish the ignition-edge baseline
+    camping.clear(); heater.clear()
+
+    u.state["vehicle"]["TerminalOneFive"] = 1         # key turned -> camping couples + pushes
+    changed = u.tick(1.0)
+    assert "campingmode" in changed and camping, "camping must push on the confirmed 1202 channel"
+
+    # the heater DOES change on the clock (its countdown) but must not push: not a confirmed channel
+    u.tick(120)
+    assert u.decoded("airheater")["RunningTimeinAction"] < 2   # it really did change
+    assert heater == []
+
+
 def test_tick_advances_the_vehicle_clock():
     """CarTimeMonth is 0-based on the wire (the app shows month+1 — app lab 2026-09-16); the
     month rollover below is 8 (= September) -> 9 (= October) at 23:59:30 + 45 s on the 30th."""

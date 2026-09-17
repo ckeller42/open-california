@@ -58,6 +58,10 @@ ROOF_RELEASE_S = 1.5       # no roof frame for this long = the button was releas
 ROOF_COUNTER_STALE_S = 1.5 # SafetyCounter not incremented for this long = no longer valid
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 LIGHT_MODE_SET_BRIGHTNESS = 4
+# Functions the real unit was CONFIRMED to push on change (control-and-actuation.md: the genuine
+# 1202 camping push + 1004 ignition, "confirmed on real hardware"). Everything else is subscribe-
+# push-once only: the 2026-09-16 buspi trace saw no change-driven push on the other 12 chars.
+CHANGE_PUSH_FNS = frozenset({"campingmode", "vehicle"})
 LIGHT_MODE_SET_PROFILE = 16
 LIGHT_MODE_COMMIT = 0        # the 0e00… commit/apply frame (HCI-verified 2026-07-13): a
                              # SET_BRIGHTNESS/SET_PROFILE is only APPLIED once this lands
@@ -163,6 +167,19 @@ class MockCamperUnit:
         # bare-read latch). Models push-only-for-freshness chars like water (1302), where a bare
         # read returns the stale latch and the true value arrives only as a notification.
         self.notify_push: dict[str, dict] = {}
+        # Live notification subscriptions: state-char UUID -> [callback]. `MockBleakClient`
+        # registers here on start_notify so the unit can PUSH after subscribe time, the way the
+        # real unit does. Without this the offline harness only ever saw the one-shot push at
+        # subscribe and `serve._confirm_lighting` / `device`'s on_push were unreachable in CI.
+        self._subs: dict[str, list] = {}
+        # LIGHTING, the unit's most treacherous behaviour (control-and-actuation.md): the state
+        # char is a write-through ECHO — it reports what you WROTE, not what the lamps did (an
+        # owner check in 2026-07 saw a "confirmed" readback while the lamps stayed dark). The only
+        # truthful channel is the 1502 Mode-4 ramp notification carrying the REAL brightness.
+        # So `state["lighting"]` is the echo, and these model the physical side:
+        self.light_actual: dict[str, int] = {}        # what the lamps are really at (ramped)
+        self.light_applies = True                     # False = unit ACKs + echoes but lamps DON'T move
+        self._light_ramp: dict[str, int] = {}         # zone -> target, stepped by tick()
         # reverse maps: char UUID -> function, for read/write routing
         self._state_char = {f.state_char: fn for fn, f in self.funcs.items() if f.state_char}
         self._control_char = {f.control_char: fn for fn, f in self.funcs.items() if f.control_char}
@@ -195,6 +212,24 @@ class MockCamperUnit:
         ctr = int.from_bytes(bytes(data), "big")
         self.last_beat = ctr
         self.armed = True
+
+    # --- notifications ---------------------------------------------------------
+    def push(self, function: str, values: dict | None = None) -> None:
+        """Push a state-char notification to every subscribed client, as the real unit does.
+
+        ``values`` overlays the stored state for this one frame (the lighting ramp uses it to send
+        the REAL brightness while the stored state still holds the write-through echo). A no-op
+        when nobody is subscribed or the unit is asleep.
+        """
+        f = self.funcs.get(function)
+        if f is None or not f.state_char or not self.online:
+            return
+        subs = self._subs.get(f.state_char)
+        if not subs:
+            return
+        frame = _pack_state(f, {**self.state.get(function, {}), **(values or {})})
+        for cb in list(subs):
+            cb(_Char(f.state_char, ["notify"]), frame)
 
     def drop(self) -> None:
         """Van parks -> deep sleep: the link dies and the unit stops advertising."""
@@ -320,6 +355,29 @@ class MockCamperUnit:
                     else:
                         r["Position"] = 0 if pos == 2 else (2 if pos == 1 else pos)
                     changed.add("roof")
+
+        # Lighting ramp: the lamps step toward the committed target (observed 01->03->04->05) and
+        # the unit notifies 1502 Mode-4 frames carrying the REAL brightness. Each step pushes one
+        # frame — that notification, NOT the echo readback, is what proves actuation.
+        if self._light_ramp:
+            done = []
+            for zone, target in self._light_ramp.items():
+                cur = self.light_actual.get(zone, self.state.get("lighting", {}).get(zone, 0))
+                cur = cur + 1 if cur < target else (cur - 1 if cur > target else cur)
+                self.light_actual[zone] = cur
+                if cur == target:
+                    done.append(zone)
+            for zone in done:
+                del self._light_ramp[zone]
+            # Mode 4 = the SET_BRIGHTNESS/ramp notification the app confirms on.
+            self.push("lighting", {**self.light_actual, "Mode": LIGHT_MODE_SET_BRIGHTNESS})
+
+        # Change-driven pushes, modelled ONLY for the chars the unit was CONFIRMED to push on real
+        # hardware: campingmode (1202) and ignition/vehicle (1004) — control-and-actuation.md. The
+        # heartbeat-traced buspi run of 2026-09-16 saw NO change-push on the other 12 subscribed
+        # chars in 150 s, so pushing everything here would be fiction (protocol-crosscheck-applab).
+        for fn in changed & CHANGE_PUSH_FNS:
+            self.push(fn)
         return changed
 
     # --- control writes ----------------------------------------------------
@@ -382,6 +440,16 @@ class MockCamperUnit:
                 if p and p[0] == "profile":
                     st["ProfileNumber"] = p[1]
                 elif p and p[0] == "zones":
+                    # Snapshot the PHYSICAL baseline before the echo lands: `st` is about to be
+                    # overwritten with the written value, so reading the ramp's starting point
+                    # from it afterwards would start every ramp already at its target.
+                    if self.light_applies:
+                        for zone in p[1]:
+                            self.light_actual.setdefault(zone, st.get(zone, 0))
+                        self._light_ramp.update(p[1])
+                    # The ECHO updates unconditionally — that is the trap: the state char reports
+                    # the written value whether or not the lamps moved. The physical side only
+                    # follows when the unit actually actuates, and then it RAMPS (tick()).
                     st.update(p[1])
                     st["ProfileNumber"] = p[2]    # a brightness set makes its profile the active one
                 self._pending_light = None
@@ -479,6 +547,7 @@ class MockBleakClient:
     def __init__(self, addr, timeout=None):
         self.addr = addr
         self.is_connected = False
+        self._notifying: list[str] = []           # chars this client subscribed (for clean removal)
 
     @classmethod
     def bind(cls, unit: MockCamperUnit) -> type[MockBleakClient]:
@@ -492,6 +561,14 @@ class MockBleakClient:
 
     async def disconnect(self):
         self.is_connected = False
+        self._unsubscribe_all()                   # a dropped link takes its subscriptions with it
+
+    def _unsubscribe_all(self):
+        for uuid in self._notifying:
+            subs = self.unit._subs.get(uuid) if self.unit else None
+            if subs:
+                del subs[:1]                      # drop one registration for this client
+        self._notifying.clear()
 
     @property
     def services(self):
@@ -531,6 +608,9 @@ class MockBleakClient:
         fn = self.unit._state_char.get(str(uuid))
         if fn is None:
             return None
+        # Keep the callback so the unit can push AFTER subscribe time too (unit.push / tick()).
+        self.unit._subs.setdefault(str(uuid), []).append(cb)
+        self._notifying.append(str(uuid))
         if fn in self.unit.notify_push:
             frame = _pack_state(self.unit.funcs[fn],
                                 {**self.unit.state.get(fn, {}), **self.unit.notify_push[fn]})
@@ -540,6 +620,11 @@ class MockBleakClient:
         return None
 
     async def stop_notify(self, uuid):
+        subs = self.unit._subs.get(str(uuid)) if self.unit else None
+        if subs:
+            del subs[:1]
+        if str(uuid) in self._notifying:
+            self._notifying.remove(str(uuid))
         return None
 
 
