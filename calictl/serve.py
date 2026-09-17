@@ -698,6 +698,10 @@ class Server:
                 stop_frame = control.roof_frame(self.funcs, "stop")
             except ValueError:
                 return None
+            # Same single-slot handover as a move: `dev.actuate` opens its own session, so a live
+            # persistent session would be a second connection the unit refuses. A STOP that fails
+            # because the slot was busy is the worst outcome here, so it takes the slot too.
+            await self._sessions.drop_for_handover()
             await self.dev.actuate(self.funcs["roof"], stop_frame, verify=True)
         return None
 
@@ -718,6 +722,12 @@ class Server:
         if self._roof_stop is None:
             self._roof_stop = asyncio.Event()
         self._roof_stop.clear()
+        # The roof OWNS the connection for its move. `actuate_roof` opens its own session, and the
+        # unit has a single slot — leaving the persistent session up means two connections, which
+        # the unit refuses. Reusing that session instead is not an option either: it runs a 1003
+        # heartbeat and the roof's arming contract requires none (the SafetyCounter is the liveness
+        # proof, #150). Transient — the supervisor brings the session back after the move.
+        await self._sessions.drop_for_handover()
         await self.dev.actuate_roof(self.funcs["roof"], move_frame, stop_frame,
                                     verify=True, stop_event=self._roof_stop,
                                     limit_positions=control.roof_limit_positions(what))

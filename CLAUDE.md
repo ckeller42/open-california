@@ -107,7 +107,12 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   GUI is press-and-hold (release → STOP via lock-free `_roof_stop`); a re-press within 1000 ms is
   debounced (would restart the counter → another ~3 s withhold). `actuate_roof` polls `Position`
   (`1402`) ~1 Hz and auto-stops at the limit (open `1` / closed `0`/`14`; `control.roof_limit_positions`)
-  — best-effort over the unit's own limit switches. See `protocol-alignment.md` + `protocol-sequences`.
+  — best-effort over the unit's own limit switches. **A roof move/STOP TAKES the single connection
+  slot** (`session.drop_for_handover`, 2026-09-17): `actuate_roof`/`actuate` open their own session,
+  so a live persistent session would be a second connection the unit refuses — and that session
+  can't be reused instead, because it runs a 1003 heartbeat the roof's arming contract forbids. The
+  drop is transient; the supervisor reconnects afterwards. See `protocol-alignment.md` +
+  `protocol-sequences`.
 - **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads (`device.read_all`/
   `read` do) to keep the link up (dropped after ~15 s otherwise) and refresh the re-read chars. It does
   NOT refresh water: water is measurement-gated (the unit measures only while its water system is

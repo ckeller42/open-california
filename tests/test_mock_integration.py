@@ -313,6 +313,35 @@ def test_serve_refuses_a_roof_move_under_a_blocking_alert_but_never_a_stop(mock,
     asyncio.run(_run())
 
 
+def test_roof_move_takes_the_single_connection_slot_from_the_persistent_session(mock):
+    """The unit has ONE connection slot. `actuate_roof` opens its own session, so a live persistent
+    session would be a SECOND connection and the unit refuses it — and reusing that session instead
+    is not an option, because it runs a 1003 heartbeat while the roof's arming contract requires
+    none (the SafetyCounter is the liveness proof, #150). So the roof hands the slot over first.
+
+    Found by modelling the single slot in the mock: `actuate_roof` has never driven a real motor, so
+    this path had never met hardware. Without `drop_for_handover` this test fails on the mock the
+    same way it would fail at the van.
+    """
+    from calictl import serve
+    mock.one_slot = True                                   # model the unit's single slot
+    s = serve.Server(influx_enabled=False)
+    s._read_only = False
+    s._last["roof"] = {"Installed": 1, "InfoPopUp": 0, "Position": 0}
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._persistent = True
+        # No supervisor task in a bare Server, so bring the session up the way it would.
+        async with s._ble:
+            await s._sessions._connect_once()
+        assert s._live_session() is not None, "persistent session did not come up"
+        await s.on_command("roof", "open", None)           # must not fail on a busy slot
+    asyncio.run(_run())
+
+    assert any(fn == "roof" for fn, _frame in mock.writes), "the roof move never reached the unit"
+
+
 def test_read_only_is_default_and_refuses_writes(mock):
     """SAFE DEFAULT: a fresh Server is read-only, so on_command refuses to actuate (and _meta
     reports it). Writes only happen once explicitly enabled (--enable-writes / CALICTL_ENABLE_WRITES)."""
