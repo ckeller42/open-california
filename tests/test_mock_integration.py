@@ -142,6 +142,23 @@ def test_lighting_applies_without_preamble(mock):
 
 # --- read_all prefers pushed notifications over a stale latched read ---------
 
+def test_connect_timeout_is_tunable_for_a_flaky_link(monkeypatch):
+    """The per-attempt connect timeout must be tunable without a code change.
+
+    A unit that advertises but ignores connection requests (seen at the van 2026-09-18) burns the
+    FULL timeout on every one of the three attempts, so a 30 s default means the daemon only
+    probes the unit every ~90 s and keeps missing its brief connectable windows. Lowering the
+    timeout samples far more often. An explicit constructor argument still wins, so callers that
+    know better are unaffected.
+    """
+    from calictl.device import CamperDevice
+    monkeypatch.delenv("CALICTL_CONNECT_TIMEOUT_S", raising=False)
+    assert CamperDevice().connect_timeout == 30.0            # unchanged default
+    monkeypatch.setenv("CALICTL_CONNECT_TIMEOUT_S", "8")
+    assert CamperDevice().connect_timeout == 8.0             # env tunes it
+    assert CamperDevice(connect_timeout=12.0).connect_timeout == 12.0   # explicit arg still wins
+
+
 def test_read_all_heartbeat_refreshes_stale_read(mock):
     """The MOCK unit latches a stale value (1 L) until the 1003 heartbeat ticks, then serves the
     fresh 11 L — so this pins that read_all runs the heartbeat while reading (link keepalive +
