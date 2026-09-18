@@ -223,10 +223,18 @@ async def _read_char_with_retry(client, name, char):
 
 class CamperDevice:
     def __init__(self, addr: str = DEFAULT_ADDR, *, adapter: str = "hci0",
-                 connect_timeout: float = 30.0):
+                 connect_timeout: float | None = None):
         self.addr = addr
         self.adapter = adapter
-        self.connect_timeout = connect_timeout
+        # Per-attempt connect timeout. Tunable because the right value depends on the unit's
+        # state, not on us: a unit that is awake answers in well under a second, while one that
+        # advertises but ignores connection requests (observed 2026-09-18: connectable ADV_IND at
+        # -61 dBm, every request unanswered) burns the WHOLE timeout three times over before the
+        # poll gives up — so a long timeout means we sample the unit rarely and keep missing its
+        # brief connectable windows. Lower it to sample more often on a flaky link; raise it only
+        # if connects are being cut short while the unit is genuinely responding.
+        self.connect_timeout = connect_timeout if connect_timeout is not None else \
+            float(os.environ.get("CALICTL_CONNECT_TIMEOUT_S", "30"))
 
     async def _session(self, reset_on_fail: bool | None = None):
         """Yield a connected BleakClient, retrying on the abort cascade.
