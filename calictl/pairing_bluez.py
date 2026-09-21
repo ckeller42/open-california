@@ -324,9 +324,35 @@ class BluezTransport:
         await self._agent_mgr.call_request_default_agent(AGENT_PATH)
 
     async def pair(self):
+        """Pair the discovered device, self-healing a stale local bond.
+
+        .. req:: Pairing self-heals a stale local bond
+           :id: R_PAIRING_STALE_BOND_RECOVERY
+
+           BlueZ refuses ``Device1.Pair()`` with ``org.bluez.Error.AlreadyExists`` when a bond
+           for the device already exists. After a unit-side Bluetooth reset the peer forgets us
+           but OUR bond persists, so the wizard would fail, retry ``MAX_ATTEMPTS`` times, and end
+           on a generic ``pairing_failed`` the user cannot act on. On that one error, clear the
+           stale bond and retry ``Pair()`` exactly once; any other error is a genuine failure and
+           propagates unchanged.
+        """
         await self._ensure_agent()
         device_iface = await self._get_interface(self._device_path(), "org.bluez.Device1")
-        await device_iface.call_pair()
+        try:
+            await device_iface.call_pair()
+        except Exception as e:
+            # BlueZ refuses Pair() outright when a bond already exists (org.bluez.Error.AlreadyExists),
+            # so a STALE bond makes the wizard unusable: it fails, retries MAX_ATTEMPTS times and ends
+            # on a generic "pairing_failed" with nothing the user can act on. Hit for real on
+            # 2026-09-18 when re-pairing at the van. Clear that bond and pair once more — the user
+            # explicitly asked to pair, and a bond that blocks pairing is worthless by definition.
+            # Only this error is recovered: anything else is a genuine pairing failure and propagates.
+            if "AlreadyExists" not in str(e) and "already exists" not in str(e).lower():
+                raise
+            log.warning("pair: bond already exists — removing the stale bond and retrying once")
+            await self.remove_bond()
+            device_iface = await self._get_interface(self._device_path(), "org.bluez.Device1")
+            await device_iface.call_pair()
         await self._emit(EV_PAIR_OK)
 
     async def send_passkey(self, pk):
