@@ -11,7 +11,85 @@ session, not here (no dbus/BLE stack in CI) -- see `pairing_bluez.py`'s
 """
 import asyncio
 
+import pytest
+
+from calictl.pairing import EV_PAIR_OK
 from calictl.pairing_bluez import BluezTransport
+
+
+def _pair_transport(monkeypatch, call_pair_impl):
+    """A BluezTransport wired for pair() unit tests: a fake Device1 whose call_pair() runs
+    ``call_pair_impl`` (sharing the counters dict), with the dbus agent / interface lookup /
+    remove_bond stubbed. Returns (transport, events, calls)."""
+    events = []
+    calls = {"pair": 0, "remove_bond": 0}
+
+    class _FakeDevice:
+        async def call_pair(self):
+            calls["pair"] += 1
+            await call_pair_impl(calls["pair"])
+
+    async def _cb(ev, arg=0):
+        events.append(ev)
+
+    async def _noop_agent():
+        pass
+
+    async def _fake_iface(path, iface):
+        return _FakeDevice()
+
+    async def _fake_remove():
+        calls["remove_bond"] += 1
+
+    t = BluezTransport(on_event=_cb)
+    t._address = "AA:BB:CC:DD:EE:FF"
+    monkeypatch.setattr(t, "_ensure_agent", _noop_agent)
+    monkeypatch.setattr(t, "_get_interface", _fake_iface)
+    monkeypatch.setattr(t, "remove_bond", _fake_remove)
+    return t, events, calls
+
+
+def test_pair_recovers_from_a_stale_bond_then_pairs_once(monkeypatch):
+    """A stale local bond makes BlueZ refuse Pair() with org.bluez.Error.AlreadyExists; pair() must
+    clear that bond and retry Pair() exactly once, ending on EV_PAIR_OK (not a generic failure).
+    Hit for real 2026-09-18 re-pairing at the van after a unit-side Bluetooth reset.
+
+    .. test:: pair() recovers from a stale bond
+       :id: T_PAIRING_STALE_BOND_RECOVERY
+       :links: R_PAIRING_STALE_BOND_RECOVERY
+    """
+    async def _call_pair(n):
+        if n == 1:
+            raise Exception("org.bluez.Error.AlreadyExists: Already Exists")
+        # second attempt succeeds
+
+    t, events, calls = _pair_transport(monkeypatch, _call_pair)
+    asyncio.run(t.pair())
+
+    assert calls["pair"] == 2          # first raised AlreadyExists, retried exactly once
+    assert calls["remove_bond"] == 1   # the stale bond was cleared before the retry
+    assert events == [EV_PAIR_OK]      # ended on success
+
+
+def test_pair_propagates_a_non_stale_bond_failure(monkeypatch):
+    """Any pairing error OTHER than AlreadyExists is a genuine failure: pair() must propagate it
+    unchanged and must NOT wipe the bond (which would mask a real problem such as an auth failure).
+
+    .. test:: pair() propagates non-AlreadyExists failures
+       :id: T_PAIRING_FAILURE_PROPAGATES
+       :links: R_PAIRING_STALE_BOND_RECOVERY
+    """
+    async def _call_pair(n):
+        raise Exception("org.bluez.Error.AuthenticationFailed: Authentication Failed")
+
+    t, events, calls = _pair_transport(monkeypatch, _call_pair)
+    with pytest.raises(Exception) as excinfo:
+        asyncio.run(t.pair())
+
+    assert "AuthenticationFailed" in str(excinfo.value)
+    assert calls["pair"] == 1          # no retry
+    assert calls["remove_bond"] == 0   # bond left untouched
+    assert events == []                # no EV_PAIR_OK
 
 
 def test_construction_defaults():
