@@ -322,11 +322,24 @@ class FakeUnit:
     async def rotate_address(self) -> None:
         """Advertise from a fresh resolvable private address. Bumble keeps the advertising address
         until advertising restarts, so rotation is explicit (the lab CLI calls this on a timer).
-        A no-op while connected — the unit is not advertising then."""
+        A no-op while connected — the unit is not advertising then.
+
+        Bumble-only workaround: ``HCI_LE_Set_Advertising_Set_Random_Address_Command`` (extended
+        advertising, what ``_advertise()`` uses) only updates that advertising SET's address;
+        ``Controller.random_address`` — a separate legacy attribute the simulated ``LocalLink``
+        uses to stamp the SOURCE address on every ACL/GATT packet once connected — is never synced
+        to it. Left stale, a central that connects under the new RPA gets every GATT response
+        misrouted ("no connection for <stale-address>", silently dropped): ``discover_services()``
+        hangs forever on the very first request after a rotate + reconnect. Found via
+        ``tests/test_pairing_link.py::test_rotation_between_scan_and_connect_recovers`` (no real
+        unit rotates this way, so real hardware is unaffected — this only matters for the Bumble
+        harness). Sync it explicitly so ACL routing tracks the address we actually advertise under.
+        """
         if self.conn is not None:
             return
         await self.device.stop_advertising()
         await self.device.update_rpa()
+        self.device.host.controller.random_address = self.device.random_address
         await self._advertise()
 
     async def forget_bonds(self) -> None:
