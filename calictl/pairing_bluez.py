@@ -243,6 +243,7 @@ class BluezTransport:
         self.radio_busy = False    # another BlueZ client kept discovery on after our scan stopped
         self._address = None       # discovered device's BLE address (identity, once bonded)
         self._found_device = None  # bleak BLEDevice set by the scan detection callback
+        self._path = None          # BlueZ's D-Bus object path for it (see _device_path)
         self._scanner = None
         self._client = None        # bleak BleakClient set by connect()
         self._bus = None           # dbus_fast system MessageBus, set by _ensure_bus()
@@ -261,12 +262,12 @@ class BluezTransport:
         async def _on_detect(device, adv_data):
             if self._found_device is not None or device.name != self._device_name:
                 return
-            self._found_device = device
-            self._address = device.address
+            self._set_found(device)
             await self._emit(EV_DEVICE_FOUND)
 
         self.radio_busy = False
         self._found_device = None
+        self._path = None
         self._scanner = BleakScanner(detection_callback=_on_detect, adapter=self.adapter)
         await self._scanner.start()
 
@@ -323,8 +324,7 @@ class BluezTransport:
             lambda d, ad: d.name == self._device_name, timeout=timeout, adapter=self.adapter)
         if device is None:
             raise RuntimeError("%s did not reappear after removing its stale bond" % self._device_name)
-        self._found_device = device
-        self._address = device.address
+        self._set_found(device)
 
     async def _drop_bond_and_rediscover(self):
         await self.remove_bond()        # clears _found_device/_address/_client + the address cache
@@ -345,7 +345,24 @@ class BluezTransport:
                         "a unit that forgot us (Bluetooth reset) can pair again" % self._address)
             await self._drop_bond_and_rediscover()
 
+    def _set_found(self, device):
+        self._found_device = device
+        self._address = device.address
+        details = getattr(device, "details", None)
+        self._path = details.get("path") if isinstance(details, dict) else None
+
     def _device_path(self):
+        """BlueZ's D-Bus object path for the discovered device.
+
+        Prefer the path bleak reported (``BLEDevice.details["path"]``): BlueZ names the object
+        after the address it was FIRST seen under, and never renames it. A unit that advertises
+        from a resolvable private address gets ``dev_<RPA>``; once bonded, BlueZ resolves later
+        adverts to its identity, so the scan reports the identity address while the object stays
+        at ``dev_<RPA>`` — a path rebuilt from the address names an object that doesn't exist
+        (found by the real-BlueZ CI rig: the stale-bond check silently read "not bonded").
+        """
+        if self._path:
+            return self._path
         if not self._address:
             raise RuntimeError("no discovered device address")
         return "%s/dev_%s" % (self._adapter_path, self._address.replace(":", "_").upper())
@@ -516,6 +533,7 @@ class BluezTransport:
         finally:
             self._found_device = None
             self._address = None
+            self._path = None
             self._client = None
         # Clear the persisted address too, else resolve_addr() re-reads it after a reboot and the
         # daemon re-targets the bond we just removed. Independent of the bluez call above (which

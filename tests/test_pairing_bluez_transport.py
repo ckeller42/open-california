@@ -426,3 +426,42 @@ def test_stop_scan_clears_radio_busy_on_a_quiet_radio(monkeypatch):
     monkeypatch.setattr(t, "_adapter_discovering", discovering)
     asyncio.run(t.stop_scan())
     assert t.radio_busy is False
+
+
+class _BLEDevice:
+    def __init__(self, address, path):
+        self.address = address
+        self.name = "VWCAMPER"
+        self.details = {"path": path, "props": {}}
+
+
+def test_device_path_is_the_object_bluez_reported_not_one_rebuilt_from_the_address():
+    """BlueZ names a device object after the address it was FIRST seen under (the unit's RPA) and
+    never renames it; once bonded, later adverts resolve to the identity, so the scan reports the
+    identity while the object stays at dev_<RPA>. A path rebuilt from the address named a missing
+    object -> the stale-bond check read "not bonded" and the wizard hung (real-BlueZ CI rig).
+
+    .. test:: the transport uses BlueZ's own device object path
+       :id: T_PAIRING_DEVICE_OBJECT_PATH
+       :links: R_PAIRING_STALE_BOND_RECOVERY
+    """
+    t = BluezTransport(adapter_path="/org/bluez/hci1")
+    t._set_found(_BLEDevice("C0:FF:EE:CA:11:F0", "/org/bluez/hci1/dev_53_B9_AA_7F_BC_C2"))
+    assert t._address == "C0:FF:EE:CA:11:F0"
+    assert t._device_path() == "/org/bluez/hci1/dev_53_B9_AA_7F_BC_C2"
+
+
+def test_device_path_falls_back_to_the_address_without_a_reported_path():
+    t = BluezTransport(adapter_path="/org/bluez/hci1")
+    t._set_found(type("D", (), {"address": "c0:ff:ee:ca:11:f0", "details": None})())
+    assert t._device_path() == "/org/bluez/hci1/dev_C0_FF_EE_CA_11_F0"
+
+
+def test_remove_bond_forgets_the_object_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "pairing.json"))
+    t = BluezTransport()
+    t._set_found(_BLEDevice("C0:FF:EE:CA:11:F0", "/org/bluez/hci0/dev_53_B9_AA_7F_BC_C2"))
+    asyncio.run(t.remove_bond())    # the dbus half no-ops off-hardware
+    assert t._path is None and t._address is None
+    with pytest.raises(RuntimeError):
+        t._device_path()
