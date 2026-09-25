@@ -478,11 +478,15 @@ class Server:
         `confirm` flag already gated).
 
         On "start", parks the persistent-session supervisor FIRST (`set_mode("disconnect")`)
-        before arming the runner. RULING (single BLE owner, see CLAUDE.md): a guided-pairing flow
-        can run for minutes (user must physically confirm a passkey), so it does NOT hold
-        `self._ble` for its duration — that would freeze `/api/state` for the whole flow. Instead,
-        parking the supervisor is the exclusion mechanism: it won't reconnect until the wizard ends
-        (user hits Connect again, or `reset`/`cancel` lets a later poll cycle re-establish).
+        before arming the runner. RULING (single BLE owner, see CLAUDE.md): the command briefly
+        acquires `self._ble` to let any in-flight poll/command finish, then enters SCANNING while
+        holding the lock (poll() checks the pairing state BEFORE taking the lock, so every later
+        poll sees the active flow and skips); the lock is released straight after `start()` returns.
+        A guided-pairing flow can run for minutes (user must physically confirm a passkey), so it
+        does NOT hold `self._ble` for its duration — that would freeze `/api/state` for the whole
+        flow. Parking the supervisor is the primary exclusion mechanism: it won't reconnect until
+        the wizard ends (user hits Connect again, or `reset`/`cancel` lets a later poll cycle
+        re-establish).
 
         :param action: "start" | "passkey" | "cancel" | "reset".
         :param value: passkey digit-string for "passkey"; unused otherwise.
