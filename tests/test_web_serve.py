@@ -949,7 +949,7 @@ def test_pairing_snapshot_idle_with_no_runner_falls_back_to_cache_address(monkey
     s = serve.Server(influx_enabled=False)
     assert s._pairing is None
     assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None,
-                                     "address": "AA:BB:CC:DD:EE:FF"}
+                                     "address": "AA:BB:CC:DD:EE:FF", "radio_busy": False}
 
 
 def test_pairing_snapshot_idle_falls_back_to_env_addr(monkeypatch, tmp_path):
@@ -960,7 +960,7 @@ def test_pairing_snapshot_idle_falls_back_to_env_addr(monkeypatch, tmp_path):
     monkeypatch.setenv("CALICTL_ADDR", "11:22:33:44:55:66")
     s = serve.Server(influx_enabled=False)
     assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None,
-                                     "address": "11:22:33:44:55:66"}
+                                     "address": "11:22:33:44:55:66", "radio_busy": False}
 
 
 def test_pairing_snapshot_idle_with_no_cache_file(monkeypatch, tmp_path):
@@ -968,7 +968,8 @@ def test_pairing_snapshot_idle_with_no_cache_file(monkeypatch, tmp_path):
     monkeypatch.delenv("CALICTL_ADDR", raising=False)
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
     s = serve.Server(influx_enabled=False)
-    assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None, "address": None}
+    assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None, "address": None,
+                                     "radio_busy": False}
 
 
 def test_pairing_snapshot_uses_runner_when_present():

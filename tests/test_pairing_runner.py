@@ -99,7 +99,7 @@ def test_snapshot_names():
 
     snap = asyncio.run(_run())
     assert snap == {"state": "bonded", "attempts": 0, "error": None,
-                     "address": "11:22:33:44:55:66"}
+                     "address": "11:22:33:44:55:66", "radio_busy": False}
 
 
 def test_stale_event_makes_no_transport_calls():
@@ -366,3 +366,11 @@ def test_cancel_stops_and_returns_idle():
     # idle-via-cancel also closes the transport (agent lifecycle).
     assert calls == ["start_scan", "stop_scan", "aclose"]
     assert state == pairing.PairingState(pairing.IDLE, 0, pairing.ERR_NONE)
+
+
+def test_snapshot_reports_radio_busy_from_the_transport():
+    t = FakeTransport()
+    r = PairingRunner(t)
+    assert r.snapshot()["radio_busy"] is False
+    t.radio_busy = True
+    assert r.snapshot()["radio_busy"] is True

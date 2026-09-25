@@ -448,7 +448,8 @@ class Server:
         if self._pairing is not None:
             return self._pairing.snapshot()
         address = _pairing_cache_address() or os.environ.get("CALICTL_ADDR", "").strip() or None
-        return {"state": "idle", "attempts": 0, "error": None, "address": address}
+        return {"state": "idle", "attempts": 0, "error": None, "address": address,
+                "radio_busy": False}
 
     def _ensure_pairing_runner(self):
         """Lazily construct the `PairingRunner` + `BluezTransport` pair on first use. Construction

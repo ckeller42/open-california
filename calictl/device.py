@@ -270,7 +270,7 @@ class CamperDevice:
         last = None
         for attempt in range(3):
             try:
-                client = BleakClient(self.addr, timeout=self.connect_timeout)
+                client = BleakClient(self.addr, timeout=self.connect_timeout, adapter=self.adapter)
                 await client.connect()
                 trace.get().link("connect", self.addr, attempt=attempt)
                 return client

@@ -54,7 +54,7 @@ class _RoofClient:
     ctrl = None                  # roof control-char uuid (set by the fixture)
     read_payload = _STATE_INVALID
 
-    def __init__(self, addr, timeout=None):
+    def __init__(self, addr, timeout=None, adapter=None):
         self.addr = addr
         self.is_connected = False
         self.writes = []         # (uuid, data) for EVERY attempt, including the one that raised

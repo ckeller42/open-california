@@ -688,7 +688,7 @@ class MockBleakClient:
     """
     unit: MockCamperUnit | None = None            # set by the harness / fixture
 
-    def __init__(self, addr, timeout=None):
+    def __init__(self, addr, timeout=None, adapter=None):
         self.addr = addr
         self.is_connected = False
         self._notifying: list[str] = []           # chars this client subscribed (for clean removal)

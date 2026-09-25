@@ -183,16 +183,22 @@ class PairingRunner:
     def snapshot(self):
         """Return the SM state as plain names/values for a UI to render.
 
-        :returns: ``{"state", "attempts", "error", "address"}``. If ``state`` is
+        :returns: ``{"state", "attempts", "error", "address", "radio_busy"}``. If ``state`` is
             ``"bonded"`` and ``address`` is ``None``, the bond itself succeeded but the
             address-cache write (``transport.persist_bond()``) failed -- pairing is
-            still fully bonded, just without a cached address.
+            still fully bonded, just without a cached address. ``radio_busy`` mirrors the
+            transport's ``radio_busy`` flag (default ``False`` for transports without one,
+            e.g. ``FakeTransport`` in tests): True when another BlueZ client (e.g. the Home
+            Assistant Bluetooth integration or a BLE reader) was still holding
+            ``Adapter1.Discovering`` after our own scan stopped, which makes a subsequent
+            LE connect likely to fail (HCI 0x3e) -- see :meth:`BluezTransport.stop_scan`.
         """
         return {
             "state": STATE_NAMES[self._ps.st],
             "attempts": self._ps.attempts,
             "error": ERR_NAMES[self._ps.error],
             "address": self.address,
+            "radio_busy": bool(getattr(self._transport, "radio_busy", False)),
         }
 
 
@@ -224,13 +230,17 @@ class BluezTransport:
         both exist: ``t = BluezTransport(); r = PairingRunner(t);
         t.on_event = r.handle``.
     :param device_name: BLE advertised name to scan for.
-    :param adapter_path: BlueZ adapter D-Bus object path.
+    :param adapter_path: BlueZ adapter D-Bus object path. :attr:`adapter` (bleak's own name for
+        it, e.g. ``"hci1"``) is derived from this and threaded into every ``bleak`` scanner/
+        client this transport constructs -- a later CI job pairs over a virtual ``hciN`` adapter.
     """
 
     def __init__(self, on_event=None, device_name="VWCAMPER", adapter_path="/org/bluez/hci0"):
         self.on_event = on_event
         self._device_name = device_name
         self._adapter_path = adapter_path
+        self.adapter = adapter_path.rsplit("/", 1)[-1]   # "/org/bluez/hci1" -> "hci1" (bleak's name)
+        self.radio_busy = False    # another BlueZ client kept discovery on after our scan stopped
         self._address = None       # discovered device's BLE address (identity, once bonded)
         self._found_device = None  # bleak BLEDevice set by the scan detection callback
         self._scanner = None
@@ -255,20 +265,35 @@ class BluezTransport:
             self._address = device.address
             await self._emit(EV_DEVICE_FOUND)
 
+        self.radio_busy = False
         self._found_device = None
-        self._scanner = BleakScanner(detection_callback=_on_detect)
+        self._scanner = BleakScanner(detection_callback=_on_detect, adapter=self.adapter)
         await self._scanner.start()
 
     async def stop_scan(self):
         if self._scanner is not None:
             await self._scanner.stop()
             self._scanner = None
+        self.radio_busy = await self._adapter_discovering()
+        if self.radio_busy:
+            log.warning(
+                "pairing: %s still discovering after our scan stopped — another Bluetooth client "
+                "(e.g. the Home Assistant Bluetooth integration or a BLE reader) is scanning; a new "
+                "LE connection will likely fail (HCI 0x3e)" % self.adapter)
+
+    async def _adapter_discovering(self) -> bool:
+        """``Adapter1.Discovering`` on our adapter, or False when it can't be read."""
+        try:
+            props = await self._get_interface(self._adapter_path, "org.freedesktop.DBus.Properties")
+            return bool((await props.call_get("org.bluez.Adapter1", "Discovering")).value)
+        except Exception:
+            return False
 
     # --- connect -------------------------------------------------------------
     async def connect(self):
         from bleak import BleakClient
 
-        self._client = BleakClient(self._found_device)
+        self._client = BleakClient(self._found_device, adapter=self.adapter)
         await self._client.connect()
         await self._emit(EV_CONNECTED)
 
@@ -381,7 +406,7 @@ class BluezTransport:
             if client is None or not client.is_connected:
                 from bleak import BleakClient
 
-                client = BleakClient(self._found_device)
+                client = BleakClient(self._found_device, adapter=self.adapter)
                 await client.connect()
                 owns_client = True
             await client.read_gatt_char(device_mod.VERSION_CHAR)

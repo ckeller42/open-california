@@ -232,3 +232,32 @@ def test_persist_bond_writes_owner_only_cache(monkeypatch, tmp_path):
     assert asyncio.run(t.persist_bond()) == "AA:BB:CC:DD:EE:FF"
     assert cache.read_text() == '{"address": "AA:BB:CC:DD:EE:FF"}'
     assert cache.stat().st_mode & 0o777 == 0o600
+
+
+def test_adapter_name_is_derived_from_the_adapter_path():
+    assert BluezTransport().adapter == "hci0"
+    assert BluezTransport(adapter_path="/org/bluez/hci1").adapter == "hci1"
+
+
+def test_stop_scan_flags_radio_busy_when_another_client_keeps_discovering(monkeypatch):
+    """Another BlueZ client (the Home Assistant Bluetooth integration, a BLE reader) holding a
+    discovery session keeps the controller scanning at full duty after OUR scan stopped; a new LE
+    link then dies with HCI 0x3e (btmon, 2026-09-25). Surface it instead of failing blind."""
+    t = BluezTransport()
+
+    async def discovering():
+        return True
+    monkeypatch.setattr(t, "_adapter_discovering", discovering)
+    asyncio.run(t.stop_scan())
+    assert t.radio_busy is True
+
+
+def test_stop_scan_clears_radio_busy_on_a_quiet_radio(monkeypatch):
+    t = BluezTransport()
+    t.radio_busy = True
+
+    async def discovering():
+        return False
+    monkeypatch.setattr(t, "_adapter_discovering", discovering)
+    asyncio.run(t.stop_scan())
+    assert t.radio_busy is False

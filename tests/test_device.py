@@ -24,7 +24,7 @@ class _FakeClient:
     """Records every GATT call in order; connect() can be told to fail N times first."""
     instances = []
 
-    def __init__(self, addr, timeout=None):
+    def __init__(self, addr, timeout=None, adapter=None):
         self.addr = addr
         self.is_connected = False
         self.calls = []                 # (op, uuid, data)
@@ -327,3 +327,19 @@ def test_paired_flag_and_placeholder_constant(monkeypatch, tmp_path):
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
     assert device.resolve_addr() == device.UNPAIRED_ADDR
     assert device.CamperDevice("11:22:33:44:55:66").paired is True
+
+
+def test_session_passes_the_adapter_to_bleak(monkeypatch):
+    seen = {}
+    fake_bleak = types.ModuleType("bleak")
+
+    class _Client:
+        def __init__(self, addr, timeout=None, adapter=None):
+            seen["adapter"] = adapter
+
+        async def connect(self):
+            return True
+    fake_bleak.BleakClient = _Client
+    monkeypatch.setitem(sys.modules, "bleak", fake_bleak)
+    asyncio.run(device.CamperDevice("11:22:33:44:55:66", adapter="hci1")._session())
+    assert seen["adapter"] == "hci1"
