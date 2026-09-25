@@ -21,7 +21,7 @@ Full design rationale: `docs/superpowers/specs/2026-08-31-guided-pairing-design.
 
 ## The state machine
 
-9 states, 13 events, 9 actions — all pinned integer enums (never renumber; the C port and the
+9 states, 14 events, 9 actions — all pinned integer enums (never renumber; the C port and the
 vectors depend on the values). `step(state, event, arg) -> (new_state, [(action, arg), ...])` is
 pure: unknown `(state, event)` pairs are no-ops, so a late or duplicate transport event can never
 derail the flow.
@@ -33,6 +33,8 @@ stateDiagram-v2
   ERROR --> SCANNING: EV_START (retry)
   SCANNING --> CONNECTING: EV_DEVICE_FOUND
   CONNECTING --> PAIRING: EV_CONNECTED
+  CONNECTING --> SCANNING: EV_CONNECT_FAIL (attempts remain)
+  CONNECTING --> ERROR: EV_CONNECT_FAIL (attempts exhausted)
   PAIRING --> WAITING_PASSKEY: EV_PASSKEY_REQUESTED
   WAITING_PASSKEY --> PAIRING: EV_PASSKEY_ENTERED
   PAIRING --> VERIFYING: EV_PAIR_OK
@@ -46,6 +48,9 @@ stateDiagram-v2
   RESETTING --> IDLE: EV_RESET_DONE
   note right of PAIRING
     EV_PAIR_FAIL retries up to 3 attempts, then moves to ERROR
+  end note
+  note right of CONNECTING
+    EV_CONNECT_FAIL retries up to 3 attempts, then moves to ERROR
   end note
 ```
 
@@ -79,6 +84,7 @@ injected.
 | SM symbol | BlueZ (buspi, `pairing_bluez.py`) | ESP32 (NimBLE + NVS, #154) |
 |---|---|---|
 | `EV_DEVICE_FOUND` | bleak scan callback, name == `VWCAMPER` | `BLE_GAP_EVENT_DISC` with a matching name in the adv payload |
+| `EV_CONNECT_FAIL` | `BleakClient.connect()` raises (e.g. HCI 0x3e, le-connection-abort-by-local) | `BLE_GAP_EVENT_CONNECT` with nonzero status |
 | `EV_PASSKEY_REQUESTED` | `org.bluez.Agent1.RequestPasskey` D-Bus call (agent capability `KeyboardOnly`) | `BLE_GAP_EVENT_PASSKEY_ACTION` with `action == BLE_SM_IOACT_INPUT` |
 | `ACT_SEND_PASSKEY` | resolve the `asyncio.Future` the agent's `RequestPasskey` is blocked on | `ble_sm_inject_io()` with the typed passkey |
 | `EV_PAIR_OK` / `EV_PAIR_FAIL` | `Device1.Pair()` D-Bus call result | `BLE_GAP_EVENT_ENC_CHANGE` status (0 = OK, nonzero = fail) |

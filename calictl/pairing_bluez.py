@@ -30,6 +30,7 @@ from calictl.pairing import (
     ERR_NONE,
     ERROR,
     EV_CANCEL,
+    EV_CONNECT_FAIL,
     EV_CONNECTED,
     EV_DEVICE_FOUND,
     EV_PAIR_FAIL,
@@ -54,7 +55,7 @@ log = _log.get(__name__)
 
 # Actions whose transport-call failure means "the pairing attempt failed" (-> EV_PAIR_FAIL);
 # ACT_VERIFY is handled separately since it also has a non-exception failure mode (None result).
-_PAIR_FAIL_ACTS = (ACT_CONNECT, ACT_PAIR, ACT_SEND_PASSKEY)
+_PAIR_FAIL_ACTS = (ACT_PAIR, ACT_SEND_PASSKEY)
 
 
 class PairingRunner:
@@ -147,7 +148,9 @@ class PairingRunner:
                 log.warning("pairing: address-cache write failed, bond itself is intact: %r" % e)
                 return
             log.warning("pairing: transport action %d failed: %r" % (act, e))
-            if act in _PAIR_FAIL_ACTS:
+            if act == ACT_CONNECT:
+                await self.handle(EV_CONNECT_FAIL)
+            elif act in _PAIR_FAIL_ACTS:
                 await self.handle(EV_PAIR_FAIL)
             elif act == ACT_VERIFY:
                 await self.handle(EV_VERIFY_FAIL)
