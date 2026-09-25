@@ -144,3 +144,9 @@ Guided pairing (issue #154, #157)
 .. automodule:: tests.test_pairing_sm
 .. automodule:: tests.test_pairing_runner
 .. automodule:: tests.test_pairing_bluez_transport
+
+Fake unit peripheral (Bumble, shared by the app lab + pairing tests)
+----------------------------------------------------------------------
+
+.. automodule:: tools.fake_unit_peripheral
+.. automodule:: tests.test_fake_unit_peripheral

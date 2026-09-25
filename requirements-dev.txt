@@ -3,3 +3,4 @@ pyyaml
 pytest-xdist
 ruff
 mypy
+bumble==0.0.235
