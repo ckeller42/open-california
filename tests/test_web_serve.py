@@ -1184,3 +1184,93 @@ def test_state_meta_reports_paired():
     assert be.state()["_meta"]["paired"] is False
     s.dev.addr = "11:22:33:44:55:66"          # what _on_pairing_bonded does after a bond
     assert be.state()["_meta"]["paired"] is True
+
+
+def test_pairing_start_waits_for_an_in_flight_ble_operation(monkeypatch):
+    """poll() only skips when a pairing flow is ALREADY active; a poll that took the BLE lock a
+    moment before "start" keeps connecting while the wizard begins to scan, and on one radio the
+    two collide (BlueZ InProgress on the scan, a dbus EOFError on the connect — 2026-09-25)."""
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    calls = []
+
+    class FakeRunner:
+        async def start(self):
+            calls.append(("start", s._ble.locked()))
+
+        def snapshot(self):
+            return {"state": "scanning", "attempts": 0, "error": None, "address": None,
+                    "radio_busy": False}
+    s._pairing = FakeRunner()
+
+    async def fake_set_mode(action):
+        return {"mode": "release"}
+    monkeypatch.setattr(s._sessions, "set_mode", fake_set_mode)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        await s._ble.acquire()                       # a poll is mid-read
+        task = asyncio.ensure_future(s.pairing_command("start", None))
+        await asyncio.sleep(0.05)
+        assert calls == []                           # parked behind the in-flight read
+        s._ble.release()
+        await task
+
+    asyncio.run(_run())
+    assert calls == [("start", True)]
+
+
+def test_second_start_while_scanning_is_a_noop():
+    """Two browser tabs press "Connect now": the second must not start a second scan."""
+    import asyncio
+
+    from calictl import pairing, serve
+    from calictl.pairing_bluez import PairingRunner
+    s = serve.Server(influx_enabled=False)
+    scans = []
+
+    class T:
+        radio_busy = False
+
+        async def start_scan(self):
+            scans.append(1)
+
+        async def stop_scan(self):
+            pass
+
+    s._pairing = PairingRunner(T())
+
+    async def fake_set_mode(action):
+        return {"mode": "release"}
+    s._sessions.set_mode = fake_set_mode
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        await s.pairing_command("start", None)
+        await s.pairing_command("start", None)
+        return s._pairing.state
+
+    state = asyncio.run(_run())
+    assert scans == [1]
+    assert state == pairing.PairingState(pairing.SCANNING, 0, pairing.ERR_NONE)
+
+
+def test_pairing_command_passkey_keeps_leading_zero_value():
+    import asyncio
+
+    from calictl import serve
+    s = serve.Server(influx_enabled=False)
+    seen = {}
+
+    class FakeRunner:
+        async def enter_passkey(self, pk):
+            seen["pk"] = pk
+
+        def snapshot(self):
+            return {"state": "pairing", "attempts": 0, "error": None, "address": None,
+                    "radio_busy": False}
+    s._pairing = FakeRunner()
+    asyncio.run(s.pairing_command("passkey", "012345"))
+    assert seen["pk"] == 12345

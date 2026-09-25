@@ -493,7 +493,14 @@ class Server:
         if action == "start":
             self._ensure_pairing_runner()
             await self._sessions.set_mode("disconnect")
-            await self._pairing.start()
+            if self._ble is not None:
+                # Let an in-flight poll/command finish, then enter SCANNING while still holding the
+                # lock: poll() checks the pairing state BEFORE taking the lock, so once we release,
+                # every later poll sees an active flow and skips. The flow itself never holds _ble.
+                async with self._ble:
+                    await self._pairing.start()
+            else:
+                await self._pairing.start()
         elif action == "passkey":
             if self._pairing is None:
                 return self.pairing_snapshot()
