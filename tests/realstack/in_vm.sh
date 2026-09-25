@@ -19,7 +19,7 @@ btmon >"$LOGS/btmon.log" 2>&1 &
 sleep 2
 
 dump() {
-  echo "----- bluetoothd (tail) -----"; tail -n 150 "$LOGS/bluetoothd.log" || true
+  echo "----- bluetoothd (tail) -----"; grep -v gatt-client "$LOGS/bluetoothd.log" | tail -n 200 || true
   echo "----- btmon (tail) -----"; tail -n 300 "$LOGS/btmon.log" || true
 }
 
