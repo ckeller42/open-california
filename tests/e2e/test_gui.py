@@ -226,6 +226,20 @@ def test_dashboard_shows_installed_tiles_and_hides_uninstalled(page):
     expect(page.get_by_text("Roof", exact=True).first).to_be_visible()
 
 
+def test_pairing_chrome_hidden_when_paired_and_online(page):
+    """UX counterpart to `test_pairing_hidden_until_opened_from_menu`: a PAIRED + ONLINE daemon
+    (the `page`/`base_url` fixture's `CALICTL_ADDR=MO:CK:CA:MP:ER:00`) must show NO pairing chrome
+    in the main flow -- the guided-pairing card only auto-opens on the true first-run case
+    (offline + no bond, see the unpaired test above). The entry point stays the ⋮ menu only.
+    Asserts on what the user sees, not the JS predicate's internals (`_meta.online`/`PAIRING.address`)."""
+    # let the dashboard finish rendering its tiles before checking for absent chrome
+    expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
+    expect(page.get_by_text("Set up remote control")).to_have_count(0)
+    expect(page.get_by_role("button", name="Connect now")).to_have_count(0)
+    page.get_by_role("button", name="Menu").click()
+    expect(page.get_by_role("button", name="Bluetooth pairing…")).to_be_visible()
+
+
 def test_water_screen_shows_level_percent(page):
     page.get_by_text("Water", exact=True).first.click()
     expect(page.get_by_text("Fresh water")).to_be_visible()
