@@ -245,6 +245,7 @@ class BluezTransport:
         self._found_device = None  # bleak BLEDevice set by the scan detection callback
         self._path = None          # BlueZ's D-Bus object path for it (see _device_path)
         self._scanner = None
+        self._adopt_task = None    # start_scan()'s already-known-device lookup (see _adopt_known_device)
         self._client = None        # bleak BleakClient set by connect()
         self._bus = None           # dbus_fast system MessageBus, set by _ensure_bus()
         self._agent = None
@@ -270,6 +271,45 @@ class BluezTransport:
         self._path = None
         self._scanner = BleakScanner(detection_callback=_on_detect, adapter=self.adapter)
         await self._scanner.start()
+        # Own task, like bleak's detection callback: the SM runs connect -> pair -> passkey wait
+        # off EV_DEVICE_FOUND, which must not block start_scan() (and so the runner's start()).
+        self._adopt_task = asyncio.ensure_future(self._adopt_known_device())
+
+    async def _adopt_known_device(self):
+        """Emit ``EV_DEVICE_FOUND`` for a unit BlueZ ALREADY knows and is currently hearing.
+
+        bleak reports a device only on ``InterfacesAdded`` or a ``PropertiesChanged``. While
+        another client (the Home Assistant Bluetooth integration, a BLE reader) keeps discovery
+        running, BlueZ neither restarts the scan for us nor resets the device's RSSI, so a unit it
+        already has an object for — bonded before, or seen by that client — with a steady signal
+        (BlueZ only signals an RSSI change of >= 8 dBm) and static advertising data raises NO new
+        callback: the wizard scanned until its timeout (found by the real-BlueZ CI rig). A
+        ``Device1`` on our adapter with our name AND an ``RSSI`` (BlueZ drops RSSI when discovery
+        stops, so its presence means "heard in the current discovery") is adopted directly.
+        Best-effort: any D-Bus failure leaves discovery to the normal callback.
+        """
+        try:
+            om = await self._get_interface("/", "org.freedesktop.DBus.ObjectManager")
+            objects = await om.call_get_managed_objects()
+        except Exception as e:
+            log.debug("pairing: known-device lookup failed: %r" % e)
+            return
+        prefix = self._adapter_path + "/"
+        for path, ifaces in objects.items():
+            dev = ifaces.get("org.bluez.Device1")
+            if not dev or not path.startswith(prefix):
+                continue
+            props = {k: getattr(v, "value", v) for k, v in dev.items()}
+            if props.get("Name") != self._device_name or "RSSI" not in props:
+                continue
+            if self._found_device is not None:     # the scan callback got there first
+                return
+            from bleak.backends.device import BLEDevice
+
+            self._set_found(BLEDevice(props.get("Address"), props.get("Name"),
+                                      {"path": path, "props": props}))
+            await self._emit(EV_DEVICE_FOUND)
+            return
 
     async def stop_scan(self):
         if self._scanner is not None:

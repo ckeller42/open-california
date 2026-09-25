@@ -465,3 +465,98 @@ def test_remove_bond_forgets_the_object_path(monkeypatch, tmp_path):
     assert t._path is None and t._address is None
     with pytest.raises(RuntimeError):
         t._device_path()
+
+
+class _Variant:
+    def __init__(self, value):
+        self.value = value
+
+
+def _device1(name="VWCAMPER", rssi=-50, address="C0:FF:EE:CA:11:F0"):
+    props = {"Address": _Variant(address), "Name": _Variant(name)}
+    if rssi is not None:
+        props["RSSI"] = _Variant(rssi)
+    return {"org.bluez.Device1": props}
+
+
+def _adopt(monkeypatch, objects, found=None):
+    """Run _adopt_known_device() over a fake ObjectManager (and a stub bleak BLEDevice); returns
+    (transport, events)."""
+    import sys
+    import types
+
+    class _BLEDevice:
+        def __init__(self, address, name, details):
+            self.address, self.name, self.details = address, name, details
+
+    monkeypatch.setitem(sys.modules, "bleak", types.ModuleType("bleak"))
+    monkeypatch.setitem(sys.modules, "bleak.backends", types.ModuleType("bleak.backends"))
+    monkeypatch.setitem(sys.modules, "bleak.backends.device",
+                        types.SimpleNamespace(BLEDevice=_BLEDevice))
+    events = []
+
+    async def _cb(ev, arg=0):
+        events.append(ev)
+
+    class _OM:
+        async def call_get_managed_objects(self):
+            return objects
+
+    async def _iface(path, iface):
+        assert (path, iface) == ("/", "org.freedesktop.DBus.ObjectManager")
+        return _OM()
+
+    t = BluezTransport(on_event=_cb, adapter_path="/org/bluez/hci1")
+    t._found_device = found
+    monkeypatch.setattr(t, "_get_interface", _iface)
+    asyncio.run(t._adopt_known_device())
+    return t, events
+
+
+def test_scan_adopts_a_unit_bluez_already_hears(monkeypatch):
+    """While another client keeps discovery on, BlueZ neither restarts the scan nor resets RSSI,
+    so a unit it already knows (bonded before, or seen by that client) with a steady signal and
+    static adverts raises no new bleak callback -- the wizard scanned until its timeout
+    (real-BlueZ CI rig). A known Device1 with our name and an RSSI (= heard in the current
+    discovery) is adopted directly, on its own object path.
+
+    .. test:: the scan adopts a unit BlueZ already hears
+       :id: T_PAIRING_ADOPT_KNOWN_DEVICE
+       :links: R_PAIRING_BLUEZ_TRANSPORT
+    """
+    from calictl.pairing import EV_DEVICE_FOUND
+
+    t, events = _adopt(monkeypatch, {
+        "/org/bluez/hci0/dev_11_11_11_11_11_11": _device1(),              # another adapter
+        "/org/bluez/hci1/dev_22_22_22_22_22_22": _device1(name="OTHER"),  # not the unit
+        "/org/bluez/hci1/dev_33_33_33_33_33_33": _device1(rssi=None),     # known, not heard now
+        "/org/bluez/hci1/dev_6A_61_C2_C5_FA_D1": _device1(),              # the unit
+        "/org/bluez/hci1": {"org.bluez.Adapter1": {}},
+    })
+    assert events == [EV_DEVICE_FOUND]
+    assert t._address == "C0:FF:EE:CA:11:F0"
+    assert t._device_path() == "/org/bluez/hci1/dev_6A_61_C2_C5_FA_D1"
+    assert t._found_device.details["path"] == "/org/bluez/hci1/dev_6A_61_C2_C5_FA_D1"
+
+
+def test_scan_does_not_adopt_a_unit_only_known_from_before(monkeypatch):
+    _, events = _adopt(monkeypatch, {"/org/bluez/hci1/dev_33_33_33_33_33_33": _device1(rssi=None)})
+    assert events == []
+
+
+def test_scan_adoption_defers_to_a_device_the_callback_already_found(monkeypatch):
+    t, events = _adopt(monkeypatch, {"/org/bluez/hci1/dev_6A_61_C2_C5_FA_D1": _device1()},
+                       found="from-callback")
+    assert events == [] and t._found_device == "from-callback"
+
+
+def test_scan_adoption_is_best_effort_without_a_bus(monkeypatch):
+    async def _cb(ev, arg=0):
+        raise AssertionError("no event expected")
+
+    async def _iface(path, iface):
+        raise RuntimeError("no system bus")
+
+    t = BluezTransport(on_event=_cb)
+    monkeypatch.setattr(t, "_get_interface", _iface)
+    asyncio.run(t._adopt_known_device())    # must not raise
