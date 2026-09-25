@@ -41,11 +41,15 @@ def _pair_transport(monkeypatch, call_pair_impl):
     async def _fake_remove():
         calls["remove_bond"] += 1
 
+    async def _fake_rediscover():
+        calls["rediscover"] = calls.get("rediscover", 0) + 1
+
     t = BluezTransport(on_event=_cb)
     t._address = "AA:BB:CC:DD:EE:FF"
     monkeypatch.setattr(t, "_ensure_agent", _noop_agent)
     monkeypatch.setattr(t, "_get_interface", _fake_iface)
     monkeypatch.setattr(t, "remove_bond", _fake_remove)
+    monkeypatch.setattr(t, "_rediscover", _fake_rediscover)
     return t, events, calls
 
 
@@ -69,6 +73,167 @@ def test_pair_recovers_from_a_stale_bond_then_pairs_once(monkeypatch):
     assert calls["pair"] == 2          # first raised AlreadyExists, retried exactly once
     assert calls["remove_bond"] == 1   # the stale bond was cleared before the retry
     assert events == [EV_PAIR_OK]      # ended on success
+
+
+def test_pair_retry_targets_the_rediscovered_device(monkeypatch, tmp_path):
+    """RemoveDevice drops BlueZ's device object together with the bond (and remove_bond() clears
+    _address), so the AlreadyExists retry must pair the unit RE-DISCOVERED under its current
+    address. It used to call _device_path() with _address=None -> RuntimeError, so the documented
+    one-shot retry could never succeed (found by the real-BlueZ CI rig, tests/realstack/rig.py).
+
+    .. test:: pair() retries against the re-discovered device
+       :id: T_PAIRING_STALE_BOND_REDISCOVER
+       :links: R_PAIRING_STALE_BOND_RECOVERY
+    """
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "pairing.json"))
+    paths = []
+
+    class _Iface:
+        def __init__(self, path):
+            self.path = path
+
+        async def call_pair(self):
+            paths.append(self.path)
+            if len(paths) == 1:
+                raise Exception("org.bluez.Error.AlreadyExists: Already Exists")
+
+        async def call_remove_device(self, path):
+            pass
+
+    async def _iface(path, iface):
+        return _Iface(path)
+
+    async def _noop():
+        pass
+
+    async def _rediscover():
+        t._found_device = object()
+        t._address = "11:22:33:44:55:66"
+
+    events = []
+
+    async def _cb(ev, arg=0):
+        events.append(ev)
+
+    t = BluezTransport(on_event=_cb)
+    t._address = "AA:BB:CC:DD:EE:FF"
+    monkeypatch.setattr(t, "_ensure_agent", _noop)
+    monkeypatch.setattr(t, "_get_interface", _iface)
+    monkeypatch.setattr(t, "_rediscover", _rediscover)   # the real remove_bond() runs
+    asyncio.run(t.pair())
+
+    assert paths == ["/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF", "/org/bluez/hci0/dev_11_22_33_44_55_66"]
+    assert events == [EV_PAIR_OK]
+
+
+class _FakeBleakClient:
+    made = []
+
+    def __init__(self, device, adapter=None):
+        self.device = device
+        self.adapter = adapter
+        _FakeBleakClient.made.append(self)
+
+    async def connect(self):
+        pass
+
+
+def _connect_transport(monkeypatch, bonded):
+    """A BluezTransport whose connect() runs against a stub ``bleak`` module; records the order of
+    the stale-bond steps. Returns (transport, calls, events)."""
+    import sys
+    import types
+
+    _FakeBleakClient.made = []
+    monkeypatch.setitem(sys.modules, "bleak", types.SimpleNamespace(BleakClient=_FakeBleakClient))
+    calls, events = [], []
+
+    async def _cb(ev, arg=0):
+        events.append(ev)
+
+    async def _bonded():
+        calls.append("bonded?")
+        return bonded
+
+    async def _remove():
+        calls.append("remove_bond")
+        t._found_device = t._address = None
+
+    async def _rediscover():
+        calls.append("rediscover")
+        t._found_device = "fresh-device"
+        t._address = "11:22:33:44:55:66"
+
+    t = BluezTransport(on_event=_cb, adapter_path="/org/bluez/hci1")
+    t._found_device = "stale-device"
+    t._address = "C0:FF:EE:CA:11:F0"
+    monkeypatch.setattr(t, "_device_bonded", _bonded)
+    monkeypatch.setattr(t, "remove_bond", _remove)
+    monkeypatch.setattr(t, "_rediscover", _rediscover)
+    return t, calls, events
+
+
+def test_connect_drops_a_stale_bond_before_connecting(monkeypatch):
+    """With a bond on file BlueZ encrypts every new link with the stored LTK; a unit that forgot
+    us (Bluetooth reset) rejects it (PIN or Key Missing), the kernel drops the link and BlueZ
+    reconnects forever -- connect() never returned and the wizard died on a CONNECTING timeout
+    (real-BlueZ CI rig). connect() must drop the bond and re-discover the unit FIRST.
+
+    .. test:: connect() clears a stale bond before connecting
+       :id: T_PAIRING_STALE_BOND_BEFORE_CONNECT
+       :links: R_PAIRING_STALE_BOND_RECOVERY
+    """
+    from calictl.pairing import EV_CONNECTED
+
+    t, calls, events = _connect_transport(monkeypatch, bonded=True)
+    asyncio.run(t.connect())
+    assert calls == ["bonded?", "remove_bond", "rediscover"]
+    assert [c.device for c in _FakeBleakClient.made] == ["fresh-device"]   # not the removed object
+    assert _FakeBleakClient.made[0].adapter == "hci1"
+    assert events == [EV_CONNECTED]
+
+
+def test_connect_leaves_an_unbonded_device_alone(monkeypatch):
+    t, calls, _ = _connect_transport(monkeypatch, bonded=False)
+    asyncio.run(t.connect())
+    assert calls == ["bonded?"]
+    assert [c.device for c in _FakeBleakClient.made] == ["stale-device"]
+
+
+class _Props:
+    def __init__(self, values):
+        self._values = values
+
+    async def call_get(self, iface, name):
+        if name not in self._values:
+            raise Exception("org.freedesktop.DBus.Error.InvalidArgs: No such property '%s'" % name)
+        return type("V", (), {"value": self._values[name]})()
+
+
+@pytest.mark.parametrize("values, expected", [
+    ({"Bonded": True, "Paired": True}, True),
+    ({"Bonded": False, "Paired": True}, False),   # paired without stored keys: nothing blocks
+    ({"Paired": True}, True),                     # a BlueZ without Device1.Bonded
+    ({}, False),
+])
+def test_device_bonded_reads_bonded_then_paired(monkeypatch, values, expected):
+    t = BluezTransport()
+    t._address = "C0:FF:EE:CA:11:F0"
+
+    async def _iface(path, iface):
+        return _Props(values)
+    monkeypatch.setattr(t, "_get_interface", _iface)
+    assert asyncio.run(t._device_bonded()) is expected
+
+
+def test_device_bonded_is_false_without_a_bus(monkeypatch):
+    t = BluezTransport()
+    t._address = "C0:FF:EE:CA:11:F0"
+
+    async def _iface(path, iface):
+        raise RuntimeError("no system bus")
+    monkeypatch.setattr(t, "_get_interface", _iface)
+    assert asyncio.run(t._device_bonded()) is False
 
 
 def test_pair_propagates_a_non_stale_bond_failure(monkeypatch):

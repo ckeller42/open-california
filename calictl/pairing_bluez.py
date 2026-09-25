@@ -291,11 +291,59 @@ class BluezTransport:
 
     # --- connect -------------------------------------------------------------
     async def connect(self):
+        await self._clear_stale_bond()
         from bleak import BleakClient
 
         self._client = BleakClient(self._found_device, adapter=self.adapter)
         await self._client.connect()
         await self._emit(EV_CONNECTED)
+
+    async def _device_bonded(self) -> bool:
+        """Whether BlueZ holds a bond for the discovered device (``Device1.Bonded``, falling back
+        to ``Paired`` on a BlueZ without ``Bonded``); False when it can't be read."""
+        try:
+            props = await self._get_interface(self._device_path(), "org.freedesktop.DBus.Properties")
+        except Exception:
+            return False
+        for name in ("Bonded", "Paired"):
+            try:
+                return bool((await props.call_get("org.bluez.Device1", name)).value)
+            except Exception:
+                continue
+        return False
+
+    async def _rediscover(self, timeout: float = 8.0):
+        """Scan once more for the unit after its BlueZ device object was removed (``RemoveDevice``
+        drops the object and its IRK, so the unit reappears as a NEW device under its current
+        resolvable address). Raises when it doesn't reappear — the caller's failure event lets the
+        SM retry from a fresh scan."""
+        from bleak import BleakScanner
+
+        device = await BleakScanner.find_device_by_filter(
+            lambda d, ad: d.name == self._device_name, timeout=timeout, adapter=self.adapter)
+        if device is None:
+            raise RuntimeError("%s did not reappear after removing its stale bond" % self._device_name)
+        self._found_device = device
+        self._address = device.address
+
+    async def _drop_bond_and_rediscover(self):
+        await self.remove_bond()        # clears _found_device/_address/_client + the address cache
+        await self._rediscover()
+
+    async def _clear_stale_bond(self):
+        """Drop a bond BlueZ still holds for the unit before connecting — the wizard's job is a
+        FRESH bond (see :meth:`pair`, ``R_PAIRING_STALE_BOND_RECOVERY``).
+
+        With a bond on file BlueZ encrypts every new link with the stored LTK. After a unit-side
+        Bluetooth reset the unit no longer has that key and rejects it ("PIN or Key Missing"), so
+        the kernel drops the link (authentication failure) and BlueZ reconnects, forever: the
+        connect never completes, ``Pair()`` is never reached, and the wizard ends on a CONNECTING
+        timeout. Found by the real-BlueZ CI rig (``tests/realstack/rig.py``).
+        """
+        if await self._device_bonded():
+            log.warning("pairing: BlueZ still holds a bond for %s — removing it before connecting so "
+                        "a unit that forgot us (Bluetooth reset) can pair again" % self._address)
+            await self._drop_bond_and_rediscover()
 
     def _device_path(self):
         if not self._address:
@@ -362,7 +410,10 @@ class BluezTransport:
            but OUR bond persists, so the wizard would fail, retry ``MAX_ATTEMPTS`` times, and end
            on a generic ``pairing_failed`` the user cannot act on. On that one error, clear the
            stale bond and retry ``Pair()`` exactly once; any other error is a genuine failure and
-           propagates unchanged.
+           propagates unchanged. The same holds before connecting: a bond BlueZ still holds is
+           dropped first (:meth:`_clear_stale_bond`), since with a stale LTK the link never comes
+           up and ``Pair()`` is never reached. Removing the bond removes BlueZ's device object, so
+           the unit is re-discovered (under its current address) before the retry.
         """
         await self._ensure_agent()
         device_iface = await self._get_interface(self._device_path(), "org.bluez.Device1")
@@ -378,7 +429,9 @@ class BluezTransport:
             if "AlreadyExists" not in str(e) and "already exists" not in str(e).lower():
                 raise
             log.warning("pair: bond already exists — removing the stale bond and retrying once")
-            await self.remove_bond()
+            # remove_bond() clears _address and BlueZ drops the device object with the bond, so the
+            # retry needs the unit re-discovered — the old path no longer exists.
+            await self._drop_bond_and_rediscover()
             device_iface = await self._get_interface(self._device_path(), "org.bluez.Device1")
             await device_iface.call_pair()
         await self._emit(EV_PAIR_OK)
