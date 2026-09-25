@@ -118,3 +118,36 @@ def test_console_pair_command_toggles_pairing_mode():
     off, on = asyncio.run(run())
     assert off is False
     assert on is True
+
+
+def test_console_forget_command_clears_bonds():
+    async def run():
+        _, unit, central = await _unit_and_central()
+        pair_with(central, unit.next_passkey)
+        conn = await central.connect(await scan_for(central))
+        await central.pair(conn)
+        await conn.disconnect()
+
+        before = await unit.device.keystore.get_all()
+        unit._console_line("forget")
+        await asyncio.wait_for(unit.tasks[-1], 2.0)   # let the scheduled forget_bonds() run
+        after = await unit.device.keystore.get_all()
+        return before, after
+
+    before, after = asyncio.run(run())
+    assert before                 # sanity: pairing actually stored a bond
+    assert after == []            # the console command's dispatcher path really clears it
+
+
+def test_console_rotate_command_changes_advertising_address():
+    async def run():
+        _, unit, central = await _unit_and_central()
+        first = await scan_for(central)
+        unit._console_line("rotate")
+        await asyncio.wait_for(unit.tasks[-1], 2.0)   # let the scheduled rotate_address() run
+        second = await scan_for(central)
+        return str(first), str(second), unit.advertising_address
+
+    first, second, advertising_address = asyncio.run(run())
+    assert first != second                # the console command's dispatcher path really rotates
+    assert advertising_address == second
