@@ -101,7 +101,7 @@ async def main():
         await unit.forget_bonds()                   # the unit's Bluetooth reset; BlueZ keeps its bond
         t2, _, snap2 = await pair_once(adapter, unit)
         check(snap2["state"] == "bonded",
-              "re-pair after the unit forgot its bonds (AlreadyExists self-heal): %s" % snap2)
+              "re-pair after the unit forgot its bonds (stale-bond self-heal): %s" % snap2)
         check((snap2["address"] or "").upper() == IDENTITY, "re-pair caches the identity: %s" % snap2["address"])
         await t2.disconnect()
         check(await until(lambda: unit.conn is None, 15), "the unit sees the re-pair link drop")
