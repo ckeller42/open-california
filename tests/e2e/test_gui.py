@@ -607,6 +607,41 @@ def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
             proc.terminate()
 
 
+def test_pairing_wizard_never_flashes_a_stale_step_after_daemon_restart(tmp_path):
+    """The no-reload counterpart to `test_pairing_wizard_restarts_cleanly_after_daemon_restart`:
+    close the wizard mid-flow (still `waiting_passkey` in THIS process), restart the daemon on the
+    same port (a fresh process starts `idle`), then reopen the wizard from the ⋮ menu WITHOUT
+    reloading the tab. The client's cached `PAIRING` object is still the stale `waiting_passkey`
+    snapshot from before the restart -- `openPairingWizard`'s synchronous render (added so the
+    wizard opens instantly from the idle case) must not flash that stale passkey step; it must
+    show a neutral loading step until the fresh `pairingFetch()` proves the real (idle) state."""
+    env = {"CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+           "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+           "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")}
+    port = _free_port()
+    proc, url = _start_daemon(port, env)
+    with sync_playwright() as p:
+        page = p.chromium.launch().new_page()
+        page.goto(url)
+        _open_and_start_pairing(page)
+        expect(page.locator("#pairing-passkey")).to_be_visible(timeout=10000)
+        page.get_by_role("button", name="Close", exact=True).click()   # close mid-flow -- server stays waiting_passkey
+        proc.terminate()
+        proc.wait(timeout=5)
+        proc, url = _start_daemon(port, env)                # same port, a FRESH process -> idle
+        try:
+            page.get_by_role("button", name="Menu").click()
+            page.get_by_text("Bluetooth pairing…").click()
+            # immediately after the click -- before the fresh fetch can possibly have landed --
+            # the stale waiting_passkey step must never appear.
+            expect(page.locator("#pairing-passkey")).to_have_count(0)
+            # once the real state lands, the idle checklist renders (never the stale passkey step).
+            expect(page.get_by_role("checkbox", name="I'm on that screen")).to_be_visible(timeout=10000)
+            expect(page.locator("#pairing-passkey")).to_have_count(0)
+        finally:
+            proc.terminate()
+
+
 def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
     """A wrong passkey each attempt: the real SM (`calictl.pairing`) retries up to MAX_ATTEMPTS
     times (cycling back through scanning/connecting/waiting_passkey) before giving up -> `error`

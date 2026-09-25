@@ -1077,6 +1077,11 @@ function energyChart() {
 // dashboard poll stays at 2 s. See .superpowers/sdd/2026-08-31-guided-pairing.
 let pairingOpen = false;
 let pairingReady = false;              // "I'm on that screen" checkbox
+// True for the brief window between opening the wizard and the fresh `pairingFetch()` landing,
+// but ONLY when the cached PAIRING snapshot might be stale (see openPairingWizard): renders a
+// neutral loading step instead of flashing a leftover passkey/bonded/error/etc. step from a
+// flow the server has since moved on from (e.g. it restarted while this tab stayed open).
+let pairingLoading = false;
 /** @type {{state:string, attempts:number, error:string|null, address:string|null, radio_busy?: boolean}|null} */
 let PAIRING = null;
 /** @type {ReturnType<typeof setInterval>|null} */
@@ -1122,6 +1127,11 @@ const PAIRING_ERROR_HINT = {
   verify_failed: "The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth reset / re-pair.",
 };
 
+// Global constraint: never show a raw error enum to the user (only the four codes above are
+// mapped; anything else -- a future code this build doesn't know about yet -- falls back to this
+// translated generic message, never to the bare `perr` string).
+const PAIRING_ERROR_FALLBACK = "Something went wrong. Try again.";
+
 /**
  * @param {string} action
  * @param {string} [value]
@@ -1145,11 +1155,19 @@ async function pairingAction(action, value, confirmFlag) {
 // Open the wizard on demand (from the topbar context menu, or auto on true first-run).
 async function openPairingWizard() {
   pairingOpen = true;
+  // Render synchronously (no visible delay opening the wizard) ONLY when that's safe: no cached
+  // snapshot yet, or the cached one was already `idle` -- either way it matches what a fresh
+  // fetch would show anyway. Any OTHER cached state (waiting_passkey/pairing/verifying/bonded/
+  // error/…) could be stale left over from a flow the server has since moved on from -- e.g. the
+  // daemon restarted while this tab stayed open -- so show a neutral loading step instead of
+  // flashing it, until the fetch below lands a fresh snapshot.
+  pairingLoading = !!(PAIRING && PAIRING.state !== "idle");
   if (view !== "home") goto("home");   // the card renders on the dashboard only (goto() re-renders)
-  else render();                       // already home: show the card now, with the last-known
-                                        // PAIRING snapshot, instead of leaving the click waiting
-                                        // on the network round-trip below
+  else render();                       // already home: show the card now (idle checklist, or the
+                                        // loading step) instead of leaving the click waiting on
+                                        // the network round-trip below
   await pairingFetch();
+  pairingLoading = false;
   startPairingPoll();
   render();
 }
@@ -1166,9 +1184,21 @@ function pairingCard() {
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
-  closeBtn.onclick = () => { pairingOpen = false; stopPairingPoll(); render(); };
+  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; stopPairingPoll(); render(); };
   head.appendChild(closeBtn);
   card.appendChild(head);
+
+  if (pairingLoading) {
+    // The cached PAIRING snapshot might be stale (see openPairingWizard) -- show a neutral
+    // loading step instead of a leftover passkey/bonded/error/etc. step from an earlier flow.
+    const row = document.createElement("div"); row.className = "row";
+    row.appendChild(spinner());
+    const lbl = document.createElement("span"); lbl.className = "lbl";
+    lbl.textContent = /** @type {string} */ (t("Loading…"));
+    row.appendChild(lbl);
+    card.appendChild(row);
+    return card;
+  }
 
   const p = PAIRING || { state: "idle", attempts: 0, error: null, address: null };
   if (p.radio_busy) {
@@ -1260,7 +1290,7 @@ function pairingCard() {
     const errRow = document.createElement("div"); errRow.className = "warn";
     const perr = /** @type {string} */ (p.error || "");
     errRow.textContent = /** @type {string} */ (t("Error: "))
-      + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || perr || /** @type {string} */ (t("unknown")));
+      + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || /** @type {string} */ (t(PAIRING_ERROR_FALLBACK)));
     card.appendChild(errRow);
     const hint = PAIRING_ERROR_HINT[perr];
     if (hint) {

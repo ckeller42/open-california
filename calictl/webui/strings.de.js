@@ -309,6 +309,7 @@ window.STRINGS_DE = {
     + "Home-Assistant-Bluetooth-Integration).",
   "I'm on that screen": "Ich bin auf diesem Bildschirm",
   "Connect now": "Jetzt verbinden",
+  "Loading…": "Wird geladen…",
   "Searching…": "Suche…",
   "Connecting…": "Verbindung wird aufgebaut…",
   ["Enter the passcode now shown on the camper control unit (it replaced ---). "
@@ -330,6 +331,7 @@ window.STRINGS_DE = {
     + "gespeicherte Verbindung). Trage es in /etc/buspi/calictl.env ein, damit es das übersteht.",
   "Error: ": "Fehler: ",
   "No vehicle found.": "Kein Fahrzeug gefunden.",
+  "Something went wrong. Try again.": "Etwas ist schiefgelaufen. Versuche es erneut.",
   "Could not connect to the unit.": "Keine Verbindung zum Gerät.",
   "Pairing was refused.": "Kopplung abgelehnt.",
   "Could not verify the bond.": "Verbindung konnte nicht verifiziert werden.",
