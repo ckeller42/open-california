@@ -75,6 +75,16 @@ The installer will:
 camper screen. "Pairing successful" / `Bonded: yes` is the real signal; ignore any leftover
 "enter passkey" prompt text.
 
+### Other Bluetooth software on this Pi
+
+Pairing needs the Pi's Bluetooth adapter free to scan and connect. If something else on the Pi
+keeps Bluetooth discovery running at full duty — the Home Assistant Bluetooth integration, a BLE
+reader (Anker/Victron/Govee), another instance of `calictl` — a new connection attempt is likely
+to fail outright while it does. Pause any such software for the few minutes pairing takes, then
+resume it once you're bonded; it doesn't interfere with a working bond, only with making a new
+connection. Re-pairing later from the web UI hits the same constraint — see
+[How to pair your camper](howto-pair-your-camper.md#before-you-start).
+
 ## Manual install (if you skip the script)
 
 ```sh
@@ -93,6 +103,11 @@ Then adapt `calictl/deploy/calictl.service` (paths, `User`, `EnvironmentFile`) a
 `sudo systemctl enable --now calictl`.
 
 ## After install
+
+Need to re-pair later — after moving the SD card to a new Pi, a factory reset, or a
+"Bluetooth zurücksetzen" on the camper unit itself — or just prefer a guided flow over
+`bluetoothctl`? Use the web UI's pairing wizard instead:
+[How to pair your camper](howto-pair-your-camper.md).
 
 ```sh
 ~/open-california/.venv/bin/python -m calictl status        # all functions

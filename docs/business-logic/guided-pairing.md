@@ -1,6 +1,8 @@
 # Guided BLE pairing — the state-machine contract (#154, #157)
 
-**Status:** SM + BlueZ transport + web wizard shipped, mock-tested. **NOT-LIVE-VERIFIED** — the
+**Status:** SM + BlueZ transport + web wizard shipped; unit-tested against a fake transport and
+CI-verified against real BlueZ (`pairing-real-stack`, a VM + the Bumble fake unit — see
+[NOT-LIVE-VERIFIED](#not-live-verified)). **NOT-LIVE-VERIFIED against a real camper unit** — the
 deliberate live unbond→re-pair at the van is tracked as a checkbox on
 [#157](https://github.com/ckeller42/open-california/issues/157), not done yet.
 
@@ -111,6 +113,45 @@ table — it would do a single encrypted read of one known auth characteristic a
 success/failure as `EV_VERIFY_OK`/`EV_VERIFY_FAIL` directly. Port the *shape* (an encrypted read
 after `EV_PAIR_OK` that fails closed on any read problem), not the specific count threshold.
 
+## Environment the wizard needs
+
+Guided pairing is BLE-radio-sensitive in ways that are easy to get wrong on a Pi doing several
+Bluetooth jobs at once. The how-to for owners is
+[How to pair your camper](../howto-pair-your-camper.md); this is the mechanism behind its
+"Before you start" checklist.
+
+- **One radio.** `hci0` on buspi is shared with other BLE clients (the Home Assistant Bluetooth
+  integration, BLE readers, calictl's own persistent session). Only one of them can hold the
+  adapter's `Discovering` state or a connection at a time.
+- **Co-resident scanners break new connections.** `BluezTransport.stop_scan` reads
+  `Adapter1.Discovering` right after its own scan stops; if another client kept discovery
+  running, `radio_busy` is set and surfaced to the wizard (the banner text in
+  `calictl/webui/app.js`). A **btmon capture on buspi (2026-09-25)** caught the mechanism
+  directly: `LE Connection Complete`, then BlueZ re-enabled active scanning at **100 % duty**
+  (scan window == scan interval, 11.25 ms) because another client still held discovery, and
+  ~300 ms later the connection failed to establish with **HCI error 0x3e**. With every other
+  scanner stopped, the same connect attempt succeeded. The owner's phone holding the unit's
+  single connection blocks a Pi connect the same way, for a different reason (the unit itself
+  refuses a second link, not the local radio).
+- **One connection slot on the unit.** The camper control unit accepts exactly one BLE central
+  at a time; a phone connected via the CaliforniaOnTour app locks the Pi out regardless of the
+  local radio's state.
+- **A rotating advertising address.** The unit advertises from a private address that changes
+  periodically (observed 2026-09-25: **four different addresses in about 45 minutes** of
+  continuous scanning). The wizard finds it by name (`VWCAMPER`), not by address; only once
+  bonded does the unit's identity address become available, and that is what
+  `persist_bond()` stores. Seeing the scanned address change between attempts is expected.
+- **`Passcode: ---` until a pairing request arrives.** The unit's own "Gerät verbinden" screen
+  shows the literal placeholder `---` where the 6-digit passcode goes, and only replaces it once
+  a central actually starts a pairing request against it (owner photo, 2026-09-25). A wizard
+  stuck in `waiting_passkey` with the unit still showing `---` means the pairing request never
+  reached the unit — recheck the checklist, not the typed digits.
+- **The unpaired-daemon guard.** Before any bond exists, `CamperDevice._session()` refuses to
+  even construct a `BleakClient` for the placeholder address (`device.UNPAIRED_ADDR`) — an
+  unpaired daemon does not poll or scan at all. This matters here because a daemon that *did*
+  scan on every failed poll would itself be one more client competing for discovery, working
+  against the very radio the wizard needs quiet. `_meta.paired` reports this state to the UI.
+
 ## Exclusion model (single BLE owner rule, CLAUDE.md)
 
 A guided-pairing flow can run for minutes — the user has to walk to the camper panel and read
@@ -131,12 +172,22 @@ flow; doing so would freeze `/api/state` (and every other read) for that entire 
 
 ## NOT-LIVE-VERIFIED
 
-Everything above is mock-tested: `tests/test_pairing_sm.py` replays the pure SM against
-`tests/vectors/pairing.json`; the BlueZ runner and the `/api/pairing` endpoints are tested
-against a fake transport, no real dbus/bleak. **No real unbond→re-pair has been run against the
-van yet** — that is a deliberate, human-in-the-loop step (typing a passkey off the camper's own
-screen) tracked as a checkbox on
+Two tiers below the real van: `tests/test_pairing_sm.py` replays the pure SM against
+`tests/vectors/pairing.json` (no transport at all), and `tests/test_pairing_link.py` drives the
+runner + `BluezTransport` against a fake transport / a Bumble `LocalLink` fake unit (no real
+dbus/bleak/BlueZ). The `pairing-real-stack` CI job (`tests/realstack/`, non-required check) goes
+one tier further: inside a virtme-ng VM, the real dbus/bleak/BlueZ stack — agent registration,
+scan, connect, `Device1.Pair()`, verify, `persist_bond`, the stale-bond probe/removal, and
+`radio_busy` — runs against the Bumble fake unit over a virtual controller. That still is **not**
+a real camper unit: it doesn't exercise RSSI jitter, the unit's own advertising/deep-sleep
+policy, WiFi coexistence on buspi's shared radio, or another client scanning at full duty and
+starving a real LE connect (HCI 0x3e) — the mechanism the 2026-09-25 btmon capture caught (see
+[Environment the wizard needs](#environment-the-wizard-needs)) was observed on real buspi
+hardware, but not yet as part of a full pairing run. **No real unbond→re-pair has been run
+against the van yet** — that is a deliberate, human-in-the-loop step (typing a passkey off the
+camper's own screen) tracked as a checkbox on
 [#157](https://github.com/ckeller42/open-california/issues/157). Until that checkbox is
-checked, treat the BlueZ transport (agent registration, `Device1.Pair()`, the verify-policy
-read count, `Adapter1.RemoveDevice()`) as **DECOMPILE/mock-tier**, not device-verified — same
-evidence-tier convention as `evidence-ledger.md`.
+checked, treat the BlueZ transport's behaviour against a **real camper unit** (as opposed to the
+VM's fake one) as **DECOMPILE/mock-tier**, not device-verified — same evidence-tier convention as
+`evidence-ledger.md`. The [how-to](../howto-pair-your-camper.md) is written from the code and the
+real-buspi radio evidence above, not from a completed live pairing.

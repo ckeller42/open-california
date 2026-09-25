@@ -134,6 +134,9 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   optionally be fronted by HTTPS on the tailnet via `tailscale serve` (tailnet-only, never
   `funnel`) — see the `buspi-deploy` skill + `docs/raspberry-pi-setup.md` "Remote access over
   Tailscale".
+- **Pairing needs a quiet radio:** any BlueZ client holding discovery (calictl unpaired polls —
+  now guarded, readers, HA Bluetooth) kills a new LE link with 0x3e; the unit advertises a
+  rotating address, only the bonded identity is stable. See `guided-pairing.md`.
 
 ## Documentation (sphinx + sphinx-needs)
 

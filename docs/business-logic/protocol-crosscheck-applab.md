@@ -107,6 +107,34 @@ or a new protocol fact — never a reason to touch the trace. Results land in th
 | `1602` energy streams ~3×/s while connected | **not observed**: with the persistent session up and the heartbeat ticking, each of the 12 subscribed chars notified **exactly once, right after its CCCD write**, then nothing for the rest of the link (no change-driven push in 150 s; energy values did change between links) | **CONTRADICTED** (the 2026-07 "3×/s" note) → mock/fake now push once on subscribe, not 1 Hz |
 | `1003` heartbeat keeps the link up indefinitely | **no unit-side drop found.** The heartbeat-traced run (524 s, 11 links) shows every link is one calictl **poll cycle**: connect → 12 on-subscribe pushes → 14 reads → 5–7 beats (median gap 0.73 s, max 1.32 s) → calictl's own disconnect 0–0.9 s after the last beat; links are 5–6 s long and start every ~39 s (`POLL_INTERVAL=30` + the cycle). The "up twice within 40 s" was the web-driven persistent session being **released for web-UI idleness** (`persistent session released (web UI idle)` ~3 s to 2 min after each `up`) and re-armed by the next `/api/session` nudge. One genuine `read_all: link dropped at airheater` occurred right after the service restart (hci0 contention on start-up), none afterwards | OBSERVED (resolved; the 30–40 s pattern is calictl's cadence, not the unit) |
 
+## Pairing (guided-pairing.md, `calictl/pairing.py` / `pairing_bluez.py`)
+
+**Not done yet.** The pairing rework on `feat/pairing-verification` (guided-pairing state
+machine, the BlueZ transport's stale-bond self-heal + probe-first bond handling, `radio_busy`,
+the unpaired-daemon scan guard) was cross-checked against the fake unit over a Bumble
+`LocalLink` (`tests/test_pairing_link.py`) and against real BlueZ in a VM
+(`tests/realstack/`, the `pairing-real-stack` CI job) — never against the real
+**CaliforniaOnTour app** in this app lab. `tools/applab/fake_unit_ble.py` already exercises app
+pairing (`### Pairing the app` in `tools/applab/README.md`) and its `pair on`/`pair off`/`rotate`/
+`forget` console commands model the unit's "Gerät verbinden" gate and address rotation, but no
+session has yet compared the **app's own pairing flow and error UX** against calictl's wizard.
+Claims still to check here, not yet observed:
+
+- Does the app's own passkey-entry flow tolerate the same **rotating address** and
+  **`Passcode: ---` until a pairing request** behaviour the how-to describes for calictl, or does
+  the app rely on something calictl's wizard doesn't (e.g. a different discovery filter, a
+  different SMP IO capability)?
+- What does the app do when the unit's Bluetooth is reset mid-ownership (`forget` on the fake
+  unit) — does it show equivalent guidance to calictl's "Bluetooth reset / re-pair", or does it
+  fail differently?
+- Does the app ever encounter (or specifically handle) the **HCI 0x3e / co-resident-scanner**
+  failure mode the 2026-09-25 btmon capture found for calictl, or is the phone's Bluetooth stack
+  less sensitive to it?
+
+Until an app-lab session answers these, do not read this repository's pairing UX (error
+messages, hints, the environment requirements) as validated against the app's own behaviour —
+only against calictl's own transport and the fake unit.
+
 ## Not testable in the lab (unit-side; keep DEVICE/CAPTURE tier)
 
 `0x0E` link drop on out-of-range values; water measurement-gating / stale latch; deep-sleep and

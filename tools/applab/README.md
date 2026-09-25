@@ -91,6 +91,10 @@ the app's real frames. `BUMBLE_LOGLEVEL=DEBUG` adds the ATT/SMP trace (large).
 
 ### Pairing the app (once per emulator image)
 
+The cross-check between calictl's own guided-pairing wizard and the app's pairing flow has not
+been run yet — see the "Pairing" section of
+`docs/business-logic/protocol-crosscheck-applab.md` for what's still open.
+
 In the app: onboarding → Vehicle tab → *Add vehicle* → enter `FAKE_UNIT_VIN` (online validation
 fails → pick model *California* + equipment *Ocean* manually) → *Set up remote control* → grant
 the nearby-devices permission → *Connect now*. The app reads `1002`, compares it with
