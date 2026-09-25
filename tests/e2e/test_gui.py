@@ -66,11 +66,19 @@ def _free_port():
     return port
 
 
-def _start_daemon(port, extra_env):
-    """Launch `tools.run_against_mock serve --web <port>` and block until `/api/state` reports
-    the mock's installed functions -- the subprocess-launch + readiness-poll dance shared by
-    `base_url` (one server for the whole module) and `pairing_url` (a fresh one per test, so the
-    guided-pairing wizard's server-side state machine can't leak between tests)."""
+def _start_daemon(port, extra_env, expect_installed=True):
+    """Launch `tools.run_against_mock serve --web <port>` and block until `/api/state` is ready --
+    the subprocess-launch + readiness-poll dance shared by `base_url` (one server for the whole
+    module), `pairing_url` (a fresh one per test, so the guided-pairing wizard's server-side state
+    machine can't leak between tests), and `unconfigured_pairing_page` (a daemon with NO bond).
+
+    :param expect_installed: when True (the default), wait until `/api/state` reports the mock's
+        installed functions -- only true once a session can actually poll the (mock) unit. An
+        UNPAIRED daemon (no bond -> `device.UNPAIRED_ADDR`) never gets there: `CamperDevice._session`
+        now refuses before any BLE traffic, so no function is ever populated. Pass False for that
+        case and this returns as soon as `/api/state` answers with a JSON object containing
+        `_meta` -- proof the web server itself is up.
+    """
     env = dict(os.environ,
                CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
                CALICTL_ARM_DELAY_S="0.3", CALICTL_SETTLE_S="0.3", CALICTL_HEARTBEAT_PERIOD_S="0.1",
@@ -91,8 +99,12 @@ def _start_daemon(port, extra_env):
             raise RuntimeError("server exited early:\n" + proc.stdout.read().decode())
         try:
             with urllib.request.urlopen(url + "/api/state", timeout=1) as r:
-                if len([k for k, v in json.load(r).items() if isinstance(v, dict)
-                        and v.get("installed")]) >= 5:
+                body = json.load(r)
+                if not expect_installed:
+                    if isinstance(body, dict) and "_meta" in body:
+                        return proc, url
+                elif len([k for k, v in body.items() if isinstance(v, dict)
+                          and v.get("installed")]) >= 5:
                     return proc, url
         except Exception:
             pass
@@ -189,7 +201,8 @@ def unconfigured_pairing_page(tmp_path):
     proc, url = _start_daemon(port, {"CALICTL_ADDR": "",
                                      "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
                                      "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
-                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json")})
+                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json")},
+                              expect_installed=False)
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch()
@@ -523,12 +536,20 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
 
 
 def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
-    """UX: when the daemon is reachable there is NO pairing card in the main flow — the entry
-    point is the topbar context menu only. Unpair is hidden there too until a bond exists (this
-    daemon has no CALICTL_ADDR and no pairing cache, so no bond is configured)."""
+    """UX: a genuinely unpaired daemon (no `CALICTL_ADDR`, no pairing cache ->
+    `device.UNPAIRED_ADDR`) is the true first-run case app.js's own pre-existing auto-open rule
+    targets (`main()`/`renderDashboard`: `_meta.online === false && PAIRING.address == null` ->
+    the setup card opens automatically) -- since Task 5's `_session` guard now refuses before any
+    BLE traffic, `_meta.online` genuinely stays False here (before Task 5 the mock's
+    address-agnostic `BleakClient` masked this: it happily "connected" even to the unpaired
+    placeholder address, so this same daemon used to read as online and the card stayed closed).
+    The unpaired banner itself is a Task 11 polish item; this only asserts the entry point still
+    works and Unpair stays hidden until a bond exists."""
     page = unconfigured_pairing_page
     expect(page.get_by_role("button", name="Menu")).to_be_visible()
-    assert "Bluetooth" not in page.locator("#app").inner_text()
+    # true first-run (offline + no bond) auto-opens the setup card with the generic instructions --
+    # pre-existing UX, not introduced by this task.
+    expect(page.get_by_text("On the camper control unit open Settings")).to_be_visible()
     page.get_by_role("button", name="Menu").click()
     expect(page.get_by_role("button", name="Bluetooth pairing…")).to_be_visible()
     # no bond configured in this daemon -> no Unpair entry

@@ -85,7 +85,7 @@ def test_actuate_arms_then_writes(fake_bleak):
     """
     f = _cooler()
     frame = bytes.fromhex("3d4300000000")
-    post = asyncio.run(device.CamperDevice("AA:BB:CC:DD:EE:FF").actuate(f, frame, verify=True))
+    post = asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate(f, frame, verify=True))
     c = fake_bleak.instances[-1]
     reads = [u for op, u, _ in c.calls if op == "read"]
     writes = [(u, d) for op, u, d in c.calls if op == "write"]
@@ -104,19 +104,19 @@ def test_actuate_arms_then_writes(fake_bleak):
 
 def test_actuate_no_verify_returns_none(fake_bleak):
     f = _cooler()
-    post = asyncio.run(device.CamperDevice().actuate(f, bytes(6), verify=False))
+    post = asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate(f, bytes(6), verify=False))
     assert post is None
 
 
 def test_session_retries_then_raises(fake_bleak):
     fake_bleak.fail_connect = 99          # every connect attempt fails
     with pytest.raises(device.ConnectionUnavailable):
-        asyncio.run(device.CamperDevice().read(_cooler()))
+        asyncio.run(device.CamperDevice("11:22:33:44:55:66").read(_cooler()))
 
 
 def test_read_all_skips_and_returns_bytes(fake_bleak):
     funcs = protocol.load(); overrides.apply(funcs)
-    out = asyncio.run(device.CamperDevice().read_all(funcs))
+    out = asyncio.run(device.CamperDevice("11:22:33:44:55:66").read_all(funcs))
     # every function with a state_char is present as bytes
     assert out and all(isinstance(v, bytes) for v in out.values())
     assert "cooler" in out
@@ -124,7 +124,7 @@ def test_read_all_skips_and_returns_bytes(fake_bleak):
 
 def test_serve_poll_caches_and_interprets(fake_bleak):
     from calictl import serve
-    s = serve.Server(influx_enabled=False)
+    s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
     async def _run():
         s._ble = asyncio.Lock()             # normally created inside run()'s loop
         return await s.poll()
@@ -137,7 +137,7 @@ def test_on_command_reads_state_when_cache_cold(fake_bleak):
     # H1: a cold cache must NOT build a frame from defaults (would force cooler ON);
     # on_command reads the live state first.
     from calictl import serve
-    s = serve.Server(influx_enabled=False)
+    s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
     s._read_only = False                            # writes enabled for this actuation test
     async def _run():
         s._ble = asyncio.Lock()
@@ -184,7 +184,7 @@ def test_actuate_roof_stops_when_event_set(fake_bleak):
     move = control.roof_frame(funcs, "open"); stop = control.roof_frame(funcs, "stop")
     ev = _a.Event(); ev.set()                       # already-set -> loop must not stream, just STOP
     async def _run():
-        dev = device.CamperDevice("AA:BB:CC:DD:EE:FF")
+        dev = device.CamperDevice("11:22:33:44:55:66")
         await dev.actuate_roof(f, move, stop, verify=False, validate_s=None, stop_event=ev)
         return fake_bleak.instances[-1]
     cli = asyncio.run(_run())
@@ -215,7 +215,7 @@ def test_actuate_roof_stops_at_limit_position(fake_bleak, monkeypatch):
     monkeypatch.setattr(fake_bleak, "read_gatt_char", _read)
     monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.0)   # poll after every frame
     async def _run():
-        dev = device.CamperDevice("AA:BB:CC:DD:EE:FF")
+        dev = device.CamperDevice("11:22:33:44:55:66")
         await dev.actuate_roof(f, move, stop, verify=False, validate_s=None,
                                limit_positions=control.roof_limit_positions("open"))
         return fake_bleak.instances[-1]
@@ -301,3 +301,29 @@ def test_resolve_addr_placeholder_on_oserror(monkeypatch, tmp_path):
     # Point the cache path to a directory, not a file -> IsADirectoryError on read_text()
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path))
     assert device.resolve_addr() == "AA:BB:CC:DD:EE:FF"
+
+
+def test_unpaired_device_refuses_without_touching_ble(monkeypatch):
+    """No bond configured (resolve_addr fell back to the placeholder): `_session` must refuse at
+    once with "not paired" — NOT build a BleakClient for the bogus MAC. That client makes BlueZ run
+    a full discovery for a device that can never answer, on every poll and session retry; on
+    buspi's single radio it starved the pairing wizard's own connect (HCI 0x3e, 2026-09-25)."""
+    fake_bleak = types.ModuleType("bleak")
+
+    class _Forbidden:
+        def __init__(self, *a, **k):
+            raise AssertionError("an unpaired device must not construct a BleakClient")
+
+    fake_bleak.BleakClient = _Forbidden
+    monkeypatch.setitem(sys.modules, "bleak", fake_bleak)
+    dev = device.CamperDevice(device.UNPAIRED_ADDR)
+    assert dev.paired is False
+    with pytest.raises(device.ConnectionUnavailable, match="^not paired"):
+        asyncio.run(asyncio.wait_for(dev._session(), 1.0))   # no 3x4 s retry sleep either
+
+
+def test_paired_flag_and_placeholder_constant(monkeypatch, tmp_path):
+    monkeypatch.delenv("CALICTL_ADDR", raising=False)
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
+    assert device.resolve_addr() == device.UNPAIRED_ADDR
+    assert device.CamperDevice("11:22:33:44:55:66").paired is True

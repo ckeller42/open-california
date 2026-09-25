@@ -1175,3 +1175,12 @@ def test_pairing_web_api_routes(tmp_path):
         assert status == 405 and body["error"] == "read_only"
     finally:
         httpd.shutdown()
+
+
+def test_state_meta_reports_paired():
+    from calictl import device, serve
+    s = serve.Server(device.UNPAIRED_ADDR, influx_enabled=False)
+    be = serve.ServeBackend(s, loop=None)
+    assert be.state()["_meta"]["paired"] is False
+    s.dev.addr = "11:22:33:44:55:66"          # what _on_pairing_bonded does after a bond
+    assert be.state()["_meta"]["paired"] is True

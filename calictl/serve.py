@@ -132,6 +132,7 @@ class ServeBackend:
             "last_seen": ts,
             "age_s": round(age) if age is not None else None,
             "online": online,
+            "paired": bool(getattr(getattr(self._s, "dev", None), "paired", True)),
             "read_only": bool(self.read_only),
             "session": session_state if persistent else "off",
             # "auto" (activity-scoped) or "release" (user tapped Disconnect) — lets the UI show

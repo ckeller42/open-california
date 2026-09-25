@@ -140,7 +140,7 @@ def test_actuate_roof_streams_move_then_stop(roof):
     """
     move = control.roof_frame(roof, "open")     # byte0 = 0x01
     stop = control.roof_frame(roof, "stop")     # byte0 = 0x00
-    asyncio.run(device.CamperDevice("AA:BB:CC:DD:EE:FF").actuate_roof(
+    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
         roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001,
         validate_s=None, counter_seed=1000, verify=False))
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
@@ -164,7 +164,7 @@ def test_actuate_roof_default_seed_is_random_in_range(roof):
     """
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
-    asyncio.run(device.CamperDevice().actuate_roof(
+    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
         roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001,
         validate_s=None, verify=False))
     ctr = _counters(_ctrl_writes(_RoofClient.instances[-1], roof))
@@ -181,7 +181,7 @@ def test_actuate_roof_counter_seed_override(roof):
     """
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
-    asyncio.run(device.CamperDevice().actuate_roof(
+    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
         roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001,
         validate_s=None, counter_seed=0x4242, verify=False))
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
@@ -200,7 +200,7 @@ def test_actuate_roof_attempts_stop_after_linkdrop_mid_move(roof):
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
     # must NOT raise despite the link dropping mid-move
-    asyncio.run(device.CamperDevice().actuate_roof(
+    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
         roof["roof"], move, stop, max_duration_s=5.0, period_s=0.001,
         validate_s=None, verify=False))
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
@@ -220,7 +220,7 @@ def test_actuate_roof_aborts_when_safetycounter_invalid(roof):
     _RoofClient.read_payload = _STATE_INVALID    # SafetyCounterValid stays 0
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
-    asyncio.run(device.CamperDevice().actuate_roof(
+    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
         roof["roof"], move, stop, max_duration_s=5.0, period_s=0.001,
         validate_s=0.0, verify=False))           # check immediately -> invalid -> abort
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
@@ -242,7 +242,7 @@ def test_actuate_roof_continues_when_safetycounter_valid(roof):
     _RoofClient.read_payload = _STATE_VALID      # SafetyCounterValid == 1
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
-    asyncio.run(device.CamperDevice().actuate_roof(
+    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
         roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001,
         validate_s=0.0, verify=False))           # check immediately -> valid -> keep streaming
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)

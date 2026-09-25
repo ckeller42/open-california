@@ -793,7 +793,7 @@ class FakePairingTransport:
     real module by `tools.run_against_mock.install_fake_pairing_transport`.
     """
 
-    FOUND_ADDR = "AA:BB:CC:DD:EE:FF"
+    FOUND_ADDR = "C0:FF:EE:00:00:01"
     RIGHT_PASSKEY = 123456
 
     def __init__(self, on_event=None):
