@@ -539,6 +539,34 @@ def test_pairing_checklist_before_connect(pairing_page):
     assert "Home Assistant" in text                       # other scanners on the Pi
 
 
+def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
+    """A POST /api/pairing that returns an error body (e.g. HTTP 500 {"error":"pairing_failed"}
+    when the daemon bridge times out) must toast translated text, never the raw enum."""
+    port = _free_port()
+    proc, url = _start_daemon(port, {"CALICTL_FAKE_PAIRING": "connect_failed",
+                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+                                     "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+                                     "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")})
+    try:
+        with sync_playwright() as p:
+            page = p.chromium.launch().new_page()
+
+            def _fail_post(route):
+                if route.request.method == "POST":
+                    route.fulfill(status=500, content_type="application/json",
+                                  body='{"error": "pairing_failed"}')
+                else:
+                    route.continue_()
+            page.route("**/api/pairing", _fail_post)
+            page.goto(url)
+            _open_and_start_pairing(page)
+            toast = page.locator("#toasts .toast")
+            expect(toast).to_contain_text("did not answer the pairing request", timeout=10000)
+            assert "pairing_failed" not in toast.inner_text()
+    finally:
+        proc.terminate()
+
+
 def test_connect_failed_shows_its_own_guidance(tmp_path):
     port = _free_port()
     proc, url = _start_daemon(port, {"CALICTL_FAKE_PAIRING": "connect_failed",
@@ -553,7 +581,8 @@ def test_connect_failed_shows_its_own_guidance(tmp_path):
             expect(page.get_by_role("button", name="Try again")).to_be_visible(timeout=20000)
             text = page.locator("#app").inner_text()
             assert "connect_failed" not in text
-            assert "holds the unit" in text               # the phone-slot hint
+            assert "may still hold its single connection" in text   # the phone-slot hint
+            assert "may be asleep" in text                # the asleep-unit hint (bond kept)
     finally:
         proc.terminate()
 

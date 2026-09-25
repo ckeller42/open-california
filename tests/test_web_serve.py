@@ -1190,10 +1190,21 @@ def test_state_meta_reports_paired():
 def test_pairing_start_waits_for_an_in_flight_ble_operation(monkeypatch):
     """poll() only skips when a pairing flow is ALREADY active; a poll that took the BLE lock a
     moment before "start" keeps connecting while the wizard begins to scan, and on one radio the
-    two collide (BlueZ InProgress on the scan, a dbus EOFError on the connect — 2026-09-25)."""
+    two collide (BlueZ InProgress on the scan, a dbus EOFError on the connect — 2026-09-25). So the
+    runner's start() still runs UNDER the lock — but the HTTP request must not wait for it: a poll
+    can hold the lock ~100 s against an unreachable unit, past the web bridge's 30 s (-> HTTP 500
+    "pairing_failed"). "start" answers at once with a "scanning" snapshot, poll() skips while the
+    start is pending (also when it already queued for the lock), and start() runs once the lock
+    is free, holding it.
+
+    .. test:: pairing start never blocks on, nor races, an in-flight BLE operation
+       :id: T_PAIRING_START_PENDING
+       :links: R_PAIRING_BLUEZ_TRANSPORT
+    """
     import asyncio
 
     from calictl import serve
+    monkeypatch.setattr(serve, "PAIRING_START_WAIT_S", 0.05)
     s = serve.Server(influx_enabled=False)
     calls = []
 
@@ -1202,7 +1213,53 @@ def test_pairing_start_waits_for_an_in_flight_ble_operation(monkeypatch):
             calls.append(("start", s._ble.locked()))
 
         def snapshot(self):
-            return {"state": "scanning", "attempts": 0, "error": None, "address": None,
+            return {"state": "error", "attempts": 3, "error": "connect_failed", "address": None,
+                    "radio_busy": False}
+    s._pairing = FakeRunner()
+
+    async def fake_set_mode(action):
+        return {"mode": "release"}
+    monkeypatch.setattr(s._sessions, "set_mode", fake_set_mode)
+
+    def _no_read(*a, **k):
+        raise AssertionError("poll() read BLE while a pairing start was pending")
+    monkeypatch.setattr(s.dev, "read_all", _no_read)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        await s._ble.acquire()                       # a poll is mid-read (unit unreachable)
+        snap = await asyncio.wait_for(s.pairing_command("start", None), 1.0)   # does NOT block
+        assert snap["state"] == "scanning" and snap["error"] is None
+        assert calls == [] and s._pairing_pending
+        assert await s.poll() == {}                  # a new poll skips while start is pending
+        queued = asyncio.ensure_future(s.poll())     # ...and one that queued for the lock earlier
+        await asyncio.sleep(0.01)
+        s._ble.release()
+        await asyncio.sleep(0.05)
+        assert await queued == {}
+        assert not s._pairing_pending and s._pairing_start_task is None
+
+    asyncio.run(_run())
+    assert calls == [("start", True)]
+
+
+def test_cancel_abandons_a_pending_pairing_start(monkeypatch):
+    import asyncio
+
+    from calictl import serve
+    monkeypatch.setattr(serve, "PAIRING_START_WAIT_S", 0.01)
+    s = serve.Server(influx_enabled=False)
+    calls = []
+
+    class FakeRunner:
+        async def start(self):
+            calls.append("start")
+
+        async def cancel(self):
+            calls.append("cancel")
+
+        def snapshot(self):
+            return {"state": "idle", "attempts": 0, "error": None, "address": None,
                     "radio_busy": False}
     s._pairing = FakeRunner()
 
@@ -1212,15 +1269,15 @@ def test_pairing_start_waits_for_an_in_flight_ble_operation(monkeypatch):
 
     async def _run():
         s._ble = asyncio.Lock()
-        await s._ble.acquire()                       # a poll is mid-read
-        task = asyncio.ensure_future(s.pairing_command("start", None))
-        await asyncio.sleep(0.05)
-        assert calls == []                           # parked behind the in-flight read
+        await s._ble.acquire()
+        await s.pairing_command("start", None)
+        snap = await s.pairing_command("cancel", None)
         s._ble.release()
-        await task
+        await asyncio.sleep(0.02)
+        return snap
 
-    asyncio.run(_run())
-    assert calls == [("start", True)]
+    snap = asyncio.run(_run())
+    assert calls == ["cancel"] and snap["state"] == "idle" and not s._pairing_pending
 
 
 def test_second_start_while_scanning_is_a_noop():

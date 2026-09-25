@@ -2,6 +2,9 @@
 Bluetooth. A Bumble virtual controller appears to BlueZ as a new adapter (vhci), linked to a second
 Bumble controller hosting the fake unit; calictl's real PairingRunner + BluezTransport pair with it.
 Prints one line per check and exits non-zero on the first failure. Needs root + a running bluetoothd.
+The wizard must release its own link at flow end (no manual disconnect here: the daemon reads right
+after it), and a wizard run against an ASLEEP unit (no adverts, links refused, while another client
+holds discovery) must end connect_failed/timeout with BlueZ's bond and pairing.json kept.
 
 Not collected by pytest (not named ``test_*.py``): it needs root, /dev/vhci, dbus, bluetoothd, bleak
 and dbus_fast — see ``tests/realstack/vm.sh`` (runner side) and ``in_vm.sh`` (guest side).
@@ -97,13 +100,15 @@ async def main():
         subprocess.run(["btmgmt", "--index", adapter[3:], "power", "on"], check=False)
         await asyncio.sleep(2)
 
+        funcs = protocol.load()
+        overrides.apply(funcs)
         rpa1 = unit.advertising_address
         t, runner, snap = await pair_once(adapter, unit)
         check(snap["state"] == "bonded", "wizard bonds over real BlueZ: %s" % snap)
         check((snap["address"] or "").upper() == IDENTITY,
               "identity cached, not the RPA %s: %s" % (rpa1, snap["address"]))
         check(json.loads(CACHE.read_text())["address"].upper() == IDENTITY, "pairing cache holds the identity")
-        await t.disconnect()
+        # no manual disconnect: the wizard itself must release its link at flow end (aclose)
         check(await until(lambda: unit.conn is None, 15), "the unit sees the wizard's link drop")
 
         # R17: re-running the wizard over a WORKING bond keeps it — no new passkey, same keys.
@@ -113,14 +118,11 @@ async def main():
         check(not unit.passkey_shown.is_set(), "no new passkey was requested (bond kept)")
         check(keys and await bond_keys(unit) == keys, "the unit's bond is unchanged")
         check((snapk["address"] or "").upper() == IDENTITY, "identity still cached: %s" % snapk["address"])
-        await tk.disconnect()
         check(await until(lambda: unit.conn is None, 15), "the unit sees the kept-bond link drop")
 
         await unit.rotate_address()
         check(unit.advertising_address != rpa1,
               "unit rotated its RPA %s -> %s" % (rpa1, unit.advertising_address))
-        funcs = protocol.load()
-        overrides.apply(funcs)
         raw = await device.CamperDevice(IDENTITY, adapter=adapter).read_all(funcs)
         check(len(raw) >= 5, "daemon reads %d functions over the bond after rotation" % len(raw))
         check(await until(lambda: unit.conn is None, 15), "the unit sees the daemon's link drop")
@@ -130,8 +132,45 @@ async def main():
         check(snap2["state"] == "bonded",
               "re-pair after the unit forgot its bonds (stale-bond self-heal): %s" % snap2)
         check((snap2["address"] or "").upper() == IDENTITY, "re-pair caches the identity: %s" % snap2["address"])
-        await t2.disconnect()
         check(await until(lambda: unit.conn is None, 15), "the unit sees the re-pair link drop")
+        raw = await device.CamperDevice(IDENTITY, adapter=adapter).read_all(funcs)
+        check(len(raw) >= 5, "daemon reads %d functions right after the wizard (no manual disconnect)"
+              % len(raw))
+        check(await until(lambda: unit.conn is None, 15), "the unit sees the daemon's link drop")
+
+        # An ASLEEP unit must never cost the bond: another client keeps discovery on while the unit
+        # is still heard (so BlueZ keeps its RSSI), then the unit sleeps (no adverts, no links) and
+        # the owner opens the wizard remotely. It must end connect_failed/timeout, bond + cache kept.
+        keys = await bond_keys(unit)
+        other = await hold_discovery(adapter)
+        await asyncio.sleep(2)
+        await unit.device.stop_advertising()
+        unit.refuse_connections = True
+        unit.passkey_shown.clear()
+        t4 = BluezTransport(adapter_path="/org/bluez/" + adapter)
+        runner4 = PairingRunner(t4)
+        t4.on_event = runner4.handle
+        await runner4.start()
+        snap4 = await until_state(runner4, {"error", "bonded", "waiting_passkey"}, 120)
+        print("  .. %s" % snap4, flush=True)
+        check(snap4["state"] == "error" and snap4["error"] in ("connect_failed", "timeout"),
+              "wizard against an asleep unit ends connect_failed/timeout: %s" % snap4)
+        check(await bluez_bonded(adapter) is True, "BlueZ still holds the bond after the asleep run")
+        check(CACHE.exists() and json.loads(CACHE.read_text())["address"].upper() == IDENTITY,
+              "pairing.json kept after the asleep run")
+        check(not unit.passkey_shown.is_set() and await bond_keys(unit) == keys,
+              "the unit's bond is untouched by the asleep run")
+        other.disconnect()
+
+        unit.refuse_connections = False                 # the unit wakes
+        await unit._advertise()
+        await asyncio.sleep(2)
+        tw, _, snapw = await rerun_over_valid_bond(adapter, unit)
+        check(snapw["state"] == "bonded", "after waking, the wizard over the kept bond ends bonded: %s"
+              % snapw)
+        check(not unit.passkey_shown.is_set() and await bond_keys(unit) == keys,
+              "after waking, no new passkey and the unit's bond is unchanged")
+        check(await until(lambda: unit.conn is None, 15), "the unit sees the post-wake link drop")
 
         other = await hold_discovery(adapter)       # "another BlueZ client" (e.g. HA Bluetooth)
         t3 = BluezTransport(adapter_path="/org/bluez/" + adapter)
@@ -143,6 +182,29 @@ async def main():
         await runner3.cancel()
         other.disconnect()
     print("ALL PASS", flush=True)
+
+
+async def bluez_bonded(adapter):
+    """Whether BlueZ (a fresh D-Bus client, like the daemon after a restart) still holds a bond for
+    the unit's identity on ``adapter``: ``Device1.Bonded`` (or ``Paired`` on an older BlueZ)."""
+    from dbus_fast import BusType
+    from dbus_fast.aio import MessageBus
+
+    bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+    try:
+        obj = bus.get_proxy_object("org.bluez", "/", await bus.introspect("org.bluez", "/"))
+        objects = await obj.get_interface("org.freedesktop.DBus.ObjectManager").call_get_managed_objects()
+        for path, ifaces in objects.items():
+            dev = ifaces.get("org.bluez.Device1")
+            if not dev or not path.startswith("/org/bluez/%s/" % adapter):
+                continue
+            if str(dev["Address"].value).upper() != IDENTITY:
+                continue
+            flag = dev.get("Bonded") or dev.get("Paired")
+            return bool(flag.value) if flag is not None else False
+        return False
+    finally:
+        bus.disconnect()
 
 
 async def hold_discovery(adapter):

@@ -339,11 +339,18 @@ window.STRINGS_DE = {
     + "phone is connected to the unit."]:
     "Prüfe, dass „Gerät verbinden“ auf der Bedieneinheit geöffnet ist, dass buspi in Reichweite "
     + "ist und dass kein Handy mit der Bedieneinheit verbunden ist.",
-  ["A phone still holds the unit's single connection, or another app on this Pi keeps "
-    + "Bluetooth scanning. Disconnect the phone, pause other Bluetooth apps, then try again."]:
-    "Ein Handy belegt noch die einzige Verbindung der Bedieneinheit, oder eine andere App auf "
-    + "diesem Pi sucht weiter nach Bluetooth-Geräten. Trenne das Handy, pausiere andere "
-    + "Bluetooth-Apps und versuche es erneut.",
+  ["The unit may be asleep, a phone may still hold its single connection, or another app on "
+    + "this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause "
+    + "other Bluetooth apps, then try again. An existing bond is kept."]:
+    "Die Bedieneinheit schläft vielleicht, ein Handy belegt noch ihre einzige Verbindung, oder "
+    + "eine andere App auf diesem Pi sucht weiter nach Bluetooth-Geräten. Wecke die Bedieneinheit "
+    + "an ihrem Bildschirm, trenne das Handy, pausiere andere Bluetooth-Apps und versuche es "
+    + "erneut. Eine bestehende Kopplung bleibt erhalten.",
+  "Enter the 6-digit passcode shown on the unit.":
+    "Gib den 6-stelligen Passcode ein, den die Bedieneinheit anzeigt.",
+  "Confirm the Bluetooth reset first.": "Bestätige zuerst das Zurücksetzen der Bluetooth-Kopplung.",
+  "The daemon did not answer the pairing request. Try again.":
+    "Der Dienst hat auf die Kopplungsanfrage nicht geantwortet. Versuche es erneut.",
   ["Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and "
     + "try again."]:
     "Falscher Passcode, oder die Bedieneinheit hat den Kopplungsmodus verlassen. Öffne „Gerät "

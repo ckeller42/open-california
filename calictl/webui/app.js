@@ -1122,7 +1122,7 @@ const PAIRING_ERROR_MSG = {
 /** @type {Record<string, string>} */
 const PAIRING_ERROR_HINT = {
   timeout: "Check that “Gerät verbinden” is open on the unit, that buspi is in range, and that no phone is connected to the unit.",
-  connect_failed: "A phone still holds the unit's single connection, or another app on this Pi keeps Bluetooth scanning. Disconnect the phone, pause other Bluetooth apps, then try again.",
+  connect_failed: "The unit may be asleep, a phone may still hold its single connection, or another app on this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause other Bluetooth apps, then try again. An existing bond is kept.",
   pairing_failed: "Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again.",
   verify_failed: "The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth reset / re-pair.",
 };
@@ -1131,6 +1131,15 @@ const PAIRING_ERROR_HINT = {
 // mapped; anything else -- a future code this build doesn't know about yet -- falls back to this
 // translated generic message, never to the bare `perr` string).
 const PAIRING_ERROR_FALLBACK = "Something went wrong. Try again.";
+
+// Errors of the POST /api/pairing REQUEST itself (web.py), as opposed to the flow's own error in
+// a snapshot. Unmapped codes fall back to "Pairing request failed" (translated) in pairingAction.
+/** @type {Record<string, string>} */
+const PAIRING_REQUEST_ERROR_MSG = {
+  bad_passkey: "Enter the 6-digit passcode shown on the unit.",
+  confirm_required: "Confirm the Bluetooth reset first.",
+  pairing_failed: "The daemon did not answer the pairing request. Try again.",
+};
 
 /**
  * @param {string} action
@@ -1148,7 +1157,8 @@ async function pairingAction(action, value, confirmFlag) {
     res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   } catch (e) { toast("Pairing request failed", "error"); return; }
   if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
-  else toast("Pairing: " + ((res && res.error) || "request failed"), "warn");
+  // never a raw error enum: known request errors get their own text, anything else the generic one
+  else toast(PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed", "warn");
   render();
 }
 

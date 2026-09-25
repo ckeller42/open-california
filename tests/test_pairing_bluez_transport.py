@@ -38,8 +38,9 @@ def _pair_transport(monkeypatch, call_pair_impl):
     async def _fake_iface(path, iface):
         return _FakeDevice()
 
-    async def _fake_remove():
+    async def _fake_remove(clear_cache=True):
         calls["remove_bond"] += 1
+        calls["clear_cache"] = clear_cache
 
     async def _fake_rediscover(timeout):
         calls["rediscover"] = calls.get("rediscover", 0) + 1
@@ -72,6 +73,7 @@ def test_pair_recovers_from_a_stale_bond_then_pairs_once(monkeypatch):
 
     assert calls["pair"] == 2          # first raised AlreadyExists, retried exactly once
     assert calls["remove_bond"] == 1   # the stale bond was cleared before the retry
+    assert calls["clear_cache"] is False   # in-flow drop keeps pairing.json (identity unchanged)
     assert events == [EV_PAIR_OK]      # ended on success
 
 
@@ -131,6 +133,7 @@ class _FakeBleakClient:
     forever), ``auth_read_fails``. Every instance is recorded in ``made``."""
     made: list = []
     connect_delay: float | None = 0
+    connect_error: Exception | None = None
     auth_read_fails = False
 
     def __init__(self, device, adapter=None, timeout=None):
@@ -140,6 +143,8 @@ class _FakeBleakClient:
         _FakeBleakClient.made.append(self)
 
     async def connect(self):
+        if _FakeBleakClient.connect_error is not None:
+            raise _FakeBleakClient.connect_error
         while _FakeBleakClient.connect_delay is None:   # a stale-key reconnect loop: hangs
             await asyncio.sleep(0.01)
         await asyncio.sleep(_FakeBleakClient.connect_delay)
@@ -155,14 +160,31 @@ class _FakeBleakClient:
         self.disconnected = True
 
 
-def _connect_transport(monkeypatch, bonded, connect_delay=0, auth_read_fails=False):
+class _FakeWatch:
+    """Stands in for pairing_bluez._LinkWatch: ``seen_up`` = Device1.Connected was observed True."""
+
+    def __init__(self, seen_up=False, auth_reason=None):
+        self.seen_up, self.auth_reason, self.closed = seen_up, auth_reason, False
+
+    async def sample(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+def _connect_transport(monkeypatch, bonded, connect_delay=0, auth_read_fails=False,
+                       connect_error=None, link_up=False, real_remove=False):
     """A BluezTransport whose connect() runs against a stub ``bleak`` module; records the order of
-    the bond steps. Returns (transport, calls, events)."""
+    the bond steps. ``link_up`` is what the probe's Device1.Connected watch reports. With
+    ``real_remove`` the real remove_bond() runs (its RemoveDevice D-Bus call stubbed). Returns
+    (transport, calls, events)."""
     import sys
     import types
 
     _FakeBleakClient.made = []
     _FakeBleakClient.connect_delay = connect_delay
+    _FakeBleakClient.connect_error = connect_error
     _FakeBleakClient.auth_read_fails = auth_read_fails
     monkeypatch.setitem(sys.modules, "bleak", types.SimpleNamespace(BleakClient=_FakeBleakClient))
     calls, events = [], []
@@ -174,8 +196,8 @@ def _connect_transport(monkeypatch, bonded, connect_delay=0, auth_read_fails=Fal
         calls.append("bonded?")
         return bonded
 
-    async def _remove():
-        calls.append("remove_bond")
+    async def _remove(clear_cache=True):
+        calls.append("remove_bond" if clear_cache else "remove_bond(keep cache)")
         t._found_device = t._address = None
 
     async def _rediscover(timeout):
@@ -186,8 +208,24 @@ def _connect_transport(monkeypatch, bonded, connect_delay=0, auth_read_fails=Fal
     t = BluezTransport(on_event=_cb, adapter_path="/org/bluez/hci1")
     t._found_device = "stale-device"
     t._address = "C0:FF:EE:CA:11:F0"
+    t.watch = _FakeWatch(seen_up=link_up)
+
+    async def _watch():
+        return t.watch
+
+    class _Adapter:
+        async def call_remove_device(self, path):
+            calls.append(("RemoveDevice", path))
+
+    async def _iface(path, iface):
+        assert iface == "org.bluez.Adapter1"
+        return _Adapter()
+
     monkeypatch.setattr(t, "_device_bonded", _bonded)
-    monkeypatch.setattr(t, "remove_bond", _remove)
+    monkeypatch.setattr(t, "_watch_link", _watch)
+    monkeypatch.setattr(t, "_get_interface", _iface)
+    if not real_remove:
+        monkeypatch.setattr(t, "remove_bond", _remove)
     monkeypatch.setattr(t, "_rediscover", _rediscover)
     return t, calls, events
 
@@ -234,12 +272,108 @@ def test_connect_drops_a_stale_bond_and_rediscovers(monkeypatch):
 
     t, calls, events = _connect_transport(monkeypatch, bonded=True, auth_read_fails=True)
     asyncio.run(t.connect())
-    assert calls[:2] == ["bonded?", "remove_bond"] and calls[2][0] == "rediscover"
+    assert calls[:2] == ["bonded?", "remove_bond(keep cache)"] and calls[2][0] == "rediscover"
     probe, final = _FakeBleakClient.made
     assert probe.device == "stale-device" and probe.disconnected      # the probe link is released
     assert final.device == "fresh-device" and final.adapter == "hci1" and t._client is final
     assert events == [EV_CONNECTED]
     assert t._bond_valid is False
+
+
+def test_a_transient_connect_failure_keeps_the_bond_and_the_cache(monkeypatch, tmp_path):
+    """HCI 0x3e (le-connection-abort-by-local: another client scanning at full duty on buspi's
+    shared radio) during the bond probe proves nothing about the key: connect() must raise
+    (-> EV_CONNECT_FAIL, the SM retries) and keep BOTH the BlueZ bond and pairing.json. It used
+    to treat every probe failure as a stale bond -> RemoveDevice + unlink the cache (final review).
+
+    .. test:: a transient probe failure never drops the bond
+       :id: T_PAIRING_PROBE_KEEPS_BOND
+       :links: R_PAIRING_STALE_BOND_RECOVERY
+    """
+    cache = tmp_path / "pairing.json"
+    cache.write_text('{"address": "C0:FF:EE:CA:11:F0"}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
+    err = Exception("org.bluez.Error.Failed: le-connection-abort-by-local (HCI 0x3e)")
+    t, calls, events = _connect_transport(monkeypatch, bonded=True, connect_error=err,
+                                          link_up=True, real_remove=True)
+    with pytest.raises(Exception, match="le-connection-abort-by-local"):
+        asyncio.run(t.connect())
+    assert calls == ["bonded?"]                       # no RemoveDevice, no re-discovery
+    assert cache.exists() and t._address == "C0:FF:EE:CA:11:F0"
+    assert events == [] and t._client is None and t.watch.closed
+
+
+def test_a_probe_timeout_without_a_link_keeps_the_bond(monkeypatch, tmp_path):
+    """An asleep unit adopted via a stale RSSI (BlueZ keeps a bonded device's RSSI while another
+    client's discovery runs): the probe connect just hangs and Device1.Connected never goes True.
+    That is 'unit not reachable', not 'key stale' -> raise TimeoutError, bond + cache kept."""
+    from calictl import pairing_bluez
+
+    cache = tmp_path / "pairing.json"
+    cache.write_text('{"address": "C0:FF:EE:CA:11:F0"}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
+    monkeypatch.setattr(pairing_bluez, "BOND_PROBE_S", 0.05)
+    t, calls, events = _connect_transport(monkeypatch, bonded=True, connect_delay=None,
+                                          link_up=False, real_remove=True)
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(t.connect())
+    assert calls == ["bonded?"] and cache.exists() and events == []
+    (probe,) = _FakeBleakClient.made
+    assert probe.disconnected                         # the half-open probe link is released
+
+
+def test_an_auth_failure_drops_the_bond_but_keeps_the_cache(monkeypatch, tmp_path):
+    """The stale-key proof: the probe's auth-gated read is refused (NotPermitted / Insufficient
+    Authentication). The bond is dropped (RemoveDevice) and the unit re-discovered, but the
+    in-flow drop keeps pairing.json — persist_bond() rewrites it once the re-pair succeeds."""
+    cache = tmp_path / "pairing.json"
+    cache.write_text('{"address": "C0:FF:EE:CA:11:F0"}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
+    t, calls, events = _connect_transport(monkeypatch, bonded=True, auth_read_fails=True,
+                                          real_remove=True)
+    asyncio.run(t.connect())
+    assert calls[0] == "bonded?" and calls[1][0] == "RemoveDevice" and calls[2][0] == "rediscover"
+    assert cache.exists()
+    from calictl.pairing import EV_CONNECTED
+    assert events == [EV_CONNECTED] and t._client.device == "fresh-device"
+
+
+def test_a_zero_probe_budget_raises_instead_of_dropping_the_bond(monkeypatch):
+    """No time left to probe must never read as 'the bond is stale': it raises TimeoutError
+    (-> EV_CONNECT_FAIL) and leaves the bond alone."""
+    from calictl import pairing
+
+    monkeypatch.setitem(pairing.TIMEOUT_S, pairing.CONNECTING, 5)    # 4 s left < MIN_CONNECT_S
+    t, calls, events = _connect_transport(monkeypatch, bonded=True)
+    with pytest.raises(TimeoutError):
+        asyncio.run(t.connect())
+    assert calls == ["bonded?"] and _FakeBleakClient.made == [] and events == []
+
+
+@pytest.mark.parametrize("text, auth", [
+    ("org.bluez.Error.Failed: PIN or Key Missing", True),
+    ("HCI error 0x06", True),
+    ("Authentication Failed (0x05)", True),
+    ("org.bluez.Error.NotPermitted: Read not permitted", True),
+    ("ATT error: 0x0f (Insufficient Encryption)", True),
+    ("Insufficient Authentication", True),
+    ("org.bluez.Error.Failed: le-connection-abort-by-local", False),
+    ("Connection Failed to be Established (0x3e)", False),
+    ("", False),
+])
+def test_is_auth_failure_classifies_error_texts(text, auth):
+    from calictl.pairing_bluez import is_auth_failure
+
+    assert is_auth_failure(Exception(text)) is auth
+
+
+def test_is_auth_failure_reads_the_dbus_error_name():
+    from calictl.pairing_bluez import is_auth_failure
+
+    e = Exception("Read failed")
+    e.dbus_error = "org.bluez.Error.NotAuthorized"
+    assert is_auth_failure(e) is True
+    assert is_auth_failure(TimeoutError()) is False
 
 
 def test_connect_budget_splits_the_connecting_timeout(monkeypatch):
@@ -250,7 +384,8 @@ def test_connect_budget_splits_the_connecting_timeout(monkeypatch):
 
     monkeypatch.setattr(pairing_bluez, "BOND_PROBE_S", 0.05)
     monkeypatch.setitem(pairing.TIMEOUT_S, pairing.CONNECTING, 20)
-    t, calls, _ = _connect_transport(monkeypatch, bonded=True, connect_delay=None)
+    # the link comes up (Device1.Connected seen True) but the probe hangs: the stale-key signature
+    t, calls, _ = _connect_transport(monkeypatch, bonded=True, connect_delay=None, link_up=True)
 
     async def _run():
         # the probe hangs; after it times out, let the final connect succeed
@@ -627,7 +762,7 @@ def _device1(name="VWCAMPER", rssi=-50, address="C0:FF:EE:CA:11:F0"):
     return {"org.bluez.Device1": props}
 
 
-def _adopt(monkeypatch, objects, found=None):
+def _adopt(monkeypatch, objects, found=None, ble_device_cls=None):
     """Run _adopt_known_device() over a fake ObjectManager (and a stub bleak BLEDevice); returns
     (transport, events)."""
     import sys
@@ -637,6 +772,7 @@ def _adopt(monkeypatch, objects, found=None):
         def __init__(self, address, name, details):
             self.address, self.name, self.details = address, name, details
 
+    _BLEDevice = ble_device_cls or _BLEDevice   # noqa: N806
     monkeypatch.setitem(sys.modules, "bleak", types.ModuleType("bleak"))
     monkeypatch.setitem(sys.modules, "bleak.backends", types.ModuleType("bleak.backends"))
     monkeypatch.setitem(sys.modules, "bleak.backends.device",
@@ -708,3 +844,140 @@ def test_scan_adoption_is_best_effort_without_a_bus(monkeypatch):
     t = BluezTransport(on_event=_cb)
     monkeypatch.setattr(t, "_get_interface", _iface)
     asyncio.run(t._adopt_known_device())    # must not raise
+
+
+def test_remove_bond_can_keep_the_cache(monkeypatch, tmp_path):
+    """The in-flow stale-bond drop passes clear_cache=False: pairing.json survives."""
+    cache = tmp_path / "pairing.json"
+    cache.write_text('{"address": "AA:BB:CC:DD:EE:FF"}')
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
+    t = BluezTransport()
+    t._address = "AA:BB:CC:DD:EE:FF"
+    asyncio.run(t.remove_bond(clear_cache=False))
+    assert cache.exists() and t._address is None
+
+
+def test_aclose_releases_the_wizards_link(monkeypatch):
+    """After BONDED the wizard's own link (connect()/verify() reuse it) must be dropped at flow
+    end: the unit has ONE connection slot and serve's poll reads right after the wizard.
+
+    .. test:: the wizard releases its link at flow end
+       :id: T_PAIRING_RELEASES_LINK
+       :links: R_PAIRING_BLUEZ_TRANSPORT
+    """
+    t = BluezTransport()
+    client = _FakeBleakClient("dev")
+    client.is_connected = True
+    t._client = client
+    asyncio.run(t.aclose())
+    assert client.disconnected and not client.is_connected and t._client is None
+
+
+def test_runner_bonded_flow_end_disconnects_the_transport_client(monkeypatch, tmp_path):
+    """Through the runner: VERIFYING -> BONDED persists the bond, THEN aclose() drops the link."""
+    from calictl import pairing
+    from calictl.pairing_bluez import PairingRunner
+
+    monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "pairing.json"))
+    t = BluezTransport()
+    t._address = "C0:FF:EE:CA:11:F0"
+    client = _FakeClient(services=[_FakeService([_FakeChar("0000f001")])])
+    client.disconnected = False
+
+    async def _disc():
+        client.is_connected = False
+        client.disconnected = True
+    client.disconnect = _disc
+    t._client = client
+    r = PairingRunner(t)
+    t.on_event = r.handle
+    r._ps = pairing.PairingState(pairing.PAIRING, 0, pairing.ERR_NONE)
+
+    async def _run():
+        await r.handle(pairing.EV_PAIR_OK)
+    asyncio.run(_run())
+    snap = r.snapshot()
+    assert snap["state"] == "bonded" and snap["address"] == "C0:FF:EE:CA:11:F0"
+    assert client.disconnected and t._client is None
+
+
+class _OldBLEDevice:
+    """bleak < 1.0: BLEDevice(address, name, details, rssi, **kwargs) — rssi is required."""
+
+    def __init__(self, address, name, details, rssi, **kwargs):
+        self.address, self.name, self.details, self.rssi = address, name, details, rssi
+
+
+class _NewBLEDevice:
+    """bleak >= 1.0: BLEDevice(address, name, details)."""
+
+    def __init__(self, address, name, details):
+        self.address, self.name, self.details = address, name, details
+
+
+@pytest.mark.parametrize("cls", [_OldBLEDevice, _NewBLEDevice])
+def test_make_bledevice_fits_both_bleak_signatures(monkeypatch, cls):
+    """buspi's bleak is pip-installed unpinned; < 1.0 needs a positional rssi (a hand-built
+    3-arg BLEDevice raised TypeError there and silently disabled adoption).
+
+    .. test:: adoption builds a BLEDevice on any bleak
+       :id: T_PAIRING_BLEDEVICE_COMPAT
+       :links: R_PAIRING_BLUEZ_TRANSPORT
+    """
+    import sys
+    import types
+
+    from calictl.pairing_bluez import _make_bledevice
+
+    monkeypatch.setitem(sys.modules, "bleak", types.ModuleType("bleak"))
+    monkeypatch.setitem(sys.modules, "bleak.backends", types.ModuleType("bleak.backends"))
+    monkeypatch.setitem(sys.modules, "bleak.backends.device", types.SimpleNamespace(BLEDevice=cls))
+    d = _make_bledevice("C0:FF:EE:CA:11:F0", "VWCAMPER", {"path": "/p"}, -50)
+    assert (d.address, d.name, d.details) == ("C0:FF:EE:CA:11:F0", "VWCAMPER", {"path": "/p"})
+    if cls is _OldBLEDevice:
+        assert d.rssi == -50
+
+
+def test_adoption_survives_a_bledevice_that_cannot_be_built(monkeypatch):
+    """A BLEDevice constructor failure is caught inside the lookup (logged), never an unretrieved
+    task exception."""
+    class _Broken:
+        def __init__(self, *a, **k):
+            raise TypeError("unexpected signature")
+
+    t, events = _adopt(monkeypatch, {"/org/bluez/hci1/dev_6A_61_C2_C5_FA_D1": _device1()},
+                       ble_device_cls=_Broken)
+    assert events == [] and t._found_device is None
+
+
+def test_the_adopt_task_is_cancelled_and_its_errors_retrieved(monkeypatch):
+    """start_scan()'s lookup task is cancelled by stop_scan()/aclose() while still looking, and a
+    failing one has its exception retrieved by the done-callback (no 'never retrieved' warning)."""
+    from calictl import pairing_bluez
+
+    async def _run():
+        t = BluezTransport()
+        hang = asyncio.Event()
+
+        async def _slow(gen=None):
+            await hang.wait()
+        monkeypatch.setattr(t, "_adopt_known_device", _slow)
+
+        async def _no_disc():
+            return False
+        monkeypatch.setattr(t, "_adapter_discovering", _no_disc)
+        t._adopt_task = asyncio.ensure_future(t._adopt_known_device())
+        task = t._adopt_task
+        await t.stop_scan()
+        await asyncio.sleep(0)
+        assert task.cancelled() and t._adopt_task is None
+
+        async def _boom():
+            raise RuntimeError("lookup exploded")
+        failing = asyncio.ensure_future(_boom())
+        failing.add_done_callback(pairing_bluez._log_task_exception)
+        await asyncio.sleep(0.01)
+        return failing
+
+    failing = asyncio.run(_run())
+    assert failing.done() and failing._log_traceback is False    # retrieved

@@ -70,7 +70,7 @@ injects `EV_TIMEOUT` — absent from the table means no timer for that state.
 | State | Timeout |
 |---|---|
 | `SCANNING` | 30 s |
-| `CONNECTING` | 20 s — the BlueZ transport splits it: probe an existing bond ≤ 5 s, drop a stale one + re-discover ≤ 5 s, final connect ≥ 8 s, 1 s margin |
+| `CONNECTING` | 20 s — the BlueZ transport splits it: probe an existing bond ≤ 5 s, drop a provably stale one + re-discover ≤ 5 s, final connect ≥ 8 s, 1 s margin |
 | `WAITING_PASSKEY` | 60 s |
 | `PAIRING` | 15 s |
 | `VERIFYING` | 10 s |
@@ -146,6 +146,21 @@ Bluetooth jobs at once. The how-to for owners is
   a central actually starts a pairing request against it (owner photo, 2026-09-25). A wizard
   stuck in `waiting_passkey` with the unit still showing `---` means the pairing request never
   reached the unit — recheck the checklist, not the typed digits.
+- **An existing bond is only dropped on proof.** Opening the wizard over a bond BlueZ already
+  holds first probes it (connect + the auth-gated `AUTH_CHAR` read, ≤ 5 s). A working bond is
+  kept (no passkey). The bond is removed ONLY when the probe proves the key stale: an auth-class
+  failure ("PIN or Key Missing", HCI 0x05/0x06, ATT 0x05/0x0F, `NotPermitted`), or a timeout
+  after BlueZ reported `Device1.Connected` = True (the link came up but encryption never
+  completed — a unit that forgot us after a Bluetooth reset). Everything else — HCI 0x3e from a
+  co-resident scanner, an **asleep unit** (parked, deep sleep) that BlueZ still lists with an old
+  RSSI because another client keeps discovering, or no time left to probe — ends as
+  `connect_failed` with the bond and `pairing.json` kept, so opening the wizard remotely while
+  the van sleeps costs nothing. The in-flow drop keeps `pairing.json` too (the identity doesn't
+  change; `persist_bond()` rewrites it); only "Bluetooth reset / re-pair" (`ACT_REMOVE_BOND`)
+  clears it.
+- **The wizard releases its link.** At flow end (`bonded`, `error`, cancel) the transport
+  disconnects the link it used for probe/verify, so the daemon's next poll can take the unit's
+  single connection slot straight away.
 - **The unpaired-daemon guard.** Before any bond exists, `CamperDevice._session()` refuses to
   even construct a `BleakClient` for the placeholder address (`device.UNPAIRED_ADDR`) — an
   unpaired daemon does not poll or scan at all. This matters here because a daemon that *did*
@@ -161,14 +176,19 @@ flow; doing so would freeze `/api/state` (and every other read) for that entire 
 - `pairing_command("start")` parks the persistent-session supervisor
   (`set_mode("disconnect")`) *before* arming the runner, so the supervisor will not open its own
   connection while the wizard owns the radio.
+- The runner's `start()` itself runs while holding `self._ble` (briefly), so a poll/command that
+  is mid-read finishes first. The HTTP request never waits for that lock — a poll against an
+  unreachable unit can hold it ~100 s: "start" sets `_pairing_pending`, schedules "take the lock
+  + `start()`" as a task, and answers within `PAIRING_START_WAIT_S` (2 s) with a `scanning`
+  snapshot. `poll()` skips while the start is pending, checked before AND after taking the lock.
 - `poll()` checks `pairing.snapshot()["state"]` and skips the **whole** read cycle (not just
   parts of it) whenever a pairing flow is active (state not in `idle`/`bonded`/`error`) — a
   second bleak `connect()` against `hci0` mid-pairing is exactly what the single-BLE-owner rule
   (`serve` is the only reader — CLAUDE.md) forbids.
 - `pairing_bluez.py` never touches `serve.py`'s `_ble` lock at all — the pairing transport opens
-  its own `bleak.BleakScanner`/`BleakClient` directly. The `_ble` lock is **never taken** by the
-  pairing flow; exclusion is entirely the supervisor-park + poll-skip pair above, not lock
-  sharing.
+  its own `bleak.BleakScanner`/`BleakClient` directly. Past the brief hold around `start()`, the
+  `_ble` lock is **not held** by the pairing flow; exclusion is the supervisor-park + poll-skip
+  pair above, not lock sharing.
 
 ## NOT-LIVE-VERIFIED
 
@@ -177,8 +197,9 @@ Two tiers below the real van: `tests/test_pairing_sm.py` replays the pure SM aga
 runner + `BluezTransport` against a fake transport / a Bumble `LocalLink` fake unit (no real
 dbus/bleak/BlueZ). The `pairing-real-stack` CI job (`tests/realstack/`, non-required check) goes
 one tier further: inside a virtme-ng VM, the real dbus/bleak/BlueZ stack — agent registration,
-scan, connect, `Device1.Pair()`, verify, `persist_bond`, the stale-bond probe/removal, and
-`radio_busy` — runs against the Bumble fake unit over a virtual controller. That still is **not**
+scan, connect, `Device1.Pair()`, verify, `persist_bond`, the link release at flow end (the
+daemon reads straight after the wizard), the stale-bond probe/removal, an asleep unit keeping
+its bond, and `radio_busy` — runs against the Bumble fake unit over a virtual controller. That still is **not**
 a real camper unit: it doesn't exercise RSSI jitter, the unit's own advertising/deep-sleep
 policy, WiFi coexistence on buspi's shared radio, or another client scanning at full duty and
 starving a real LE connect (HCI 0x3e) — the mechanism the 2026-09-25 btmon capture caught (see

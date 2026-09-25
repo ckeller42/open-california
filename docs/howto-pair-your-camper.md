@@ -57,7 +57,7 @@ next:
 | Wizard message | What it means | What to do |
 |---|---|---|
 | **"No vehicle found."** | The Pi never saw the unit advertising within the scan window. | Check that "Gerät verbinden" is open on the unit, that buspi is in range, and that no phone is connected to the unit. |
-| **"Could not connect to the unit."** | The unit was found, but the Bluetooth connection itself failed. | A phone still holds the unit's single connection, or another app on this Pi keeps Bluetooth scanning. Disconnect the phone, pause other Bluetooth apps, then try again. |
+| **"Could not connect to the unit."** | The unit was found, but the Bluetooth connection itself failed. | The unit may be asleep, a phone may still hold its single connection, or another app on this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause other Bluetooth apps, then try again. An existing bond is kept. |
 | **"Pairing was refused."** | The unit rejected the passcode or the pairing request. | Wrong passcode, or the unit left pairing mode. Reopen "Gerät verbinden" on the unit and try again. |
 | **"Could not verify the bond."** | Bluetooth-level pairing succeeded, but the unit didn't answer calictl's own follow-up reads. | The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth reset / re-pair. |
 | **"Something went wrong. Try again."** | A fallback for an error code this build doesn't have specific wording for. | Try again; if it repeats, use Bluetooth reset / re-pair. |
