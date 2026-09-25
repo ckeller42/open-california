@@ -15,6 +15,14 @@ from bumble.core import ProtocolError  # noqa: E402
 
 from tools.fake_unit_peripheral import IDENTITY, build_unit  # noqa: E402
 
+# bumble.host.Host.send_command_sync is decorated @utils.deprecated(...) and fires this
+# DeprecationWarning from INSIDE bumble/smp.py's start_encryption() every time SMP pairing
+# reaches the encrypt step -- library-internal tech debt in bumble 0.0.235, not our code. Narrow
+# ignore (exact message + category), not a blanket filter.
+pytestmark = pytest.mark.filterwarnings(
+    r"ignore:Use utils\.AsyncRunner\.spawn\(\) instead\.:DeprecationWarning"
+)
+
 
 async def _unit_and_central(**kw):
     link = radio()
