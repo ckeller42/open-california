@@ -278,7 +278,10 @@ class FakeUnit:
     # --- link-level behaviour ----------------------------------------------------------
     def _on_connection(self, conn) -> None:
         if self.refuse_connections:
-            asyncio.get_running_loop().create_task(conn.disconnect())
+            # Keep the task reference (as schedule_notify does) — an orphaned task can be
+            # garbage-collected before it runs, silently dropping the refusal.
+            self.tasks.append(asyncio.get_event_loop().create_task(conn.disconnect()))
+            self.tasks = [t for t in self.tasks if not t.done()]
             return
         self.conn = conn
         conn.on("disconnection", lambda reason, c=conn: self._on_disconnection(c))

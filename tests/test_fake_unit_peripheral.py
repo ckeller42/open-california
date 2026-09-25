@@ -74,3 +74,32 @@ def test_one_connection_slot_hides_the_unit_while_a_central_holds_it():
             await scan_for(second, timeout=1.0)
 
     asyncio.run(run())
+
+
+def test_refuse_connections_drops_the_link():
+    async def run():
+        _, unit, central = await _unit_and_central()
+        unit.refuse_connections = True
+        conn = await central.connect(await scan_for(central))
+        dropped: asyncio.Future = asyncio.get_running_loop().create_future()
+        conn.on("disconnection", lambda reason: not dropped.done() and dropped.set_result(reason))
+        await asyncio.wait_for(dropped, 2.0)   # the unit disconnects it, not left to GC/timeout
+
+    asyncio.run(run())
+
+
+def test_pairing_mode_off_still_allows_a_bonded_central_to_reconnect():
+    async def run():
+        _, unit, central = await _unit_and_central()
+        pair_with(central, unit.next_passkey)
+        conn = await central.connect(await scan_for(central))
+        await central.pair(conn)
+        await conn.disconnect()
+
+        unit.pairing_mode = False   # the pairing screen is closed — NEW bonds are refused, but
+        conn2 = await central.connect(await scan_for(central))   # an existing bond still reconnects
+        await conn2.encrypt()
+        return str(conn2.peer_address), conn2.is_encrypted
+
+    peer, encrypted = asyncio.run(run())
+    assert peer == IDENTITY and encrypted
