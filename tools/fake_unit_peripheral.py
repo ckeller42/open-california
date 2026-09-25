@@ -235,7 +235,8 @@ class FakeUnit:
         except OSError as e:
             log.info("scenario console disabled (no FIFO at %s: %s)", path, e)
             return
-        log.info("scenario console: echo commands into %s (set <fn> F=v | raw <fn> <hex> | show <fn> | q)", path)
+        log.info("scenario console: echo commands into %s "
+                 "(set <fn> F=v | raw <fn> <hex> | show <fn> | pair on|off | rotate | forget | q)", path)
 
         def pump():
             while True:
@@ -270,8 +271,18 @@ class FakeUnit:
                 elif parts[0] == "show":
                     fn = parts[1]
                     print(f"{fn} raw={self.read_state(fn).hex()} decoded={protocol.decode(self.funcs[fn], self.read_state(fn))}", flush=True)
+                elif parts[0] == "pair":          # pair on | pair off — the unit's pairing screen
+                    self.pairing_mode = parts[1] == "on"
+                    print(f"pairing mode {'ON' if self.pairing_mode else 'off'}", flush=True)
+                elif parts[0] == "rotate":
+                    self.tasks.append(asyncio.get_running_loop().create_task(self.rotate_address()))
+                    self.tasks = [t for t in self.tasks if not t.done()]
+                elif parts[0] == "forget":        # like "Bluetooth zurücksetzen"
+                    self.tasks.append(asyncio.get_running_loop().create_task(self.forget_bonds()))
+                    self.tasks = [t for t in self.tasks if not t.done()]
+                    print("bonds forgotten", flush=True)
                 else:
-                    print("commands: set <fn> F=v ... | raw <fn> <hex> | show <fn> | q", flush=True)
+                    print("commands: set <fn> F=v ... | raw <fn> <hex> | show <fn> | pair on|off | rotate | forget | q", flush=True)
             except Exception as e:  # noqa: BLE001
                 print(f"error: {e}", flush=True)
 

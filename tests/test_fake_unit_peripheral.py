@@ -103,3 +103,18 @@ def test_pairing_mode_off_still_allows_a_bonded_central_to_reconnect():
 
     peer, encrypted = asyncio.run(run())
     assert peer == IDENTITY and encrypted
+
+
+def test_console_pair_command_toggles_pairing_mode():
+    async def run():
+        _, unit, _ = await _unit_and_central()
+        assert unit.pairing_mode is True   # starts open, like the unit's default screen state
+        unit._console_line("pair off")
+        off = unit.pairing_mode
+        unit._console_line("pair on")
+        on = unit.pairing_mode
+        return off, on
+
+    off, on = asyncio.run(run())
+    assert off is False
+    assert on is True
