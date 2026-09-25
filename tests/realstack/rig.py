@@ -65,6 +65,23 @@ async def pair_once(adapter, unit):
     return t, runner, snap
 
 
+async def rerun_over_valid_bond(adapter, unit):
+    """Run the wizard while both sides still hold a working bond; it must not reach a passkey."""
+    unit.passkey_shown.clear()
+    t = BluezTransport(adapter_path="/org/bluez/" + adapter)
+    runner = PairingRunner(t)
+    t.on_event = runner.handle
+    await runner.start()
+    snap = await until_state(runner, {"bonded", "error", "waiting_passkey"})
+    print("  .. %s" % snap, flush=True)
+    return t, runner, snap
+
+
+async def bond_keys(unit):
+    """The fake unit's stored bonds as comparable dicts."""
+    return [(name, keys.to_dict()) for name, keys in await unit.device.keystore.get_all()]
+
+
 async def main():
     before = set(os.listdir("/sys/class/bluetooth"))
     link = LocalLink()
@@ -88,6 +105,16 @@ async def main():
         check(json.loads(CACHE.read_text())["address"].upper() == IDENTITY, "pairing cache holds the identity")
         await t.disconnect()
         check(await until(lambda: unit.conn is None, 15), "the unit sees the wizard's link drop")
+
+        # R17: re-running the wizard over a WORKING bond keeps it — no new passkey, same keys.
+        keys = await bond_keys(unit)
+        tk, _, snapk = await rerun_over_valid_bond(adapter, unit)
+        check(snapk["state"] == "bonded", "wizard over a working bond ends bonded: %s" % snapk)
+        check(not unit.passkey_shown.is_set(), "no new passkey was requested (bond kept)")
+        check(keys and await bond_keys(unit) == keys, "the unit's bond is unchanged")
+        check((snapk["address"] or "").upper() == IDENTITY, "identity still cached: %s" % snapk["address"])
+        await tk.disconnect()
+        check(await until(lambda: unit.conn is None, 15), "the unit sees the kept-bond link drop")
 
         await unit.rotate_address()
         check(unit.advertising_address != rpa1,

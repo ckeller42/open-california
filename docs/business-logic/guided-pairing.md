@@ -68,7 +68,7 @@ injects `EV_TIMEOUT` — absent from the table means no timer for that state.
 | State | Timeout |
 |---|---|
 | `SCANNING` | 30 s |
-| `CONNECTING` | 15 s |
+| `CONNECTING` | 20 s — the BlueZ transport splits it: probe an existing bond ≤ 5 s, drop a stale one + re-discover ≤ 5 s, final connect ≥ 8 s, 1 s margin |
 | `WAITING_PASSKEY` | 60 s |
 | `PAIRING` | 15 s |
 | `VERIFYING` | 10 s |

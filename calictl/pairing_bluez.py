@@ -204,6 +204,16 @@ class PairingRunner:
 
 AGENT_PATH = "/org/calictl/pairing_agent"
 
+# BluezTransport.connect() budget. Everything connect() does shares ONE deadline,
+# pairing.TIMEOUT_S[CONNECTING] - CONNECT_MARGIN_S, so it finishes (or fails) before the SM's own
+# CONNECTING timer fires. With CONNECTING = 20 s the worst case (a stale bond) splits the 19 s as:
+# bond probe <= BOND_PROBE_S (5) + RemoveDevice (~ms) + re-discover <= REDISCOVER_S (5) + the final
+# connect, which always keeps >= MIN_CONNECT_S (8) — bleak's own default connect timeout is 10 s.
+CONNECT_MARGIN_S = 1.0
+BOND_PROBE_S = 5.0      # connect + auth-gated read over an existing bond; a stale key hangs, so bound it
+REDISCOVER_S = 5.0      # find the unit again after RemoveDevice dropped its object
+MIN_CONNECT_S = 8.0     # always left for the final BleakClient.connect()
+
 
 class BluezTransport:
     """Real BlueZ transport for :class:`PairingRunner`: bleak scan/GATT + a dbus-fast agent.
@@ -218,10 +228,14 @@ class BluezTransport:
        KeyboardOnly passkey agent and the ``Device1``/``Adapter1`` pair /
        remove-device calls. Every ``bleak``/``dbus_fast`` import is lazy
        (inside methods), so importing this module stays stdlib-only.
-       **NOT-LIVE-VERIFIED**: no dbus/BLE stack in CI, so only the
-       stdlib-only plumbing (construction, the ``_passkey_future`` hookup) is
-       test-covered here; the dbus/bleak call sequence is exercised against
-       real hardware in the #157 van session.
+       **CI-verified against real BlueZ** (``T_PAIRING_REALSTACK``, the
+       ``pairing-real-stack`` job): inside a VM, the real dbus/bleak/BlueZ sequence
+       (agent, scan, connect, Pair, verify, persist, stale-bond probe/removal,
+       ``radio_busy``) runs against the Bumble fake unit over a virtual controller;
+       the unit tests cover the stdlib-only logic with stubs. CI still does NOT cover a
+       real unit's radio behaviour: RSSI jitter, its advertising policy and deep sleep,
+       WiFi coexistence on buspi's shared radio, or other clients scanning at full duty
+       and starving LE connects (HCI 0x3e) — those remain for the #157 van session.
 
     :param on_event: async ``callable(ev, arg=0)`` fed pairing-SM events as
         the transport observes them (device found, connected, passkey
@@ -251,6 +265,8 @@ class BluezTransport:
         self._agent = None
         self._agent_mgr = None
         self._passkey_future = None  # resolved by send_passkey(); awaited by the dbus agent
+        self._gen = 0              # flow generation: bumped by start_scan()/aclose() (see _abandoned)
+        self._bond_valid = False   # connect() found an existing bond that works -> pair() is a no-op
 
     async def _emit(self, ev, arg=0):
         if self.on_event is not None:
@@ -266,16 +282,18 @@ class BluezTransport:
             self._set_found(device)
             await self._emit(EV_DEVICE_FOUND)
 
+        self._gen += 1             # a new attempt: anything still in flight from the last one is stale
         self.radio_busy = False
         self._found_device = None
         self._path = None
+        self._bond_valid = False
         self._scanner = BleakScanner(detection_callback=_on_detect, adapter=self.adapter)
         await self._scanner.start()
         # Own task, like bleak's detection callback: the SM runs connect -> pair -> passkey wait
         # off EV_DEVICE_FOUND, which must not block start_scan() (and so the runner's start()).
-        self._adopt_task = asyncio.ensure_future(self._adopt_known_device())
+        self._adopt_task = asyncio.ensure_future(self._adopt_known_device(self._gen))
 
-    async def _adopt_known_device(self):
+    async def _adopt_known_device(self, gen=None):
         """Emit ``EV_DEVICE_FOUND`` for a unit BlueZ ALREADY knows and is currently hearing.
 
         bleak reports a device only on ``InterfacesAdded`` or a ``PropertiesChanged``. While
@@ -293,6 +311,8 @@ class BluezTransport:
             objects = await om.call_get_managed_objects()
         except Exception as e:
             log.debug("pairing: known-device lookup failed: %r" % e)
+            return
+        if gen is not None and self._abandoned(gen):
             return
         prefix = self._adapter_path + "/"
         for path, ifaces in objects.items():
@@ -331,13 +351,105 @@ class BluezTransport:
             return False
 
     # --- connect -------------------------------------------------------------
+    def _abandoned(self, gen) -> bool:
+        """True once the flow that started an operation has moved on: :meth:`start_scan` (a new
+        attempt) or :meth:`aclose` (flow end) bumped the generation while that operation awaited.
+        The runner's state timer can fire mid-``connect()``/``pair()``; a late result must then
+        neither emit an event nor keep a link (the unit has ONE connection slot, and ``serve``'s
+        poll resumes as soon as the wizard ends)."""
+        return gen != self._gen
+
     async def connect(self):
-        await self._clear_stale_bond()
+        """Connect to the discovered unit within the SM's CONNECTING budget.
+
+        When BlueZ already holds a bond, a bounded probe (connect + the auth-gated ``AUTH_CHAR``
+        read) tells a valid bond from a stale one: a valid bond is KEPT (its link becomes
+        :attr:`_client` and :meth:`pair` short-circuits to ``EV_PAIR_OK``) — starting the wizard
+        must never destroy a working bond. Only a probe that fails or hangs (a unit that forgot us
+        rejects the stored key: "PIN or Key Missing", and BlueZ reconnects forever) drops the bond
+        and re-discovers the unit. Every step shares one deadline, ``TIMEOUT_S[CONNECTING]`` minus
+        :data:`CONNECT_MARGIN_S`, so ``connect()`` finishes (or raises -> ``EV_CONNECT_FAIL``)
+        before the SM's own timer; an abandoned attempt releases any link it made.
+        """
+        gen = self._gen
+        self._bond_valid = False
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + pairing.TIMEOUT_S[pairing.CONNECTING] - CONNECT_MARGIN_S
+
+        def left():
+            return deadline - loop.time()
+
+        if await self._device_bonded():
+            if self._abandoned(gen):
+                return
+            probe = await self._probe_bond(min(BOND_PROBE_S, left() - MIN_CONNECT_S))
+            if self._abandoned(gen):
+                await self._quiet_disconnect(probe)
+                return
+            if probe is not None:
+                log.info("pairing: the existing bond with %s is valid — keeping it" % self._address)
+                self._client = probe
+                self._bond_valid = True
+                await self._emit(EV_CONNECTED)
+                return
+            log.warning("pairing: the bond BlueZ holds for %s no longer works (the unit forgot it, "
+                        "e.g. a Bluetooth reset) — removing it and pairing afresh" % self._address)
+            await self._drop_bond_and_rediscover(min(REDISCOVER_S, left() - MIN_CONNECT_S))
+            if self._abandoned(gen):
+                return
         from bleak import BleakClient
 
-        self._client = BleakClient(self._found_device, adapter=self.adapter)
-        await self._client.connect()
+        budget = left()
+        if budget <= 0:
+            raise TimeoutError("no time left in the CONNECTING budget")
+        client = BleakClient(self._found_device, adapter=self.adapter, timeout=budget)
+        try:
+            await asyncio.wait_for(client.connect(), budget)
+        except BaseException:
+            await self._quiet_disconnect(client)
+            raise
+        if self._abandoned(gen):
+            await self._quiet_disconnect(client)
+            return
+        self._client = client
         await self._emit(EV_CONNECTED)
+
+    async def _probe_bond(self, timeout: float):
+        """Connect and read the auth-gated ``AUTH_CHAR`` (1004) within ``timeout`` s.
+
+        :returns: the connected client when the bond works, ``None`` when it doesn't (the read or
+            connect failed, or hung past ``timeout``) — that client is released first.
+        """
+        from bleak import BleakClient
+
+        from calictl import device as device_mod
+
+        if timeout <= 0:
+            return None
+        client = BleakClient(self._found_device, adapter=self.adapter, timeout=timeout)
+
+        async def _probe():
+            await client.connect()
+            await client.read_gatt_char(device_mod.AUTH_CHAR)
+
+        try:
+            await asyncio.wait_for(_probe(), timeout)
+            return client
+        except Exception as e:
+            log.info("pairing: bond probe failed: %r" % e)
+            await self._quiet_disconnect(client)
+            return None
+
+    @staticmethod
+    async def _quiet_disconnect(client, timeout: float = CONNECT_MARGIN_S):
+        """Best-effort release of a (possibly half-open) client, bounded so connect() still ends
+        inside its deadline: the final connect's cleanup is what CONNECT_MARGIN_S is for."""
+        if client is None:
+            return
+        try:
+            await asyncio.wait_for(client.disconnect(), timeout)
+        except BaseException:
+            pass
 
     async def _device_bonded(self) -> bool:
         """Whether BlueZ holds a bond for the discovered device (``Device1.Bonded``, falling back
@@ -353,37 +465,24 @@ class BluezTransport:
                 continue
         return False
 
-    async def _rediscover(self, timeout: float = 8.0):
+    async def _rediscover(self, timeout: float):
         """Scan once more for the unit after its BlueZ device object was removed (``RemoveDevice``
         drops the object and its IRK, so the unit reappears as a NEW device under its current
-        resolvable address). Raises when it doesn't reappear — the caller's failure event lets the
-        SM retry from a fresh scan."""
+        resolvable address). Raises when it doesn't reappear within ``timeout`` s — the caller's
+        failure event lets the SM retry from a fresh scan."""
         from bleak import BleakScanner
 
+        if timeout <= 0:
+            raise TimeoutError("no time left to re-discover %s" % self._device_name)
         device = await BleakScanner.find_device_by_filter(
             lambda d, ad: d.name == self._device_name, timeout=timeout, adapter=self.adapter)
         if device is None:
             raise RuntimeError("%s did not reappear after removing its stale bond" % self._device_name)
         self._set_found(device)
 
-    async def _drop_bond_and_rediscover(self):
+    async def _drop_bond_and_rediscover(self, timeout: float):
         await self.remove_bond()        # clears _found_device/_address/_client + the address cache
-        await self._rediscover()
-
-    async def _clear_stale_bond(self):
-        """Drop a bond BlueZ still holds for the unit before connecting — the wizard's job is a
-        FRESH bond (see :meth:`pair`, ``R_PAIRING_STALE_BOND_RECOVERY``).
-
-        With a bond on file BlueZ encrypts every new link with the stored LTK. After a unit-side
-        Bluetooth reset the unit no longer has that key and rejects it ("PIN or Key Missing"), so
-        the kernel drops the link (authentication failure) and BlueZ reconnects, forever: the
-        connect never completes, ``Pair()`` is never reached, and the wizard ends on a CONNECTING
-        timeout. Found by the real-BlueZ CI rig (``tests/realstack/rig.py``).
-        """
-        if await self._device_bonded():
-            log.warning("pairing: BlueZ still holds a bond for %s — removing it before connecting so "
-                        "a unit that forgot us (Bluetooth reset) can pair again" % self._address)
-            await self._drop_bond_and_rediscover()
+        await self._rediscover(timeout)
 
     def _set_found(self, device):
         self._found_device = device
@@ -467,13 +566,23 @@ class BluezTransport:
            but OUR bond persists, so the wizard would fail, retry ``MAX_ATTEMPTS`` times, and end
            on a generic ``pairing_failed`` the user cannot act on. On that one error, clear the
            stale bond and retry ``Pair()`` exactly once; any other error is a genuine failure and
-           propagates unchanged. The same holds before connecting: a bond BlueZ still holds is
-           dropped first (:meth:`_clear_stale_bond`), since with a stale LTK the link never comes
-           up and ``Pair()`` is never reached. Removing the bond removes BlueZ's device object, so
-           the unit is re-discovered (under its current address) before the retry.
+           propagates unchanged. Before connecting, a bond BlueZ still holds is PROBED (bounded
+           connect + auth-gated read, :meth:`connect`): a working bond is kept and ``pair()``
+           reports success without pairing again — starting the wizard never destroys a working
+           bond; a stale one (with a stale LTK the link never comes up, so ``Pair()`` would never
+           be reached) is dropped. Removing a bond removes BlueZ's device object, so the unit is
+           re-discovered (under its current address) before pairing again.
         """
+        gen = self._gen
+        if self._bond_valid:
+            # connect() proved the existing bond works (an auth-gated read succeeded over it):
+            # keep it — there is nothing to pair, and VERIFY confirms the link next.
+            await self._emit(EV_PAIR_OK)
+            return
         await self._ensure_agent()
         device_iface = await self._get_interface(self._device_path(), "org.bluez.Device1")
+        if self._abandoned(gen):
+            return
         try:
             await device_iface.call_pair()
         except Exception as e:
@@ -488,9 +597,17 @@ class BluezTransport:
             log.warning("pair: bond already exists — removing the stale bond and retrying once")
             # remove_bond() clears _address and BlueZ drops the device object with the bond, so the
             # retry needs the unit re-discovered — the old path no longer exists.
-            await self._drop_bond_and_rediscover()
+            # Bounded like connect(): re-discovery must finish inside the SM's PAIRING budget.
+            await self._drop_bond_and_rediscover(
+                min(REDISCOVER_S, pairing.TIMEOUT_S[pairing.PAIRING] - CONNECT_MARGIN_S))
+            if self._abandoned(gen):
+                return
             device_iface = await self._get_interface(self._device_path(), "org.bluez.Device1")
+            if self._abandoned(gen):
+                return
             await device_iface.call_pair()
+        if self._abandoned(gen):
+            return
         await self._emit(EV_PAIR_OK)
 
     async def send_passkey(self, pk):
@@ -575,6 +692,7 @@ class BluezTransport:
             self._address = None
             self._path = None
             self._client = None
+            self._bond_valid = False
         # Clear the persisted address too, else resolve_addr() re-reads it after a reboot and the
         # daemon re-targets the bond we just removed. Independent of the bluez call above (which
         # no-ops off-hardware), and best-effort: a cache-clear failure must not surface as a
@@ -586,6 +704,7 @@ class BluezTransport:
 
     async def aclose(self):
         """Unregister the D-Bus agent and drop the system-bus connection (call at flow end)."""
+        self._gen += 1             # the flow ended: an in-flight connect()/pair() must not revive it
         try:
             if self._agent_mgr is not None:
                 await self._agent_mgr.call_unregister_agent(AGENT_PATH)

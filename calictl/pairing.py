@@ -22,7 +22,10 @@ IDLE, SCANNING, CONNECTING, WAITING_PASSKEY, PAIRING, VERIFYING, BONDED, ERROR, 
  ACT_PERSIST_BOND, ACT_DISCONNECT, ACT_REMOVE_BOND) = range(9)
 ERR_NONE, ERR_TIMEOUT, ERR_PAIR, ERR_VERIFY, ERR_CONNECT = range(5)
 MAX_ATTEMPTS = 3
-TIMEOUT_S = {SCANNING: 30, CONNECTING: 15, WAITING_PASSKEY: 60, PAIRING: 15,
+# CONNECTING is 20 s (was 15): over an existing bond the BlueZ transport first probes it (<= 5 s),
+# may drop it and re-discover the unit (<= 5 s), and still keeps >= 8 s for the real connect —
+# see calictl.pairing_bluez's CONNECT_* budget constants.
+TIMEOUT_S = {SCANNING: 30, CONNECTING: 20, WAITING_PASSKEY: 60, PAIRING: 15,
              VERIFYING: 10, RESETTING: 10}
 STATE_NAMES = {IDLE: "idle", SCANNING: "scanning", CONNECTING: "connecting",
                WAITING_PASSKEY: "waiting_passkey", PAIRING: "pairing",
