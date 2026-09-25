@@ -295,14 +295,26 @@ window.STRINGS_DE = {
   // --- pairing wizard ------------------------------------------------------------------------
   "Set up remote control": "Fernsteuerung einrichten",
   "Close": "Schließen",
-  "On the camper control unit open Settings → Bluetooth and press Pair.":
-    "Wähle in der Camper-Bedieneinheit Setup → Bluetooth und drücke Verbinden.",
+  ["On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows "
+    + "“Passcode: ---” until buspi connects."]:
+    "Wähle in der Camper-Bedieneinheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht "
+    + "„Passcode: ---“, bis buspi sich verbindet.",
+  ["Disconnect your phone: close the California On Tour app or turn off the phone's Bluetooth "
+    + "— the unit takes one connection at a time."]:
+    "Trenne dein Handy: schließe die California-On-Tour-App oder schalte Bluetooth am Handy aus "
+    + "— die Bedieneinheit erlaubt jeweils nur eine Verbindung.",
+  ["Stop other Bluetooth scanners on this Pi during pairing (for example the Home Assistant "
+    + "Bluetooth integration)."]:
+    "Beende während der Kopplung andere Bluetooth-Scanner auf diesem Pi (zum Beispiel die "
+    + "Home-Assistant-Bluetooth-Integration).",
   "I'm on that screen": "Ich bin auf diesem Bildschirm",
   "Connect now": "Jetzt verbinden",
   "Searching…": "Suche…",
   "Connecting…": "Verbindung wird aufgebaut…",
-  "Enter the passcode shown on the camper control unit — a fresh code each attempt.":
-    "Gib den Passcode von der Camper-Bedieneinheit ein — bei jedem Versuch ein neuer Code.",
+  ["Enter the passcode now shown on the camper control unit (it replaced ---). "
+    + "A fresh code each attempt."]:
+    "Gib den Passcode ein, der jetzt auf der Camper-Bedieneinheit steht (er hat --- ersetzt). "
+    + "Bei jedem Versuch ein neuer Code.",
   "Send": "Senden",
   "Pairing…": "Kopplung läuft…",
   "Verifying…": "Wird geprüft…",
@@ -318,12 +330,36 @@ window.STRINGS_DE = {
     + "gespeicherte Verbindung). Trage es in /etc/buspi/calictl.env ein, damit es das übersteht.",
   "Error: ": "Fehler: ",
   "No vehicle found.": "Kein Fahrzeug gefunden.",
-  "Connection failed.": "Verbindung fehlgeschlagen.",
+  "Could not connect to the unit.": "Keine Verbindung zum Gerät.",
+  "Pairing was refused.": "Kopplung abgelehnt.",
   "Could not verify the bond.": "Verbindung konnte nicht verifiziert werden.",
+  ["Check that “Gerät verbinden” is open on the unit, that buspi is in range, and that no "
+    + "phone is connected to the unit."]:
+    "Prüfe, dass „Gerät verbinden“ auf der Bedieneinheit geöffnet ist, dass buspi in Reichweite "
+    + "ist und dass kein Handy mit der Bedieneinheit verbunden ist.",
+  ["A phone still holds the unit's single connection, or another app on this Pi keeps "
+    + "Bluetooth scanning. Disconnect the phone, pause other Bluetooth apps, then try again."]:
+    "Ein Handy belegt noch die einzige Verbindung der Bedieneinheit, oder eine andere App auf "
+    + "diesem Pi sucht weiter nach Bluetooth-Geräten. Trenne das Handy, pausiere andere "
+    + "Bluetooth-Apps und versuche es erneut.",
+  ["Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and "
+    + "try again."]:
+    "Falscher Passcode, oder die Bedieneinheit hat den Kopplungsmodus verlassen. Öffne „Gerät "
+    + "verbinden“ auf der Bedieneinheit erneut und versuche es noch einmal.",
+  ["The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth "
+    + "reset / re-pair."]:
+    "Die Kopplung wurde hergestellt, aber die Bedieneinheit hat nicht geantwortet. Versuche es "
+    + "erneut; wenn das wiederholt passiert, nutze Bluetooth zurücksetzen / neu koppeln.",
   "Try again": "Erneut versuchen",
   "Bluetooth reset / re-pair": "Bluetooth zurücksetzen / neu koppeln",
   "This removes the working bond; telemetry stops until re-paired. Continue?":
     "Dies entfernt die bestehende Verbindung; die Telemetrie stoppt bis zur erneuten Kopplung. Fortfahren?",
+  ["Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops "
+    + "(for example the Home Assistant Bluetooth integration)."]:
+    "Eine andere App auf diesem Pi sucht dauerhaft nach Bluetooth-Geräten — die Kopplung "
+    + "schlägt wahrscheinlich fehl, bis sie stoppt (zum Beispiel die "
+    + "Home-Assistant-Bluetooth-Integration).",
+  "No camper unit is paired yet.": "Noch kein Camper-Gerät gekoppelt.",
 
   // --- disabled-control reasons --------------------------------------------------------------
   "Turn camping mode on first": "Zuerst Campingmodus einschalten",

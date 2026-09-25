@@ -229,13 +229,14 @@ def test_dashboard_shows_installed_tiles_and_hides_uninstalled(page):
 def test_pairing_chrome_hidden_when_paired_and_online(page):
     """UX counterpart to `test_pairing_hidden_until_opened_from_menu`: a PAIRED + ONLINE daemon
     (the `page`/`base_url` fixture's `CALICTL_ADDR=MO:CK:CA:MP:ER:00`) must show NO pairing chrome
-    in the main flow -- the guided-pairing card only auto-opens on the true first-run case
-    (offline + no bond, see the unpaired test above). The entry point stays the ⋮ menu only.
-    Asserts on what the user sees, not the JS predicate's internals (`_meta.online`/`PAIRING.address`)."""
+    in the main flow -- neither the guided-pairing card (opens only from the ⋮ menu, or the
+    unpaired banner, never automatically) nor that banner itself (`_meta.paired` is True here).
+    Asserts on what the user sees, not the JS predicate's internals (`_meta.online`/`_meta.paired`)."""
     # let the dashboard finish rendering its tiles before checking for absent chrome
     expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
     expect(page.get_by_text("Set up remote control")).to_have_count(0)
     expect(page.get_by_role("button", name="Connect now")).to_have_count(0)
+    expect(page.locator("#unpaired-banner")).to_have_count(0)
     page.get_by_role("button", name="Menu").click()
     expect(page.get_by_role("button", name="Bluetooth pairing…")).to_be_visible()
 
@@ -527,6 +528,85 @@ def test_pairing_wizard_reaches_bonded(pairing_page):
     assert FakePairingTransport.FOUND_ADDR in pairing_page.locator("#app").inner_text()
 
 
+def test_pairing_checklist_before_connect(pairing_page):
+    page = pairing_page
+    page.get_by_role("button", name="Menu").click()
+    page.get_by_text("Bluetooth pairing…").click()
+    text = page.locator("#app").inner_text()
+    assert "Gerät verbinden" in text                      # the unit's own screen name
+    assert "Passcode: ---" in text                        # what the unit shows before we connect
+    assert "phone" in text.lower()                        # disconnect the CaliforniaOnTour app
+    assert "Home Assistant" in text                       # other scanners on the Pi
+
+
+def test_connect_failed_shows_its_own_guidance(tmp_path):
+    port = _free_port()
+    proc, url = _start_daemon(port, {"CALICTL_FAKE_PAIRING": "connect_failed",
+                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+                                     "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+                                     "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")})
+    try:
+        with sync_playwright() as p:
+            page = p.chromium.launch().new_page()
+            page.goto(url)
+            _open_and_start_pairing(page)
+            expect(page.get_by_role("button", name="Try again")).to_be_visible(timeout=20000)
+            text = page.locator("#app").inner_text()
+            assert "connect_failed" not in text
+            assert "holds the unit" in text               # the phone-slot hint
+    finally:
+        proc.terminate()
+
+
+def test_radio_busy_banner(tmp_path):
+    port = _free_port()
+    proc, url = _start_daemon(port, {"CALICTL_FAKE_PAIRING": "radio_busy",
+                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+                                     "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+                                     "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")})
+    try:
+        with sync_playwright() as p:
+            page = p.chromium.launch().new_page()
+            page.goto(url)
+            _open_and_start_pairing(page)
+            expect(page.locator("#pairing-radio-busy")).to_be_visible(timeout=10000)
+    finally:
+        proc.terminate()
+
+
+def test_unpaired_daemon_offers_setup(unconfigured_pairing_page):
+    page = unconfigured_pairing_page
+    expect(page.locator("#unpaired-banner")).to_be_visible(timeout=10000)
+    page.locator("#unpaired-banner").get_by_role("button").click()
+    expect(page.get_by_text("Gerät verbinden")).to_be_visible()
+
+
+def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
+    env = {"CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+           "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+           "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")}
+    port = _free_port()
+    proc, url = _start_daemon(port, env)
+    with sync_playwright() as p:
+        page = p.chromium.launch().new_page()
+        page.goto(url)
+        _open_and_start_pairing(page)
+        expect(page.locator("#pairing-passkey")).to_be_visible(timeout=10000)
+        proc.terminate()
+        proc.wait(timeout=5)
+        proc, url = _start_daemon(port, env)          # same port: the tab reconnects
+        try:
+            page.reload()
+            page.get_by_role("button", name="Menu").click()
+            page.get_by_text("Bluetooth pairing…").click()
+            expect(page.get_by_role("button", name="Connect now")).to_be_visible()
+            page.locator("#pairing-ready").check()
+            page.get_by_role("button", name="Connect now").click()
+            expect(page.locator("#pairing-passkey")).to_be_visible(timeout=10000)
+        finally:
+            proc.terminate()
+
+
 def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
     """A wrong passkey each attempt: the real SM (`calictl.pairing`) retries up to MAX_ATTEMPTS
     times (cycling back through scanning/connecting/waiting_passkey) before giving up -> `error`
@@ -546,24 +626,26 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
         expect(passkey).to_be_hidden(timeout=10000)
     expect(page.get_by_role("button", name="Try again")).to_be_visible(timeout=10000)
     assert "pairing_failed" not in page.locator("#app").inner_text()   # friendly text, not the raw enum
-    assert "Connection failed" in page.locator("#app").inner_text()
+    assert "Pairing was refused" in page.locator("#app").inner_text()
 
 
 def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
     """UX: a genuinely unpaired daemon (no `CALICTL_ADDR`, no pairing cache ->
-    `device.UNPAIRED_ADDR`) is the true first-run case app.js's own pre-existing auto-open rule
-    targets (`main()`/`renderDashboard`: `_meta.online === false && PAIRING.address == null` ->
-    the setup card opens automatically) -- since Task 5's `_session` guard now refuses before any
-    BLE traffic, `_meta.online` genuinely stays False here (before Task 5 the mock's
-    address-agnostic `BleakClient` masked this: it happily "connected" even to the unpaired
-    placeholder address, so this same daemon used to read as online and the card stayed closed).
-    The unpaired banner itself is a Task 11 polish item; this only asserts the entry point still
-    works and Unpair stays hidden until a bond exists."""
+    `device.UNPAIRED_ADDR`) is the true first-run case -- since Task 5's `_session` guard now
+    refuses before any BLE traffic, `_meta.online` genuinely stays False here (before Task 5 the
+    mock's address-agnostic `BleakClient` masked this: it happily "connected" even to the
+    unpaired placeholder address, so this same daemon used to read as online).
+
+    Task 11 replaced app.js's old `main()` rule that auto-OPENED the guided-pairing card itself on
+    this exact case (`_meta.online === false && PAIRING.address == null`) with a persistent
+    `#unpaired-banner` on the dashboard (`_meta.paired === false && !pairingOpen`,
+    see `test_unpaired_daemon_offers_setup`): a working install never had pairing chrome forced
+    open, and now neither does a fresh one -- the banner is an entry point alongside the ⋮ menu,
+    not a full-card takeover. This test now asserts the banner (not the old auto-opened card) plus
+    the menu entry point, and that Unpair stays hidden until a bond exists."""
     page = unconfigured_pairing_page
     expect(page.get_by_role("button", name="Menu")).to_be_visible()
-    # true first-run (offline + no bond) auto-opens the setup card with the generic instructions --
-    # pre-existing UX, not introduced by this task.
-    expect(page.get_by_text("On the camper control unit open Settings")).to_be_visible()
+    expect(page.locator("#unpaired-banner")).to_be_visible()
     page.get_by_role("button", name="Menu").click()
     expect(page.get_by_role("button", name="Bluetooth pairing…")).to_be_visible()
     # no bond configured in this daemon -> no Unpair entry
