@@ -35,6 +35,13 @@ def test_header_is_protocol_facts_only():
 
 
 def test_chars_header_is_fresh_and_covers_every_state_function():
+    """The checked-in ``codec_chars.h`` matches a fresh ``generate_chars()`` regeneration
+    and carries a row for every function with a state char.
+
+    .. test:: Generated char-map header is fresh and covers every state function
+       :id: T_CDICT_CHARS_FRESH
+       :links: R_CHARS_PAIRING_SINGLE_SOURCE
+    """
     from calictl import overrides, protocol
     from tools import gen_c_dict
 
@@ -49,6 +56,13 @@ def test_chars_header_is_fresh_and_covers_every_state_function():
 
 
 def test_pairing_header_mirrors_calictl_pairing():
+    """The checked-in ``pairing_consts.h`` matches a fresh ``generate_pairing()``
+    regeneration and mirrors ``calictl.pairing``'s pinned enums/timeouts.
+
+    .. test:: Generated pairing header mirrors calictl.pairing
+       :id: T_CDICT_PAIRING_FRESH
+       :links: R_CHARS_PAIRING_SINGLE_SOURCE
+    """
     from calictl import pairing as P
     from tools import gen_c_dict
 
@@ -58,3 +72,19 @@ def test_pairing_header_mirrors_calictl_pairing():
     assert "PAIR_EV_CONNECT_FAIL = %d" % P.EV_CONNECT_FAIL in text
     for st, secs in P.TIMEOUT_S.items():
         assert "[PAIR_%s] = %d" % (P.STATE_NAMES[st].upper(), secs) in text
+
+
+def test_chars_header_device_name_matches_the_single_source_of_truth():
+    """``CODEC_DEVICE_NAME`` is never hand-typed in the generator — it must equal
+    ``calictl.device.DEVICE_NAME``, the same constant ``calictl.pairing_bluez``'s
+    ``BluezTransport`` uses as its default scan-name filter.
+    """
+    import inspect
+
+    from calictl import device, pairing_bluez
+    from tools import gen_c_dict
+
+    text = gen_c_dict.generate_chars()
+    assert 'CODEC_DEVICE_NAME "%s"' % device.DEVICE_NAME in text
+    default = inspect.signature(pairing_bluez.BluezTransport.__init__).parameters["device_name"].default
+    assert default == device.DEVICE_NAME

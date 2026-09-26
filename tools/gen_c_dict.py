@@ -180,10 +180,6 @@ def generate_chars() -> str:
     """Generate ``codec_chars.h``: the GATT char map + heartbeat constants.
 
     :returns: the header text (deterministic; sorted function order)
-
-    .. test:: Generated char-map header is fresh and covers every state function
-       :id: T_CDICT_CHARS_FRESH
-       :links: R_CHARS_PAIRING_SINGLE_SOURCE
     """
     from calictl import device
 
@@ -213,7 +209,7 @@ def generate_chars() -> str:
             "calictl.device.HEARTBEAT_PERIOD_S default changed (now %d ms) — update "
             "CODEC_HEARTBEAT_PERIOD_MS in tools/gen_c_dict.py to match" % actual_ms)
     out.append("#define CODEC_HEARTBEAT_PERIOD_MS %d" % period_ms)
-    out.append('#define CODEC_DEVICE_NAME "VWCAMPER"')
+    out.append('#define CODEC_DEVICE_NAME "%s"' % device.DEVICE_NAME)
     out.append("#endif /* CODEC_CHARS_H */")
     return "\n".join(out) + "\n"
 
@@ -249,10 +245,6 @@ def generate_pairing() -> str:
     reflected mechanically rather than silently drifting out of the C port.
 
     :returns: the header text (deterministic; values sorted ascending)
-
-    .. test:: Generated pairing header mirrors calictl.pairing
-       :id: T_CDICT_PAIRING_FRESH
-       :links: R_CHARS_PAIRING_SINGLE_SOURCE
     """
     from calictl import pairing as P
 
