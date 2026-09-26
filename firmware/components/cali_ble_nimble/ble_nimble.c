@@ -473,8 +473,25 @@ static int t_connect_bonded(void) {
     return rc ? rc : connect_to(&id);
 }
 
+/* An explicit pair always runs a fresh SMP pairing. With a bond stored for this peer,
+ * ble_gap_security_initiate would only re-encrypt with the stored LTK. If the unit forgot us
+ * ("Bluetooth zurücksetzen"), that fails on every retry and never heals. So pair() replaces a
+ * stored bond for the connected peer first, as calictl does on AlreadyExists (#200). The
+ * reconnect-by-bond path (connect_bonded + the session) never calls pair(). */
 static int t_pair(void) {
+    struct ble_gap_conn_desc desc;
+    struct ble_store_key_sec key;
+    struct ble_store_value_sec val;
     if (s_conn == BLE_HS_CONN_HANDLE_NONE) return BLE_HS_ENOTCONN;
+    if (ble_gap_conn_find(s_conn, &desc) == 0) {
+        memset(&key, 0, sizeof key);
+        key.peer_addr = desc.peer_id_addr;
+        if (ble_store_read_peer_sec(&key, &val) == 0) {
+            cali_log("pair: replacing stored bond");
+            int rc = ble_store_util_delete_peer(&desc.peer_id_addr);
+            if (rc != 0) return rc;
+        }
+    }
     return ble_gap_security_initiate(s_conn);
 }
 

@@ -35,7 +35,9 @@ void cali_ble_nimble_init(void (*on_sync)(void));
  * INDICATE) and reports failures only as a LOG line; so does write_heartbeat() (written with
  * response, like calictl.device's heartbeat). disconnect() is silent: the link it drops (or the
  * connect it cancels) produces no DISCONNECTED/CONNECT_FAIL; only a drop the stack or the peer
- * caused is reported. remove_bond() drops the link, then deletes every bonded peer. */
+ * caused is reported. remove_bond() drops the link, then deletes every bonded peer. pair()
+ * replaces a bond already stored for the connected peer, so a fresh SMP pairing runs even when
+ * the unit forgot us (it logs "LOG pair: replacing stored bond"). */
 const cali_transport_t *cali_ble_nimble_transport(void);
 
 #ifdef __cplusplus
