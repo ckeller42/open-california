@@ -153,6 +153,7 @@ Firmware (issue #154)
 ----------------------
 
 .. automodule:: tests.firmware.test_pairing_sm_parity
+.. automodule:: tests.firmware.test_runner_fake
 
 Fake unit peripheral (Bumble, shared by the app lab + pairing tests)
 ----------------------------------------------------------------------

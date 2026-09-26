@@ -57,8 +57,10 @@ CFLAGS = $(NIMBLE_CFLAGS) $(INCLUDES) -g -D_GNU_SOURCE
 # OUR sources (this repo's C under firmware/) build warning-clean; fetched NimBLE/Mbed TLS do not.
 # Component sources live under ../components; their objects land here (gitignored firmware/host/*.o).
 COMPONENTS := ../components
-OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include
-COMPONENT_OBJ := platform_host.o ble_store_kv.o
+CSRC := ../../csrc
+OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
+	$(COMPONENTS)/cali_core/include $(CSRC)
+COMPONENT_OBJ := platform_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
 OWN_OBJ := spike_main.o store_cli.o $(COMPONENT_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
@@ -86,7 +88,25 @@ platform_host.o: $(COMPONENTS)/platform/host/platform_host.c $(COMPONENTS)/platf
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 store_cli.o: $(COMPONENTS)/cali_ble_nimble/test/store_cli.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
+		$(COMPONENTS)/cali_core/include/cali_transport.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The NimBLE transport (cali_transport_t) — exercised end to end by Task 6's cali-host; linked into
+# cali-spike and store-cli meanwhile so a broken link fails the build.
+ble_nimble.o: $(COMPONENTS)/cali_ble_nimble/ble_nimble.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
+		$(COMPONENTS)/cali_core/include/cali_transport.h $(CSRC)/codec_chars.h \
+		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# cali_core: no NimBLE headers; built with the same flags so the -m32 -Werror build covers it.
+runner.o: $(COMPONENTS)/cali_core/runner.c $(COMPONENTS)/cali_core/include/cali_runner.h \
+		$(COMPONENTS)/cali_core/include/cali_transport.h $(COMPONENTS)/cali_core/include/cali_pairing_sm.h \
+		$(CSRC)/codec_chars.h $(CSRC)/pairing_consts.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+pairing_sm.o: $(COMPONENTS)/cali_core/pairing_sm.c $(COMPONENTS)/cali_core/include/cali_pairing_sm.h \
+		$(CSRC)/pairing_consts.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 ble_store_kv.o: $(COMPONENTS)/cali_ble_nimble/ble_store_kv.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \

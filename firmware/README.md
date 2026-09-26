@@ -58,9 +58,9 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
    host build pins upstream `nimble_1_10_0_tag`. API skew between the two is caught by Task 8, which
    compiles `cali_ble_nimble` against esp-nimble in the `firmware-build` job.
 
-1. **Warnings.** Our C (`OWN_OBJ` in the Makefile: `spike_main.o` plus the component objects `platform_host.o`,
-   `ble_store_kv.o` built from `firmware/components/`; later all repo C under
-   `firmware/`) builds with `-Wall -Wextra -Werror`; the fetched NimBLE/Mbed TLS sources do not.
+1. **Warnings.** Our C (`OWN_OBJ` in the Makefile: `spike_main.o`, `store_cli.o` plus the component
+   objects `platform_host.o`, `ble_store_kv.o`, `ble_nimble.o`, `runner.o`, `pairing_sm.o` built from
+   `firmware/components/`; later all repo C under `firmware/`) builds with `-Wall -Wextra -Werror`; the fetched NimBLE/Mbed TLS sources do not.
    The test suite skips `tests/firmware` (with the reason) when no 32-bit toolchain links;
    run it locally with `tools/ci.sh firmware`.
 1. **32-bit build.** NimBLE's `porting/nimble/Makefile.defs` forces `-m32` ("places in NimBLE assume
@@ -121,6 +121,15 @@ platform timer and the opaque `PAIR_ACT_PERSIST_BOND` action cross the boundary.
 **T_FW_PAIRING_SM_PARITY**: replaying `tests/vectors/pairing.json` through both the Python and C
 implementations and asserting identical `(state, actions)` at every step
 (`tests/firmware/test_pairing_sm_parity.py`).
+
+**R_FW_PAIRING_RUNNER** — the pairing runner. `firmware/components/cali_core/runner.c` drives that
+SM from BLE transport events (`cali_transport.h`; NimBLE implementation
+`components/cali_ble_nimble/ble_nimble.c`) per `docs/business-logic/guided-pairing.md` "ESP
+mapping", runs its actions as transport calls and its `PAIR_TIMEOUT_S` timeouts from a tick.
+Verified by **T_FW_RUNNER_FAKE** (`tests/firmware/test_runner_fake.py`): a scripted fake
+transport (`cali_core/test/runner_fake.c`) asserts the call/state sequences — happy path, ignored
+passkey, retries to `connect_failed`/`pairing_failed`, timeouts (incl. a pairing NimBLE refuses
+without an encryption change), link drops, verify failure, forwarding, forget.
 
 These `.. req::` / `.. test::` IDs are declared in that test module's own docstring — a Python
 "shim" sphinx-needs can parse, since the real implementation is C (whose comments sphinx-needs
