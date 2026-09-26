@@ -8,16 +8,18 @@
 # (first half of `no-vendor-material`). The pytest suite also covers `codec-parity` (C header +
 # vector freshness always; the C parity tests only if a C compiler is present), the Bumble pairing
 # harness (tests/test_pairing_link.py, if bumble is installed — requirements-dev pins it) and
-# `gui-e2e` (tests/e2e, if Playwright + Chromium are installed; otherwise they SKIP).
+# `gui-e2e` (tests/e2e, if Playwright + Chromium are installed; otherwise they SKIP), and the pure-C
+# firmware tests (tests/firmware minus the `linux_only` NimBLE host e2e; `tools/ci.sh firmware` runs
+# those = ci.yml `firmware-host-e2e`).
 # Only GitHub runs: the committed-MAC/VIN git-grep over the whole tree (`no-vendor-material`; the
 # pre-commit hook checks only the staged diff), `install-script` (sh -n + shellcheck install.sh),
-# `pairing-real-stack` (real BlueZ in a VM, tests/realstack/vm.sh; not a required check), and the
+# `firmware-build` + `firmware-qemu` (ESP-IDF container), `pairing-real-stack` (real BlueZ in a VM, tests/realstack/vm.sh; not a required check), and the
 # push-to-main workflows: docs.yml (sphinx -W build + Pages deploy — never on a PR, so a -W failure
 # first shows after merge; build locally with `sh docs/build_site.sh`) and screenshots.yml
 # (re-renders docs/screenshots and commits them to main with [skip ci]).
 #
 #   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
-#   tools/ci.sh test|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check
+#   tools/ci.sh test|firmware|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check
 #   tools/ci.sh dev          # install dev tooling + activate the pre-commit hook
 #
 # Runtime is stdlib-only; dev tools are in requirements-dev.txt.
@@ -39,10 +41,15 @@ fi
 test_suite() {   # parallel when pytest-xdist is present (tools/ci.sh dev), else serial
   if "$PY" -c 'import xdist' 2>/dev/null; then
     # --dist loadgroup: the e2e module is one xdist_group (shared daemon + browser) -> single worker.
-    "$PY" -m pytest tests/ -q -n auto --dist loadgroup
+    # tests/firmware is its own job (firmware-host-e2e): it needs a 32-bit toolchain + a NimBLE build.
+    "$PY" -m pytest tests/ -q -n auto --dist loadgroup --ignore=tests/firmware
   else
-    "$PY" -m pytest tests/ -q
+    "$PY" -m pytest tests/ -q --ignore=tests/firmware
   fi
+}
+firmware() {   # CI's firmware-host-e2e job: NimBLE Linux host over TCP HCI to the Bumble fake unit.
+               # Linux + gcc-multilib/g++-multilib (or CROSS_COMPILE=i686-linux-gnu-); skips otherwise.
+  "$PY" -m pytest tests/firmware -v
 }
 audit()        { "$PY" -m tools.audit_signals --report; }
 import_clean() { "$PY" -m tools.check_import_clean; }
@@ -80,6 +87,7 @@ dev() {
 case "${1:-ci}" in
   ci)            lint; webcheck; test_suite; audit; web_fresh; import_clean; vendor_check; echo "local CI: OK";;
   test)          test_suite;;
+  firmware)      firmware;;
   lint)          lint;;
   webcheck)      webcheck;;
   typecheck)     typecheck;;
@@ -89,5 +97,5 @@ case "${1:-ci}" in
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|firmware|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check|dev]"; exit 2;;
 esac

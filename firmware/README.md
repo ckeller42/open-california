@@ -26,6 +26,15 @@ python -m pytest tests/firmware -v
 
 ## Host build notes (every NimBLE / Bumble adaptation)
 
+0. **NimBLE pin (ruling R5).** ESP-IDF v6.1 vendors esp-nimble based on NimBLE 1.6.0, whose socket
+   transport does not link in TCP mode (no `ble_hci_sock_cmdevt_tx` for `BLE_SOCK_USE_TCP`), so the
+   host build pins upstream `nimble_1_10_0_tag`. API skew between the two is caught by Task 8, which
+   compiles `cali_ble_nimble` against esp-nimble in the `firmware-build` job.
+
+1. **Warnings.** Our C (`OWN_OBJ` in the Makefile: `spike_main.o`, later all repo C under
+   `firmware/`) builds with `-Wall -Wextra -Werror`; the fetched NimBLE/Mbed TLS sources do not.
+   The test suite skips `tests/firmware` (with the reason) when no 32-bit toolchain links;
+   run it locally with `tools/ci.sh firmware`.
 1. **32-bit build.** NimBLE's `porting/nimble/Makefile.defs` forces `-m32` ("places in NimBLE assume
    4-byte pointers"); the ESP32-S3 is 32-bit too, so we keep it. CI installs `gcc-multilib
    g++-multilib`. On a non-x86 Linux (e.g. Docker on Apple silicon) cross-build with
@@ -36,7 +45,10 @@ python -m pytest tests/firmware -v
 3. **syscfg.** `host/syscfg/syscfg.h` is the 1.10 example's `syscfg.h` with exactly these changes:
    `BLE_SOCK_TYPE__linux_blue 0`, `BLE_SOCK_TYPE__linux_tcp 1`, `BLE_SM_BONDING 1`, `BLE_SM_SC 1`,
    `BLE_SM_MITM 1`, `BLE_SM_IO_CAP BLE_HS_IO_KEYBOARD_ONLY`, `BLE_SM_OUR_KEY_DIST 0x07`,
-   `BLE_SM_THEIR_KEY_DIST 0x07`. NimBLE includes `"syscfg/syscfg.h"`, so the include path lists
+   `BLE_SM_THEIR_KEY_DIST 0x07`, plus **LE Secure Connections only**: `BLE_SM_LEGACY 0`,
+   `BLE_SM_SC_ONLY 1` — a peer that answers without the SC bit gets SMP Pairing Failed
+   (Authentication Requirements, 0x03) before any passkey (checked against a fake unit with
+   `sc=False`). NimBLE includes `"syscfg/syscfg.h"`, so the include path lists
    `firmware/host` itself (not `firmware/host/syscfg`) **before** the example's include dir.
 4. **Init order (1.10).** `nimble_port_init()` already runs `ble_transport_ll_init()` →
    `ble_hci_sock_init()`, which connects to `127.0.0.1:<port>` — so `ble_hci_sock_set_device(port)`

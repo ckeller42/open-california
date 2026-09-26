@@ -53,6 +53,10 @@ SRC_CC = $(filter %.cc, $(SRC))
 NIMBLE_ALL_OBJ := $(SRC_C:.c=.o) $(SRC_CC:.cc=.o)
 
 CFLAGS = $(NIMBLE_CFLAGS) $(INCLUDES) -g -D_GNU_SOURCE
+
+# OUR sources (this repo's C under firmware/) build warning-clean; fetched NimBLE/Mbed TLS do not.
+OWN_OBJ := spike_main.o
+$(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
 
 .PHONY: all clean
@@ -74,5 +78,5 @@ $(MBEDTLS_LIBS) &:
 %.o: %.cc syscfg/syscfg.h
 	$(CXX) -c $(CFLAGS) -o $@ $<
 
-cali-spike: $(NIMBLE_ALL_OBJ) spike_main.o $(MBEDTLS_LIBS)
-	$(LD) -o $@ $(NIMBLE_ALL_OBJ) spike_main.o $(LIBS)
+cali-spike: $(NIMBLE_ALL_OBJ) $(OWN_OBJ) $(MBEDTLS_LIBS)
+	$(LD) -o $@ $(NIMBLE_ALL_OBJ) $(OWN_OBJ) $(LIBS)

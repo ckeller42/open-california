@@ -1084,7 +1084,7 @@
 #endif
 
 #ifndef MYNEWT_VAL_BLE_SM_LEGACY
-#define MYNEWT_VAL_BLE_SM_LEGACY (1)
+#define MYNEWT_VAL_BLE_SM_LEGACY (0)
 #endif
 
 #ifndef MYNEWT_VAL_BLE_SM_LVL
@@ -1116,7 +1116,7 @@
 #endif
 
 #ifndef MYNEWT_VAL_BLE_SM_SC_ONLY
-#define MYNEWT_VAL_BLE_SM_SC_ONLY (0)
+#define MYNEWT_VAL_BLE_SM_SC_ONLY (1)
 #endif
 
 #ifndef MYNEWT_VAL_BLE_SM_THEIR_KEY_DIST

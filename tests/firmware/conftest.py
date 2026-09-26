@@ -3,10 +3,13 @@ NimBLE socket transport connects to it), linked to the fake unit's controller.""
 import asyncio
 import importlib.util
 import json
+import os
 import queue
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -19,24 +22,48 @@ HOST_DIR = Path(__file__).resolve().parents[2] / "firmware" / "host"
 FW_PUBLIC_ADDRESS = "F0:F1:F2:F3:F4:F6"
 
 
+def _toolchain_missing():
+    """Why the 32-bit host build cannot run here (``None`` if it can). NimBLE's Linux port builds with
+    ``-m32``, so this links a trivial C and C++ program with ``$CROSS_COMPILE{gcc,g++} -m32`` — the
+    same compilers the Makefile uses (gcc-multilib/g++-multilib on x86_64, or an i686 cross gcc)."""
+    for tool in ("make", "git"):
+        if shutil.which(tool) is None:
+            return "%s not found" % tool
+    prefix = os.environ.get("CROSS_COMPILE", "")
+    with tempfile.TemporaryDirectory() as tmp:
+        for comp, ext in (("gcc", "c"), ("g++", "cc")):
+            src = Path(tmp) / ("probe." + ext)
+            src.write_text("int main(void) { return 0; }\n" if ext == "c" else "int main() { return 0; }\n")
+            cmd = [prefix + comp, "-m32", str(src), "-o", str(Path(tmp) / "probe"), "-lstdc++"]
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            except OSError as e:
+                return "%s%s not usable (%s)" % (prefix, comp, e)
+            if r.returncode != 0:
+                return ("no 32-bit toolchain: `%s -m32` cannot link (install gcc-multilib g++-multilib, "
+                        "or set CROSS_COMPILE=i686-linux-gnu-)" % (prefix + comp))
+    return None
+
+
 def _skip_reason():
     if not sys.platform.startswith("linux"):
         return "host firmware build is Linux-only (NimBLE NPL linux port)"
     if importlib.util.find_spec("bumble") is None:
         return "bumble not installed"
-    return None
+    return _toolchain_missing()
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip (not error) this directory off Linux / without Bumble. A module-level ``pytest.skip`` in a
-    conftest aborts the whole run when the directory is the command-line target, so skip per item;
-    Bumble and the fake unit are imported lazily for the same reason."""
-    reason = _skip_reason()
+    """Skip (not error) this directory off Linux, without Bumble, or without a 32-bit toolchain. A
+    module-level ``pytest.skip`` in a conftest aborts the whole run when the directory is the
+    command-line target, so skip per item; Bumble and the fake unit are imported lazily for the same
+    reason."""
+    here = Path(__file__).resolve().parent
+    mine = [it for it in items if here in Path(str(it.fspath)).resolve().parents]
+    reason = _skip_reason() if mine else None
     if reason:
-        here = Path(__file__).resolve().parent
-        for item in items:
-            if here in Path(str(item.fspath)).resolve().parents:
-                item.add_marker(pytest.mark.skip(reason=reason))
+        for item in mine:
+            item.add_marker(pytest.mark.skip(reason=reason))
 
 
 # One LE connection event at the minimum connection interval (7.5 ms), rounded up.
