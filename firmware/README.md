@@ -55,3 +55,11 @@ python -m pytest tests/firmware -v
 7. **Pairing.** The fake unit refuses Just Works, so the host pairs as KEYBOARD_ONLY + MITM + SC; the
    unit displays the passkey (`FakeUnit.next_passkey()`), the test types it on the firmware's stdin.
    A wrong passkey ends in SMP Pairing Failed (confirm value failed) → `FAIL enc_change 1284`.
+8. **Bumble: ACL takes a connection event.** Bumble's `LocalLink` delivers ACL with zero latency.
+   NimBLE's host drains its whole ACL RX queue in one go (`ble_hs_process_rx_data_queue`) while
+   HCI events wait behind it on the event queue; with zero latency the unit's first
+   key-distribution PDU (Identity Information, sent the instant its side sees the encryption
+   change) was processed before our Encryption Change event, and NimBLE failed pairing with SMP
+   "Unspecified reason" (seen on the x86 CI runner, not under qemu locally). On a real radio that
+   PDU needs at least one more connection event (>= 7.5 ms), so the harness delays LE ACL by 10 ms
+   (`ACL_LATENCY_S`), FIFO; LL control PDUs stay immediate.

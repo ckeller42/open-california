@@ -39,6 +39,37 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(pytest.mark.skip(reason=reason))
 
 
+# One LE connection event at the minimum connection interval (7.5 ms), rounded up.
+ACL_LATENCY_S = 0.010
+
+
+def _radio_link():
+    """A Bumble ``LocalLink`` whose LE ACL data takes a connection event to arrive.
+
+    Bumble delivers ACL with zero latency. NimBLE's host drains its whole ACL RX queue in one go
+    (``ble_hs_process_rx_data_queue``) while HCI events wait on the event queue behind it, so on a
+    zero-latency link the unit's first key-distribution PDU (sent the instant its side sees the
+    encryption change) is processed BEFORE our Encryption Change event -> SMP "Unspecified reason".
+    On a real radio that PDU needs at least one more connection event (>= 7.5 ms). LL control PDUs
+    (which drive the encryption change) stay immediate; ACL order is preserved.
+    """
+    import asyncio
+
+    from bumble.link import LocalLink
+
+    class RadioLink(LocalLink):
+        _last_at = 0.0
+
+        def send_acl_data(self, sender_controller, destination_address, transport, data):
+            loop = asyncio.get_running_loop()
+            at = max(loop.time() + ACL_LATENCY_S, self._last_at + 1e-6)  # strictly increasing: FIFO
+            self._last_at = at
+            loop.call_at(at, LocalLink.send_acl_data, self, sender_controller, destination_address,
+                         transport, data)
+
+    return RadioLink()
+
+
 def _free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -66,12 +97,11 @@ class HciUnit:
     async def _start(self):
         from bumble.controller import Controller
         from bumble.hci import Address, LeFeatureMask
-        from bumble.link import LocalLink
         from bumble.transport import open_transport
 
         from tools.fake_unit_peripheral import build_unit
 
-        self.link = LocalLink()
+        self.link = _radio_link()
         uc = Controller("unit", link=self.link)
         self.unit = build_unit(uc, uc, **self._kw)
         await self.unit.start()
