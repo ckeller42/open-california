@@ -440,6 +440,10 @@ class BluezTransport:
         self._found_device = None
         self._path = None
         self._bond_valid = False
+        # Register the KeyboardOnly agent BEFORE any link exists: the kernel stamps an LE link's IO
+        # capability when the link is created, so an agent registered later (in pair()) left the
+        # Pairing Request at NoInputNoOutput / no MITM and the unit hung up (btmon, buspi 2026-09-26).
+        await self._ensure_agent()
         self._scanner = BleakScanner(detection_callback=_on_detect, adapter=self.adapter)
         await self._scanner.start()
         # Own task, like bleak's detection callback: the SM runs connect -> pair -> passkey wait

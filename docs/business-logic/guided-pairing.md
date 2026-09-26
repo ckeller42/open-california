@@ -141,6 +141,14 @@ Bluetooth jobs at once. The how-to for owners is
   continuous scanning). The wizard finds it by name (`VWCAMPER`), not by address; only once
   bonded does the unit's identity address become available, and that is what
   `persist_bond()` stores. Seeing the scanned address change between attempts is expected.
+- **The unit refuses Just Works; the agent must exist before the link.** The unit only accepts
+  passkey pairing (it DISPLAYS, we type — MITM). A **btmon capture on buspi (2026-09-26)** showed
+  the wizard's `Pairing Request` going out as `IO capability: NoInputNoOutput`, `No MITM`, and the
+  unit hanging up at once (`Remote User Terminated Connection`, 0x13; calictl saw
+  `Authentication Canceled`). BlueZ had switched the adapter to `KeyboardOnly` only when
+  `pair()` registered the agent, but the kernel fixes an LE link's IO capability when the link is
+  created, and `connect()` had already made it. `start_scan()` now registers the agent before any
+  link exists, and the fake unit refuses Just Works so CI catches a regression.
 - **`Passcode: ---` until a pairing request arrives.** The unit's own "Gerät verbinden" screen
   shows the literal placeholder `---` where the 6-digit passcode goes, and only replaces it once
   a central actually starts a pairing request against it (owner photo, 2026-09-25). A wizard

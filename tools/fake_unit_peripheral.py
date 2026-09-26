@@ -60,6 +60,11 @@ class UnitDelegate(PairingDelegate):
     async def accept(self) -> bool:
         return self._unit.pairing_mode
 
+    async def confirm(self, auto: bool = False) -> bool:
+        # Bumble asks here only for Just Works (a NoInputNoOutput central, no passkey, no MITM).
+        # The real unit hangs up on that request (btmon, buspi 2026-09-26): refuse it too.
+        return False
+
     async def generate_passkey(self) -> int:
         u = self._unit
         code = u.fixed_passkey if u.fixed_passkey is not None else secrets.randbelow(1_000_000)

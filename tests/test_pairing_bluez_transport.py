@@ -981,3 +981,44 @@ def test_the_adopt_task_is_cancelled_and_its_errors_retrieved(monkeypatch):
 
     failing = asyncio.run(_run())
     assert failing.done() and failing._log_traceback is False    # retrieved
+
+
+def test_the_agent_is_registered_before_the_scan_and_connect(monkeypatch):
+    """The kernel stamps an LE link's IO capability when the link is CREATED; BlueZ switches the
+    adapter to KeyboardOnly only when our agent becomes the default. Registered in pair() — after
+    connect() — the Pairing Request went out as NoInputNoOutput / no MITM and the unit (passkey
+    display) hung up (0x13). Captured with btmon on buspi against the real unit, 2026-09-26.
+
+    .. test:: the passkey agent is registered before any link is made
+       :id: T_PAIRING_AGENT_BEFORE_CONNECT
+       :links: R_PAIRING_BLUEZ_TRANSPORT
+    """
+    import sys
+    import types
+
+    order = []
+
+    class _Scanner:
+        def __init__(self, **kw):
+            pass
+
+        async def start(self):
+            order.append("scan")
+
+    monkeypatch.setitem(sys.modules, "bleak", types.SimpleNamespace(BleakScanner=_Scanner))
+
+    async def _run():
+        t = BluezTransport()
+
+        async def _agent():
+            order.append("agent")
+
+        async def _idle(gen=None):
+            pass
+        monkeypatch.setattr(t, "_ensure_agent", _agent)
+        monkeypatch.setattr(t, "_adopt_known_device", _idle)
+        await t.start_scan()
+        await asyncio.sleep(0)
+
+    asyncio.run(_run())
+    assert order == ["agent", "scan"]

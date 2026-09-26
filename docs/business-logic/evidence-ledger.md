@@ -101,6 +101,10 @@ to CAPTURE, and drop the GUI "not verified" confirm for that control. See the me
 - the camper unit **advertises from a rotating address** — CAPTURE (observed 2026-09-25):
   four different advertising addresses seen over about 45 minutes of continuous scanning; only
   the bonded identity address is stable, and only becomes known once bonded.
+- the unit **refuses Just Works pairing** — CAPTURE (btmon on buspi, 2026-09-26): a Pairing
+  Request with `IO capability: NoInputNoOutput`, `No MITM` was answered by the unit dropping the
+  link (`Remote User Terminated Connection`, 0x13) within ~0.5 s. Cause on our side: the LE link
+  was created before the KeyboardOnly agent was registered. See `guided-pairing.md`.
 - the unit's own screen shows **"Passcode: ---" until a pairing request arrives** — OBSERVED
   (owner photo, 2026-09-25): the placeholder stays literal `---` until a central starts pairing
   against the unit, then is replaced by the 6-digit passcode.

@@ -72,6 +72,25 @@ def test_pairing_mode_off_refuses_a_new_bond():
     asyncio.run(run())
 
 
+def test_just_works_pairing_is_refused():
+    """A central that pairs as NoInputNoOutput (no passkey, no MITM) is refused: the real unit hung
+    up on exactly that Pairing Request (btmon on buspi, 2026-09-26) — so must the fake, or a
+    calictl that forgets its KeyboardOnly agent passes CI."""
+    from bumble.pairing import PairingConfig, PairingDelegate
+
+    async def run():
+        _, unit, central = await _unit_and_central()
+        central.pairing_config_factory = lambda conn: PairingConfig(
+            sc=True, mitm=False, bonding=True,
+            delegate=PairingDelegate(io_capability=PairingDelegate.IoCapability.NO_OUTPUT_NO_INPUT))
+        conn = await central.connect(await scan_for(central))
+        with pytest.raises(ProtocolError):
+            await central.pair(conn)
+        return conn.is_encrypted
+
+    assert asyncio.run(run()) is False
+
+
 def test_one_connection_slot_hides_the_unit_while_a_central_holds_it():
     async def run():
         link, unit, first = await _unit_and_central()
