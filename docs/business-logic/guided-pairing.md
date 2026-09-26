@@ -149,6 +149,10 @@ Bluetooth jobs at once. The how-to for owners is
   `pair()` registered the agent, but the kernel fixes an LE link's IO capability when the link is
   created, and `connect()` had already made it. `start_scan()` now registers the agent before any
   link exists, and the fake unit refuses Just Works so CI catches a regression.
+- **Open "Gerät verbinden" before starting the wizard.** On 2026-09-26 (btmon, buspi) links
+  failed with 0x3e even with the radio quiet (scanning disabled at every connect) until the
+  owner opened the screen; the next link came up at once. Likely the unit ignores an unbonded
+  central outside pairing mode — a hypothesis from timing, see the evidence ledger.
 - **`Passcode: ---` until a pairing request arrives.** The unit's own "Gerät verbinden" screen
   shows the literal placeholder `---` where the 6-digit passcode goes, and only replaces it once
   a central actually starts a pairing request against it (owner photo, 2026-09-25). A wizard
