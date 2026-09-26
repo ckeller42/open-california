@@ -1,7 +1,8 @@
 # firmware — ESP32 satellite (#154)
 
-ESP-IDF + NimBLE firmware for the camper-unit satellite. Work in progress: only the host-build
-spike exists so far (`host/spike_main.c`, deleted once the real host target lands).
+ESP-IDF + NimBLE firmware for the camper-unit satellite. Work in progress: the host-build spike
+(`host/spike_main.c`, deleted once the real host target lands) plus the first platform-free
+component, `components/cali_core` (below).
 
 ## Host build (`firmware/host`)
 
@@ -15,6 +16,32 @@ firmware/host/fetch_nimble.sh      # clones the pinned NimBLE + Mbed TLS into fi
 make -C firmware/host cali-spike   # Linux only; needs a 32-bit toolchain (see below)
 python -m pytest tests/firmware -v
 ```
+
+## Components (`firmware/components`)
+
+`cali_core` is platform-free C: no BLE, no strings, no clock — safe to compile and unit-test on
+any host. First member: the pairing state machine.
+
+| File | What |
+|---|---|
+| `include/cali_pairing_sm.h` | Public interface — `cali_pair_state_t`, `cali_pair_action_t`, `cali_pair_step()`. |
+| `pairing_sm.c` | A line-for-line transcription of `calictl/pairing.py`'s `step()`, using the pinned enums from `csrc/pairing_consts.h` (GENERATED from the same Python module, #156's "one dictionary, two consumers" pattern extended to the pairing SM). |
+| `test/pairing_sm_cli.c` | Line-protocol driver used ONLY by `tests/firmware/test_pairing_sm_parity.py` — not part of the ESP build. |
+
+Proven equal to the Python original by replaying `tests/vectors/pairing.json` (the same golden
+vectors `tests/test_pairing_sm.py` checks) through both implementations:
+
+```
+cc -std=c99 -Wall -Wextra -Werror \
+   -I firmware/components/cali_core/include -I csrc \
+   firmware/components/cali_core/pairing_sm.c firmware/components/cali_core/test/pairing_sm_cli.c \
+   -o pairing_sm_cli
+python3 -m pytest tests/firmware/test_pairing_sm_parity.py -v
+```
+
+This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host with a C compiler
+— macOS included, unlike the BLE e2e tests below (`tests/firmware/test_spike_link.py`, marked
+`linux_only`, which need the 32-bit NimBLE Linux host build).
 
 ## Pins
 
@@ -75,3 +102,21 @@ python -m pytest tests/firmware -v
    "Unspecified reason" (seen on the x86 CI runner, not under qemu locally). On a real radio that
    PDU needs at least one more connection event (>= 7.5 ms), so the harness delays LE ACL by 10 ms
    (`ACL_LATENCY_S`), FIFO; LL control PDUs stay immediate.
+
+## Traceability
+
+**R_FW_PAIRING_SM** — C twin of the pairing SM. `firmware/components/cali_core/pairing_sm.c` is a
+platform-free C port of `calictl/pairing.py`'s `step()` (itself `R_PAIRING_SM`): same pinned
+state/event/action enums (`csrc/pairing_consts.h`, GENERATED from the Python module), the same
+transition table, no strings/clock/BLE calls in the SM itself — only `PAIR_EV_TIMEOUT` from a
+platform timer and the opaque `PAIR_ACT_PERSIST_BOND` action cross the boundary. Verified by
+**T_FW_PAIRING_SM_PARITY**: replaying `tests/vectors/pairing.json` through both the Python and C
+implementations and asserting identical `(state, actions)` at every step
+(`tests/firmware/test_pairing_sm_parity.py`).
+
+These `.. req::` / `.. test::` IDs are declared in that test module's own docstring — a Python
+"shim" sphinx-needs can parse, since the real implementation is C (whose comments sphinx-needs
+does not collect). `docs/api.rst` pulls the module in via `.. automodule::
+tests.firmware.test_pairing_sm_parity`, so both objects and their `:links:` resolve in the
+`sphinx -b needs` build today. Task 10 gives firmware its own `docs/firmware.md` page and may move
+the autodoc entry there; either way this file is the human-readable trace back to the source.

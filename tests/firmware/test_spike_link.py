@@ -1,7 +1,11 @@
 """Spike (deleted in Task 6): the NimBLE Linux host pairs with the Bumble fake unit over TCP HCI."""
 import subprocess
 
+import pytest
+
 from .conftest import HOST_DIR, Firmware
+
+pytestmark = pytest.mark.linux_only
 
 
 def _build(target):

@@ -149,6 +149,11 @@ Guided pairing (issue #154, #157)
 .. automodule:: tests.test_pairing_link
 .. autofunction:: tests.test_web_serve.test_pairing_start_waits_for_an_in_flight_ble_operation
 
+Firmware (issue #154)
+----------------------
+
+.. automodule:: tests.firmware.test_pairing_sm_parity
+
 Fake unit peripheral (Bumble, shared by the app lab + pairing tests)
 ----------------------------------------------------------------------
 

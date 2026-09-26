@@ -53,16 +53,25 @@ def _skip_reason():
     return _toolchain_missing()
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "linux_only: BLE e2e test needing the NimBLE Linux host build "
+        "(skipped off Linux, without Bumble, or without a 32-bit toolchain — see _skip_reason()).",
+    )
+
+
 def pytest_collection_modifyitems(config, items):
-    """Skip (not error) this directory off Linux, without Bumble, or without a 32-bit toolchain. A
-    module-level ``pytest.skip`` in a conftest aborts the whole run when the directory is the
-    command-line target, so skip per item; Bumble and the fake unit are imported lazily for the same
-    reason."""
-    here = Path(__file__).resolve().parent
-    mine = [it for it in items if here in Path(str(it.fspath)).resolve().parents]
-    reason = _skip_reason() if mine else None
+    """Skip (not error) tests marked ``linux_only`` off Linux, without Bumble, or without a 32-bit
+    toolchain. A module-level ``pytest.skip`` in a conftest aborts the whole run when the directory
+    is the command-line target, so skip per item; Bumble and the fake unit are imported lazily for
+    the same reason. Only the BLE e2e tests (test_spike_link.py and its successors) carry the
+    marker — the pure-C pairing-SM parity test (test_pairing_sm_parity.py) has no BLE/NimBLE
+    dependency and runs on any host with a C compiler, macOS included."""
+    marked = [it for it in items if it.get_closest_marker("linux_only")]
+    reason = _skip_reason() if marked else None
     if reason:
-        for item in mine:
+        for item in marked:
             item.add_marker(pytest.mark.skip(reason=reason))
 
 
