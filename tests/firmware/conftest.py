@@ -66,7 +66,7 @@ def pytest_collection_modifyitems(config, items):
     toolchain. A module-level ``pytest.skip`` in a conftest aborts the whole run when the directory
     is the command-line target, so skip per item; Bumble and the fake unit are imported lazily for
     the same reason. Only the tests needing the NimBLE host build carry the marker (the BLE e2e
-    test_spike_link.py and its successors, and the bond-store test test_ble_store_kv.py) — the
+    test_host_e2e.py and the bond-store test test_ble_store_kv.py) — the
     pure-C pairing-SM parity test (test_pairing_sm_parity.py) has no BLE/NimBLE
     dependency and runs on any host with a C compiler, macOS included."""
     marked = [it for it in items if it.get_closest_marker("linux_only")]
@@ -76,8 +76,10 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.skip(reason=reason))
 
 
-# One LE connection event at the minimum connection interval (7.5 ms), rounded up.
-ACL_LATENCY_S = 0.010
+# One LE connection event at the interval NimBLE actually asks for: ble_gap_connect with NULL params
+# uses BLE_GAP_INITIAL_CONN_ITVL_MIN = 30 ms (max 50 ms). 10 ms (the 7.5 ms spec minimum) was not
+# enough under qemu-i386: the unit's Identity Information still overtook our Encryption Change.
+ACL_LATENCY_S = 0.030
 
 
 def _radio_link():
@@ -87,7 +89,8 @@ def _radio_link():
     (``ble_hs_process_rx_data_queue``) while HCI events wait on the event queue behind it, so on a
     zero-latency link the unit's first key-distribution PDU (sent the instant its side sees the
     encryption change) is processed BEFORE our Encryption Change event -> SMP "Unspecified reason".
-    On a real radio that PDU needs at least one more connection event (>= 7.5 ms). LL control PDUs
+    On a real radio that PDU needs at least one more connection event (the negotiated interval,
+    >= 30 ms for NimBLE's default connection parameters). LL control PDUs
     (which drive the encryption change) stay immediate; ACL order is preserved.
     """
     import asyncio
@@ -224,3 +227,35 @@ class Firmware:
                 self.p.wait(5)
             except Exception:
                 self.p.kill()
+                self.p.wait(5)
+
+
+_BUILT: dict[str, Path] = {}
+
+
+def build_host(binary="cali-host"):
+    """Build a firmware/host Makefile target once per session (fetching the pinned NimBLE first)."""
+    if binary not in _BUILT:
+        subprocess.run(["bash", str(HOST_DIR / "fetch_nimble.sh")], check=True)
+        subprocess.run(["make", "-C", str(HOST_DIR), binary], check=True)
+        _BUILT[binary] = HOST_DIR / binary
+    return _BUILT[binary]
+
+
+@pytest.fixture
+def host_fw(tmp_path):
+    """Factory ``host_fw(hu, store_dir=None, extra=(), binary="cali-host")`` -> a running
+    :class:`Firmware` on ``hu.port``. Without ``store_dir`` each firmware gets the per-test
+    ``tmp_path/"store"`` (so two calls in one test share the bond store, like a reboot). Every
+    firmware started is stopped at teardown."""
+    started: list[Firmware] = []
+
+    def make(hu, store_dir=None, extra=(), binary="cali-host"):
+        store = Path(store_dir) if store_dir is not None else tmp_path / "store"
+        fw = Firmware(build_host(binary), hu.port, store, extra)
+        started.append(fw)
+        return fw
+
+    yield make
+    for fw in started:
+        fw.stop()

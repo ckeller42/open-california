@@ -77,7 +77,7 @@ static void on_state(const cali_pair_state_t *s, const char *address) {
 
 static const char *const EV_NAMES[] = {
     "FOUND", "CONNECTED", "CONNECT_FAIL", "PASSKEY_REQ", "ENC_OK", "ENC_FAIL", "DISCONNECTED",
-    "READ", "NOTIFY", "DISCOVERED",
+    "READ", "NOTIFY", "DISCOVERED", "HEARTBEAT",
 };
 
 static void on_other(const cali_tevent_t *e) {

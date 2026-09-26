@@ -70,6 +70,5 @@ tools/applab/.fake_unit_keys.json
 firmware/host/_deps/
 firmware/host/*.o
 firmware/host/cali-host
-firmware/host/cali-spike
 firmware/host/store-cli
 firmware/build/

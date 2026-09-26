@@ -61,15 +61,17 @@ CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC)
 COMPONENT_OBJ := platform_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
-OWN_OBJ := spike_main.o store_cli.o $(COMPONENT_OBJ)
+# The rest of cali_core (console + session) and the frame codec: only cali-host needs them.
+CORE_OBJ := console.o session.o codec.o
+OWN_OBJ := host_main.o store_cli.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
 
 .PHONY: all clean
-all: cali-spike store-cli
+all: cali-host store-cli
 
 clean:
-	rm -f $(NIMBLE_ALL_OBJ) *.o cali-spike cali-host store-cli
+	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host store-cli
 	-$(MAKE) -C $(MBEDTLS_ROOT)/library clean >/dev/null
 
 $(MBEDTLS_LIBS) &:
@@ -92,8 +94,7 @@ store_cli.o: $(COMPONENTS)/cali_ble_nimble/test/store_cli.c $(COMPONENTS)/cali_b
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# The NimBLE transport (cali_transport_t) — exercised end to end by Task 6's cali-host; linked into
-# cali-spike and store-cli meanwhile so a broken link fails the build.
+# The NimBLE transport (cali_transport_t) — exercised end to end by cali-host (test_host_e2e.py).
 ble_nimble.o: $(COMPONENTS)/cali_ble_nimble/ble_nimble.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
 		$(COMPONENTS)/cali_core/include/cali_transport.h $(CSRC)/codec_chars.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
@@ -113,8 +114,29 @@ ble_store_kv.o: $(COMPONENTS)/cali_ble_nimble/ble_store_kv.c $(COMPONENTS)/cali_
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-cali-spike: $(NIMBLE_ALL_OBJ) spike_main.o $(COMPONENT_OBJ) $(MBEDTLS_LIBS)
-	$(LD) -o $@ $(NIMBLE_ALL_OBJ) spike_main.o $(COMPONENT_OBJ) $(LIBS)
+CORE_H := $(COMPONENTS)/cali_core/include
+console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/cali_session.h \
+		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_pairing_sm.h \
+		$(CSRC)/codec.h $(CSRC)/codec_chars.h $(CSRC)/pairing_consts.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h \
+		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CSRC)/codec.h $(CSRC)/codec_chars.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+codec.o: $(CSRC)/codec.c $(CSRC)/codec.h $(CSRC)/codec_dict.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+host_main.o: host_main.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h $(CORE_H)/cali_console.h \
+		$(CORE_H)/cali_session.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h \
+		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The host firmware: console + runner + session on the NimBLE transport, HCI over TCP.
+cali-host: $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(MBEDTLS_LIBS)
+	$(LD) -o $@ $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(LIBS)
 
 # Test driver for the NimBLE bond store (tests/firmware/test_ble_store_kv.py): the store callbacks
 # linked against the real NimBLE host objects, no controller/transport needed.

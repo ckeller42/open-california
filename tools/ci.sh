@@ -41,12 +41,12 @@ fi
 test_suite() {   # parallel when pytest-xdist is present (tools/ci.sh dev), else serial
   if "$PY" -c 'import xdist' 2>/dev/null; then
     # --dist loadgroup: the e2e module is one xdist_group (shared daemon + browser) -> single worker.
-    # Only test_spike_link.py (marked linux_only) needs a 32-bit toolchain + a NimBLE build — it's
-    # its own job (firmware-host-e2e); the rest of tests/firmware (e.g. the pure-C pairing-SM parity
-    # test) has no BLE dependency and runs here too, on any host with a C compiler.
-    "$PY" -m pytest tests/ -q -n auto --dist loadgroup --ignore=tests/firmware/test_spike_link.py
+    # Tests marked linux_only (the NimBLE host e2e + bond store) need a 32-bit toolchain + a NimBLE
+    # build — their own job (firmware-host-e2e / `tools/ci.sh firmware`); the rest of tests/firmware
+    # (pure-C SM parity, runner and session fakes) runs here too, on any host with a C compiler.
+    "$PY" -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only"
   else
-    "$PY" -m pytest tests/ -q --ignore=tests/firmware/test_spike_link.py
+    "$PY" -m pytest tests/ -q -m "not linux_only"
   fi
 }
 firmware() {   # CI's firmware-host-e2e job: NimBLE Linux host over TCP HCI to the Bumble fake unit.

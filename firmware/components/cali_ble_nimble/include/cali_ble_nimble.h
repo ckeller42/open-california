@@ -30,10 +30,12 @@ void cali_ble_store_init(void);
 void cali_ble_nimble_init(void (*on_sync)(void));
 
 /* The NimBLE transport. Every call, and every event it delivers, runs on the NimBLE host task
- * (marshal console input there, e.g. through ble_npl_eventq_put, as the spike does). Notes:
- * subscribe() needs discover() first (it returns BLE_HS_ENOTSUP for a char without NOTIFY/
- * INDICATE) and reports failures only as a LOG line; so does write_heartbeat() (written with
- * response, like calictl.device's heartbeat). disconnect() is silent: the link it drops (or the
+ * (marshal console input there through ble_npl_eventq_put, as firmware/host/host_main.c does).
+ * Notes: subscribe() needs discover() first (it returns BLE_HS_ENOTSUP for a char without NOTIFY/
+ * INDICATE) and reports failures only as a LOG line. write_heartbeat() writes with response (like
+ * calictl.device's heartbeat) and reports every completion as HEARTBEAT (status = ATT/host error),
+ * so the session can treat a failed beat as a lost link. connect_bonded() re-encrypts by itself
+ * once connected (ENC_OK / ENC_FAIL). disconnect() is silent: the link it drops (or the
  * connect it cancels) produces no DISCONNECTED/CONNECT_FAIL; only a drop the stack or the peer
  * caused is reported. remove_bond() drops the link, then deletes every bonded peer. pair()
  * replaces a bond already stored for the connected peer, so a fresh SMP pairing runs even when

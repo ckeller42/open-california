@@ -1,8 +1,8 @@
 # firmware — ESP32 satellite (#154)
 
-ESP-IDF + NimBLE firmware for the camper-unit satellite. Work in progress: the host-build spike
-(`host/spike_main.c`, deleted once the real host target lands) plus the first platform-free
-component, `components/cali_core` (below).
+ESP-IDF + NimBLE firmware for the camper-unit satellite. Work in progress: the host build
+(`host/host_main.c` -> `cali-host`: console, pairing runner and session on the NimBLE Linux port)
+and the platform-free component `components/cali_core` (below).
 
 ## Host build (`firmware/host`)
 
@@ -13,8 +13,24 @@ fake unit (`tools/fake_unit_peripheral.py`). Harness: `tests/firmware/conftest.p
 
 ```
 firmware/host/fetch_nimble.sh      # clones the pinned NimBLE + Mbed TLS into firmware/host/_deps (gitignored)
-make -C firmware/host cali-spike   # Linux only; needs a 32-bit toolchain (see below)
+make -C firmware/host cali-host    # Linux only; needs a 32-bit toolchain (see below)
 python -m pytest tests/firmware -v
+```
+
+`cali-host --hci-port <tcp-port> [--store <dir>]` speaks the console line protocol on
+stdin/stdout (`components/cali_core/include/cali_console.h`): `pair`, `passkey N`, `forget`,
+`status`, `quit` in; `STATE {json}` (calictl's `/api/pairing` keys), `SNAP {"t":ms,"fn":{...}}`
+(every state function, `codec_decode`d) and `LOG text` out. Without a stored bond it boots `idle`
+and never scans; with one it reconnects by bond. The NimBLE host task (main thread) makes every
+cali_core/transport call; the stdin thread only queues lines and posts one NimBLE event; a 100 ms
+callout drives the runner/session timers.
+
+On a Mac, run the Linux-only tests in Docker (arm64 image with an i686 cross gcc + qemu-i386
+binfmt, as used for this branch):
+
+```
+docker run --rm -v "$PWD":/w -w /w -e CROSS_COMPILE=i686-linux-gnu- \
+    -e QEMU_LD_PREFIX=/usr/i686-linux-gnu <image> python3 -m pytest tests/firmware -v
 ```
 
 ## Components (`firmware/components`)
@@ -40,8 +56,9 @@ python3 -m pytest tests/firmware/test_pairing_sm_parity.py -v
 ```
 
 This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host with a C compiler
-— macOS included, unlike the BLE e2e tests below (`tests/firmware/test_spike_link.py`, marked
-`linux_only`, which need the 32-bit NimBLE Linux host build).
+— macOS included, unlike the BLE e2e tests (`tests/firmware/test_host_e2e.py`, marked
+`linux_only`, which need the 32-bit NimBLE Linux host build; the default test run deselects them
+with `-m "not linux_only"`).
 
 ## Pins
 
@@ -58,9 +75,9 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
    host build pins upstream `nimble_1_10_0_tag`. API skew between the two is caught by Task 8, which
    compiles `cali_ble_nimble` against esp-nimble in the `firmware-build` job.
 
-1. **Warnings.** Our C (`OWN_OBJ` in the Makefile: `spike_main.o`, `store_cli.o` plus the component
-   objects `platform_host.o`, `ble_store_kv.o`, `ble_nimble.o`, `runner.o`, `pairing_sm.o` built from
-   `firmware/components/`; later all repo C under `firmware/`) builds with `-Wall -Wextra -Werror`; the fetched NimBLE/Mbed TLS sources do not.
+1. **Warnings.** Our C (`OWN_OBJ` in the Makefile: `host_main.o`, `store_cli.o` plus the component
+   objects `platform_host.o`, `ble_store_kv.o`, `ble_nimble.o`, `runner.o`, `pairing_sm.o`,
+   `console.o`, `session.o` built from `firmware/components/`, and `codec.o` from `csrc/`) builds with `-Wall -Wextra -Werror`; the fetched NimBLE/Mbed TLS sources do not.
    The test suite skips `tests/firmware` (with the reason) when no 32-bit toolchain links;
    run it locally with `tools/ci.sh firmware`.
 1. **32-bit build.** NimBLE's `porting/nimble/Makefile.defs` forces `-m32` ("places in NimBLE assume
@@ -82,8 +99,7 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
    `ble_hci_sock_init()`, which connects to `127.0.0.1:<port>` — so `ble_hci_sock_set_device(port)`
    must come first, and the Bumble TCP server must already listen. The socket transport's RX queue
    needs its own thread (`ble_hci_sock_ack_handler`); the host runs `nimble_port_run()` on the main
-   thread. The spike's bond store is `ble_store_config_init()` (1.10; RAM-only). The
-   persistent store, `cali_ble_store_init()` (`components/cali_ble_nimble/ble_store_kv.c`), keeps
+   thread. The persistent store, `cali_ble_store_init()` (`components/cali_ble_nimble/ble_store_kv.c`), keeps
    `ble_store_config.c`'s matching rules but persists each record through the CRC-checked
    `cali_kv_*` store (`components/platform`; host: one `<key>.kv` file per key under `--store`),
    so a torn/corrupt record reads as "no bond" (`LOG store: corrupt record <key> ignored`), and a
@@ -101,15 +117,21 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
    which NimBLE treats as "no public address") and mirrors it, typed PUBLIC, into `random_address`.
 7. **Pairing.** The fake unit refuses Just Works, so the host pairs as KEYBOARD_ONLY + MITM + SC; the
    unit displays the passkey (`FakeUnit.next_passkey()`), the test types it on the firmware's stdin.
-   A wrong passkey ends in SMP Pairing Failed (confirm value failed) → `FAIL enc_change 1284`.
+   A wrong passkey ends in SMP Pairing Failed (confirm value failed) → ENC_FAIL → the runner
+   retries (`pairing_failed` after 3 attempts).
 8. **Bumble: ACL takes a connection event.** Bumble's `LocalLink` delivers ACL with zero latency.
    NimBLE's host drains its whole ACL RX queue in one go (`ble_hs_process_rx_data_queue`) while
    HCI events wait behind it on the event queue; with zero latency the unit's first
    key-distribution PDU (Identity Information, sent the instant its side sees the encryption
    change) was processed before our Encryption Change event, and NimBLE failed pairing with SMP
-   "Unspecified reason" (seen on the x86 CI runner, not under qemu locally). On a real radio that
-   PDU needs at least one more connection event (>= 7.5 ms), so the harness delays LE ACL by 10 ms
-   (`ACL_LATENCY_S`), FIFO; LL control PDUs stay immediate.
+   "Unspecified reason" (seen on the x86 CI runner, and under qemu-i386 with a 10 ms delay). On a
+   real radio that PDU needs at least one more connection event — the interval NimBLE requests by
+   default is 30-50 ms (`BLE_GAP_INITIAL_CONN_ITVL_MIN/MAX`) — so the harness delays LE ACL by
+   30 ms (`ACL_LATENCY_S`), FIFO; LL control PDUs stay immediate.
+9. **Reconnect by bond.** `connect_bonded()` connects to the stored identity address and then
+   calls `ble_gap_security_initiate` itself (the stored LTK re-encrypts; no passkey), so the
+   session sees CONNECTED then ENC_OK/ENC_FAIL. Every heartbeat write completion is reported as
+   `CALI_TEV_HEARTBEAT`; a failed or unwritable beat counts as a lost link (reconnect with backoff).
 
 ## Traceability
 
@@ -130,6 +152,15 @@ Verified by **T_FW_RUNNER_FAKE** (`tests/firmware/test_runner_fake.py`): a scrip
 transport (`cali_core/test/runner_fake.c`) asserts the call/state sequences — happy path, ignored
 passkey, retries to `connect_failed`/`pairing_failed`, timeouts (incl. a pairing NimBLE refuses
 without an encryption change), link drops, verify failure, forwarding, forget.
+
+**R_FW_SESSION** — the session and console. `cali_core/session.c` discovers, subscribes, reads
+every `CODEC_CHARS` function and holds one whole frame per function, runs the 1003 heartbeat and
+reconnects by bond with 1 s -> 60 s backoff; `cali_core/console.c` is the line protocol. Verified
+by **T_FW_SESSION_FAKE** (`tests/firmware/test_session_fake.py`, scripted transport, macOS too) and
+end to end by **T_FW_HOST_E2E** (`tests/firmware/test_host_e2e.py`, `linux_only`): `cali-host`
+pairs with the Bumble fake unit, its `SNAP` equals `calictl.protocol.decode` of every frame the
+fake served (a truncated frame too), the heartbeat keeps the link for 20 s, a pushed notification
+replaces exactly that function, and a passkey typed while idle is ignored.
 
 These `.. req::` / `.. test::` IDs are declared in that test module's own docstring — a Python
 "shim" sphinx-needs can parse, since the real implementation is C (whose comments sphinx-needs

@@ -9,6 +9,8 @@
  * outstanding request per bearer). discover() walks ble_gattc_disc_all_chrs over the full handle
  * range and builds char_short -> (handles, properties); the short id is bytes 12-13 of the
  * little-endian 128-bit UUID, accepted only when the other 14 bytes equal CODEC_UUID_FMT's base.
+ * connect_bonded() re-encrypts by itself once connected (ble_gap_security_initiate with the stored
+ * LTK: ENC_OK / ENC_FAIL, never a passkey). Every heartbeat completion is reported (HEARTBEAT).
  * A read/heartbeat of a char not yet in the table (e.g. the 1004 verify read right after pairing)
  * first looks it up with ble_gattc_disc_chrs_by_uuid.
  */
@@ -51,6 +53,7 @@ static char s_name[32];
 static int s_scanning, s_found;
 static ble_addr_t s_found_addr;
 static int s_connecting, s_connect_cancelled;
+static int s_encrypt_on_connect;            /* connect_bonded(): re-encrypt once the link is up */
 static uint16_t s_conn = BLE_HS_CONN_HANDLE_NONE;
 static uintptr_t s_gen;                     /* bumped per link: stale GATT callbacks are dropped */
 
@@ -195,6 +198,7 @@ static void op_finish(int status, const uint8_t *data, size_t len) {
     case OP_READ: emit(CALI_TEV_READ, status, o.short_id, status ? NULL : data, status ? 0 : len, NULL); break;
     case OP_WRITE_HB:
         if (status) cali_log("ble: heartbeat write failed %d", status);
+        emit(CALI_TEV_HEARTBEAT, status, CODEC_CHAR_HEARTBEAT, NULL, 0, NULL);
         break;
     case OP_SUB:
         if (status) cali_log("ble: subscribe %04x failed %d", o.short_id, status);
@@ -370,6 +374,12 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
             link_reset();
             s_conn = ev->connect.conn_handle;
             emit(CALI_TEV_CONNECTED, 0, 0, NULL, 0, NULL);
+            if (s_encrypt_on_connect && s_conn == ev->connect.conn_handle) {
+                /* With the peer's LTK stored this starts the encryption procedure, no pairing. */
+                s_encrypt_on_connect = 0;
+                int rc = ble_gap_security_initiate(s_conn);
+                if (rc != 0) emit(CALI_TEV_ENC_FAIL, rc, 0, NULL, 0, NULL);
+            }
         } else if (s_connect_cancelled) {
             s_connect_cancelled = 0;                        /* our own disconnect(): silent */
         } else {
@@ -446,6 +456,7 @@ static int t_stop_scan(void) {
 static int connect_to(const ble_addr_t *addr) {
     if (s_conn != BLE_HS_CONN_HANDLE_NONE || s_connecting) return BLE_HS_EALREADY;
     s_connect_cancelled = 0;
+    s_encrypt_on_connect = 0;
     int rc = ble_gap_connect(s_own_addr_type, addr, CONNECT_TIMEOUT_MS, NULL, gap_cb, NULL);
     s_connecting = rc == 0;
     return rc;
@@ -470,7 +481,9 @@ static int first_bond(ble_addr_t *out) {
 static int t_connect_bonded(void) {
     ble_addr_t id;
     int rc = first_bond(&id);
-    return rc ? rc : connect_to(&id);
+    if (rc == 0) rc = connect_to(&id);
+    if (rc == 0) s_encrypt_on_connect = 1;
+    return rc;
 }
 
 /* An explicit pair always runs a fresh SMP pairing. With a bond stored for this peer,

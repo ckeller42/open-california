@@ -99,6 +99,7 @@ class FakeUnit:
         self.tasks: list = []                # keep task refs (else GC kills them)
         self.last_beat_t: float = 0.0        # monotonic time of the last 1003 write
         self.seen_beat = False               # a beat arrived on the current link (watchdog arms)
+        self.beats = 0                       # 1003 writes seen since start (test hook)
         self.conn = None                     # current Bumble connection (single-link unit)
         self.pairing_mode = True           # the unit's "Gerät verbinden" screen is open
         self.refuse_connections = False    # test knob: drop every link at once
@@ -139,6 +140,16 @@ class FakeUnit:
         self.unit.beat(data)
         self.last_beat_t = time.monotonic()
         self.seen_beat = True
+        self.beats += 1
+
+    def set_raw(self, fn: str, frame: bytes, notify: bool = True) -> None:
+        """Serve ``frame`` verbatim for ``fn`` from now on (reads and notifications), e.g. a frame
+        shorter than the dictionary's; with ``notify`` push it to a subscribed central at once."""
+        self.raw[fn] = bytes(frame)
+        self.unit.state[fn] = protocol.decode(self.funcs[fn], self.raw[fn])
+        self.dirty.discard(fn)
+        if notify:
+            self.schedule_notify(fn)
 
     async def clock(self) -> None:
         """Drive the mock's clock once a second (RTC, countdowns, roof travel, ignition coupling —
@@ -268,9 +279,7 @@ class FakeUnit:
                     self.schedule_notify(fn)
                 elif parts[0] == "raw":
                     fn, hx = parts[1], parts[2]
-                    self.raw[fn] = bytes.fromhex(hx)
-                    self.unit.state[fn] = protocol.decode(self.funcs[fn], self.raw[fn])
-                    self.dirty.discard(fn)
+                    self.set_raw(fn, bytes.fromhex(hx), notify=False)
                     print(f"{fn} raw -> {self.raw[fn].hex()}", flush=True)
                     self.schedule_notify(fn)
                 elif parts[0] == "show":

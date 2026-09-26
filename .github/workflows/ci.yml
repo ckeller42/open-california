@@ -33,10 +33,10 @@ jobs:
       - name: Install test/tooling deps (runtime is stdlib-only)
         run: pip install -r requirements-dev.txt
       - name: Test suite (parallel; conftest isolates state per-test so it's xdist-safe)
-        # test_spike_link.py (marked linux_only) needs a 32-bit toolchain + a NimBLE build: its own
-        # job (firmware-host-e2e). The rest of tests/firmware (e.g. the pure-C pairing-SM parity
-        # test) has no BLE dependency and runs here too.
-        run: python -m pytest tests/ -q -n auto --dist loadgroup --ignore=tests/firmware/test_spike_link.py
+        # Tests marked linux_only (tests/firmware: the NimBLE host e2e + bond store) need a 32-bit
+        # toolchain + a NimBLE build: their own job (firmware-host-e2e). The rest of tests/firmware
+        # (the pure-C SM parity, runner and session fakes) has no BLE dependency and runs here too.
+        run: python -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only"
       # The next three checks are Python-version-independent -> run once (on the deploy target 3.13)
       # instead of 3x. The import-cleanliness guard stays on ALL versions (a stdlib layout can differ).
       - name: Signal-coverage + semantic-review audit

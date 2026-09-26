@@ -178,3 +178,54 @@ def test_console_rotate_command_changes_advertising_address():
     first, second, advertising_address = asyncio.run(run())
     assert first != second                # the console command's dispatcher path really rotates
     assert advertising_address == second
+
+
+async def _connected_peer():
+    from bumble.device import Peer
+
+    _, unit, central = await _unit_and_central()
+    conn = await central.connect(await scan_for(central))
+    peer = Peer(conn)
+    await peer.discover_services()
+    await peer.discover_characteristics()
+    return unit, peer
+
+
+def _char(peer, slot):
+    from bumble.core import UUID
+
+    from tools.fake_unit_peripheral import cu
+    return peer.get_characteristics_by_uuid(UUID(cu(slot)))[0]
+
+
+def test_heartbeat_writes_are_counted():
+    """``unit.beats`` counts 1003 writes — the firmware e2e checks its heartbeat with it."""
+    async def run():
+        unit, peer = await _connected_peer()
+        before = unit.beats
+        for n in (0x100000, 0x100001, 0x100002):
+            await _char(peer, "1003").write_value(n.to_bytes(4, "big"), with_response=True)
+        return before, unit.beats
+
+    assert asyncio.run(run()) == (0, 3)
+
+
+def test_set_raw_serves_the_frame_and_notifies_a_subscriber():
+    """``set_raw`` serves a frame verbatim (a truncated one too) and pushes it to a subscriber."""
+    async def run():
+        unit, peer = await _connected_peer()
+        ch = _char(peer, "1102")                     # cooler
+        got: asyncio.Queue = asyncio.Queue()
+        await ch.subscribe(lambda v: got.put_nowait(bytes(v)))
+        await asyncio.wait_for(got.get(), 2.0)      # the on-subscribe push of the current value
+        short = unit.raw["cooler"][:1]
+        unit.set_raw("cooler", short, notify=False)
+        read_back = bytes(await ch.read_value())
+        changed = bytes([unit.raw["cooler"][0] ^ 0xFF]) + b"\x00" * 3
+        unit.set_raw("cooler", changed)
+        pushed = await asyncio.wait_for(got.get(), 2.0)
+        return short, read_back, changed, pushed
+
+    short, read_back, changed, pushed = asyncio.run(run())
+    assert read_back == short and len(short) == 1
+    assert pushed == changed

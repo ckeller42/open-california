@@ -29,7 +29,8 @@ typedef enum {
     CALI_TEV_DISCONNECTED,  /* the current link went down; status = reason */
     CALI_TEV_READ,          /* read(char_short) completed; status 0 -> data/len valid */
     CALI_TEV_NOTIFY,        /* notification on char_short; data/len valid */
-    CALI_TEV_DISCOVERED     /* discover() completed; status 0 -> every char is known */
+    CALI_TEV_DISCOVERED,    /* discover() completed; status 0 -> every char is known */
+    CALI_TEV_HEARTBEAT      /* a write_heartbeat() completed; status 0 = written (acknowledged) */
 } cali_tev_t;
 
 /* data points into transport memory valid only for the duration of the sink call: copy it. */
@@ -49,13 +50,15 @@ typedef struct {
     int  (*start_scan)(const char *name);          /* FOUND when the name matches */
     int  (*stop_scan)(void);
     int  (*connect_found)(void);                   /* CONNECTED / CONNECT_FAIL */
-    int  (*connect_bonded)(void);                  /* direct to the stored identity */
+    int  (*connect_bonded)(void);                  /* direct to the stored identity; once CONNECTED
+                                                      it re-encrypts with the stored keys itself:
+                                                      ENC_OK / ENC_FAIL follow */
     int  (*pair)(void);                            /* PASSKEY_REQ, then ENC_OK / ENC_FAIL */
     int  (*inject_passkey)(uint32_t pk);
     int  (*discover)(void);                        /* DISCOVERED once all chars are known */
     int  (*read)(uint16_t char_short);             /* READ */
     int  (*subscribe)(uint16_t char_short);        /* NOTIFY events afterwards */
-    int  (*write_heartbeat)(uint32_t counter);     /* the ONLY write; target 0x1003 */
+    int  (*write_heartbeat)(uint32_t counter);     /* the ONLY write; target 0x1003; HEARTBEAT */
     int  (*disconnect)(void);
     int  (*remove_bond)(void);
     int  (*has_bond)(void);
