@@ -24,6 +24,7 @@ clean and shows an empty "incoming" list).
 
    architecture
    raspberry-pi-setup
+   howto-pair-your-camper
 
 .. toctree::
    :maxdepth: 1

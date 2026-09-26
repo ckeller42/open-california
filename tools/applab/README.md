@@ -67,16 +67,23 @@ mkfifo /tmp/fake_unit.in                            # scenario console (stdin of
 tail -f /tmp/fake_unit.in | $LAB/venv-bumble/bin/python tools/applab/fake_unit_ble.py > /tmp/fake_unit.log 2>&1 &
 ```
 
-The peripheral advertises as `VWCAMPER`, serves the 0xNN00 services from
-`protocol/dictionary.yaml`, seeds state from `tests/scenarios/firmware/baseline-0410.json`,
-displays passkey **123456** (`FAKE_UNIT_PASSKEY`), and answers the app's VIN check for
-`FAKE_UNIT_VIN`. Drive it while it runs:
+The peripheral advertises as `VWCAMPER` from a rotating resolvable private address over the fixed
+identity `FAKE_UNIT_ADDR` (rotation period `FAKE_UNIT_RPA_S`, default 600 s — the real unit rotated
+every ~10 min), serves the 0xNN00 services from `protocol/dictionary.yaml`, seeds state from
+`tests/scenarios/firmware/baseline-0410.json`, and answers the app's VIN check for
+`FAKE_UNIT_VIN`. It displays a **fresh passkey per pairing attempt**, printed to the log as
+`### PASSKEY nnnnnn — the unit shows this; type it on the central ###`; set `FAKE_UNIT_PASSKEY` to
+pin a fixed code instead (e.g. for a scripted pairing wizard). Drive it while it runs:
 
 ```
 echo "set roof InfoPopUp=5"          > /tmp/fake_unit.in    # any dictionary field, notifies subscribers
 echo "set vehicle TerminalOneFive=1" > /tmp/fake_unit.in    # ignition on (roof page needs it)
 echo "raw airheater 1050003c0c0000"  > /tmp/fake_unit.in    # replace a whole state frame
 echo "show airheater"                > /tmp/fake_unit.in    # decoded state -> log
+echo "pair off"                      > /tmp/fake_unit.in    # close the "Gerät verbinden" screen (refuses new bonds)
+echo "pair on"                       > /tmp/fake_unit.in    # reopen it
+echo "rotate"                        > /tmp/fake_unit.in    # advertise from a fresh private address now
+echo "forget"                        > /tmp/fake_unit.in    # drop every stored bond, like "Bluetooth zurücksetzen"
 ```
 
 `fake_unit.log` carries `READ <fn>` / `WRITE <fn> <hex> -> state` lines — the WRITE lines are
@@ -84,16 +91,21 @@ the app's real frames. `BUMBLE_LOGLEVEL=DEBUG` adds the ATT/SMP trace (large).
 
 ### Pairing the app (once per emulator image)
 
+The cross-check between calictl's own guided-pairing wizard and the app's pairing flow has not
+been run yet — see the "Pairing" section of
+`docs/business-logic/protocol-crosscheck-applab.md` for what's still open.
+
 In the app: onboarding → Vehicle tab → *Add vehicle* → enter `FAKE_UNIT_VIN` (online validation
 fails → pick model *California* + equipment *Ocean* manually) → *Set up remote control* → grant
 the nearby-devices permission → *Connect now*. The app reads `1002`, compares it with
 `sha256(VIN)[-16:]` and would otherwise stop with *"Wrong vehicle found"*. It then reads the
 auth-gated `1004`, Android starts LE passkey pairing and posts a **notification** ("Pairing
-request") — you have ~30 s: expand the shade, tap it, type `123456`, tap OK:
+request") — you have ~30 s: expand the shade, tap it, read the code from `### PASSKEY nnnnnn`
+in `fake_unit.log` (or the fixed one from `FAKE_UNIT_PASSKEY`, if set), type it, tap OK:
 
 ```sh
 adb shell cmd statusbar expand-notifications; python3 tools/applab/adbui.py tap "Pairing request"
-adb shell input tap 536 988; adb shell input text 123456; python3 tools/applab/adbui.py tap "^OK$"
+adb shell input tap 536 988; adb shell input text <passkey from fake_unit.log>; python3 tools/applab/adbui.py tap "^OK$"
 ```
 
 The bond persists on both sides (Android's bond store + the fake's `JsonKeyStore` at
@@ -116,7 +128,7 @@ tools/applab/labctl.sh status                                     # what's runni
 tools/applab/labctl.sh down                                       # stop the fake CLEANLY, then the emulator
 ```
 
-What makes a restart survivable (all in `fake_unit_ble.py`):
+What makes a restart survivable (`fake_unit_ble.py` + the shared `tools/fake_unit_peripheral.py`):
 
 - **Stable address** (`FAKE_UNIT_ADDR`, default `C0:FF:EE:CA:11:F0`) + **persistent keystore**
   (`FAKE_UNIT_KEYSTORE`) → the phone's bond still matches after the fake restarts, so the app shows

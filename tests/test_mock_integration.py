@@ -65,21 +65,21 @@ def test_mock_seed_is_coherent_and_realistic():
 
 def test_set_cooler_power_on_then_off(mock):
     from calictl import cli
-    assert cli.main(["set", "cooler", "power", "on"]) == 0
+    assert cli.main(["--addr", "11:22:33:44:55:66", "set", "cooler", "power", "on"]) == 0
     assert mock.decoded("cooler")["State"] == 1          # armed write applied
-    assert cli.main(["set", "cooler", "power", "off"]) == 0
+    assert cli.main(["--addr", "11:22:33:44:55:66", "set", "cooler", "power", "off"]) == 0
     assert mock.decoded("cooler")["State"] == 0          # same process -> reflected
 
 
 def test_set_cooler_level(mock):
     from calictl import cli
-    assert cli.main(["set", "cooler", "level", "5"]) == 0
+    assert cli.main(["--addr", "11:22:33:44:55:66", "set", "cooler", "level", "5"]) == 0
     assert mock.decoded("cooler")["Level"] == 5
 
 
 def test_set_campingmode_master(mock):
     from calictl import cli, semantics
-    assert cli.main(["set", "campingmode", "master", "on"]) == 0
+    assert cli.main(["--addr", "11:22:33:44:55:66", "set", "campingmode", "master", "on"]) == 0
     interp = semantics.interpret("campingmode", mock.decoded("campingmode"))
     assert interp["master_on"] is True
 
@@ -88,7 +88,7 @@ def test_set_cooler_level_out_of_range_is_clean_error(mock, capsys):
     """The build-side guard (protocol.encode/CONTROL_RANGES) rejects before any write —
     the user gets a clean exit 2, not a traceback, and the state is untouched."""
     from calictl import cli
-    assert cli.main(["set", "cooler", "level", "9"]) == 2
+    assert cli.main(["--addr", "11:22:33:44:55:66", "set", "cooler", "level", "9"]) == 2
     assert "1-5" in capsys.readouterr().err
     assert mock.decoded("cooler")["Level"] == 3          # unchanged seed default
 
@@ -101,7 +101,8 @@ def test_set_lighting_applies_directly_no_activate_step(mock):
     profile activation. The cli sends the 0e00… commit as the follow frame."""
     from calictl import cli
     assert mock.decoded("lighting")["ProfileNumber"] == 0       # lights off, no active profile
-    assert cli.main(["set", "lighting", "kitchen", "8"]) == 0   # rc 0 = APPLIED, no activate needed
+    assert cli.main(["--addr", "11:22:33:44:55:66",
+                     "set", "lighting", "kitchen", "8"]) == 0   # rc 0 = APPLIED, no activate needed
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
     assert mock.decoded("lighting")["ProfileNumber"] == 9       # the set made profile 9 active
 
@@ -112,7 +113,7 @@ def test_lighting_requires_the_commit_frame_to_apply(mock):
     exactly why lighting looked broken for so long. `device.actuate(..., follow=control.LIGHT_COMMIT)`
     sends it; `control.commit_for('lighting')` returns it."""
     funcs = _funcs()
-    dev = device.CamperDevice()
+    dev = device.CamperDevice("11:22:33:44:55:66")
     setf = control.build(funcs, "lighting", "kitchen", 8, {})   # self-carries ProfileNumber=9
     # SET alone (armed session, no commit) -> ACKed, NOT applied
     asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False))
@@ -133,7 +134,7 @@ def test_lighting_applies_without_preamble(mock):
        :links: R_LIGHT_COMMIT
     """
     funcs = _funcs()
-    dev = device.CamperDevice()
+    dev = device.CamperDevice("11:22:33:44:55:66")
     setf = control.build(funcs, "lighting", "kitchen", 8, {})
     asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False,
                             follow=control.LIGHT_COMMIT))
@@ -181,7 +182,7 @@ def test_read_all_heartbeat_refreshes_stale_read(mock):
     # a plain read (no heartbeat -> not armed) sees the stale latch...
     assert protocol.decode(funcs["water"], mock.read(funcs["water"].state_char))["FreshWaterLevel"] == 1
     # ...but read_all runs the heartbeat, which arms the session, so it surfaces the truth
-    raw = asyncio.run(device.CamperDevice().read_all(funcs))
+    raw = asyncio.run(device.CamperDevice("11:22:33:44:55:66").read_all(funcs))
     assert mock.armed is True
     assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 11
 
@@ -199,7 +200,7 @@ def test_read_all_prefers_water_notification_over_stale_read(mock):
     # a bare read still sees the stale 1...
     assert protocol.decode(funcs["water"], mock.read(funcs["water"].state_char))["FreshWaterLevel"] == 1
     # ...but read_all consumes the 1302 notification and surfaces 11
-    raw = asyncio.run(device.CamperDevice().read_all(funcs))
+    raw = asyncio.run(device.CamperDevice("11:22:33:44:55:66").read_all(funcs))
     assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 11
 
 
@@ -251,7 +252,7 @@ def test_out_of_range_surfaces_through_actuate(mock):
     funcs = _funcs()
     bad = _out_of_range_frame()
     with pytest.raises(MockDisconnect):
-        asyncio.run(device.CamperDevice().actuate(funcs["lighting"], bad, verify=True))
+        asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate(funcs["lighting"], bad, verify=True))
 
 
 # --- serve.on_command path --------------------------------------------------
@@ -269,7 +270,7 @@ def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
         def write(self, **_k):
             pass
 
-    s = serve.Server(influx_enabled=True)
+    s = serve.Server("11:22:33:44:55:66", influx_enabled=True)
     s._iw = _Rec()
 
     async def _run():
@@ -284,7 +285,7 @@ def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
 
 def test_serve_on_command_actuates(mock):
     from calictl import serve
-    s = serve.Server(influx_enabled=False)
+    s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
     s._read_only = False                                 # writes explicitly enabled
     async def _run():
         s._ble = asyncio.Lock()                          # normally created inside run()'s loop
@@ -342,7 +343,7 @@ def test_roof_move_takes_the_single_connection_slot_from_the_persistent_session(
     """
     from calictl import serve
     mock.one_slot = True                                   # model the unit's single slot
-    s = serve.Server(influx_enabled=False)
+    s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
     s._read_only = False
     s._last["roof"] = {"Installed": 1, "InfoPopUp": 0, "Position": 0}
 

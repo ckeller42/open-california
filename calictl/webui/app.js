@@ -25,6 +25,7 @@
  * @property {number|null} last_seen        epoch seconds of the last successful poll (null = none yet)
  * @property {number|null} age_s            seconds since last_seen (null = none yet)
  * @property {boolean} online               van currently reachable
+ * @property {boolean} [paired]             false when no unit is bonded yet (Task 5's `_meta.paired`)
  * @property {boolean} read_only            daemon rejects control writes
  * @property {'off'|'connecting'|'up'|'degraded'|'asleep'} session   persistent BLE session state
  * @property {'off'|'auto'|'release'} session_mode                    activity-scoped vs user-disconnected
@@ -1076,7 +1077,12 @@ function energyChart() {
 // dashboard poll stays at 2 s. See .superpowers/sdd/2026-08-31-guided-pairing.
 let pairingOpen = false;
 let pairingReady = false;              // "I'm on that screen" checkbox
-/** @type {{state:string, attempts:number, error:string|null, address:string|null}|null} */
+// True for the brief window between opening the wizard and the fresh `pairingFetch()` landing,
+// but ONLY when the cached PAIRING snapshot might be stale (see openPairingWizard): renders a
+// neutral loading step instead of flashing a leftover passkey/bonded/error/etc. step from a
+// flow the server has since moved on from (e.g. it restarted while this tab stayed open).
+let pairingLoading = false;
+/** @type {{state:string, attempts:number, error:string|null, address:string|null, radio_busy?: boolean}|null} */
 let PAIRING = null;
 /** @type {ReturnType<typeof setInterval>|null} */
 let pairingTimer = null;
@@ -1108,8 +1114,31 @@ function stopPairingPoll() {
 /** @type {Record<string, string>} */
 const PAIRING_ERROR_MSG = {
   timeout: "No vehicle found.",
-  pairing_failed: "Connection failed.",
+  connect_failed: "Could not connect to the unit.",
+  pairing_failed: "Pairing was refused.",
   verify_failed: "Could not verify the bond.",
+};
+
+/** @type {Record<string, string>} */
+const PAIRING_ERROR_HINT = {
+  timeout: "Check that “Gerät verbinden” is open on the unit, that buspi is in range, and that no phone is connected to the unit.",
+  connect_failed: "The unit may be asleep, a phone may still hold its single connection, or another app on this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause other Bluetooth apps, then try again. An existing bond is kept.",
+  pairing_failed: "Wrong passcode, or the unit left pairing mode. Reopen “Gerät verbinden” on the unit and try again.",
+  verify_failed: "The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth reset / re-pair.",
+};
+
+// Global constraint: never show a raw error enum to the user (only the four codes above are
+// mapped; anything else -- a future code this build doesn't know about yet -- falls back to this
+// translated generic message, never to the bare `perr` string).
+const PAIRING_ERROR_FALLBACK = "Something went wrong. Try again.";
+
+// Errors of the POST /api/pairing REQUEST itself (web.py), as opposed to the flow's own error in
+// a snapshot. Unmapped codes fall back to "Pairing request failed" (translated) in pairingAction.
+/** @type {Record<string, string>} */
+const PAIRING_REQUEST_ERROR_MSG = {
+  bad_passkey: "Enter the 6-digit passcode shown on the unit.",
+  confirm_required: "Confirm the Bluetooth reset first.",
+  pairing_failed: "The daemon did not answer the pairing request. Try again.",
 };
 
 /**
@@ -1128,15 +1157,27 @@ async function pairingAction(action, value, confirmFlag) {
     res = await api("/api/pairing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   } catch (e) { toast("Pairing request failed", "error"); return; }
   if (res && res.state) PAIRING = res;              // a real snapshot -> adopt it
-  else toast("Pairing: " + ((res && res.error) || "request failed"), "warn");
+  // never a raw error enum: known request errors get their own text, anything else the generic one
+  else toast(PAIRING_REQUEST_ERROR_MSG[(res && res.error) || ""] || "Pairing request failed", "warn");
   render();
 }
 
 // Open the wizard on demand (from the topbar context menu, or auto on true first-run).
 async function openPairingWizard() {
   pairingOpen = true;
-  if (view !== "home") goto("home");   // the card renders on the dashboard only
+  // Render synchronously (no visible delay opening the wizard) ONLY when that's safe: no cached
+  // snapshot yet, or the cached one was already `idle` -- either way it matches what a fresh
+  // fetch would show anyway. Any OTHER cached state (waiting_passkey/pairing/verifying/bonded/
+  // error/…) could be stale left over from a flow the server has since moved on from -- e.g. the
+  // daemon restarted while this tab stayed open -- so show a neutral loading step instead of
+  // flashing it, until the fetch below lands a fresh snapshot.
+  pairingLoading = !!(PAIRING && PAIRING.state !== "idle");
+  if (view !== "home") goto("home");   // the card renders on the dashboard only (goto() re-renders)
+  else render();                       // already home: show the card now (idle checklist, or the
+                                        // loading step) instead of leaving the click waiting on
+                                        // the network round-trip below
   await pairingFetch();
+  pairingLoading = false;
   startPairingPoll();
   render();
 }
@@ -1153,15 +1194,40 @@ function pairingCard() {
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
-  closeBtn.onclick = () => { pairingOpen = false; stopPairingPoll(); render(); };
+  closeBtn.onclick = () => { pairingOpen = false; pairingLoading = false; stopPairingPoll(); render(); };
   head.appendChild(closeBtn);
   card.appendChild(head);
 
+  if (pairingLoading) {
+    // The cached PAIRING snapshot might be stale (see openPairingWizard) -- show a neutral
+    // loading step instead of a leftover passkey/bonded/error/etc. step from an earlier flow.
+    const row = document.createElement("div"); row.className = "row";
+    row.appendChild(spinner());
+    const lbl = document.createElement("span"); lbl.className = "lbl";
+    lbl.textContent = /** @type {string} */ (t("Loading…"));
+    row.appendChild(lbl);
+    card.appendChild(row);
+    return card;
+  }
+
   const p = PAIRING || { state: "idle", attempts: 0, error: null, address: null };
+  if (p.radio_busy) {
+    const busy = document.createElement("div"); busy.className = "warn"; busy.id = "pairing-radio-busy";
+    busy.textContent = /** @type {string} */ (t("Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops (for example the Home Assistant Bluetooth integration)."));
+    card.appendChild(busy);
+  }
   if (p.state === "idle") {
-    const instr = document.createElement("div"); instr.className = "note";
-    instr.textContent = /** @type {string} */ (t("On the camper control unit open Settings → Bluetooth and press Pair."));
-    card.appendChild(instr);
+    const steps = document.createElement("ol"); steps.className = "note";
+    for (const s of [
+      "On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until buspi connects.",
+      "Disconnect your phone: close the California On Tour app or turn off the phone's Bluetooth — the unit takes one connection at a time.",
+      "Stop other Bluetooth scanners on this Pi during pairing (for example the Home Assistant Bluetooth integration).",
+    ]) {
+      const li = document.createElement("li");
+      li.textContent = /** @type {string} */ (t(s));
+      steps.appendChild(li);
+    }
+    card.appendChild(steps);
     const crow = document.createElement("label"); crow.className = "row";
     const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "pairing-ready";
     cb.checked = pairingReady;
@@ -1190,7 +1256,7 @@ function pairingCard() {
     card.appendChild(btns);
   } else if (p.state === "waiting_passkey") {
     const instr = document.createElement("div"); instr.className = "note";
-    instr.textContent = /** @type {string} */ (t("Enter the passcode shown on the camper control unit — a fresh code each attempt."));
+    instr.textContent = /** @type {string} */ (t("Enter the passcode now shown on the camper control unit (it replaced ---). A fresh code each attempt."));
     card.appendChild(instr);
     const row = document.createElement("div"); row.className = "row";
     const inp = document.createElement("input");
@@ -1234,8 +1300,14 @@ function pairingCard() {
     const errRow = document.createElement("div"); errRow.className = "warn";
     const perr = /** @type {string} */ (p.error || "");
     errRow.textContent = /** @type {string} */ (t("Error: "))
-      + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || perr || /** @type {string} */ (t("unknown")));
+      + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || /** @type {string} */ (t(PAIRING_ERROR_FALLBACK)));
     card.appendChild(errRow);
+    const hint = PAIRING_ERROR_HINT[perr];
+    if (hint) {
+      const hintRow = document.createElement("div"); hintRow.className = "note";
+      hintRow.textContent = /** @type {string} */ (t(hint));
+      card.appendChild(hintRow);
+    }
     const btns = document.createElement("div"); btns.className = "btnrow";
     const retryBtn = document.createElement("button"); retryBtn.type = "button"; retryBtn.className = "btn";
     retryBtn.textContent = /** @type {string} */ (t("Try again"));
@@ -1334,11 +1406,21 @@ function renderSummary() {
 function renderDashboard() {
   titleEl.textContent = /** @type {string} */ (t("Vehicle"));
   // Prominent = the daemon can't reach the van AND no bond exists yet -- the exact moment a
-  // fresh/re-paired install needs the wizard most (main() auto-opens it then). Any other time
-  // the card exists only while opened from the ⋮ menu, at the end of the dashboard.
+  // fresh/re-paired install needs the wizard most, so IF it happens to be open (the ⋮ menu, or
+  // the unpaired-banner button below) it renders at the top instead of after the tiles.
   const prominent = !!(STATE._meta && STATE._meta.online === false && PAIRING && PAIRING.address == null);
   const pc = pairingCard();   // null unless open
   if (prominent && pc) app.appendChild(pc);
+  if (STATE._meta && STATE._meta.paired === false && !pairingOpen) {
+    const b = document.createElement("div"); b.className = "card"; b.id = "unpaired-banner";
+    const msg = document.createElement("span"); msg.className = "lbl";
+    msg.textContent = /** @type {string} */ (t("No camper unit is paired yet."));
+    const go = document.createElement("button"); go.type = "button"; go.className = "btn";
+    go.textContent = /** @type {string} */ (t("Set up remote control"));
+    go.onclick = () => openPairingWizard();
+    b.append(msg, go);
+    app.appendChild(b);
+  }
   const summary = renderSummary();
   if (summary) app.appendChild(summary);
   const grid = document.createElement("div");
@@ -1878,12 +1960,12 @@ function roofControls(s) {
 
 async function main() {
   await refreshState(true);
-  await pairingFetch();      // one-off: needed just to decide the setup card's prominence (see
-                              // renderDashboard); the recurring 1 s poll only runs while it's open.
-  if (STATE._meta && STATE._meta.online === false && PAIRING && PAIRING.address == null) {
-    pairingOpen = true;
-    startPairingPoll();
-  }
+  // One-off (not the recurring 1 s poll, which only runs once the wizard is opened): needed just
+  // to decide the setup card's prominence if it's opened, and (`_meta.paired`) the dashboard's
+  // unpaired banner. Task 11 replaced the old "auto-open the card on true first-run" behaviour
+  // with that persistent banner -- a working install never had pairing chrome forced open, and
+  // now neither does a fresh one; the banner is the entry point, same as the ⋮ menu.
+  await pairingFetch();
   render();
   setInterval(() => refreshState(false), 2000);
 }

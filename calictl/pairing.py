@@ -17,19 +17,22 @@ from typing import NamedTuple
 IDLE, SCANNING, CONNECTING, WAITING_PASSKEY, PAIRING, VERIFYING, BONDED, ERROR, RESETTING = range(9)
 (EV_START, EV_DEVICE_FOUND, EV_CONNECTED, EV_PASSKEY_REQUESTED, EV_PASSKEY_ENTERED,
  EV_PAIR_OK, EV_PAIR_FAIL, EV_VERIFY_OK, EV_VERIFY_FAIL, EV_TIMEOUT, EV_CANCEL,
- EV_RESET, EV_RESET_DONE) = range(13)
+ EV_RESET, EV_RESET_DONE, EV_CONNECT_FAIL) = range(14)
 (ACT_START_SCAN, ACT_STOP_SCAN, ACT_CONNECT, ACT_PAIR, ACT_SEND_PASSKEY, ACT_VERIFY,
  ACT_PERSIST_BOND, ACT_DISCONNECT, ACT_REMOVE_BOND) = range(9)
-ERR_NONE, ERR_TIMEOUT, ERR_PAIR, ERR_VERIFY = range(4)
+ERR_NONE, ERR_TIMEOUT, ERR_PAIR, ERR_VERIFY, ERR_CONNECT = range(5)
 MAX_ATTEMPTS = 3
-TIMEOUT_S = {SCANNING: 30, CONNECTING: 15, WAITING_PASSKEY: 60, PAIRING: 15,
+# CONNECTING is 20 s (was 15): over an existing bond the BlueZ transport first probes it (<= 5 s),
+# may drop it and re-discover the unit (<= 5 s), and still keeps >= 8 s for the real connect —
+# see calictl.pairing_bluez's CONNECT_* budget constants.
+TIMEOUT_S = {SCANNING: 30, CONNECTING: 20, WAITING_PASSKEY: 60, PAIRING: 15,
              VERIFYING: 10, RESETTING: 10}
 STATE_NAMES = {IDLE: "idle", SCANNING: "scanning", CONNECTING: "connecting",
                WAITING_PASSKEY: "waiting_passkey", PAIRING: "pairing",
                VERIFYING: "verifying", BONDED: "bonded", ERROR: "error",
                RESETTING: "resetting"}
 ERR_NAMES = {ERR_NONE: None, ERR_TIMEOUT: "timeout", ERR_PAIR: "pairing_failed",
-             ERR_VERIFY: "verify_failed"}
+             ERR_VERIFY: "verify_failed", ERR_CONNECT: "connect_failed"}
 
 
 class PairingState(NamedTuple):
@@ -75,6 +78,11 @@ def step(ps, ev, arg=0):
         if att < MAX_ATTEMPTS:
             return PairingState(SCANNING, att, ERR_NONE), [(ACT_DISCONNECT, 0), (ACT_START_SCAN, 0)]
         return PairingState(ERROR, att, ERR_PAIR), [(ACT_DISCONNECT, 0)]
+    if st == CONNECTING and ev == EV_CONNECT_FAIL:
+        att = ps.attempts + 1
+        if att < MAX_ATTEMPTS:
+            return PairingState(SCANNING, att, ERR_NONE), [(ACT_DISCONNECT, 0), (ACT_START_SCAN, 0)]
+        return PairingState(ERROR, att, ERR_CONNECT), [(ACT_DISCONNECT, 0)]
     if st == VERIFYING and ev == EV_VERIFY_OK:
         return PairingState(BONDED, ps.attempts, ERR_NONE), [(ACT_PERSIST_BOND, 0)]
     if st == VERIFYING and ev == EV_VERIFY_FAIL:

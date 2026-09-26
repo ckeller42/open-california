@@ -146,3 +146,15 @@ jobs:
         run: python -m playwright install ${{ steps.pw-cache.outputs.cache-hit == 'true' && 'chromium' || '--with-deps chromium' }}
       - name: GUI end-to-end (web UI over the mock unit)
         run: python -m pytest tests/e2e -q
+
+  pairing-real-stack:
+    # calictl's real BluezTransport pairs with the fake unit over real BlueZ inside a VM (GitHub's
+    # runner kernel has no Bluetooth). Not a required check until it has been reliably green.
+    # No setup-python on purpose: the VM boots off the runner's root filesystem and runs the SYSTEM
+    # python3, so vm.sh installs the rig's deps (bumble, bleak, dbus-fast) for that interpreter.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pair over real BlueZ in a VM
+        run: bash tests/realstack/vm.sh

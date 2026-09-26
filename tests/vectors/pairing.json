@@ -75,6 +75,27 @@
       "steps": [
         {"ev": 10, "state": [0, 0, 0], "actions": []}
       ]
+    },
+    {
+      "id": "connect-fail-retries",
+      "start": [2, 0, 0],
+      "steps": [
+        {"ev": 13, "state": [1, 1, 0], "actions": [[7, 0], [0, 0]]}
+      ]
+    },
+    {
+      "id": "connect-fail-exhausted",
+      "start": [2, 2, 0],
+      "steps": [
+        {"ev": 13, "state": [7, 3, 4], "actions": [[7, 0]]}
+      ]
+    },
+    {
+      "id": "connect-fail-outside-connecting-is-noop",
+      "start": [4, 0, 0],
+      "steps": [
+        {"ev": 13, "state": [4, 0, 0], "actions": []}
+      ]
     }
   ]
 }

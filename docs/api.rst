@@ -94,6 +94,7 @@ Tests
 .. autofunction:: tests.test_automation.test_autocamper_step_restores_via_injected_actuate
 .. autofunction:: tests.test_web_serve.test_observer_logs_transitions_and_bursts_on_engine_start
 .. automodule:: tests.test_control_extra
+.. automodule:: tests.realstack.rig
 .. automodule:: tests.test_persistent_session
 .. automodule:: tests.test_roof
 .. automodule:: tests.test_history
@@ -144,3 +145,11 @@ Guided pairing (issue #154, #157)
 .. automodule:: tests.test_pairing_sm
 .. automodule:: tests.test_pairing_runner
 .. automodule:: tests.test_pairing_bluez_transport
+.. automodule:: tests.test_pairing_link
+.. autofunction:: tests.test_web_serve.test_pairing_start_waits_for_an_in_flight_ble_operation
+
+Fake unit peripheral (Bumble, shared by the app lab + pairing tests)
+----------------------------------------------------------------------
+
+.. automodule:: tools.fake_unit_peripheral
+.. automodule:: tests.test_fake_unit_peripheral

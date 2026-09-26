@@ -86,6 +86,8 @@ curl -fsSL https://raw.githubusercontent.com/ckeller42/open-california/main/inst
 
 Pairing is interactive (type the passkey the camper shows). `sh install.sh --dry-run` previews
 every step without changing anything. Full guide: **[Raspberry Pi setup](https://ckeller42.github.io/open-california/raspberry-pi-setup.html)**.
+Need to (re-)pair later from the web UI, or after a "Bluetooth zurücksetzen" on the unit? See
+**[How to pair your camper](https://ckeller42.github.io/open-california/howto-pair-your-camper.html)**.
 
 ## Tested on
 

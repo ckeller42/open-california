@@ -42,6 +42,9 @@ def pairing_cache_path() -> Path:
     return Path(state_home) / "calictl" / "pairing.json"
 
 
+UNPAIRED_ADDR = "AA:BB:CC:DD:EE:FF"   # resolve_addr()'s fallback = "no bonded unit configured"
+
+
 def resolve_addr() -> str:
     """Resolve the unit's BLE address from env override or bonded pairing cache.
 
@@ -52,7 +55,7 @@ def resolve_addr() -> str:
     2. Pairing cache file (:func:`pairing_cache_path`, default
        ``~/.local/state/calictl/pairing.json``): extract the ``address`` field if the file
        exists and is valid JSON.
-    3. Placeholder ``"AA:BB:CC:DD:EE:FF"`` if all else fails.
+    3. :data:`UNPAIRED_ADDR` placeholder if all else fails.
 
     Any read errors (missing file, malformed JSON, missing field, empty string) are
     silently skipped and fall through to the next option.
@@ -75,7 +78,7 @@ def resolve_addr() -> str:
         # placeholder, never break the import of calictl.
         pass
 
-    return "AA:BB:CC:DD:EE:FF"
+    return UNPAIRED_ADDR
 
 
 # The vehicle's BLE identity address is owner-specific PII — never hardcode a real one.
@@ -236,6 +239,11 @@ class CamperDevice:
         self.connect_timeout = connect_timeout if connect_timeout is not None else \
             float(os.environ.get("CALICTL_CONNECT_TIMEOUT_S", "30"))
 
+    @property
+    def paired(self) -> bool:
+        """True once a real unit address is configured (env, pairing cache, or a fresh bond)."""
+        return self.addr != UNPAIRED_ADDR
+
     async def _session(self, reset_on_fail: bool | None = None):
         """Yield a connected BleakClient, retrying on the abort cascade.
 
@@ -243,7 +251,17 @@ class CamperDevice:
         default OFF: on buspi hci0 is shared with the Anker/Victron/Govee readers,
         so resetting it would disrupt them. Plain retries (plus bleak-retry-connector
         in solix-env) handle the cascade without touching the adapter.
+
+        Refuses immediately, without constructing a ``BleakClient``, when no real unit is
+        paired (:attr:`paired` is False — the address is still the :data:`UNPAIRED_ADDR`
+        placeholder). Building a client for that bogus MAC makes BlueZ run a full discovery
+        for a device that can never answer, on every poll and session retry — on buspi's
+        single radio this starved the pairing wizard's own connect (HCI 0x3e, 2026-09-25).
         """
+        if not self.paired:
+            raise ConnectionUnavailable(
+                "not paired: no camper unit is bonded yet — open the web UI menu → "
+                "Bluetooth pairing… (nothing is scanned until then)")
         import os
 
         from bleak import BleakClient  # lazy
@@ -252,7 +270,7 @@ class CamperDevice:
         last = None
         for attempt in range(3):
             try:
-                client = BleakClient(self.addr, timeout=self.connect_timeout)
+                client = BleakClient(self.addr, timeout=self.connect_timeout, adapter=self.adapter)
                 await client.connect()
                 trace.get().link("connect", self.addr, attempt=attempt)
                 return client

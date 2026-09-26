@@ -37,6 +37,7 @@ environment (a project hard rule).
 from __future__ import annotations
 
 import asyncio
+import os
 
 from calictl import control, device, overrides, protocol
 from calictl.pairing import (
@@ -688,7 +689,7 @@ class MockBleakClient:
     """
     unit: MockCamperUnit | None = None            # set by the harness / fixture
 
-    def __init__(self, addr, timeout=None):
+    def __init__(self, addr, timeout=None, adapter=None):
         self.addr = addr
         self.is_connected = False
         self._notifying: list[str] = []           # chars this client subscribed (for clean removal)
@@ -793,11 +794,17 @@ class FakePairingTransport:
     real module by `tools.run_against_mock.install_fake_pairing_transport`.
     """
 
-    FOUND_ADDR = "AA:BB:CC:DD:EE:FF"
+    FOUND_ADDR = "C0:FF:EE:00:00:01"
     RIGHT_PASSKEY = 123456
 
     def __init__(self, on_event=None):
         self.on_event = on_event
+        # e2e knob (Task 11): CALICTL_FAKE_PAIRING selects a scripted failure mode on top of the
+        # happy path above -- "connect_failed" (every connect() raises) or "radio_busy" (stop_scan
+        # reports another BlueZ client still scanning), read once at construction like the real
+        # transport reads its environment at import time.
+        self.mode = os.environ.get("CALICTL_FAKE_PAIRING", "")
+        self.radio_busy = False
 
     async def _emit(self, ev, arg=0):
         if self.on_event is not None:
@@ -811,9 +818,11 @@ class FakePairingTransport:
         await self._emit(EV_DEVICE_FOUND)
 
     async def stop_scan(self):
-        pass
+        self.radio_busy = self.mode == "radio_busy"
 
     async def connect(self):
+        if self.mode == "connect_failed":
+            raise ConnectionError("fake: link refused")
         await asyncio.sleep(0.1)
         await self._emit(EV_CONNECTED)
 
