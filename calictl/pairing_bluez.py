@@ -206,11 +206,13 @@ class PairingRunner:
 AGENT_PATH = "/org/calictl/pairing_agent"
 
 # BluezTransport.connect() budget. Everything connect() does shares ONE deadline,
-# pairing.TIMEOUT_S[CONNECTING] - CONNECT_MARGIN_S, so it finishes (or fails) before the SM's own
-# CONNECTING timer fires. With CONNECTING = 20 s the worst case (a stale bond) splits the 19 s as:
-# bond probe <= BOND_PROBE_S (5) + RemoveDevice (~ms) + re-discover <= REDISCOVER_S (5) + the final
-# connect, which always keeps >= MIN_CONNECT_S (8) — bleak's own default connect timeout is 10 s.
+# pairing.TIMEOUT_S[CONNECTING] - CONNECT_MARGIN_S - STOP_SCAN_ALLOWANCE_S, so it finishes (or fails)
+# before the SM's own CONNECTING timer fires (that timer is armed before stop_scan() runs). With
+# CONNECTING = 20 s the worst case (a stale bond) splits the 18 s as: bond probe <= BOND_PROBE_S (5)
+# + RemoveDevice (~ms) + re-discover <= REDISCOVER_S (5) + the final connect, which always keeps
+# >= MIN_CONNECT_S (8) — bleak's own default connect timeout is 10 s.
 CONNECT_MARGIN_S = 1.0
+STOP_SCAN_ALLOWANCE_S = 1.0  # stop_scan() runs on the SM's CONNECTING clock, before connect() starts
 BOND_PROBE_S = 5.0      # connect + auth-gated read over an existing bond; a stale key hangs, so bound it
 REDISCOVER_S = 5.0      # find the unit again after RemoveDevice dropped its object
 MIN_CONNECT_S = 8.0     # always left for the final BleakClient.connect()
@@ -546,13 +548,15 @@ class BluezTransport:
         and BlueZ reconnects forever). Any other probe failure — HCI 0x3e on a busy radio, an
         asleep unit adopted via a stale RSSI, no probe budget left — raises (-> ``EV_CONNECT_FAIL``)
         with the bond and the address cache kept. Every step shares one deadline,
-        ``TIMEOUT_S[CONNECTING]`` minus :data:`CONNECT_MARGIN_S`, so ``connect()`` finishes (or
+        ``TIMEOUT_S[CONNECTING]`` minus :data:`CONNECT_MARGIN_S` and :data:`STOP_SCAN_ALLOWANCE_S`
+        (``stop_scan()`` already ran on the SM's CONNECTING clock), so ``connect()`` finishes (or
         raises) before the SM's own timer; an abandoned attempt releases any link it made.
         """
         gen = self._gen
         self._bond_valid = False
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + pairing.TIMEOUT_S[pairing.CONNECTING] - CONNECT_MARGIN_S
+        deadline = (loop.time() + pairing.TIMEOUT_S[pairing.CONNECTING]
+                    - CONNECT_MARGIN_S - STOP_SCAN_ALLOWANCE_S)
 
         def left():
             return deadline - loop.time()

@@ -11,7 +11,7 @@ and dbus_fast — see ``tests/realstack/vm.sh`` (runner side) and ``in_vm.sh`` (
 
 .. test:: Real BlueZ pairs with the fake unit (CI VM)
    :id: T_PAIRING_REALSTACK
-   :links: R_PAIRING_SM, R_FAKE_UNIT_FIDELITY
+   :links: R_PAIRING_SM, R_FAKE_UNIT_FIDELITY, R_PAIRING_BLUEZ_TRANSPORT, R_PAIRING_STALE_BOND_RECOVERY
 """
 import asyncio
 import json

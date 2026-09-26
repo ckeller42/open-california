@@ -94,6 +94,7 @@ Tests
 .. autofunction:: tests.test_automation.test_autocamper_step_restores_via_injected_actuate
 .. autofunction:: tests.test_web_serve.test_observer_logs_transitions_and_bursts_on_engine_start
 .. automodule:: tests.test_control_extra
+.. automodule:: tests.realstack.rig
 .. automodule:: tests.test_persistent_session
 .. automodule:: tests.test_roof
 .. automodule:: tests.test_history

@@ -343,7 +343,7 @@ def test_a_zero_probe_budget_raises_instead_of_dropping_the_bond(monkeypatch):
     (-> EV_CONNECT_FAIL) and leaves the bond alone."""
     from calictl import pairing
 
-    monkeypatch.setitem(pairing.TIMEOUT_S, pairing.CONNECTING, 5)    # 4 s left < MIN_CONNECT_S
+    monkeypatch.setitem(pairing.TIMEOUT_S, pairing.CONNECTING, 5)    # 3 s left < MIN_CONNECT_S
     t, calls, events = _connect_transport(monkeypatch, bonded=True)
     with pytest.raises(TimeoutError):
         asyncio.run(t.connect())
@@ -409,7 +409,7 @@ def test_the_default_connect_budget_fits_the_sm_timer():
     from calictl import pairing_bluez as pb
 
     assert pb.BOND_PROBE_S + pb.REDISCOVER_S + pb.MIN_CONNECT_S + pb.CONNECT_MARGIN_S \
-        <= pairing.TIMEOUT_S[pairing.CONNECTING]
+        + pb.STOP_SCAN_ALLOWANCE_S <= pairing.TIMEOUT_S[pairing.CONNECTING]
 
 
 def test_connect_leaves_an_unbonded_device_alone(monkeypatch):
@@ -430,7 +430,7 @@ def test_a_connect_past_the_deadline_leaves_no_link(monkeypatch):
     """
     from calictl import pairing
 
-    monkeypatch.setitem(pairing.TIMEOUT_S, pairing.CONNECTING, 1.2)   # budget = 0.2 s
+    monkeypatch.setitem(pairing.TIMEOUT_S, pairing.CONNECTING, 2.2)   # budget = 0.2 s (minus margin + stop-scan allowance)
     t, _, events = _connect_transport(monkeypatch, bonded=False, connect_delay=None)
     with pytest.raises(asyncio.TimeoutError):
         asyncio.run(t.connect())
