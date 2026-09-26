@@ -65,8 +65,9 @@ def pytest_collection_modifyitems(config, items):
     """Skip (not error) tests marked ``linux_only`` off Linux, without Bumble, or without a 32-bit
     toolchain. A module-level ``pytest.skip`` in a conftest aborts the whole run when the directory
     is the command-line target, so skip per item; Bumble and the fake unit are imported lazily for
-    the same reason. Only the BLE e2e tests (test_spike_link.py and its successors) carry the
-    marker — the pure-C pairing-SM parity test (test_pairing_sm_parity.py) has no BLE/NimBLE
+    the same reason. Only the tests needing the NimBLE host build carry the marker (the BLE e2e
+    test_spike_link.py and its successors, and the bond-store test test_ble_store_kv.py) — the
+    pure-C pairing-SM parity test (test_pairing_sm_parity.py) has no BLE/NimBLE
     dependency and runs on any host with a C compiler, macOS included."""
     marked = [it for it in items if it.get_closest_marker("linux_only")]
     reason = _skip_reason() if marked else None

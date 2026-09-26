@@ -71,4 +71,5 @@ firmware/host/_deps/
 firmware/host/*.o
 firmware/host/cali-host
 firmware/host/cali-spike
+firmware/host/store-cli
 firmware/build/

@@ -7,7 +7,9 @@
  *   cccd_<n>                    struct ble_store_value_cccd, n < BLE_STORE_MAX_CCCDS
  * Slots 0..count-1 hold the table in order; a zero-length value marks a free slot. A record that
  * reads back corrupt (-2: torn/CRC-mismatched, or the wrong size for the struct) is "no record",
- * logged once at load, and overwritten on the next persist — a damaged store boots unpaired.
+ * logged once at load, and overwritten on the next persist — a damaged store boots unpaired. A
+ * second record with the same key (a delete-compaction cut short by power loss) is dropped at load
+ * the same way (table_load).
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -39,11 +41,25 @@ struct kv_table {
     int max;
     int num;
     uint32_t used_slots; /* slots holding a non-empty (possibly corrupt) record in the kv-store */
+    int (*same_key)(const void *a, const void *b); /* two records NimBLE would treat as one */
 };
 
-static struct kv_table s_our = {"sec_our_", s_our_secs, sizeof s_our_secs[0], MAX_BONDS, 0, 0};
-static struct kv_table s_peer = {"sec_peer_", s_peer_secs, sizeof s_peer_secs[0], MAX_BONDS, 0, 0};
-static struct kv_table s_cccd = {"cccd_", s_cccds, sizeof s_cccds[0], MAX_CCCDS, 0, 0};
+static int sec_same_key(const void *a, const void *b) {
+    return !ble_addr_cmp(&((const struct ble_store_value_sec *)a)->peer_addr,
+                         &((const struct ble_store_value_sec *)b)->peer_addr);
+}
+
+static int cccd_same_key(const void *a, const void *b) {
+    const struct ble_store_value_cccd *x = a, *y = b;
+    return !ble_addr_cmp(&x->peer_addr, &y->peer_addr) && x->chr_val_handle == y->chr_val_handle;
+}
+
+static struct kv_table s_our = {"sec_our_", s_our_secs, sizeof s_our_secs[0], MAX_BONDS, 0, 0,
+                                sec_same_key};
+static struct kv_table s_peer = {"sec_peer_", s_peer_secs, sizeof s_peer_secs[0], MAX_BONDS, 0, 0,
+                                 sec_same_key};
+static struct kv_table s_cccd = {"cccd_", s_cccds, sizeof s_cccds[0], MAX_CCCDS, 0, 0,
+                                 cccd_same_key};
 
 static void slot_key(char *out, size_t cap, const struct kv_table *t, int n) {
     snprintf(out, cap, "%s%d", t->prefix, n);
@@ -53,7 +69,23 @@ static uint8_t *table_at(const struct kv_table *t, int idx) {
     return (uint8_t *)t->vals + (size_t)idx * t->size;
 }
 
-/* Load slots 0..max-1 into RAM, compacting over free/corrupt slots. */
+/* Index of a loaded record with the same key as `rec`, or -1. */
+static int loaded_dup(const struct kv_table *t, const void *rec) {
+    for (int i = 0; i < t->num; i++) {
+        if (t->same_key(table_at(t, i), rec)) return i;
+    }
+    return -1;
+}
+
+/* Load slots 0..max-1 into RAM, compacting over free/corrupt/duplicate slots.
+ *
+ * Duplicates: a delete compacts the table by rewriting slots one at a time (each write is atomic,
+ * the sequence is not), so a power loss mid-delete can leave the moved record in two slots — e.g.
+ * deleting A from [A, B] writes slot0 = B, then clears slot1; a crash between leaves [B, B]. Loading
+ * both would waste a slot and, worse, a later delete of B would drop only the first copy and B
+ * would come back on the next boot. So the first copy wins and later ones are dropped (their slot
+ * stays marked used, so the next persist clears it). Moved records are identical copies, so which
+ * one wins does not matter. */
 static void table_load(struct kv_table *t) {
     char key[CALI_KV_KEY_MAX + 1];
     t->num = 0;
@@ -65,10 +97,12 @@ static void table_load(struct kv_table *t) {
         rc = cali_kv_get(key, table_at(t, t->num), &len);
         if (rc == CALI_KV_MISSING || (rc == CALI_KV_OK && len == 0)) continue;
         t->used_slots |= 1u << n;
-        if (rc == CALI_KV_OK && len == t->size) {
-            t->num++;
-        } else {
+        if (rc != CALI_KV_OK || len != t->size) {
             cali_log("store: corrupt record %s ignored", key);
+        } else if (loaded_dup(t, table_at(t, t->num)) >= 0) {
+            cali_log("store: duplicate record %s ignored", key);
+        } else {
+            t->num++;
         }
     }
 }

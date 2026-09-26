@@ -86,7 +86,10 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
    persistent store, `cali_ble_store_init()` (`components/cali_ble_nimble/ble_store_kv.c`), keeps
    `ble_store_config.c`'s matching rules but persists each record through the CRC-checked
    `cali_kv_*` store (`components/platform`; host: one `<key>.kv` file per key under `--store`),
-   so a torn/corrupt record reads as "no bond" (`LOG store: corrupt record <key> ignored`).
+   so a torn/corrupt record reads as "no bond" (`LOG store: corrupt record <key> ignored`), and a
+   duplicate left by a delete-compaction cut short by power loss loads once (`LOG store: duplicate
+   record <key> ignored`). `make store-cli` builds the store's test driver against the NimBLE
+   objects (`tests/firmware/test_ble_store_kv.py`, `linux_only`).
 5. **Bumble: legacy advertising reports.** Bumble's `Controller` answers even a legacy scan
    (`HCI_LE_Set_Scan_Enable`, what NimBLE sends with `BLE_EXT_ADV=0`) with LE *Extended*
    Advertising Reports while it advertises the `LE_EXTENDED_ADVERTISING` feature; NimBLE ignores

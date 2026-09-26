@@ -59,15 +59,15 @@ CFLAGS = $(NIMBLE_CFLAGS) $(INCLUDES) -g -D_GNU_SOURCE
 COMPONENTS := ../components
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include
 COMPONENT_OBJ := platform_host.o ble_store_kv.o
-OWN_OBJ := spike_main.o $(COMPONENT_OBJ)
+OWN_OBJ := spike_main.o store_cli.o $(COMPONENT_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
 
 .PHONY: all clean
-all: cali-spike
+all: cali-spike store-cli
 
 clean:
-	rm -f $(NIMBLE_ALL_OBJ) *.o cali-spike cali-host
+	rm -f $(NIMBLE_ALL_OBJ) *.o cali-spike cali-host store-cli
 	-$(MAKE) -C $(MBEDTLS_ROOT)/library clean >/dev/null
 
 $(MBEDTLS_LIBS) &:
@@ -85,9 +85,18 @@ $(MBEDTLS_LIBS) &:
 platform_host.o: $(COMPONENTS)/platform/host/platform_host.c $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
+store_cli.o: $(COMPONENTS)/cali_ble_nimble/test/store_cli.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
+		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
+	$(CC) -c $(CFLAGS) -o $@ $<
+
 ble_store_kv.o: $(COMPONENTS)/cali_ble_nimble/ble_store_kv.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-cali-spike: $(NIMBLE_ALL_OBJ) $(OWN_OBJ) $(MBEDTLS_LIBS)
-	$(LD) -o $@ $(NIMBLE_ALL_OBJ) $(OWN_OBJ) $(LIBS)
+cali-spike: $(NIMBLE_ALL_OBJ) spike_main.o $(COMPONENT_OBJ) $(MBEDTLS_LIBS)
+	$(LD) -o $@ $(NIMBLE_ALL_OBJ) spike_main.o $(COMPONENT_OBJ) $(LIBS)
+
+# Test driver for the NimBLE bond store (tests/firmware/test_ble_store_kv.py): the store callbacks
+# linked against the real NimBLE host objects, no controller/transport needed.
+store-cli: $(NIMBLE_ALL_OBJ) store_cli.o $(COMPONENT_OBJ) $(MBEDTLS_LIBS)
+	$(LD) -o $@ $(NIMBLE_ALL_OBJ) store_cli.o $(COMPONENT_OBJ) $(LIBS)
