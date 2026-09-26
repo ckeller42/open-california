@@ -83,6 +83,13 @@ async def _or_link_drop(conn, coro):
             dropped.set_result(reason)
 
     conn.on("disconnection", on_drop)
+    if conn.device.connections.get(conn.handle) is not conn:
+        # The link dropped before we listened (the fake unit refuses links as soon as they
+        # complete — on Python 3.11 that disconnect lands before this call); the event is gone,
+        # and a GATT/SMP request on the dead link would wait forever.
+        coro.close()
+        conn.remove_listener("disconnection", on_drop)
+        raise ConnectionError("link dropped")
     work = asyncio.ensure_future(coro)
     try:
         done, _ = await asyncio.wait({work, dropped}, return_when=asyncio.FIRST_COMPLETED)
