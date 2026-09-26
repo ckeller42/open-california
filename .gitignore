@@ -65,3 +65,10 @@ docs/_build/
 applab-shots/
 # the fake unit's SMP bond keystore (LTK/IRK for the paired emulator) — per-machine secret state
 tools/applab/.fake_unit_keys.json
+
+# ESP32 firmware host build: fetched NimBLE/Mbed TLS sources (never committed) + build outputs
+firmware/host/_deps/
+firmware/host/*.o
+firmware/host/cali-host
+firmware/host/cali-spike
+firmware/build/
