@@ -63,6 +63,14 @@ if git diff --cached --name-only | grep -qE '^(protocol/dictionary\.yaml|calictl
     fail "csrc/codec_dict.h stale — run: $PY -m tools.gen_c_dict (and stage csrc/codec_dict.h)"
 fi
 
+# 4g) Same contract for the ESP32 (#154) GATT char map + pairing-SM header: a pairing.py (pinned
+# enums/timeouts/names) or device.py (heartbeat/aux-char constants) edit must ship with a
+# regenerated csrc/codec_chars.h + csrc/pairing_consts.h, or codec-parity CI fails anyway.
+if git diff --cached --name-only | grep -qE '^calictl/(pairing|device)\.py$'; then
+  "$PY" -m tools.gen_c_dict --check >/dev/null 2>&1 || \
+    fail "csrc/codec_chars.h / csrc/pairing_consts.h stale — run: $PY -m tools.gen_c_dict (and stage both)"
+fi
+
 # 4d) ruff lint — HARD GATE (the codebase is ruff-green). Whole-repo check is sub-second. If ruff
 #     isn't installed, skip with a note rather than block (run `tools/ci.sh dev` to install it).
 if "$PY" -m ruff --version >/dev/null 2>&1; then

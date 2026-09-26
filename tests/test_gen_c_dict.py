@@ -14,7 +14,8 @@ from pathlib import Path
 from calictl import overrides
 from tools import gen_c_dict
 
-HEADER = Path(__file__).parent.parent / "csrc" / "codec_dict.h"
+ROOT = Path(__file__).resolve().parents[1]
+HEADER = ROOT / "csrc" / "codec_dict.h"
 
 
 def test_checked_in_header_is_fresh():
@@ -31,3 +32,29 @@ def test_header_is_protocol_facts_only():
     # no decompiled-source identifiers leak into the generated artifact
     text = HEADER.read_text()
     assert ".java" not in text and "decompile" not in text.lower()
+
+
+def test_chars_header_is_fresh_and_covers_every_state_function():
+    from calictl import overrides, protocol
+    from tools import gen_c_dict
+
+    text = gen_c_dict.generate_chars()
+    assert text == (ROOT / "csrc" / "codec_chars.h").read_text()
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    for name, f in funcs.items():
+        if f.state_char:
+            short = str(f.state_char)[4:8].lower()
+            assert '{"%s", 0x%s}' % (name, short) in text
+
+
+def test_pairing_header_mirrors_calictl_pairing():
+    from calictl import pairing as P
+    from tools import gen_c_dict
+
+    text = gen_c_dict.generate_pairing()
+    assert text == (ROOT / "csrc" / "pairing_consts.h").read_text()
+    assert "PAIR_MAX_ATTEMPTS %d" % P.MAX_ATTEMPTS in text
+    assert "PAIR_EV_CONNECT_FAIL = %d" % P.EV_CONNECT_FAIL in text
+    for st, secs in P.TIMEOUT_S.items():
+        assert "[PAIR_%s] = %d" % (P.STATE_NAMES[st].upper(), secs) in text

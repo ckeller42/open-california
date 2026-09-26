@@ -117,7 +117,7 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install deps
         run: pip install -r requirements-dev.txt
-      - name: Generated C header is fresh
+      - name: Generated C headers are fresh (codec_dict.h + codec_chars.h + pairing_consts.h)
         run: python -m tools.gen_c_dict --check
       - name: Golden vectors are fresh
         run: python -m tools.gen_codec_vectors --check
