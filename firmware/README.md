@@ -58,7 +58,8 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
    host build pins upstream `nimble_1_10_0_tag`. API skew between the two is caught by Task 8, which
    compiles `cali_ble_nimble` against esp-nimble in the `firmware-build` job.
 
-1. **Warnings.** Our C (`OWN_OBJ` in the Makefile: `spike_main.o`, later all repo C under
+1. **Warnings.** Our C (`OWN_OBJ` in the Makefile: `spike_main.o` plus the component objects `platform_host.o`,
+   `ble_store_kv.o` built from `firmware/components/`; later all repo C under
    `firmware/`) builds with `-Wall -Wextra -Werror`; the fetched NimBLE/Mbed TLS sources do not.
    The test suite skips `tests/firmware` (with the reason) when no 32-bit toolchain links;
    run it locally with `tools/ci.sh firmware`.
@@ -81,7 +82,11 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
    `ble_hci_sock_init()`, which connects to `127.0.0.1:<port>` — so `ble_hci_sock_set_device(port)`
    must come first, and the Bumble TCP server must already listen. The socket transport's RX queue
    needs its own thread (`ble_hci_sock_ack_handler`); the host runs `nimble_port_run()` on the main
-   thread. The bond store is `ble_store_config_init()` (1.10; RAM-only here).
+   thread. The spike's bond store is `ble_store_config_init()` (1.10; RAM-only). The
+   persistent store, `cali_ble_store_init()` (`components/cali_ble_nimble/ble_store_kv.c`), keeps
+   `ble_store_config.c`'s matching rules but persists each record through the CRC-checked
+   `cali_kv_*` store (`components/platform`; host: one `<key>.kv` file per key under `--store`),
+   so a torn/corrupt record reads as "no bond" (`LOG store: corrupt record <key> ignored`).
 5. **Bumble: legacy advertising reports.** Bumble's `Controller` answers even a legacy scan
    (`HCI_LE_Set_Scan_Enable`, what NimBLE sends with `BLE_EXT_ADV=0`) with LE *Extended*
    Advertising Reports while it advertises the `LE_EXTENDED_ADVERTISING` feature; NimBLE ignores

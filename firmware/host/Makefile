@@ -55,8 +55,12 @@ NIMBLE_ALL_OBJ := $(SRC_C:.c=.o) $(SRC_CC:.cc=.o)
 CFLAGS = $(NIMBLE_CFLAGS) $(INCLUDES) -g -D_GNU_SOURCE
 
 # OUR sources (this repo's C under firmware/) build warning-clean; fetched NimBLE/Mbed TLS do not.
-OWN_OBJ := spike_main.o
-$(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror
+# Component sources live under ../components; their objects land here (gitignored firmware/host/*.o).
+COMPONENTS := ../components
+OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include
+COMPONENT_OBJ := platform_host.o ble_store_kv.o
+OWN_OBJ := spike_main.o $(COMPONENT_OBJ)
+$(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
 
 .PHONY: all clean
@@ -77,6 +81,13 @@ $(MBEDTLS_LIBS) &:
 
 %.o: %.cc syscfg/syscfg.h
 	$(CXX) -c $(CFLAGS) -o $@ $<
+
+platform_host.o: $(COMPONENTS)/platform/host/platform_host.c $(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+ble_store_kv.o: $(COMPONENTS)/cali_ble_nimble/ble_store_kv.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
+		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
+	$(CC) -c $(CFLAGS) -o $@ $<
 
 cali-spike: $(NIMBLE_ALL_OBJ) $(OWN_OBJ) $(MBEDTLS_LIBS)
 	$(LD) -o $@ $(NIMBLE_ALL_OBJ) $(OWN_OBJ) $(LIBS)
