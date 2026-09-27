@@ -224,3 +224,16 @@ checked, treat the BlueZ transport's behaviour against a **real camper unit** (a
 VM's fake one) as **DECOMPILE/mock-tier**, not device-verified — same evidence-tier convention as
 `evidence-ledger.md`. The [how-to](../howto-pair-your-camper.md) is written from the code and the
 real-buspi radio evidence above, not from a completed live pairing.
+
+**Cross-checked against the real app (app lab, 2026-09-27).** The CaliforniaOnTour app, run in
+the Android emulator against the same fake unit, uses the same association model as this wizard
+(its pairing request is `KEYBOARD_DISPLAY` + MITM + SC → passkey entry, the unit displays),
+reconnects over a rotated address with its stored key and no prompt, and — after a unit-side
+bond loss — simply starts a fresh pairing 1.4 s after connecting, with no guidance of its own
+(a spinner plus the OS "Bluetooth pairing request" notification; unanswered, the link drops
+after ~33 s and the app returns to "Connect" silently). When the unit refuses pairing (not in
+"Gerät verbinden") the app retries in the background indefinitely and shows nothing. So the
+wizard's `connect_failed` / `pairing_failed` hints and the "Bluetooth reset / re-pair" guidance
+are this repo's own UX, not a mirror of the app; the model of the unit they rest on is
+consistent with what the app does. Table in
+[protocol-crosscheck-applab.md](protocol-crosscheck-applab.md) "Pairing".

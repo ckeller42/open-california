@@ -109,31 +109,26 @@ or a new protocol fact — never a reason to touch the trace. Results land in th
 
 ## Pairing (guided-pairing.md, `calictl/pairing.py` / `pairing_bluez.py`)
 
-**Not done yet.** The pairing rework on `feat/pairing-verification` (guided-pairing state
-machine, the BlueZ transport's stale-bond self-heal + probe-first bond handling, `radio_busy`,
-the unpaired-daemon scan guard) was cross-checked against the fake unit over a Bumble
-`LocalLink` (`tests/test_pairing_link.py`) and against real BlueZ in a VM
-(`tests/realstack/`, the `pairing-real-stack` CI job) — never against the real
-**CaliforniaOnTour app** in this app lab. `tools/applab/fake_unit_ble.py` already exercises app
-pairing (`### Pairing the app` in `tools/applab/README.md`) and its `pair on`/`pair off`/`rotate`/
-`forget` console commands model the unit's "Gerät verbinden" gate and address rotation, but no
-session has yet compared the **app's own pairing flow and error UX** against calictl's wizard.
-Claims still to check here, not yet observed:
+Session 2026-09-27 (fake unit with `BUMBLE_LOGLEVEL=DEBUG`, so every SMP PDU is in the log;
+the app's side from `logcat`). The pairing rework on `feat/pairing-verification` was already
+cross-checked against the fake over a Bumble `LocalLink` (`tests/test_pairing_link.py`) and
+against real BlueZ in a VM (`tests/realstack/`); this session adds the **real CaliforniaOnTour
+app's own pairing flow and error UX** against the same fake, driven through its `pair on`/
+`pair off`/`forget` console commands.
 
-- Does the app's own passkey-entry flow tolerate the same **rotating address** and
-  **`Passcode: ---` until a pairing request** behaviour the how-to describes for calictl, or does
-  the app rely on something calictl's wizard doesn't (e.g. a different discovery filter, a
-  different SMP IO capability)?
-- What does the app do when the unit's Bluetooth is reset mid-ownership (`forget` on the fake
-  unit) — does it show equivalent guidance to calictl's "Bluetooth reset / re-pair", or does it
-  fail differently?
-- Does the app ever encounter (or specifically handle) the **HCI 0x3e / co-resident-scanner**
-  failure mode the 2026-09-25 btmon capture found for calictl, or is the phone's Bluetooth stack
-  less sensitive to it?
+| Claim (calictl side) | Observation (app, 2026-09-27) | Verdict |
+|---|---|---|
+| a bonded central reconnects over a **rotated RPA** without re-pairing (`connect_bonded`, host-side IRK resolution) | fake restarted → new RPA; app "Connect" → link up, peer resolved, `HCI_ENCRYPTION_CHANGE` with the stored LTK **1 s after connect, no SMP exchange, no prompt**; vehicle page shows the fake's data (fresh water 14/29 l …) | OBSERVED (app tolerates the rotation exactly as calictl does) |
+| passkey entry: unit DISPLAYS, central types — calictl pairs as `KeyboardOnly` + MITM + SC, set before any link | app's `SMP_PAIRING_REQUEST`: `io_capability KEYBOARD_DISPLAY`, `auth_req BONDING\|MITM\|SC\|CT2` → fake answers `DISPLAY_ONLY`, `BONDING\|MITM\|SC` → method **PASSKEY**; Android surfaces it as the notification "Bluetooth pairing request — Tap to pair with VWCAMPER" → PIN dialog | CONSISTENT (same association model; the app additionally advertises display capability + CT2, irrelevant against a display-only unit) |
+| `Passcode: ---` until a pairing request arrives | the fake generates its passkey only in `generate_passkey()` i.e. when the app's request lands (1.4–3 s after connect); the app's flow works with a code that exists only from that moment | CONSISTENT (fake-side; the unit's own screen stays owner-photo OBSERVED) |
+| **unit Bluetooth reset mid-ownership** — calictl's wizard probes the bond, removes the stale one, re-pairs, and its GUI hints "Bluetooth reset / re-pair" | `forget` on the fake, app Disconnect → Connect: link up, stored LTK unusable → the app (Android) starts a **fresh SMP pairing by itself** 1.4 s after connect; **no guidance in the app**, only a spinner in the Connect button plus the OS notification. Unanswered, the phone drops the link 33 s later (`REMOTE_USER_TERMINATED`, 0x13), the app **silently** returns to "Connect" and the stale notification lingers. Tapping Connect again → new request → passkey typed → bond restored (`BluetoothPairingService: Bond state change : 12`), data flows | OBSERVED — outcome CONSISTENT with calictl's self-heal (both end bonded after one passkey), mechanism differs (Android re-pairs on LTK failure; BlueZ needs the explicit `remove_bond`), and calictl's hint text is richer than the app's (which has none) |
+| **unit not in "Gerät verbinden"** — calictl ends `pairing_failed` with a "put the unit in pairing mode" hint | `pair off` + `forget`: app connects, discovers, MTU, sends its pairing request → fake `SMP_PAIRING_FAILED PAIRING_NOT_SUPPORTED` → Android closes the GATT 3 s later (`onClientConnectionState status=22`) → the app **immediately retries with `autoConnect=true`** (`status=133`) and keeps the spinner ≥ 60 s; **no text, no dialog, no notification** | OBSERVED — CONSISTENT with the fake's refusal model; calictl's explicit failure + hint is the better UX (the app gives the user nothing to act on) |
+| HCI 0x3e under a co-resident full-duty scanner (2026-09-25 btmon on buspi) | netsim is a virtual link with no airtime contention — cannot be provoked here | NOT TESTABLE (stays CAPTURE-tier on real buspi hardware) |
 
-Until an app-lab session answers these, do not read this repository's pairing UX (error
-messages, hints, the environment requirements) as validated against the app's own behaviour —
-only against calictl's own transport and the fake unit.
+Takeaways for this repo's pairing UX: the association model and the "re-pair after a unit reset"
+outcome are validated against the app; the wizard's hints (`connect_failed`, `pairing_failed` +
+"open Gerät verbinden", "Bluetooth reset / re-pair") have **no app equivalent** — the app spins
+and retries silently — so they are calictl's own contribution, not a mirror of app behaviour.
 
 ## Not testable in the lab (unit-side; keep DEVICE/CAPTURE tier)
 

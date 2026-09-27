@@ -73,6 +73,15 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   cabinet light `LSix` has no app control); cooler
   OFF/quiet/timer frames and camping master OFF (`fc`, identical) as tabled in
   `control-and-actuation.md`.
+- **pairing, APP-OBSERVED (2026-09-27, fake unit at SMP debug level):** the app pairs with
+  `io_capability KEYBOARD_DISPLAY`, `auth_req BONDING|MITM|SC|CT2` → passkey entry against the
+  display-only unit (calictl's `KeyboardOnly`+MITM+SC is the same association model); a bonded
+  app reconnects over a rotated RPA with the stored LTK and no prompt; after a unit-side bond
+  loss (`forget`) Android starts a fresh pairing on its own 1.4 s after connect, the app shows only
+  a spinner (no guidance), drops the link 33 s later if the passkey isn't typed, and re-pairs on
+  the next Connect; with the unit refusing pairing (`PAIRING_NOT_SUPPORTED`, "not in Gerät
+  verbinden") the app retries silently with `autoConnect` and never shows an error. Table in
+  `protocol-crosscheck-applab.md` "Pairing".
 - energy current scales — DECOMPILE (2026-09-07): `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` ÷10 → A
   (`xf/d.java:159,173,175`, holders bound `xf/a.java:150-157,239,307`), `IDcdcAfs` unscaled A + the
   SW-0409/0410 `+2` (`xf/d.java:171`). Plausibility from 14 d telemetry: `batt2_current` raw −49…318
