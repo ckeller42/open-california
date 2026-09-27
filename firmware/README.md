@@ -106,8 +106,11 @@ tier (`test_host_e2e.py`) and hardware.
   and on `PATH` after `export.sh`. Nothing is downloaded.
 - **Variant:** `qemu/sdkconfig.qemu` = UART0 console + `CONFIG_CALI_QEMU_PROBE=y`
   (`main/Kconfig.projbuild`): skips the BT controller init (above) and adds the console command
-  `kvprobe set <hex>` -> `LOG kvprobe ok` / `kvprobe get` -> `LOG kvprobe get <hex>|missing|corrupt`
-  (one NVS record, key `kvprobe`, through `cali_kv_set/get`). **Never in the release image:** a
+  `kvprobe set <hex>` -> `LOG kvprobe ok` / `kvprobe get [key]` -> `LOG kvprobe get <hex>|missing|corrupt`
+  (key default `kvprobe`, through `cali_kv_set/get`) / `kvprobe corrupt <key>` (writes a record with a
+  valid length prefix and a wrong CRC32 straight through `nvs_set_blob`, bypassing `cali_kv_set`).
+  The probe build also loads the bond store (`cali_ble_store_init`) on the no-controller path, as
+  `cali_ble_nimble_init` does on the BLE path, so damaged bond records meet the real NVS code. **Never in the release image:** a
   POST_BUILD step in `CMakeLists.txt` fails any build without the option whose ELF contains the
   string `kvprobe` (the `codec_encode` guard's twin). CI builds the variant in its own job and
   uploads nothing from it.
@@ -120,7 +123,9 @@ tier (`test_host_e2e.py`) and hardware.
 - **Test:** `tests/firmware/test_qemu_boot.py` (skipped unless `CALI_QEMU=1`, and when
   `qemu-system-xtensa` is not on `PATH`): boot -> `LOG ble: controller unavailable` + idle `STATE`,
   `status` -> idle, `kvprobe set 0a0b0c`, power off, boot the same flash file, `kvprobe get` ->
-  `0a0b0c`. The `qemu` fixture (`conftest.py`) runs `run_qemu.sh` under the same `Firmware` line
+  `0a0b0c`; and a CRC-broken `sec_peer_0` (the first peer-bond slot, `ble_store_kv.c`) in real NVS
+  boots `LOG store: corrupt record sec_peer_0 ignored` + idle, keeps the intact records, and does not
+  reboot (exactly one `ESP-ROM:` banner after 3 s). The `qemu` fixture (`conftest.py`) runs `run_qemu.sh` under the same `Firmware` line
   reader as the host tier. Boot to `STATE` takes ~0.3 s.
 
 Locally (repo root; the image runs natively on Apple silicon):

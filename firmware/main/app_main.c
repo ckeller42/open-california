@@ -17,9 +17,11 @@
  *
  * QEMU build (CONFIG_CALI_QEMU_PROBE, firmware/qemu/sdkconfig.qemu only): nimble_port_init() is not
  * called at all (QEMU does not model the controller; esp_bt_controller_init asserts there and the
- * chip reboots in a loop), so the no-controller path above runs; plus the "kvprobe set <hex>" /
- * "kvprobe get" console command (one record through cali_kv_* = NVS, the bond store's path) for the
- * QEMU reboot test (tests/firmware/test_qemu_boot.py). Never in the release image.
+ * chip reboots in a loop), so the no-controller path above runs, and the bond store is still loaded
+ * from NVS (cali_ble_store_init, what cali_ble_nimble_init does on the BLE path) so a damaged record
+ * meets the real NVS code; plus the "kvprobe" console command (set/get a record through cali_kv_*,
+ * or plant a CRC-broken one with the raw NVS API) for the QEMU tests
+ * (tests/firmware/test_qemu_boot.py). Never in the release image.
  */
 #include <stdatomic.h>
 #include <stdio.h>
@@ -40,6 +42,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 
 #include "host/ble_hs.h"
@@ -73,9 +76,25 @@ static int hexval(char c) {
     return -1;
 }
 
-/* "kvprobe set <hex>" -> "LOG kvprobe ok" | "LOG kvprobe error ..."; "kvprobe get" -> "LOG kvprobe
- * get <hex>" | "LOG kvprobe get missing|corrupt". Returns 1 if the line was a kvprobe command.
- * Runs on the owner task, like every other cali_kv_* caller. */
+/* "kvprobe corrupt <key>": write <key> in cali_kv's NVS namespace ("cali", platform_esp.c) with the
+ * raw blob API, bypassing cali_kv_set: a record with a valid length prefix (4 value bytes) and a
+ * WRONG CRC32 — what a bit-rotted or foreign record looks like to cali_kv_get. */
+static int kvprobe_corrupt(const char *key) {
+    uint8_t raw[12] = {4, 0, 0, 0, 0xde, 0xad, 0xbe, 0xef};
+    uint32_t bad = ~cali_crc32(0, raw, 8);
+    nvs_handle_t h;
+    int ok;
+    for (int i = 0; i < 4; i++) raw[8 + i] = (uint8_t)(bad >> (8 * i));
+    if (nvs_open("cali", NVS_READWRITE, &h) != ESP_OK) return -1;
+    ok = nvs_set_blob(h, key, raw, sizeof raw) == ESP_OK && nvs_commit(h) == ESP_OK;
+    nvs_close(h);
+    return ok ? 0 : -1;
+}
+
+/* "kvprobe set <hex>" -> "LOG kvprobe ok" | "LOG kvprobe error ..."; "kvprobe get [key]" (default
+ * key "kvprobe") -> "LOG kvprobe get <hex>" | "LOG kvprobe get missing|corrupt"; "kvprobe corrupt
+ * <key>" -> "LOG kvprobe corrupt <key> ok". Returns 1 if the line was a kvprobe command. Runs on the
+ * owner task, like every other cali_kv_* caller. */
 static int kvprobe_line(const char *line) {
     uint8_t buf[KVPROBE_MAX];
     size_t n = 0;
@@ -97,10 +116,14 @@ static int kvprobe_line(const char *line) {
         }
         if (cali_kv_set(KVPROBE_KEY, buf, n) == 0) cali_log("kvprobe ok");
         else cali_log("kvprobe error: cali_kv_set failed");
-    } else if (strcmp(line, "kvprobe get") == 0) {
+    } else if (strncmp(line, "kvprobe corrupt ", 16) == 0) {
+        if (kvprobe_corrupt(line + 16) == 0) cali_log("kvprobe corrupt %s ok", line + 16);
+        else cali_log("kvprobe error: nvs_set_blob failed");
+    } else if (strcmp(line, "kvprobe get") == 0 || strncmp(line, "kvprobe get ", 12) == 0) {
         char hex[2 * KVPROBE_MAX + 1];
+        const char *key = line[11] ? line + 12 : KVPROBE_KEY;
         n = sizeof buf;
-        int rc = cali_kv_get(KVPROBE_KEY, buf, &n);
+        int rc = cali_kv_get(key, buf, &n);
         if (rc == CALI_KV_MISSING) {
             cali_log("kvprobe get missing");
         } else if (rc != CALI_KV_OK) {
@@ -111,7 +134,7 @@ static int kvprobe_line(const char *line) {
             cali_log("kvprobe get %s", hex);
         }
     } else {
-        cali_log("kvprobe error: usage kvprobe set <hex> | kvprobe get");
+        cali_log("kvprobe error: usage kvprobe set <hex> | kvprobe get [key] | kvprobe corrupt <key>");
     }
     return 1;
 }
@@ -276,6 +299,9 @@ void app_main(void) {
         cali_log("ble: nimble_port_init skipped (QEMU build, CONFIG_CALI_QEMU_PROBE)");
 #else
         cali_log("ble: nimble_port_init: %s", esp_err_to_name(err));
+#endif
+#if CONFIG_CALI_QEMU_PROBE
+        cali_ble_store_init();    /* load the bonds from NVS as the BLE path does (corrupt -> LOG) */
 #endif
         cali_console_init(&s_no_ble);
     }
