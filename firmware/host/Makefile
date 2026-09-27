@@ -13,6 +13,7 @@ CC      := $(CROSS_COMPILE)gcc
 CXX     := $(CROSS_COMPILE)g++
 LD      := $(CROSS_COMPILE)gcc
 AR      := $(CROSS_COMPILE)ar
+NM      := $(CROSS_COMPILE)nm
 
 NIMBLE_ROOT := _deps/nimble
 NIMBLE_CFG_MBEDTLS := 1
@@ -126,6 +127,9 @@ session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
+# Read-only firmware (#154): codec_encode is compiled out of the firmware's codec (and its
+# prototype hidden), and the link below fails if the symbol ever reaches cali-host.
+codec.o: CFLAGS += -DCODEC_NO_ENCODE
 codec.o: $(CSRC)/codec.c $(CSRC)/codec.h $(CSRC)/codec_dict.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -137,6 +141,7 @@ host_main.o: host_main.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h
 # The host firmware: console + runner + session on the NimBLE transport, HCI over TCP.
 cali-host: $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(MBEDTLS_LIBS)
 	$(LD) -o $@ $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(LIBS)
+	@if $(NM) $@ | grep -qw codec_encode; then echo "cali-host: codec_encode linked into read-only firmware" >&2; rm -f $@; exit 1; fi
 
 # Test driver for the NimBLE bond store (tests/firmware/test_ble_store_kv.py): the store callbacks
 # linked against the real NimBLE host objects, no controller/transport needed.

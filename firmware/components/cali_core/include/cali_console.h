@@ -11,8 +11,10 @@
  *
  * Output (stdout, one line each, flushed):
  *   STATE {"state":"<name>","attempts":N,"error":"<name>"|null,"address":"AA:.."|null}
- *       the keys of calictl's /api/pairing snapshot. While the runner is idle but the session
- *       holds a stored bond (after a boot with a bond), the state reads "bonded" with that address.
+ *       the keys and meaning of calictl's /api/pairing snapshot: the PAIRING state machine's
+ *       state. With no pairing flow since boot and a stored bond it reads "idle" with the bond's
+ *       address (as calictl does); "bonded" only right after a pairing in this boot. STATE never
+ *       says whether the link is up (the session's concern, by design).
  *   SNAP {"t":<uptime_ms>,"fn":{"<function>":{"<Field>":<int>,...},...}}
  *       every function the session holds a frame for, in CODEC_CHARS order, decoded with
  *       codec_decode (fields past a short frame's end are absent).

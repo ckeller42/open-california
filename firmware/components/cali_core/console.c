@@ -81,15 +81,14 @@ void cali_console_snapshot(uint64_t t_ms) {
     out_line();
 }
 
+/* calictl /api/pairing: with no pairing flow in this process it reports idle + the stored bond's
+ * address (calictl/serve.py). The pairing SM is idle then; whether the link is up is the session's
+ * business, not a pairing state. */
 static void status(void) {
     const cali_pair_state_t *s = cali_runner_state();
-    if (s->st == PAIR_IDLE && s_t->has_bond()) {
-        /* booted with a stored bond: the runner never paired in this boot, the session holds it */
-        cali_pair_state_t b = {PAIR_BONDED, 0, PAIR_ERR_NONE};
-        cali_console_state(&b, s_t->identity());
-        return;
-    }
-    cali_console_state(s, s->st == PAIR_BONDED ? s_t->identity() : NULL);
+    const char *addr = NULL;
+    if (s->st == PAIR_BONDED || (s->st == PAIR_IDLE && s_t->has_bond())) addr = s_t->identity();
+    cali_console_state(s, addr);
 }
 
 static void on_state(const cali_pair_state_t *s, const char *address) {

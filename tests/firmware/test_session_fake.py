@@ -47,7 +47,9 @@ HB = 0x00100000
 def fake(tmp_path_factory):
     cc = shutil.which("cc") or pytest.skip("no C compiler")
     out = tmp_path_factory.mktemp("session") / "session_fake"
-    subprocess.run([cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include"),
+    # -DCODEC_NO_ENCODE: the read-only firmware's codec, so a cali_core use of codec_encode fails here too
+    subprocess.run([cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-DCODEC_NO_ENCODE",
+                    "-I", str(CORE / "include"),
                     "-I", str(ROOT / "csrc"), "-I", str(ROOT / "firmware/components/platform/include"),
                     str(CORE / "console.c"), str(CORE / "session.c"), str(CORE / "runner.c"),
                     str(CORE / "pairing_sm.c"), str(ROOT / "csrc" / "codec.c"),
@@ -169,10 +171,10 @@ def test_backoff_doubles_to_60s_and_resets_once_encrypted(fake):
     assert "CALL discover" in after(out, "CALL connect_bonded")
 
 
-def test_boot_with_bond_reconnects_and_reports_bonded(fake):
+def test_boot_with_bond_reconnects_and_reports_idle_with_address(fake):
     out = run(fake, "bond 1", "boot", "CONNECTED", "ENC_OK", *READ_ALL)
-    assert out[:2] == ["CALL connect_bonded",
-                       'STATE {"state":"bonded","attempts":0,"error":null,"address":"%s"}' % IDENTITY]
+    assert out[:2] == ["CALL connect_bonded",                          # calictl: idle + bond address
+                       'STATE {"state":"idle","attempts":0,"error":null,"address":"%s"}' % IDENTITY]
     assert out[2] == "CALL discover" and len(snaps(out)) == 1
 
 

@@ -65,13 +65,25 @@ def test_read_all_matches_python_decode(host_fw, hci_unit):
 
 
 def test_heartbeat_keeps_the_link(host_fw, hci_unit):
+    """20 s on one link: >= 20 new beats in the window, no session drop/reconnect logged in it,
+    and the same link still delivers (a pushed change still produces a SNAP)."""
+    fn = "cooler"
     fw = host_fw(hci_unit)
     _pair(fw, hci_unit)
     fw.expect("SNAP", timeout=40)
+    mark = len(fw.log)
+    before = hci_unit.call(_beats_seen, hci_unit.unit)
     time.sleep(20)
-    fw.send("status")
-    assert fw.expect("STATE")["state"] == "bonded"
-    assert hci_unit.call(_beats_seen, hci_unit.unit) >= 20
+    beats = hci_unit.call(_beats_seen, hci_unit.unit) - before
+    window = fw.log[mark:]
+    assert not [line for line in window if line.startswith("LOG session:")], window
+    assert beats >= 20, beats
+    old = hci_unit.call(_served_frames, hci_unit.unit)[fn]
+    new = bytes([old[0] ^ 0xFF]) + old[1:]
+    want = protocol.decode(_funcs()[fn], new)
+    hci_unit.call(_serve_raw, hci_unit.unit, fn, new, True)
+    fw.expect("SNAP", lambda s: s["fn"].get(fn) == want, timeout=15)
+    assert not [line for line in fw.log[mark:] if line.startswith("LOG session:")]
 
 
 def test_passkey_outside_waiting_is_ignored(host_fw, hci_unit):
