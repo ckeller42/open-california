@@ -298,6 +298,44 @@ def test_lighting_echo_still_confirms_when_the_lamps_never_move():
     assert u.light_actual == {}                               # and the lamp really never moved
 
 
+def test_lighting_actuates_on_an_awake_unit_without_the_heartbeat():
+    """The real unit actuates lighting on an AWAKE unit with a bare SET_BRIGHTNESS + ``0e00…``
+    commit and NO 1003 heartbeat (photon-verified 2026-08-16; CLAUDE.md Known state). The mock used
+    to apply the generic arm gate to lighting too, so it was stricter than the van. Every other
+    control write stays heartbeat-gated, and lighting keeps its own gates (commit, non-zero PN).
+
+    .. test:: Lighting applies without the 1003 heartbeat; other writes stay arm-gated
+       :id: T_MOCK_LIGHT_NO_HEARTBEAT
+    """
+    f = _funcs()
+    u = MockCamperUnit(seed={"lighting": {"Installed": 1, "ProfileNumber": 9, "BrightnessLOne": 1},
+                             "cooler": {"Installed": 1, "State": 0, "Level": 3, "Mode": 0}})
+    assert u.armed is False                                    # no heartbeat ever written
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+
+    _commit_brightness(u, "BrightnessLOne", 3)
+    assert u.decoded("lighting")["BrightnessLOne"] == 3        # applied (echo) ...
+    u.tick(0.5)
+    assert pushes and u.light_actual["BrightnessLOne"] == 2    # ... and the lamp really ramps
+
+    # the lighting gates themselves are untouched: a PN=0 brightness frame is still ignored
+    frame_bytes = overrides.CONTROL_FRAME_BYTES["lighting"]
+    zones = {c.name: 14 for c in f["lighting"].control_fields
+             if c.placed and c.name.startswith("BrightnessL")}
+    u.write(f["lighting"].control_char, protocol.encode(
+        f["lighting"], {"Mode": 4, "ProfileNumber": 0, **zones, "BrightnessLOne": 8},
+        frame_bytes=frame_bytes))
+    u.write(f["lighting"].control_char, protocol.encode(
+        f["lighting"], {"Mode": 0, "ProfileNumber": 0, **zones}, frame_bytes=frame_bytes))
+    assert u.decoded("lighting")["BrightnessLOne"] == 3
+
+    # ... and every other control write still needs the heartbeat: ACKed and ignored unarmed
+    u.write(f["cooler"].control_char, control.build(f, "cooler", "power", "on", u.decoded("cooler")))
+    assert u.decoded("cooler")["State"] == 0
+
+
 def test_change_pushes_only_for_the_chars_the_unit_really_pushes():
     """campingmode (1202) and ignition (1004) are confirmed change-push channels on real hardware;
     the 2026-09-16 buspi trace saw NO change-driven push on the other subscribed chars in 150 s.

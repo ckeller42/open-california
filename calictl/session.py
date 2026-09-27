@@ -93,14 +93,24 @@ class SessionSupervisor:
         active, and nudges the supervisor up NOW; ``disconnect`` sets the release + wakes the
         supervisor to drop the session. Returns the mode + current session state for the UI."""
         if action == "connect":
-            self._session_mode = None
-            self.note_activity()
+            self.claim_intent()
             self.nudge()
         elif action == "disconnect":
             self._session_mode = "release"
             if self._wake is not None:
                 self._wake.set()   # wake the supervisor to drop the session immediately
         return {"ok": True, "mode": self.mode, "session": self.session_state}
+
+    def claim_intent(self):
+        """A command means intent to control: clear any manual release and mark the UI active,
+        WITHOUT nudging the supervisor to connect.
+
+        ``set_mode("connect")`` is this plus :meth:`nudge`. A roof move calls this alone: it takes
+        the single slot for its own dedicated connection (:meth:`drop_for_handover`), so warming
+        the persistent session first would only be closed again unused.
+        """
+        self._session_mode = None
+        self.note_activity()
 
     async def drop_for_handover(self) -> bool:
         """Close the live session so another path can own the unit's single connection slot.

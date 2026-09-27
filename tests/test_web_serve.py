@@ -630,6 +630,118 @@ def test_on_command_nudges_session_when_down(monkeypatch):
     assert was_set is True and fails == 0    # supervisor prodded, backoff reset
 
 
+def _roof_server(monkeypatch, order):
+    """A writes-enabled Server whose roof/one-shot actuators and set_mode are spies into ``order``."""
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._last = {"roof": {"Installed": 1, "InfoPopUp": 0, "Position": 0},
+               "lighting": {"ProfileNumber": 9}}
+
+    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True, stop_event=None,
+                                limit_positions=None):
+        order.append(("actuate_roof", s._live_session() is None))
+        return None
+
+    async def fake_actuate(f, frame, verify=True, **_k):
+        order.append(("actuate", f.name))
+        return None
+
+    real_set_mode = s._sessions.set_mode
+
+    async def spy_set_mode(action):
+        order.append(("set_mode", action))
+        return await real_set_mode(action)
+
+    monkeypatch.setattr(s.dev, "actuate_roof", fake_actuate_roof)
+    monkeypatch.setattr(s.dev, "actuate", fake_actuate)
+    monkeypatch.setattr(s._sessions, "set_mode", spy_set_mode)
+    return s
+
+
+def test_roof_move_skips_the_session_warmup(monkeypatch):
+    """A roof move must NOT warm the persistent session first: no ``set_mode("connect")`` and no
+    wait for the session (a wait would be the full ``CALICTL_SESSION_WAIT_S`` here), because the
+    move takes the single slot for its own connection and would close that session unused.
+    Intent is still recorded (manual release cleared, UI active) and the supervisor is nudged
+    AFTER the move so the fast path comes back.
+
+    .. test:: A roof move skips the persistent-session warm-up and nudges the supervisor afterwards
+       :id: T_ROOF_NO_SESSION_WARMUP
+       :links: R_SESSION_SUPERVISOR, R_ROOF_ACTUATE
+
+       Exercises :meth:`calictl.serve.Server.on_command` for ``roof``/``open`` with no live
+       session: ``actuate_roof`` runs with no ``set_mode`` call and without idling the wait window.
+    """
+    import time as _time
+    order = []
+    s = _roof_server(monkeypatch, order)
+    s._sessions._session = None                         # no live session
+    s._sessions._session_mode = "release"               # the user had pressed Disconnect
+    s._sessions._backoff_fails = 3
+    monkeypatch.setattr(serve, "_SESSION_WAIT_S", 30.0)  # a wait would blow the time bound below
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._sessions.attach(s._ble)
+        t0 = _time.monotonic()
+        await s.on_command("roof", "open", None)
+        return _time.monotonic() - t0, s._sessions._wake.is_set()
+    elapsed, woke = asyncio.run(_run())
+    assert order == [("actuate_roof", True)]            # no set_mode("connect"), straight to the move
+    assert elapsed < 2.0                                # no wait-for-session window
+    assert s._sessions._session_mode is None            # a command still clears a manual release
+    assert s._sessions._ui_active() is True             # ...and marks the UI active
+    assert woke is True and s._sessions._backoff_fails == 0   # supervisor nudged after the move
+
+
+def test_roof_move_still_drops_a_live_session_for_handover(monkeypatch):
+    """Skipping the warm-up must not skip the handover: an ALREADY-live persistent session is
+    closed before ``actuate_roof`` opens its own connection (single slot, #198)."""
+    order = []
+    s = _roof_server(monkeypatch, order)
+
+    class FakeSess:
+        is_up = True
+        async def aclose(self):
+            order.append(("aclose",))
+    s._sessions._session = FakeSess()
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._sessions.attach(s._ble)
+        await s.on_command("roof", "close", None)
+    asyncio.run(_run())
+    assert order == [("aclose",), ("actuate_roof", True)]   # dropped first, then the move
+    assert s._sessions.session_state == "off"
+
+
+def test_non_roof_command_keeps_the_session_warmup(monkeypatch):
+    """Every other command keeps its behaviour: ``set_mode("connect")`` then the wait for the
+    session, then the one-shot actuate."""
+    order = []
+    s = _roof_server(monkeypatch, order)
+    s._sessions._session = None
+    monkeypatch.setattr(serve, "_SESSION_WAIT_S", 0.3)
+    slept = []
+    real_sleep = asyncio.sleep
+
+    async def spy_sleep(t, *a, **k):
+        slept.append(t)
+        return await real_sleep(0)
+    monkeypatch.setattr(serve.asyncio, "sleep", spy_sleep)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._sessions.attach(s._ble)
+        await s.on_command("cooler", "power", "on")
+    s._last["cooler"] = {"State": 0}
+    asyncio.run(_run())
+    assert order[0] == ("set_mode", "connect")
+    assert slept, "the non-roof command no longer waits for the session"
+    assert ("actuate", "cooler") in order
+
+
 def test_on_command_lighting_is_fast_path_confirmed_by_notification(monkeypatch):
     """Lighting takes the fast path: NO preamble, NO blocking readback (verify=False); the write
     returns immediately and applied-ness comes from the unit's real 1502 Mode-4 notification."""
