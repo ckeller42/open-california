@@ -78,7 +78,7 @@ Automation
 .. autoclass:: calictl.web._NoResolveHTTPServer
    :no-members:
 .. autoclass:: calictl.session.SessionSupervisor
-   :members: attach, live_session, note_activity, set_mode, nudge, supervise, mode
+   :members: attach, live_session, note_activity, set_mode, drop_for_handover, nudge, supervise, mode
 
 Tests
 -----

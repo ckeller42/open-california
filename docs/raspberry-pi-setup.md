@@ -106,8 +106,55 @@ the timestamp — outside systemd calictl stamps them itself). `CALICTL_LOG_LEVE
 unit's raw BLE traffic for offline analysis add `CALICTL_BLE_TRACE=/home/pi/ble.jsonl` (one JSON
 line per notification/read/write; `python3 -m tools.trace_compare` replays it against the mock).
 
-```sh
-```
+If polls keep failing while the unit is **visibly advertising** (the journal shows repeated connect
+timeouts), tune `CALICTL_CONNECT_TIMEOUT_S` (per-attempt BLE connect timeout, default `30` s; each
+connect makes up to 3 attempts). An awake unit answers in well under a second, but one that
+advertises while ignoring connection requests burns the whole timeout on every attempt, so a long
+timeout samples the unit rarely and keeps missing its brief connectable windows. **Lower** it (e.g.
+`10`) to sample more often on a flaky link; **raise** it only if connects are being cut short while
+the unit is genuinely responding.
+
+### Environment variables
+
+All knobs are read from the environment (for the service: `calictl.env`, the unit's
+`EnvironmentFile`). Timing values are seconds. Module-level ones are read once at import, so a
+change needs a daemon restart.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CALICTL_ADDR` | unset | manual BLE address override (wins over the pairing cache) — see "The pairing step" above |
+| `CALICTL_PAIRING_CACHE` | `$XDG_STATE_HOME/calictl/pairing.json` (`~/.local/state/…`) | path of the persisted-bond file the pairing wizard maintains |
+| `CALICTL_ENABLE_WRITES` | off | `1`/`true`/`yes` = allow control writes (same as `--enable-writes`) |
+| `CALICTL_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `CALICTL_LOG_TIMESTAMP` | on, except under the systemd journal (`JOURNAL_STREAM` set) | `0`/`false`/`no` = no timestamp; any other value forces it on |
+| `CALICTL_BLE_TRACE` | unset | path of a JSONL trace of every notify/read/write/link event |
+| `CALICTL_BLE_TRACE_HEARTBEAT` | off | non-empty, not `0` = also trace the `1003` heartbeat writes |
+| `CALICTL_CONNECT_TIMEOUT_S` | `30` | per-attempt BLE connect timeout (above) |
+| `CALICTL_ADAPTER_RESET` | off | `1` = power-cycle the adapter to recover from a failed connect. Off because `hci0` is shared with the other buspi BLE readers |
+| `CALICTL_PERSISTENT_SESSION` | `1` | `0` = no persistent armed session; connect per operation |
+| `CALICTL_UI_IDLE_S` | `25` | release the persistent session after this long without web-UI activity, so the phone app can use the single slot |
+| `CALICTL_SESSION_WAIT_S` | `6` | how long a command waits for the supervisor's session before falling back to a cold connect |
+| `CALICTL_FAST_CONFIRM_S` | `1.2` | how long a lighting command waits for the `1502` notification before returning an optimistic "sent" |
+| `CALICTL_STATE_CACHE` | `~/.cache/calictl/last_state.json` | persisted last-known state (shown while the van is asleep) |
+| `CALICTL_HISTORY_CACHE` | `~/.cache/calictl/history.jsonl` | leisure-battery history for the web UI's 24 h chart |
+| `CALICTL_OUTCOMES_CACHE` | `~/.cache/calictl/poll_outcomes.jsonl` | per-poll outcome log (classifies telemetry gaps: deep sleep vs BLE error vs daemon down) |
+| `CALICTL_FW_SNAPSHOT_DIR` | `~/.cache/calictl/fw-snapshots` | where a firmware change's raw-frame capture is written |
+| `CALICTL_STORE_GENERALPURPOSE` | off | `1`/`true`/`yes` = log the raw F000/F001 diagnostic register to InfluxDB (RE probe) |
+| `CALICTL_MQTT_EXPIRE_AFTER_S` | `300` | Home Assistant `expire_after`: sensors go `unavailable` after this long without a state message |
+| `CALICTL_HEARTBEAT_PERIOD_S` | `0.6` | `1003` liveness-heartbeat period |
+| `CALICTL_HEARTBEAT_WARMUP_S` | `2.0` | heartbeat warm-up before a read pass |
+| `CALICTL_ARM_DELAY_S` | `3.0` | heartbeat time before a control write (lets the unit register it) |
+| `CALICTL_SETTLE_S` | `2.5` | wait after a write before the readback |
+| `CALICTL_FOLLOW_DELAY_S` | `0.3` | gap before a commit/follow frame |
+| `CALICTL_WATER_PUSH_WAIT_S` | `0` (disabled) | wait for a fresh `1302` water push during a read — an unvalidated hypothesis, see `business-logic/value-freshness.md` |
+| `CALICTL_ROOF_PERIOD_S` | `0.5` | roof move-frame (SafetyCounter) cadence |
+| `CALICTL_ROOF_MAX_TRAVEL_S` | `30.0` | hard cap on one roof move |
+| `CALICTL_ROOF_LIMIT_POLL_S` | `1.0` | how often a roof move polls `Position` to auto-stop at the limit |
+| `CALICTL_AUTO_CAMPER_MIN_SOC`, `…_WINDOW_S`, `…_MAX_FAILS` | `20`, `120`, `3` | auto camper mode guards — see `business-logic/auto-camper-mode.md` |
+| `CALICTL_OBSERVE_BURST_INTERVAL_S`, `CALICTL_OBSERVE_BURST_S` | `3`, `180` | fast-poll burst after an engine start — see `business-logic/auto-camper-mode.md` |
+
+The heartbeat / arm / settle / follow / roof timings are the proven on-device values; the mock and
+e2e harness shrink them for speed. **Do not lower them for real hardware.**
 
 Add Home Assistant / MQTT / InfluxDB / Grafana: `calictl/deploy/homeassistant/HOMEASSISTANT.md`
 and `calictl/deploy/GRAFANA.md`. `install.sh --with-sinks` installs the Python client libs

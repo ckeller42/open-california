@@ -1,8 +1,10 @@
 # Guided BLE pairing — the state-machine contract (#154, #157)
 
-**Status:** SM + BlueZ transport + web wizard shipped, mock-tested. **NOT-LIVE-VERIFIED** — the
-deliberate live unbond→re-pair at the van is tracked as a checkbox on
-[#157](https://github.com/ckeller42/open-california/issues/157), not done yet.
+**Status:** SM + BlueZ transport + web wizard shipped, mock-tested. **Partly live-exercised:** a
+real re-pair at the van on 2026-09-18 hit `org.bluez.Error.AlreadyExists` from `Device1.Pair()` (a
+stale local bond), which led to the stale-bond recovery below (#200). The rest of the transport is
+still mock-tier; the full live unbond→re-pair is tracked as a checkbox on
+[#157](https://github.com/ckeller42/open-california/issues/157).
 
 ## Purpose
 
@@ -17,7 +19,8 @@ mechanically. The sequence vectors in `tests/vectors/pairing.json` are written s
 replay them against the C port as a golden-vector differential test, the same pattern already
 used for the frame codec (issue #156).
 
-Full design rationale: `docs/superpowers/specs/2026-08-31-guided-pairing-design.md`.
+Full design rationale: `docs/superpowers/specs/2026-08-31-guided-pairing-design.md` — a
+local-only planning document (`docs/superpowers/` is gitignored), not in the repository.
 
 ## The state machine
 
@@ -123,14 +126,31 @@ flow; doing so would freeze `/api/state` (and every other read) for that entire 
   pairing flow; exclusion is entirely the supervisor-park + poll-skip pair above, not lock
   sharing.
 
-## NOT-LIVE-VERIFIED
+## Stale-bond recovery (#200, `R_PAIRING_STALE_BOND_RECOVERY`)
+
+BlueZ refuses `Device1.Pair()` with `org.bluez.Error.AlreadyExists` when a bond for the device
+already exists. After a unit-side Bluetooth reset the unit has forgotten buspi but buspi's own bond
+persists, so without recovery the wizard's `Pair()` fails, retries `MAX_ATTEMPTS` times and ends on
+a generic `pairing_failed` the user cannot act on. That is exactly what happened on the real re-pair
+at the van on 2026-09-18.
+
+`BluezTransport.pair()` (`calictl/pairing_bluez.py`) now handles that one error: it logs a warning,
+removes the stale bond (`remove_bond()`, i.e. `Adapter1.RemoveDevice()` plus clearing the pairing
+cache) and retries `Pair()` **exactly once**. Any other error (e.g. an authentication failure) is a
+genuine pairing failure and propagates unchanged, so a bond is never wiped to mask a real problem.
+Verified by `T_PAIRING_STALE_BOND_RECOVERY` and `T_PAIRING_FAILURE_PROPAGATES` in
+`tests/test_pairing_bluez_transport.py` — both stub `remove_bond()`, so the recovery path itself
+has not yet run end-to-end against real BlueZ.
+
+## Live-verification status
 
 Everything above is mock-tested: `tests/test_pairing_sm.py` replays the pure SM against
 `tests/vectors/pairing.json`; the BlueZ runner and the `/api/pairing` endpoints are tested
-against a fake transport, no real dbus/bleak. **No real unbond→re-pair has been run against the
-van yet** — that is a deliberate, human-in-the-loop step (typing a passkey off the camper's own
-screen) tracked as a checkbox on
-[#157](https://github.com/ckeller42/open-california/issues/157). Until that checkbox is
-checked, treat the BlueZ transport (agent registration, `Device1.Pair()`, the verify-policy
-read count, `Adapter1.RemoveDevice()`) as **DECOMPILE/mock-tier**, not device-verified — same
-evidence-tier convention as `evidence-ledger.md`.
+against a fake transport, no real dbus/bleak. The one real run so far — a re-pair at the van on
+2026-09-18 — failed at `Device1.Pair()` with `AlreadyExists`, which is what the stale-bond
+recovery above was written for; a successful live unbond→re-pair has not been recorded. It is a
+deliberate, human-in-the-loop step (typing a passkey off the camper's own screen) tracked as a
+checkbox on [#157](https://github.com/ckeller42/open-california/issues/157). Until that checkbox
+is checked, treat the BlueZ transport (agent registration, `Device1.Pair()`, the stale-bond
+recovery, the verify-policy read count, `Adapter1.RemoveDevice()`) as **DECOMPILE/mock-tier**, not
+device-verified — same evidence-tier convention as `evidence-ledger.md`.

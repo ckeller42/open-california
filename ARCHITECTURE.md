@@ -43,7 +43,9 @@ One daemon (`serve.py`) owns the single BLE connection and drives that pipeline:
    (InfluxDB, read by Grafana). Same process, one connection.
 
 Supporting the daemon: `session.py` (a supervisor that holds the BLE slot while the UI is active and
-releases it when idle), `observer.py` / `automation.py` (passive camping observer + auto-camper),
+releases it when idle; a roof move or STOP takes the slot outright via `drop_for_handover`, because
+the roof opens its own connection and its arming contract forbids the session's `1003` heartbeat —
+the supervisor reconnects afterwards), `observer.py` / `automation.py` (passive camping observer + auto-camper),
 `firmware.py` / `anchors.py` (firmware-drift capture + plausibility checks), `history.py` +
 `freshness.py` (energy history + stale-read handling).
 

@@ -39,8 +39,8 @@ exact file:line citations).
   names are VW/partner copyrighted drawables (incl. the VW roundel + California
   logos); per the repo's citations-only rule they are not redistributed here and
   were purged from git history (2026-07-08). Regenerate them locally from the APK
-  with `ui/assets/vd2svg.py`; `build_prototype.py` falls back to neutral
-  placeholders when they're absent.
+  (the `vd2svg.py` converter used for that is local-only, not in the repo);
+  `build_prototype.py` falls back to neutral placeholders when they're absent.
 
 ## Screen inventory
 

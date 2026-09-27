@@ -197,6 +197,17 @@ sequenceDiagram
 >    the app's **3000 ms** dead-man (`validate_s`, abort to STOP if not valid by 3 s).
 > 3. **Cadence ≈ 500 ms** (`CALICTL_ROOF_PERIOD_S`).
 
+**Connection-slot handover (#198).** In the daemon, a roof move *and* a roof STOP first call
+`session.SessionSupervisor.drop_for_handover()` (under the `_ble` lock) to close the live persistent
+session, then `actuate_roof` / `actuate` open their own connection. Two independent reasons: the unit
+has **one** connection slot, so a second client alongside the live session is refused; and that
+session runs a `1003` heartbeat, while the roof's arming contract above requires **none** (the
+SafetyCounter is the liveness proof, #150) — so the roof cannot borrow it either. The drop is
+transient: unlike `set_mode("disconnect")` it leaves the manual-release mode untouched, and the
+supervisor reconnects by itself afterwards. A release during an in-flight move is lock-free (it
+flips the move loop's stop event and the loop writes its own STOP); a standalone STOP with no move
+in flight takes the slot too, since a STOP refused for a busy slot is the worst outcome.
+
 ## 3b. Range validation & the 0x0E link drop (`protocol.check_value`)
 
 calictl validates every field against its width + curated `valid` set **before** writing. The

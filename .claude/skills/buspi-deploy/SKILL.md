@@ -76,7 +76,7 @@ ssh -t buspi 'sudo sed -i "/^CALICTL_ADDR=/d" /etc/buspi/calictl.env && sudo -n 
   IP, and if still down, report and wait rather than retrying forever.
 - The APK lives at `buspi:~/apks/de.volkswagen.CaliforniaOnTour.apk` (gitignored source).
 - `sudo` on buspi needs the box password EXCEPT restart/stop/start of `calictl.service` (passwordless, scoped `deploy/calictl-restart.sudoers`); secrets in `/etc/buspi/*.env` (root, 0600).
-- Grafana dashboards don't auto-update; push from buspi with `deploy/push_dashboard.py`.
+- Grafana dashboards don't auto-update; push from buspi with `calictl/deploy/push_dashboard.py`.
 - The web UI **can** be served over **HTTPS on the tailnet** via `tailscale serve` (proxying
   `127.0.0.1:8088`) at `https://<pi-name>.<tailnet>.ts.net/` — tailnet-only, valid LE cert,
   persistent across reboots (survives a `tailscaled` restart, verified). It's a toggle the owner
