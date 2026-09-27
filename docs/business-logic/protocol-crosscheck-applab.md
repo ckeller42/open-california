@@ -93,8 +93,10 @@ daemon with `CALICTL_BLE_TRACE=~/ble.jsonl` (`calictl/trace.py` — one JSON lin
 read / write / link event; `CALICTL_BLE_TRACE_HEARTBEAT=1` to include the 1003 beats), let it
 run through a drive / a heater cycle / a roof move, then `python3 -m tools.trace_compare
 ~/ble.jsonl`. The report lists: state frames that do **not** round-trip through the dictionary
-(bits the unit uses that we don't model), per-char notification cadence (the mock pushes energy
-once a second — the unit was seen at ~3 Hz live), `RunningTimeinAction` and
+(bits the unit uses that we don't model), per-char notification cadence (the mock pushes each char once on
+subscribe and afterwards only `CHANGE_PUSH_FNS` — campingmode + vehicle — on change, plus the
+lighting ramp and water on a measured change; the 2026-07 "energy ~3 Hz" note was contradicted by
+the first trace below), `RunningTimeinAction` and
 `AgeOneBattValuesMinutes` rates vs the mock's ±1/min, roof `Position` transitions with timings,
 and the terminal-15 → `campingmode.Enable`/master-shed coupling delay. A difference is a mock bug
 or a new protocol fact — never a reason to touch the trace. Results land in this file's tables.

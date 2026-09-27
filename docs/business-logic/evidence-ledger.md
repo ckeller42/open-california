@@ -6,7 +6,7 @@ proves what actually happens.
 
 | Tier | Meaning | How it's checked |
 |---|---|---|
-| **CAPTURE** | Matched byte-for-byte against a real HCI/PacketLogger capture of the app | `tests/scenarios/<fn>/*.yaml` + `tests/test_capture_diff.py` |
+| **CAPTURE** | Matched byte-for-byte against a real HCI/PacketLogger capture of the app | `tools/scenarios/<fn>/*.yaml` (fed to `tools/capture_diff.py`) + `tests/test_capture_diff.py` |
 | **DECOMPILE** | Grounded in the app's decompiled decode/setter + the enigma mapping, but never seen on the wire | agent cross-checks; `mapping.enigma` (54 verified classes) |
 | **DEVICE** | Physically observed on the van (photons / a human at the hardware), frame not necessarily diffed | owner report, dated |
 
@@ -90,9 +90,14 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 - roof `Installed=1` — DEVICE (live read 2026-08-26, #106): the pop-top IS installed (motor never driven).
 
 Captures come from the Mac "bar" (PacketLogger/tshark) or buspi HCI. When one lands: add a
-`tests/scenarios/<fn>/<case>.yaml`, assert our frame matches in `test_capture_diff.py`, flip the row
+`tools/scenarios/<fn>/<case>.yaml`, assert our frame matches in `test_capture_diff.py`, flip the row
 to CAPTURE, and drop the GUI "not verified" confirm for that control. See the memory
-`capture-evidence-tier`.
+`capture-evidence-tier`. A scenario is one (function, action) capture target for
+`python3 -m tools.capture_diff <capture> <fn>/<case> [--frames]`: keys `function`, `what`,
+`value` (the `calictl set` arguments that should reproduce the app's write), `control_char` (short
+UUID the app writes, e.g. `"1501"`), optional `handle` (ATT handle, if known), `capture_label`, and
+`state` (decoded state at capture time, carried into the full-packet `control.build`); a leading
+comment says what to do at the van (see `tools/scenarios/lighting/kitchen-50.yaml`).
 - lighting **zone 9 = pop-top roof READING light** — DEVICE (2026-08-30, single-light isolation:
   unit screen "Dach Ein/Aus" on, live read `zone_9=2`, all other zones 0/13). Exposed an `any_on`
   bug (a zones-1..8 whitelist excluded it — fixed same day). NB conflicts with the 2026-08-27

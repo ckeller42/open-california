@@ -30,6 +30,10 @@ traceability table on the index page):
 ``mock-only``
    Exercised end-to-end only against ``tools/mock_unit`` / ``tools/applab``. The frames match the
    app, but ``calictl`` has never run this sequence against the real unit.
+``ci-real-stack``
+   Verified in CI against the real host Bluetooth stack (BlueZ, ``bluetoothd``, D-Bus and the
+   kernel inside a VM, the ``pairing-real-stack`` job) talking to the Bumble fake unit, but
+   ``calictl`` has not yet run this sequence end to end against the real unit.
 ``not-live-verified``
    Unit-tested (or only partly exercised live). The contract is the *intended* behaviour, not a
    proven one.
@@ -159,26 +163,56 @@ Guided pairing — passkey entry and stale-bond recovery
 
 .. spec:: Guided pairing with passkey entry and stale-bond recovery
    :id: S_SEQ_PAIRING
-   :status: not-live-verified
-   :links: R_PAIRING_SM, R_PAIRING_RUNNER, R_PAIRING_BLUEZ_TRANSPORT, R_PAIRING_STALE_BOND_RECOVERY
+   :status: ci-real-stack
+   :links: R_PAIRING_SM, R_PAIRING_RUNNER, R_PAIRING_BLUEZ_TRANSPORT, R_PAIRING_STALE_BOND_RECOVERY, R_FAKE_UNIT_FIDELITY
 
    **Contract.** ``POST /api/pairing`` drives the platform-free state machine
    (:py:func:`calictl.pairing.step`) through :py:class:`calictl.pairing_bluez.PairingRunner` and the
    BlueZ transport (:py:class:`calictl.pairing_bluez.BluezTransport`):
 
-   * ``start`` first parks the persistent-session supervisor (``set_mode("disconnect")``). While a
-     flow is active the poll loop skips its whole read cycle. The pairing flow never takes the
-     ``_ble`` lock. Exclusion comes from parking the supervisor and skipping polls.
-   * SCANNING (30 s) for the name ``VWCAMPER`` → CONNECTING (15 s) → PAIRING (15 s):
-     ``Device1.Pair()`` with a ``KeyboardOnly`` ``Agent1`` → WAITING_PASSKEY (60 s) until the user
-     types the 6-digit passkey the unit displays → VERIFYING (10 s): ``1001`` + ``1004`` must read,
-     and at least one readable char → BONDED: cache the identity address in ``pairing.json``
-     (mode 0600) and retarget the running daemon live.
-   * A failed pair retries by rescanning, up to 3 attempts, then ERROR. Any state timeout leads to
-     ERROR. ``cancel`` returns to IDLE.
-   * **Stale-bond recovery (#200)**: when ``Pair()`` fails with ``org.bluez.Error.AlreadyExists``
-     (a local bond the unit has forgotten), clear the stale bond and retry ``Pair()`` exactly
-     once. Any other error propagates unchanged. **NOT-LIVE-VERIFIED** (unit-tested only).
+   * ``start`` parks the persistent-session supervisor (``set_mode("disconnect")``), marks the
+     start pending (the poll loop skips while it is set), then takes the ``_ble`` lock just long
+     enough to enter SCANNING — an in-flight poll or command finishes first. The HTTP request waits
+     at most ``PAIRING_START_WAIT_S`` (2 s) and answers ``scanning`` while the start still waits.
+     The lock is released once SCANNING is entered; for the rest of the flow the parked supervisor
+     and the poll skip keep ``serve`` off the radio.
+   * Entering SCANNING registers the ``KeyboardOnly`` ``Agent1`` **before any link exists** (the
+     kernel fixes an LE link's IO capability when the link is created). The registration is
+     transactional: the agent is kept only when both ``RegisterAgent`` and ``RequestDefaultAgent``
+     succeeded, otherwise it is unregistered and unexported again and the error propagates.
+   * SCANNING (30 s) for the name ``VWCAMPER``. A unit BlueZ already knows and currently hears (a
+     ``Device1`` with that name and an ``RSSI``) is adopted directly, since BlueZ raises no new
+     discovery callback for it while another client keeps discovery running. When our scan stops
+     and ``Adapter1.Discovering`` is still true, the snapshot reports ``radio_busy`` (another client
+     is scanning, so a new LE connect will likely fail with HCI 0x3e) and the wizard shows a hint.
+   * CONNECTING (20 s). Every step shares one deadline, 18 s after the margins. **Bond probe
+     first:** when BlueZ already holds a bond, a bounded connect plus the auth-gated ``1004`` read
+     (at most 5 s) tells a working bond from a stale one. A **working bond is kept**: its link is
+     reused and PAIRING reports success at once without pairing again. The bond is dropped only
+     when the probe **proves** the key stale — an authentication-class failure ("PIN or Key
+     Missing", HCI 0x05/0x06, ATT 0x05/0x0F, ``NotPermitted``/``NotAuthorized``) or a probe that
+     timed out after ``Device1.Connected`` was seen true (the link came up but the read never
+     completed). Then ``remove_bond(clear_cache=False)`` removes the BlueZ device object and bond
+     but **keeps** ``pairing.json`` (the identity does not change), and the unit is re-discovered
+     under its current address (at most 5 s) before a fresh connect, which always keeps at least
+     8 s. Any other probe or connect failure (an asleep or out-of-range unit, HCI 0x3e on a busy
+     radio, no budget left) is ``EV_CONNECT_FAIL`` with the bond **and** ``pairing.json`` kept.
+   * ``EV_CONNECT_FAIL`` and ``EV_PAIR_FAIL`` retry from a fresh scan, up to 3 attempts in all,
+     then ERROR ``connect_failed`` / ``pairing_failed``. Any state timeout leads to ERROR
+     ``timeout``. ``cancel`` returns to IDLE.
+   * PAIRING (15 s): ``Device1.Pair()`` → WAITING_PASSKEY (60 s) until the user types the 6-digit
+     passkey the unit displays → VERIFYING (10 s): ``1001`` + ``1004`` must read, and at least one
+     readable char → BONDED: cache the identity address in ``pairing.json`` (mode 0600) and
+     retarget the running daemon live.
+   * **Stale-bond recovery at Pair() (#200)**: when ``Pair()`` still fails with
+     ``org.bluez.Error.AlreadyExists``, drop the bond the same way (``_drop_bond_and_rediscover()``,
+     cache kept, re-discovery bounded by the PAIRING budget) and retry ``Pair()`` exactly once. Any
+     other error propagates unchanged.
+   * **Flow end** (BONDED, ERROR, or IDLE after cancel/reset): the transport's ``aclose()``
+     releases the wizard's own link (at most 5 s) so ``serve`` can read right after BONDED,
+     unregisters the agent and drops the D-Bus connection. A late result from an abandoned
+     attempt neither emits an event nor keeps a link.
+   * Only the explicit ``reset`` (``ACT_REMOVE_BOND``) clears ``pairing.json``.
 
 .. mermaid::
 
@@ -188,15 +222,28 @@ Guided pairing — passkey entry and stale-bond recovery
         participant B as BlueZ
         participant U as Camper unit
         W->>C: POST /api/pairing start
-        C->>C: park session supervisor, poll loop skips while the flow is active
+        C->>C: park session supervisor, mark start pending, poll loop skips
+        C->>C: take the _ble lock after any in-flight poll, release it once scanning
+        C->>B: register Agent1 KeyboardOnly and request default agent (before any link)
         C->>B: start scan (SCANNING, 30 s)
-        U-->>B: advertises VWCAMPER
-        B-->>C: device found
-        C->>U: stop scan, connect (CONNECTING, 15 s)
-        C->>B: register Agent1 KeyboardOnly, Device1.Pair() (PAIRING, 15 s)
-        alt Pair() fails with AlreadyExists (stale local bond, 2026-09-18)
-            C->>B: clear the stale bond (Adapter1.RemoveDevice)
-            C->>B: retry Pair() exactly once (NOT-LIVE-VERIFIED)
+        U-->>B: advertises VWCAMPER (rotating private address)
+        B-->>C: device found (or an already-known device with a current RSSI is adopted)
+        C->>B: stop scan, check Adapter1.Discovering (true means radio_busy)
+        opt BlueZ already holds a bond (CONNECTING, 20 s budget)
+            C->>U: bond probe, connect and read 1004 (up to 5 s)
+            alt read OK
+                C->>C: keep the bond and its link, skip connect and Pair(), go to VERIFYING
+            else auth-class failure, or link up but the read timed out
+                C->>B: remove_bond with clear_cache False (Adapter1.RemoveDevice)
+                C->>B: re-discover the unit (up to 5 s), pairing.json kept
+            else unit asleep, busy radio, or no budget left
+                C->>C: EV_CONNECT_FAIL, bond and pairing.json kept, retry from scan
+            end
+        end
+        C->>U: connect (no bond, or after the drop, at least 8 s left)
+        C->>B: Device1.Pair() (PAIRING, 15 s)
+        opt Pair() fails with AlreadyExists
+            C->>B: drop the bond, re-discover, retry Pair() exactly once
         end
         B->>U: SMP pairing request
         Note over U: unit shows a 6-digit passkey on its screen
@@ -212,15 +259,26 @@ Guided pairing — passkey entry and stale-bond recovery
         else read failed or zero readable
             C->>C: ERROR verify_failed
         end
-        C->>B: unregister the agent (flow end)
+        C->>U: release the wizard link (flow end, up to 5 s)
+        C->>B: unregister the agent, drop the D-Bus connection
 
-**Evidence.** The state machine, runner and wizard are unit- and mock-tested
+**Evidence.** The state machine, runner and transport logic are unit-tested
 (``tests/vectors/pairing.json``, ``tests/test_pairing_runner.py``,
-``tests/test_pairing_bluez_transport.py``). The BlueZ transport is mock-tier. The one live contact
-was a re-pair at the van on 2026-09-18, which hit ``AlreadyExists`` from a stale local bond left by
-a unit-side Bluetooth reset and motivated #200, whose recovery is so far unit-tested only. The
-full live unbond and re-pair is still open (#157). Details: `guided-pairing.md
-<https://ckeller42.github.io/open-california/business-logic/guided-pairing.html>`_.
+``tests/test_pairing_bluez_transport.py``). On every pull request the real runner and state machine
+pair with the Bumble fake unit (:py:mod:`tools.fake_unit_peripheral`) over a Bumble ``LocalLink``
+(``tests/test_pairing_link.py``). The ``pairing-real-stack`` CI job runs calictl's real
+``BluezTransport`` against real BlueZ and ``bluetoothd`` inside a VM (``tests/realstack/``): agent,
+scan, connect, Pair, verify, persist, link release at flow end, the stale-bond probe and removal,
+an asleep unit keeping its bond, and ``radio_busy``. That job is not yet a required check. The fake
+unit's pairing behaviour was cross-checked against the vendor app on 2026-09-27 (`protocol-crosscheck-applab.md
+<https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html>`_,
+"Pairing"). The one live contact with the real unit was a re-pair at the van on 2026-09-18, which
+hit ``AlreadyExists`` from a stale local bond left by a unit-side Bluetooth reset and motivated
+#200. CI does **not** cover the real unit's radio behaviour (RSSI jitter, advertising policy and
+deep sleep, WiFi coexistence on buspi, other clients starving LE connects); the full live unbond
+and re-pair is still open (#157). Details: `guided-pairing.md
+<https://ckeller42.github.io/open-california/business-logic/guided-pairing.html>`_; owner guide:
+:doc:`howto-pair-your-camper`; test layers: :doc:`simulation-and-testing`.
 
 Notifications
 -------------

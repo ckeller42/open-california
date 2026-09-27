@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # On the GitHub runner: KVM access, a guest kernel WITH Bluetooth (the runner's own has none), then
-# boot it with virtme-ng and run in_vm.sh inside as root. The invocation is the one the Task 9 spike
-# proved on ubuntu-latest (docs: .superpowers/sdd/2026-09-25-pairing-verification/task-9-report.md):
+# boot it with virtme-ng and run in_vm.sh inside as root. The invocation below was proven on
+# ubuntu-latest while building this job (#201); the non-obvious parts:
 #   - pip-install as the runner user (a `sudo pip` collides with Debian's cryptography);
 #   - call vng by ABSOLUTE path under `sudo env PATH=… PYTHONPATH=…` (sudo's secure_path/site
 #     don't see ~/.local);

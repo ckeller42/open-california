@@ -104,7 +104,9 @@ the unit's on-screen display, not a guess. See [`signals.md`](https://ckeller42.
 3. **Surface it** — update the Grafana dashboard (`calictl/deploy/camper-dashboard.json`, pushed with
    `push_dashboard.py`) and Home Assistant.
 4. **Audit** — `python3 -m tools.audit_signals --report`.
-5. **Keep the suite green** — `python3 -m pytest tests/ -q`.
+5. **Keep the suite green** — `python3 -m pytest tests/ -q`. What each test layer (mock unit, GUI
+   e2e, real-unit trace replay, the pairing harnesses, the app lab, C parity) proves and which CI job
+   runs it: [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html).
 
 ## Invariants (do not break these)
 
@@ -130,4 +132,5 @@ the unit's on-screen display, not a guess. See [`signals.md`](https://ckeller42.
 | Sequence diagrams | the [rendered docs](https://ckeller42.github.io/open-california/protocol-sequences.html) |
 | Per-signal provenance + scales | [`docs/business-logic/signals.md`](https://ckeller42.github.io/open-california/business-logic/signals.html) |
 | The tested hardware + GATT map | the [hardware reference](https://ckeller42.github.io/open-california/hardware.html) |
+| Test layers, the mock unit + its fidelity gaps, CI jobs | [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html) |
 | Contributor rules + hard invariants | [`CLAUDE.md`](CLAUDE.md) |

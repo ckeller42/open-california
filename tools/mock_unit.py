@@ -19,12 +19,27 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
   * **Range validation → link drop:** an out-of-range field value raises
     ``MockDisconnect`` (the unit drops the ATT link with 0x0E; e.g. cooler State=3).
     This runs regardless of arming (the firmware's parse layer always validates).
-  * **Lighting per-zone SET (cracked 2026-07-08):** SET_PROFILE (Mode 16) activates a profile;
-    SET_BRIGHTNESS (Mode 4) applies the changed zone (honouring the ``14`` per-zone
-    leave-unchanged sentinel; 0 = set-to-0) but ONLY while a profile is active — the
-    live-verified precondition. All from an HCI capture of the app.
-  * It does NOT fake what we haven't decoded: the control→state timer offset remap and
-    the roof/heater enum semantics are deliberately not modelled (untouched by writes).
+  * **Lighting per-zone SET (cracked 2026-07-08):** SET_PROFILE (Mode 16) and SET_BRIGHTNESS
+    (Mode 4, honouring the ``14`` per-zone leave-unchanged sentinel; 0 = set-to-0) only STAGE a
+    change; the ``0e00…`` commit frame (Mode 0) applies it. A brightness frame applies only when
+    it carries a non-zero ProfileNumber (the app hardcodes 9) — the frame's own PN, not a
+    separately-active profile. The state char is a write-through ECHO; the physical lamps
+    (``light_actual``) ramp on ``tick()`` and push 1502 Mode-4 frames, and ``light_applies=False``
+    models "ACKed + echoed, lamps dark". Zone 9 (pop-top reading light) is refused while the roof
+    is closed. KNOWN FIDELITY GAP: like every control write here, lighting is also gated on the
+    1003 heartbeat arm — the real unit actuates lighting on an awake unit WITHOUT it
+    (control-and-actuation.md), so the mock is stricter than the van for lighting.
+  * **Roof (1401/1402):** the app-style SafetyCounter stream is modelled — validity needs a
+    monotonic, still-advancing counter (two increments), a restart drops it, a validated counter
+    withholds the motor ``ROOF_WITHHOLD_S`` (~3 s, SEMI-VERIFIED), a held move steps ``Position``
+    every ``ROOF_STEP_S`` and releasing (no frames for ``ROOF_RELEASE_S``) stops it. Coarse and
+    unverified against a real motor (calictl has never driven it).
+  * Also modelled: cooler/heater timers (control TimerHour/TimerMin → state ``*Set``, heater
+    departure timer), per-minute countdowns, the ignition→camping shed + crank link drop, the
+    15 s no-heartbeat link drop, device-confirmed ACK-and-ignore refusals, the one-slot option,
+    water freeze while its system is unpowered, and change-pushes only for ``CHANGE_PUSH_FNS``.
+    Not modelled: anything undecoded (e.g. roof/heater ``InfoPopUp``/``ErrorCode`` causes — they
+    change only when a test or the app-lab console sets them).
 
 Because a mock can only encode already-decoded behaviour, it is a regression harness +
 executable documentation — NOT an oracle. New protocol truth comes from Phase 2's
@@ -90,11 +105,11 @@ DEFAULT_SEED = {
     # Pop-top FITTED (the real van has one, #106), closed, no InfoPopUp alert, counter valid.
     # Seeded so the Roof tile + screen render in the e2e suite: the move buttons are the one
     # safety-sensitive control, and without a roof here CI never executed roofControls() at
-    # all — which is how a ReferenceError shipped to buspi in #174. Reads only; the mock does
-    # not model roof motion.
+    # all — which is how a ReferenceError shipped to buspi in #174. Motion is modelled coarsely
+    # from the SafetyCounter stream (write()'s roof branch + tick()), not from a real motor.
     "roof": {"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 1},
-    # ProfileNumber 0 = NO active profile: SET_BRIGHTNESS is ACKed but ignored until a profile
-    # is activated (SET_PROFILE) — the live-verified precondition. L10-16 hold the constant
+    # ProfileNumber 0 = no active profile. The apply gate is the brightness FRAME's own
+    # ProfileNumber (non-zero, see write()), not this seed value. L10-16 hold the constant
     # not-installed default (13) that the real van reports (so any_on must ignore them).
     "lighting": {"ProfileNumber": 0, "Mode": 0, "LightValue": 0,
                  "BrightnessLOneZero": 13, "BrightnessLOneOne": 13, "BrightnessLOneThree": 13,
@@ -169,9 +184,9 @@ class MockCamperUnit:
         self._last_t15: int | None = None            # ignition edge detector (tick)
         self.writes: list[tuple[str, bytes]] = []   # (function, frame) audit trail
         # Per-function STALE-read overrides: a read returns these until the 1003 heartbeat arms
-        # the session (self.armed), after which the true `state` is returned — models the real
-        # unit latching an old value until the liveness heartbeat drives its measurement loop
-        # (observed: fresh-water 1 L latched vs the true 11 L once the app's heartbeat runs).
+        # the session (self.armed), after which the true `state` is returned — models re-read chars
+        # the heartbeat refreshes. NOT water: the old "1 L latched vs 11 L once the heartbeat runs"
+        # story was correlation; water's real gate is `water_powered` (value-freshness.md).
         self.read_latch: dict[str, dict] = {}
         # Per-function NOTIFICATION push values: what the unit pushes on the state char (vs the
         # bare-read latch). Models push-only-for-freshness chars like water (1302), where a bare

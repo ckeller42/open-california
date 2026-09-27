@@ -12,7 +12,8 @@ Run (emulator started with ``-packet-streamer-endpoint default``; needs ``bumble
 
     FAKE_UNIT_VIN=<vin typed into the app> python tools/applab/fake_unit_ble.py [android-netsim]
 
-Then on stdin, live scenario control (each change notifies subscribers):
+Then, via the scenario-console FIFO (``FAKE_UNIT_FIFO``, default ``$TMPDIR/applab/fake_unit.in``;
+one command per ``echo … > "$FIFO"``), live scenario control (each change notifies subscribers):
 
     set airheater NormalOperation=1 RunningTimeinAction=42
     set roof InfoPopUp=5

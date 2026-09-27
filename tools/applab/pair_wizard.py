@@ -9,10 +9,13 @@ notification, opens it, types the passkey and taps OK. It prints each step.
 Prereqs: the emulator is up with the app open (`labctl.sh up`), and the fake unit is advertising.
 Only needed for a *fresh* pair; a persisted bond reconnects on its own (see the README).
 
-    FAKE_UNIT_PASSKEY=123456 python3 tools/applab/pair_wizard.py
+    python3 tools/applab/pair_wizard.py                            # code read from the fake's log
+    FAKE_UNIT_PASSKEY=123456 python3 tools/applab/pair_wizard.py   # fake started with the same pin
 
-Env: FAKE_UNIT_PASSKEY (default 123456), FAKE_UNIT_LOG (fake unit log to tail for the result;
-default $TMPDIR/applab/fake_unit.log, matching labctl.sh).
+Env: FAKE_UNIT_PASSKEY (the code to type; the fake pins the same value only if it was STARTED with
+it — unset, the fake shows a fresh random code per attempt, so this reads the last
+``### PASSKEY nnnnnn`` line from the log instead), FAKE_UNIT_LOG (the fake unit's log, read for
+that code and tailed for the result; default $TMPDIR/applab/fake_unit.log, matching labctl.sh).
 """
 from __future__ import annotations
 
@@ -24,7 +27,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADBUI = [sys.executable, os.path.join(HERE, "adbui.py")]
-PASSKEY = os.environ.get("FAKE_UNIT_PASSKEY", "123456")
+PASSKEY = os.environ.get("FAKE_UNIT_PASSKEY")   # unset: read the fake's fresh code from its log
 FAKE_LOG = os.environ.get(
     "FAKE_UNIT_LOG", os.path.join(os.environ.get("TMPDIR", "/tmp"), "applab", "fake_unit.log"))
 PRIMARY = ("Connect now", "Continue with Remote Control", "Set up Remote Control", "Next")
@@ -45,6 +48,15 @@ def bounds(line: str):
 
 def tap_bounds(b) -> None:
     sh("adb", "shell", "input", "tap", str((b[0] + b[2]) // 2), str((b[1] + b[3]) // 2))
+
+
+def logged_passkey() -> str | None:
+    """The last ``### PASSKEY nnnnnn`` the fake printed to FAKE_LOG, or None."""
+    try:
+        codes = re.findall(r"### PASSKEY (\d{6})", open(FAKE_LOG).read())
+    except OSError:
+        return None
+    return codes[-1] if codes else None
 
 
 def notif_has(text: str) -> bool:
@@ -79,8 +91,11 @@ def main() -> None:
     ed = next((bounds(l) for l in t.splitlines() if "EditText" in l), None)
     if not ed:
         print("no passkey field found", flush=True); return
+    passkey = PASSKEY or logged_passkey()
+    if not passkey:
+        print("no passkey: set FAKE_UNIT_PASSKEY or FAKE_UNIT_LOG (none in %s)" % FAKE_LOG, flush=True); return
     tap_bounds(ed); time.sleep(0.5)
-    sh("adb", "shell", "input", "text", PASSKEY); time.sleep(0.7)
+    sh("adb", "shell", "input", "text", passkey); time.sleep(0.7)
     ok = next((bounds(l) for l in tree().splitlines() if re.search(r"'OK'", l)), None)
     print("OK button:", ok, flush=True)
     if ok:

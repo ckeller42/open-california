@@ -46,6 +46,7 @@ clean and shows an empty "incoming" list).
    :caption: Appendix
 
    UI-DESIGN-RATIONALE
+   simulation-and-testing
    building-the-docs
 
 Reverse-engineering lab notes

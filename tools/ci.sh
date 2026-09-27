@@ -1,8 +1,22 @@
 #!/usr/bin/env bash
-# Local mirror of CI (.github/workflows/ci.yml's `test` job). Run before pushing — GitHub Actions
+# Local mirror of most of CI (.github/workflows/ci.yml). Run before pushing — GitHub Actions
 # may be gated (billing/spending limit), so this is the authoritative LOCAL gate.
 #
-#   tools/ci.sh              # run the full gate (what CI runs, minus gui-e2e)
+# `tools/ci.sh` (= `ci`) runs: ruff (ci.yml `lint`), the web-UI tsc/node check (`lint`), the whole
+# pytest suite on ONE local python (`test` runs it on 3.11/3.12/3.13), the signal audit, the
+# screens.json freshness check and the import-clean guard (`test`), and the vendor-FILE check
+# (first half of `no-vendor-material`). The pytest suite also covers `codec-parity` (C header +
+# vector freshness always; the C parity tests only if a C compiler is present), the Bumble pairing
+# harness (tests/test_pairing_link.py, if bumble is installed — requirements-dev pins it) and
+# `gui-e2e` (tests/e2e, if Playwright + Chromium are installed; otherwise they SKIP).
+# Only GitHub runs: the committed-MAC/VIN git-grep over the whole tree (`no-vendor-material`; the
+# pre-commit hook checks only the staged diff), `install-script` (sh -n + shellcheck install.sh),
+# `pairing-real-stack` (real BlueZ in a VM, tests/realstack/vm.sh; not a required check), and the
+# push-to-main workflows: docs.yml (sphinx -W build + Pages deploy — never on a PR, so a -W failure
+# first shows after merge; build locally with `sh docs/build_site.sh`) and screenshots.yml
+# (re-renders docs/screenshots and commits them to main with [skip ci]).
+#
+#   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
 #   tools/ci.sh test|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check
 #   tools/ci.sh dev          # install dev tooling + activate the pre-commit hook
 #

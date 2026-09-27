@@ -43,7 +43,7 @@ source $LAB/env.sh
 yes | sdkmanager --licenses >/dev/null
 sdkmanager "platform-tools" "emulator" "build-tools;35.0.0" "platforms;android-34" "system-images;android-34;google_apis;arm64-v8a"
 echo no | avdmanager create avd -n cali34 -k "system-images;android-34;google_apis;arm64-v8a" -d pixel_6
-apkeep -a de.volkswagen.CaliforniaOnTour -d apk-pure $LAB/apks     # same source the decompile skill uses
+apkeep -a de.volkswagen.CaliforniaOnTour -d apk-pure $LAB/apks     # same source as the private decompile pipeline (docs/protocol.md)
 python3 -m venv $LAB/venv-bumble && $LAB/venv-bumble/bin/pip install 'bumble[android]'
 ```
 
@@ -63,9 +63,17 @@ adb wait-for-device && adb install -r $LAB/apks/de.volkswagen.CaliforniaOnTour.a
 adb shell am start -n de.volkswagen.CaliforniaOnTour/de.volkswagen.caliontour.development.CaliforniaOnTourMainActivity
 
 export FAKE_UNIT_VIN=<the 17-char VIN you will type into the app — any syntactically valid one>
-mkfifo /tmp/fake_unit.in                            # scenario console (stdin of the peripheral)
-tail -f /tmp/fake_unit.in | $LAB/venv-bumble/bin/python tools/applab/fake_unit_ble.py > /tmp/fake_unit.log 2>&1 &
+mkdir -p "${TMPDIR:-/tmp}/applab"
+$LAB/venv-bumble/bin/python tools/applab/fake_unit_ble.py > "${TMPDIR:-/tmp}/applab/fake_unit.log" 2>&1 &
 ```
+
+(`tools/applab/labctl.sh up` does the emulator + fake + app launch in one go — see
+[Surviving a restart](#surviving-a-restart-labctl). It writes the log to the same place.)
+
+The fake makes its own **scenario console**: a named FIFO at `$FAKE_UNIT_FIFO`, default
+`${TMPDIR:-/tmp}/applab/fake_unit.in`, read in a background thread (not stdin — asyncio's stdin
+reader fails on macOS when stdin is a FIFO or redirected under `nohup`). `$TMPDIR` on macOS is a
+per-user `/var/folders/…` path, not `/tmp`, so use the variable rather than a literal path.
 
 The peripheral advertises as `VWCAMPER` from a rotating resolvable private address over the fixed
 identity `FAKE_UNIT_ADDR` (rotation period `FAKE_UNIT_RPA_S`, default 600 s — the real unit rotated
@@ -75,25 +83,29 @@ every ~10 min), serves the 0xNN00 services from `protocol/dictionary.yaml`, seed
 `### PASSKEY nnnnnn — the unit shows this; type it on the central ###`; set `FAKE_UNIT_PASSKEY` to
 pin a fixed code instead (e.g. for a scripted pairing wizard). Drive it while it runs:
 
-```
-echo "set roof InfoPopUp=5"          > /tmp/fake_unit.in    # any dictionary field, notifies subscribers
-echo "set vehicle TerminalOneFive=1" > /tmp/fake_unit.in    # ignition on (roof page needs it)
-echo "raw airheater 1050003c0c0000"  > /tmp/fake_unit.in    # replace a whole state frame
-echo "show airheater"                > /tmp/fake_unit.in    # decoded state -> log
-echo "pair off"                      > /tmp/fake_unit.in    # close the "Gerät verbinden" screen (refuses new bonds)
-echo "pair on"                       > /tmp/fake_unit.in    # reopen it
-echo "rotate"                        > /tmp/fake_unit.in    # advertise from a fresh private address now
-echo "forget"                        > /tmp/fake_unit.in    # drop every stored bond, like "Bluetooth zurücksetzen"
+```sh
+FIFO="${FAKE_UNIT_FIFO:-${TMPDIR:-/tmp}/applab/fake_unit.in}"
+echo "set roof InfoPopUp=5"          > "$FIFO"    # any dictionary field, notifies subscribers
+echo "set vehicle TerminalOneFive=1" > "$FIFO"    # ignition on (roof page needs it)
+echo "raw airheater 1050003c0c0000"  > "$FIFO"    # replace a whole state frame
+echo "show airheater"                > "$FIFO"    # decoded state -> log
+echo "pair off"                      > "$FIFO"    # close the "Gerät verbinden" screen (refuses new bonds)
+echo "pair on"                       > "$FIFO"    # reopen it
+echo "rotate"                        > "$FIFO"    # advertise from a fresh private address now
+echo "forget"                        > "$FIFO"    # drop every stored bond, like "Bluetooth zurücksetzen"
+echo "q"                             > "$FIFO"    # exit immediately (no clean radio power-off — prefer labctl.sh down)
 ```
 
-`fake_unit.log` carries `READ <fn>` / `WRITE <fn> <hex> -> state` lines — the WRITE lines are
+`fake_unit.log` (`${TMPDIR:-/tmp}/applab/fake_unit.log`) carries `READ <fn>` / `WRITE <fn> <hex> -> state` lines — the WRITE lines are
 the app's real frames. `BUMBLE_LOGLEVEL=DEBUG` adds the ATT/SMP trace (large).
 
 ### Pairing the app (once per emulator image)
 
-The cross-check between calictl's own guided-pairing wizard and the app's pairing flow has not
-been run yet — see the "Pairing" section of
-`docs/business-logic/protocol-crosscheck-applab.md` for what's still open.
+The app's pairing flow and error UX were cross-checked against this fake on 2026-09-27 (passkey
+association model, reconnect over a rotated address, re-pair after `forget`, refusal while
+`pair off`): see the "Pairing" section of `docs/business-logic/protocol-crosscheck-applab.md`.
+calictl's own wizard is checked against the same fake in CI (`tests/test_pairing_link.py`, and
+real BlueZ in the `pairing-real-stack` VM job — `docs/simulation-and-testing.md`).
 
 In the app: onboarding → Vehicle tab → *Add vehicle* → enter `FAKE_UNIT_VIN` (online validation
 fails → pick model *California* + equipment *Ocean* manually) → *Set up remote control* → grant
@@ -107,6 +119,13 @@ in `fake_unit.log` (or the fixed one from `FAKE_UNIT_PASSKEY`, if set), type it,
 adb shell cmd statusbar expand-notifications; python3 tools/applab/adbui.py tap "Pairing request"
 adb shell input tap 536 988; adb shell input text <passkey from fake_unit.log>; python3 tools/applab/adbui.py tap "^OK$"
 ```
+
+Or let `tools/applab/pair_wizard.py` walk the wizard sheets and type the code. It types
+`FAKE_UNIT_PASSKEY` when that is set, otherwise the last `### PASSKEY nnnnnn` line in the fake's log
+(`FAKE_UNIT_LOG`, default `${TMPDIR:-/tmp}/applab/fake_unit.log`). If you pin a code, export the
+**same** `FAKE_UNIT_PASSKEY` for both processes — the fake (before `labctl.sh up`/`fake`, since it is
+read at start) and `pair_wizard.py` — otherwise the fake shows a fresh random code the wizard can't
+know. If you run the fake with a log elsewhere, point `FAKE_UNIT_LOG` at it.
 
 The bond persists on both sides (Android's bond store + the fake's `JsonKeyStore` at
 `tools/applab/.fake_unit_keys.json`, gitignored), so later sessions reconnect without the dance.
@@ -127,6 +146,38 @@ FAKE_UNIT_VIN=<the VIN you paired> tools/applab/labctl.sh up      # emulator + f
 tools/applab/labctl.sh status                                     # what's running
 tools/applab/labctl.sh down                                       # stop the fake CLEANLY, then the emulator
 ```
+
+| `labctl.sh` subcommand | What it does |
+|---|---|
+| `up` | start the emulator if it is down (headless, netsim Bluetooth), start the fake if it is down, launch the app. Idempotent. |
+| `fake` | (re)start only the fake unit: `SIGTERM` a running one, then start it again (needs `FAKE_UNIT_VIN`) |
+| `status` (default) | emulator / fake / `netsimd` up or down, plus the scenario-console command line |
+| `down` | `SIGTERM` the fake (so netsim drops its radio), kill the emulator, then stop `netsimd` |
+
+State lives in `${TMPDIR:-/tmp}/applab/`: `fake_unit.log`, `fake_unit.pid`, `emulator.log`, and the
+`fake_unit.in` FIFO. Under `labctl.sh` the FIFO path is always that one (it passes
+`FAKE_UNIT_FIFO` to the fake itself, so an exported `FAKE_UNIT_FIFO` is ignored there).
+
+| Variable | Read by | Default | Meaning |
+|---|---|---|---|
+| `LAB_DIR` | `labctl.sh` | `/Volumes/External/android-lab` | lab install root; `$LAB_DIR/env.sh` is sourced for `adb`/`emulator` on `PATH` |
+| `BUMBLE_PY` | `labctl.sh` | `$LAB_DIR/venv-bumble/bin/python` | a Python with `bumble[android]` installed |
+| `AVD` | `labctl.sh` | `cali34` | emulator AVD name |
+| `APP_ID` / `APP_ACTIVITY` | `labctl.sh` | `de.volkswagen.CaliforniaOnTour` / `de.volkswagen.caliontour.development.CaliforniaOnTourMainActivity` | app package / launch activity |
+| `TMPDIR` | `labctl.sh`, fake, `pair_wizard.py` | `/tmp` | parent of the `applab/` state dir |
+| `FAKE_UNIT_VIN` | fake (required by `labctl.sh up`/`fake`) | empty | the VIN you type into the app; `1002` serves `SHA-256(VIN)[-16:]`. Never committed. |
+| `FAKE_UNIT_PASSKEY` | fake, `pair_wizard.py` | unset: fresh random code per attempt (fake); last `### PASSKEY` in the log (wizard) | pin a fixed 6-digit code — export it for both |
+| `FAKE_UNIT_ADDR` | fake | `C0:FF:EE:CA:11:F0` | stable identity address (keep it: changing it forces a re-pair) |
+| `FAKE_UNIT_KEYSTORE` | fake | `tools/applab/.fake_unit_keys.json` (gitignored) | Bumble `JsonKeyStore` for bonds |
+| `FAKE_UNIT_FIFO` | fake | `${TMPDIR:-/tmp}/applab/fake_unit.in` | scenario console FIFO (created if missing) |
+| `FAKE_UNIT_LOG` | `pair_wizard.py` | `${TMPDIR:-/tmp}/applab/fake_unit.log` | the fake's log, tailed for the passkey and the result |
+| `FAKE_UNIT_RPA_S` | fake | `600` | resolvable-private-address rotation period, seconds |
+| `FAKE_UNIT_HEARTBEAT_TIMEOUT_S` | fake | `15` | drop a link with no `1003` beat for this long (after the first beat) |
+| `FAKE_UNIT_PAIRING_GRACE_S` | fake | `90` | the same, before the first beat (passkey entry) |
+| `BUMBLE_LOGLEVEL` | fake | `INFO` | `DEBUG` adds the ATT/SMP trace |
+| `OC_REPO` | fake | the checkout containing the script | repo root put on `sys.path` |
+| `ADB` / `ANDROID_SDK_ROOT` | `adbui.py` | `$ANDROID_SDK_ROOT/platform-tools/adb`, else `adb` | which `adb` to run |
+| `APPLAB_SHOTS` | `adbui.py` | `./applab-shots` | screenshot directory (keep it out of the repo) |
 
 What makes a restart survivable (`fake_unit_ble.py` + the shared `tools/fake_unit_peripheral.py`):
 
