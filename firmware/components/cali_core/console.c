@@ -2,10 +2,10 @@
 #include "cali_console.h"
 
 #include <ctype.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_json.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
@@ -19,27 +19,39 @@ static const cali_transport_t *s_t;
 
 #define N_OF(a) (sizeof (a) / sizeof *(a))
 
-/* A SNAP of every function (14 functions, ~160 fields) is ~4.5 KB; built whole, then written with
- * one fputs so no other output can land inside it. */
+/* A SNAP of every function (14 functions, ~160 fields) is ~4.5 KB; built whole (behind the "STATE
+ * "/"SNAP " line prefix, via cali_json), then written with one fputs so no other output can land
+ * inside it. */
 #define SNAP_MAX 8192
 static char s_buf[SNAP_MAX];
-static size_t s_pos;
 static int s_over;
 
-static void put(const char *fmt, ...)
-#if defined(__GNUC__)
-    __attribute__((format(printf, 1, 2)))
-#endif
-    ;
+#define PREFIX_STATE "STATE "
+#define PREFIX_SNAP "SNAP "
 
-static void put(const char *fmt, ...) {
-    if (s_over) return;
-    va_list ap;
-    va_start(ap, fmt);
-    int n = vsnprintf(s_buf + s_pos, SNAP_MAX - s_pos, fmt, ap);
-    va_end(ap);
-    if (n < 0 || (size_t)n >= SNAP_MAX - s_pos) s_over = 1;
-    else s_pos += (size_t)n;
+/* Writes prefix into s_buf and starts a cali_json_t right after it. */
+static void begin_line(cali_json_t *j, const char *prefix) {
+    size_t n = strlen(prefix);
+    memcpy(s_buf, prefix, n);
+    cali_json_begin(j, s_buf + n, SNAP_MAX - n);
+}
+
+/* Closes j's document, appends the trailing newline, and sets s_over on any overflow (of the
+ * JSON itself, or of the one extra byte the newline needs). */
+static void finish_line(cali_json_t *j, const char *prefix) {
+    int n = cali_json_end(j);
+    if (n < 0) {
+        s_over = 1;
+        return;
+    }
+    size_t total = strlen(prefix) + (size_t)n;
+    if (total + 1 >= SNAP_MAX) {
+        s_over = 1;
+        return;
+    }
+    s_buf[total] = '\n';
+    s_buf[total + 1] = '\0';
+    s_over = 0;
 }
 
 static void out_line(void) {
@@ -55,32 +67,44 @@ void cali_console_state(const cali_pair_state_t *s, const char *address) {
     /* bounds = the generated tables' own lengths (pairing_consts.h), never hand-typed counts */
     const char *st = (size_t)s->st < N_OF(PAIR_STATE_NAMES) ? PAIR_STATE_NAMES[s->st] : "unknown";
     const char *err = (size_t)s->error < N_OF(PAIR_ERR_NAMES) ? PAIR_ERR_NAMES[s->error] : NULL;
-    s_pos = 0;
-    s_over = 0;
-    put("STATE {\"state\":\"%s\",\"attempts\":%u,\"error\":", st, (unsigned)s->attempts);
-    if (err) put("\"%s\"", err); else put("null");
-    if (address) put(",\"address\":\"%s\"}\n", address); else put(",\"address\":null}\n");
+    cali_json_t j;
+    begin_line(&j, PREFIX_STATE);
+    cali_json_key(&j, "state");
+    cali_json_str(&j, st);
+    cali_json_key(&j, "attempts");
+    cali_json_int(&j, (long long)(unsigned)s->attempts);
+    cali_json_key(&j, "error");
+    if (err) cali_json_str(&j, err); else cali_json_null(&j);
+    cali_json_key(&j, "address");
+    if (address) cali_json_str(&j, address); else cali_json_null(&j);
+    finish_line(&j, PREFIX_STATE);
     out_line();
 }
 
 void cali_console_snapshot(uint64_t t_ms) {
     codec_kv_t kv[CODEC_KV_MAX];
-    int first = 1;
-    s_pos = 0;
-    s_over = 0;
-    put("SNAP {\"t\":%llu,\"fn\":{", (unsigned long long)t_ms);
+    cali_json_t j;
+    begin_line(&j, PREFIX_SNAP);
+    cali_json_key(&j, "t");
+    cali_json_int(&j, (long long)t_ms);
+    cali_json_key(&j, "fn");
+    cali_json_obj_begin(&j);
     for (size_t i = 0; i < CODEC_NCHARS; i++) {
         const uint8_t *frame;
         size_t len;
         const codec_func_t *f = codec_func_by_name(CODEC_CHARS[i].function);
         if (!f || !cali_session_frame(i, &frame, &len)) continue;
         int n = codec_decode(f, frame, len, kv);
-        put("%s\"%s\":{", first ? "" : ",", CODEC_CHARS[i].function);
-        first = 0;
-        for (int k = 0; k < n; k++) put("%s\"%s\":%lu", k ? "," : "", kv[k].name, (unsigned long)kv[k].value);
-        put("}");
+        cali_json_key(&j, CODEC_CHARS[i].function);
+        cali_json_obj_begin(&j);
+        for (int k = 0; k < n; k++) {
+            cali_json_key(&j, kv[k].name);
+            cali_json_int(&j, (long long)(unsigned long)kv[k].value);
+        }
+        cali_json_obj_end(&j);
     }
-    put("}}\n");
+    cali_json_obj_end(&j);
+    finish_line(&j, PREFIX_SNAP);
     out_line();
 }
 

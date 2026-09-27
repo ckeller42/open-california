@@ -106,6 +106,7 @@ def fake(tmp_path_factory):
             "-I",
             str(ROOT / "firmware/components/platform/include"),
             str(CORE / "console.c"),
+            str(CORE / "json.c"),
             str(CORE / "session.c"),
             str(CORE / "runner.c"),
             str(CORE / "pairing_sm.c"),

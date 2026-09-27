@@ -127,3 +127,19 @@ def test_chars_header_heartbeat_timing_is_calictl_defaults_not_env(monkeypatch):
     assert "#define CODEC_HEARTBEAT_PERIOD_MS %d\n" % want_period in text
     assert "#define CODEC_HEARTBEAT_WARMUP_MS %d\n" % want_warmup in text
     assert want_warmup == 2000  # value-freshness.md: the proven on-device warm-up
+
+
+def test_net_consts_header_is_fresh():
+    """The checked-in ``net_consts.h`` matches a fresh ``generate_net()`` regeneration of
+    ``tools.wifi_consts.CONSTS`` (#154 Task 1).
+
+    .. test:: Generated network-constants header is fresh
+       :id: T_CDICT_NET_FRESH
+       :links: R_NET_CONSTS_SINGLE_SOURCE
+    """
+    from tools import gen_c_dict
+
+    text = gen_c_dict.generate_net()
+    assert text == (ROOT / "csrc" / "net_consts.h").read_text()
+    assert '#define NET_AP_SSID "calictl-esp-setup"' in text
+    assert "#define NET_SETUP_AFTER_MS 300000" in text

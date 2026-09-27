@@ -112,9 +112,11 @@ Cross-language codec (issue #156)
 
 .. automodule:: tools.gen_codec_vectors
 .. automodule:: tools.gen_c_dict
+.. automodule:: tools.wifi_consts
 .. automodule:: tests.test_codec_vectors
 .. automodule:: tests.test_codec_parity
 .. automodule:: tests.test_gen_c_dict
+.. automodule:: tests.test_wifi_consts
 .. automodule:: tests.test_ports_parity
 
 BLE trace recorder + replay (real-unit evidence for the mock)
@@ -156,6 +158,7 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_runner_fake
 .. automodule:: tests.firmware.test_session_fake
 .. automodule:: tests.firmware.test_host_e2e
+.. automodule:: tests.firmware.test_json
 
 Fake unit peripheral (Bumble, shared by the app lab + pairing tests)
 ----------------------------------------------------------------------

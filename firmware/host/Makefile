@@ -62,8 +62,8 @@ CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC)
 COMPONENT_OBJ := platform_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
-# The rest of cali_core (console + session) and the frame codec: only cali-host needs them.
-CORE_OBJ := console.o session.o codec.o
+# The rest of cali_core (console + json + session) and the frame codec: only cali-host needs them.
+CORE_OBJ := console.o json.o session.o codec.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
@@ -118,8 +118,12 @@ ble_store_kv.o: $(COMPONENTS)/cali_ble_nimble/ble_store_kv.c $(COMPONENTS)/cali_
 CORE_H := $(COMPONENTS)/cali_core/include
 console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/cali_session.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_pairing_sm.h \
-		$(CSRC)/codec.h $(CSRC)/codec_chars.h $(CSRC)/pairing_consts.h \
+		$(CORE_H)/cali_json.h $(CSRC)/codec.h $(CSRC)/codec_chars.h $(CSRC)/pairing_consts.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The bounded JSON writer shared by console.c (STATE/SNAP) and, from Task 2 on, the web setup page.
+json.o: $(COMPONENTS)/cali_core/json.c $(CORE_H)/cali_json.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h \
