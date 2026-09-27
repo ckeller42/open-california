@@ -34,7 +34,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 
 ## Already at CAPTURE / DEVICE (examples, keep as the model)
 
-- cooler power/level frames, airheater on/off — CAPTURE (HCI 2026-07-08/14; `tests/scenarios/`).
+- cooler power/level frames, airheater on/off — CAPTURE (HCI 2026-07-08/14; `tools/scenarios/`).
 - cooler `night_on`/`night_off` + `mode` timer_quiet(4) — DEVICE (live writes 2026-08-26, PR #112): hours
   + Mode are stored on the unit (survive reconnects) and every change is **broadcast as an unsolicited
   1102 notification**.

@@ -213,8 +213,8 @@ a generic `pairing_failed` the user cannot act on. That is exactly what happened
 at the van on 2026-09-18.
 
 `BluezTransport.pair()` (`calictl/pairing_bluez.py`) now handles that one error: it logs a warning,
-removes the stale bond (`remove_bond()`, i.e. `Adapter1.RemoveDevice()` plus clearing the pairing
-cache) and retries `Pair()` **exactly once**. Any other error (e.g. an authentication failure) is a
+removes the stale bond (`remove_bond(clear_cache=False)`, i.e. `Adapter1.RemoveDevice()` — the
+cached identity in `pairing.json` is kept), re-discovers the unit and retries `Pair()` **exactly once**. Any other error (e.g. an authentication failure) is a
 genuine pairing failure and propagates unchanged, so a bond is never wiped to mask a real problem.
 Verified by `T_PAIRING_STALE_BOND_RECOVERY` and `T_PAIRING_FAILURE_PROPAGATES` in
 `tests/test_pairing_bluez_transport.py` (both stub `remove_bond()`); the real removal +
