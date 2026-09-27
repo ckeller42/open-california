@@ -257,3 +257,14 @@ void cali_ble_store_init(void) {
     ble_hs_cfg.store_write_cb = store_write;
     ble_hs_cfg.store_delete_cb = store_delete;
 }
+
+int cali_ble_store_ensure(void) {
+    if (ble_hs_cfg.store_read_cb == store_read && ble_hs_cfg.store_write_cb == store_write &&
+        ble_hs_cfg.store_delete_cb == store_delete)
+        return 0;
+    cali_log("store: ERROR bond store callbacks were replaced by the BLE stack, re-installed");
+    ble_hs_cfg.store_read_cb = store_read;
+    ble_hs_cfg.store_write_cb = store_write;
+    ble_hs_cfg.store_delete_cb = store_delete;
+    return 1;
+}

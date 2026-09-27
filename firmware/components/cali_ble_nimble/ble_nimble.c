@@ -649,6 +649,7 @@ const cali_transport_t *cali_ble_nimble_transport(void) { return &TRANSPORT; }
 /* ---- init ---------------------------------------------------------------------------------- */
 
 static void on_sync(void) {
+    (void)cali_ble_store_ensure();            /* esp-nimble may have swapped in its RAM store */
     if (ble_hs_id_infer_auto(0, &s_own_addr_type) != 0) s_own_addr_type = BLE_OWN_ADDR_PUBLIC;
     if (s_on_sync) s_on_sync();
 }

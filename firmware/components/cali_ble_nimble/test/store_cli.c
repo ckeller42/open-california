@@ -22,6 +22,9 @@
 #include "cali_ble_nimble.h"
 #include "cali_platform.h"
 
+/* NimBLE store/config: defined in ble_store_config.c, not declared by 1.10's public header. */
+void ble_store_config_init(void);
+
 static int parse_addr(const char *s, ble_addr_t *out) {
     unsigned b;
     if (strcmp(s, "any") == 0) {
@@ -61,7 +64,14 @@ int main(int argc, char **argv) {
         memset(&key, 0, sizeof key);
         memset(&val, 0, sizeof val);
 
-        if (strcmp(cmd, "wsec") == 0 && n >= 4 && (type = parse_type(a1)) > 0 &&
+        if (strcmp(cmd, "clobber") == 0) {
+            /* What esp-nimble's host sync does with CONFIG_BT_NIMBLE_STATIC_TO_DYNAMIC=y
+             * (ble_hs_pvcy_set_default_irk -> ble_store_config_init): the RAM store takes over. */
+            ble_store_config_init();
+            printf("rc=0\n");
+        } else if (strcmp(cmd, "ensure") == 0) {
+            printf("rc=%d\n", cali_ble_store_ensure());
+        } else if (strcmp(cmd, "wsec") == 0 && n >= 4 && (type = parse_type(a1)) > 0 &&
             parse_addr(a2, &val.sec.peer_addr) == 0) {
             val.sec.ltk_present = 1;
             val.sec.ltk[0] = (uint8_t)x;

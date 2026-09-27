@@ -1,0 +1,5 @@
+# QEMU variant overlay (#154, Task 9): QEMU's esp32s3 machine emulates UART0, not the
+# USB-Serial/JTAG the release image's console uses (sdkconfig.defaults, ruling R9). Build with
+#   idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig \
+#          -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y

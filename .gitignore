@@ -73,6 +73,7 @@ firmware/host/cali-host
 firmware/host/cali-host-jw
 firmware/host/store-cli
 firmware/build/
+firmware/build-qemu/
 # ESP-IDF generated config (sdkconfig.defaults is the committed source)
 firmware/sdkconfig
 firmware/sdkconfig.old

@@ -1,7 +1,9 @@
 /*
  * app_main.c — the firmware on the esp32s3 (#154): the device twin of firmware/host/host_main.c.
- * Same cali_core (console, pairing runner, session) and NimBLE transport; the console is UART0
- * (CONFIG_ESP_CONSOLE_UART_DEFAULT) instead of stdin/stdout, the bond store is NVS.
+ * Same cali_core (console, pairing runner, session) and NimBLE transport; the console is the
+ * S3's native USB-Serial/JTAG (CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG: the M5Stack CoreS3's USB-C port)
+ * instead of stdin/stdout, or UART0 in the QEMU variant (qemu/sdkconfig.qemu: QEMU emulates UART,
+ * not USB-Serial/JTAG). Same line protocol on both. The bond store is NVS.
  *
  * Tasks: the NimBLE host task (nimble_port_freertos_init) makes EVERY cali_core and transport
  * call, as main does on the host. The console task only reads UART lines into a queue and posts
@@ -17,8 +19,16 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "sdkconfig.h"
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#include "driver/usb_serial_jtag.h"
+#include "driver/usb_serial_jtag_vfs.h"
+#elif CONFIG_ESP_CONSOLE_UART
 #include "driver/uart.h"
 #include "driver/uart_vfs.h"
+#else
+#error "console must be USB-Serial/JTAG (device) or UART (QEMU): see firmware/README.md"
+#endif
 #include "esp_err.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -39,7 +49,6 @@
 #define TICK_MS 100
 #define NLINES 16
 #define LINE_MAX_LEN 128
-#define CONSOLE_UART CONFIG_ESP_CONSOLE_UART_NUM
 
 static QueueHandle_t s_lines;          /* NLINES x LINE_MAX_LEN: console task -> owner */
 static atomic_int s_tick_due;          /* set by the timer, cleared by the owner */
@@ -126,14 +135,36 @@ static void core_task(void *param) {
     }
 }
 
-/* ---- console: UART lines -> queue -> owner. Never calls NimBLE or cali_core. ---- */
+/* ---- console: USB-Serial/JTAG or UART bytes -> lines -> queue -> owner ---- */
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+static void console_io_init(void) {
+    usb_serial_jtag_driver_config_t cfg = USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&cfg));
+    usb_serial_jtag_vfs_use_driver();   /* stdout (cali_log, STATE, SNAP) through the driver */
+}
+
+static int console_read_byte(uint8_t *c) {
+    return usb_serial_jtag_read_bytes(c, 1, portMAX_DELAY);
+}
+#else
+static void console_io_init(void) {
+    ESP_ERROR_CHECK(uart_driver_install(CONFIG_ESP_CONSOLE_UART_NUM, 256, 0, 0, NULL, 0));
+    uart_vfs_dev_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);  /* stdout through the driver */
+}
+
+static int console_read_byte(uint8_t *c) {
+    return uart_read_bytes(CONFIG_ESP_CONSOLE_UART_NUM, c, 1, portMAX_DELAY);
+}
+#endif
+
+/* Console task: never calls NimBLE or cali_core. */
 static void console_task(void *param) {
     (void)param;
     char line[LINE_MAX_LEN];
     size_t n = 0;
     for (;;) {
         uint8_t c;
-        if (uart_read_bytes(CONSOLE_UART, &c, 1, portMAX_DELAY) != 1) continue;
+        if (console_read_byte(&c) != 1) continue;
         if (c != '\r' && c != '\n') {
             if (n < sizeof line - 1) line[n++] = (char)c;   /* overlong: truncated */
             continue;
@@ -146,9 +177,8 @@ static void console_task(void *param) {
     }
 }
 
-static void console_uart_init(void) {
-    ESP_ERROR_CHECK(uart_driver_install(CONSOLE_UART, 256, 0, 0, NULL, 0));
-    uart_vfs_dev_use_driver(CONSOLE_UART);  /* stdout (cali_log, STATE, SNAP) through the driver */
+static void console_init(void) {
+    console_io_init();
     setvbuf(stdout, NULL, _IOLBF, 0);
 }
 
@@ -159,7 +189,7 @@ void app_main(void) {
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK(err);
-    console_uart_init();
+    console_init();
     if (cali_platform_init(NULL) != 0) cali_log("store: NVS namespace unusable, bonds will not persist");
 
     s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);

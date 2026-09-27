@@ -122,3 +122,20 @@ def test_a_crash_mid_delete_duplicate_loads_once_and_deletes_for_good(store_cli,
     assert run(store_cli, tmp_path, "rsec peer 11 0\nrsec peer any 0\n"
                                     "rcccd 11 5 0\nrcccd any 0 0\nrcccd any 0 1\n") == [
         "rc=5", "rc=5", "rc=5", "rc=0 addr=11 h=7 f=2", "rc=5"]   # no resurrection, no log
+
+
+def test_store_replaced_by_the_stack_is_reinstalled(store_cli, tmp_path):
+    """esp-nimble (ESP-IDF, CONFIG_BT_NIMBLE_STATIC_TO_DYNAMIC=y) runs ``ble_store_config_init()``
+    inside host sync (``ble_hs_pvcy_set_default_irk``), silently replacing our persistent store with
+    its RAM store; upstream NimBLE 1.10 (this host build) never does, so ``clobber`` emulates it.
+    ``cali_ble_store_ensure()`` (called from the transport's sync callback) must notice, log, and
+    put our callbacks back, keeping the bonds loaded at boot."""
+    assert run(store_cli, tmp_path, "wsec peer 10 a0\n") == ["rc=0"]
+    out = run(store_cli, tmp_path, "ensure\nclobber\nrsec peer 10 0\nensure\nrsec peer 10 0\n"
+                                   "ensure\n")
+    # (NimBLE's config store prints its own debug lines: keep ours only.)
+    assert [line for line in out if line.startswith(("rc=", "LOG "))] == [
+        "rc=0",                                               # ours: nothing to do
+        "rc=0", "rc=5",                                       # RAM store: our bond is invisible
+        "LOG store: ERROR bond store callbacks were replaced by the BLE stack, re-installed",
+        "rc=1", "rc=0 addr=10 ltk=a0", "rc=0"]

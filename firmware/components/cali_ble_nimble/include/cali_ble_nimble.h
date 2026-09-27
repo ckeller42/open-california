@@ -21,6 +21,14 @@ extern "C" {
  * ignored"), so a damaged store boots unpaired. */
 void cali_ble_store_init(void);
 
+/* Re-assert the store: if ble_hs_cfg.store_{read,write,delete}_cb are not ours any more, log
+ * "LOG store: ERROR bond store callbacks were replaced by the BLE stack, re-installed", put them
+ * back (the RAM tables loaded by cali_ble_store_init() are kept) and return 1; else return 0.
+ * cali_ble_nimble's sync callback calls it before anything can pair or reconnect: ESP-IDF's
+ * esp-nimble swaps in its RAM-only ble_store_config during host sync when
+ * CONFIG_BT_NIMBLE_STATIC_TO_DYNAMIC=y (ble_hs_pvcy.c; firmware/README.md "ESP-IDF build"). */
+int cali_ble_store_ensure(void);
+
 /* Configure the NimBLE host for the unit: LE Secure Connections passkey entry (io_cap
  * KEYBOARD_ONLY, MITM, bonding, ENC+ID key distribution) in ble_hs_cfg, the persistent bond store
  * (cali_ble_store_init(), so cali_platform_init() must have run), and the host's sync/reset

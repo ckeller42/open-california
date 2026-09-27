@@ -18,7 +18,21 @@ docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 idf.p
 ```
 
 (The image is multi-arch, amd64 + arm64: on Apple silicon it runs natively.) Outputs (`build/`,
-`sdkconfig`, `sdkconfig.old`) are gitignored; `sdkconfig.defaults` is the committed configuration.
+`build-qemu/`, `sdkconfig`, `sdkconfig.old`) are gitignored; `sdkconfig.defaults` is the committed
+configuration.
+
+**Two variants, one source — the console transport differs (ruling R9):**
+
+| Variant | Console | Build |
+|---|---|---|
+| release (the CoreS3) | **USB-Serial/JTAG** (`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`): the CoreS3's USB-C is the S3's native USB (`/dev/cu.usbmodem*`, 303a:1001); UART0 (G43/G44) only reaches the M5-Bus header, so `pair`/`passkey` could never be typed over USB on a UART console | `idf.py build` |
+| QEMU (Task 9) | **UART0** (`qemu/sdkconfig.qemu`: `CONFIG_ESP_CONSOLE_UART_DEFAULT=y`): QEMU's esp32s3 machine emulates UART, not USB-Serial/JTAG | `idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build` |
+
+`app_main.c` picks the driver at compile time (`usb_serial_jtag_read_bytes` + `usb_serial_jtag_vfs_use_driver`,
+or `uart_read_bytes` + `uart_vfs_dev_use_driver`; any other console is an `#error`); the line
+protocol is identical. Give the QEMU variant its own `SDKCONFIG` (above): `idf.py` otherwise
+reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
+`SDKCONFIG_DEFAULTS`.
 
 | Component | ESP-IDF sources | Host-build-only files (not in the ESP build) |
 |---|---|---|
@@ -41,13 +55,30 @@ docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 idf.p
   emulates; the option is ESP32-only in Kconfig, so on the S3 it is off regardless and Kconfig notes
   the value as "not visible"), `CONFIG_BT_NIMBLE_NVS_PERSIST=n` (bonds go through
   `ble_store_kv.c` onto `cali_kv_*` = NVS: one store path on both builds), and
-  `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192` (the host task runs all of cali_core). Bond/CCCD
+  `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192` (the host task runs all of cali_core), and
+  `CONFIG_BT_NIMBLE_STATIC_TO_DYNAMIC=n` (next bullet). Bond/CCCD
   slots stay at the defaults, equal to the host's (`MAX_BONDS=3`, `MAX_CCCDS=8`).
+- **esp-nimble replaces the bond store at sync unless told not to (Task 8 review C1).** With the
+  IDF default `CONFIG_BT_NIMBLE_STATIC_TO_DYNAMIC=y`, `ble_hs_startup_go()` (no
+  `store_gen_key_cb`) calls `ble_hs_pvcy_set_default_irk()` (esp-nimble
+  `nimble/host/src/ble_hs_startup.c:563-578`), which under `#if MYNEWT_VAL(BLE_STATIC_TO_DYNAMIC)`
+  runs `ble_store_config_init()` (`nimble/host/src/ble_hs_pvcy.c:327-338`): that sets
+  `ble_hs_cfg.store_*_cb` to the RAM-only `ble_store_config` (`store/config/src/ble_store_config.c:1236-1238`)
+  before `sync_cb` runs (`ble_hs_sync`, `ble_hs.c:466`: `startup_go` at `:477`, `sync_cb` at `:495-496`) — new bonds lost on reboot, NVS bonds
+  invisible. Two guards: `STATIC_TO_DYNAMIC=n` (then `ble_store_config_init` is not even linked:
+  absent from `cali_fw.elf`), and `cali_ble_store_ensure()` in the transport's sync callback, which
+  puts our callbacks back and logs `LOG store: ERROR bond store callbacks were replaced by the BLE
+  stack, re-installed`. **The host tier cannot catch this naturally:** upstream NimBLE 1.10's
+  `ble_hs_pvcy.c` has no such call (it is an Espressif addition), so
+  `tests/firmware/test_ble_store_kv.py::test_store_replaced_by_the_stack_is_reinstalled` emulates
+  it (store-cli `clobber` = `ble_store_config_init()`) and proves only the guard. That esp-nimble
+  itself leaves the store alone stays a **hardware watch item** (first flash: pair, reboot, the
+  unit must reconnect by bond without a passkey; no `store: ERROR` line).
 - **Tasks** (`main/app_main.c`): the NimBLE host task makes every cali_core/transport call, as
   `main` does on the host. The UART console task queues lines (FreeRTOS queue, 16 x 128) and posts
   one NimBLE event; the 100 ms `esp_timer` sets a tick flag and posts the same event; its callback
-  runs the tick, then the queued lines (lines only after sync). Console = UART0
-  (`CONFIG_ESP_CONSOLE_UART_DEFAULT`) through the UART driver + VFS; `quit` is ignored (no
+  runs the tick, then the queued lines (lines only after sync). Console = USB-Serial/JTAG (release)
+  or UART0 (QEMU), each through its driver + VFS (table above); `quit` is ignored (no
   `cali_console_on_quit` on the device).
 - **No controller** (`nimble_port_init()` fails in `esp_bt_controller_init`, e.g. QEMU):
   `LOG ble: controller unavailable`, then the console runs on a transport that refuses every
