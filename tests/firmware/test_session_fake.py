@@ -17,7 +17,7 @@
 
 .. test:: Session and console call/output sequences against a fake transport
    :id: T_FW_SESSION_FAKE
-   :links: R_FW_SESSION, R_FW_PAIRING_RUNNER
+   :links: R_FW_SESSION, R_FW_PAIRING_RUNNER, R_FW_READ_ONLY
 
 ``session_fake.c`` compiles console + session + runner + SM + ``csrc/codec.c`` with the host ``cc``
 (macOS too, no NimBLE) and scripts transport events; the end-to-end proof over NimBLE against the

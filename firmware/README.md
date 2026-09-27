@@ -333,5 +333,68 @@ These `.. req::` / `.. test::` IDs are declared in that test module's own docstr
 "shim" sphinx-needs can parse, since the real implementation is C (whose comments sphinx-needs
 does not collect). `docs/api.rst` pulls the module in via `.. automodule::
 tests.firmware.test_pairing_sm_parity`, so both objects and their `:links:` resolve in the
-`sphinx -b needs` build today. Task 10 gives firmware its own `docs/firmware.md` page and may move
-the autodoc entry there; either way this file is the human-readable trace back to the source.
+`sphinx -b needs` build today.
+
+Two more requirements are authored directly on the rendered doc page rather than in a test
+docstring shim (they describe cross-cutting build properties, not one C module):
+**R_FW_READ_ONLY** (the firmware only ever writes the `1003` heartbeat — `codec_encode` is
+compiled out and a `POST_BUILD` link check enforces it in every firmware build, host and ESP-IDF)
+and **R_FW_IO_CAP_BEFORE_LINK** (the SM's I/O capability and MITM flag must be set before the host
+syncs, i.e. before any link exists — the exact shape of the 2026-09-26 `calictl` bug where the
+pairing agent arrived after SMP had already started; reproduced on purpose by the
+`make cali-host-jw` regression build). Both are defined, and linked to the tests that verify them
+(`T_FW_SESSION_FAKE`, `T_FW_HOST_E2E`), in **`docs/firmware.md`**'s traceability section — that
+page (added in Task 10) is now the primary human-readable trace for firmware; this file stays the
+build/porting reference.
+
+## On-board verification (queued until the CoreS3 arrives)
+
+Nothing below has run: the host and QEMU tiers above are the only proof so far. This is the plan
+for the first time a real M5Stack CoreS3 is on the bench, in order:
+
+1. **Flash from the build's own flasher args — never hand-type offsets.** `idf.py build` (the
+   release variant, table above) writes `firmware/build/flasher_args.json` alongside the images;
+   flash with `idf.py -p /dev/cu.usbmodemXXXX flash` (it reads that file itself) or, equivalently,
+   `cd firmware/build && python -m esptool --chip esp32s3 -p /dev/cu.usbmodemXXXX write_flash
+   @flash_args` (the same `@flash_args` pattern `qemu/run_qemu.sh` uses to merge the image for
+   QEMU) — both read the addresses/sizes out of the build, so a bootloader/partition-table/app
+   offset never gets hand-typed and drifts from the build. See the `flashing-cores3-on-bar` skill
+   for the CoreS3-specific port-finding and serial-capture mechanics on the bar Mac.
+2. **Console over USB-Serial/JTAG.** The CoreS3's USB-C enumerates as the S3's native USB (not a
+   UART bridge): `/dev/cu.usbmodem*` (macOS) or `/dev/ttyACM*` (Linux) at any baud (the driver
+   ignores it) — `idf.py -p <port> monitor`, or a plain serial terminal, speaks the console line
+   protocol above directly. **Watch item 4**: this exact path has never been tried.
+3. **Pause `calictl` on buspi first — the unit has a single BLE connection slot.** `sudo systemctl
+   stop calictl` on buspi (or unplug it) before pairing the firmware — a live buspi daemon holds
+   the only slot the unit will grant, and the firmware's `pair` would simply never connect.
+   `sudo systemctl start calictl` (or `--now` re-enable) afterwards.
+4. **Pair with the real unit via the console passkey.** Send `pair` on the console, type the
+   6-digit passkey the unit's own screen displays with `passkey N`, watch for `STATE
+   {"state":"bonded",...}`. This is also the first real test of **watch items 1 and 2** (the bond
+   store guard, the local-IRK `WARN`) and of **ruling R9** (whether USB-Serial/JTAG input actually
+   reaches the console) all at once.
+5. **Compare one `SNAP` against buspi's `/api/state`.** With the firmware bonded and reading
+   (`status` shows `bonded`; watch the console for the first `SNAP` line), pull
+   `curl -s http://buspi:8088/api/state` (or the cache, `~/.cache/calictl/last_state.json`) and
+   diff the raw decoded fields of one function present in both (e.g. `vehicle` or `energy`) — same
+   `codec_decode`/`protocol.decode` output, two independent implementations of the same wire
+   protocol, against the same real unit. A mismatch on a field both sides claim to decode is a
+   firmware (or calictl) bug, not a protocol question.
+6. **Reboot with the bond in place.** Power-cycle the board; it must reconnect by bond (`STATE
+   {"state":"idle",...}` then, once the session comes up, a fresh `SNAP`) with no passkey prompt
+   and no `LOG store: ERROR` line — closes out **watch item 1**.
+
+Carry the hardware watch items from `docs/firmware.md` into this run explicitly (repeated here so
+this checklist is self-contained):
+
+- **Bond-store guard** — esp-nimble must not silently replace the NVS-backed store with a RAM-only
+  one; no `store: ERROR` line, and a reboot must reconnect by bond.
+- **Local-IRK `WARN`** — `WARN Failed to persist local IRK (rc=…)` is expected and believed benign
+  (a new random local IRK every boot); confirm it does not block bonding or reconnect.
+- **Host-task stack** — `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192` is unmeasured; check the
+  FreeRTOS high-water mark once the firmware is running real traffic.
+- **USB-Serial/JTAG console** — confirm `pair`/`passkey N` typed over the native USB port actually
+  reach `cali_console_line()` (step 2 above).
+- **`esp_bt_controller_init` under QEMU** — QEMU-only, not expected on real hardware (the S3 has a
+  real BT low-power clock); listed here only so it is not mistaken for a hardware regression if
+  seen again.

@@ -79,22 +79,31 @@ injects `EV_TIMEOUT` — absent from the table means no timer for that state.
 | `RESETTING` | 10 s |
 | `IDLE`, `BONDED`, `ERROR` | none |
 
-## ESP mapping (buspi today, #154's NimBLE port later)
+## ESP mapping (buspi today, #154's NimBLE port — implemented, unverified on hardware)
 
-Agent registration / `io_cap=KEYBOARD_ONLY` (BlueZ) or the NimBLE `ble_sm_io` setup are
+Agent registration / `io_cap=KEYBOARD_ONLY` (BlueZ) or NimBLE's `ble_hs_cfg.sm_io_cap` are
 **transport init, not an SM action** — they happen once, outside `step()`, before any event is
-injected.
+injected (on the ESP32 side, before the host even syncs — see `R_FW_IO_CAP_BEFORE_LINK` in
+[the firmware docs](https://ckeller42.github.io/open-california/firmware.html)).
 
-| SM symbol | BlueZ (buspi, `pairing_bluez.py`) | ESP32 (NimBLE + NVS, #154) |
+This mapping is no longer aspirational: `firmware/components/cali_core/runner.c`
+(`cali_runner_*`) is the C SM driver, `firmware/components/cali_core/include/cali_transport.h`
+(`cali_transport_t`) is the abstract transport it calls, and
+`firmware/components/cali_ble_nimble/ble_nimble.c` is the NimBLE implementation of that
+transport (Linux host build and ESP-IDF both) — proven against a Bumble fake unit
+(`tests/firmware/test_host_e2e.py`) and compiled against ESP-IDF's real esp-nimble
+(`firmware-build` CI), but not yet run against the real camper unit (no hardware).
+
+| SM symbol | BlueZ (buspi, `pairing_bluez.py`) | ESP32 (`ble_nimble.c`, via `cali_transport_t`) |
 |---|---|---|
 | `EV_DEVICE_FOUND` | bleak scan callback, name == `VWCAMPER` | `BLE_GAP_EVENT_DISC` with a matching name in the adv payload |
 | `EV_CONNECT_FAIL` | `BleakClient.connect()` raises (e.g. HCI 0x3e, le-connection-abort-by-local) | `BLE_GAP_EVENT_CONNECT` with nonzero status |
 | `EV_PASSKEY_REQUESTED` | `org.bluez.Agent1.RequestPasskey` D-Bus call (agent capability `KeyboardOnly`) | `BLE_GAP_EVENT_PASSKEY_ACTION` with `action == BLE_SM_IOACT_INPUT` |
-| `ACT_SEND_PASSKEY` | resolve the `asyncio.Future` the agent's `RequestPasskey` is blocked on | `ble_sm_inject_io()` with the typed passkey |
+| `ACT_SEND_PASSKEY` | resolve the `asyncio.Future` the agent's `RequestPasskey` is blocked on | `ble_sm_inject_io()` with the typed passkey (`t_inject_passkey`) |
 | `EV_PAIR_OK` / `EV_PAIR_FAIL` | `Device1.Pair()` D-Bus call result | `BLE_GAP_EVENT_ENC_CHANGE` status (0 = OK, nonzero = fail) |
-| `ACT_VERIFY` | encrypted read of `VERSION_CHAR` + `AUTH_CHAR`, then count all readable state chars | encrypted read of the equivalent auth characteristic (no full-service enumeration needed on the ESP side) |
-| `ACT_PERSIST_BOND` | BlueZ auto-persists the bond; we additionally cache the identity address in `~/.local/state/calictl/pairing.json` | NimBLE NVS bond store (`ble_store_util_*`) |
-| `ACT_REMOVE_BOND` | `Adapter1.RemoveDevice()` D-Bus call | `ble_store_util_delete_peer()` |
+| `ACT_VERIFY` | encrypted read of `VERSION_CHAR` + `AUTH_CHAR`, then count all readable state chars | `runner.c`'s `PAIR_ACT_VERIFY`: one encrypted read of `CODEC_CHAR_AUTH` (char `0x1004`, the `vehicle` function) — no full-service enumeration on the ESP side |
+| `ACT_PERSIST_BOND` | BlueZ auto-persists the bond; we additionally cache the identity address in `~/.local/state/calictl/pairing.json` | NimBLE bond store callbacks on `cali_kv_*` = NVS (`firmware/components/cali_ble_nimble/ble_store_kv.c`, `cali_ble_store_init()`), not the RAM-only `ble_store_util_*`/`ble_store_config` default |
+| `ACT_REMOVE_BOND` | `Adapter1.RemoveDevice()` D-Bus call | `ble_store_util_delete_peer()` (through `ble_store_kv.c`'s `store_delete` callback) |
 
 ## Verify-policy caveat
 

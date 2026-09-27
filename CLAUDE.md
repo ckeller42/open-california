@@ -21,6 +21,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
 | `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); they are regenerated locally from the APK with a `vd2svg.py` converter that is itself **not in the repo** (`ui/assets/` is untracked); `build_prototype.py` falls back to neutral placeholders without them. |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
+| `firmware/` | ESP32-S3 satellite (#154, WIP, read-only, no hardware yet): `cali_core` (pairing SM/runner/session/console, platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store) + `host`/`qemu`/`main` builds; see `docs/firmware.md` |
 
 ## Hard rules (don't break these)
 
@@ -73,6 +74,9 @@ curl -s localhost:8088/api/state                     # buspi: live decoded state
 CALICTL_LOG_LEVEL=DEBUG python3 -m calictl serve …         # daemon logs via `logging` (calictl/log.py): level, name, timestamp (dropped under journald)
 CALICTL_BLE_TRACE=~/ble.jsonl python3 -m calictl serve …   # record every notify/read/write of the REAL unit (JSONL)
 python3 -m tools.trace_compare ~/ble.jsonl           # replay that trace through the mock: round-trip, cadence, dynamics
+python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py -v   # firmware pure-C tiers, no BLE, macOS OK
+make -C firmware/host cali-host && python -m pytest tests/firmware -v   # firmware host+NimBLE tier (Linux only; tools/ci.sh firmware)
+docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build'   # firmware QEMU tier build
 ```
 `tools/ci.sh` covers ci.yml's `test` (one python, not the 3.11–3.13 matrix) + `lint` + the vendor-*file*
 check; its pytest run also covers `codec-parity` (C tests only with a C compiler) and `gui-e2e` (only

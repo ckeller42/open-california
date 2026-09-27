@@ -8,7 +8,7 @@ on the NimBLE Linux port, talking HCI over TCP to a Bumble controller linked to 
 
 .. test:: Host firmware pairs and reads the fake unit end to end
    :id: T_FW_HOST_E2E
-   :links: R_FW_PAIRING_SM, R_FAKE_UNIT_FIDELITY, R_FW_SESSION
+   :links: R_FW_PAIRING_SM, R_FAKE_UNIT_FIDELITY, R_FW_SESSION, R_FW_READ_ONLY, R_FW_IO_CAP_BEFORE_LINK
 """
 import time
 
