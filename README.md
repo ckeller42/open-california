@@ -67,6 +67,10 @@ python3 -m calictl serve --web 8080    # the daemon → InfluxDB + MQTT + web UI
 python3 -m calictl serve --web 8080 --enable-writes   # ...allow control writes to the vehicle
 ```
 
+No van needed for development: the whole stack runs against a model of the unit (the mock, a Bumble
+BLE fake with real passkey pairing, the vendor app in an emulator) — see
+**[Simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html)**.
+
 The **daemon is read-only by default** — it will not write to the vehicle until you pass
 `--enable-writes` (or set `CALICTL_ENABLE_WRITES=1`), so a stray deploy never actuates anything by
 accident. The web UI disables its controls and shows a banner when read-only, and greys out any

@@ -10,8 +10,11 @@ Examples::
 
     python -m tools.run_against_mock set cooler power on      # -> cooler.on False->True, OK
     python -m tools.run_against_mock set cooler power off      # -> back to False
-    python -m tools.run_against_mock set lighting brightness 8 # -> NOT APPLIED (unsolved gate)
+    python -m tools.run_against_mock set lighting kitchen 8    # -> SET_BRIGHTNESS + commit, zone_7=8 OK
     python -m tools.run_against_mock get cooler                # -> decoded + interpreted
+    CALICTL_ENABLE_WRITES=1 python -m tools.run_against_mock serve --web 8080 --interval 1 --no-influx
+                                                               # -> the daemon + web UI over the mock
+                                                               #    (what tests/e2e launches)
 
 The single ``MockCamperUnit`` persists across calictl's connect-per-operation calls, so a
 ``set`` followed by a ``get`` reflects the change (within one process invocation).

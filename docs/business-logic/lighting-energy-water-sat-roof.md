@@ -442,7 +442,7 @@ re-implementing roof control on another vehicle should generate that counter and
 The move-frame cadence is **~500 ms**, not 1 Hz: the primary transmitter is the `w8/a` SafetyCounter timer
 (~500 ms, +1/frame; `w8/a.java:49-60` + `b1/d.java:353`); a **secondary** 1000 ms `ig/c` timer
 (`ig/c.java:776`) only re-affirms direction (net ~3 frames/s, consecutive counter deltas 0/+1). Cross-reference
-`protocol-sequences.md` §3.
+[protocol sequences — Roof](https://ckeller42.github.io/open-california/protocol-sequences.html#roof-actuation-press-and-hold-safetycounter-gated).
 
 ### Roof-state enum (readback, `hf/b.java`)
 

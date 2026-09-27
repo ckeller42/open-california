@@ -2,9 +2,10 @@
 
 **Status:** SM + BlueZ transport + web wizard shipped; unit-tested against a fake transport and
 CI-verified against real BlueZ (`pairing-real-stack`, a VM + the Bumble fake unit — see
-[NOT-LIVE-VERIFIED](#not-live-verified)). **NOT-LIVE-VERIFIED against a real camper unit** — the
+[Live-verification status](#live-verification-status)). **NOT-LIVE-VERIFIED against a real camper unit** — the
 deliberate live unbond→re-pair at the van is tracked as a checkbox on
-[#157](https://github.com/ckeller42/open-california/issues/157), not done yet.
+[#157](https://github.com/ckeller42/open-california/issues/157), not done yet. The one real run so far (a re-pair at the van on 2026-09-18) failed at
+`Device1.Pair()` with `AlreadyExists` — the stale local bond the recovery below handles.
 
 ## Purpose
 
@@ -19,7 +20,8 @@ mechanically. The sequence vectors in `tests/vectors/pairing.json` are written s
 replay them against the C port as a golden-vector differential test, the same pattern already
 used for the frame codec (issue #156).
 
-Full design rationale: `docs/superpowers/specs/2026-08-31-guided-pairing-design.md`.
+Full design rationale: `docs/superpowers/specs/2026-08-31-guided-pairing-design.md` — a
+local-only planning document (`docs/superpowers/` is gitignored), not in the repository.
 
 ## The state machine
 
@@ -202,7 +204,24 @@ flow; doing so would freeze `/api/state` (and every other read) for that entire 
   `_ble` lock is **not held** by the pairing flow; exclusion is the supervisor-park + poll-skip
   pair above, not lock sharing.
 
-## NOT-LIVE-VERIFIED
+## Stale-bond recovery (#200, `R_PAIRING_STALE_BOND_RECOVERY`)
+
+BlueZ refuses `Device1.Pair()` with `org.bluez.Error.AlreadyExists` when a bond for the device
+already exists. After a unit-side Bluetooth reset the unit has forgotten buspi but buspi's own bond
+persists, so without recovery the wizard's `Pair()` fails, retries `MAX_ATTEMPTS` times and ends on
+a generic `pairing_failed` the user cannot act on. That is exactly what happened on the real re-pair
+at the van on 2026-09-18.
+
+`BluezTransport.pair()` (`calictl/pairing_bluez.py`) now handles that one error: it logs a warning,
+removes the stale bond (`remove_bond(clear_cache=False)`, i.e. `Adapter1.RemoveDevice()` — the
+cached identity in `pairing.json` is kept), re-discovers the unit and retries `Pair()` **exactly once**. Any other error (e.g. an authentication failure) is a
+genuine pairing failure and propagates unchanged, so a bond is never wiped to mask a real problem.
+Verified by `T_PAIRING_STALE_BOND_RECOVERY` and `T_PAIRING_FAILURE_PROPAGATES` in
+`tests/test_pairing_bluez_transport.py` (both stub `remove_bond()`); the real removal +
+re-discovery path runs against real BlueZ in the `pairing-real-stack` CI job (a VM + the Bumble
+fake unit), not yet against a real camper unit.
+
+## Live-verification status
 
 Two tiers below the real van: `tests/test_pairing_sm.py` replays the pure SM against
 `tests/vectors/pairing.json` (no transport at all), and `tests/test_pairing_link.py` drives the
@@ -216,8 +235,9 @@ a real camper unit: it doesn't exercise RSSI jitter, the unit's own advertising/
 policy, WiFi coexistence on buspi's shared radio, or another client scanning at full duty and
 starving a real LE connect (HCI 0x3e) — the mechanism the 2026-09-25 btmon capture caught (see
 [Environment the wizard needs](#environment-the-wizard-needs)) was observed on real buspi
-hardware, but not yet as part of a full pairing run. **No real unbond→re-pair has been run
-against the van yet** — that is a deliberate, human-in-the-loop step (typing a passkey off the
+hardware, but not yet as part of a full pairing run. The one real run so far — a re-pair at the van on 2026-09-18 — failed at `Device1.Pair()` with
+`AlreadyExists`, which is what the stale-bond recovery above was written for; **no successful
+real unbond→re-pair has been recorded yet** — that is a deliberate, human-in-the-loop step (typing a passkey off the
 camper's own screen) tracked as a checkbox on
 [#157](https://github.com/ckeller42/open-california/issues/157). Until that checkbox is
 checked, treat the BlueZ transport's behaviour against a **real camper unit** (as opposed to the

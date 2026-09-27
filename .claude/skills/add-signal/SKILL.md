@@ -26,7 +26,7 @@ See `ARCHITECTURE.md`.
    surfaced state field is emitted; every surfaced control field is placed.
 5. **Update sinks if surfaced**: Grafana panels don't auto-update — edit
    `calictl/deploy/camper-dashboard.json` (data auto-flows to InfluxDB by field name; only
-   titles/units/new-panels need JSON edits) and push with `deploy/push_dashboard.py` (needs
+   titles/units/new-panels need JSON edits) and push with `calictl/deploy/push_dashboard.py` (needs
    Grafana creds on buspi). HA MQTT discovery is automatic for installed functions.
 6. **Don't label unverified scales with a unit** — several scales are UNVERIFIED
    (`docs/business-logic/signal-scales.md`).

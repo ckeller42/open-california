@@ -11,7 +11,9 @@ Checks (each a section of the report):
   dictionary decode (otherwise the dictionary misses bits the unit uses, and the mock would serve
   a different frame than the van);
 * **cadence** — per state char: notifications per minute + median interval, against the mock's
-  push model (energy every tick; others on change);
+  push model: one push per char right after subscribe, then change-driven pushes only for
+  ``mock_unit.CHANGE_PUSH_FNS`` (campingmode, vehicle), lighting Mode-4 ramp frames, and water
+  on a measured change while its system is powered — energy is NOT pushed on its own;
 * **dynamics** — rates the mock's clock model assumes vs what the unit did: heater
   ``RunningTimeinAction`` per minute while ``NormalOperation``, energy ``AgeOneBattValuesMinutes``
   per minute while the ignition is off, roof ``Position`` transitions, the ignition→camping

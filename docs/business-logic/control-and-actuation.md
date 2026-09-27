@@ -291,7 +291,7 @@ because it is instructive RE:
   app-faithful-but-optional since the 2026-08-16 evening correction (the app sends it on screen
   open via `d0()`, not per write); it cost ~3.3 s per set and was never what makes the lamps
   switch, so `preamble_for`/`LIGHT_REQUEST_CONFIG`/`device.actuate(pre=…)` were removed. The
-  frame (`0d0c000000000000eeeeeeeeeeeeeeee`) stays documented in `protocol-sequences` as the RE
+  frame (`0d0c000000000000eeeeeeeeeeeeeeee`) stays documented in [protocol sequences — Lighting](https://ckeller42.github.io/open-california/protocol-sequences.html#lighting-set-and-neutral-flush) as the RE
   record.
 - **Still open:** SET_COLOR on-device apply — the app DOES have colour control (`dg/h.java:644`,
   a profile-recolour: Mode 6, LightValue=colour, ProfileNumber=target profile + its brightness),

@@ -7,20 +7,36 @@ auto-extracted, live-verified protocol map).
 
 ## Layers
 
+See [`ARCHITECTURE.md`](../ARCHITECTURE.md) for how these fit together (BLE → decode → semantics →
+sinks).
+
 | Module | Responsibility |
 |---|---|
 | `protocol.py` | stdlib parser for the dictionary + MSB-first frame decode/encode |
-| `semantics.py` | live-verified transforms (water `Level`=current/`Volume`=capacity, energy ×0.1 V + stale-age + signed currents, per-function `Installed` gating, camping independent outputs) |
-| `device.py` | robust BLE (single `async with` connect, adapter-reset + rescan recovery, `ConnectionUnavailable` when the phone app holds the one slot) |
 | `overrides.py` | the 4 cooler/heater timer offsets resolved from `sf/a.java` `f()` (extractor left `MERGED_AMBIGUOUS`) |
-| `cli.py` | `status` / `get` / `raw` / `set` / `serve` / `influx` |
-| `serve.py` | unified daemon: one BLE owner → InfluxDB + MQTT (HA discovery) + commands |
+| `semantics.py` | live-verified transforms (water `Level`=current/`Volume`=capacity, energy ×0.1 V + stale-age + signed currents, per-function `Installed` gating, camping independent outputs) |
+| `freshness.py` | physical-plausibility guards for latched/stale reads (the fresh-water stale latch) |
+| `device.py` | robust BLE (single `async with` connect, retries with opt-in adapter reset, `1003` heartbeat, roof streaming, `ConnectionUnavailable` when the phone app holds the one slot) |
+| `session.py` | persistent-BLE-session supervisor (holds the slot while the web UI is active, releases it when idle, hands it over for roof moves) |
+| `control.py` | per-function full-packet control-frame builders (`BUILDERS`), shared by `set` and the daemon |
+| `postcheck.py` | post-write applied-check: did a control write land in the resulting state? |
+| `serve.py` | unified daemon: one BLE owner → InfluxDB + MQTT (HA discovery) + web UI + commands |
+| `web.py` | stdlib HTTP server for the web UI + JSON API (never opens BLE) |
 | `mqtt.py` | Home Assistant MQTT-discovery entity configs |
+| `influx.py` | InfluxDB writes for the Grafana stack |
+| `history.py` | bounded on-disk leisure-battery history for the web UI (Influx-free) |
+| `observer.py` | passive camping/ignition observer (logs transitions, fast-poll burst; never actuates) |
+| `automation.py` | auto camper mode — restore camping after you park |
+| `firmware.py` / `anchors.py` | firmware-drift raw-frame capture / plausibility anchors for a silently-wrong decode |
+| `pairing.py` / `pairing_bluez.py` | platform-free guided-pairing state machine / its async runner + BlueZ transport |
+| `trace.py` | opt-in BLE trace recorder (`CALICTL_BLE_TRACE`) |
+| `log.py` | daemon logging (`CALICTL_LOG_LEVEL`) |
+| `cli.py` | `status` / `get` / `raw` / `set` / `serve` / `influx` |
 
 ## CLI
 
 ```
-python -m calictl status                 # interpreted status of all 13 functions
+python -m calictl status                 # interpreted status of all 14 functions
 python -m calictl get water              # one function: decoded + interpreted (JSON)
 python -m calictl raw cooler             # raw hex of the state characteristic
 python -m calictl set cooler power off   # control (writes + verifies readback)

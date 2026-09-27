@@ -12,14 +12,14 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 
 | Path | What |
 |---|---|
-| `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `cli` |
+| `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `freshness` (stale-read guards), `history` (battery history for the UI), `postcheck` (post-write applied-check), `pairing`/`pairing_bluez` (guided-pairing SM + BlueZ transport), `log`, `trace` (BLE trace recorder), `cli` |
 | `protocol/dictionary.yaml` | extracted field map (14 functions, state+control); source of truth for bit layout |
 | `protocol/signals.yaml` | the **signal catalog** — surface/omit decision + provenance per field |
-| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `applab/` (the **real app** in an emulator against `mock_unit` served over BLE — screens in any state + app-vs-calictl frame diffs; see its README), `hooks/` |
-| `tests/` | pytest; **must stay green**. `tests/e2e/` = Playwright over the mock daemon; every test fails on an uncaught JS error |
+| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `run_against_mock` (real CLI/`serve` over the mock), `trace_compare` (real-unit trace vs the mock), `fake_unit_peripheral` (the mock as a **Bumble BLE peripheral** with real SMP passkey pairing — shared by `applab`, `tests/test_pairing_link.py` and the `tests/realstack/` VM rig), `applab/` (the **real app** in an emulator against that peripheral — screens in any state + app-vs-calictl frame diffs; see its README), `gen_c_dict` + `gen_codec_vectors` (C codec header + golden vectors, `--check` in CI), `hooks/` |
+| `tests/` | pytest; **must stay green**. `tests/e2e/` = Playwright over the mock daemon; every test fails on an uncaught JS error. `tests/realstack/` = the real-BlueZ pairing rig (CI VM only, not collected by pytest) |
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) — the full provenance behind the terse "Known state" below |
-| `docs/superpowers/` | specs + plans |
-| `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); regenerate locally with `ui/assets/vd2svg.py` from the APK. |
+| `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
+| `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); they are regenerated locally from the APK with a `vd2svg.py` converter that is itself **not in the repo** (`ui/assets/` is untracked); `build_prototype.py` falls back to neutral placeholders without them. |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
 
 ## Hard rules (don't break these)
@@ -65,7 +65,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 
 ```
 python3 -m pytest tests/ -q                          # the suite (keep green)
-tools/ci.sh [ci|webcheck|test|lint|audit|…]          # the local CI gate (what GitHub runs, minus gui-e2e)
+tools/ci.sh [ci|webcheck|test|lint|audit|…]          # the local CI gate — NOT all of GitHub CI (below)
 DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + semantic-review
 python3 -m calictl status                            # live read of all functions (needs BLE + free slot)
 python3 -m calictl serve [--dry-run]                 # the unified daemon (read-only unless --enable-writes)
@@ -74,6 +74,15 @@ CALICTL_LOG_LEVEL=DEBUG python3 -m calictl serve …         # daemon logs via `
 CALICTL_BLE_TRACE=~/ble.jsonl python3 -m calictl serve …   # record every notify/read/write of the REAL unit (JSONL)
 python3 -m tools.trace_compare ~/ble.jsonl           # replay that trace through the mock: round-trip, cadence, dynamics
 ```
+`tools/ci.sh` covers ci.yml's `test` (one python, not the 3.11–3.13 matrix) + `lint` + the vendor-*file*
+check; its pytest run also covers `codec-parity` (C tests only with a C compiler) and `gui-e2e` (only
+with Playwright + Chromium, else they skip). **Only GitHub runs:** the whole-tree MAC/VIN grep
+(`no-vendor-material`), `install-script` (shellcheck), `pairing-real-stack` (calictl's real
+`BluezTransport` vs the Bumble fake unit over real BlueZ in a VM, `tests/realstack/vm.sh`; not a
+required check yet), and — on push to `main` only — `docs.yml` (`sphinx -W` + Pages deploy; never on
+a PR, so run `sh docs/build_site.sh` yourself) and `screenshots.yml` (commits `docs/screenshots` to
+`main` with `[skip ci]`). Test layers + harnesses: `docs/simulation-and-testing.md`.
+
 When the daemon is up it OWNS the single BLE slot — read live state via its web API `/api/state`
 (**buspi runs `--web 8088`** via a systemd drop-in override — the committed unit template has no
 `--web`; the CLI default is 8080) or the cache `~/.cache/calictl/last_state.json`;
@@ -137,6 +146,12 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
 - **Pairing needs a quiet radio:** any BlueZ client holding discovery (calictl unpaired polls —
   now guarded, readers, HA Bluetooth) kills a new LE link with 0x3e; the unit advertises a
   rotating address, only the bonded identity is stable. See `guided-pairing.md`.
+- **Guided pairing (#201):** the wizard (`POST /api/pairing`, owner guide `docs/howto-pair-your-camper.md`)
+  probes an existing bond first and **keeps a working one**; it drops a bond only on proof it is stale
+  (auth-class failure, or link up but the auth read timed out), then re-discovers and re-pairs
+  (`pairing.json` kept). Unreachable/asleep unit = `connect_failed` (bounded retries, 20 s CONNECTING
+  budget), never a bond drop; `radio_busy` flags another client holding discovery. CI-verified against
+  real BlueZ in a VM (`pairing-real-stack`), **not yet live-verified at the van** (#157).
 
 ## Documentation (sphinx + sphinx-needs)
 

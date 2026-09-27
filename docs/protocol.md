@@ -72,39 +72,20 @@ sliced/packed into fields at hardcoded bit offsets, per subsystem.
 bonded write. Security finding: the control plane is **bonded-but-unauthenticated**;
 any bonded central has full, replayable control.
 
-## Fridge (service 0x1100) — worked example
+## Worked example (fridge) — superseded
 
-- **State `0x1102`** (8 bytes): byte0 bit0 = power (`09`=on/`08`=off), byte1 =
-  fluctuating temperature reading; remaining bytes bit-packed flags/setpoint.
-  Full bit slicing is in the app's decode; the power bit is live-confirmed.
-- **Control `0x1101`** (6 bytes, device-confirmed length). The 6-byte frame is
-  **10 named fields** (`sf/a.B()` debug log): `State` (power, bits 6-7),
-  `TimerStart`/`TimerCancel`/`NightTimerSet` (timer *actions*, bits 0-5),
-  `Level` (bits 12-15), `Mode` (bits 8-11), and `TimerHour/Min`,
-  `NightTimerHourOn/Off`. Offsets bits 0-15 are extracted; the timer-value
-  fields are `MERGED_AMBIGUOUS` (fridge vs heater share the model, placed
-  differently). See `protocol/dictionary.yaml`.
-- **LIVE RESULT (do NOT reuse `fd77…`/`3d7b…`):** writing a whole-frame with the
-  model's *defaults* was tested against the unit and **did not toggle power** —
-  it was a garbage command (`Level=7` is out of the 1-5 range; `TimerStart/Cancel/
-  NightTimerSet=3` = three conflicting timer actions). The unit ignored power and
-  stored stray bytes. The `fd770f1e3e1f` frame is therefore a **structural example
-  only, not a working command** — which is why `calictl/control.py` carries the
-  *current* state and leaves the timer-action fields at their no-op sentinels.
-- **Correct power toggle:** set `State`, leave the timer-**action** fields
-  `TimerStart`/`TimerCancel` at the 2-bit leave-unchanged sentinel `3`, carry the
-  *current* `NightTimerSet` + night-schedule hours (a literal `0` would disarm a set
-  schedule — live-verified 2026-08-26), and carry the *current* `Level`/`Mode` (read
-  from State) rather than defaults (live frame `3d43…`). Verify against State `1102`
-  byte0 `08↔09`.
+This page used to walk through the fridge (`1101` control / `1102` state) as its worked example.
+That walkthrough has been superseded by live on-device results, and the current per-feature
+recipes live in
+[`control-and-actuation.md`](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html) (§3 frame model, §4
+per-feature status). Two points from it still hold:
 
-## Status
-
-This "fridge" section is the original worked example. It has since been superseded by
-live on-device results — see `docs/business-logic/control-and-actuation.md` (per-feature
-tiers) and `docs/business-logic/evidence-ledger.md` for the current truth. In short:
-
-- Fridge (cooler) **power + level are live-actuation-verified** on the reference van
-  (not just derived); `night_on`/`night_off` + quiet-mode (Mode 4) actuate and broadcast.
-- The extraction method (per-service decode `e()` + control model `f()`) has been run for
-  all 14 functions — the field map is `protocol/dictionary.yaml`, catalogued in `signals.yaml`.
+- **Never write a whole frame of model defaults** (e.g. `fd770f1e3e1f`). It carries out-of-range
+  and conflicting action values; the unit ignored power and stored stray bytes. A control frame must
+  carry the *current* state in untargeted fields and the leave-unchanged sentinel (`3` for 2-bit)
+  in action fields. `calictl/control.py` builds it that way.
+- Cooler power and level are **live-actuation-verified**, armed by the `1003` heartbeat. For the
+  wire sequence, see the
+  [protocol sequence diagrams](https://ckeller42.github.io/open-california/protocol-sequences.html#heartbeat-armed-control-write).
+  The evidence tiers are in
+  [`evidence-ledger.md`](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html).
