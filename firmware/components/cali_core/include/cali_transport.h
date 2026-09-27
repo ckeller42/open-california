@@ -58,7 +58,9 @@ typedef struct {
     int  (*discover)(void);                        /* DISCOVERED once all chars are known */
     int  (*read)(uint16_t char_short);             /* READ */
     int  (*subscribe)(uint16_t char_short);        /* NOTIFY events afterwards */
-    int  (*write_heartbeat)(uint32_t counter);     /* the ONLY write; target 0x1003; HEARTBEAT */
+    int  (*write_heartbeat)(uint32_t counter);     /* the only characteristic-value write; target
+                                                      0x1003; HEARTBEAT (subscribe's CCCD write only
+                                                      enables notifications) */
     int  (*disconnect)(void);
     int  (*remove_bond)(void);
     int  (*has_bond)(void);

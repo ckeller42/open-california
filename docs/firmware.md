@@ -49,6 +49,13 @@ Identical on the host build (stdin/stdout) and the device (UART/USB-Serial-JTAG 
   for, `codec_decode`d, in `CODEC_CHARS` order), `LOG text` (everything else, including every
   watch item below).
 
+The session's read-all follows `calictl.device.read_all`: subscribe every notifying state char,
+let the 1003 heartbeat run `CODEC_HEARTBEAT_WARMUP_MS` (generated from
+`calictl.device.HEARTBEAT_WARMUP_S`'s default, 2 s) so the liveness registers and sensors refresh,
+then read the functions in order — skipping any the unit pushed since the subscribe, and never
+letting a read completion overwrite a frame pushed while that read was outstanding (a
+notification is fresher than the read latch). The first `SNAP` of a link follows that pass.
+
 ## CI jobs (`.github/workflows/ci.yml`)
 
 | Job | Runs |
@@ -90,6 +97,15 @@ chip":
    on the no-controller fallback path. The no-controller fallback itself (`LOG ble: controller
    unavailable`, console still answers) is what a real board would take if its radio genuinely
    failed to init, and *that* path is what QEMU exercises.
+6. **Device-only NimBLE options (final review I1).** esp-nimble has options upstream NimBLE (the
+   host tier) lacks or defaults differently; `sdkconfig.defaults` pins them to the host syscfg:
+   `CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n` (else a 0x3e establishment failure — this unit's
+   known failure — is re-attempted inside the stack and comes up unencrypted),
+   `CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1`, `CONFIG_BT_NIMBLE_EXT_ADV=n`/`EXT_SCAN=n` (extended
+   discovery events are not handled) and NimBLE log level WARNING. On the board: a failed connect
+   must show as one `CONNECT_FAIL`-driven retry of the SM/session (no silent second link), the
+   unit must be found by the legacy scan, and no NimBLE INFO lines may appear between the console
+   lines.
 
 ## Design rulings worth knowing
 
@@ -126,19 +142,30 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 `.. automodule::` so their objects are collected here.
 
 ```{eval-rst}
-.. req:: The firmware only ever writes the 1003 heartbeat
+.. req:: The firmware writes no control frame: its only characteristic-value write is the 1003 heartbeat
    :id: R_FW_READ_ONLY
 
-   The firmware never actuates the vehicle. ``csrc/codec.c`` is compiled with
-   ``-DCODEC_NO_ENCODE`` in every firmware build (host and ESP-IDF) — the same macro the Pi's
-   cross-language codec uses to prove a read-only caller never links an encoder — and a
-   ``POST_BUILD`` step fails the link if the symbol ``codec_encode`` reaches the output binary
-   (``firmware/host/Makefile``'s ``cali-host`` rule and ``firmware/CMakeLists.txt``'s
-   ``cali_fw.elf`` rule both run this check; the QEMU probe variant has its own twin check for the
-   ``kvprobe`` probe command, so it can never ship in the release image either). The only write
-   the transport ever issues is the ``1003`` liveness heartbeat
-   (``firmware/components/cali_core/session.c``), the same mechanism ``calictl/device.py`` uses on
-   the Pi to keep reads fresh — never a control frame.
+   The firmware never actuates the vehicle. Three mechanisms, each with a stated scope:
+
+   - **Compile time (every firmware build: ``cali-host``, ``cali-host-jw``, the ESP-IDF release and
+     QEMU images).** ``csrc/codec.c`` is compiled with ``-DCODEC_NO_ENCODE`` (``firmware/host/Makefile``'s
+     ``codec.o`` rule, which both host binaries link; ``PUBLIC`` on the ESP-IDF ``csrc``
+     component). The macro was introduced for this firmware; with it ``codec_encode`` is neither
+     declared nor defined, so any firmware reference fails to build (implicit declaration under
+     ``-Werror``). This is the primary guard.
+   - **Link time (``cali-host`` and every ``cali_fw.elf`` — release and QEMU variants; not
+     ``cali-host-jw``, which is covered by the shared ``codec.o`` above).** A post-link ``nm`` check
+     (``firmware/host/Makefile``'s ``cali-host`` rule, ``firmware/CMakeLists.txt``'s ``POST_BUILD``)
+     fails the build if the symbol ``codec_encode`` is in the binary. It is a secondary check:
+     should ``nm`` itself fail, it passes (fails open).
+   - **Transport surface (structural, both builds).** ``cali_transport_t``
+     (``firmware/components/cali_core/include/cali_transport.h``) has no generic write: its only
+     characteristic-value write is ``write_heartbeat``, whose target ``ble_nimble.c`` fixes to
+     ``CODEC_CHAR_HEARTBEAT`` (``0x1003``) — the liveness counter ``calictl/device.py`` also runs on
+     the Pi to keep reads fresh. The only other ATT writes are the CCCD descriptor writes of
+     ``subscribe`` (``0x0001``: enable notifications on a state char). No control characteristic is
+     ever written; the host e2e tier observes this at the fake unit (zero control writes over a
+     whole pair + read-all + heartbeat run).
 
 .. req:: SM I/O capability and MITM must be set before any link exists
    :id: R_FW_IO_CAP_BEFORE_LINK
@@ -170,9 +197,12 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   compiles with `-DCODEC_NO_ENCODE` — a second, independent check that `cali_core` never
   references `codec_encode`) and end to end by `T_FW_HOST_E2E`
   (`tests/firmware/test_host_e2e.py`).
-- **`R_FW_READ_ONLY`** — verified by `T_FW_SESSION_FAKE` (compiles `cali_core` linked against a
-  codec built `-DCODEC_NO_ENCODE`) and by `T_FW_HOST_E2E` (builds and runs `cali-host`, whose own
-  Makefile rule fails the build were `codec_encode` ever to reach the link).
+- **`R_FW_READ_ONLY`** — verified by `T_FW_SESSION_FAKE` (compiles `cali_core` with
+  `-DCODEC_NO_ENCODE` under `-Werror`, so a `codec_encode` reference fails that compile) and by
+  `T_FW_HOST_E2E` (builds `cali-host`, whose link rule runs the `nm` check, and asserts the fake
+  unit saw zero control-characteristic writes). The ESP-IDF images' `POST_BUILD` `nm` check runs in
+  the `firmware-build`/`firmware-qemu` CI jobs; no test proves the transport surface on the device
+  build beyond compiling the same `ble_nimble.c`.
 - **`R_FW_IO_CAP_BEFORE_LINK`** — verified by `T_FW_HOST_E2E`'s
   `test_just_works_build_is_refused`, which runs the `-DCALI_TEST_LATE_IO_CAP` regression build
   against the fake unit and asserts pairing ends in `error` (the unit refusing Just Works).

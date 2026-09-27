@@ -164,6 +164,7 @@ jobs:
 
   firmware-host-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 20   # observed ~4.6 min on the probe runs; a hang must not burn 6 h
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -184,6 +185,7 @@ jobs:
   # codec_encode compiled out (the build fails if it reaches the ELF). Pin: firmware/README.md.
   firmware-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15   # observed 3.0-4.2 min on the probe runs; a hang must not burn 6 h
     container: espressif/idf:v6.1
     steps:
       - uses: actions/checkout@v4
@@ -210,6 +212,7 @@ jobs:
   # no-controller path, and NVS (the bond store) surviving a reboot. No Bluetooth in QEMU.
   firmware-qemu:
     runs-on: ubuntu-latest
+    timeout-minutes: 15   # observed 2.7-3.1 min on the probe runs; a hang must not burn 6 h
     container: espressif/idf:v6.1
     steps:
       - uses: actions/checkout@v4

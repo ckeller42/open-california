@@ -17,6 +17,8 @@ void (*cali_console_on_quit)(void);
 
 static const cali_transport_t *s_t;
 
+#define N_OF(a) (sizeof (a) / sizeof *(a))
+
 /* A SNAP of every function (14 functions, ~160 fields) is ~4.5 KB; built whole, then written with
  * one fputs so no other output can land inside it. */
 #define SNAP_MAX 8192
@@ -50,8 +52,9 @@ static void out_line(void) {
 }
 
 void cali_console_state(const cali_pair_state_t *s, const char *address) {
-    const char *st = s->st < 9 ? PAIR_STATE_NAMES[s->st] : "unknown";
-    const char *err = s->error < 5 ? PAIR_ERR_NAMES[s->error] : NULL;
+    /* bounds = the generated tables' own lengths (pairing_consts.h), never hand-typed counts */
+    const char *st = (size_t)s->st < N_OF(PAIR_STATE_NAMES) ? PAIR_STATE_NAMES[s->st] : "unknown";
+    const char *err = (size_t)s->error < N_OF(PAIR_ERR_NAMES) ? PAIR_ERR_NAMES[s->error] : NULL;
     s_pos = 0;
     s_over = 0;
     put("STATE {\"state\":\"%s\",\"attempts\":%u,\"error\":", st, (unsigned)s->attempts);

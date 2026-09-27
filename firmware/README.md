@@ -42,9 +42,15 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
 | `platform` | `esp/platform_esp.c` — `cali_kv_*` on NVS namespace `cali`, same CRC record as the host (bad CRC -> -2); `cali_uptime_ms` from `esp_timer`; `cali_log` -> `printf("LOG …")` | `host/`, `test/` |
 | `csrc` | `../../../csrc/codec.c` with `CODEC_NO_ENCODE` PUBLIC (read-only firmware) | — |
 
-- **Read-only.** `codec_encode` is compiled out (`CODEC_NO_ENCODE`, as on the host), and a
-  POST_BUILD step in `CMakeLists.txt` fails the build if `codec_encode` is in `cali_fw.elf` (the
-  twin of the `cali-host` link check). The only write stays the 1003 heartbeat.
+- **Read-only.** `codec_encode` is compiled out (`CODEC_NO_ENCODE`, as on the host — the primary,
+  compile-time guard), and a POST_BUILD `nm` step in `CMakeLists.txt` fails the build if
+  `codec_encode` is in `cali_fw.elf` (release and QEMU variants; the twin of the `cali-host` link
+  check, and like it fail-open should `nm` itself fail). The only characteristic-value write stays
+  the 1003 heartbeat; `subscribe`'s CCCD descriptor writes only enable notifications
+  (`R_FW_READ_ONLY` in `docs/firmware.md` has the exact scope).
+- **NimBLE options pinned to the host tier** (final review I1, `sdkconfig.defaults`): no in-stack
+  connection re-attempt, one connection, legacy scan only (no extended adv/scan), NimBLE log
+  level WARNING — so the device runs the configuration the host e2e tier proved.
 - **Warnings.** Our components build with the host's `-Wall -Wextra -Werror` strictness:
   `cmake/cali_strict.cmake` re-enables what ESP-IDF's global flags relax (`-Wno-error=extra`,
   `-Wno-unused-parameter`, `-Wno-sign-compare`, `-Wno-enum-conversion`, `-Wno-error=unused-*`);
@@ -337,8 +343,9 @@ tests.firmware.test_pairing_sm_parity`, so both objects and their `:links:` reso
 
 Two more requirements are authored directly on the rendered doc page rather than in a test
 docstring shim (they describe cross-cutting build properties, not one C module):
-**R_FW_READ_ONLY** (the firmware only ever writes the `1003` heartbeat — `codec_encode` is
-compiled out and a `POST_BUILD` link check enforces it in every firmware build, host and ESP-IDF)
+**R_FW_READ_ONLY** (no control frame: the only characteristic-value write is the `1003`
+heartbeat, CCCD writes only enable notifications; `codec_encode` is compiled out of every firmware
+build, and an `nm` link check backs that up for `cali-host` and both ESP-IDF images)
 and **R_FW_IO_CAP_BEFORE_LINK** (the SM's I/O capability and MITM flag must be set before the host
 syncs, i.e. before any link exists — the exact shape of the 2026-09-26 `calictl` bug where the
 pairing agent arrived after SMP had already started; reproduced on purpose by the
@@ -395,6 +402,10 @@ this checklist is self-contained):
   FreeRTOS high-water mark once the firmware is running real traffic.
 - **USB-Serial/JTAG console** — confirm `pair`/`passkey N` typed over the native USB port actually
   reach `cali_console_line()` (step 2 above).
+- **Device-only NimBLE options** (`docs/firmware.md` watch item 6) — pinned to the host tier in
+  `sdkconfig.defaults`; confirm a failed connect is one SM/session retry (no silent in-stack
+  re-attempt), the unit is found by the legacy scan, and no NimBLE INFO lines interleave with the
+  console lines.
 - **`esp_bt_controller_init` under QEMU** — QEMU-only, not expected on real hardware (the S3 has a
   real BT low-power clock); listed here only so it is not mistaken for a hardware regression if
   seen again.
