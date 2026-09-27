@@ -28,8 +28,13 @@ likec4_source_dir = "likec4"
 myst_fence_as_directive = ["mermaid"]
 myst_heading_anchors = 3
 
-# autodoc must not pull the lazily-imported runtime stack (hard rule: stdlib-only import)
-autodoc_mock_imports = ["bleak", "paho", "influxdb_client", "yaml", "pytest"]
+# autodoc must not pull the lazily-imported runtime stack (hard rule: stdlib-only import).
+# "bumble" and "_bumble_link" cover the Bumble-only test/lab modules (tools/fake_unit_peripheral.py,
+# tests/test_pairing_link.py, tests/test_fake_unit_peripheral.py): docs/requirements.txt installs
+# no bumble, and "_bumble_link" is a bare (non-package) sibling import inside tests/ (not on
+# sys.path here, and never needs to be -- mocking the name means autodoc never has to resolve or
+# import it at all, real or otherwise).
+autodoc_mock_imports = ["bleak", "paho", "influxdb_client", "yaml", "pytest", "bumble", "_bumble_link"]
 autodoc_default_options = {"members": True, "undoc-members": False}
 
 # --- sphinx-needs -----------------------------------------------------------

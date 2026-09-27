@@ -51,6 +51,11 @@ _UI_IDLE_S = float(os.environ.get("CALICTL_UI_IDLE_S", "25"))
 # redundant cold connect that fights over the single BLE slot. Falls back to the cold path on timeout.
 _SESSION_WAIT_S = float(os.environ.get("CALICTL_SESSION_WAIT_S", "6"))
 
+# How long POST /api/pairing {"action":"start"} waits for the wizard to actually start before it
+# answers with a "scanning" snapshot anyway (the start then completes once the radio is free).
+# Far below ServeBackend.pairing_command's 30 s bridge timeout.
+PAIRING_START_WAIT_S = 2.0
+
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
 
 
@@ -132,6 +137,7 @@ class ServeBackend:
             "last_seen": ts,
             "age_s": round(age) if age is not None else None,
             "online": online,
+            "paired": bool(getattr(getattr(self._s, "dev", None), "paired", True)),
             "read_only": bool(self.read_only),
             "session": session_state if persistent else "off",
             # "auto" (activity-scoped) or "release" (user tapped Disconnect) — lets the UI show
@@ -273,6 +279,8 @@ class Server:
         self._roof_stop = None              # asyncio.Event (lazy, loop-bound): interrupts an in-flight roof move
         self._pairing = None                # pairing_bluez.PairingRunner (lazy: created on first /api/pairing use)
         self._poll_skipped_for_pairing = False  # edge-detect so the skip/resume log prints once per flow
+        self._pairing_pending = False       # "start" accepted, waiting for the _ble lock (poll skips)
+        self._pairing_start_task = None     # that waiting task (cancel/reset abandon it)
         self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
         # Persist the last-known state so a restart while the van is asleep still shows the last
         # real values (the unit can be unreachable for days when parked). Env-overridable path.
@@ -438,16 +446,23 @@ class Server:
         """Thread-safe read of the guided-pairing wizard's state for `GET /api/pairing`.
 
         :returns: `self._pairing.snapshot()` if a wizard run has ever started this
-            process lifetime, else the idle default with `address` falling back to
+            process lifetime (reported as ``scanning`` while an accepted "start" still waits for
+            the radio, see `pairing_command`), else the idle default with `address` falling back to
             the persisted pairing-cache address (see `_pairing_cache_address`), then
             to the operator's `CALICTL_ADDR` manual override. The env fallback keeps
             the web UI's Unpair entry visible for a bond forced via the env var (a dev
             box); normal installs — buspi included since 2026-08-31 — bond via the cache.
         """
         if self._pairing is not None:
-            return self._pairing.snapshot()
+            snap = self._pairing.snapshot()
+            if self._pairing_pending:
+                # "start" is accepted but still waiting for an in-flight poll/command to release
+                # the radio: report the flow as scanning (a previous run's error is not current).
+                snap = dict(snap, state="scanning", attempts=0, error=None)
+            return snap
         address = _pairing_cache_address() or os.environ.get("CALICTL_ADDR", "").strip() or None
-        return {"state": "idle", "attempts": 0, "error": None, "address": address}
+        return {"state": "idle", "attempts": 0, "error": None, "address": address,
+                "radio_busy": False}
 
     def _ensure_pairing_runner(self):
         """Lazily construct the `PairingRunner` + `BluezTransport` pair on first use. Construction
@@ -477,11 +492,18 @@ class Server:
         `confirm` flag already gated).
 
         On "start", parks the persistent-session supervisor FIRST (`set_mode("disconnect")`)
-        before arming the runner. RULING (single BLE owner, see CLAUDE.md): a guided-pairing flow
-        can run for minutes (user must physically confirm a passkey), so it does NOT hold
-        `self._ble` for its duration — that would freeze `/api/state` for the whole flow. Instead,
-        parking the supervisor is the exclusion mechanism: it won't reconnect until the wizard ends
-        (user hits Connect again, or `reset`/`cancel` lets a later poll cycle re-establish).
+        before arming the runner. RULING (single BLE owner, see CLAUDE.md): the runner's `start()`
+        runs while holding `self._ble`, so an in-flight poll/command finishes first and no poll
+        slips in between. The HTTP request never blocks on that lock: a poll can hold it ~100 s
+        when the paired unit is unreachable (3 x (connect timeout + backoff)), far past the web
+        bridge's 30 s. "start" sets `_pairing_pending` (poll() skips while it is set, checked both
+        before and after taking the lock), schedules "take the lock + `start()`" as a task, waits
+        at most `PAIRING_START_WAIT_S` for it, and returns the snapshot — ``scanning`` while the
+        task still waits. The lock is released straight after `start()` returns: a guided-pairing
+        flow can run for minutes (the user reads a passkey off the camper), so it does NOT hold
+        `self._ble` for its duration — that would freeze `/api/state`. Parking the supervisor plus
+        the poll skip is the exclusion for the rest of the flow. "cancel"/"reset" abandon a
+        still-waiting start.
 
         :param action: "start" | "passkey" | "cancel" | "reset".
         :param value: passkey digit-string for "passkey"; unused otherwise.
@@ -491,20 +513,63 @@ class Server:
         """
         if action == "start":
             self._ensure_pairing_runner()
+            if self._pairing_pending:           # a second tab pressed "Connect" meanwhile
+                return self.pairing_snapshot()
             await self._sessions.set_mode("disconnect")
-            await self._pairing.start()
+            if self._ble is None:
+                await self._pairing.start()
+            else:
+                self._pairing_pending = True
+                task = asyncio.ensure_future(self._start_pairing_when_radio_free())
+                self._pairing_start_task = task
+                await asyncio.wait({task}, timeout=PAIRING_START_WAIT_S)   # never cancels it
         elif action == "passkey":
             if self._pairing is None:
                 return self.pairing_snapshot()
             await self._pairing.enter_passkey(int(value))
         elif action == "cancel":
+            await self._abandon_pending_pairing_start()
             if self._pairing is None:
                 return self.pairing_snapshot()
             await self._pairing.cancel()
         elif action == "reset":
+            await self._abandon_pending_pairing_start()
             self._ensure_pairing_runner()
             await self._pairing.reset()
         return self.pairing_snapshot()
+
+    async def _start_pairing_when_radio_free(self):
+        """Take `self._ble` (let an in-flight poll/command finish), then enter SCANNING while
+        holding it; `_pairing_pending` is cleared only once the flow's own state keeps poll()
+        away. Runs as a task so `pairing_command("start")` never blocks the HTTP request."""
+        try:
+            async with self._ble:
+                if self._pairing_pending:
+                    await self._pairing.start()
+                self._pairing_pending = False   # still under the lock: no poll can slip in
+        except Exception as e:
+            log.warning("pairing: start failed: %r" % (e,))
+        finally:
+            self._pairing_pending = False
+            self._pairing_start_task = None
+
+    async def _abandon_pending_pairing_start(self):
+        """Cancel a "start" that is still waiting for the radio (cancel/reset while pending)."""
+        task, self._pairing_start_task = self._pairing_start_task, None
+        self._pairing_pending = False
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except BaseException:
+                pass
+
+    def _pairing_owns_radio(self):
+        """True while a pairing flow is accepted (pending start) or mid-flight (not idle/bonded/
+        error): poll() must not open a BLE connection then."""
+        return self._pairing_pending or (
+            self._pairing is not None
+            and self._pairing.snapshot()["state"] not in ("idle", "bonded", "error"))
 
     async def poll(self):
         # Single BLE owner rule (CLAUDE.md): a pairing flow OWNS the radio while active (design
@@ -512,7 +577,7 @@ class Server:
         # its OWN bleak connect -- a second BLE actor against hci0 mid-pairing is exactly what the
         # single-owner rule forbids. Skip the WHOLE read (not just parts) while a wizard run is
         # actively mid-flight; idle/bonded/error means no flow is using the radio -> poll resumes.
-        if self._pairing is not None and self._pairing.snapshot()["state"] not in ("idle", "bonded", "error"):
+        if self._pairing_owns_radio():
             if not self._poll_skipped_for_pairing:
                 self._poll_skipped_for_pairing = True
                 log.warning("poll skipped: pairing in progress")
@@ -524,6 +589,9 @@ class Server:
         # (on_command builds full-packet control frames from it) and derive the
         # INTERPRETED state for MQTT + InfluxDB.
         async with self._ble:
+            if self._pairing_owns_radio():
+                # a "start" won the race while this poll waited for the lock: it owns the radio now
+                return {}
             sess = self._live_session()
             raw = await (sess.read_all(self.funcs) if sess is not None
                          else self.dev.read_all(self.funcs))
