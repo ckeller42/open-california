@@ -61,7 +61,7 @@ COMPONENTS := ../components
 CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC)
-COMPONENT_OBJ := platform_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
+COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
 # The rest of cali_core (console + json + session) and the frame codec: only cali-host needs them.
 CORE_OBJ := console.o json.o session.o codec.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
@@ -88,6 +88,12 @@ $(MBEDTLS_LIBS) &:
 	$(CXX) -c $(CFLAGS) -o $@ $<
 
 platform_host.o: $(COMPONENTS)/platform/host/platform_host.c $(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# cali_net on the host (#154): POSIX sockets on 127.0.0.1 + the scripted fake WiFi (--fake-wifi).
+net_host.o: $(COMPONENTS)/platform/host/net_host.c $(COMPONENTS)/platform/include/cali_net_host.h \
+		$(COMPONENTS)/cali_core/include/cali_net.h $(CSRC)/net_consts.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 store_cli.o: $(COMPONENTS)/cali_ble_nimble/test/store_cli.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
