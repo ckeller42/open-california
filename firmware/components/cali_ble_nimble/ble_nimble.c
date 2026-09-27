@@ -14,7 +14,8 @@
  * A read/heartbeat of a char not yet in the table (e.g. the 1004 verify read right after pairing)
  * first looks it up with ble_gattc_disc_chrs_by_uuid.
  * disconnect() during a connect cancels it; until that cancel's CONNECT event arrives a scan is
- * deferred (NimBLE refuses it) and a link that completed anyway is dropped.
+ * deferred (NimBLE refuses it) and a link that completed anyway is dropped. A GATT op that fails
+ * ENOTCONN (the link is going down) is not reported: the queue is dropped and DISCONNECTED follows.
  */
 /* CALI_TEST_LATE_IO_CAP: a host-only regression build (make cali-host-jw) that reproduces the
  * 2026-09-26 calictl bug — the passkey IO capability arrives only once pairing is already under
@@ -66,6 +67,7 @@ static int s_connecting, s_connect_cancelled;
 static int s_scan_deferred;                 /* start_scan() while our connect cancel is in flight */
 static int s_encrypt_on_connect;            /* connect_bonded(): re-encrypt once the link is up */
 static uint16_t s_conn = BLE_HS_CONN_HANDLE_NONE;
+static int s_dying;                         /* a GATT op failed ENOTCONN: DISCONNECT is on its way */
 static uintptr_t s_gen;                     /* bumped per link: stale GATT callbacks are dropped */
 
 static struct chr s_chrs[MAX_CHRS];
@@ -176,6 +178,7 @@ static uint16_t om_copy(struct os_mbuf *om) {
 
 static void link_reset(void) {
     s_conn = BLE_HS_CONN_HANDLE_NONE;
+    s_dying = 0;
     s_gen++;
     s_ophead = s_oplen = 0;
     s_op_busy = 0;
@@ -186,7 +189,7 @@ static void link_reset(void) {
 /* ---- GATT operation queue ------------------------------------------------------------------ */
 
 static int op_push(uint8_t kind, uint16_t short_id, uint32_t counter) {
-    if (s_conn == BLE_HS_CONN_HANDLE_NONE) return BLE_HS_ENOTCONN;
+    if (s_conn == BLE_HS_CONN_HANDLE_NONE || s_dying) return BLE_HS_ENOTCONN;
     if (s_oplen >= OPQ) return BLE_HS_ENOMEM;
     struct op *o = &s_ops[(s_ophead + s_oplen) % OPQ];
     o->kind = kind;
@@ -201,6 +204,18 @@ static int op_push(uint8_t kind, uint16_t short_id, uint32_t counter) {
  * transport, e.g. disconnect() clears the queue), reports what the contract promises, then runs
  * the next one. */
 static void op_finish(int status, const uint8_t *data, size_t len) {
+    if (status == BLE_HS_ENOTCONN) {
+        /* The link is going down: NimBLE fails the outstanding GATT procedure before it reports
+         * the disconnect. Reporting that failure would make the session issue its next request on
+         * the dying link — a GATT procedure NimBLE keeps for the connection handle, which the next
+         * link reuses, stalling its ATT queue until the 30 s ATT timeout. Drop the whole queue
+         * silently instead; DISCONNECTED (still reported: s_conn is kept) tells the caller. */
+        s_dying = 1;
+        s_gen++;
+        s_ophead = s_oplen = 0;
+        s_op_busy = 0;
+        return;
+    }
     struct op o = s_ops[s_ophead];
     s_ophead = (s_ophead + 1) % OPQ;
     s_oplen--;
@@ -520,7 +535,10 @@ static int t_connect_bonded(void) {
     ble_addr_t id;
     int rc = first_bond(&id);
     if (rc == 0) rc = connect_to(&id);
-    if (rc == 0) s_encrypt_on_connect = 1;
+    if (rc == 0) {
+        s_encrypt_on_connect = 1;
+        cali_log("ble: connect_bonded started");     /* a reconnect attempt is pending */
+    }
     return rc;
 }
 

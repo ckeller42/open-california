@@ -229,3 +229,23 @@ def test_set_raw_serves_the_frame_and_notifies_a_subscriber():
     short, read_back, changed, pushed = asyncio.run(run())
     assert read_back == short and len(short) == 1
     assert pushed == changed
+
+
+def test_drop_on_read_hangs_up_on_that_read_only_once():
+    """``drop_on_read`` (test knob, default off) ends the link on the next GATT read of that
+    function instead of answering it; other reads, and later links, are served as before."""
+    async def run():
+        unit, peer = await _connected_peer()
+        assert unit.drop_on_read is None
+        other = bytes(await _char(peer, "1602").read_value())          # energy: served
+        dropped: asyncio.Future = asyncio.get_running_loop().create_future()
+        peer.connection.on("disconnection",
+                           lambda reason: not dropped.done() and dropped.set_result(reason))
+        unit.drop_on_read = "cooler"
+        with pytest.raises((Exception, asyncio.CancelledError)):     # no response: the link ends
+            await asyncio.wait_for(_char(peer, "1102").read_value(), 2.0)
+        await asyncio.wait_for(dropped, 2.0)
+        return other, unit.drop_on_read
+
+    other, knob = asyncio.run(run())
+    assert other and knob is None                                    # one-shot

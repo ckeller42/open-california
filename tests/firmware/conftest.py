@@ -141,6 +141,13 @@ def _fw_controller_class():
             super().__init__(*a, **kw)
             self.resolving_list: dict[bytes, tuple[bytes, object]] = {}   # identity -> (irk, addr)
             self._resolved: tuple[object, object] | None = None           # (rpa, identity)
+            self.hold_connects = False    # test knob: a pending LE connection never completes
+            # test knobs for a cancel of a held connection: its completion arrives this much later
+            # (a real controller ends the procedure at a connection event), or the connection
+            # completes first and the cancel is refused (the race a real radio can lose)
+            self.cancel_delay_s = 0.0
+            self.connect_on_cancel = False
+            self._last_rpa = None         # the latest resolvable advertiser address seen
 
         # -- resolving list ----------------------------------------------------------------
         def on_hci_le_add_device_to_resolving_list_command(self, command):
@@ -158,6 +165,15 @@ def _fw_controller_class():
 
         def on_advertising_pdu(self, pdu):
             pending = self.pending_le_connection
+            if pdu.advertiser_address.is_resolvable:
+                self._last_rpa = pdu.advertiser_address
+            if pending and self.hold_connects:        # scan reports only; the connect stays pending
+                self.pending_le_connection = None
+                try:
+                    super().on_advertising_pdu(pdu)
+                finally:
+                    self.pending_le_connection = pending
+                return
             adv = pdu.advertiser_address
             entry = self.resolving_list.get(bytes(pending.peer_address)) if pending else None
             if entry and adv.is_resolvable:
@@ -186,6 +202,13 @@ def _fw_controller_class():
             pending = self.pending_le_connection
             if pending is None:
                 return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.COMMAND_DISALLOWED_ERROR)
+            if self.connect_on_cancel and self._last_rpa is not None:
+                # the connection completes before the cancel is processed: refuse the cancel
+                self.connect_on_cancel = self.hold_connects = False
+                self._resolved = (self._last_rpa, pending.peer_address)
+                pending.peer_address = self._last_rpa
+                self.create_le_connection(self._last_rpa)   # its Connection Complete goes first
+                return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.COMMAND_DISALLOWED_ERROR)
             self.pending_le_connection = None
             self._resolved = None
             done = hci.HCI_LE_Connection_Complete_Event(
@@ -194,7 +217,7 @@ def _fw_controller_class():
                 peer_address=pending.peer_address, connection_interval=0, peripheral_latency=0,
                 supervision_timeout=0, central_clock_accuracy=0)
             # after this command's Command Complete (send_hci_packet itself defers with call_soon)
-            asyncio.get_running_loop().call_soon(self.send_hci_packet, done)
+            asyncio.get_running_loop().call_later(self.cancel_delay_s, self.send_hci_packet, done)
             return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.SUCCESS)
 
         # -- the host went away (process exit = ESP reboot) -----------------------------------

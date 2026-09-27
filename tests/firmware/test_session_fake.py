@@ -204,3 +204,29 @@ def test_console_lines(fake):
     assert out == ['STATE {"state":"idle","attempts":0,"error":null,"address":null}',
                    "LOG console: bad passkey", "LOG console: bad passkey",
                    "LOG unknown command: bogus", "QUIT"]
+
+
+def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
+    """The link drops between two READs of a read-all: nothing more goes to the dead link (no read,
+    no heartbeat — also not for a late READ completion), no SNAP of the half-read set, a reconnect
+    by bond after the 1 s backoff, then a fresh read-all from the first function and one SNAP."""
+    half = READ_ALL[:6]                                   # DISCOVERED + the first 5 of 14 reads
+    out = run(fake, *PAIRED, "tick 0", *half, "tick 600", "DISCONNECTED",
+              "READ %x 0" % CHARS[5],                     # a completion racing the drop: stale
+              *["tick %d" % t for t in range(700, 1700, 100)],
+              "CONNECTED", "ENC_OK", *READ_ALL)
+    drop = out.index("LOG session: reconnect in 1000 ms")
+    reconnect = out.index("CALL connect_bonded")
+    assert drop < reconnect
+    dead = out[drop:reconnect]
+    assert not calls(dead, "read") and not calls(dead, "write_heartbeat"), dead
+    assert not snaps(out[:reconnect])                     # the half-finished read-all printed none
+    # the reconnect waits the backoff: not on the ticks before 1600 (drop at 600 + 1000)
+    ticks = run(fake, *PAIRED, "tick 0", *half, "tick 600", "DISCONNECTED",
+                *["tick %d" % t for t in range(700, 1600, 100)])
+    assert not calls(ticks, "connect_bonded")
+    fresh = out[reconnect:]
+    assert fresh[1] == "CALL discover"
+    assert [line for line in fresh if line.startswith("CALL read")] == \
+        ["CALL read %d" % c for c in CHARS]               # the whole read-all again, from the start
+    assert len(snaps(fresh)) == 1 and fresh[-1].startswith("SNAP ")

@@ -133,6 +133,11 @@ with `-m "not linux_only"`).
    calls `ble_gap_security_initiate` itself (the stored LTK re-encrypts; no passkey), so the
    session sees CONNECTED then ENC_OK/ENC_FAIL. Every heartbeat write completion is reported as
    `CALI_TEV_HEARTBEAT`; a failed or unwritable beat counts as a lost link (reconnect with backoff).
+   A GATT operation that fails with `BLE_HS_ENOTCONN` is not reported (the queue is dropped and the
+   disconnect follows): reporting it made the session start its next read on the dying link, a
+   GATT procedure NimBLE then kept for the connection handle the next link reused, stalling that
+   link until the 30 s ATT timeout. `disconnect()` during a connect tracks the cancel until its
+   CONNECT event: a scan asked for meanwhile is deferred, a link that completed first is dropped.
 
 10. **Bumble: resolving list, connect cancel, lost host.** The firmware-side controller is a
    `Controller` subclass (`tests/firmware/conftest.py`, `_fw_controller_class`) adding three
@@ -145,7 +150,10 @@ with `-m "not linux_only"`).
    Identifier), per Vol 4 Part E 7.8.13; Bumble answered success and kept it pending, so NimBLE's
    connect procedure never ended. (c) *A lost host ends its links:* when `cali-host` exits (the
    ESP32 reboots) the unit sees a supervision timeout; Bumble's controller outlived the TCP host
-   and held the unit's only connection slot.
+   and held the unit's only connection slot. Test knobs on the same controller make the
+   connect-cancel races deterministic (`hold_connects`, `cancel_delay_s`, `connect_on_cancel`,
+   used by `test_unit_forgot_us_repairs`), and the fake unit's `drop_on_read` hangs up on one GATT
+   read so a link is lost mid read-all (`test_link_drop_mid_read_all_reconnects`).
 11. **Just Works regression build (`make cali-host-jw`).** `ble_nimble.c` compiled with
    `-DCALI_TEST_LATE_IO_CAP`: the IO capability is NoInputNoOutput (no MITM) until `pair()` has
    sent the Pairing Request, then set to KEYBOARD_ONLY — the 2026-09-26 calictl bug (the agent
