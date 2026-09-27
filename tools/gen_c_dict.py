@@ -51,7 +51,6 @@ state-machine enums/timeouts/names from :mod:`calictl.pairing`.
 """
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -176,6 +175,30 @@ struct codec_char {
 """
 
 
+def _env_default(var: str) -> float:
+    """The literal default of ``os.environ.get(var, "<default>")`` in ``calictl/device.py``.
+
+    Read from the source (not the imported module) so an environment override the developer
+    has set cannot change a generated header.
+
+    :param var: the environment variable name (e.g. ``CALICTL_HEARTBEAT_WARMUP_S``)
+    :returns: the default, as a float
+    :raises LookupError: no ``os.environ.get(var, "<str literal>")`` call in the module
+    """
+    import ast
+
+    from calictl import device
+
+    for node in ast.walk(ast.parse(Path(device.__file__).read_text())):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "get" and ast.unparse(node.func.value) == "os.environ"
+                and len(node.args) == 2
+                and isinstance(node.args[0], ast.Constant) and node.args[0].value == var
+                and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str)):
+            return float(node.args[1].value)
+    raise LookupError("no os.environ.get(%r, <literal>) in calictl/device.py" % var)
+
+
 def generate_chars() -> str:
     """Generate ``codec_chars.h``: the GATT char map + heartbeat constants.
 
@@ -198,17 +221,16 @@ def generate_chars() -> str:
     out.append("#define CODEC_CHAR_HEARTBEAT 0x%s" % str(device.HEARTBEAT_CHAR)[4:8])
     out.append("#define CODEC_CHAR_AUTH 0x%s" % str(device.AUTH_CHAR)[4:8])
     out.append("#define CODEC_HEARTBEAT_START 0x%08xu" % device.HEARTBEAT_START)
-    # Pinned to the module's documented default (600 ms / 0.6 s): a developer's
-    # CALICTL_HEARTBEAT_PERIOD_S override must never leak into the committed header.
-    # When the env var is unset, assert the module default still matches the pin —
-    # a silent drift there would desync the generated header from the real timing.
-    period_ms = 600
-    if "CALICTL_HEARTBEAT_PERIOD_S" not in os.environ:
-        actual_ms = round(device.HEARTBEAT_PERIOD_S * 1000)
-        assert actual_ms == period_ms, (
-            "calictl.device.HEARTBEAT_PERIOD_S default changed (now %d ms) — update "
-            "CODEC_HEARTBEAT_PERIOD_MS in tools/gen_c_dict.py to match" % actual_ms)
+    # Timing from calictl.device's DOCUMENTED defaults — the literal default of its
+    # os.environ.get(...) call, read from the source (``_env_default``) — so a developer's
+    # CALICTL_HEARTBEAT_*_S override (which calictl.device applies at import) can never leak
+    # into the committed header.
+    period_ms = round(_env_default("CALICTL_HEARTBEAT_PERIOD_S") * 1000)
+    warmup_ms = round(_env_default("CALICTL_HEARTBEAT_WARMUP_S") * 1000)
     out.append("#define CODEC_HEARTBEAT_PERIOD_MS %d" % period_ms)
+    # calictl.device.read_all waits this long with the heartbeat running before its read pass
+    # ("let the liveness register + sensors refresh"); the firmware session does the same.
+    out.append("#define CODEC_HEARTBEAT_WARMUP_MS %d" % warmup_ms)
     out.append('#define CODEC_DEVICE_NAME "%s"' % device.DEVICE_NAME)
     out.append("#endif /* CODEC_CHARS_H */")
     return "\n".join(out) + "\n"

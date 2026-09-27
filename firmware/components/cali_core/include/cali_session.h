@@ -9,16 +9,20 @@
  *   cali_session_on_bonded()    the runner reached bonded: the link is up and encrypted.
  *   cali_session_stop()         the runner left bonded or starts a flow (forget, pair): no more
  *                               heartbeat, reads or reconnects until the next on_bonded/boot.
- *   cali_session_tick(now_ms)   every ~100 ms: heartbeat + reconnect + encryption timers.
+ *   cali_session_tick(now_ms)   every ~100 ms: heartbeat + warm-up + reconnect + encryption timers.
  *
  * Link up (on_bonded, or ENC_OK on a reconnect): heartbeat write_heartbeat(counter++) every
  * CODEC_HEARTBEAT_PERIOD_MS starting at CODEC_HEARTBEAT_START (first beat on the next tick), and
  * discover(). DISCOVERED -> subscribe() every CODEC_CHARS entry (a char without NOTIFY is refused
- * by the transport and skipped), then read() them one at a time in CODEC_CHARS order; each READ
- * (status 0) replaces that function's frame. After the last read the session prints one SNAP
- * (cali_console_snapshot). A NOTIFY replaces that function's frame at any time; once the link's
- * first read-all completed it also prints a SNAP. The snapshot therefore always holds exactly one
- * whole frame per function (never a mix of two).
+ * by the transport and skipped), then — like calictl.device.read_all — let the heartbeat run for
+ * CODEC_HEARTBEAT_WARMUP_MS (the first cali_session_tick at or past DISCOVERED + warm-up starts the
+ * reads) and read() the functions one at a time in CODEC_CHARS order; each READ (status 0)
+ * replaces that function's frame. A function the unit pushed on this link (NOTIFY since the
+ * subscribe) is not read, and a read already outstanding when its push arrives does not replace
+ * the pushed frame: the notification is fresher than the read latch. After the last read the
+ * session prints one SNAP (cali_console_snapshot). A NOTIFY replaces that function's frame at any
+ * time; once the link's first read-all completed it also prints a SNAP. The snapshot therefore
+ * always holds exactly one whole frame per function (never a mix of two).
  *
  * Link loss (DISCONNECTED, CONNECT_FAIL, ENC_FAIL, a failed discovery, a heartbeat that cannot be
  * written or completes with an error, or no encryption within CALI_SESSION_ENC_TIMEOUT_MS of

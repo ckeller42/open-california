@@ -29,6 +29,10 @@ async def _beats_seen(unit):
     return unit.beats
 
 
+async def _control_writes(unit):
+    return unit.control_writes
+
+
 async def _serve_raw(unit, fn, frame, notify):
     unit.set_raw(fn, frame, notify=notify)
 
@@ -66,7 +70,9 @@ def test_read_all_matches_python_decode(host_fw, hci_unit):
 
 def test_heartbeat_keeps_the_link(host_fw, hci_unit):
     """20 s on one link: >= 20 new beats in the window, no session drop/reconnect logged in it,
-    and the same link still delivers (a pushed change still produces a SNAP)."""
+    and the same link still delivers (a pushed change still produces a SNAP). Over the whole run —
+    pairing, read-all, 20 s of heartbeat — the firmware never wrote a control characteristic
+    (R_FW_READ_ONLY, observed at the unit)."""
     fn = "cooler"
     fw = host_fw(hci_unit)
     _pair(fw, hci_unit)
@@ -84,6 +90,7 @@ def test_heartbeat_keeps_the_link(host_fw, hci_unit):
     hci_unit.call(_serve_raw, hci_unit.unit, fn, new, True)
     fw.expect("SNAP", lambda s: s["fn"].get(fn) == want, timeout=15)
     assert not [line for line in fw.log[mark:] if line.startswith("LOG session:")]
+    assert hci_unit.call(_control_writes, hci_unit.unit) == 0
 
 
 def test_passkey_outside_waiting_is_ignored(host_fw, hci_unit):
@@ -238,9 +245,11 @@ async def _drop_on_read(unit, fn):
 
 
 def test_link_drop_mid_read_all_reconnects(host_fw, hci_unit):
-    """The unit hangs up while the first read-all is under way (on the cooler read, the 3rd of 14):
-    no SNAP of the half-read set, one backoff reconnect by bond, then a fresh read-all -> SNAP."""
-    hci_unit.call(_drop_on_read, hci_unit.unit, "cooler")    # not read while pairing (1004 is)
+    """The unit hangs up while the first read-all is under way (on the ``general`` read — 1001 has
+    no NOTIFY, so it is the one function the read-all always reads; every notifying char was
+    already pushed on subscribe, and a pushed function is not read): no SNAP of the half-read set,
+    one backoff reconnect by bond, then a fresh read-all -> SNAP."""
+    hci_unit.call(_drop_on_read, hci_unit.unit, "general")   # not read while pairing (1004 is)
     fw = host_fw(hci_unit); _pair(fw, hci_unit)
     fw.expect("LOG session: reconnect in", timeout=40)      # the session saw the link go
     assert not any(line.startswith("SNAP") for line in fw.log)   # nothing from the torn read-all

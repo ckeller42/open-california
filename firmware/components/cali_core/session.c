@@ -28,6 +28,8 @@ static int s_reconnect_pending;
 static uint64_t s_reconnect_at;
 static uint32_t s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
 
+static int s_warming;          /* discovered + subscribed, heartbeat running: reads start at s_warm_until */
+static uint64_t s_warm_until;
 static int s_reading;          /* read-all in progress: s_read_idx is outstanding */
 static size_t s_read_idx;
 static int s_snapped;          /* this link's first read-all completed */
@@ -37,6 +39,10 @@ static struct {
     size_t len;
     uint8_t have;
 } s_fr[CODEC_NCHARS];
+/* Pushed on this link (since its read-all started with the subscribe): the NOTIFY frame is fresher
+ * than the unit's read latch, so the read-all neither reads nor overwrites it (calictl.device
+ * read_all: "a fresh notification beats the stale latch"). */
+static uint8_t s_pushed[CODEC_NCHARS];
 
 static int index_of(uint16_t short_id) {
     for (size_t i = 0; i < CODEC_NCHARS; i++) {
@@ -59,6 +65,7 @@ static void store(size_t i, const uint8_t *data, size_t len) {
 static void link_clear(void) {
     s_link = LINK_DOWN;
     s_hb_on = 0;
+    s_warming = 0;
     s_reading = 0;
     s_snapped = 0;
 }
@@ -90,8 +97,10 @@ static void link_up(void) {
     s_hb_on = 1;
     s_hb_ctr = CODEC_HEARTBEAT_START;
     s_hb_next = s_now;                                /* first beat on the next tick */
+    s_warming = 0;
     s_reading = 0;
     s_snapped = 0;
+    memset(s_pushed, 0, sizeof s_pushed);
     int rc = s_t->discover();
     if (rc != 0) {
         cali_log("session: discover failed %d", rc);
@@ -101,6 +110,10 @@ static void link_up(void) {
 
 static void read_next(void) {
     while (s_read_idx < CODEC_NCHARS) {
+        if (s_pushed[s_read_idx]) {                   /* a fresh push already holds this function */
+            s_read_idx++;
+            continue;
+        }
         int rc = s_t->read(CODEC_CHARS[s_read_idx].state_short);
         if (rc == 0) return;                          /* READ comes back */
         cali_log("session: read %s failed %d", CODEC_CHARS[s_read_idx].function, rc);
@@ -119,6 +132,14 @@ static void on_discovered(int status) {
     }
     for (size_t i = 0; i < CODEC_NCHARS; i++)
         (void)s_t->subscribe(CODEC_CHARS[i].state_short);   /* refused for a char without NOTIFY */
+    /* calictl.device.read_all: the heartbeat runs CODEC_HEARTBEAT_WARMUP_MS before the read pass
+     * ("let the liveness register + sensors refresh"); cali_session_tick starts the reads. */
+    s_warming = 1;
+    s_warm_until = s_now + CODEC_HEARTBEAT_WARMUP_MS;
+}
+
+static void start_reads(void) {
+    s_warming = 0;
     s_reading = 1;
     s_read_idx = 0;
     read_next();
@@ -126,8 +147,13 @@ static void on_discovered(int status) {
 
 static void on_read(const cali_tevent_t *e) {
     if (!s_reading || e->char_short != CODEC_CHARS[s_read_idx].state_short) return;
-    if (e->status == 0) store(s_read_idx, e->data, e->len);
-    else cali_log("session: read %s status %d", CODEC_CHARS[s_read_idx].function, e->status);
+    if (s_pushed[s_read_idx]) {
+        /* pushed while this read was outstanding: keep the fresher NOTIFY frame */
+    } else if (e->status == 0) {
+        store(s_read_idx, e->data, e->len);
+    } else {
+        cali_log("session: read %s status %d", CODEC_CHARS[s_read_idx].function, e->status);
+    }
     s_read_idx++;
     read_next();
 }
@@ -162,6 +188,7 @@ static void on_event(const cali_tevent_t *e) {
     case CALI_TEV_NOTIFY:
         if (s_link != LINK_UP || (i = index_of(e->char_short)) < 0) break;
         store((size_t)i, e->data, e->len);
+        s_pushed[i] = 1;
         if (s_snapped) cali_console_snapshot(s_now);
         break;
     case CALI_TEV_HEARTBEAT:
@@ -228,6 +255,7 @@ void cali_session_tick(uint64_t now_ms) {
             return;
         }
     }
+    if (s_link == LINK_UP && s_warming && now_ms >= s_warm_until) start_reads();
     if (s_link == LINK_CONNECTED && now_ms - s_connected_at >= CALI_SESSION_ENC_TIMEOUT_MS) {
         cali_log("session: link not encrypted after %u ms", (unsigned)CALI_SESSION_ENC_TIMEOUT_MS);
         link_lost();

@@ -336,13 +336,34 @@ static int on_dsc(uint16_t conn, const struct ble_gatt_error *err, uint16_t chr_
     return 0;
 }
 
+/* OP_DISC, step 1: the ATT MTU exchange (as BlueZ does for calictl on connect). Without it the
+ * link keeps the 23-byte default and a notification carries only 20 bytes — energy's 22-byte
+ * frame would arrive truncated. A refused/failed exchange is logged, never fatal: discovery runs
+ * either way (reads still return up to MTU-1 bytes). */
+static int on_mtu(uint16_t conn, const struct ble_gatt_error *err, uint16_t mtu, void *arg) {
+    (void)conn; (void)mtu;
+    if ((uintptr_t)arg != s_gen) return 0;
+    if (err->status == BLE_HS_ENOTCONN) {
+        op_finish(err->status, NULL, 0);
+        return 0;
+    }
+    if (err->status != 0) cali_log("ble: MTU exchange failed %d", err->status);
+    int rc = ble_gattc_disc_all_chrs(s_conn, 1, 0xffff, on_disc_chr, arg);
+    if (rc != 0) op_finish(rc, NULL, 0);
+    return 0;
+}
+
 static int op_begin(struct op *o) {
     void *gen = (void *)s_gen;
     struct chr *c;
+    int rc;
     switch (o->kind) {
     case OP_DISC:
         s_nchrs = 0;
         s_disc_done = 0;
+        rc = ble_gattc_exchange_mtu(s_conn, on_mtu, gen);
+        if (rc == 0) return 0;                          /* on_mtu starts the discovery */
+        if (rc != BLE_HS_EALREADY) cali_log("ble: MTU exchange not started %d", rc);
         return ble_gattc_disc_all_chrs(s_conn, 1, 0xffff, on_disc_chr, gen);
     case OP_READ:
     case OP_WRITE_HB:

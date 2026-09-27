@@ -100,6 +100,7 @@ class FakeUnit:
         self.last_beat_t: float = 0.0        # monotonic time of the last 1003 write
         self.seen_beat = False               # a beat arrived on the current link (watchdog arms)
         self.beats = 0                       # 1003 writes seen since start (test hook)
+        self.control_writes = 0              # control-char writes seen since start (test hook)
         self.conn = None                     # current Bumble connection (single-link unit)
         self.pairing_mode = True           # the unit's "Gerät verbinden" screen is open
         self.refuse_connections = False    # test knob: drop every link at once
@@ -143,6 +144,7 @@ class FakeUnit:
         return hang_up()
 
     def on_write(self, fn: str, data: bytes) -> None:
+        self.control_writes += 1
         f = self.funcs[fn]
         try:
             self.unit.write(f.control_char, bytes(data))
