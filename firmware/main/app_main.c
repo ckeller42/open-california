@@ -14,6 +14,12 @@
  * "LOG ble: controller unavailable" and run the console anyway on a transport that refuses every
  * operation; a small "core" task then plays the host task's part (same do_work, woken by a task
  * notification instead of the NimBLE event), so it still prints the idle STATE and answers lines.
+ *
+ * QEMU build (CONFIG_CALI_QEMU_PROBE, firmware/qemu/sdkconfig.qemu only): nimble_port_init() is not
+ * called at all (QEMU does not model the controller; esp_bt_controller_init asserts there and the
+ * chip reboots in a loop), so the no-controller path above runs; plus the "kvprobe set <hex>" /
+ * "kvprobe get" console command (one record through cali_kv_* = NVS, the bond store's path) for the
+ * QEMU reboot test (tests/firmware/test_qemu_boot.py). Never in the release image.
  */
 #include <stdatomic.h>
 #include <stdio.h>
@@ -56,6 +62,61 @@ static atomic_int s_ready;             /* the owner may take lines (NimBLE synce
 static struct ble_npl_event s_work_ev; /* BLE: the owner is the NimBLE host task */
 static TaskHandle_t s_core_task;       /* no BLE: the owner is this task */
 
+#if CONFIG_CALI_QEMU_PROBE
+#define KVPROBE_KEY "kvprobe"
+#define KVPROBE_MAX 64
+
+static int hexval(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+/* "kvprobe set <hex>" -> "LOG kvprobe ok" | "LOG kvprobe error ..."; "kvprobe get" -> "LOG kvprobe
+ * get <hex>" | "LOG kvprobe get missing|corrupt". Returns 1 if the line was a kvprobe command.
+ * Runs on the owner task, like every other cali_kv_* caller. */
+static int kvprobe_line(const char *line) {
+    uint8_t buf[KVPROBE_MAX];
+    size_t n = 0;
+    if (strncmp(line, "kvprobe", 7) != 0 || (line[7] != ' ' && line[7] != 0)) return 0;
+    if (strncmp(line, "kvprobe set ", 12) == 0) {
+        const char *h = line + 12;
+        size_t len = strlen(h);
+        if (len == 0 || len % 2 || len / 2 > sizeof buf) {
+            cali_log("kvprobe error: want 1..%d bytes of hex", KVPROBE_MAX);
+            return 1;
+        }
+        for (; n < len / 2; n++) {
+            int hi = hexval(h[2 * n]), lo = hexval(h[2 * n + 1]);
+            if (hi < 0 || lo < 0) {
+                cali_log("kvprobe error: not hex");
+                return 1;
+            }
+            buf[n] = (uint8_t)(hi << 4 | lo);
+        }
+        if (cali_kv_set(KVPROBE_KEY, buf, n) == 0) cali_log("kvprobe ok");
+        else cali_log("kvprobe error: cali_kv_set failed");
+    } else if (strcmp(line, "kvprobe get") == 0) {
+        char hex[2 * KVPROBE_MAX + 1];
+        n = sizeof buf;
+        int rc = cali_kv_get(KVPROBE_KEY, buf, &n);
+        if (rc == CALI_KV_MISSING) {
+            cali_log("kvprobe get missing");
+        } else if (rc != CALI_KV_OK) {
+            cali_log("kvprobe get corrupt");
+        } else {
+            for (size_t i = 0; i < n; i++) snprintf(hex + 2 * i, 3, "%02x", buf[i]);
+            hex[2 * n] = 0;
+            cali_log("kvprobe get %s", hex);
+        }
+    } else {
+        cali_log("kvprobe error: usage kvprobe set <hex> | kvprobe get");
+    }
+    return 1;
+}
+#endif
+
 /* Owner task: the due tick, then every queued line (only once ready). */
 static void do_work(void) {
     char line[LINE_MAX_LEN];
@@ -65,7 +126,12 @@ static void do_work(void) {
         cali_session_tick(now);
     }
     if (!atomic_load(&s_ready)) return;
-    while (xQueueReceive(s_lines, line, 0) == pdTRUE) cali_console_line(line);
+    while (xQueueReceive(s_lines, line, 0) == pdTRUE) {
+#if CONFIG_CALI_QEMU_PROBE
+        if (kvprobe_line(line)) continue;
+#endif
+        cali_console_line(line);
+    }
 }
 
 /* Any task: wake the owner. */
@@ -195,14 +261,22 @@ void app_main(void) {
     s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);
     configASSERT(s_lines != NULL);
 
+#if CONFIG_CALI_QEMU_PROBE
+    err = ESP_ERR_NOT_SUPPORTED;  /* QEMU: no controller to init (see the header comment) */
+#else
     err = nimble_port_init();     /* esp_bt_controller_init + enable, then the NimBLE host */
+#endif
     if (err == ESP_OK) {
         cali_ble_nimble_init(on_sync);
         cali_console_init(cali_ble_nimble_transport());
         ble_npl_event_init(&s_work_ev, work_ev_cb, NULL);
     } else {
         cali_log("ble: controller unavailable");   /* exact text: the QEMU boot test (Task 9) */
+#if CONFIG_CALI_QEMU_PROBE
+        cali_log("ble: nimble_port_init skipped (QEMU build, CONFIG_CALI_QEMU_PROBE)");
+#else
         cali_log("ble: nimble_port_init: %s", esp_err_to_name(err));
+#endif
         cali_console_init(&s_no_ble);
     }
 

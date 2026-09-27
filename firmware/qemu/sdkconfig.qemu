@@ -3,3 +3,6 @@
 #   idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig \
 #          -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+# The QEMU boot tier's probe (main/Kconfig.projbuild): no BT controller init (QEMU does not model it),
+# plus the kvprobe console command. Never set in the release image (POST_BUILD check).
+CONFIG_CALI_QEMU_PROBE=y

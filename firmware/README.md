@@ -26,7 +26,7 @@ configuration.
 | Variant | Console | Build |
 |---|---|---|
 | release (the CoreS3) | **USB-Serial/JTAG** (`CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y`): the CoreS3's USB-C is the S3's native USB (`/dev/cu.usbmodem*`, 303a:1001); UART0 (G43/G44) only reaches the M5-Bus header, so `pair`/`passkey` could never be typed over USB on a UART console | `idf.py build` |
-| QEMU (Task 9) | **UART0** (`qemu/sdkconfig.qemu`: `CONFIG_ESP_CONSOLE_UART_DEFAULT=y`): QEMU's esp32s3 machine emulates UART, not USB-Serial/JTAG | `idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build` |
+| QEMU (Task 9) | **UART0** (`qemu/sdkconfig.qemu`: `CONFIG_ESP_CONSOLE_UART_DEFAULT=y`): QEMU's esp32s3 machine emulates UART, not USB-Serial/JTAG. Also `CONFIG_CALI_QEMU_PROBE=y` (below) | `idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build` |
 
 `app_main.c` picks the driver at compile time (`usb_serial_jtag_read_bytes` + `usb_serial_jtag_vfs_use_driver`,
 or `uart_read_bytes` + `uart_vfs_dev_use_driver`; any other console is an `#error`); the line
@@ -80,15 +80,60 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   runs the tick, then the queued lines (lines only after sync). Console = USB-Serial/JTAG (release)
   or UART0 (QEMU), each through its driver + VFS (table above); `quit` is ignored (no
   `cali_console_on_quit` on the device).
-- **No controller** (`nimble_port_init()` fails in `esp_bt_controller_init`, e.g. QEMU):
+- **No controller** (`nimble_port_init()` returns an error, or the QEMU build skips it):
   `LOG ble: controller unavailable`, then the console runs on a transport that refuses every
   operation, owned by a `cali_core` FreeRTOS task (woken by task notifications instead of the
-  NimBLE event): it prints the idle `STATE` and answers lines.
+  NimBLE event): it prints the idle `STATE` and answers lines. Under QEMU `esp_bt_controller_init`
+  does **not** return an error: it asserts (`btdm_low_power_mode_init`, `assert(select_src_ret &&
+  set_div_ret)`, QEMU models no BT low-power clock) and the chip reboots in a loop, so the QEMU
+  build does not call `nimble_port_init()` at all (`CONFIG_CALI_QEMU_PROBE`).
 - **API skew vs the host's NimBLE 1.10: none.** `cali_ble_nimble` compiles unchanged against the
   IDF v6.1 esp-nimble (1.6.0-based) under the strict flags above: no `#if` was needed in
   `ble_nimble.c` or `ble_store_kv.c`. `ble_store_kv.c`'s `syscfg/syscfg.h` resolves to esp-nimble's
   (which maps `MYNEWT_VAL`s onto Kconfig via `esp_nimble_cfg.h`). Compile-time only: runtime
   behaviour on esp-nimble is unproven until hardware.
+
+## QEMU boot tier (`firmware/qemu`, CI job `firmware-qemu`)
+
+The "chip simulator" tier: the real ESP-IDF image boots on Espressif's QEMU esp32s3 machine. It
+proves boot, the console line protocol on the no-controller path, and NVS (the bond store's
+`cali_kv_*` path) surviving a reboot. **No Bluetooth** (QEMU has no radio): BLE stays with the host
+tier (`test_host_e2e.py`) and hardware.
+
+- **QEMU pin:** the one ESP-IDF v6.1 pins in `tools/tools.json` — `espressif/qemu`
+  **`esp-develop-9.2.2-20260417`** (`qemu-system-xtensa`, "QEMU emulator version 9.2.2
+  (esp_develop_9.2.2_20260417)"), preinstalled in the `espressif/idf:v6.1` image (amd64 + arm64)
+  and on `PATH` after `export.sh`. Nothing is downloaded.
+- **Variant:** `qemu/sdkconfig.qemu` = UART0 console + `CONFIG_CALI_QEMU_PROBE=y`
+  (`main/Kconfig.projbuild`): skips the BT controller init (above) and adds the console command
+  `kvprobe set <hex>` -> `LOG kvprobe ok` / `kvprobe get` -> `LOG kvprobe get <hex>|missing|corrupt`
+  (one NVS record, key `kvprobe`, through `cali_kv_set/get`). **Never in the release image:** a
+  POST_BUILD step in `CMakeLists.txt` fails any build without the option whose ELF contains the
+  string `kvprobe` (the `codec_encode` guard's twin). CI builds the variant in its own job and
+  uploads nothing from it.
+- **`qemu/run_qemu.sh [BUILD_DIR [FLASH_FILE]]`** (defaults `build-qemu`,
+  `build-qemu/qemu_flash.bin`): `idf.py qemu`'s esp32s3 arguments (machine, eFuse image, watchdog
+  off), except that the flash image is merged (`esptool merge-bin`, padded to 16MB) only when it
+  is missing or older than the app — `idf.py qemu` re-merges on every run and so wipes NVS — and
+  UART0 is `-serial stdio -monitor none` (no QEMU monitor multiplexed onto the console stream).
+  Delete the flash file for a factory-fresh chip. Stop QEMU with SIGTERM.
+- **Test:** `tests/firmware/test_qemu_boot.py` (skipped unless `CALI_QEMU=1`, and when
+  `qemu-system-xtensa` is not on `PATH`): boot -> `LOG ble: controller unavailable` + idle `STATE`,
+  `status` -> idle, `kvprobe set 0a0b0c`, power off, boot the same flash file, `kvprobe get` ->
+  `0a0b0c`. The `qemu` fixture (`conftest.py`) runs `run_qemu.sh` under the same `Firmware` line
+  reader as the host tier. Boot to `STATE` takes ~0.3 s.
+
+Locally (repo root; the image runs natively on Apple silicon):
+
+```
+docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '
+  . $IDF_PATH/export.sh >/dev/null &&
+  idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build &&
+  cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v'
+```
+
+Interactive: `docker run --rm -it -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c
+'. $IDF_PATH/export.sh >/dev/null && qemu/run_qemu.sh'`, type `status` / `kvprobe get`, Ctrl-C to stop.
 
 ## Host build (`firmware/host`)
 
@@ -151,6 +196,7 @@ with `-m "not linux_only"`).
 | What | Pin | Why |
 |---|---|---|
 | ESP-IDF | **v6.1** (`firmware-build`, container `espressif/idf:v6.1`) — the highest stable release on 2026-09-27; GitHub's newest non-prerelease *by date* is the v5.3.6 maintenance release, so the pin is by version, not by date | its `components/bt/host/nimble/nimble` submodule is esp-nimble `139cada0ae93` on branch `nimble-1.6.0-idf`, i.e. based on **upstream NimBLE 1.6.0** (merge base "Prepare for NimBLE 1.6.0 release") + ~440 Espressif commits |
+| QEMU (`firmware-qemu`) | `espressif/qemu` **`esp-develop-9.2.2-20260417`** (QEMU 9.2.2) | not chosen separately: the build ESP-IDF v6.1 pins in `tools/tools.json` and ships in `espressif/idf:v6.1`, so it moves with the IDF pin |
 | Upstream NimBLE (host build) | `nimble_1_10_0_tag` | **gap vs ESP-IDF: 1.6.0 → 1.10.0.** Upstream's TCP socket transport (`BLE_SOCK_USE_TCP`) is incomplete up to 1.9.0 — `ble_hci_sock_cmdevt_tx` (and, before 1.8.0, `ble_hci_sock_acl_tx`) exists only for the `linux_blue`/`nuttx` variants, so a 1.6.0–1.9.0 TCP build does not link (verified for 1.6.0: `undefined reference to ble_hci_sock_cmdevt_tx`). 1.10.0 is the first release whose `linux_tcp` choice is complete. The host API used here (GAP disc/connect, SM passkey, GATT client, `ble_store_config`) is unchanged across the gap. |
 | Mbed TLS (host build) | `mbedtls-3.6.5` | NimBLE 1.10 dropped the bundled TinyCrypt; SM crypto needs Mbed TLS, and the build is 32-bit (below), so it is built from source — same version upstream NimBLE's port CI uses |
 

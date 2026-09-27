@@ -1,0 +1,19 @@
+menu "open-california firmware (#154)"
+
+    config CALI_QEMU_PROBE
+        bool "QEMU build: no BT controller init, kvprobe console command"
+        default n
+        help
+            For the QEMU boot tier only (firmware/qemu/sdkconfig.qemu, CI job firmware-qemu); never
+            in the release image (a POST_BUILD check in firmware/CMakeLists.txt fails a build
+            without this option whose ELF contains "kvprobe").
+
+            1. Skips nimble_port_init(): QEMU does not model the BT controller, and
+               esp_bt_controller_init() asserts there (btdm_low_power_mode_init, "assert(select_src_ret
+               && set_div_ret)"), rebooting in a loop. The firmware then takes its no-controller path
+               ("LOG ble: controller unavailable", console on a refusing transport, idle STATE).
+            2. Adds the console command "kvprobe set <hex>" / "kvprobe get", which stores/reads one
+               record through cali_kv_set/cali_kv_get (the bond store's NVS path) so the QEMU test
+               can prove NVS survives a reboot.
+
+endmenu

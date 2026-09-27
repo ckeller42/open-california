@@ -328,7 +328,11 @@ class Firmware:
         args = [str(binary), "--hci-port", str(port)]
         if store_dir is not None:
             args += ["--store", str(store_dir)]
-        self.p = subprocess.Popen(args + list(extra), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        self._spawn(args + list(extra))
+
+    def _spawn(self, argv):
+        """Start ``argv`` with stdin/stdout pipes (stderr folded into stdout) and pump its lines."""
+        self.p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, text=True, bufsize=1)
         self.lines: queue.Queue[str] = queue.Queue()
         self.log: list[str] = []
@@ -370,6 +374,59 @@ class Firmware:
             except Exception:
                 self.p.kill()
                 self.p.wait(5)
+
+
+QEMU_RUN = HOST_DIR.parent / "qemu" / "run_qemu.sh"
+QEMU_BUILD = HOST_DIR.parent / "build-qemu"
+
+
+class QemuFirmware(Firmware):
+    """The esp32s3 QEMU-probe image (``firmware/build-qemu``) booted by ``firmware/qemu/run_qemu.sh``:
+    the same line reader, on QEMU's UART0 (``-serial stdio``, no monitor on the stream)."""
+
+    def __init__(self, flash, build_dir=QEMU_BUILD):
+        self._spawn(["bash", str(QEMU_RUN), str(build_dir), str(flash)])
+
+    def stop(self):
+        """Power off: the device firmware has no ``quit`` (it ignores the line), so end QEMU. SIGTERM
+        lets QEMU close the flash file; every probe write was committed (``nvs_commit``) before its
+        ``LOG kvprobe ok``."""
+        if self.p.poll() is None:
+            self.p.terminate()
+            try:
+                self.p.wait(10)
+            except subprocess.TimeoutExpired:
+                self.p.kill()
+                self.p.wait(5)
+
+
+@pytest.fixture
+def qemu(tmp_path):
+    """``qemu.boot()`` -> a running :class:`QemuFirmware`. Every boot of one test uses the same flash
+    file (``tmp_path/"flash.bin"``, merged from the build on the first boot), so a second boot is a
+    reboot with the NVS written by the first. Skipped unless ``CALI_QEMU=1``, and when
+    ``qemu-system-xtensa`` is not on PATH (ESP-IDF's ``export.sh`` puts it there)."""
+    if os.environ.get("CALI_QEMU") != "1":
+        pytest.skip("QEMU boot tier: set CALI_QEMU=1 (CI job firmware-qemu)")
+    if shutil.which("qemu-system-xtensa") is None:
+        pytest.skip("qemu-system-xtensa not found (source $IDF_PATH/export.sh)")
+    if not (QEMU_BUILD / "flash_args").is_file():
+        pytest.fail("no QEMU-probe build in %s (see firmware/README.md)" % QEMU_BUILD)
+    started: list[QemuFirmware] = []
+
+    class _Qemu:
+        flash = tmp_path / "flash.bin"
+
+        def boot(self):
+            for fw in started:           # one QEMU owns the flash file at a time
+                fw.stop()
+            fw = QemuFirmware(self.flash)
+            started.append(fw)
+            return fw
+
+    yield _Qemu()
+    for fw in started:
+        fw.stop()
 
 
 _BUILT: dict[str, Path] = {}
