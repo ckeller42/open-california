@@ -58,7 +58,9 @@ every tile and screen renders.
 What it models:
 
 - **The 1003 arm gate.** A control write is honoured only while the liveness heartbeat is ticking.
-  Without it the write is ACKed and ignored. A link with no beat for 15 s is dropped.
+  Without it the write is ACKed and ignored. A link with no beat for 15 s is dropped. Lighting is
+  exempt, as on the van: an awake unit actuates a bare SET_BRIGHTNESS plus commit with no
+  heartbeat (photon-verified).
 - **The parse layer.** An out-of-range field value drops the link (`MockDisconnect`), armed or not.
   The 2-bit `3` and the wider fields' defaults are treated as "leave unchanged", as the app sends
   them.
@@ -88,10 +90,6 @@ What it models:
 Known fidelity gaps. The mock is **wrong** or **coarser** than the van here, so don't trust a green
 mock run on these points:
 
-- **Lighting is gated on the 1003 heartbeat in the mock, but the real unit doesn't need it.** An
-  awake unit actuates a bare SET_BRIGHTNESS plus commit with no heartbeat (photon-verified). The
-  mock applies the generic arm gate to every control write, so a lighting path that dropped the
-  heartbeat would pass on the van but fail on the mock. The mock is stricter than the van here.
 - **Roof motion is a model, not a measurement.** calictl has never driven the real motor. The
   withhold time, step timing and limit behaviour are parameters.
 - **"Driving" is an explicit flag**, not derived: the real "vehicle is stationary" predicate is

@@ -15,7 +15,9 @@ Design: two layers.
 Fidelity — the mock encodes only what is *known*, and stays honest about what is not:
   * **1003 arm-gate (issue #2, SOLVED):** control writes are honoured only while the
     liveness heartbeat on char 1003 is ticking. Without it, a write is ACKed and
-    ignored — exactly the "writes ACK but do nothing" symptom.
+    ignored — exactly the "writes ACK but do nothing" symptom. EXCEPT lighting: the real
+    unit actuates lighting on an awake unit with a bare SET_BRIGHTNESS + commit and no
+    heartbeat (photon-verified 2026-08-16, control-and-actuation.md), so lighting skips it.
   * **Range validation → link drop:** an out-of-range field value raises
     ``MockDisconnect`` (the unit drops the ATT link with 0x0E; e.g. cooler State=3).
     This runs regardless of arming (the firmware's parse layer always validates).
@@ -26,9 +28,8 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
     separately-active profile. The state char is a write-through ECHO; the physical lamps
     (``light_actual``) ramp on ``tick()`` and push 1502 Mode-4 frames, and ``light_applies=False``
     models "ACKed + echoed, lamps dark". Zone 9 (pop-top reading light) is refused while the roof
-    is closed. KNOWN FIDELITY GAP: like every control write here, lighting is also gated on the
-    1003 heartbeat arm — the real unit actuates lighting on an awake unit WITHOUT it
-    (control-and-actuation.md), so the mock is stricter than the van for lighting.
+    is closed. NOT gated on the 1003 heartbeat (see the arm-gate above): the only wake gate is
+    that the mock is connectable at all (``drop()`` = deep sleep refuses the link).
   * **Roof (1401/1402):** the app-style SafetyCounter stream is modelled — validity needs a
     monotonic, still-advancing counter (two increments), a restart drops it, a validated counter
     withholds the motor ``ROOF_WITHHOLD_S`` (~3 s, SEMI-VERIFIED), a held move steps ``Position``
@@ -551,8 +552,11 @@ class MockCamperUnit:
                     raise MockDisconnect("out-of-range write to %s: %s" % (fn, e)) from e
 
         # 2) apply layer — gated on the 1003 heartbeat (issue #2). Without a live
-        #    heartbeat the write is ACKed and ignored.
-        if not self.armed:
+        #    heartbeat the write is ACKed and ignored. Lighting is the exception: an AWAKE unit
+        #    actuates a bare SET_BRIGHTNESS + commit with no heartbeat (photon-verified on-device
+        #    2026-08-16; the app's E() writes direct). Its own gates — stage/commit, the frame's
+        #    non-zero ProfileNumber, the L9 roof refusal, echo vs ramp — still apply below.
+        if not self.armed and fn != "lighting":
             return
 
         # 2b) UNIT-SIDE REFUSALS: parsed fine, armed, ACKed — and then silently not applied. The
