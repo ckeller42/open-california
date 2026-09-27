@@ -73,6 +73,15 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   cabinet light `LSix` has no app control); cooler
   OFF/quiet/timer frames and camping master OFF (`fc`, identical) as tabled in
   `control-and-actuation.md`.
+- **pairing, APP-OBSERVED (2026-09-27, fake unit at SMP debug level):** the app pairs with
+  `io_capability KEYBOARD_DISPLAY`, `auth_req BONDING|MITM|SC|CT2` → passkey entry against the
+  display-only unit (calictl's `KeyboardOnly`+MITM+SC is the same association model); a bonded
+  app reconnects over a rotated RPA with the stored LTK and no prompt; after a unit-side bond
+  loss (`forget`) Android starts a fresh pairing on its own 1.4 s after connect, the app shows only
+  a spinner (no guidance), drops the link 33 s later if the passkey isn't typed, and re-pairs on
+  the next Connect; with the unit refusing pairing (`PAIRING_NOT_SUPPORTED`, "not in Gerät
+  verbinden") the app retries silently with `autoConnect` and never shows an error. Table in
+  `protocol-crosscheck-applab.md` "Pairing".
 - energy current scales — DECOMPILE (2026-09-07): `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` ÷10 → A
   (`xf/d.java:159,173,175`, holders bound `xf/a.java:150-157,239,307`), `IDcdcAfs` unscaled A + the
   SW-0409/0410 `+2` (`xf/d.java:171`). Plausibility from 14 d telemetry: `batt2_current` raw −49…318
@@ -93,6 +102,27 @@ to CAPTURE, and drop the GUI "not verified" confirm for that control. See the me
   L7=Küche-Kochen, L8=Dach-Ambient, L9=Dach-Lesen, L12=Eingang. Fixed the roof-reading mislabel
   (was L6→ now L9; L6=cabinet) and added L12 to the real-zone set. The L6 write was calictl→unit,
   owner-confirmed the cabinet lamp lit (bonus live actuation check).
+- BlueZ needs a quiet radio to make a new LE connection: **0x3e under full-duty scanning** —
+  CAPTURE (btmon on buspi, 2026-09-25): `LE Connection Complete`, then BlueZ re-enabled active
+  scanning at 100% duty (window == interval, 11.25 ms) because another client held discovery,
+  ~300 ms later `Connection Failed to be Established (0x3e)`; with all scanners stopped the same
+  connect succeeded. See `guided-pairing.md` "Environment the wizard needs".
+- the camper unit **advertises from a rotating address** — CAPTURE (observed 2026-09-25):
+  four different advertising addresses seen over about 45 minutes of continuous scanning; only
+  the bonded identity address is stable, and only becomes known once bonded.
+- the unit **refuses Just Works pairing** — CAPTURE (btmon on buspi, 2026-09-26): a Pairing
+  Request with `IO capability: NoInputNoOutput`, `No MITM` was answered by the unit dropping the
+  link (`Remote User Terminated Connection`, 0x13) within ~0.5 s. Cause on our side: the LE link
+  was created before the KeyboardOnly agent was registered. See `guided-pairing.md`.
+- the unit **ignores links from an unbonded central outside "Gerät verbinden"** — HYPOTHESIS
+  (btmon on buspi, 2026-09-26): with every other scanner stopped and scanning DISABLED at each
+  `LE Create Connection`, a dozen consecutive links failed with 0x3e (link never answered) ~2 s
+  apart; the first link that came up did so right after the owner opened "Gerät verbinden".
+  Timing correlation only — so a quiet radio is necessary but not sufficient; open the screen
+  BEFORE starting the wizard.
+- the unit's own screen shows **"Passcode: ---" until a pairing request arrives** — OBSERVED
+  (owner photo, 2026-09-25): the placeholder stays literal `---` until a central starts pairing
+  against the unit, then is replaced by the 6-digit passcode.
 - roof **Position decode + L9=roof-reading** — DEVICE (2026-08-30, roof physically opened): live read
   `roof.Position=1 -> position_name "open"` (first live confirm — roof was never driven before), and a
   `roof-reading`(L9) write lit the pop-top reading lamp only with the roof up. Gates the write: L9 is

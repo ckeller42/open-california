@@ -99,7 +99,7 @@ def test_snapshot_names():
 
     snap = asyncio.run(_run())
     assert snap == {"state": "bonded", "attempts": 0, "error": None,
-                     "address": "11:22:33:44:55:66"}
+                     "address": "11:22:33:44:55:66", "radio_busy": False}
 
 
 def test_stale_event_makes_no_transport_calls():
@@ -164,10 +164,11 @@ def test_transport_exception_on_pair_injects_pair_fail_and_retries():
     assert state == pairing.PairingState(pairing.SCANNING, 1, pairing.ERR_NONE)
 
 
-def test_transport_exception_on_connect_is_logged_and_left_to_the_timeout():
-    # connect() runs from CONNECTING, a state the SM's EV_PAIR_FAIL rule does NOT cover
-    # (only PAIRING is) -- the injected event is a harmless no-op; CONNECTING's own
-    # TIMEOUT_S entry is the real recovery path for a connect() that never succeeds.
+def test_transport_exception_on_connect_injects_connect_fail_and_retries():
+    # On real hardware a failed connect RAISES within ~0.3 s (HCI 0x3e "Connection Failed to be
+    # Established", surfaced by bleak/BlueZ as le-connection-abort-by-local or a dbus EOFError) —
+    # seen 2026-09-25 while another BlueZ client kept discovery running. It used to be a no-op in
+    # CONNECTING, so the wizard idled 15 s and then reported a misleading "timeout" with no retry.
     async def _run():
         t = FakeTransport()
         t.raise_on.add("connect")
@@ -177,8 +178,23 @@ def test_transport_exception_on_connect_is_logged_and_left_to_the_timeout():
         return t.calls, r.state
 
     calls, state = asyncio.run(_run())
-    assert calls == ["start_scan", "stop_scan", "connect"]
-    assert state == pairing.PairingState(pairing.CONNECTING, 0, pairing.ERR_NONE)
+    assert calls == ["start_scan", "stop_scan", "connect", "disconnect", "start_scan"]
+    assert state == pairing.PairingState(pairing.SCANNING, 1, pairing.ERR_NONE)
+
+
+def test_connect_failures_exhaust_into_connect_failed():
+    async def _run():
+        t = FakeTransport()
+        t.raise_on.add("connect")
+        r = PairingRunner(t)
+        await r.start()
+        for _ in range(pairing.MAX_ATTEMPTS):
+            await r.handle(pairing.EV_DEVICE_FOUND)
+        return r.state, r.snapshot()
+
+    state, snap = asyncio.run(_run())
+    assert state == pairing.PairingState(pairing.ERROR, pairing.MAX_ATTEMPTS, pairing.ERR_CONNECT)
+    assert snap["error"] == "connect_failed"
 
 
 def test_transport_exception_on_verify_injects_verify_fail():
@@ -350,3 +366,11 @@ def test_cancel_stops_and_returns_idle():
     # idle-via-cancel also closes the transport (agent lifecycle).
     assert calls == ["start_scan", "stop_scan", "aclose"]
     assert state == pairing.PairingState(pairing.IDLE, 0, pairing.ERR_NONE)
+
+
+def test_snapshot_reports_radio_busy_from_the_transport():
+    t = FakeTransport()
+    r = PairingRunner(t)
+    assert r.snapshot()["radio_busy"] is False
+    t.radio_busy = True
+    assert r.snapshot()["radio_busy"] is True
