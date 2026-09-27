@@ -1022,3 +1022,54 @@ def test_the_agent_is_registered_before_the_scan_and_connect(monkeypatch):
 
     asyncio.run(_run())
     assert order == ["agent", "scan"]
+
+
+def test_failed_agent_setup_is_not_cached(monkeypatch):
+    """If RequestDefaultAgent fails after RegisterAgent succeeded, _ensure_agent() must undo the
+    registration and leave no cached agent, so a reused start_scan() retries the setup instead of
+    scanning without the KeyboardOnly agent (CodeRabbit finding on #201)."""
+    pytest.importorskip("dbus_fast")
+    calls = []
+
+    class _Bus:
+        def export(self, path, iface):
+            calls.append("export")
+
+        def unexport(self, path, iface=None):
+            calls.append("unexport")
+
+    class _Mgr:
+        def __init__(self, fail):
+            self.fail = fail
+
+        async def call_register_agent(self, path, cap):
+            calls.append("register")
+
+        async def call_request_default_agent(self, path):
+            calls.append("default")
+            if self.fail:
+                raise RuntimeError("org.bluez.Error.DoesNotExist")
+
+        async def call_unregister_agent(self, path):
+            calls.append("unregister")
+
+    mgrs = [_Mgr(fail=True), _Mgr(fail=False)]
+
+    async def _bus():
+        return _Bus()
+
+    async def _iface(path, iface):
+        return mgrs.pop(0)
+
+    t = BluezTransport(on_event=lambda *a: None)
+    monkeypatch.setattr(t, "_ensure_bus", _bus)
+    monkeypatch.setattr(t, "_get_interface", _iface)
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(t._ensure_agent())
+    assert t._agent is None and t._agent_mgr is None
+    assert calls == ["export", "register", "default", "unregister", "unexport"]
+
+    asyncio.run(t._ensure_agent())          # the retry sets the agent up again
+    assert t._agent is not None and t._agent_mgr is not None
+    assert calls[-3:] == ["export", "register", "default"]

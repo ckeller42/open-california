@@ -767,11 +767,29 @@ class BluezTransport:
                 pass
 
         bus = await self._ensure_bus()
-        self._agent = _PairingAgent()
-        bus.export(AGENT_PATH, self._agent)
-        self._agent_mgr = await self._get_interface("/org/bluez", "org.bluez.AgentManager1")
-        await self._agent_mgr.call_register_agent(AGENT_PATH, "KeyboardOnly")
-        await self._agent_mgr.call_request_default_agent(AGENT_PATH)
+        agent = _PairingAgent()
+        bus.export(AGENT_PATH, agent)
+        mgr = None
+        registered = False
+        try:
+            mgr = await self._get_interface("/org/bluez", "org.bluez.AgentManager1")
+            await mgr.call_register_agent(AGENT_PATH, "KeyboardOnly")
+            registered = True
+            await mgr.call_request_default_agent(AGENT_PATH)
+        except BaseException:
+            # Transactional: cache the agent only once BOTH registration calls succeeded, so a
+            # reused start_scan() retries the setup instead of scanning with no KeyboardOnly agent.
+            if registered:
+                try:
+                    await mgr.call_unregister_agent(AGENT_PATH)
+                except Exception:
+                    pass
+            try:
+                bus.unexport(AGENT_PATH, agent)
+            except Exception:
+                pass
+            raise
+        self._agent, self._agent_mgr = agent, mgr
 
     async def pair(self):
         """Pair the discovered device, self-healing a stale local bond.
