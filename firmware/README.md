@@ -77,7 +77,8 @@ with `-m "not linux_only"`).
 
 1. **Warnings.** Our C (`OWN_OBJ` in the Makefile: `host_main.o`, `store_cli.o` plus the component
    objects `platform_host.o`, `ble_store_kv.o`, `ble_nimble.o`, `runner.o`, `pairing_sm.o`,
-   `console.o`, `session.o` built from `firmware/components/`, and `codec.o` from `csrc/`) builds with `-Wall -Wextra -Werror`; the fetched NimBLE/Mbed TLS sources do not.
+   `console.o`, `session.o` built from `firmware/components/`, `codec.o` from `csrc/`, and
+   `ble_nimble_jw.o` for the `cali-host-jw` regression build — note 11) builds with `-Wall -Wextra -Werror`; the fetched NimBLE/Mbed TLS sources do not.
    The test suite skips `tests/firmware` (with the reason) when no 32-bit toolchain links;
    run it locally with `tools/ci.sh firmware`.
 1. **32-bit build.** NimBLE's `porting/nimble/Makefile.defs` forces `-m32` ("places in NimBLE assume
@@ -132,6 +133,27 @@ with `-m "not linux_only"`).
    calls `ble_gap_security_initiate` itself (the stored LTK re-encrypts; no passkey), so the
    session sees CONNECTED then ENC_OK/ENC_FAIL. Every heartbeat write completion is reported as
    `CALI_TEV_HEARTBEAT`; a failed or unwritable beat counts as a lost link (reconnect with backoff).
+
+10. **Bumble: resolving list, connect cancel, lost host.** The firmware-side controller is a
+   `Controller` subclass (`tests/firmware/conftest.py`, `_fw_controller_class`) adding three
+   controller duties Bumble leaves out. (a) *LL privacy:* NimBLE writes the bonded unit's identity
+   + IRK to the controller's resolving list and reconnects by the identity address; the controller
+   must match the unit's current RPA. Bumble ignores the list, so a restart after the unit rotated
+   its address never connected. The harness resolves the advertiser's RPA with the listed IRK,
+   connects to it and reports the identity in LE Connection Complete. (b) *LE Create Connection
+   Cancel* now ends the pending connection with a Connection Complete (Unknown Connection
+   Identifier), per Vol 4 Part E 7.8.13; Bumble answered success and kept it pending, so NimBLE's
+   connect procedure never ended. (c) *A lost host ends its links:* when `cali-host` exits (the
+   ESP32 reboots) the unit sees a supervision timeout; Bumble's controller outlived the TCP host
+   and held the unit's only connection slot.
+11. **Just Works regression build (`make cali-host-jw`).** `ble_nimble.c` compiled with
+   `-DCALI_TEST_LATE_IO_CAP`: the IO capability is NoInputNoOutput (no MITM) until `pair()` has
+   sent the Pairing Request, then set to KEYBOARD_ONLY — the 2026-09-26 calictl bug (the agent
+   arrived after SMP had started). NimBLE copies the capability into the Pairing Request inside
+   `ble_gap_security_initiate`, so "late" means after that call. SC stays on (the build is SC-only),
+   so the unit's refusal is of Just Works itself (`confirm()`), not of legacy pairing.
+   `test_just_works_build_is_refused` asserts it ends in `error`. The macro is an `#error` in an
+   ESP-IDF build (`ESP_PLATFORM`).
 
 ## Traceability
 

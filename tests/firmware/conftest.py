@@ -110,6 +110,124 @@ def _radio_link():
     return RadioLink()
 
 
+def _fw_controller_class():
+    """The firmware-side Bumble ``Controller`` with the three controller duties the firmware relies
+    on and Bumble leaves out (harness-only; README "Host build notes" 10):
+
+    * **Resolving list (LL privacy).** NimBLE writes a bonded peer's identity + IRK to the
+      controller (``LE Add Device To Resolving List``, on bond and at every boot) and reconnects by
+      the *identity* address; the controller must match that against the peer's current resolvable
+      private address. Bumble accepts the command but ignores it, so a unit that advertises from an
+      RPA (as the real one does) is never found. Here an advertisement whose RPA resolves with a
+      listed IRK completes a pending connection to that identity, reported (``LE Connection
+      Complete``) with the identity address — what NimBLE looks the bond up by.
+    * **LE Create Connection Cancel** ends the pending connection with a Connection Complete
+      (Unknown Connection Identifier), Vol 4 Part E 7.8.13. Bumble answers success and keeps the
+      pending connection, so NimBLE's connect procedure (its 10 s timeout, or our disconnect())
+      never ends and every later GAP procedure is refused.
+    * **Losing the host ends the links.** A rebooting ESP32 takes its controller with it and the
+      unit sees a supervision timeout; Bumble's controller outlives the TCP host and keeps the link
+      up, so the unit (one connection slot) would never advertise again. ``host_gone()`` drops
+      every link (Connection Timeout to the peer) and forgets the pending connection and the list.
+    """
+    import asyncio
+
+    from bumble import hci, ll
+    from bumble.controller import Controller
+    from bumble.smp import AddressResolver
+
+    class FirmwareController(Controller):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self.resolving_list: dict[bytes, tuple[bytes, object]] = {}   # identity -> (irk, addr)
+            self._resolved: tuple[object, object] | None = None           # (rpa, identity)
+
+        # -- resolving list ----------------------------------------------------------------
+        def on_hci_le_add_device_to_resolving_list_command(self, command):
+            ident = command.peer_identity_address
+            self.resolving_list[bytes(ident)] = (command.peer_irk, ident)
+            return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.SUCCESS)
+
+        def on_hci_le_remove_device_from_resolving_list_command(self, command):
+            self.resolving_list.pop(bytes(command.peer_identity_address), None)
+            return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.SUCCESS)
+
+        def on_hci_le_clear_resolving_list_command(self, command):
+            self.resolving_list.clear()
+            return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.SUCCESS)
+
+        def on_advertising_pdu(self, pdu):
+            pending = self.pending_le_connection
+            adv = pdu.advertiser_address
+            entry = self.resolving_list.get(bytes(pending.peer_address)) if pending else None
+            if entry and adv.is_resolvable:
+                irk, ident = entry
+                if AddressResolver([(irk, ident)]).resolve(adv) is not None:
+                    self._resolved = (adv, pending.peer_address)
+                    pending.peer_address = adv              # connect to the RPA on the air ...
+            super().on_advertising_pdu(pdu)
+
+        def send_hci_packet(self, packet):
+            if (isinstance(packet, hci.HCI_LE_Connection_Complete_Event) and self._resolved
+                    and packet.peer_address == self._resolved[0]):
+                ident = self._resolved[1]                   # ... report the identity to the host
+                self._resolved = None
+                packet = hci.HCI_LE_Connection_Complete_Event(
+                    status=packet.status, connection_handle=packet.connection_handle,
+                    role=packet.role, peer_address_type=ident.address_type, peer_address=ident,
+                    connection_interval=packet.connection_interval,
+                    peripheral_latency=packet.peripheral_latency,
+                    supervision_timeout=packet.supervision_timeout,
+                    central_clock_accuracy=packet.central_clock_accuracy)
+            super().send_hci_packet(packet)
+
+        # -- create connection cancel --------------------------------------------------------
+        def on_hci_le_create_connection_cancel_command(self, command):
+            pending = self.pending_le_connection
+            if pending is None:
+                return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.COMMAND_DISALLOWED_ERROR)
+            self.pending_le_connection = None
+            self._resolved = None
+            done = hci.HCI_LE_Connection_Complete_Event(
+                status=hci.HCI_ErrorCode.UNKNOWN_CONNECTION_IDENTIFIER_ERROR, connection_handle=0,
+                role=hci.Role.CENTRAL, peer_address_type=pending.peer_address.address_type,
+                peer_address=pending.peer_address, connection_interval=0, peripheral_latency=0,
+                supervision_timeout=0, central_clock_accuracy=0)
+            # after this command's Command Complete (send_hci_packet itself defers with call_soon)
+            asyncio.get_running_loop().call_soon(self.send_hci_packet, done)
+            return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.SUCCESS)
+
+        # -- the host went away (process exit = ESP reboot) -----------------------------------
+        def host_gone(self):
+            for addr, conn in list(self.le_connections.items()):
+                conn.send_ll_control_pdu(ll.TerminateInd(hci.HCI_ErrorCode.CONNECTION_TIMEOUT_ERROR))
+                del self.le_connections[addr]
+            self.pending_le_connection = None
+            self._resolved = None
+            self.resolving_list.clear()
+
+    return FirmwareController
+
+
+def _watch_host(sink, on_gone):
+    """Call ``on_gone()`` when the TCP host of a Bumble ``tcp-server`` transport disconnects (its
+    sink's ``transport`` goes from a connection to ``None``; Bumble has no other hook)."""
+    class WatchedSink(type(sink)):
+        @property
+        def transport(self):
+            return self.__dict__.get("_watched_transport")
+
+        @transport.setter
+        def transport(self, t):
+            was = self.__dict__.get("_watched_transport")
+            self.__dict__["_watched_transport"] = t
+            if was is not None and t is None:
+                on_gone()
+
+    sink.__dict__["_watched_transport"] = sink.__dict__.pop("transport", None)
+    sink.__class__ = WatchedSink
+
+
 def _free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -146,9 +264,10 @@ class HciUnit:
         self.unit = build_unit(uc, uc, **self._kw)
         await self.unit.start()
         self._transport = await open_transport(f"tcp-server:127.0.0.1:{self.port}")
-        self.fw_controller = Controller("fw", host_source=self._transport.source,
-                                        host_sink=self._transport.sink, link=self.link,
-                                        public_address=FW_PUBLIC_ADDRESS)
+        self.fw_controller = _fw_controller_class()("fw", host_source=self._transport.source,
+                                                    host_sink=self._transport.sink, link=self.link,
+                                                    public_address=FW_PUBLIC_ADDRESS)
+        _watch_host(self._transport.sink, self.fw_controller.host_gone)
         # Bumble's Controller answers even a LEGACY scan (HCI_LE_Set_Scan_Enable, what NimBLE sends
         # with BLE_EXT_ADV=0) with LE *Extended* Advertising Reports whenever it advertises the
         # LE_EXTENDED_ADVERTISING feature; NimBLE drops those, so it never sees the unit. A real

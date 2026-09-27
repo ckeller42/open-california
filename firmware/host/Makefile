@@ -64,7 +64,7 @@ OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include 
 COMPONENT_OBJ := platform_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
 # The rest of cali_core (console + session) and the frame codec: only cali-host needs them.
 CORE_OBJ := console.o session.o codec.o
-OWN_OBJ := host_main.o store_cli.o $(COMPONENT_OBJ) $(CORE_OBJ)
+OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
 
@@ -72,7 +72,7 @@ LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
 all: cali-host store-cli
 
 clean:
-	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host store-cli
+	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host cali-host-jw store-cli
 	-$(MAKE) -C $(MBEDTLS_ROOT)/library clean >/dev/null
 
 $(MBEDTLS_LIBS) &:
@@ -142,6 +142,20 @@ host_main.o: host_main.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h
 cali-host: $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(MBEDTLS_LIBS)
 	$(LD) -o $@ $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(LIBS)
 	@if $(NM) $@ | grep -qw codec_encode; then echo "cali-host: codec_encode linked into read-only firmware" >&2; rm -f $@; exit 1; fi
+
+# Just Works regression build (tests/firmware/test_host_e2e.py::test_just_works_build_is_refused):
+# cali-host with the transport compiled -DCALI_TEST_LATE_IO_CAP, which sets the passkey IO capability
+# only after the Pairing Request left (the 2026-09-26 calictl bug). ble_nimble.c refuses the macro
+# in an ESP-IDF build. Everything else is cali-host's objects.
+JW_OBJ := $(filter-out ble_nimble.o,$(COMPONENT_OBJ)) ble_nimble_jw.o
+ble_nimble_jw.o: CFLAGS += -DCALI_TEST_LATE_IO_CAP
+ble_nimble_jw.o: $(COMPONENTS)/cali_ble_nimble/ble_nimble.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
+		$(COMPONENTS)/cali_core/include/cali_transport.h $(CSRC)/codec_chars.h \
+		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+cali-host-jw: $(NIMBLE_ALL_OBJ) host_main.o $(JW_OBJ) $(CORE_OBJ) $(MBEDTLS_LIBS)
+	$(LD) -o $@ $(NIMBLE_ALL_OBJ) host_main.o $(JW_OBJ) $(CORE_OBJ) $(LIBS)
 
 # Test driver for the NimBLE bond store (tests/firmware/test_ble_store_kv.py): the store callbacks
 # linked against the real NimBLE host objects, no controller/transport needed.

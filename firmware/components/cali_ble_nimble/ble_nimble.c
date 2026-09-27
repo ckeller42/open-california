@@ -13,7 +13,17 @@
  * LTK: ENC_OK / ENC_FAIL, never a passkey). Every heartbeat completion is reported (HEARTBEAT).
  * A read/heartbeat of a char not yet in the table (e.g. the 1004 verify read right after pairing)
  * first looks it up with ble_gattc_disc_chrs_by_uuid.
+ * disconnect() during a connect cancels it; until that cancel's CONNECT event arrives a scan is
+ * deferred (NimBLE refuses it) and a link that completed anyway is dropped.
  */
+/* CALI_TEST_LATE_IO_CAP: a host-only regression build (make cali-host-jw) that reproduces the
+ * 2026-09-26 calictl bug — the passkey IO capability arrives only once pairing is already under
+ * way, so SMP negotiates Just Works and the unit refuses it. tests/firmware/test_host_e2e.py
+ * proves the fake unit catches that. Never in a device build. */
+#if defined(CALI_TEST_LATE_IO_CAP) && defined(ESP_PLATFORM)
+#error "CALI_TEST_LATE_IO_CAP is a host test build only"
+#endif
+
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -53,6 +63,7 @@ static char s_name[32];
 static int s_scanning, s_found;
 static ble_addr_t s_found_addr;
 static int s_connecting, s_connect_cancelled;
+static int s_scan_deferred;                 /* start_scan() while our connect cancel is in flight */
 static int s_encrypt_on_connect;            /* connect_bonded(): re-encrypt once the link is up */
 static uint16_t s_conn = BLE_HS_CONN_HANDLE_NONE;
 static uintptr_t s_gen;                     /* bumped per link: stale GATT callbacks are dropped */
@@ -70,6 +81,7 @@ static char s_identity[18];
 
 static int gap_cb(struct ble_gap_event *ev, void *arg);
 static void op_kick(void);
+static void scan_deferred(void);
 
 /* ---- helpers ------------------------------------------------------------------------------- */
 
@@ -370,7 +382,13 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         return 0;
     case BLE_GAP_EVENT_CONNECT:
         s_connecting = 0;
-        if (ev->connect.status == 0) {
+        if (ev->connect.status == 0 && s_connect_cancelled) {
+            /* Connected before our cancel landed: nobody wants this link (disconnect() already
+             * reported it gone) — end it, then run the scan that waited for the cancel. */
+            s_connect_cancelled = 0;
+            ble_gap_terminate(ev->connect.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
+            scan_deferred();
+        } else if (ev->connect.status == 0) {
             link_reset();
             s_conn = ev->connect.conn_handle;
             emit(CALI_TEV_CONNECTED, 0, 0, NULL, 0, NULL);
@@ -382,6 +400,7 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
             }
         } else if (s_connect_cancelled) {
             s_connect_cancelled = 0;                        /* our own disconnect(): silent */
+            scan_deferred();
         } else {
             emit(CALI_TEV_CONNECT_FAIL, ev->connect.status, 0, NULL, 0, NULL);
         }
@@ -433,20 +452,39 @@ static void t_set_sink(cali_tsink_t sink, void *ctx) {
     s_sink_ctx = ctx;
 }
 
-static int t_start_scan(const char *name) {
+static int scan_now(void) {
     struct ble_gap_disc_params p;
     memset(&p, 0, sizeof p);
     p.passive = 0;                  /* active: the name may be in the scan response */
     p.filter_duplicates = 1;
-    snprintf(s_name, sizeof s_name, "%s", name);
-    s_found = 0;
     if (s_scanning) ble_gap_disc_cancel();
     int rc = ble_gap_disc(s_own_addr_type, BLE_HS_FOREVER, &p, gap_cb, NULL);
     s_scanning = rc == 0;
     return rc;
 }
 
+/* The scan start_scan() deferred, now that the connect it waited for has ended. */
+static void scan_deferred(void) {
+    if (!s_scan_deferred) return;
+    s_scan_deferred = 0;
+    int rc = scan_now();
+    if (rc != 0) cali_log("ble: deferred scan failed %d", rc);
+}
+
+static int t_start_scan(const char *name) {
+    snprintf(s_name, sizeof s_name, "%s", name);
+    s_found = 0;
+    /* NimBLE refuses a scan (BLE_HS_EBUSY) until the controller confirms a connect cancel, which
+     * is asynchronous: forget during a reconnect, then pair at once, hits that window. */
+    if (s_connect_cancelled) {
+        s_scan_deferred = 1;
+        return 0;
+    }
+    return scan_now();
+}
+
 static int t_stop_scan(void) {
+    s_scan_deferred = 0;
     if (!s_scanning) return 0;
     s_scanning = 0;
     int rc = ble_gap_disc_cancel();
@@ -455,7 +493,7 @@ static int t_stop_scan(void) {
 
 static int connect_to(const ble_addr_t *addr) {
     if (s_conn != BLE_HS_CONN_HANDLE_NONE || s_connecting) return BLE_HS_EALREADY;
-    s_connect_cancelled = 0;
+    if (s_connect_cancelled) return BLE_HS_EBUSY;   /* our cancel has not landed yet */
     s_encrypt_on_connect = 0;
     int rc = ble_gap_connect(s_own_addr_type, addr, CONNECT_TIMEOUT_MS, NULL, gap_cb, NULL);
     s_connecting = rc == 0;
@@ -505,7 +543,19 @@ static int t_pair(void) {
             if (rc != 0) return rc;
         }
     }
+#ifdef CALI_TEST_LATE_IO_CAP
+    /* NimBLE copies sm_io_cap/sm_mitm into the Pairing Request inside security_initiate, so the
+     * "late" capability is installed right after it: this attempt pairs as NoInputNoOutput (Just
+     * Works). Reverted first, so every retry repeats the bug as calictl's did. */
+    ble_hs_cfg.sm_io_cap = BLE_HS_IO_NO_INPUT_OUTPUT;
+    ble_hs_cfg.sm_mitm = 0;
+    int rc = ble_gap_security_initiate(s_conn);
+    ble_hs_cfg.sm_io_cap = BLE_HS_IO_KEYBOARD_ONLY;
+    ble_hs_cfg.sm_mitm = 1;
+    return rc;
+#else
     return ble_gap_security_initiate(s_conn);
+#endif
 }
 
 static int t_inject_passkey(uint32_t pk) {
@@ -532,9 +582,12 @@ static int t_write_heartbeat(uint32_t counter) { return op_push(OP_WRITE_HB, COD
 static int t_disconnect(void) {
     if (s_connecting) {
         s_connecting = 0;
-        s_connect_cancelled = 1;
         int rc = ble_gap_conn_cancel();
-        return rc == BLE_HS_EALREADY ? 0 : rc;
+        /* A CONNECT event still follows while NimBLE's connect procedure is open: the cancel's
+         * completion, or — when the controller had already connected and refused the cancel —
+         * the new link, which gap_cb then drops. */
+        s_connect_cancelled = ble_gap_conn_active();
+        return rc == BLE_HS_EALREADY || s_connect_cancelled ? 0 : rc;
     }
     if (s_conn == BLE_HS_CONN_HANDLE_NONE) return 0;
     uint16_t h = s_conn;
@@ -585,6 +638,7 @@ static void on_sync(void) {
 static void on_reset(int reason) {
     cali_log("ble: host reset %d", reason);
     s_scanning = s_connecting = 0;
+    s_connect_cancelled = s_scan_deferred = 0;
     link_reset();
 }
 
@@ -600,9 +654,14 @@ void cali_ble_nimble_init(void (*sync_cb)(void)) {
      * MITM), bonded. Set before the host syncs, i.e. before any link exists: SMP reads these when
      * it answers/sends the first Pairing Request, and a link opened with other values pairs Just
      * Works, which the unit refuses (the 2026-09-26 calictl bug). */
+#ifdef CALI_TEST_LATE_IO_CAP
+    ble_hs_cfg.sm_io_cap = BLE_HS_IO_NO_INPUT_OUTPUT;   /* the bug: set only in t_pair(), too late */
+    ble_hs_cfg.sm_mitm = 0;
+#else
     ble_hs_cfg.sm_io_cap = BLE_HS_IO_KEYBOARD_ONLY;
-    ble_hs_cfg.sm_bonding = 1;
     ble_hs_cfg.sm_mitm = 1;
+#endif
+    ble_hs_cfg.sm_bonding = 1;
     ble_hs_cfg.sm_sc = 1;
     ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;
     ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID;

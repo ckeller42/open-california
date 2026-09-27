@@ -124,3 +124,78 @@ def test_notify_during_read_all(host_fw, hci_unit):
     nxt = fw.expect("SNAP", lambda s: s["fn"].get(fn) == want, timeout=15)
     assert {k: v for k, v in nxt["fn"].items() if k != fn} == \
         {k: v for k, v in first["fn"].items() if k != fn}
+
+
+async def _rotate_when_free(unit, timeout=10.0):
+    """Rotate the unit's RPA once the old link is gone (``rotate_address`` is a no-op while
+    connected — the harness ends the link when the firmware process exits, a moment later).
+    Returns (old, new) advertising address."""
+    import asyncio
+    end = asyncio.get_running_loop().time() + timeout
+    while unit.conn is not None:
+        assert asyncio.get_running_loop().time() < end, "unit still connected"
+        await asyncio.sleep(0.05)
+    old = unit.advertising_address
+    await unit.rotate_address()
+    return old, unit.advertising_address
+
+
+async def _drop_link(unit):
+    """The unit hangs up on the central (a link lost mid-session)."""
+    if unit.conn:
+        await unit.conn.disconnect()
+
+
+def test_restart_reconnects_with_the_bond_after_rotation(host_fw, hci_unit, tmp_path):
+    """Reboot with the stored bond after the unit moved to a fresh resolvable private address:
+    the firmware finds it again through the bond's IRK and re-encrypts, no passkey."""
+    store = tmp_path / "store"
+    fw = host_fw(hci_unit, store_dir=store); _pair(fw, hci_unit); fw.stop()
+    old, new = hci_unit.call(_rotate_when_free, hci_unit.unit, timeout=15)
+    assert old != new
+    fw2 = host_fw(hci_unit, store_dir=store)
+    fw2.expect("SNAP", timeout=40)                         # reconnected, no passkey asked
+    assert not any("waiting_passkey" in l for l in fw2.log)
+
+
+def test_unit_forgot_us_repairs(host_fw, hci_unit, tmp_path):
+    """The unit dropped our bond ("Bluetooth zurücksetzen"): ``forget`` clears ours, a fresh pair
+    bonds again."""
+    store = tmp_path / "store"
+    fw = host_fw(hci_unit, store_dir=store); _pair(fw, hci_unit); fw.stop()
+    hci_unit.call(hci_unit.unit.forget_bonds)
+    fw2 = host_fw(hci_unit, store_dir=store)
+    fw2.expect("LOG session: reconnect in", timeout=40)     # the stale LTK is refused: no session
+    assert not any(line.startswith("SNAP") for line in fw2.log)
+    fw2.send("forget"); fw2.expect("STATE", lambda s: s["state"] == "idle" and not s["address"])
+    assert _pair(fw2, hci_unit)["state"] == "bonded"
+
+
+def test_pairing_mode_off_is_pairing_failed(host_fw):
+    """The unit's pairing screen is closed: every attempt is refused -> pairing_failed after 3."""
+    from .conftest import HciUnit
+    hu = HciUnit(pairing_mode=False)
+    try:
+        fw = host_fw(hu)
+        fw.send("pair")
+        s = fw.expect("STATE", lambda s: s["state"] == "error", timeout=90)
+        assert s["error"] == "pairing_failed" and s["attempts"] == 3
+    finally:
+        hu.close()
+
+
+def test_just_works_build_is_refused(host_fw, hci_unit):
+    """A build that sets the IO capability only AFTER connecting (the 2026-09-26 calictl bug) must
+    fail against the fake unit — proof the fake would catch that regression."""
+    fw = host_fw(hci_unit, binary="cali-host-jw")
+    fw.send("pair")
+    s = fw.expect("STATE", lambda s: s["state"] in ("error", "bonded", "waiting_passkey"), timeout=90)
+    assert s["state"] == "error"
+
+
+def test_link_drop_mid_read_reconnects(host_fw, hci_unit):
+    """The unit hangs up on an established session: backoff reconnect by bond + a fresh read-all."""
+    fw = host_fw(hci_unit); _pair(fw, hci_unit); fw.expect("SNAP", timeout=40)
+    hci_unit.call(_drop_link, hci_unit.unit)               # fake disconnects the central
+    fw.expect("LOG session: reconnect in", timeout=15)      # the session saw the link go
+    fw.expect("SNAP", timeout=60)                           # backoff reconnect + fresh read_all
