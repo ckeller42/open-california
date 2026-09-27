@@ -12,7 +12,8 @@ open-california — documentation
    and ``DISCLAIMER.md``.
 
 Reverse-engineered control + monitoring for the VW California T7 camper unit over BLE.
-Start with :doc:`architecture` for the five-minute map; the requirement traceability at the
+Start with :doc:`architecture` for the five-minute map and :doc:`protocol-sequences` for the
+wire-level flows (all diagrams are Mermaid); the requirement traceability at the
 bottom of this page is generated from ``sphinx-needs`` objects authored **inside code
 docstrings** (``.. req::``) and traced to the tests that verify them (``.. test:: … :links:``),
 so a link to a nonexistent requirement fails the doc build (a requirement with no test builds
@@ -53,14 +54,6 @@ The dated RE lab notes — how each protocol fact was established, with captures
 citations and dead ends — are **evidence, not product documentation**. They are published
 separately from these docs: `Reverse-engineering notes <business-logic/index.html>`_
 (also browsable `in the repository <https://github.com/ckeller42/open-california/tree/main/docs/business-logic>`_).
-
-There is also an **interactive LikeC4 model** of the runtime — the architecture plus the eight
-protocol sequences as explorable dynamic views: `open the full model <_likec4/index.html>`_ (source:
-``docs/likec4/*.c4``, validated in the docs build; the mermaid diagrams in
-:doc:`protocol-sequences` stay canonical and carry the requirement links).
-
-.. likec4-view:: index
-   :height: 520px
 
 Requirement traceability
 ------------------------
