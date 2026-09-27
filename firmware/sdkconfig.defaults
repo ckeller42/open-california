@@ -1,0 +1,23 @@
+# esp32s3 (M5Stack CoreS3) satellite, #154. Values from the Task 8 plan, plus the lines below the
+# second comment that keep the device's SM/privacy settings equal to firmware/host/syscfg/syscfg.h.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=y
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
+CONFIG_BT_NIMBLE_SM_SC=y
+CONFIG_BT_NIMBLE_NVS_PERSIST=n
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# Same as the host build (firmware/README.md "Host build notes" 3 + Task 7 review):
+# LE Secure Connections only (a legacy-only peer fails before any passkey), RPA resolution in the
+# controller (the host-based variant is ESP32-only in Kconfig; pinned off explicitly anyway).
+CONFIG_BT_NIMBLE_SM_LEGACY=n
+CONFIG_BT_NIMBLE_SM_SC_ONLY=1
+CONFIG_BT_NIMBLE_HOST_BASED_PRIVACY=n
+# The NimBLE host task runs all of cali_core (console JSON output, session frames): 4 KB default is
+# tight for printf + codec_decode.
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192

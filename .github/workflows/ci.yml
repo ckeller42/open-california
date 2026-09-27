@@ -178,3 +178,26 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Host firmware e2e (NimBLE Linux port over TCP HCI to the Bumble fake unit)
         run: python -m pytest tests/firmware -v
+
+  # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,
+  # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble, with
+  # codec_encode compiled out (the build fails if it reaches the ELF). Pin: firmware/README.md.
+  firmware-build:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build esp32s3 image
+        working-directory: firmware
+        run: |
+          . $IDF_PATH/export.sh
+          idf.py build
+          { echo '```'; idf.py size; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-esp32s3
+          path: |
+            firmware/build/*.bin
+            firmware/build/bootloader/bootloader.bin
+            firmware/build/partition_table/partition-table.bin
+            firmware/build/flasher_args.json

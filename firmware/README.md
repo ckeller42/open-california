@@ -1,8 +1,63 @@
 # firmware — ESP32 satellite (#154)
 
 ESP-IDF + NimBLE firmware for the camper-unit satellite. Work in progress: the host build
-(`host/host_main.c` -> `cali-host`: console, pairing runner and session on the NimBLE Linux port)
-and the platform-free component `components/cali_core` (below).
+(`host/host_main.c` -> `cali-host`: console, pairing runner and session on the NimBLE Linux port),
+the platform-free component `components/cali_core` (below), and the ESP-IDF project for the
+esp32s3 / M5Stack CoreS3 (`main/app_main.c`, compile-only so far: no hardware yet).
+
+## ESP-IDF build (`firmware/`, esp32s3)
+
+`firmware/` is an ESP-IDF project (`CMakeLists.txt`, `sdkconfig.defaults`, `main/`,
+`components/`). CI job: `firmware-build` (container `espressif/idf:v6.1`; uploads the images and
+`flasher_args.json` as the `firmware-esp32s3` artifact). Locally, from the repo root (the whole
+repo is mounted: `components/csrc` wraps the generated codec in `../csrc`):
+
+```
+docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 idf.py build
+docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 idf.py size
+```
+
+(The image is multi-arch, amd64 + arm64: on Apple silicon it runs natively.) Outputs (`build/`,
+`sdkconfig`, `sdkconfig.old`) are gitignored; `sdkconfig.defaults` is the committed configuration.
+
+| Component | ESP-IDF sources | Host-build-only files (not in the ESP build) |
+|---|---|---|
+| `main` | `app_main.c` — device twin of `host/host_main.c` | — |
+| `cali_core` | `pairing_sm.c runner.c session.c console.c` | `test/` |
+| `cali_ble_nimble` | `ble_nimble.c ble_store_kv.c` (UNCHANGED from the host build) | `test/` |
+| `platform` | `esp/platform_esp.c` — `cali_kv_*` on NVS namespace `cali`, same CRC record as the host (bad CRC -> -2); `cali_uptime_ms` from `esp_timer`; `cali_log` -> `printf("LOG …")` | `host/`, `test/` |
+| `csrc` | `../../../csrc/codec.c` with `CODEC_NO_ENCODE` PUBLIC (read-only firmware) | — |
+
+- **Read-only.** `codec_encode` is compiled out (`CODEC_NO_ENCODE`, as on the host), and a
+  POST_BUILD step in `CMakeLists.txt` fails the build if `codec_encode` is in `cali_fw.elf` (the
+  twin of the `cali-host` link check). The only write stays the 1003 heartbeat.
+- **Warnings.** Our components build with the host's `-Wall -Wextra -Werror` strictness:
+  `cmake/cali_strict.cmake` re-enables what ESP-IDF's global flags relax (`-Wno-error=extra`,
+  `-Wno-unused-parameter`, `-Wno-sign-compare`, `-Wno-enum-conversion`, `-Wno-error=unused-*`);
+  a plain `-Wall -Wextra -Werror` would be de-duplicated by CMake into the relaxed global flags.
+- **Config** (`sdkconfig.defaults`): the plan's values plus the host `syscfg.h` SM settings —
+  `CONFIG_BT_NIMBLE_SM_LEGACY=n` + `CONFIG_BT_NIMBLE_SM_SC_ONLY=1` (LE Secure Connections only),
+  `CONFIG_BT_NIMBLE_HOST_BASED_PRIVACY=n` (RPA resolution in the controller, as the host harness
+  emulates; the option is ESP32-only in Kconfig, so on the S3 it is off regardless and Kconfig notes
+  the value as "not visible"), `CONFIG_BT_NIMBLE_NVS_PERSIST=n` (bonds go through
+  `ble_store_kv.c` onto `cali_kv_*` = NVS: one store path on both builds), and
+  `CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192` (the host task runs all of cali_core). Bond/CCCD
+  slots stay at the defaults, equal to the host's (`MAX_BONDS=3`, `MAX_CCCDS=8`).
+- **Tasks** (`main/app_main.c`): the NimBLE host task makes every cali_core/transport call, as
+  `main` does on the host. The UART console task queues lines (FreeRTOS queue, 16 x 128) and posts
+  one NimBLE event; the 100 ms `esp_timer` sets a tick flag and posts the same event; its callback
+  runs the tick, then the queued lines (lines only after sync). Console = UART0
+  (`CONFIG_ESP_CONSOLE_UART_DEFAULT`) through the UART driver + VFS; `quit` is ignored (no
+  `cali_console_on_quit` on the device).
+- **No controller** (`nimble_port_init()` fails in `esp_bt_controller_init`, e.g. QEMU):
+  `LOG ble: controller unavailable`, then the console runs on a transport that refuses every
+  operation, owned by a `cali_core` FreeRTOS task (woken by task notifications instead of the
+  NimBLE event): it prints the idle `STATE` and answers lines.
+- **API skew vs the host's NimBLE 1.10: none.** `cali_ble_nimble` compiles unchanged against the
+  IDF v6.1 esp-nimble (1.6.0-based) under the strict flags above: no `#if` was needed in
+  `ble_nimble.c` or `ble_store_kv.c`. `ble_store_kv.c`'s `syscfg/syscfg.h` resolves to esp-nimble's
+  (which maps `MYNEWT_VAL`s onto Kconfig via `esp_nimble_cfg.h`). Compile-time only: runtime
+  behaviour on esp-nimble is unproven until hardware.
 
 ## Host build (`firmware/host`)
 
@@ -64,7 +119,7 @@ with `-m "not linux_only"`).
 
 | What | Pin | Why |
 |---|---|---|
-| ESP-IDF | v6.1 (Task 8's `firmware-build`) | its `components/bt/host/nimble/nimble` submodule is esp-nimble `139cada0ae93` on branch `nimble-1.6.0-idf`, i.e. based on **upstream NimBLE 1.6.0** (merge base "Prepare for NimBLE 1.6.0 release") + ~440 Espressif commits |
+| ESP-IDF | **v6.1** (`firmware-build`, container `espressif/idf:v6.1`) — the highest stable release on 2026-09-27; GitHub's newest non-prerelease *by date* is the v5.3.6 maintenance release, so the pin is by version, not by date | its `components/bt/host/nimble/nimble` submodule is esp-nimble `139cada0ae93` on branch `nimble-1.6.0-idf`, i.e. based on **upstream NimBLE 1.6.0** (merge base "Prepare for NimBLE 1.6.0 release") + ~440 Espressif commits |
 | Upstream NimBLE (host build) | `nimble_1_10_0_tag` | **gap vs ESP-IDF: 1.6.0 → 1.10.0.** Upstream's TCP socket transport (`BLE_SOCK_USE_TCP`) is incomplete up to 1.9.0 — `ble_hci_sock_cmdevt_tx` (and, before 1.8.0, `ble_hci_sock_acl_tx`) exists only for the `linux_blue`/`nuttx` variants, so a 1.6.0–1.9.0 TCP build does not link (verified for 1.6.0: `undefined reference to ble_hci_sock_cmdevt_tx`). 1.10.0 is the first release whose `linux_tcp` choice is complete. The host API used here (GAP disc/connect, SM passkey, GATT client, `ble_store_config`) is unchanged across the gap. |
 | Mbed TLS (host build) | `mbedtls-3.6.5` | NimBLE 1.10 dropped the bundled TinyCrypt; SM crypto needs Mbed TLS, and the build is 32-bit (below), so it is built from source — same version upstream NimBLE's port CI uses |
 
