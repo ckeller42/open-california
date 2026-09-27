@@ -195,7 +195,7 @@ The app-faithful screen-open config pull (proven NOT an actuation gate, 2026-08-
 entry) was still sent on the CLI path, costing ~3.3 s per `set lighting`; the daemon path
 already shipped without it. Removed everywhere: `control.preamble_for`, `LIGHT_REQUEST_CONFIG`,
 the `device.actuate(pre=…)` plumbing and `PRE_SETTLE_S` (`R_LIGHT_PREAMBLE` retired with it).
-The frame stays documented in `protocol-sequences` as the RE record.
+The frame stays documented in [protocol sequences — Lighting](https://ckeller42.github.io/open-california/protocol-sequences.html#lighting-set-and-neutral-flush) as the RE record.
 
 ## 2026-08-17 — roof SafetyCounter model re-verified (and an intraday mis-edit reverted)
 

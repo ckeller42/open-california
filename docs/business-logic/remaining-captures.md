@@ -51,7 +51,7 @@ The only thing left is proving **calictl itself** can drive it:
 > **Roof sequence SETTLED from the decompiled roof class**
 > (open `0x01`/stop `0x00`/close `0x04`; **press-and-hold** move stream, **app-generated monotonic
 > SafetyCounter ~+1/500 ms**, unit self-gates the first **~3 s** via `SafetyCounterValid` (`1402`
-> bit 7) — NO 4 s countdown, NO STOP-hold phase — see `protocol-sequences.md` §3). SET_COLOR is
+> bit 7) — NO 4 s countdown, NO STOP-hold phase — see [protocol sequences — Roof](https://ckeller42.github.io/open-california/protocol-sequences.html#roof-actuation-press-and-hold-safetycounter-gated)). SET_COLOR is
 > **not exposed** in the app (skip). Cooler `Error` = **fridge door** (now surfaced in the GUI).
 >
 > **UPDATE 2026-07-14 (at-the-van captures):** **roof protocol LIVE-VERIFIED** (dir bytes + free-running
@@ -219,7 +219,7 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 - **full lamp→nibble map**: ~6 of 16 lamps mapped; set each remaining lamp to a distinct level.
 - **roof drive from calictl** (SAFETY-SENSITIVE — **needs ignition ON**, roof path clear): the
   sequence is now settled (decompiled roof class — press-and-hold, app-generated monotonic
-  SafetyCounter ~+1/500 ms, ~3 s unit self-gate; see `protocol-sequences.md` §3 + the required
+  SafetyCounter ~+1/500 ms, ~3 s unit self-gate; see [protocol sequences — Roof](https://ckeller42.github.io/open-california/protocol-sequences.html#roof-actuation-press-and-hold-safetycounter-gated) + the required
   fixes above). What remains is **implementing + live-verifying** the three fixes in
   `device.actuate_roof`, then a controlled open→Stop→close drive from calictl.
 
