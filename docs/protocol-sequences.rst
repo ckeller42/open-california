@@ -34,9 +34,6 @@ traceability table on the index page):
    Verified in CI against the real host Bluetooth stack (BlueZ, ``bluetoothd``, D-Bus and the
    kernel inside a VM, the ``pairing-real-stack`` job) talking to the Bumble fake unit, but
    ``calictl`` has not yet run this sequence end to end against the real unit.
-``not-live-verified``
-   Unit-tested (or only partly exercised live). The contract is the *intended* behaviour, not a
-   proven one.
 
 Characteristics
 ---------------
