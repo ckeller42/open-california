@@ -381,8 +381,8 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
 - **Roof moves gate too** (closed 2026-09-17): `open`/`close` are refused under the same alert set
   the GUI greys (`control.ROOF_MOVE_BLOCK`, kept in step with `ROOF_MOVE_BLOCK` in `webui/app.js`)
   and on a `Position` the unit reports as `error`. `sensor_error` deliberately does **not** block
-  (the app still allows a move with it). The check runs in `serve.on_command` *before* the session
-  nudge — the roof branch short-circuits to `_roof_move`, so a check at the bottom would never run,
+  (the app still allows a move with it). The check runs in `serve.on_command` *before* the roof
+  branches off (`_roof_move_command`, which skips the session warm-up), so a check at the bottom would never run,
   and refusing early avoids waking the unit for a move we are about to refuse. **STOP is never
   gated** under any alert: it is the safety action, it returns lock-free above the check, and the
   GUI never greys it either. This is a courtesy refusal that keeps the off-UI paths honest — the

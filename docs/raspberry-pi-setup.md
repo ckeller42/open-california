@@ -148,7 +148,7 @@ change needs a daemon restart.
 | `CALICTL_ADAPTER_RESET` | off | `1` = power-cycle the adapter to recover from a failed connect. Off because `hci0` is shared with the other buspi BLE readers |
 | `CALICTL_PERSISTENT_SESSION` | `1` | `0` = no persistent armed session; connect per operation |
 | `CALICTL_UI_IDLE_S` | `25` | release the persistent session after this long without web-UI activity, so the phone app can use the single slot |
-| `CALICTL_SESSION_WAIT_S` | `6` | how long a command waits for the supervisor's session before falling back to a cold connect |
+| `CALICTL_SESSION_WAIT_S` | `6` | how long a command waits for the supervisor's session before falling back to a cold connect (a roof move never waits: it takes the slot for its own connection) |
 | `CALICTL_FAST_CONFIRM_S` | `1.2` | how long a lighting command waits for the `1502` notification before returning an optimistic "sent" |
 | `CALICTL_STATE_CACHE` | `~/.cache/calictl/last_state.json` | persisted last-known state (shown while the van is asleep) |
 | `CALICTL_HISTORY_CACHE` | `~/.cache/calictl/history.jsonl` | leisure-battery history for the web UI's 24 h chart |

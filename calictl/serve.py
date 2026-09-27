@@ -715,16 +715,17 @@ class Server:
             return None
         if function == "roof" and what == "stop":
             return await self._roof_stop_command()
-        # Roof MOVES gate here, before the session nudge: the roof branch below short-circuits to
-        # _roof_move and would otherwise never reach the precondition check at the bottom (the gap
-        # that left /api/command, CLI and HA able to drive the roof under a blocking InfoPopUp).
-        # Refusing up here also avoids waking the unit for a move we are about to refuse. STOP never
-        # gets here — it returned above — and must never be gated.
+        # Roof MOVES gate here and branch off before the session warm-up: the move takes the single
+        # slot for its own connection (_roof_move_command), so it never reaches the precondition
+        # check at the bottom (the gap that once left /api/command, CLI and HA able to drive the
+        # roof under a blocking InfoPopUp). Refusing up here also avoids waking the unit for a move
+        # we are about to refuse. STOP never gets here — it returned above — and must never be gated.
         if function == "roof":
             reason = control.command_precondition(function, what, value, self._last)
             if reason:
                 log.warning("refusing %s/%s: %s" % (function, what, reason))
                 return None
+            return await self._roof_move_command(what)
         # A command means intent to control: clear any manual Disconnect, mark active (hold the
         # session), and keep-warm nudge the supervisor up now if it isn't. set_mode("connect") does
         # exactly those three; its return dict is irrelevant here.
@@ -739,8 +740,6 @@ class Server:
         # actuate holds a 1003 liveness heartbeat across the write (arms actuation,
         # issue #2); the same self._ble lock keeps it the single BLE owner.
         async with self._ble:
-            if function == "roof":
-                return await self._roof_move(what)
             last = await self._ensure_last(function)
             if last is None:
                 return None
@@ -749,6 +748,23 @@ class Server:
                 log.warning("refusing %s/%s: %s" % (function, what, reason))
                 return None
             return await self._actuate_checked(function, what, value, last)
+
+    async def _roof_move_command(self, what):
+        """A roof MOVE skips the persistent-session warm-up every other command gets.
+
+        The move takes the unit's single slot for its own dedicated connection
+        (:meth:`_roof_move` -> ``drop_for_handover``), so nudging the supervisor to connect and
+        waiting up to ``CALICTL_SESSION_WAIT_S`` for that session would only bring up a connection
+        that is closed again, unused, the moment the move starts — seconds of delay before the
+        press reaches the unit. It still records the intent (clears a manual release, marks the UI
+        active), still drops an ALREADY-live session for the handover, and nudges the supervisor
+        once the move has released the lock, so the fast path comes back afterwards."""
+        self._sessions.claim_intent()
+        try:
+            async with self._ble:
+                return await self._roof_move(what)
+        finally:
+            self._sessions.nudge()
 
     async def _roof_stop_command(self):
         """ROOF STOP short-circuits everything: a hold-to-move release must interrupt an in-flight

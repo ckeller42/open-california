@@ -119,8 +119,9 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   — best-effort over the unit's own limit switches. **A roof move/STOP TAKES the single connection
   slot** (`session.drop_for_handover`, 2026-09-17): `actuate_roof`/`actuate` open their own session,
   so a live persistent session would be a second connection the unit refuses — and that session
-  can't be reused instead, because it runs a 1003 heartbeat the roof's arming contract forbids. The
-  drop is transient; the supervisor reconnects afterwards. See `protocol-alignment.md` +
+  can't be reused instead, because it runs a 1003 heartbeat the roof's arming contract forbids. A roof
+  command never warms that session first (no keep-warm nudge, no `CALICTL_SESSION_WAIT_S` wait) — it
+  only drops one that is already live. The drop is transient; the supervisor reconnects afterwards. See `protocol-alignment.md` +
   `protocol-sequences`.
 - **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads (`device.read_all`/
   `read` do) to keep the link up (dropped after ~15 s otherwise) and refresh the re-read chars. It does

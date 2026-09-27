@@ -353,13 +353,17 @@ Persistent session supervisor
      the session is held.
    * **Held**: polls and commands run over it. Writes skip the handshake and the 3 s arm delay
      (``arm=False``), so they land in well under a second. A command first waits up to
-     ``CALICTL_SESSION_WAIT_S`` (6 s) for the session to come up instead of racing it cold.
+     ``CALICTL_SESSION_WAIT_S`` (6 s) for the session to come up instead of racing it cold. A roof
+     move is the exception: it neither nudges nor waits (see Handover).
    * **Idle**: close the session under the ``_ble`` lock, so the phone app gets the single slot.
      Polls fall back to brief cold per-op reads.
    * **Unreachable**: back off 5 / 10 / 30 / 60 s (capped). After 4 consecutive failures the state
      is ``asleep``. A command resets the backoff and reconnects immediately (keep-warm nudge).
-   * **Handover**: a roof move or STOP calls ``drop_for_handover()``, which closes the session
-     *without* setting the manual release. The supervisor reconnects once the lock is free. Guided
+   * **Handover**: a roof move or STOP calls ``drop_for_handover()``, which closes an
+     already-live session *without* setting the manual release. It never warms the session first:
+     a roof command skips the keep-warm nudge and the ``CALICTL_SESSION_WAIT_S`` wait, because
+     that session would only be closed again unused. After a move, the daemon nudges the
+     supervisor, which reconnects once the lock is free. Guided
      pairing parks the session with ``set_mode("disconnect")``.
 
 .. mermaid::
@@ -387,7 +391,9 @@ Persistent session supervisor
 **Evidence.** On buspi (2026-09-16 trace) the session repeatedly came up on a web nudge and was
 released for UI idleness (``persistent session released (web UI idle)``). No unit-side drop was
 found while the heartbeat ticked. The 2026-07-13 stability spike held the link 180 s with 100 %
-uptime and 0 drops. The roof handover (#198) is covered by tests only; the roof itself has never
+uptime and 0 drops. The roof handover (#198), and the roof command skipping the session warm-up (it
+used to nudge the session up and wait up to 6 s for it, only to close it unused), are covered by
+tests only; the roof itself has never
 moved under ``calictl`` (see :need:`S_SEQ_ROOF`). Design notes:
 `protocol-crosscheck-applab.md
 <https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html>`_.
@@ -529,8 +535,9 @@ Roof actuation — press-and-hold, SafetyCounter-gated
    or ``Position`` 15 = error). STOP is never gated. For a move,
    :py:meth:`calictl.device.CamperDevice.actuate_roof` does the following:
 
-   * **Slot handover (#198)**: under the ``_ble`` lock, ``drop_for_handover()`` closes the live
-     persistent session. The unit has one connection slot, and that session's ``1003`` heartbeat
+   * **Slot handover (#198)**: the daemon does **not** warm the persistent session for a roof
+     command (no keep-warm nudge, no ``CALICTL_SESSION_WAIT_S`` wait). Under the ``_ble`` lock,
+     ``drop_for_handover()`` closes the session only if one is already live. The unit has one connection slot, and that session's ``1003`` heartbeat
      is forbidden during a roof move. Then open a **dedicated connection**. The supervisor
      reconnects after the move.
    * **Arm = handshake only** (``_handshake``: ``1001`` + ``1004`` reads, subscribe-all). There is
@@ -559,7 +566,7 @@ Roof actuation — press-and-hold, SafetyCounter-gated
         participant U as Roof (1401 / state 1402)
         participant A as App (reference only)
         Note over C,U: ignition ON, no blocking InfoPopUp, roof path clear
-        S->>S: drop_for_handover closes the persistent session (one slot, no heartbeat allowed)
+        S->>S: no session warm-up, drop_for_handover closes a live session (one slot, no heartbeat allowed)
         C->>U: dedicated connect, read 1001 and 1004, subscribe-all (no 1003 heartbeat, no pre-arm)
         loop app only, while the roof page is open and before any press
             A->>U: frame [0x00 stop] plus SafetyCounter every ~500 ms (pre-validates the counter)
