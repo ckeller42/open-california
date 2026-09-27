@@ -50,8 +50,31 @@ test_suite() {   # parallel when pytest-xdist is present (tools/ci.sh dev), else
   fi
 }
 firmware() {   # CI's firmware-host-e2e job: NimBLE Linux host over TCP HCI to the Bumble fake unit.
-               # Linux + gcc-multilib/g++-multilib (or CROSS_COMPILE=i686-linux-gnu-); skips otherwise.
-  "$PY" -m pytest tests/firmware -v
+               # Linux + gcc-multilib/g++-multilib (or CROSS_COMPILE=i686-linux-gnu-); the linux_only
+               # host tier (test_host_e2e.py + test_ble_store_kv.py; see tests/firmware/conftest.py
+               # _skip_reason()) SKIPS -- not errors -- off that environment, so a bare pytest run
+               # exits 0 even though the host e2e it's presented as never ran. Fail loud instead: this
+               # is a targeted check, not the general suite (which filters `-m "not linux_only"` and
+               # keeps the quiet skip in test_suite() above).
+  local f
+  for f in tests/firmware/test_host_e2e.py tests/firmware/test_ble_store_kv.py; do
+    [ -f "$f" ] || { echo "firmware: expected test file missing: $f" >&2; exit 1; }
+  done
+  local out status
+  out=$("$PY" -m pytest tests/firmware -v -rs 2>&1)
+  status=$?
+  printf '%s\n' "$out"
+  [ $status -eq 0 ] || exit $status
+  # test_qemu_boot.py is a separate tier (gated on CALI_QEMU=1, its own CI job firmware-qemu) and
+  # stays a quiet skip here; only the two linux_only host-tier files count as "not validated".
+  local skip_lines reason
+  skip_lines=$(printf '%s\n' "$out" \
+    | grep -E '^SKIPPED \[[0-9]+\] tests/firmware/(test_host_e2e|test_ble_store_kv)\.py')
+  if [ -n "$skip_lines" ]; then
+    reason=$(printf '%s\n' "$skip_lines" | sed -E 's/^SKIPPED \[[0-9]+\] [^:]+(:[0-9]+)?: //' | sort -u | paste -sd '; ' -)
+    echo "firmware: host tier NOT validated: $reason" >&2
+    exit 1
+  fi
 }
 audit()        { "$PY" -m tools.audit_signals --report; }
 import_clean() { "$PY" -m tools.check_import_clean; }
