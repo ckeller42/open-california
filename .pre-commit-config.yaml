@@ -96,6 +96,14 @@ repos:
         pass_filenames: false
         files: ^calictl/webui/(.*\.js|jsconfig\.json)$
 
+      # mypy type check on the calictl/ package (blocking: all errors resolved)
+      - id: mypy
+        name: mypy type check
+        entry: tools/ci.sh typecheck
+        language: system
+        pass_filenames: false
+        files: ^(calictl/.*\.py|pyproject\.toml)$
+
       # --- pre-push: the slow gates ---
       - id: pytest
         name: full test suite

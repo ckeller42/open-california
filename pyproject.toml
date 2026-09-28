@@ -37,4 +37,9 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 no_implicit_optional = true
 files = ["calictl"]
+
 exclude = "(^|/)(tests|tools|docs)/"
+
+[[tool.mypy.overrides]]
+module = "calictl.pairing_bluez"
+disable_error_code = "name-defined"

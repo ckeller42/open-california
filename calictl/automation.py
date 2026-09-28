@@ -339,7 +339,7 @@ class AutoCamper:
             if read_only:
                 log.warning(
                     "auto-camper: parked with a restore owed but writes are read-only; not restoring",
-                    flush=True,
+                    flush=True,  # type: ignore[call-arg]
                 )
                 self.owe_restore, self.restore_until = False, None  # can't act -> don't spin
                 return

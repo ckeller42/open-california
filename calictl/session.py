@@ -56,8 +56,8 @@ class SessionSupervisor:
         self._backoff_fails = 0
         self._session_mode = None  # None = auto (activity-scoped); "release" = user disconnected
         self._last_ui_activity = None
-        self._ble = None  # the SHARED lock, set by attach() in run()'s loop
-        self._wake = None  # asyncio.Event(), created in attach() (loop-bound)
+        self._ble: asyncio.Lock | None = None
+        self._wake: asyncio.Event | None = None
 
     def attach(self, ble_lock):
         """Bind the loop-created shared ``_ble`` lock and create the wake event. Call from ``run()``
@@ -180,6 +180,9 @@ class SessionSupervisor:
     async def supervise(self):
         """Hold the persistent session while the web UI is ACTIVE; release the BLE slot when idle (so
         the phone app can connect); back off while the van is unreachable. Runs forever on the loop."""
+        # attach() must be called before supervise() - _ble and _wake are required
+        assert self._wake is not None
+        assert self._ble is not None
         while True:
             if not self._ui_active():
                 # web UI idle -> release the slot for the phone app; the daemon falls back to brief

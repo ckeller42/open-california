@@ -86,7 +86,7 @@ def append_jsonl(path: str, record, max_lines: int = 300_000) -> bool:
         return False
 
 
-def load_jsonl(path: str, since: float = None) -> list:
+def load_jsonl(path: str, since: float | None = None) -> list:
     """Read JSONL records (dicts) oldest-first, dropping torn lines. ``since`` filters by ``ts``."""
     out = []
     try:
@@ -106,7 +106,7 @@ def load_jsonl(path: str, since: float = None) -> list:
     return out
 
 
-def load(path: str, since: float = None) -> list:
+def load(path: str, since: float | None = None) -> list:
     """Read samples, oldest first. Never raises.
 
     :param path: the JSONL history file.
@@ -137,7 +137,7 @@ def load(path: str, since: float = None) -> list:
     return out
 
 
-def trim(path: str, retention_s: float = RETENTION_S, now: float = None) -> int:
+def trim(path: str, retention_s: float = RETENTION_S, now: float | None = None) -> int:
     """Rewrite the file, dropping samples older than ``retention_s``. Never raises.
 
     :param path: the JSONL history file. A missing file is left missing (not created).

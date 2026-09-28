@@ -47,8 +47,8 @@ def water(d: dict) -> dict:
         # The unit's water fault codes (qg/b.java dispatch; every dialog text app-observed 2026-09-16,
         # docs/business-logic/alert-states.md §5). Fresh 3 and 7 are the same "unknown error";
         # 6 and 8-15 show nothing in the app -> None.
-        "fresh_alert": _FRESH_WATER_ALERT.get(d.get("FreshWaterInfoPopUp")),
-        "waste_alert": _WASTE_WATER_ALERT.get(d.get("WasteWaterInfoPopUp")),
+        "fresh_alert": _FRESH_WATER_ALERT.get(d.get("FreshWaterInfoPopUp")),  # type: ignore[arg-type]
+        "waste_alert": _WASTE_WATER_ALERT.get(d.get("WasteWaterInfoPopUp")),  # type: ignore[arg-type]
     }
 
 
@@ -173,7 +173,7 @@ def cooler(d: dict) -> dict:
     on = d.get("State") == 1
     # Fault is gated on Installed, not power — mirrors the app (vf/c.java:423). Fixed 2026-08-17
     # from the consistency audit: gating on State hid faults on an installed-but-off fridge.
-    fault = _COOLER_FAULT.get(d.get("Error")) if d.get("Installed") else None
+    fault = _COOLER_FAULT.get(d.get("Error")) if d.get("Installed") else None  # type: ignore[arg-type]
     return {
         "installed": bool(d.get("Installed")),
         "on": on,
@@ -187,7 +187,7 @@ def cooler(d: dict) -> dict:
         # 0 while the unit's own screen showed "Flüstermodus — Geplant von 22:00 bis 06:00". So
         # quiet_scheduled follows Mode, not the (unconfirmed-meaning) NightTimerSet bit, which we no
         # longer surface under a guessed name (it's still in the raw decoded state).
-        "quiet_mode": _COOLER_QUIET.get(d.get("Mode")),  # None | "off" | "manual" | "scheduled"
+        "quiet_mode": _COOLER_QUIET.get(d.get("Mode")),  # type: ignore[arg-type]  # None | "off" | "manual" | "scheduled"
         "quiet_scheduled": d.get("Mode") == 4,
         "quiet_from": d.get(
             "NightTimerHourOn"
@@ -327,7 +327,7 @@ def roof(d: dict) -> dict:
         "position": pos,  # raw 0-15 (0 = closed/down)
         "position_name": _ROOF_POS.get(pos, "other") if pos is not None else None,
         # alert is the app's InfoPopUp popup, gated on the roof being fitted (ig/c.java gate)
-        "alert": _ROOF_ALERT.get(d.get("InfoPopUp")) if installed else None,
+        "alert": _ROOF_ALERT.get(d.get("InfoPopUp")) if installed else None,  # type: ignore[arg-type]
         "safety_valid": bool(d.get("SafetyCounterValid")),
     }
 
@@ -506,7 +506,7 @@ def vehicle(d: dict) -> dict:
     # time); don't format that as the nonsensical "1900-01-00 00:00:00" — leave it unavailable.
     if None not in (y, mo, da, h, mi, se) and da:
         # app applies +1900 to the year field and +1 to the month field
-        clock = "%04d-%02d-%02d %02d:%02d:%02d" % (y + 1900, mo + 1, da, h, mi, se)
+        clock = "%04d-%02d-%02d %02d:%02d:%02d" % (y + 1900, mo + 1, da, h, mi, se)  # type: ignore[operator, str-format]
     return {
         "installed": True,
         "ignition_on": bool(d.get("TerminalOneFive")),  # terminal-15 line

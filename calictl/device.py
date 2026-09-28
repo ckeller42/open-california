@@ -799,8 +799,8 @@ class PersistentSession:
         self._client = None
         self._notif: dict[str, bytes] = {}
         self._on_push = on_push  # optional sync callback(uuid_lower, data) fired on each push
-        self._stop = None
-        self._beat = None
+        self._stop: asyncio.Event | None = None
+        self._beat: asyncio.Task[None] | None = None
 
     @property
     def is_up(self) -> bool:
@@ -856,6 +856,7 @@ class PersistentSession:
         return out
 
     async def read_one(self, func) -> bytes:
+        assert self._client is not None
         return bytes(await self._client.read_gatt_char(func.state_char))
 
     async def actuate(

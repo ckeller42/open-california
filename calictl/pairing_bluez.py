@@ -274,7 +274,7 @@ def _make_bledevice(address, name, details, rssi):
     try:
         params = inspect.signature(BLEDevice.__init__).parameters
     except (TypeError, ValueError):
-        params = {}
+        params = {}  # type: ignore[assignment]
     if "rssi" in params:
         return BLEDevice(address, name, details, rssi)
     return BLEDevice(address, name, details)
@@ -767,7 +767,7 @@ class BluezTransport:
                 super().__init__("org.bluez.Agent1")
 
             @method()
-            async def RequestPasskey(self, device: "o") -> "u":  # noqa: N802,N803,F821
+            async def RequestPasskey(self, device: "o") -> "u":  # noqa: N802,N803,F821  # type: ignore
                 transport._passkey_future = asyncio.get_running_loop().create_future()
                 await transport._emit(EV_PASSKEY_REQUESTED)
                 return await transport._passkey_future
@@ -795,6 +795,7 @@ class BluezTransport:
             # Transactional: cache the agent only once BOTH registration calls succeeded, so a
             # reused start_scan() retries the setup instead of scanning with no KeyboardOnly agent.
             if registered:
+                assert mgr is not None  # registered=True means mgr was set above
                 try:
                     await mgr.call_unregister_agent(AGENT_PATH)
                 except Exception:
@@ -908,6 +909,7 @@ class BluezTransport:
             return None
         finally:
             if owns_client:
+                assert client is not None  # owns_client=True means we created a new client
                 await client.disconnect()
 
     # --- bond persistence / teardown -----------------------------------------
