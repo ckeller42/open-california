@@ -56,7 +56,7 @@ static void pump(uint64_t now_ms) {
         size_t n = S.out_off < S.out_head_len ? S.out_head_len - S.out_off : total - S.out_off;
         int r = S.net->tcp_send(S.fd, p, n);
         if (r == -2) break;
-        if (r <= 0) {
+        if (r <= 0) { /* -1 would block; 0 (a contract breach) likewise: retry next poll */
             if (now_ms - S.last_ms > CALI_HTTP_IDLE_MS) break;
             return;
         }
@@ -67,11 +67,14 @@ static void pump(uint64_t now_ms) {
 }
 
 /* Queues the response (headers rendered now, body by reference); pump() sends it. A header set too
- * long for HEAD_OUT_MAX (an oversized Location or Content-Type) becomes a 500. */
+ * long for HEAD_OUT_MAX (an oversized Location or Content-Type), or a 3xx redirect (not 304)
+ * without a location, becomes a 500. */
 static void respond(const cali_http_resp_t *r, uint64_t now_ms) {
     const char *body = r->body ? r->body : "";
     size_t body_len = r->body ? r->body_len : 0;
-    int n = snprintf(S.out_head, sizeof S.out_head,
+    int n = -1; /* a redirect without a Location is the handler's error: 500 */
+    if (!(r->status >= 300 && r->status < 400 && r->status != 304 && !r->location))
+        n = snprintf(S.out_head, sizeof S.out_head,
                      "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %lu\r\n%s%s%s"
                      "Connection: close\r\n\r\n",
                      r->status, reason(r->status), r->content_type ? r->content_type : "text/plain",
@@ -188,13 +191,20 @@ static void dispatch(uint64_t now_ms) {
     respond(&resp, now_ms);
 }
 
+void cali_http_stop(void) {
+    if (S.fd >= 0) close_conn();
+    if (S.lfd >= 0) S.net->tcp_close(S.lfd);
+    S.lfd = -1;
+}
+
 int cali_http_init(const cali_net_t *net, uint16_t port, cali_http_handler_t handler, void *ctx) {
-    int lfd = net->tcp_listen(port);
+    int lfd;
+    cali_http_stop(); /* a re-init drops the open connection and the old listener */
+    lfd = net->tcp_listen(port);
     S.net = net;
     S.handler = handler;
     S.ctx = ctx;
     S.lfd = lfd >= 0 ? lfd : -1;
-    S.fd = -1;
     return S.lfd >= 0 ? 0 : -1;
 }
 
@@ -216,7 +226,7 @@ void cali_http_poll(uint64_t now_ms) {
 
     while (S.len < NET_HTTP_REQ_MAX) {
         int r = S.net->tcp_recv(S.fd, S.buf + S.len, NET_HTTP_REQ_MAX - S.len);
-        if (r == -1) break;
+        if (r == -1 || r == 0) break; /* 0 breaks cali_net's contract: read it as would-block, never spin */
         if (r < 0) {
             peer_gone = 1;
             break;
@@ -250,10 +260,4 @@ void cali_http_poll(uint64_t now_ms) {
         return;
     }
     if (peer_gone || now_ms - S.last_ms > CALI_HTTP_IDLE_MS) close_conn();
-}
-
-void cali_http_stop(void) {
-    if (S.fd >= 0) close_conn();
-    if (S.lfd >= 0) S.net->tcp_close(S.lfd);
-    S.lfd = -1;
 }

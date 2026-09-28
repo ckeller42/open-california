@@ -14,12 +14,14 @@
  *   404  the handler returned 0 (not handled)
  *   413  Content-Length larger than the buffer space left after the headers
  *   431  no "\r\n\r\n" within NET_HTTP_REQ_MAX bytes
- *   500  the handler's Content-Type + Location do not fit the response header buffer
+ *   500  the handler's Content-Type + Location do not fit the response header buffer, or the
+ *        handler answered a 3xx redirect (not 304) without a location — a handler bug
  * A connection that makes no progress for more than CALI_HTTP_IDLE_MS is closed: while reading,
  * counted from its accept or its last received byte (closed without a response); while sending,
  * from the last byte the socket took (the response is cut short). A connection the peer closes
  * mid-request is closed without a response. Every response carries Content-Type, Content-Length and
- * Connection: close; a response with a location (302) also carries Location.
+ * Connection: close; a response with a location (302) also carries Location. A 302 MUST set
+ * location (see 500 above).
  *
  * Request views (method, path, query, body) are NUL-terminated and point into the core's request
  * buffer; query is "" when the target has no '?'. The buffer is not touched again until the

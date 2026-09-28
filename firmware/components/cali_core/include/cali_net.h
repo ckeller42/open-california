@@ -15,7 +15,8 @@
  * Addresses are IPv4 in host byte order (192.168.4.1 = 0xc0a80401u = NET_AP_ADDR_U32); 0 = none.
  * Sockets are non-blocking: every socket call returns >= 0 on success (a descriptor or a byte
  * count), -1 when it would block / there is nothing yet, -2 when the socket is closed by the peer or
- * failed (the caller then closes it).
+ * failed (the caller then closes it). For n > 0, tcp_recv and tcp_send never return 0: > 0 bytes,
+ * -1 or -2 (a POSIX recv() of 0, the peer's orderly close, is -2).
  */
 #ifndef CALI_NET_H
 #define CALI_NET_H
@@ -46,7 +47,7 @@ typedef struct {
     int  (*scan)(void);                                     /* → SCAN_DONE with the list */
     int  (*sta_rssi)(void);                                 /* dBm or 0 */
     int  (*mdns_announce)(const char *hostname, uint16_t port);  /* host: no-op returning 0 */
-    /* sockets (non-blocking; -1 = would block/none; -2 = closed/error) */
+    /* sockets (non-blocking; -1 = would block/none; -2 = closed/error; recv/send never 0 for n > 0) */
     int  (*tcp_listen)(uint16_t port);            int (*tcp_accept)(int lfd);
     int  (*tcp_recv)(int fd, void *buf, size_t n); int (*tcp_send)(int fd, const void *buf, size_t n);
     void (*tcp_close)(int fd);
