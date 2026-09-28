@@ -62,18 +62,15 @@ CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC) ../web
 COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
-# The rest of cali_core (console + snapshot + json + session + wifi_sm + http_core + captive_dns) and
-# the frame codec: only cali-host needs them.
-CORE_OBJ := console.o snapshot.o json.o session.o codec.o wifi_sm.o http_core.o captive_dns.o
-# The web endpoints (#154 Task 6) compile with our flags (built by `all`) but join CORE_OBJ — i.e. the
-# cali-host link — only with the WiFi runtime (Task 7's wifi_run.o), whose cali_wifi_run_* they call.
-WEB_OBJ := web.o
-OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ) $(WEB_OBJ)
+# The rest of cali_core (console + snapshot + json + session + wifi_sm + wifi_run + http_core +
+# captive_dns + web) and the frame codec: only cali-host needs them.
+CORE_OBJ := console.o snapshot.o json.o session.o codec.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o
+OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
 
 .PHONY: all clean
-all: cali-host store-cli $(WEB_OBJ)
+all: cali-host store-cli
 
 clean:
 	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host cali-host-jw store-cli
@@ -129,6 +126,7 @@ CORE_H := $(COMPONENTS)/cali_core/include
 console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/cali_session.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_pairing_sm.h \
 		$(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CSRC)/pairing_consts.h \
+		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_net.h $(CSRC)/net_consts.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -144,6 +142,14 @@ json.o: $(COMPONENTS)/cali_core/json.c $(CORE_H)/cali_json.h
 
 # The WiFi provisioning/connectivity SM (#154 Task 3): pure, replays tests/vectors/wifi_sm.json.
 wifi_sm.o: $(COMPONENTS)/cali_core/wifi_sm.c $(CORE_H)/cali_wifi_sm.h $(CSRC)/net_consts.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The WiFi runtime (#154 Task 7): the SM over cali_net + kv + captive DNS. tests/firmware/test_session_fake.py
+# (fake net) and test_web_e2e.py (cali-host --http).
+wifi_run.o: $(COMPONENTS)/cali_core/wifi_run.c $(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h \
+		$(CORE_H)/cali_net.h $(CORE_H)/cali_captive.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_pairing_sm.h \
+		$(CORE_H)/cali_transport.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The single-connection HTTP/1.1 responder over cali_net (#154 Task 4): tests/firmware/test_http_core.py.
@@ -175,6 +181,8 @@ codec.o: $(CSRC)/codec.c $(CSRC)/codec.h $(CSRC)/codec_dict.h
 
 host_main.o: host_main.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h $(CORE_H)/cali_console.h \
 		$(CORE_H)/cali_session.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h \
+		$(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h $(CORE_H)/cali_captive.h \
+		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(COMPONENTS)/platform/include/cali_net_host.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 

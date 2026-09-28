@@ -155,3 +155,15 @@ def test_bind_failure_makes_poll_noop(captive_cli):
     q = build_query("example.com", 1)
     out = drive(captive_cli, ["dgram " + q.hex(), "poll"], args=["nobind"])
     assert out == ""  # udp_bind failed: poll never even calls recvfrom
+
+
+def test_one_poll_answers_at_most_16_datagrams(captive_cli):
+    """A flood cannot starve the tick: one poll answers at most 16 datagrams, the rest wait for the
+    next poll."""
+    qs = [build_query("q%d.example" % i, 1, qid=i) for i in range(20)]
+    out = drive(captive_cli, ["dgram " + q.hex() for q in qs] + ["poll"])
+    assert len(out.strip("\n").split("\n")) == 16
+    out = drive(captive_cli, ["dgram " + q.hex() for q in qs] + ["poll", "poll"])
+    lines = out.strip("\n").split("\n")
+    assert len(lines) == 20 and all(line.startswith("REPLY ") for line in lines)
+    assert [parse_header(bytes.fromhex(line[6:]))[0] for line in lines] == list(range(20))

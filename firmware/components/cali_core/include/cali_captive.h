@@ -5,9 +5,9 @@
  * gets answered with the hotspot's own address, so any host a client tries to resolve — including
  * the fixed probe host an OS uses right after joining a network to decide whether it is behind a
  * captive portal — lands on calictl's setup page instead of failing to resolve. Driven from the
- * same tick as cali_http_poll(): each cali_captive_dns_poll() call drains every datagram already
- * waiting on the UDP socket (loops on udp_recvfrom until it says "nothing more"/"error"), answers
- * each in turn, and never blocks.
+ * same tick as cali_http_poll(): each cali_captive_dns_poll() call drains the datagrams already
+ * waiting on the UDP socket (loops on udp_recvfrom until it says "nothing more"/"error", at most 16
+ * per call), answers each in turn, and never blocks.
  *
  * cali_captive_is_probe() is the table the HTTP handler (Task 6) consults to recognise the fixed
  * set of paths Android/iOS/macOS/Windows/Firefox request for that same captive-portal check, so the
@@ -36,8 +36,9 @@ extern "C" {
  * that asks for a record type we don't answer doesn't decide the network is broken. */
 int cali_captive_dns_start(const cali_net_t *net, uint32_t answer_ip);
 
-/* Drains every datagram already waiting (loops on udp_recvfrom until -1/-2), answering each in
- * turn; never blocks. A malformed or truncated query — shorter than the 12-byte header, QDCOUNT !=
+/* Drains the datagrams already waiting (loops on udp_recvfrom until -1/-2, at most 16 per call so a
+ * flood cannot starve the tick; the rest wait for the next poll), answering each in turn; never
+ * blocks. A malformed or truncated query — shorter than the 12-byte header, QDCOUNT !=
  * 1, a name whose labels run past the datagram or whose wire-format length exceeds 253 bytes — or a
  * message with QR already set (a response, not a query) is dropped silently: no reply sent. A
  * no-op before cali_captive_dns_start succeeds. */

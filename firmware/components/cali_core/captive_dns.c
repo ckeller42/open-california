@@ -6,6 +6,7 @@
 #define MAX_NAME_WIRE 253u /* wire-format bytes (length octets + labels + the terminating 0) */
 #define RECV_MAX 512u      /* a query this large has no business on a captive portal; drop it */
 #define REPLY_MAX 512u
+#define DRAIN_MAX 16 /* datagrams answered per cali_captive_dns_poll() */
 #define ANSWER_RR_LEN 16u  /* pointer(2) + TYPE(2) + CLASS(2) + TTL(4) + RDLENGTH(2) + RDATA(4) */
 
 static struct {
@@ -131,7 +132,8 @@ void cali_captive_dns_poll(void) {
     uint8_t reply[REPLY_MAX];
 
     if (S.fd < 0) return;
-    for (;;) {
+    /* at most DRAIN_MAX datagrams per poll: a flood cannot starve the rest of the tick */
+    for (int k = 0; k < DRAIN_MAX; k++) {
         uint32_t from_ip;
         uint16_t from_port;
         int n = S.net->udp_recvfrom(S.fd, buf, sizeof buf, &from_ip, &from_port);

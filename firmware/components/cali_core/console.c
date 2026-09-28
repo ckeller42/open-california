@@ -10,6 +10,7 @@
 #include "cali_runner.h"
 #include "cali_session.h"
 #include "cali_snapshot.h"
+#include "cali_wifi_run.h"
 #include "pairing_consts.h"
 
 void (*cali_console_on_quit)(void);
@@ -17,6 +18,8 @@ void (*cali_console_on_quit)(void);
 static const cali_transport_t *s_t;
 
 #define N_OF(a) (sizeof (a) / sizeof *(a))
+/* "wifi set <32-byte ssid> <63-byte psk>" is 105 bytes: room for it plus whitespace */
+#define CONSOLE_LINE_MAX 160
 
 /* A SNAP of every function (14 functions, ~160 fields) is ~4.5 KB; built whole (behind the "STATE
  * "/"SNAP " line prefix, via cali_json), then written with one fputs so no other output can land
@@ -62,7 +65,16 @@ static void out_line(void) {
     fflush(stdout);
 }
 
-void cali_console_state(const cali_pair_state_t *s, const char *address) {
+/* 1 once the WiFi runtime booted (host --http): it never returns to UNPROVISIONED after boot. */
+static int wifi_on(void) { return cali_wifi_run_state()->st != WIFI_UNPROVISIONED; }
+
+static void ip_text(uint32_t ip, char out[16]) {
+    snprintf(out, 16, "%u.%u.%u.%u", (unsigned)(ip >> 24), (unsigned)(ip >> 16 & 0xffu),
+             (unsigned)(ip >> 8 & 0xffu), (unsigned)(ip & 0xffu));
+}
+
+/* The STATE line; with_wifi adds the "wifi" member (console "status" once the WiFi runtime runs). */
+static void state_line(const cali_pair_state_t *s, const char *address, int with_wifi) {
     /* bounds = the generated tables' own lengths (pairing_consts.h), never hand-typed counts */
     const char *st = (size_t)s->st < N_OF(PAIR_STATE_NAMES) ? PAIR_STATE_NAMES[s->st] : "unknown";
     const char *err = (size_t)s->error < N_OF(PAIR_ERR_NAMES) ? PAIR_ERR_NAMES[s->error] : NULL;
@@ -76,9 +88,30 @@ void cali_console_state(const cali_pair_state_t *s, const char *address) {
     if (err) cali_json_str(&j, err); else cali_json_null(&j);
     cali_json_key(&j, "address");
     if (address) cali_json_str(&j, address); else cali_json_null(&j);
+    if (with_wifi) {
+        const char *ssid = cali_wifi_run_ssid();
+        uint32_t ip = cali_wifi_run_ip();
+        char a[16];
+        cali_json_key(&j, "wifi");
+        cali_json_obj_begin(&j);
+        cali_json_key(&j, "mode");
+        cali_json_str(&j, cali_wifi_mode_name(cali_wifi_mode(cali_wifi_run_state())));
+        cali_json_key(&j, "ssid");
+        if (ssid) cali_json_str(&j, ssid); else cali_json_null(&j);
+        cali_json_key(&j, "ip");
+        if (ip) {
+            ip_text(ip, a);
+            cali_json_str(&j, a);
+        } else {
+            cali_json_null(&j);
+        }
+        cali_json_obj_end(&j);
+    }
     finish_line(&j, PREFIX_STATE);
     out_line();
 }
+
+void cali_console_state(const cali_pair_state_t *s, const char *address) { state_line(s, address, 0); }
 
 void cali_console_snapshot(uint64_t t_ms) {
     cali_json_t j;
@@ -97,7 +130,54 @@ void cali_console_snapshot(uint64_t t_ms) {
  * address (calictl/serve.py). The pairing SM is idle then; whether the link is up is the session's
  * business, not a pairing state. */
 static void status(void) {
-    cali_console_state(cali_runner_state(), cali_snapshot_pair_address(s_t));
+    state_line(cali_runner_state(), cali_snapshot_pair_address(s_t), wifi_on());
+}
+
+/* "wifi status": LOG wifi: <mode> ssid=<ssid|-> ip=<a.b.c.d|-> rssi=<dBm|-> scan=<n> */
+static void wifi_status(void) {
+    const char *ssid = cali_wifi_run_ssid();
+    uint32_t ip = cali_wifi_run_ip();
+    int rssi = cali_wifi_run_rssi();
+    char a[16] = "-", r[12] = "-";
+    if (ip) ip_text(ip, a);
+    if (rssi) snprintf(r, sizeof r, "%d", rssi);
+    cali_log("wifi: %s ssid=%s ip=%s rssi=%s scan=%d", cali_wifi_mode_name(cali_wifi_mode(cali_wifi_run_state())),
+             ssid ? ssid : "-", a, r, cali_wifi_run_scan_list(NULL));
+}
+
+/* "wifi set <ssid> <psk>": both single tokens (an SSID with spaces cannot be typed here — use the
+ * setup page), stored like POST /api/wifi (kv "wifi_ssid"/"wifi_psk", then the runner). args points
+ * into the caller's line buffer, which the caller zeroes afterwards (it holds the passphrase). */
+static void wifi_set(char *args) {
+    char *ssid = strtok(args, " \t"), *psk = strtok(NULL, " \t");
+    size_t ssid_len = ssid ? strlen(ssid) : 0, psk_len = psk ? strlen(psk) : 0;
+    if (!ssid || !psk || strtok(NULL, " \t")) {
+        cali_log("wifi: usage: wifi set <ssid> <psk>");
+    } else if (ssid_len > NET_SSID_MAX) {
+        cali_log("wifi: bad ssid");
+    } else if (psk_len < NET_PSK_MIN || psk_len > NET_PSK_MAX) {
+        cali_log("wifi: bad psk");
+    } else if (cali_kv_set("wifi_ssid", ssid, ssid_len) != 0 || cali_kv_set("wifi_psk", psk, psk_len) != 0) {
+        cali_log("wifi: storing credentials failed");
+    } else {
+        cali_wifi_run_set_creds(ssid, psk);
+    }
+}
+
+static void wifi_cmd(char *sub) {
+    if (!wifi_on()) {
+        cali_log("wifi: not enabled");
+    } else if (strcmp(sub, "status") == 0) {
+        wifi_status();
+    } else if (strcmp(sub, "scan") == 0) {
+        cali_wifi_run_scan();
+    } else if (strcmp(sub, "forget") == 0) {
+        cali_wifi_run_forget();
+    } else if (strcmp(sub, "set") == 0 || (strncmp(sub, "set", 3) == 0 && (sub[3] == ' ' || sub[3] == '\t'))) {
+        wifi_set(sub + 3);
+    } else {
+        cali_log("unknown command: wifi %s", sub);
+    }
 }
 
 static void on_state(const cali_pair_state_t *s, const char *address) {
@@ -113,6 +193,12 @@ void cali_console_init(const cali_transport_t *t) {
     cali_runner_on_state = on_state;
 }
 
+/* memset that the compiler may not drop as a dead store (the buffer dies right after). */
+static void wipe(void *p, size_t n) {
+    volatile unsigned char *v = (volatile unsigned char *)p;
+    while (n--) *v++ = 0;
+}
+
 /* "N" of "passkey N": 1-6 decimal digits and nothing else, else -1. */
 static long parse_passkey(const char *p) {
     long v = 0;
@@ -126,7 +212,7 @@ static long parse_passkey(const char *p) {
 }
 
 void cali_console_line(const char *line) {
-    char cmd[80];
+    char cmd[CONSOLE_LINE_MAX];
     size_t n = 0;
     while (*line && isspace((unsigned char)*line)) line++;
     while (line[n] && n < sizeof cmd - 1) {
@@ -149,7 +235,14 @@ void cali_console_line(const char *line) {
         status();
     } else if (strcmp(cmd, "quit") == 0) {
         if (cali_console_on_quit) cali_console_on_quit();
+    } else if (strncmp(cmd, "wifi", 4) == 0 && (cmd[4] == ' ' || cmd[4] == '\t')) {
+        char *sub = cmd + 5;
+        while (*sub == ' ' || *sub == '\t') sub++;
+        wifi_cmd(sub);
+    } else if (strcmp(cmd, "wifi") == 0) {
+        wifi_cmd(cmd + 4);
     } else {
         cali_log("unknown command: %s", cmd);
     }
+    wipe(cmd, sizeof cmd);   /* a "wifi set" line held a passphrase */
 }

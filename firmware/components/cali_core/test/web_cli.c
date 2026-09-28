@@ -254,7 +254,7 @@ int main(void) {
         else if (strcmp(w, "stamp") == 0 && sscanf(a1, "%llu", &ms) == 1) s_stamp = ms;
         else if (strcmp(w, "now") == 0 && sscanf(a1, "%llu", &ms) == 1) s_now = ms;
         else if (strcmp(w, "ap") == 0 && s_naps < NET_SCAN_MAX) {
-            snprintf(s_aps[s_naps].ssid, sizeof s_aps[s_naps].ssid, "%s", a1);
+            snprintf(s_aps[s_naps].ssid, sizeof s_aps[s_naps].ssid, "%.*s", NET_SSID_MAX, a1);
             s_aps[s_naps].rssi = (int)strtol(a2, NULL, 10);
             s_aps[s_naps].secure = (int)strtol(a3, NULL, 10);
             s_naps++;
@@ -264,7 +264,7 @@ int main(void) {
             if (i == N_OF(WIFI_NAMES)) { printf("UNKNOWN wifi %s\n", a1); continue; }
             s_wifi.st = (uint8_t)i;
             s_has_ssid = n >= 3 && strcmp(a2, "-") != 0;
-            snprintf(s_ssid, sizeof s_ssid, "%s", s_has_ssid ? a2 : "");
+            snprintf(s_ssid, sizeof s_ssid, "%.*s", NET_SSID_MAX, s_has_ssid ? a2 : "");
             s_ip = n >= 4 ? parse_ip(a3) : 0;
             s_rssi = n >= 5 ? (int)strtol(a4, NULL, 10) : 0;
         } else if (strcmp(w, "pair") == 0) {

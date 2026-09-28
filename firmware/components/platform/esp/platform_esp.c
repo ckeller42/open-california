@@ -114,6 +114,16 @@ int cali_kv_set(const char *key, const void *buf, size_t len) {
     return rc;
 }
 
+/* Needed now, not only from Task 9: console.c links the WiFi runner (wifi_run.c), whose credential
+ * clear calls this, into every build that has the console. */
+int cali_kv_erase(const char *key) {
+    esp_err_t err;
+    if (!s_nvs_open || !key_ok(key)) return -1;
+    err = nvs_erase_key(s_nvs, key);
+    if (err == ESP_ERR_NVS_NOT_FOUND) return 0;
+    return err == ESP_OK && nvs_commit(s_nvs) == ESP_OK ? 0 : -1;
+}
+
 int cali_kv_erase_all(void) {
     if (!s_nvs_open) return -1;
     return nvs_erase_all(s_nvs) == ESP_OK && nvs_commit(s_nvs) == ESP_OK ? 0 : -1;

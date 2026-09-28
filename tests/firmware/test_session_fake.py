@@ -112,6 +112,9 @@ def fake(tmp_path_factory):
             str(CORE / "runner.c"),
             str(CORE / "pairing_sm.c"),
             str(ROOT / "csrc" / "codec.c"),
+            str(CORE / "wifi_run.c"),
+            str(CORE / "wifi_sm.c"),
+            str(CORE / "captive_dns.c"),
             str(CORE / "test" / "session_fake.c"),
             "-o",
             str(out),
@@ -441,3 +444,267 @@ def test_last_update_stamps_every_stored_frame(fake):
         "LASTUPD %d" % T,
         "LASTUPD %d" % (T + 700),
     ]
+
+
+def test_snap_line_bytes_are_pinned(fake):
+    """The console ``SNAP`` line, byte for byte, for a fixed frame set: only cooler read (one byte,
+    so only the fields inside it), every other read failed. Pins the emitter (``snapshot.c``) and
+    the line framing together — key order, no whitespace, the ``t`` of the read-all's last tick."""
+    reads = ["READ %x %s" % (c, "0 01" if c == 0x1102 else "14") for c in CHARS]
+    out = run(fake, *PAIRED, *read_all(reads=reads))
+    assert [line for line in out if line.startswith("SNAP ")] == [
+        'SNAP {"t":%d,"fn":{"cooler":{"Error":0,"NightTimerSet":0,"Installed":0,"TimerElapsed":0,'
+        '"TimerState":0,"State":1}}}' % T
+    ]
+
+
+# ---- the WiFi runner (wifi_run.c) on the same tick as the session ----------------------------
+
+AP = "NET ap_start calictl-esp-setup calictl-setup"
+PSK = "test-psk-1234"
+
+
+def test_wifi_off_until_booted(fake):
+    """Without ``wifi_boot`` (host_main without ``--http``) the WiFi runtime is off: ``wifi`` commands
+    only say so, no cali_net call happens, and ``status`` prints the unchanged STATE line."""
+    out = run(
+        fake,
+        "> wifi status",
+        "> wifi scan",
+        "> wifi forget",
+        "> wifi set minsel " + PSK,
+        "> status",
+        *["tick %d" % t for t in range(0, 1000, 100)],
+    )
+    assert out == ["LOG wifi: not enabled"] * 4 + [
+        'STATE {"state":"idle","attempts":0,"error":null,"address":null}'
+    ]
+
+
+def test_wifi_boot_without_creds_opens_setup_and_scans(fake):
+    out = run(fake, "wifi_boot", "NET_AP_STARTED", "NET_SCAN_DONE minsel other", "> wifi status", "> status")
+    assert out == [
+        AP,
+        "NET udp_bind 53",
+        "NET scan",
+        "LOG wifi: setup hotspot up (calictl-esp-setup)",
+        "LOG wifi: setup ssid=- ip=- rssi=- scan=2",
+        'STATE {"state":"idle","attempts":0,"error":null,"address":null,'
+        '"wifi":{"mode":"setup","ssid":null,"ip":null}}',
+    ]
+
+
+def _online(*extra):
+    return [
+        "wifi_boot",
+        "NET_AP_STARTED",
+        "NET_SCAN_DONE minsel",
+        "> wifi set minsel " + PSK,
+        "NET_GOT_IP 192.168.1.42",
+        *extra,
+    ]
+
+
+def test_wifi_set_stores_joins_and_goes_online(fake):
+    out = run(
+        fake,
+        *_online(
+            "rssi -61", "tick 100", "tick 200", "> wifi status", "> status", "kv wifi_ssid", "kv wifi_psk"
+        ),
+    )
+    rest = after(out, "LOG wifi: setup hotspot up (calictl-esp-setup)")
+    assert rest == [
+        "LOG wifi: joining minsel",
+        "NET sta_start minsel " + PSK,
+        "NET mdns calictl-esp 80",
+        "LOG wifi: online 192.168.1.42",
+        "LOG wifi: station ssid=minsel ip=192.168.1.42 rssi=-61 scan=1",
+        'STATE {"state":"idle","attempts":0,"error":null,"address":null,'
+        '"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.42"}}',
+        "KV wifi_ssid minsel",
+        "KV wifi_psk " + PSK,
+    ]
+
+
+def test_wifi_set_rejects_bad_input_without_storing(fake):
+    out = run(
+        fake,
+        "wifi_boot",
+        "> wifi set",
+        "> wifi set minsel short",
+        "> wifi set " + "s" * 33 + " " + PSK,
+        "> wifi bogus",
+        "kv wifi_ssid",
+    )
+    assert after(out, "NET scan") == [
+        "LOG wifi: usage: wifi set <ssid> <psk>",
+        "LOG wifi: bad psk",
+        "LOG wifi: bad ssid",
+        "LOG unknown command: wifi bogus",
+        "KV wifi_ssid missing",
+    ]
+
+
+def test_wifi_retry_after_loss_uses_the_copied_credentials(fake):
+    """R14: the runner keeps its own copy of the credentials (the console and web.c zero theirs right
+    after the call): the retry after a loss joins with the same SSID + PSK."""
+    out = run(fake, *_online("tick 100", "NET_LOST", "tick 200", "tick 1100", "tick 1200"))
+    rest = after(out, "LOG wifi: online 192.168.1.42")
+    assert rest == [
+        "LOG wifi: lost",
+        "NET sta_stop",
+        "LOG wifi: joining minsel",
+        "NET sta_start minsel " + PSK,
+    ]
+
+
+def test_wifi_typo_fails_back_to_setup_and_clears_creds(fake):
+    out = run(
+        fake,
+        "wifi_boot",
+        "NET_AP_STARTED",
+        "> wifi set minsel wrong-psk-99",
+        "NET_FAILED 2",
+        "kv wifi_ssid",
+        "kv wifi_psk",
+        "> wifi status",
+    )
+    assert after(out, "NET sta_start minsel wrong-psk-99") == [
+        "LOG wifi: failed auth",
+        "LOG wifi: credentials cleared",
+        "KV wifi_ssid missing",
+        "KV wifi_psk missing",
+        "LOG wifi: setup ssid=- ip=- rssi=- scan=0",
+    ]
+
+
+def test_wifi_boot_with_saved_creds_joins_and_keeps_them_on_failure(fake):
+    """R6: saved credentials join at boot without a hotspot; a failure retries, never wipes them."""
+    out = run(
+        fake,
+        "kvset wifi_ssid minsel",
+        "kvset wifi_psk " + PSK,
+        "wifi_boot",
+        "NET_FAILED 1",
+        "kv wifi_ssid",
+        "tick 100",
+        "tick 1100",
+    )
+    assert out == [
+        "LOG wifi: joining minsel",
+        "NET sta_start minsel " + PSK,
+        "LOG wifi: failed not_found",
+        "KV wifi_ssid minsel",
+        "LOG wifi: joining minsel",
+        "NET sta_start minsel " + PSK,
+    ]
+
+
+def test_wifi_forget_clears_creds_and_opens_setup(fake):
+    out = run(fake, *_online("> wifi forget", "kv wifi_ssid", "kv wifi_psk", "NET_AP_STARTED"))
+    assert after(out, "LOG wifi: online 192.168.1.42") == [
+        "NET sta_stop",
+        "LOG wifi: credentials cleared",
+        AP,
+        "NET close 5",
+        "NET udp_bind 53",
+        "NET scan",
+        "KV wifi_ssid missing",
+        "KV wifi_psk missing",
+        "LOG wifi: setup hotspot up (calictl-esp-setup)",
+    ]
+
+
+def test_wifi_set_while_online_replaces_and_reconnects(fake):
+    """``wifi set`` while online is never a silent no-op: the new credentials replace the old ones
+    (kv kept, not cleared) and the runner rejoins through the setup flow."""
+    out = run(fake, *_online("> wifi set other new-psk-5678", "kv wifi_ssid", "kv wifi_psk"))
+    rest = after(out, "LOG wifi: online 192.168.1.42")
+    assert rest[0] == "LOG wifi: credentials replaced, reconnecting"
+    assert "NET sta_stop" in rest and AP in rest
+    assert "LOG wifi: credentials cleared" not in rest
+    assert rest[-4:] == [
+        "LOG wifi: joining other",
+        "NET sta_start other new-psk-5678",
+        "KV wifi_ssid other",
+        "KV wifi_psk new-psk-5678",
+    ]
+
+
+def test_wifi_scan_waits_while_a_scan_is_in_flight(fake):
+    """A scan request while one is in flight (until its SCAN_DONE) is dropped, not queued."""
+    out = run(
+        fake,
+        "wifi_boot",
+        "> wifi scan",
+        "tick 100",
+        "NET_SCAN_DONE a",
+        "> wifi scan",
+        "> wifi scan",
+        "tick 200",
+    )
+    assert [line for line in out if line == "NET scan"] == ["NET scan"] * 2  # boot's, then one more
+
+
+def test_wifi_scan_deferred_while_ble_pairing_is_active(fake):
+    """R15, the one BLE-coex gate: no WiFi scan while a pairing flow is active (runner state not idle,
+    bonded or error); the request runs on the first tick after the flow ends."""
+    out = run(
+        fake,
+        "wifi_boot",
+        "NET_SCAN_DONE a",
+        "> pair",
+        "> wifi scan",
+        "tick 100",
+        "FOUND",
+        "CONNECTED",
+        "tick 200",
+        "PASSKEY_REQ",
+        "> passkey 123456",
+        "bond 1",
+        "ENC_OK",
+        "READ 1004 0",
+        "tick 300",
+    )
+    start = next(i for i, line in enumerate(out) if line.startswith("CALL start_scan"))
+    bonded = out.index('STATE {"state":"bonded","attempts":0,"error":null,"address":"%s"}' % IDENTITY)
+    assert "NET scan" not in out[start:bonded], out
+    assert "NET scan" in out[bonded:]
+
+
+def test_wifi_scan_not_blocked_by_pairing_error(fake):
+    """PAIR_ERROR has no timeout: it must not block scans forever."""
+    out = run(
+        fake, "wifi_boot", "NET_SCAN_DONE a", "> pair", "tick 0", "tick 30000", "> status", "> wifi scan"
+    )
+    assert json.loads(out[-2][6:])["state"] == "error", out
+    assert out[-1] == "NET scan"
+
+
+def test_wifi_loss_does_not_touch_session(fake):
+    """The WiFi dropping and the runner's retries never reach the BLE session: no transport call but
+    the heartbeat, no ``LOG session:`` line, the beats keep their period and a push still SNAPs.
+
+    .. test:: WiFi loss leaves the BLE session alone
+       :id: T_FW_WIFI_LOSS_SESSION
+       :links: R_FW_WIFI_BLE_COEX, R_FW_SESSION
+    """
+    ticks = ["tick %d" % t for t in range(T + 100, T + 3100, 100)]
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        *_online(),
+        "NET_LOST",
+        *ticks,
+        "NET_GOT_IP 192.168.1.42",
+        "NET_LOST",
+        "NOTIFY 1102 11",
+    )
+    rest = after(out, "LOG wifi: online 192.168.1.42")
+    assert "LOG wifi: lost" in rest
+    assert not [line for line in rest if line.startswith("LOG session:")], rest
+    assert [line for line in rest if line.startswith("CALL")] == [
+        "CALL write_heartbeat %d" % n for n in range(HB + 1, HB + 1 + 3000 // PERIOD)
+    ]
+    assert rest[-1].startswith("SNAP ")

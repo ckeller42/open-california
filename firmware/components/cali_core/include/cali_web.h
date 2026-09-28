@@ -15,8 +15,9 @@
  *                     built whole in one handler call (one consistent snapshot) into a
  *                     NET_JSON_MAX buffer; overflow -> 500 + LOG "http: overflow".
  *   GET /api/wifi     200 {"mode","ssid","ip","rssi","scan":[{"ssid","rssi","secure":<bool>}]} (the
- *                     last SCAN_DONE's list); in setup mode it also starts a fresh scan — unless a
- *                     BLE pairing flow is active (runner state not idle/bonded): no scan then.
+ *                     last SCAN_DONE's list); in setup mode it also asks for a fresh scan
+ *                     (cali_wifi_run_scan, which holds it back while a BLE pairing flow is active
+ *                     — the one coex gate lives in the runner, cali_wifi_run.h).
  *   POST /api/wifi    body {"ssid":"…","psk":"…"} — a fixed-shape parser: one object, exactly the
  *                     two keys (either order, once each), string values with only \" and \\
  *                     escapes, no control bytes/NUL, whitespace between tokens allowed. SSID 1 ..

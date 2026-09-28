@@ -34,6 +34,10 @@ int cali_kv_get(const char *key, void *buf, size_t *len);
  * Returns 0 ok, -1 on failure (bad key, I/O error). */
 int cali_kv_set(const char *key, const void *buf, size_t len);
 
+/* Remove one key; a key that is not stored is not an error. Returns 0 ok, -1 on failure (bad key,
+ * I/O error). (#154: the WiFi runner drops exactly "wifi_ssid" + "wifi_psk", never the bond.) */
+int cali_kv_erase(const char *key);
+
 /* Remove every key. Returns 0 ok, -1 on failure. */
 int cali_kv_erase_all(void);
 

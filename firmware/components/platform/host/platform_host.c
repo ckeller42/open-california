@@ -159,6 +159,17 @@ static int ends_with(const char *s, const char *suffix) {
     return n >= m && strcmp(s + n - m, suffix) == 0;
 }
 
+int cali_kv_erase(const char *key) {
+    char path[sizeof s_dir + 32];
+    int rc = 0;
+    if (!key_ok(key)) return -1;
+    key_path(path, sizeof path, key, KV_TMP_EXT);
+    if (remove(path) != 0 && errno != ENOENT) rc = -1;
+    key_path(path, sizeof path, key, KV_EXT);
+    if (remove(path) != 0 && errno != ENOENT) rc = -1;
+    return rc;
+}
+
 int cali_kv_erase_all(void) {
     char path[sizeof s_dir + 300];
     struct dirent *e;

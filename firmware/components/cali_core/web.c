@@ -39,26 +39,8 @@ static const char ERR_STORE[] = "{\"ok\":false,\"error\":\"store\"}";
 static const char ERR_METHOD[] = "{\"ok\":false,\"error\":\"method\"}";
 static const char OVERFLOW_BODY[] = "response too large";
 
-enum { MODE_OFF, MODE_SETUP, MODE_STATION };
-static const char *const MODE_NAMES[] = {"off", "setup", "station"};
-
-/* See cali_web.h for the mapping and why a setup-flow join reports "off". */
-static int wifi_mode(void) {
-    const cali_wifi_state_t *w = cali_wifi_run_state();
-    switch (w->st) {
-    case WIFI_SETUP_AP:
-    case WIFI_SETUP_AP_RETRYING: return MODE_SETUP;
-    case WIFI_ONLINE: return MODE_STATION;
-    case WIFI_CONNECTING:
-    case WIFI_RETRYING: return w->joined_once ? MODE_STATION : MODE_OFF;
-    default: return MODE_OFF;
-    }
-}
-
-static int ble_pairing_active(void) {
-    uint8_t st = cali_runner_state()->st;
-    return st != PAIR_IDLE && st != PAIR_BONDED;
-}
+/* See cali_web.h / cali_wifi_run.h for the mapping and why a setup-flow join reports "off". */
+static int wifi_mode(void) { return cali_wifi_mode(cali_wifi_run_state()); }
 
 static void set_body(cali_http_resp_t *resp, int status, const char *type, const char *body, size_t len) {
     resp->status = status;
@@ -75,7 +57,7 @@ static void wifi_members(cali_json_t *j) {
     uint32_t ip = cali_wifi_run_ip();
     int rssi = cali_wifi_run_rssi();
     cali_json_key(j, "mode");
-    cali_json_str(j, MODE_NAMES[wifi_mode()]);
+    cali_json_str(j, cali_wifi_mode_name(wifi_mode()));
     cali_json_key(j, "ssid");
     if (ssid) cali_json_str(j, ssid); else cali_json_null(j);
     cali_json_key(j, "ip");
@@ -170,8 +152,9 @@ static void api_wifi_get(cali_http_resp_t *resp) {
     }
     cali_json_arr_end(&j);
     finish_json(&j, resp);
-    /* the list above is the last SCAN_DONE; a fresh one for the next GET, never while BLE pairs */
-    if (wifi_mode() == MODE_SETUP && !ble_pairing_active()) cali_wifi_run_scan();
+    /* the list above is the last SCAN_DONE; a fresh one for the next GET (the runner holds it back
+     * while a BLE pairing flow is active: the one coex gate, ruling R15) */
+    if (wifi_mode() == CALI_WIFI_MODE_SETUP) cali_wifi_run_scan();
 }
 
 /* ---- the fixed-shape {"ssid":"…","psk":"…"} parser ---- */
@@ -283,7 +266,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         }
         return 1;
     }
-    if (wifi_mode() == MODE_SETUP) {
+    if (wifi_mode() == CALI_WIFI_MODE_SETUP) {
         /* captive portal: an OS probe gets the absolute setup address (its Host is some probe domain);
          * anything else goes home */
         resp->status = 302;

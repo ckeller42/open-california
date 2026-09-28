@@ -2,7 +2,8 @@
  * tests/firmware/test_session_fake.py ONLY; not part of the ESP build. Compiled with console.c,
  * session.c, runner.c, pairing_sm.c and csrc/codec.c by the host `cc` (no NimBLE, runs on macOS).
  *
- * (Also links snapshot.c, which console.c's SNAP uses.)
+ * (Also links snapshot.c, which console.c's SNAP uses, and the WiFi runner — wifi_run.c + wifi_sm.c +
+ * captive_dns.c — over the fake cali_net below, for console "wifi …" and the WiFi-vs-session tests.)
  *
  * stdin, one line each:
  *   transport events (through the sink the runner registered; the runner forwards to the session):
@@ -17,8 +18,16 @@
  *     bond 0|1             what has_bond() answers (default 0)
  *     fail <call>          the next call of that transport function returns -1
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
- * stdout: CALL <name> [arg] per transport action (decimal args; queries not printed), the
- * console's STATE/SNAP lines, and LOG lines (cali_log).
+ *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
+ *                          does with --http); before it the WiFi runtime is off, as without --http
+ *     kv <key>             print "KV <key> <value>" or "KV <key> missing" (the in-memory kv store)
+ *     kvset <key> <value>  store a kv value (e.g. saved WiFi credentials before wifi_boot)
+ *     rssi <dBm>           what the fake net's sta_rssi() answers (default 0)
+ *   fake-net events (through the sink the WiFi runner registered):
+ *     NET_GOT_IP <a.b.c.d> | NET_LOST | NET_FAILED <reason> | NET_AP_STARTED | NET_AP_STOPPED
+ *     NET_SCAN_DONE [ssid ...]   (rssi -40 - 10*i, secure)
+ * stdout: CALL <name> [arg] per transport action (decimal args; queries not printed), NET <op>
+ * [args] per cali_net WiFi/UDP call, the console's STATE/SNAP lines, and LOG lines (cali_log).
  */
 #include <stdarg.h>
 #include <stdio.h>
@@ -29,6 +38,7 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
+#include "cali_wifi_run.h"
 
 #define FAKE_IDENTITY "C0:FF:EE:CA:11:F0"
 
@@ -108,6 +118,122 @@ static void deliver(cali_tev_t ev, int status, uint16_t c, const uint8_t *data, 
 
 static void quit(void) { printf("QUIT\n"); }
 
+/* ---- an in-memory kv store (cali_platform.h's kv calls) ---- */
+
+#define KV_N 8
+static struct {
+    char key[CALI_KV_KEY_MAX + 1];
+    char val[128];
+    size_t len;
+    int used;
+} s_kv[KV_N];
+
+static int kv_find(const char *key) {
+    for (int i = 0; i < KV_N; i++)
+        if (s_kv[i].used && strcmp(s_kv[i].key, key) == 0) return i;
+    return -1;
+}
+
+int cali_kv_get(const char *key, void *buf, size_t *len) {
+    int i = kv_find(key);
+    if (i < 0) return CALI_KV_MISSING;
+    if (s_kv[i].len > *len) return CALI_KV_CORRUPT;
+    memcpy(buf, s_kv[i].val, s_kv[i].len);
+    *len = s_kv[i].len;
+    return CALI_KV_OK;
+}
+
+int cali_kv_set(const char *key, const void *buf, size_t len) {
+    int i = kv_find(key);
+    if (strlen(key) > CALI_KV_KEY_MAX || len > sizeof s_kv[0].val) return -1;
+    for (int k = 0; i < 0 && k < KV_N; k++)
+        if (!s_kv[k].used) i = k;
+    if (i < 0) return -1;
+    s_kv[i].used = 1;
+    strcpy(s_kv[i].key, key);
+    memcpy(s_kv[i].val, buf, len);
+    s_kv[i].len = len;
+    return 0;
+}
+
+int cali_kv_erase(const char *key) {
+    int i = kv_find(key);
+    if (i >= 0) memset(&s_kv[i], 0, sizeof s_kv[i]);
+    return 0;
+}
+
+/* ---- the fake cali_net: WiFi + UDP calls print "NET <op> [args]" ---- */
+
+static cali_net_sink_t s_net_sink;
+static void *s_net_ctx;
+static int s_rssi;
+
+static void n_set_sink(cali_net_sink_t sink, void *ctx) { s_net_sink = sink; s_net_ctx = ctx; }
+static int n_sta_start(const char *ssid, const char *psk) { printf("NET sta_start %s %s\n", ssid, psk); return 0; }
+static int n_sta_stop(void) { printf("NET sta_stop\n"); return 0; }
+static int n_ap_start(const char *ssid, const char *psk) { printf("NET ap_start %s %s\n", ssid, psk); return 0; }
+static int n_ap_stop(void) { printf("NET ap_stop\n"); return 0; }
+static int n_scan(void) { printf("NET scan\n"); return 0; }
+static int n_sta_rssi(void) { return s_rssi; }
+static int n_mdns(const char *host, uint16_t port) { printf("NET mdns %s %u\n", host, (unsigned)port); return 0; }
+static int n_tcp_listen(uint16_t port) { (void)port; return -2; }
+static int n_tcp_accept(int lfd) { (void)lfd; return -1; }
+static int n_tcp_recv(int fd, void *b, size_t n) { (void)fd; (void)b; (void)n; return -1; }
+static int n_tcp_send(int fd, const void *b, size_t n) { (void)fd; (void)b; (void)n; return -1; }
+static void n_close(int fd) { printf("NET close %d\n", fd); }
+static int n_udp_bind(uint16_t port) { printf("NET udp_bind %u\n", (unsigned)port); return 5; }
+static int n_udp_recvfrom(int fd, void *b, size_t n, uint32_t *ip, uint16_t *port) {
+    (void)fd; (void)b; (void)n; (void)ip; (void)port;
+    return -1;
+}
+static int n_udp_sendto(int fd, const void *b, size_t n, uint32_t ip, uint16_t port) {
+    (void)fd; (void)b; (void)ip; (void)port;
+    return (int)n;
+}
+
+static const cali_net_t FAKE_NET = {
+    .set_sink = n_set_sink, .sta_start = n_sta_start, .sta_stop = n_sta_stop, .ap_start = n_ap_start,
+    .ap_stop = n_ap_stop, .scan = n_scan, .sta_rssi = n_sta_rssi, .mdns_announce = n_mdns,
+    .tcp_listen = n_tcp_listen, .tcp_accept = n_tcp_accept, .tcp_recv = n_tcp_recv,
+    .tcp_send = n_tcp_send, .tcp_close = n_close, .udp_bind = n_udp_bind,
+    .udp_recvfrom = n_udp_recvfrom, .udp_sendto = n_udp_sendto,
+};
+
+static void net_deliver(cali_net_ev_t ev, cali_net_reason_t reason, uint32_t ip, int nscan,
+                        const cali_net_ap_t *scan) {
+    cali_net_event_t e;
+    memset(&e, 0, sizeof e);
+    e.ev = ev;
+    e.reason = reason;
+    e.ip = ip;
+    e.nscan = nscan;
+    e.scan = scan;
+    if (s_net_sink) s_net_sink(&e, s_net_ctx);
+}
+
+static uint32_t parse_ip(const char *s) {
+    unsigned a = 0, b = 0, c = 0, d = 0;
+    sscanf(s, "%u.%u.%u.%u", &a, &b, &c, &d);
+    return (uint32_t)a << 24 | (uint32_t)b << 16 | (uint32_t)c << 8 | (uint32_t)d;
+}
+
+/* "NET_SCAN_DONE a b c": up to NET_SCAN_MAX networks named by the words after the event. */
+static void net_scan_done(const char *line) {
+    static cali_net_ap_t aps[NET_SCAN_MAX];
+    char name[64];
+    int n = 0, off = 0, used;
+    line += strlen("NET_SCAN_DONE");
+    while (n < NET_SCAN_MAX && sscanf(line + off, "%32s%n", name, &used) == 1) {
+        memset(&aps[n], 0, sizeof aps[n]);
+        strcpy(aps[n].ssid, name);
+        aps[n].rssi = -40 - 10 * n;
+        aps[n].secure = 1;
+        n++;
+        off += used;
+    }
+    net_deliver(CALI_NET_EV_SCAN_DONE, CALI_NET_REASON_NONE, 0, n, aps);
+}
+
 int main(void) {
     char line[512], word[32];
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -145,6 +271,35 @@ int main(void) {
             uint64_t now = strtoull(a1, NULL, 10);
             cali_runner_tick(now);
             cali_session_tick(now);
+            cali_wifi_run_tick(now);
+        } else if (strcmp(word, "wifi_boot") == 0) {
+            cali_wifi_run_init(&FAKE_NET);
+            cali_wifi_run_boot();
+        } else if (strcmp(word, "kv") == 0) {
+            char v[129];
+            size_t vl = sizeof v - 1;
+            if (cali_kv_get(a1, v, &vl) == CALI_KV_OK) {
+                v[vl] = 0;
+                printf("KV %s %s\n", a1, v);
+            } else {
+                printf("KV %s missing\n", a1);
+            }
+        } else if (strcmp(word, "kvset") == 0) {
+            cali_kv_set(a1, a2, strlen(a2));
+        } else if (strcmp(word, "rssi") == 0) {
+            s_rssi = n1;
+        } else if (strcmp(word, "NET_GOT_IP") == 0) {
+            net_deliver(CALI_NET_EV_STA_GOT_IP, CALI_NET_REASON_NONE, parse_ip(a1), 0, NULL);
+        } else if (strcmp(word, "NET_LOST") == 0) {
+            net_deliver(CALI_NET_EV_STA_LOST, CALI_NET_REASON_NONE, 0, 0, NULL);
+        } else if (strcmp(word, "NET_FAILED") == 0) {
+            net_deliver(CALI_NET_EV_STA_FAILED, (cali_net_reason_t)n1, 0, 0, NULL);
+        } else if (strcmp(word, "NET_AP_STARTED") == 0) {
+            net_deliver(CALI_NET_EV_AP_STARTED, CALI_NET_REASON_NONE, 0, 0, NULL);
+        } else if (strcmp(word, "NET_AP_STOPPED") == 0) {
+            net_deliver(CALI_NET_EV_AP_STOPPED, CALI_NET_REASON_NONE, 0, 0, NULL);
+        } else if (strcmp(word, "NET_SCAN_DONE") == 0) {
+            net_scan_done(line);
         } else if (strcmp(word, "boot") == 0) {
             cali_session_boot();
             cali_console_line("status");

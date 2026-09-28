@@ -257,9 +257,11 @@ def test_get_wifi_in_setup_lists_last_scan_and_rescans(web_cli):
 
 
 @pytest.mark.parametrize("pair", ["scanning", "connecting", "waiting_passkey", "pairing", "verifying", "resetting"])
-def test_get_wifi_never_scans_during_ble_pairing(web_cli, pair):
+def test_get_wifi_leaves_the_ble_pairing_gate_to_the_runner(web_cli, pair):
+    """R15: the one BLE-coex scan gate lives in the WiFi runner (cali_wifi_run_scan defers a scan
+    while a pairing flow is active — tests/firmware/test_session_fake.py); web.c asks regardless."""
     r, other = one(web_cli, "GET", "/api/wifi", setup=["wifi setup_ap", "pair " + pair])
-    assert r.status == 200 and other == []
+    assert r.status == 200 and other == ["CALL scan"]
 
 
 def test_get_wifi_in_station_mode_does_not_scan(web_cli):
