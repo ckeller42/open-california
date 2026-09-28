@@ -35,10 +35,16 @@ S=$TMPDIR/applab; mkdir -p "$S"; [ -p "$S/fake_unit.in" ] || mkfifo "$S/fake_uni
 $ADB root >/dev/null; sleep 2                          # google_apis image: rootable
 # the VIN the app was set up with lives in the app's own data — never print it, never ask the owner
 VIN=$($ADB shell "grep -rhoaE 'WV2[A-HJ-NPR-Z0-9]{14}' /data/data/de.volkswagen.CaliforniaOnTour/ 2>/dev/null | head -1" | tr -d '\r')
-pgrep -f applab/fake_unit_ble.py >/dev/null || \
+if ! pgrep -f applab/fake_unit_ble.py >/dev/null; then
+  n0=$(grep -c . "$S/fake_unit.log" 2>/dev/null || echo 0)              # only accept a NEW readiness line
   FAKE_UNIT_PASSKEY=123456 FAKE_UNIT_VIN="$VIN" FAKE_UNIT_FIFO="$S/fake_unit.in" \
-  nohup /opt/local/bin/python3.13 tools/applab/fake_unit_ble.py >>"$S/fake_unit.log" 2>&1 & unset VIN
-until grep -q "advertising from" "$S/fake_unit.log"; do sleep 1; done
+    nohup /opt/local/bin/python3.13 tools/applab/fake_unit_ble.py >>"$S/fake_unit.log" 2>&1 &
+  for i in $(seq 1 30); do
+    tail -n +$((n0+1)) "$S/fake_unit.log" | grep -q "advertising from" && break
+    pgrep -f applab/fake_unit_ble.py >/dev/null || { echo "fake unit died:"; tail -5 "$S/fake_unit.log"; break; }
+    sleep 1
+  done
+fi; unset VIN
 $ADB shell am start -n de.volkswagen.CaliforniaOnTour/de.volkswagen.caliontour.development.CaliforniaOnTourMainActivity
 ui(){ /opt/local/bin/python3.13 tools/applab/adbui.py "$@"; }          # dump | tap "<regex>" | tree | shot <name>
 $ADB shell input tap 745 2290; sleep 3; ui tap '^Connect$'             # Vehicle tab, reconnect on the stored bond
@@ -91,7 +97,7 @@ Error=1` (workshop dialog), `set roof Position=…`/`InfoPopUp=9`, `set campingm
    from calictl import control, overrides, protocol
    funcs = protocol.load(); overrides.apply(funcs)
    frame = bytes.fromhex('3f7b007f091f')
-   print(control.decode_control(funcs["airheater"], frame))           # TimerHour=9 TimerMin=31, rest sentinel
+   print(control.decode_control(funcs['airheater'], frame))           # TimerHour=9 TimerMin=31, rest sentinel
    print(control.build(funcs, 'airheater', 'timer', '09:31', {}).hex())   # what calictl would send
    "
    ```
