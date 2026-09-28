@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "nvs.h"
 
@@ -35,6 +36,12 @@ void cali_log(const char *fmt, ...) {
     va_end(ap);
     fputc('\n', stdout);
     fflush(stdout);
+}
+
+/* The app description's version: PROJECT_VER, which firmware/CMakeLists.txt sets from `git describe`
+ * at configure time (esp_app_desc_t.version, 32 bytes, NUL-terminated). */
+const char *cali_fw_version(void) {
+    return esp_app_get_description()->version;
 }
 
 /* store_dir is the host's; on the ESP the store is NVS (nvs_flash_init() must have run). */

@@ -16,4 +16,16 @@ menu "open-california firmware (#154)"
                record through cali_kv_set/cali_kv_get (the bond store's NVS path) so the QEMU test
                can prove NVS survives a reboot.
 
+    config CALI_WIFI
+        bool "WiFi: the station/setup-hotspot runtime and the HTTP page (cali_net on esp_wifi)"
+        default y
+        help
+            With it, platform/esp/net_esp.c implements cali_net on esp_wifi + esp_netif + lwIP
+            sockets + mdns, and app_main starts the WiFi runner, the captive DNS and the web
+            endpoints. Without it (firmware/qemu/sdkconfig.qemu: QEMU's esp32s3 has no WiFi radio),
+            no esp_wifi call is compiled: cali_net_esp_init() returns -1, app_main logs
+            "LOG wifi: driver unavailable" once and the WiFi SM stays WIFI_UNPROVISIONED (the QEMU
+            test test_no_wifi_driver_boots_and_serves_nothing). A release image whose esp_wifi_init
+            fails takes the same path at run time.
+
 endmenu

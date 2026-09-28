@@ -581,6 +581,16 @@ def test_wifi_forget_in_setup_keeps_the_running_hotspot(fake):
     ]
 
 
+def test_wifi_ap_stopped_event_clears_the_hotspot_bookkeeping(fake):
+    """An ``AP_STOPPED`` the runner did not ask for (the platform's hotspot went down) clears its
+    ``ap_running``: the next ``AP_START`` (here a forget) really restarts the hotspot instead of
+    trusting a hotspot that is gone (the captive DNS is re-bound: its old socket closed first)."""
+    out = run(fake, "wifi_boot", "NET_AP_STARTED", "NET_SCAN_DONE minsel", "NET_AP_STOPPED", "> wifi forget")
+    assert out.count(AP) == 2
+    assert after(out, "LOG wifi: setup hotspot up (calictl-esp-setup)") == [
+        "NET sta_stop", "LOG wifi: credentials cleared", AP, "NET close 5", "NET udp_bind 53", "NET scan"]
+
+
 def test_wifi_clear_creds_reports_a_failed_erase(fake):
     """``credentials cleared`` only when both erases succeeded (a missing key is success); a failed
     erase says so instead of claiming the creds are gone."""

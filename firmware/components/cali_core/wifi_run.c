@@ -178,6 +178,10 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
         break;
     }
     case CALI_NET_EV_AP_STOPPED:
+        /* the hotspot is down (asked for, or the platform lost it): the next WACT_AP_START must
+         * really start it again, not trust the idempotence bookkeeping */
+        W.ap_running = 0;
+        break;
     default:
         break;
     }

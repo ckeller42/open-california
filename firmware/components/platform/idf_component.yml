@@ -1,0 +1,5 @@
+## ESP-IDF component manager manifest for the platform component (#154): net_esp.c's mDNS.
+## Exact pin (the repo does not commit dependencies.lock: firmware/.gitignore rules in the root
+## .gitignore): the newest espressif/mdns the registry serves for ESP-IDF v6.1 on 2026-09-28.
+dependencies:
+  espressif/mdns: "==1.13.1"

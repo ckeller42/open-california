@@ -6,3 +6,7 @@ CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 # The QEMU boot tier's probe (main/Kconfig.projbuild): no BT controller init (QEMU does not model it),
 # plus the kvprobe console command. Never set in the release image (POST_BUILD check).
 CONFIG_CALI_QEMU_PROBE=y
+# No WiFi driver in the QEMU image (QEMU's esp32s3 models no WiFi radio): net_esp.c compiles no
+# esp_wifi call, cali_net_esp_init() returns -1, app_main logs "LOG wifi: driver unavailable" and the
+# WiFi SM stays WIFI_UNPROVISIONED (test_no_wifi_driver_boots_and_serves_nothing).
+CONFIG_CALI_WIFI=n
