@@ -27,7 +27,7 @@ There is **no persisted "semantic-review status" field** in signals.yaml — tha
 (``SEMANTIC-REVIEW-NEEDED``) is computed on the fly by ``tools/audit_signals.py`` against
 a decompile source tree, not stored here. As a best-effort stand-in we flag any entry
 whose ``scale`` mentions "inverted" or "combined" (the only persisted marker of a
-non-trivial semantic transform, per CLAUDE.md's camping-lights precedent) as
+non-trivial semantic transform, per AGENTS.md's camping-lights precedent) as
 ``needs-review``; everything else is ``—``. This is a proxy, not a real audit result —
 said explicitly in the generated doc.
 """

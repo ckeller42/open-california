@@ -128,7 +128,7 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   QEMU; no hardware run yet. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.
 
 New here? Start with **[the architecture map](https://ckeller42.github.io/open-california/architecture.html)** — the five-minute map of the data flow and
-where each concern lives. Contributor rules and hard invariants: **[CLAUDE.md](CLAUDE.md)**.
+where each concern lives. Contributor rules and hard invariants: **[AGENTS.md](AGENTS.md)**.
 Reverse-engineering notes (control recipes, the write gate, value-freshness, signal scales):
 **[docs/business-logic/](docs/business-logic/)**.
 

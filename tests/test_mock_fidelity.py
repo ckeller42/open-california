@@ -366,7 +366,7 @@ def test_lighting_echo_still_confirms_when_the_lamps_never_move():
 
 def test_lighting_actuates_on_an_awake_unit_without_the_heartbeat():
     """The real unit actuates lighting on an AWAKE unit with a bare SET_BRIGHTNESS + ``0e00…``
-    commit and NO 1003 heartbeat (photon-verified 2026-08-16; CLAUDE.md Known state). The mock used
+    commit and NO 1003 heartbeat (photon-verified 2026-08-16; AGENTS.md Known state). The mock used
     to apply the generic arm gate to lighting too, so it was stricter than the van. Every other
     control write stays heartbeat-gated, and lighting keeps its own gates (commit, non-zero PN).
 

@@ -50,7 +50,7 @@ class _NoResolveHTTPServer(ThreadingHTTPServer):
 ROOF_FUNCTION = "roof"
 # Safety-sensitive / not-live-verified targets that require an explicit client
 # confirmation flag on the POST: roof (physically moves the pop-top) and
-# airheater (fuel-burning parking heater). See CLAUDE.md "Known state".
+# airheater (fuel-burning parking heater). See AGENTS.md "Known state".
 CONFIRM_REQUIRED = {ROOF_FUNCTION, "airheater"}
 _MAX_BODY = 64 * 1024  # command POSTs are tiny JSON; reject anything larger unread
 _CONTENT_TYPES = {

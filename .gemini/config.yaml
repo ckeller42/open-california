@@ -1,6 +1,6 @@
 # Gemini Code Assist (GitHub app) — repo review config.
 # Docs: https://docs.cloud.google.com/gemini/docs/code-review/customize-repo-review
-# Project rules Gemini should review against live in .gemini/styleguide.md (authority: CLAUDE.md).
+# Project rules Gemini should review against live in .gemini/styleguide.md (authority: AGENTS.md).
 have_fun: false
 code_review:
   disable: false

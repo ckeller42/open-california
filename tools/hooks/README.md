@@ -2,7 +2,7 @@
 
 ## block-vendor-material.py
 
-A **PreToolUse** hook (matcher `Edit|Write`): the *local* enforcement of CLAUDE.md's "never commit
+A **PreToolUse** hook (matcher `Edit|Write`): the *local* enforcement of AGENTS.md's "never commit
 the APK, decompiled sources (`decompile/`), VW manuals (`manuals/`), or secrets (`*.env`)" rule. It
 mirrors the `no-vendor-material` CI job's patterns but blocks the **write** before the file exists,
 instead of failing CI after it's committed and pushed. Refuses any Edit/Write whose path is a

@@ -131,7 +131,7 @@ ENTITY_SPECS: dict[str, list] = {
     "livingroomheater": [
         EntitySpec("binary_sensor", "air_on", "LR Heater Air", {**_BIN, "icon": "mdi:heat-wave"}),
         EntitySpec("binary_sensor", "water_on", "LR Heater Water", {**_BIN, "icon": "mdi:water-boiler"}),
-        # air_temp scale is UNVERIFIED (8-bit raw) -> no unit/device_class (CLAUDE.md rule);
+        # air_temp scale is UNVERIFIED (8-bit raw) -> no unit/device_class (AGENTS.md rule);
         # water_temp is a 1-bit flag, not a temperature.
         EntitySpec("sensor", "air_temp", "LR Heater Air Temp (raw)", {"icon": "mdi:thermometer"}),
         EntitySpec("binary_sensor", "water_temp_flag", "LR Heater Water Temp Flag", {**_BIN}),

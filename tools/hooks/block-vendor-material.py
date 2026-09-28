@@ -5,7 +5,7 @@ it's already committed and pushed. Mirrors that CI job's patterns (.github/workf
 never a decompiled source, VW manual, APK/capture binary, un-gitignored icon, or *.env into a
 tracked path, and never the real vehicle MAC (OUI 20:81:9A) or a VIN into file content.
 
-CLAUDE.md hard rule: "Never commit the APK, decompiled sources (decompile/), VW manuals (manuals/),
+AGENTS.md hard rule: "Never commit the APK, decompiled sources (decompile/), VW manuals (manuals/),
 or secrets/tokens (*.env)". This is the local enforcement of that rule.
 
 Reads the PreToolUse event JSON on stdin. Silent (exit 0) when the write is clean; on a match it
@@ -46,7 +46,7 @@ def block(reason: str) -> None:
 
 if path and PATH_BAD.search(path):
     block(
-        "%s is a vendor/binary/secret path CLAUDE.md forbids committing (APK, decompile/, manuals/, "
+        "%s is a vendor/binary/secret path AGENTS.md forbids committing (APK, decompile/, manuals/, "
         "captures, un-gitignored icons, or *.env). Keep it local/gitignored; cite VW material, never "
         "vendor it." % path
     )

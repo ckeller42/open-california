@@ -523,7 +523,7 @@ class Server:
         `confirm` flag already gated).
 
         On "start", parks the persistent-session supervisor FIRST (`set_mode("disconnect")`)
-        before arming the runner. RULING (single BLE owner, see CLAUDE.md): the runner's `start()`
+        before arming the runner. RULING (single BLE owner, see AGENTS.md): the runner's `start()`
         runs while holding `self._ble`, so an in-flight poll/command finishes first and no poll
         slips in between. The HTTP request never blocks on that lock: a poll can hold it ~100 s
         when the paired unit is unreachable (3 x (connect timeout + backoff)), far past the web
@@ -603,7 +603,7 @@ class Server:
         )
 
     async def poll(self):
-        # Single BLE owner rule (CLAUDE.md): a pairing flow OWNS the radio while active (design
+        # Single BLE owner rule (AGENTS.md): a pairing flow OWNS the radio while active (design
         # spec, transport section: "the poll loop skips while pairing is active"). Polling opens
         # its OWN bleak connect -- a second BLE actor against hci0 mid-pairing is exactly what the
         # single-owner rule forbids. Skip the WHOLE read (not just parts) while a wizard run is

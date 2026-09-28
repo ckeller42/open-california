@@ -58,6 +58,6 @@ order of operations so you fix things forward instead of chasing red CI.
   step 2 rather than reasoning about whether it's needed.
 - Semantics correctness is NOT auto-checked (only presence + scale). An inverted or
   combined app getter needs manual polarity verification against `ui/screens/*.yaml`
-  / the decompiled getter — see CLAUDE.md "Semantics correctness".
+  / the decompiled getter — see AGENTS.md "Semantics correctness".
 - The C side ships raw fields; `semantics.py` is deliberately NOT ported. Scale or
   enum changes belong in Python semantics + the signals catalog, never in `csrc/`.

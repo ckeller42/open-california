@@ -4,7 +4,7 @@ Docs and code-comments cite bit offsets in a ``Field@offset`` / ``Field@offset/w
 (e.g. ``NightTimerHourOn@48``, ``ProfileNumber@4/w4``). Nothing used to check those citations against
 the dictionary, so prose drifted from the wire layout (this is how the roof-cadence and several
 offset claims went stale). This test parses every such citation out of ``docs/business-logic/*.md``,
-``CLAUDE.md``, and ``calictl/*.py`` and asserts the dictionary (``protocol/dictionary.yaml`` +
+``AGENTS.md``, and ``calictl/*.py`` and asserts the dictionary (``protocol/dictionary.yaml`` +
 ``overrides.CONTROL_OFFSETS``) actually has a field of that name at that offset (and width, if cited).
 
 A failure means a document claims a bit layout the code does not implement — fix the prose (or the
@@ -32,7 +32,7 @@ _IGNORE = {
 }
 
 _SCAN = (
-    ["CLAUDE.md"]
+    ["AGENTS.md"]
     + [str(p.relative_to(ROOT)) for p in (ROOT / "docs" / "business-logic").glob("*.md")]
     + [str(p.relative_to(ROOT)) for p in (ROOT / "calictl").glob("*.py")]
 )

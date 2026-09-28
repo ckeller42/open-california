@@ -30,7 +30,7 @@ for how strongly each fact is proven.
 without a compiler, and it never runs the real-BlueZ VM job. The git hooks (`tools/ci.sh dev`
 installs them from `.pre-commit-config.yaml`) run the fast guards and linters on every commit and
 the full suite plus the signal audit on every push. The notes on the `tools/ci.sh` line
-in `CLAUDE.md` list exactly what only GitHub runs.
+in `AGENTS.md` list exactly what only GitHub runs.
 
 ## Unit tests
 

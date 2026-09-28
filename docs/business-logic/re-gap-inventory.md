@@ -9,7 +9,7 @@
 > **UPDATE (2026-07-13):** `A1` (lighting on-device apply) is **RESOLVED** — the unit applies a
 > SET only after a **commit frame** `0e00000000000000eeeeeeeeeeeeeeee` (Mode 0); our SET frames
 > were already byte-identical to the app's. HCI-captured + confirmed on-device via readback. Fix:
-> `device.actuate(..., follow=control.LIGHT_COMMIT)`. See [protocol sequences — Lighting](https://ckeller42.github.io/open-california/protocol-sequences.html#lighting-set-and-neutral-flush) + CLAUDE.md
+> `device.actuate(..., follow=control.LIGHT_COMMIT)`. See [protocol sequences — Lighting](https://ckeller42.github.io/open-california/protocol-sequences.html#lighting-set-and-neutral-flush) + AGENTS.md
 > Known state. Also 2026-07-13: roof frames verified (SafetyCounter-echo gap noted); the app
 > exposes **no colour control**, so SET_COLOR is unverified/possibly N/A; the cooler `Error` field
 > tracks the **fridge door** (door open→true, verified live).

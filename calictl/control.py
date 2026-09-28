@@ -590,7 +590,7 @@ def _airheater(funcs, what, value, last):
 
 
 # --- roof / roof-A/C / stairs / LR-heater ------------------------------------
-# ALL FOUR ARE NOT-LIVE-VERIFIED (none installed on this van; see CLAUDE.md "Known state").
+# ALL FOUR ARE NOT-LIVE-VERIFIED (none installed on this van; see AGENTS.md "Known state").
 # Their frames are offset-resolved in overrides.py; encode() validates bit-widths only. Enum
 # meanings vary in confidence: roof-A/C Mode (jf/c.java: 0=AUTOMATIC/1=MANUAL_COOLING/
 # 2=MANUAL_HEATING/3=VENTING) + FanSpeed (jf/b.java: 0-4=LEVEL_0..AUTO) are STATICALLY VERIFIED
