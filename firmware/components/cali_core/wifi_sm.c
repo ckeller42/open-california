@@ -50,7 +50,8 @@ int cali_wifi_step(cali_wifi_state_t *s, uint8_t ev, uint64_t arg, cali_wifi_act
     }
     if (st == WIFI_UNPROVISIONED) {
         if (ev == WEV_BOOT_NO_CREDS) { set(s, WIFI_SETUP_AP, 1, 0, 0, 0, 0); return emit(o, 0, WACT_AP_START, 0); }
-        if (ev == WEV_BOOT_WITH_CREDS) { set(s, WIFI_CONNECTING, s->ap_up, 0, 0, 0, 0); return emit(o, 0, WACT_STA_START, 0); }
+        /* R6: creds loaded from flash were validated when saved -> joined_once=1 (never wiped) */
+        if (ev == WEV_BOOT_WITH_CREDS) { set(s, WIFI_CONNECTING, s->ap_up, 1, 0, 0, 0); return emit(o, 0, WACT_STA_START, 0); }
     } else if (st == WIFI_SETUP_AP) {
         if (ev == WEV_CREDS_SET) { s->st = WIFI_CONNECTING; return emit(o, 0, WACT_STA_START, 0); }
     } else if (st == WIFI_CONNECTING) {
@@ -58,10 +59,8 @@ int cali_wifi_step(cali_wifi_state_t *s, uint8_t ev, uint64_t arg, cali_wifi_act
         if (ev == WEV_FAILED) {
             uint32_t reason = (uint32_t)arg;
             if (!s->joined_once) { /* a typo never bricks setup: back to the AP, bad creds gone */
-                int n = emit(o, emit(o, 0, WACT_LOG_REASON, reason), WACT_CLEAR_CREDS, 0);
-                if (!s->ap_up) n = emit(o, n, WACT_AP_START, 0); /* booted with creds: no AP yet */
-                set(s, WIFI_SETUP_AP, 1, 0, 0, 0, 0);
-                return n;
+                set(s, WIFI_SETUP_AP, 1, 0, 0, 0, 0); /* joined_once=0 only via CREDS_SET: AP is up */
+                return emit(o, emit(o, 0, WACT_LOG_REASON, reason), WACT_CLEAR_CREDS, 0);
             }
             set(s, WIFI_RETRYING, s->ap_up, 1, NET_RETRY_MIN_MS, 0, 0);
             return emit(o, 0, WACT_LOG_REASON, reason);

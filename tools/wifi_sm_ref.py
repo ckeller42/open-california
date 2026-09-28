@@ -16,6 +16,9 @@ event args single-purpose (``WEV_FAILED``'s ``arg`` is the reason, ``WEV_TICK``'
 Timings come from :data:`tools.wifi_consts.CONSTS`.
 
 State is ``(st, ap_up, joined_once, retry_ms, since_ms, next_try_ms)`` (:class:`WifiState`).
+``joined_once`` (ruling R6) is 1 for creds that have joined or were loaded from flash
+(``WEV_BOOT_WITH_CREDS``: saved creds were validated when saved) and 0 only for creds typed in
+the current setup flow (``WEV_CREDS_SET``); only a FAILED with ``joined_once == 0`` clears creds.
 ``ap_up`` tracks the SM's *intent*: it is set when the SM emits ``WACT_AP_START`` and cleared
 when it emits ``WACT_AP_STOP`` (``WEV_AP_STARTED`` is informational and changes nothing).
 """
@@ -80,7 +83,9 @@ def step(state, ev, arg=0):
         if ev == WEV_BOOT_NO_CREDS:
             return WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0), [(WACT_AP_START, 0)]
         if ev == WEV_BOOT_WITH_CREDS:
-            return WifiState(WIFI_CONNECTING, s.ap_up, 0, 0, 0, 0), [(WACT_STA_START, 0)]
+            # R6: creds loaded from flash were validated when saved -> joined_once=1, so an
+            # unreachable router at boot retries (and opens the AP after 5 min), never wipes them
+            return WifiState(WIFI_CONNECTING, s.ap_up, 1, 0, 0, 0), [(WACT_STA_START, 0)]
     elif st == WIFI_SETUP_AP:
         if ev == WEV_CREDS_SET:
             return s._replace(st=WIFI_CONNECTING), [(WACT_STA_START, 0)]
@@ -90,10 +95,9 @@ def step(state, ev, arg=0):
         if ev == WEV_FAILED:
             reason = arg & 0xFFFFFFFF
             if not s.joined_once:   # a typo never bricks setup: back to the AP, bad creds gone
-                acts = [(WACT_LOG_REASON, reason), (WACT_CLEAR_CREDS, 0)]
-                if not s.ap_up:     # booted with creds -> the AP was never started
-                    acts.append((WACT_AP_START, 0))
-                return WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0), acts
+                # (joined_once=0 only after CREDS_SET, from SETUP_AP/SETUP_AP_RETRYING: AP is up)
+                return (WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0),
+                        [(WACT_LOG_REASON, reason), (WACT_CLEAR_CREDS, 0)])
             return (WifiState(WIFI_RETRYING, s.ap_up, 1, _RETRY_MIN_MS, 0, 0),
                     [(WACT_LOG_REASON, reason)])
     elif st == WIFI_ONLINE:

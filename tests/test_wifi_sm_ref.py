@@ -50,7 +50,7 @@ def test_fresh_boot_opens_the_setup_ap():
 def test_boot_with_creds_joins_without_the_ap():
     assert run([0, 0, 0, 0, 0, 0], (W.WEV_BOOT_WITH_CREDS, 0), (W.WEV_GOT_IP, 0),
                (W.WEV_TICK, 5000), (W.WEV_TICK, 5000 + AP_CLOSE)) == [
-        ([2, 0, 0, 0, 0, 0], [[W.WACT_STA_START, 0]]),
+        ([2, 0, 1, 0, 0, 0], [[W.WACT_STA_START, 0]]),     # R6: stored creds count as joined
         ([3, 0, 1, 0, 0, 0], [[W.WACT_MDNS, 0]]),
         ([3, 0, 1, 0, 5000, 0], []),                    # first TICK stamps since_ms
         ([3, 0, 1, 0, 5000, 0], []),                    # no AP up -> nothing to close
@@ -72,13 +72,33 @@ def test_first_join_failure_clears_credentials():
                               "actions": [[W.WACT_LOG_REASON, auth], [W.WACT_CLEAR_CREDS, 0]]}]
 
 
-def test_first_join_failure_after_boot_reopens_the_ap():
-    # booted with creds -> AP never started; SETUP_AP without an AP would brick setup
-    assert run([0, 0, 0, 0, 0, 0], (W.WEV_BOOT_WITH_CREDS, 0), (W.WEV_FAILED, 201)) == [
-        ([2, 0, 0, 0, 0, 0], [[W.WACT_STA_START, 0]]),
-        ([1, 1, 0, 0, 0, 0], [[W.WACT_LOG_REASON, 201], [W.WACT_CLEAR_CREDS, 0],
-                              [W.WACT_AP_START, 0]]),
+def test_boot_with_creds_and_router_down_keeps_the_creds():
+    """Ruling R6: creds loaded from flash were validated when saved. Boot with the router down
+    -> CONNECTING -> FAILED -> RETRYING (backoff) -> SETUP_AP_RETRYING after NET_SETUP_AFTER_MS;
+    CLEAR_CREDS never fires; the router comes back -> ONLINE and the AP closes 30 s later."""
+    steps = run([0, 0, 0, 0, 0, 0], (W.WEV_BOOT_WITH_CREDS, 0), (W.WEV_FAILED, 201),
+                (W.WEV_TICK, 1000), (W.WEV_TICK, 2000), (W.WEV_TICK, 1000 + SETUP_AFTER - 1),
+                (W.WEV_TICK, 1000 + SETUP_AFTER), (W.WEV_FAILED, 201), (W.WEV_GOT_IP, 0),
+                (W.WEV_TICK, 400000), (W.WEV_TICK, 400000 + AP_CLOSE))
+    sta = [W.WACT_STA_START, 0]
+    assert steps == [
+        ([2, 0, 1, 0, 0, 0], [sta]),
+        ([4, 0, 1, MIN, 0, 0], [[W.WACT_LOG_REASON, 201]]),
+        ([4, 0, 1, MIN, 1000, 2000], []),
+        ([4, 0, 1, 2000, 1000, 4000], [sta]),
+        ([4, 0, 1, 4000, 1000, SETUP_AFTER + 4999], [sta]),              # overdue retry fires
+        ([5, 1, 1, 4000, 1000, SETUP_AFTER + 4999], [[W.WACT_AP_START, 0]]),
+        ([5, 1, 1, 4000, 1000, SETUP_AFTER + 4999], []),                 # retry failure: no wipe
+        ([3, 1, 1, 0, 0, 0], [[W.WACT_MDNS, 0]]),
+        ([3, 1, 1, 0, 400000, 0], []),
+        ([3, 0, 1, 0, 400000, 0], [[W.WACT_AP_STOP, 0]]),
     ]
+    case = next(c for c in json.loads(VECTORS.read_text())["cases"]
+                if c["id"] == "boot-with-creds-router-down-keeps-creds")
+    assert case["steps"][0]["state"][2] == 1
+    assert all([W.WACT_CLEAR_CREDS, 0] not in s["actions"] for s in case["steps"])
+    assert any(s["state"][0] == W.WIFI_SETUP_AP_RETRYING for s in case["steps"])
+    assert case["steps"][-1]["state"][0] == W.WIFI_ONLINE
 
 
 def test_failure_after_a_join_retries_instead():
@@ -166,11 +186,13 @@ def test_forget_from_every_state():
 
 
 def test_stray_events_are_noops():
-    for start, ev in (([0, 0, 0, 0, 0, 0], W.WEV_TICK), ([1, 1, 0, 0, 0, 0], W.WEV_GOT_IP),
-                      ([1, 1, 0, 0, 0, 0], W.WEV_TICK), ([1, 1, 0, 0, 0, 0], W.WEV_LOST),
-                      ([3, 0, 1, 0, 5, 0], W.WEV_CREDS_SET), ([2, 1, 0, 0, 0, 0], W.WEV_TICK),
-                      ([4, 0, 1, MIN, 5, 1005], W.WEV_FAILED), ([3, 0, 1, 0, 5, 0], 99)):
-        assert run(start, (ev, 7)) == [(start, [])], (start, ev)
+    """The stray list lives in the vectors (so the C twin is checked too): each is unchanged."""
+    from tools.gen_wifi_vectors import STRAY
+    ids = {c["id"]: c for c in json.loads(VECTORS.read_text())["cases"]}
+    assert "stray-retrying-creds-set" in ids and "stray-setup-ap-retrying-failed" in ids
+    for cid, start, ev in STRAY:
+        assert run(list(start), (ev, 7)) == [(list(start), [])], cid
+        assert ids[cid]["steps"] == [{"ev": ev, "arg": 7, "state": list(start), "actions": []}]
 
 
 def test_actions_never_exceed_max():
