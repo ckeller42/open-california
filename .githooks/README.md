@@ -1,22 +1,14 @@
-# Git hooks (local development)
+# Retired: use pre-commit
 
-Enable once per clone:
+The custom `.githooks/pre-commit` hook was replaced by the [pre-commit](https://pre-commit.com)
+framework. Its checks now live in [`.pre-commit-config.yaml`](../.pre-commit-config.yaml):
+the fast guards (vendor material / vehicle MAC / VIN, import-clean, doc-offset, web-fresh,
+codec vectors + C headers, the web-UI `tsc` check) and the linters run on every commit; the
+full pytest suite and the signal audit run on `git push` (pre-push stage).
+
+Switch an existing clone over once:
 
 ```sh
-git config core.hooksPath .githooks
+git config --unset core.hooksPath   # pre-commit refuses to install while this is set
+tools/ci.sh dev                     # pip install -r requirements-dev.txt && pre-commit install
 ```
-
-## `pre-commit`
-
-Fails the commit if any of these are true:
-
-1. VW/vendor binaries or extracted assets are staged (`*.apk/*.dex/*.jar/…`, `decompile/`,
-   `manuals/`, `ui/assets/svg/`, `strings_resolved*`) — belt-and-braces over `.gitignore`.
-2. The real vehicle BLE MAC (`20:81:9A:…`) appears in the diff — use a placeholder / env var.
-3. A 17-char VIN appears in the diff (PII).
-4. `pytest tests/` or `tools.audit_signals --report` fails.
-5. Web UI JS is staged (`calictl/webui/*.js`, `jsconfig.json`) and `tsc --checkJs` or
-   `node --check` fails (`tools/ci.sh webcheck`; needs Node — skipped with a note if absent).
-   `SKIP_TESTS=1` does not bypass this step.
-
-Bypass tests for a docs-only commit: `SKIP_TESTS=1 git commit …`.

@@ -15,7 +15,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `freshness` (stale-read guards), `history` (battery history for the UI), `postcheck` (post-write applied-check), `pairing`/`pairing_bluez` (guided-pairing SM + BlueZ transport), `log`, `trace` (BLE trace recorder), `cli` |
 | `protocol/dictionary.yaml` | extracted field map (14 functions, state+control); source of truth for bit layout |
 | `protocol/signals.yaml` | the **signal catalog** — surface/omit decision + provenance per field |
-| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `run_against_mock` (real CLI/`serve` over the mock), `trace_compare` (real-unit trace vs the mock), `fake_unit_peripheral` (the mock as a **Bumble BLE peripheral** with real SMP passkey pairing — shared by `applab`, `tests/test_pairing_link.py` and the `tests/realstack/` VM rig), `applab/` (the **real app** in an emulator against that peripheral — screens in any state + app-vs-calictl frame diffs; see its README), `gen_c_dict` + `gen_codec_vectors` (C codec header + golden vectors, `--check` in CI), `hooks/` |
+| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `run_against_mock` (real CLI/`serve` over the mock), `trace_compare` (real-unit trace vs the mock), `fake_unit_peripheral` (the mock as a **Bumble BLE peripheral** with real SMP passkey pairing — shared by `applab`, `tests/test_pairing_link.py` and the `tests/realstack/` VM rig), `applab/` (the **real app** in an emulator against that peripheral — screens in any state + app-vs-calictl frame diffs; see its README), `gen_c_dict` + `gen_codec_vectors` (C codec header + golden vectors, `--check` in CI), `check_vendor_material` + `check_import_clean` (guards shared by the pre-commit hooks + CI), `hooks/` (Claude Code hook scripts) |
 | `tests/` | pytest; **must stay green**. `tests/e2e/` = Playwright over the mock daemon; every test fails on an uncaught JS error. `tests/realstack/` = the real-BlueZ pairing rig (CI VM only, not collected by pytest) |
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) — the full provenance behind the terse "Known state" below |
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
@@ -36,7 +36,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 - **The web UI is un-built JS; `tsc --checkJs` is its hard gate** (`calictl/webui/jsconfig.json`,
   baseline **0 errors** — keep it there). `node --check` only parses; an undeclared identifier in a
   renderer once shipped to buspi because no test rendered that screen. Run `tools/ci.sh webcheck`
-  (also in CI `lint` + pre-commit when webui JS is staged). Any label/enum shown to the user must
+  (also CI `pre-commit` + the `webcheck` pre-commit hook when webui JS is staged). Any label/enum shown to the user must
   use the unit's own vocabulary (Sofortheizen / Dauerbetrieb / Flüstermodus …), EN + DE
   (`strings.de.js`; `tests/test_i18n_de.py` guards literal `t()` keys).
 - **Every dictionary field has a catalog decision** (`surface` w/ name, or `omit` w/ reason).
@@ -65,6 +65,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 ## Commands
 
 ```
+tools/ci.sh dev                                      # once per clone: dev deps + pre-commit/pre-push hooks
 python3 -m pytest tests/ -q                          # the suite (keep green)
 tools/ci.sh [ci|webcheck|test|lint|audit|…]          # the local CI gate — NOT all of GitHub CI (below)
 DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + semantic-review
@@ -78,14 +79,24 @@ python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_ru
 make -C firmware/host cali-host && python -m pytest tests/firmware -v   # firmware host+NimBLE tier (Linux only; tools/ci.sh firmware)
 docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build'   # firmware QEMU tier build
 ```
-`tools/ci.sh` covers ci.yml's `test` (one python, not the 3.11–3.13 matrix) + `lint` + the vendor-*file*
-check; its pytest run also covers `codec-parity` (C tests only with a C compiler) and `gui-e2e` (only
-with Playwright + Chromium, else they skip). **Only GitHub runs:** the whole-tree MAC/VIN grep
-(`no-vendor-material`), `install-script` (shellcheck), `pairing-real-stack` (calictl's real
-`BluezTransport` vs the Bumble fake unit over real BlueZ in a VM, `tests/realstack/vm.sh`; not a
-required check yet), and — on push to `main` only — `docs.yml` (`sphinx -W` + Pages deploy; never on
-a PR, so run `sh docs/build_site.sh` yourself) and `screenshots.yml` (commits `docs/screenshots` to
-`main` with `[skip ci]`). Test layers + harnesses: `docs/simulation-and-testing.md`.
+
+`tools/ci.sh` covers ci.yml's `pre-commit` (via `pre-commit run --all-files`, incl. the whole-tree
+vendor/MAC/VIN guard) + `test` (one python, not the 3.11–3.13 matrix); its pytest run also covers
+`codec-parity` (C tests only with a C compiler) and `gui-e2e` (only with Playwright + Chromium, else
+they skip). **Only GitHub runs:** `install-script` (shellcheck), `docs` (the `sphinx -W` site build on
+every PR — locally `sh docs/build_site.sh`), `pairing-real-stack` (calictl's real `BluezTransport` vs
+the Bumble fake unit over real BlueZ in a VM, `tests/realstack/vm.sh`; not a required check yet), the
+firmware jobs, and — on push to `main` only — `docs.yml` (the same build + Pages deploy) and
+`screenshots.yml` (commits `docs/screenshots` to `main` with `[skip ci]`).
+Test layers + harnesses: `docs/simulation-and-testing.md`.
+
+**Git hooks = the pre-commit framework** (`.pre-commit-config.yaml`; the old `.githooks/` is retired —
+`git config --unset core.hooksPath` on an old clone). On **commit**: ruff + ruff format (Python only),
+markdownlint-cli2 (`.markdownlint-cli2.jsonc`), gitleaks, whitespace/YAML checks and the repo guards
+(vendor/MAC/VIN, import-clean, doc-offset, and — when their inputs are staged — web-fresh, codec
+vectors + C headers, the webui `tsc` check). On **push**: the full pytest suite + `audit_signals`
+(skip once with `SKIP=pytest,audit-signals git push`). Tool versions live only in that config (keep
+`ruff==` in `requirements-dev.txt` in step).
 
 When the daemon is up it OWNS the single BLE slot — read live state via its web API `/api/state`
 (**buspi runs `--web 8088`** via a systemd drop-in override — the committed unit template has no

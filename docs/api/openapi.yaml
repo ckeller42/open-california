@@ -27,8 +27,7 @@ servers:
   - url: http://buspi:8088
     description: buspi (in-vehicle Raspberry Pi) — runs `calictl serve --web 8088`
   - url: http://localhost:8080
-    description: local default (the CLI `--web` port defaults to 8080)
-    description: local / same-host
+    description: local / same-host default (the CLI `--web` port defaults to 8080)
 paths:
   /api/state:
     get:

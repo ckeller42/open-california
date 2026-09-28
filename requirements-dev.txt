@@ -1,6 +1,7 @@
 pytest
 pyyaml
 pytest-xdist
-ruff
+ruff==0.16.9        # keep in step with the ruff-pre-commit rev in .pre-commit-config.yaml
 mypy
 bumble==0.0.235
+pre-commit==4.6.2   # runs .pre-commit-config.yaml (tools/ci.sh dev installs the hooks; CI pre-commit job)

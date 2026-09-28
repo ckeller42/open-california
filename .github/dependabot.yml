@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Workflow actions are pinned by full commit SHA (with a `# vX.Y.Z` comment); Dependabot bumps both.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # Dev/test/doc tooling only — the runtime is stdlib-only. Keep ruff== in step with the
+  # ruff-pre-commit rev in .pre-commit-config.yaml (`pre-commit autoupdate` bumps that side).
+  - package-ecosystem: pip
+    directories: ["/", "/docs"]
+    schedule:
+      interval: weekly

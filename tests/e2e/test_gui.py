@@ -16,6 +16,7 @@ imposes (camping lights/USB need master, quiet mode needs the box on, roof move-
 roof press-and-hold → STOP traffic. Every test also doubles as a JS runtime-error gate: the `page`
 fixture fails on any uncaught `pageerror`/console error, and one test opens every tile.
 """
+
 import json
 import os
 import socket
@@ -44,15 +45,16 @@ except Exception as _e:  # noqa: BLE001 — any launch failure (missing executab
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # These tests share one module-scoped daemon + a real browser, so they must not be spread across
-# xdist workers: keep the whole module on a single worker (`--dist loadgroup`, set by the pre-commit
-# hook / tools/ci.sh / CI). Without it each worker started its OWN daemon, the module fixture below
+# xdist workers: keep the whole module on a single worker (`--dist loadgroup`, set by tools/ci.sh
+# test (also the pre-push hook) and CI). Without it each worker started its OWN daemon, the module fixture below
 # deleted the shared cache files out from under a peer mid-run, and the latency assertion competed
 # with N browsers — two GUI tests flaked under `-n auto` while passing serially.
 pytestmark = pytest.mark.xdist_group("e2e")
 
+
 # Cache files the e2e daemon writes, namespaced per xdist worker (`PYTEST_XDIST_WORKER` is unset when
 # running serially). Belt-and-braces alongside the loadgroup marker: it also keeps two CONCURRENT
-# pytest runs (e.g. the pre-commit hook while a manual run is open) from clobbering each other.
+# pytest runs (e.g. the pre-push hook while a manual run is open) from clobbering each other.
 def _cache(name):
     worker = os.environ.get("PYTEST_XDIST_WORKER", "")
     return "/tmp/calictl_e2e%s_%s" % ("-" + worker if worker else "", name)
@@ -79,19 +81,37 @@ def _start_daemon(port, extra_env, expect_installed=True):
         case and this returns as soon as `/api/state` answers with a JSON object containing
         `_meta` -- proof the web server itself is up.
     """
-    env = dict(os.environ,
-               CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
-               CALICTL_ARM_DELAY_S="0.3", CALICTL_SETTLE_S="0.3", CALICTL_HEARTBEAT_PERIOD_S="0.1",
-               CALICTL_FAST_CONFIRM_S="0.2",  # lighting fast-path Mode-4 confirm window (real default 1.2 s)
-               CALICTL_SESSION_WAIT_S="0.3",  # don't idle waiting for a session in the mock e2e
-               CALICTL_HEARTBEAT_WARMUP_S="0",
-               CALICTL_ENABLE_WRITES="1",  # e2e exercises control writes -> not read-only
-               CALICTL_PERSISTENT_SESSION="1")  # default, explicit for the session-pill test's intent
+    env = dict(
+        os.environ,
+        CALICTL_ADDR="MO:CK:CA:MP:ER:00",
+        PYTHONUNBUFFERED="1",
+        CALICTL_ARM_DELAY_S="0.3",
+        CALICTL_SETTLE_S="0.3",
+        CALICTL_HEARTBEAT_PERIOD_S="0.1",
+        CALICTL_FAST_CONFIRM_S="0.2",  # lighting fast-path Mode-4 confirm window (real default 1.2 s)
+        CALICTL_SESSION_WAIT_S="0.3",  # don't idle waiting for a session in the mock e2e
+        CALICTL_HEARTBEAT_WARMUP_S="0",
+        CALICTL_ENABLE_WRITES="1",  # e2e exercises control writes -> not read-only
+        CALICTL_PERSISTENT_SESSION="1",
+    )  # default, explicit for the session-pill test's intent
     env.update(extra_env)
     proc = subprocess.Popen(
-        [sys.executable, "-m", "tools.run_against_mock", "serve",
-         "--web", str(port), "--interval", "1", "--no-influx"],
-        cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        [
+            sys.executable,
+            "-m",
+            "tools.run_against_mock",
+            "serve",
+            "--web",
+            str(port),
+            "--interval",
+            "1",
+            "--no-influx",
+        ],
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
     url = "http://127.0.0.1:%d" % port
     deadline = time.time() + 30
     while time.time() < deadline:
@@ -103,8 +123,7 @@ def _start_daemon(port, extra_env, expect_installed=True):
                 if not expect_installed:
                     if isinstance(body, dict) and "_meta" in body:
                         return proc, url
-                elif len([k for k, v in body.items() if isinstance(v, dict)
-                          and v.get("installed")]) >= 5:
+                elif len([k for k, v in body.items() if isinstance(v, dict) and v.get("installed")]) >= 5:
                     return proc, url
         except Exception:
             pass
@@ -116,7 +135,7 @@ def _start_daemon(port, extra_env, expect_installed=True):
 def base_url():
     port = _free_port()
     for stale in (_cache("history.jsonl"), _cache("state.json"), _cache("pairing.json")):
-        try:                       # a previous run's samples must not make this one pass
+        try:  # a previous run's samples must not make this one pass
             os.unlink(stale)
         except OSError:
             pass
@@ -124,9 +143,14 @@ def base_url():
     # this the suite writes mock data into the developer's real ~/.cache. Same for the pairing
     # cache -- it's only read as a `pairing_snapshot()` fallback before any wizard run, but a
     # real cached address there would falsely suppress the "prominent setup card" case.
-    proc, url = _start_daemon(port, {"CALICTL_STATE_CACHE": _cache("state.json"),
-                                      "CALICTL_HISTORY_CACHE": _cache("history.jsonl"),
-                                      "CALICTL_PAIRING_CACHE": _cache("pairing.json")})
+    proc, url = _start_daemon(
+        port,
+        {
+            "CALICTL_STATE_CACHE": _cache("state.json"),
+            "CALICTL_HISTORY_CACHE": _cache("history.jsonl"),
+            "CALICTL_PAIRING_CACHE": _cache("pairing.json"),
+        },
+    )
     try:
         yield url
     finally:
@@ -152,8 +176,14 @@ def page(base_url):
         pg = browser.new_page()
         js_errors = []
         pg.on("pageerror", lambda err: js_errors.append("pageerror: %s" % err))
-        pg.on("console", lambda msg: js_errors.append("console.error: %s" % msg.text)
-              if msg.type == "error" and "favicon" not in msg.text else None)
+        pg.on(
+            "console",
+            lambda msg: (
+                js_errors.append("console.error: %s" % msg.text)
+                if msg.type == "error" and "favicon" not in msg.text
+                else None
+            ),
+        )
         pg.goto(base_url)
         try:
             yield pg
@@ -168,9 +198,14 @@ def pairing_url(tmp_path):
     server-side state machine (`calictl.pairing`), so sharing the module-scoped `base_url` server
     across pairing tests would let one test's end state (e.g. bonded) leak into the next."""
     port = _free_port()
-    proc, url = _start_daemon(port, {"CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-                                      "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
-                                      "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json")})
+    proc, url = _start_daemon(
+        port,
+        {
+            "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+            "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+        },
+    )
     try:
         yield url
     finally:
@@ -198,11 +233,16 @@ def unconfigured_pairing_page(tmp_path):
     scenario — the one where the menu's Unpair entry must stay hidden until a wizard bond lands
     (unlike the default e2e daemon, which always carries a mock `CALICTL_ADDR`)."""
     port = _free_port()
-    proc, url = _start_daemon(port, {"CALICTL_ADDR": "",
-                                     "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-                                     "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
-                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json")},
-                              expect_installed=False)
+    proc, url = _start_daemon(
+        port,
+        {
+            "CALICTL_ADDR": "",
+            "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+            "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+        },
+        expect_installed=False,
+    )
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch()
@@ -244,13 +284,13 @@ def test_pairing_chrome_hidden_when_paired_and_online(page):
 def test_water_screen_shows_level_percent(page):
     page.get_by_text("Water", exact=True).first.click()
     expect(page.get_by_text("Fresh water")).to_be_visible()
-    assert "%" in page.locator("#app").inner_text()          # a real level readout, not a spec dump
+    assert "%" in page.locator("#app").inner_text()  # a real level readout, not a spec dump
 
 
 def test_cooler_toggle_gives_feedback_then_applies(page):
     page.get_by_text("Cooler", exact=True).first.click()
     sw = page.locator(".switch").first
-    expect(sw).to_have_attribute("aria-checked", "false")     # off at start
+    expect(sw).to_have_attribute("aria-checked", "false")  # off at start
     sw.click()
     expect(page.locator("#status")).to_have_text("Sending…")  # immediate in-flight feedback
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)  # completion toast
@@ -271,8 +311,8 @@ def test_camping_lights_and_usb_greyed_until_master_on(page):
         expect(master).to_have_attribute("aria-checked", "false")
     expect(page.get_by_role("switch", name="Exterior and interior lighting")).to_be_disabled()
     expect(page.get_by_role("switch", name="Rear USB ports")).to_be_disabled()
-    expect(page.locator(".row.ctl-off")).to_have_count(2)          # exactly lights + usb greyed
-    expect(master).to_be_enabled()                                  # master itself is usable
+    expect(page.locator(".row.ctl-off")).to_have_count(2)  # exactly lights + usb greyed
+    expect(master).to_be_enabled()  # master itself is usable
 
 
 def test_cooler_quiet_and_timer_controls_follow_power(page):
@@ -280,7 +320,7 @@ def test_cooler_quiet_and_timer_controls_follow_power(page):
     # cooling timer only while it is OFF. Both rows grey (.ctl-off) with the reason as tooltip.
     page.get_by_text("Cooler", exact=True).first.click()
     power = page.get_by_role("switch", name="Refrigerator box")
-    quiet = page.locator("select").first                                   # the Quiet mode <select>
+    quiet = page.locator("select").first  # the Quiet mode <select>
     start_timer = page.get_by_role("button", name="Start timer")
     was_on = power.get_attribute("aria-checked") == "true"
 
@@ -296,8 +336,8 @@ def test_cooler_quiet_and_timer_controls_follow_power(page):
     set_power(True)
     expect(quiet).to_be_enabled()
     expect(start_timer).to_be_disabled()
-    expect(power).to_be_enabled()                     # the power switch itself is never gated
-    set_power(was_on)                                 # leave the shared mock as we found it
+    expect(power).to_be_enabled()  # the power switch itself is never gated
+    set_power(was_on)  # leave the shared mock as we found it
 
 
 def test_heater_continuous_switch_off_only(page):
@@ -319,7 +359,10 @@ def test_heater_timer_buttons_arm_and_stop(page):
     # render; arming goes through the fuel-burner confirm and lands as "Applied" against the mock.
     page.get_by_text("Air heater", exact=True).first.click()
     page.on("dialog", lambda d: d.accept())
-    start, stop = page.get_by_role("button", name="Start timer"), page.get_by_role("button", name="Stop timer")
+    start, stop = (
+        page.get_by_role("button", name="Start timer"),
+        page.get_by_role("button", name="Stop timer"),
+    )
     expect(start).to_be_visible()
     expect(stop).to_be_visible()
     start.click()
@@ -334,7 +377,7 @@ def test_heater_timer_buttons_arm_and_stop(page):
 
 def test_camping_master_toggle_applies(page):
     page.get_by_text("Camping mode", exact=True).first.click()
-    sw = page.locator(".switch").first                        # first control = master
+    sw = page.locator(".switch").first  # first control = master
     sw.click()
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
     expect(page.locator('.switch[aria-checked="true"]').first).to_be_visible()
@@ -349,7 +392,7 @@ def test_roof_screen_renders_move_buttons(page):
     for name in ("open", "close", "stop"):
         expect(page.get_by_role("button", name=name)).to_be_visible()
         expect(page.get_by_role("button", name=name)).to_be_enabled()
-    expect(page.get_by_text("Alert")).to_be_visible()                 # readouts rendered too
+    expect(page.get_by_text("Alert")).to_be_visible()  # readouts rendered too
 
 
 def test_every_tile_renders_without_js_errors(page):
@@ -363,7 +406,7 @@ def test_every_tile_renders_without_js_errors(page):
         # JS click on the header's #back: deterministic (no pointer actionability / overlay
         # races) — this test is about renderers throwing, not about hitting the back arrow.
         page.evaluate("document.getElementById('back').click()")
-    expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()     # back on the dashboard
+    expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()  # back on the dashboard
 
 
 def test_roof_hold_release_sends_stop(page):
@@ -372,14 +415,18 @@ def test_roof_hold_release_sends_stop(page):
     # pointerup never fired and no STOP went out (the roof kept moving until the server's Position
     # auto-stop). The release is now caught at document level and the screen is not rebuilt while a
     # move is held. Assert the actual /api/command traffic: a roof "open" on press, "stop" on release.
-    page.on("dialog", lambda d: d.accept())          # the "path clear?" confirm
+    page.on("dialog", lambda d: d.accept())  # the "path clear?" confirm
     page.get_by_text("Roof", exact=True).first.click()
     open_btn = page.get_by_role("button", name="open")
     expect(open_btn).to_be_enabled()
 
     def is_cmd(req, what):
-        return "/api/command" in req.url and req.method == "POST" \
-            and '"roof"' in (req.post_data or "") and ('"%s"' % what) in (req.post_data or "")
+        return (
+            "/api/command" in req.url
+            and req.method == "POST"
+            and '"roof"' in (req.post_data or "")
+            and ('"%s"' % what) in (req.post_data or "")
+        )
 
     open_btn.hover()
     try:
@@ -392,8 +439,9 @@ def test_roof_hold_release_sends_stop(page):
         # otherwise hold the serve lock and stall every later test's command ("Sending…" forever).
         page.mouse.up()
         origin = page.url.split("/", 3)[0] + "//" + page.url.split("/", 3)[2]
-        page.request.post(origin + "/api/command",
-                          data={"function": "roof", "what": "stop", "value": None, "confirm": True})
+        page.request.post(
+            origin + "/api/command", data={"function": "roof", "what": "stop", "value": None, "confirm": True}
+        )
 
 
 def test_lighting_screen_lamps_are_directly_controllable(page):
@@ -401,13 +449,13 @@ def test_lighting_screen_lamps_are_directly_controllable(page):
     # a lamp from the lights-off state applies directly — the SET_BRIGHTNESS self-carries profile 9.
     page.get_by_text("Lighting", exact=True).first.click()
     expect(page.get_by_text("Reading lights")).to_be_visible()
-    expect(page.get_by_text("Left", exact=True)).to_be_visible()   # a reading lamp
+    expect(page.get_by_text("Left", exact=True)).to_be_visible()  # a reading lamp
     # no manual Activate step, and controls are live from the start
     assert page.get_by_role("button", name="Activate").count() == 0
     slider = page.locator("input[type=range]").first
     expect(slider).to_be_enabled()
-    assert page.locator(".switch").first.is_enabled()              # all-lights master too
-    slider.fill("8")                                               # drag a lamp
+    assert page.locator(".switch").first.is_enabled()  # all-lights master too
+    slider.fill("8")  # drag a lamp
     slider.dispatch_event("change")
     # lighting applied-ness is honestly "unknown" (the state char is a write-through echo),
     # so the toast says Sent — check the lamp, never a false green "Applied"
@@ -422,14 +470,25 @@ def test_dashboard_summary_card(page):
         expect(card.get_by_text(label, exact=True)).to_be_visible()
     # a real "<liters> / <capacity> l" readout, not a spec/ghost row
     import re
+
     assert re.search(r"\d+ / \d+ l", card.inner_text())
 
 
 def test_no_red_flag_text(page, base_url):
     # Auto-catches the UX-bug classes we hit by hand: raw compose-key ids, undefined/null/NaN,
     # nonsense dates, [object Object]. Scans every installed screen + the dashboard.
-    RED = ("_text", "_toggle", "_widget", "_section", "_drawer",
-           "undefined", "null", "NaN", "1900-", "[object Object]")
+    RED = (
+        "_text",
+        "_toggle",
+        "_widget",
+        "_section",
+        "_drawer",
+        "undefined",
+        "null",
+        "NaN",
+        "1900-",
+        "[object Object]",
+    )
     for name in ("Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Vehicle"):
         page.goto(base_url)
         page.locator(".tile", has_text=name).first.click()
@@ -437,7 +496,7 @@ def test_no_red_flag_text(page, base_url):
         text = page.locator("#app").inner_text()
         for flag in RED:
             assert flag not in text, "%r rendered on the %s screen" % (flag, name)
-    page.goto(base_url)                     # dashboard
+    page.goto(base_url)  # dashboard
     dtext = page.locator("#app").inner_text()
     for flag in RED:
         assert flag not in dtext, "%r rendered on the dashboard" % flag
@@ -455,6 +514,7 @@ def test_command_latency_is_subsecond(page, base_url):
     """The persistent session's payoff: a control write applies in well under a second
     (the e2e daemon runs with real ARM_DELAY defaults; only a live session makes this pass)."""
     import time
+
     page.goto(base_url)
     page.get_by_text("Cooler", exact=True).first.click()
     sw = page.locator(".switch").first
@@ -473,7 +533,7 @@ def test_energy_chart_draws_from_daemon_history_not_influx(page, base_url):
     """
     page.goto(base_url)
     page.locator(".tile", has_text="Energy").first.click()
-    page.wait_for_selector("svg.echart", timeout=20000)      # polls every 1s -> samples accrue
+    page.wait_for_selector("svg.echart", timeout=20000)  # polls every 1s -> samples accrue
     drawn = page.locator("svg.echart polyline.ec-v, svg.echart circle.ec-v-dot").count()
     assert drawn >= 1, "no voltage series rendered"
     assert "History unavailable" not in page.locator("#app").inner_text()
@@ -488,11 +548,11 @@ def test_open_control_survives_a_state_poll(page):
     fire), and assert the SAME element is still there — a repaint would have replaced it, losing
     the marker (and, in a browser, closing the dropdown)."""
     page.get_by_text("Lighting", exact=True).first.click()
-    sel = page.locator("select").first                 # the 'Profile' dropdown
+    sel = page.locator("select").first  # the 'Profile' dropdown
     expect(sel).to_be_visible()
     sel.evaluate("el => { el.dataset.probe = 'keep'; el.focus(); }")
     assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
-    page.wait_for_timeout(5000)                         # span 2+ poll cycles
+    page.wait_for_timeout(5000)  # span 2+ poll cycles
     # if refreshState re-rendered, the marked <select> was replaced -> marker gone / focus lost
     assert sel.get_attribute("data-probe") == "keep", "the open <select> was destroyed by a state poll"
     assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
@@ -533,30 +593,37 @@ def test_pairing_checklist_before_connect(pairing_page):
     page.get_by_role("button", name="Menu").click()
     page.get_by_text("Bluetooth pairing…").click()
     text = page.locator("#app").inner_text()
-    assert "Gerät verbinden" in text                      # the unit's own screen name
-    assert "Passcode: ---" in text                        # what the unit shows before we connect
-    assert "phone" in text.lower()                        # disconnect the CaliforniaOnTour app
-    assert "Home Assistant" in text                       # other scanners on the Pi
+    assert "Gerät verbinden" in text  # the unit's own screen name
+    assert "Passcode: ---" in text  # what the unit shows before we connect
+    assert "phone" in text.lower()  # disconnect the CaliforniaOnTour app
+    assert "Home Assistant" in text  # other scanners on the Pi
 
 
 def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
     """A POST /api/pairing that returns an error body (e.g. HTTP 500 {"error":"pairing_failed"}
     when the daemon bridge times out) must toast translated text, never the raw enum."""
     port = _free_port()
-    proc, url = _start_daemon(port, {"CALICTL_FAKE_PAIRING": "connect_failed",
-                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
-                                     "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-                                     "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")})
+    proc, url = _start_daemon(
+        port,
+        {
+            "CALICTL_FAKE_PAIRING": "connect_failed",
+            "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+            "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+        },
+    )
     try:
         with sync_playwright() as p:
             page = p.chromium.launch().new_page()
 
             def _fail_post(route):
                 if route.request.method == "POST":
-                    route.fulfill(status=500, content_type="application/json",
-                                  body='{"error": "pairing_failed"}')
+                    route.fulfill(
+                        status=500, content_type="application/json", body='{"error": "pairing_failed"}'
+                    )
                 else:
                     route.continue_()
+
             page.route("**/api/pairing", _fail_post)
             page.goto(url)
             _open_and_start_pairing(page)
@@ -569,10 +636,15 @@ def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
 
 def test_connect_failed_shows_its_own_guidance(tmp_path):
     port = _free_port()
-    proc, url = _start_daemon(port, {"CALICTL_FAKE_PAIRING": "connect_failed",
-                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
-                                     "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-                                     "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")})
+    proc, url = _start_daemon(
+        port,
+        {
+            "CALICTL_FAKE_PAIRING": "connect_failed",
+            "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+            "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+        },
+    )
     try:
         with sync_playwright() as p:
             page = p.chromium.launch().new_page()
@@ -581,18 +653,23 @@ def test_connect_failed_shows_its_own_guidance(tmp_path):
             expect(page.get_by_role("button", name="Try again")).to_be_visible(timeout=20000)
             text = page.locator("#app").inner_text()
             assert "connect_failed" not in text
-            assert "may still hold its single connection" in text   # the phone-slot hint
-            assert "may be asleep" in text                # the asleep-unit hint (bond kept)
+            assert "may still hold its single connection" in text  # the phone-slot hint
+            assert "may be asleep" in text  # the asleep-unit hint (bond kept)
     finally:
         proc.terminate()
 
 
 def test_radio_busy_banner(tmp_path):
     port = _free_port()
-    proc, url = _start_daemon(port, {"CALICTL_FAKE_PAIRING": "radio_busy",
-                                     "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
-                                     "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-                                     "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")})
+    proc, url = _start_daemon(
+        port,
+        {
+            "CALICTL_FAKE_PAIRING": "radio_busy",
+            "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+            "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+        },
+    )
     try:
         with sync_playwright() as p:
             page = p.chromium.launch().new_page()
@@ -611,9 +688,11 @@ def test_unpaired_daemon_offers_setup(unconfigured_pairing_page):
 
 
 def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
-    env = {"CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
-           "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-           "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")}
+    env = {
+        "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+        "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+        "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+    }
     port = _free_port()
     proc, url = _start_daemon(port, env)
     with sync_playwright() as p:
@@ -623,7 +702,7 @@ def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
         expect(page.locator("#pairing-passkey")).to_be_visible(timeout=10000)
         proc.terminate()
         proc.wait(timeout=5)
-        proc, url = _start_daemon(port, env)          # same port: the tab reconnects
+        proc, url = _start_daemon(port, env)  # same port: the tab reconnects
         try:
             page.reload()
             page.get_by_role("button", name="Menu").click()
@@ -644,9 +723,11 @@ def test_pairing_wizard_never_flashes_a_stale_step_after_daemon_restart(tmp_path
     snapshot from before the restart -- `openPairingWizard`'s synchronous render (added so the
     wizard opens instantly from the idle case) must not flash that stale passkey step; it must
     show a neutral loading step until the fresh `pairingFetch()` proves the real (idle) state."""
-    env = {"CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
-           "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-           "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl")}
+    env = {
+        "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+        "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+        "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+    }
     port = _free_port()
     proc, url = _start_daemon(port, env)
     with sync_playwright() as p:
@@ -654,10 +735,12 @@ def test_pairing_wizard_never_flashes_a_stale_step_after_daemon_restart(tmp_path
         page.goto(url)
         _open_and_start_pairing(page)
         expect(page.locator("#pairing-passkey")).to_be_visible(timeout=10000)
-        page.get_by_role("button", name="Close", exact=True).click()   # close mid-flow -- server stays waiting_passkey
+        page.get_by_role(
+            "button", name="Close", exact=True
+        ).click()  # close mid-flow -- server stays waiting_passkey
         proc.terminate()
         proc.wait(timeout=5)
-        proc, url = _start_daemon(port, env)                # same port, a FRESH process -> idle
+        proc, url = _start_daemon(port, env)  # same port, a FRESH process -> idle
         try:
             page.get_by_role("button", name="Menu").click()
             page.get_by_text("Bluetooth pairing…").click()
@@ -678,7 +761,7 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
     page = pairing_page
     _open_and_start_pairing(page)
     passkey = page.locator("#pairing-passkey")
-    for _ in range(3):   # calictl.pairing.MAX_ATTEMPTS
+    for _ in range(3):  # calictl.pairing.MAX_ATTEMPTS
         expect(passkey).to_be_visible(timeout=10000)
         passkey.fill("000000")
         page.get_by_role("button", name="Send").click()
@@ -689,7 +772,7 @@ def test_pairing_wizard_wrong_passkey_ends_in_error_with_retry(pairing_page):
         # "passkey" event that doesn't arrive in `waiting_passkey` -- undercounting attempts.
         expect(passkey).to_be_hidden(timeout=10000)
     expect(page.get_by_role("button", name="Try again")).to_be_visible(timeout=10000)
-    assert "pairing_failed" not in page.locator("#app").inner_text()   # friendly text, not the raw enum
+    assert "pairing_failed" not in page.locator("#app").inner_text()  # friendly text, not the raw enum
     assert "Pairing was refused" in page.locator("#app").inner_text()
 
 
@@ -751,7 +834,7 @@ def test_pairing_wizard_reset_demands_confirm_then_idle(pairing_page):
     """The reset/re-pair button gates on a native confirm() (design spec step 3); accepting it
     removes the bond and returns the wizard to `idle`."""
     page = pairing_page
-    page.on("dialog", lambda d: d.accept())   # Playwright auto-dismisses confirm() with no listener
+    page.on("dialog", lambda d: d.accept())  # Playwright auto-dismisses confirm() with no listener
     _complete_bonding(page)
     page.get_by_role("button", name="Bluetooth reset / re-pair").click()
     expect(page.get_by_role("checkbox", name="I'm on that screen")).to_be_visible(timeout=10000)

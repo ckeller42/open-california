@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, vwcamper-control]
+    branches: [main]
   pull_request:
 
 # Cancel superseded runs on the same ref (rapid pushes stop paying for old commits). Read-only
@@ -24,8 +24,8 @@ jobs:
         # Floor 3.11 (3.9/3.10 are EOL); 3.13 is what buspi (the deploy target) runs.
         python: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
           cache: pip
@@ -49,61 +49,70 @@ jobs:
           diff -q /tmp/screens.json calictl/webui/screens.json \
             || { echo "::error::screens.json stale — run python -m tools.build_web"; exit 1; }
       - name: Runtime is stdlib-only at import
-        run: python -m tools.check_import_clean   # shared with tools/ci.sh + the pre-commit hook
+        run: python -m tools.check_import_clean   # shared with tools/ci.sh + the import-clean pre-commit hook
 
-  lint:
+  # Every pre-commit-stage hook in .pre-commit-config.yaml over the whole tree (ruff + ruff format,
+  # markdownlint, gitleaks, whitespace/YAML, the vendor/MAC/VIN guard, import-clean, doc-offset,
+  # screens.json + codec freshness, and the web-UI tsc --checkJs gate — the web UI is un-built JS,
+  # so that is its only static check; a ReferenceError once shipped to the Pi without it). The
+  # repo-local hooks run via tools/ci.sh (need the dev deps + node); tool versions are pinned in the
+  # config, so this job, the local hooks and `tools/ci.sh lint` cannot drift apart.
+  pre-commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      - run: pip install -r requirements-dev.txt
-      - name: ruff lint (config in pyproject.toml)
-        run: python -m ruff check .
-      # The web UI is hand-authored JS served client-side — no build, so nothing compiles it. A
-      # ReferenceError (an undeclared identifier) once shipped to the Pi because `node --check`
-      # only parses and the e2e mock hadn't rendered that screen. jsconfig.json has checkJs on:
-      # `tsc` catches "Cannot find name" and the like statically. Hard gate, must stay at 0 errors.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-      - name: web UI typecheck (tsc --checkJs) + parse
-        run: |
-          npx --yes -p typescript tsc --noEmit -p calictl/webui/jsconfig.json
-          node --check calictl/webui/app.js
-          node --check calictl/webui/strings.de.js
+      - run: pip install -r requirements-dev.txt
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: pre-commit (all files)
+        run: pre-commit run --all-files --show-diff-on-failure
+      - name: gitleaks over the working tree (the commit hook only scans staged changes)
+        run: pre-commit run --hook-stage manual gitleaks-dir --all-files
 
   no-vendor-material:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Refuse committed VW/vendor material or vehicle PII
-        run: |
-          set -e
-          bad=$(git ls-files | grep -iE '\.(apk|xapk|dex|jar|aar|aab|cvr|pcap|pcapng|pklg|btsnoop)$|(^|/)decompile/|(^|/)manuals/|ui/assets/svg/' || true)
-          if [ -n "$bad" ]; then echo "::error::vendor/binary material committed:"; echo "$bad"; exit 1; fi
-          # real vehicle BLE MAC must not be committed (use a placeholder). Match by the
-          # unit's OUI prefix + any suffix so this guard doesn't embed the full device MAC.
-          if git grep -niE '20:81:9a(:[0-9a-f]{2}){3}' -- . ':!.github/' ':!.githooks/'; then
-            echo "::error::real vehicle BLE MAC committed — use a placeholder / env var"; exit 1; fi
-          # No committed VIN (PII). Mirrors the pre-commit hook: a 17-char VIN token AND a
-          # WV2ZZZ/VIN context on the same line (WV2ZZZ is the generic VW world-manufacturer
-          # prefix, safe to name; the owner's full VIN never appears in the repo).
-          if git grep -nE '\b[A-HJ-NPR-Z0-9]{17}\b' -- . ':!.github/' ':!.githooks/' | grep -qiE 'WV2ZZZ|VIN'; then
-            echo "::error::a VIN appears in a tracked file — VINs are PII, keep them out"; exit 1; fi
-          echo "no vendor material, vehicle MAC, or VIN committed"
+        # Whole tracked tree: vendor paths, the real vehicle BLE MAC (matched by OUI prefix), VINs.
+        # Same script as the `vendor-material` pre-commit hook and `tools/ci.sh vendor-check`.
+        run: python3 tools/check_vendor_material.py --all
 
   install-script:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Lint install.sh (POSIX syntax + shellcheck)
         run: |
           sh -n install.sh
           shellcheck install.sh
+
+  # The Sphinx site (product docs + the evidence build, `-W`) on every PR, so a broken `:links:`,
+  # cross-reference or toctree fails before merge. docs.yml runs the same build on main and deploys.
+  docs:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+      - name: Install doc toolchain
+        run: pip install -r docs/requirements.txt
+      - name: Build the site (warnings are errors)
+        run: sh docs/build_site.sh docs/_build/html
 
   # Python <-> C codec parity (issue #156): the generated header must be fresh and
   # every golden vector + the seeded fuzz pass must agree between calictl.protocol
@@ -111,8 +120,8 @@ jobs:
   codec-parity:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
@@ -129,8 +138,8 @@ jobs:
   gui-e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
@@ -141,7 +150,7 @@ jobs:
         run: echo "PW_VERSION=$(python -m playwright --version | awk '{print $2}')" >> "$GITHUB_ENV"
       - name: Cache Playwright browsers
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ env.PW_VERSION }}
@@ -158,7 +167,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Pair over real BlueZ in a VM
         run: bash tests/realstack/vm.sh
 
@@ -166,8 +175,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20   # observed ~4.6 min on the probe runs; a hang must not burn 6 h
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
@@ -188,14 +197,14 @@ jobs:
     timeout-minutes: 15   # observed 3.0-4.2 min on the probe runs; a hang must not burn 6 h
     container: espressif/idf:v6.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build esp32s3 image
         working-directory: firmware
         run: |
           . $IDF_PATH/export.sh
           idf.py build
           { echo '```'; idf.py size; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: firmware-esp32s3
           path: |
@@ -215,7 +224,7 @@ jobs:
     timeout-minutes: 15   # observed 2.7-3.1 min on the probe runs; a hang must not burn 6 h
     container: espressif/idf:v6.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build the QEMU probe variant
         working-directory: firmware
         run: |
