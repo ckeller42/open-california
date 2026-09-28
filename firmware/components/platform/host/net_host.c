@@ -92,57 +92,69 @@ static int parse_reason(const char *s, cali_net_reason_t *r) {
     return 0;
 }
 
-/* One non-comment line → 0 ok, -1 malformed. The SSID buffers hold NET_SSID_MAX + 1 characters so
- * an over-long SSID is caught (sscanf stops one past the limit) instead of silently truncated. */
-static int parse_line(const char *line) {
-    char word[16], ssid[NET_SSID_MAX + 2], a1[24], a2[24], extra[2];
-    int n = sscanf(line, "%15s", word);
-    if (n != 1 || word[0] == '#') return 0;
+/* Parse a whole decimal token (optional leading '-' when `neg_ok`) → 0 ok, -1 malformed. */
+static int parse_long(const char *s, int neg_ok, long *out) {
+    char *end;
+    if (s[0] == '\0' || (s[0] == '-' && !neg_ok)) return -1;
+    errno = 0;
+    *out = strtol(s, &end, 10);
+    return *end == '\0' && errno == 0 ? 0 : -1;
+}
 
-    if (strcmp(word, "ap") == 0) {
-        int rssi, secure;
-        if (sscanf(line, "%*s %33s %d %d %1s", ssid, &rssi, &secure, extra) != 3) return -1;
-        if (strlen(ssid) > NET_SSID_MAX || s_naps >= NET_SCAN_MAX) return -1;
-        strcpy(s_aps[s_naps].ssid, ssid);
-        s_aps[s_naps].rssi = rssi;
+#define TOK_MAX 6 /* the longest rule, "join SSID ok-after N IP", has 5 tokens: 6 = one too many */
+
+/* One line → 0 ok (a rule, a comment, or blank), -1 malformed. The line is split in place into
+ * whitespace-separated tokens (no scanf field widths); every SSID token is checked against
+ * NET_SSID_MAX from the generated net_consts.h, so a longer SSID is refused, never truncated. */
+static int parse_line(char *line) {
+    char *tok[TOK_MAX];
+    int n = 0;
+    for (char *p = strtok(line, " \t\r\n"); p != NULL; p = strtok(NULL, " \t\r\n")) {
+        if (n == TOK_MAX) return -1;
+        tok[n++] = p;
+    }
+    if (n == 0 || tok[0][0] == '#') return 0;
+
+    if (strcmp(tok[0], "ap") == 0) {
+        long rssi, secure;
+        if (n != 4 || strlen(tok[1]) > NET_SSID_MAX || s_naps >= NET_SCAN_MAX ||
+            parse_long(tok[2], 1, &rssi) != 0 || parse_long(tok[3], 0, &secure) != 0)
+            return -1;
+        strcpy(s_aps[s_naps].ssid, tok[1]);
+        s_aps[s_naps].rssi = (int)rssi;
         s_aps[s_naps].secure = secure != 0;
         s_naps++;
         return 0;
     }
-    if (strcmp(word, "join") == 0) {
+    if (strcmp(tok[0], "join") == 0) {
         join_rule_t *j = &s_joins[s_njoins];
-        char ip[24] = "";
-        /* ssid, kind, argument, and the optional ok-after address; anything more is malformed */
-        int k = sscanf(line, "%*s %33s %23s %23s %23s %1s", ssid, a1, a2, ip, extra);
-        if (k < 3 || k > 4 || strlen(ssid) > NET_SSID_MAX || s_njoins >= JOIN_MAX) return -1;
+        /* join SSID KIND ARG [IP]: the optional address only for ok-after */
+        if (n < 4 || n > 5 || strlen(tok[1]) > NET_SSID_MAX || s_njoins >= JOIN_MAX) return -1;
         memset(j, 0, sizeof *j);
-        strcpy(j->ssid, ssid);
-        if (strcmp(a1, "ok") == 0 && k == 3) {
+        strcpy(j->ssid, tok[1]);
+        if (strcmp(tok[2], "ok") == 0 && n == 4) {
             j->kind = JOIN_OK;
-            if (parse_ip(a2, &j->ip) != 0) return -1;
-        } else if (strcmp(a1, "fail") == 0 && k == 3) {
+            if (parse_ip(tok[3], &j->ip) != 0) return -1;
+        } else if (strcmp(tok[2], "fail") == 0 && n == 4) {
             j->kind = JOIN_FAIL;
-            if (parse_reason(a2, &j->reason) != 0) return -1;
-        } else if (strcmp(a1, "ok-after") == 0) {
-            unsigned long fails;
-            char *end;
-            errno = 0;
-            fails = strtoul(a2, &end, 10);
-            if (*end != '\0' || a2[0] == '-' || errno != 0 || fails > 1000000ul) return -1;
+            if (parse_reason(tok[3], &j->reason) != 0) return -1;
+        } else if (strcmp(tok[2], "ok-after") == 0) {
+            long fails;
+            if (parse_long(tok[3], 0, &fails) != 0 || fails > 1000000L) return -1;
             j->kind = JOIN_OK_AFTER;
             j->fails_left = (unsigned)fails;
             j->ip = OK_AFTER_DEFAULT_IP;
-            if (k == 4 && parse_ip(ip, &j->ip) != 0) return -1;
+            if (n == 5 && parse_ip(tok[4], &j->ip) != 0) return -1;
         } else {
             return -1;
         }
         s_njoins++;
         return 0;
     }
-    if (strcmp(word, "drop-after") == 0) {
-        unsigned long ms;
-        if (sscanf(line, "%*s %lu %1s", &ms, extra) != 1 || ms == 0) return -1;
-        s_drop_after_ms = ms;
+    if (strcmp(tok[0], "drop-after") == 0) {
+        long ms;
+        if (n != 2 || parse_long(tok[1], 0, &ms) != 0 || ms == 0) return -1;
+        s_drop_after_ms = (uint64_t)ms;
         return 0;
     }
     return -1;

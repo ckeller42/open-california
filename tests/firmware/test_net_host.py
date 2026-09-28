@@ -12,6 +12,7 @@ call that caused them. Driven through the line-protocol CLI
    :id: T_FW_NET_HOST
    :links: R_FW_WIFI_PROVISION
 """
+import re
 import shutil
 import socket
 import subprocess
@@ -144,3 +145,26 @@ def test_malformed_script_is_refused(net_cli, tmp_path):
     script = tmp_path / "wifi.txt"; script.write_text("join minsel maybe\n")
     r = subprocess.run([str(net_cli), str(script)], input="", capture_output=True, text=True, timeout=30)
     assert r.returncode == 2
+
+
+def _net_const(name):
+    """A constant from the generated csrc/net_consts.h (never a hand-typed copy)."""
+    text = (ROOT / "csrc" / "net_consts.h").read_text()
+    return int(re.search(r"#define %s (\d+)" % name, text).group(1))
+
+
+def test_ssid_length_boundary_follows_net_ssid_max(net_cli, tmp_path):
+    # An SSID of exactly NET_SSID_MAX characters round-trips through scan and join; one longer is
+    # refused as a malformed rule (init fails, exit 2) — never silently truncated.
+    ssid_max = _net_const("NET_SSID_MAX")
+    longest = "s" * ssid_max
+    script = tmp_path / "wifi.txt"
+    script.write_text("ap %s -60 1\njoin %s ok 192.168.1.9\n" % (longest, longest))
+    out = run(net_cli, script, "scan\npoll 1\naps\nsta_start %s test-psk-1234\npoll 1\n" % longest)
+    assert out.splitlines() == ["EV SCAN_DONE NONE 0 1", "AP %s -60 1" % longest,
+                                "EV STA_GOT_IP NONE 192.168.1.9 0"]
+    for rule in ("ap %s -60 1\n", "join %s ok 192.168.1.9\n"):
+        script.write_text(rule % ("s" * (ssid_max + 1)))
+        r = subprocess.run([str(net_cli), str(script)], input="", capture_output=True, text=True,
+                           timeout=30)
+        assert r.returncode == 2 and "bad rule" in r.stdout
