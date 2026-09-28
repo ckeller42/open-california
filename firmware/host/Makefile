@@ -62,8 +62,9 @@ CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC)
 COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
-# The rest of cali_core (console + json + session + wifi_sm + http_core) and the frame codec: only cali-host needs them.
-CORE_OBJ := console.o json.o session.o codec.o wifi_sm.o http_core.o
+# The rest of cali_core (console + json + session + wifi_sm + http_core + captive_dns) and the frame
+# codec: only cali-host needs them.
+CORE_OBJ := console.o json.o session.o codec.o wifi_sm.o http_core.o captive_dns.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
@@ -138,6 +139,10 @@ wifi_sm.o: $(COMPONENTS)/cali_core/wifi_sm.c $(CORE_H)/cali_wifi_sm.h $(CSRC)/ne
 
 # The single-connection HTTP/1.1 responder over cali_net (#154 Task 4): tests/firmware/test_http_core.py.
 http_core.o: $(COMPONENTS)/cali_core/http_core.c $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h $(CSRC)/net_consts.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The captive DNS responder over cali_net (#154 Task 5): tests/firmware/test_captive_dns.py.
+captive_dns.o: $(COMPONENTS)/cali_core/captive_dns.c $(CORE_H)/cali_captive.h $(CORE_H)/cali_net.h $(CSRC)/net_consts.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h \
