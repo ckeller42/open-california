@@ -73,11 +73,24 @@ widgets:
       - {label: vehiclePage_remoteControlWidget_lighting_text, target: lighting}
       - {label: vehiclePage_remoteControlWidget_campingMode_text, target: camping-mode}
       - {label: vehiclePage_remoteControlWidget_step_text, target: stairs}
+      - {label_text: "Pop-up roof", target: roof, note: "APP-OBSERVED 2026-09-27 row; status 'Closed' / 'Open'; label key not identified"}
+      - {label_text: "Level Indicator", target: vehicle-info, note: "APP-OBSERVED 2026-09-27 row (dedicated Level Indicator screen, see vehicle-info.yaml levelIndicatorReadout); label key not identified"}
     constraints: >
+      APP-OBSERVED 2026-09-27 (app 5.0.8.3028, Ocean profile, inventory
+      screens 03-05): the "Remote Control" card shows SIX rows — Refrigerator
+      box, Lighting, Auxiliary air heater, Camping mode, Pop-up roof, Level
+      Indicator — each with a status line: "On • Level 3/5" (cooler; the level
+      is shown even when off, e.g. "Off • Level 5/10" for the heater), "Off" /
+      "On" (lighting, camping mode), "Closed" (roof). The key list below is a
+      union over vehicle variants; the header also carries "Disconnect" while
+      connected. The earlier statement that the pop-up roof has no remote-
+      control row is WRONG for this build (the two added rows above).
+      Decompile-era notes follow.
       Exactly 9 keys exist under vehiclePage_remoteControlWidget_* (x9/q.java) —
       only 8 map to feature screens; the 9th (vehiclePage_remoteControlWidget_remoteControl_text)
       is this widget's own section header, not a tile. Roof (pop-up roof) and
-      Satellite Antenna have NO matching remoteControlWidget key — they are
+      Satellite Antenna have NO matching remoteControlWidget key (the roof row
+      exists anyway, see above — its label comes from another key) — they are
       reachable some other way (most likely vehicle-info.yaml's full function
       list / VehicleDataMenuScreen). The reachability *path* is still
       UNCONFIRMED (no menu-enumeration composable was resolvable from the

@@ -190,7 +190,7 @@ stay `UNVERIFIED` because this van can't exercise them live.
 |---|---|---|
 | ~~currents~~ | **Moved to §4 (RESOLVED 2026-09-07)** — `batt2/shore/solar_current` are ×0.1 A, `dcdc_current` raw A, per the app view-model. Signedness as before: `batt2`/`dcdc` **signed** 16-bit, `shore`/`solar` **unsigned** (`sg.a` type 1 vs 3, `yf/a.java:88-91`). A `511` reading is still the not-fitted sentinel, *no data*, not a huge current. | — |
 | `air_temp`, `water_temp` (LR-heater), `target_temp` (roof-A/C) | **RESOLVED 2026-07-12** (semantics verified against the app): the app applies **no arithmetic scale** — these are **coarse levels** (`air_temp`/`water_temp` 4-bit 0–15, `target_temp` 8-bit), same category as SoC, **not °C**. | **Do NOT label °C** — a level/setpoint index. |
-| `energy_mode` | 0=normal / 1=max_charge / 2=eco (3=error, read-only), **CONFIRMED** from source (`bf/c.java` enum + read getter `l()` + setter `d4()`, `xf/d.java`). | Not the old `0=eco` ordering — that was inverted vs source. |
+| `energy_mode` | 0=normal / 1=max_charge / 2=eco (3=error, read-only), **CONFIRMED** from source (`bf/c.java` enum + read getter `l()` + setter `d4()`, `xf/d.java`). | Not the old `0=eco` ordering — that was inverted vs source. ECO (2) is **not offered by the app on this van** (its selector shows Normal / Max only; ECO needs `zj/c.N0` — DECOMPILE-VERIFIED `ak/a.java:712-716`, source of `N0` unresolved; no BLE field the fake serves unlocks it — APP-OBSERVED 2026-09-27), so the app never sends 2; calictl still offers it. |
 
 **How to verify a scale.** (1) Drive a known state (a measured shore-charging current, a
 thermometer at the heater sensor, a battery monitor's %). (2) `python3 -m calictl get energy`

@@ -6,6 +6,11 @@
 # grouping only the battery/charging-relevant keys. A compact summary tile
 # (vehiclePage_overviewWidget_secondBattery_*) lives on the main vehicle
 # dashboard and links into this detail screen via "seeAllInfo".
+# APP-OBSERVED 2026-09-27 (app 5.0.8.3028 vs the fake unit, inventory screens
+# 01-02, 09-10, 58-59): this detail screen IS the page titled "Vehicle
+# Information" (Status: Fresh water / Waste water / Vehicle Battery / Second
+# battery; Charging (i); Energy Mode; Shore power; Vehicle Power). The
+# "howToAndInfo" title in vehicle-info.yaml is the separate Help page.
 screen: energy
 title_key: infoPage_pageHeadline_vehicleBattery_text
 function: energy  # service 1600/1602, control char 1601 (pg/a.java) — state telemetry only, control_fields largely MERGED_AMBIGUOUS/UNVERIFIED
@@ -22,7 +27,9 @@ widgets:
       - vehiclePage_overviewWidget_secondBattery_vehiclePower_text
       - vehiclePage_overviewWidget_seeAllInfo_text
       - vehiclePage_overviewWidget_allInfos_issues_text
-    constraints: "Compact dashboard tile: '<battery %> via <source>' where source is one of externalPowerSource/solarPower/vehiclePower. 'seeAllInfo' navigates to this detail screen."
+    label_text: Second battery
+    constraints: "Compact dashboard row. APP-OBSERVED 2026-09-27 (screens 03-05): 'Second battery  100% • 14 h' = '<soc2 %> • <remaining h>' (the key-name reading '<battery %> via <source>' was not what this build shows). 'See all info' navigates to this detail screen."
+    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
 
   - id: energyDurationFormat
     type: label
@@ -46,7 +53,7 @@ widgets:
     range: null
     controls: {field: null, action: null}
     elements: null
-    constraints: "Second/leisure battery readout: voltage and current (V • A), NOT a charge percentage. VERIFIED 2026-09-07 against the view-model: UTwoBattBemAfs ÷ 10 → V and ITwoBattBemAfs ÷ 10 → A (xf/d.java:159, binding xf/a.java:154); both from the energy service (1600), see protocol/signals.yaml batt2_v / batt2_current."
+    constraints: "APP-OBSERVED 2026-09-27 (screens 01-02): 'Second battery  100% • 14 h / 13.6 V • -3.9 A'; the starter row reads 'Vehicle Battery  -- V • -- A' with no % when there is no data. Second/leisure battery readout: voltage and current (V • A), NOT a charge percentage. VERIFIED 2026-09-07 against the view-model: UTwoBattBemAfs ÷ 10 → V and ITwoBattBemAfs ÷ 10 → A (xf/d.java:159, binding xf/a.java:154); both from the energy service (1600), see protocol/signals.yaml batt2_v / batt2_current."
 
   - id: chargingSection
     type: section
@@ -54,7 +61,17 @@ widgets:
     range: null
     controls: null
     elements: [infoPage_charging_value_text]
-    constraints: null
+    constraints: "The Charging row carries an (i) icon that opens chargingInfoSheet (APP-OBSERVED 2026-09-27)."
+
+  - id: chargingInfoSheet
+    type: drawer
+    label_key: null
+    label_text: Charging
+    range: null
+    controls: null
+    elements: []
+    constraints: "Bottom sheet from the Charging (i) (APP-OBSERVED 2026-09-27, screen 09): explains that Max energy mode charges the second battery as fast as possible while driving by raising the engine idle speed, which can increase fuel consumption; link 'Online manual'; button 'Got it'."
+    evidence: APP-OBSERVED 2026-09-27
 
   - id: energyModeSelector
     type: toggle
@@ -62,7 +79,8 @@ widgets:
     range: "0..3 (2-bit OperationMode field, offset MERGED_AMBIGUOUS)"
     controls: {field: OperationMode, action: null}
     elements: [energyMode_eco_text, energyMode_max_text, energyMode_normal_text, energyMode_text]
-    constraints: "3-way mode selector (eco/normal/max). Disabled state signalled by EnergyModeNotSelectable state bit (offset 2)."
+    constraints: "Chevron row 'Energy Mode: Normal' expanding to an inline radio group. Normal / Max ALWAYS; ECO only when zj/c.N0 is true — DECOMPILE-VERIFIED (ak/a.java:712-716: ak/a.b reads N0 and conditionally prepends bf.c.X ECO_MODE); the SOURCE of N0 (account/config vs vehicle) is unresolved, next step a SootUp def-use trace of N0's writer. APP-OBSERVED 2026-09-27 (screens 58-59): ECO absent with EnergyModeNotSelectable=0, PvInstalled=1 and CarVariant=2 alike. EnergyModeNotSelectable is decoded but never read by any UI (dead). Max frame 10 -> 30 APP-OBSERVED 2026-09-16."
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE
 
   - id: vehicleInfoListItems
     type: section
@@ -83,7 +101,7 @@ widgets:
     range: null
     controls: {field: null, action: null}
     elements: [infoPage_subline_outsideTemperature_text]
-    constraints: "Not an energy field per se, but co-displayed on the same vehicle-status list as energy source rows."
+    constraints: "Not an energy field per se, but co-displayed on the same vehicle-status list as energy source rows. Not shown on the Ocean profile in 5.0.8.3028 (APP-OBSERVED 2026-09-27); the Shore power row reads '0.0 W • 0.0 A' + 'Inactive', then a 'Vehicle Power' row."
 
   - id: batteryWarningDialogs
     type: label

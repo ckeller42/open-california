@@ -249,6 +249,26 @@ the UI (on when both are off, i.e. the switch represents "turn all lights on"), 
 `K0` only ever toggling both together. No separate per-light control is exposed anywhere in this
 interface.
 
+**APP-OBSERVED 2026-09-27** (`tools/applab`, app 5.0.8.3028, inventory screens 38-40). The camping
+page has one switch (the master) and three status rows. The fake unit's four `InteriorLight` /
+`OutsideLight` combinations (master on):
+
+| `InteriorLight`, `OutsideLight` | front-door row | sliding-door row |
+|---|---|---|
+| 1, 1 / 1, 0 / 0, 1 | Disabled | Disabled |
+| 0, 0 | **Enabled** | Disabled |
+
+So the front-door row ("Opening front door activates the exterior and interior lighting at the
+front.") is exactly `m2()` — Enabled iff both raw fields are 0 — and the single inverted toggle model
+holds. The sliding-door row ("Opening sliding door activates the rear interior lights.") never moved
+with any 1202 field: it is not a campingmode field. **Hypothesis:** it follows the lighting
+function's DOOR_CONTACT profile (`dg/h.n4`; the page's tip reads "See also lighting > lighting &
+sliding door"); next step: set the lighting DOOR_CONTACT state on the fake unit and watch the row.
+The USB row follows `UsbCharger` 1/0 (Enabled/Disabled). With the master off (`State=0`) the page
+body is unchanged. No lights or USB **switch** is shown on this page; whether tapping the row icons
+writes (the 2026-09-16 session recorded `0f` / `f3` from the front-door / USB row icons,
+`control-and-actuation.md` §3) was not re-tested in this pass.
+
 ### 4. Correct command recipe
 
 Full-packet resend rule applies (4 fields, all 2-bit, sentinel `3`). Recipes:

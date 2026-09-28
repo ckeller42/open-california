@@ -262,6 +262,10 @@ else references it; the selector's `enabled` flows (`xf/d.java:139-140`) are con
 plausible firmware bit, not an app behaviour — keep it, but don't cite the app for it. The selector
 itself (`ak/a.java:704-716`) offers Normal + Max always and **ECO only when `zj/c.N0`** (availability
 flag, source one hop unresolved); calictl offers ECO unconditionally.
+**Negative confirmation, APP-OBSERVED 2026-09-27** (`tools/applab`, inventory screens 58-59): the
+real app's picker showed only Normal / Max with `EnergyModeNotSelectable=0`, with
+`energy.PvInstalled=1`, and with `vehicle.CarVariant=2` (GRAND_CALIFORNIA) — no BLE field the fake
+unit serves unlocks ECO. **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` (account/config vs vehicle) is still unresolved — next step: SootUp def-use trace of `N0`'s writer. The app never sends `EnergyModeSet=2` on this van.
 
 ("Land" = shore/landline power, "Pv" = photovoltaic/solar, "Dcdc" = DC-DC converter, "Afs" = raw AFS-scaled
 value, "Two Batt" = second/auxiliary battery, "Emp"/"Lad" = installed-equipment flags.)
@@ -443,6 +447,16 @@ The move-frame cadence is **~500 ms**, not 1 Hz: the primary transmitter is the 
 (~500 ms, +1/frame; `w8/a.java:49-60` + `b1/d.java:353`); a **secondary** 1000 ms `ig/c` timer
 (`ig/c.java:776`) only re-affirms direction (net ~3 frames/s, consecutive counter deltas 0/+1). Cross-reference
 [protocol sequences — Roof](https://ckeller42.github.io/open-california/protocol-sequences.html#roof-actuation-press-and-hold-safetycounter-gated).
+
+**On-entry probe — APP-OBSERVED 2026-09-27** (`tools/applab`, inventory screens 41-44). With the
+ignition off, opening the roof page shows the dialog "Switch on the ignition" / "Please switch on the
+ignition to operate the pop-up roof." [Not now] and no controls. With ignition on, merely opening the
+page (no button pressed) wrote `0000097b00` (Up=0 / Down=0 plus a SafetyCounter value) and the
+counter then streams while the page is open. The app therefore validates its counter before the
+first press; calictl starts the counter on the press (hence its ~3 s withhold after the press). The
+page shows one rocker ("To open, press and hold the upper button." / "To close, press and hold the
+lower button."); release = stop (no separate stop button). "Intermediate position" asks "Please set
+the roof to an end position."
 
 ### Roof-state enum (readback, `hf/b.java`)
 

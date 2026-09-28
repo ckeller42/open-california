@@ -18,9 +18,10 @@
 #   - rf/b.java — the AirHeater screen ViewModel, class `rf.b`, which
 #     implements TWO interfaces:
 #       * we.b  — the airHeaterPage (parking heater) controls used below.
-#       * df.a  — controls for the separate combined/livingRoomHeater
-#                 screen (methods a2, j4, B1, M1, b2) — OUT OF SCOPE, not
-#                 modeled here.
+#       * df.a  — timer/combined-device controls (methods a2, j4, B1, M1,
+#                 b2). a2(AIR_HEATER) is this page's "Start timer" and j4
+#                 its "Stop" (APP-OBSERVED 2026-09-16) — modeled in
+#                 timerWidget below; B1/M1/b2 stay out of scope.
 #     Action letters below are the LITERAL decompiled method names on
 #     `rf.b`, confirmed by reading the method bodies:
 #       C2(boolean, ...)   -> writes control field "NormalOperationRequest"
@@ -31,7 +32,9 @@
 #                             no in-app range check found — UNVERIFIED units,
 #                             likely minutes)
 #       B0(m, ...)         -> writes control fields "TimerHour"+"TimerMin" as
-#                             a pair (start-heating-at time picker)
+#                             a pair (start-heating-at time picker).
+#                             APP-OBSERVED 2026-09-27: fired on the wheel's
+#                             OK; 09:31 -> 3f7b007f091f.
 #       E3(fz.i)           -> writes control field "PermanentOperationRequest"
 #                             = 0 (OFF/cancel). NOTE: no literal "=1" (turn ON)
 #                             call site was found anywhere in rf/b.java for
@@ -43,6 +46,7 @@
 #                             widget below — noted here only.
 screen: air-heater
 title_key: airHeaterPage_pageTitle_heating_text
+title_text: Heating    # APP-OBSERVED 2026-09-27 (inventory screen 34)
 function: airheater
 widgets:
   - id: imediateHeatingWidget
@@ -56,15 +60,18 @@ widgets:
   - id: heatingSlider
     type: slider
     label_key: airHeaterPage_heatingSlider_heatingTemperature_text
-    range: "1..10"
+    range: "1..10 (ticks 1-9, HI = 10)"
+    label_text: Heating Temperature
     controls: {field: HeatingLevel, action: q4}
     elements: []
-    constraints: "UI validates 0 < value <= 10 before writing (protocol raw_range is 0..15)"
+    constraints: "UI validates 0 < value <= 10 before writing (protocol raw_range is 0..15). Ticks 1..9 plus HI (APP-OBSERVED 2026-09-16/27)."
+    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
 
   - id: runTimeSlider
     type: slider
     label_key: airHeaterPage_runTimeSlider_runTime_text
-    range: null
+    label_text: "Run Time: N min"
+    range: "10..120"
     controls: {field: RunningTime, action: D4}
     elements: []
     constraints: "Minutes, slider 10..120 (OBSERVED on the running app 2026-09-16, tools/applab; ticks every ~11 min). D4 writes the raw int unclamped; the cap is UI-side (infoPage_heating_immediate_description: 'limited to 120 minutes'; unit raises ErrorCode 4 HEATING_TIME_EXCEEDED past it). Protocol raw_range is 0..255."
@@ -78,7 +85,8 @@ widgets:
       - afterTheTimerIsActivated_text
       - heatingWillStart_text
       - startHeatingAt_text
-    constraints: "OBSERVED on the running app 2026-09-16 (tools/applab): expander row 'Timer: Off/On'; body = explanatory text ('After the timer is activated, the heating starts tomorrow at HH:MM and stays on for N min' / armed: 'The heating starts tomorrow at HH:MM and stays on for N min'), 'Start heating at: HH:MM' picker row, then ONE button — 'Start timer' when off, 'Stop' when armed. Start timer -> uh/d -> rf/b.a2(AIR_HEATER) = OperationModeAirHeater 3 + OperationModeCombined 1 (frame 3f3b017f1f3f); Stop -> j4 = Mode 0 (3f0b007f1f3f). Page status bar reads 'Inactive • Timer: HH:MM' only while armed. No confirm dialog on this path. calictl: timer_start / timer_cancel + semantics timer_armed."
+    constraints: "OBSERVED on the running app 2026-09-16 (tools/applab): expander row 'Timer: Off/On'; body = explanatory text ('After the timer is activated, the heating starts tomorrow at HH:MM and stays on for N min' / armed: 'The heating starts tomorrow at HH:MM and stays on for N min'), 'Start heating at: HH:MM' picker row, then ONE button — 'Start timer' when off, 'Stop' when armed. Start timer -> uh/d -> rf/b.a2(AIR_HEATER) = OperationModeAirHeater 3 + OperationModeCombined 1 (frame 3f3b017f1f3f); Stop -> j4 = Mode 0 (3f0b007f1f3f). Page status bar reads 'Inactive • Timer: HH:MM' only while armed. No confirm dialog on this path. calictl: timer_start / timer_cancel + semantics timer_armed. B0 APP-OBSERVED 2026-09-27 (screens 35-37): tapping the 'Start heating at' value opens a bottom-sheet hour/minute wheel; its OK writes the time at once, with no confirm, independent of Start timer (does not arm); 09:31 -> 3f7b007f091f (TimerHour@32=0x09, TimerMin@40=0x1f, every other field at its sentinel). Identical to calictl 'timer 09:31' (T_AIRHEATER_TIMER_TIME, tools/scenarios/airheater/timer-time.yaml)."
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE
 
   - id: permanentHeatingWidget
     type: toggle
@@ -138,7 +146,18 @@ widgets:
       - activeRunTime_text
       - inactive_text
       - inactiveStartTimer_text
-    constraints: "Read-only summary; text variant selected based on combination of NormalOperation/PermanentOperation/RunningTime state (UNVERIFIED exact selection logic)"
+    constraints: "Read-only status line under the title. APP-OBSERVED 2026-09-27 (screen 34 variants): 'Inactive' (idle); 'Active • N min remaining' (NormalOperation=1, RunningTimeinAction=N); 'Active • Continuous heating' (PermanentOperation=1); 'Inactive • Timer: HH:MM' (OperationModeAirHeater=3 + OperationModeCombined=1). The two remaining keys (activePermHeatingTimer, activeRemainingTimerStartTimer) look (by key name) like the timer-armed-while-active variants — not provoked, UNVERIFIED."
+    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
+
+  - id: faultToasts
+    type: dialog
+    label_key: null
+    label_text: "ErrorCode toasts (headline / body / OK)"
+    range: null
+    controls: null
+    elements: []
+    constraints: "Pops the moment 1702 ErrorCode changes, on any page. 1 Battery voltage too low; 2 'Low fuel' — 'The auxiliary air heater was switched off because the fuel level is low. It can only be activated again when there is sufficient fuel. Please refuel.' [OK] (APP-OBSERVED 2026-09-16, re-seen 2026-09-27 screen 34); 3 system fault; 4 Emission limit exceeded; 5 deactivated. Full texts: docs/business-logic/cooler-airheater.md, alert-states.md §3."
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16
 
 icons:
   - air_heater             # drawable/air_heater
@@ -156,8 +175,9 @@ notes: |
   (this screen) and df.a (the separate combined livingRoomHeater screen),
   because both features are multiplexed over the same BLE control
   characteristic (1701/1702, class sf.a/sf.b — shared with the cooler
-  function's 1101/1102 register layout). Methods belonging to df.a
-  (a2, j4, B1, M1, b2) were deliberately left out of this spec.
+  function's 1101/1102 register layout). Of the df.a methods, a2
+  (Start timer) and j4 (Stop) ARE this page's timer controls
+  (APP-OBSERVED 2026-09-16, see timerWidget); B1, M1, b2 are not modeled.
 
   Enum we.a (package `we`) backing the H3 action has 3 members:
   FRONT_AND_REAR(0), FRONT(1), REAR(2) — mapped to AirDistribution values

@@ -23,16 +23,19 @@ widgets:
     constraints: "tf/a.java:211-220 z2(boolean on) -> State = on?1:0. Overall camping-mode on/off."
 
   - id: usbChargerToggle
-    type: toggle
+    type: label
     label_key: campingMode_rearUsbPorts_text
+    label_text: "Rear USB ports are Enabled"
     range: null
     controls: {field: UsbCharger, action: X1}
     elements: null
-    constraints: "tf/a.java:94-103 B2(boolean on) -> UsbCharger = on?1:0"
+    constraints: "tf/a.java:94-103 B2(boolean on) -> UsbCharger = on?1:0. VM setter B2 exists; on 5.0.8.3028 the page shows NO switch for it — a status row 'Enabled'/'Disabled' following UsbCharger 1/0 (APP-OBSERVED 2026-09-27, screens 38-40). The 2026-09-16 session recorded 'f3' from tapping this row's icon (control-and-actuation.md §3), so the row may still be a tap target — not re-tested. calictl keeps its usb write + the derived usb_powered."
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE
 
   - id: allLightsToggle
-    type: toggle
+    type: label
     label_key: null
+    label_text: "Opening front door activates the exterior and interior lighting at the front."
     range: null
     controls: {field: OutsideLight, action: X1}
     elements: null
@@ -41,11 +44,16 @@ widgets:
       InteriorLight together (no independent per-light control exists in
       this interface): on=true writes 0 to both fields, on=false writes 1
       to both. Polarity is inverted from what you'd expect — presented
-      exactly as coded, UNVERIFIED which raw value the vehicle interprets
-      as "lit". Derived readback flag tf/a.java:185-188 m2() = true iff both
-      lights currently read back false — this is almost certainly the value
-      shown/bound to this single "lights" toggle (climate-stairs.md:246-249).
-      Modeled as ONE toggle (not two), matching K0's combined-write behavior.
+      exactly as coded; polarity SETTLED (owner-verified on the unit's
+      screen: lit iff both fields read 0). Derived readback flag
+      tf/a.java:185-188 m2() = true iff both raw fields == 0.
+      APP-OBSERVED 2026-09-27 (screens 38-40): this is the front-door row
+      of the camping page, a status row (no switch on 5.0.8.3028) reading
+      "Enabled" only at (InteriorLight, OutsideLight) = (0, 0) and
+      "Disabled" at (1,1), (1,0), (0,1) — exactly m2(). VM setter K0 exists;
+      the 2026-09-16 session recorded '0f' from tapping the row's icon
+      (control-and-actuation.md §3) — not re-tested on 09-27.
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE
 
   - id: interiorLightState
     type: label
@@ -54,6 +62,16 @@ widgets:
     controls: {field: InteriorLight, action: null}
     elements: null
     constraints: "Same field written by K0 above; no independent setter exists — read-only for display purposes distinct from allLightsToggle's combined write"
+
+  - id: slidingDoorRow
+    type: label
+    label_key: null
+    label_text: "Opening sliding door activates the rear interior lights."
+    range: null
+    controls: null
+    elements: null
+    constraints: "Status row 'Enabled'/'Disabled' (APP-OBSERVED 2026-09-27, screens 38-40). It never moved with any 1202 field (all four InteriorLight/OutsideLight combinations, UsbCharger, State) — NOT a campingmode field. HYPOTHESIS: it follows the lighting function's DOOR_CONTACT profile (dg/h.n4; Lighting > Functions & Settings > 'Lighting & Sliding door'). Next step: set the lighting DOOR_CONTACT state on the fake unit and watch this row. The 2026-09-16 session saw no write on tapping it."
+    evidence: APP-OBSERVED 2026-09-27 (row); source = hypothesis
 
   - id: behaviorInfoSection
     type: section
@@ -66,6 +84,9 @@ widgets:
       - campingMode_openingFrontDoorTriggers_text
       - campingMode_seeAlsoLightingAndSlidingDoor_text
       - campingMode_tipInteriorMonitoringAlarm_text
+    label_text: "In camping mode the lighting and USB will behave as follows."
+    constraints: "APP-OBSERVED 2026-09-27 (screens 38-39): intro text, then the front-door row, the sliding-door row, the USB row, and 'Tip: See also lighting > lighting & sliding door'. With the master off (State=0) the page body is UNCHANGED (only the dashboard tile loses its 'On'). tipInteriorMonitoringAlarm and alarmDisclaimerDrawer were not shown on the Ocean profile."
+    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
 
   - id: alarmDisclaimerDrawer
     type: drawer

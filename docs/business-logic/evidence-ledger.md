@@ -18,11 +18,11 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 
 | Fact | Tier now | Capture that would verify it |
 |---|---|---|
-| cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | DECOMPILE | app: set + arm a cooling timer → diff 1101 frames |
+| cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | APP-OBSERVED (tools/applab 2026-09-16): timer start `f7771e3e1f1f`, time picker 04:02 `ff7704021f1f` — targeted fields match calictl's (`354309001606` / `3d43091e1606`); untargeted fields differ in convention only (`control-and-actuation.md` §3, `protocol-crosscheck-applab.md`) | unit-side: does the box switch on at TimerHour:TimerMin (the 2026-08-30 DEVICE read confirms the stored time, not the switch-on) |
 | cooler `mode` quiet=2(manual)/4=scheduled — DISPLAY-CONFIRMED 2026-08-26: the unit's Flüstermodus screen shows "Ein/Aus"(manual=Mode2) + "Automatisch"(scheduled=Mode4) toggles; scheduled quiet = Mode 4 (vf/c L0), decompile-cross-checked end to end (yh/e QuietModeViewModel). No physical compressor-audible confirm yet | DEVICE (display) | a human hearing the compressor quieten in the window |
 | cooler `NightTimerSet` bit — meaning UNKNOWN: decoded (1102 bit3) + plumbed into a StateFlow (vf/c D3) but NEVER rendered (dead-end, zero UI consumers) and NEVER written by any cooler path (only air-heater rf/b.H3 stages that shared frame slot). NOT the schedule-arm bit (that's Mode 4); "within-window active flag" hypothesis **REFUTED** DEVICE 2026-08-26 — read 0 with the unit RTC at 22:06 INSIDE the armed 22:00–06:00 window (also 0 outside it). Vestigial on this unit, or asserts only under some unseen condition. Not surfaced | DEVICE (refuted) | — |
 | airheater `runtime` (`3f7b003c1f3f`), `timer_start` (`3f3b017f1f3f` = Mode 3 + Combined 1), `timer_cancel` (`3f0b007f1f3f`) | APP-OBSERVED (tools/applab 2026-09-16; frames identical to calictl's) | unit-side: does the heater actually start at TimerHour:TimerMin, and what Mode does 1702 report after it fires (mock assumes 0) |
-| airheater `timer` HH:MM (`B0`, TimerHour/TimerMin) | DECOMPILE | app: move the "Start heating at" wheel (emulator swipes didn't turn it) → diff 1701 frame |
+| airheater `timer` HH:MM (`B0`, TimerHour/TimerMin) | APP-OBSERVED (2026-09-27, inventory screens 35-37): the "Start heating at" wheel set to 09:31 + OK → `3f7b007f091f` (`TimerHour` byte 4 = `0x09`, `TimerMin` byte 5 = `0x1f`), **identical** to calictl's `timer 09:31`; written on OK, no confirm, does not arm. Pinned by `T_AIRHEATER_TIMER_TIME` + `tools/scenarios/airheater/timer-time.yaml` | unit-side: does the unit store TimerHour/TimerMin, and does 1702 read them back (mock assumes yes) |
 | fault dialogs: heater ErrorCode 1–5, cooler Error 1–3, 11 energy flags, water InfoPopUps (fresh 1–5/7, waste 1–3) → the app's exact dialog texts | APP-OBSERVED (fake unit injection 2026-09-16; `alert-states.md`, `cooler-airheater.md`) | unit-side: which real conditions raise each code (only cooler door-open and heater codes have ever been seen live) |
 | `Installed` bit gates a function's tile; stairs / LR-heater / satellite / roof-A/C screens + vocabulary | APP-OBSERVED (Installed flipped on the fake unit) | — (not fitted on this van) |
 | airheater **permanent-ON** (NOT wired — only OFF is known) | unknown | app: enable permanent heating → learn the ON value |
@@ -73,6 +73,19 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   cabinet light `LSix` has no app control); cooler
   OFF/quiet/timer frames and camping master OFF (`fc`, identical) as tabled in
   `control-and-actuation.md`.
+- **APP-OBSERVED (2026-09-27, app 5.0.8.3028 against the fake unit; screen numbers = the session
+  inventory):** (a) **ex080 connect gate** — implausible `general` (1001) versions (AmbSw/CmSw
+  "9999"/"0000", `CommunicationVersion=99`) → the app refuses the connection: "Connection failure",
+  "App version outdated.", "Error code: ex080" (screen 57); restored versions reconnect. (b) **ECO
+  is not BLE-reachable** — the Energy Mode picker offers Normal / Max only, with
+  `EnergyModeNotSelectable=0`, `PvInstalled=1` and `CarVariant=2` alike (screens 58-59). **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` (account/config vs vehicle) is still unresolved — next step: SootUp def-use trace of `N0`'s writer (enigma updated
+  2026-09-28, californiaontour-re 8c8a8d32). (c) **camping front-door row = `tf/a.m2`** — "Enabled" only when
+  `InteriorLight`=`OutsideLight`=0 (screens 38-40); the sliding-door row never follows 1202
+  (hypothesis: lighting DOOR_CONTACT). (d) **roof ignition dialog** — ignition off → "Switch on the
+  ignition — Please switch on the ignition to operate the pop-up roof." [Not now] (screen 41), and
+  the roof page writes `0000097b00` on entry. (e) **heater timer wheel** frame above. (f) The Level
+  Indicator screen's ignition gate is not 1004 terminal-15 (screen 45; source is a hypothesis).
+  Tables in `protocol-crosscheck-applab.md`.
 - **pairing, APP-OBSERVED (2026-09-27, fake unit at SMP debug level):** the app pairs with
   `io_capability KEYBOARD_DISPLAY`, `auth_req BONDING|MITM|SC|CT2` → passkey entry against the
   display-only unit (calictl's `KeyboardOnly`+MITM+SC is the same association model); a bonded

@@ -32,6 +32,7 @@ widgets:
   - id: openButton
     type: button
     label_key: popUpRoof_instruction_toOpenPressTheUpperButton_text
+    label_text: "To open, press and hold the upper button."
     range: null
     controls: {field: Up, action: X1}
     elements: null
@@ -45,6 +46,7 @@ widgets:
   - id: closeButton
     type: button
     label_key: popUpRoof_instruction_toClosePressTheLowerButton_text
+    label_text: "To close, press and hold the lower button."
     range: null
     controls: {field: Down, action: X1}
     elements: null
@@ -58,7 +60,18 @@ widgets:
     range: null
     controls: {field: null, action: X1}
     elements: null
-    constraints: "ig/c.java:191-206 W(). Cancels the repeat timer and sends {Down:0, Up:0} once. No dedicated string key found for this button; UI likely reuses a generic stop/pause icon (drawable/stop)."
+    constraints: "ig/c.java:191-206 W(). Cancels the repeat timer and sends {Down:0, Up:0} once. IMPLICIT in 5.0.8.3028: the page shows a single press-and-hold rocker (upper half = open, lower half = close) and releasing it is the stop — no separate stop button was seen (APP-OBSERVED 2026-09-27, screens 41-43)."
+    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
+
+  - id: screenEntryProbe
+    type: label
+    label_key: null
+    label_text: "(no UI) on-entry write"
+    range: null
+    controls: {field: "Up/Down/SafetyCounter", action: null}
+    elements: null
+    constraints: "APP-OBSERVED 2026-09-27: opening the roof page with ignition on and no button pressed wrote 0000097b00 (Up=0 / Down=0 + a SafetyCounter value); the counter then streams every ~500 ms while the page is open (2026-09-16). The app thus validates its counter before the first press; calictl starts the counter on the press."
+    evidence: APP-OBSERVED 2026-09-27
 
   - id: installedLabel
     type: label
@@ -118,8 +131,8 @@ widgets:
     controls: null
     elements:
       - dialog_info_popUpRoof_safetyCheck_headline / _beforeOpening_text / _beforeClosing_text / _wait_button
-      - dialog_info_popUpRoof_activateIgnition_headline / _text / _button
-      - dialog_info_popUpRoof_onlyPossibleWhenStationary_headline / _text / _button
+      - dialog_info_popUpRoof_activateIgnition_headline / _text / _button  # APP-OBSERVED 2026-09-27 (screen 41): "Switch on the ignition" / "Please switch on the ignition to operate the pop-up roof." / [Not now]
+      - dialog_info_popUpRoof_onlyPossibleWhenStationary_headline / _text / _button  # APP-OBSERVED 2026-09-27 (screen 44, InfoPopUp 9): "Only possible when stationary" / "It cannot be operated when the vehicle is moving."
       - dialog_info_popUpRoof_functionInUse_headline / _text
       - dialog_info_popUpRoof_somethingWentWrong_headline / _text
       - dialog_warning_popUpRoof_childLock_headline / _text

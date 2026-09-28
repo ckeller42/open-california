@@ -22,7 +22,7 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | subscribe-all = exactly 12 notifiable chars | 12 CCCD writes with `0100` (handles 0x001B 1004, 0x0023 1102, 0x002B 1202, 0x0030 1302, 0x0038 1402, 0x0040 1502, 0x0048 1602, 0x0050 1702, 0x0058 1802, 0x0060 1902, 0x006E 2002, 0x0076 2102) + `0200` on the GATT Service-Changed indication | OBSERVED |
 | every state char read once after subscribing | `READ` of all 14 state chars within ~1 s of CONNECTED, `general` read repeatedly | OBSERVED |
 | writes are WRITE_TYPE_DEFAULT (with response) | 1798 `ATT_WRITE_REQUEST`, 0 `ATT_WRITE_COMMAND` | OBSERVED |
-| app disconnects if the version check fails | not exercised (baseline versions accepted) | NOT TESTED |
+| app disconnects if the version check fails | 2026-09-27 (inventory screen 57): `general` (1001) set to implausible versions (AmbSw/CmSw ASCII "9999"/"0000", `CommunicationVersion=99`), disconnect + reconnect → the app **refuses the connection**: full-screen "Connection failure", "App version outdated.", tip "1. Update app", "Error code: ex080", [Try again] [Close]. Baseline versions restored → one transient "Error accessing data" retry prompt, then a fresh Connect reconnects cleanly | OBSERVED (APP-OBSERVED 2026-09-27) — a hard refusal, not a banner; see `alert-states.md` §connect gate, `feature-availability.md` §firmware |
 
 ## Heartbeat / arming (S_SEQ_ACTUATE, `control-and-actuation.md` §2)
 
@@ -45,20 +45,21 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | heater continuous OFF | `0f7b007f1f3f` after the confirm dialog | `0f7b007f1f3f` | OBSERVED identical; no ON write exists (switch inert when off) |
 | heater temperature / run-time sliders | `3f78007f1f3f` (level 8) / `3f7b003c1f3f` (60 min) | same | OBSERVED identical |
 | heater **departure timer** arm / stop | "Start timer" → `3f3b017f1f3f` (`OperationModeAirHeater=3`, `OperationModeCombined=1`); "Stop" → `3f0b007f1f3f` (Mode 0); status bar "Inactive • Timer: 12:00" only while armed | `timer_start` / `timer_cancel` → same bytes (new 2026-09-16) | OBSERVED → **the doc's "a2() is combined-heater-only / no heater timer trigger exists" claim was wrong**; `a2(AIR_HEATER)` IS the timer arm on this AirHeater-only van (`uh/d.java` toggle → `rf/b.java` a2/j4) |
-| heater run-time picker / timer time picker | "Start heating at" wheel: swipes did not move it in the emulator (no frame captured); the slider path `B0` stays decompile-verified | `timer HH:MM` → `3f7b007f161e` | NOT TESTED (picker interaction) |
+| heater timer time picker ("Start heating at" wheel) | 2026-09-27 (screens 35-37): wheel set to 09:31, **OK** → `3f7b007f091f` (`TimerHour=9` byte 4, `TimerMin=31` byte 5, every other field at its sentinel); no confirm, does not arm (Start timer not pressed). Swipes do not turn the wheel; `adb shell input draganddrop x y1 x y2 1500` with a ~145 px throw advances exactly one row | `timer 09:31` → `3f7b007f091f` | OBSERVED identical (was NOT TESTED 2026-09-16); scenario `tools/scenarios/airheater/timer-time.yaml` |
 | cooler OFF / manual / automatic quiet | `fc771e3e1f1f` / `ff271e3e1f1f` / `ff471e3e1f1f` | `3c4309001606` / `3d2309001606` / `3d4309001606` | CONSISTENT (Mode 2 / 4 confirmed) |
 | cooler timer start | `f7771e3e1f1f` (box off only; hours at sentinel) | `354309001606` | CONSISTENT |
 | lighting All lights ON | `0c10…eeee…` + `0e00…` | same | OBSERVED identical |
 | lighting lamp on | `0904…` one nibble = **11 DEFAULT** | `0904…` nibble = 10 | CONSISTENT (value convention differs) |
 | lighting save profile | `0104…e00eeeee` + commit, then `0d0c…` (REQUEST_CONFIG @13) + commit | `save_profile 1` identical first frame | OBSERVED identical (app adds a config pull) |
-| energy mode Max | `10` → `30` | `10` | OBSERVED identical; ECO absent from the selector on this profile |
+| energy mode Max | `10` → `30` | `10` | OBSERVED identical; ECO absent from the selector on this profile — and still absent (2026-09-27, screens 58-59) with `energy.PvInstalled=1` and with `vehicle.CarVariant=2` (GRAND_CALIFORNIA): **ECO is not gated by any BLE field the fake serves**. **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` (account/config vs vehicle) is still unresolved — next step: SootUp def-use trace of `N0`'s writer |
 | lamp → zone map (`LIGHT_ZONES`) | 9 lamps → nibble positions match every entry; no app lamp on `LSix` | OBSERVED (DEVICE map confirmed) |
 
 ## Roof (S_SEQ_ROOF, `alert-states.md`)
 
 | Claim | Observation | Verdict |
 |---|---|---|
-| needs ignition ON | page shows "Switch on the ignition …" and no controls while `TerminalOneFive=0` | OBSERVED |
+| needs ignition ON | page shows "Switch on the ignition …" and no controls while `TerminalOneFive=0`; 2026-09-27 (screen 41) the full dialog: "Switch on the ignition — Please switch on the ignition to operate the pop-up roof." [Not now] | OBSERVED |
+| (new 2026-09-27) screen entry writes a probe frame | opening the roof page (ignition on, `Position=1`, no button pressed) → `WRITE roof 0000097b00` (Up=0 / Down=0 + a SafetyCounter); the counter then streams while the page stays open (S_SEQ_ROOF). Not investigated further; calictl starts its counter on the press instead (hence its ~3 s withhold after the press) | OBSERVED (APP-OBSERVED 2026-09-27) |
 | app streams `[dir][counter]` @ ~500 ms while held | page open (no press) streams `[00][counter]` every ~500 ms; **while held the rate is ~8 frames/s** with the counter still +1 per ~500 ms (same value on 4 consecutive frames) | **CONTRADICTED on cadence → S_SEQ_ROOF updated**; the mock's per-frame +1 validity rule was wrong and made the app abort after 2 `01` frames — fixed to monotonic-and-advancing |
 | direction bytes open `01` / stop `00` / close `04` | all three seen: `00` idle/pre-validation, `01` while OPEN held, `04` while CLOSE held (the app fell back to `00` once `Position` reached 0) | OBSERVED |
 | press-and-hold OPEN moves the roof; app stops at the limit | held 12 s: `01` frames at ~8/s until the fake unit reported `Position=1` (open), then the app itself fell back to `00` frames while still held; page text "The roof is closed" → "The roof is open" | OBSERVED (app-side auto-stop at the limit confirmed) |
@@ -84,6 +85,31 @@ carry them, and `semantics.water` now surfaces `fresh_alert` / `waste_alert`.
 | SoC display = level × 10 % for 0–10, nothing above | 0–10 → 0–100 %; **11, 12, 15 → "0 %"** | OBSERVED (calictl keeps `None` for 11–15) |
 | `Installed=0` hides a function | cooler / heater / roof tiles vanish from the overview the moment their `Installed` bit drops | OBSERVED |
 | stairs / roof-A/C / LR-heater / satellite screens exist in the app (not fitted on this van) | `Installed=1` on the fake unit adds the tiles: **Step** "Folded"; **Living area heating** "Off • Level 20 • Mix 6A (fuel and current)" + **Hot Water Mode** "Off • Eco • Mix 6A (fuel and current)"; **Satellite system** "Aerial switched off"; **roof A/C** renders raw resource keys `!ROOF_AIR_CONDITION` / `!OFF • !LEVEL 0 • !COOLING • !SPEED 0` (unlocalised — the app's roof-A/C surface is unfinished in this build) | OBSERVED (vocabulary for the four unverified functions: Step, Living area heating, Hot Water Mode, Satellite system) |
+
+## Camping-mode page and Level Indicator (session 2026-09-27)
+
+Screens 38-40 and 45 of the 2026-09-27 app inventory. Camping mode on app 5.0.8.3028 has **one
+control** (the master toggle); the three rows below it are read-only status rows, not toggles.
+The fake unit's `campingmode` fields were set from the console with `State=1` (master on):
+
+| `InteriorLight`, `OutsideLight` | Front-door row ("Opening front door activates the exterior and interior lighting at the front.") | Sliding-door row ("Opening sliding door activates the rear interior lights.") |
+|---|---|---|
+| 1, 1 | Disabled | Disabled |
+| 1, 0 | Disabled | Disabled |
+| 0, 1 | Disabled | Disabled |
+| 0, 0 | **Enabled** | Disabled |
+
+| Claim | Observation | Verdict |
+|---|---|---|
+| the lights are ONE inverted toggle, lit iff both fields read 0 (`tf/a` `K0` / `m2`) | the front-door row is Enabled only at (0,0) — exactly `tf/a.m2()` ("true iff both raw fields == 0") | OBSERVED (the model holds; `semantics.campingmode` `lights_on` matches the row) |
+| the sliding-door row is a campingmode (1202) field | it never moved in any of the four combinations, nor with `UsbCharger` | OBSERVED negative. **Hypothesis:** it follows the lighting function's DOOR_CONTACT profile (`dg/h.n4`; the page's own tip points to "lighting > lighting & sliding door"). Next step: set the fake unit's lighting DOOR_CONTACT state and watch the row |
+| rear USB row | "Enabled" / "Disabled" follows `UsbCharger` 1 / 0 | OBSERVED |
+| the app offers lights / USB toggles | the page has **one switch** (the master; a custom checkable view). The front-door and USB rows render as status rows ("Disabled" / "Rear USB ports are Enabled"), not switches; they were not tapped in this pass. The 2026-09-16 session did get writes from tapping those row **icons** (front-door `0f`, USB `f3`, `control-and-actuation.md` §3) and none from the sliding-door row | OBSERVED (UI shape). No switch for lights / USB, but the 09-16 icon taps did write — so "read-only rows" is NOT established; next step: tap each row icon with the fake unit logging writes. calictl's `lights` / `usb` writes are unaffected |
+| master off changes the page | `State=0`: the page body is unchanged; only the dashboard tile loses its "On" | OBSERVED |
+
+| Claim | Observation | Verdict |
+|---|---|---|
+| the Level Indicator reads roll/pitch from `1004` once ignition is on | the dedicated Level Indicator screen always shows "No data available. The ignition needs to be turned on for data." — with `vehicle.TerminalOneFive=1` (decoded correctly) and `CarLevelRoll`/`CarLevelPitch`/`CarLevelPopUp` set, after two re-entries | OBSERVED negative: the screen's ignition gate is **not** driven by 1004 terminal-15. **Hypothesis:** it reads the phone's own vehicle-data API (not the camper unit). Next step: trace the LevelIndicatorScreen view-model to the flow that supplies "ignition" |
 
 ## The hardware side: trace the real unit, replay it through the mock
 
