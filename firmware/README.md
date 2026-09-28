@@ -230,15 +230,85 @@ callout drives the runner/session timers.
 (`wifi_run.c`), the captive DNS (UDP 53, only where bindable) and the status/setup page + `/api/*`
 on `127.0.0.1:<port>`; the console gains `wifi set <ssid> <psk>` / `wifi status` / `wifi forget` /
 `wifi scan` and a `"wifi"` member in `status`'s STATE line. Without `--http` nothing network-related
-runs. Proven end to end by `tests/firmware/test_web_e2e.py`.
-
-On a Mac, run the Linux-only tests in Docker (arm64 image with an i686 cross gcc + qemu-i386
-binfmt, as used for this branch):
+runs (`--fake-wifi` without `--http` is a usage error; so is a port outside 1..65535). Proven end to
+end by `tests/firmware/test_web_e2e.py`. By hand (needs an HCI controller on the port, e.g. the
+Bumble fake unit the tests start — `tests/firmware/conftest.py`):
 
 ```
+cali-host --hci-port 9000 --store /tmp/cali --http 8081 --fake-wifi my.wifi   # then open http://127.0.0.1:8081/
+```
+
+**Fake-WiFi script** (`--fake-wifi PATH`, grammar from `components/platform/host/include/cali_net_host.h`):
+one rule per line, `#` comments and blank lines ignored; an SSID is one whitespace-free token of
+1..`NET_SSID_MAX` characters.
+
+```
+ap <ssid> <rssi> <secure>                 # a visible network (scan lists them in file order, at most NET_SCAN_MAX)
+join <ssid> ok <a.b.c.d>                  # sta_start(ssid) -> STA_GOT_IP with that address
+join <ssid> fail <not_found|auth|other>   # sta_start(ssid) -> STA_FAILED(reason)
+join <ssid> ok-after <n> [a.b.c.d]        # the first n sta_start(ssid) fail with OTHER, then GOT_IP (default 192.168.1.100)
+drop-after <ms>                           # STA_LOST <ms> after each STA_GOT_IP delivery
+```
+
+An SSID without a join rule fails `NOT_FOUND`; no script (or a missing/empty file) = no networks
+visible (ruling R2). The PSK is validated (empty = open, else 8..63 characters) but otherwise ignored — the rule
+decides. Every fake operation only queues its outcome, delivered by the next
+`cali_net_host_poll()` on the tick (the ESP event shape). The captive DNS binds UDP 53 only where
+that is allowed (root, e.g. the CI container); otherwise `LOG wifi: captive DNS unavailable` and
+the rest runs.
+
+**Console `wifi` commands** (both builds; `components/cali_core/include/cali_console.h`):
+
+| Command | Effect / output |
+|---|---|
+| `wifi set <ssid> <psk>` | Stores kv `wifi_ssid`/`wifi_psk` (like `POST /api/wifi`) and hands them to the runner. Single tokens (an SSID with spaces needs the page); SSID 1..32, PSK 8..63 bytes, else `LOG wifi: usage: wifi set <ssid> <psk>` / `LOG wifi: bad ssid` / `LOG wifi: bad psk`. While online/retrying/mid-join it replaces the old credentials (`LOG wifi: credentials replaced, reconnecting`) and re-joins as a setup-flow join (a typo -> setup). The line buffer is wiped after the command; the PSK is never printed. |
+| `wifi status` | `LOG wifi: <setup\|station\|off> ssid=<ssid\|-> ip=<a.b.c.d\|-> rssi=<dBm\|-> scan=<n>` |
+| `wifi forget` | Erase the credentials, stop the station, open the setup hotspot (`cali_wifi_run_forget`). |
+| `wifi scan` | Ask for a scan (held back while a BLE pairing flow is active). |
+
+Before the WiFi runtime booted (host without `--http`, a device without a working WiFi driver)
+every `wifi …` line answers `LOG wifi: not enabled` and `status` has no `wifi` member.
+
+**The Linux-only tier on a Mac** (`test_host_e2e.py`, `test_ble_store_kv.py`, `test_web_e2e.py`):
+run it in an arm64 Ubuntu container with an i686 cross gcc + qemu-i386 binfmt. The image used on
+this branch (`oc-fw-host`) was built from `ubuntu:24.04` with the steps below (reconstructed
+from its `docker history`; the build itself was not re-run for this doc, the test run was):
+
+```
+docker run --name oc-fw-host-build -v "$PWD":/w -w /w ubuntu:24.04 bash -c '
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq && apt-get install -y -qq gcc-i686-linux-gnu g++-i686-linux-gnu \
+      libc6-dev-i386-cross qemu-user-static binfmt-support build-essential git make \
+      python3 python3-pip python3-venv >/dev/null
+  pip install -q --break-system-packages -r requirements-dev.txt
+  ln -sf /usr/i686-linux-gnu/lib/ld-linux.so.2 /lib/ld-linux.so.2'
+docker commit oc-fw-host-build oc-fw-host && docker rm oc-fw-host-build
+firmware/host/fetch_nimble.sh                  # once, on the host: NimBLE + Mbed TLS into firmware/host/_deps
 docker run --rm -v "$PWD":/w -w /w -e CROSS_COMPILE=i686-linux-gnu- \
-    -e QEMU_LD_PREFIX=/usr/i686-linux-gnu <image> python3 -m pytest tests/firmware -v
+    -e QEMU_LD_PREFIX=/usr/i686-linux-gnu oc-fw-host python3 -m pytest tests/firmware -v -rs
 ```
+
+That run (2026-09-28, `test_web_e2e.py`: 11 passed) skips the two `test_page_renders` cases —
+the image has no Playwright/Chromium; they run in CI (`firmware-host-e2e`, `CALI_REQUIRE_CHROMIUM=1`
+makes them fail instead of skip) and on a Linux box with `requirements-e2e.txt` + `python -m
+playwright install --with-deps chromium`.
+
+### The page and the network constants are generated
+
+`python3 -m tools.gen_c_dict` writes every generated file; `--check` exits 1 if a checked-in one is
+stale (run by `tests/test_gen_c_dict.py`, `tests/test_web_strings.py` and CI). The network targets:
+
+| Source | Generated | What |
+|---|---|---|
+| `tools/wifi_consts.py` (`CONSTS`) + `tools/wifi_sm_ref.py` (enums) | `csrc/net_consts.h` | `NET_*` constants (SSID, PSK, address, hostname, timings, size limits) + the WiFi SM's `WIFI_*`/`WEV_*`/`WACT_*` enums |
+| `firmware/web/index.html` + `firmware/web/strings.json` | `firmware/web/index_gen.html` | the page with its `{{NET_*}}` placeholders and the EN/DE string table filled in |
+| the same | `firmware/web/strings_gen.h` | `WEB_STR_EN_*`/`WEB_STR_DE_*` + `WEB_INDEX_HTML` — `index_gen.html` byte for byte as a byte array |
+
+`tools/wifi_sm_ref.py` also generates the WiFi SM's golden vectors: `python3 -m
+tools.gen_wifi_vectors [--check]` -> `tests/vectors/wifi_sm.json`. Edit the page only in
+`index.html`/`strings.json` (EN + DE for every key), never the generated files. **One source of
+bytes:** `web.c` serves `WEB_INDEX_HTML` on both tiers — no `EMBED_FILES`, no LittleFS — and the docs
+screenshots (`python -m tools.ux_gallery --esp`) render the same `index_gen.html`.
 
 ## Components (`firmware/components`)
 
@@ -421,6 +491,13 @@ pairing agent arrived after SMP had already started; reproduced on purpose by th
 page (added in Task 10) is now the primary human-readable trace for firmware; this file stays the
 build/porting reference.
 
+**R_FW_WIFI_PROVISION**, **R_FW_HTTP_STATUS**, **R_FW_WIFI_BLE_COEX** (the WiFi/web slice) are
+defined in `docs/firmware.md` too, with their verifying tests (`T_WIFI_SM_REF`,
+`T_FW_WIFI_SM_PARITY`, `T_FW_CAPTIVE_DNS`, `T_FW_NET_HOST`, `T_FW_QEMU_NO_WIFI_DRIVER`,
+`T_FW_HTTP_CORE`, `T_FW_WEB_HANDLERS`, `T_FW_JSON_WRITER`, `T_FW_WEB_STRINGS`,
+`T_FW_ESP_SCREENSHOT_FIXTURES`, `T_FW_WIFI_LOSS_SESSION`, `T_FW_WEB_E2E`) declared in the test
+modules' docstrings.
+
 ## On-board verification (queued until the CoreS3 arrives)
 
 Nothing below has run: the host and QEMU tiers above are the only proof so far. This is the plan
@@ -473,6 +550,13 @@ this checklist is self-contained):
   `sdkconfig.defaults`; confirm a failed connect is one SM/session retry (no silent in-stack
   re-attempt), the unit is found by the legacy scan, and no NimBLE INFO lines interleave with the
   console lines.
+- **WiFi/web (network watch items, `docs/firmware.md`)** — BLE+WiFi coexistence with the hotspot
+  up (heartbeat period and `SNAP` cadence unchanged), the captive portal popping on iOS/macOS/
+  Android/Windows, `calictl-esp.local` resolving from iOS/macOS/Android, the single-connection
+  HTTP core with a real browser, the ESP event assumptions (`ASSOC_LEAVE` on our own disconnect,
+  the SSID in the disconnect event, `SCAN_DONE` when a join aborts a scan), typo-then-fix within
+  ~2 s (`wifi: online`, no `wifi: failed auth`), and a saved network out of range for minutes then
+  back (at most one `esp_wifi_connect` per driver attempt, `ONLINE` within one retry period).
 - **`esp_bt_controller_init` under QEMU** — QEMU-only, not expected on real hardware (the S3 has a
   real BT low-power clock); listed here only so it is not mistaken for a hardware regression if
   seen again.

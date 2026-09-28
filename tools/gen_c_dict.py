@@ -409,7 +409,8 @@ _WEB_HEADER = """\
  *
  * WEB_STR_EN_* / WEB_STR_DE_*: the status/setup page's EN/DE strings (UTF-8). WEB_INDEX_HTML: the
  * rendered page, byte for byte index_gen.html, as a NUL-terminated byte array (ruling R1: never a
- * C string literal) — the host build serves it; the ESP build embeds the same index_gen.html file.
+ * C string literal) — web.c serves this array on both the host and the ESP build (the one source
+ * of the page's bytes: no EMBED_FILES copy).
  * Include from exactly one translation unit (web.c): the array is static.
  */
 #ifndef WEB_STRINGS_GEN_H

@@ -66,7 +66,12 @@ def test_no_wifi_driver_boots_and_serves_nothing(qemu):
     firmware logs ``LOG wifi: driver unavailable`` once, never starts the WiFi runner or the HTTP
     server, and keeps answering the console. The WiFi SM stays ``WIFI_UNPROVISIONED`` = mode "off",
     which ``status`` shows by leaving the ``wifi`` member out (console.c: it appears only once the
-    runner booted) and ``wifi status`` by ``LOG wifi: not enabled``. No crash loop."""
+    runner booted) and ``wifi status`` by ``LOG wifi: not enabled``. No crash loop.
+
+    .. test:: A board without a working WiFi driver boots with WiFi off (QEMU tier)
+       :id: T_FW_QEMU_NO_WIFI_DRIVER
+       :links: R_FW_WIFI_PROVISION
+    """
     s = qemu.boot()
     s.expect("LOG wifi: driver unavailable", timeout=90)
     s.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
