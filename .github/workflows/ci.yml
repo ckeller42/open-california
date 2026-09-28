@@ -130,7 +130,7 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install deps
         run: pip install -r requirements-dev.txt
-      - name: Generated C headers are fresh (codec_dict.h + codec_chars.h + pairing_consts.h + net_consts.h)
+      - name: Generated artifacts are fresh (csrc/ codec_dict.h + codec_chars.h + pairing_consts.h + net_consts.h, firmware/web/ strings_gen.h + index_gen.html)
         run: python -m tools.gen_c_dict --check
       - name: Golden vectors are fresh
         run: python -m tools.gen_codec_vectors --check
@@ -184,14 +184,30 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
-      - name: Install deps
-        # 32-bit toolchain: NimBLE's Linux port builds with -m32 (Mbed TLS is built from source, 32-bit)
+          cache-dependency-path: |
+            requirements-dev.txt
+            requirements-e2e.txt
+      - name: Install deps (32-bit toolchain, Bumble, Playwright)
+        # 32-bit toolchain: NimBLE's Linux port builds with -m32 (Mbed TLS is built from source, 32-bit).
+        # requirements-e2e.txt: Playwright for test_web_e2e.py::test_page_renders (the status page).
         run: |
           sudo apt-get update && sudo apt-get install -y gcc-multilib g++-multilib
-          pip install -r requirements-dev.txt
-      - name: Host firmware e2e (NimBLE Linux port over TCP HCI to the Bumble fake unit)
-        run: python -m pytest tests/firmware -v
+          pip install -r requirements-dev.txt -r requirements-e2e.txt
+      # The browser install mirrors gui-e2e (same cache key, so the two jobs share the cache entry).
+      - name: Playwright version (for the browser cache key)
+        run: echo "PW_VERSION=$(python -m playwright --version | awk '{print $2}')" >> "$GITHUB_ENV"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ env.PW_VERSION }}
+      - name: Install Chromium (browser from cache when present; apt --with-deps only on miss)
+        run: python -m playwright install ${{ steps.pw-cache.outputs.cache-hit == 'true' && 'chromium' || '--with-deps chromium' }}
+      - name: Firmware tests incl. host tier (BLE e2e + bond store over NimBLE/Bumble, WiFi/web e2e + status page in Chromium)
+        env:
+          CALI_REQUIRE_CHROMIUM: "1"   # the status-page test fails, not skips, without a browser
+        run: python -m pytest tests/firmware -v -rs
 
   # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,
   # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble, with

@@ -10,6 +10,7 @@ and the Bumble fake unit for the camper. Requests go to ``127.0.0.1:PORT`` with 
    :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX
 """
 import json
+import os
 import subprocess
 import time
 import urllib.error
@@ -191,6 +192,8 @@ def test_page_renders(host_fw, hci_unit, tmp_path, locale, device, functions):
     any uncaught page error fails the test."""
     sync_playwright, why = _chromium()
     if sync_playwright is None:
+        if os.environ.get("CALI_REQUIRE_CHROMIUM") == "1":   # CI firmware-host-e2e / tools/ci.sh firmware
+            pytest.fail("CALI_REQUIRE_CHROMIUM=1 but " + why)
         pytest.skip(why)
     fw = host_fw(hci_unit, http=True)
     _pair(fw, hci_unit)
