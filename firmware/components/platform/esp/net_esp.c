@@ -15,13 +15,24 @@
  *    driver SCAN_DONE with status != 0 is delivered empty, and a scan whose SCAN_DONE never comes
  *    (dropped from a full ring, aborted by a join) gets an empty one from the poll's 15 s watchdog;
  *    a driver SCAN_DONE with no scan in flight is dropped (its records freed).
- *  - sta_start / sta_stop cancel every queued station event, and a late driver event of an OLD join
- *    is never attributed to the new one: DISCONNECTED/CONNECTED carrying another SSID are dropped,
- *    the ASSOC_LEAVE our own esp_wifi_disconnect() causes is swallowed, and GOT_IP counts only after
- *    a CONNECTED to the target SSID. Every join ends (GOT_IP or FAILED): the 30 s watchdog covers a
- *    join the driver never resolves (e.g. associated but no DHCP lease — the WiFi SM has no
- *    CONNECTING timeout of its own).
- *  - STA_LOST only after GOT_IP was delivered (s_ip_up).
+ *  - A late driver event of an OLD join never reaches the runner as the new join's outcome (join
+ *    generations, fix round 1): every station event is tagged in the ring with the generation current
+ *    when the handler ran; sta_start (a real replacement), sta_stop and the join watchdog bump the
+ *    generation (and scrub the ring), so everything raised before is dropped whatever its reason.
+ *    The one old event that can still be raised AFTER the bump — the end of the driver attempt we
+ *    abandoned with esp_wifi_disconnect() — is counted (J.old_ends, at most one attempt runs in the
+ *    driver) and the next DISCONNECTED is swallowed as it (for at most OLD_END_MS); a CONNECTED of the
+ *    new attempt proves the old one ended (the driver runs one attempt at a time; CONNECTED comes after
+ *    the 4-way handshake, so a wrong-psk attempt never produces one). The decision is the pure
+ *    sta_verdict() below.
+ *  - sta_start with the SAME ssid+psk as a join still in flight keeps that join (no disconnect, no
+ *    new generation): the WiFi SM re-issues STA_START every 1/2/4 ... s while RETRYING, and a
+ *    NO_AP_FOUND attempt scans all channels for seconds.
+ *  - Every join ends (GOT_IP or FAILED): the 30 s watchdog covers a join the driver never resolves
+ *    (e.g. associated but no DHCP lease, or a swallowed old end that never came — then the worst case
+ *    is FAILED(other) after 30 s, never a wrong-credentials verdict). The WiFi SM has no CONNECTING
+ *    timeout of its own.
+ *  - STA_LOST only after GOT_IP was delivered for the current generation (J.ip_up).
  */
 #include "cali_net_esp.h"
 
@@ -82,6 +93,7 @@ void cali_net_esp_poll(uint64_t now_ms) { (void)now_ms; }
 #define RING_MAX 16
 #define JOIN_TIMEOUT_MS 30000u
 #define SCAN_TIMEOUT_MS 15000u
+#define OLD_END_MS 5000u  /* an abandoned attempt ends within ms of our disconnect; after this, stop waiting */
 #define AP_CHANNEL 1
 #define AP_MAX_CLIENTS 4
 
@@ -96,6 +108,7 @@ typedef struct {
     uint8_t ssid[32];
     uint32_t ip;               /* K_GOT_IP: host byte order */
     uint32_t seq;
+    uint32_t gen;              /* station kinds: the join generation when the event was queued */
     cali_net_ev_t ev;          /* K_FINAL */
     cali_net_reason_t fin_reason;
 } entry_t;
@@ -105,19 +118,48 @@ static portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
 static entry_t s_ring[RING_MAX];
 static uint32_t s_seq;
 static unsigned s_dropped;     /* entries evicted by a full ring since the last poll */
+static uint32_t s_gen;         /* the join generation: written by the owner, read by ring_put */
+
+/* ---- the join: platform-free state + verdict (fix round 1) ---- */
+
+typedef struct {
+    uint32_t gen;      /* the current generation (== s_gen) */
+    int joining;       /* sta_start issued in this generation; no GOT_IP/FAILED delivered yet */
+    int assoc;         /* CONNECTED seen in this generation */
+    int ip_up;         /* GOT_IP delivered in this generation, no STA_LOST since */
+    int old_ends;      /* 0/1: the end of an abandoned driver attempt still to come (swallow it) */
+} join_t;
+
+enum { V_DROP, V_OLD_END, V_ASSOC, V_UP, V_FAIL, V_LOST };
+enum { SK_CONNECTED, SK_DISCONNECTED, SK_GOT_IP, SK_LOST_IP };
+
+/* What a station event (kind SK_*, tagged with generation ev_gen) means for the join j. Pure: no
+ * driver, no globals, so the two scenarios of the Task 9 review are traced by hand against it
+ * (task-9-report.md, fix round 1). */
+static int sta_verdict(const join_t *j, int kind, uint32_t ev_gen) {
+    if (ev_gen != j->gen) return V_DROP;                       /* raised before a replace/stop */
+    switch (kind) {
+    case SK_CONNECTED: return j->joining ? V_ASSOC : V_DROP;
+    case SK_DISCONNECTED:
+        if (j->old_ends > 0) return V_OLD_END;                 /* the abandoned attempt's end */
+        if (j->ip_up) return V_LOST;
+        return j->joining ? V_FAIL : V_DROP;
+    case SK_GOT_IP: return j->joining && j->assoc && !j->ip_up ? V_UP : V_DROP;
+    case SK_LOST_IP: return j->ip_up ? V_LOST : V_DROP;
+    default: return V_DROP;
+    }
+}
 
 /* ---- owner task only ---- */
 static cali_net_sink_t s_sink;
 static void *s_sink_ctx;
 static esp_netif_t *s_sta_if, *s_ap_if;
 static int s_ready;            /* init succeeded */
-static char s_target[NET_SSID_MAX + 1];   /* the SSID of the current join ("" = none) */
-static int s_joining;          /* sta_start issued; no GOT_IP/FAILED delivered yet */
-static int s_assoc;            /* CONNECTED to s_target seen during this join */
-static int s_ip_up;            /* GOT_IP delivered, no STA_LOST since */
-static int s_sta_active;       /* esp_wifi_connect issued, no DISCONNECTED for it processed yet */
-static int s_leave_pending;    /* our esp_wifi_disconnect's ASSOC_LEAVE not seen yet */
+static join_t J;
+static char s_ssid[NET_SSID_MAX + 1], s_psk[NET_PSK_MAX + 1];   /* the current join's credentials */
+static int s_drv_active;       /* esp_wifi_connect issued in this generation, its end not seen yet */
 static uint64_t s_join_ms;
+static uint64_t s_old_ms;      /* when J.old_ends was set */
 static int s_ap_on;            /* ap_start succeeded, no ap_stop since */
 static int s_ap_start_due;     /* AP_STARTED not delivered yet for this ap_start */
 static int s_ap_stop_due;      /* AP_STOPPED not delivered yet for this ap_stop */
@@ -148,6 +190,7 @@ static void ring_put(const entry_t *e) {
     s_ring[slot] = *e;
     s_ring[slot].used = 1;
     s_ring[slot].seq = s_seq++;
+    s_ring[slot].gen = s_gen;
     taskEXIT_CRITICAL(&s_mux);
 }
 
@@ -181,6 +224,46 @@ static void cancel_sta(void) {
     for (int i = 0; i < RING_MAX; i++)
         if (s_ring[i].used && is_sta_kind(&s_ring[i])) s_ring[i].used = 0;
     taskEXIT_CRITICAL(&s_mux);
+}
+
+/* Owner task: a new generation; everything tagged before is stale from now on. */
+static void bump_gen(void) {
+    taskENTER_CRITICAL(&s_mux);
+    J.gen = ++s_gen;
+    taskEXIT_CRITICAL(&s_mux);
+}
+
+/* Owner task: is the driver still running this generation's attempt? Not when its DISCONNECTED is
+ * already waiting in the ring (the attempt ended; a disconnect now would produce no event). */
+static int drv_active_now(void) {
+    int ended = 0;
+    if (!s_drv_active) return 0;
+    taskENTER_CRITICAL(&s_mux);
+    for (int i = 0; i < RING_MAX; i++)
+        if (s_ring[i].used && s_ring[i].kind == K_STA_DISCONNECTED && s_ring[i].gen == J.gen) ended = 1;
+    taskEXIT_CRITICAL(&s_mux);
+    return !ended;
+}
+
+/* Owner task: end the current join/association: new generation, ring scrubbed (cancel_sta BEFORE
+ * any esp_wifi_disconnect, so the event it causes can never be scrubbed), a running driver attempt
+ * disconnected and its end counted in old_ends. Returns 1 if GOT_IP had been delivered. */
+static int end_join(void) {
+    int active = drv_active_now(), was_up = J.ip_up;
+    bump_gen();
+    cancel_sta();
+    if (active) {
+        esp_err_t err = esp_wifi_disconnect();
+        if (err == ESP_OK) {
+            J.old_ends = 1;
+            s_old_ms = cali_uptime_ms();
+        } else {
+            cali_log("net: esp_wifi_disconnect: %s", esp_err_to_name(err));
+        }
+    }
+    s_drv_active = 0;
+    J.joining = J.assoc = J.ip_up = 0;
+    return was_up;
 }
 
 static void put_final(cali_net_ev_t ev, cali_net_reason_t reason) {
@@ -258,32 +341,18 @@ static int psk_ok(const char *psk) {
     return n == 0 || (n >= NET_PSK_MIN && n <= NET_PSK_MAX);
 }
 
-static int ssid_is(const entry_t *e, const char *want) {
-    return e->ssid_len == strlen(want) && memcmp(e->ssid, want, e->ssid_len) == 0;
-}
-
 static void set_sink(cali_net_sink_t sink, void *ctx) {
     s_sink = sink;
     s_sink_ctx = ctx;
 }
 
-/* Drop the station: cancel its queued events, disconnect a live/pending association (its
- * ASSOC_LEAVE is then swallowed), queue STA_LOST if it was up. */
+/* Drop the station (a new generation: nothing pending is ever reported), queue STA_LOST if GOT_IP
+ * had been delivered for the stopped generation. */
 static int sta_stop(void) {
-    cancel_sta();
-    if (s_sta_active) {
-        esp_err_t err = esp_wifi_disconnect();
-        if (err == ESP_OK) s_leave_pending = 1;
-        else cali_log("net: esp_wifi_disconnect: %s", esp_err_to_name(err));
-        s_sta_active = 0;
-    }
-    s_joining = 0;
-    s_assoc = 0;
-    s_target[0] = '\0';
-    if (s_ip_up) {
-        s_ip_up = 0;
-        put_final(CALI_NET_EV_STA_LOST, CALI_NET_REASON_NONE);
-    }
+    if (!s_ready) return -1;
+    if (end_join()) put_final(CALI_NET_EV_STA_LOST, CALI_NET_REASON_NONE);
+    memset(s_ssid, 0, sizeof s_ssid);
+    memset(s_psk, 0, sizeof s_psk);
     return 0;
 }
 
@@ -291,7 +360,9 @@ static int sta_start(const char *ssid, const char *psk) {
     wifi_config_t cfg;
     esp_err_t err;
     if (!s_ready || !ssid_ok(ssid) || !psk_ok(psk)) return -1;
-    sta_stop(); /* a new join replaces the old one: LOST first if it was up */
+    if (J.joining && strcmp(ssid, s_ssid) == 0 && strcmp(psk, s_psk) == 0)
+        return 0;                                      /* the same join is in flight: keep it */
+    sta_stop(); /* a real replacement: new generation, LOST first if it was up */
 
     memset(&cfg, 0, sizeof cfg);
     memcpy(cfg.sta.ssid, ssid, strlen(ssid));          /* 1..32 bytes, no NUL needed at 32 */
@@ -310,10 +381,10 @@ static int sta_start(const char *ssid, const char *psk) {
         cali_log("net: esp_wifi_connect: %s", esp_err_to_name(err));
         return -1;
     }
-    strcpy(s_target, ssid);
-    s_joining = 1;
-    s_assoc = 0;
-    s_sta_active = 1;
+    strcpy(s_ssid, ssid);
+    strcpy(s_psk, psk);
+    J.joining = 1;
+    s_drv_active = 1;
     s_join_ms = cali_uptime_ms();
     return 0;
 }
@@ -398,7 +469,7 @@ static int scan(void) {
 
 static int sta_rssi(void) {
     wifi_ap_record_t ap;
-    if (!s_ip_up || esp_wifi_sta_get_ap_info(&ap) != ESP_OK) return 0;
+    if (!J.ip_up || esp_wifi_sta_get_ap_info(&ap) != ESP_OK) return 0;
     return ap.rssi;
 }
 
@@ -450,13 +521,6 @@ static void deliver(cali_net_ev_t ev, cali_net_reason_t reason, uint32_t ip, int
     if (s_sink) s_sink(&e, s_sink_ctx);
 }
 
-/* The join ended without GOT_IP: FAILED(reason) to the runner. */
-static void join_failed(cali_net_reason_t reason) {
-    s_joining = 0;
-    s_assoc = 0;
-    deliver(CALI_NET_EV_STA_FAILED, reason, 0, 0);
-}
-
 static int scan_records(int ok) {
     uint16_t n = NET_SCAN_MAX;
     int out = 0;
@@ -477,6 +541,35 @@ static int scan_records(int ok) {
     return out;
 }
 
+static void handle_sta(const entry_t *e) {
+    int kind = e->kind == K_STA_CONNECTED ? SK_CONNECTED : e->kind == K_STA_DISCONNECTED ? SK_DISCONNECTED
+             : e->kind == K_GOT_IP ? SK_GOT_IP : SK_LOST_IP;
+    switch (sta_verdict(&J, kind, e->gen)) {
+    case V_OLD_END: J.old_ends = 0; break;
+    case V_ASSOC:
+        J.assoc = 1;
+        J.old_ends = 0;                            /* a new association: the old attempt is over */
+        break;
+    case V_UP:
+        J.joining = 0;
+        J.ip_up = 1;
+        deliver(CALI_NET_EV_STA_GOT_IP, CALI_NET_REASON_NONE, e->ip, 0);
+        break;
+    case V_FAIL:
+        J.joining = J.assoc = 0;
+        s_drv_active = 0;
+        deliver(CALI_NET_EV_STA_FAILED, map_reason(e->reason), 0, 0);
+        break;
+    case V_LOST:
+        if (kind == SK_DISCONNECTED) s_drv_active = 0;   /* LOST_IP: still associated */
+        J.ip_up = 0;
+        deliver(CALI_NET_EV_STA_LOST, CALI_NET_REASON_NONE, 0, 0);
+        break;
+    default:
+        break;
+    }
+}
+
 static void handle(const entry_t *e) {
     switch (e->kind) {
     case K_FINAL:
@@ -484,37 +577,10 @@ static void handle(const entry_t *e) {
         deliver(e->ev, e->fin_reason, 0, 0);
         break;
     case K_STA_CONNECTED:
-        if (s_joining && ssid_is(e, s_target)) s_assoc = 1;
-        break;
-    case K_GOT_IP:
-        if (s_joining && s_assoc && !s_ip_up) {
-            s_joining = 0;
-            s_ip_up = 1;
-            s_leave_pending = 0;
-            deliver(CALI_NET_EV_STA_GOT_IP, CALI_NET_REASON_NONE, e->ip, 0);
-        }
-        break;
     case K_STA_DISCONNECTED:
-        if (s_leave_pending && e->reason == WIFI_REASON_ASSOC_LEAVE) {
-            s_leave_pending = 0;                   /* our own disconnect of the old association */
-            break;
-        }
-        if (e->ssid_len > 0 && !ssid_is(e, s_target)) break;   /* another (old) SSID */
-        if (s_ip_up) {
-            s_ip_up = 0;
-            s_sta_active = 0;
-            s_target[0] = '\0';
-            deliver(CALI_NET_EV_STA_LOST, CALI_NET_REASON_NONE, 0, 0);
-        } else if (s_joining) {
-            s_sta_active = 0;
-            join_failed(map_reason(e->reason));
-        }
-        break;
+    case K_GOT_IP:
     case K_LOST_IP:
-        if (s_ip_up) {                             /* the lease is gone while associated */
-            s_ip_up = 0;
-            deliver(CALI_NET_EV_STA_LOST, CALI_NET_REASON_NONE, 0, 0);
-        }
+        handle_sta(e);
         break;
     case K_AP_START:
         if (s_ap_on && s_ap_start_due) {
@@ -555,17 +621,19 @@ void cali_net_esp_poll(uint64_t now_ms) {
         s_overflow_logged = 1;
         cali_log("net: event queue full, oldest dropped");
     }
+    /* An old end that never came (esp_wifi_disconnect of an attempt that had just ended emits
+     * nothing) must not swallow a genuine outcome forever. */
+    if (J.old_ends && now_ms >= s_old_ms && now_ms - s_old_ms >= OLD_END_MS) J.old_ends = 0;
     while (ring_take(limit, &e)) handle(&e);
 
-    if (s_joining && now_ms - s_join_ms >= JOIN_TIMEOUT_MS) {   /* no outcome from the driver */
-        esp_err_t err = esp_wifi_disconnect();
-        if (err == ESP_OK) s_leave_pending = 1;
-        else cali_log("net: esp_wifi_disconnect: %s", esp_err_to_name(err));
-        s_sta_active = 0;
-        cancel_sta();
-        join_failed(CALI_NET_REASON_OTHER);
+    /* now_ms >= start: an op started from inside the sink during this drain is stamped after now_ms */
+    if (J.joining && now_ms >= s_join_ms && now_ms - s_join_ms >= JOIN_TIMEOUT_MS) {
+        end_join();                    /* this generation's late outcome is dropped from now on */
+        memset(s_psk, 0, sizeof s_psk);
+        s_ssid[0] = '\0';
+        deliver(CALI_NET_EV_STA_FAILED, CALI_NET_REASON_OTHER, 0, 0);
     }
-    if (s_scan_busy && now_ms - s_scan_ms >= SCAN_TIMEOUT_MS) {  /* SCAN_DONE never came */
+    if (s_scan_busy && now_ms >= s_scan_ms && now_ms - s_scan_ms >= SCAN_TIMEOUT_MS) {  /* SCAN_DONE never came */
         s_scan_busy = 0;
         deliver(CALI_NET_EV_SCAN_DONE, CALI_NET_REASON_NONE, 0, 0);
     }
@@ -725,36 +793,63 @@ static int ap_netif_setup(void) {
     return 0;
 }
 
+/* Undo a failed init (M3): handlers, driver, netifs; the no-driver path and a retry start clean. */
+static void init_undo(int wifi_inited) {
+    esp_err_t err;
+    if ((err = esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_LOST_IP, on_ip_event)) != ESP_OK &&
+        err != ESP_ERR_NOT_FOUND && err != ESP_ERR_INVALID_ARG)
+        cali_log("net: unregister: %s", esp_err_to_name(err));
+    (void)esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, on_ip_event);
+    (void)esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event);
+    if (wifi_inited && (err = esp_wifi_deinit()) != ESP_OK) cali_log("net: esp_wifi_deinit: %s", esp_err_to_name(err));
+    if (s_sta_if) esp_netif_destroy_default_wifi(s_sta_if);
+    if (s_ap_if) esp_netif_destroy_default_wifi(s_ap_if);
+    s_sta_if = s_ap_if = NULL;
+}
+
+#define STEP(call)                                                           \
+    do {                                                                     \
+        esp_err_t err_ = (call);                                             \
+        if (err_ != ESP_OK) {                                                \
+            cali_log("net: %s: %s", #call, esp_err_to_name(err_));           \
+            goto fail;                                                       \
+        }                                                                    \
+    } while (0)
+
 int cali_net_esp_init(void) {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_err_t err;
+    int wifi_inited = 0;
     if (s_ready) return 0;
     s_sta_if = esp_netif_create_default_wifi_sta();
     s_ap_if = esp_netif_create_default_wifi_ap();
     if (s_sta_if == NULL || s_ap_if == NULL) {
         cali_log("net: esp_netif_create_default_wifi_*: failed");
-        return -1;
+        goto fail;
     }
-    if (ap_netif_setup() != 0) return -1;
-    err = esp_wifi_init(&cfg);
-    if (err != ESP_OK) {
-        cali_log("net: esp_wifi_init: %s", esp_err_to_name(err));
-        return -1;
-    }
-    TRY(esp_wifi_set_storage(WIFI_STORAGE_RAM));           /* credentials live in cali_kv */
-    TRY(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL));
-    TRY(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_ip_event, NULL));
-    TRY(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, on_ip_event, NULL));
+    /* DHCP client/AP hostname = the generated NET_HOSTNAME (csrc/net_consts.h), never a hand-typed
+     * copy in sdkconfig (review I2). */
+    STEP(esp_netif_set_hostname(s_sta_if, NET_HOSTNAME));
+    STEP(esp_netif_set_hostname(s_ap_if, NET_HOSTNAME));
+    if (ap_netif_setup() != 0) goto fail;
+    STEP(esp_wifi_init(&cfg));
+    wifi_inited = 1;
+    STEP(esp_wifi_set_storage(WIFI_STORAGE_RAM));          /* credentials live in cali_kv */
+    STEP(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL));
+    STEP(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_ip_event, NULL));
+    STEP(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, on_ip_event, NULL));
     /* Configure the setup AP while it is still down (set_config needs the AP interface enabled),
      * so ap_start()'s mode switch brings it up with our SSID/PSK, never the driver's open default. */
-    TRY(esp_wifi_set_mode(WIFI_MODE_APSTA));
-    TRY(set_ap_config(NET_AP_SSID, NET_AP_PSK));
+    STEP(esp_wifi_set_mode(WIFI_MODE_APSTA));
+    STEP(set_ap_config(NET_AP_SSID, NET_AP_PSK));
     strcpy(s_ap_ssid, NET_AP_SSID);
     strcpy(s_ap_psk, NET_AP_PSK);
-    TRY(esp_wifi_set_mode(WIFI_MODE_STA));
-    TRY(esp_wifi_start());
+    STEP(esp_wifi_set_mode(WIFI_MODE_STA));
+    STEP(esp_wifi_start());
     s_ready = 1;
     return 0;
+fail:
+    init_undo(wifi_inited);
+    return -1;
 }
 
 #endif /* CONFIG_CALI_WIFI */

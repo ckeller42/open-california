@@ -114,13 +114,18 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   dropped`); the poll on the owner task is the only caller of the runner's sink. Two watchdogs end
   every started operation: a join with no outcome after 30 s -> `STA_FAILED(other)` (the WiFi SM has
   no CONNECTING timeout; e.g. associated but no DHCP lease), a scan without `SCAN_DONE` after 15 s
-  -> an empty `SCAN_DONE`. Old-join events are never attributed to a new join (SSID check on
-  CONNECTED/DISCONNECTED, our own disconnect's `ASSOC_LEAVE` swallowed, GOT_IP only after a CONNECTED
-  to the target). Failure reasons: `NO_AP_FOUND` -> `not_found`; `AUTH_FAIL`,
+  -> an empty `SCAN_DONE`. Old-join events are never attributed to a new join: join generations
+  (every station event is tagged in the ring with the generation current when it was queued; a
+  replacing `sta_start`, `sta_stop` and the watchdog bump it, so earlier events are dropped whatever
+  their reason; the end of an attempt abandoned by our own `esp_wifi_disconnect` is swallowed once,
+  for at most 5 s). `sta_start` with the same ssid+psk as a join in flight keeps it (the SM's
+  1/2/4 s retries do not restart the driver). A GOT_IP with a changed address while up is ignored,
+  and the queue-overflow line is logged once per boot. Failure reasons: `NO_AP_FOUND` -> `not_found`; `AUTH_FAIL`,
   `4WAY_HANDSHAKE_TIMEOUT`, `HANDSHAKE_TIMEOUT` -> `auth`; anything else -> `other`.
 - **Sockets:** lwIP BSD, `O_NONBLOCK`, `SO_REUSEADDR` on the listener, `TCP_NODELAY` on accepted
   sockets, bound to `INADDR_ANY`; `CONFIG_LWIP_MAX_SOCKETS=6` (listener + connection + one closing +
-  captive DNS = 4). DHCP hostname `CONFIG_LWIP_LOCAL_HOSTNAME="calictl-esp"`.
+  captive DNS = 4). DHCP hostname = `NET_HOSTNAME`, set in code (`esp_netif_set_hostname` on both netifs), never
+  copied into `sdkconfig.defaults`.
 - **mDNS:** managed component **`espressif/mdns` pinned `==1.13.1`** (`components/platform/idf_component.yml`;
   the newest the registry served for IDF v6.1 on 2026-09-28). The repo does not commit
   `dependencies.lock` (gitignored with `managed_components/`), so the exact pin is the manifest's.
@@ -145,7 +150,7 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   switching, delete the stale `firmware/sdkconfig` / `build-qemu/sdkconfig` (and
   `build-qemu/qemu_flash.bin`, whose partition table is the old one).
 - **Size (`idf.py size`, release):** `cali_fw.bin` before WiFi 0x71190 = 463,248 B (70 % of the old
-  1,536,000 B app partition free) -> with WiFi **0x107290 = 1,077,904 B** (+614,656 B: net80211,
+  1,536,000 B app partition free) -> with WiFi **0x107660 = 1,078,880 B** (+615,632 B: net80211,
   wpa_supplicant + PSA crypto, lwIP, pp/phy, mdns) = **66 % of the 3 MB partition free** (it would
   have been 30 % of the old 1.5 MB one). The plan's ~250 KB estimate for WiFi + lwIP was wrong by
   about 2.5x. DIRAM 103,802 -> 160,018 B used (46.8 %). QEMU image (no WiFi): 0x55cf0 B, 89 % free.

@@ -62,8 +62,8 @@ CONFIG_CALI_WIFI=y
 # The credentials live in cali_kv (NVS namespace "cali", "wifi_ssid"/"wifi_psk"); net_esp.c also
 # sets WIFI_STORAGE_RAM, so the driver never keeps its own copy of the passphrase in NVS.
 CONFIG_ESP_WIFI_NVS_ENABLED=n
-# DHCP client hostname = the mDNS name (NET_HOSTNAME in csrc/net_consts.h).
-CONFIG_LWIP_LOCAL_HOSTNAME="calictl-esp"
+# DHCP hostname: net_esp.c sets NET_HOSTNAME (csrc/net_consts.h) on both netifs at init, so no copy
+# of the name lives here (CONFIG_LWIP_LOCAL_HOSTNAME stays the IDF default, overridden in code).
 # Socket budget: the HTTP listener + one connection (+ one being torn down) + the captive DNS UDP
 # socket = 4; 6 leaves room (the mdns component uses lwIP PCBs, not sockets, by default).
 CONFIG_LWIP_MAX_SOCKETS=6
