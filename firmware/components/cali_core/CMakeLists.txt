@@ -1,6 +1,6 @@
-# Platform-free core: pairing SM, WiFi SM, runner, session, console, JSON writer. No NimBLE/ESP headers
+# Platform-free core: pairing SM, WiFi SM, runner, session, console, JSON writer, HTTP core. No NimBLE/ESP headers
 # (test/ is host-only).
-idf_component_register(SRCS "pairing_sm.c" "runner.c" "session.c" "console.c" "json.c" "wifi_sm.c"
+idf_component_register(SRCS "pairing_sm.c" "runner.c" "session.c" "console.c" "json.c" "wifi_sm.c" "http_core.c"
                        INCLUDE_DIRS "include"
                        REQUIRES csrc
                        PRIV_REQUIRES platform)

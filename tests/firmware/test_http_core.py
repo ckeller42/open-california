@@ -1,0 +1,147 @@
+"""cali_http: the portable single-connection HTTP/1.1 responder over cali_net sockets.
+
+``firmware/components/cali_core/http_core.c`` accepts one connection at a time, reads until
+``\\r\\n\\r\\n`` plus ``Content-Length`` body bytes, dispatches one request to the registered handler,
+sends one ``Connection: close`` response and closes. Driven here through
+``test/http_fake_sock.c``: a ``cali_net_t`` whose tcp ops replay a script (one fragment per poll,
+sends capped at 64 bytes), with a handler answering ``GET /hello`` and ``POST /echo``.
+
+.. test:: HTTP core: fragments, Content-Length bodies, limits, single request per connection
+   :id: T_FW_HTTP_CORE
+   :links: R_FW_HTTP_STATUS
+"""
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+CORE = ROOT / "firmware" / "components" / "cali_core"
+REQ_MAX = 2048  # NET_HTTP_REQ_MAX (csrc/net_consts.h)
+
+
+@pytest.fixture(scope="module")
+def http_cli(tmp_path_factory):
+    cc = shutil.which("cc") or pytest.skip("no C compiler")
+    out = tmp_path_factory.mktemp("http") / "http_fake_sock"
+    subprocess.run([cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include"),
+                    "-I", str(ROOT / "csrc"), str(CORE / "http_core.c"),
+                    str(CORE / "test" / "http_fake_sock.c"), "-o", str(out)], check=True)
+    return out
+
+
+def _esc(s):
+    return s.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace("\0", "\\0")
+
+
+def session(cli, fragments, gap_ms=10, tail=(10, 10), eof=False):
+    """Connect, feed one fragment per poll ``gap_ms`` apart, then poll at each ``tail`` offset.
+
+    :returns: ``(sent, closed)`` — the raw bytes the core sent, and whether the core itself closed
+        the connection (before the driver's final ``cali_http_stop``).
+    """
+    lines = ["conn"] + ["frag " + _esc(f) for f in fragments] + (["eof"] if eof else [])
+    lines += ["tick %d" % gap_ms for _ in fragments] + ["tick %d" % t for t in tail]
+    raw = subprocess.run([str(cli)], input=("\n".join(lines) + "\n").encode(), capture_output=True,
+                         check=True).stdout.decode("latin-1")
+    before, _, after = raw.partition("<stopped>")
+    assert after in ("", "<closed>")
+    closed = before.endswith("<closed>")
+    return before[:-len("<closed>")] if closed else before, closed
+
+
+def run(cli, fragments, **kw):
+    sent, closed = session(cli, fragments, **kw)
+    assert closed, "core left the connection open"
+    return sent
+
+
+def test_request_in_fragments(http_cli):
+    out = run(http_cli, ["GET /hel", "lo HTTP/1.1\r\nHost: x\r\n", "\r\n"])
+    assert out.startswith("HTTP/1.1 200 OK\r\n") and "Content-Length: 2\r\n" in out and out.endswith("\r\n\r\nhi")
+    assert "Content-Type: text/plain\r\n" in out and "Connection: close\r\n" in out
+
+
+def test_terminator_split_across_fragments(http_cli):
+    out = run(http_cli, ["GET /hello HTTP/1.1\r\nHost: x\r", "\n\r", "\n"])
+    assert out.startswith("HTTP/1.1 200 OK\r\n") and out.endswith("\r\n\r\nhi")
+
+
+def test_post_body_by_content_length(http_cli):
+    out = run(http_cli, ["POST /echo HTTP/1.1\r\nContent-Length: 5\r\n\r\nab", "cde"])
+    assert out.endswith("\r\n\r\nabcde")
+
+
+def test_header_complete_body_not_yet_waits(http_cli):
+    sent, closed = session(http_cli, ["POST /echo HTTP/1.1\r\ncontent-length: 3\r\n\r\n"])
+    assert sent == "" and not closed
+
+
+def test_content_length_zero(http_cli):
+    out = run(http_cli, ["POST /echo HTTP/1.1\r\nContent-Length: 0\r\n\r\n"])
+    assert out.startswith("HTTP/1.1 200 OK\r\n") and out.endswith("Content-Length: 0\r\nConnection: close\r\n\r\n")
+
+
+def test_unhandled_404(http_cli):
+    out = run(http_cli, ["GET /nope?x=1 HTTP/1.1\r\n\r\n"])
+    assert out.startswith("HTTP/1.1 404 Not Found\r\n") and "Content-Type: text/plain\r\n" in out
+    head, _, body = out.partition("\r\n\r\n")
+    assert "Content-Length: %d\r\n" % len(body) in head + "\r\n" and body
+
+
+def test_oversized_body_413(http_cli):
+    out = run(http_cli, ["POST /echo HTTP/1.1\r\nContent-Length: 5000\r\n\r\n"])
+    assert out.startswith("HTTP/1.1 413 ")
+
+
+def test_body_filling_the_buffer_exactly_is_accepted(http_cli):
+    head = "POST /echo HTTP/1.1\r\nContent-Length: %04d\r\n\r\n"
+    n = REQ_MAX - len(head % 0)
+    body = "b" * n
+    out = run(http_cli, [head % n, body[:1000], body[1000:]])
+    assert out.startswith("HTTP/1.1 200 OK\r\n") and out.endswith("\r\n\r\n" + body)
+    out = run(http_cli, [head % (n + 1)])
+    assert out.startswith("HTTP/1.1 413 ")
+
+
+def test_oversized_header_431(http_cli):
+    frag = "GET /hello HTTP/1.1\r\n" + "X-Pad: " + "p" * 900 + "\r\n"
+    out = run(http_cli, [frag, frag, frag])
+    assert out.startswith("HTTP/1.1 431 ")
+
+
+def test_malformed_400(http_cli):
+    out = run(http_cli, ["GARBAGE\r\n\r\n"])
+    assert out.startswith("HTTP/1.1 400 ")
+
+
+@pytest.mark.parametrize("req", ["GET hello HTTP/1.1\r\n\r\n", "GET /hello FTP/1.1\r\n\r\n",
+                                 "GET  /hello HTTP/1.1\r\n\r\n", "\r\n\r\n",
+                                 "GET /hel\0lo HTTP/1.1\r\n\r\n", "GET /hello HTTP/1.1\nX: y\r\n\r\n",
+                                 "POST /echo HTTP/1.1\r\nContent-Length: 1x\r\n\r\n",
+                                 "POST /echo HTTP/1.1\r\nContent-Length: \r\n\r\n"])
+def test_malformed_variants_400(http_cli, req):
+    assert run(http_cli, [req]).startswith("HTTP/1.1 400 ")
+
+
+def test_pipelined_second_request_ignored(http_cli):
+    out = run(http_cli, ["GET /hello HTTP/1.1\r\n\r\nGET /hello HTTP/1.1\r\n\r\n"])
+    assert out.count("HTTP/1.1 ") == 1 and out.endswith("\r\n\r\nhi")
+
+
+def test_idle_timeout_closes(http_cli):
+    sent, closed = session(http_cli, ["GET /hel"], tail=(5000,))
+    assert sent == "" and not closed          # exactly 5 000 ms idle: still open
+    sent, closed = session(http_cli, ["GET /hel"], tail=(5001,))
+    assert sent == "" and closed
+
+
+def test_peer_close_mid_request_closes_silently(http_cli):
+    sent, closed = session(http_cli, ["GET /hel"], eof=True)
+    assert sent == "" and closed
+
+
+def test_peer_half_close_after_full_request_still_answered(http_cli):
+    out = run(http_cli, ["GET /hello HTTP/1.1\r\n\r\n"], eof=True)
+    assert out.endswith("\r\n\r\nhi")
