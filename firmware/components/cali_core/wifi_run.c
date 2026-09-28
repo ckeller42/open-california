@@ -36,6 +36,7 @@ static struct {
     int scan_wanted;                 /* held back by the BLE-pairing gate: start on a later tick */
     int join_failed;                 /* a STA_START that could not start: FAILED(OTHER) next tick */
     int ap_running;                  /* ap_start() succeeded and no WACT_AP_STOP since */
+    uint32_t last_fail;              /* the last WACT_LOG_REASON's reason; NONE after CREDS_SET/GOT_IP */
 } W;
 
 static void wipe_creds(void) {
@@ -122,6 +123,7 @@ static void run_action(const cali_wifi_action_t *a) {
         break;
     }
     case WACT_LOG_REASON:
+        W.last_fail = a->arg ? a->arg : CALI_NET_REASON_OTHER;   /* the page shows why (R23) */
         cali_log("wifi: failed %s", reason_name(a->arg));
         break;
     default:
@@ -145,6 +147,7 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
     case CALI_NET_EV_STA_GOT_IP:
         feed(WEV_GOT_IP, 0);
         if (W.sm.st == WIFI_ONLINE) {
+            W.last_fail = CALI_NET_REASON_NONE;
             W.ip = e->ip;
             W.rssi = W.net->sta_rssi();
             W.rssi_at = 0;
@@ -218,11 +221,17 @@ void cali_wifi_run_tick(uint64_t now_ms) {
     }
 }
 
+/* WEV_CREDS_SET: a new attempt — the previous attempt's failure reason no longer applies. */
+static void feed_creds_set(void) {
+    W.last_fail = CALI_NET_REASON_NONE;
+    feed(WEV_CREDS_SET, 0);
+}
+
 void cali_wifi_run_set_creds(const char *ssid, const char *psk) {
     uint8_t st = W.sm.st;
     if (!W.net || !ssid || !psk || copy_creds(ssid, strlen(ssid), psk, strlen(psk)) != 0) return;
     if (st == WIFI_SETUP_AP || st == WIFI_SETUP_AP_RETRYING) {
-        feed(WEV_CREDS_SET, 0);
+        feed_creds_set();
     } else if (st != WIFI_UNPROVISIONED) {
         /* Online, retrying or mid-join: the SM takes new creds only in setup. Go there the way a
          * forget does — station down, hotspot up — but keep the new creds (the caller stored them;
@@ -232,7 +241,7 @@ void cali_wifi_run_set_creds(const char *ssid, const char *psk) {
         W.ip = 0;
         W.rssi = 0;
         feed_skip(WEV_CREDS_FORGET, 0, WACT_CLEAR_CREDS);
-        feed(WEV_CREDS_SET, 0);
+        feed_creds_set();
     }
 }
 
@@ -254,6 +263,10 @@ const char *cali_wifi_run_ssid(void) { return W.have_creds ? W.ssid : NULL; }
 uint32_t cali_wifi_run_ip(void) { return W.sm.st == WIFI_ONLINE ? W.ip : 0; }
 
 int cali_wifi_run_rssi(void) { return W.sm.st == WIFI_ONLINE ? W.rssi : 0; }
+
+const char *cali_wifi_run_last_fail(void) {
+    return W.last_fail == CALI_NET_REASON_NONE ? NULL : reason_name(W.last_fail);
+}
 
 int cali_wifi_run_scan_list(const cali_net_ap_t **out) {
     if (out) *out = W.scan;

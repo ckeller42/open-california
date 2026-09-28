@@ -342,11 +342,28 @@ def test_get_wifi_in_setup_lists_last_scan_and_rescans(web_cli):
         "ssid": None,
         "ip": None,
         "rssi": None,
+        "last_error": None,
         "scan": [
             {"ssid": "minsel", "rssi": -48, "secure": True},
             {"ssid": "cafe", "rssi": -80, "secure": False},
         ],
     }
+
+
+@pytest.mark.parametrize("reason", ["not_found", "auth", "other"])
+def test_get_wifi_reports_the_last_join_failure(web_cli, reason):
+    """I1/R23: the setup page says WHY a join failed — ``last_error`` is the runner's last
+    ``WACT_LOG_REASON`` (cali_wifi_run_last_fail), in setup and every other mode."""
+    for state in ("setup_ap", "online"):
+        w = json.loads(get(web_cli, "/api/wifi", setup=["wifi " + state, "lastfail " + reason]))
+        assert w["last_error"] == reason
+
+
+def test_get_wifi_last_error_null_without_a_failure(web_cli):
+    assert json.loads(get(web_cli, "/api/wifi", setup=["wifi setup_ap"]))["last_error"] is None
+    assert (
+        "last_error" not in json.loads(get(web_cli, "/api/state", setup=["lastfail auth"]))["device"]["wifi"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -366,6 +383,7 @@ def test_get_wifi_in_station_mode_does_not_scan(web_cli):
         "ssid": "minsel",
         "ip": "10.0.0.7",
         "rssi": -55,
+        "last_error": None,
         "scan": [],
     }
 

@@ -45,9 +45,10 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
    joined your network it shows *Connected as 192.168.x.y. Join <your network> with this device
    too, then open:* followed by a link to **<http://calictl-esp.local>**.
 
-   If the password was wrong, the page says *Could not connect — check the password and try
-   again.* The satellite forgets the wrong password and keeps its setup hotspot open, so you can
-   simply try again.
+   If joining failed, the page says why: *Wrong password — try again.*, *Network not found — check
+   that it is in range, then try again.*, or *Could not join the network — try again.* The
+   satellite forgets the failed password and keeps its setup hotspot open, so you can simply try
+   again.
 5. **Switch back.** About 30 seconds after the satellite joins your network it closes the setup
    hotspot. Put your phone back on your own WiFi (most phones do that on their own) and open
    **<http://calictl-esp.local>**.
@@ -142,7 +143,9 @@ back**. The replies you'll see:
 | Joined the hotspot, no page pops up | Open **<http://192.168.4.1>** in a browser. Some phones only show the sign-in notice once; others open it in a small window you have to tap. |
 | Your network is missing from the list | Tap **Search again**. 5 GHz-only networks, and networks that hide their name, never appear — use a 2.4 GHz network; for a hidden one, try `wifi set` on the USB console (untested). |
 | "The password needs 8–63 characters." | The password is too short or too long. An open network (no password) cannot be used. |
-| "Could not connect — check the password and try again." | Wrong password, or the network was out of reach. The satellite is back on its setup hotspot; try again. |
+| "Wrong password — try again." | The network turned the password down. The satellite is back on its setup hotspot; type the password again (it is case-sensitive). |
+| "Network not found — check that it is in range, then try again." | The satellite could not see the network when it tried to join: it is out of range, switched off, or 5 GHz-only. Move the satellite closer or pick another network. |
+| "Could not join the network — try again." | Anything else (the router did not answer, or gave no address). The satellite is back on its setup hotspot; try again, and check the router if it keeps happening. |
 | "Device not reachable" banner on the page | The page lost contact with the satellite: your phone left its network (e.g. the setup hotspot closed after the satellite joined your WiFi). Rejoin the right network and reload. |
 | <http://calictl-esp.local> doesn't open | Use the IP address from your router's device list or `wifi status` (see [Finding the satellite](#finding-the-satellite-on-your-network)). |
 | The page is slow with several tabs open | The satellite answers one request at a time. Keep one tab open. |

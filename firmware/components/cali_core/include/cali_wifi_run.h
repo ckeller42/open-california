@@ -47,6 +47,10 @@ const char *cali_wifi_run_ssid(void);                /* the station SSID, or NUL
 uint32_t cali_wifi_run_ip(void);                     /* station IPv4, host byte order; 0 = none */
 int cali_wifi_run_rssi(void);                        /* station RSSI in dBm; 0 = none */
 int cali_wifi_run_scan_list(const cali_net_ap_t **out);   /* the last SCAN_DONE's list: count, *out set */
+/* Why the last join failed: "not_found" | "auth" | "other" (the reason of the last WACT_LOG_REASON),
+ * or NULL — none yet, or cleared by new credentials (WEV_CREDS_SET) or by joining (GOT_IP). The
+ * setup page shows it as one of three texts (ruling R23). */
+const char *cali_wifi_run_last_fail(void);
 
 /* What "mode" the page and the console report for a WiFi SM state: SETUP while the setup hotspot
  * serves (WIFI_SETUP_AP, WIFI_SETUP_AP_RETRYING); STATION when online, and while a station with

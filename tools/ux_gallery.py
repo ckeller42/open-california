@@ -179,6 +179,7 @@ def esp_fixtures():
             },
             "/api/wifi": dict(
                 setup_wifi,
+                last_error=None,
                 scan=[
                     {"ssid": "HomeNet", "rssi": -52, "secure": True},
                     {"ssid": "Campsite-Guest", "rssi": -71, "secure": True},
@@ -198,7 +199,7 @@ def esp_fixtures():
                     "fw": "bef07f1",
                 },
             },
-            "/api/wifi": dict(station_wifi, scan=[]),
+            "/api/wifi": dict(station_wifi, last_error=None, scan=[]),
         },
     }
 

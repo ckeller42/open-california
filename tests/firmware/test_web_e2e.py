@@ -105,6 +105,7 @@ def test_wrong_password_returns_to_setup(host_fw, hci_unit, tmp_path):
     fw.expect("LOG", lambda l: l == "wifi: credentials cleared")
     w = get_json(fw, "/api/wifi")
     assert w["mode"] == "setup" and w["ssid"] is None
+    assert w["last_error"] == "auth"  # the page says why (R23)
 
 
 def test_boot_with_saved_creds_reconnects_and_forget(host_fw, hci_unit, tmp_path):

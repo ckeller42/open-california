@@ -14,8 +14,9 @@
  *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>"}}
  *                     built whole in one handler call (one consistent snapshot) into a
  *                     NET_JSON_MAX buffer; overflow -> 500 + LOG "http: overflow".
- *   GET /api/wifi     200 {"mode","ssid","ip","rssi","scan":[{"ssid","rssi","secure":<bool>}]} (the
- *                     last SCAN_DONE's list); in setup mode it also asks for a fresh scan
+ *   GET /api/wifi     200 {"mode","ssid","ip","rssi","last_error":"not_found"|"auth"|"other"|null,
+ *                     "scan":[{"ssid","rssi","secure":<bool>}]} (last_error = why the last join
+ *                     failed, cali_wifi_run_last_fail(); scan = the last SCAN_DONE's list); in setup mode it also asks for a fresh scan
  *                     (cali_wifi_run_scan, which holds it back while a BLE pairing flow is active
  *                     — the one coex gate lives in the runner, cali_wifi_run.h).
  *   POST /api/wifi    body {"ssid":"…","psk":"…"} — a fixed-shape parser: one object, exactly the

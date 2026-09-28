@@ -24,6 +24,7 @@
  *     kvset <key> <value>  store a kv value (e.g. saved WiFi credentials before wifi_boot)
  *     kverasefail <n>      the next n cali_kv_erase calls fail (-1, nothing erased)
  *     rssi <dBm>           what the fake net's sta_rssi() answers (default 0)
+ *     lastfail             print "LASTFAIL <cali_wifi_run_last_fail() or ->"
  *   fake-net events (through the sink the WiFi runner registered):
  *     NET_GOT_IP <a.b.c.d> | NET_LOST | NET_FAILED <reason> | NET_AP_STARTED | NET_AP_STOPPED
  *     NET_SCAN_DONE [ssid ...]   (rssi -40 - 10*i, secure)
@@ -297,6 +298,9 @@ int main(void) {
             s_erase_fail = n1;
         } else if (strcmp(word, "rssi") == 0) {
             s_rssi = n1;
+        } else if (strcmp(word, "lastfail") == 0) {
+            const char *f = cali_wifi_run_last_fail();
+            printf("LASTFAIL %s\n", f ? f : "-");
         } else if (strcmp(word, "NET_GOT_IP") == 0) {
             net_deliver(CALI_NET_EV_STA_GOT_IP, CALI_NET_REASON_NONE, parse_ip(a1), 0, NULL);
         } else if (strcmp(word, "NET_LOST") == 0) {

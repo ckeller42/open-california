@@ -62,6 +62,7 @@ function t(key, vars) {
 const FN = {vehicle: "fn_vehicle", cooler: "fn_cooler", campingmode: "fn_campingmode", lighting: "fn_lighting",
             airheater: "fn_airheater", water: "fn_water", energy: "fn_energy", roof: "fn_roof"};
 const MODE = {setup: "mode_setup", station: "mode_station", off: "mode_off"};
+const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
 const $ = (id) => document.getElementById(id);
 function el(tag, text, cls) {
   const e = document.createElement(tag);
@@ -183,7 +184,8 @@ async function watchJoin() {
     joining = null;
   } else if (w.mode === "setup" && (j.left || j.polls > 3)) {
     msg.className = "bad";
-    msg.textContent = t("join_failed");
+    /* why it failed (/api/wifi last_error): out of range, a typo, or anything else */
+    msg.textContent = t(JOIN_FAILED[w.last_error] || "join_failed_other");
     joining = null;
   }
 }

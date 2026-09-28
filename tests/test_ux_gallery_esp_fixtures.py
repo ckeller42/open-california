@@ -43,7 +43,7 @@ def test_state_fixture_shape(fixtures, mode):
 @pytest.mark.parametrize("mode", ["setup", "station"])
 def test_wifi_fixture_shape(fixtures, mode):
     w = fixtures[mode]["/api/wifi"]
-    assert set(w) == WIFI_KEYS | {"scan"}
+    assert set(w) == WIFI_KEYS | {"last_error", "scan"}
     assert {k: w[k] for k in WIFI_KEYS} == fixtures[mode]["/api/state"]["device"]["wifi"]
     for ap in w["scan"]:
         assert set(ap) == {"ssid", "rssi", "secure"}

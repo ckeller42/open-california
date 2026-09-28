@@ -642,6 +642,46 @@ def test_wifi_typo_fails_back_to_setup_and_clears_creds(fake):
     ]
 
 
+@pytest.mark.parametrize("code,name", [(1, "not_found"), (2, "auth"), (3, "other")])
+def test_wifi_last_fail_is_the_logged_reason_until_new_creds(fake, code, name):
+    """I1/R23: the runner keeps the reason of the last ``WACT_LOG_REASON`` for the setup page
+    (``cali_wifi_run_last_fail``); new credentials (``WEV_CREDS_SET``) clear it, so an old typo's
+    reason never shows on the next attempt."""
+    out = run(
+        fake,
+        "wifi_boot",
+        "NET_AP_STARTED",
+        "lastfail",
+        "> wifi set minsel wrong-psk-99",
+        "NET_FAILED %d" % code,
+        "lastfail",
+        "> wifi set minsel " + PSK,
+        "lastfail",
+    )
+    assert [line for line in out if line.startswith("LASTFAIL")] == [
+        "LASTFAIL -",
+        "LASTFAIL " + name,
+        "LASTFAIL -",
+    ]
+
+
+def test_wifi_last_fail_cleared_when_online(fake):
+    """A saved network that failed once (not_found, retrying) and then joins: GOT_IP clears it."""
+    out = run(
+        fake,
+        "kvset wifi_ssid minsel",
+        "kvset wifi_psk " + PSK,
+        "wifi_boot",
+        "NET_FAILED 1",
+        "lastfail",
+        "tick 100",
+        "tick 1100",
+        "NET_GOT_IP 192.168.1.42",
+        "lastfail",
+    )
+    assert [line for line in out if line.startswith("LASTFAIL")] == ["LASTFAIL not_found", "LASTFAIL -"]
+
+
 def test_wifi_boot_with_saved_creds_joins_and_keeps_them_on_failure(fake):
     """R6: saved credentials join at boot without a hotspot; a failure retries, never wipes them."""
     out = run(

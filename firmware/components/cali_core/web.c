@@ -136,8 +136,12 @@ static void api_wifi_get(cali_http_resp_t *resp) {
     const cali_net_ap_t *aps = NULL;
     int n = cali_wifi_run_scan_list(&aps);
 
+    const char *fail = cali_wifi_run_last_fail();
+
     cali_json_begin(&j, s_json, sizeof s_json);
     wifi_members(&j);
+    cali_json_key(&j, "last_error");
+    if (fail) cali_json_str(&j, fail); else cali_json_null(&j);
     cali_json_key(&j, "scan");
     cali_json_arr_begin(&j);
     for (int i = 0; aps && i < n && i < NET_SCAN_MAX; i++) {
