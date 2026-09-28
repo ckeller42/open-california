@@ -20,6 +20,8 @@ import pytest
 
 from tools.wifi_consts import CONSTS
 
+from .api_shape import AP_KEYS, DEVICE_KEYS, LINK_KEYS, PAIRING_KEYS, STATE_KEYS, WIFI_GET_KEYS, WIFI_KEYS
+
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware" / "components" / "cali_core"
 PAGE = ROOT / "firmware" / "web" / "index_gen.html"
@@ -161,8 +163,10 @@ def test_api_state_shape(web_cli):
             setup=["now 5000", "stamp 4000", "active 1", "bond 1", "wifi online minsel 192.168.1.23 -61"],
         )
     )
-    assert set(body) == {"t", "fn", "device"} and body["fn"]["cooler"]["Installed"] == 1
-    assert set(body["device"]) == {"pairing", "link", "wifi", "uptime_ms", "fw"}
+    assert set(body) == STATE_KEYS and body["fn"]["cooler"]["Installed"] == 1
+    assert set(body["device"]) == DEVICE_KEYS
+    assert set(body["device"]["pairing"]) == PAIRING_KEYS and set(body["device"]["link"]) == LINK_KEYS
+    assert set(body["device"]["wifi"]) == WIFI_KEYS
     assert list(body["fn"]) == ["cooler", "roof"]  # CODEC_CHARS order, frames held only
     assert body["fn"]["cooler"]["Level"] == 3
     assert body["fn"]["roof"] == {"Position": 1, "Installed": 1, "SafetyCounterValid": 0, "InfoPopUp": 0}
@@ -337,6 +341,7 @@ def test_delete_wifi_forgets(web_cli):
 def test_get_wifi_in_setup_lists_last_scan_and_rescans(web_cli):
     r, other = one(web_cli, "GET", "/api/wifi", setup=["wifi setup_ap", "ap minsel -48 1", "ap cafe -80 0"])
     assert r.status == 200 and other == ["CALL scan"]
+    assert set(r.json()) == WIFI_GET_KEYS and all(set(ap) == AP_KEYS for ap in r.json()["scan"])
     assert r.json() == {
         "mode": "setup",
         "ssid": None,

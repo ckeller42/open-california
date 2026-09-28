@@ -157,7 +157,8 @@ static void wifi_set(char *args) {
         cali_log("wifi: bad ssid");
     } else if (psk_len < NET_PSK_MIN || psk_len > NET_PSK_MAX) {
         cali_log("wifi: bad psk");
-    } else if (cali_kv_set("wifi_ssid", ssid, ssid_len) != 0 || cali_kv_set("wifi_psk", psk, psk_len) != 0) {
+    } else if (cali_kv_set(CALI_WIFI_KEY_SSID, ssid, ssid_len) != 0 ||
+               cali_kv_set(CALI_WIFI_KEY_PSK, psk, psk_len) != 0) {
         cali_log("wifi: storing credentials failed");
     } else {
         cali_wifi_run_set_creds(ssid, psk);

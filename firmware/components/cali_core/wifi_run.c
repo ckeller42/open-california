@@ -17,8 +17,6 @@
 #include "cali_runner.h"
 #include "pairing_consts.h"
 
-#define KEY_SSID "wifi_ssid"
-#define KEY_PSK "wifi_psk"
 #define RSSI_EVERY_MS 1000u
 
 static struct {
@@ -116,8 +114,8 @@ static void run_action(const cali_wifi_action_t *a) {
         break;
     case WACT_CLEAR_CREDS: {
         /* both erases always run; a missing key is not an error (cali_kv_erase) */
-        int ok = cali_kv_erase(KEY_SSID) == 0;
-        ok = cali_kv_erase(KEY_PSK) == 0 && ok;
+        int ok = cali_kv_erase(CALI_WIFI_KEY_SSID) == 0;
+        ok = cali_kv_erase(CALI_WIFI_KEY_PSK) == 0 && ok;
         wipe_creds();
         cali_log(ok ? "wifi: credentials cleared" : "wifi: credential erase failed");
         break;
@@ -173,11 +171,12 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
         break;
     case CALI_NET_EV_SCAN_DONE: {
         int n = e->scan && e->nscan > 0 ? e->nscan : 0;
+        W.scan_in_flight = 0;
+        if (e->nscan < 0) break;           /* refused/aborted/timed out: keep the last good list */
         if (n > NET_SCAN_MAX) n = NET_SCAN_MAX;
         if (n) memcpy(W.scan, e->scan, (size_t)n * sizeof *W.scan);
         for (int i = 0; i < n; i++) W.scan[i].ssid[NET_SSID_MAX] = '\0';
         W.nscan = n;
-        W.scan_in_flight = 0;
         break;
     }
     case CALI_NET_EV_AP_STOPPED:
@@ -201,7 +200,7 @@ void cali_wifi_run_boot(void) {
     size_t ssid_len = sizeof ssid - 1, psk_len = sizeof psk - 1;
     int ok;
     if (!W.net) return;
-    ok = cali_kv_get(KEY_SSID, ssid, &ssid_len) == CALI_KV_OK && cali_kv_get(KEY_PSK, psk, &psk_len) == CALI_KV_OK &&
+    ok = cali_kv_get(CALI_WIFI_KEY_SSID, ssid, &ssid_len) == CALI_KV_OK && cali_kv_get(CALI_WIFI_KEY_PSK, psk, &psk_len) == CALI_KV_OK &&
          copy_creds(ssid, ssid_len, psk, psk_len) == 0;
     memset(psk, 0, sizeof psk);
     feed(ok ? WEV_BOOT_WITH_CREDS : WEV_BOOT_NO_CREDS, 0);

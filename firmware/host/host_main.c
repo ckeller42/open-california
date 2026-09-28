@@ -82,14 +82,14 @@ static void line_ev_cb(struct ble_npl_event *ev) {
 static void tick_cb(struct ble_npl_event *ev) {
     (void)ev;
     uint64_t now = cali_uptime_ms();
+    cali_runner_tick(now);              /* BLE first: WiFi/web work never delays this tick's */
+    cali_session_tick(now);             /* heartbeat decision (same order as app_main.c) */
     if (s_http) {
         cali_net_host_poll(now);        /* WiFi events -> the runner's sink */
         cali_wifi_run_tick(now);
         cali_captive_dns_poll();
         cali_web_poll(now);
     }
-    cali_runner_tick(now);
-    cali_session_tick(now);
     ble_npl_callout_reset(&s_tick, ble_npl_time_ms_to_ticks32(TICK_MS));
 }
 

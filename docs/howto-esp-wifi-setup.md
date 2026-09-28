@@ -118,8 +118,9 @@ back**. The replies you'll see:
 - `LOG wifi: failed auth` (wrong password), `LOG wifi: failed not_found` (network not in range),
   `LOG wifi: failed other`.
 - `LOG wifi: bad psk` — the password is not 8–63 characters; `LOG wifi: bad ssid` — the name is
-  longer than 32 characters; `LOG wifi: usage: wifi set <ssid> <psk>` — one of the two is missing
-  or the name has a space.
+  longer than 32 characters; `LOG wifi: usage: wifi set <ssid> <psk>` — one of the two is missing,
+  or the name **or the password** has a space. `wifi set` cannot take either with a space (WiFi
+  passwords may contain spaces): use the setup page for those.
 - `LOG wifi: credentials replaced, reconnecting` — you replaced a saved network.
 - `LOG wifi: setup hotspot up (calictl-esp-setup)` / `LOG wifi: setup hotspot closed`.
 

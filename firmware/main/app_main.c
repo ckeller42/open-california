@@ -161,21 +161,22 @@ static void do_work(void) {
     char line[LINE_MAX_LEN];
     if (atomic_exchange(&s_tick_due, 0)) {
         uint64_t now = cali_uptime_ms();
+        cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
+        cali_session_tick(now);       /* delays this tick's heartbeat decision */
         if (s_wifi) {
             cali_net_esp_poll(now);   /* WiFi events -> the runner's sink */
             cali_wifi_run_tick(now);
             cali_captive_dns_poll();
             cali_web_poll(now);
         }
-        cali_runner_tick(now);
-        cali_session_tick(now);
     }
     if (!atomic_load(&s_ready)) return;
     while (xQueueReceive(s_lines, line, 0) == pdTRUE) {
 #if CONFIG_CALI_QEMU_PROBE
-        if (kvprobe_line(line)) continue;
+        if (!kvprobe_line(line))
 #endif
-        cali_console_line(line);
+            cali_console_line(line);
+        memset(line, 0, sizeof line);   /* a "wifi set" line holds a passphrase */
     }
 }
 
@@ -284,6 +285,7 @@ static void console_task(void *param) {
         line[n] = 0;
         n = 0;
         xQueueSend(s_lines, line, portMAX_DELAY);           /* owner behind: wait for a slot */
+        memset(line, 0, sizeof line);                       /* the queue holds its own copy */
         wake_owner();
     }
 }

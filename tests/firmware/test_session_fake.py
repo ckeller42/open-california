@@ -36,6 +36,7 @@ from pathlib import Path
 import pytest
 
 from calictl import overrides, protocol
+from tools.wifi_consts import CONSTS
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware" / "components" / "cali_core"
@@ -460,7 +461,8 @@ def test_snap_line_bytes_are_pinned(fake):
 
 # ---- the WiFi runner (wifi_run.c) on the same tick as the session ----------------------------
 
-AP = "NET ap_start calictl-esp-setup calictl-setup"
+AP = "NET ap_start %s %s" % (CONSTS["NET_AP_SSID"], CONSTS["NET_AP_PSK"])
+AP_UP = "LOG wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"]
 PSK = "test-psk-1234"
 
 
@@ -487,7 +489,7 @@ def test_wifi_boot_without_creds_opens_setup_and_scans(fake):
         AP,
         "NET udp_bind 53",
         "NET scan",
-        "LOG wifi: setup hotspot up (calictl-esp-setup)",
+        AP_UP,
         "LOG wifi: setup ssid=- ip=- rssi=- scan=2",
         'STATE {"state":"idle","attempts":0,"error":null,"address":null,'
         '"wifi":{"mode":"setup","ssid":null,"ip":null}}',
@@ -512,11 +514,11 @@ def test_wifi_set_stores_joins_and_goes_online(fake):
             "rssi -61", "tick 100", "tick 200", "> wifi status", "> status", "kv wifi_ssid", "kv wifi_psk"
         ),
     )
-    rest = after(out, "LOG wifi: setup hotspot up (calictl-esp-setup)")
+    rest = after(out, AP_UP)
     assert rest == [
         "LOG wifi: joining minsel",
         "NET sta_start minsel " + PSK,
-        "NET mdns calictl-esp 80",
+        "NET mdns %s %d" % (CONSTS["NET_HOSTNAME"], CONSTS["NET_HTTP_PORT"]),
         "LOG wifi: online 192.168.1.42",
         "LOG wifi: station ssid=minsel ip=192.168.1.42 rssi=-61 scan=1",
         'STATE {"state":"idle","attempts":0,"error":null,"address":null,'
@@ -572,8 +574,8 @@ def test_wifi_forget_in_setup_keeps_the_running_hotspot(fake):
     it: no second ap_start, no captive-DNS re-bind — so no second ``setup hotspot up`` either."""
     out = run(fake, "wifi_boot", "NET_AP_STARTED", "NET_SCAN_DONE minsel", "> wifi forget", "> wifi status")
     assert out.count(AP) == 1 and out.count("NET udp_bind 53") == 1
-    assert out.count("LOG wifi: setup hotspot up (calictl-esp-setup)") == 1
-    assert after(out, "LOG wifi: setup hotspot up (calictl-esp-setup)") == [
+    assert out.count(AP_UP) == 1
+    assert after(out, AP_UP) == [
         "NET sta_stop",
         "LOG wifi: credentials cleared",
         "NET scan",
@@ -587,7 +589,7 @@ def test_wifi_ap_stopped_event_clears_the_hotspot_bookkeeping(fake):
     trusting a hotspot that is gone (the captive DNS is re-bound: its old socket closed first)."""
     out = run(fake, "wifi_boot", "NET_AP_STARTED", "NET_SCAN_DONE minsel", "NET_AP_STOPPED", "> wifi forget")
     assert out.count(AP) == 2
-    assert after(out, "LOG wifi: setup hotspot up (calictl-esp-setup)") == [
+    assert after(out, AP_UP) == [
         "NET sta_stop",
         "LOG wifi: credentials cleared",
         AP,
@@ -718,7 +720,7 @@ def test_wifi_forget_clears_creds_and_opens_setup(fake):
         "NET scan",
         "KV wifi_ssid missing",
         "KV wifi_psk missing",
-        "LOG wifi: setup hotspot up (calictl-esp-setup)",
+        AP_UP,
     ]
 
 
@@ -763,6 +765,28 @@ def test_wifi_scan_waits_while_a_scan_is_in_flight(fake):
         "tick 200",
     )
     assert [line for line in out if line == "NET scan"] == ["NET scan"] * 2  # boot's, then one more
+
+
+def test_wifi_failed_scan_keeps_the_last_list(fake):
+    """M2: a scan the radio refused or aborted (a join in flight: SCAN_DONE with nscan -1) keeps
+    the last good list instead of blanking it ("No networks found"), and ends the in-flight scan so
+    the next request starts one; an empty but successful scan still empties the list."""
+    out = run(
+        fake,
+        "wifi_boot",
+        "NET_SCAN_DONE minsel other",
+        "> wifi scan",
+        "NET_SCAN_FAILED",
+        "> wifi status",
+        "> wifi scan",
+        "NET_SCAN_DONE",
+        "> wifi status",
+    )
+    assert [line for line in out if line.startswith("LOG wifi: unprovisioned") or "scan=" in line] == [
+        "LOG wifi: setup ssid=- ip=- rssi=- scan=2",
+        "LOG wifi: setup ssid=- ip=- rssi=- scan=0",
+    ]
+    assert out.count("NET scan") == 3  # boot's, then one per request: the failed one is not in flight
 
 
 def test_wifi_scan_deferred_while_ble_pairing_is_active(fake):

@@ -28,6 +28,8 @@ static struct {
 static void close_conn(void) {
     S.net->tcp_close(S.fd);
     S.fd = -1;
+    memset(S.buf, 0, sizeof S.buf);   /* a POST /api/wifi body holds the passphrase */
+    S.len = 0;
 }
 
 static const char *reason(int status) {

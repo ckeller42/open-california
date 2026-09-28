@@ -238,7 +238,7 @@ Bumble fake unit the tests start — `tests/firmware/conftest.py`):
 cali-host --hci-port 9000 --store /tmp/cali --http 8081 --fake-wifi my.wifi   # then open http://127.0.0.1:8081/
 ```
 
-**Fake-WiFi script** (`--fake-wifi PATH`, grammar from `components/platform/host/include/cali_net_host.h`):
+**Fake-WiFi script** (`--fake-wifi PATH`, grammar from `components/platform/include/cali_net_host.h`):
 one rule per line, `#` comments and blank lines ignored; an SSID is one whitespace-free token of
 1..`NET_SSID_MAX` characters.
 
@@ -261,7 +261,7 @@ the rest runs.
 
 | Command | Effect / output |
 |---|---|
-| `wifi set <ssid> <psk>` | Stores kv `wifi_ssid`/`wifi_psk` (like `POST /api/wifi`) and hands them to the runner. Single tokens (an SSID with spaces needs the page); SSID 1..32, PSK 8..63 bytes, else `LOG wifi: usage: wifi set <ssid> <psk>` / `LOG wifi: bad ssid` / `LOG wifi: bad psk`. While online/retrying/mid-join it replaces the old credentials (`LOG wifi: credentials replaced, reconnecting`) and re-joins as a setup-flow join (a typo -> setup). The line buffer is wiped after the command; the PSK is never printed. |
+| `wifi set <ssid> <psk>` | Stores kv `wifi_ssid`/`wifi_psk` (like `POST /api/wifi`) and hands them to the runner. Single tokens (an SSID or a password with spaces needs the page); SSID 1..32, PSK 8..63 bytes, else `LOG wifi: usage: wifi set <ssid> <psk>` / `LOG wifi: bad ssid` / `LOG wifi: bad psk`. While online/retrying/mid-join it replaces the old credentials (`LOG wifi: credentials replaced, reconnecting`) and re-joins as a setup-flow join (a typo -> setup). The line buffers are wiped after the command (on the ESP the console queue's slot keeps its copy until a later line reuses it); the PSK is never printed. |
 | `wifi status` | `LOG wifi: <setup\|station\|off> ssid=<ssid\|-> ip=<a.b.c.d\|-> rssi=<dBm\|-> scan=<n>` |
 | `wifi forget` | Erase the credentials, stop the station, open the setup hotspot (`cali_wifi_run_forget`). |
 | `wifi scan` | Ask for a scan (held back while a BLE pairing flow is active). |

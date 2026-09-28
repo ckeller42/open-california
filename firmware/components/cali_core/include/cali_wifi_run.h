@@ -6,7 +6,7 @@
  *
  * Off until cali_wifi_run_init(): every call is then a no-op and the state stays WIFI_UNPROVISIONED
  * (the host without --http; the ESP until Task 9 wires it) — which is how the console tells "WiFi
- * off" apart. Credentials live in the kv store as "wifi_ssid" / "wifi_psk" (written by the caller:
+ * off" apart. Credentials live in the kv store as CALI_WIFI_KEY_SSID / _PSK (written by the caller:
  * web.c's POST /api/wifi, console "wifi set"); boot() reads them, WACT_CLEAR_CREDS erases exactly
  * those two keys. set_creds() COPIES both strings (the callers zero theirs right after).
  *
@@ -18,7 +18,8 @@
  * Console lines (cali_log): "wifi: setup hotspot up (calictl-esp-setup)" (AP_STARTED), "wifi:
  * setup hotspot closed" (WACT_AP_STOP), "wifi: joining <ssid>" (each WACT_STA_START), "wifi:
  * online <a.b.c.d>" (GOT_IP accepted), "wifi: lost" (LOST while online), "wifi: failed
- * <not_found|auth|other>" (WACT_LOG_REASON), "wifi: credentials cleared" (WACT_CLEAR_CREDS),
+ * <not_found|auth|other>" (WACT_LOG_REASON), "wifi: credentials cleared" / "wifi: credential
+ * erase failed" (WACT_CLEAR_CREDS), "wifi: setup hotspot failed to start" (ap_start refused),
  * "wifi: credentials replaced, reconnecting" (set_creds outside setup), "wifi: captive DNS
  * unavailable" (port 53 not bindable, e.g. an unprivileged host run).
  */
@@ -34,13 +35,19 @@
 extern "C" {
 #endif
 
+/* The kv keys of the station credentials — one definition for every writer/reader/eraser (web.c
+ * POST /api/wifi, console.c "wifi set", wifi_run.c boot + WACT_CLEAR_CREDS). */
+#define CALI_WIFI_KEY_SSID "wifi_ssid"
+#define CALI_WIFI_KEY_PSK "wifi_psk"
+
 void cali_wifi_run_init(const cali_net_t *net);
 void cali_wifi_run_boot(void);                       /* stored creds -> WEV_BOOT_WITH_CREDS, else _NO_CREDS */
 void cali_wifi_run_tick(uint64_t now_ms);
 void cali_wifi_run_set_creds(const char *ssid, const char *psk);   /* -> WEV_CREDS_SET */
 void cali_wifi_run_forget(void);                     /* -> WEV_CREDS_FORGET */
 const cali_wifi_state_t *cali_wifi_run_state(void);
-void cali_wifi_run_scan(void);                       /* starts a scan; its SCAN_DONE replaces the list */
+void cali_wifi_run_scan(void);                       /* starts a scan; its SCAN_DONE replaces the list
+                                                        (a failed one, nscan < 0, keeps the last list) */
 
 /* What the web page reports. */
 const char *cali_wifi_run_ssid(void);                /* the station SSID, or NULL when none */

@@ -8,12 +8,13 @@
  *   status       print the current STATE line (+ a "wifi" member once the WiFi runtime runs)
  *   quit         call cali_console_on_quit (the host exits; NULL hook = ignored)
  *   wifi set <ssid> <psk>   store the credentials (kv "wifi_ssid"/"wifi_psk", like POST /api/wifi)
- *                and hand them to the WiFi runner. Both are single tokens: an SSID with spaces
- *                cannot be typed here (use the setup page). SSID 1..NET_SSID_MAX bytes, PSK
+ *                and hand them to the WiFi runner. Both are single tokens: an SSID or a password
+ *                with spaces cannot be typed here (use the setup page). SSID 1..NET_SSID_MAX bytes, PSK
  *                NET_PSK_MIN..NET_PSK_MAX; else "LOG wifi: usage: wifi set <ssid> <psk>" / "LOG
  *                wifi: bad ssid" / "LOG wifi: bad psk". While online/retrying the new creds replace
- *                the old ones ("LOG wifi: credentials replaced, reconnecting"). The line buffer is
- *                wiped after the command (it held the passphrase); the PSK is never printed.
+ *                the old ones ("LOG wifi: credentials replaced, reconnecting"). The line buffers
+ *                are wiped after the command (it held the passphrase; on the ESP the console
+ *                queue's slot keeps its copy until a later line reuses it); the PSK is never printed.
  *   wifi status  "LOG wifi: <setup|station|off> ssid=<ssid|-> ip=<a.b.c.d|-> rssi=<dBm|-> scan=<n>"
  *                (mode as /api/wifi's; scan = networks in the last scan result)
  *   wifi forget  drop the WiFi credentials and reopen the setup hotspot (cali_wifi_run_forget)
@@ -22,7 +23,7 @@
  *   "LOG wifi: not enabled".
  * anything else -> "LOG unknown command: <first word>" ("wifi <subcommand>" for an unknown wifi
  *   subcommand): never the rest of the line, which a mistyped "wifi set" fills with the passphrase.
- *   Lines up to 159 bytes.
+ *   Lines up to 127 bytes (both line readers: LINE_MAX_LEN 128 in host_main.c / app_main.c).
  *
  * Output (stdout, one line each, flushed):
  *   STATE {"state":"<name>","attempts":N,"error":"<name>"|null,"address":"AA:.."|null}

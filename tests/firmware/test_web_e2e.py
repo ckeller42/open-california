@@ -30,6 +30,7 @@ from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw, _served_frame
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
 
 PSK = "test-psk-1234"
+AP_UP = "wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"]
 STRINGS = json.loads(
     (Path(__file__).resolve().parents[2] / "firmware" / "web" / "strings.json").read_text(encoding="utf-8")
 )
@@ -90,7 +91,7 @@ def _wifi_script(tmp_path, text):
 def test_fresh_device_opens_setup_and_joins(host_fw, hci_unit, tmp_path):
     wifi = _wifi_script(tmp_path, "ap minsel -55 1\nap other -80 1\njoin minsel ok 192.168.1.42\n")
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
-    fw.expect("LOG", lambda l: l == "wifi: setup hotspot up (calictl-esp-setup)")
+    fw.expect("LOG", lambda l: l == AP_UP)
     w = get_json(fw, "/api/wifi")
     assert w["mode"] == "setup" and [a["ssid"] for a in w["scan"]] == ["minsel", "other"]
     assert get(fw, "/generate_204").status == 302
@@ -131,7 +132,7 @@ def test_boot_with_saved_creds_reconnects_and_forget(host_fw, hci_unit, tmp_path
 
     fw.send("wifi forget")
     fw.expect("LOG", lambda l: l == "wifi: credentials cleared")
-    fw.expect("LOG", lambda l: l == "wifi: setup hotspot up (calictl-esp-setup)")
+    fw.expect("LOG", lambda l: l == AP_UP)
     assert get_json(fw, "/api/wifi")["mode"] == "setup"
     fw.stop()
 
@@ -238,25 +239,25 @@ def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
         tmp_path, "ap minsel -55 1\nap typo -60 1\njoin minsel ok 192.168.1.42\njoin typo fail auth\n"
     )
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
-    fw.expect("LOG", lambda l: l == "wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"])
+    fw.expect("LOG", lambda l: l == AP_UP)
     wrong = STRINGS["join_failed_auth"][lang]
     link = "http://%s.local" % CONSTS["NET_HOSTNAME"]
-    join_s = 10 * CONSTS["NET_PAGE_POLL_MS"]  # a few page polls, in ms
+    wait_ms = 10 * CONSTS["NET_PAGE_POLL_MS"]  # a few page polls
     errors = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_context(locale=locale).new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/" % fw.http_port)
-        page.wait_for_selector("#setup", state="visible", timeout=join_s)
-        page.wait_for_selector("#ssid option[value=typo]", state="attached", timeout=join_s)
+        page.wait_for_selector("#setup", state="visible", timeout=wait_ms)
+        page.wait_for_selector("#ssid option[value=typo]", state="attached", timeout=wait_ms)
         assert page.inner_text("#connect") == STRINGS["connect"][lang]
 
         page.select_option("#ssid", "typo")
         page.fill("#psk", "wrong-psk-99")
         page.click("#connect")
         page.wait_for_function(
-            "t => document.getElementById('setup-msg').textContent === t", arg=wrong, timeout=join_s
+            "t => document.getElementById('setup-msg').textContent === t", arg=wrong, timeout=wait_ms
         )
         assert page.input_value("#psk") == ""
         assert fw.expect("LOG", lambda l: l == "wifi: failed auth")
@@ -264,7 +265,7 @@ def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
         page.select_option("#ssid", "minsel")
         page.fill("#psk", PSK)
         page.click("#connect")
-        a = page.wait_for_selector('#setup-msg a[href="%s"]' % link, timeout=join_s)
+        a = page.wait_for_selector('#setup-msg a[href="%s"]' % link, timeout=wait_ms)
         assert a.inner_text() == link
         assert page.input_value("#psk") == ""
         assert wrong not in page.inner_text("#setup-msg")

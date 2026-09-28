@@ -35,7 +35,9 @@ typedef enum { CALI_NET_EV_STA_GOT_IP, CALI_NET_EV_STA_LOST, CALI_NET_EV_STA_FAI
 typedef enum { CALI_NET_REASON_NONE = 0, CALI_NET_REASON_NOT_FOUND, CALI_NET_REASON_AUTH, CALI_NET_REASON_OTHER } cali_net_reason_t;
 typedef struct { char ssid[NET_SSID_MAX + 1]; int rssi; int secure; } cali_net_ap_t;
 /* ip: STA_GOT_IP only. nscan/scan: SCAN_DONE only (at most NET_SCAN_MAX entries); scan points into
- * implementation memory valid only for the duration of the sink call: copy it. */
+ * implementation memory valid only for the duration of the sink call: copy it. nscan < 0: the scan
+ * produced no list (refused or aborted — e.g. by a station join — or timed out); 0: it ran and saw
+ * no network. Every scan() that returned 0 still ends in exactly one SCAN_DONE. */
 typedef struct { cali_net_ev_t ev; cali_net_reason_t reason; uint32_t ip; int nscan; const cali_net_ap_t *scan; } cali_net_event_t;
 typedef void (*cali_net_sink_t)(const cali_net_event_t *e, void *ctx);
 typedef struct {

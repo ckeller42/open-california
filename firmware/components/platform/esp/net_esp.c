@@ -460,7 +460,7 @@ static int scan(void) {
         entry_t e;
         cali_log("net: esp_wifi_scan_start: %s", esp_err_to_name(err));
         memset(&e, 0, sizeof e);
-        e.kind = K_SCAN_DONE;                  /* this scan's one SCAN_DONE, delivered empty */
+        e.kind = K_SCAN_DONE;                  /* this scan's one SCAN_DONE, delivered as failed (-1) */
         e.reason = 1;
         ring_put(&e);
     }
@@ -521,13 +521,14 @@ static void deliver(cali_net_ev_t ev, cali_net_reason_t reason, uint32_t ip, int
     if (s_sink) s_sink(&e, s_sink_ctx);
 }
 
+/* The scan's list into s_aps: its count, or -1 = no list (a refused/aborted scan; cali_net.h). */
 static int scan_records(int ok) {
     uint16_t n = NET_SCAN_MAX;
     int out = 0;
     if (!ok || esp_wifi_scan_get_ap_records(&n, s_rec) != ESP_OK) {
         esp_err_t err = esp_wifi_clear_ap_list();   /* free whatever the driver still holds */
         if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_STARTED) cali_log("net: esp_wifi_clear_ap_list: %s", esp_err_to_name(err));
-        return 0;
+        return -1;
     }
     for (uint16_t i = 0; i < n && out < NET_SCAN_MAX; i++) {
         size_t len = strnlen((const char *)s_rec[i].ssid, sizeof s_rec[i].ssid);
@@ -635,7 +636,7 @@ void cali_net_esp_poll(uint64_t now_ms) {
     }
     if (s_scan_busy && now_ms >= s_scan_ms && now_ms - s_scan_ms >= SCAN_TIMEOUT_MS) {  /* SCAN_DONE never came */
         s_scan_busy = 0;
-        deliver(CALI_NET_EV_SCAN_DONE, CALI_NET_REASON_NONE, 0, 0);
+        deliver(CALI_NET_EV_SCAN_DONE, CALI_NET_REASON_NONE, 0, -1);   /* no list: keep the last one */
     }
 }
 

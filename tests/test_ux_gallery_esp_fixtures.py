@@ -2,8 +2,8 @@
 
 ``tools.ux_gallery --esp`` renders ``docs/screenshots/esp-setup-page.png`` / ``esp-status-page.png``
 from a stdlib stub serving canned ``/api/state`` + ``/api/wifi`` JSON. These tests pin the canned key
-sets to the ones ``tests/firmware/test_web_handlers.py`` asserts of the real C handlers (``web.c``),
-and check the stub serves the exact generated page bytes the firmware embeds — so the figures in
+sets to the ones ``tests/firmware/test_web_handlers.py`` asserts of the real C handlers (``web.c``)
+— one shared copy, ``tests/firmware/api_shape.py`` — and check the stub serves the exact generated page bytes the firmware embeds — so the figures in
 ``docs/howto-esp-wifi-setup.md`` cannot drift from what the device serves. Stdlib only (no browser).
 
 .. test:: The ESP docs-screenshot fixtures match the firmware API shape
@@ -16,11 +16,16 @@ import urllib.request
 
 import pytest
 
+from tests.firmware.api_shape import (
+    AP_KEYS,
+    DEVICE_KEYS,
+    LINK_KEYS,
+    PAIRING_KEYS,
+    STATE_KEYS,
+    WIFI_GET_KEYS,
+    WIFI_KEYS,
+)
 from tools import ux_gallery
-
-STATE_KEYS = {"t", "fn", "device"}
-DEVICE_KEYS = {"pairing", "link", "wifi", "uptime_ms", "fw"}
-WIFI_KEYS = {"mode", "ssid", "ip", "rssi"}
 
 
 @pytest.fixture(scope="module")
@@ -34,8 +39,8 @@ def test_state_fixture_shape(fixtures, mode):
     assert set(state) == STATE_KEYS
     d = state["device"]
     assert set(d) == DEVICE_KEYS
-    assert set(d["pairing"]) == {"state", "address"}
-    assert set(d["link"]) == {"up", "last_snap_age_ms"}
+    assert set(d["pairing"]) == PAIRING_KEYS
+    assert set(d["link"]) == LINK_KEYS
     assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == mode
     assert d["uptime_ms"] == state["t"]
 
@@ -43,10 +48,10 @@ def test_state_fixture_shape(fixtures, mode):
 @pytest.mark.parametrize("mode", ["setup", "station"])
 def test_wifi_fixture_shape(fixtures, mode):
     w = fixtures[mode]["/api/wifi"]
-    assert set(w) == WIFI_KEYS | {"last_error", "scan"}
+    assert set(w) == WIFI_GET_KEYS
     assert {k: w[k] for k in WIFI_KEYS} == fixtures[mode]["/api/state"]["device"]["wifi"]
     for ap in w["scan"]:
-        assert set(ap) == {"ssid", "rssi", "secure"}
+        assert set(ap) == AP_KEYS
 
 
 def test_station_fn_is_codec_decoded(fixtures):

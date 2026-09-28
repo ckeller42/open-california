@@ -28,6 +28,7 @@
  *   fake-net events (through the sink the WiFi runner registered):
  *     NET_GOT_IP <a.b.c.d> | NET_LOST | NET_FAILED <reason> | NET_AP_STARTED | NET_AP_STOPPED
  *     NET_SCAN_DONE [ssid ...]   (rssi -40 - 10*i, secure)
+ *     NET_SCAN_FAILED      a SCAN_DONE with nscan -1 (the scan was refused, aborted or timed out)
  * stdout: CALL <name> [arg] per transport action (decimal args; queries not printed), NET <op>
  * [args] per cali_net WiFi/UDP call, the console's STATE/SNAP lines, and LOG lines (cali_log).
  */
@@ -313,6 +314,8 @@ int main(void) {
             net_deliver(CALI_NET_EV_AP_STOPPED, CALI_NET_REASON_NONE, 0, 0, NULL);
         } else if (strcmp(word, "NET_SCAN_DONE") == 0) {
             net_scan_done(line);
+        } else if (strcmp(word, "NET_SCAN_FAILED") == 0) {
+            net_deliver(CALI_NET_EV_SCAN_DONE, CALI_NET_REASON_NONE, 0, -1, NULL);
         } else if (strcmp(word, "boot") == 0) {
             cali_session_boot();
             cali_console_line("status");

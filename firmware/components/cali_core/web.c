@@ -235,7 +235,8 @@ static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
         SET_CONST(resp, 400, ERR_SSID);
     } else if (psk_len < NET_PSK_MIN || psk_len > NET_PSK_MAX) {
         SET_CONST(resp, 400, ERR_PSK);
-    } else if (cali_kv_set("wifi_ssid", ssid, ssid_len) != 0 || cali_kv_set("wifi_psk", psk, psk_len) != 0) {
+    } else if (cali_kv_set(CALI_WIFI_KEY_SSID, ssid, ssid_len) != 0 ||
+               cali_kv_set(CALI_WIFI_KEY_PSK, psk, psk_len) != 0) {
         cali_log("http: storing wifi credentials failed");
         SET_CONST(resp, 500, ERR_STORE);
     } else {

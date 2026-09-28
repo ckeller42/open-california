@@ -129,11 +129,14 @@ Not drawn: `CREDS_FORGET` (console `wifi forget`, `DELETE /api/wifi`) goes from 
 
 Console lines (`LOG wifi: …`, exact texts from `cali_wifi_run.h`/`console.c`): `setup hotspot up
 (calictl-esp-setup)`, `setup hotspot closed`, `joining <ssid>`, `online <a.b.c.d>`, `lost`,
-`failed <not_found|auth|other>`, `credentials cleared`, `credentials replaced, reconnecting`,
-`captive DNS unavailable`; on the device also `driver unavailable`. `wifi status` answers `LOG wifi:
+`failed <not_found|auth|other>`, `credentials cleared`, `credential erase failed`, `credentials
+replaced, reconnecting`, `setup hotspot failed to start`, `captive DNS unavailable`; from `wifi set`
+also `usage: wifi set <ssid> <psk>`, `bad ssid`, `bad psk`, `storing credentials failed`; before the
+WiFi runtime booted `not enabled`; on the device also `driver unavailable`. `wifi status` answers `LOG wifi:
 <setup|station|off> ssid=<ssid|-> ip=<a.b.c.d|-> rssi=<dBm|-> scan=<n>`. The passphrase is never
 printed: the console does not echo input, an unknown/mistyped `wifi` line is logged by its first
-word(s) only, and the line buffer is wiped after every command.
+word(s) only, and the line buffers are wiped after every command (on the ESP the console queue's
+slot keeps its copy until a later line reuses it).
 
 ### Endpoints (`web.c`, contract in `include/cali_web.h`)
 
@@ -166,7 +169,7 @@ pairing flow is **active** (runner state not idle/bonded/error — a failed pair
 it) and starts it on the first tick after the flow ends.
 
 **Size** (ruling R18): the WiFi stack (net80211, wpa_supplicant + PSA crypto, lwIP, pp/phy, mdns)
-adds ~614 KB to the release image — `cali_fw.bin` 463,248 B -> 1,078,880 B — so `partitions.csv`
+adds ~615 KB (+615,632 B) to the release image — `cali_fw.bin` 463,248 B -> 1,078,880 B — so `partitions.csv`
 gives the factory app **3 MB** on the 16 MB flash (66 % free); the plan's ~250 KB estimate was off
 by about 2.5x. Details: `firmware/README.md` "WiFi build".
 

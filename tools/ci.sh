@@ -130,7 +130,10 @@ webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only s
 dev() {
   "$PY" -m pip install -r requirements-dev.txt
   # The retired .githooks/ hook set core.hooksPath; pre-commit refuses to install while it is set.
-  if [ "$(git config --get core.hooksPath || true)" = ".githooks" ]; then git config --unset core.hooksPath; fi
+  # Relative (".githooks") or absolute ("/…/.githooks", with or without a trailing slash) alike.
+  case "$(git config --get core.hooksPath || true)" in
+    .githooks | .githooks/ | */.githooks | */.githooks/) git config --unset core.hooksPath;;
+  esac
   "$PY" -m pre_commit install   # pre-commit + pre-push (default_install_hook_types)
   echo "dev tooling installed; pre-commit + pre-push hooks active (.pre-commit-config.yaml)"
 }
