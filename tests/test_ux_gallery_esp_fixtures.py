@@ -10,6 +10,7 @@ and check the stub serves the exact generated page bytes the firmware embeds —
    :id: T_FW_ESP_SCREENSHOT_FIXTURES
    :links: R_FW_HTTP_STATUS
 """
+
 import json
 import urllib.request
 
@@ -50,13 +51,14 @@ def test_wifi_fixture_shape(fixtures, mode):
 
 def test_station_fn_is_codec_decoded(fixtures):
     from calictl import overrides, protocol
+
     funcs = protocol.load()
     overrides.apply(funcs)
     fn = fixtures["station"]["/api/state"]["fn"]
-    assert list(fn) == sorted(fn) and fn                   # CODEC_CHARS (sorted) order
+    assert list(fn) == sorted(fn) and fn  # CODEC_CHARS (sorted) order
     for name, fields in fn.items():
         placed = {f.name for f in funcs[name].state_fields if f.placed}
-        assert set(fields) == placed                        # a whole frame, decoded
+        assert set(fields) == placed  # a whole frame, decoded
 
 
 def test_stub_serves_the_generated_page_and_fixtures(fixtures):

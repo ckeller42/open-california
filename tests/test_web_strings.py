@@ -9,6 +9,7 @@ page fits ``NET_HTTP_BODY_MAX`` and loads nothing external.
    :id: T_FW_WEB_STRINGS
    :links: R_FW_HTTP_STATUS
 """
+
 import json
 import re
 import subprocess
@@ -59,8 +60,9 @@ def test_rendered_page_is_small_and_self_contained():
 def test_generated_files_are_fresh():
     assert gen_c_dict.generate_web_strings() == (WEB / "strings_gen.h").read_text()
     assert gen_c_dict.render_web_page() == (WEB / "index_gen.html").read_text()
-    r = subprocess.run([sys.executable, "-m", "tools.gen_c_dict", "--check"], cwd=ROOT, capture_output=True,
-                       text=True)
+    r = subprocess.run(
+        [sys.executable, "-m", "tools.gen_c_dict", "--check"], cwd=ROOT, capture_output=True, text=True
+    )
     assert r.returncode == 0, r.stderr
 
 

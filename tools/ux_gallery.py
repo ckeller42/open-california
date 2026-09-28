@@ -149,8 +149,10 @@ def _esp_fn():
     unit = MockCamperUnit()
     funcs = protocol.load()
     overrides.apply(funcs)
-    return {name: protocol.decode(funcs[name], _pack_state(funcs[name], unit.state[name]))
-            for name in sorted(ESP_FUNCTIONS)}
+    return {
+        name: protocol.decode(funcs[name], _pack_state(funcs[name], unit.state[name]))
+        for name in sorted(ESP_FUNCTIONS)
+    }
 
 
 def esp_fixtures():
@@ -164,20 +166,38 @@ def esp_fixtures():
     station_wifi = {"mode": "station", "ssid": "HomeNet", "ip": "192.168.1.57", "rssi": -58}
     return {
         "setup": {
-            "/api/state": {"t": 41250, "fn": {}, "device": {
-                "pairing": {"state": "idle", "address": None},
-                "link": {"up": False, "last_snap_age_ms": None},
-                "wifi": setup_wifi, "uptime_ms": 41250, "fw": "bef07f1"}},
-            "/api/wifi": dict(setup_wifi, scan=[
-                {"ssid": "HomeNet", "rssi": -52, "secure": True},
-                {"ssid": "Campsite-Guest", "rssi": -71, "secure": True},
-                {"ssid": "Neighbour-5G", "rssi": -83, "secure": True}]),
+            "/api/state": {
+                "t": 41250,
+                "fn": {},
+                "device": {
+                    "pairing": {"state": "idle", "address": None},
+                    "link": {"up": False, "last_snap_age_ms": None},
+                    "wifi": setup_wifi,
+                    "uptime_ms": 41250,
+                    "fw": "bef07f1",
+                },
+            },
+            "/api/wifi": dict(
+                setup_wifi,
+                scan=[
+                    {"ssid": "HomeNet", "rssi": -52, "secure": True},
+                    {"ssid": "Campsite-Guest", "rssi": -71, "secure": True},
+                    {"ssid": "Neighbour-5G", "rssi": -83, "secure": True},
+                ],
+            ),
         },
         "station": {
-            "/api/state": {"t": 3912400, "fn": _esp_fn(), "device": {
-                "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
-                "link": {"up": True, "last_snap_age_ms": 1200},
-                "wifi": station_wifi, "uptime_ms": 3912400, "fw": "bef07f1"}},
+            "/api/state": {
+                "t": 3912400,
+                "fn": _esp_fn(),
+                "device": {
+                    "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
+                    "link": {"up": True, "last_snap_age_ms": 1200},
+                    "wifi": station_wifi,
+                    "uptime_ms": 3912400,
+                    "fw": "bef07f1",
+                },
+            },
             "/api/wifi": dict(station_wifi, scan=[]),
         },
     }
@@ -231,12 +251,17 @@ def capture_esp(out_dir):
     :returns: the two PNG paths (``esp-setup-page.png``, ``esp-status-page.png``)
     """
     from playwright.sync_api import sync_playwright  # tool dep; imported lazily
+
     os.makedirs(out_dir, exist_ok=True)
     paths = []
     with EspStub() as stub, sync_playwright() as pw:
         browser = pw.chromium.launch()
-        ctx = browser.new_context(color_scheme="light", locale="en-US",
-                                  viewport={"width": 420, "height": 900}, device_scale_factor=2)
+        ctx = browser.new_context(
+            color_scheme="light",
+            locale="en-US",
+            viewport={"width": 420, "height": 900},
+            device_scale_factor=2,
+        )
         for mode, name in (("setup", "esp-setup-page.png"), ("station", "esp-status-page.png")):
             stub.mode = mode
             pg = ctx.new_page()
@@ -244,7 +269,7 @@ def capture_esp(out_dir):
             if mode == "setup":
                 pg.wait_for_selector("#ssid option", state="attached")
                 pg.fill("#psk", "example-passphrase")
-                pg.wait_for_timeout(4500)       # the page's follow-up re-scan read clears "Searching…"
+                pg.wait_for_timeout(4500)  # the page's follow-up re-scan read clears "Searching…"
             else:
                 pg.wait_for_selector("#functions .box")
                 pg.wait_for_timeout(500)
@@ -259,13 +284,18 @@ def capture_esp(out_dir):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="screenshot the web UI (over the mock) for review")
     ap.add_argument("--out", default="/tmp/ux", help="output directory for the PNGs")
-    ap.add_argument("--esp", action="store_true",
-                    help="only the ESP32 firmware page (setup + station mode, from fixtures)")
+    ap.add_argument(
+        "--esp",
+        action="store_true",
+        help="only the ESP32 firmware page (setup + station mode, from fixtures)",
+    )
     args = ap.parse_args(argv)
     try:
         import playwright  # noqa: F401
     except ImportError:
-        raise SystemExit("needs playwright: pip install playwright && python -m playwright install chromium") from None
+        raise SystemExit(
+            "needs playwright: pip install playwright && python -m playwright install chromium"
+        ) from None
     paths = [] if args.esp else capture(args.out)
     paths += capture_esp(args.out)
     print("wrote %d screenshots to %s" % (len(paths), args.out))

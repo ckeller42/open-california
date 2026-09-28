@@ -362,8 +362,11 @@ def generate_net() -> str:
         else:
             out.append("#define %s %d" % (key, v))
     for prefix in ("WIFI_", "WEV_", "WACT_"):
-        out.append("enum {\n" + ",\n".join(
-            "    %s = %d" % (name, val) for name, val in _int_members(wifi_sm_ref, prefix)) + "\n};")
+        out.append(
+            "enum {\n"
+            + ",\n".join("    %s = %d" % (name, val) for name, val in _int_members(wifi_sm_ref, prefix))
+            + "\n};"
+        )
     out.append("#define WIFI_MAX_ACTIONS %d" % wifi_sm_ref.MAX_ACTIONS)
     out.append("#endif /* NET_CONSTS_H */")
     return "\n".join(out) + "\n"
@@ -430,22 +433,29 @@ def generate_web_strings() -> str:
     out = [_WEB_HEADER]
     for key, tr in _web_strings().items():
         for lang in ("en", "de"):
-            out.append("#define WEB_STR_%s_%s %s" % (lang.upper(), key.upper(),
-                                                      json.dumps(tr[lang], ensure_ascii=False)))
+            out.append(
+                "#define WEB_STR_%s_%s %s"
+                % (lang.upper(), key.upper(), json.dumps(tr[lang], ensure_ascii=False))
+            )
     page = render_web_page().encode("utf-8")
     out.append("#define WEB_INDEX_HTML_LEN %du" % len(page))
     out.append("static const unsigned char WEB_INDEX_HTML[WEB_INDEX_HTML_LEN + 1] = {")
     data = list(page) + [0]
     for i in range(0, len(data), 16):
-        out.append("    " + ", ".join("0x%02x" % b for b in data[i:i + 16]) + ",")
+        out.append("    " + ", ".join("0x%02x" % b for b in data[i : i + 16]) + ",")
     out.append("};")
     out.append("#endif /* WEB_STRINGS_GEN_H */")
     return "\n".join(out) + "\n"
 
 
-_TARGETS = ((OUT, generate), (CHARS_OUT, generate_chars), (PAIRING_OUT, generate_pairing),
-            (NET_OUT, generate_net), (WEB_STRINGS_OUT, generate_web_strings),
-            (WEB_PAGE_OUT, render_web_page))
+_TARGETS = (
+    (OUT, generate),
+    (CHARS_OUT, generate_chars),
+    (PAIRING_OUT, generate_pairing),
+    (NET_OUT, generate_net),
+    (WEB_STRINGS_OUT, generate_web_strings),
+    (WEB_PAGE_OUT, render_web_page),
+)
 
 
 def main() -> int:

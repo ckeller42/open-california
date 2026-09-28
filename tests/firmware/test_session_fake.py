@@ -588,7 +588,13 @@ def test_wifi_ap_stopped_event_clears_the_hotspot_bookkeeping(fake):
     out = run(fake, "wifi_boot", "NET_AP_STARTED", "NET_SCAN_DONE minsel", "NET_AP_STOPPED", "> wifi forget")
     assert out.count(AP) == 2
     assert after(out, "LOG wifi: setup hotspot up (calictl-esp-setup)") == [
-        "NET sta_stop", "LOG wifi: credentials cleared", AP, "NET close 5", "NET udp_bind 53", "NET scan"]
+        "NET sta_stop",
+        "LOG wifi: credentials cleared",
+        AP,
+        "NET close 5",
+        "NET udp_bind 53",
+        "NET scan",
+    ]
 
 
 def test_wifi_clear_creds_reports_a_failed_erase(fake):

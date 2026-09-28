@@ -33,7 +33,7 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
    needs a sign-in and finds the satellite's page instead — a "Sign in to network" notice or a
    small browser window pops up. Tap it.
 
-   **The page doesn't pop up?** Open a browser and go to **http://192.168.4.1** (plain `http`, no
+   **The page doesn't pop up?** Open a browser and go to **<http://192.168.4.1>** (plain `http`, no
    `s`). That is always the satellite's address on its own hotspot.
 3. **Choose your network and type its password.** The page lists the networks the satellite can
    see. Pick yours, type the password, tap
@@ -43,20 +43,20 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
 
 4. **Wait for "Connected as …".** The page says *Connecting to …*, and once the satellite has
    joined your network it shows *Connected as 192.168.x.y. Join <your network> with this device
-   too, then open:* followed by a link to **http://calictl-esp.local**.
+   too, then open:* followed by a link to **<http://calictl-esp.local>**.
 
    If the password was wrong, the page says *Could not connect — check the password and try
    again.* The satellite forgets the wrong password and keeps its setup hotspot open, so you can
    simply try again.
 5. **Switch back.** About 30 seconds after the satellite joins your network it closes the setup
    hotspot. Put your phone back on your own WiFi (most phones do that on their own) and open
-   **http://calictl-esp.local**.
+   **<http://calictl-esp.local>**.
 
 From now on the satellite joins your network by itself every time it starts.
 
 ## Finding the satellite on your network
 
-Open **http://calictl-esp.local** from any device on the same network. The page refreshes every
+Open **<http://calictl-esp.local>** from any device on the same network. The page refreshes every
 2 seconds:
 
 ![The satellite's status page on the home network: device state and the camper unit's functions](screenshots/esp-status-page.png)
@@ -138,12 +138,12 @@ back**. The replies you'll see:
 
 | What you see | What to do |
 |---|---|
-| No `calictl-esp-setup` network appears | The satellite already has a saved network and is on it (or still inside its first 5 minutes of retrying). Open http://calictl-esp.local, or type `wifi status` on the USB console; `wifi forget` reopens the hotspot. |
-| Joined the hotspot, no page pops up | Open **http://192.168.4.1** in a browser. Some phones only show the sign-in notice once; others open it in a small window you have to tap. |
+| No `calictl-esp-setup` network appears | The satellite already has a saved network and is on it (or still inside its first 5 minutes of retrying). Open <http://calictl-esp.local>, or type `wifi status` on the USB console; `wifi forget` reopens the hotspot. |
+| Joined the hotspot, no page pops up | Open **<http://192.168.4.1>** in a browser. Some phones only show the sign-in notice once; others open it in a small window you have to tap. |
 | Your network is missing from the list | Tap **Search again**. 5 GHz-only networks, and networks that hide their name, never appear — use a 2.4 GHz network; for a hidden one, try `wifi set` on the USB console (untested). |
 | "The password needs 8–63 characters." | The password is too short or too long. An open network (no password) cannot be used. |
 | "Could not connect — check the password and try again." | Wrong password, or the network was out of reach. The satellite is back on its setup hotspot; try again. |
 | "Device not reachable" banner on the page | The page lost contact with the satellite: your phone left its network (e.g. the setup hotspot closed after the satellite joined your WiFi). Rejoin the right network and reload. |
-| http://calictl-esp.local doesn't open | Use the IP address from your router's device list or `wifi status` (see [Finding the satellite](#finding-the-satellite-on-your-network)). |
+| <http://calictl-esp.local> doesn't open | Use the IP address from your router's device list or `wifi status` (see [Finding the satellite](#finding-the-satellite-on-your-network)). |
 | The page is slow with several tabs open | The satellite answers one request at a time. Keep one tab open. |
 | *Link to the camper unit: not connected* | That is the Bluetooth side, not WiFi: the satellite is not paired yet, the camper unit is asleep, or another device (the Pi, the app) holds the unit's only Bluetooth connection. Pairing is done on the USB console (`pair`, then `passkey <code>`) — see [ESP32 firmware](firmware.md). |

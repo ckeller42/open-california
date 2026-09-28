@@ -9,6 +9,7 @@ and the Bumble fake unit for the camper. Requests go to ``127.0.0.1:PORT`` with 
    :id: T_FW_WEB_E2E
    :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX
 """
+
 import json
 import os
 import subprocess
@@ -31,7 +32,7 @@ PSK = "test-psk-1234"
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a, **kw):
-        return None                       # a 3xx comes back as the HTTPError below, not followed
+        return None  # a 3xx comes back as the HTTPError below, not followed
 
 
 _OPENER = urllib.request.build_opener(_NoRedirect)
@@ -93,7 +94,7 @@ def test_fresh_device_opens_setup_and_joins(host_fw, hci_unit, tmp_path):
     fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
     w = get_json(fw, "/api/wifi")
     assert (w["mode"], w["ssid"], w["ip"], w["rssi"]) == ("station", "minsel", "192.168.1.42", -55)
-    assert not any(PSK in line for line in fw.log)           # the passphrase is never printed
+    assert not any(PSK in line for line in fw.log)  # the passphrase is never printed
 
 
 def test_wrong_password_returns_to_setup(host_fw, hci_unit, tmp_path):
@@ -114,7 +115,7 @@ def test_boot_with_saved_creds_reconnects_and_forget(host_fw, hci_unit, tmp_path
     fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
     fw.stop()
 
-    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)              # reboot: same store
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)  # reboot: same store
     fw.expect("LOG", lambda l: l == "wifi: joining minsel")
     fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
     assert not any(line.startswith("LOG wifi: setup hotspot") for line in fw.log)
@@ -128,13 +129,13 @@ def test_boot_with_saved_creds_reconnects_and_forget(host_fw, hci_unit, tmp_path
     assert get_json(fw, "/api/wifi")["mode"] == "setup"
     fw.stop()
 
-    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)              # the forget reached the store
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)  # the forget reached the store
     fw.expect("LOG", lambda l: l.startswith("wifi: setup hotspot up"))
     assert not any(line == "LOG wifi: joining minsel" for line in fw.log)
 
 
 def test_api_state_matches_snap_after_pairing(host_fw, hci_unit, tmp_path):
-    fw = host_fw(hci_unit, http=True)                              # no script: no networks (R2)
+    fw = host_fw(hci_unit, http=True)  # no script: no networks (R2)
     assert _pair(fw, hci_unit)["state"] == "bonded"
     snap = fw.expect("SNAP", timeout=40)
     body = get_json(fw, "/api/state")
@@ -157,7 +158,7 @@ def test_wifi_loss_keeps_ble_link(host_fw, hci_unit, tmp_path):
     fw.send("wifi set minsel %s" % PSK)
     fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
     fw.expect("LOG", lambda l: l == "wifi: lost", timeout=20)
-    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42", timeout=20)   # the retry rejoins
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42", timeout=20)  # the retry rejoins
     window = fw.log[mark:]
     assert not [line for line in window if line.startswith("LOG session:")], window
     assert hci_unit.call(_beats_seen, hci_unit.unit) > before
@@ -166,7 +167,7 @@ def test_wifi_loss_keeps_ble_link(host_fw, hci_unit, tmp_path):
     new = bytes([old[0] ^ 0xFF]) + old[1:]
     want = protocol.decode(_funcs()[fn], new)
     hci_unit.call(_serve_raw, hci_unit.unit, fn, new, True)
-    fw.expect("SNAP", lambda s: s["fn"].get(fn) == want, timeout=15)         # still flowing
+    fw.expect("SNAP", lambda s: s["fn"].get(fn) == want, timeout=15)  # still flowing
     assert not [line for line in fw.log[mark:] if line.startswith("LOG session:")]
 
 
@@ -185,14 +186,15 @@ def _chromium():
     return sync_playwright, None
 
 
-@pytest.mark.parametrize("locale,device,functions", [("en-US", "Device", "Camper unit"),
-                                                     ("de-DE", "Gerät", "Camper-Einheit")])
+@pytest.mark.parametrize(
+    "locale,device,functions", [("en-US", "Device", "Camper unit"), ("de-DE", "Gerät", "Camper-Einheit")]
+)
 def test_page_renders(host_fw, hci_unit, tmp_path, locale, device, functions):
     """GET / renders the device box and a function block within 3 s, in the browser's language;
     any uncaught page error fails the test."""
     sync_playwright, why = _chromium()
     if sync_playwright is None:
-        if os.environ.get("CALI_REQUIRE_CHROMIUM") == "1":   # CI firmware-host-e2e / tools/ci.sh firmware
+        if os.environ.get("CALI_REQUIRE_CHROMIUM") == "1":  # CI firmware-host-e2e / tools/ci.sh firmware
             pytest.fail("CALI_REQUIRE_CHROMIUM=1 but " + why)
         pytest.skip(why)
     fw = host_fw(hci_unit, http=True)
@@ -216,6 +218,7 @@ def test_page_renders(host_fw, hci_unit, tmp_path, locale, device, functions):
 def test_http_port_must_be_a_valid_port(bad):
     """``--http 0`` or a non-numeric/out-of-range port is a usage error (exit 2), never a silent run
     without the network side."""
-    r = subprocess.run([str(build_host()), "--hci-port", "1", "--http", bad], capture_output=True, text=True,
-                       timeout=30)
+    r = subprocess.run(
+        [str(build_host()), "--hci-port", "1", "--http", bad], capture_output=True, text=True, timeout=30
+    )
     assert r.returncode == 2 and "usage:" in r.stderr

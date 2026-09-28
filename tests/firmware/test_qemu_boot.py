@@ -78,9 +78,11 @@ def test_no_wifi_driver_boots_and_serves_nothing(qemu):
     s.send("status")
     v = s.expect("STATE")
     assert v["state"] == "idle"
-    assert "wifi" not in v, v                          # WiFi off: the runner never booted
-    s.send("wifi status"); s.expect("LOG wifi: not enabled")
-    time.sleep(3)                                      # a crash would reboot within ~0.4 s (QEMU)
-    s.send("status"); assert s.expect("STATE")["state"] == "idle"
+    assert "wifi" not in v, v  # WiFi off: the runner never booted
+    s.send("wifi status")
+    s.expect("LOG wifi: not enabled")
+    time.sleep(3)  # a crash would reboot within ~0.4 s (QEMU)
+    s.send("status")
+    assert s.expect("STATE")["state"] == "idle"
     assert sum(line.startswith(BOOT_BANNER) for line in s.log) == 1, "rebooted:\n" + "\n".join(s.log)
     assert sum(line.strip() == "LOG wifi: driver unavailable" for line in s.log) == 1, "\n".join(s.log)

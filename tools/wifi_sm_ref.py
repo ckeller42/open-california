@@ -22,17 +22,29 @@ the current setup flow (``WEV_CREDS_SET``); only a FAILED with ``joined_once == 
 ``ap_up`` tracks the SM's *intent*: it is set when the SM emits ``WACT_AP_START`` and cleared
 when it emits ``WACT_AP_STOP`` (``WEV_AP_STARTED`` is informational and changes nothing).
 """
+
 from typing import NamedTuple
 
 from tools.wifi_consts import CONSTS
 
-(WIFI_UNPROVISIONED, WIFI_SETUP_AP, WIFI_CONNECTING, WIFI_ONLINE, WIFI_RETRYING,
- WIFI_SETUP_AP_RETRYING) = range(6)
-(WEV_BOOT_WITH_CREDS, WEV_BOOT_NO_CREDS, WEV_CREDS_SET, WEV_CREDS_FORGET, WEV_GOT_IP, WEV_LOST,
- WEV_FAILED, WEV_AP_STARTED, WEV_TICK) = range(9)
-(WACT_AP_START, WACT_AP_STOP, WACT_STA_START, WACT_STA_STOP, WACT_MDNS, WACT_CLEAR_CREDS,
- WACT_LOG_REASON) = range(7)
-MAX_ACTIONS = 3   # CREDS_FORGET emits 3 (STA_STOP, CLEAR_CREDS, AP_START); nothing emits more
+(WIFI_UNPROVISIONED, WIFI_SETUP_AP, WIFI_CONNECTING, WIFI_ONLINE, WIFI_RETRYING, WIFI_SETUP_AP_RETRYING) = (
+    range(6)
+)
+(
+    WEV_BOOT_WITH_CREDS,
+    WEV_BOOT_NO_CREDS,
+    WEV_CREDS_SET,
+    WEV_CREDS_FORGET,
+    WEV_GOT_IP,
+    WEV_LOST,
+    WEV_FAILED,
+    WEV_AP_STARTED,
+    WEV_TICK,
+) = range(9)
+(WACT_AP_START, WACT_AP_STOP, WACT_STA_START, WACT_STA_STOP, WACT_MDNS, WACT_CLEAR_CREDS, WACT_LOG_REASON) = (
+    range(7)
+)
+MAX_ACTIONS = 3  # CREDS_FORGET emits 3 (STA_STOP, CLEAR_CREDS, AP_START); nothing emits more
 
 _AP_CLOSE_MS = CONSTS["NET_AP_CLOSE_MS"]
 _RETRY_MIN_MS = CONSTS["NET_RETRY_MIN_MS"]
@@ -77,8 +89,10 @@ def step(state, ev, arg=0):
     s = WifiState(*state)
     st = s.st
     if ev == WEV_CREDS_FORGET:
-        return (WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0),
-                [(WACT_STA_STOP, 0), (WACT_CLEAR_CREDS, 0), (WACT_AP_START, 0)])
+        return (
+            WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0),
+            [(WACT_STA_STOP, 0), (WACT_CLEAR_CREDS, 0), (WACT_AP_START, 0)],
+        )
     if st == WIFI_UNPROVISIONED:
         if ev == WEV_BOOT_NO_CREDS:
             return WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0), [(WACT_AP_START, 0)]
@@ -94,16 +108,19 @@ def step(state, ev, arg=0):
             return WifiState(WIFI_ONLINE, s.ap_up, 1, 0, 0, 0), [(WACT_MDNS, 0)]
         if ev == WEV_FAILED:
             reason = arg & 0xFFFFFFFF
-            if not s.joined_once:   # a typo never bricks setup: back to the AP, bad creds gone
+            if not s.joined_once:  # a typo never bricks setup: back to the AP, bad creds gone
                 # (joined_once=0 only after CREDS_SET, from SETUP_AP/SETUP_AP_RETRYING: AP is up)
-                return (WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0),
-                        [(WACT_LOG_REASON, reason), (WACT_CLEAR_CREDS, 0)])
-            return (WifiState(WIFI_RETRYING, s.ap_up, 1, _RETRY_MIN_MS, 0, 0),
-                    [(WACT_LOG_REASON, reason)])
+                return (
+                    WifiState(WIFI_SETUP_AP, 1, 0, 0, 0, 0),
+                    [(WACT_LOG_REASON, reason), (WACT_CLEAR_CREDS, 0)],
+                )
+            return (WifiState(WIFI_RETRYING, s.ap_up, 1, _RETRY_MIN_MS, 0, 0), [(WACT_LOG_REASON, reason)])
     elif st == WIFI_ONLINE:
         if ev == WEV_LOST:
-            return (WifiState(WIFI_RETRYING, s.ap_up, s.joined_once, _RETRY_MIN_MS, 0, 0),
-                    [(WACT_STA_STOP, 0)])
+            return (
+                WifiState(WIFI_RETRYING, s.ap_up, s.joined_once, _RETRY_MIN_MS, 0, 0),
+                [(WACT_STA_STOP, 0)],
+            )
         if ev == WEV_TICK:
             if s.since_ms == 0:
                 return s._replace(since_ms=arg), []

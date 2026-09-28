@@ -10,6 +10,7 @@ the generated golden vectors through both (``tests/test_wifi_sm_ref.py`` replays
    :id: T_FW_WIFI_SM_PARITY
    :links: R_FW_WIFI_PROVISION
 """
+
 import json
 import shutil
 import subprocess
@@ -25,9 +26,24 @@ CORE = ROOT / "firmware" / "components" / "cali_core"
 def sm_cli(tmp_path_factory):
     cc = shutil.which("cc") or pytest.skip("no C compiler")
     out = tmp_path_factory.mktemp("wsm") / "wifi_sm_cli"
-    subprocess.run([cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include"),
-                    "-I", str(ROOT / "csrc"), str(CORE / "wifi_sm.c"),
-                    str(CORE / "test" / "wifi_sm_cli.c"), "-o", str(out)], check=True)
+    subprocess.run(
+        [
+            cc,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(CORE / "include"),
+            "-I",
+            str(ROOT / "csrc"),
+            str(CORE / "wifi_sm.c"),
+            str(CORE / "test" / "wifi_sm_cli.c"),
+            "-o",
+            str(out),
+        ],
+        check=True,
+    )
     return out
 
 
@@ -42,8 +58,9 @@ def test_c_wifi_sm_replays_the_golden_vectors(sm_cli):
         lines.append("S %d %d %d %d %d %d" % tuple(c["start"]))
         for s in c["steps"]:
             lines.append("E %d %d" % (s["ev"], s["arg"]))
-    out = subprocess.run([str(sm_cli)], input="\n".join(lines) + "\n", capture_output=True,
-                         text=True, check=True).stdout.splitlines()
+    out = subprocess.run(
+        [str(sm_cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+    ).stdout.splitlines()
     i = 0
     for c in cases:
         for s in c["steps"]:
@@ -55,14 +72,20 @@ def test_c_wifi_sm_replays_the_golden_vectors(sm_cli):
 
 def test_first_join_failure_clears_credentials(sm_cli):
     # CONNECTING (2), AP up, never joined + FAILED (6) reason 15 (auth) -> SETUP_AP, LOG + CLEAR
-    out = subprocess.run([str(sm_cli)], input="S 2 1 0 0 0 0\nE 6 15\n", capture_output=True,
-                         text=True, check=True).stdout.splitlines()
+    out = subprocess.run(
+        [str(sm_cli)], input="S 2 1 0 0 0 0\nE 6 15\n", capture_output=True, text=True, check=True
+    ).stdout.splitlines()
     assert out == ["1 1 0 0 0 0 | 6:15 5:0"]
 
 
 def test_64bit_now_survives_the_c_twin(sm_cli):
     # ONLINE, AP up, stamped just below 2^32 ms: the close deadline crosses 32 bits
     big = (1 << 32) - 10
-    out = subprocess.run([str(sm_cli)], input="S 3 1 1 0 %d 0\nE 8 %d\n" % (big, big + 30000),
-                         capture_output=True, text=True, check=True).stdout.splitlines()
+    out = subprocess.run(
+        [str(sm_cli)],
+        input="S 3 1 1 0 %d 0\nE 8 %d\n" % (big, big + 30000),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
     assert out == ["3 0 1 0 %d 0 | 1:0" % big]

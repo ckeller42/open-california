@@ -103,9 +103,17 @@ def test_erase_one_key_leaves_the_others(kv_cli, tmp_path):
     """``cali_kv_erase``: the WiFi runner drops exactly its two keys, never the bond records; a key
     that is not stored is not an error; a bad key is."""
     assert run(kv_cli, tmp_path, "set wifi_ssid 61\nset wifi_psk 62\nset sec_peer_0 63\n") == ["OK"] * 3
-    assert run(kv_cli, tmp_path, "erase wifi_ssid\nerase wifi_psk\nerase wifi_psk\nerase bad/key\n") == \
-        ["OK", "OK", "OK", "FAIL"]
-    assert run(kv_cli, tmp_path, "get wifi_ssid\nget wifi_psk\nget sec_peer_0\n") == ["MISSING", "MISSING", "63"]
+    assert run(kv_cli, tmp_path, "erase wifi_ssid\nerase wifi_psk\nerase wifi_psk\nerase bad/key\n") == [
+        "OK",
+        "OK",
+        "OK",
+        "FAIL",
+    ]
+    assert run(kv_cli, tmp_path, "get wifi_ssid\nget wifi_psk\nget sec_peer_0\n") == [
+        "MISSING",
+        "MISSING",
+        "63",
+    ]
 
 
 def test_a_value_larger_than_the_buffer_is_too_big(kv_cli, tmp_path):

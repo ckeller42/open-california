@@ -10,6 +10,7 @@ clock, log and the WiFi runtime. Every assertion is on the bytes the core sent.
    :id: T_FW_WEB_HANDLERS
    :links: R_FW_HTTP_STATUS
 """
+
 import json
 import shutil
 import subprocess
@@ -23,20 +24,50 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware" / "components" / "cali_core"
 PAGE = ROOT / "firmware" / "web" / "index_gen.html"
 IDENTITY = "C0:FF:EE:CA:11:F0"
-PROBES = ["/generate_204", "/gen_204", "/hotspot-detect.html", "/library/test/success.html",
-          "/connecttest.txt", "/ncsi.txt", "/canonical.html", "/success.txt"]
+PROBES = [
+    "/generate_204",
+    "/gen_204",
+    "/hotspot-detect.html",
+    "/library/test/success.html",
+    "/connecttest.txt",
+    "/ncsi.txt",
+    "/canonical.html",
+    "/success.txt",
+]
 
 
 def _build(tmp_path_factory, name, *defines):
     cc = shutil.which("cc") or pytest.skip("no C compiler")
     out = tmp_path_factory.mktemp("web") / name
-    subprocess.run([cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-DCODEC_NO_ENCODE", *defines,
-                    "-I", str(CORE / "include"), "-I", str(ROOT / "csrc"),
-                    "-I", str(ROOT / "firmware" / "components" / "platform" / "include"),
-                    "-I", str(ROOT / "firmware" / "web"),
-                    str(CORE / "web.c"), str(CORE / "http_core.c"), str(CORE / "captive_dns.c"),
-                    str(CORE / "json.c"), str(CORE / "snapshot.c"), str(ROOT / "csrc" / "codec.c"),
-                    str(CORE / "test" / "web_cli.c"), "-o", str(out)], check=True)
+    subprocess.run(
+        [
+            cc,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-DCODEC_NO_ENCODE",
+            *defines,
+            "-I",
+            str(CORE / "include"),
+            "-I",
+            str(ROOT / "csrc"),
+            "-I",
+            str(ROOT / "firmware" / "components" / "platform" / "include"),
+            "-I",
+            str(ROOT / "firmware" / "web"),
+            str(CORE / "web.c"),
+            str(CORE / "http_core.c"),
+            str(CORE / "captive_dns.c"),
+            str(CORE / "json.c"),
+            str(CORE / "snapshot.c"),
+            str(ROOT / "csrc" / "codec.c"),
+            str(CORE / "test" / "web_cli.c"),
+            "-o",
+            str(out),
+        ],
+        check=True,
+    )
     return out
 
 
@@ -69,8 +100,9 @@ class Resp:
 
 def drive(cli, lines):
     """Run the driver on script ``lines``; returns ``(responses, other output lines)``."""
-    proc = subprocess.run([str(cli)], input=b"\n".join(lines) + b"\n", capture_output=True, check=True,
-                          timeout=30)
+    proc = subprocess.run(
+        [str(cli)], input=b"\n".join(lines) + b"\n", capture_output=True, check=True, timeout=30
+    )
     assert proc.stderr == b"init=0\n"
     out, resps, other = proc.stdout, [], []
     while out:
@@ -78,8 +110,8 @@ def drive(cli, lines):
         if line.startswith(b"RESP "):
             n = int(line[5:])
             resps.append(Resp(out[:n]))
-            assert out[n:n + 1] == b"\n"
-            out = out[n + 1:]
+            assert out[n : n + 1] == b"\n"
+            out = out[n + 1 :]
         else:
             other.append(line.decode())
     return resps, other
@@ -120,12 +152,18 @@ def kv(cli, key, body='{"ssid":"minsel","psk":"test-psk-1234"}'):
 
 # ---- /api/state ------------------------------------------------------------------------------
 
+
 def test_api_state_shape(web_cli):
-    body = json.loads(get(web_cli, "/api/state", setup=["now 5000", "stamp 4000", "active 1", "bond 1",
-                                                        "wifi online minsel 192.168.1.23 -61"]))
+    body = json.loads(
+        get(
+            web_cli,
+            "/api/state",
+            setup=["now 5000", "stamp 4000", "active 1", "bond 1", "wifi online minsel 192.168.1.23 -61"],
+        )
+    )
     assert set(body) == {"t", "fn", "device"} and body["fn"]["cooler"]["Installed"] == 1
     assert set(body["device"]) == {"pairing", "link", "wifi", "uptime_ms", "fw"}
-    assert list(body["fn"]) == ["cooler", "roof"]                # CODEC_CHARS order, frames held only
+    assert list(body["fn"]) == ["cooler", "roof"]  # CODEC_CHARS order, frames held only
     assert body["fn"]["cooler"]["Level"] == 3
     assert body["fn"]["roof"] == {"Position": 1, "Installed": 1, "SafetyCounterValid": 0, "InfoPopUp": 0}
     d = body["device"]
@@ -143,18 +181,33 @@ def test_api_state_nulls(web_cli):
     assert body["device"]["wifi"] == {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
 
 
-@pytest.mark.parametrize("pair,bond,address", [("bonded", 1, IDENTITY), ("idle", 1, IDENTITY),
-                                               ("idle", 0, None), ("scanning", 1, None),
-                                               ("waiting_passkey", 1, None)])
+@pytest.mark.parametrize(
+    "pair,bond,address",
+    [
+        ("bonded", 1, IDENTITY),
+        ("idle", 1, IDENTITY),
+        ("idle", 0, None),
+        ("scanning", 1, None),
+        ("waiting_passkey", 1, None),
+    ],
+)
 def test_api_state_pairing_address_like_console_status(web_cli, pair, bond, address):
     body = json.loads(get(web_cli, "/api/state", setup=["pair " + pair, "bond %d" % bond]))
     assert body["device"]["pairing"] == {"state": pair, "address": address}
 
 
-@pytest.mark.parametrize("state,joined,mode", [
-    ("unprovisioned", 0, "off"), ("setup_ap", 0, "setup"), ("setup_ap_retrying", 1, "setup"),
-    ("online", 1, "station"), ("connecting", 1, "station"), ("retrying", 1, "station"),
-    ("connecting", 0, "off")])
+@pytest.mark.parametrize(
+    "state,joined,mode",
+    [
+        ("unprovisioned", 0, "off"),
+        ("setup_ap", 0, "setup"),
+        ("setup_ap_retrying", 1, "setup"),
+        ("online", 1, "station"),
+        ("connecting", 1, "station"),
+        ("retrying", 1, "station"),
+        ("connecting", 0, "off"),
+    ],
+)
 def test_wifi_mode(web_cli, state, joined, mode):
     setup = ["wifi " + state, "joined %d" % joined]
     assert json.loads(get(web_cli, "/api/state", setup=setup))["device"]["wifi"]["mode"] == mode
@@ -169,11 +222,11 @@ def test_api_state_is_atomic(web_cli):
     assert len(resps) == 20
     levels = set()
     for r in resps:
-        assert r.status == 200 and len(r.body) > 3 * 64           # really sent across several polls
+        assert r.status == 200 and len(r.body) > 3 * 64  # really sent across several polls
         body = r.json()
         levels.add(body["fn"]["cooler"]["Level"])
         assert body["fn"]["cooler"]["Level"] in (3, 4)
-    assert levels == {3, 4}                                      # the flips really happened
+    assert levels == {3, 4}  # the flips really happened
 
 
 def test_api_state_overflow_is_500_and_logged(web_cli_tiny):
@@ -184,10 +237,17 @@ def test_api_state_overflow_is_500_and_logged(web_cli_tiny):
 
 # ---- /api/wifi -------------------------------------------------------------------------------
 
+
 def test_post_wifi_validates_and_stores(web_cli):
     assert post(web_cli, "/api/wifi", '{"ssid":"minsel","psk":"test-psk-1234"}') == (200, {"ok": True})
-    assert post(web_cli, "/api/wifi", '{"ssid":"","psk":"test-psk-1234"}') == (400, {"ok": False, "error": "ssid"})
-    assert post(web_cli, "/api/wifi", '{"ssid":"minsel","psk":"short"}') == (400, {"ok": False, "error": "psk"})
+    assert post(web_cli, "/api/wifi", '{"ssid":"","psk":"test-psk-1234"}') == (
+        400,
+        {"ok": False, "error": "ssid"},
+    )
+    assert post(web_cli, "/api/wifi", '{"ssid":"minsel","psk":"short"}') == (
+        400,
+        {"ok": False, "error": "psk"},
+    )
     assert kv(web_cli, "wifi_ssid") == "minsel"
     assert kv(web_cli, "wifi_psk") == "test-psk-1234"
 
@@ -205,32 +265,56 @@ def test_post_wifi_escapes_whitespace_and_key_order(web_cli):
     assert other == ['CALL set_creds [caf\u00e9 \\x] [pa"ss\\word]']
 
 
-@pytest.mark.parametrize("ssid,psk,status,error", [
-    ("s" * CONSTS["NET_SSID_MAX"], "p" * CONSTS["NET_PSK_MAX"], 200, None),
-    ("s" * (CONSTS["NET_SSID_MAX"] + 1), "p" * 8, 400, "ssid"),
-    ("s", "p" * CONSTS["NET_PSK_MIN"], 200, None),
-    ("s", "p" * (CONSTS["NET_PSK_MIN"] - 1), 400, "psk"),
-    ("s", "p" * (CONSTS["NET_PSK_MAX"] + 1), 400, "psk"),
-    ("s" * 200, "p" * 200, 400, "ssid"),                        # far too long: still ssid, not json
-])
+@pytest.mark.parametrize(
+    "ssid,psk,status,error",
+    [
+        ("s" * CONSTS["NET_SSID_MAX"], "p" * CONSTS["NET_PSK_MAX"], 200, None),
+        ("s" * (CONSTS["NET_SSID_MAX"] + 1), "p" * 8, 400, "ssid"),
+        ("s", "p" * CONSTS["NET_PSK_MIN"], 200, None),
+        ("s", "p" * (CONSTS["NET_PSK_MIN"] - 1), 400, "psk"),
+        ("s", "p" * (CONSTS["NET_PSK_MAX"] + 1), 400, "psk"),
+        ("s" * 200, "p" * 200, 400, "ssid"),  # far too long: still ssid, not json
+    ],
+)
 def test_post_wifi_length_bounds(web_cli, ssid, psk, status, error):
-    r, other = one(web_cli, "POST", "/api/wifi", json.dumps({"ssid": ssid, "psk": psk}, separators=(",", ":")))
+    r, other = one(
+        web_cli, "POST", "/api/wifi", json.dumps({"ssid": ssid, "psk": psk}, separators=(",", ":"))
+    )
     assert r.status == status
     assert r.json() == ({"ok": True} if error is None else {"ok": False, "error": error})
     assert other == (["CALL set_creds [%s] [%s]" % (ssid, psk)] if error is None else [])
 
 
-@pytest.mark.parametrize("body", [
-    b"", b"x", b"{}", b"[]", b'{"ssid":"a"}', b'{"psk":"12345678"}',
-    b'{"ssid":"a","psk":"12345678","x":"y"}', b'{"ssid":"a","ssid":"b"}',
-    b'{"ssid":1,"psk":"12345678"}', b'{"ssid":"a","psk":12345678}', b'{"ssid":null,"psk":"12345678"}',
-    b'{"ssid":"a\\n","psk":"12345678"}', b'{"ssid":"a\\u0041","psk":"12345678"}',
-    b'{"ssid":"a\nb","psk":"12345678"}', b'{"ssid":"a\0b","psk":"12345678"}',
-    b'{"ssid":"a","psk":"12345678"}x', b'{"ssid":"a","psk":"12345678"', b'{"ssid":"a,"psk":"12345678"}',
-    b'{"ssid":"a" "psk":"12345678"}', b'{"ssid":"a",,"psk":"12345678"}', b'{"ssid":"a","psk":"12345678",}',
-    b'{ssid:"a","psk":"12345678"}', b'{"ssid":"a","psk":"12345678\\', b'\0{"ssid":"a","psk":"12345678"}',
-    b'{"ssid":"a","psk":"12345678"}\0',
-])
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"",
+        b"x",
+        b"{}",
+        b"[]",
+        b'{"ssid":"a"}',
+        b'{"psk":"12345678"}',
+        b'{"ssid":"a","psk":"12345678","x":"y"}',
+        b'{"ssid":"a","ssid":"b"}',
+        b'{"ssid":1,"psk":"12345678"}',
+        b'{"ssid":"a","psk":12345678}',
+        b'{"ssid":null,"psk":"12345678"}',
+        b'{"ssid":"a\\n","psk":"12345678"}',
+        b'{"ssid":"a\\u0041","psk":"12345678"}',
+        b'{"ssid":"a\nb","psk":"12345678"}',
+        b'{"ssid":"a\0b","psk":"12345678"}',
+        b'{"ssid":"a","psk":"12345678"}x',
+        b'{"ssid":"a","psk":"12345678"',
+        b'{"ssid":"a,"psk":"12345678"}',
+        b'{"ssid":"a" "psk":"12345678"}',
+        b'{"ssid":"a",,"psk":"12345678"}',
+        b'{"ssid":"a","psk":"12345678",}',
+        b'{ssid:"a","psk":"12345678"}',
+        b'{"ssid":"a","psk":"12345678\\',
+        b'\0{"ssid":"a","psk":"12345678"}',
+        b'{"ssid":"a","psk":"12345678"}\0',
+    ],
+)
 def test_post_wifi_malformed_is_json_error(web_cli, body):
     r, other = one(web_cli, "POST", "/api/wifi", body)
     assert (r.status, r.json()) == (400, {"ok": False, "error": "json"})
@@ -238,7 +322,9 @@ def test_post_wifi_malformed_is_json_error(web_cli, body):
 
 
 def test_post_wifi_store_failure_is_500_and_creds_not_applied(web_cli):
-    r, other = one(web_cli, "POST", "/api/wifi", '{"ssid":"minsel","psk":"test-psk-1234"}', setup=["kvfail 1"])
+    r, other = one(
+        web_cli, "POST", "/api/wifi", '{"ssid":"minsel","psk":"test-psk-1234"}', setup=["kvfail 1"]
+    )
     assert (r.status, r.json()) == (500, {"ok": False, "error": "store"})
     assert not any(line.startswith("CALL") for line in other)
 
@@ -251,12 +337,21 @@ def test_delete_wifi_forgets(web_cli):
 def test_get_wifi_in_setup_lists_last_scan_and_rescans(web_cli):
     r, other = one(web_cli, "GET", "/api/wifi", setup=["wifi setup_ap", "ap minsel -48 1", "ap cafe -80 0"])
     assert r.status == 200 and other == ["CALL scan"]
-    assert r.json() == {"mode": "setup", "ssid": None, "ip": None, "rssi": None,
-                        "scan": [{"ssid": "minsel", "rssi": -48, "secure": True},
-                                 {"ssid": "cafe", "rssi": -80, "secure": False}]}
+    assert r.json() == {
+        "mode": "setup",
+        "ssid": None,
+        "ip": None,
+        "rssi": None,
+        "scan": [
+            {"ssid": "minsel", "rssi": -48, "secure": True},
+            {"ssid": "cafe", "rssi": -80, "secure": False},
+        ],
+    }
 
 
-@pytest.mark.parametrize("pair", ["scanning", "connecting", "waiting_passkey", "pairing", "verifying", "resetting"])
+@pytest.mark.parametrize(
+    "pair", ["scanning", "connecting", "waiting_passkey", "pairing", "verifying", "resetting"]
+)
 def test_get_wifi_leaves_the_ble_pairing_gate_to_the_runner(web_cli, pair):
     """R15: the one BLE-coex scan gate lives in the WiFi runner (cali_wifi_run_scan defers a scan
     while a pairing flow is active — tests/firmware/test_session_fake.py); web.c asks regardless."""
@@ -266,17 +361,25 @@ def test_get_wifi_leaves_the_ble_pairing_gate_to_the_runner(web_cli, pair):
 
 def test_get_wifi_in_station_mode_does_not_scan(web_cli):
     r, other = one(web_cli, "GET", "/api/wifi", setup=["wifi online minsel 10.0.0.7 -55", "joined 1"])
-    assert other == [] and r.json() == {"mode": "station", "ssid": "minsel", "ip": "10.0.0.7", "rssi": -55,
-                                        "scan": []}
+    assert other == [] and r.json() == {
+        "mode": "station",
+        "ssid": "minsel",
+        "ip": "10.0.0.7",
+        "rssi": -55,
+        "scan": [],
+    }
 
 
-@pytest.mark.parametrize("method,path", [("PUT", "/api/wifi"), ("POST", "/api/state"), ("DELETE", "/api/state")])
+@pytest.mark.parametrize(
+    "method,path", [("PUT", "/api/wifi"), ("POST", "/api/state"), ("DELETE", "/api/state")]
+)
 def test_wrong_method_is_405(web_cli, method, path):
     r, other = one(web_cli, method, path, "" if method != "DELETE" else None)
     assert (r.status, r.json()) == (405, {"ok": False, "error": "method"}) and other == []
 
 
 # ---- captive portal + routing ----------------------------------------------------------------
+
 
 @pytest.mark.parametrize("state", ["setup_ap", "setup_ap_retrying"])
 @pytest.mark.parametrize("probe", PROBES)

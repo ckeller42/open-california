@@ -11,6 +11,7 @@ scripted datagrams and report each reply's bytes (or that it was dropped).
    :id: T_FW_CAPTIVE_DNS
    :links: R_FW_WIFI_PROVISION
 """
+
 import shutil
 import struct
 import subprocess
@@ -29,9 +30,24 @@ AP_IP = CONSTS["NET_AP_ADDR_U32"]
 def captive_cli(tmp_path_factory):
     cc = shutil.which("cc") or pytest.skip("no C compiler")
     out = tmp_path_factory.mktemp("captive") / "captive_cli"
-    subprocess.run([cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include"),
-                    "-I", str(ROOT / "csrc"), str(CORE / "captive_dns.c"),
-                    str(CORE / "test" / "captive_cli.c"), "-o", str(out)], check=True)
+    subprocess.run(
+        [
+            cc,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(CORE / "include"),
+            "-I",
+            str(ROOT / "csrc"),
+            str(CORE / "captive_dns.c"),
+            str(CORE / "test" / "captive_cli.c"),
+            "-o",
+            str(out),
+        ],
+        check=True,
+    )
     return out
 
 
@@ -43,8 +59,13 @@ def build_query(qname, qtype, qid=0x1234, flags=0x0100, qclass=1, qdcount=1):
 
 
 def drive(cli, lines, args=()):
-    proc = subprocess.run([str(cli), *args], input=("\n".join(lines) + "\n").encode(),
-                           capture_output=True, check=True, timeout=10)
+    proc = subprocess.run(
+        [str(cli), *args],
+        input=("\n".join(lines) + "\n").encode(),
+        capture_output=True,
+        check=True,
+        timeout=10,
+    )
     assert proc.stderr.decode() == ("init=-1\n" if "nobind" in args else "init=0\n")
     return proc.stdout.decode()
 
@@ -57,7 +78,7 @@ def ask(cli, query, args=()):
     if lines[0] == "DROP":
         return None
     assert lines[0].startswith("REPLY ")
-    return bytes.fromhex(lines[0][len("REPLY "):])
+    return bytes.fromhex(lines[0][len("REPLY ") :])
 
 
 def parse_header(reply):
@@ -70,24 +91,24 @@ def test_a_query_answered_with_ap_ip(captive_cli):
     assert reply is not None
     qid, flags, qd, an, ns, ar = parse_header(reply)
     assert qid == 0xBEEF
-    assert flags & 0x8000            # QR = 1 (response)
+    assert flags & 0x8000  # QR = 1 (response)
     assert (flags >> 11) & 0xF == 0  # OPCODE kept (0 = standard query)
-    assert flags & 0x0400            # AA = 1
-    assert flags & 0x0100            # RD kept from the query
-    assert not flags & 0x0080        # RA = 0
-    assert flags & 0x000F == 0       # RCODE 0
+    assert flags & 0x0400  # AA = 1
+    assert flags & 0x0100  # RD kept from the query
+    assert not flags & 0x0080  # RA = 0
+    assert flags & 0x000F == 0  # RCODE 0
     assert (qd, an, ns, ar) == (1, 1, 0, 0)
 
     qsection = q[12:]
-    assert reply[12:12 + len(qsection)] == qsection   # question echoed verbatim
-    rr = reply[12 + len(qsection):]
+    assert reply[12 : 12 + len(qsection)] == qsection  # question echoed verbatim
+    rr = reply[12 + len(qsection) :]
     assert len(reply) == 12 + len(qsection) + 16
-    assert rr[0:2] == b"\xC0\x0C"                     # compression pointer to the name @ offset 12
-    assert struct.unpack(">H", rr[2:4])[0] == 1        # TYPE A
-    assert struct.unpack(">H", rr[4:6])[0] == 1        # CLASS IN
-    assert struct.unpack(">I", rr[6:10])[0] == 0       # TTL 0
-    assert struct.unpack(">H", rr[10:12])[0] == 4      # RDLENGTH 4
-    assert rr[12:16] == struct.pack(">I", AP_IP)       # RDATA = the hotspot's own address
+    assert rr[0:2] == b"\xc0\x0c"  # compression pointer to the name @ offset 12
+    assert struct.unpack(">H", rr[2:4])[0] == 1  # TYPE A
+    assert struct.unpack(">H", rr[4:6])[0] == 1  # CLASS IN
+    assert struct.unpack(">I", rr[6:10])[0] == 0  # TTL 0
+    assert struct.unpack(">H", rr[10:12])[0] == 4  # RDLENGTH 4
+    assert rr[12:16] == struct.pack(">I", AP_IP)  # RDATA = the hotspot's own address
 
 
 def test_aaaa_query_gets_no_answer(captive_cli):
@@ -96,17 +117,26 @@ def test_aaaa_query_gets_no_answer(captive_cli):
     assert reply is not None
     _, flags, qd, an, ns, ar = parse_header(reply)
     assert flags & 0x8000
-    assert flags & 0x000F == 0          # RCODE 0: never NXDOMAIN
+    assert flags & 0x000F == 0  # RCODE 0: never NXDOMAIN
     assert (qd, an, ns, ar) == (1, 0, 0, 0)
-    assert reply[12:] == q[12:]         # just the echoed question, no answer record
+    assert reply[12:] == q[12:]  # just the echoed question, no answer record
 
 
-@pytest.mark.parametrize("path,expected", [
-    ("/generate_204", 1), ("/gen_204", 1), ("/hotspot-detect.html", 1),
-    ("/library/test/success.html", 1), ("/connecttest.txt", 1), ("/ncsi.txt", 1),
-    ("/canonical.html", 1), ("/success.txt", 1),
-    ("/api/state", 0), ("/", 0),
-])
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("/generate_204", 1),
+        ("/gen_204", 1),
+        ("/hotspot-detect.html", 1),
+        ("/library/test/success.html", 1),
+        ("/connecttest.txt", 1),
+        ("/ncsi.txt", 1),
+        ("/canonical.html", 1),
+        ("/success.txt", 1),
+        ("/api/state", 0),
+        ("/", 0),
+    ],
+)
 def test_captive_probe_paths_redirect(captive_cli, path, expected):
     assert drive(captive_cli, ["probe " + path]) == "PROBE %d\n" % expected
 
@@ -146,8 +176,8 @@ def test_several_datagrams_in_one_poll(captive_cli):
     lines = out.strip("\n").split("\n")
     assert len(lines) == 3
     assert lines[0].startswith("REPLY ") and lines[1].startswith("REPLY ") and lines[2] == "DROP"
-    r1 = bytes.fromhex(lines[0][len("REPLY "):])
-    r2 = bytes.fromhex(lines[1][len("REPLY "):])
+    r1 = bytes.fromhex(lines[0][len("REPLY ") :])
+    r2 = bytes.fromhex(lines[1][len("REPLY ") :])
     assert parse_header(r1)[0] == 1 and parse_header(r2)[0] == 2  # matched to the right query by ID
 
 

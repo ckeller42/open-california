@@ -4,6 +4,7 @@
    :id: T_NET_CONSTS_PINNED
    :links: R_NET_CONSTS_SINGLE_SOURCE
 """
+
 from tools import wifi_consts
 
 WANT = {
