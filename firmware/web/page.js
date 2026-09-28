@@ -1,59 +1,3 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>calictl-esp</title>
-<!-- The ESP32 firmware's status/setup page (#154). SOURCE: tools/gen_c_dict.py renders it into
-     index_gen.html (the double-brace placeholders: generated constants, the strings.json table and
-     the page script from page.js) and strings_gen.h; never edit those. Self-contained: no external
-     assets. -->
-<style>
-:root{--bg:#f6f6f3;--fg:#1d1d1b;--muted:#6b6b66;--card:#fff;--line:#deded8;--accent:#1f6f5c;--bad:#a8322d}
-@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ececea;--muted:#9a9a94;--card:#21211f;--line:#34342f;--accent:#5bbf9f;--bad:#e0716b}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:720px;margin:0 auto;padding:16px}
-h1{font-size:20px;margin:0 0 12px}
-h2{font-size:16px;margin:0 0 8px}
-.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px}
-dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0}
-dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
-#functions{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-#functions .box{margin:0}
-.muted{color:var(--muted)}.bad{color:var(--bad)}
-#banner{display:none;background:var(--bad);color:#fff;border-radius:8px;padding:8px 12px;margin:0 0 12px}
-label{display:block;margin:10px 0 4px;color:var(--muted)}
-select,input,button{font:inherit;width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
-button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px;cursor:pointer}
-button.secondary{background:transparent;color:var(--accent)}
-a{color:var(--accent)}
-</style>
-</head>
-<body>
-<main>
-<h1 id="title"></h1>
-<div id="banner"></div>
-<section id="setup" class="box" hidden>
-  <h2 id="setup-title"></h2>
-  <p id="setup-hint" class="muted"></p>
-  <label for="ssid" id="ssid-label"></label>
-  <select id="ssid"></select>
-  <label for="psk" id="psk-label"></label>
-  <input id="psk" type="password" autocomplete="off">
-  <button id="connect" type="button"></button>
-  <button id="rescan" class="secondary" type="button"></button>
-  <p id="setup-msg"></p>
-</section>
-<section id="device" class="box"></section>
-<h2 id="functions-title"></h2>
-<section id="functions"></section>
-</main>
-<script>
-const CFG = {pollMs: 2000, host: "calictl-esp", ssidMax: 32, pskMin: 8, pskMax: 63};
-const STR = {"address":{"de":"Gekoppelte Einheit","en":"Paired unit"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"firmware":{"de":"Firmware","en":"Firmware"},"fn_airheater":{"de":"Luftstandheizung","en":"Air heater"},"fn_campingmode":{"de":"Campingmodus","en":"Camping mode"},"fn_cooler":{"de":"Kühlbox","en":"Cooler"},"fn_energy":{"de":"Energie","en":"Energy"},"fn_lighting":{"de":"Beleuchtung","en":"Lighting"},"fn_roof":{"de":"Aufstelldach","en":"Roof"},"fn_vehicle":{"de":"Fahrzeug","en":"Vehicle"},"fn_water":{"de":"Wasser","en":"Water"},"functions":{"de":"Camper-Einheit","en":"Camper unit"},"ip":{"de":"IP-Adresse","en":"IP address"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"last_update":{"de":"Letzte Aktualisierung","en":"Last update"},"link":{"de":"Verbindung zur Camper-Einheit","en":"Link to the camper unit"},"link_down":{"de":"nicht verbunden","en":"not connected"},"link_up":{"de":"verbunden","en":"connected"},"mode_off":{"de":"aus","en":"off"},"mode_setup":{"de":"Einrichtungs-Hotspot","en":"setup hotspot"},"mode_station":{"de":"verbunden","en":"connected"},"network":{"de":"Netzwerk","en":"Network"},"no_data":{"de":"Noch keine Daten von der Camper-Einheit.","en":"No data from the camper unit yet."},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"none":{"de":"keine","en":"none"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_network":{"de":"offen","en":"open"},"pairing":{"de":"Bluetooth-Kopplung","en":"Bluetooth pairing"},"password":{"de":"Passwort","en":"Password"},"rescan":{"de":"Erneut suchen","en":"Search again"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"seconds_ago":{"de":"vor {n} s","en":"{n} s ago"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"signal":{"de":"Signal","en":"Signal"},"title":{"de":"Camper-Status","en":"Camper status"},"uptime":{"de":"Laufzeit","en":"Uptime"},"wifi":{"de":"WLAN","en":"WiFi"}};
-</script>
-<script>
 /* page.js — the ESP32 firmware's status/setup page script (#154). SOURCE: tools/gen_c_dict.py inlines
  * it into index_gen.html (index.html's PAGE_JS placeholder), right after the script that defines
  * CFG (generated constants) and STR (the strings.json table) — their types: globals.d.ts.
@@ -282,6 +226,3 @@ async function poll() {
 $("connect").addEventListener("click", connect);
 $("rescan").addEventListener("click", scan);
 poll();
-</script>
-</body>
-</html>

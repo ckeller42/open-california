@@ -21,7 +21,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
 | `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); they are regenerated locally from the APK with a `vd2svg.py` converter that is itself **not in the repo** (`ui/assets/` is untracked); `build_prototype.py` falls back to neutral placeholders without them. |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
-| `firmware/` | ESP32-S3 satellite (#154, WIP, read-only, no hardware yet): `cali_core` (pairing SM/runner/session/console + WiFi SM/runner, HTTP core, captive DNS, web endpoints — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (3 MB app partition); see `docs/firmware.md`, owner how-to `docs/howto-esp-wifi-setup.md` |
+| `firmware/` | ESP32-S3 satellite (#154, WIP, read-only, no hardware yet): `cali_core` (pairing SM/runner/session/console + WiFi SM/runner, HTTP core, captive DNS, web endpoints — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`page.js`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (3 MB app partition); see `docs/firmware.md`, owner how-to `docs/howto-esp-wifi-setup.md` |
 
 ## Hard rules (don't break these)
 
@@ -33,10 +33,10 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
   `asyncio.Lock` in `serve.py` (created **inside** the running loop) serializes all access.
 - **BLE codec is MSB-first**; control frames are **full-packet** (resend every field;
   unchanged fields = the leave-unchanged sentinel, usually `3` for 2-bit).
-- **The web UI is un-built JS; `tsc --checkJs` is its hard gate** (`calictl/webui/jsconfig.json`,
-  baseline **0 errors** — keep it there). `node --check` only parses; an undeclared identifier in a
+- **The web UI is un-built JS; `tsc --checkJs` is its hard gate** (`calictl/webui/jsconfig.json`
+  and the ESP32 page's `firmware/web/jsconfig.json`, baseline **0 errors** — keep it there). `node --check` only parses; an undeclared identifier in a
   renderer once shipped to buspi because no test rendered that screen. Run `tools/ci.sh webcheck`
-  (also CI `pre-commit` + the `webcheck` pre-commit hook when webui JS is staged). Any label/enum shown to the user must
+  (also CI `pre-commit` + the `webcheck` pre-commit hook when webui or `firmware/web` JS is staged). Any label/enum shown to the user must
   use the unit's own vocabulary (Sofortheizen / Dauerbetrieb / Flüstermodus …), EN + DE
   (`strings.de.js`; `tests/test_i18n_de.py` guards literal `t()` keys).
 - **Every dictionary field has a catalog decision** (`surface` w/ name, or `omit` w/ reason).

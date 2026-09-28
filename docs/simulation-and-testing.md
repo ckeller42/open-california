@@ -244,7 +244,7 @@ the postcheck port, the ESP-IDF build).
 | Workflow / job | When | Runs |
 |---|---|---|
 | `ci.yml` `test` | every PR and push to `main` | full pytest suite on 3.11/3.12/3.13 (unit, mock, Bumble pairing link, vector freshness, and the C parity tests since `gcc` is present; `tests/e2e` skips without Playwright), signal audit, `screens.json` freshness, import-clean |
-| `ci.yml` `pre-commit` | every PR and push to `main` | `pre-commit run --all-files`: `ruff` + `ruff format`, markdownlint, gitleaks (plus a working-tree scan), whitespace/YAML checks, the vendor/MAC/VIN guard, import-clean, doc-offset, `screens.json` + codec freshness, web-UI `tsc --checkJs` + `node --check` |
+| `ci.yml` `pre-commit` | every PR and push to `main` | `pre-commit run --all-files`: `ruff` + `ruff format`, markdownlint, gitleaks (plus a working-tree scan), whitespace/YAML checks, the vendor/MAC/VIN guard, import-clean, doc-offset, `screens.json` + codec freshness, web-UI `tsc --checkJs` + `node --check` (the calictl web UI and the ESP32 page script) |
 | `ci.yml` `docs` | every PR | the `sphinx -W` site build (both builds) that `docs.yml` deploys from `main` (see {doc}`building-the-docs`) |
 | `ci.yml` `gui-e2e` | every PR and push to `main` | `tests/e2e` in Chromium over the mock daemon |
 | `ci.yml` `codec-parity` | every PR and push to `main` | C header and vector `--check`, the four codec/ports parity test modules with `gcc` |

@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>calictl-esp</title>
 <!-- The ESP32 firmware's status/setup page (#154). SOURCE: tools/gen_c_dict.py renders it into
-     index_gen.html (the double-brace placeholders: generated constants + the strings.json table) and
-     strings_gen.h; never edit those. Self-contained: no external assets. -->
+     index_gen.html (the double-brace placeholders: generated constants, the strings.json table and
+     the page script from page.js) and strings_gen.h; never edit those. Self-contained: no external
+     assets. -->
 <style>
 :root{--bg:#f6f6f3;--fg:#1d1d1b;--muted:#6b6b66;--card:#fff;--line:#deded8;--accent:#1f6f5c;--bad:#a8322d}
 @media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ececea;--muted:#9a9a94;--card:#21211f;--line:#34342f;--accent:#5bbf9f;--bad:#e0716b}}
@@ -49,169 +50,10 @@ a{color:var(--accent)}
 <section id="functions"></section>
 </main>
 <script>
-"use strict";
 const CFG = {pollMs: {{NET_PAGE_POLL_MS}}, host: "{{NET_HOSTNAME}}", ssidMax: {{NET_SSID_MAX}}, pskMin: {{NET_PSK_MIN}}, pskMax: {{NET_PSK_MAX}}};
 const STR = {{STRINGS}};
-const LANG = /^de\b/i.test(navigator.language || "") ? "de" : "en";
-function t(key, vars) {
-  let s = STR[key] ? STR[key][LANG] : key;
-  for (const k in vars || {}) s = s.split("{" + k + "}").join(String(vars[k]));
-  return s;
-}
-/* the unit's own function titles (calictl web UI vocabulary); other functions show their raw name */
-const FN = {vehicle: "fn_vehicle", cooler: "fn_cooler", campingmode: "fn_campingmode", lighting: "fn_lighting",
-            airheater: "fn_airheater", water: "fn_water", energy: "fn_energy", roof: "fn_roof"};
-const MODE = {setup: "mode_setup", station: "mode_station", off: "mode_off"};
-const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
-const $ = (id) => document.getElementById(id);
-function el(tag, text, cls) {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  if (cls) e.className = cls;
-  return e;
-}
-function list(rows) {
-  const dl = el("dl");
-  for (const [k, v] of rows) { dl.appendChild(el("dt", k)); dl.appendChild(el("dd", v)); }
-  return dl;
-}
-async function fetchJson(url, opts) {
-  const r = await fetch(url, Object.assign({cache: "no-store"}, opts));
-  return {status: r.status, body: await r.json()};
-}
-
-$("title").textContent = t("title");
-$("setup-title").textContent = t("setup_title");
-$("setup-hint").textContent = t("setup_hint");
-$("ssid-label").textContent = t("network");
-$("psk-label").textContent = t("password");
-$("connect").textContent = t("connect");
-$("rescan").textContent = t("rescan");
-$("functions-title").textContent = t("functions");
-document.documentElement.lang = LANG;
-
-let joining = null;   /* {ssid, polls, left}: a submitted join being watched */
-
-function renderDevice(d) {
-  const box = $("device");
-  box.textContent = "";
-  box.appendChild(el("h2", t("device")));
-  const w = d.wifi, age = d.link.last_snap_age_ms;
-  box.appendChild(list([
-    [t("pairing"), d.pairing.state],
-    [t("address"), d.pairing.address || t("none")],
-    [t("link"), t(d.link.up ? "link_up" : "link_down")],
-    [t("last_update"), age === null ? t("none") : t("seconds_ago", {n: Math.round(age / 1000)})],
-    [t("wifi"), t(MODE[w.mode] || "mode_off") + (w.ssid ? " · " + w.ssid : "")],
-    [t("ip"), w.ip || t("none")],
-    [t("signal"), w.rssi === null ? t("none") : w.rssi + " dBm"],
-    [t("uptime"), Math.round(d.uptime_ms / 1000) + " s"],
-    [t("firmware"), d.fw],
-  ]));
-}
-
-function renderFunctions(fn) {
-  const box = $("functions");
-  box.textContent = "";
-  const names = Object.keys(fn);
-  if (!names.length) { box.appendChild(el("p", t("no_data"), "muted")); return; }
-  for (const name of names) {
-    const card = el("div", undefined, "box");
-    card.appendChild(el("h2", FN[name] ? t(FN[name]) : name));
-    card.appendChild(list(Object.keys(fn[name]).map((k) => [k, String(fn[name][k])])));
-    box.appendChild(card);
-  }
-}
-
-function renderNetworks(scan) {
-  const sel = $("ssid"), keep = sel.value;
-  sel.textContent = "";
-  if (!scan.length) { sel.appendChild(el("option", t("no_networks"))).value = ""; return; }
-  for (const ap of scan) {
-    const o = el("option", ap.ssid + "  (" + ap.rssi + " dBm" + (ap.secure ? "" : ", " + t("open_network")) + ")");
-    o.value = ap.ssid;
-    sel.appendChild(o);
-  }
-  if (scan.some((ap) => ap.ssid === keep)) sel.value = keep;
-}
-
-async function scan() {
-  $("setup-msg").textContent = t("scanning");
-  try {
-    renderNetworks((await fetchJson("/api/wifi")).body.scan);
-    /* each GET starts a fresh scan for the next one: read its result a moment later */
-    setTimeout(async () => {
-      try { renderNetworks((await fetchJson("/api/wifi")).body.scan); $("setup-msg").textContent = ""; }
-      catch (e) { $("setup-msg").textContent = t("err_net"); }
-    }, 2 * CFG.pollMs);
-  } catch (e) { $("setup-msg").textContent = t("err_net"); }
-}
-
-async function connect() {
-  const ssid = $("ssid").value, psk = $("psk").value, msg = $("setup-msg");
-  msg.className = "bad";
-  if (!ssid || ssid.length > CFG.ssidMax) { msg.textContent = t("err_ssid", {max: CFG.ssidMax}); return; }
-  if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
-    msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
-  }
-  try {
-    const r = await fetchJson("/api/wifi", {method: "POST", headers: {"Content-Type": "application/json"},
-                                            body: JSON.stringify({ssid: ssid, psk: psk})});
-    if (!r.body.ok) {
-      const e = {ssid: "err_ssid", psk: "err_psk", store: "err_store"}[r.body.error] || "err_json";
-      msg.textContent = t(e, {max: e === "err_ssid" ? CFG.ssidMax : CFG.pskMax, min: CFG.pskMin});
-      return;
-    }
-    $("psk").value = "";
-    msg.className = "";
-    msg.textContent = t("joining", {ssid: ssid});
-    joining = {ssid: ssid, polls: 0, left: false};
-  } catch (e) { msg.textContent = t("err_net"); }
-}
-
-async function watchJoin() {
-  const msg = $("setup-msg"), j = joining;
-  const w = (await fetchJson("/api/wifi")).body;
-  j.polls++;
-  if (w.mode !== "setup") j.left = true;
-  if (w.mode === "station" && w.ip) {
-    msg.className = "";
-    msg.textContent = t("joined", {ip: w.ip, ssid: j.ssid}) + " ";
-    const url = "http://" + CFG.host + ".local";
-    const a = el("a", url);
-    a.href = url;
-    msg.appendChild(a);
-    joining = null;
-  } else if (w.mode === "setup" && (j.left || j.polls > 3)) {
-    msg.className = "bad";
-    /* why it failed (/api/wifi last_error): out of range, a typo, or anything else */
-    msg.textContent = t(JOIN_FAILED[w.last_error] || "join_failed_other");
-    joining = null;
-  }
-}
-
-let setupShown = false;
-async function poll() {
-  try {
-    if (joining) await watchJoin();
-    const s = (await fetchJson("/api/state")).body;
-    $("banner").style.display = "none";
-    renderDevice(s.device);
-    renderFunctions(s.fn);
-    const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
-    $("setup").hidden = !setup;
-    if (setup && !setupShown && !joining) scan();
-    setupShown = setup;
-  } catch (e) {
-    $("banner").textContent = t("offline");
-    $("banner").style.display = "block";
-  }
-  setTimeout(poll, CFG.pollMs);
-}
-
-$("connect").addEventListener("click", connect);
-$("rescan").addEventListener("click", scan);
-poll();
 </script>
+<script>
+{{PAGE_JS}}</script>
 </body>
 </html>

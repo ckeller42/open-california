@@ -301,12 +301,15 @@ stale (run by `tests/test_gen_c_dict.py`, `tests/test_web_strings.py` and CI). T
 | Source | Generated | What |
 |---|---|---|
 | `tools/wifi_consts.py` (`CONSTS`) + `tools/wifi_sm_ref.py` (enums) | `csrc/net_consts.h` | `NET_*` constants (SSID, PSK, address, hostname, timings, size limits) + the WiFi SM's `WIFI_*`/`WEV_*`/`WACT_*` enums |
-| `firmware/web/index.html` + `firmware/web/strings.json` | `firmware/web/index_gen.html` | the page with its `{{NET_*}}` placeholders and the EN/DE string table filled in |
+| `firmware/web/index.html` + `firmware/web/page.js` + `firmware/web/strings.json` | `firmware/web/index_gen.html` | the page with its `{{NET_*}}` placeholders, the EN/DE string table and the page script (`{{PAGE_JS}}`) filled in |
 | the same | `firmware/web/strings_gen.h` | `WEB_STR_EN_*`/`WEB_STR_DE_*` + `WEB_INDEX_HTML` — `index_gen.html` byte for byte as a byte array |
 
 `tools/wifi_sm_ref.py` also generates the WiFi SM's golden vectors: `python3 -m
 tools.gen_wifi_vectors [--check]` -> `tests/vectors/wifi_sm.json`. Edit the page only in
-`index.html`/`strings.json` (EN + DE for every key), never the generated files. **One source of
+`index.html`/`page.js`/`strings.json` (EN + DE for every key), never the generated files. The page
+script is its own file so `tools/ci.sh webcheck` can type-check it (`tsc --checkJs` over
+`firmware/web/jsconfig.json`, 0 errors; `globals.d.ts` types the `CFG`/`STR` globals the generated
+page defines before it); `tests/firmware/test_web_e2e.py` clicks the setup flow in Chromium. **One source of
 bytes:** `web.c` serves `WEB_INDEX_HTML` on both tiers — no `EMBED_FILES`, no LittleFS — and the docs
 screenshots (`python -m tools.ux_gallery --esp`) render the same `index_gen.html`.
 

@@ -3,7 +3,7 @@
  *
  * Routes (cali_web_handle):
  *   GET /             200 text/html: the status/setup page (firmware/web/index_gen.html, rendered
- *                     from index.html + strings.json by tools/gen_c_dict.py; strings_gen.h's
+ *                     from index.html + page.js + strings.json by tools/gen_c_dict.py; strings_gen.h's
  *                     WEB_INDEX_HTML byte array)
  *   GET /api/state    200 application/json:
  *                       {"t":<uptime_ms>,"fn":{<the SNAP "fn" object, cali_snapshot_fn>},

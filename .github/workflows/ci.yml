@@ -189,7 +189,7 @@ jobs:
             requirements-e2e.txt
       - name: Install deps (32-bit toolchain, Bumble, Playwright)
         # 32-bit toolchain: NimBLE's Linux port builds with -m32 (Mbed TLS is built from source, 32-bit).
-        # requirements-e2e.txt: Playwright for test_web_e2e.py::test_page_renders (the status page).
+        # requirements-e2e.txt: Playwright for test_web_e2e.py::test_page_renders + test_setup_flow_in_browser (the page).
         run: |
           sudo apt-get update && sudo apt-get install -y gcc-multilib g++-multilib
           pip install -r requirements-dev.txt -r requirements-e2e.txt

@@ -16,10 +16,12 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 
 from calictl import protocol
+from tools.wifi_consts import CONSTS
 
 from .conftest import build_host
 from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw, _served_frames
@@ -28,6 +30,9 @@ from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw, _served_frame
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
 
 PSK = "test-psk-1234"
+STRINGS = json.loads(
+    (Path(__file__).resolve().parents[2] / "firmware" / "web" / "strings.json").read_text(encoding="utf-8")
+)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -187,17 +192,24 @@ def _chromium():
     return sync_playwright, None
 
 
+def _require_chromium():
+    """sync_playwright, or skip — a failure instead under ``CALI_REQUIRE_CHROMIUM=1`` (CI
+    firmware-host-e2e / tools/ci.sh firmware), so the browser tests can never silently skip there."""
+    sync_playwright, why = _chromium()
+    if sync_playwright is None:
+        if os.environ.get("CALI_REQUIRE_CHROMIUM") == "1":
+            pytest.fail("CALI_REQUIRE_CHROMIUM=1 but " + why)
+        pytest.skip(why)
+    return sync_playwright
+
+
 @pytest.mark.parametrize(
     "locale,device,functions", [("en-US", "Device", "Camper unit"), ("de-DE", "Gerät", "Camper-Einheit")]
 )
 def test_page_renders(host_fw, hci_unit, tmp_path, locale, device, functions):
     """GET / renders the device box and a function block within 3 s, in the browser's language;
     any uncaught page error fails the test."""
-    sync_playwright, why = _chromium()
-    if sync_playwright is None:
-        if os.environ.get("CALI_REQUIRE_CHROMIUM") == "1":  # CI firmware-host-e2e / tools/ci.sh firmware
-            pytest.fail("CALI_REQUIRE_CHROMIUM=1 but " + why)
-        pytest.skip(why)
+    sync_playwright = _require_chromium()
     fw = host_fw(hci_unit, http=True)
     _pair(fw, hci_unit)
     fw.expect("SNAP", timeout=40)
@@ -213,6 +225,52 @@ def test_page_renders(host_fw, hci_unit, tmp_path, locale, device, functions):
         assert page.inner_text("#functions-title") == functions
         browser.close()
     assert not errors, errors
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
+    """The owner's first-flash path, clicked in Chromium (final review I2): pick a network, type a
+    wrong password -> the page says why (R23: the auth text); pick the right one -> the
+    ``http://<NET_HOSTNAME>.local`` link. The password field is emptied after each submit; any
+    uncaught page error fails the test. Texts come from ``strings.json``, in the browser's language."""
+    sync_playwright = _require_chromium()
+    wifi = _wifi_script(
+        tmp_path, "ap minsel -55 1\nap typo -60 1\njoin minsel ok 192.168.1.42\njoin typo fail auth\n"
+    )
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    fw.expect("LOG", lambda l: l == "wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"])
+    wrong = STRINGS["join_failed_auth"][lang]
+    link = "http://%s.local" % CONSTS["NET_HOSTNAME"]
+    join_s = 10 * CONSTS["NET_PAGE_POLL_MS"]  # a few page polls, in ms
+    errors = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_context(locale=locale).new_page()
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto("http://127.0.0.1:%d/" % fw.http_port)
+        page.wait_for_selector("#setup", state="visible", timeout=join_s)
+        page.wait_for_selector("#ssid option[value=typo]", state="attached", timeout=join_s)
+        assert page.inner_text("#connect") == STRINGS["connect"][lang]
+
+        page.select_option("#ssid", "typo")
+        page.fill("#psk", "wrong-psk-99")
+        page.click("#connect")
+        page.wait_for_function(
+            "t => document.getElementById('setup-msg').textContent === t", arg=wrong, timeout=join_s
+        )
+        assert page.input_value("#psk") == ""
+        assert fw.expect("LOG", lambda l: l == "wifi: failed auth")
+
+        page.select_option("#ssid", "minsel")
+        page.fill("#psk", PSK)
+        page.click("#connect")
+        a = page.wait_for_selector('#setup-msg a[href="%s"]' % link, timeout=join_s)
+        assert a.inner_text() == link
+        assert page.input_value("#psk") == ""
+        assert wrong not in page.inner_text("#setup-msg")
+        browser.close()
+    assert not errors, errors
+    assert not any(PSK in line for line in fw.log)
 
 
 @pytest.mark.parametrize("bad", ["0", "abc", "80x", "65536", "-1", ""])
