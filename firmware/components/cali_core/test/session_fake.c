@@ -2,6 +2,8 @@
  * tests/firmware/test_session_fake.py ONLY; not part of the ESP build. Compiled with console.c,
  * session.c, runner.c, pairing_sm.c and csrc/codec.c by the host `cc` (no NimBLE, runs on macOS).
  *
+ * (Also links snapshot.c, which console.c's SNAP uses.)
+ *
  * stdin, one line each:
  *   transport events (through the sink the runner registered; the runner forwards to the session):
  *     FOUND | CONNECTED | CONNECT_FAIL | PASSKEY_REQ | ENC_OK | ENC_FAIL | DISCONNECTED
@@ -14,6 +16,7 @@
  *     boot                 cali_session_boot + console "status" (what host_main does on sync)
  *     bond 0|1             what has_bond() answers (default 0)
  *     fail <call>          the next call of that transport function returns -1
+ *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
  * stdout: CALL <name> [arg] per transport action (decimal args; queries not printed), the
  * console's STATE/SNAP lines, and LOG lines (cali_log).
  */
@@ -146,6 +149,8 @@ int main(void) {
             cali_session_boot();
             cali_console_line("status");
         } else if (strcmp(word, "bond") == 0) s_bond = n1;
+        else if (strcmp(word, "lastupd") == 0)
+            printf("LASTUPD %llu\n", (unsigned long long)cali_session_last_update_ms());
         else if (strcmp(word, "fail") == 0) snprintf(s_fail, sizeof s_fail, "%s", a1);
         else printf("UNKNOWN %s\n", word);
     }

@@ -44,6 +44,10 @@ void cali_log(const char *fmt, ...)
 #endif
     ;
 
+/* The firmware's version string, reported as device.fw by the web page's /api/state. host:
+ * "host"; esp: the build's version (Task 9). Static storage, never NULL. */
+const char *cali_fw_version(void);
+
 /* host: store_dir is the directory for the kv files (created if missing; NULL = "."); esp: ignored
  * (NVS). Starts the uptime clock. Returns 0 ok, -1 if the store directory is unusable. */
 int cali_platform_init(const char *store_dir);

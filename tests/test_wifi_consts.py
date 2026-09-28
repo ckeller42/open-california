@@ -20,7 +20,7 @@ WANT = {
     "NET_HTTP_PORT": 80,
     "NET_HTTP_REQ_MAX": 2048,
     "NET_HTTP_BODY_MAX": 16384,
-    "NET_JSON_MAX": 4096,
+    "NET_JSON_MAX": 8192,
     "NET_SSID_MAX": 32,
     "NET_PSK_MIN": 8,
     "NET_PSK_MAX": 63,

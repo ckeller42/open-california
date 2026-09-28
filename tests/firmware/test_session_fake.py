@@ -106,6 +106,7 @@ def fake(tmp_path_factory):
             "-I",
             str(ROOT / "firmware/components/platform/include"),
             str(CORE / "console.c"),
+            str(CORE / "snapshot.c"),
             str(CORE / "json.c"),
             str(CORE / "session.c"),
             str(CORE / "runner.c"),
@@ -416,3 +417,27 @@ def test_link_drop_mid_read_all_reconnects_and_reads_afresh(fake):
         "CALL read %d" % c for c in CHARS
     ]  # the whole read-all again, from the start
     assert len(snaps(fresh)) == 1 and fresh[-1].startswith("SNAP ")
+
+
+def test_last_update_stamps_every_stored_frame(fake):
+    """``cali_session_last_update_ms`` is 0 until a frame is stored, then the latest tick's now_ms
+    of the latest READ/NOTIFY store (the web page's ``link.last_snap_age_ms`` source)."""
+    out = run(
+        fake,
+        "lastupd",
+        *PAIRED,
+        "lastupd",
+        *READ_ALL,
+        "lastupd",
+        "tick %d" % (T + 700),
+        "lastupd",
+        "NOTIFY 1102 11",
+        "lastupd",
+    )
+    assert [line for line in out if line.startswith("LASTUPD")] == [
+        "LASTUPD 0",
+        "LASTUPD 0",
+        "LASTUPD %d" % T,
+        "LASTUPD %d" % T,
+        "LASTUPD %d" % (T + 700),
+    ]

@@ -60,17 +60,20 @@ CFLAGS = $(NIMBLE_CFLAGS) $(INCLUDES) -g -D_GNU_SOURCE
 COMPONENTS := ../components
 CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
-	$(COMPONENTS)/cali_core/include $(CSRC)
+	$(COMPONENTS)/cali_core/include $(CSRC) ../web
 COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
-# The rest of cali_core (console + json + session + wifi_sm + http_core + captive_dns) and the frame
-# codec: only cali-host needs them.
-CORE_OBJ := console.o json.o session.o codec.o wifi_sm.o http_core.o captive_dns.o
-OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
+# The rest of cali_core (console + snapshot + json + session + wifi_sm + http_core + captive_dns) and
+# the frame codec: only cali-host needs them.
+CORE_OBJ := console.o snapshot.o json.o session.o codec.o wifi_sm.o http_core.o captive_dns.o
+# The web endpoints (#154 Task 6) compile with our flags (built by `all`) but join CORE_OBJ — i.e. the
+# cali-host link — only with the WiFi runtime (Task 7's wifi_run.o), whose cali_wifi_run_* they call.
+WEB_OBJ := web.o
+OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ) $(WEB_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
 
 .PHONY: all clean
-all: cali-host store-cli
+all: cali-host store-cli $(WEB_OBJ)
 
 clean:
 	rm -f $(NIMBLE_ALL_OBJ) *.o cali-host cali-host-jw store-cli
@@ -125,8 +128,14 @@ ble_store_kv.o: $(COMPONENTS)/cali_ble_nimble/ble_store_kv.c $(COMPONENTS)/cali_
 CORE_H := $(COMPONENTS)/cali_core/include
 console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/cali_session.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_pairing_sm.h \
-		$(CORE_H)/cali_json.h $(CSRC)/codec.h $(CSRC)/codec_chars.h $(CSRC)/pairing_consts.h \
+		$(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CSRC)/pairing_consts.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The "fn" emitter + pairing address shared by console.c (SNAP/STATE) and web.c (/api/state).
+snapshot.o: $(COMPONENTS)/cali_core/snapshot.c $(CORE_H)/cali_snapshot.h $(CORE_H)/cali_json.h \
+		$(CORE_H)/cali_session.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h \
+		$(CSRC)/codec.h $(CSRC)/codec_chars.h $(CSRC)/pairing_consts.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The bounded JSON writer shared by console.c (STATE/SNAP) and, from Task 2 on, the web setup page.
@@ -143,6 +152,14 @@ http_core.o: $(COMPONENTS)/cali_core/http_core.c $(CORE_H)/cali_http.h $(CORE_H)
 
 # The captive DNS responder over cali_net (#154 Task 5): tests/firmware/test_captive_dns.py.
 captive_dns.o: $(COMPONENTS)/cali_core/captive_dns.c $(CORE_H)/cali_captive.h $(CORE_H)/cali_net.h $(CSRC)/net_consts.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The web endpoints + status/setup page (#154 Task 6): tests/firmware/test_web_handlers.py.
+web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h \
+		$(CORE_H)/cali_captive.h $(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h \
+		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \
+		$(CORE_H)/cali_runner.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h \

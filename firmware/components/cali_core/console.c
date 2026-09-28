@@ -9,8 +9,7 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
-#include "codec.h"
-#include "codec_chars.h"
+#include "cali_snapshot.h"
 #include "pairing_consts.h"
 
 void (*cali_console_on_quit)(void);
@@ -82,27 +81,13 @@ void cali_console_state(const cali_pair_state_t *s, const char *address) {
 }
 
 void cali_console_snapshot(uint64_t t_ms) {
-    codec_kv_t kv[CODEC_KV_MAX];
     cali_json_t j;
     begin_line(&j, PREFIX_SNAP);
     cali_json_key(&j, "t");
     cali_json_int(&j, (long long)t_ms);
     cali_json_key(&j, "fn");
     cali_json_obj_begin(&j);
-    for (size_t i = 0; i < CODEC_NCHARS; i++) {
-        const uint8_t *frame;
-        size_t len;
-        const codec_func_t *f = codec_func_by_name(CODEC_CHARS[i].function);
-        if (!f || !cali_session_frame(i, &frame, &len)) continue;
-        int n = codec_decode(f, frame, len, kv);
-        cali_json_key(&j, CODEC_CHARS[i].function);
-        cali_json_obj_begin(&j);
-        for (int k = 0; k < n; k++) {
-            cali_json_key(&j, kv[k].name);
-            cali_json_int(&j, (long long)(unsigned long)kv[k].value);
-        }
-        cali_json_obj_end(&j);
-    }
+    cali_snapshot_fn(&j);
     cali_json_obj_end(&j);
     finish_line(&j, PREFIX_SNAP);
     out_line();
@@ -112,10 +97,7 @@ void cali_console_snapshot(uint64_t t_ms) {
  * address (calictl/serve.py). The pairing SM is idle then; whether the link is up is the session's
  * business, not a pairing state. */
 static void status(void) {
-    const cali_pair_state_t *s = cali_runner_state();
-    const char *addr = NULL;
-    if (s->st == PAIR_BONDED || (s->st == PAIR_IDLE && s_t->has_bond())) addr = s_t->identity();
-    cali_console_state(s, addr);
+    cali_console_state(cali_runner_state(), cali_snapshot_pair_address(s_t));
 }
 
 static void on_state(const cali_pair_state_t *s, const char *address) {

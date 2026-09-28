@@ -35,6 +35,8 @@ static uint64_t now_ms(void) {
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
 }
 
+const char *cali_fw_version(void) { return "host"; }
+
 uint64_t cali_uptime_ms(void) {
     if (!s_clock_started) {
         s_t0_ms = now_ms();

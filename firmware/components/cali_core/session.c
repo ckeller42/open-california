@@ -43,6 +43,9 @@ static struct {
  * than the unit's read latch, so the read-all neither reads nor overwrites it (calictl.device
  * read_all: "a fresh notification beats the stale latch"). */
 static uint8_t s_pushed[CODEC_NCHARS];
+/* now_ms (latest tick) of the latest stored frame; 0 = never (a store before the first tick is
+ * stamped 1, so "stored" never reads as "never"). */
+static uint64_t s_last_update;
 
 static int index_of(uint16_t short_id) {
     for (size_t i = 0; i < CODEC_NCHARS; i++) {
@@ -60,6 +63,7 @@ static void store(size_t i, const uint8_t *data, size_t len) {
     if (len) memcpy(s_fr[i].frame, data, len);
     s_fr[i].len = len;
     s_fr[i].have = 1;
+    s_last_update = s_now ? s_now : 1;
 }
 
 static void link_clear(void) {
@@ -209,6 +213,7 @@ void cali_session_init(const cali_transport_t *t) {
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
     memset(s_fr, 0, sizeof s_fr);
+    s_last_update = 0;
     cali_runner_on_other = on_event;
 }
 
@@ -279,3 +284,5 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     *len = s_fr[i].len;
     return 1;
 }
+
+uint64_t cali_session_last_update_ms(void) { return s_last_update; }
