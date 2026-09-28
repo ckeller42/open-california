@@ -1,0 +1,18 @@
+# APP-OBSERVED (2026-09-27, tools/applab) — the heater's "Start heating at" time. The real app's
+# bottom-sheet hour/minute wheel, set to 09:31 and confirmed with OK, wrote to char 1701:
+#   3f7b007f091f   TimerHour = 0x09 (byte 4, bit 32), TimerMin = 0x1f = 31 (byte 5, bit 40),
+#                  every other field at its leave-unchanged sentinel (Mode 7 = not armed).
+# rf/b.java B0; written on OK with no confirm and independent of "Start timer" (the arm is a
+# separate frame, 3f3b017f1f3f). calictl's `set airheater timer 09:31` builds the same bytes
+# (T_AIRHEATER_TIMER_TIME), so a fresh capture must diff to zero.
+#
+# AT THE VAN (or in the app lab): open Heating > Timer, set "Start heating at" to 09:31, tap OK,
+# capture, then:
+#   python3 -m tools.capture_diff <capture.pcap> airheater/timer-time
+# Expected: zero diff (identical frames).
+function: airheater
+what: timer
+value: "09:31"
+control_char: "1701"
+capture_label: airheater-timer-time-0931
+state: {}                  # nothing is carried: every untargeted heater field is the app's sentinel

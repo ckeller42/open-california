@@ -85,6 +85,7 @@ Tests
 
 .. autofunction:: tests.test_calictl.test_vehicle_decode_char_1004
 .. autofunction:: tests.test_calictl.test_airheater_control_frame
+.. autofunction:: tests.test_calictl.test_airheater_timer_time_matches_app_frame
 .. autofunction:: tests.test_calictl.test_roof_position_name_and_infopopup_alert
 .. autofunction:: tests.test_calictl.test_water_stale_latch_guard
 .. autofunction:: tests.test_calictl.test_cli_set_check_all_rows
