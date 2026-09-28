@@ -62,8 +62,8 @@ CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC)
 COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
-# The rest of cali_core (console + json + session) and the frame codec: only cali-host needs them.
-CORE_OBJ := console.o json.o session.o codec.o
+# The rest of cali_core (console + json + session + wifi_sm) and the frame codec: only cali-host needs them.
+CORE_OBJ := console.o json.o session.o codec.o wifi_sm.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
@@ -130,6 +130,10 @@ console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/
 
 # The bounded JSON writer shared by console.c (STATE/SNAP) and, from Task 2 on, the web setup page.
 json.o: $(COMPONENTS)/cali_core/json.c $(CORE_H)/cali_json.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The WiFi provisioning/connectivity SM (#154 Task 3): pure, replays tests/vectors/wifi_sm.json.
+wifi_sm.o: $(COMPONENTS)/cali_core/wifi_sm.c $(CORE_H)/cali_wifi_sm.h $(CSRC)/net_consts.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h \

@@ -143,3 +143,26 @@ def test_net_consts_header_is_fresh():
     assert text == (ROOT / "csrc" / "net_consts.h").read_text()
     assert '#define NET_AP_SSID "calictl-esp-setup"' in text
     assert "#define NET_SETUP_AFTER_MS 300000" in text
+
+
+def test_net_consts_header_pins_the_wifi_sm_enums():
+    """``net_consts.h`` carries the WiFi SM's pinned enums, read off ``tools.wifi_sm_ref`` (#154
+    Task 3) — every ``WIFI_*``/``WEV_*``/``WACT_*`` member with its Python value, nothing else.
+
+    .. test:: Generated network header pins the WiFi SM enums from the Python twin
+       :id: T_CDICT_NET_WIFI_SM_ENUMS
+       :links: R_NET_CONSTS_SINGLE_SOURCE
+    """
+    from tools import gen_c_dict
+    from tools import wifi_sm_ref as W
+
+    text = gen_c_dict.generate_net()
+    for prefix, n in (("WIFI_", 6), ("WEV_", 9), ("WACT_", 7)):
+        members = gen_c_dict._int_members(W, prefix)
+        assert [v for _, v in members] == list(range(n)), prefix
+        for name, val in members:
+            assert "    %s = %d" % (name, val) in text
+    assert "    WIFI_SETUP_AP_RETRYING = 5" in text
+    assert "    WEV_TICK = 8" in text
+    assert "    WACT_LOG_REASON = 6" in text
+    assert "#define WIFI_MAX_ACTIONS %d" % W.MAX_ACTIONS in text

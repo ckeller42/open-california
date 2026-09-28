@@ -92,10 +92,13 @@ vendor_check() {   # whole tracked tree: vendor paths, the real vehicle MAC, VIN
 }
 doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
 codec_fresh() {   # golden vectors + generated C headers match protocol/dictionary.yaml + overrides
+                  # (+ the ESP32 WiFi SM vectors / net_consts.h from tools/wifi_sm_ref.py + wifi_consts.py)
   "$PY" -m tools.gen_codec_vectors --check \
     || { echo "golden codec vectors stale — run: $PY -m tools.gen_codec_vectors"; exit 1; }
   "$PY" -m tools.gen_c_dict --check \
     || { echo "generated C headers stale — run: $PY -m tools.gen_c_dict"; exit 1; }
+  "$PY" -m tools.gen_wifi_vectors --check \
+    || { echo "WiFi SM golden vectors stale — run: $PY -m tools.gen_wifi_vectors"; exit 1; }
 }
 screenshots() {   # regenerate docs/screenshots from the live UI over the mock (needs Playwright +
                   # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.

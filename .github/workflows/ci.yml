@@ -130,12 +130,14 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install deps
         run: pip install -r requirements-dev.txt
-      - name: Generated C headers are fresh (codec_dict.h + codec_chars.h + pairing_consts.h)
+      - name: Generated C headers are fresh (codec_dict.h + codec_chars.h + pairing_consts.h + net_consts.h)
         run: python -m tools.gen_c_dict --check
       - name: Golden vectors are fresh
         run: python -m tools.gen_codec_vectors --check
+      - name: WiFi SM golden vectors are fresh (tools/wifi_sm_ref.py -> tests/vectors/wifi_sm.json)
+        run: python -m tools.gen_wifi_vectors --check
       - name: Vectors + differential parity (compiles csrc/)
-        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py -q
+        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py tests/test_wifi_sm_ref.py tests/firmware/test_wifi_sm_parity.py -q
 
   gui-e2e:
     runs-on: ubuntu-latest
