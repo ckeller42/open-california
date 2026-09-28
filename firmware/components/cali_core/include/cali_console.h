@@ -20,7 +20,9 @@
  *   wifi scan    ask for a WiFi scan (held back while BLE pairs; cali_wifi_run.h)
  *   Before the WiFi runtime booted (host without --http) every "wifi …" line only prints
  *   "LOG wifi: not enabled".
- * anything else -> "LOG unknown command: <line>". Lines up to 159 bytes.
+ * anything else -> "LOG unknown command: <first word>" ("wifi <subcommand>" for an unknown wifi
+ *   subcommand): never the rest of the line, which a mistyped "wifi set" fills with the passphrase.
+ *   Lines up to 159 bytes.
  *
  * Output (stdout, one line each, flushed):
  *   STATE {"state":"<name>","attempts":N,"error":"<name>"|null,"address":"AA:.."|null}

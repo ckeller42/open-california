@@ -22,6 +22,7 @@
  *                          does with --http); before it the WiFi runtime is off, as without --http
  *     kv <key>             print "KV <key> <value>" or "KV <key> missing" (the in-memory kv store)
  *     kvset <key> <value>  store a kv value (e.g. saved WiFi credentials before wifi_boot)
+ *     kverasefail <n>      the next n cali_kv_erase calls fail (-1, nothing erased)
  *     rssi <dBm>           what the fake net's sta_rssi() answers (default 0)
  *   fake-net events (through the sink the WiFi runner registered):
  *     NET_GOT_IP <a.b.c.d> | NET_LOST | NET_FAILED <reason> | NET_AP_STARTED | NET_AP_STOPPED
@@ -156,8 +157,14 @@ int cali_kv_set(const char *key, const void *buf, size_t len) {
     return 0;
 }
 
+static int s_erase_fail;   /* "kverasefail n": the next n erases fail */
+
 int cali_kv_erase(const char *key) {
     int i = kv_find(key);
+    if (s_erase_fail > 0) {
+        s_erase_fail--;
+        return -1;
+    }
     if (i >= 0) memset(&s_kv[i], 0, sizeof s_kv[i]);
     return 0;
 }
@@ -286,6 +293,8 @@ int main(void) {
             }
         } else if (strcmp(word, "kvset") == 0) {
             cali_kv_set(a1, a2, strlen(a2));
+        } else if (strcmp(word, "kverasefail") == 0) {
+            s_erase_fail = n1;
         } else if (strcmp(word, "rssi") == 0) {
             s_rssi = n1;
         } else if (strcmp(word, "NET_GOT_IP") == 0) {

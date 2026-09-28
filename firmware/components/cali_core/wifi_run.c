@@ -35,6 +35,7 @@ static struct {
     int scan_in_flight;              /* net->scan() started, its SCAN_DONE not seen yet */
     int scan_wanted;                 /* held back by the BLE-pairing gate: start on a later tick */
     int join_failed;                 /* a STA_START that could not start: FAILED(OTHER) next tick */
+    int ap_running;                  /* ap_start() succeeded and no WACT_AP_STOP since */
 } W;
 
 static void wipe_creds(void) {
@@ -80,11 +81,18 @@ static const char *reason_name(uint32_t r) {
 static void run_action(const cali_wifi_action_t *a) {
     switch (a->act) {
     case WACT_AP_START:
-        if (W.net->ap_start(NET_AP_SSID, NET_AP_PSK) != 0) cali_log("wifi: setup hotspot failed to start");
-        if (cali_captive_dns_start(W.net, NET_AP_ADDR_U32) != 0) cali_log("wifi: captive DNS unavailable");
+        /* Idempotent: a forget/replace while the hotspot already runs (the SM emits AP_START on every
+         * CREDS_FORGET) keeps it — no second ap_start, DNS re-bind or "setup hotspot up". A start
+         * that failed is retried by the next AP_START. */
+        if (!W.ap_running) {
+            if (W.net->ap_start(NET_AP_SSID, NET_AP_PSK) != 0) cali_log("wifi: setup hotspot failed to start");
+            else W.ap_running = 1;
+            if (cali_captive_dns_start(W.net, NET_AP_ADDR_U32) != 0) cali_log("wifi: captive DNS unavailable");
+        }
         start_scan();                      /* the setup page lists networks from the first GET */
         break;
     case WACT_AP_STOP:
+        W.ap_running = 0;
         W.net->ap_stop();
         cali_captive_dns_stop();
         cali_log("wifi: setup hotspot closed");
@@ -105,12 +113,14 @@ static void run_action(const cali_wifi_action_t *a) {
     case WACT_MDNS:
         W.net->mdns_announce(NET_HOSTNAME, NET_HTTP_PORT);
         break;
-    case WACT_CLEAR_CREDS:
-        cali_kv_erase(KEY_SSID);
-        cali_kv_erase(KEY_PSK);
+    case WACT_CLEAR_CREDS: {
+        /* both erases always run; a missing key is not an error (cali_kv_erase) */
+        int ok = cali_kv_erase(KEY_SSID) == 0;
+        ok = cali_kv_erase(KEY_PSK) == 0 && ok;
         wipe_creds();
-        cali_log("wifi: credentials cleared");
+        cali_log(ok ? "wifi: credentials cleared" : "wifi: credential erase failed");
         break;
+    }
     case WACT_LOG_REASON:
         cali_log("wifi: failed %s", reason_name(a->arg));
         break;

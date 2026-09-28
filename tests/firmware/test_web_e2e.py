@@ -10,6 +10,7 @@ and the Bumble fake unit for the camper. Requests go to ``127.0.0.1:PORT`` with 
    :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX
 """
 import json
+import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -18,6 +19,7 @@ import pytest
 
 from calictl import protocol
 
+from .conftest import build_host
 from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw, _served_frames
 
 # One xdist worker: the host_fw fixture runs `make` in firmware/host (like test_host_e2e.py).
@@ -205,3 +207,12 @@ def test_page_renders(host_fw, hci_unit, tmp_path, locale, device, functions):
         assert page.inner_text("#functions-title") == functions
         browser.close()
     assert not errors, errors
+
+
+@pytest.mark.parametrize("bad", ["0", "abc", "80x", "65536", "-1", ""])
+def test_http_port_must_be_a_valid_port(bad):
+    """``--http 0`` or a non-numeric/out-of-range port is a usage error (exit 2), never a silent run
+    without the network side."""
+    r = subprocess.run([str(build_host()), "--hci-port", "1", "--http", bad], capture_output=True, text=True,
+                       timeout=30)
+    assert r.returncode == 2 and "usage:" in r.stderr

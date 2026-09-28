@@ -545,6 +545,54 @@ def test_wifi_set_rejects_bad_input_without_storing(fake):
     ]
 
 
+def test_mistyped_wifi_line_never_echoes_the_passphrase(fake):
+    """An unknown ``wifi`` subcommand (or a mistyped ``wifi`` word) logs only the command words, never
+    the rest of the line: a typo'd ``wifi set`` still carries the passphrase."""
+    out = run(
+        fake,
+        "wifi_boot",
+        "> wifi sett minsel " + PSK,
+        "> wifi SET minsel " + PSK,
+        "> wif set minsel " + PSK,
+        "> wifi\tsett minsel " + PSK,
+        "kv wifi_psk",
+    )
+    assert not any(PSK in line for line in out)
+    assert after(out, "NET scan") == [
+        "LOG unknown command: wifi sett",
+        "LOG unknown command: wifi SET",
+        "LOG unknown command: wif",
+        "LOG unknown command: wifi sett",
+        "KV wifi_psk missing",
+    ]
+
+
+def test_wifi_forget_in_setup_keeps_the_running_hotspot(fake):
+    """A forget while the setup hotspot already runs (per the runner's bookkeeping) never restarts
+    it: no second ap_start, no captive-DNS re-bind — so no second ``setup hotspot up`` either."""
+    out = run(fake, "wifi_boot", "NET_AP_STARTED", "NET_SCAN_DONE minsel", "> wifi forget", "> wifi status")
+    assert out.count(AP) == 1 and out.count("NET udp_bind 53") == 1
+    assert out.count("LOG wifi: setup hotspot up (calictl-esp-setup)") == 1
+    assert after(out, "LOG wifi: setup hotspot up (calictl-esp-setup)") == [
+        "NET sta_stop",
+        "LOG wifi: credentials cleared",
+        "NET scan",
+        "LOG wifi: setup ssid=- ip=- rssi=- scan=1",
+    ]
+
+
+def test_wifi_clear_creds_reports_a_failed_erase(fake):
+    """``credentials cleared`` only when both erases succeeded (a missing key is success); a failed
+    erase says so instead of claiming the creds are gone."""
+    out = run(
+        fake, "wifi_boot", "NET_AP_STARTED", "> wifi set minsel wrong-psk-99", "kverasefail 1", "NET_FAILED 2"
+    )
+    assert after(out, "NET sta_start minsel wrong-psk-99") == [
+        "LOG wifi: failed auth",
+        "LOG wifi: credential erase failed",
+    ]
+
+
 def test_wifi_retry_after_loss_uses_the_copied_credentials(fake):
     """R14: the runner keeps its own copy of the credentials (the console and web.c zero theirs right
     after the call): the retry after a loss joins with the same SSID + PSK."""
@@ -601,17 +649,31 @@ def test_wifi_boot_with_saved_creds_joins_and_keeps_them_on_failure(fake):
 
 
 def test_wifi_forget_clears_creds_and_opens_setup(fake):
-    out = run(fake, *_online("> wifi forget", "kv wifi_ssid", "kv wifi_psk", "NET_AP_STARTED"))
-    assert after(out, "LOG wifi: online 192.168.1.42") == [
+    """Online past the AP-close window (hotspot closed), a forget reopens the hotspot."""
+    out = run(
+        fake,
+        *_online("tick 100", "tick 30100", "> wifi forget", "kv wifi_ssid", "kv wifi_psk", "NET_AP_STARTED"),
+    )
+    assert after(out, "LOG wifi: setup hotspot closed") == [
         "NET sta_stop",
         "LOG wifi: credentials cleared",
         AP,
-        "NET close 5",
         "NET udp_bind 53",
         "NET scan",
         "KV wifi_ssid missing",
         "KV wifi_psk missing",
         "LOG wifi: setup hotspot up (calictl-esp-setup)",
+    ]
+
+
+def test_wifi_forget_inside_the_ap_close_window_keeps_the_hotspot(fake):
+    """Online but the hotspot still up (inside NET_AP_CLOSE_MS): a forget keeps it running."""
+    out = run(fake, *_online("> wifi forget", "kv wifi_ssid"))
+    assert after(out, "LOG wifi: online 192.168.1.42") == [
+        "NET sta_stop",
+        "LOG wifi: credentials cleared",
+        "NET scan",
+        "KV wifi_ssid missing",
     ]
 
 
@@ -621,7 +683,8 @@ def test_wifi_set_while_online_replaces_and_reconnects(fake):
     out = run(fake, *_online("> wifi set other new-psk-5678", "kv wifi_ssid", "kv wifi_psk"))
     rest = after(out, "LOG wifi: online 192.168.1.42")
     assert rest[0] == "LOG wifi: credentials replaced, reconnecting"
-    assert "NET sta_stop" in rest and AP in rest
+    assert "NET sta_stop" in rest
+    assert AP not in rest  # the hotspot is still up (inside the AP-close window)
     assert "LOG wifi: credentials cleared" not in rest
     assert rest[-4:] == [
         "LOG wifi: joining other",

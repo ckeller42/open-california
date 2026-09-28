@@ -139,17 +139,29 @@ static void *hci_thread(void *arg) {
     return NULL;
 }
 
+/* A TCP port 1..65535, all decimal digits; else -1 (so "--http 0"/"--http abc" is a usage error, not
+ * a silent run without the network side). */
+static int parse_port(const char *s) {
+    long v = 0;
+    if (!*s) return -1;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9' || v > 65535) return -1;
+        v = v * 10 + (*s - '0');
+    }
+    return v >= 1 && v <= 65535 ? (int)v : -1;
+}
+
 int main(int argc, char **argv) {
     int port = 0, http = 0;
     const char *store = NULL, *wifi_script = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--hci-port") == 0 && i + 1 < argc) port = atoi(argv[++i]);
         else if (strcmp(argv[i], "--store") == 0 && i + 1 < argc) store = argv[++i];
-        else if (strcmp(argv[i], "--http") == 0 && i + 1 < argc) http = atoi(argv[++i]);
+        else if (strcmp(argv[i], "--http") == 0 && i + 1 < argc) http = parse_port(argv[++i]);
         else if (strcmp(argv[i], "--fake-wifi") == 0 && i + 1 < argc) wifi_script = argv[++i];
         else port = 0, i = argc;  /* unknown argument: usage */
     }
-    if (port <= 0 || (http && (http < 1 || http > 65535)) || (wifi_script && !http)) {
+    if (port <= 0 || http < 0 || (wifi_script && !http)) {
         fprintf(stderr, "usage: %s --hci-port <tcp-port> [--store <dir>] [--http <port> "
                         "[--fake-wifi <script>]]\n", argv[0]);
         return 2;

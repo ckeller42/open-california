@@ -164,6 +164,14 @@ static void wifi_set(char *args) {
     }
 }
 
+/* Length of the first word of s (up to a space/tab): an unknown command is logged by its word(s)
+ * only — the rest of a mistyped "wifi set" line is the passphrase. */
+static int word_len(const char *s) {
+    int n = 0;
+    while (s[n] && s[n] != ' ' && s[n] != '\t') n++;
+    return n;
+}
+
 static void wifi_cmd(char *sub) {
     if (!wifi_on()) {
         cali_log("wifi: not enabled");
@@ -176,7 +184,7 @@ static void wifi_cmd(char *sub) {
     } else if (strcmp(sub, "set") == 0 || (strncmp(sub, "set", 3) == 0 && (sub[3] == ' ' || sub[3] == '\t'))) {
         wifi_set(sub + 3);
     } else {
-        cali_log("unknown command: wifi %s", sub);
+        cali_log("unknown command: wifi %.*s", word_len(sub), sub);
     }
 }
 
@@ -242,7 +250,7 @@ void cali_console_line(const char *line) {
     } else if (strcmp(cmd, "wifi") == 0) {
         wifi_cmd(cmd + 4);
     } else {
-        cali_log("unknown command: %s", cmd);
+        cali_log("unknown command: %.*s", word_len(cmd), cmd);
     }
     wipe(cmd, sizeof cmd);   /* a "wifi set" line held a passphrase */
 }
