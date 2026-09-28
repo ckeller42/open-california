@@ -49,6 +49,7 @@ state-machine enums/timeouts/names from :mod:`calictl.pairing`.
    respectively, via the same generator and freshness gate as ``codec_dict.h``, so
    a pairing-SM or heartbeat-constant edit can never silently drift from the C port.
 """
+
 from __future__ import annotations
 
 import sys
@@ -97,22 +98,25 @@ struct codec_func {
 
 
 def _field_row(f) -> str:
-    assert 1 <= f.width <= 32, \
-        "%s: width %d exceeds the uint32 field model" % (f.name, f.width)
+    assert 1 <= f.width <= 32, "%s: width %d exceeds the uint32 field model" % (f.name, f.width)
     flags, dflt, mask = [], 0, 0
     if isinstance(f.default, int):
         flags.append("CODEC_F_HAS_DEFAULT")
         dflt = f.default
     if f.valid is not None:
-        allowed = (f.valid if isinstance(f.valid, (set, frozenset))
-                   else range(f.valid[0], f.valid[1] + 1))
-        assert max(allowed) < 32, \
-            "%s valid value %d >= 32: widen valid_mask" % (f.name, max(allowed))
+        allowed = f.valid if isinstance(f.valid, (set, frozenset)) else range(f.valid[0], f.valid[1] + 1)
+        assert max(allowed) < 32, "%s valid value %d >= 32: widen valid_mask" % (f.name, max(allowed))
         for v in allowed:
             mask |= 1 << v
         flags.append("CODEC_F_HAS_VALID")
     return '    {"%s", %d, %d, %s, %du, 0x%08xu},' % (
-        f.name, f.offset, f.width, "|".join(flags) or "0", dflt, mask)
+        f.name,
+        f.offset,
+        f.width,
+        "|".join(flags) or "0",
+        dflt,
+        mask,
+    )
 
 
 def generate() -> str:
@@ -129,9 +133,10 @@ def generate() -> str:
             out.append("};")
         if name in overrides.CONTROL_FRAME_BYTES:
             unplaced = [f.name for f in fn.control_fields if not f.placed]
-            assert not unplaced, \
-                "%s: unplaced control fields %s — a pinned-length function must be " \
+            assert not unplaced, (
+                "%s: unplaced control fields %s — a pinned-length function must be "
                 "fully placed (fix overrides), refusing a half-frame table" % (name, unplaced)
+            )
             out.append("static const struct codec_field %s_CTRL[] = {" % name.upper())
             out.extend(_field_row(f) for f in fn.control_fields)
             out.append("};")
@@ -145,8 +150,7 @@ def generate() -> str:
         s_tbl = "%s_STATE" % name.upper() if state else "0"
         c_tbl = "%s_CTRL" % name.upper() if fb else "0"
         n_ctrl = len(fn.control_fields) if fb else 0
-        out.append('    {"%s", %d, %s, %d, %s, %d},'
-                   % (name, fb, s_tbl, len(state), c_tbl, n_ctrl))
+        out.append('    {"%s", %d, %s, %d, %s, %d},' % (name, fb, s_tbl, len(state), c_tbl, n_ctrl))
     out.append("};")
     out.append("#define CODEC_NFUNCS %d" % len(funcs))
     out.append("#define CODEC_MAX_FIELDS %d" % max_fields)
@@ -190,11 +194,17 @@ def _env_default(var: str) -> float:
     from calictl import device
 
     for node in ast.walk(ast.parse(Path(device.__file__).read_text())):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "get" and ast.unparse(node.func.value) == "os.environ"
-                and len(node.args) == 2
-                and isinstance(node.args[0], ast.Constant) and node.args[0].value == var
-                and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str)):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and ast.unparse(node.func.value) == "os.environ"
+            and len(node.args) == 2
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == var
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
+        ):
             return float(node.args[1].value)
     raise LookupError("no os.environ.get(%r, <literal>) in calictl/device.py" % var)
 
@@ -208,8 +218,9 @@ def generate_chars() -> str:
 
     funcs = protocol.load()
     overrides.apply(funcs)
-    rows = [(name, str(funcs[name].state_char)[4:8].lower())
-            for name in sorted(funcs) if funcs[name].state_char]
+    rows = [
+        (name, str(funcs[name].state_char)[4:8].lower()) for name in sorted(funcs) if funcs[name].state_char
+    ]
 
     out = [_CHARS_HEADER]
     out.append("static const struct codec_char CODEC_CHARS[] = {")
@@ -254,8 +265,11 @@ def _int_members(mod, prefix: str):
     Filters to ``int`` (excluding ``bool``) so a same-prefixed non-scalar (e.g.
     ``pairing.ERR_NAMES``, a dict) never leaks into an enum.
     """
-    items = [(k, v) for k, v in vars(mod).items()
-             if k.startswith(prefix) and isinstance(v, int) and not isinstance(v, bool)]
+    items = [
+        (k, v)
+        for k, v in vars(mod).items()
+        if k.startswith(prefix) and isinstance(v, int) and not isinstance(v, bool)
+    ]
     return sorted(items, key=lambda kv: kv[1])
 
 
@@ -276,14 +290,12 @@ def generate_pairing() -> str:
     err = _int_members(P, "ERR_")
 
     out = [_PAIRING_HEADER]
-    out.append("enum {\n" + ",\n".join(
-        "    PAIR_%s = %d" % (name.upper(), val) for val, name in states) + "\n};")
-    out.append("enum {\n" + ",\n".join(
-        "    PAIR_%s = %d" % (name, val) for name, val in ev) + "\n};")
-    out.append("enum {\n" + ",\n".join(
-        "    PAIR_%s = %d" % (name, val) for name, val in act) + "\n};")
-    out.append("enum {\n" + ",\n".join(
-        "    PAIR_%s = %d" % (name, val) for name, val in err) + "\n};")
+    out.append(
+        "enum {\n" + ",\n".join("    PAIR_%s = %d" % (name.upper(), val) for val, name in states) + "\n};"
+    )
+    out.append("enum {\n" + ",\n".join("    PAIR_%s = %d" % (name, val) for name, val in ev) + "\n};")
+    out.append("enum {\n" + ",\n".join("    PAIR_%s = %d" % (name, val) for name, val in act) + "\n};")
+    out.append("enum {\n" + ",\n".join("    PAIR_%s = %d" % (name, val) for name, val in err) + "\n};")
     out.append("#define PAIR_MAX_ATTEMPTS %d" % P.MAX_ATTEMPTS)
 
     n = len(states)
@@ -314,8 +326,11 @@ def main() -> int:
     if "--check" in sys.argv:
         stale = [path for path, gen in _TARGETS if not path.is_file() or path.read_text() != gen()]
         if stale:
-            print("STALE: %s do not match a fresh regeneration — run "
-                  "python3 -m tools.gen_c_dict" % ", ".join(str(p) for p in stale), file=sys.stderr)
+            print(
+                "STALE: %s do not match a fresh regeneration — run "
+                "python3 -m tools.gen_c_dict" % ", ".join(str(p) for p in stale),
+                file=sys.stderr,
+            )
             return 1
         print("fresh: %s" % ", ".join(str(path) for path, _ in _TARGETS))
         return 0

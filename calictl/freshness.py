@@ -16,6 +16,7 @@ the last plausible reading (flagged stale). Any grey movement proves the unit is
 the fresh drop is real (drinking/cooking/an external grey drain make fresh fall faster than grey
 fills; that is NOT the latch). See ``docs/business-logic/value-freshness.md``.
 """
+
 from __future__ import annotations
 
 
@@ -55,13 +56,13 @@ def implausible_water_drop(new: dict, prev: dict) -> bool:
     nf, pf = _liters(new, "fresh"), _liters(prev, "fresh")
     if nf is None or pf is None:
         return False
-    if nf >= pf:                        # not a drop (refill / same / active re-measure) -> plausible
+    if nf >= pf:  # not a drop (refill / same / active re-measure) -> plausible
         return False
     ng, pg = _liters(new, "waste"), _liters(prev, "waste")
     if ng is None or pg is None:
-        return True                     # fresh dropped, grey unknown -> can't corroborate -> latch
-    return ng == pg                     # grey EXACTLY frozen -> latch; ANY grey movement (rise OR
-                                        # fall, e.g. a dump-station drain) -> live measurement.
-                                        # `<=` here wedged the hold for a month after a real grey
-                                        # dump: every genuine post-dump reading re-latched because
-                                        # grey sat below the pre-dump baseline (fixed 2026-08-16).
+        return True  # fresh dropped, grey unknown -> can't corroborate -> latch
+    return ng == pg  # grey EXACTLY frozen -> latch; ANY grey movement (rise OR
+    # fall, e.g. a dump-station drain) -> live measurement.
+    # `<=` here wedged the hold for a month after a real grey
+    # dump: every genuine post-dump reading re-latched because
+    # grey sat below the pre-dump baseline (fixed 2026-08-16).

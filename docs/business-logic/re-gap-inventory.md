@@ -59,6 +59,7 @@ evidence, finally photon-verified 2026-08-16 — §A1.)
 ## A. BLE protocol / control gaps
 
 ### A1 — Lighting SET — RESOLVED 2026-08-16 (unit awake ⇒ bare SET actuates; photon-verified)
+
 **The physical-actuation gap is closed.** With the unit **awake/active**, a **bare
 SET_BRIGHTNESS + `0e00…` commit physically drives the lamps, both directions** — no
 REQUEST_CONFIG preamble, no 1003 heartbeat, no arm delay (settled 2026-08-16 evening: 6×
@@ -91,8 +92,10 @@ wake-light, the Alle-Lichter master frame, the rest of the 16-zone→lamp map, a
 profile-number semantics (A=9).
 
 ### A2 — chars 1004 / 1002 / satellite 1903–1905 (RESOLVED; open leads)
+
 1004 modeled; **1002 = `SHA-256(VIN)[16:32]`**; sat chars 1903–1905 mapped — detail + citations
 in `DECISIONS.md`. **Open leads:**
+
 - **`generalpurposesignals` (service `F000`, char `F001`)** — a read-only 168-bit/21-byte block
   of semantically-unassigned signals (`bg/a.java` service, `cg/a.java` char; 8×1-bit `BitZero*`,
   8×8-bit `ByteZero*`, 4×16-bit `WordZero*`, 1×32-bit `DwordZero*`; `b()`=false so not even
@@ -103,6 +106,7 @@ in `DECISIONS.md`. **Open leads:**
   writes risk brick — treat as a lead, not an action. Firmware-acquisition recon in §A6.
 
 ### A3 — MERGED_AMBIGUOUS control offsets — roof/roofAC/stairs/LR-heater remain
+
 airheater (1701) is resolved + wired and the satelliteantenna "wrong width" claim was a false
 alarm (both in `DECISIONS.md`). **Open:** roof (1401 `jg/a.java`), roofAC (2001 `lg/a.java`),
 stairs (1801 `pg/a.java`), LR-heater (2101 `gg/a.java`) — transcribe offsets from each `f()`
@@ -111,6 +115,7 @@ when needed; roof's ~500 ms SafetyCounter move loop (`ig/c.java` + `w8/a`) is im
 never been driven by calictl. Field *value semantics* (enum meanings) still need a live pass.
 
 ### A4 — 1003 counter cadence / firmware disarm timeout (needs idle capture)
+
 Char 1003 (`ag/b.java`, 32-bit, `v()` resets to 0) is written app-side via `t0/c.java:264`
 (`o(num); y(false)` = write-with-response, no-init). Unknown statically: the **source/
 increment rule** of `num` (trace the producer feeding `t0/c.java:264`) and the **unit-side
@@ -121,8 +126,10 @@ liveness window before the unit refuses a *new* write is unmeasured). The clock-
 the app's 1003 interval + a stop-and-probe for the timeout.
 
 ### A5 — Lighting profile/color/wake-timer notification overlay (static enum decode)
+
 `dg/a.java e()` reinterprets the same 1502 frame by Mode: REQUEST_CONFIG(12)→7 zone booleans
 from LightValue; SET_COLOR(6)→profile enum `dg/k.java`→color `ef.b` + color-temp `dg/j.java`
+
 + 4 flags `dg/m.java` (LightValue bits 4–7) + Timestamp→UTC wake time; WAKEUP_TIME(20)/
 SYSTEM_TIME(24) alarm/clock round-trips. Our dictionary treats 1500/1502 as a flat
 brightness array and misses this profile/color/timer overlay. Decode the `dg/*` + `ef/*`
@@ -131,7 +138,9 @@ enums (static; one capture confirms bit assignments).
 ---
 
 ### A6 — Live device fingerprint (2026-07-07) — firmware-acquisition recon
+
 Full GATT + identity read from buspi (app closed). Bearing on "can we get the firmware":
+
 - **No Device Information Service (0x180A)** and **no DFU service** — the unit exposes only
   the custom `1000–2100`+`F000` family plus standard GAP `1800` (`2a00` name "VWCAMPER",
   `2a01` appearance) and GATT `1801`. So **no chip/vendor/firmware-rev strings, no OTA** — the
@@ -163,6 +172,7 @@ The app is far larger than the vehicle-control surface `ui/screens` covers — 1
 `NavigationModule` entries (`com/californiaontour/multiplatformcore/graphs/NavigationModule$*`).
 
 **Entire modules with zero yaml/doc:**
+
 - **Travel / Trips / MyPlaces** (`travel/graphs/NavigationTravel$*`; `backend/api/trips`,
   `backend/api/myPlaces`) — saved places, itineraries, "mark as visited", server-synced.
 - **Search / POI** (`search/graphs/…$SearchScreen`; `backend/api/search/model/*`) — reviews,
@@ -183,6 +193,7 @@ standalone `energy` route — energy is surfaced via VehicleData categories; con
 
 **Light scenes/favorites model (B-priority, static):** `WifiExlapLightingProfiles` =
 `profileOne..profileSeven` (`wp/j.java:87`), each `wp/i.java:10–56` = **8 zones × (bool on/off
+
 + int brightness)**; enums `FAVORITE1..7` (`dg/l.java:64–76`, `currentActiveLightProfile`
 :111). Documents how scenes are defined/saved/recalled. (Earlier framed as "the storage behind
 A1's active-profile requirement" — that requirement never existed; it was the `1502` echo bug,
@@ -193,6 +204,7 @@ and A1 was resolved 2026-08-16 with no profile precondition at all.)
 
 **Structural caveat (refined 2026-07-08):** the decompile is **dex-only** — jadx processed
 `classes.dex`, not the APK assets. Consequence for strings:
+
 - **String KEYS are fully recoverable** (1882 distinct `"string:area_component_meaning_text"`
   refs in the dex) — descriptive enough to read menu structure/feature semantics without the text.
 - **Localized VALUES are NOT here** — Compose Multiplatform packs UI text into binary
@@ -208,6 +220,7 @@ and A1 was resolved 2026-08-16 with no profile precondition at all.)
   APK-mirror lookups 404'd). Confirm via `play.google.com/store/apps/details?id=de.volkswagen.CaliforniaOnTour`.
 
 **Developer-module dive (2026-07-08) — findings from the prefs surface (`xp/g.java`):**
+
 - **Interior-light zone names — two complementary sources (correction).** Zone names were
   already documented in `ui/screens/lighting.yaml` (per-model section labels: ambientLighting,
   kitchen, readingLights left/right/frontArea/loftBed, popupRoof, bootLid, entrance, … across the
@@ -250,6 +263,7 @@ Shares the light-profile/alert prefs with the BLE side → **likely a parallel a
 channel** (VW "Exchange of Live Automotive Parameters", MIB head-unit path) with its own
 login/subscribe handshake — entirely outside our BLE model. Decode `AbstractInterface.java`,
 `command/*`, `ContentStream.java`; capture discovery on 28500.
+
 - **Live probe 2026-07-07 (buspi, van parked/off): NOT reachable.** buspi is on a GL.iNet
   travel router (`<router-LAN>/24`, gw `<router-gw>` nginx). WiFi scan shows no camper AP (only the
   home SSID); a full `<router-LAN>/24` sweep found no host with **tcp/28500**; a 12 s passive
@@ -303,6 +317,7 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
 ---
 
 ## Files to decode next (bodies in the decompiled sources (bad-code pass))
+
 - `w10/l.java`, `w10/d.java` — lighting profile→wire-value table (~~unblocks A1 / `set lighting`~~
   A1 resolved 2026-08-16 without it; still useful for profile-number semantics, e.g. A=9).
 - `ag/a.java`, `ag/d.java`, `mg/f.java`, `jg/b.java` — chars 1004/1002/1903–1905 (A2, static).
@@ -314,6 +329,7 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
 ## Open topics needing the vehicle (nothing else is static-blocked)
 
 **Needs a phone HCI capture** (app behavior buspi can't derive):
+
 - **Zone → physical-lamp map** — toggle each named light zone in the app, watch which
   `BrightnessL[1..16]` moves. The only real lighting-capture item (names + `ef.i`→channel map
   are known; the fix works without it — it's just for labeling which slider = which lamp).
@@ -323,6 +339,7 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
   cadence (both already decoded statically).
 
 **Needs a buspi live test — no phone:**
+
 - ~~`set lighting` confirm~~ **DONE 2026-08-16** (photon-verified — the ProfileNumber-echo theory
   was moot; PN is hardcoded 9, and a bare SET+commit actuates once the unit is awake — the
   interim "REQUEST_CONFIG preamble is the gate" theory was a wake-state confound). `set
@@ -333,6 +350,7 @@ check whether VIN (`cali_vin`) / vehicleId is uploaded (search `od/` request bod
 - Grafana dashboard push (needs the buspi Grafana creds).
 
 **Needs a special vehicle state (not a BLE capture):**
+
 - **EXLAP** — infotainment WiFi up (ignition on), buspi joined to that SSID, speak `<Protocol>`
   then `<Dir>`/`<Get>`/`<Call>`. Wire format fully known; only reachability blocks it.
 - **OIDC** redirect/token endpoint/client-secret (C1) — capture a login (out of scope for BLE).

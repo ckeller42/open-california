@@ -13,6 +13,7 @@ and dbus_fast — see ``tests/realstack/vm.sh`` (runner side) and ``in_vm.sh`` (
    :id: T_PAIRING_REALSTACK
    :links: R_PAIRING_SM, R_FAKE_UNIT_FIDELITY, R_PAIRING_BLUEZ_TRANSPORT, R_PAIRING_STALE_BOND_RECOVERY
 """
+
 import asyncio
 import json
 import os
@@ -105,9 +106,13 @@ async def main():
         rpa1 = unit.advertising_address
         t, runner, snap = await pair_once(adapter, unit)
         check(snap["state"] == "bonded", "wizard bonds over real BlueZ: %s" % snap)
-        check((snap["address"] or "").upper() == IDENTITY,
-              "identity cached, not the RPA %s: %s" % (rpa1, snap["address"]))
-        check(json.loads(CACHE.read_text())["address"].upper() == IDENTITY, "pairing cache holds the identity")
+        check(
+            (snap["address"] or "").upper() == IDENTITY,
+            "identity cached, not the RPA %s: %s" % (rpa1, snap["address"]),
+        )
+        check(
+            json.loads(CACHE.read_text())["address"].upper() == IDENTITY, "pairing cache holds the identity"
+        )
         # no manual disconnect: the wizard itself must release its link at flow end (aclose)
         check(await until(lambda: unit.conn is None, 15), "the unit sees the wizard's link drop")
 
@@ -121,21 +126,29 @@ async def main():
         check(await until(lambda: unit.conn is None, 15), "the unit sees the kept-bond link drop")
 
         await unit.rotate_address()
-        check(unit.advertising_address != rpa1,
-              "unit rotated its RPA %s -> %s" % (rpa1, unit.advertising_address))
+        check(
+            unit.advertising_address != rpa1,
+            "unit rotated its RPA %s -> %s" % (rpa1, unit.advertising_address),
+        )
         raw = await device.CamperDevice(IDENTITY, adapter=adapter).read_all(funcs)
         check(len(raw) >= 5, "daemon reads %d functions over the bond after rotation" % len(raw))
         check(await until(lambda: unit.conn is None, 15), "the unit sees the daemon's link drop")
 
-        await unit.forget_bonds()                   # the unit's Bluetooth reset; BlueZ keeps its bond
+        await unit.forget_bonds()  # the unit's Bluetooth reset; BlueZ keeps its bond
         t2, _, snap2 = await pair_once(adapter, unit)
-        check(snap2["state"] == "bonded",
-              "re-pair after the unit forgot its bonds (stale-bond self-heal): %s" % snap2)
-        check((snap2["address"] or "").upper() == IDENTITY, "re-pair caches the identity: %s" % snap2["address"])
+        check(
+            snap2["state"] == "bonded",
+            "re-pair after the unit forgot its bonds (stale-bond self-heal): %s" % snap2,
+        )
+        check(
+            (snap2["address"] or "").upper() == IDENTITY, "re-pair caches the identity: %s" % snap2["address"]
+        )
         check(await until(lambda: unit.conn is None, 15), "the unit sees the re-pair link drop")
         raw = await device.CamperDevice(IDENTITY, adapter=adapter).read_all(funcs)
-        check(len(raw) >= 5, "daemon reads %d functions right after the wizard (no manual disconnect)"
-              % len(raw))
+        check(
+            len(raw) >= 5,
+            "daemon reads %d functions right after the wizard (no manual disconnect)" % len(raw),
+        )
         check(await until(lambda: unit.conn is None, 15), "the unit sees the daemon's link drop")
 
         # An ASLEEP unit must never cost the bond: another client keeps discovery on while the unit
@@ -153,26 +166,35 @@ async def main():
         await runner4.start()
         snap4 = await until_state(runner4, {"error", "bonded", "waiting_passkey"}, 120)
         print("  .. %s" % snap4, flush=True)
-        check(snap4["state"] == "error" and snap4["error"] in ("connect_failed", "timeout"),
-              "wizard against an asleep unit ends connect_failed/timeout: %s" % snap4)
+        check(
+            snap4["state"] == "error" and snap4["error"] in ("connect_failed", "timeout"),
+            "wizard against an asleep unit ends connect_failed/timeout: %s" % snap4,
+        )
         check(await bluez_bonded(adapter) is True, "BlueZ still holds the bond after the asleep run")
-        check(CACHE.exists() and json.loads(CACHE.read_text())["address"].upper() == IDENTITY,
-              "pairing.json kept after the asleep run")
-        check(not unit.passkey_shown.is_set() and await bond_keys(unit) == keys,
-              "the unit's bond is untouched by the asleep run")
+        check(
+            CACHE.exists() and json.loads(CACHE.read_text())["address"].upper() == IDENTITY,
+            "pairing.json kept after the asleep run",
+        )
+        check(
+            not unit.passkey_shown.is_set() and await bond_keys(unit) == keys,
+            "the unit's bond is untouched by the asleep run",
+        )
         other.disconnect()
 
-        unit.refuse_connections = False                 # the unit wakes
+        unit.refuse_connections = False  # the unit wakes
         await unit._advertise()
         await asyncio.sleep(2)
         tw, _, snapw = await rerun_over_valid_bond(adapter, unit)
-        check(snapw["state"] == "bonded", "after waking, the wizard over the kept bond ends bonded: %s"
-              % snapw)
-        check(not unit.passkey_shown.is_set() and await bond_keys(unit) == keys,
-              "after waking, no new passkey and the unit's bond is unchanged")
+        check(
+            snapw["state"] == "bonded", "after waking, the wizard over the kept bond ends bonded: %s" % snapw
+        )
+        check(
+            not unit.passkey_shown.is_set() and await bond_keys(unit) == keys,
+            "after waking, no new passkey and the unit's bond is unchanged",
+        )
         check(await until(lambda: unit.conn is None, 15), "the unit sees the post-wake link drop")
 
-        other = await hold_discovery(adapter)       # "another BlueZ client" (e.g. HA Bluetooth)
+        other = await hold_discovery(adapter)  # "another BlueZ client" (e.g. HA Bluetooth)
         t3 = BluezTransport(adapter_path="/org/bluez/" + adapter)
         runner3 = PairingRunner(t3)
         t3.on_event = runner3.handle

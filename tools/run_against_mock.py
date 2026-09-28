@@ -19,6 +19,7 @@ Examples::
 The single ``MockCamperUnit`` persists across calictl's connect-per-operation calls, so a
 ``set`` followed by a ``get`` reflects the change (within one process invocation).
 """
+
 from __future__ import annotations
 
 import os
@@ -52,6 +53,7 @@ def install_fake_pairing_transport() -> None:
     swapped. Importing ``pairing_bluez`` itself is safe here: per its own docstring, only
     ``BluezTransport``'s methods lazy-import bleak/dbus_fast, and we're replacing the whole class."""
     from calictl import pairing_bluez
+
     pairing_bluez.BluezTransport = FakePairingTransport
 
 
@@ -59,6 +61,7 @@ def main(argv=None) -> int:
     install_fake_bleak()
     install_fake_pairing_transport()
     from calictl import cli
+
     return cli.main(argv)
 
 

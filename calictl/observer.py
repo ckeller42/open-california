@@ -18,6 +18,7 @@ the persistent session, and asks :meth:`poll_interval` how long to nap (the burs
    on an engine-start edge of EITHER Terminal-15 or DC-DC charging, fast-poll for a bounded window so
    the camping shed is captured finely enough to tell a clean shed from a flip-flop.
 """
+
 from __future__ import annotations
 
 import os
@@ -31,10 +32,11 @@ log = _log.get(__name__)
 # camping/ignition fields watched on a push, per function (mirrors what `observe` tracks).
 # cooler: probes whether the unit BROADCASTS night-timer/quiet-time changes on 1102 (issue #99)
 # — a push here the moment the app writes a quiet time is the wire proof.
-_PUSH_FIELDS = {"campingmode": ("master_on", "usb_charger", "lights_on", "enable"),
-                "vehicle": ("ignition_on",),
-                "cooler": ("on", "level", "quiet_scheduled", "quiet_from", "quiet_to",
-                           "timer_active")}
+_PUSH_FIELDS = {
+    "campingmode": ("master_on", "usb_charger", "lights_on", "enable"),
+    "vehicle": ("ignition_on",),
+    "cooler": ("on", "level", "quiet_scheduled", "quiet_from", "quiet_to", "timer_active"),
+}
 
 
 def _fmt(v):
@@ -55,16 +57,21 @@ class CampingObserver:
 
     def __init__(self, funcs, *, burst_interval=None, burst_window_s=None):
         self._funcs = funcs
-        self._push_char_to_fn = {str(f.state_char).lower(): name
-                                 for name, f in funcs.items() if f.state_char}
-        self._obs_prev = None            # last observed {ignition, dcdc_charging, master_on, ...}
-        self._obs_ign_edge = None        # wall time of the last engine-start edge (for Δ-since)
-        self._push_prev = {}             # last pushed value per tracked field (change detection)
-        self._burst_until = None         # monotonic deadline while fast-polling, else None
-        self._burst_interval = (burst_interval if burst_interval is not None
-                                else float(os.environ.get("CALICTL_OBSERVE_BURST_INTERVAL_S", "3")))
-        self._burst_window_s = (burst_window_s if burst_window_s is not None
-                                else float(os.environ.get("CALICTL_OBSERVE_BURST_S", "180")))
+        self._push_char_to_fn = {str(f.state_char).lower(): name for name, f in funcs.items() if f.state_char}
+        self._obs_prev = None  # last observed {ignition, dcdc_charging, master_on, ...}
+        self._obs_ign_edge = None  # wall time of the last engine-start edge (for Δ-since)
+        self._push_prev = {}  # last pushed value per tracked field (change detection)
+        self._burst_until = None  # monotonic deadline while fast-polling, else None
+        self._burst_interval = (
+            burst_interval
+            if burst_interval is not None
+            else float(os.environ.get("CALICTL_OBSERVE_BURST_INTERVAL_S", "3"))
+        )
+        self._burst_window_s = (
+            burst_window_s
+            if burst_window_s is not None
+            else float(os.environ.get("CALICTL_OBSERVE_BURST_S", "180"))
+        )
 
     def observe(self, states):
         """Log every change in ignition + camping substates, and arm the fast-poll burst on an
@@ -77,19 +84,22 @@ class CampingObserver:
         veh = states.get("vehicle") or {}
         camp = states.get("campingmode") or {}
         e = states.get("energy") or {}
-        cur = {"ignition": veh.get("ignition_on"),          # Terminal-15 (ignition switch)
-               "dcdc_charging": e.get("dcdc_charging"),      # DC-DC active = alternator = engine RUNNING
-               "master_on": camp.get("master_on"),
-               "usb_charger": camp.get("usb_charger"),
-               "lights_on": camp.get("lights_on"),
-               "enable": camp.get("enable")}                 # camp.enable = terminal-15 as camping sees it
+        cur = {
+            "ignition": veh.get("ignition_on"),  # Terminal-15 (ignition switch)
+            "dcdc_charging": e.get("dcdc_charging"),  # DC-DC active = alternator = engine RUNNING
+            "master_on": camp.get("master_on"),
+            "usb_charger": camp.get("usb_charger"),
+            "lights_on": camp.get("lights_on"),
+            "enable": camp.get("enable"),
+        }  # camp.enable = terminal-15 as camping sees it
         now = time.time()
         prev, self._obs_prev = self._obs_prev, cur
         if prev is None:
-            return                                # first poll: baseline only, nothing to compare
-        engine_rise = ((bool(cur["ignition"]) and not bool(prev["ignition"]))
-                       or (bool(cur["dcdc_charging"]) and not bool(prev["dcdc_charging"])))
-        if engine_rise:                            # engine start on EITHER signal -> stamp + burst
+            return  # first poll: baseline only, nothing to compare
+        engine_rise = (bool(cur["ignition"]) and not bool(prev["ignition"])) or (
+            bool(cur["dcdc_charging"]) and not bool(prev["dcdc_charging"])
+        )
+        if engine_rise:  # engine start on EITHER signal -> stamp + burst
             self._obs_ign_edge = now
             self._burst_until = time.monotonic() + self._burst_window_s
         changed = [k for k in cur if cur[k] != prev[k]]
@@ -97,10 +107,18 @@ class CampingObserver:
             return
         dt = "%.0f" % (now - self._obs_ign_edge) if self._obs_ign_edge else "-"
         parts = ", ".join("%s %s->%s" % (k, _fmt(prev[k]), _fmt(cur[k])) for k in changed)
-        log.info("camping-watch: %s (ign=%s dcdc=%s dcdc_A=%s batt2_A=%s dt_eng=%ss soc=%s)"
-              % (parts, _fmt(cur["ignition"]), _fmt(cur["dcdc_charging"]),
-                 _fmt(e.get("dcdc_current")), _fmt(e.get("batt2_current")),
-                 dt, _fmt(e.get("soc2_pct"))))
+        log.info(
+            "camping-watch: %s (ign=%s dcdc=%s dcdc_A=%s batt2_A=%s dt_eng=%ss soc=%s)"
+            % (
+                parts,
+                _fmt(cur["ignition"]),
+                _fmt(cur["dcdc_charging"]),
+                _fmt(e.get("dcdc_current")),
+                _fmt(e.get("batt2_current")),
+                dt,
+                _fmt(e.get("soc2_pct")),
+            )
+        )
 
     def on_push(self, uuid, data):
         """Fired IN THE BLE LOOP the instant a status char pushes a notification (persistent session
@@ -111,11 +129,14 @@ class CampingObserver:
         fn = self._push_char_to_fn.get(uuid)
         fields = _PUSH_FIELDS.get(fn)
         if not fields:
-            return                            # not a char we watch (only campingmode / vehicle)
+            return  # not a char we watch (only campingmode / vehicle)
         interp = semantics.interpret(fn, protocol.decode(self._funcs[fn], data))
         cur = {k: interp.get(k) for k in fields}
-        changed = {k: (self._push_prev[k], v) for k, v in cur.items()
-                   if k in self._push_prev and self._push_prev[k] != v}
+        changed = {
+            k: (self._push_prev[k], v)
+            for k, v in cur.items()
+            if k in self._push_prev and self._push_prev[k] != v
+        }
         self._push_prev.update(cur)
         if changed:
             parts = ", ".join("%s %s->%s" % (k, _fmt(o), _fmt(n)) for k, (o, n) in changed.items())
@@ -129,7 +150,7 @@ class CampingObserver:
             return default
         if time.monotonic() < self._burst_until:
             return min(default, self._burst_interval)
-        self._burst_until = None              # window elapsed -> back to the normal cadence
+        self._burst_until = None  # window elapsed -> back to the normal cadence
         return default
 
     @property

@@ -10,6 +10,7 @@
    events. No dbus/bleak imports here — stdlib-only at import (Task 3 adds the
    concrete BlueZ transport in this same module, with its own lazy imports).
 """
+
 import asyncio
 import json
 import re
@@ -85,7 +86,7 @@ class PairingRunner:
             self.address = None  # don't let a stale bond address survive an abandon/reset
         old = self._ps
         self._ps, actions = step(self._ps, ev, arg)
-        mine = self._ps   # THIS frame's own transition target -- ACT_VERIFY dispatches a NESTED
+        mine = self._ps  # THIS frame's own transition target -- ACT_VERIFY dispatches a NESTED
         # handle() call (VERIFYING -> BONDED/ERROR) from inside the loop below, which mutates
         # self._ps out from under us; comparing against `self._ps` after the loop would see the
         # nested call's state and double-fire the cleanup below. `mine` pins what THIS call
@@ -213,10 +214,10 @@ AGENT_PATH = "/org/calictl/pairing_agent"
 # >= MIN_CONNECT_S (8) — bleak's own default connect timeout is 10 s.
 CONNECT_MARGIN_S = 1.0
 STOP_SCAN_ALLOWANCE_S = 1.0  # stop_scan() runs on the SM's CONNECTING clock, before connect() starts
-BOND_PROBE_S = 5.0      # connect + auth-gated read over an existing bond; a stale key hangs, so bound it
-REDISCOVER_S = 5.0      # find the unit again after RemoveDevice dropped its object
-MIN_CONNECT_S = 8.0     # always left for the final BleakClient.connect()
-LINK_POLL_S = 0.1       # how often the bond probe samples Device1.Connected (see _LinkWatch)
+BOND_PROBE_S = 5.0  # connect + auth-gated read over an existing bond; a stale key hangs, so bound it
+REDISCOVER_S = 5.0  # find the unit again after RemoveDevice dropped its object
+MIN_CONNECT_S = 8.0  # always left for the final BleakClient.connect()
+LINK_POLL_S = 0.1  # how often the bond probe samples Device1.Connected (see _LinkWatch)
 CLOSE_DISCONNECT_S = 5.0  # aclose(): bound on releasing the wizard's own link at flow end
 
 # Error texts/codes that mean "the link came up but the peer rejected our stored key": BlueZ/kernel
@@ -226,7 +227,9 @@ CLOSE_DISCONNECT_S = 5.0  # aclose(): bound on releasing the wizard's own link a
 # asleep unit, a busy radio — is a connect failure that must keep the bond.
 _AUTH_FAILURE_RE = re.compile(
     r"pin or key missing|authenticat|notpermitted|not permitted|notauthorized|not authorized"
-    r"|insufficient (authentication|encryption)|\b0x0?[56f]\b", re.IGNORECASE)
+    r"|insufficient (authentication|encryption)|\b0x0?[56f]\b",
+    re.IGNORECASE,
+)
 
 
 def is_auth_failure(exc) -> bool:
@@ -239,8 +242,13 @@ def is_auth_failure(exc) -> bool:
     """
     if exc is None:
         return False
-    text = exc if isinstance(exc, str) else " ".join(
-        str(x) for x in (exc, getattr(exc, "dbus_error", ""), getattr(exc, "dbus_error_details", "")))
+    text = (
+        exc
+        if isinstance(exc, str)
+        else " ".join(
+            str(x) for x in (exc, getattr(exc, "dbus_error", ""), getattr(exc, "dbus_error_details", ""))
+        )
+    )
     return bool(_AUTH_FAILURE_RE.search(text))
 
 
@@ -285,13 +293,13 @@ class _LinkWatch:
 
     def __init__(self):
         self.seen_up = False
-        self.auth_reason = None   # a Device1.Disconnected reason naming authentication
+        self.auth_reason = None  # a Device1.Disconnected reason naming authentication
         self._props = None
         self._on_changed = None
         self._dev = None
         self._on_disc = None
         self._poller = None
-        self._props_get = None    # the Properties proxy the sampler reads Connected through
+        self._props_get = None  # the Properties proxy the sampler reads Connected through
 
     async def start(self, transport, path):
         try:
@@ -312,11 +320,13 @@ class _LinkWatch:
             log.debug("pairing: PropertiesChanged subscription failed: %r" % e)
         try:
             dev = await transport._get_interface(path, "org.bluez.Device1")
-            on_disc = getattr(dev, "on_disconnected", None)   # BlueZ >= 5.8x only
+            on_disc = getattr(dev, "on_disconnected", None)  # BlueZ >= 5.8x only
             if on_disc is not None:
+
                 def _disc(name, message=""):
                     if is_auth_failure("%s %s" % (name, message)):
                         self.auth_reason = "%s %s" % (name, message)
+
                 on_disc(_disc)
                 self._dev, self._on_disc = dev, _disc
         except Exception:
@@ -405,20 +415,20 @@ class BluezTransport:
         self.on_event = on_event
         self._device_name = device_name
         self._adapter_path = adapter_path
-        self.adapter = adapter_path.rsplit("/", 1)[-1]   # "/org/bluez/hci1" -> "hci1" (bleak's name)
-        self.radio_busy = False    # another BlueZ client kept discovery on after our scan stopped
-        self._address = None       # discovered device's BLE address (identity, once bonded)
+        self.adapter = adapter_path.rsplit("/", 1)[-1]  # "/org/bluez/hci1" -> "hci1" (bleak's name)
+        self.radio_busy = False  # another BlueZ client kept discovery on after our scan stopped
+        self._address = None  # discovered device's BLE address (identity, once bonded)
         self._found_device = None  # bleak BLEDevice set by the scan detection callback
-        self._path = None          # BlueZ's D-Bus object path for it (see _device_path)
+        self._path = None  # BlueZ's D-Bus object path for it (see _device_path)
         self._scanner = None
-        self._adopt_task = None    # start_scan()'s already-known-device lookup (see _adopt_known_device)
-        self._client = None        # bleak BleakClient set by connect()
-        self._bus = None           # dbus_fast system MessageBus, set by _ensure_bus()
+        self._adopt_task = None  # start_scan()'s already-known-device lookup (see _adopt_known_device)
+        self._client = None  # bleak BleakClient set by connect()
+        self._bus = None  # dbus_fast system MessageBus, set by _ensure_bus()
         self._agent = None
         self._agent_mgr = None
         self._passkey_future = None  # resolved by send_passkey(); awaited by the dbus agent
-        self._gen = 0              # flow generation: bumped by start_scan()/aclose() (see _abandoned)
-        self._bond_valid = False   # connect() found an existing bond that works -> pair() is a no-op
+        self._gen = 0  # flow generation: bumped by start_scan()/aclose() (see _abandoned)
+        self._bond_valid = False  # connect() found an existing bond that works -> pair() is a no-op
 
     async def _emit(self, ev, arg=0):
         if self.on_event is not None:
@@ -434,7 +444,7 @@ class BluezTransport:
             self._set_found(device)
             await self._emit(EV_DEVICE_FOUND)
 
-        self._gen += 1             # a new attempt: anything still in flight from the last one is stale
+        self._gen += 1  # a new attempt: anything still in flight from the last one is stale
         self._cancel_adopt()
         self.radio_busy = False
         self._found_device = None
@@ -494,11 +504,12 @@ class BluezTransport:
                 if props.get("Name") == self._device_name and "RSSI" in props:
                     found = (path, props)
                     break
-            if found is None or self._found_device is not None:   # the scan callback got there first
+            if found is None or self._found_device is not None:  # the scan callback got there first
                 return
             path, props = found
-            device = _make_bledevice(props.get("Address"), props.get("Name"),
-                                     {"path": path, "props": props}, props.get("RSSI"))
+            device = _make_bledevice(
+                props.get("Address"), props.get("Name"), {"path": path, "props": props}, props.get("RSSI")
+            )
         except Exception as e:
             log.warning("pairing: known-device lookup failed: %r" % e)
             return
@@ -519,7 +530,8 @@ class BluezTransport:
             log.warning(
                 "pairing: %s still discovering after our scan stopped — another Bluetooth client "
                 "(e.g. the Home Assistant Bluetooth integration or a BLE reader) is scanning; a new "
-                "LE connection will likely fail (HCI 0x3e)" % self.adapter)
+                "LE connection will likely fail (HCI 0x3e)" % self.adapter
+            )
 
     async def _adapter_discovering(self) -> bool:
         """``Adapter1.Discovering`` on our adapter, or False when it can't be read."""
@@ -559,8 +571,9 @@ class BluezTransport:
         gen = self._gen
         self._bond_valid = False
         loop = asyncio.get_running_loop()
-        deadline = (loop.time() + pairing.TIMEOUT_S[pairing.CONNECTING]
-                    - CONNECT_MARGIN_S - STOP_SCAN_ALLOWANCE_S)
+        deadline = (
+            loop.time() + pairing.TIMEOUT_S[pairing.CONNECTING] - CONNECT_MARGIN_S - STOP_SCAN_ALLOWANCE_S
+        )
 
         def left():
             return deadline - loop.time()
@@ -573,9 +586,10 @@ class BluezTransport:
             except StaleBond as e:
                 if self._abandoned(gen):
                     return
-                log.warning("pairing: the bond BlueZ holds for %s no longer works (%s; the unit "
-                            "forgot it, e.g. a Bluetooth reset) — removing it and pairing afresh"
-                            % (self._address, e))
+                log.warning(
+                    "pairing: the bond BlueZ holds for %s no longer works (%s; the unit "
+                    "forgot it, e.g. a Bluetooth reset) — removing it and pairing afresh" % (self._address, e)
+                )
                 await self._drop_bond_and_rediscover(min(REDISCOVER_S, left() - MIN_CONNECT_S))
                 if self._abandoned(gen):
                     return
@@ -635,7 +649,7 @@ class BluezTransport:
             await asyncio.wait_for(_probe(), timeout)
             return client
         except Exception as e:
-            await watch.sample()        # read Connected once more, just before giving up
+            await watch.sample()  # read Connected once more, just before giving up
             link_up = watch.seen_up or bool(getattr(client, "is_connected", False))
             await self._quiet_disconnect(client)
             if is_auth_failure(e) or watch.auth_reason:
@@ -690,7 +704,8 @@ class BluezTransport:
         if timeout <= 0:
             raise TimeoutError("no time left to re-discover %s" % self._device_name)
         device = await BleakScanner.find_device_by_filter(
-            lambda d, ad: d.name == self._device_name, timeout=timeout, adapter=self.adapter)
+            lambda d, ad: d.name == self._device_name, timeout=timeout, adapter=self.adapter
+        )
         if device is None:
             raise RuntimeError("%s did not reappear after removing its stale bond" % self._device_name)
         self._set_found(device)
@@ -699,7 +714,7 @@ class BluezTransport:
         # In-flow stale-bond drop: the unit's identity doesn't change, and persist_bond() rewrites
         # the cache on success — so keep pairing.json (a failed re-pair must not strand the daemon
         # without its address). Only the explicit reset (ACT_REMOVE_BOND) clears the cache.
-        await self.remove_bond(clear_cache=False)   # clears _found_device/_address/_client
+        await self.remove_bond(clear_cache=False)  # clears _found_device/_address/_client
         await self._rediscover(timeout)
 
     def _set_found(self, device):
@@ -838,7 +853,8 @@ class BluezTransport:
             # retry needs the unit re-discovered — the old path no longer exists.
             # Bounded like connect(): re-discovery must finish inside the SM's PAIRING budget.
             await self._drop_bond_and_rediscover(
-                min(REDISCOVER_S, pairing.TIMEOUT_S[pairing.PAIRING] - CONNECT_MARGIN_S))
+                min(REDISCOVER_S, pairing.TIMEOUT_S[pairing.PAIRING] - CONNECT_MARGIN_S)
+            )
             if self._abandoned(gen):
                 return
             device_iface = await self._get_interface(self._device_path(), "org.bluez.Device1")
@@ -958,7 +974,7 @@ class BluezTransport:
         poll must be able to read right after the wizard reaches ``BONDED``. A still-looking
         known-device lookup is cancelled.
         """
-        self._gen += 1             # the flow ended: an in-flight connect()/pair() must not revive it
+        self._gen += 1  # the flow ended: an in-flight connect()/pair() must not revive it
         self._cancel_adopt()
         client, self._client = self._client, None
         await self._quiet_disconnect(client, CLOSE_DISCONNECT_S)

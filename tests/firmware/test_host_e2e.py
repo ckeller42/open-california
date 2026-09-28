@@ -10,6 +10,7 @@ on the NimBLE Linux port, talking HCI over TCP to a Bumble controller linked to 
    :id: T_FW_HOST_E2E
    :links: R_FW_PAIRING_SM, R_FAKE_UNIT_FIDELITY, R_FW_SESSION, R_FW_READ_ONLY, R_FW_IO_CAP_BEFORE_LINK
 """
+
 import time
 
 import pytest
@@ -52,7 +53,7 @@ def _pair(fw, hu):
 
 def test_fresh_pair_persists_the_identity(host_fw, hci_unit):
     fw = host_fw(hci_unit)
-    fw.expect("STATE", lambda s: s["state"] == "idle")          # no bond -> idle, no scan
+    fw.expect("STATE", lambda s: s["state"] == "idle")  # no bond -> idle, no scan
     s = _pair(fw, hci_unit)
     assert s["state"] == "bonded" and s["address"] == "C0:FF:EE:CA:11:F0"
 
@@ -62,7 +63,7 @@ def test_read_all_matches_python_decode(host_fw, hci_unit):
     _pair(fw, hci_unit)
     snap = fw.expect("SNAP", timeout=40)
     funcs = _funcs()
-    served = hci_unit.call(_served_frames, hci_unit.unit)          # {function: bytes} the fake served
+    served = hci_unit.call(_served_frames, hci_unit.unit)  # {function: bytes} the fake served
     assert set(snap["fn"]) == set(served)
     for name, frame in served.items():
         assert snap["fn"][name] == protocol.decode(funcs[name], frame), name
@@ -95,7 +96,7 @@ def test_heartbeat_keeps_the_link(host_fw, hci_unit):
 
 def test_passkey_outside_waiting_is_ignored(host_fw, hci_unit):
     fw = host_fw(hci_unit)
-    fw.send("passkey 000000")                                     # idle: must be ignored
+    fw.send("passkey 000000")  # idle: must be ignored
     fw.send("status")
     assert fw.expect("STATE")["state"] == "idle"
     fw.send("status")
@@ -114,7 +115,7 @@ def test_short_frame_yields_present_fields_only(host_fw, hci_unit):
     snap = fw.expect("SNAP", timeout=40)
     want = protocol.decode(funcs[fn], short)
     assert snap["fn"][fn] == want
-    assert len(want) < len(protocol.decode(funcs[fn], full))      # fields past the end are absent
+    assert len(want) < len(protocol.decode(funcs[fn], full))  # fields past the end are absent
 
 
 def test_notify_during_read_all(host_fw, hci_unit):
@@ -127,10 +128,11 @@ def test_notify_during_read_all(host_fw, hci_unit):
     new = bytes([old[0] ^ 0xFF]) + old[1:]
     want = protocol.decode(funcs[fn], new)
     assert want != first["fn"][fn]
-    hci_unit.call(_serve_raw, hci_unit.unit, fn, new, True)       # the unit pushes the change
+    hci_unit.call(_serve_raw, hci_unit.unit, fn, new, True)  # the unit pushes the change
     nxt = fw.expect("SNAP", lambda s: s["fn"].get(fn) == want, timeout=15)
-    assert {k: v for k, v in nxt["fn"].items() if k != fn} == \
-        {k: v for k, v in first["fn"].items() if k != fn}
+    assert {k: v for k, v in nxt["fn"].items() if k != fn} == {
+        k: v for k, v in first["fn"].items() if k != fn
+    }
 
 
 async def _rotate_when_free(unit, timeout=10.0):
@@ -138,6 +140,7 @@ async def _rotate_when_free(unit, timeout=10.0):
     connected — the harness ends the link when the firmware process exits, a moment later).
     Returns (old, new) advertising address."""
     import asyncio
+
     end = asyncio.get_running_loop().time() + timeout
     while unit.conn is not None:
         assert asyncio.get_running_loop().time() < end, "unit still connected"
@@ -157,11 +160,13 @@ def test_restart_reconnects_with_the_bond_after_rotation(host_fw, hci_unit, tmp_
     """Reboot with the stored bond after the unit moved to a fresh resolvable private address:
     the firmware finds it again through the bond's IRK and re-encrypts, no passkey."""
     store = tmp_path / "store"
-    fw = host_fw(hci_unit, store_dir=store); _pair(fw, hci_unit); fw.stop()
+    fw = host_fw(hci_unit, store_dir=store)
+    _pair(fw, hci_unit)
+    fw.stop()
     old, new = hci_unit.call(_rotate_when_free, hci_unit.unit, timeout=15)
     assert old != new
     fw2 = host_fw(hci_unit, store_dir=store)
-    fw2.expect("SNAP", timeout=40)                         # reconnected, no passkey asked
+    fw2.expect("SNAP", timeout=40)  # reconnected, no passkey asked
     assert not any("waiting_passkey" in l for l in fw2.log)
 
 
@@ -191,36 +196,42 @@ def test_unit_forgot_us_repairs(host_fw, hci_unit, tmp_path, race):
 
     Either way: idle without a bond, no link left to the unit, and the fresh pair bonds."""
     store = tmp_path / "store"
-    fw = host_fw(hci_unit, store_dir=store); _pair(fw, hci_unit); fw.stop()
+    fw = host_fw(hci_unit, store_dir=store)
+    _pair(fw, hci_unit)
+    fw.stop()
     hci_unit.call(hci_unit.unit.forget_bonds)
     fw2 = host_fw(hci_unit, store_dir=store)
-    fw2.expect("LOG session: reconnect in", timeout=40)     # the stale LTK is refused: no session
+    fw2.expect("LOG session: reconnect in", timeout=40)  # the stale LTK is refused: no session
     assert not any(line.startswith("SNAP") for line in fw2.log)
-    hci_unit.call(_hold_connects, hci_unit, True, 1.0 if race == "cancel_lands_late" else 0.0,
-                  race == "connected_before_cancel")        # the next reconnect stays pending
+    hci_unit.call(
+        _hold_connects,
+        hci_unit,
+        True,
+        1.0 if race == "cancel_lands_late" else 0.0,
+        race == "connected_before_cancel",
+    )  # the next reconnect stays pending
     mark = len(fw2.log)
     fw2.expect("LOG ble: connect_bonded started", timeout=20)
-    fw2.send("forget")                                      # ... so it is pending: cancel it
+    fw2.send("forget")  # ... so it is pending: cancel it
     fw2.expect("STATE", lambda s: s["state"] == "idle" and not s["address"])
     assert "GAP procedure initiated: cancel connection" in fw2.log[mark:]
-    hci_unit.call(_hold_connects, hci_unit, False)          # (a delayed completion stays queued)
+    hci_unit.call(_hold_connects, hci_unit, False)  # (a delayed completion stays queued)
     if race == "cancel_lands_late":
-        assert not hci_unit.call(_linked, hci_unit.unit)    # the held connect never reached it
-    fw2.send("pair")                                        # at once, before the cancel settles
+        assert not hci_unit.call(_linked, hci_unit.unit)  # the held connect never reached it
+    fw2.send("pair")  # at once, before the cancel settles
     fw2.expect("STATE", lambda s: s["state"] == "waiting_passkey", timeout=40)
     fw2.send("passkey %06d" % hci_unit.call(hci_unit.unit.next_passkey))
-    assert fw2.expect("STATE", lambda s: s["state"] in ("bonded", "error"), timeout=40)["state"] \
-        == "bonded"
+    assert fw2.expect("STATE", lambda s: s["state"] in ("bonded", "error"), timeout=40)["state"] == "bonded"
     # the pair connected, so the unit's one slot was free: no stale link survived the forget
     assert not any("deferred scan failed" in line for line in fw2.log)
-    if race == "connected_before_cancel":                   # the unwanted link was ended by us
-        assert any("GAP procedure initiated: terminate connection" in line
-                   for line in fw2.log[mark:])
+    if race == "connected_before_cancel":  # the unwanted link was ended by us
+        assert any("GAP procedure initiated: terminate connection" in line for line in fw2.log[mark:])
 
 
 def test_pairing_mode_off_is_pairing_failed(host_fw):
     """The unit's pairing screen is closed: every attempt is refused -> pairing_failed after 3."""
     from .conftest import HciUnit
+
     hu = HciUnit(pairing_mode=False)
     try:
         fw = host_fw(hu)
@@ -249,13 +260,14 @@ def test_link_drop_mid_read_all_reconnects(host_fw, hci_unit):
     no NOTIFY, so it is the one function the read-all always reads; every notifying char was
     already pushed on subscribe, and a pushed function is not read): no SNAP of the half-read set,
     one backoff reconnect by bond, then a fresh read-all -> SNAP."""
-    hci_unit.call(_drop_on_read, hci_unit.unit, "general")   # not read while pairing (1004 is)
-    fw = host_fw(hci_unit); _pair(fw, hci_unit)
-    fw.expect("LOG session: reconnect in", timeout=40)      # the session saw the link go
-    assert not any(line.startswith("SNAP") for line in fw.log)   # nothing from the torn read-all
+    hci_unit.call(_drop_on_read, hci_unit.unit, "general")  # not read while pairing (1004 is)
+    fw = host_fw(hci_unit)
+    _pair(fw, hci_unit)
+    fw.expect("LOG session: reconnect in", timeout=40)  # the session saw the link go
+    assert not any(line.startswith("SNAP") for line in fw.log)  # nothing from the torn read-all
     assert not any("subscribe" in line and "failed" in line for line in fw.log)  # dropped in the reads
-    snap = fw.expect("SNAP", timeout=60)                    # backoff reconnect + fresh read_all
-    assert hci_unit.unit.drop_on_read is None               # the knob fired (one-shot)
+    snap = fw.expect("SNAP", timeout=60)  # backoff reconnect + fresh read_all
+    assert hci_unit.unit.drop_on_read is None  # the knob fired (one-shot)
     assert set(snap["fn"]) == set(hci_unit.call(_served_frames, hci_unit.unit))
     lost = [line for line in fw.log if line.startswith("LOG session: reconnect in")]
-    assert lost == ["LOG session: reconnect in 1000 ms"], lost   # one drop, one reconnect
+    assert lost == ["LOG session: reconnect in 1000 ms"], lost  # one drop, one reconnect

@@ -13,6 +13,7 @@ source with live reads — the transforms a raw field dump can't tell you:
 - Camping: `State`(master), `UsbCharger`, lights are INDEPENDENT outputs sharing
   one frame; `Enable` is a read-only vehicle signal (tracks terminal-15).
 """
+
 from __future__ import annotations
 
 
@@ -36,8 +37,9 @@ def water(d: dict) -> dict:
         if unit:
             liters, pct = level, _pct(level, volume)
         else:
-            pct, liters = level, (volume * level) // 100   # truncate, like the app (qg/b.java:414 h())
+            pct, liters = level, (volume * level) // 100  # truncate, like the app (qg/b.java:414 h())
         return {"liters": liters, "capacity_l": volume, "percent": pct}
+
     return {
         "installed": bool(d.get("Installed")),
         "fresh": tank(d.get("FreshWaterUnit"), d.get("FreshWaterLevel"), d.get("FreshWaterVolume")),
@@ -50,8 +52,14 @@ def water(d: dict) -> dict:
     }
 
 
-_FRESH_WATER_ALERT = {1: "pump_protection", 2: "sensor_error", 3: "error", 7: "error",
-                      4: "pump_error", 5: "empty"}
+_FRESH_WATER_ALERT = {
+    1: "pump_protection",
+    2: "sensor_error",
+    3: "error",
+    7: "error",
+    4: "pump_error",
+    5: "empty",
+}
 _WASTE_WATER_ALERT = {1: "full", 2: "sensor_error", 3: "error"}
 
 
@@ -62,14 +70,18 @@ def energy(d: dict) -> dict:
     # (second) battery: always live. Suppress only the starter's sentinel garbage,
     # never the real leisure/source signals (solar stays even when not fitted).
     _b1 = d.get("IOneBattBemAfs")
-    b1_valid = _b1 is not None and _b1 != 0x81   # missing (short frame) -> not valid, not 0.0
+    b1_valid = _b1 is not None and _b1 != 0x81  # missing (short frame) -> not valid, not 0.0
     # A source's raw current reads a not-fitted sentinel (observed 511 / 0x1FF over
     # 14 d telemetry: solar_current constant 511 with solar absent) when the source
     # isn't installed. Null the current in that case so the sentinel never surfaces as
     # a reading — the signal stays present (None), like the batt1 0x81 handling. The
     # *_power fields read a clean 0 when absent, so they're left as-is.
-    dcdc_i, shore_i, solar_i = (bool(d.get("DcdcInstalled")), bool(d.get("LadInstalled")),
-                                bool(d.get("PvInstalled")))
+    dcdc_i, shore_i, solar_i = (
+        bool(d.get("DcdcInstalled")),
+        bool(d.get("LadInstalled")),
+        bool(d.get("PvInstalled")),
+    )
+
     # Scales/signs/enums verified against the app view-model xf/d.java (2026-07-08, catalog
     # flipped to verified 2026-09-07): powers = raw*10 W (PDcdc signed, PLand/PPv unsigned);
     #   ITwoBatt signed /10 A (:159); ILand/IPv UNSIGNED /10 A (:173/:175); IDcdc signed, NO /10
@@ -79,20 +91,20 @@ def energy(d: dict) -> dict:
     def soc_pct(level):
         return level * 10 if isinstance(level, int) and 0 <= level <= 10 else None
 
-    def src_state(v):   # xf/d.java:203 k(): raw 0=inactive 1=active 2=standby 6=init, else=error
+    def src_state(v):  # xf/d.java:203 k(): raw 0=inactive 1=active 2=standby 6=init, else=error
         #   (bf/a.java holds the enum; its ordinals differ from these wire values)
         return None if v is None else {0: "inactive", 1: "active", 2: "standby", 6: "init"}.get(v, "error")
 
     soc1, soc2 = d.get("SocOneBattAfs"), d.get("SocTwoBattAfs")
     return {
         "installed": True,
-        "stale": stale,               # True => STARTER values are last-known, not live
+        "stale": stale,  # True => STARTER values are last-known, not live
         "age_min": d.get("AgeOneBattValuesMinutes"),
         # --- STARTER (default car) battery: engine-on only ---
         "batt1_v": round(d.get("UOneBattBemAfs", 0) * 0.1, 1) if b1_valid else None,
         "batt1_current": _signed(d.get("IOneBattBemAfs", 0), 8) if b1_valid else None,  # signed A, no scale
-        "soc1_level": soc1,                        # coarse 0-15 (11-15 invalid)
-        "soc1_pct": soc_pct(soc1),                 # 0-10 -> 0/10/../100 %; else None
+        "soc1_level": soc1,  # coarse 0-15 (11-15 invalid)
+        "soc1_pct": soc_pct(soc1),  # 0-10 -> 0/10/../100 %; else None
         # --- LEISURE (second) battery: always live ---
         "batt2_v": round(d.get("UTwoBattBemAfs", 0) * 0.1, 1),
         "batt2_current": round(_signed(d.get("ITwoBattBemAfs", 0), 16) * 0.1, 1),  # signed A (/10)
@@ -101,7 +113,7 @@ def energy(d: dict) -> dict:
         "batt2_remaining_h": d.get("tTwoBattRemainingh"),
         "batt2_remaining_min": d.get("tTwoBattRemainingmin"),
         # --- sources feeding the leisure battery (DC-DC=vehicle/alternator, Land=shore, Pv=solar) ---
-        "dcdc_charging": src_state(d.get("StateDcdcAfs")) == "active",   # active(1) only, not "nonzero"
+        "dcdc_charging": src_state(d.get("StateDcdcAfs")) == "active",  # active(1) only, not "nonzero"
         "dcdc_state": src_state(d.get("StateDcdcAfs")),
         "shore_state": src_state(d.get("StateLandAfs")),
         "solar_state": src_state(d.get("StatePvAfs")),
@@ -111,22 +123,38 @@ def energy(d: dict) -> dict:
         "dcdc_power": _signed(d.get("PDcdcAfs", 0), 8) * 10 if dcdc_i else 0,
         "shore_power": d.get("PLandAfs", 0) * 10 if shore_i else 0,
         "solar_power": d.get("PPvAfs", 0) * 10 if solar_i else 0,
-        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16) if dcdc_i else None,   # signed A, no /10; +2 on AmbSwVersion 0409/0410 via apply_sw_corrections()
-        "shore_current": round(d.get("ILandAfs", 0) * 0.1, 1) if shore_i else None,   # unsigned A (/10)
-        "solar_current": round(d.get("IPvAfs", 0) * 0.1, 1) if solar_i else None,     # unsigned A (/10)
+        "dcdc_current": _signed(d.get("IDcdcAfs", 0), 16)
+        if dcdc_i
+        else None,  # signed A, no /10; +2 on AmbSwVersion 0409/0410 via apply_sw_corrections()
+        "shore_current": round(d.get("ILandAfs", 0) * 0.1, 1) if shore_i else None,  # unsigned A (/10)
+        "solar_current": round(d.get("IPvAfs", 0) * 0.1, 1) if solar_i else None,  # unsigned A (/10)
         "dcdc_installed": dcdc_i,
         "shore_installed": shore_i,
         "solar_installed": solar_i,
-        "energy_mode": d.get("EnergyMode"),                     # 0=normal 1=max_charge 2=eco 3=error (bf/c.java)
+        "energy_mode": d.get("EnergyMode"),  # 0=normal 1=max_charge 2=eco 3=error (bf/c.java)
         "energy_mode_locked": bool(d.get("EnergyModeNotSelectable")),
-        "warning_level": d.get("WarningLevelTwo"),              # 0=none 1=level1 2=level2 (bf/d.java)
+        "warning_level": d.get("WarningLevelTwo"),  # 0=none 1=level1 2=level2 (bf/d.java)
         "warning_active": bool(d.get("WarningLevelActive")),
         "derating_temp_active": bool(d.get("CurrentDeratingTemperature")),
         "sleep_warning": bool(d.get("SleepWarning")),
-        "faults": [k for k in ("SystemError", "DcdcDefect", "PvDefect", "LandDefect",
-                               "LandNotAvailable", "TwoBattNotCharged", "TwoBattSwitchAtCharging",
-                               "TwoBattSwitchAtWorkshop", "WarningLevelTwo", "WarningLevelActive",
-                               "SleepWarning", "CurrentDeratingTemperature") if d.get(k)],
+        "faults": [
+            k
+            for k in (
+                "SystemError",
+                "DcdcDefect",
+                "PvDefect",
+                "LandDefect",
+                "LandNotAvailable",
+                "TwoBattNotCharged",
+                "TwoBattSwitchAtCharging",
+                "TwoBattSwitchAtWorkshop",
+                "WarningLevelTwo",
+                "WarningLevelActive",
+                "SleepWarning",
+                "CurrentDeratingTemperature",
+            )
+            if d.get(k)
+        ],
     }
 
 
@@ -149,31 +177,40 @@ def cooler(d: dict) -> dict:
     return {
         "installed": bool(d.get("Installed")),
         "on": on,
-        "level": d.get("Level"),        # 1-5 cooling level
+        "level": d.get("Level"),  # 1-5 cooling level
         "mode": d.get("Mode"),
-        "timer_active": bool(d.get("TimerState")),   # the cooling-start COUNTDOWN timer (TimerState), NOT quiet
+        "timer_active": bool(
+            d.get("TimerState")
+        ),  # the cooling-start COUNTDOWN timer (TimerState), NOT quiet
         # Quiet ("Flüstermodus") mode. DISPLAY+DECOMPILE-CONFIRMED 2026-08-26: the app's scheduled
         # state is Mode==4 (vf/c.java:168 L0, :167 K0=Mode==2 manual) — NOT NightTimerSet, which read
         # 0 while the unit's own screen showed "Flüstermodus — Geplant von 22:00 bis 06:00". So
         # quiet_scheduled follows Mode, not the (unconfirmed-meaning) NightTimerSet bit, which we no
         # longer surface under a guessed name (it's still in the raw decoded state).
-        "quiet_mode": _COOLER_QUIET.get(d.get("Mode")),   # None | "off" | "manual" | "scheduled"
+        "quiet_mode": _COOLER_QUIET.get(d.get("Mode")),  # None | "off" | "manual" | "scheduled"
         "quiet_scheduled": d.get("Mode") == 4,
-        "quiet_from": d.get("NightTimerHourOn"),    # quiet schedule start hour (0-23; meaningful when scheduled)
-        "quiet_to": d.get("NightTimerHourOff"),     # quiet schedule end hour (0-23)
-        "timer_hour": d.get("TimerHourSet"),        # configured cooling-timer start time
+        "quiet_from": d.get(
+            "NightTimerHourOn"
+        ),  # quiet schedule start hour (0-23; meaningful when scheduled)
+        "quiet_to": d.get("NightTimerHourOff"),  # quiet schedule end hour (0-23)
+        "timer_hour": d.get("TimerHourSet"),  # configured cooling-timer start time
         "timer_min": d.get("TimerMinSet"),
-        "fault": fault,                 # None | "error" | "emergency" | "door_open"
+        "fault": fault,  # None | "error" | "emergency" | "door_open"
         "door_open": fault == "door_open",
-        "error": bool(fault),           # back-compat: any active fault
+        "error": bool(fault),  # back-compat: any active fault
     }
 
 
 # Air-heater ErrorCode (char 1702) -> the app's fault IDs (rf/b.java:461-671: 1 AIR_HEATER_LOW_BATTERY,
 # 2 FUEL_LOW, 3 SYSTEM_ERROR, 4 HEATING_TIME_EXCEEDED, 5 OPERATION_NOT_POSSIBLE; 0 clears). Each
 # maps to a dialog the app shows AFTER a refused write — the heater is never greyed pre-emptively.
-_AIRHEATER_ERROR = {1: "low_battery", 2: "low_fuel", 3: "system_error",
-                    4: "heating_time_exceeded", 5: "not_possible"}
+_AIRHEATER_ERROR = {
+    1: "low_battery",
+    2: "low_fuel",
+    3: "system_error",
+    4: "heating_time_exceeded",
+    5: "not_possible",
+}
 
 
 def airheater(d: dict) -> dict:
@@ -198,12 +235,12 @@ def airheater(d: dict) -> dict:
         # app-observed 2026-09-16). Other values (1/2 running states?) stay UNVERIFIED.
         "timer_armed": d.get("OperationModeAirHeater") == 3,
         "air_distribution": d.get("AirDistribution"),
-        "running_time": d.get("RunningTime"),           # configured run duration (min)
+        "running_time": d.get("RunningTime"),  # configured run duration (min)
         # Timer readback the unit reports (state char 1702; cross-checked bit-exact vs the app's
         # rf/b.java:~395 decoder: RunningTime@24, TimerHour@32, TimerMin@40, RunningTimeinAction@48):
-        "timer_hour": d.get("TimerHour"),               # configured start-at hour
+        "timer_hour": d.get("TimerHour"),  # configured start-at hour
         "timer_min": d.get("TimerMin"),
-        "running_time_remaining": d.get("RunningTimeinAction"),   # counts down while heating
+        "running_time_remaining": d.get("RunningTimeinAction"),  # counts down while heating
     }
 
 
@@ -216,7 +253,7 @@ def campingmode(d: dict) -> dict:
     return {
         "installed": bool(d.get("Installed")),
         "master_on": master,
-        "usb_charger": bool(d.get("UsbCharger")),                 # raw field, normal: on=1
+        "usb_charger": bool(d.get("UsbCharger")),  # raw field, normal: on=1
         # DERIVED truth: the rear USB is physically OFF whenever master is off, even though the
         # UsbCharger field keeps reading 1 (owner-confirmed 2026-08-19). Gate the raw field by
         # master so consumers (UI/MQTT/HA) get "is USB actually powered", not the latched field.
@@ -224,8 +261,8 @@ def campingmode(d: dict) -> dict:
         # inverted+combined AND only meaningful while master on (fields default to 0
         # when camping is off, which would otherwise read as a false "lit").
         "lights_on": master and d.get("InteriorLight") == 0 and d.get("OutsideLight") == 0,
-        "outputs_controllable": master,                            # lights/USB toggle only when master on
-        "enable": bool(d.get("Enable")),          # read-only vehicle signal (terminal-15)
+        "outputs_controllable": master,  # lights/USB toggle only when master on
+        "enable": bool(d.get("Enable")),  # read-only vehicle signal (terminal-15)
     }
 
 
@@ -236,12 +273,22 @@ _ROOF_POS = {0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error"}
 # 0=none 1=child_lock 4=error 5=driving 6=sensor_error 7=emergency_locked 10=not_possible
 # 11=low_battery. Names are the app's internal IDs; what they MEAN to the user (child_lock = an
 # over-use cooldown, driving = roof open while the vehicle may move) is in alert-states.md.
-_ROOF_ALERT = {1: "child_lock", 4: "error", 5: "driving", 6: "sensor_error", 7: "emergency_locked",
-               10: "not_possible", 11: "low_battery",
-               # Observed 2026-09-16 with the real app against the fake unit (tools/applab):
-               # 2/3/12 -> roof tile "Function currently in use" (app's k() set), 9 -> "Only
-               # possible when stationary" (E0 flow). No dialog, just a refused move + tile text.
-               2: "in_use", 3: "in_use", 12: "in_use", 9: "not_stationary"}
+_ROOF_ALERT = {
+    1: "child_lock",
+    4: "error",
+    5: "driving",
+    6: "sensor_error",
+    7: "emergency_locked",
+    10: "not_possible",
+    11: "low_battery",
+    # Observed 2026-09-16 with the real app against the fake unit (tools/applab):
+    # 2/3/12 -> roof tile "Function currently in use" (app's k() set), 9 -> "Only
+    # possible when stationary" (E0 flow). No dialog, just a refused move + tile text.
+    2: "in_use",
+    3: "in_use",
+    12: "in_use",
+    9: "not_stationary",
+}
 # InfoPopUp 5 = ROOF_OP_DRIVING (docs/business-logic/alert-states.md): the unit refuses to move the
 # pop-top while driving. It was missing here, so the web UI's move gate saw alert=None and left
 # open/close enabled in exactly the state the app blocks them (found by code review of #174).
@@ -277,7 +324,7 @@ def roof(d: dict) -> dict:
     pos = d.get("Position")
     return {
         "installed": installed,
-        "position": pos,                          # raw 0-15 (0 = closed/down)
+        "position": pos,  # raw 0-15 (0 = closed/down)
         "position_name": _ROOF_POS.get(pos, "other") if pos is not None else None,
         # alert is the app's InfoPopUp popup, gated on the roof being fitted (ig/c.java gate)
         "alert": _ROOF_ALERT.get(d.get("InfoPopUp")) if installed else None,
@@ -285,9 +332,24 @@ def roof(d: dict) -> dict:
     }
 
 
-_LZONES = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seven": 7,
-           "Eight": 8, "Nine": 9, "OneZero": 10, "OneOne": 11, "OneTwo": 12, "OneThree": 13,
-           "OneFour": 14, "OneFive": 15, "OneSix": 16}
+_LZONES = {
+    "One": 1,
+    "Two": 2,
+    "Three": 3,
+    "Four": 4,
+    "Five": 5,
+    "Six": 6,
+    "Seven": 7,
+    "Eight": 8,
+    "Nine": 9,
+    "OneZero": 10,
+    "OneOne": 11,
+    "OneTwo": 12,
+    "OneThree": 13,
+    "OneFour": 14,
+    "OneFive": 15,
+    "OneSix": 16,
+}
 
 
 # Zones that physically exist on the reference van: L1-L8 (reading/kitchen/roof-ambient/outside,
@@ -295,7 +357,9 @@ _LZONES = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seve
 # 2026-08-30 by single-light isolation). The never-equipped zones (L10/L11, L13-L16) read constant
 # not-installed defaults (0 or 13) that ignore SET_BRIGHTNESS, so they must NOT count toward
 # "any light on".
-_REAL_LIGHT_ZONES = frozenset((1, 2, 3, 4, 5, 6, 7, 8, 9, 12))  # full van lamp set, DEVICE-mapped 2026-08-30 (L12=Eingang)
+_REAL_LIGHT_ZONES = frozenset(
+    (1, 2, 3, 4, 5, 6, 7, 8, 9, 12)
+)  # full van lamp set, DEVICE-mapped 2026-08-30 (L12=Eingang)
 
 
 def lighting(d: dict) -> dict:
@@ -304,7 +368,7 @@ def lighting(d: dict) -> dict:
     for suf, num in _LZONES.items():
         v = d.get("BrightnessL" + suf)
         out["brightness_zone_%d" % num] = v
-        if v and v not in (13, 14):   # 13=NOT_EQUIPPED, 14=leave-unchanged — real brightness only
+        if v and v not in (13, 14):  # 13=NOT_EQUIPPED, 14=leave-unchanged — real brightness only
             # No zone whitelist: not-equipped zones always read 13, so they exclude themselves.
             # DEVICE-proven 2026-08-30: zone 9 is the pop-top READING light (was wrongly excluded
             # by a 1..8 whitelist -> any_on lied False while the lamp burned).
@@ -326,12 +390,14 @@ def _sw_ascii(v):
 def general(d: dict) -> dict:
     return {
         "installed": True,
-        "comm_version": d.get("CommunicationVersion"),      # 1-byte int
-        "cm_sw_version": _sw_ascii(d.get("CmSwVersion")),    # 4 ASCII bytes -> "0207"
+        "comm_version": d.get("CommunicationVersion"),  # 1-byte int
+        "cm_sw_version": _sw_ascii(d.get("CmSwVersion")),  # 4 ASCII bytes -> "0207"
         "amb_sw_version": _sw_ascii(d.get("AmbSwVersion")),  # 4 ASCII bytes -> "0410" (feeds the +2 gate)
         # True when the unit runs firmware/protocol the project hasn't validated -> UI warning +
         # arms the drift capture (serve.poll). See _TESTED_AMB_SW / _TESTED_COMM.
-        "firmware_untested": _firmware_untested(_sw_ascii(d.get("AmbSwVersion")), d.get("CommunicationVersion")),
+        "firmware_untested": _firmware_untested(
+            _sw_ascii(d.get("AmbSwVersion")), d.get("CommunicationVersion")
+        ),
     }
 
 
@@ -345,13 +411,13 @@ def livingroomheater(d: dict) -> dict:
         "installed": bool(d.get("Installed")),
         "air_on": bool(d.get("StateAir")),
         "water_on": bool(d.get("StateWater")),
-        "air_temp": d.get("TemperatureAir"),        # 8-bit raw 0-255, scale UNVERIFIED (no unit)
+        "air_temp": d.get("TemperatureAir"),  # 8-bit raw 0-255, scale UNVERIFIED (no unit)
         # State TemperatureWater is a 1-BIT boolean flag (fg/b.java:238 subList(5,6)), NOT a
         # temperature — surface it as a flag; its exact meaning is UNVERIFIED.
         "water_temp_flag": bool(d.get("TemperatureWater")),
         "mode": d.get("Mode"),
-        "error_code": _LRHEATER_ERROR.get(err) if err else None,   # heater/gas/fuel/window enum
-        "error": bool(err),                          # back-compat: any non-zero
+        "error_code": _LRHEATER_ERROR.get(err) if err else None,  # heater/gas/fuel/window enum
+        "error": bool(err),  # back-compat: any non-zero
     }
 
 
@@ -361,7 +427,7 @@ def roofaircondition(d: dict) -> dict:
         "on": bool(d.get("State")),
         "mode": d.get("Mode"),
         "fan_speed": d.get("Fanspeed"),
-        "target_temp": d.get("Temperature"),        # scale UNVERIFIED
+        "target_temp": d.get("Temperature"),  # scale UNVERIFIED
         "error": bool(d.get("Error")),
     }
 
@@ -392,7 +458,7 @@ def stairs(d: dict) -> dict:
     return {
         "installed": bool(d.get("Installed")),
         "extended": bool(d.get("State")),
-        "mode": d.get("OperationMode"),         # raw bit; app indicator = its inverse (og/b.java:101)
+        "mode": d.get("OperationMode"),  # raw bit; app indicator = its inverse (og/b.java:101)
         "obstacle_sensor": bool(d.get("Sensor")),
     }
 
@@ -422,6 +488,7 @@ def vehicle(d: dict) -> dict:
        state (terminal-15), car variant, unit real-time clock and the two-axis
        (roll/pitch) leveling readout, exposing them as interpreted signals.
     """
+
     def s16(v):
         return None if v is None else (v - 65536 if v >= 32768 else v)
 
@@ -431,6 +498,7 @@ def vehicle(d: dict) -> dict:
         # raw 35 -> 0.35° ~ app pitch 0.3°. The old "-57/-256" were just -0.57°/-2.56° unscaled.
         s = s16(v)
         return None if s is None else round(s / 100.0, 2)
+
     y, mo, da = d.get("CarTimeYear"), d.get("CarTimeMonth"), d.get("CarTimeDay")
     h, mi, se = d.get("CarTimeHour"), d.get("CarTimeMinute"), d.get("CarTimeSecond")
     clock = None
@@ -441,10 +509,10 @@ def vehicle(d: dict) -> dict:
         clock = "%04d-%02d-%02d %02d:%02d:%02d" % (y + 1900, mo + 1, da, h, mi, se)
     return {
         "installed": True,
-        "ignition_on": bool(d.get("TerminalOneFive")),   # terminal-15 line
+        "ignition_on": bool(d.get("TerminalOneFive")),  # terminal-15 line
         "car_variant": d.get("CarVariant"),
         "level_popup": d.get("CarLevelPopUp"),
-        "level_roll": deg(d.get("CarLevelRoll")),         # degrees (signed, 0.01° resolution)
+        "level_roll": deg(d.get("CarLevelRoll")),  # degrees (signed, 0.01° resolution)
         "level_pitch": deg(d.get("CarLevelPitch")),
         "car_clock": clock,
     }
@@ -460,10 +528,19 @@ def _generic(d: dict) -> dict:
 
 
 INTERPRETERS = {
-    "water": water, "energy": energy, "cooler": cooler, "airheater": airheater,
-    "campingmode": campingmode, "roof": roof, "lighting": lighting, "general": general,
-    "livingroomheater": livingroomheater, "roofaircondition": roofaircondition,
-    "satelliteantenna": satelliteantenna, "stairs": stairs, "vehicle": vehicle,
+    "water": water,
+    "energy": energy,
+    "cooler": cooler,
+    "airheater": airheater,
+    "campingmode": campingmode,
+    "roof": roof,
+    "lighting": lighting,
+    "general": general,
+    "livingroomheater": livingroomheater,
+    "roofaircondition": roofaircondition,
+    "satelliteantenna": satelliteantenna,
+    "stairs": stairs,
+    "vehicle": vehicle,
 }
 
 
@@ -481,8 +558,8 @@ _DCDC_PLUS2_SW = frozenset({"0409", "0410"})
 # Firmware/protocol versions the project has been VALIDATED against (own-vehicle testing +
 # decompile). Anything outside this is surfaced as "untested" so a user on newer firmware knows the
 # decode/semantics may have drifted, and it arms the fw-drift raw-frame capture (see serve.poll).
-_TESTED_AMB_SW = frozenset({"0409", "0410"})   # camper-unit ("Ambiente") firmware builds seen here
-_TESTED_COMM = 2                                # CommunicationVersion = the protocol structure version
+_TESTED_AMB_SW = frozenset({"0409", "0410"})  # camper-unit ("Ambiente") firmware builds seen here
+_TESTED_COMM = 2  # CommunicationVersion = the protocol structure version
 
 
 def _firmware_untested(amb_sw_version, comm_version) -> bool:
@@ -504,9 +581,12 @@ def apply_sw_corrections(states: dict) -> dict:
     single-function caller (``cli get energy``) that lacks ``general`` context simply skips it.
     """
     en, gen = states.get("energy"), states.get("general")
-    if (isinstance(en, dict) and isinstance(gen, dict)
-            and en.get("dcdc_current") is not None
-            and gen.get("amb_sw_version") in _DCDC_PLUS2_SW):
+    if (
+        isinstance(en, dict)
+        and isinstance(gen, dict)
+        and en.get("dcdc_current") is not None
+        and gen.get("amb_sw_version") in _DCDC_PLUS2_SW
+    ):
         en["dcdc_current"] = en["dcdc_current"] + 2
     return states
 

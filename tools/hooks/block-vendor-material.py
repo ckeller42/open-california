@@ -11,6 +11,7 @@ or secrets/tokens (*.env)". This is the local enforcement of that rule.
 Reads the PreToolUse event JSON on stdin. Silent (exit 0) when the write is clean; on a match it
 exits 2 with the reason on stderr, which blocks the tool call and tells the model why.
 """
+
 import json
 import re
 import sys

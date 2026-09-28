@@ -4,6 +4,7 @@
    :id: T_FAKE_UNIT_CONTRACT
    :links: R_FAKE_UNIT_FIDELITY
 """
+
 import asyncio
 
 import pytest
@@ -43,9 +44,9 @@ def test_advertises_from_a_rotating_private_address_over_a_fixed_identity():
         return str(first), str(second), unit.advertising_address
 
     first, second, advertising_address = asyncio.run(run())
-    assert first != IDENTITY and second != IDENTITY      # never advertises its identity
-    assert first != second                               # rotate_address() moves it
-    assert advertising_address == second                 # .advertising_address tracks the CURRENT RPA
+    assert first != IDENTITY and second != IDENTITY  # never advertises its identity
+    assert first != second  # rotate_address() moves it
+    assert advertising_address == second  # .advertising_address tracks the CURRENT RPA
 
 
 def test_pairs_with_a_fresh_passkey_and_reveals_its_identity():
@@ -81,8 +82,11 @@ def test_just_works_pairing_is_refused():
     async def run():
         _, unit, central = await _unit_and_central()
         central.pairing_config_factory = lambda conn: PairingConfig(
-            sc=True, mitm=False, bonding=True,
-            delegate=PairingDelegate(io_capability=PairingDelegate.IoCapability.NO_OUTPUT_NO_INPUT))
+            sc=True,
+            mitm=False,
+            bonding=True,
+            delegate=PairingDelegate(io_capability=PairingDelegate.IoCapability.NO_OUTPUT_NO_INPUT),
+        )
         conn = await central.connect(await scan_for(central))
         with pytest.raises(ProtocolError):
             await central.pair(conn)
@@ -110,7 +114,7 @@ def test_refuse_connections_drops_the_link():
         conn = await central.connect(await scan_for(central))
         dropped: asyncio.Future = asyncio.get_running_loop().create_future()
         conn.on("disconnection", lambda reason: not dropped.done() and dropped.set_result(reason))
-        await asyncio.wait_for(dropped, 2.0)   # the unit disconnects it, not left to GC/timeout
+        await asyncio.wait_for(dropped, 2.0)  # the unit disconnects it, not left to GC/timeout
 
     asyncio.run(run())
 
@@ -123,8 +127,8 @@ def test_pairing_mode_off_still_allows_a_bonded_central_to_reconnect():
         await central.pair(conn)
         await conn.disconnect()
 
-        unit.pairing_mode = False   # the pairing screen is closed — NEW bonds are refused, but
-        conn2 = await central.connect(await scan_for(central))   # an existing bond still reconnects
+        unit.pairing_mode = False  # the pairing screen is closed — NEW bonds are refused, but
+        conn2 = await central.connect(await scan_for(central))  # an existing bond still reconnects
         await conn2.encrypt()
         return str(conn2.peer_address), conn2.is_encrypted
 
@@ -135,7 +139,7 @@ def test_pairing_mode_off_still_allows_a_bonded_central_to_reconnect():
 def test_console_pair_command_toggles_pairing_mode():
     async def run():
         _, unit, _ = await _unit_and_central()
-        assert unit.pairing_mode is True   # starts open, like the unit's default screen state
+        assert unit.pairing_mode is True  # starts open, like the unit's default screen state
         unit._console_line("pair off")
         off = unit.pairing_mode
         unit._console_line("pair on")
@@ -157,13 +161,13 @@ def test_console_forget_command_clears_bonds():
 
         before = await unit.device.keystore.get_all()
         unit._console_line("forget")
-        await asyncio.wait_for(unit.tasks[-1], 2.0)   # let the scheduled forget_bonds() run
+        await asyncio.wait_for(unit.tasks[-1], 2.0)  # let the scheduled forget_bonds() run
         after = await unit.device.keystore.get_all()
         return before, after
 
     before, after = asyncio.run(run())
-    assert before                 # sanity: pairing actually stored a bond
-    assert after == []            # the console command's dispatcher path really clears it
+    assert before  # sanity: pairing actually stored a bond
+    assert after == []  # the console command's dispatcher path really clears it
 
 
 def test_console_rotate_command_changes_advertising_address():
@@ -171,12 +175,12 @@ def test_console_rotate_command_changes_advertising_address():
         _, unit, central = await _unit_and_central()
         first = await scan_for(central)
         unit._console_line("rotate")
-        await asyncio.wait_for(unit.tasks[-1], 2.0)   # let the scheduled rotate_address() run
+        await asyncio.wait_for(unit.tasks[-1], 2.0)  # let the scheduled rotate_address() run
         second = await scan_for(central)
         return str(first), str(second), unit.advertising_address
 
     first, second, advertising_address = asyncio.run(run())
-    assert first != second                # the console command's dispatcher path really rotates
+    assert first != second  # the console command's dispatcher path really rotates
     assert advertising_address == second
 
 
@@ -195,11 +199,13 @@ def _char(peer, slot):
     from bumble.core import UUID
 
     from tools.fake_unit_peripheral import cu
+
     return peer.get_characteristics_by_uuid(UUID(cu(slot)))[0]
 
 
 def test_heartbeat_writes_are_counted():
     """``unit.beats`` counts 1003 writes — the firmware e2e checks its heartbeat with it."""
+
     async def run():
         unit, peer = await _connected_peer()
         before = unit.beats
@@ -212,12 +218,13 @@ def test_heartbeat_writes_are_counted():
 
 def test_set_raw_serves_the_frame_and_notifies_a_subscriber():
     """``set_raw`` serves a frame verbatim (a truncated one too) and pushes it to a subscriber."""
+
     async def run():
         unit, peer = await _connected_peer()
-        ch = _char(peer, "1102")                     # cooler
+        ch = _char(peer, "1102")  # cooler
         got: asyncio.Queue = asyncio.Queue()
         await ch.subscribe(lambda v: got.put_nowait(bytes(v)))
-        await asyncio.wait_for(got.get(), 2.0)      # the on-subscribe push of the current value
+        await asyncio.wait_for(got.get(), 2.0)  # the on-subscribe push of the current value
         short = unit.raw["cooler"][:1]
         unit.set_raw("cooler", short, notify=False)
         read_back = bytes(await ch.read_value())
@@ -234,18 +241,18 @@ def test_set_raw_serves_the_frame_and_notifies_a_subscriber():
 def test_drop_on_read_hangs_up_on_that_read_only_once():
     """``drop_on_read`` (test knob, default off) ends the link on the next GATT read of that
     function instead of answering it; other reads, and later links, are served as before."""
+
     async def run():
         unit, peer = await _connected_peer()
         assert unit.drop_on_read is None
-        other = bytes(await _char(peer, "1602").read_value())          # energy: served
+        other = bytes(await _char(peer, "1602").read_value())  # energy: served
         dropped: asyncio.Future = asyncio.get_running_loop().create_future()
-        peer.connection.on("disconnection",
-                           lambda reason: not dropped.done() and dropped.set_result(reason))
+        peer.connection.on("disconnection", lambda reason: not dropped.done() and dropped.set_result(reason))
         unit.drop_on_read = "cooler"
-        with pytest.raises((Exception, asyncio.CancelledError)):     # no response: the link ends
+        with pytest.raises((Exception, asyncio.CancelledError)):  # no response: the link ends
             await asyncio.wait_for(_char(peer, "1102").read_value(), 2.0)
         await asyncio.wait_for(dropped, 2.0)
         return other, unit.drop_on_read
 
     other, knob = asyncio.run(run())
-    assert other and knob is None                                    # one-shot
+    assert other and knob is None  # one-shot

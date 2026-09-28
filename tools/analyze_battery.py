@@ -22,6 +22,7 @@ Influx it prints a clear "no data" message instead of failing.
 The metric functions below are pure (``series`` = ``[(epoch_s, value)]`` ascending) so they are
 unit-tested without a database.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -99,28 +100,42 @@ def classify_gap(start, end, outcomes):
     :returns: ``(label, counts)``.
     """
     from collections import Counter
+
     rows = [r for r in outcomes if start - 90 <= r.get("ts", 0) <= end + 90]
     if not rows:
-        return ("DAEMON-DOWN — no poll attempts were logged in this window, so the daemon itself "
-                "was not running (crash / restart / Pi reboot / a manual redeploy)", {})
+        return (
+            "DAEMON-DOWN — no poll attempts were logged in this window, so the daemon itself "
+            "was not running (crash / restart / Pi reboot / a manual redeploy)",
+            {},
+        )
     c = Counter(r.get("outcome") for r in rows)
     n = len(rows)
     if c.get("asleep", 0) >= n * 0.5:
-        return (f"VAN DEEP-SLEEP — {c.get('asleep', 0)}/{n} cycles reported 'asleep' "
-                "(unit stopped advertising; expected while parked)", dict(c))
+        return (
+            f"VAN DEEP-SLEEP — {c.get('asleep', 0)}/{n} cycles reported 'asleep' "
+            "(unit stopped advertising; expected while parked)",
+            dict(c),
+        )
     if c.get("ble_error", 0) + c.get("error", 0) >= n * 0.5:
         hrs = (end - start) / 3600
         # A LONG unbroken run of DeviceNotFound (won't self-resolve like deep sleep) points at the
         # unit's Bluetooth being switched OFF in its settings, or a hard link problem — not a blip.
-        kind = ("UNIT BLUETOOTH DISABLED / hard link problem" if hrs >= 0.5
-                else "OUR-SIDE CONNECTION/BLE FAILURE")
-        return (f"{kind} — {c.get('ble_error', 0) + c.get('error', 0)}/{n} cycles errored "
-                f"(DeviceNotFound) over {hrs:.1f}h. Short runs = phone-app slot contention / hci0 / "
-                "a transient drop; a long persistent run = the unit's BLE is off (re-enable in its "
-                "settings) — either way the van, not buspi", dict(c))
+        kind = (
+            "UNIT BLUETOOTH DISABLED / hard link problem" if hrs >= 0.5 else "OUR-SIDE CONNECTION/BLE FAILURE"
+        )
+        return (
+            f"{kind} — {c.get('ble_error', 0) + c.get('error', 0)}/{n} cycles errored "
+            f"(DeviceNotFound) over {hrs:.1f}h. Short runs = phone-app slot contention / hci0 / "
+            "a transient drop; a long persistent run = the unit's BLE is off (re-enable in its "
+            "settings) — either way the van, not buspi",
+            dict(c),
+        )
     if c.get("ok", 0) >= n * 0.5:
-        return (f"INFLUX-WRITE FAILURE? — {c.get('ok', 0)}/{n} cycles polled OK yet no battery row "
-                "was stored (network to Influx / token / bucket), i.e. NOT a real telemetry gap", dict(c))
+        return (
+            f"INFLUX-WRITE FAILURE? — {c.get('ok', 0)}/{n} cycles polled OK yet no battery row "
+            "was stored (network to Influx / token / bucket), i.e. NOT a real telemetry gap",
+            dict(c),
+        )
     return (f"MIXED — {dict(c)}", dict(c))
 
 
@@ -132,7 +147,7 @@ def age_summary(age_series, stale_at=AGE_STALE_SENTINEL):
     fresh_vals = [v for _, v in age_series if v < stale_at]
     # longest consecutive stale run (in seconds)
     longest, cur_start = 0, None
-    for (ts, v) in age_series:
+    for ts, v in age_series:
         if v >= stale_at:
             cur_start = ts if cur_start is None else cur_start
             longest = max(longest, ts - cur_start)
@@ -151,13 +166,20 @@ def verdict(name, s, age_stale_frac=None):
     if not s or s.get("n", 0) < 3:
         return f"{name}: insufficient data ({s.get('n', 0)} samples)"
     hrs = s["longest_frozen_s"] / 3600
-    tag = ("STALE-RISK" if s["change_frac"] < 0.02 or hrs > 24 else
-           "CAUTION" if s["change_frac"] < 0.1 or hrs > 8 else "TRUSTWORTHY")
+    tag = (
+        "STALE-RISK"
+        if s["change_frac"] < 0.02 or hrs > 24
+        else "CAUTION"
+        if s["change_frac"] < 0.1 or hrs > 8
+        else "TRUSTWORTHY"
+    )
     extra = ""
     if name.startswith("age_min") and age_stale_frac is not None:
         extra = f"; unit-reported stale {age_stale_frac * 100:.0f}% of the time"
-    return (f"{name}: {tag} — {s['changes']} changes / {s['n']} samples over "
-            f"{s['span_s'] / 86400:.1f}d, longest frozen {hrs:.1f}h, range {s['min']}..{s['max']}{extra}")
+    return (
+        f"{name}: {tag} — {s['changes']} changes / {s['n']} samples over "
+        f"{s['span_s'] / 86400:.1f}d, longest frozen {hrs:.1f}h, range {s['min']}..{s['max']}{extra}"
+    )
 
 
 def _fmt_dur(sec):
@@ -177,6 +199,7 @@ def analyze(days=7.0, every="1m", gap_min=10.0, outcomes_path=None):
     import time
 
     from calictl import history, influx
+
     if outcomes_path is None:
         outcomes_path = os.environ.get("CALICTL_OUTCOMES_CACHE")
         if not outcomes_path:
@@ -190,21 +213,26 @@ def analyze(days=7.0, every="1m", gap_min=10.0, outcomes_path=None):
     ref = influx.field_series("soc2_pct", "energy", days=days, every=every, fn="last")
     print(f"=== Battery reliability over {days:g} days (every {every}, aggregate=last) ===")
     if not ref:
-        print("No InfluxDB data (token unset, Influx unreachable, or empty bucket). "
-              "Run on buspi with /etc/buspi/*.env sourced.")
+        print(
+            "No InfluxDB data (token unset, Influx unreachable, or empty bucket). "
+            "Run on buspi with /etc/buspi/*.env sourced."
+        )
         return {}
     gaps = polling_gaps([t for t, _ in ref], gap_min * 60)
     total_gap = sum(d for *_, d in gaps)
     outcomes = history.load_jsonl(outcomes_path, since=ref[0][0] - 3600)
     log_start = min((r["ts"] for r in outcomes if "ts" in r), default=None)
-    print(f"Polling: {len(ref)} windows; {len(gaps)} gaps >{gap_min:g}m "
-          f"totalling {_fmt_dur(total_gap)} ({total_gap / (days * 864):.0f}% of the window)."
-          + ("" if outcomes else "  [poll-outcome log empty/unreadable at %s]" % outcomes_path))
+    print(
+        f"Polling: {len(ref)} windows; {len(gaps)} gaps >{gap_min:g}m "
+        f"totalling {_fmt_dur(total_gap)} ({total_gap / (days * 864):.0f}% of the window)."
+        + ("" if outcomes else "  [poll-outcome log empty/unreadable at %s]" % outcomes_path)
+    )
     for a, b, d in gaps:
         when = f"{time.strftime('%a %m-%d %H:%M', time.localtime(a))} .. {time.strftime('%H:%M', time.localtime(b))}"
         if log_start is not None and b < log_start:
-            cause = "predates the poll-outcome log (started %s) — cause not recorded" % \
-                    time.strftime("%m-%d %H:%M", time.localtime(log_start))
+            cause = "predates the poll-outcome log (started %s) — cause not recorded" % time.strftime(
+                "%m-%d %H:%M", time.localtime(log_start)
+            )
         else:
             cause = classify_gap(a, b, outcomes)[0]
         print(f"  {when}  {_fmt_dur(d)}  -> {cause}")
@@ -214,16 +242,24 @@ def analyze(days=7.0, every="1m", gap_min=10.0, outcomes_path=None):
     a = age_summary(age)
     summaries = {}
     for field, label in FIELDS:
-        series = age if field == "age_min" else influx.field_series(field, "energy", days=days,
-                                                                    every=every, fn="last")
+        series = (
+            age
+            if field == "age_min"
+            else influx.field_series(field, "energy", days=days, every=every, fn="last")
+        )
         s = summarize_field(series)
         summaries[field] = s
-        print(verdict(f"{label} [{field}]", s,
-                      age_stale_frac=a.get("stale_frac") if field == "age_min" else None))
+        print(
+            verdict(
+                f"{label} [{field}]", s, age_stale_frac=a.get("stale_frac") if field == "age_min" else None
+            )
+        )
     if a.get("n"):
-        print(f"\nUnit's own staleness (age_min): stale {a['stale_frac'] * 100:.0f}% of samples; "
-              f"longest stale stretch {_fmt_dur(a['longest_stale_s'])}; "
-              f"max fresh age reported {a['max_fresh_age_min']} min.")
+        print(
+            f"\nUnit's own staleness (age_min): stale {a['stale_frac'] * 100:.0f}% of samples; "
+            f"longest stale stretch {_fmt_dur(a['longest_stale_s'])}; "
+            f"max fresh age reported {a['max_fresh_age_min']} min."
+        )
     return summaries
 
 

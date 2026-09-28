@@ -1,4 +1,5 @@
 """Firmware drift-capture + plausibility anchors (calictl.firmware, calictl.anchors)."""
+
 import json
 
 from calictl import anchors, firmware
@@ -6,12 +7,12 @@ from calictl import anchors, firmware
 
 def test_firmware_change_detection():
     """`changed` fires only on a KNOWN-to-KNOWN difference — not first read, not a partial read."""
-    assert firmware.changed(None, ("0410", 2)) is False           # first read: no prev
-    assert firmware.changed(("0410", 2), ("0410", 2)) is False    # unchanged
-    assert firmware.changed(("0409", 2), ("0410", 2)) is True     # amb bump
-    assert firmware.changed(("0410", 2), ("0410", 3)) is True     # protocol (comm) bump
-    assert firmware.changed(("0410", 2), (None, None)) is False   # partial/empty read -> not a change
-    assert firmware.changed(("0410", 2), (None, 2)) is False      # amb missing this poll -> no fake change
+    assert firmware.changed(None, ("0410", 2)) is False  # first read: no prev
+    assert firmware.changed(("0410", 2), ("0410", 2)) is False  # unchanged
+    assert firmware.changed(("0409", 2), ("0410", 2)) is True  # amb bump
+    assert firmware.changed(("0410", 2), ("0410", 3)) is True  # protocol (comm) bump
+    assert firmware.changed(("0410", 2), (None, None)) is False  # partial/empty read -> not a change
+    assert firmware.changed(("0410", 2), (None, 2)) is False  # amb missing this poll -> no fake change
 
 
 def test_firmware_snapshot_captures_raw_frames(tmp_path):
@@ -22,13 +23,15 @@ def test_firmware_snapshot_captures_raw_frames(tmp_path):
     The snapshot must carry the RAW hex frames (the irreplaceable evidence) keyed by function, plus
     the firmware identity, so a later diff can spot what shifted.
     """
-    states = {"general": {"amb_sw_version": "0411", "cm_sw_version": "0208", "comm_version": 3},
-              "energy": {"batt2_v": 13.1}}
+    states = {
+        "general": {"amb_sw_version": "0411", "cm_sw_version": "0208", "comm_version": 3},
+        "energy": {"batt2_v": 13.1},
+    }
     raw = {"general": b"\x30\x34\x31\x31", "energy": b"\x01\x02\x03"}
     path = firmware.write_snapshot(states, raw, str(tmp_path), reason="drift", now=1000.0)
     blob = json.load(open(path))
     assert blob["amb_sw_version"] == "0411" and blob["comm_version"] == 3
-    assert blob["raw_frames_hex"]["general"] == "30343131"        # the wire bytes, recoverable
+    assert blob["raw_frames_hex"]["general"] == "30343131"  # the wire bytes, recoverable
     assert blob["raw_frames_hex"]["energy"] == "010203"
     assert "fw-drift-0411-1000.json" in path
 

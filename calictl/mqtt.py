@@ -8,6 +8,7 @@ via a value_template.
 `paho.mqtt` is imported lazily; `render_discovery`/`flatten`/`render_state` are
 pure and unit-tested without a broker.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,17 +31,27 @@ EntitySpec = namedtuple("EntitySpec", "component key name config")
 
 DEVICE_BASE = {"manufacturer": "Volkswagen", "model": "California T7"}
 FUNCTION_NAMES = {
-    "water": "Water", "energy": "Energy", "cooler": "Fridge", "campingmode": "Camping Mode",
-    "airheater": "Air Heater", "roof": "Roof", "lighting": "Lighting",
-    "livingroomheater": "Living-Room Heater", "roofaircondition": "Roof A/C",
-    "stairs": "Stairs", "satelliteantenna": "Satellite",
+    "water": "Water",
+    "energy": "Energy",
+    "cooler": "Fridge",
+    "campingmode": "Camping Mode",
+    "airheater": "Air Heater",
+    "roof": "Roof",
+    "lighting": "Lighting",
+    "livingroomheater": "Living-Room Heater",
+    "roofaircondition": "Roof A/C",
+    "stairs": "Stairs",
+    "satelliteantenna": "Satellite",
 }
 
 
 def device_block(function: str) -> dict:
-    return {"identifiers": ["vwcamper_%s" % function],
-            "name": "VW California — %s" % FUNCTION_NAMES.get(function, function),
-            "via_device": "vwcamper", **DEVICE_BASE}
+    return {
+        "identifiers": ["vwcamper_%s" % function],
+        "name": "VW California — %s" % FUNCTION_NAMES.get(function, function),
+        "via_device": "vwcamper",
+        **DEVICE_BASE,
+    }
 
 
 _BIN = {"payload_on": "True", "payload_off": "False"}
@@ -48,23 +59,44 @@ _BIN = {"payload_on": "True", "payload_off": "False"}
 # Read-only entities per function (control entities added in Tasks 6-8).
 ENTITY_SPECS: dict[str, list] = {
     "water": [
-        EntitySpec("sensor", "fresh_percent", "Fresh Water", {"unit_of_measurement": "%", "icon": "mdi:water"}),
-        EntitySpec("sensor", "waste_percent", "Waste Water", {"unit_of_measurement": "%", "icon": "mdi:water-off"}),
+        EntitySpec(
+            "sensor", "fresh_percent", "Fresh Water", {"unit_of_measurement": "%", "icon": "mdi:water"}
+        ),
+        EntitySpec(
+            "sensor", "waste_percent", "Waste Water", {"unit_of_measurement": "%", "icon": "mdi:water-off"}
+        ),
     ],
     "energy": [
-        EntitySpec("sensor", "batt2_v", "Leisure Battery", {"unit_of_measurement": "V", "device_class": "voltage"}),
+        EntitySpec(
+            "sensor", "batt2_v", "Leisure Battery", {"unit_of_measurement": "V", "device_class": "voltage"}
+        ),
         EntitySpec("sensor", "soc2_level", "Leisure Battery Level", {"icon": "mdi:battery"}),
         EntitySpec("sensor", "batt2_current", "Leisure Battery Current", {"icon": "mdi:current-dc"}),
-        EntitySpec("sensor", "batt1_v", "Starter Battery", {"unit_of_measurement": "V", "device_class": "voltage"}),
-        EntitySpec("binary_sensor", "dcdc_charging", "DC-DC Charging", {**_BIN, "device_class": "battery_charging"}),
+        EntitySpec(
+            "sensor", "batt1_v", "Starter Battery", {"unit_of_measurement": "V", "device_class": "voltage"}
+        ),
+        EntitySpec(
+            "binary_sensor", "dcdc_charging", "DC-DC Charging", {**_BIN, "device_class": "battery_charging"}
+        ),
         EntitySpec("sensor", "energy_mode", "Energy Mode", {"icon": "mdi:lightning-bolt"}),
         # Freshness: the unit's OWN battery-values age (minutes; 255 => stale/subsystem asleep) +
         # a derived stale flag, so a frozen starter reading is visible rather than trusted blindly.
-        EntitySpec("sensor", "age_min", "Battery Values Age",
-                   {"unit_of_measurement": "min", "icon": "mdi:clock-alert-outline",
-                    "entity_category": "diagnostic"}),
-        EntitySpec("binary_sensor", "stale", "Starter Battery Data Stale",
-                   {**_BIN, "device_class": "problem", "entity_category": "diagnostic"}),
+        EntitySpec(
+            "sensor",
+            "age_min",
+            "Battery Values Age",
+            {
+                "unit_of_measurement": "min",
+                "icon": "mdi:clock-alert-outline",
+                "entity_category": "diagnostic",
+            },
+        ),
+        EntitySpec(
+            "binary_sensor",
+            "stale",
+            "Starter Battery Data Stale",
+            {**_BIN, "device_class": "problem", "entity_category": "diagnostic"},
+        ),
     ],
     "cooler": [
         EntitySpec("binary_sensor", "on", "Fridge On", {**_BIN, "icon": "mdi:fridge"}),
@@ -80,10 +112,17 @@ ENTITY_SPECS: dict[str, list] = {
     "airheater": [
         EntitySpec("binary_sensor", "running", "Air Heater Running", {**_BIN, "device_class": "running"}),
         EntitySpec("sensor", "level", "Air Heater Level", {"icon": "mdi:radiator"}),
-        EntitySpec("sensor", "running_time", "Air Heater Runtime", {"unit_of_measurement": "min", "icon": "mdi:timer"}),
+        EntitySpec(
+            "sensor",
+            "running_time",
+            "Air Heater Runtime",
+            {"unit_of_measurement": "min", "icon": "mdi:timer"},
+        ),
     ],
     "lighting": [
-        EntitySpec("binary_sensor", "any_on", "Interior Lights On", {**_BIN, "icon": "mdi:led-strip-variant"}),
+        EntitySpec(
+            "binary_sensor", "any_on", "Interior Lights On", {**_BIN, "icon": "mdi:led-strip-variant"}
+        ),
     ],
     "roof": [
         EntitySpec("sensor", "position", "Roof Position", {"icon": "mdi:caravan"}),
@@ -181,13 +220,16 @@ def flatten(interp: dict, prefix: str = "") -> dict:
 
 def _config(function, spec):
     uid = "vwcamper_%s_%s" % (function, spec.key)
-    cfg = {"name": spec.name, "unique_id": uid,
-           "state_topic": "%s/%s" % (BASE, function),
-           "value_template": "{{ value_json.%s }}" % spec.key,
-           "availability_topic": "%s/status" % BASE,
-           "expire_after": EXPIRE_AFTER_S,   # go `unavailable` when the reading stops refreshing
-           "device": device_block(function)}
-    cfg.update(spec.config)   # a spec may override (e.g. its own expire_after)
+    cfg = {
+        "name": spec.name,
+        "unique_id": uid,
+        "state_topic": "%s/%s" % (BASE, function),
+        "value_template": "{{ value_json.%s }}" % spec.key,
+        "availability_topic": "%s/status" % BASE,
+        "expire_after": EXPIRE_AFTER_S,  # go `unavailable` when the reading stops refreshing
+        "device": device_block(function),
+    }
+    cfg.update(spec.config)  # a spec may override (e.g. its own expire_after)
     return "%s/%s/%s/config" % (DISCOVERY_PREFIX, spec.component, uid), cfg
 
 
@@ -197,20 +239,23 @@ def _command_config(function, spec):
     accepts ``"on"``); numbers carry min/max from ``spec.config``. When the target
     has a read-back field (``spec.state_key``) the entity also reflects live state."""
     uid = "vwcamper_%s_%s_set" % (function, spec.what)
-    cfg = {"name": spec.name, "unique_id": uid,
-           "command_topic": command_topic(function, spec.what),
-           "availability_topic": "%s/status" % BASE,
-           "device": device_block(function)}
+    cfg = {
+        "name": spec.name,
+        "unique_id": uid,
+        "command_topic": command_topic(function, spec.what),
+        "availability_topic": "%s/status" % BASE,
+        "device": device_block(function),
+    }
     if spec.state_key is not None:
         cfg["state_topic"] = "%s/%s" % (BASE, function)
         cfg["value_template"] = "{{ value_json.%s }}" % spec.state_key
     if spec.component == "switch":
         cfg["payload_on"] = "on"
         cfg["payload_off"] = "off"
-        if spec.state_key is not None:      # semantics emits bools -> "True"/"False"
+        if spec.state_key is not None:  # semantics emits bools -> "True"/"False"
             cfg["state_on"] = "True"
             cfg["state_off"] = "False"
-    cfg.update(spec.config)                 # number min/max
+    cfg.update(spec.config)  # number min/max
     return "%s/%s/%s/config" % (DISCOVERY_PREFIX, spec.component, uid), cfg
 
 

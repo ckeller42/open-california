@@ -1,4 +1,5 @@
 """Load + validate the signal catalog (protocol/signals.yaml)."""
+
 from __future__ import annotations
 
 import os
@@ -7,7 +8,10 @@ import yaml
 
 _DEFAULT = os.path.join(os.path.dirname(__file__), "..", "protocol", "signals.yaml")
 
-class SchemaError(Exception): pass
+
+class SchemaError(Exception):
+    pass
+
 
 def load_catalog(path=_DEFAULT) -> dict:
     with open(path) as fh:
@@ -26,10 +30,15 @@ def load_catalog(path=_DEFAULT) -> dict:
                     raise SchemaError("%s.%s.%s: omit requires reason" % (fn, kind, name))
     return data
 
+
 def keys(cat: dict) -> set:
-    return {"%s.%s.%s" % (fn, k, f)
-            for fn, kinds in cat.items() for k, fields in (kinds or {}).items()
-            for f in (fields or {})}
+    return {
+        "%s.%s.%s" % (fn, k, f)
+        for fn, kinds in cat.items()
+        for k, fields in (kinds or {}).items()
+        for f in (fields or {})
+    }
+
 
 def dictionary_keys(funcs) -> set:
     out = set()
@@ -40,8 +49,10 @@ def dictionary_keys(funcs) -> set:
             out.add("%s.control.%s" % (fn, cf.name))
     return out
 
+
 def emitted_state_names(fn, funcs) -> set:
     from calictl import mqtt, semantics
+
     func = funcs[fn]
     zero = {sf.name: 0 for sf in func.state_fields if sf.placed}
     return set(mqtt.flatten(semantics.interpret(fn, zero)))

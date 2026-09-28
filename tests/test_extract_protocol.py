@@ -4,18 +4,20 @@ A synthetic control-model class exercises the object-keyed extraction: field
 name (from the debug log), width/default (from `new sg.a`), and bit offset
 (from `f()`), plus the merged-branch ambiguity handling.
 """
+
 import importlib.util
 import pathlib
 
 _spec = importlib.util.spec_from_file_location(
-    "extract_protocol", pathlib.Path(__file__).parent.parent / "tools" / "extract_protocol.py")
+    "extract_protocol", pathlib.Path(__file__).parent.parent / "tools" / "extract_protocol.py"
+)
 ep = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ep)
 
 
 # A minimal control model: 2 fields, one placed consistently, one placed
 # differently across two f() branches (should come out MERGED_AMBIGUOUS).
-CONTROL = '''
+CONTROL = """
 public final class a {
     public final sg.a f1;
     public final sg.a f2;
@@ -57,14 +59,14 @@ public final class a {
         }
     }
 }
-'''
+"""
 
 
 def test_constructor_widths_and_defaults():
     ctors = ep.constructors(CONTROL)
     assert len(ctors) == 1
     decls = {o: (int(d), ep.TYPECODE_WIDTH[int(tc)]) for o, d, tc in ep.SGA_RE.findall(ctors[0])}
-    assert decls == {"f1": (3, 2), "f2": (7, 4)}   # typecode 4->2 bits, 6->4 bits
+    assert decls == {"f1": (3, 2), "f2": (7, 4)}  # typecode 4->2 bits, 6->4 bits
 
 
 def test_obj_names_from_log():
@@ -82,9 +84,11 @@ def test_offsets_consistent_vs_merged_ambiguous():
 
 def test_offset_width_validation():
     ps = ep.field_offsets(CONTROL)
+
     # the caller's rule: contiguous run == width -> resolved, else None
     def resolve(obj, width):
         p = ps[obj]
         return p[0] if (len(p) == width and p[-1] - p[0] + 1 == width) else None
-    assert resolve("f1", 2) == 6            # power resolves
-    assert resolve("f2", 4) is None         # level ambiguous across branches
+
+    assert resolve("f1", 2) == 6  # power resolves
+    assert resolve("f2", 4) is None  # level ambiguous across branches

@@ -22,6 +22,7 @@ These tests lock in:
 Move frames carry byte0 == 0x01 (Up); the STOP frame carries byte0 == 0x00 -- that byte
 distinguishes a STOP write from a move write (bytes 1-4 are the live SafetyCounter).
 """
+
 import asyncio
 import sys
 import types
@@ -31,8 +32,8 @@ import pytest
 from calictl import control, device, overrides, protocol
 
 # roof state payloads for the readback / validation read (char 1402):
-_STATE_INVALID = bytes(16)            # SafetyCounterValid bit clear
-_STATE_VALID = bytes([0x01, 0x00])   # SafetyCounterValid bit set (offset 7, MSB-first)
+_STATE_INVALID = bytes(16)  # SafetyCounterValid bit clear
+_STATE_VALID = bytes([0x01, 0x00])  # SafetyCounterValid bit set (offset 7, MSB-first)
 
 
 class _Char:
@@ -49,15 +50,16 @@ class _RoofClient:
     """Records every write (even failed ones). `drop_after` control writes -> the link drops:
     the write raises and is_connected flips False (mirrors the van's mid-move disconnect).
     `read_payload` is what every read_gatt_char returns (set the roof-state validity bit)."""
+
     instances = []
-    drop_after = None            # None = never drop (normal end-of-travel)
-    ctrl = None                  # roof control-char uuid (set by the fixture)
+    drop_after = None  # None = never drop (normal end-of-travel)
+    ctrl = None  # roof control-char uuid (set by the fixture)
     read_payload = _STATE_INVALID
 
     def __init__(self, addr, timeout=None, adapter=None):
         self.addr = addr
         self.is_connected = False
-        self.writes = []         # (uuid, data) for EVERY attempt, including the one that raised
+        self.writes = []  # (uuid, data) for EVERY attempt, including the one that raised
         self._ctrl_writes = 0
         _RoofClient.instances.append(self)
 
@@ -69,8 +71,14 @@ class _RoofClient:
 
     @property
     def services(self):
-        return [_Svc([_Char(device._aux_uuid("1402"), ["read", "notify"]),
-                      _Char(device._aux_uuid("1401"), ["write"])])]
+        return [
+            _Svc(
+                [
+                    _Char(device._aux_uuid("1402"), ["read", "notify"]),
+                    _Char(device._aux_uuid("1401"), ["write"]),
+                ]
+            )
+        ]
 
     async def read_gatt_char(self, uuid):
         return _RoofClient.read_payload
@@ -89,7 +97,8 @@ class _RoofClient:
 
 @pytest.fixture
 def roof(monkeypatch):
-    funcs = protocol.load(); overrides.apply(funcs)
+    funcs = protocol.load()
+    overrides.apply(funcs)
     _RoofClient.instances = []
     _RoofClient.drop_after = None
     _RoofClient.read_payload = _STATE_INVALID
@@ -98,8 +107,10 @@ def roof(monkeypatch):
     mod.BleakClient = _RoofClient
     monkeypatch.setitem(sys.modules, "bleak", mod)
     real_sleep = asyncio.sleep
+
     async def _fast(*_a, **_k):
         await real_sleep(0)
+
     monkeypatch.setattr(device.asyncio, "sleep", _fast)
     return funcs
 
@@ -123,7 +134,7 @@ def test_roof_safety_counter_is_time_derived_plus_one_per_tick():
     """
     seed = 1000
     assert device._roof_safety_counter(seed, 0) == seed
-    assert device._roof_safety_counter(seed, 499) == seed          # still within tick 0
+    assert device._roof_safety_counter(seed, 499) == seed  # still within tick 0
     assert device._roof_safety_counter(seed, 500) == seed + 1
     assert device._roof_safety_counter(seed, 1200) == seed + 2
     # wraps as a 32-bit unsigned int
@@ -138,11 +149,20 @@ def test_actuate_roof_streams_move_then_stop(roof):
        :links: R_ROOF_ACTUATE
        :status: passing
     """
-    move = control.roof_frame(roof, "open")     # byte0 = 0x01
-    stop = control.roof_frame(roof, "stop")     # byte0 = 0x00
-    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
-        roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001,
-        validate_s=None, counter_seed=1000, verify=False))
+    move = control.roof_frame(roof, "open")  # byte0 = 0x01
+    stop = control.roof_frame(roof, "stop")  # byte0 = 0x00
+    asyncio.run(
+        device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+            roof["roof"],
+            move,
+            stop,
+            max_duration_s=0.02,
+            period_s=0.001,
+            validate_s=None,
+            counter_seed=1000,
+            verify=False,
+        )
+    )
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
     b0 = [d[0] for d in ctrl]
     assert ctrl, "no control writes at all"
@@ -164,9 +184,11 @@ def test_actuate_roof_default_seed_is_random_in_range(roof):
     """
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
-    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
-        roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001,
-        validate_s=None, verify=False))
+    asyncio.run(
+        device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+            roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001, validate_s=None, verify=False
+        )
+    )
     ctr = _counters(_ctrl_writes(_RoofClient.instances[-1], roof))
     assert 1 <= ctr[0] <= device.ROOF_SAFETY_SEED_MAX, "seed must be a random int in [1, MAX]"
 
@@ -181,9 +203,18 @@ def test_actuate_roof_counter_seed_override(roof):
     """
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
-    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
-        roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001,
-        validate_s=None, counter_seed=0x4242, verify=False))
+    asyncio.run(
+        device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+            roof["roof"],
+            move,
+            stop,
+            max_duration_s=0.02,
+            period_s=0.001,
+            validate_s=None,
+            counter_seed=0x4242,
+            verify=False,
+        )
+    )
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
     assert _counters(ctrl)[0] == 0x4242, "explicit counter_seed must seed the first frame"
 
@@ -196,13 +227,15 @@ def test_actuate_roof_attempts_stop_after_linkdrop_mid_move(roof):
        :links: R_ROOF_ACTUATE
        :status: passing
     """
-    _RoofClient.drop_after = 2                   # link drops on the 2nd move write
+    _RoofClient.drop_after = 2  # link drops on the 2nd move write
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
     # must NOT raise despite the link dropping mid-move
-    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
-        roof["roof"], move, stop, max_duration_s=5.0, period_s=0.001,
-        validate_s=None, verify=False))
+    asyncio.run(
+        device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+            roof["roof"], move, stop, max_duration_s=5.0, period_s=0.001, validate_s=None, verify=False
+        )
+    )
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
     # the loop broke early on the drop (nowhere near a 5 s deadline of ~1 ms ticks)
     assert len(ctrl) <= 3
@@ -217,12 +250,14 @@ def test_actuate_roof_aborts_when_safetycounter_invalid(roof):
        :links: R_ROOF_ACTUATE
        :status: passing
     """
-    _RoofClient.read_payload = _STATE_INVALID    # SafetyCounterValid stays 0
+    _RoofClient.read_payload = _STATE_INVALID  # SafetyCounterValid stays 0
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
-    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
-        roof["roof"], move, stop, max_duration_s=5.0, period_s=0.001,
-        validate_s=0.0, verify=False))           # check immediately -> invalid -> abort
+    asyncio.run(
+        device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+            roof["roof"], move, stop, max_duration_s=5.0, period_s=0.001, validate_s=0.0, verify=False
+        )
+    )  # check immediately -> invalid -> abort
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
     b0 = [d[0] for d in ctrl]
     # aborted right after the first move + validity check, nowhere near the 5 s cap
@@ -239,12 +274,14 @@ def test_actuate_roof_continues_when_safetycounter_valid(roof):
        :links: R_ROOF_ACTUATE
        :status: passing
     """
-    _RoofClient.read_payload = _STATE_VALID      # SafetyCounterValid == 1
+    _RoofClient.read_payload = _STATE_VALID  # SafetyCounterValid == 1
     move = control.roof_frame(roof, "open")
     stop = control.roof_frame(roof, "stop")
-    asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate_roof(
-        roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001,
-        validate_s=0.0, verify=False))           # check immediately -> valid -> keep streaming
+    asyncio.run(
+        device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+            roof["roof"], move, stop, max_duration_s=0.02, period_s=0.001, validate_s=0.0, verify=False
+        )
+    )  # check immediately -> valid -> keep streaming
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
     b0 = [d[0] for d in ctrl]
     # ran to the max-duration cap (many frames), not aborted after the first check

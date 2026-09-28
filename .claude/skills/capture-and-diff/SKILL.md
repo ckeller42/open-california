@@ -33,16 +33,20 @@ after the pcap is automated.
    Keep the capture SHORT and do exactly one action so the target write is easy to pick out.
 
 2. **Run the diff** (needs `tshark` for pcap/pcapng/btsnoop; `pip install pyyaml` for scenarios):
+
    ```sh
    python3 -m tools.capture_diff /tmp/cali.pcapng lighting/kitchen-50
    ```
+
    Validate the pipeline on the **known-good** scenario first — it must diff to zero:
+
    ```sh
    python3 -m tools.capture_diff /tmp/cooler.pcapng cooler/power-on   # expect: identical
    ```
 
 3. **If tshark can't parse the format**, extract ATT writes by hand into a normalized list and
    use `--frames` (one `<uuid|handle>: <hex>` per line):
+
    ```sh
    printf '1501: 00040000...\n' > /tmp/frames.txt
    python3 -m tools.capture_diff /tmp/frames.txt lighting/kitchen-50 --frames
@@ -65,6 +69,7 @@ state?}`. `state` is the decoded state at capture time (the full-packet carry-fo
   theory looked airtight and still failed on-device — see the lighting note in that memory).
 
 ## Notes
+
 - Never commit captures — `.gitignore` covers `*.pcap`/`*.pcapng`/`*.pklg`/`*.btsnoop`/`*.cvr`.
   They contain the van's BLE identity + payloads. Citations only.
 - Handle↔UUID: only `0x0022`=cooler `1101` is hardcoded (`capture_diff.HANDLE_UUID`); a scenario

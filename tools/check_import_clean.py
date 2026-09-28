@@ -6,6 +6,7 @@ invariant. Shared by the Makefile, the pre-commit hook, and CI so there's ONE so
 
 Exits non-zero (and prints the leaked modules) if any banned module is imported as a side effect.
 """
+
 import sys
 
 import calictl.anchors  # noqa: F401

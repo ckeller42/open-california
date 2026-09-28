@@ -5,6 +5,7 @@ LocalLink — every PR, no BlueZ, no radio.
    :id: T_PAIRING_LINK
    :links: R_PAIRING_SM, R_FAKE_UNIT_FIDELITY
 """
+
 import asyncio
 import json
 
@@ -34,8 +35,9 @@ async def _setup(tmp_path=None, **unit_kw):
     await unit.start()
     central = central_device(link)
     await central.power_on()
-    t = BumbleTransport(central, cache_path=(tmp_path / "pairing.json") if tmp_path else None,
-                        connect_timeout=1.0)
+    t = BumbleTransport(
+        central, cache_path=(tmp_path / "pairing.json") if tmp_path else None, connect_timeout=1.0
+    )
     runner = PairingRunner(t)
     t.on_event = runner.handle
     return link, unit, central, t, runner
@@ -113,7 +115,7 @@ def test_unit_held_by_another_central_is_not_found(monkeypatch):
         link, unit, _, _, runner = await _setup()
         phone = central_device(link, name="phone", address="F0:F1:F2:F3:F4:F6")
         await phone.power_on()
-        await phone.connect(await scan_for(phone))          # the phone app holds the only slot
+        await phone.connect(await scan_for(phone))  # the phone app holds the only slot
         await runner.start()
         return await _until(runner, {"error"})
 
@@ -134,7 +136,7 @@ def test_refused_links_retry_then_end_connect_failed():
 def test_rotation_between_scan_and_connect_recovers():
     async def run():
         _, unit, _, t, runner = await _setup()
-        t.before_connect = unit.rotate_address               # the found address goes stale
+        t.before_connect = unit.rotate_address  # the found address goes stale
         return await _pair(runner, unit)
 
     snap = asyncio.run(run())
@@ -163,8 +165,8 @@ def test_repair_after_unit_forgets_bonds():
         _, unit, _, t, runner = await _setup()
         await _pair(runner, unit)
         await t.disconnect()
-        await unit.forget_bonds()                            # the unit's "Bluetooth zurücksetzen"
-        await runner.reset()                                 # the wizard's re-pair path
+        await unit.forget_bonds()  # the unit's "Bluetooth zurücksetzen"
+        await runner.reset()  # the wizard's re-pair path
         return await _pair(runner, unit)
 
     snap = asyncio.run(run())

@@ -21,23 +21,24 @@ def codec_cli(tmp_path_factory):
     import shutil
     import subprocess
     from pathlib import Path
+
     cc = shutil.which("cc") or shutil.which("gcc")
     if not cc:
         pytest.skip("no C compiler on this machine (the codec-parity CI job enforces)")
     csrc = Path(__file__).resolve().parent.parent / "csrc"
-    srcs = [s for s in (csrc / "codec.c", csrc / "ports.c", csrc / "codec_cli.c")
-            if s.is_file()]
+    srcs = [s for s in (csrc / "codec.c", csrc / "ports.c", csrc / "codec_cli.c") if s.is_file()]
     exe = tmp_path_factory.mktemp("codec") / "codec_cli"
-    subprocess.run([cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-O1",
-                    *map(str, srcs), "-o", str(exe)], check=True)
+    subprocess.run(
+        [cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-O1", *map(str, srcs), "-o", str(exe)], check=True
+    )
 
     def run(lines):
-        proc = subprocess.run([str(exe)], input="\n".join(lines) + "\n",
-                              capture_output=True, text=True, timeout=120)
+        proc = subprocess.run(
+            [str(exe)], input="\n".join(lines) + "\n", capture_output=True, text=True, timeout=120
+        )
         assert proc.returncode == 0, proc.stderr
         out = proc.stdout.splitlines()
-        assert len(out) == len(lines), "line-count mismatch: %d in, %d out" % (
-            len(lines), len(out))
+        assert len(out) == len(lines), "line-count mismatch: %d in, %d out" % (len(lines), len(out))
         return out
 
     return run

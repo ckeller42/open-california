@@ -4,6 +4,7 @@
    :id: T_PAIRING_SM_VECTORS
    :links: R_PAIRING_SM
 """
+
 import json
 from pathlib import Path
 
@@ -29,6 +30,11 @@ def test_stale_events_are_noops():
 
 
 def test_timeout_table_covers_every_timed_state():
-    assert set(pairing.TIMEOUT_S) == {pairing.SCANNING, pairing.CONNECTING,
-                                      pairing.WAITING_PASSKEY, pairing.PAIRING,
-                                      pairing.VERIFYING, pairing.RESETTING}
+    assert set(pairing.TIMEOUT_S) == {
+        pairing.SCANNING,
+        pairing.CONNECTING,
+        pairing.WAITING_PASSKEY,
+        pairing.PAIRING,
+        pairing.VERIFYING,
+        pairing.RESETTING,
+    }

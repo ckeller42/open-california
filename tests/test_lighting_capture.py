@@ -5,11 +5,14 @@ earlier static guesses got wrong: unchanged zones are ``14`` (0xe), not 0, and t
 switch is Mode 16. These tests pin ``control._lighting`` to the exact bytes the app sends, so
 the crack can never silently regress.
 """
+
 from calictl import control, overrides, protocol
 
 
 def _f():
-    f = protocol.load(); overrides.apply(f); return f
+    f = protocol.load()
+    overrides.apply(f)
+    return f
 
 
 def test_set_brightness_one_zone_matches_app_frame():
@@ -24,8 +27,12 @@ def test_inferred_zones_l5_l6_target_the_right_fields():
     # kitchen-ambient=L5, kitchen-cabinet=L6, roof-reading=L9 (was mislabelled L6), entrance=L12.
     # The friendly-key -> field wiring must be exact; every other zone left at the 14 sentinel.
     f = _f()
-    for what, field in (("kitchen-ambient", "BrightnessLFive"), ("kitchen-cabinet", "BrightnessLSix"),
-                        ("roof-reading", "BrightnessLNine"), ("entrance", "BrightnessLOneTwo")):
+    for what, field in (
+        ("kitchen-ambient", "BrightnessLFive"),
+        ("kitchen-cabinet", "BrightnessLSix"),
+        ("roof-reading", "BrightnessLNine"),
+        ("entrance", "BrightnessLOneTwo"),
+    ):
         d = control.decode_control(f["lighting"], control.build(f, "lighting", what, 6, {"ProfileNumber": 9}))
         assert d[field] == 6
         others = [v for k, v in d.items() if k.startswith("Brightness") and k != field]
@@ -35,8 +42,18 @@ def test_inferred_zones_l5_l6_target_the_right_fields():
 def test_gui_lamp_keys_all_resolve_to_control_zones():
     # Guard the GUI<->control contract: every `what` the Lighting screen can send must be a real
     # LIGHT_ZONES key, or the slider would 400. (app.js LIGHT_LAMPS is the source; mirrored here.)
-    gui_keys = {"reading-1", "reading-2", "reading-3", "kitchen-ambient", "kitchen-cabinet",
-                "kitchen", "roof-ambient", "roof-reading", "outside-rear", "entrance"}
+    gui_keys = {
+        "reading-1",
+        "reading-2",
+        "reading-3",
+        "kitchen-ambient",
+        "kitchen-cabinet",
+        "kitchen",
+        "roof-ambient",
+        "roof-reading",
+        "outside-rear",
+        "entrance",
+    }
     assert gui_keys <= set(control.LIGHT_ZONES), gui_keys - set(control.LIGHT_ZONES)
 
 
@@ -51,7 +68,7 @@ def test_unchanged_zones_are_14_not_zero():
     frame = control.build(f, "lighting", "kitchen", 5, {"ProfileNumber": 9})
     d = control.decode_control(f["lighting"], frame)
     others = [v for k, v in d.items() if k.startswith("Brightness") and k != "BrightnessLSeven"]
-    assert set(others) == {14}                       # every other zone left unchanged
+    assert set(others) == {14}  # every other zone left unchanged
     assert d["BrightnessLSeven"] == 5
 
 
@@ -82,15 +99,18 @@ def test_set_color_is_mode_6_palette_index():
 def test_power_off_selects_lights_off_profile():
     f = _f()
     # power off == SET_PROFILE LIGHTS_OFF (0), the app's master toggle — not per-zone zeroing
-    d = control.decode_control(f["lighting"], control.build(f, "lighting", "power", "off", {"ProfileNumber": 9}))
+    d = control.decode_control(
+        f["lighting"], control.build(f, "lighting", "power", "off", {"ProfileNumber": 9})
+    )
     assert d["Mode"] == control.LIGHT_MODE_SET_PROFILE and d["ProfileNumber"] == 0
     assert all(v == control.LIGHT_UNCHANGED for k, v in d.items() if k.startswith("Brightness"))
 
 
 def test_any_on_ignores_phantom_zones():
     from calictl import semantics
+
     # L9-L16 read constant not-installed defaults (13) — must NOT count as "on"
     d = {"BrightnessL" + s: (13 if n >= 9 else 0) for s, n in semantics._LZONES.items()}
     assert semantics.interpret("lighting", d)["any_on"] is False
-    d["BrightnessLSeven"] = 5   # a real lamp (L7 = Kitchen) lit
+    d["BrightnessLSeven"] = 5  # a real lamp (L7 = Kitchen) lit
     assert semantics.interpret("lighting", d)["any_on"] is True

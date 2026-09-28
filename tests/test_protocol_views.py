@@ -7,6 +7,7 @@ byte-identical to the committed copy — a stale view fails CI instead of lying 
 
 Add one test per generator/view here (this file is the single home for all of them).
 """
+
 import pathlib
 
 import pytest
@@ -36,9 +37,7 @@ def test_frame_layouts_md_matches_dictionary(tmp_path):
     from tools import gen_frame_layouts
 
     committed = ROOT / "docs" / "protocol" / "frame-layouts.md"
-    assert committed.exists(), (
-        "run: python3 -m tools.gen_frame_layouts --out docs/protocol/frame-layouts.md"
-    )
+    assert committed.exists(), "run: python3 -m tools.gen_frame_layouts --out docs/protocol/frame-layouts.md"
 
     fresh = gen_frame_layouts.build()
     out = tmp_path / "frame-layouts.md"
@@ -73,8 +72,7 @@ def test_wireshark_dissector_is_non_trivial():
     assert "Proto(" in text
     proto_field_count = sum(1 for line in text.splitlines() if "ProtoField." in line)
     assert proto_field_count >= 20, (
-        "expected many ProtoField definitions (one per surfaced state field), got %d"
-        % proto_field_count
+        "expected many ProtoField definitions (one per surfaced state field), got %d" % proto_field_count
     )
 
 
@@ -82,24 +80,30 @@ def test_wireshark_dissector_signed_fields(tmp_path):
     """Fields carrying `signed: true` in dictionary.yaml render as ProtoField.intN, not uintN
     (issue #108) — e.g. the vehicle leveling angles and the signed battery currents."""
     from tools import gen_wireshark_dissector
+
     text = gen_wireshark_dissector.build()
-    for ident, ftype in (("carlevelroll", "int16"), ("carlevelpitch", "int16"),
-                         ("itwobattbemafs", "int16"), ("idcdcafs", "int16"),
-                         ("ionebattbemafs", "int8"), ("pdcdcafs", "int8")):
-        line = next((ln for ln in text.splitlines()
-                     if "ProtoField." in ln and ident in ln.lower()), None)
+    for ident, ftype in (
+        ("carlevelroll", "int16"),
+        ("carlevelpitch", "int16"),
+        ("itwobattbemafs", "int16"),
+        ("idcdcafs", "int16"),
+        ("ionebattbemafs", "int8"),
+        ("pdcdcafs", "int8"),
+    ):
+        line = next((ln for ln in text.splitlines() if "ProtoField." in ln and ident in ln.lower()), None)
         assert line is not None, "no ProtoField line for %s" % ident
-        assert "ProtoField.%s(" % ftype in line, (
-            "%s should be ProtoField.%s, got: %s" % (ident, ftype, line.strip()))
+        assert "ProtoField.%s(" % ftype in line, "%s should be ProtoField.%s, got: %s" % (
+            ident,
+            ftype,
+            line.strip(),
+        )
 
 
 def test_signal_matrix_md_matches_signals_yaml(tmp_path):
     from tools import gen_signal_matrix
 
     committed = ROOT / "docs" / "protocol" / "signal-matrix.md"
-    assert committed.exists(), (
-        "run: python3 -m tools.gen_signal_matrix --out docs/protocol/signal-matrix.md"
-    )
+    assert committed.exists(), "run: python3 -m tools.gen_signal_matrix --out docs/protocol/signal-matrix.md"
 
     fresh = gen_signal_matrix.build()
     out = tmp_path / "signal-matrix.md"
@@ -117,8 +121,10 @@ def test_signal_matrix_md_matches_signals_yaml(tmp_path):
 # checks parse the COMMITTED output text and compare it against dictionary.yaml directly — no
 # generator code in the loop.
 
+
 def _dict_functions():
     import yaml
+
     doc = yaml.safe_load((ROOT / "protocol" / "dictionary.yaml").read_text())
     return doc.get("functions", doc)
 
@@ -133,17 +139,23 @@ def test_reference_rows_match_dictionary_independently():
         start = text.find("\n## %s\n" % fn)
         assert start >= 0, "reference.md: missing section for %s" % fn
         end = text.find("\n## ", start + 1)
-        section = text[start:end if end > 0 else len(text)]
+        section = text[start : end if end > 0 else len(text)]
         for f in spec.get("state_fields", []) + spec.get("control_fields", []):
             if not (isinstance(f.get("offset"), int) and isinstance(f.get("width"), int)):
                 continue
-            rows = [ln for ln in section.splitlines()
-                    if ln.startswith("| %s |" % f["name"])]
+            rows = [ln for ln in section.splitlines() if ln.startswith("| %s |" % f["name"])]
             assert rows, "reference.md[%s]: no row for %s" % (fn, f["name"])
-            ok = any(ln.split("|")[2].strip() == str(f["offset"])
-                     and ln.split("|")[3].strip() == str(f["width"]) for ln in rows)
+            ok = any(
+                ln.split("|")[2].strip() == str(f["offset"]) and ln.split("|")[3].strip() == str(f["width"])
+                for ln in rows
+            )
             assert ok, "reference.md[%s]: %s row disagrees with dictionary (want off=%s w=%s): %r" % (
-                fn, f["name"], f["offset"], f["width"], rows)
+                fn,
+                f["name"],
+                f["offset"],
+                f["width"],
+                rows,
+            )
             checked += 1
     assert checked > 50, "suspiciously few rows checked (%d)" % checked
 
@@ -159,12 +171,12 @@ def test_frame_layout_grid_matches_dictionary_independently():
         start = text.find("\n## %s\n" % fn)
         assert start >= 0, "frame-layouts.md: missing section for %s" % fn
         end = text.find("\n## ", start + 1)
-        section = text[start:end if end > 0 else len(text)]
+        section = text[start : end if end > 0 else len(text)]
         st = section.find("### State frame")
         if st < 0:
             continue
         st_end = section.find("### ", st + 4)
-        state_block = section[st:st_end if st_end > 0 else len(section)]
+        state_block = section[st : st_end if st_end > 0 else len(section)]
         # parse the grid: rows "| <byte> | c7 | c6 | ... | c0 |"
         grid = {}
         for ln in state_block.splitlines():
@@ -182,6 +194,7 @@ def test_frame_layout_grid_matches_dictionary_independently():
                 assert row in grid, "frame-layouts.md[%s]: no grid row for byte %d" % (fn, row)
                 assert grid[row][col] == f["name"], (
                     "frame-layouts.md[%s]: byte %d bit-col %d should be %s, grid says %r"
-                    % (fn, row, 7 - col, f["name"], grid[row][col]))
+                    % (fn, row, 7 - col, f["name"], grid[row][col])
+                )
                 checked += 1
     assert checked > 100, "suspiciously few grid cells checked (%d)" % checked

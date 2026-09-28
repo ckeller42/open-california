@@ -12,27 +12,61 @@ time only as EV_TIMEOUT; pinned values frozen for the C port.
    pinned (a future C port + the sequence vectors in
    ``tests/vectors/pairing.json`` depend on them) — never renumber.
 """
+
 from typing import NamedTuple
 
 IDLE, SCANNING, CONNECTING, WAITING_PASSKEY, PAIRING, VERIFYING, BONDED, ERROR, RESETTING = range(9)
-(EV_START, EV_DEVICE_FOUND, EV_CONNECTED, EV_PASSKEY_REQUESTED, EV_PASSKEY_ENTERED,
- EV_PAIR_OK, EV_PAIR_FAIL, EV_VERIFY_OK, EV_VERIFY_FAIL, EV_TIMEOUT, EV_CANCEL,
- EV_RESET, EV_RESET_DONE, EV_CONNECT_FAIL) = range(14)
-(ACT_START_SCAN, ACT_STOP_SCAN, ACT_CONNECT, ACT_PAIR, ACT_SEND_PASSKEY, ACT_VERIFY,
- ACT_PERSIST_BOND, ACT_DISCONNECT, ACT_REMOVE_BOND) = range(9)
+(
+    EV_START,
+    EV_DEVICE_FOUND,
+    EV_CONNECTED,
+    EV_PASSKEY_REQUESTED,
+    EV_PASSKEY_ENTERED,
+    EV_PAIR_OK,
+    EV_PAIR_FAIL,
+    EV_VERIFY_OK,
+    EV_VERIFY_FAIL,
+    EV_TIMEOUT,
+    EV_CANCEL,
+    EV_RESET,
+    EV_RESET_DONE,
+    EV_CONNECT_FAIL,
+) = range(14)
+(
+    ACT_START_SCAN,
+    ACT_STOP_SCAN,
+    ACT_CONNECT,
+    ACT_PAIR,
+    ACT_SEND_PASSKEY,
+    ACT_VERIFY,
+    ACT_PERSIST_BOND,
+    ACT_DISCONNECT,
+    ACT_REMOVE_BOND,
+) = range(9)
 ERR_NONE, ERR_TIMEOUT, ERR_PAIR, ERR_VERIFY, ERR_CONNECT = range(5)
 MAX_ATTEMPTS = 3
 # CONNECTING is 20 s (was 15): over an existing bond the BlueZ transport first probes it (<= 5 s),
 # may drop it and re-discover the unit (<= 5 s), and still keeps >= 8 s for the real connect —
 # see calictl.pairing_bluez's CONNECT_* budget constants.
-TIMEOUT_S = {SCANNING: 30, CONNECTING: 20, WAITING_PASSKEY: 60, PAIRING: 15,
-             VERIFYING: 10, RESETTING: 10}
-STATE_NAMES = {IDLE: "idle", SCANNING: "scanning", CONNECTING: "connecting",
-               WAITING_PASSKEY: "waiting_passkey", PAIRING: "pairing",
-               VERIFYING: "verifying", BONDED: "bonded", ERROR: "error",
-               RESETTING: "resetting"}
-ERR_NAMES = {ERR_NONE: None, ERR_TIMEOUT: "timeout", ERR_PAIR: "pairing_failed",
-             ERR_VERIFY: "verify_failed", ERR_CONNECT: "connect_failed"}
+TIMEOUT_S = {SCANNING: 30, CONNECTING: 20, WAITING_PASSKEY: 60, PAIRING: 15, VERIFYING: 10, RESETTING: 10}
+STATE_NAMES = {
+    IDLE: "idle",
+    SCANNING: "scanning",
+    CONNECTING: "connecting",
+    WAITING_PASSKEY: "waiting_passkey",
+    PAIRING: "pairing",
+    VERIFYING: "verifying",
+    BONDED: "bonded",
+    ERROR: "error",
+    RESETTING: "resetting",
+}
+ERR_NAMES = {
+    ERR_NONE: None,
+    ERR_TIMEOUT: "timeout",
+    ERR_PAIR: "pairing_failed",
+    ERR_VERIFY: "verify_failed",
+    ERR_CONNECT: "connect_failed",
+}
 
 
 class PairingState(NamedTuple):
@@ -42,8 +76,13 @@ class PairingState(NamedTuple):
 
 
 def _cleanup(st):
-    return [(ACT_STOP_SCAN, 0)] if st == SCANNING else \
-        [(ACT_DISCONNECT, 0)] if st in (CONNECTING, WAITING_PASSKEY, PAIRING, VERIFYING) else []
+    return (
+        [(ACT_STOP_SCAN, 0)]
+        if st == SCANNING
+        else [(ACT_DISCONNECT, 0)]
+        if st in (CONNECTING, WAITING_PASSKEY, PAIRING, VERIFYING)
+        else []
+    )
 
 
 def step(ps, ev, arg=0):

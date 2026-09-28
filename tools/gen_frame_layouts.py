@@ -11,6 +11,7 @@ MSB-first — bit index 0 of a frame is bit 7 (the MSB) of byte 0
 therefore occupies frame-bit indices ``[offset .. offset + width - 1]`` in that scheme, which
 this generator maps onto a per-byte grid of bit positions 7..0.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -23,10 +24,6 @@ DICT_FILE = ROOT / "protocol" / "dictionary.yaml"
 OUT_FILE = ROOT / "docs" / "protocol" / "frame-layouts.md"
 
 _BIT_COLS = tuple(range(7, -1, -1))  # bit 7 (MSB) .. bit 0 (LSB), per byte
-
-
-
-
 
 
 def _byte_grid(fields):
@@ -103,10 +100,12 @@ def build(dict_path=None) -> str:
         control_source = spec.get("control_source") or "—"
         lines.append("## %s" % name)
         lines.append("")
-        lines.extend(_frame_section(
-            "State frame (char(s): %s)" % uuids, spec.get("state_fields") or []))
-        lines.extend(_frame_section(
-            "Control frame (control_source: %s)" % control_source, spec.get("control_fields") or []))
+        lines.extend(_frame_section("State frame (char(s): %s)" % uuids, spec.get("state_fields") or []))
+        lines.extend(
+            _frame_section(
+                "Control frame (control_source: %s)" % control_source, spec.get("control_fields") or []
+            )
+        )
     return "\n".join(lines).rstrip("\n") + "\n"
 
 

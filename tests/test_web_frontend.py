@@ -8,9 +8,15 @@ WEBUI = str(Path(__file__).resolve().parent.parent / "calictl" / "webui")
 
 class _StubBackend:
     read_only = False
-    def state(self): return {}
-    def screens_bytes(self): return b'{"screens":{},"order":[]}'
-    def command(self, *a, **k): return {"ok": True, "applied": True, "state": {}, "error": None}
+
+    def state(self):
+        return {}
+
+    def screens_bytes(self):
+        return b'{"screens":{},"order":[]}'
+
+    def command(self, *a, **k):
+        return {"ok": True, "applied": True, "state": {}, "error": None}
 
 
 def _serve():
@@ -21,8 +27,7 @@ def _serve():
 def test_index_and_assets_served():
     srv, base = _serve()
     try:
-        for path, needle in (("/", b"<div id=\"app\""), ("/app.js", b"/api/state"),
-                             ("/app.css", b"--card")):
+        for path, needle in (("/", b'<div id="app"'), ("/app.js", b"/api/state"), ("/app.css", b"--card")):
             with urllib.request.urlopen(base + path) as r:
                 assert r.status == 200
                 assert needle in r.read()
@@ -44,6 +49,7 @@ def test_app_js_surfaces_real_state_keys():
     """Guard the curated data readouts: app.js must reference the interpreted /api/state keys,
     so a regression back to a data-less spec dump is caught."""
     from pathlib import Path
+
     js = (Path(__file__).resolve().parent.parent / "calictl" / "webui" / "app.js").read_text()
     for key in ("soc2_pct", "batt2_v", "fresh", "waste", "master_on", "usb_charger", "running_time"):
         assert key in js, "app.js no longer surfaces %r" % key

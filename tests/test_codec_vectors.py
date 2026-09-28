@@ -13,6 +13,7 @@ reference.
    :id: T_CODEC_VECTORS_ORACLE
    :links: R_CODEC_XLANG_PARITY
 """
+
 import json
 from pathlib import Path
 
@@ -43,6 +44,7 @@ def test_checked_in_vectors_are_fresh():
     pre-commit / codec-parity ``--check``), so a NEW field can never ship
     uncovered — regenerate with ``python3 -m tools.gen_codec_vectors``."""
     from tools import gen_codec_vectors
+
     assert gen_codec_vectors.render() == VECTORS.read_text()
 
 

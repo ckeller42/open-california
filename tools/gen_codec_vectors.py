@@ -33,6 +33,7 @@ Deterministic output; PyYAML-free. Regenerate after any dictionary/overrides cha
    ESP32 port (#154) reuses the reverse-engineered protocol instead of forking a
    divergent twin.
 """
+
 from __future__ import annotations
 
 import json
@@ -47,6 +48,7 @@ COOLER_POWER_ON_HEX = "3d4300000000"
 
 
 # --- independent MSB-first bit helpers (NOT protocol.py's — see module docstring) ---
+
 
 def _slice(frame: bytes, offset: int, width: int) -> int:
     v = 0
@@ -83,6 +85,7 @@ def _max_valid(field) -> int:
 
 # --- vector construction ---------------------------------------------------------
 
+
 def _decode_vectors(name, fn) -> list[dict]:
     placed = [f for f in fn.state_fields if f.placed]
     if not placed:
@@ -93,25 +96,40 @@ def _decode_vectors(name, fn) -> list[dict]:
         buf = bytearray(nbytes)
         _place(buf, f.offset, f.width, (1 << f.width) - 1)
         raw = bytes(buf)
-        expect = {g.name: _slice(raw, g.offset, g.width)
-                  for g in placed if g.offset + g.width <= nbytes * 8}
-        vecs.append({"id": "%s/state/%s/onehot" % (name, f.name), "function": name,
-                     "raw_hex": raw.hex(), "expect": expect})
+        expect = {g.name: _slice(raw, g.offset, g.width) for g in placed if g.offset + g.width <= nbytes * 8}
+        vecs.append(
+            {
+                "id": "%s/state/%s/onehot" % (name, f.name),
+                "function": name,
+                "raw_hex": raw.hex(),
+                "expect": expect,
+            }
+        )
     # mixed pattern: every field carries bits, catches cross-field slicing errors
     maxend = max(f.offset + f.width for f in placed)
     nbytes = (maxend + 7) // 8
     raw = bytes((0xA5 + 7 * i) & 0xFF for i in range(nbytes))
-    vecs.append({"id": "%s/state/mixed" % name, "function": name, "raw_hex": raw.hex(),
-                 "expect": {f.name: _slice(raw, f.offset, f.width) for f in placed}})
+    vecs.append(
+        {
+            "id": "%s/state/mixed" % name,
+            "function": name,
+            "raw_hex": raw.hex(),
+            "expect": {f.name: _slice(raw, f.offset, f.width) for f in placed},
+        }
+    )
     # truncated: frame ends before the last field completes -> that field is absent
     last = max(placed, key=lambda f: f.offset + f.width)
     cut = last.offset // 8
     if 0 < cut * 8 < last.offset + last.width:
         raw = bytes(cut)
-        vecs.append({"id": "%s/state/truncated" % name, "function": name,
-                     "raw_hex": raw.hex(),
-                     "expect": {f.name: 0 for f in placed
-                                if f.offset + f.width <= cut * 8}})
+        vecs.append(
+            {
+                "id": "%s/state/truncated" % name,
+                "function": name,
+                "raw_hex": raw.hex(),
+                "expect": {f.name: 0 for f in placed if f.offset + f.width <= cut * 8},
+            }
+        )
     return vecs
 
 
@@ -145,28 +163,48 @@ def _encode_vectors(name, fn, frame_bytes) -> list[dict]:
     base = _base_values(ctrl)
     vecs = [
         # explicit defaults (2-bit defaults are 3 -> doubles as the sentinel case)
-        {"id": "%s/encode/defaults-explicit-sentinel" % name, "function": name,
-         "values": dict(base), "frame_bytes": frame_bytes,
-         "expect_hex": _encode_hex(ctrl, base, frame_bytes)},
+        {
+            "id": "%s/encode/defaults-explicit-sentinel" % name,
+            "function": name,
+            "values": dict(base),
+            "frame_bytes": frame_bytes,
+            "expect_hex": _encode_hex(ctrl, base, frame_bytes),
+        },
         # implicit defaults: only the non-encodable defaults supplied; the rest must
         # come from the dictionary defaults inside encode (exercises HAS_DEFAULT)
-        {"id": "%s/encode/defaults-implicit" % name, "function": name,
-         "values": {f.name: base[f.name] for f in ctrl if base[f.name] != f.default},
-         "frame_bytes": frame_bytes,
-         "expect_hex": _encode_hex(ctrl, base, frame_bytes)},
+        {
+            "id": "%s/encode/defaults-implicit" % name,
+            "function": name,
+            "values": {f.name: base[f.name] for f in ctrl if base[f.name] != f.default},
+            "frame_bytes": frame_bytes,
+            "expect_hex": _encode_hex(ctrl, base, frame_bytes),
+        },
     ]
     for f in ctrl:
         vals = dict(base)
         vals[f.name] = _max_valid(f)
-        vecs.append({"id": "%s/encode/%s/max" % (name, f.name), "function": name,
-                     "values": vals, "frame_bytes": frame_bytes,
-                     "expect_hex": _encode_hex(ctrl, vals, frame_bytes)})
+        vecs.append(
+            {
+                "id": "%s/encode/%s/max" % (name, f.name),
+                "function": name,
+                "values": vals,
+                "frame_bytes": frame_bytes,
+                "expect_hex": _encode_hex(ctrl, vals, frame_bytes),
+            }
+        )
     # error: width overflow on the widest field
     wide = max(ctrl, key=lambda f: f.width)
     vals = dict(base)
     vals[wide.name] = 1 << wide.width
-    vecs.append({"id": "%s/encode/err-width-overflow" % name, "function": name,
-                 "values": vals, "frame_bytes": frame_bytes, "error": True})
+    vecs.append(
+        {
+            "id": "%s/encode/err-width-overflow" % name,
+            "function": name,
+            "values": vals,
+            "frame_bytes": frame_bytes,
+            "error": True,
+        }
+    )
     # error: valid-set rejection (first in-width value outside the allowed set)
     for f in ctrl:
         if f.valid is None:
@@ -176,9 +214,15 @@ def _encode_vectors(name, fn, frame_bytes) -> list[dict]:
             continue
         vals = dict(base)
         vals[f.name] = bad
-        vecs.append({"id": "%s/encode/err-invalid-%s-%d" % (name, f.name, bad),
-                     "function": name, "values": vals, "frame_bytes": frame_bytes,
-                     "error": True})
+        vecs.append(
+            {
+                "id": "%s/encode/err-invalid-%s-%d" % (name, f.name, bad),
+                "function": name,
+                "values": vals,
+                "frame_bytes": frame_bytes,
+                "error": True,
+            }
+        )
     return vecs
 
 
@@ -189,17 +233,21 @@ def generate() -> dict:
     for name in sorted(funcs):
         decode.extend(_decode_vectors(name, funcs[name]))
     for name in sorted(overrides.CONTROL_FRAME_BYTES):
-        encode.extend(_encode_vectors(name, funcs[name],
-                                      overrides.CONTROL_FRAME_BYTES[name]))
+        encode.extend(_encode_vectors(name, funcs[name], overrides.CONTROL_FRAME_BYTES[name]))
     # the real captured frame: values sliced independently from its bytes, encode
     # must reproduce it byte-identically
     cooler = [f for f in funcs["cooler"].control_fields if f.placed]
     raw = bytes.fromhex(COOLER_POWER_ON_HEX)
-    encode.append({"id": "cooler/encode/real-power-on", "function": "cooler",
-                   "values": {f.name: _slice(raw, f.offset, f.width) for f in cooler},
-                   "frame_bytes": len(raw), "expect_hex": COOLER_POWER_ON_HEX})
-    return {"version": 1, "generated_by": "tools/gen_codec_vectors.py",
-            "decode": decode, "encode": encode}
+    encode.append(
+        {
+            "id": "cooler/encode/real-power-on",
+            "function": "cooler",
+            "values": {f.name: _slice(raw, f.offset, f.width) for f in cooler},
+            "frame_bytes": len(raw),
+            "expect_hex": COOLER_POWER_ON_HEX,
+        }
+    )
+    return {"version": 1, "generated_by": "tools/gen_codec_vectors.py", "decode": decode, "encode": encode}
 
 
 def render() -> str:
@@ -209,11 +257,15 @@ def render() -> str:
 
 def main() -> int:
     import sys
+
     text = render()
     if "--check" in sys.argv:
         if not OUT.is_file() or OUT.read_text() != text:
-            print("STALE: %s does not match a fresh regeneration — run "
-                  "python3 -m tools.gen_codec_vectors" % OUT, file=sys.stderr)
+            print(
+                "STALE: %s does not match a fresh regeneration — run "
+                "python3 -m tools.gen_codec_vectors" % OUT,
+                file=sys.stderr,
+            )
             return 1
         print("fresh: %s" % OUT)
         return 0

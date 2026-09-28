@@ -5,6 +5,7 @@ a missing key in `strings.de.js` silently falls back to English. This test catch
 the common case — a single string-literal key. Keys assembled by concatenation or computed from a
 variable are maintained by hand and can't be extracted statically, so they're out of scope here.
 """
+
 import json
 import re
 import shutil
@@ -24,10 +25,13 @@ def _de_keys():
     if not node:
         pytest.skip("node not available")
     out = subprocess.check_output(
-        [node, "-e",
-         "global.window={};require(process.argv[1]);"
-         "process.stdout.write(JSON.stringify(Object.keys(window.STRINGS_DE)))",
-         str(DE)],
+        [
+            node,
+            "-e",
+            "global.window={};require(process.argv[1]);"
+            "process.stdout.write(JSON.stringify(Object.keys(window.STRINGS_DE)))",
+            str(DE),
+        ],
         text=True,
     )
     return set(json.loads(out))
@@ -43,7 +47,7 @@ def test_every_simple_t_key_has_a_german_translation():
     keys = _de_keys()
     src = APP.read_text(encoding="utf-8")
     lits = set(_T.findall(src)) | set(_TF.findall(src))
-    lits = {k for k in lits if k}          # drop the empty string
+    lits = {k for k in lits if k}  # drop the empty string
     missing = sorted(k for k in lits if k not in keys)
     assert not missing, "t()/tf() keys with no strings.de.js entry: " + repr(missing)
 
@@ -54,10 +58,13 @@ def test_de_values_are_nonempty_strings():
     if not node:
         pytest.skip("node not available")
     out = subprocess.check_output(
-        [node, "-e",
-         "global.window={};require(process.argv[1]);"
-         "process.stdout.write(JSON.stringify(window.STRINGS_DE))",
-         str(DE)],
+        [
+            node,
+            "-e",
+            "global.window={};require(process.argv[1]);"
+            "process.stdout.write(JSON.stringify(window.STRINGS_DE))",
+            str(DE),
+        ],
         text=True,
     )
     m = json.loads(out)

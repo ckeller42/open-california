@@ -85,6 +85,7 @@ vs un-inverted usb/master; every energy scale (÷10 V & currents, ×10 powers, I
 ×10, sentinels); vehicle +1900/+1-month + roll/pitch ÷100; cooler/roof/airheater.
 
 Review flags resolved by the app's intent:
+
 - **LR-heater `air_temp`/`water_temp` (4-bit) and roof-AC `target_temp` (8-bit) carry NO code
   scale — they are coarse *levels*, not °C.** The app never converts. `UNVERIFIED`→resolved: don't
   label °C (matches the existing `signals.md` caution).

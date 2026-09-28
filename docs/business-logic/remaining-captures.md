@@ -5,6 +5,7 @@
 Only these need you physically at the van. Everything else is done or is a desk task.
 
 ### 1. Water — settle "is 1 L stale or real?" (PRIORITY, unresolved)
+
 buspi reads **fresh water = 1 L** while polling fine every ~45 s with the heartbeat running.
 We do **not** know if that's stale or the tank is genuinely near-empty (the "true 11 L" was a single
 2026-07-09 reading that isn't reproducing). Do this to settle it:
@@ -19,6 +20,7 @@ We do **not** know if that's stale or the tank is genuinely near-empty (the "tru
   - buspi stays wrong even after the pump → real stale bug to reopen.
 
 ### 2. Finish the lamp map (~1 min)
+
 Sweep 2026-07-14 confirmed **L7=Kochen, L8=Ambientelicht, L3=Umgebung hinten**, and **L5 is a real
 lamp**. Two gaps:
 
@@ -28,9 +30,11 @@ lamp**. Two gaps:
   Ping me to start the logger first.
 
 ### 3. Roof drive from calictl (OPTIONAL — higher risk)
+
 The roof **protocol is now live-verified** (capture 2026-07-14: dir bytes 0x01/0x04/0x00, free-running
 +1/500 ms counter, press-and-hold, Position closed→middle→closed all confirmed against real motion).
 The only thing left is proving **calictl itself** can drive it:
+
 - [ ] Ignition **ON**, roof path **clear**, writes enabled → I run a bounded `open → stop → close` from
   calictl and read `1402` back. Only do this if you want it; the protocol is already proven.
 
@@ -91,6 +95,7 @@ answers wire facts; it adds nothing for app-side logic or unexposed features.
 | **Lighting colour (`SET_COLOR`)** | ❌ **no — not exposed** | The app has **no colour UI** (decompile-confirmed), so it never emits a colour frame. A capture only confirms the negative. `set lighting color` stays inferred/N-A. |
 
 **Highest-leverage capturable targets** (all wire facts, grab them in one at-the-van session):
+
 1. **Roof actuation** — the last control path still NOT-LIVE-VERIFIED, and the roof **is** fitted here.
    A *passive* capture (you tap, we watch — zero risk) confirms SafetyCounter cadence, the ~3 s
    self-gate, and direction bytes vs `device.actuate_roof`. See §5 + Priority 5.
@@ -103,19 +108,24 @@ Scenarios for the differential oracle are **pre-staged** under `tools/scenarios/
 calictl frame — verified offline). The capture is the only manual seam; everything after is one command.
 
 **0. Confirm the van woke (buspi).** After a door/ignition, within one poll cycle (~30 s):
+
 ```
 ssh buspi 'curl -s http://localhost:8088/api/state' | python3 -c 'import sys,json;m=json.load(sys.stdin)["_meta"];print("online:",m["online"],"age_s:",m["age_s"])'
 ```
+
 `online: True` → buspi has the slot. If the phone app is open it may hold the single slot — close it.
 
 **1. Capture (bar Mac) → diff (repo host).** Per action: start the logger, do ONE thing in the app,
 stop, then diff. Capture SOP + iPhone UDID: `.claude/skills/capture-and-diff/SKILL.md`.
+
 ```
 # on the bar: idevicebtlogger -u <UDID> -f pcap /tmp/<label>.pcap   (Ctrl-C to stop)
 # then, where the repo + tshark live:
 python3 -m tools.capture_diff /tmp/<label>.pcap <scenario>
 ```
+
 Run the **known-good validators FIRST** (must diff to zero — proves the pipeline):
+
 | Order | App action | Scenario | Expect |
 |---|---|---|---|
 | a | Camping Mode ON | `campingmode/master-on` | zero diff |
@@ -125,6 +135,7 @@ Run the **known-good validators FIRST** (must diff to zero — proves the pipeli
 | e | Switch to profile 9 | `lighting/profile-9` | zero diff |
 
 **2. Stability spike (buspi, phone app closed):**
+
 ```
 ssh buspi 'cd /home/pi/open-california && python3 -m tools.ble_stability_spike --seconds 180'
 ```
@@ -133,6 +144,7 @@ ssh buspi 'cd /home/pi/open-california && python3 -m tools.ble_stability_spike -
 that flips (marks fresh-vs-stale). Cloud unlock does NOT wake it.
 
 **4. Read-side verifications (buspi) — NOT capture_diff (no control write):**
+
 ```
 ssh buspi 'cd /home/pi/open-california && python3 -m calictl get vehicle'   # ignition ON => ignition_on: true  (bit-7 fix)
 ssh buspi 'cd /home/pi/open-california && python3 -m calictl get water'     # ignition ON => fresh ~11 L; OFF later => decays
@@ -148,7 +160,9 @@ window** as the P4 ignition/leveling checks (step 4). Ensure the roof path is cl
 Not a `capture_diff` scenario: the app drives the roof with a *repeated* 1 Hz move frame + a final
 STOP, so a single committed frame doesn't represent it. Capture the app doing
 **open → partial → Stop → close** and inspect the sequence directly (the move-frame direction byte
+
 + the +1 `SafetyCounter` cadence, and that a STOP frame follows):
+
 ```
 # ignition ON, roof path clear, phone app open
 # on the bar: idevicebtlogger -u <UDID> -f pcap /tmp/roof.pcap   (Ctrl-C after the STOP)
@@ -156,12 +170,14 @@ STOP, so a single committed frame doesn't represent it. Capture the app doing
 tshark -r /tmp/roof.pcap -Y 'btatt.opcode.method==0x12 || btatt.opcode.method==0x52' \
   -T fields -e btatt.handle -e btatt.value | grep -i '<roof-handle>'
 ```
+
 This live-verifies `device.actuate_roof`'s move-heartbeat + STOP against the real app before we
 ever drive the roof from calictl. Roof writes are `CONFIRM_REQUIRED` and NOT-LIVE-VERIFIED.
 (Live data 2026-07-13 confirmed the van reports `roof` **installed**, so this is a real, capturable
 feature on this vehicle — unlike the uninstalled gear below.)
 
 ## Priority 1 — the lighting-apply gap (RESOLVED 2026-08-16, photon-verified)
+
 ~~Our lighting frames ACK but the zones don't visibly change (`re-gap A1`).~~ **Resolved**: with
 the unit **awake**, a **bare SET_BRIGHTNESS + `0e00…` commit drives the real lamps, both
 directions** — no preamble, no heartbeat, no arm delay (2026-08-16 evening: 6× photon-confirmed
@@ -174,6 +190,7 @@ screen-open config pull, decompile-confirmed: `dg/h.java:174 E()` writes DIRECT,
 `1502` is a write-through echo.** See `control-and-actuation.md` §4 + `re-gap-inventory.md` §A1.
 
 **Remaining lighting capture targets:**
+
 - The app's **"Alle Lichter" master frame** — RESOLVED from the decompile 2026-08-16 (not a
   capture gap): `dg/h.java:323-337` ``Q(boolean allOn)`` = SET_PROFILE (Mode 16) with
   ``ProfileNumber = allOn ? 12 : 0`` (12=LIGHTS_ON, 0=LIGHTS_OFF per ``dg/l.java``). ``control._lighting``
@@ -194,17 +211,20 @@ screen-open config pull, decompile-confirmed: `dg/h.java:174 E()` writes DIRECT,
   test, no decode.
 
 ## Priority 2 — can buspi hold a persistent session? (continuous data)
+
 Van awake, **phone app closed**, on buspi:
 `PYTHONPATH=/home/pi/open-california python3 -m tools.ble_stability_spike --seconds 180`
 Verdict tells us if a persistent-read mode is viable, or if intermittent access is inherent (→ the
 offline/hold-last design is the ceiling).
 
 ## Priority 3 — the "van awake" freshness signal
+
 Baseline read, then **open a door / ignition on**, then re-read all functions and diff. The field
 that flips = the gate for marking sensor values fresh vs stale. (Cloud unlock does NOT wake the
 unit — must be a physical door/ignition, phone app closed so buspi gets the slot.)
 
 ## Priority 4 — verify the frames we just fixed/decoded (decoded-but-UNVERIFIED)
+
 - **vehicle ignition byte-0**: ignition ON → confirm `ignition_on` reads True (the bit-7 fix).
 - **water ↔ ignition**: ignition on → 11 L; off → decays.
 - ~~**cooler night-timer**~~ — DONE (2026-08-26): night_on/off + quiet Mode 4 live-verified.
@@ -212,6 +232,7 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
   2026-07-13), so there is no colour write to capture.
 
 ## Priority 5 — finish the smaller gaps
+
 - **air-heater level + runtime** (only on/off captured; the physical fields were at sentinels):
   drag Heizstufe to 3 then 8; Laufzeit to 30 then 90 min.
 - **WAKEUP_TIME** (Wecklicht): set a wake-alarm → capture → confirm the epoch-seconds `Timestamp`
@@ -224,6 +245,7 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
   `device.actuate_roof`, then a controlled open→Stop→close drive from calictl.
 
 ## Out of reach even at the van (WiFi, not BLE)
+
 - **Exlap data-body schemas** — need the camper's WiFi AP up + an Exlap/TCP capture on
   `<camper-AP-ip>`; a separate transport, not a BLE capture.
 - **Uninstalled features** (satellite/stairs/roof-A/C/LR-heater) — no hardware on this van.

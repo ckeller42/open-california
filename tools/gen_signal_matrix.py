@@ -31,6 +31,7 @@ non-trivial semantic transform, per CLAUDE.md's camping-lights precedent) as
 ``needs-review``; everything else is ``—``. This is a proxy, not a real audit result —
 said explicitly in the generated doc.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -45,8 +46,15 @@ OUT_FILE = ROOT / "docs" / "protocol" / "signal-matrix.md"
 _SOURCE_KEYS = ("app", "gui", "vwdoc", "live")
 
 _COLUMNS = (
-    "function", "category", "field", "decision", "surfaced-name",
-    "confidence", "provenance", "semantic-review", "omit-reason",
+    "function",
+    "category",
+    "field",
+    "decision",
+    "surfaced-name",
+    "confidence",
+    "provenance",
+    "semantic-review",
+    "omit-reason",
 )
 
 
@@ -81,17 +89,19 @@ def _rows(catalog):
             for field in sorted(fields):
                 entry = fields.get(field) or {}
                 decision = entry.get("decision")
-                rows.append((
-                    fn,
-                    category,
-                    field,
-                    _cell(decision),
-                    _cell(entry.get("name")) if decision == "surface" else "—",
-                    _cell(entry.get("confidence")),
-                    _provenance(entry),
-                    _semantic_review(entry),
-                    _cell(entry.get("reason")) if decision == "omit" else "—",
-                ))
+                rows.append(
+                    (
+                        fn,
+                        category,
+                        field,
+                        _cell(decision),
+                        _cell(entry.get("name")) if decision == "surface" else "—",
+                        _cell(entry.get("confidence")),
+                        _provenance(entry),
+                        _semantic_review(entry),
+                        _cell(entry.get("reason")) if decision == "omit" else "—",
+                    )
+                )
     return rows
 
 
@@ -123,7 +133,7 @@ def build(signals_path=None) -> str:
         "- **semantic-review**: signals.yaml persists **no** dedicated review-status "
         "field — `tools/audit_signals.py --report` computes `SEMANTIC-REVIEW-NEEDED` "
         "live against a decompile source tree, it isn't stored here. This column is a "
-        "best-effort proxy: entries whose `scale` mentions \"inverted\" or \"combined\" "
+        'best-effort proxy: entries whose `scale` mentions "inverted" or "combined" '
         "(the only persisted marker of a non-trivial transform, e.g. the camping-lights "
         "case) are flagged `needs-review`; run the real auditor for anything authoritative.",
         "",

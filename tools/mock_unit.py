@@ -50,6 +50,7 @@ Imports only stdlib + ``calictl.{protocol,control,overrides,pairing}`` (no bleak
 ``calictl.pairing`` is itself stdlib-only), so it stays importable in the bleak-less test
 environment (a project hard rule).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -69,9 +70,9 @@ _VERSION_SHORT = "1001"
 _AUTH_SHORT = "1004"
 _HEARTBEAT_SHORT = "1003"
 
-LEAVE_UNCHANGED_2BIT = 3   # the sg.a 2-bit "leave unchanged" sentinel (see control.SENTINEL)
-ROOF_STEP_S = 5.0          # seconds of a held valid move per Position step (closed→middle→open)
-ROOF_RELEASE_S = 1.5       # no roof frame for this long = the button was released (app streams @500 ms)
+LEAVE_UNCHANGED_2BIT = 3  # the sg.a 2-bit "leave unchanged" sentinel (see control.SENTINEL)
+ROOF_STEP_S = 5.0  # seconds of a held valid move per Position step (closed→middle→open)
+ROOF_RELEASE_S = 1.5  # no roof frame for this long = the button was released (app streams @500 ms)
 ROOF_COUNTER_STALE_S = 1.5
 # The unit drops a link that carries no 1003 beat for this long (on-device 2026-07-09).
 HEARTBEAT_TIMEOUT_S = 15.0
@@ -80,7 +81,7 @@ CRANK_DROP_S = 60.0
 # The unit withholds the roof motor while it validates a fresh SafetyCounter (~3 s per the app's
 # own dead-man, device.ROOF_SAFETY_VALIDATE_S). SEMI-VERIFIED: calictl has never driven the real
 # motor, so this is a parameter to tune, not a measured fact. 0 disables the withhold.
-ROOF_WITHHOLD_S = 3.0 # SafetyCounter not incremented for this long = no longer valid
+ROOF_WITHHOLD_S = 3.0  # SafetyCounter not incremented for this long = no longer valid
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 LIGHT_MODE_SET_BRIGHTNESS = 4
 # Functions the real unit was CONFIRMED to push on change (control-and-actuation.md: the genuine
@@ -88,8 +89,8 @@ LIGHT_MODE_SET_BRIGHTNESS = 4
 # push-once only: the 2026-09-16 buspi trace saw no change-driven push on the other 12 chars.
 CHANGE_PUSH_FNS = frozenset({"campingmode", "vehicle"})
 LIGHT_MODE_SET_PROFILE = 16
-LIGHT_MODE_COMMIT = 0        # the 0e00… commit/apply frame (HCI-verified 2026-07-13): a
-                             # SET_BRIGHTNESS/SET_PROFILE is only APPLIED once this lands
+LIGHT_MODE_COMMIT = 0  # the 0e00… commit/apply frame (HCI-verified 2026-07-13): a
+# SET_BRIGHTNESS/SET_PROFILE is only APPLIED once this lands
 
 # Per-function initial decoded state. Installed flags on so semantics reports the
 # function as present; loads start OFF. Functions absent here start all-zero.
@@ -99,10 +100,8 @@ DEFAULT_SEED = {
     # fields are 4 ASCII bytes packed as a 32-bit int: "0410" = 0x30343130, "0207" = 0x30323037.
     "general": {"AmbSwVersion": 0x30343130, "CmSwVersion": 0x30323037, "CommunicationVersion": 2},
     "cooler": {"Installed": 1, "State": 0, "Mode": 4, "Level": 3},
-    "campingmode": {"Installed": 1, "State": 0, "UsbCharger": 0,
-                    "InteriorLight": 0, "OutsideLight": 0},
-    "airheater": {"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0,
-                  "HeatingLevel": 0},
+    "campingmode": {"Installed": 1, "State": 0, "UsbCharger": 0, "InteriorLight": 0, "OutsideLight": 0},
+    "airheater": {"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0, "HeatingLevel": 0},
     # Pop-top FITTED (the real van has one, #106), closed, no InfoPopUp alert, counter valid.
     # Seeded so the Roof tile + screen render in the e2e suite: the move buttons are the one
     # safety-sensitive control, and without a roof here CI never executed roofControls() at
@@ -112,32 +111,65 @@ DEFAULT_SEED = {
     # ProfileNumber 0 = no active profile. The apply gate is the brightness FRAME's own
     # ProfileNumber (non-zero, see write()), not this seed value. L10-16 hold the constant
     # not-installed default (13) that the real van reports (so any_on must ignore them).
-    "lighting": {"ProfileNumber": 0, "Mode": 0, "LightValue": 0,
-                 "BrightnessLOneZero": 13, "BrightnessLOneOne": 13, "BrightnessLOneThree": 13,
-                 "BrightnessLOneFour": 13, "BrightnessLOneFive": 13, "BrightnessLOneSix": 13},
+    "lighting": {
+        "ProfileNumber": 0,
+        "Mode": 0,
+        "LightValue": 0,
+        "BrightnessLOneZero": 13,
+        "BrightnessLOneOne": 13,
+        "BrightnessLOneThree": 13,
+        "BrightnessLOneFour": 13,
+        "BrightnessLOneFive": 13,
+        "BrightnessLOneSix": 13,
+    },
     # Water uses the van's ABSOLUTE encoding (Unit=1: Level=litres, Volume=capacity), matching
     # a live read: fresh 11/29 L (38%), waste 0/22 L. (The van's fresh sensor is coarse, so a low
     # reading like 1 L can appear without the grey tank rising — modelled as a normal healthy 11 L.)
-    "water": {"Installed": 1, "FreshWaterUnit": 1, "FreshWaterLevel": 11, "FreshWaterVolume": 29,
-              "WasteWaterUnit": 1, "WasteWaterLevel": 0, "WasteWaterVolume": 22},
+    "water": {
+        "Installed": 1,
+        "FreshWaterUnit": 1,
+        "FreshWaterLevel": 11,
+        "FreshWaterVolume": 29,
+        "WasteWaterUnit": 1,
+        "WasteWaterLevel": 0,
+        "WasteWaterVolume": 22,
+    },
     # Engine-OFF energy state (mirrors the real van, live-verified): the STARTER battery is
     # only measured with terminal-15, so its current reads the 0x81 sentinel and Age=255 (stale)
     # -> batt1_v is None (the UI must render "—", never "null V"). Leisure battery is always live
     # (100% / 14.1 V, 58 h remaining). Seeding this makes the null-readout path reachable in tests.
     # DC-DC + shore are fitted but idle (-> "inactive (0 W)"); solar is NOT fitted (-> "not
     # installed") — the real equipment profile of this van.
-    "energy": {"SocOneBattAfs": 5, "SocTwoBattAfs": 10, "UTwoBattBemAfs": 141,
-               "ITwoBattBemAfs": 0, "UOneBattBemAfs": 48, "IOneBattBemAfs": 0x81,
-               "AgeOneBattValuesMinutes": 255, "tTwoBattRemainingh": 58,
-               "DcdcInstalled": 1, "LadInstalled": 1, "PvInstalled": 0,
-               "StateDcdcAfs": 0, "StateLandAfs": 0},
+    "energy": {
+        "SocOneBattAfs": 5,
+        "SocTwoBattAfs": 10,
+        "UTwoBattBemAfs": 141,
+        "ITwoBattBemAfs": 0,
+        "UOneBattBemAfs": 48,
+        "IOneBattBemAfs": 0x81,
+        "AgeOneBattValuesMinutes": 255,
+        "tTwoBattRemainingh": 58,
+        "DcdcInstalled": 1,
+        "LadInstalled": 1,
+        "PvInstalled": 0,
+        "StateDcdcAfs": 0,
+        "StateLandAfs": 0,
+    },
     # Parked, engine-OFF (COHERENT with the energy seed above: terminal-15 off => starter
     # battery unmeasured). Valid RTC (runs regardless of ignition) + a small tilt (roll -1.09°,
     # pitch 0.35°; raw CarLevelRoll -109 = 0.01°-units, ÷100 in semantics).
-    "vehicle": {"TerminalOneFive": 0, "CarVariant": 4,
-                "CarTimeYear": 126, "CarTimeMonth": 6, "CarTimeDay": 8,
-                "CarTimeHour": 19, "CarTimeMinute": 30, "CarTimeSecond": 0,
-                "CarLevelRoll": -109, "CarLevelPitch": 35},
+    "vehicle": {
+        "TerminalOneFive": 0,
+        "CarVariant": 4,
+        "CarTimeYear": 126,
+        "CarTimeMonth": 6,
+        "CarTimeDay": 8,
+        "CarTimeHour": 19,
+        "CarTimeMinute": 30,
+        "CarTimeSecond": 0,
+        "CarLevelRoll": -109,
+        "CarLevelPitch": 35,
+    },
 }
 
 
@@ -155,7 +187,7 @@ def _pack_state(func, values: dict) -> bytes:
     for f in placed:
         if f.name in values and values[f.name] is not None:
             v = int(values[f.name]) & ((1 << f.width) - 1)
-            bits[f.offset:f.offset + f.width] = protocol._bits_of(v, f.width)
+            bits[f.offset : f.offset + f.width] = protocol._bits_of(v, f.width)
     return protocol.pack(bits)
 
 
@@ -170,20 +202,20 @@ class MockCamperUnit:
             base.setdefault(fn, {}).update(vals)
         self.state: dict[str, dict] = base
         self.armed = False
-        self.online = True     # False models the parked unit deep-asleep (not advertising)
+        self.online = True  # False models the parked unit deep-asleep (not advertising)
         self.last_beat: int | None = None
-        self._pending_light = None                   # staged lighting change, applied on commit
-        self._roof_ctr: int | None = None            # last SafetyCounter seen (roof frames)
-        self._roof_streak = 0                        # counter increments observed (monotonic run)
-        self._roof_ctr_advanced = 0.0                # self.now when the counter last incremented
-        self._roof_withhold_until = 0.0              # motor withheld until then (see ROOF_WITHHOLD_S)
-        self._roof_dir: str | None = None            # "up" / "down" while a move frame is held
-        self._roof_last_frame = 0.0                  # self.now when the last roof frame arrived
-        self._roof_travel = 0.0                      # seconds of valid travel since the last step
-        self.now = 0.0                               # the unit's own clock, advanced by tick()
-        self._acc_minute = 0.0                       # sub-minute remainder for per-minute counters
-        self._last_t15: int | None = None            # ignition edge detector (tick)
-        self.writes: list[tuple[str, bytes]] = []   # (function, frame) audit trail
+        self._pending_light = None  # staged lighting change, applied on commit
+        self._roof_ctr: int | None = None  # last SafetyCounter seen (roof frames)
+        self._roof_streak = 0  # counter increments observed (monotonic run)
+        self._roof_ctr_advanced = 0.0  # self.now when the counter last incremented
+        self._roof_withhold_until = 0.0  # motor withheld until then (see ROOF_WITHHOLD_S)
+        self._roof_dir: str | None = None  # "up" / "down" while a move frame is held
+        self._roof_last_frame = 0.0  # self.now when the last roof frame arrived
+        self._roof_travel = 0.0  # seconds of valid travel since the last step
+        self.now = 0.0  # the unit's own clock, advanced by tick()
+        self._acc_minute = 0.0  # sub-minute remainder for per-minute counters
+        self._last_t15: int | None = None  # ignition edge detector (tick)
+        self.writes: list[tuple[str, bytes]] = []  # (function, frame) audit trail
         # Per-function STALE-read overrides: a read returns these until the 1003 heartbeat arms
         # the session (self.armed), after which the true `state` is returned — models re-read chars
         # the heartbeat refreshes. NOT water: the old "1 L latched vs 11 L once the heartbeat runs"
@@ -203,9 +235,9 @@ class MockCamperUnit:
         # owner check in 2026-07 saw a "confirmed" readback while the lamps stayed dark). The only
         # truthful channel is the 1502 Mode-4 ramp notification carrying the REAL brightness.
         # So `state["lighting"]` is the echo, and these model the physical side:
-        self.light_actual: dict[str, int] = {}        # what the lamps are really at (ramped)
-        self.light_applies = True                     # False = unit ACKs + echoes but lamps DON'T move
-        self._light_ramp: dict[str, int] = {}         # zone -> target, stepped by tick()
+        self.light_actual: dict[str, int] = {}  # what the lamps are really at (ramped)
+        self.light_applies = True  # False = unit ACKs + echoes but lamps DON'T move
+        self._light_ramp: dict[str, int] = {}  # zone -> target, stepped by tick()
         # WATER is measurement-gated on the van's own WATER SYSTEM being powered — NOT on the 1003
         # heartbeat (that was correlation; disproven at the van 2026-07-14, value-freshness.md).
         # Unpowered, the unit stops measuring and FREEZES BOTH tanks at their last reading, which is
@@ -217,7 +249,7 @@ class MockCamperUnit:
         # (terminal-15 vs road speed vs parking brake) is still under decompile review, so deriving
         # it here would encode a guess. See `refusals` for the audit trail.
         self.driving = False
-        self.refusals: list[tuple[str, str]] = []     # (function, why) for every ACK-and-ignore
+        self.refusals: list[tuple[str, str]] = []  # (function, why) for every ACK-and-ignore
         # Link liveness. The arm is a one-shot latch, but it does NOT last forever: the unit drops
         # a link that carries no 1003 beat for ~15 s (on-device 2026-07-09). Only a link that has
         # actually SEEN a beat can lapse — `_beat_t` stays None when a test arms the unit directly,
@@ -227,12 +259,12 @@ class MockCamperUnit:
         # globally makes calictl's own roof flow fail, because it opens a second client while the
         # persistent session still holds one — see test_single_connection_slot for the detail.
         self.one_slot = False
-        self.holder: object | None = None             # the one connection slot (phone or daemon)
-        self._wake_at: float | None = None            # scheduled re-wake (engine-crank drop)
-        self._crank_drop = False                      # drop the link at the end of this tick
-        self.water_powered = True                     # False = parked/locked: both tanks freeze
-        self._water_latch: dict[str, int] = {}        # the frozen reading, captured when power drops
-        self._water_pushed: dict[str, int] = {}       # last values notified, so we push only on change
+        self.holder: object | None = None  # the one connection slot (phone or daemon)
+        self._wake_at: float | None = None  # scheduled re-wake (engine-crank drop)
+        self._crank_drop = False  # drop the link at the end of this tick
+        self.water_powered = True  # False = parked/locked: both tanks freeze
+        self._water_latch: dict[str, int] = {}  # the frozen reading, captured when power drops
+        self._water_pushed: dict[str, int] = {}  # last values notified, so we push only on change
         # reverse maps: char UUID -> function, for read/write routing
         self._state_char = {f.state_char: fn for fn, f in self.funcs.items() if f.state_char}
         self._control_char = {f.control_char: fn for fn, f in self.funcs.items() if f.control_char}
@@ -258,8 +290,8 @@ class MockCamperUnit:
                 vals.update(self.read_latch[fn])
             return _pack_state(self.funcs[fn], vals)
         if uuid in (device.VERSION_CHAR, device.AUTH_CHAR):
-            return b"\x04\x10\x02\x07"           # non-empty payload for the version/auth gate
-        return bytes(6)                          # unknown readable char: benign payload
+            return b"\x04\x10\x02\x07"  # non-empty payload for the version/auth gate
+        return bytes(6)  # unknown readable char: benign payload
 
     def decoded(self, function: str) -> dict:
         """Current decoded state as calictl would read it (for test assertions)."""
@@ -310,7 +342,7 @@ class MockCamperUnit:
         """Van parks -> deep sleep: the link dies and the unit stops advertising."""
         self.online = False
         self.armed = False
-        self.holder = None            # the link is gone, so the single slot is free again
+        self.holder = None  # the link is gone, so the single slot is free again
         self._beat_t = None
 
     def wake(self) -> None:
@@ -334,6 +366,7 @@ class MockCamperUnit:
         ``ROOF_RELEASE_S`` = released).
         """
         import datetime as _dt
+
         self.now += dt
         changed: set[str] = set()
         v = self.state.get("vehicle")
@@ -341,17 +374,38 @@ class MockCamperUnit:
 
         # RTC — the fields are 1900-based year, 0-BASED month (the app adds 1; verified in the app
         # lab: CarTimeMonth=9 displayed as October), 1-based day, then h/m/s.
-        if v and all(k in v for k in ("CarTimeYear", "CarTimeMonth", "CarTimeDay",
-                                       "CarTimeHour", "CarTimeMinute", "CarTimeSecond")):
+        if v and all(
+            k in v
+            for k in (
+                "CarTimeYear",
+                "CarTimeMonth",
+                "CarTimeDay",
+                "CarTimeHour",
+                "CarTimeMinute",
+                "CarTimeSecond",
+            )
+        ):
             try:
-                t = _dt.datetime(1900 + int(v["CarTimeYear"]), int(v["CarTimeMonth"]) + 1, int(v["CarTimeDay"]),
-                                 int(v["CarTimeHour"]), int(v["CarTimeMinute"]), int(v["CarTimeSecond"]))
+                t = _dt.datetime(
+                    1900 + int(v["CarTimeYear"]),
+                    int(v["CarTimeMonth"]) + 1,
+                    int(v["CarTimeDay"]),
+                    int(v["CarTimeHour"]),
+                    int(v["CarTimeMinute"]),
+                    int(v["CarTimeSecond"]),
+                )
                 t += _dt.timedelta(seconds=dt)
-                v.update(CarTimeYear=t.year - 1900, CarTimeMonth=t.month - 1, CarTimeDay=t.day,
-                         CarTimeHour=t.hour, CarTimeMinute=t.minute, CarTimeSecond=t.second)
+                v.update(
+                    CarTimeYear=t.year - 1900,
+                    CarTimeMonth=t.month - 1,
+                    CarTimeDay=t.day,
+                    CarTimeHour=t.hour,
+                    CarTimeMinute=t.minute,
+                    CarTimeSecond=t.second,
+                )
                 changed.add("vehicle")
             except ValueError:
-                pass                                # garbage clock fields: leave them alone
+                pass  # garbage clock fields: leave them alone
 
         # ignition edge -> camping + starter-battery freshness
         if v is not None and self._last_t15 is not None and int(ign) != self._last_t15:
@@ -359,7 +413,7 @@ class MockCamperUnit:
             if cm is not None:
                 cm["Enable"] = int(ign)
                 if ign:
-                    cm["State"] = 0            # the unit sheds camping master when terminal 15 rises
+                    cm["State"] = 0  # the unit sheds camping master when terminal 15 rises
                 changed.add("campingmode")
             # The BLE link also drops for ~1 min at the engine crank (observed at the van) — the one
             # moment calictl both loses the link AND has state changes to reconcile. Deferred to the
@@ -411,15 +465,19 @@ class MockCamperUnit:
             start_m = int(a.get("TimerHour") or 0) * 60 + int(a.get("TimerMin") or 0)
             left = (start_m - now_m) % (24 * 60)
             if left == 0 or left > 24 * 60 - 2:
-                a.update(NormalOperation=1, OperationModeAirHeater=0,
-                         RunningTimeinAction=a.get("RunningTime", 0))
+                a.update(
+                    NormalOperation=1, OperationModeAirHeater=0, RunningTimeinAction=a.get("RunningTime", 0)
+                )
                 changed.add("airheater")
 
         # roof: a counter that stopped arriving is no longer valid (the app reads a stale
         # SafetyCounterValid=1 as "another user is operating the roof" — observed 2026-09-16)
         r = self.state.get("roof")
-        if r is not None and r.get("SafetyCounterValid") and \
-                self.now - self._roof_last_frame > ROOF_COUNTER_STALE_S:
+        if (
+            r is not None
+            and r.get("SafetyCounterValid")
+            and self.now - self._roof_last_frame > ROOF_COUNTER_STALE_S
+        ):
             r["SafetyCounterValid"] = 0
             self._roof_streak = 0
             self._roof_dir = None
@@ -427,7 +485,7 @@ class MockCamperUnit:
         # roof travel
         if r is not None and self._roof_dir is not None:
             if self.now - self._roof_last_frame > ROOF_RELEASE_S:
-                self._roof_dir = None            # released: frames stopped
+                self._roof_dir = None  # released: frames stopped
                 self._roof_travel = 0.0
             else:
                 self._roof_travel += dt
@@ -488,7 +546,7 @@ class MockCamperUnit:
         for fn in changed & CHANGE_PUSH_FNS:
             self.push(fn)
 
-        if getattr(self, "_crank_drop", False):    # engine crank: notify first, then lose the link
+        if getattr(self, "_crank_drop", False):  # engine crank: notify first, then lose the link
             self._crank_drop = False
             self.drop()
             self._wake_at = self.now + CRANK_DROP_S
@@ -519,8 +577,10 @@ class MockCamperUnit:
         # (power, level), and the unit obviously does not refuse those.
         cs = self.state.get("cooler") or {}
         if fn == "cooler" and cs.get("State") == 1:
-            moves_timer = any(ctrl.get(c) is not None and ctrl.get(c) != cs.get(s)
-                              for c, s in (("TimerHour", "TimerHourSet"), ("TimerMin", "TimerMinSet")))
+            moves_timer = any(
+                ctrl.get(c) is not None and ctrl.get(c) != cs.get(s)
+                for c, s in (("TimerHour", "TimerHourSet"), ("TimerMin", "TimerMinSet"))
+            )
             if ctrl.get("TimerStart") == 1 or moves_timer:
                 return "the cooling timer can only be set while the fridge is off"
         return None
@@ -530,7 +590,7 @@ class MockCamperUnit:
             return self.beat(data)
         fn = self._control_char.get(uuid)
         if fn is None:
-            return                                # write to a non-control char: ignore
+            return  # write to a non-control char: ignore
         func = self.funcs[fn]
         frame = bytes(data)
         self.writes.append((fn, frame))
@@ -567,7 +627,7 @@ class MockCamperUnit:
         refusal = self._refusal(fn, ctrl)
         if refusal:
             self.refusals.append((fn, refusal))
-            return                                # ACK, no state change — the silent kind
+            return  # ACK, no state change — the silent kind
         st = self.state.setdefault(fn, {})
 
         # Lighting is COMMIT-GATED (HCI-verified 2026-07-13). A SET_PROFILE (Mode 16) or
@@ -585,14 +645,21 @@ class MockCamperUnit:
                 self._pending_light = ("profile", ctrl.get("ProfileNumber", st.get("ProfileNumber", 0)))
                 return
             if mode == LIGHT_MODE_SET_BRIGHTNESS:
-                if not ctrl.get("ProfileNumber"):   # frame carries no working profile (PN=0) -> ignored
-                    self._pending_light = None; return
-                zones = {cf.name: ctrl[cf.name] for cf in func.control_fields
-                         if cf.placed and cf.name.startswith("BrightnessL") and cf.name in ctrl
-                         and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED and func.state_field(cf.name)}
+                if not ctrl.get("ProfileNumber"):  # frame carries no working profile (PN=0) -> ignored
+                    self._pending_light = None
+                    return
+                zones = {
+                    cf.name: ctrl[cf.name]
+                    for cf in func.control_fields
+                    if cf.placed
+                    and cf.name.startswith("BrightnessL")
+                    and cf.name in ctrl
+                    and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED
+                    and func.state_field(cf.name)
+                }
                 self._pending_light = ("zones", zones, ctrl.get("ProfileNumber"))
                 return
-            if mode == LIGHT_MODE_COMMIT:         # apply the staged change
+            if mode == LIGHT_MODE_COMMIT:  # apply the staged change
                 p = getattr(self, "_pending_light", None)
                 if p and p[0] == "profile":
                     st["ProfileNumber"] = p[1]
@@ -608,7 +675,7 @@ class MockCamperUnit:
                     # the written value whether or not the lamps moved. The physical side only
                     # follows when the unit actually actuates, and then it RAMPS (tick()).
                     st.update(p[1])
-                    st["ProfileNumber"] = p[2]    # a brightness set makes its profile the active one
+                    st["ProfileNumber"] = p[2]  # a brightness set makes its profile the active one
                 self._pending_light = None
             return
 
@@ -625,7 +692,7 @@ class MockCamperUnit:
             # increment for ROOF_COUNTER_STALE_S. Two increments seen = validated.
             ctr = ctrl.get("SafetyCounter")
             if self._roof_ctr is None or ctr < self._roof_ctr:
-                self._roof_streak = 0                # first frame / restarted counter
+                self._roof_streak = 0  # first frame / restarted counter
             elif ctr > self._roof_ctr:
                 self._roof_streak += 1
                 self._roof_ctr_advanced = self.now
@@ -647,13 +714,13 @@ class MockCamperUnit:
             moving = st["SafetyCounterValid"] and self.now >= self._roof_withhold_until
             self._roof_dir = new_dir if moving else None
             self._roof_last_frame = self.now
-            return                                # motion itself happens on the clock: tick()
+            return  # motion itself happens on the clock: tick()
 
         for cf in func.control_fields:
             if not (cf.placed and cf.name in ctrl):
                 continue
             if cf.width == 2 and ctrl[cf.name] == LEAVE_UNCHANGED_2BIT:
-                continue                          # full-packet "leave unchanged" 2-bit sentinel
+                continue  # full-packet "leave unchanged" 2-bit sentinel
             # Wider fields: the app fills every UNTARGETED field with the model's default (its
             # `v()` value — heater HeatingLevel 11 / RunningTime 127 / TimerHour 31 / TimerMin 63,
             # cooler Level 7 / TimerHour 30 ...), which the unit treats as "leave unchanged". Seen
@@ -669,18 +736,26 @@ class MockCamperUnit:
             # Cooler start time: control TimerHour/TimerMin land in state TimerHourSet/TimerMinSet
             # (the app's picker writes them alone — ff7704021f1f = 04:02 — and re-reads the *Set*
             # fields to display "cooling starts at"). Heater keeps the same names on both sides.
-            if fn == "cooler" and cf.name in ("TimerHour", "TimerMin") and func.state_field(cf.name + "Set") is not None:
+            if (
+                fn == "cooler"
+                and cf.name in ("TimerHour", "TimerMin")
+                and func.state_field(cf.name + "Set") is not None
+            ):
                 st[cf.name + "Set"] = ctrl[cf.name]
                 continue
             # Cooler timer ACTIONS: TimerStart=1 arms the timer (TimerState=1), TimerCancel=1
             # clears it — the app's frames carry only the action bit (f7771e3e1f1f, observed).
-            if fn == "cooler" and cf.name in ("TimerStart", "TimerCancel") and ctrl[cf.name] == 1 \
-                    and func.state_field("TimerState") is not None:
+            if (
+                fn == "cooler"
+                and cf.name in ("TimerStart", "TimerCancel")
+                and ctrl[cf.name] == 1
+                and func.state_field("TimerState") is not None
+            ):
                 st["TimerState"] = 1 if cf.name == "TimerStart" else 0
                 continue
             if func.state_field(target) is None:
-                continue                          # not a name-aligned control→state field
-                                                  # (offset-remapped timers are NOT faked)
+                continue  # not a name-aligned control→state field
+                # (offset-remapped timers are NOT faked)
             st[target] = ctrl[cf.name]
         # Immediate heating starts the run-time countdown: RunningTimeinAction (1702) mirrors the
         # configured RunningTime while NormalOperation is on and reads 0 otherwise (the app's status
@@ -706,12 +781,13 @@ class MockBleakClient:
     ``device.py`` constructs it as ``BleakClient(addr, timeout=...)``. All instances
     share the one unit so state persists across calictl's connect-per-operation calls.
     """
-    unit: MockCamperUnit | None = None            # set by the harness / fixture
+
+    unit: MockCamperUnit | None = None  # set by the harness / fixture
 
     def __init__(self, addr, timeout=None, adapter=None):
         self.addr = addr
         self.is_connected = False
-        self._notifying: list[str] = []           # chars this client subscribed (for clean removal)
+        self._notifying: list[str] = []  # chars this client subscribed (for clean removal)
 
     @classmethod
     def bind(cls, unit: MockCamperUnit) -> type[MockBleakClient]:
@@ -734,22 +810,24 @@ class MockBleakClient:
     async def disconnect(self):
         self.is_connected = False
         if self.unit is not None and self.unit.holder is self:
-            self.unit.holder = None               # release the single slot
-        self._unsubscribe_all()                   # a dropped link takes its subscriptions with it
+            self.unit.holder = None  # release the single slot
+        self._unsubscribe_all()  # a dropped link takes its subscriptions with it
 
     def _unsubscribe_all(self):
         for uuid in self._notifying:
             subs = self.unit._subs.get(uuid) if self.unit else None
             if subs:
-                del subs[:1]                      # drop one registration for this client
+                del subs[:1]  # drop one registration for this client
         self._notifying.clear()
 
     @property
     def services(self):
         unit = self.unit
-        chars = [_Char(device.VERSION_CHAR, ["read"]),
-                 _Char(device.AUTH_CHAR, ["read"]),
-                 _Char(device.HEARTBEAT_CHAR, ["write"])]
+        chars = [
+            _Char(device.VERSION_CHAR, ["read"]),
+            _Char(device.AUTH_CHAR, ["read"]),
+            _Char(device.HEARTBEAT_CHAR, ["write"]),
+        ]
         for _fn, f in unit.funcs.items():
             if f.state_char:
                 chars.append(_Char(f.state_char, ["read", "notify"]))
@@ -770,7 +848,7 @@ class MockBleakClient:
         try:
             self.unit.write(str(uuid), data)
         except MockDisconnect:
-            self.is_connected = False             # mirror the unit dropping the link
+            self.is_connected = False  # mirror the unit dropping the link
             raise
 
     async def start_notify(self, uuid, cb):
@@ -786,8 +864,9 @@ class MockBleakClient:
         self.unit._subs.setdefault(str(uuid), []).append(cb)
         self._notifying.append(str(uuid))
         if fn in self.unit.notify_push:
-            frame = _pack_state(self.unit.funcs[fn],
-                                {**self.unit.state.get(fn, {}), **self.unit.notify_push[fn]})
+            frame = _pack_state(
+                self.unit.funcs[fn], {**self.unit.state.get(fn, {}), **self.unit.notify_push[fn]}
+            )
             cb(_Char(str(uuid), ["notify"]), frame)
         elif fn not in self.unit.read_latch:
             cb(_Char(str(uuid), ["notify"]), self.unit.read(str(uuid)))
@@ -855,7 +934,7 @@ class FakePairingTransport:
 
     async def verify(self):
         await asyncio.sleep(0.1)
-        return 5   # any int = "verified"; the real transport counts readable state chars
+        return 5  # any int = "verified"; the real transport counts readable state chars
 
     async def persist_bond(self):
         return self.FOUND_ADDR

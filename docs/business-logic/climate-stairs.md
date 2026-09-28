@@ -17,6 +17,7 @@ Each BLE "feature" has three cooperating classes:
   `tf/a.java` for Campingmode, `og/b.java` for Stairs) — implements a per-feature action interface
   (`jf.a`, `ff.a`, `xe.a`, `lf.a` respectively — these play the role the task brief calls "`af.a`").
   Every action method here does exactly:
+
   ```
   aVar.<field>.o(<value>);   // set ONE control-model field
   aVar.B(); / aVar.A();      // log + (re)build the full outgoing packet from ALL cached fields
@@ -103,12 +104,14 @@ nothing stops you from still sending Mode/FanSpeed/Temperature changes while an 
 ### 4. Correct command recipe
 
 To change **one** control (matching app behavior), send a full 24-bit packet with:
+
 - the target field set to its new value,
 - the other 3 fields set to **whatever you last sent for them** (or the sentinel defaults
   `State=3/FanSpeed=7/Mode=7/Temperature=0` if this is the first command of the session — mirrors
   `lg/a.java:139-147`).
 
 Recipes:
+
 - **Power on/off**: `State = 1|0`, keep last FanSpeed/Mode/Temperature.
 - **Set fan speed**: `FanSpeed = 0..4` (`LEVEL_0..AUTO`), keep others.
 - **Set mode**: `Mode = 0..3` (`AUTOMATIC/MANUAL_COOLING/MANUAL_HEATING/VENTING`), keep others.
@@ -184,6 +187,7 @@ active.
 ### 4. Correct command recipe
 
 Full-packet resend rule applies (5 fields). Recipes:
+
 - **Toggle air heating**: `StateAir = 1|0`, keep others.
 - **Toggle water heating**: `StateWater = 1|0`, keep others.
 - **Toggle hot water (only 0/1 supported)**: `TemperatureWater = 1|0`, keep others.
@@ -252,6 +256,7 @@ interface.
 ### 4. Correct command recipe
 
 Full-packet resend rule applies (4 fields, all 2-bit, sentinel `3`). Recipes:
+
 - **Toggle Campingmode on/off**: `State = 1|0`, keep others.
 - **Toggle USB charger**: `UsbCharger = 1|0`, keep others.
 - **Toggle all lights**: `OutsideLight = InteriorLight = (!on)?1:0` (both fields set together, see
@@ -322,6 +327,7 @@ suggest the vehicle can and does reject movement commands out-of-band.
 ### 4. Correct command recipe
 
 Full-packet resend rule applies (2 fields). Recipes:
+
 - **Switch automatic/manual mode**: `OperationMode = (!auto)?1:0`, keep `Movement`.
 - **Drive the step**: `Movement = extend?2:1`, keep `OperationMode`. No explicit stop value is
   sent by the app; assume the vehicle handles end-of-travel stop internally, and treat repeated/

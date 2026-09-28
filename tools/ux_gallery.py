@@ -13,6 +13,7 @@ Review the PNGs (or send them on) after any GUI change — layout, label, and da
 issues show up here that a headless assertion can't judge. The hard-assertion counterpart is
 `tests/e2e/test_gui.py::test_no_red_flag_text`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,14 +40,34 @@ def _free_port():
 
 def _start_mock_server():
     port = _free_port()
-    env = dict(os.environ, CALICTL_ADDR="MO:CK:CA:MP:ER:00", PYTHONUNBUFFERED="1",
-               CALICTL_ARM_DELAY_S="0.2", CALICTL_SETTLE_S="0.2", CALICTL_HEARTBEAT_PERIOD_S="0.1",
-               CALICTL_HEARTBEAT_WARMUP_S="0", CALICTL_STATE_CACHE="/tmp/calictl_gallery_state.json",
-               CALICTL_ENABLE_WRITES="1")   # screenshots show live controls, not the read-only default
+    env = dict(
+        os.environ,
+        CALICTL_ADDR="MO:CK:CA:MP:ER:00",
+        PYTHONUNBUFFERED="1",
+        CALICTL_ARM_DELAY_S="0.2",
+        CALICTL_SETTLE_S="0.2",
+        CALICTL_HEARTBEAT_PERIOD_S="0.1",
+        CALICTL_HEARTBEAT_WARMUP_S="0",
+        CALICTL_STATE_CACHE="/tmp/calictl_gallery_state.json",
+        CALICTL_ENABLE_WRITES="1",
+    )  # screenshots show live controls, not the read-only default
     proc = subprocess.Popen(
-        [sys.executable, "-m", "tools.run_against_mock", "serve", "--web", str(port),
-         "--interval", "1", "--no-influx"],
-        cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        [
+            sys.executable,
+            "-m",
+            "tools.run_against_mock",
+            "serve",
+            "--web",
+            str(port),
+            "--interval",
+            "1",
+            "--no-influx",
+        ],
+        cwd=ROOT,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     base = "http://127.0.0.1:%d" % port
     deadline = time.time() + 30
     while time.time() < deadline:
@@ -66,6 +87,7 @@ def _start_mock_server():
 def capture(out_dir, screens=SCREENS):
     """Screenshot the dashboard + each feature screen (light + dark) into out_dir. Returns paths."""
     from playwright.sync_api import sync_playwright  # tool dep; imported lazily
+
     os.makedirs(out_dir, exist_ok=True)
     proc, base = _start_mock_server()
     paths = []
@@ -73,8 +95,9 @@ def capture(out_dir, screens=SCREENS):
         with sync_playwright() as pw:
             for theme in ("light", "dark"):
                 browser = pw.chromium.launch()
-                ctx = browser.new_context(color_scheme=theme, viewport={"width": 420, "height": 900},
-                                          device_scale_factor=2)
+                ctx = browser.new_context(
+                    color_scheme=theme, viewport={"width": 420, "height": 900}, device_scale_factor=2
+                )
                 pg = ctx.new_page()
                 pg.goto(base)
                 pg.wait_for_timeout(1500)
@@ -107,7 +130,9 @@ def main(argv=None):
     try:
         import playwright  # noqa: F401
     except ImportError:
-        raise SystemExit("needs playwright: pip install playwright && python -m playwright install chromium") from None
+        raise SystemExit(
+            "needs playwright: pip install playwright && python -m playwright install chromium"
+        ) from None
     paths = capture(args.out)
     print("wrote %d screenshots to %s" % (len(paths), args.out))
 

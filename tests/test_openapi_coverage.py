@@ -5,12 +5,13 @@ so this test is what keeps it honest: it fails if a route, the POST allowlist, o
 CONFIRM_REQUIRED set drifts between code and spec. Mirrors the repo's other coverage guardrails
 (test_signal_coverage, test_doc_offset_consistency).
 """
+
 import os
 import re
 
 import pytest
 
-yaml = pytest.importorskip("yaml")   # PyYAML is a tooling/test dep, not a runtime one
+yaml = pytest.importorskip("yaml")  # PyYAML is a tooling/test dep, not a runtime one
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB_PY = os.path.join(ROOT, "calictl", "web.py")
@@ -41,9 +42,12 @@ def _routes_from_web():
 def _routes_from_spec():
     with open(SPEC, encoding="utf-8") as f:
         spec = yaml.safe_load(f)
-    return {(method, path)
-            for path, ops in spec["paths"].items()
-            for method in ops if method in ("get", "post", "put", "delete", "patch")}
+    return {
+        (method, path)
+        for path, ops in spec["paths"].items()
+        for method in ops
+        if method in ("get", "post", "put", "delete", "patch")
+    }
 
 
 def test_spec_routes_match_web_routes():
@@ -54,29 +58,34 @@ def test_spec_routes_match_web_routes():
     assert web == spec_api, (
         "openapi.yaml drifted from web.py routes.\n"
         "  in web.py but undocumented: %s\n"
-        "  documented but not in web.py: %s" % (sorted(web - spec_api), sorted(spec_api - web)))
+        "  documented but not in web.py: %s" % (sorted(web - spec_api), sorted(spec_api - web))
+    )
 
 
 def test_post_allowlist_matches_spec():
     """web.py's POST allowlist tuple == the POST paths documented in the spec."""
     src = _web_src()
-    m = re.search(r'path not in \(([^)]*)\)', src)
+    m = re.search(r"path not in \(([^)]*)\)", src)
     assert m, "could not find the POST allowlist tuple in web.py"
     allow = set(re.findall(r'"(/api/[a-z_]+)"', m.group(1)))
     spec_post = {p for meth, p in _routes_from_spec() if meth == "post"}
-    assert allow == spec_post, (
-        "POST allowlist vs spec mismatch: web=%s spec=%s" % (sorted(allow), sorted(spec_post)))
+    assert allow == spec_post, "POST allowlist vs spec mismatch: web=%s spec=%s" % (
+        sorted(allow),
+        sorted(spec_post),
+    )
 
 
 def test_confirm_required_matches_spec():
     """web.CONFIRM_REQUIRED == the spec's x-confirm-required list."""
     from calictl import web
+
     with open(SPEC, encoding="utf-8") as f:
         spec = yaml.safe_load(f)
     spec_confirm = set(spec["info"]["x-confirm-required"])
-    assert set(web.CONFIRM_REQUIRED) == spec_confirm, (
-        "x-confirm-required %s != web.CONFIRM_REQUIRED %s" % (sorted(spec_confirm),
-                                                              sorted(web.CONFIRM_REQUIRED)))
+    assert set(web.CONFIRM_REQUIRED) == spec_confirm, "x-confirm-required %s != web.CONFIRM_REQUIRED %s" % (
+        sorted(spec_confirm),
+        sorted(web.CONFIRM_REQUIRED),
+    )
 
 
 def test_error_tokens_documented():

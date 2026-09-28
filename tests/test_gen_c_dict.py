@@ -9,6 +9,7 @@ directly).
    :id: T_CDICT_REGEN_FRESH
    :links: R_DICT_SINGLE_SOURCE
 """
+
 from pathlib import Path
 
 from calictl import overrides
@@ -106,14 +107,23 @@ def test_chars_header_heartbeat_timing_is_calictl_defaults_not_env(monkeypatch):
     from tools import gen_c_dict
 
     env = {k: v for k, v in os.environ.items() if not k.startswith("CALICTL_HEARTBEAT_")}
-    probe = subprocess.run(   # the defaults as calictl itself resolves them with no override
-        [sys.executable, "-c", "from calictl import device as d; "
-         "print(round(d.HEARTBEAT_PERIOD_S * 1000), round(d.HEARTBEAT_WARMUP_S * 1000))"],
-        cwd=ROOT, env=env, capture_output=True, text=True, check=True)
+    probe = subprocess.run(  # the defaults as calictl itself resolves them with no override
+        [
+            sys.executable,
+            "-c",
+            "from calictl import device as d; "
+            "print(round(d.HEARTBEAT_PERIOD_S * 1000), round(d.HEARTBEAT_WARMUP_S * 1000))",
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     want_period, want_warmup = map(int, probe.stdout.split())
     monkeypatch.setenv("CALICTL_HEARTBEAT_PERIOD_S", "0.05")
     monkeypatch.setenv("CALICTL_HEARTBEAT_WARMUP_S", "0.1")
     text = gen_c_dict.generate_chars()
     assert "#define CODEC_HEARTBEAT_PERIOD_MS %d\n" % want_period in text
     assert "#define CODEC_HEARTBEAT_WARMUP_MS %d\n" % want_warmup in text
-    assert want_warmup == 2000                    # value-freshness.md: the proven on-device warm-up
+    assert want_warmup == 2000  # value-freshness.md: the proven on-device warm-up

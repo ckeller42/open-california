@@ -7,6 +7,7 @@ sweep vector file under ``tests/vectors/`` that is first proven against the Pyth
 original (the oracle), then replayed through the batched ``codec_cli`` and asserted
 identical.
 """
+
 import json
 from pathlib import Path
 
@@ -41,8 +42,13 @@ def test_freshness_vectors_pass_python_oracle():
 def _f_line(c):
     def s(v):
         return "-" if v is None else str(v)
-    return "F %s %s %s %s" % (s(c["new"]["fresh"]), s(c["prev"]["fresh"]),
-                              s(c["new"]["waste"]), s(c["prev"]["waste"]))
+
+    return "F %s %s %s %s" % (
+        s(c["new"]["fresh"]),
+        s(c["prev"]["fresh"]),
+        s(c["new"]["waste"]),
+        s(c["prev"]["waste"]),
+    )
 
 
 def test_freshness_c_port_parity(codec_cli):
@@ -53,15 +59,30 @@ def test_freshness_c_port_parity(codec_cli):
 # --- anchors ---------------------------------------------------------------------
 
 # Python violation-message prefix -> the C port's stable bitmask ID (csrc/ports.h)
-_ANCHOR_ID = {"leisure battery": 1 << 0, "leisure SoC": 1 << 1,
-              "cooler level": 1 << 2, "cooler quiet_from": 1 << 3,
-              "cooler quiet_to": 1 << 4, "roof position": 1 << 5,
-              "vehicle level_roll": 1 << 6, "vehicle level_pitch": 1 << 7}
+_ANCHOR_ID = {
+    "leisure battery": 1 << 0,
+    "leisure SoC": 1 << 1,
+    "cooler level": 1 << 2,
+    "cooler quiet_from": 1 << 3,
+    "cooler quiet_to": 1 << 4,
+    "roof position": 1 << 5,
+    "vehicle level_roll": 1 << 6,
+    "vehicle level_pitch": 1 << 7,
+}
 
 # flat sweep key -> (states path, needs-installed gate)
-_ANCHOR_KEYS = ("batt2_v", "soc2_level", "cooler_installed", "cooler_level",
-                "quiet_from", "quiet_to", "roof_installed", "roof_position",
-                "level_roll", "level_pitch")
+_ANCHOR_KEYS = (
+    "batt2_v",
+    "soc2_level",
+    "cooler_installed",
+    "cooler_level",
+    "quiet_from",
+    "quiet_to",
+    "roof_installed",
+    "roof_position",
+    "level_roll",
+    "level_pitch",
+)
 
 
 def _anchor_states(case):
@@ -85,6 +106,7 @@ def _anchor_states(case):
 
 def _py_anchor_mask(case):
     from calictl import anchors
+
     mask = 0
     for msg in anchors.check(_anchor_states(case)):
         mask |= next(v for k, v in _ANCHOR_ID.items() if msg.startswith(k))
@@ -96,15 +118,16 @@ def _anchor_sweep():
     combined and all-absent cases. Boundary floats use exactly-representable
     .0/.5 values so float(C) and double(Python) agree on every verdict."""
     cases = []
-    for k, lo, hi, gate in (("batt2_v", 8.0, 16.0, None),
-                            ("soc2_level", 0, 15, None),
-                            ("cooler_level", 1, 5, {"cooler_installed": 1}),
-                            ("quiet_from", 0, 23, {"cooler_installed": 1}),
-                            ("quiet_to", 0, 23, {"cooler_installed": 1}),
-                            ("roof_position", 0, 15, {"roof_installed": 1})):
+    for k, lo, hi, gate in (
+        ("batt2_v", 8.0, 16.0, None),
+        ("soc2_level", 0, 15, None),
+        ("cooler_level", 1, 5, {"cooler_installed": 1}),
+        ("quiet_from", 0, 23, {"cooler_installed": 1}),
+        ("quiet_to", 0, 23, {"cooler_installed": 1}),
+        ("roof_position", 0, 15, {"roof_installed": 1}),
+    ):
         step = 0.5 if isinstance(lo, float) else 1
-        for v in (lo - step, lo, (lo + hi) / 2 if isinstance(lo, float) else (lo + hi) // 2,
-                  hi, hi + step):
+        for v in (lo - step, lo, (lo + hi) / 2 if isinstance(lo, float) else (lo + hi) // 2, hi, hi + step):
             cases.append({k: v, **(gate or {})})
     for k in ("level_roll", "level_pitch"):
         for v in (-95.5, -90.0, 0.0, 90.0, 90.5):
@@ -113,9 +136,19 @@ def _anchor_sweep():
     cases.append({"cooler_installed": 0, "cooler_level": 9, "quiet_from": 25})
     cases.append({"roof_installed": 0, "roof_position": 20})
     # combined multi-violation + all-absent
-    cases.append({"batt2_v": 3.0, "soc2_level": 99, "cooler_installed": 1,
-                  "cooler_level": 0, "quiet_to": 30, "roof_installed": 1,
-                  "roof_position": 16, "level_roll": 180.0, "level_pitch": -180.0})
+    cases.append(
+        {
+            "batt2_v": 3.0,
+            "soc2_level": 99,
+            "cooler_installed": 1,
+            "cooler_level": 0,
+            "quiet_to": 30,
+            "roof_installed": 1,
+            "roof_position": 16,
+            "level_roll": 180.0,
+            "level_pitch": -180.0,
+        }
+    )
     cases.append({})
     return cases
 
@@ -144,6 +177,7 @@ def test_anchors_c_port_parity(codec_cli):
 
 # --- roof SafetyCounter ----------------------------------------------------------
 
+
 def _counter_cases():
     return json.loads((VDIR / "safety_counter.json").read_text())["cases"]
 
@@ -157,6 +191,7 @@ def test_safety_counter_vectors_pass_python_oracle():
        :links: R_PORT_SAFETY_COUNTER
     """
     from calictl import device
+
     for c in _counter_cases():
         for t, exp, beat in zip(c["timeline_ms"], c["expect"], c["expect_beat_hex"]):
             got = device._roof_safety_counter(c["seed"], float(t), c["tick_ms"])
@@ -179,6 +214,7 @@ def test_safety_counter_delta_invariant_both_sides(codec_cli):
     +1; at a faster cadence deltas are only 0 or +1, never +2 — asserted on the
     Python and C sequences alike (and the two sequences are identical)."""
     from calictl import device
+
     seed, tick = 424242, 500
     for period, allowed in ((500, {1}), (250, {0, 1})):
         ts = [i * period for i in range(60)]

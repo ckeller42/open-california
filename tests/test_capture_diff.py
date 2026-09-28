@@ -6,6 +6,7 @@ Deterministic — no real capture, no tshark, no BLE. They validate the tested c
   * the frames-file and tshark-field parsers;
   * end-to-end run() over a --frames list.
 """
+
 import pytest
 
 from calictl import control, overrides, protocol
@@ -14,31 +15,42 @@ from tools.capture_diff import Scenario
 
 
 def _funcs():
-    f = protocol.load(); overrides.apply(f); return f
+    f = protocol.load()
+    overrides.apply(f)
+    return f
 
 
 def _cooler_scenario():
-    return Scenario.from_dict("cooler/power-on", {
-        "function": "cooler", "what": "power", "value": "on", "control_char": "1101",
-        "handle": 0x0022, "state": {"State": 0, "Mode": 4, "Level": 3}})
+    return Scenario.from_dict(
+        "cooler/power-on",
+        {
+            "function": "cooler",
+            "what": "power",
+            "value": "on",
+            "control_char": "1101",
+            "handle": 0x0022,
+            "state": {"State": 0, "Mode": 4, "Level": 3},
+        },
+    )
 
 
 def test_cooler_scenario_zero_diff():
     funcs = _funcs()
-    app_frame = bytes.fromhex("3d4300000000")          # the app's real cooler-ON frame
+    app_frame = bytes.fromhex("3d4300000000")  # the app's real cooler-ON frame
     rows, leads, ours = capture_diff.diff(funcs, _cooler_scenario(), app_frame)
-    assert ours == app_frame                            # calictl reproduces it byte-for-byte
+    assert ours == app_frame  # calictl reproduces it byte-for-byte
     assert all(r.match for r in rows) and leads == []
 
 
 def test_lighting_lead_detected():
     """The diff tool flags a field the app carries that calictl leaves at 0/sentinel."""
     funcs = _funcs()
-    scen = Scenario.from_dict("lighting/kitchen-50", {
-        "function": "lighting", "what": "kitchen", "value": 5, "control_char": "1501"})
+    scen = Scenario.from_dict(
+        "lighting/kitchen-50", {"function": "lighting", "what": "kitchen", "value": 5, "control_char": "1501"}
+    )
     ours_frame = control.build(funcs, "lighting", "kitchen", 5, {})
     app_vals = dict(control.decode_control(funcs["lighting"], ours_frame))
-    app_vals["LightValue"] = 1                          # app carries a field we send as 0
+    app_vals["LightValue"] = 1  # app carries a field we send as 0
     app_frame = protocol.encode(funcs["lighting"], app_vals, frame_bytes=16)
 
     rows, leads, _ = capture_diff.diff(funcs, scen, app_frame)
@@ -67,7 +79,7 @@ def test_parse_tshark_fields():
 
 
 def test_run_frames_cooler_zero_diff(tmp_path):
-    pytest.importorskip("yaml")                         # run() loads the scenario yaml
+    pytest.importorskip("yaml")  # run() loads the scenario yaml
     p = tmp_path / "frames.txt"
     p.write_text("0x0022: 3d4300000000\n")
     assert capture_diff.run(str(p), "cooler/power-on", frames=True) == 0

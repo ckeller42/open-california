@@ -4,6 +4,7 @@
    :id: T_PAIRING_RUNNER
    :links: R_PAIRING_RUNNER
 """
+
 import asyncio
 
 from calictl import pairing
@@ -85,8 +86,16 @@ def test_happy_path_call_sequence():
     calls, state, snap = asyncio.run(_run())
     # Reaching BONDED also closes the transport (agent lifecycle: the D-Bus KeyboardOnly agent
     # must not squat as the system default past this flow's end).
-    assert calls == ["start_scan", "stop_scan", "connect", "pair",
-                      "send_passkey:123456", "verify", "persist_bond", "aclose"]
+    assert calls == [
+        "start_scan",
+        "stop_scan",
+        "connect",
+        "pair",
+        "send_passkey:123456",
+        "verify",
+        "persist_bond",
+        "aclose",
+    ]
     assert state == pairing.PairingState(pairing.BONDED, 0, pairing.ERR_NONE)
 
 
@@ -98,8 +107,13 @@ def test_snapshot_names():
         return r.snapshot()
 
     snap = asyncio.run(_run())
-    assert snap == {"state": "bonded", "attempts": 0, "error": None,
-                     "address": "11:22:33:44:55:66", "radio_busy": False}
+    assert snap == {
+        "state": "bonded",
+        "attempts": 0,
+        "error": None,
+        "address": "11:22:33:44:55:66",
+        "radio_busy": False,
+    }
 
 
 def test_stale_event_makes_no_transport_calls():
@@ -206,7 +220,7 @@ def test_transport_exception_on_verify_injects_verify_fail():
         return t.calls, r.state
 
     calls, state = asyncio.run(_run())
-    assert calls[-2:] == ["disconnect", "aclose"]   # ERROR also closes the transport
+    assert calls[-2:] == ["disconnect", "aclose"]  # ERROR also closes the transport
     assert state == pairing.PairingState(pairing.ERROR, 0, pairing.ERR_VERIFY)
 
 
@@ -292,6 +306,7 @@ def test_on_bonded_callback_fires_with_the_persisted_address():
     """`runner.on_bonded` (wired by serve.py to adopt the address into the running daemon) must
     fire once persist_bond lands a real address -- not on the BONDED state transition itself
     (which happens one step earlier, before persist_bond has run)."""
+
     async def _run():
         seen = []
         t = FakeTransport(bond_address="AA:BB:CC:DD:EE:FF")
@@ -320,6 +335,7 @@ def test_on_bonded_callback_does_not_fire_when_persist_bond_yields_no_address():
 def test_aclose_is_skipped_when_the_transport_has_none():
     """Guard: a transport without `aclose` (only the dbus_fast-backed BluezTransport has one)
     must not crash the flow-end cleanup."""
+
     class BareTransport:
         def __init__(self):
             self.calls = []

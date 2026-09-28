@@ -12,6 +12,7 @@ Hard-won connection lessons baked in:
 
 `bleak` is imported lazily so protocol/semantics stay importable without it.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -42,7 +43,7 @@ def pairing_cache_path() -> Path:
     return Path(state_home) / "calictl" / "pairing.json"
 
 
-UNPAIRED_ADDR = "AA:BB:CC:DD:EE:FF"   # resolve_addr()'s fallback = "no bonded unit configured"
+UNPAIRED_ADDR = "AA:BB:CC:DD:EE:FF"  # resolve_addr()'s fallback = "no bonded unit configured"
 
 
 def resolve_addr() -> str:
@@ -99,6 +100,7 @@ DEFAULT_ADDR = resolve_addr()
 def _aux_uuid(short: str) -> str:
     return "0000%s-6c77-4b7d-bbf6-a5e587701f3d" % short
 
+
 # The unit's BLE advertised name (the app's and calictl's own scan filter). Single source of
 # truth for calictl.pairing_bluez's BluezTransport default `device_name` AND the generated
 # CODEC_DEVICE_NAME (tools/gen_c_dict.py, ESP32 firmware #154) — never hand-type it elsewhere.
@@ -107,13 +109,17 @@ DEVICE_NAME = "VWCAMPER"
 HEARTBEAT_CHAR = _aux_uuid("1003")
 VERSION_CHAR = _aux_uuid("1001")
 AUTH_CHAR = _aux_uuid("1004")
-HEARTBEAT_START = 0x00100000      # arbitrary high start (no read-seed / challenge)
+HEARTBEAT_START = 0x00100000  # arbitrary high start (no read-seed / challenge)
 # Timing (env-overridable). Defaults are the proven on-device values; the mock/e2e harness
 # shrinks them so a run is fast while still exercising the multi-step arm→write→settle window
 # (and thus the UI's in-flight feedback). Do NOT lower the defaults for real hardware.
-HEARTBEAT_PERIOD_S = float(os.environ.get("CALICTL_HEARTBEAT_PERIOD_S", "0.6"))  # ~10 beats span the arm window
-ARM_DELAY_S = float(os.environ.get("CALICTL_ARM_DELAY_S", "3.0"))   # let the unit register the heartbeat before writing
-SETTLE_S = float(os.environ.get("CALICTL_SETTLE_S", "2.5"))         # let the actuation take effect before readback
+HEARTBEAT_PERIOD_S = float(
+    os.environ.get("CALICTL_HEARTBEAT_PERIOD_S", "0.6")
+)  # ~10 beats span the arm window
+ARM_DELAY_S = float(
+    os.environ.get("CALICTL_ARM_DELAY_S", "3.0")
+)  # let the unit register the heartbeat before writing
+SETTLE_S = float(os.environ.get("CALICTL_SETTLE_S", "2.5"))  # let the actuation take effect before readback
 FOLLOW_DELAY_S = float(os.environ.get("CALICTL_FOLLOW_DELAY_S", "0.3"))  # gap before a commit/follow frame
 # The 1003 liveness heartbeat keeps the link up (an un-heartbeated link is dropped after ~15 s) and
 # refreshes the chars the app re-reads (1102/1602/1902/1004) — the app ticks it continuously (~0.7 s)
@@ -153,9 +159,9 @@ ROOF_MAX_TRAVEL_S = float(os.environ.get("CALICTL_ROOF_MAX_TRAVEL_S", "30.0"))  
 # only checks liveness/monotonicity and reports a SafetyCounterValid bit (char 1402, bit 7); it
 # gates motor actuation until the counter validates. The app arms a 3 s dead-man: if the counter
 # is still invalid after 3 s it errors ("SafetyCounter is invalid after 3 seconds").
-ROOF_SAFETY_TICK_MS = 500                 # counter increments +1 per this many ms of wall-clock
-ROOF_SAFETY_VALIDATE_S = 3.0              # dead-man: counter must validate within ~3 s, else error
-ROOF_SAFETY_SEED_MAX = 1_000_000          # app seeds a random SafetyCounter in [1, this]
+ROOF_SAFETY_TICK_MS = 500  # counter increments +1 per this many ms of wall-clock
+ROOF_SAFETY_VALIDATE_S = 3.0  # dead-man: counter must validate within ~3 s, else error
+ROOF_SAFETY_SEED_MAX = 1_000_000  # app seeds a random SafetyCounter in [1, this]
 # Auto-stop at limit: while a move streams, poll the roof Position at this cadence and cease the
 # stream when it reaches the direction's terminal Position (app-faithful; the unit's own limit
 # switches remain the real safety). Throttled so the poll-reads don't crowd out the counter frames.
@@ -180,15 +186,14 @@ class ConnectionUnavailable(RuntimeError):
 def _adapter_reset(adapter: str = "hci0") -> None:
     """Power-cycle the local BT adapter and re-scan — clears the abort cascade."""
     for cmd in ("power off", "power on"):
-        subprocess.run(["bluetoothctl", cmd.split()[0], cmd.split()[1]],
-                       capture_output=True, timeout=10)
+        subprocess.run(["bluetoothctl", cmd.split()[0], cmd.split()[1]], capture_output=True, timeout=10)
         _sleep_blocking(2)
-    subprocess.run(["bluetoothctl", "--timeout", "5", "scan", "on"],
-                   capture_output=True, timeout=9)
+    subprocess.run(["bluetoothctl", "--timeout", "5", "scan", "on"], capture_output=True, timeout=9)
 
 
 def _sleep_blocking(sec: float) -> None:
     import time
+
     time.sleep(sec)
 
 
@@ -217,7 +222,7 @@ async def _read_char_with_retry(client, name, char):
         try:
             data = bytes(await client.read_gatt_char(char))
             trace.get().read(char, data)
-            return data, getattr(client, "is_connected", False)   # report the post-read link state
+            return data, getattr(client, "is_connected", False)  # report the post-read link state
         except Exception as e:
             if not getattr(client, "is_connected", False):
                 # link dropped mid-session: don't burn ~30 s of futile retries under the serve lock
@@ -230,8 +235,9 @@ async def _read_char_with_retry(client, name, char):
 
 
 class CamperDevice:
-    def __init__(self, addr: str = DEFAULT_ADDR, *, adapter: str = "hci0",
-                 connect_timeout: float | None = None):
+    def __init__(
+        self, addr: str = DEFAULT_ADDR, *, adapter: str = "hci0", connect_timeout: float | None = None
+    ):
         self.addr = addr
         self.adapter = adapter
         # Per-attempt connect timeout. Tunable because the right value depends on the unit's
@@ -241,8 +247,11 @@ class CamperDevice:
         # poll gives up — so a long timeout means we sample the unit rarely and keep missing its
         # brief connectable windows. Lower it to sample more often on a flaky link; raise it only
         # if connects are being cut short while the unit is genuinely responding.
-        self.connect_timeout = connect_timeout if connect_timeout is not None else \
-            float(os.environ.get("CALICTL_CONNECT_TIMEOUT_S", "30"))
+        self.connect_timeout = (
+            connect_timeout
+            if connect_timeout is not None
+            else float(os.environ.get("CALICTL_CONNECT_TIMEOUT_S", "30"))
+        )
 
     @property
     def paired(self) -> bool:
@@ -266,10 +275,12 @@ class CamperDevice:
         if not self.paired:
             raise ConnectionUnavailable(
                 "not paired: no camper unit is bonded yet — open the web UI menu → "
-                "Bluetooth pairing… (nothing is scanned until then)")
+                "Bluetooth pairing… (nothing is scanned until then)"
+            )
         import os
 
         from bleak import BleakClient  # lazy
+
         if reset_on_fail is None:
             reset_on_fail = os.environ.get("CALICTL_ADAPTER_RESET") == "1"
         last = None
@@ -288,7 +299,8 @@ class CamperDevice:
             "no BLE session to %s after retries (%s). Causes: the unit deep-slept (parked/idle — "
             "wakes on door/ignition), the phone app holds the single connection slot, or the unit's "
             "Bluetooth is DISABLED in its settings (persistent DeviceNotFound that won't self-resolve "
-            "until re-enabled)." % (self.addr, type(last).__name__))
+            "until re-enabled)." % (self.addr, type(last).__name__)
+        )
 
     async def read_all(self, funcs: dict) -> dict[str, bytes]:
         """One session: read every function's state characteristic, under a live 1003 heartbeat
@@ -317,17 +329,17 @@ class CamperDevice:
 
     async def _read_all_on(self, client, funcs: dict) -> dict[str, bytes]:
         out: dict[str, bytes] = {}
-        notif: dict[str, bytes] = {}                  # pushed values, keyed by lowercased char UUID
-        await self._subscribe_all(client, notif)      # water (1302) is push-only for freshness
+        notif: dict[str, bytes] = {}  # pushed values, keyed by lowercased char UUID
+        await self._subscribe_all(client, notif)  # water (1302) is push-only for freshness
         stop = asyncio.Event()
         beat = asyncio.ensure_future(self._heartbeat(client, stop))
         try:
-            await asyncio.sleep(HEARTBEAT_WARMUP_S)   # let the liveness register + sensors refresh
+            await asyncio.sleep(HEARTBEAT_WARMUP_S)  # let the liveness register + sensors refresh
             for name, f in funcs.items():
                 if not f.state_char:
                     continue
                 pushed = notif.get(str(f.state_char).lower())
-                if pushed is not None:                # a fresh notification beats the stale latch
+                if pushed is not None:  # a fresh notification beats the stale latch
                     out[name] = pushed
                     continue
                 data, up = await _read_char_with_retry(client, name, f.state_char)
@@ -355,18 +367,19 @@ class CamperDevice:
         ``WATER_PUSH_WAIT_S``. A no-op when water isn't in the table or the wait is disabled. Never
         raises — on any trouble the earlier (stale) read stands."""
         import time as _t
+
         wait_s = float(os.environ.get("CALICTL_WATER_PUSH_WAIT_S", WATER_PUSH_WAIT_S))  # read live (testable)
         wf = funcs.get("water")
         if wf is None or not wf.state_char or wait_s <= 0 or not client.is_connected:
             return
         key = str(wf.state_char).lower()
-        seen0 = notif.get(key)                  # the latch push (if any) from the initial subscribe
+        seen0 = notif.get(key)  # the latch push (if any) from the initial subscribe
         deadline = _t.monotonic() + wait_s
         try:
             while _t.monotonic() < deadline and client.is_connected:
                 await asyncio.sleep(0.5)
                 p = notif.get(key)
-                if p is not None and p != seen0:   # a NEW push = the fresh re-measurement
+                if p is not None and p != seen0:  # a NEW push = the fresh re-measurement
                     out["water"] = p
                     return
         except Exception as e:
@@ -393,8 +406,7 @@ class CamperDevice:
                 pass
             await self._safe_disconnect(client)
 
-    async def actuate(self, func, frame: bytes, *, verify=True,
-                      follow: bytes | None = None) -> dict | None:
+    async def actuate(self, func, frame: bytes, *, verify=True, follow: bytes | None = None) -> dict | None:
         """Connect, arm with a 1003 heartbeat, write a control frame, disconnect (one BLE
         session — the CLI/per-op path). See :meth:`_actuate_on` for the shared write core.
 
@@ -411,8 +423,7 @@ class CamperDevice:
             raise ValueError("%s has no control characteristic" % func.name)
         client = await self._session()
         try:
-            return await self._actuate_on(client, func, frame, follow=follow, verify=verify,
-                                          arm=True)
+            return await self._actuate_on(client, func, frame, follow=follow, verify=verify, arm=True)
         finally:
             await self._safe_disconnect(client)
 
@@ -423,13 +434,16 @@ class CamperDevice:
         auth_ok = 0
         for uuid in (VERSION_CHAR, AUTH_CHAR):
             try:
-                await client.read_gatt_char(uuid); auth_ok += 1
+                await client.read_gatt_char(uuid)
+                auth_ok += 1
             except Exception:
                 pass
         n = await self._subscribe_all(client)
         if auth_ok < 2 or n == 0:
-            log.warning("%s: weak handshake (auth-reads=%d/2, subscribed=%d) — %s may be ignored"
-                  % (label, auth_ok, n, noun))
+            log.warning(
+                "%s: weak handshake (auth-reads=%d/2, subscribed=%d) — %s may be ignored"
+                % (label, auth_ok, n, noun)
+            )
 
     async def _arm(self, client, stop, label, noun):
         """Handshake, then start the 1003 liveness heartbeat and wait ``ARM_DELAY_S`` so the unit
@@ -443,11 +457,19 @@ class CamperDevice:
         """
         await self._handshake(client, label, noun)
         beat = asyncio.create_task(self._heartbeat(client, stop))
-        await asyncio.sleep(ARM_DELAY_S)   # let the unit register the heartbeat
+        await asyncio.sleep(ARM_DELAY_S)  # let the unit register the heartbeat
         return beat
 
-    async def _actuate_on(self, client, func, frame: bytes, *, follow: bytes | None = None,
-                          verify: bool = True, arm: bool = True) -> dict | None:
+    async def _actuate_on(
+        self,
+        client,
+        func,
+        frame: bytes,
+        *,
+        follow: bytes | None = None,
+        verify: bool = True,
+        arm: bool = True,
+    ) -> dict | None:
         """Write a control frame over an ALREADY-CONNECTED client. Never connects/disconnects.
 
         ``arm=True`` (cold session, e.g. the CLI): replay the handshake (VERSION/AUTH reads +
@@ -460,6 +482,7 @@ class CamperDevice:
         :returns: the post-write ``protocol.decode`` when ``verify`` and the func has a state char.
         """
         from . import protocol  # lazy
+
         if not func.control_char:
             raise ValueError("%s has no control characteristic" % func.name)
         stop = asyncio.Event()
@@ -487,14 +510,20 @@ class CamperDevice:
                 except Exception:
                     pass
 
-    async def actuate_roof(self, func, move_frame: bytes, stop_frame: bytes, *,
-                           max_duration_s: float = ROOF_MAX_TRAVEL_S,
-                           period_s: float = ROOF_MOVE_PERIOD_S,
-                           validate_s: float = ROOF_SAFETY_VALIDATE_S,
-                           counter_seed: int | None = None,
-                           stop_event=None,
-                           limit_positions=None,
-                           verify: bool = True) -> dict | None:
+    async def actuate_roof(
+        self,
+        func,
+        move_frame: bytes,
+        stop_frame: bytes,
+        *,
+        max_duration_s: float = ROOF_MAX_TRAVEL_S,
+        period_s: float = ROOF_MOVE_PERIOD_S,
+        validate_s: float = ROOF_SAFETY_VALIDATE_S,
+        counter_seed: int | None = None,
+        stop_event=None,
+        limit_positions=None,
+        verify: bool = True,
+    ) -> dict | None:
         """Drive a roof OPEN/CLOSE move by streaming move frames, then force STOP.
 
         **SAFETY-SENSITIVE.** The wire protocol is **live-verified** against the app's real
@@ -571,13 +600,14 @@ class CamperDevice:
         import time
 
         from . import protocol  # lazy
+
         if not func.control_char:
             raise ValueError("%s has no control characteristic" % func.name)
         client = await self._session()
         stop = asyncio.Event()
         beat = None
         seed = counter_seed if counter_seed is not None else random.randint(1, ROOF_SAFETY_SEED_MAX)
-        start = None                       # set once the move stream begins (arms the counter clock)
+        start = None  # set once the move stream begins (arms the counter clock)
 
         async def _send(direction_byte: bytes) -> bool:
             """Write one 5-byte roof frame (direction + the live time-derived SafetyCounter).
@@ -592,7 +622,7 @@ class CamperDevice:
             except Exception:
                 if not client.is_connected:
                     return False
-                return True   # transient write error on a live link: keep driving
+                return True  # transient write error on a live link: keep driving
 
         try:
             # App-faithful roof arm (decompile-verified 2026-08-30): handshake ONLY — no 1003
@@ -614,30 +644,38 @@ class CamperDevice:
                 if not await _send(move_frame):
                     log.warning("actuate_roof: link dropped mid-move — sending STOP")
                     break
-                if (validate_s is not None and not validate_checked and func.state_char
-                        and (time.monotonic() - start) >= validate_s):
+                if (
+                    validate_s is not None
+                    and not validate_checked
+                    and func.state_char
+                    and (time.monotonic() - start) >= validate_s
+                ):
                     validate_checked = True
                     if not await self._roof_counter_valid(client, func):
-                        log.warning("actuate_roof: SafetyCounter invalid after %.0fs — aborting move "
-                              "(STOP)" % validate_s)
+                        log.warning(
+                            "actuate_roof: SafetyCounter invalid after %.0fs — aborting move "
+                            "(STOP)" % validate_s
+                        )
                         break
                 # Auto-stop at the limit: once the roof reaches this direction's terminal Position,
                 # cease the stream (-> STOP) instead of running to the travel cap. Best-effort — a
                 # None read (flaky) just keeps driving until the cap.
-                if (limit_positions and func.state_char
-                        and (time.monotonic() - last_limit_poll) >= ROOF_LIMIT_POLL_S):
+                if (
+                    limit_positions
+                    and func.state_char
+                    and (time.monotonic() - last_limit_poll) >= ROOF_LIMIT_POLL_S
+                ):
                     last_limit_poll = time.monotonic()
                     pos = await self._roof_position(client, func)
                     if pos is not None and pos in limit_positions:
-                        log.info("actuate_roof: roof reached limit position %s — ceasing (STOP)"
-                              % pos)
+                        log.info("actuate_roof: roof reached limit position %s — ceasing (STOP)" % pos)
                         break
                 await asyncio.sleep(period_s)
             # ALWAYS force a STOP (best-effort even if the link is flaky), with the live counter.
             await _send(stop_frame)
             if not verify or not func.state_char:
                 return None
-            await asyncio.sleep(SETTLE_S)      # let the state settle after STOP
+            await asyncio.sleep(SETTLE_S)  # let the state settle after STOP
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw)
         finally:
@@ -655,6 +693,7 @@ class CamperDevice:
         Best-effort: a read/decode failure is treated as *valid* (True) so a flaky read never
         force-aborts a move on its own — the bounded cap + STOP remain the real safety net."""
         from . import protocol  # lazy
+
         try:
             raw = bytes(await client.read_gatt_char(func.state_char))
             dec = protocol.decode(func, raw)
@@ -668,6 +707,7 @@ class CamperDevice:
         read/decode failure — so a flaky read never spuriously stops a move (the caller keeps
         driving to the bounded cap instead). Cheap: the unit is awake while the counter streams."""
         from . import protocol  # lazy
+
         try:
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw).get("Position")
@@ -681,7 +721,7 @@ class CamperDevice:
         while not stop.is_set():
             try:
                 await client.write_gatt_char(HEARTBEAT_CHAR, _beat_bytes(ctr), response=True)
-                trace.get().write(HEARTBEAT_CHAR, _beat_bytes(ctr))   # skipped unless asked for
+                trace.get().write(HEARTBEAT_CHAR, _beat_bytes(ctr))  # skipped unless asked for
                 ctr += 1
             except Exception:
                 pass  # keep beating; a dropped tick is tolerable within the arm window
@@ -706,6 +746,7 @@ class CamperDevice:
         the unit pushes them (the app subscribes camping state on ``1202``, decompile-confirmed),
         rather than waiting for the next poll. It must be sync + fast; its exceptions are swallowed.
         """
+
         def _handler(sender, data):
             u = str(getattr(sender, "uuid", sender)).lower()
             b = bytes(data)
@@ -717,6 +758,7 @@ class CamperDevice:
                     on_push(u, b)
                 except Exception:
                     pass
+
         n = 0
         for svc in client.services:
             for ch in svc.characteristics:
@@ -756,14 +798,18 @@ class PersistentSession:
         self._dev = dev
         self._client = None
         self._notif: dict[str, bytes] = {}
-        self._on_push = on_push        # optional sync callback(uuid_lower, data) fired on each push
+        self._on_push = on_push  # optional sync callback(uuid_lower, data) fired on each push
         self._stop = None
         self._beat = None
 
     @property
     def is_up(self) -> bool:
-        return bool(self._client is not None and getattr(self._client, "is_connected", False)
-                    and self._beat is not None and not self._beat.done())
+        return bool(
+            self._client is not None
+            and getattr(self._client, "is_connected", False)
+            and self._beat is not None
+            and not self._beat.done()
+        )
 
     async def start(self) -> None:
         client = await self._dev._session()
@@ -776,7 +822,7 @@ class PersistentSession:
         await self._dev._subscribe_all(client, self._notif, on_push=self._on_push)
         self._stop = asyncio.Event()
         self._beat = asyncio.create_task(self._dev._heartbeat(client, self._stop))
-        await asyncio.sleep(HEARTBEAT_WARMUP_S)     # let the arm + first measurement register
+        await asyncio.sleep(HEARTBEAT_WARMUP_S)  # let the arm + first measurement register
         self._client = client
 
     async def read_all(self, funcs: dict) -> dict[str, bytes]:
@@ -812,10 +858,10 @@ class PersistentSession:
     async def read_one(self, func) -> bytes:
         return bytes(await self._client.read_gatt_char(func.state_char))
 
-    async def actuate(self, func, frame: bytes, *, follow: bytes | None = None,
-                      verify: bool = True) -> dict | None:
-        return await self._dev._actuate_on(self._client, func, frame, follow=follow,
-                                           verify=verify, arm=False)
+    async def actuate(
+        self, func, frame: bytes, *, follow: bytes | None = None, verify: bool = True
+    ) -> dict | None:
+        return await self._dev._actuate_on(self._client, func, frame, follow=follow, verify=verify, arm=False)
 
     async def aclose(self) -> None:
         if self._stop is not None:

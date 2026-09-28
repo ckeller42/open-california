@@ -15,6 +15,7 @@ there is no POLL_INTERVAL env knob.
 `influxdb_client` is imported lazily (only present in solix-env, which also has
 modern bleak + bleak-retry-connector — run calictl from there for this).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -32,9 +33,17 @@ log = _log.get(__name__)
 # Codes match the semantics enums: cooler `fault` (semantics.cooler) + roof `alert` (semantics.roof).
 _ENUM_CODES: dict[str, dict[str, int]] = {
     "fault": {"error": 1, "emergency": 2, "door_open": 3},
-    "alert": {"child_lock": 1, "error": 2, "sensor_error": 3,
-              "emergency_locked": 4, "not_possible": 5, "low_battery": 6,
-              "driving": 7, "in_use": 8, "not_stationary": 9},
+    "alert": {
+        "child_lock": 1,
+        "error": 2,
+        "sensor_error": 3,
+        "emergency_locked": 4,
+        "not_possible": 5,
+        "low_battery": 6,
+        "driving": 7,
+        "in_use": 8,
+        "not_stationary": 9,
+    },
     # water fault codes (semantics.water fresh_alert / waste_alert, app dialogs observed 2026-09-16)
     "fresh_alert": {"pump_protection": 1, "sensor_error": 2, "error": 3, "pump_error": 4, "empty": 5},
     "waste_alert": {"full": 1, "sensor_error": 2, "error": 3},
@@ -49,7 +58,7 @@ def numeric_fields(interp: dict) -> dict[str, float]:
     :data:`_ENUM_CODES`) become a numeric `<key>_code` (0 = ok/none)."""
     out: dict[str, float] = {}
     for k, v in mqtt.flatten(interp).items():
-        if k in _ENUM_CODES:                       # alert enum -> code (None/unknown -> 0 = ok)
+        if k in _ENUM_CODES:  # alert enum -> code (None/unknown -> 0 = ok)
             out[k + "_code"] = float(_ENUM_CODES[k].get(v, 0))
         elif isinstance(v, bool):
             out[k] = 1.0 if v else 0.0
@@ -64,6 +73,7 @@ def points_for(states: dict) -> list:
     """Build InfluxDB Points from interpreted states (one per function with any
     numeric field). Shared by the standalone `run` path and `serve`."""
     from influxdb_client import Point
+
     pts = []
     for fn, interp in states.items():
         fields = numeric_fields(interp)
@@ -83,8 +93,7 @@ def build_points(states: dict[str, dict]):
 async def poll_states(funcs, dev) -> dict:
     """One BLE session: read every function and return {function: interpreted}."""
     raw = await dev.read_all(funcs)
-    return {name: semantics.interpret(name, protocol.decode(funcs[name], data))
-            for name, data in raw.items()}
+    return {name: semantics.interpret(name, protocol.decode(funcs[name], data)) for name, data in raw.items()}
 
 
 def field_series(field: str, function: str, *, days: float = 7.0, every: str = "1h", fn: str = "mean"):
@@ -119,9 +128,10 @@ def field_series(field: str, function: str, *, days: float = 7.0, every: str = "
     )
     try:
         from influxdb_client import InfluxDBClient
+
         with InfluxDBClient(url=url, token=token, org=org) as client:
             tables = client.query_api().query(flux, org=org)
-    except Exception as e:   # network down, deps absent, bad query -> no series, never crash
+    except Exception as e:  # network down, deps absent, bad query -> no series, never crash
         log.warning("influx field_series(%s) failed: %r" % (field, e))
         return []
     out = []
@@ -142,14 +152,16 @@ def write_once(addr: str | None = None) -> int:
     """One poll+write cycle (for testing). Returns points written."""
     from influxdb_client import InfluxDBClient
     from influxdb_client.client.write_api import SYNCHRONOUS
+
     url = os.environ.get("INFLUX_URL", "http://localhost:8086")
     org = os.environ.get("INFLUX_ORG", "home")
     bucket = os.environ.get("INFLUX_BUCKET", "buspi")
     token = os.environ.get("INFLUXDB_TOKEN")
-    if not token:   # mirror serve.run()'s handling instead of a raw KeyError
+    if not token:  # mirror serve.run()'s handling instead of a raw KeyError
         log.warning("influx disabled: no INFLUXDB_TOKEN")
         return 0
-    funcs = protocol.load(); overrides.apply(funcs)
+    funcs = protocol.load()
+    overrides.apply(funcs)
     dev = CamperDevice(addr) if addr else CamperDevice()
     states = asyncio.run(_poll(funcs, dev))
     pts = build_points(states)

@@ -10,6 +10,7 @@ recorder), these drive the whole runtime — cli.cmd_set / serve.on_command / de
   * a set is reflected by a subsequent read within the same process.
 All with no bleak/BLE — the fake `bleak` module is backed by the mock.
 """
+
 import asyncio
 import sys
 import types
@@ -28,23 +29,29 @@ def mock(monkeypatch):
     mod.BleakClient = MockBleakClient.bind(unit)
     monkeypatch.setitem(sys.modules, "bleak", mod)
     real_sleep = asyncio.sleep
+
     async def _fast(*_a, **_k):
         await real_sleep(0)
+
     monkeypatch.setattr(device.asyncio, "sleep", _fast)
     return unit
 
 
 def _funcs():
-    f = protocol.load(); overrides.apply(f); return f
+    f = protocol.load()
+    overrides.apply(f)
+    return f
 
 
 # --- mock seed fidelity: a coherent, realistic snapshot of the real van ------
+
 
 def test_mock_seed_is_coherent_and_realistic():
     """The DEFAULT_SEED must mirror a real engine-off/parked read, so the GUI tests exercise
     the states the hardware actually emits (this is how the 'null V' starter-voltage bug slipped
     through — the old seed made the starter battery look measured when the real van doesn't)."""
     from calictl import semantics
+
     u = MockCamperUnit()
     en = semantics.interpret("energy", u.decoded("energy"))
     ve = semantics.interpret("vehicle", u.decoded("vehicle"))
@@ -63,22 +70,26 @@ def test_mock_seed_is_coherent_and_realistic():
 
 # --- cli.cmd_set end-to-end -------------------------------------------------
 
+
 def test_set_cooler_power_on_then_off(mock):
     from calictl import cli
+
     assert cli.main(["--addr", "11:22:33:44:55:66", "set", "cooler", "power", "on"]) == 0
-    assert mock.decoded("cooler")["State"] == 1          # armed write applied
+    assert mock.decoded("cooler")["State"] == 1  # armed write applied
     assert cli.main(["--addr", "11:22:33:44:55:66", "set", "cooler", "power", "off"]) == 0
-    assert mock.decoded("cooler")["State"] == 0          # same process -> reflected
+    assert mock.decoded("cooler")["State"] == 0  # same process -> reflected
 
 
 def test_set_cooler_level(mock):
     from calictl import cli
+
     assert cli.main(["--addr", "11:22:33:44:55:66", "set", "cooler", "level", "5"]) == 0
     assert mock.decoded("cooler")["Level"] == 5
 
 
 def test_set_campingmode_master(mock):
     from calictl import cli, semantics
+
     assert cli.main(["--addr", "11:22:33:44:55:66", "set", "campingmode", "master", "on"]) == 0
     interp = semantics.interpret("campingmode", mock.decoded("campingmode"))
     assert interp["master_on"] is True
@@ -88,23 +99,27 @@ def test_set_cooler_level_out_of_range_is_clean_error(mock, capsys):
     """The build-side guard (protocol.encode/CONTROL_RANGES) rejects before any write —
     the user gets a clean exit 2, not a traceback, and the state is untouched."""
     from calictl import cli
+
     assert cli.main(["--addr", "11:22:33:44:55:66", "set", "cooler", "level", "9"]) == 2
     assert "1-5" in capsys.readouterr().err
-    assert mock.decoded("cooler")["Level"] == 3          # unchanged seed default
+    assert mock.decoded("cooler")["Level"] == 3  # unchanged seed default
 
 
 # --- lighting: SET frame cracked 2026-07-08; APPLY gap cracked 2026-07-13 (commit frame) -----
+
 
 def test_set_lighting_applies_directly_no_activate_step(mock):
     """A lamp set applies straight away with the lights off (ProfileNumber 0) — like the app,
     which hardcodes ProfileNumber=9 in every SET_BRIGHTNESS instead of requiring a manual
     profile activation. The cli sends the 0e00… commit as the follow frame."""
     from calictl import cli
-    assert mock.decoded("lighting")["ProfileNumber"] == 0       # lights off, no active profile
-    assert cli.main(["--addr", "11:22:33:44:55:66",
-                     "set", "lighting", "kitchen", "8"]) == 0   # rc 0 = APPLIED, no activate needed
+
+    assert mock.decoded("lighting")["ProfileNumber"] == 0  # lights off, no active profile
+    assert (
+        cli.main(["--addr", "11:22:33:44:55:66", "set", "lighting", "kitchen", "8"]) == 0
+    )  # rc 0 = APPLIED, no activate needed
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
-    assert mock.decoded("lighting")["ProfileNumber"] == 9       # the set made profile 9 active
+    assert mock.decoded("lighting")["ProfileNumber"] == 9  # the set made profile 9 active
 
 
 def test_lighting_requires_the_commit_frame_to_apply(mock):
@@ -114,7 +129,7 @@ def test_lighting_requires_the_commit_frame_to_apply(mock):
     sends it; `control.commit_for('lighting')` returns it."""
     funcs = _funcs()
     dev = device.CamperDevice("11:22:33:44:55:66")
-    setf = control.build(funcs, "lighting", "kitchen", 8, {})   # self-carries ProfileNumber=9
+    setf = control.build(funcs, "lighting", "kitchen", 8, {})  # self-carries ProfileNumber=9
     # SET alone (armed session, no commit) -> ACKed, NOT applied
     asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 0
@@ -136,12 +151,12 @@ def test_lighting_applies_without_preamble(mock):
     funcs = _funcs()
     dev = device.CamperDevice("11:22:33:44:55:66")
     setf = control.build(funcs, "lighting", "kitchen", 8, {})
-    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False,
-                            follow=control.LIGHT_COMMIT))
+    asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False, follow=control.LIGHT_COMMIT))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
 
 
 # --- read_all prefers pushed notifications over a stale latched read ---------
+
 
 def test_connect_timeout_is_tunable_for_a_flaky_link(monkeypatch):
     """The per-attempt connect timeout must be tunable without a code change.
@@ -153,11 +168,12 @@ def test_connect_timeout_is_tunable_for_a_flaky_link(monkeypatch):
     know better are unaffected.
     """
     from calictl.device import CamperDevice
+
     monkeypatch.delenv("CALICTL_CONNECT_TIMEOUT_S", raising=False)
-    assert CamperDevice().connect_timeout == 30.0            # unchanged default
+    assert CamperDevice().connect_timeout == 30.0  # unchanged default
     monkeypatch.setenv("CALICTL_CONNECT_TIMEOUT_S", "8")
-    assert CamperDevice().connect_timeout == 8.0             # env tunes it
-    assert CamperDevice(connect_timeout=12.0).connect_timeout == 12.0   # explicit arg still wins
+    assert CamperDevice().connect_timeout == 8.0  # env tunes it
+    assert CamperDevice(connect_timeout=12.0).connect_timeout == 12.0  # explicit arg still wins
 
 
 def test_read_all_heartbeat_refreshes_stale_read(mock):
@@ -175,8 +191,9 @@ def test_read_all_heartbeat_refreshes_stale_read(mock):
     import asyncio
 
     from calictl import device, protocol
-    mock.state["water"]["FreshWaterLevel"] = 11             # the truth (revealed once armed)
-    mock.read_latch["water"] = {"FreshWaterLevel": 1}       # a bare read returns the stale latch
+
+    mock.state["water"]["FreshWaterLevel"] = 11  # the truth (revealed once armed)
+    mock.read_latch["water"] = {"FreshWaterLevel": 1}  # a bare read returns the stale latch
     funcs = mock.funcs
 
     # a plain read (no heartbeat -> not armed) sees the stale latch...
@@ -194,8 +211,9 @@ def test_read_all_prefers_water_notification_over_stale_read(mock):
     import asyncio
 
     from calictl import device, protocol
-    mock.state["water"]["FreshWaterLevel"] = 1               # bare read = stale latch
-    mock.notify_push["water"] = {"FreshWaterLevel": 11}      # the unit pushes the truth
+
+    mock.state["water"]["FreshWaterLevel"] = 1  # bare read = stale latch
+    mock.notify_push["water"] = {"FreshWaterLevel": 11}  # the unit pushes the truth
     funcs = mock.funcs
     # a bare read still sees the stale 1...
     assert protocol.decode(funcs["water"], mock.read(funcs["water"].state_char))["FreshWaterLevel"] == 1
@@ -206,6 +224,7 @@ def test_read_all_prefers_water_notification_over_stale_read(mock):
 
 # --- the 1003 arm-gate, at the unit level -----------------------------------
 
+
 def test_write_ignored_without_heartbeat_then_applied_with_it():
     """Directly exercise the gate: an unarmed control write is ACKed but ignored;
     once the 1003 heartbeat ticks, the same write applies."""
@@ -214,15 +233,16 @@ def test_write_ignored_without_heartbeat_then_applied_with_it():
     cur = protocol.decode(funcs["cooler"], unit.read(funcs["cooler"].state_char))
     frame = control.build(funcs, "cooler", "power", "on", cur)
 
-    unit.write(funcs["cooler"].control_char, frame)      # not armed
-    assert unit.decoded("cooler")["State"] == 0          # ignored
+    unit.write(funcs["cooler"].control_char, frame)  # not armed
+    assert unit.decoded("cooler")["State"] == 0  # ignored
 
-    unit.beat((0x00100000).to_bytes(4, "big"))           # heartbeat -> arm
+    unit.beat((0x00100000).to_bytes(4, "big"))  # heartbeat -> arm
     unit.write(funcs["cooler"].control_char, frame)
-    assert unit.decoded("cooler")["State"] == 1          # now applied
+    assert unit.decoded("cooler")["State"] == 1  # now applied
 
 
 # --- firmware range validation -> link drop ---------------------------------
+
 
 def _out_of_range_frame():
     """A lighting frame carrying Mode=5 — outside the firmware's Mode enum (dg/n.java), the
@@ -236,8 +256,7 @@ def _out_of_range_frame():
             cf.valid = None
     vals = {cf.name: (cf.default or 0) for cf in relaxed["lighting"].control_fields if cf.placed}
     vals["Mode"] = 5
-    return protocol.encode(relaxed["lighting"], vals,
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
+    return protocol.encode(relaxed["lighting"], vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 
 
 def test_out_of_range_write_drops_link_at_unit():
@@ -257,14 +276,15 @@ def test_out_of_range_surfaces_through_actuate(mock):
 
 # --- serve.on_command path --------------------------------------------------
 
+
 def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
     """Influx should store only INSTALLED functions (same set MQTT publishes). The uninstalled
     ones (satellite / living-room heater / roof-A/C / stairs / generalpurposesignals) emit only
     raw pass-through fields (WordZeroFour, System, ...) — noise that must not reach the dashboard."""
     from calictl import influx, serve
+
     captured = {}
-    monkeypatch.setattr(influx, "points_for",
-                        lambda states: (captured.__setitem__("fns", set(states)) or []))
+    monkeypatch.setattr(influx, "points_for", lambda states: captured.__setitem__("fns", set(states)) or [])
 
     class _Rec:
         def write(self, **_k):
@@ -276,20 +296,24 @@ def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
     async def _run():
         s._ble = asyncio.Lock()
         await s.poll()
+
     asyncio.run(_run())
 
     fns = captured["fns"]
-    assert {"water", "cooler", "campingmode", "vehicle"} <= fns          # installed -> stored
-    assert "generalpurposesignals" not in fns and "satelliteantenna" not in fns   # noise dropped
+    assert {"water", "cooler", "campingmode", "vehicle"} <= fns  # installed -> stored
+    assert "generalpurposesignals" not in fns and "satelliteantenna" not in fns  # noise dropped
 
 
 def test_serve_on_command_actuates(mock):
     from calictl import serve
+
     s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
-    s._read_only = False                                 # writes explicitly enabled
+    s._read_only = False  # writes explicitly enabled
+
     async def _run():
-        s._ble = asyncio.Lock()                          # normally created inside run()'s loop
+        s._ble = asyncio.Lock()  # normally created inside run()'s loop
         await s.on_command("cooler", "power", "on")
+
     asyncio.run(_run())
     assert mock.decoded("cooler")["State"] == 1
 
@@ -301,6 +325,7 @@ def test_serve_refuses_a_roof_move_under_a_blocking_alert_but_never_a_stop(mock,
     blocked move never reaches _roof_move (and never wakes the unit). STOP is the safety action and
     must still get through untouched."""
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     s._read_only = False
     moved, stopped = [], []
@@ -315,7 +340,7 @@ def test_serve_refuses_a_roof_move_under_a_blocking_alert_but_never_a_stop(mock,
     monkeypatch.setattr(s, "_roof_stop_command", _fake_stop)
 
     async def _run():
-        s._ble = asyncio.Lock()                          # normally created inside run()'s loop
+        s._ble = asyncio.Lock()  # normally created inside run()'s loop
         # child_lock (InfoPopUp 1) is in ROOF_MOVE_BLOCK -> refuse; _roof_move is never called
         s._last["roof"] = {"Installed": 1, "InfoPopUp": 1, "Position": 0}
         await s.on_command("roof", "open", None)
@@ -342,7 +367,8 @@ def test_roof_move_takes_the_single_connection_slot_from_the_persistent_session(
     same way it would fail at the van.
     """
     from calictl import serve
-    mock.one_slot = True                                   # model the unit's single slot
+
+    mock.one_slot = True  # model the unit's single slot
     s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
     s._read_only = False
     s._last["roof"] = {"Installed": 1, "InfoPopUp": 0, "Position": 0}
@@ -354,7 +380,8 @@ def test_roof_move_takes_the_single_connection_slot_from_the_persistent_session(
         async with s._ble:
             await s._sessions._connect_once()
         assert s._live_session() is not None, "persistent session did not come up"
-        await s.on_command("roof", "open", None)           # must not fail on a busy slot
+        await s.on_command("roof", "open", None)  # must not fail on a busy slot
+
     asyncio.run(_run())
 
     assert any(fn == "roof" for fn, _frame in mock.writes), "the roof move never reached the unit"
@@ -364,26 +391,31 @@ def test_read_only_is_default_and_refuses_writes(mock):
     """SAFE DEFAULT: a fresh Server is read-only, so on_command refuses to actuate (and _meta
     reports it). Writes only happen once explicitly enabled (--enable-writes / CALICTL_ENABLE_WRITES)."""
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
-    assert s._read_only is True                          # default
+    assert s._read_only is True  # default
     assert serve.ServeBackend(s, loop=None, read_only=s._read_only).state()["_meta"]["read_only"] is True
+
     async def _run():
         s._ble = asyncio.Lock()
         return await s.on_command("cooler", "power", "on")
-    assert asyncio.run(_run()) is None                   # refused
-    assert mock.decoded("cooler")["State"] == 0          # unchanged
+
+    assert asyncio.run(_run()) is None  # refused
+    assert mock.decoded("cooler")["State"] == 0  # unchanged
 
 
 def test_mock_drop_and_wake_models_deep_sleep():
     import asyncio
 
     from tools.mock_unit import MockBleakClient, MockCamperUnit, MockDisconnect
+
     unit = MockCamperUnit()
     client = MockBleakClient.bind(unit)("MO:CK", timeout=1)
 
     async def _run():
-        await client.connect(); assert client.is_connected
-        unit.drop()                                   # van parks -> deep sleep
+        await client.connect()
+        assert client.is_connected
+        unit.drop()  # van parks -> deep sleep
         raised = False
         try:
             await client.read_gatt_char(unit.funcs["cooler"].state_char)
@@ -393,9 +425,12 @@ def test_mock_drop_and_wake_models_deep_sleep():
         # a fresh connect while asleep fails (not advertising)
         c2 = MockBleakClient.bind(unit)("MO:CK", timeout=1)
         try:
-            await c2.connect(); assert False, "connect should fail while asleep"
+            await c2.connect()
+            assert False, "connect should fail while asleep"
         except MockDisconnect:
             pass
         unit.wake()
-        await c2.connect(); assert c2.is_connected     # wakes on physical use
+        await c2.connect()
+        assert c2.is_connected  # wakes on physical use
+
     asyncio.run(_run())

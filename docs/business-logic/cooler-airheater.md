@@ -43,6 +43,7 @@ Cooler code (`vf/c.java`) always calls `aVar.B()`; AirHeater code (`rf/b.java`) 
 
 **Critical send behavior (`m2/a.java:88-99`, the common base class of `sf.a`):**
 `y(boolean)` is called at the end of every action method. It:
+
 1. Calls `f()` to rebuild the **entire** bit-packed frame from *all 10 slots' current
    in-memory values* — not just the one you changed (`m2/a.java:96`, `sf/a.java:104-232`).
 2. Writes that full frame to the characteristic (`m2/a.java:96-98`).

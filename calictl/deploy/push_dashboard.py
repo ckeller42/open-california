@@ -17,6 +17,7 @@ POSTs it, so the same repo file deploys everywhere.
 Env fallbacks: GRAFANA_URL, GRAFANA_USER, GRAFANA_PASSWORD, GRAFANA_TOKEN.
 Stdlib only.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,8 +32,7 @@ def _req(url, method="GET", token=None, user=None, password=None, body=None):
     if token:
         headers["Authorization"] = "Bearer " + token
     elif user is not None:
-        headers["Authorization"] = "Basic " + base64.b64encode(
-            ("%s:%s" % (user, password)).encode()).decode()
+        headers["Authorization"] = "Basic " + base64.b64encode(("%s:%s" % (user, password)).encode()).decode()
     data = json.dumps(body).encode() if body is not None else None
     r = urllib.request.Request(url, data=data, method=method, headers=headers)
     with urllib.request.urlopen(r, timeout=30) as resp:
@@ -54,7 +54,7 @@ def prepare(dash: dict, ds_uid: str) -> dict:
     d = json.loads(raw)
     d.pop("__inputs", None)
     d.pop("__requires", None)
-    d["id"] = None            # let Grafana assign; uid keeps it stable/idempotent
+    d["id"] = None  # let Grafana assign; uid keeps it stable/idempotent
     return d
 
 
@@ -74,11 +74,14 @@ def main(argv=None):
 
     ds_uid = a.datasource_uid or find_influx_datasource(a.url, **auth)
     dash = json.load(open(a.dashboard))
-    payload = {"dashboard": prepare(dash, ds_uid), "overwrite": True,
-               "folderId": a.folder, "message": "calictl push"}
+    payload = {
+        "dashboard": prepare(dash, ds_uid),
+        "overwrite": True,
+        "folderId": a.folder,
+        "message": "calictl push",
+    }
     res = _req(a.url + "/api/dashboards/db", method="POST", body=payload, **auth)
-    print("pushed '%s' -> %s%s (datasource %s)" %
-          (dash.get("title"), a.url, res.get("url", ""), ds_uid))
+    print("pushed '%s' -> %s%s (datasource %s)" % (dash.get("title"), a.url, res.get("url", ""), ds_uid))
     return 0
 
 

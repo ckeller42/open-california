@@ -10,6 +10,7 @@ C codec. A later task adds the seeded differential fuzz pass on top.
    :id: T_CODEC_PARITY_GOLDEN
    :links: R_CODEC_XLANG_PARITY
 """
+
 import json
 from pathlib import Path
 
@@ -24,8 +25,7 @@ def _parse_ok_fields(line):
     """'OK Name=1 Other=2' -> {'Name': 1, 'Other': 2}; None when not OK."""
     if not line.startswith("OK"):
         return None
-    return {k: int(v) for k, v in
-            (part.split("=", 1) for part in line.split()[1:])}
+    return {k: int(v) for k, v in (part.split("=", 1) for part in line.split()[1:])}
 
 
 def _funcs():
@@ -59,11 +59,9 @@ def test_encode_vectors_triple_parity(codec_cli):
         if vec.get("error"):
             with pytest.raises(ValueError):
                 protocol.encode(f, vec["values"], frame_bytes=vec["frame_bytes"])
-            assert out.startswith("ERR "), "%s: C accepted an invalid encode: %r" % (
-                vec["id"], out)
+            assert out.startswith("ERR "), "%s: C accepted an invalid encode: %r" % (vec["id"], out)
         else:
-            py_hex = protocol.encode(f, vec["values"],
-                                     frame_bytes=vec["frame_bytes"]).hex()
+            py_hex = protocol.encode(f, vec["values"], frame_bytes=vec["frame_bytes"]).hex()
             assert out == "OK " + py_hex and py_hex == vec["expect_hex"], vec["id"]
 
 
@@ -76,25 +74,26 @@ def test_seeded_differential_fuzz(codec_cli):
        :links: R_CODEC_XLANG_PARITY
     """
     import random
+
     rng = random.Random(0xCA11)
     funcs = _funcs()
     names, enc_fns = sorted(funcs), sorted(overrides.CONTROL_FRAME_BYTES)
     ops, lines = [], []
-    for _ in range(500):                       # decode: random function/length/bytes
+    for _ in range(500):  # decode: random function/length/bytes
         fn = rng.choice(names)
         raw = bytes(rng.randrange(256) for _ in range(rng.randrange(0, 24)))
         ops.append(("D", fn, raw))
         lines.append("D %s %s" % (fn, raw.hex() or "-"))
-    for _ in range(500):                       # encode: valid-biased, ~10% deliberately bad
+    for _ in range(500):  # encode: valid-biased, ~10% deliberately bad
         fn = rng.choice(enc_fns)
         fb, vals = overrides.CONTROL_FRAME_BYTES[fn], {}
         for fl in funcs[fn].control_fields:
             if rng.random() < 0.2:
-                continue                       # exercise the default-fallback path
+                continue  # exercise the default-fallback path
             if fl.valid is not None and rng.random() >= 0.15:
                 vals[fl.name] = rng.choice(sorted(fl.valid))
             elif rng.random() < 0.1:
-                vals[fl.name] = (1 << fl.width) + rng.randrange(7)   # too wide
+                vals[fl.name] = (1 << fl.width) + rng.randrange(7)  # too wide
             else:
                 vals[fl.name] = rng.randrange(1 << min(fl.width, 32))
         ops.append(("E", fn, (vals, fb)))
@@ -114,7 +113,16 @@ def test_seeded_differential_fuzz(codec_cli):
 
 
 def test_malformed_lines_never_crash(codec_cli):
-    junk = ["", "X", "D", "E cooler", "D nosuch 00", "D cooler zz",
-            "E cooler 6 State=abc", "E cooler 999 State=1", "E nosuch 6 A=1"]
+    junk = [
+        "",
+        "X",
+        "D",
+        "E cooler",
+        "D nosuch 00",
+        "D cooler zz",
+        "E cooler 6 State=abc",
+        "E cooler 999 State=1",
+        "E nosuch 6 A=1",
+    ]
     for line, got in zip(junk, codec_cli(junk)):
         assert got.startswith("ERR "), (line, got)

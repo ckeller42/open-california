@@ -4,7 +4,9 @@ from calictl import control, observer, overrides, protocol, serve
 
 
 def _funcs():
-    f = protocol.load(); overrides.apply(f); return f
+    f = protocol.load()
+    overrides.apply(f)
+    return f
 
 
 def test_observer_logs_transitions_and_bursts_on_engine_start(capsys):
@@ -17,20 +19,24 @@ def test_observer_logs_transitions_and_bursts_on_engine_start(capsys):
        :links: R_CAMPING_OBSERVER
     """
     obs = observer.CampingObserver(_funcs())
-    base = {"vehicle": {"ignition_on": False},
-            "energy": {"dcdc_charging": False, "soc2_pct": 80, "dcdc_current": 0, "batt2_current": 0.0},
-            "campingmode": {"master_on": True, "usb_charger": True, "lights_on": False, "enable": False}}
-    obs.observe(base)                        # baseline poll -> nothing logged, no burst
+    base = {
+        "vehicle": {"ignition_on": False},
+        "energy": {"dcdc_charging": False, "soc2_pct": 80, "dcdc_current": 0, "batt2_current": 0.0},
+        "campingmode": {"master_on": True, "usb_charger": True, "lights_on": False, "enable": False},
+    }
+    obs.observe(base)  # baseline poll -> nothing logged, no burst
     assert obs.bursting is False
     assert capsys.readouterr().out == ""
     # engine start: ignition + dcdc rise, camping sheds -> one log line + a burst armed
-    started = {"vehicle": {"ignition_on": True},
-               "energy": {"dcdc_charging": True, "soc2_pct": 80, "dcdc_current": 30, "batt2_current": 12.0},
-               "campingmode": {"master_on": False, "usb_charger": False, "lights_on": False, "enable": True}}
+    started = {
+        "vehicle": {"ignition_on": True},
+        "energy": {"dcdc_charging": True, "soc2_pct": 80, "dcdc_current": 30, "batt2_current": 12.0},
+        "campingmode": {"master_on": False, "usb_charger": False, "lights_on": False, "enable": True},
+    }
     obs.observe(started)
     out = capsys.readouterr().out
     assert "camping-watch:" in out and "master_on 1->0" in out and "ignition 0->1" in out
-    assert obs.bursting is True              # fast-poll burst armed by the engine-start edge
+    assert obs.bursting is True  # fast-poll burst armed by the engine-start edge
 
 
 def test_push_observer_logs_camping_change(capsys, monkeypatch):
@@ -40,21 +46,24 @@ def test_push_observer_logs_camping_change(capsys, monkeypatch):
     funcs = _funcs()
     obs = observer.CampingObserver(funcs)
     ch = str(funcs["campingmode"].state_char).lower()
-    seq = [{"master_on": True, "usb_charger": True, "lights_on": False, "enable": False},
-           {"master_on": False, "usb_charger": True, "lights_on": False, "enable": False}]
+    seq = [
+        {"master_on": True, "usb_charger": True, "lights_on": False, "enable": False},
+        {"master_on": False, "usb_charger": True, "lights_on": False, "enable": False},
+    ]
     i = {"n": 0}
 
     def fake_interp(fn, decoded):
         r = seq[min(i["n"], len(seq) - 1)]
         i["n"] += 1
         return r
+
     monkeypatch.setattr(observer.semantics, "interpret", fake_interp)
     monkeypatch.setattr(observer.protocol, "decode", lambda f, d: d)
-    obs.on_push(ch, b"\x00")                    # baseline push -> silent
+    obs.on_push(ch, b"\x00")  # baseline push -> silent
     assert capsys.readouterr().out == ""
-    obs.on_push(ch, b"\x00")                    # master 1->0 -> one line
+    obs.on_push(ch, b"\x00")  # master 1->0 -> one line
     assert "camping-push[campingmode]: master_on 1->0" in capsys.readouterr().out
-    obs.on_push("0000dead-0000-1000-8000-00805f9b34fb", b"\x00")   # unwatched char -> ignored
+    obs.on_push("0000dead-0000-1000-8000-00805f9b34fb", b"\x00")  # unwatched char -> ignored
     assert capsys.readouterr().out == ""
 
 
@@ -64,21 +73,36 @@ def test_push_observer_logs_cooler_quiet_time_change(capsys, monkeypatch):
     funcs = _funcs()
     obs = observer.CampingObserver(funcs)
     ch = str(funcs["cooler"].state_char).lower()
-    seq = [{"on": True, "level": 3, "quiet_scheduled": False, "quiet_from": 0, "quiet_to": 0,
-            "timer_active": False},
-           {"on": True, "level": 3, "quiet_scheduled": True, "quiet_from": 22, "quiet_to": 6,
-            "timer_active": False}]
+    seq = [
+        {
+            "on": True,
+            "level": 3,
+            "quiet_scheduled": False,
+            "quiet_from": 0,
+            "quiet_to": 0,
+            "timer_active": False,
+        },
+        {
+            "on": True,
+            "level": 3,
+            "quiet_scheduled": True,
+            "quiet_from": 22,
+            "quiet_to": 6,
+            "timer_active": False,
+        },
+    ]
     i = {"n": 0}
 
     def fake_interp(fn, decoded):
         r = seq[min(i["n"], len(seq) - 1)]
         i["n"] += 1
         return r
+
     monkeypatch.setattr(observer.semantics, "interpret", fake_interp)
     monkeypatch.setattr(observer.protocol, "decode", lambda f, d: d)
-    obs.on_push(ch, b"\x00")                    # baseline push -> silent
+    obs.on_push(ch, b"\x00")  # baseline push -> silent
     assert capsys.readouterr().out == ""
-    obs.on_push(ch, b"\x00")                    # quiet time enabled 22->6 -> one line
+    obs.on_push(ch, b"\x00")  # quiet time enabled 22->6 -> one line
     out = capsys.readouterr().out
     assert "camping-push[cooler]:" in out
     assert "quiet_scheduled 0->1" in out and "quiet_from 0->22" in out and "quiet_to 0->6" in out
@@ -102,15 +126,16 @@ def test_persistent_flag_is_single_source_of_truth(monkeypatch):
     than masked by the env-unset default of True."""
     monkeypatch.setenv("CALICTL_PERSISTENT_SESSION", "0")
     s = serve.Server(influx_enabled=False)
-    assert s._persistent is False and s._sessions._persistent is False   # both read the env
-    s._persistent = True                                                 # runtime/test toggle
-    assert s._sessions._persistent is True                               # propagated, not shadowed
-    assert s._persistent is s._sessions._persistent                      # one source of truth
+    assert s._persistent is False and s._sessions._persistent is False  # both read the env
+    s._persistent = True  # runtime/test toggle
+    assert s._sessions._persistent is True  # propagated, not shadowed
+    assert s._persistent is s._sessions._persistent  # one source of truth
 
 
 def test_meta_session_state_reflects_supervisor(monkeypatch):
     """_meta.session mirrors the supervisor's state machine; online == (session up)."""
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     s._persistent = True
     s._sessions.session_state = "up"
@@ -129,15 +154,20 @@ def test_supervise_session_backoff_to_asleep(monkeypatch):
 
     from calictl import serve
     from tools.mock_unit import MockBleakClient, MockCamperUnit
-    unit = MockCamperUnit(); unit.drop()                 # asleep from the start
-    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+
+    unit = MockCamperUnit()
+    unit.drop()  # asleep from the start
+    fake = types.ModuleType("bleak")
+    fake.BleakClient = MockBleakClient.bind(unit)
     sys.modules["bleak"] = fake
 
     # device._session retries the connect 3x with a real asyncio.sleep(4) between attempts;
     # collapse those to keep this a fast unit test. We assert on state, never on sleep timing.
     real = asyncio.sleep
+
     async def fast_sleep(x, *a, **k):
         await real(0)
+
     monkeypatch.setattr(serve.asyncio, "sleep", fast_sleep)
 
     s = serve.Server("MO:CK", influx_enabled=False)
@@ -149,6 +179,7 @@ def test_supervise_session_backoff_to_asleep(monkeypatch):
         for _ in range(5):
             await s._sessions._connect_once()
         return s._sessions.session_state
+
     state = asyncio.run(_run())
     assert state == "asleep"
     assert s._sessions._backoff_fails >= s._sessions.ASLEEP_AFTER
@@ -163,12 +194,16 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
 
     from calictl import serve
     from tools.mock_unit import MockBleakClient, MockCamperUnit
-    unit = MockCamperUnit(); unit.drop()                     # asleep from the start
-    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+
+    unit = MockCamperUnit()
+    unit.drop()  # asleep from the start
+    fake = types.ModuleType("bleak")
+    fake.BleakClient = MockBleakClient.bind(unit)
     sys.modules["bleak"] = fake
 
     class _Stop(Exception):
         pass
+
     sleeps = []
     real = asyncio.sleep
     s = serve.Server("MO:CK", influx_enabled=False)
@@ -182,6 +217,7 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
     async def fake_sleep(x, *a, **k):
         sleeps.append(x)
         await real(0)
+
     monkeypatch.setattr(serve.asyncio, "sleep", fake_sleep)
 
     # Stop the otherwise-infinite supervisor loop from the connect call -- it is awaited DIRECTLY in
@@ -190,32 +226,36 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
     # 60 s backoff cap.
     real_connect = s._sessions._connect_once
     _n = {"i": 0}
+
     async def counting_connect():
         _n["i"] += 1
         ok = await real_connect()
         if _n["i"] >= 8:
             raise _Stop
         return ok
+
     monkeypatch.setattr(s._sessions, "_connect_once", counting_connect)
 
     async def _run():
         s._ble = asyncio.Lock()
-        s._sessions.attach(s._ble)          # keep-warm nudge target (never set in this test)
-        s._note_ui_activity()                       # UI active -> supervisor attempts connects (vs idle-release)
+        s._sessions.attach(s._ble)  # keep-warm nudge target (never set in this test)
+        s._note_ui_activity()  # UI active -> supervisor attempts connects (vs idle-release)
         try:
             await s._sessions.supervise()
         except _Stop:
             pass
         return s._sessions.session_state, sleeps
+
     state, sleeps = asyncio.run(_run())
-    assert state == "asleep"                                 # escalated after ASLEEP_AFTER fails
-    assert 60 in sleeps and all(x > 0 for x in sleeps)       # capped backoff, never a 0-sleep spin
+    assert state == "asleep"  # escalated after ASLEEP_AFTER fails
+    assert 60 in sleeps and all(x > 0 for x in sleeps)  # capped backoff, never a 0-sleep spin
 
 
 def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
     """The daemon must keep serving the last-known values behind an offline flag when the van's
     unreachable, and the cache must survive a restart (the unit deep-sleeps for days when parked)."""
     import time
+
     monkeypatch.setenv("CALICTL_STATE_CACHE", str(tmp_path / "last.json"))
     s = serve.Server(influx_enabled=False)
     s._last = {"cooler": {"Installed": 1, "State": 1, "Level": 3, "Mode": 4}}
@@ -225,7 +265,8 @@ def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
     assert st["_meta"]["online"] is False and st["_meta"]["last_seen"] is None
     assert st["cooler"]["on"] is True
     # a fresh poll -> online + persisted
-    s._last_ok_ts = time.time(); s._save_last()
+    s._last_ok_ts = time.time()
+    s._save_last()
     assert be.state()["_meta"]["online"] is True
     # a brand-new Server (restart) loads the persisted cache
     s2 = serve.Server(influx_enabled=False)
@@ -235,8 +276,16 @@ def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
 def test_state_renders_water_without_influx():
     """state() renders the fresh-water tank straight from the BLE cache — no Influx, no forecast."""
     s = serve.Server(influx_enabled=False)
-    s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 11, "FreshWaterVolume": 29,
-                         "WasteWaterUnit": 1, "WasteWaterLevel": 0, "WasteWaterVolume": 22}}
+    s._last = {
+        "water": {
+            "FreshWaterUnit": 1,
+            "FreshWaterLevel": 11,
+            "FreshWaterVolume": 29,
+            "WasteWaterUnit": 1,
+            "WasteWaterLevel": 0,
+            "WasteWaterVolume": 22,
+        }
+    }
     fresh = serve.ServeBackend(s, loop=None).state()["water"]["fresh"]
     assert fresh["liters"] == 11 and "days_left" not in fresh and "drain_lpd" not in fresh
 
@@ -246,13 +295,16 @@ def test_state_flags_stale_water():
     latched low in _last."""
     s = serve.Server(influx_enabled=False)
     s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 1, "FreshWaterVolume": 29}}  # latched low
-    s._water_good = {"installed": True, "fresh": {"liters": 17, "capacity_l": 29, "percent": 59},
-                     "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
+    s._water_good = {
+        "installed": True,
+        "fresh": {"liters": 17, "capacity_l": 29, "percent": 59},
+        "waste": {"liters": 1, "capacity_l": 22, "percent": 5},
+    }
     s._water_stale_since = 1_700_000_000.0
     held = serve.ServeBackend(s, loop=None).state()["water"]
     fresh = held["fresh"]
     assert fresh["stale"] is True
-    assert fresh["liters"] == 17               # the last plausible level, not the latched 1 L
+    assert fresh["liters"] == 17  # the last plausible level, not the latched 1 L
     assert "days_left" not in fresh
     # the substitution holds the WHOLE dict, so waste is a held value too — it must carry the
     # same stale flag (regression: waste was served frozen-but-unflagged for a month, 2026-08-16)
@@ -265,11 +317,14 @@ def test_water_baseline_persists_across_restart(monkeypatch, tmp_path):
     monkeypatch.setenv("CALICTL_STATE_CACHE", str(tmp_path / "state.json"))
     s = serve.Server(influx_enabled=False)
     s._last = {"water": {"FreshWaterUnit": 1, "FreshWaterLevel": 1, "FreshWaterVolume": 29}}
-    s._water_good = {"installed": True, "fresh": {"liters": 18, "capacity_l": 29, "percent": 62},
-                     "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
+    s._water_good = {
+        "installed": True,
+        "fresh": {"liters": 18, "capacity_l": 29, "percent": 62},
+        "waste": {"liters": 1, "capacity_l": 22, "percent": 5},
+    }
     s._water_stale_since = 1_700_000_000.0
     s._save_last()
-    s2 = serve.Server(influx_enabled=False)          # "restart" — same cache path
+    s2 = serve.Server(influx_enabled=False)  # "restart" — same cache path
     assert s2._water_good == s._water_good and s2._water_stale_since == 1_700_000_000.0
 
 
@@ -278,19 +333,28 @@ def test_water_good_baseline_needs_no_influx(monkeypatch):
     plausible read establishes it; a later impossible drop is flagged without any Influx call."""
     # influx must never be consulted by the stale path
     from calictl import freshness, influx
+
     def _boom(*a, **k):
         raise AssertionError("stale detection must not call influx.field_series")
+
     monkeypatch.setattr(influx, "field_series", _boom)
-    good = {"installed": True, "fresh": {"liters": 17, "capacity_l": 29, "percent": 59},
-            "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
-    latch = {"installed": True, "fresh": {"liters": 1, "capacity_l": 29, "percent": 3},
-             "waste": {"liters": 1, "capacity_l": 22, "percent": 5}}
-    assert freshness.implausible_water_drop(latch, good) is True     # flagged purely from the baseline
+    good = {
+        "installed": True,
+        "fresh": {"liters": 17, "capacity_l": 29, "percent": 59},
+        "waste": {"liters": 1, "capacity_l": 22, "percent": 5},
+    }
+    latch = {
+        "installed": True,
+        "fresh": {"liters": 1, "capacity_l": 29, "percent": 3},
+        "waste": {"liters": 1, "capacity_l": 22, "percent": 5},
+    }
+    assert freshness.implausible_water_drop(latch, good) is True  # flagged purely from the baseline
 
 
 def test_serve_backend_state_interprets_cache():
     s = serve.Server(influx_enabled=False)
-    funcs = protocol.load(); overrides.apply(funcs)
+    funcs = protocol.load()
+    overrides.apply(funcs)
     s._last = {"cooler": {"Installed": 1, "State": 1, "Level": 3, "Mode": 4}}
     be = serve.ServeBackend(s, loop=None)
     st = be.state()
@@ -305,39 +369,46 @@ def test_state_read_is_safe_while_poll_rebinds_last(monkeypatch):
     import threading
 
     from tools.mock_unit import MockCamperUnit
+
     u = MockCamperUnit()
     safe = ["cooler", "campingmode", "lighting", "water", "vehicle", "energy"]
-    pool = {fn: u.decoded(fn) for fn in safe}       # realistic decoded states (interpret cleanly)
+    pool = {fn: u.decoded(fn) for fn in safe}  # realistic decoded states (interpret cleanly)
     s = serve.Server(influx_enabled=False)
     be = serve.ServeBackend(s, loop=None)
     stop = threading.Event()
     errors = []
 
-    def reader():                                   # the web thread hammering /api/state
+    def reader():  # the web thread hammering /api/state
         while not stop.is_set():
             try:
                 be.state()
-            except Exception as e:                  # a race would surface here (RuntimeError)
-                errors.append(e); return
+            except Exception as e:  # a race would surface here (RuntimeError)
+                errors.append(e)
+                return
 
-    t = threading.Thread(target=reader); t.start()
+    t = threading.Thread(target=reader)
+    t.start()
     try:
         # the loop thread republishing a cache of VARYING SIZE many times, the way poll() does.
         # Size changes are what trigger 'dictionary changed size during iteration' if state()
         # ever iterates a dict being mutated in place -- copy-on-publish must prevent it.
         for i in range(4000):
             k = 1 + (i % len(safe))
-            s._last = {fn: pool[fn] for fn in safe[:k]}   # atomic rebind, never in-place mutation
+            s._last = {fn: pool[fn] for fn in safe[:k]}  # atomic rebind, never in-place mutation
     finally:
-        stop.set(); t.join()
+        stop.set()
+        t.join()
     assert not errors, "state() raced with poll rebind: %r" % (errors[:1])
 
 
 def test_serve_backend_command_bridges_to_on_command(monkeypatch):
     s = serve.Server(influx_enabled=False)
     calls = []
+
     async def fake_on_command(fn, what, value):
-        calls.append((fn, what, value)); s._last.setdefault(fn, {})
+        calls.append((fn, what, value))
+        s._last.setdefault(fn, {})
+
     monkeypatch.setattr(s, "on_command", fake_on_command)
 
     async def _run():
@@ -357,11 +428,12 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
     (device.actuate_roof), never the one-shot device.actuate -- a single frame
     won't complete travel and has no guaranteed STOP."""
     s = serve.Server(influx_enabled=False)
-    s._read_only = False                                 # writes enabled for this actuation test
+    s._read_only = False  # writes enabled for this actuation test
     calls = {"actuate_roof": None, "actuate": None}
 
-    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True, stop_event=None,
-                                limit_positions=None):
+    async def fake_actuate_roof(
+        f, move_frame, stop_frame, verify=True, stop_event=None, limit_positions=None
+    ):
         calls["actuate_roof"] = (f.name, move_frame, stop_frame, limit_positions)
         return None
 
@@ -377,11 +449,12 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
         return await s.on_command("roof", "open", None)
 
     result = asyncio.run(_run())
-    assert result is None                     # roof has no _set_check row
+    assert result is None  # roof has no _set_check row
     assert calls["actuate_roof"] is not None
     assert calls["actuate"] is None
     _, move_frame, stop_frame, limit_positions = calls["actuate_roof"]
-    funcs = protocol.load(); overrides.apply(funcs)
+    funcs = protocol.load()
+    overrides.apply(funcs)
     assert move_frame == control.roof_frame(funcs, "open")
     assert stop_frame == control.roof_frame(funcs, "stop")
     # the open-move carries its terminal limit so travel auto-stops at the open position
@@ -391,7 +464,7 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
 def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
     """roof stop is a one-shot STOP frame -- device.actuate, not the move-heartbeat."""
     s = serve.Server(influx_enabled=False)
-    s._read_only = False                                 # writes enabled for this actuation test
+    s._read_only = False  # writes enabled for this actuation test
     calls = {"actuate_roof": None, "actuate": None}
 
     async def fake_actuate_roof(f, move_frame, stop_frame, verify=True):
@@ -450,12 +523,15 @@ def test_reconnect_closes_the_old_session_no_leak(monkeypatch):
     from tools.mock_unit import MockBleakClient, MockCamperUnit
 
     unit = MockCamperUnit()
-    fake = types.ModuleType("bleak"); fake.BleakClient = MockBleakClient.bind(unit)
+    fake = types.ModuleType("bleak")
+    fake.BleakClient = MockBleakClient.bind(unit)
     sys.modules["bleak"] = fake
     monkeypatch.setattr(device, "HEARTBEAT_WARMUP_S", 0.0, raising=False)
     real_sleep = asyncio.sleep
+
     async def fast_sleep(x, *a, **k):
         await real_sleep(0)
+
     monkeypatch.setattr(serve.asyncio, "sleep", fast_sleep)
     monkeypatch.setattr(device.asyncio, "sleep", fast_sleep)
 
@@ -464,16 +540,17 @@ def test_reconnect_closes_the_old_session_no_leak(monkeypatch):
 
     async def _run():
         s._ble = asyncio.Lock()
-        assert await s._sessions._connect_once() is True     # first connect -> up
+        assert await s._sessions._connect_once() is True  # first connect -> up
         old = s._sessions._session
         assert old.is_up is True
         assert old._stop.is_set() is False
-        unit.drop(); unit.wake()                            # link cycles; van reachable again
-        ok = await s._sessions._connect_once()                # reconnect
+        unit.drop()
+        unit.wake()  # link cycles; van reachable again
+        ok = await s._sessions._connect_once()  # reconnect
         assert ok is True
-        assert s._sessions._session is not old                        # a NEW session object
+        assert s._sessions._session is not old  # a NEW session object
         assert s._sessions._session.is_up is True
-        assert old._stop.is_set() is True                   # old session was closed, not leaked
+        assert old._stop.is_set() is True  # old session was closed, not leaked
         return True
 
     assert asyncio.run(_run())
@@ -484,30 +561,37 @@ def test_on_command_uses_persistent_session_when_up(monkeypatch):
     import asyncio
 
     from calictl import overrides, protocol, serve
-    funcs = protocol.load(); overrides.apply(funcs)
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
     s = serve.Server(influx_enabled=False)
     s._persistent = True
     s._read_only = False
     s._last = {"cooler": {"Installed": 1, "State": 0, "Level": 3, "Mode": 4}}
 
     calls = {"session": 0, "dev": 0}
+
     class FakeSession:
         is_up = True
+
         async def actuate(self, func, frame, *, follow=None, verify=True, pre=None):
             calls["session"] += 1
             return {"State": 1, "Level": 3, "Mode": 4, "Installed": 1}
+
     async def dev_actuate(*a, **k):
         calls["dev"] += 1
         return None
+
     monkeypatch.setattr(s.dev, "actuate", dev_actuate)
     s._sessions._session = FakeSession()
 
     async def _run():
         s._ble = asyncio.Lock()
         return await s.on_command("cooler", "power", "on")
+
     result = asyncio.run(_run())
     assert calls["session"] == 1 and calls["dev"] == 0
-    assert result is True     # readback State==1 matches "on"
+    assert result is True  # readback State==1 matches "on"
 
 
 def test_session_toggle_disconnect_and_connect():
@@ -516,30 +600,35 @@ def test_session_toggle_disconnect_and_connect():
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     s._persistent = True
 
     async def _disc():
-        s._ble = asyncio.Lock(); s._sessions.attach(s._ble)
-        s._note_ui_activity()                       # UI is being polled (active)
+        s._ble = asyncio.Lock()
+        s._sessions.attach(s._ble)
+        s._note_ui_activity()  # UI is being polled (active)
         assert s._sessions._ui_active() is True
         r = await s.set_session_mode("disconnect")
         return r
+
     r = asyncio.run(_disc())
     assert r["mode"] == "release"
     assert s._sessions._session_mode == "release"
-    assert s._sessions._ui_active() is False                  # release overrides activity -> slot freed
+    assert s._sessions._ui_active() is False  # release overrides activity -> slot freed
 
     async def _conn():
         s._sessions.attach(s._ble)
         return await s.set_session_mode("connect")
+
     r = asyncio.run(_conn())
     assert r["mode"] == "auto" and s._sessions._session_mode is None
-    assert s._sessions._ui_active() is True                   # connect re-marked activity
+    assert s._sessions._ui_active() is True  # connect re-marked activity
 
 
 def test_meta_exposes_session_mode():
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     s._persistent = True
     s._sessions._session_mode = "release"
@@ -553,12 +642,13 @@ def test_ui_active_window():
     import time
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
-    assert s._sessions._ui_active() is False                      # never used
+    assert s._sessions._ui_active() is False  # never used
     s._note_ui_activity()
-    assert s._sessions._ui_active() is True                       # just now
+    assert s._sessions._ui_active() is True  # just now
     s._sessions._last_ui_activity = time.time() - (serve._UI_IDLE_S + 5)
-    assert s._sessions._ui_active() is False                      # gone idle -> release the slot
+    assert s._sessions._ui_active() is False  # gone idle -> release the slot
 
 
 def test_supervise_releases_session_when_ui_idle(monkeypatch):
@@ -575,20 +665,26 @@ def test_supervise_releases_session_when_ui_idle(monkeypatch):
     import asyncio
 
     from calictl import serve
+
     s = serve.Server("MO:CK", influx_enabled=False)
     s._persistent = True
-    s._sessions._last_ui_activity = None                          # idle (never used)
+    s._sessions._last_ui_activity = None  # idle (never used)
     closed = {"n": 0}
+
     class FakeSess:
         is_up = True
+
         async def aclose(self):
             closed["n"] += 1
+
     s._sessions._session = FakeSess()
 
     class _Stop(Exception):
         pass
-    async def fake_wait(aws, timeout=None):             # stop after the first idle-release
+
+    async def fake_wait(aws, timeout=None):  # stop after the first idle-release
         raise _Stop
+
     monkeypatch.setattr(serve.asyncio, "wait", fake_wait)
 
     async def _run():
@@ -599,8 +695,9 @@ def test_supervise_releases_session_when_ui_idle(monkeypatch):
         except _Stop:
             pass
         return closed["n"], s._sessions._session, s._sessions.session_state
+
     n, sess, state = asyncio.run(_run())
-    assert n == 1 and sess is None and state == "off"   # released, slot freed
+    assert n == 1 and sess is None and state == "off"  # released, slot freed
 
 
 def test_on_command_nudges_session_when_down(monkeypatch):
@@ -609,16 +706,20 @@ def test_on_command_nudges_session_when_down(monkeypatch):
     import asyncio
 
     from calictl import overrides, protocol, serve
-    funcs = protocol.load(); overrides.apply(funcs)
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
     s = serve.Server(influx_enabled=False)
     s._persistent = True
     s._read_only = False
-    s._sessions._session = None                       # no live session (van was asleep)
-    s._sessions._backoff_fails = 3                     # backoff grew during the sleep
+    s._sessions._session = None  # no live session (van was asleep)
+    s._sessions._backoff_fails = 3  # backoff grew during the sleep
     s._last = {"lighting": {"ProfileNumber": 9}}
-    monkeypatch.setattr(serve, "_SESSION_WAIT_S", 0.1)   # don't idle the full wait-for-session window
+    monkeypatch.setattr(serve, "_SESSION_WAIT_S", 0.1)  # don't idle the full wait-for-session window
+
     async def dev_actuate(*a, **k):
         return None
+
     monkeypatch.setattr(s.dev, "actuate", dev_actuate)
 
     async def _run():
@@ -626,8 +727,9 @@ def test_on_command_nudges_session_when_down(monkeypatch):
         s._sessions.attach(s._ble)
         await s.on_command("lighting", "kitchen", 8)
         return s._sessions._wake.is_set(), s._sessions._backoff_fails
+
     was_set, fails = asyncio.run(_run())
-    assert was_set is True and fails == 0    # supervisor prodded, backoff reset
+    assert was_set is True and fails == 0  # supervisor prodded, backoff reset
 
 
 def _roof_server(monkeypatch, order):
@@ -635,11 +737,11 @@ def _roof_server(monkeypatch, order):
     s = serve.Server(influx_enabled=False)
     s._persistent = True
     s._read_only = False
-    s._last = {"roof": {"Installed": 1, "InfoPopUp": 0, "Position": 0},
-               "lighting": {"ProfileNumber": 9}}
+    s._last = {"roof": {"Installed": 1, "InfoPopUp": 0, "Position": 0}, "lighting": {"ProfileNumber": 9}}
 
-    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True, stop_event=None,
-                                limit_positions=None):
+    async def fake_actuate_roof(
+        f, move_frame, stop_frame, verify=True, stop_event=None, limit_positions=None
+    ):
         order.append(("actuate_roof", s._live_session() is None))
         return None
 
@@ -674,10 +776,11 @@ def test_roof_move_skips_the_session_warmup(monkeypatch):
        session: ``actuate_roof`` runs with no ``set_mode`` call and without idling the wait window.
     """
     import time as _time
+
     order = []
     s = _roof_server(monkeypatch, order)
-    s._sessions._session = None                         # no live session
-    s._sessions._session_mode = "release"               # the user had pressed Disconnect
+    s._sessions._session = None  # no live session
+    s._sessions._session_mode = "release"  # the user had pressed Disconnect
     s._sessions._backoff_fails = 3
     monkeypatch.setattr(serve, "_SESSION_WAIT_S", 30.0)  # a wait would blow the time bound below
 
@@ -687,12 +790,13 @@ def test_roof_move_skips_the_session_warmup(monkeypatch):
         t0 = _time.monotonic()
         await s.on_command("roof", "open", None)
         return _time.monotonic() - t0, s._sessions._wake.is_set()
+
     elapsed, woke = asyncio.run(_run())
-    assert order == [("actuate_roof", True)]            # no set_mode("connect"), straight to the move
-    assert elapsed < 2.0                                # no wait-for-session window
-    assert s._sessions._session_mode is None            # a command still clears a manual release
-    assert s._sessions._ui_active() is True             # ...and marks the UI active
-    assert woke is True and s._sessions._backoff_fails == 0   # supervisor nudged after the move
+    assert order == [("actuate_roof", True)]  # no set_mode("connect"), straight to the move
+    assert elapsed < 2.0  # no wait-for-session window
+    assert s._sessions._session_mode is None  # a command still clears a manual release
+    assert s._sessions._ui_active() is True  # ...and marks the UI active
+    assert woke is True and s._sessions._backoff_fails == 0  # supervisor nudged after the move
 
 
 def test_roof_move_still_drops_a_live_session_for_handover(monkeypatch):
@@ -703,16 +807,19 @@ def test_roof_move_still_drops_a_live_session_for_handover(monkeypatch):
 
     class FakeSess:
         is_up = True
+
         async def aclose(self):
             order.append(("aclose",))
+
     s._sessions._session = FakeSess()
 
     async def _run():
         s._ble = asyncio.Lock()
         s._sessions.attach(s._ble)
         await s.on_command("roof", "close", None)
+
     asyncio.run(_run())
-    assert order == [("aclose",), ("actuate_roof", True)]   # dropped first, then the move
+    assert order == [("aclose",), ("actuate_roof", True)]  # dropped first, then the move
     assert s._sessions.session_state == "off"
 
 
@@ -729,12 +836,14 @@ def test_non_roof_command_keeps_the_session_warmup(monkeypatch):
     async def spy_sleep(t, *a, **k):
         slept.append(t)
         return await real_sleep(0)
+
     monkeypatch.setattr(serve.asyncio, "sleep", spy_sleep)
 
     async def _run():
         s._ble = asyncio.Lock()
         s._sessions.attach(s._ble)
         await s.on_command("cooler", "power", "on")
+
     s._last["cooler"] = {"State": 0}
     asyncio.run(_run())
     assert order[0] == ("set_mode", "connect")
@@ -748,43 +857,52 @@ def test_on_command_lighting_is_fast_path_confirmed_by_notification(monkeypatch)
     import asyncio
 
     from calictl import overrides, protocol, serve
-    funcs = protocol.load(); overrides.apply(funcs)
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
     s = serve.Server(influx_enabled=False)
     s._persistent = True
     s._read_only = False
-    s._last = {"lighting": {"ProfileNumber": 9}}      # non-empty -> skip the cold-cache read
+    s._last = {"lighting": {"ProfileNumber": 9}}  # non-empty -> skip the cold-cache read
     key = str(funcs["lighting"].state_char).lower()
     # a genuine Mode-4 state notification captured on-device: BrightnessLSeven (Kitchen/L7) = 8
     fresh = bytes.fromhex("090400000000000000000508d00ddddd")
 
     seen = {}
+
     class FakeSession:
         is_up = True
         _notif = {}
+
         async def actuate(self, func, frame, *, follow=None, verify=True, pre=None):
             seen["verify"], seen["pre"], seen["follow"] = verify, pre, follow
-            async def push():                          # the unit's Mode-4 arrives shortly after
+
+            async def push():  # the unit's Mode-4 arrives shortly after
                 await asyncio.sleep(0.02)
                 self._notif[key] = fresh
+
             asyncio.ensure_future(push())
             return None
+
     s._sessions._session = FakeSession()
 
     async def _run():
         s._ble = asyncio.Lock()
         return await s.on_command("lighting", "kitchen", 8)
+
     result = asyncio.run(_run())
-    assert seen["pre"] is None            # no REQUEST_CONFIG preamble on the fast path
-    assert seen["verify"] is False        # no blocking echo-readback
-    assert result is True                 # confirmed by the real Mode-4 notification (L7 == 8)
-    assert s._last["lighting"]["BrightnessLSeven"] == 8   # served state updated from the push
+    assert seen["pre"] is None  # no REQUEST_CONFIG preamble on the fast path
+    assert seen["verify"] is False  # no blocking echo-readback
+    assert result is True  # confirmed by the real Mode-4 notification (L7 == 8)
+    assert s._last["lighting"]["BrightnessLSeven"] == 8  # served state updated from the push
 
 
 # --- web UI start is optional: a bind failure must not crash the daemon ---
 
+
 def test_maybe_start_web_none_when_no_port():
     s = serve.Server(influx_enabled=False)
-    assert s._maybe_start_web(loop=None) is None       # _web_port unset
+    assert s._maybe_start_web(loop=None) is None  # _web_port unset
 
 
 def test_maybe_start_web_survives_bind_failure(monkeypatch, capsys):
@@ -796,12 +914,13 @@ def test_maybe_start_web_survives_bind_failure(monkeypatch, capsys):
     monkeypatch.setattr(web, "serve_http", _boom)
     s = serve.Server(influx_enabled=False)
     s._web_port = 8088
-    assert s._maybe_start_web(loop=None) is None        # swallowed, did not raise
+    assert s._maybe_start_web(loop=None) is None  # swallowed, did not raise
     assert "web UI failed to start" in capsys.readouterr().out
 
 
 def test_maybe_start_web_returns_server_on_success(monkeypatch, capsys):
     from calictl import web
+
     sentinel = object()
     monkeypatch.setattr(web, "serve_http", lambda *_a, **_k: sentinel)
     s = serve.Server(influx_enabled=False)
@@ -812,25 +931,27 @@ def test_maybe_start_web_returns_server_on_success(monkeypatch, capsys):
 
 # --- MQTT is optional: no broker / paho absent must not crash the daemon ---
 
+
 def test_maybe_start_mqtt_survives_no_broker(monkeypatch):
-    monkeypatch.setenv("MQTT_PORT", "1")   # nothing listens on port 1 -> connect refused
+    monkeypatch.setenv("MQTT_PORT", "1")  # nothing listens on port 1 -> connect refused
     s = serve.Server(influx_enabled=False)
-    assert s._maybe_start_mqtt(loop=None) is None   # graceful None, never raises
+    assert s._maybe_start_mqtt(loop=None) is None  # graceful None, never raises
 
 
 def test_auto_camper_toggle_persists_and_surfaces():
     """The auto-camper toggle flips + persists to the state cache and shows in _meta.auto_camper.
     (conftest points CALICTL_STATE_CACHE at a per-test temp, shared by both Server instances.)"""
     from calictl import serve
+
     s = serve.Server()
     be = serve.ServeBackend(s, loop=None)
-    assert be.state()["_meta"]["auto_camper"]["enabled"] is False   # off by default
+    assert be.state()["_meta"]["auto_camper"]["enabled"] is False  # off by default
     assert be.set_auto_camper(True)["auto_camper"] is True
     assert be.state()["_meta"]["auto_camper"]["enabled"] is True
-    s2 = serve.Server()                                             # fresh load from the same cache
+    s2 = serve.Server()  # fresh load from the same cache
     assert s2._autocamper.enabled is True
     be2 = serve.ServeBackend(s2, loop=None)
-    assert be2.set_auto_camper(False)["auto_camper"] is False       # and back off
+    assert be2.set_auto_camper(False)["auto_camper"] is False  # and back off
 
 
 def test_load_last_survives_corrupt_auto_camper_state():
@@ -840,12 +961,13 @@ def test_load_last_survives_corrupt_auto_camper_state():
     import os
 
     from calictl import serve
-    cache = os.environ["CALICTL_STATE_CACHE"]          # conftest points this at a per-test temp
+
+    cache = os.environ["CALICTL_STATE_CACHE"]  # conftest points this at a per-test temp
     with open(cache, "w") as f:
         json.dump({"auto_camper": True, "auto_camper_state": {"fails": None, "owe_restore": None}}, f)
-    s = serve.Server()                                  # must not raise
+    s = serve.Server()  # must not raise
     ac = s._autocamper
-    assert ac.fails == 0 and ac.owe_restore is False   # safe defaults applied
+    assert ac.fails == 0 and ac.owe_restore is False  # safe defaults applied
 
 
 def test_auto_camper_restore_debt_survives_restart():
@@ -854,15 +976,16 @@ def test_auto_camper_restore_debt_survives_restart():
     doesn't silently drop a pending restore. Also verifies _load_last runs AFTER the AutoCamper is
     constructed (else the default would clobber the loaded debt)."""
     from calictl import serve
+
     s = serve.Server()
     ac = s._autocamper
     ac.owe_restore = True
     ac.pre_drive = {"master": True, "usb": True, "lights": False}
-    ac.restore_until = 9_999_999_999.0           # wall-clock (far future) — survives the reload
+    ac.restore_until = 9_999_999_999.0  # wall-clock (far future) — survives the reload
     ac.fails = 2
-    ac.prev_ignition = True                       # mid-drive when saved -> park edge detectable on reload
+    ac.prev_ignition = True  # mid-drive when saved -> park edge detectable on reload
     s._save_last()
-    s2 = serve.Server()                           # "restart" — same cache path (conftest-isolated)
+    s2 = serve.Server()  # "restart" — same cache path (conftest-isolated)
     ac2 = s2._autocamper
     assert ac2.owe_restore is True
     assert ac2.pre_drive == {"master": True, "usb": True, "lights": False}
@@ -874,6 +997,7 @@ def test_auto_camper_restore_debt_survives_restart():
 def test_meta_firmware_block_and_untested_flag():
     """_meta.firmware surfaces the version identity + the untested flag from general()."""
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     s._last = {"general": {"AmbSwVersion": None, "CommunicationVersion": 3}}  # comm 3 -> untested
     meta = serve.ServeBackend(s, loop=None).state()["_meta"]
@@ -888,31 +1012,35 @@ def test_poll_captures_raw_frames_on_firmware_change(tmp_path, monkeypatch):
     import asyncio
 
     from calictl import overrides, protocol, serve
-    funcs = protocol.load(); overrides.apply(funcs)
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
     s = serve.Server(influx_enabled=False)
     s._read_only = True
     s._fw_snapshot_dir = str(tmp_path)
     # first poll establishes the baseline (amb 0410), no capture; second poll sees 0411 -> capture
     raws = [
-        {"general": bytes([0x30, 0x34, 0x31, 0x30, 0x30, 0x32, 0x30, 0x37, 0x02])},   # "0410"/"0207"/2
-        {"general": bytes([0x30, 0x34, 0x31, 0x31, 0x30, 0x32, 0x30, 0x37, 0x02])},   # "0411"
+        {"general": bytes([0x30, 0x34, 0x31, 0x30, 0x30, 0x32, 0x30, 0x37, 0x02])},  # "0410"/"0207"/2
+        {"general": bytes([0x30, 0x34, 0x31, 0x31, 0x30, 0x32, 0x30, 0x37, 0x02])},  # "0411"
     ]
     seq = iter(raws)
 
     async def fake_read_all(fns):
         return next(seq)
+
     monkeypatch.setattr(s.dev, "read_all", fake_read_all)
 
     async def _run():
         s._ble = asyncio.Lock()
-        await s.poll()          # first-ever -> BASELINE snapshot (0410)
+        await s.poll()  # first-ever -> BASELINE snapshot (0410)
         n_after_1 = len(list(tmp_path.glob("fw-baseline-*.json")))
-        await s.poll()          # 0411 -> DRIFT snapshot
+        await s.poll()  # 0411 -> DRIFT snapshot
         return n_after_1, len(list(tmp_path.glob("fw-drift-*.json")))
+
     n_base, n_drift = asyncio.run(_run())
-    assert n_base == 1 and n_drift == 1                          # baseline captured, then the drift
+    assert n_base == 1 and n_drift == 1  # baseline captured, then the drift
     snap = list(tmp_path.glob("fw-drift-0411-*.json"))[0].read_text()
-    assert "30343131" in snap                                   # the raw "0411" bytes captured
+    assert "30343131" in snap  # the raw "0411" bytes captured
     assert s._fw_seen == ("0411", 2)
 
 
@@ -923,17 +1051,20 @@ def test_poll_skips_ble_read_while_pairing_active(monkeypatch):
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     called = {"n": 0}
 
     async def fake_read_all(fns):
         called["n"] += 1
         return {}
+
     monkeypatch.setattr(s.dev, "read_all", fake_read_all)
 
     class FakeRunner:
         def __init__(self, state):
             self._state = state
+
         def snapshot(self):
             return {"state": self._state, "attempts": 0, "error": None, "address": None}
 
@@ -941,7 +1072,7 @@ def test_poll_skips_ble_read_while_pairing_active(monkeypatch):
         s._pairing = FakeRunner(state)
         result = asyncio.run(s.poll())
         assert result == {}
-    assert called["n"] == 0    # NO device read happened for any active pairing state
+    assert called["n"] == 0  # NO device read happened for any active pairing state
 
 
 def test_poll_proceeds_when_pairing_idle_bonded_or_error(monkeypatch):
@@ -949,17 +1080,20 @@ def test_poll_proceeds_when_pairing_idle_bonded_or_error(monkeypatch):
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     called = {"n": 0}
 
     async def fake_read_all(fns):
         called["n"] += 1
         return {}
+
     monkeypatch.setattr(s.dev, "read_all", fake_read_all)
 
     class FakeRunner:
         def __init__(self, state):
             self._state = state
+
         def snapshot(self):
             return {"state": self._state, "attempts": 0, "error": None, "address": None}
 
@@ -968,8 +1102,9 @@ def test_poll_proceeds_when_pairing_idle_bonded_or_error(monkeypatch):
         for pairing in (None, FakeRunner("idle"), FakeRunner("bonded"), FakeRunner("error")):
             s._pairing = pairing
             await s.poll()
+
     asyncio.run(_run())
-    assert called["n"] == 4   # every non-active state (including no runner) reached the BLE read
+    assert called["n"] == 4  # every non-active state (including no runner) reached the BLE read
 
 
 def test_web_server_binds_without_reverse_dns(tmp_path, monkeypatch):
@@ -990,6 +1125,7 @@ def test_web_server_binds_without_reverse_dns(tmp_path, monkeypatch):
 
     def _boom(*a, **k):
         raise AssertionError("server_bind called socket.getfqdn — it would hang on a slow resolver")
+
     monkeypatch.setattr(socket, "getfqdn", _boom)
 
     class _Backend:
@@ -1014,9 +1150,10 @@ def test_command_surfaces_precondition_refusal_without_actuating():
     collapse into on_command's None and the UI showed a misleading 'Sent — check the lamp'.
     loop=None proves nothing was scheduled (run_coroutine_threadsafe would raise)."""
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     s._read_only = False
-    s._last = {"roof": {"Position": 0}}                 # roof closed
+    s._last = {"roof": {"Position": 0}}  # roof closed
     res = serve.ServeBackend(s, loop=None, read_only=False).command("lighting", "roof-reading", 8)
     assert res["ok"] is True and res["applied"] is False
     assert "refused" in res and "roof" in res["refused"].lower()
@@ -1031,13 +1168,14 @@ def test_roof_stop_sets_event_lockfree_to_interrupt_inflight_move():
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     s._read_only = False
 
     async def _run():
         s._ble = asyncio.Lock()
-        s._roof_stop = asyncio.Event()          # a move is 'in flight': event clear
-        await s._ble.acquire()                  # the move loop holds the lock
+        s._roof_stop = asyncio.Event()  # a move is 'in flight': event clear
+        await s._ble.acquire()  # the move loop holds the lock
         try:
             # stop must NOT block on the held lock; it just flips the event
             await asyncio.wait_for(s.on_command("roof", "stop", None), timeout=1.0)
@@ -1045,52 +1183,73 @@ def test_roof_stop_sets_event_lockfree_to_interrupt_inflight_move():
             s._ble.release()
         return s._roof_stop.is_set()
 
-    assert asyncio.run(_run()) is True          # event set -> in-flight loop will break + STOP
+    assert asyncio.run(_run()) is True  # event set -> in-flight loop will break + STOP
 
 
 # --- guided pairing: serve.py wiring (task 5) ------------------------------------------------
+
 
 def test_pairing_snapshot_idle_with_no_runner_falls_back_to_cache_address(monkeypatch, tmp_path):
     """No wizard has run yet this process -> idle default, address read from the persisted
     pairing cache (preferred over CALICTL_ADDR when both are set)."""
     from calictl import serve
+
     cache = tmp_path / "pairing.json"
     cache.write_text('{"address": "AA:BB:CC:DD:EE:FF"}')
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(cache))
     monkeypatch.setenv("CALICTL_ADDR", "11:22:33:44:55:66")
     s = serve.Server(influx_enabled=False)
     assert s._pairing is None
-    assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None,
-                                     "address": "AA:BB:CC:DD:EE:FF", "radio_busy": False}
+    assert s.pairing_snapshot() == {
+        "state": "idle",
+        "attempts": 0,
+        "error": None,
+        "address": "AA:BB:CC:DD:EE:FF",
+        "radio_busy": False,
+    }
 
 
 def test_pairing_snapshot_idle_falls_back_to_env_addr(monkeypatch, tmp_path):
     """No wizard, no pairing cache, but CALICTL_ADDR is configured (the buspi case) ->
     the env address surfaces so the web UI offers Unpair for that bond."""
     from calictl import serve
+
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
     monkeypatch.setenv("CALICTL_ADDR", "11:22:33:44:55:66")
     s = serve.Server(influx_enabled=False)
-    assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None,
-                                     "address": "11:22:33:44:55:66", "radio_busy": False}
+    assert s.pairing_snapshot() == {
+        "state": "idle",
+        "attempts": 0,
+        "error": None,
+        "address": "11:22:33:44:55:66",
+        "radio_busy": False,
+    }
 
 
 def test_pairing_snapshot_idle_with_no_cache_file(monkeypatch, tmp_path):
     from calictl import serve
+
     monkeypatch.delenv("CALICTL_ADDR", raising=False)
     monkeypatch.setenv("CALICTL_PAIRING_CACHE", str(tmp_path / "missing.json"))
     s = serve.Server(influx_enabled=False)
-    assert s.pairing_snapshot() == {"state": "idle", "attempts": 0, "error": None, "address": None,
-                                     "radio_busy": False}
+    assert s.pairing_snapshot() == {
+        "state": "idle",
+        "attempts": 0,
+        "error": None,
+        "address": None,
+        "radio_busy": False,
+    }
 
 
 def test_pairing_snapshot_uses_runner_when_present():
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
 
     class FakeRunner:
         def snapshot(self):
             return {"state": "waiting_passkey", "attempts": 0, "error": None, "address": None}
+
     s._pairing = FakeRunner()
     assert s.pairing_snapshot()["state"] == "waiting_passkey"
 
@@ -1101,6 +1260,7 @@ def test_pairing_command_start_parks_supervisor_before_starting(monkeypatch):
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     calls = []
 
@@ -1108,13 +1268,15 @@ def test_pairing_command_start_parks_supervisor_before_starting(monkeypatch):
         async def start(self):
             calls.append("start")
 
-        def snapshot(self):   # pairing_command's return value (matches GET /api/pairing's shape)
+        def snapshot(self):  # pairing_command's return value (matches GET /api/pairing's shape)
             return {"state": "scanning", "attempts": 0, "error": None, "address": None}
+
     s._pairing = FakeRunner()
 
     async def fake_set_mode(action):
         calls.append(("set_mode", action))
         return {"mode": "release"}
+
     monkeypatch.setattr(s._sessions, "set_mode", fake_set_mode)
 
     asyncio.run(s.pairing_command("start", None))
@@ -1125,6 +1287,7 @@ def test_pairing_command_passkey_forwards_int():
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     seen = {}
 
@@ -1134,6 +1297,7 @@ def test_pairing_command_passkey_forwards_int():
 
         def snapshot(self):
             return {"state": "pairing", "attempts": 0, "error": None, "address": None}
+
     s._pairing = FakeRunner()
 
     asyncio.run(s.pairing_command("passkey", "123456"))
@@ -1144,6 +1308,7 @@ def test_pairing_command_reset_with_confirm_calls_runner_reset():
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     calls = []
 
@@ -1153,6 +1318,7 @@ def test_pairing_command_reset_with_confirm_calls_runner_reset():
 
         def snapshot(self):
             return {"state": "idle", "attempts": 0, "error": None, "address": None}
+
     s._pairing = FakeRunner()
 
     asyncio.run(s.pairing_command("reset", None))
@@ -1164,6 +1330,7 @@ def test_pairing_command_passkey_and_cancel_are_noop_without_a_runner():
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     asyncio.run(s.pairing_command("passkey", "123456"))
     asyncio.run(s.pairing_command("cancel", None))
@@ -1176,20 +1343,23 @@ def test_pairing_command_reset_creates_a_runner_when_none_exists():
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     assert s._pairing is None
     asyncio.run(s.pairing_command("reset", None))
     assert s._pairing is not None
-    assert s.pairing_snapshot()["state"] == "idle"   # RESET -> RESET_DONE settles back to idle
+    assert s.pairing_snapshot()["state"] == "idle"  # RESET -> RESET_DONE settles back to idle
 
 
 # --- fix-wave: adopt the bonded address into the RUNNING daemon (blocker) --------------------
+
 
 def test_ensure_pairing_runner_wires_on_bonded_to_adopt_the_address():
     """`_ensure_pairing_runner` must hook `runner.on_bonded` to `Server._on_pairing_bonded` --
     else a real bond never reaches `self.dev.addr` and polling keeps targeting the old address
     until a restart."""
     from calictl import serve
+
     s = serve.Server(addr="11:11:11:11:11:11", influx_enabled=False)
     runner = s._ensure_pairing_runner()
     assert runner.on_bonded == s._on_pairing_bonded
@@ -1205,18 +1375,20 @@ def test_pairing_command_start_adopts_bonded_address_from_a_fake_runner():
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(addr="11:11:11:11:11:11", influx_enabled=False)
 
     class FakeRunner:
         on_bonded = None
 
         async def start(self):
-            self.on_bonded("22:22:22:22:22:22")   # simulate reaching BONDED with a fresh address
+            self.on_bonded("22:22:22:22:22:22")  # simulate reaching BONDED with a fresh address
 
         def snapshot(self):
             return {"state": "bonded", "attempts": 0, "error": None, "address": "22:22:22:22:22:22"}
+
     fake = FakeRunner()
-    fake.on_bonded = s._on_pairing_bonded   # mirrors the wiring _ensure_pairing_runner does
+    fake.on_bonded = s._on_pairing_bonded  # mirrors the wiring _ensure_pairing_runner does
     s._pairing = fake
 
     asyncio.run(s.pairing_command("start", None))
@@ -1224,6 +1396,7 @@ def test_pairing_command_start_adopts_bonded_address_from_a_fake_runner():
 
 
 # --- guided pairing: web.py /api/pairing routing (task 5) ------------------------------------
+
 
 def test_pairing_web_api_routes(tmp_path):
     """web.py's /api/pairing contract: GET returns the backend snapshot; allowed in read-only
@@ -1238,7 +1411,7 @@ def test_pairing_web_api_routes(tmp_path):
     calls = []
 
     class _Backend:
-        read_only = True   # a read-only Server must still accept pairing POSTs
+        read_only = True  # a read-only Server must still accept pairing POSTs
 
         def pairing_snapshot(self):
             return {"state": "idle", "attempts": 0, "error": None, "address": None}
@@ -1251,8 +1424,12 @@ def test_pairing_web_api_routes(tmp_path):
     base = "http://127.0.0.1:%d" % httpd.server_address[1]
 
     def post(path, body):
-        req = urllib.request.Request(base + path, data=json.dumps(body).encode(),
-                                      headers={"Content-Type": "application/json"}, method="POST")
+        req = urllib.request.Request(
+            base + path,
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         try:
             with urllib.request.urlopen(req, timeout=3) as r:
                 return r.status, json.load(r)
@@ -1272,7 +1449,7 @@ def test_pairing_web_api_routes(tmp_path):
         for bad in ("12ab56", "12345", 123456):
             status, body = post("/api/pairing", {"action": "passkey", "value": bad})
             assert status == 400 and body["error"] == "bad_passkey"
-        assert calls[-1] == ("passkey", "123456")   # none of the bad values reached the backend
+        assert calls[-1] == ("passkey", "123456")  # none of the bad values reached the backend
 
         status, body = post("/api/pairing", {"action": "reset"})
         assert status == 400 and body["error"] == "confirm_required"
@@ -1292,10 +1469,11 @@ def test_pairing_web_api_routes(tmp_path):
 
 def test_state_meta_reports_paired():
     from calictl import device, serve
+
     s = serve.Server(device.UNPAIRED_ADDR, influx_enabled=False)
     be = serve.ServeBackend(s, loop=None)
     assert be.state()["_meta"]["paired"] is False
-    s.dev.addr = "11:22:33:44:55:66"          # what _on_pairing_bonded does after a bond
+    s.dev.addr = "11:22:33:44:55:66"  # what _on_pairing_bonded does after a bond
     assert be.state()["_meta"]["paired"] is True
 
 
@@ -1316,6 +1494,7 @@ def test_pairing_start_waits_for_an_in_flight_ble_operation(monkeypatch):
     import asyncio
 
     from calictl import serve
+
     monkeypatch.setattr(serve, "PAIRING_START_WAIT_S", 0.05)
     s = serve.Server(influx_enabled=False)
     calls = []
@@ -1325,26 +1504,34 @@ def test_pairing_start_waits_for_an_in_flight_ble_operation(monkeypatch):
             calls.append(("start", s._ble.locked()))
 
         def snapshot(self):
-            return {"state": "error", "attempts": 3, "error": "connect_failed", "address": None,
-                    "radio_busy": False}
+            return {
+                "state": "error",
+                "attempts": 3,
+                "error": "connect_failed",
+                "address": None,
+                "radio_busy": False,
+            }
+
     s._pairing = FakeRunner()
 
     async def fake_set_mode(action):
         return {"mode": "release"}
+
     monkeypatch.setattr(s._sessions, "set_mode", fake_set_mode)
 
     def _no_read(*a, **k):
         raise AssertionError("poll() read BLE while a pairing start was pending")
+
     monkeypatch.setattr(s.dev, "read_all", _no_read)
 
     async def _run():
         s._ble = asyncio.Lock()
-        await s._ble.acquire()                       # a poll is mid-read (unit unreachable)
-        snap = await asyncio.wait_for(s.pairing_command("start", None), 1.0)   # does NOT block
+        await s._ble.acquire()  # a poll is mid-read (unit unreachable)
+        snap = await asyncio.wait_for(s.pairing_command("start", None), 1.0)  # does NOT block
         assert snap["state"] == "scanning" and snap["error"] is None
         assert calls == [] and s._pairing_pending
-        assert await s.poll() == {}                  # a new poll skips while start is pending
-        queued = asyncio.ensure_future(s.poll())     # ...and one that queued for the lock earlier
+        assert await s.poll() == {}  # a new poll skips while start is pending
+        queued = asyncio.ensure_future(s.poll())  # ...and one that queued for the lock earlier
         await asyncio.sleep(0.01)
         s._ble.release()
         await asyncio.sleep(0.05)
@@ -1359,6 +1546,7 @@ def test_cancel_abandons_a_pending_pairing_start(monkeypatch):
     import asyncio
 
     from calictl import serve
+
     monkeypatch.setattr(serve, "PAIRING_START_WAIT_S", 0.01)
     s = serve.Server(influx_enabled=False)
     calls = []
@@ -1371,12 +1559,13 @@ def test_cancel_abandons_a_pending_pairing_start(monkeypatch):
             calls.append("cancel")
 
         def snapshot(self):
-            return {"state": "idle", "attempts": 0, "error": None, "address": None,
-                    "radio_busy": False}
+            return {"state": "idle", "attempts": 0, "error": None, "address": None, "radio_busy": False}
+
     s._pairing = FakeRunner()
 
     async def fake_set_mode(action):
         return {"mode": "release"}
+
     monkeypatch.setattr(s._sessions, "set_mode", fake_set_mode)
 
     async def _run():
@@ -1398,6 +1587,7 @@ def test_second_start_while_scanning_is_a_noop():
 
     from calictl import pairing, serve
     from calictl.pairing_bluez import PairingRunner
+
     s = serve.Server(influx_enabled=False)
     scans = []
 
@@ -1414,6 +1604,7 @@ def test_second_start_while_scanning_is_a_noop():
 
     async def fake_set_mode(action):
         return {"mode": "release"}
+
     s._sessions.set_mode = fake_set_mode
 
     async def _run():
@@ -1431,6 +1622,7 @@ def test_pairing_command_passkey_keeps_leading_zero_value():
     import asyncio
 
     from calictl import serve
+
     s = serve.Server(influx_enabled=False)
     seen = {}
 
@@ -1439,8 +1631,8 @@ def test_pairing_command_passkey_keeps_leading_zero_value():
             seen["pk"] = pk
 
         def snapshot(self):
-            return {"state": "pairing", "attempts": 0, "error": None, "address": None,
-                    "radio_busy": False}
+            return {"state": "pairing", "attempts": 0, "error": None, "address": None, "radio_busy": False}
+
     s._pairing = FakeRunner()
     asyncio.run(s.pairing_command("passkey", "012345"))
     assert seen["pk"] == 12345

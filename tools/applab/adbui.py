@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Tiny adb UI driver for the emulator: dump the view tree, tap by text, screenshot.
 
-  adbui.py dump                 -> prints visible texts (deduped, in tree order)
-  adbui.py tap "<regex>"        -> taps the centre of the first node whose text/desc matches
-  adbui.py shot <name>          -> screenshot to shots/<name>.png (scratchpad) + prints texts
-  adbui.py tree                 -> prints (text|desc, class, bounds, clickable) per node
+adbui.py dump                 -> prints visible texts (deduped, in tree order)
+adbui.py tap "<regex>"        -> taps the centre of the first node whose text/desc matches
+adbui.py shot <name>          -> screenshot to shots/<name>.png (scratchpad) + prints texts
+adbui.py tree                 -> prints (text|desc, class, bounds, clickable) per node
 """
+
 import os
 import re
 import subprocess
@@ -14,8 +15,10 @@ import xml.etree.ElementTree as ET
 
 ADB = os.environ.get("ADB") or (
     os.path.join(os.environ["ANDROID_SDK_ROOT"], "platform-tools", "adb")
-    if os.environ.get("ANDROID_SDK_ROOT") else "adb")
-SHOTS = os.environ.get("APPLAB_SHOTS", os.path.join(os.getcwd(), "applab-shots"))   # never inside the repo
+    if os.environ.get("ANDROID_SDK_ROOT")
+    else "adb"
+)
+SHOTS = os.environ.get("APPLAB_SHOTS", os.path.join(os.getcwd(), "applab-shots"))  # never inside the repo
 
 
 def sh(*args, binary=False):
@@ -26,16 +29,22 @@ def sh(*args, binary=False):
 def tree():
     sh("shell", "uiautomator", "dump", "/sdcard/ui.xml")
     xml = sh("shell", "cat", "/sdcard/ui.xml")
-    xml = xml[xml.find("<"):]
+    xml = xml[xml.find("<") :]
     nodes = []
     for n in ET.fromstring(xml).iter("node"):
         b = [int(x) for x in re.findall(r"\d+", n.get("bounds", ""))]
-        nodes.append({
-            "text": n.get("text", ""), "desc": n.get("content-desc", ""),
-            "cls": n.get("class", "").split(".")[-1], "bounds": b,
-            "clickable": n.get("clickable") == "true", "enabled": n.get("enabled") == "true",
-            "checked": n.get("checked"), "checkable": n.get("checkable") == "true",
-        })
+        nodes.append(
+            {
+                "text": n.get("text", ""),
+                "desc": n.get("content-desc", ""),
+                "cls": n.get("class", "").split(".")[-1],
+                "bounds": b,
+                "clickable": n.get("clickable") == "true",
+                "enabled": n.get("enabled") == "true",
+                "checked": n.get("checked"),
+                "checkable": n.get("checkable") == "true",
+            }
+        )
     return nodes
 
 
@@ -80,5 +89,7 @@ if __name__ == "__main__":
     elif cmd == "tree":
         for n in tree():
             if n["text"] or n["desc"] or n["clickable"]:
-                print(f"{(n['text'] or n['desc'])[:60]!r:64} {n['cls']:18} {n['bounds']} "
-                      f"{'click' if n['clickable'] else ''} {'chk=' + str(n['checked']) if n['checkable'] else ''}")
+                print(
+                    f"{(n['text'] or n['desc'])[:60]!r:64} {n['cls']:18} {n['bounds']} "
+                    f"{'click' if n['clickable'] else ''} {'chk=' + str(n['checked']) if n['checkable'] else ''}"
+                )

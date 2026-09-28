@@ -1,5 +1,6 @@
 """Host-firmware e2e harness: a Bumble virtual controller exposed as HCI over TCP (the firmware's
 NimBLE socket transport connects to it), linked to the fake unit's controller."""
+
 import asyncio
 import importlib.util
 import json
@@ -40,8 +41,10 @@ def _toolchain_missing():
             except OSError as e:
                 return "%s%s not usable (%s)" % (prefix, comp, e)
             if r.returncode != 0:
-                return ("no 32-bit toolchain: `%s -m32` cannot link (install gcc-multilib g++-multilib, "
-                        "or set CROSS_COMPILE=i686-linux-gnu-)" % (prefix + comp))
+                return (
+                    "no 32-bit toolchain: `%s -m32` cannot link (install gcc-multilib g++-multilib, "
+                    "or set CROSS_COMPILE=i686-linux-gnu-)" % (prefix + comp)
+                )
     return None
 
 
@@ -104,8 +107,9 @@ def _radio_link():
             loop = asyncio.get_running_loop()
             at = max(loop.time() + ACL_LATENCY_S, self._last_at + 1e-6)  # strictly increasing: FIFO
             self._last_at = at
-            loop.call_at(at, LocalLink.send_acl_data, self, sender_controller, destination_address,
-                         transport, data)
+            loop.call_at(
+                at, LocalLink.send_acl_data, self, sender_controller, destination_address, transport, data
+            )
 
     return RadioLink()
 
@@ -139,15 +143,15 @@ def _fw_controller_class():
     class FirmwareController(Controller):
         def __init__(self, *a, **kw):
             super().__init__(*a, **kw)
-            self.resolving_list: dict[bytes, tuple[bytes, object]] = {}   # identity -> (irk, addr)
-            self._resolved: tuple[object, object] | None = None           # (rpa, identity)
-            self.hold_connects = False    # test knob: a pending LE connection never completes
+            self.resolving_list: dict[bytes, tuple[bytes, object]] = {}  # identity -> (irk, addr)
+            self._resolved: tuple[object, object] | None = None  # (rpa, identity)
+            self.hold_connects = False  # test knob: a pending LE connection never completes
             # test knobs for a cancel of a held connection: its completion arrives this much later
             # (a real controller ends the procedure at a connection event), or the connection
             # completes first and the cancel is refused (the race a real radio can lose)
             self.cancel_delay_s = 0.0
             self.connect_on_cancel = False
-            self._last_rpa = None         # the latest resolvable advertiser address seen
+            self._last_rpa = None  # the latest resolvable advertiser address seen
 
         # -- resolving list ----------------------------------------------------------------
         def on_hci_le_add_device_to_resolving_list_command(self, command):
@@ -167,7 +171,7 @@ def _fw_controller_class():
             pending = self.pending_le_connection
             if pdu.advertiser_address.is_resolvable:
                 self._last_rpa = pdu.advertiser_address
-            if pending and self.hold_connects:        # scan reports only; the connect stays pending
+            if pending and self.hold_connects:  # scan reports only; the connect stays pending
                 self.pending_le_connection = None
                 try:
                     super().on_advertising_pdu(pdu)
@@ -180,21 +184,28 @@ def _fw_controller_class():
                 irk, ident = entry
                 if AddressResolver([(irk, ident)]).resolve(adv) is not None:
                     self._resolved = (adv, pending.peer_address)
-                    pending.peer_address = adv              # connect to the RPA on the air ...
+                    pending.peer_address = adv  # connect to the RPA on the air ...
             super().on_advertising_pdu(pdu)
 
         def send_hci_packet(self, packet):
-            if (isinstance(packet, hci.HCI_LE_Connection_Complete_Event) and self._resolved
-                    and packet.peer_address == self._resolved[0]):
-                ident = self._resolved[1]                   # ... report the identity to the host
+            if (
+                isinstance(packet, hci.HCI_LE_Connection_Complete_Event)
+                and self._resolved
+                and packet.peer_address == self._resolved[0]
+            ):
+                ident = self._resolved[1]  # ... report the identity to the host
                 self._resolved = None
                 packet = hci.HCI_LE_Connection_Complete_Event(
-                    status=packet.status, connection_handle=packet.connection_handle,
-                    role=packet.role, peer_address_type=ident.address_type, peer_address=ident,
+                    status=packet.status,
+                    connection_handle=packet.connection_handle,
+                    role=packet.role,
+                    peer_address_type=ident.address_type,
+                    peer_address=ident,
                     connection_interval=packet.connection_interval,
                     peripheral_latency=packet.peripheral_latency,
                     supervision_timeout=packet.supervision_timeout,
-                    central_clock_accuracy=packet.central_clock_accuracy)
+                    central_clock_accuracy=packet.central_clock_accuracy,
+                )
             super().send_hci_packet(packet)
 
         # -- create connection cancel --------------------------------------------------------
@@ -207,15 +218,21 @@ def _fw_controller_class():
                 self.connect_on_cancel = self.hold_connects = False
                 self._resolved = (self._last_rpa, pending.peer_address)
                 pending.peer_address = self._last_rpa
-                self.create_le_connection(self._last_rpa)   # its Connection Complete goes first
+                self.create_le_connection(self._last_rpa)  # its Connection Complete goes first
                 return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.COMMAND_DISALLOWED_ERROR)
             self.pending_le_connection = None
             self._resolved = None
             done = hci.HCI_LE_Connection_Complete_Event(
-                status=hci.HCI_ErrorCode.UNKNOWN_CONNECTION_IDENTIFIER_ERROR, connection_handle=0,
-                role=hci.Role.CENTRAL, peer_address_type=pending.peer_address.address_type,
-                peer_address=pending.peer_address, connection_interval=0, peripheral_latency=0,
-                supervision_timeout=0, central_clock_accuracy=0)
+                status=hci.HCI_ErrorCode.UNKNOWN_CONNECTION_IDENTIFIER_ERROR,
+                connection_handle=0,
+                role=hci.Role.CENTRAL,
+                peer_address_type=pending.peer_address.address_type,
+                peer_address=pending.peer_address,
+                connection_interval=0,
+                peripheral_latency=0,
+                supervision_timeout=0,
+                central_clock_accuracy=0,
+            )
             # after this command's Command Complete (send_hci_packet itself defers with call_soon)
             asyncio.get_running_loop().call_later(self.cancel_delay_s, self.send_hci_packet, done)
             return hci.HCI_StatusReturnParameters(hci.HCI_ErrorCode.SUCCESS)
@@ -235,6 +252,7 @@ def _fw_controller_class():
 def _watch_host(sink, on_gone):
     """Call ``on_gone()`` when the TCP host of a Bumble ``tcp-server`` transport disconnects (its
     sink's ``transport`` goes from a connection to ``None``; Bumble has no other hook)."""
+
     class WatchedSink(type(sink)):
         @property
         def transport(self):
@@ -287,17 +305,20 @@ class HciUnit:
         self.unit = build_unit(uc, uc, **self._kw)
         await self.unit.start()
         self._transport = await open_transport(f"tcp-server:127.0.0.1:{self.port}")
-        self.fw_controller = _fw_controller_class()("fw", host_source=self._transport.source,
-                                                    host_sink=self._transport.sink, link=self.link,
-                                                    public_address=FW_PUBLIC_ADDRESS)
+        self.fw_controller = _fw_controller_class()(
+            "fw",
+            host_source=self._transport.source,
+            host_sink=self._transport.sink,
+            link=self.link,
+            public_address=FW_PUBLIC_ADDRESS,
+        )
         _watch_host(self._transport.sink, self.fw_controller.host_gone)
         # Bumble's Controller answers even a LEGACY scan (HCI_LE_Set_Scan_Enable, what NimBLE sends
         # with BLE_EXT_ADV=0) with LE *Extended* Advertising Reports whenever it advertises the
         # LE_EXTENDED_ADVERTISING feature; NimBLE drops those, so it never sees the unit. A real
         # controller reports in the format of the scan command used; dropping the feature bit on the
         # firmware-side controller makes Bumble emit legacy reports.
-        self.fw_controller.le_features = (Controller.le_features
-                                          & ~LeFeatureMask.LE_EXTENDED_ADVERTISING)
+        self.fw_controller.le_features = Controller.le_features & ~LeFeatureMask.LE_EXTENDED_ADVERTISING
         # Bumble's LocalLink stamps every LE ACL packet with the SENDER controller's random_address,
         # even on a link the host opened with its public address (own_addr_type=0, what the firmware
         # uses). The unit's controller keys that link by our public address, so with the default
@@ -332,8 +353,14 @@ class Firmware:
 
     def _spawn(self, argv):
         """Start ``argv`` with stdin/stdout pipes (stderr folded into stdout) and pump its lines."""
-        self.p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                  stderr=subprocess.STDOUT, text=True, bufsize=1)
+        self.p = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
         self.lines: queue.Queue[str] = queue.Queue()
         self.log: list[str] = []
         threading.Thread(target=self._pump, daemon=True).start()
@@ -344,7 +371,8 @@ class Firmware:
             self.lines.put(line.rstrip())
 
     def send(self, line):
-        self.p.stdin.write(line + "\n"); self.p.stdin.flush()
+        self.p.stdin.write(line + "\n")
+        self.p.stdin.flush()
 
     def expect(self, prefix, pred=lambda v: True, timeout=30.0):
         """Wait for a ``PREFIX {json}`` (or bare ``PREFIX ...``) line whose payload satisfies pred."""
@@ -356,15 +384,16 @@ class Firmware:
                 break
             if not line.startswith(prefix):
                 continue
-            rest = line[len(prefix):].strip()
+            rest = line[len(prefix) :].strip()
             try:
                 val = json.loads(rest) if rest[:1] in "{[" else rest
             except ValueError:
                 val = rest
             if pred(val):
                 return val
-        raise AssertionError("no %r matching line in %.0fs; log tail:\n%s"
-                             % (prefix, timeout, "\n".join(self.log[-40:])))
+        raise AssertionError(
+            "no %r matching line in %.0fs; log tail:\n%s" % (prefix, timeout, "\n".join(self.log[-40:]))
+        )
 
     def stop(self):
         if self.p.poll() is None:
@@ -418,7 +447,7 @@ def qemu(tmp_path):
         flash = tmp_path / "flash.bin"
 
         def boot(self):
-            for fw in started:           # one QEMU owns the flash file at a time
+            for fw in started:  # one QEMU owns the flash file at a time
                 fw.stop()
             fw = QemuFirmware(self.flash)
             started.append(fw)

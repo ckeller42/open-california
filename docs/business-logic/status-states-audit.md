@@ -39,6 +39,7 @@ functions match the decompiled source exactly.
 ```
 rg -o -N '"<-- Incoming Data for [A-Za-z0-9 ]+' <root> | sort -u
 ```
+
 returns exactly 11 hits, one per function, matching the dictionary's 11:
 AirHeater (`rf/b.java:393`), Campingmode (`tf/a.java:174`), Cooler (`vf/c.java:377`),
 Energy (`xf/a.java:286`), General (`zf/d.java:239`), GeneralPurposeSignals
