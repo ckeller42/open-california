@@ -288,7 +288,9 @@ class Server:
         self._pairing = None  # PairingRunner (lazy: created on first /api/pairing use)
         self._poll_skipped_for_pairing = False  # edge-detect so the skip/resume log prints once per flow
         self._pairing_pending = False  # "start" accepted, waiting for the _ble lock (poll skips)
-        self._pairing_start_task: asyncio.Task[None] | None = None  # that waiting task (cancel/reset abandon it)
+        self._pairing_start_task: asyncio.Task[None] | None = (
+            None  # that waiting task (cancel/reset abandon it)
+        )
         self._last_ok_ts: float | None = None  # epoch of the last SUCCESSFUL poll (for offline/age)
         # Persist the last-known state so a restart while the van is asleep still shows the last
         # real values (the unit can be unreachable for days when parked). Env-overridable path.
@@ -426,7 +428,10 @@ class Server:
         if not energy:
             return
         if history.append(
-            self._history_cache, self._last_ok_ts, energy.get("batt2_v"), energy.get("batt2_current")  # type: ignore[arg-type]
+            self._history_cache,
+            self._last_ok_ts,  # type: ignore[arg-type]
+            energy.get("batt2_v"),
+            energy.get("batt2_current"),
         ):
             self._appends += 1
             if self._appends >= history.TRIM_EVERY:  # amortised: ~1 rewrite per 4 h of polling
