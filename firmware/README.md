@@ -167,6 +167,13 @@ and never scans; with one it reconnects by bond. The NimBLE host task (main thre
 cali_core/transport call; the stdin thread only queues lines and posts one NimBLE event; a 100 ms
 callout drives the runner/session timers.
 
+`--http <port> [--fake-wifi <script>]` adds the WiFi side on the same tick: `net_host.c`'s
+`cali_net` (POSIX sockets on 127.0.0.1 + the scripted fake WiFi, `cali_net_host.h`), the WiFi runner
+(`wifi_run.c`), the captive DNS (UDP 53, only where bindable) and the status/setup page + `/api/*`
+on `127.0.0.1:<port>`; the console gains `wifi set <ssid> <psk>` / `wifi status` / `wifi forget` /
+`wifi scan` and a `"wifi"` member in `status`'s STATE line. Without `--http` nothing network-related
+runs. Proven end to end by `tests/firmware/test_web_e2e.py`.
+
 On a Mac, run the Linux-only tests in Docker (arm64 image with an i686 cross gcc + qemu-i386
 binfmt, as used for this branch):
 
