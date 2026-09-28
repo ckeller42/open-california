@@ -35,16 +35,20 @@ def _esc(s):
     return s.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n").replace("\0", "\\0")
 
 
-def session(cli, fragments, gap_ms=10, tail=(10, 10), eof=False):
+def session(cli, fragments, gap_ms=10, tail=(10, 10), eof=False, setup=(), args=()):
     """Connect, feed one fragment per poll ``gap_ms`` apart, then poll at each ``tail`` offset.
+
+    ``setup`` lines (``sendmax``/``sendblock``/``big``) go first; ``args`` go to the driver.
 
     :returns: ``(sent, closed)`` — the raw bytes the core sent, and whether the core itself closed
         the connection (before the driver's final ``cali_http_stop``).
     """
-    lines = ["conn"] + ["frag " + _esc(f) for f in fragments] + (["eof"] if eof else [])
+    lines = list(setup) + ["conn"] + ["frag " + _esc(f) for f in fragments] + (["eof"] if eof else [])
     lines += ["tick %d" % gap_ms for _ in fragments] + ["tick %d" % t for t in tail]
-    raw = subprocess.run([str(cli)], input=("\n".join(lines) + "\n").encode(), capture_output=True,
-                         check=True).stdout.decode("latin-1")
+    proc = subprocess.run([str(cli), *args], input=("\n".join(lines) + "\n").encode(), capture_output=True,
+                          check=True)
+    assert proc.stderr.decode() == ("init=-1\n" if "nolisten" in args else "init=0\n")
+    raw = proc.stdout.decode("latin-1")
     before, _, after = raw.partition("<stopped>")
     assert after in ("", "<closed>")
     closed = before.endswith("<closed>")
@@ -116,6 +120,16 @@ def test_malformed_400(http_cli):
     assert out.startswith("HTTP/1.1 400 ")
 
 
+def test_duplicate_content_length_400(http_cli):
+    out = run(http_cli, ["POST /echo HTTP/1.1\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\nab"])
+    assert out.startswith("HTTP/1.1 400 ")
+
+
+def test_transfer_encoding_400(http_cli):
+    out = run(http_cli, ["POST /echo HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n0\r\n\r\n"])
+    assert out.startswith("HTTP/1.1 400 ")
+
+
 @pytest.mark.parametrize("req", ["GET hello HTTP/1.1\r\n\r\n", "GET /hello FTP/1.1\r\n\r\n",
                                  "GET  /hello HTTP/1.1\r\n\r\n", "\r\n\r\n",
                                  "GET /hel\0lo HTTP/1.1\r\n\r\n", "GET /hello HTTP/1.1\nX: y\r\n\r\n",
@@ -145,3 +159,41 @@ def test_peer_close_mid_request_closes_silently(http_cli):
 def test_peer_half_close_after_full_request_still_answered(http_cli):
     out = run(http_cli, ["GET /hello HTTP/1.1\r\n\r\n"], eof=True)
     assert out.endswith("\r\n\r\nhi")
+
+
+def _big(n):
+    return "".join(chr(ord("a") + i % 26) for i in range(n))
+
+
+def test_response_sent_across_polls(http_cli):
+    n = 16000
+    sent, closed = session(http_cli, ["GET /big HTTP/1.1\r\n\r\n"], tail=[10] * 3,
+                           setup=["big %d" % n, "sendmax 1000"])
+    assert not closed and 0 < len(sent) < n          # 1000 bytes per poll: still sending
+    out = run(http_cli, ["GET /big HTTP/1.1\r\n\r\n"], tail=[10] * 40, setup=["big %d" % n, "sendmax 1000"])
+    head, _, body = out.partition("\r\n\r\n")
+    assert out.count("HTTP/1.1 ") == 1 and "Content-Length: %d" % n in head and body == _big(n)
+
+
+def test_send_would_block_then_resumes(http_cli):
+    out = run(http_cli, ["GET /hello HTTP/1.1\r\n\r\n"], tail=[10] * 5, setup=["sendblock 3"])
+    assert out.startswith("HTTP/1.1 200 OK\r\n") and out.endswith("\r\n\r\nhi")
+
+
+def test_send_stall_times_out(http_cli):
+    sent, closed = session(http_cli, ["GET /hello HTTP/1.1\r\n\r\n"], tail=(5000,), setup=["sendblock -1"])
+    assert sent == "" and not closed          # exactly 5 000 ms without send progress: still open
+    sent, closed = session(http_cli, ["GET /hello HTTP/1.1\r\n\r\n"], tail=(5001,), setup=["sendblock -1"])
+    assert sent == "" and closed
+    # stalls after a partial send: 1000 bytes in the first poll, then blocked; idle counts from that progress
+    lines = ["big 16000", "sendmax 1000", "conn", "frag GET /big HTTP/1.1\\r\\n\\r\\n", "tick 10",
+             "sendblock -1", "tick 5000", "tick 1"]
+    raw = subprocess.run([str(http_cli)], input=("\n".join(lines) + "\n").encode(), capture_output=True,
+                         check=True).stdout.decode("latin-1")
+    assert raw.startswith("HTTP/1.1 200 OK\r\n") and raw.endswith("<closed><stopped>")
+    assert len(raw) - len("<closed><stopped>") == 1000   # partial output only
+
+
+def test_listen_failure_reported_and_poll_inert(http_cli):
+    sent, closed = session(http_cli, ["GET /hello HTTP/1.1\r\n\r\n"], args=["nolisten"])
+    assert sent == "" and not closed
