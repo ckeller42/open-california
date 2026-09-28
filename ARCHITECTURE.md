@@ -122,6 +122,19 @@ the unit's on-screen display, not a guess. See [`signals.md`](https://ckeller42.
   an unverified scale. The [`evidence-ledger.md`](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html) is the
   running record.
 
+## The satellite path (ESP32 firmware, work in progress)
+
+`firmware/` is a second, independent implementation of the pairing half of this picture: an
+ESP32-S3 (M5Stack CoreS3) satellite that pairs with the camper unit over its own NimBLE stack and
+reads its state without going through buspi at all. It reuses the *design*, not the Python code —
+`calictl/pairing.py`'s state machine is ported to platform-free C (`firmware/components/cali_core`)
+against the same golden vectors, and the frame codec is the same generated C already used for
+codec parity (`csrc/`, issue #156) — so the dictionary stays the single source of truth for both
+consumers. It is **read-only** (only the `1003` heartbeat is ever written) and, as of this writing,
+proven only on a Linux host build against a fake unit and in QEMU — no real hardware run yet. See
+[the firmware docs](https://ckeller42.github.io/open-california/firmware.html) for the test tiers
+and what each does and doesn't prove.
+
 ## Where to read next
 
 | You want… | Read |

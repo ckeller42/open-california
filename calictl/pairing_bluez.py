@@ -15,7 +15,7 @@ import json
 import re
 
 from calictl import pairing
-from calictl.device import pairing_cache_path
+from calictl.device import DEVICE_NAME, pairing_cache_path
 from calictl.pairing import (
     ACT_CONNECT,
     ACT_DISCONNECT,
@@ -401,7 +401,7 @@ class BluezTransport:
         client this transport constructs -- a later CI job pairs over a virtual ``hciN`` adapter.
     """
 
-    def __init__(self, on_event=None, device_name="VWCAMPER", adapter_path="/org/bluez/hci0"):
+    def __init__(self, on_event=None, device_name=DEVICE_NAME, adapter_path="/org/bluez/hci0"):
         self.on_event = on_event
         self._device_name = device_name
         self._adapter_path = adapter_path

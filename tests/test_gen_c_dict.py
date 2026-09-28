@@ -14,7 +14,8 @@ from pathlib import Path
 from calictl import overrides
 from tools import gen_c_dict
 
-HEADER = Path(__file__).parent.parent / "csrc" / "codec_dict.h"
+ROOT = Path(__file__).resolve().parents[1]
+HEADER = ROOT / "csrc" / "codec_dict.h"
 
 
 def test_checked_in_header_is_fresh():
@@ -31,3 +32,88 @@ def test_header_is_protocol_facts_only():
     # no decompiled-source identifiers leak into the generated artifact
     text = HEADER.read_text()
     assert ".java" not in text and "decompile" not in text.lower()
+
+
+def test_chars_header_is_fresh_and_covers_every_state_function():
+    """The checked-in ``codec_chars.h`` matches a fresh ``generate_chars()`` regeneration
+    and carries a row for every function with a state char.
+
+    .. test:: Generated char-map header is fresh and covers every state function
+       :id: T_CDICT_CHARS_FRESH
+       :links: R_CHARS_PAIRING_SINGLE_SOURCE
+    """
+    from calictl import overrides, protocol
+    from tools import gen_c_dict
+
+    text = gen_c_dict.generate_chars()
+    assert text == (ROOT / "csrc" / "codec_chars.h").read_text()
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    for name, f in funcs.items():
+        if f.state_char:
+            short = str(f.state_char)[4:8].lower()
+            assert '{"%s", 0x%s}' % (name, short) in text
+
+
+def test_pairing_header_mirrors_calictl_pairing():
+    """The checked-in ``pairing_consts.h`` matches a fresh ``generate_pairing()``
+    regeneration and mirrors ``calictl.pairing``'s pinned enums/timeouts.
+
+    .. test:: Generated pairing header mirrors calictl.pairing
+       :id: T_CDICT_PAIRING_FRESH
+       :links: R_CHARS_PAIRING_SINGLE_SOURCE
+    """
+    from calictl import pairing as P
+    from tools import gen_c_dict
+
+    text = gen_c_dict.generate_pairing()
+    assert text == (ROOT / "csrc" / "pairing_consts.h").read_text()
+    assert "PAIR_MAX_ATTEMPTS %d" % P.MAX_ATTEMPTS in text
+    assert "PAIR_EV_CONNECT_FAIL = %d" % P.EV_CONNECT_FAIL in text
+    for st, secs in P.TIMEOUT_S.items():
+        assert "[PAIR_%s] = %d" % (P.STATE_NAMES[st].upper(), secs) in text
+
+
+def test_chars_header_device_name_matches_the_single_source_of_truth():
+    """``CODEC_DEVICE_NAME`` is never hand-typed in the generator — it must equal
+    ``calictl.device.DEVICE_NAME``, the same constant ``calictl.pairing_bluez``'s
+    ``BluezTransport`` uses as its default scan-name filter.
+    """
+    import inspect
+
+    from calictl import device, pairing_bluez
+    from tools import gen_c_dict
+
+    text = gen_c_dict.generate_chars()
+    assert 'CODEC_DEVICE_NAME "%s"' % device.DEVICE_NAME in text
+    default = inspect.signature(pairing_bluez.BluezTransport.__init__).parameters["device_name"].default
+    assert default == device.DEVICE_NAME
+
+
+def test_chars_header_heartbeat_timing_is_calictl_defaults_not_env(monkeypatch):
+    """``CODEC_HEARTBEAT_PERIOD_MS`` / ``CODEC_HEARTBEAT_WARMUP_MS`` are the documented defaults
+    of ``calictl.device.HEARTBEAT_PERIOD_S`` / ``HEARTBEAT_WARMUP_S`` (read from the source), so a
+    developer's ``CALICTL_HEARTBEAT_*_S`` override never leaks into the committed header.
+
+    .. test:: Generated heartbeat timing follows calictl's defaults, not the environment
+       :id: T_CDICT_HEARTBEAT_TIMING
+       :links: R_CHARS_PAIRING_SINGLE_SOURCE
+    """
+    import os
+    import subprocess
+    import sys
+
+    from tools import gen_c_dict
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CALICTL_HEARTBEAT_")}
+    probe = subprocess.run(   # the defaults as calictl itself resolves them with no override
+        [sys.executable, "-c", "from calictl import device as d; "
+         "print(round(d.HEARTBEAT_PERIOD_S * 1000), round(d.HEARTBEAT_WARMUP_S * 1000))"],
+        cwd=ROOT, env=env, capture_output=True, text=True, check=True)
+    want_period, want_warmup = map(int, probe.stdout.split())
+    monkeypatch.setenv("CALICTL_HEARTBEAT_PERIOD_S", "0.05")
+    monkeypatch.setenv("CALICTL_HEARTBEAT_WARMUP_S", "0.1")
+    text = gen_c_dict.generate_chars()
+    assert "#define CODEC_HEARTBEAT_PERIOD_MS %d\n" % want_period in text
+    assert "#define CODEC_HEARTBEAT_WARMUP_MS %d\n" % want_warmup in text
+    assert want_warmup == 2000                    # value-freshness.md: the proven on-device warm-up

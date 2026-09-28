@@ -38,6 +38,7 @@ clean and shows an empty "incoming" list).
    protocol/frame-layouts
    protocol/signal-matrix
    cross-language-codec
+   firmware
    screenshots
    api
 

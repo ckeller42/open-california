@@ -61,6 +61,11 @@ DECISIONS entry), `ui/screens/*.yaml`, the protocol sequence diagrams, the Grafa
 tests + the auditor. For `dictionary.yaml`/`overrides.py` edits it also flags the REQUIRED codec
 regen (`tools.gen_codec_vectors` + `tools.gen_c_dict`) that the codec-parity CI enforces.
 
+`calictl/pairing.py` (the pairing SM) and `calictl/device.py` (heartbeat/aux-char constants) get a
+narrower, codec-only reminder instead of the full checklist above (no GUI/docs/dashboard finding
+applies to them): REQUIRED regen `tools.gen_c_dict`, stage `csrc/codec_chars.h` +
+`csrc/pairing_consts.h` — these feed the ESP32 firmware's generated C headers (#154).
+
 Reads the PostToolUse event JSON on stdin; prints `additionalContext` when relevant,
 otherwise silent.
 

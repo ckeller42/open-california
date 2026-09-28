@@ -99,6 +99,11 @@ DEFAULT_ADDR = resolve_addr()
 def _aux_uuid(short: str) -> str:
     return "0000%s-6c77-4b7d-bbf6-a5e587701f3d" % short
 
+# The unit's BLE advertised name (the app's and calictl's own scan filter). Single source of
+# truth for calictl.pairing_bluez's BluezTransport default `device_name` AND the generated
+# CODEC_DEVICE_NAME (tools/gen_c_dict.py, ESP32 firmware #154) — never hand-type it elsewhere.
+DEVICE_NAME = "VWCAMPER"
+
 HEARTBEAT_CHAR = _aux_uuid("1003")
 VERSION_CHAR = _aux_uuid("1001")
 AUTH_CHAR = _aux_uuid("1004")

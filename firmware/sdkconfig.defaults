@@ -1,0 +1,53 @@
+# esp32s3 (M5Stack CoreS3) satellite, #154. Values from the Task 8 plan, plus the lines below the
+# second comment that keep the device's SM/privacy settings equal to firmware/host/syscfg/syscfg.h.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=y
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
+CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
+CONFIG_BT_NIMBLE_SM_SC=y
+CONFIG_BT_NIMBLE_NVS_PERSIST=n
+# Ruling R9 (overrides the plan's CONFIG_ESP_CONSOLE_UART_DEFAULT): the CoreS3's USB-C is the S3's
+# native USB-Serial/JTAG; UART0 only reaches the M5-Bus header. The QEMU variant switches back to
+# UART0 (qemu/sdkconfig.qemu).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+# Same as the host build (firmware/README.md "Host build notes" 3 + Task 7 review):
+# LE Secure Connections only (a legacy-only peer fails before any passkey), RPA resolution in the
+# controller (the host-based variant is ESP32-only in Kconfig; pinned off explicitly anyway).
+CONFIG_BT_NIMBLE_SM_LEGACY=n
+CONFIG_BT_NIMBLE_SM_SC_ONLY=1
+CONFIG_BT_NIMBLE_HOST_BASED_PRIVACY=n
+# Task 8 review C1: with STATIC_TO_DYNAMIC=y (the IDF default) esp-nimble's host sync runs
+# ble_store_config_init() (ble_hs_pvcy.c:336-337, via ble_hs_startup.c:578
+# ble_hs_pvcy_set_default_irk) and replaces our NVS bond store with its RAM store. Off; the
+# transport's sync callback also re-asserts the store (cali_ble_store_ensure) as a second guard.
+CONFIG_BT_NIMBLE_STATIC_TO_DYNAMIC=n
+# The NimBLE host task runs all of cali_core (console JSON output, session frames): 4 KB default is
+# tight for printf + codec_decode.
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192
+
+# Final-review I1: esp-nimble options whose IDF defaults differ from what the host tier proves
+# (firmware/host/syscfg/syscfg.h + upstream NimBLE 1.10). Pinned = host syscfg:
+# - Connection re-attempt (IDF default y on the S3): on an establishment failure with reason 0x3e —
+#   exactly this unit's known failure (guided-pairing.md) — esp-nimble would re-run the connect
+#   inside the stack. The re-attempted link comes up with s_encrypt_on_connect already cleared
+#   (ble_nimble.c gap_cb, BLE_GAP_EVENT_CONNECT), i.e. UNENCRYPTED, and can hold the unit's single
+#   slot; the pairing SM / session own the retry policy instead. Upstream NimBLE has no such path.
+CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n
+# - One connection (host syscfg BLE_MAX_CONNECTIONS 1; IDF default 3). The unit has one slot, and
+#   the retry/cancel paths were proven with ble_gap_connect failing ENOMEM while a link terminates.
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+# - Legacy advertising/scanning only (host syscfg BLE_EXT_ADV 0). With extended scanning on,
+#   ble_gap_disc reports BLE_GAP_EVENT_EXT_DISC, which gap_cb ignores: discovery would never find
+#   the unit. Off by IDF default today; pinned so a default change cannot flip it silently.
+CONFIG_BT_NIMBLE_EXT_ADV=n
+CONFIG_BT_NIMBLE_EXT_SCAN=n
+# - NimBLE host log level WARNING (IDF default INFO logs every GAP/GATT procedure). The console's
+#   STATE/SNAP/LOG lines share the USB-Serial/JTAG stream; INFO chatter would bury them between
+#   the protocol lines a board-side reader parses. WARNING (not ERROR/NONE) keeps the stack's rare
+#   warnings — the diagnostics the unverified board tier needs.
+CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y

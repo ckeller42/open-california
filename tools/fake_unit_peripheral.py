@@ -99,9 +99,12 @@ class FakeUnit:
         self.tasks: list = []                # keep task refs (else GC kills them)
         self.last_beat_t: float = 0.0        # monotonic time of the last 1003 write
         self.seen_beat = False               # a beat arrived on the current link (watchdog arms)
+        self.beats = 0                       # 1003 writes seen since start (test hook)
+        self.control_writes = 0              # control-char writes seen since start (test hook)
         self.conn = None                     # current Bumble connection (single-link unit)
         self.pairing_mode = True           # the unit's "Gerät verbinden" screen is open
         self.refuse_connections = False    # test knob: drop every link at once
+        self.drop_on_read: str | None = None  # test knob: hang up on the next GATT read of this fn
         self.fixed_passkey: int | None = None
         self.last_passkey: int | None = None
         self.passkey_shown = asyncio.Event()
@@ -123,7 +126,25 @@ class FakeUnit:
         log.info("READ %s -> %s", fn, v.hex())
         return v
 
+    def gatt_read(self, fn: str):
+        """A central's GATT read of ``fn``'s state char (notifications do not come through here).
+        With ``drop_on_read == fn`` (one-shot) the unit hangs up instead of answering: the read
+        never completes — a link lost mid read-all.
+        (Bumble awaits an awaitable read value; this one returns only after the link is gone.)"""
+        if self.drop_on_read != fn or self.conn is None:
+            return self.read_state(fn)
+        self.drop_on_read = None
+        conn = self.conn
+
+        async def hang_up() -> bytes:
+            log.info("READ %s -> dropping the link", fn)
+            await conn.disconnect()
+            return b""                        # nobody left to answer
+
+        return hang_up()
+
     def on_write(self, fn: str, data: bytes) -> None:
+        self.control_writes += 1
         f = self.funcs[fn]
         try:
             self.unit.write(f.control_char, bytes(data))
@@ -139,6 +160,16 @@ class FakeUnit:
         self.unit.beat(data)
         self.last_beat_t = time.monotonic()
         self.seen_beat = True
+        self.beats += 1
+
+    def set_raw(self, fn: str, frame: bytes, notify: bool = True) -> None:
+        """Serve ``frame`` verbatim for ``fn`` from now on (reads and notifications), e.g. a frame
+        shorter than the dictionary's; with ``notify`` push it to a subscribed central at once."""
+        self.raw[fn] = bytes(frame)
+        self.unit.state[fn] = protocol.decode(self.funcs[fn], self.raw[fn])
+        self.dirty.discard(fn)
+        if notify:
+            self.schedule_notify(fn)
 
     async def clock(self) -> None:
         """Drive the mock's clock once a second (RTC, countdowns, roof travel, ignition coupling —
@@ -156,7 +187,10 @@ class FakeUnit:
     def schedule_notify(self, fn: str) -> None:
         ch = self.chars.get(fn)
         if ch is not None and self.device is not None:
-            self.tasks.append(asyncio.get_event_loop().create_task(self.device.notify_subscribers(ch)))
+            # the value explicitly: Bumble would otherwise fetch it through the char's GATT read
+            # callback, which is the central-read path (gatt_read, drop_on_read)
+            self.tasks.append(asyncio.get_event_loop().create_task(
+                self.device.notify_subscribers(ch, self.read_state(fn))))
             self.tasks = [t for t in self.tasks if not t.done()]
 
     # --- GATT --------------------------------------------------------------------------
@@ -171,14 +205,14 @@ class FakeUnit:
             if fn == "general":                   # 1001 = versions, read-only (no notify)
                 groups.setdefault(svc, []).append(Characteristic(
                     cu("1001"), Characteristic.Properties.READ, Attribute.READABLE,
-                    AttributeValue(read=lambda c, fn=fn: self.read_state(fn)), [desc("Info")]))
+                    AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn)), [desc("Info")]))
                 continue
             props = Characteristic.Properties.READ | Characteristic.Properties.NOTIFY
             perms = Attribute.READABLE
             if fn == "vehicle":                   # the auth-gated read that forces bonding
                 perms = Attribute.READABLE | Attribute.READ_REQUIRES_AUTHENTICATION
             st = Characteristic(f.state_char, props, perms,
-                                AttributeValue(read=lambda c, fn=fn: self.read_state(fn)),
+                                AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn)),
                                 [desc("State")])
             # The unit pushes the current value once as soon as a client enables notifications
             # (observed on buspi 2026-09-16: one notify per char right after each CCCD write).
@@ -268,9 +302,7 @@ class FakeUnit:
                     self.schedule_notify(fn)
                 elif parts[0] == "raw":
                     fn, hx = parts[1], parts[2]
-                    self.raw[fn] = bytes.fromhex(hx)
-                    self.unit.state[fn] = protocol.decode(self.funcs[fn], self.raw[fn])
-                    self.dirty.discard(fn)
+                    self.set_raw(fn, bytes.fromhex(hx), notify=False)
                     print(f"{fn} raw -> {self.raw[fn].hex()}", flush=True)
                     self.schedule_notify(fn)
                 elif parts[0] == "show":
