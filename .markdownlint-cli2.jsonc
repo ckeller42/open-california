@@ -1,0 +1,28 @@
+// markdownlint-cli2 (pre-commit hook `markdownlint-cli2`, pinned in .pre-commit-config.yaml).
+// The only markdownlint config in the repo. Much of the Markdown is reverse-engineering lab notes
+// (docs/business-logic/) whose value is the evidence, not the typography: rules that would force
+// a mass rewrite of that prose are off, structural rules stay on.
+{
+  "config": {
+    "default": true,
+    "MD013": false, // line-length: lab notes + wide evidence tables; wrapping them is churn only
+    "MD024": { "siblings_only": true }, // repeated per-function/per-date sub-headings are the notes' structure
+    "MD033": false, // inline HTML (<br>, <details>, <kbd>) is used deliberately in tables + docs
+    "MD036": false, // bold lead-in lines used as captions in the lab notes
+    "MD040": false, // fenced-code language: many fences are raw frame dumps/log excerpts, no language fits
+    "MD041": false, // first-line H1: Sphinx stubs + SKILL.md front matter pages start otherwise
+    "MD060": false, // table-column-style: new in markdownlint-cli2 0.2x; hundreds of hand-aligned tables
+    // Hand-wrapped lab-note prose trips these without being wrong in intent: a wrapped line that
+    // starts with `+` (MD004/MD007), notes numbered by reference (MD029, firmware/README.md "note 11"),
+    // evidence tables with a merged cell (MD056), `(VIN)[16:32]` slice notation (MD011) and a
+    // quoted log format with a literal trailing space (MD038). Fixing them means rewriting notes.
+    "MD004": false,
+    "MD007": false,
+    "MD011": false,
+    "MD029": false,
+    "MD038": false,
+    "MD056": false
+  },
+  "gitignore": true,
+  "ignores": ["docs/_build/**"]
+}

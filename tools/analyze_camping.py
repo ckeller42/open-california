@@ -28,6 +28,7 @@ message instead of failing. On buspi, source ``/etc/buspi/*.env`` first.
 The analysis functions are pure (they take ``{field: [(epoch_s, value)]}``) so they are unit-tested
 without a database — see ``tests/test_analyze_camping.py``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -45,7 +46,7 @@ SERIES = [
     ("dcdc_current", "energy"),
     ("batt2_current", "energy"),
 ]
-ENGINE_SIGNALS = ("ignition_on", "dcdc_charging")   # a rising edge of either = an engine start
+ENGINE_SIGNALS = ("ignition_on", "dcdc_charging")  # a rising edge of either = an engine start
 CAMPING_SUBSTATES = ("master_on", "usb_charger", "lights_on")
 _MISSING = object()
 
@@ -102,8 +103,11 @@ def flip_flops(named: dict, edge_ts, window_s) -> int:
 
     ``>= 2`` means camping went off→on→… (or on→off→…) more than once after the engine start — a
     flip-flop, the behaviour that would make an auto-re-enable fight the unit."""
-    return sum(1 for ts, f, _o, _n in transitions(named, ("master_on",))
-               if f == "master_on" and edge_ts <= ts <= edge_ts + window_s)
+    return sum(
+        1
+        for ts, f, _o, _n in transitions(named, ("master_on",))
+        if f == "master_on" and edge_ts <= ts <= edge_ts + window_s
+    )
 
 
 def _truthy(v):
@@ -121,12 +125,17 @@ def _fmt(v):
 def analyze(days=3.0, every="10s", pre=60.0, post=300.0, flip_window=300.0):
     """Query InfluxDB and print the engine-start / camping report. Returns the list of events."""
     from calictl import influx
-    named = {field: influx.field_series(field, fn_tag, days=days, every=every, fn="last")
-             for field, fn_tag in SERIES}
+
+    named = {
+        field: influx.field_series(field, fn_tag, days=days, every=every, fn="last")
+        for field, fn_tag in SERIES
+    }
     print(f"=== Camping-vs-engine-start over {days:g} days (every {every}, aggregate=last) ===")
     if not any(named.values()):
-        print("No InfluxDB data (token unset, Influx unreachable, or empty bucket). "
-              "Run on buspi with /etc/buspi/*.env sourced.")
+        print(
+            "No InfluxDB data (token unset, Influx unreachable, or empty bucket). "
+            "Run on buspi with /etc/buspi/*.env sourced."
+        )
         return []
     edges = engine_starts(named)
     if not edges:
@@ -140,8 +149,10 @@ def analyze(days=3.0, every="10s", pre=60.0, post=300.0, flip_window=300.0):
         verdict = "FLIP-FLOP" if flips >= 2 else ("clean" if flips <= 1 else "check")
         when = time.strftime("%a %m-%d %H:%M:%S", time.localtime(edge_ts))
         soc = value_at(named.get("soc2_pct", []), edge_ts)
-        print(f"● {when}  engine-start via {signal}  soc={_fmt(soc)}  "
-              f"-> master_on transitions in +{flip_window:g}s: {flips} [{verdict}]")
+        print(
+            f"● {when}  engine-start via {signal}  soc={_fmt(soc)}  "
+            f"-> master_on transitions in +{flip_window:g}s: {flips} [{verdict}]"
+        )
         # every camping/engine transition in the [-pre, +post] window, tagged Δ-since-edge
         for ts, f, old, new in trans:
             if edge_ts - pre <= ts <= edge_ts + post:
@@ -150,14 +161,20 @@ def analyze(days=3.0, every="10s", pre=60.0, post=300.0, flip_window=300.0):
         events.append({"ts": edge_ts, "signal": signal, "flips": flips, "verdict": verdict})
         print()
     ff = [e for e in events if e["flips"] >= 2]
-    print("SUMMARY: %d engine start(s); %d showed a camping flip-flop (>=2 master transitions)."
-          % (len(events), len(ff)))
+    print(
+        "SUMMARY: %d engine start(s); %d showed a camping flip-flop (>=2 master transitions)."
+        % (len(events), len(ff))
+    )
     if not ff:
-        print("No flip-flop observed: camping mode settled after each engine start. "
-              "Auto-camper's guards (window + max-fails) would not thrash here.")
+        print(
+            "No flip-flop observed: camping mode settled after each engine start. "
+            "Auto-camper's guards (window + max-fails) would not thrash here."
+        )
     else:
-        print("Flip-flop(s) observed — the unit toggled camping repeatedly after an engine start. "
-              "Review before enabling auto-camper; its max-fails cap bounds it but it would still fight.")
+        print(
+            "Flip-flop(s) observed — the unit toggled camping repeatedly after an engine start. "
+            "Review before enabling auto-camper; its max-fails cap bounds it but it would still fight."
+        )
     return events
 
 
@@ -167,8 +184,12 @@ def main(argv=None):
     p.add_argument("--every", default="10s", help="aggregate window (Flux duration, e.g. 5s/10s/30s)")
     p.add_argument("--pre", type=float, default=60.0, help="seconds before each edge to print")
     p.add_argument("--post", type=float, default=300.0, help="seconds after each edge to print")
-    p.add_argument("--flip-window", type=float, default=300.0,
-                   help="seconds after an edge within which >=2 master transitions = flip-flop")
+    p.add_argument(
+        "--flip-window",
+        type=float,
+        default=300.0,
+        help="seconds after an edge within which >=2 master transitions = flip-flop",
+    )
     a = p.parse_args(argv)
     analyze(days=a.days, every=a.every, pre=a.pre, post=a.post, flip_window=a.flip_window)
 

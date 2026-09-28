@@ -2,26 +2,29 @@
 # Local mirror of most of CI (.github/workflows/ci.yml). Run before pushing — GitHub Actions
 # may be gated (billing/spending limit), so this is the authoritative LOCAL gate.
 #
-# `tools/ci.sh` (= `ci`) runs: ruff (ci.yml `lint`), the web-UI tsc/node check (`lint`), the whole
-# pytest suite on ONE local python (`test` runs it on 3.11/3.12/3.13), the signal audit, the
-# screens.json freshness check and the import-clean guard (`test`), and the vendor-FILE check
-# (first half of `no-vendor-material`). The pytest suite also covers `codec-parity` (C header +
-# vector freshness always; the C parity tests only if a C compiler is present), the Bumble pairing
-# harness (tests/test_pairing_link.py, if bumble is installed — requirements-dev pins it) and
-# `gui-e2e` (tests/e2e, if Playwright + Chromium are installed; otherwise they SKIP), and the pure-C
-# firmware tests (tests/firmware minus the `linux_only` NimBLE host e2e; `tools/ci.sh firmware` runs
-# those = ci.yml `firmware-host-e2e`).
-# Only GitHub runs: the committed-MAC/VIN git-grep over the whole tree (`no-vendor-material`; the
-# pre-commit hook checks only the staged diff), `install-script` (sh -n + shellcheck install.sh),
-# `firmware-build` + `firmware-qemu` (ESP-IDF container), `pairing-real-stack` (real BlueZ in a VM, tests/realstack/vm.sh; not a required check), and the
-# push-to-main workflows: docs.yml (sphinx -W build + Pages deploy — never on a PR, so a -W failure
-# first shows after merge; build locally with `sh docs/build_site.sh`) and screenshots.yml
+# `tools/ci.sh` (= `ci`) runs: `pre-commit run --all-files` (ci.yml `pre-commit`: ruff + ruff
+# format, markdownlint, gitleaks, whitespace/YAML checks, the vendor/MAC/VIN guard over every
+# tracked file, import-clean, doc-offset, screens.json freshness, codec vector/C-header freshness
+# and the web-UI tsc/node check), then the whole pytest suite on ONE local python (ci.yml `test`
+# runs it on 3.11/3.12/3.13) and the signal audit. The pytest suite also covers `codec-parity` (C
+# header + vector freshness always; the C parity tests only if a C compiler is present), the Bumble
+# pairing harness (tests/test_pairing_link.py, if bumble is installed — requirements-dev pins it)
+# and `gui-e2e` (tests/e2e, if Playwright + Chromium are installed; otherwise they SKIP), and the
+# pure-C firmware tests (tests/firmware minus the `linux_only` NimBLE host e2e; `tools/ci.sh
+# firmware` runs those = ci.yml `firmware-host-e2e`). pre-commit only sees git-TRACKED files:
+# `git add` a new file before running this, or it gets a false green.
+# Only GitHub runs: `install-script` (sh -n + shellcheck install.sh), `docs` (sphinx -W site build
+# on PRs; locally `sh docs/build_site.sh`), `firmware-build` + `firmware-qemu` (ESP-IDF container),
+# `pairing-real-stack` (real BlueZ in a VM, tests/realstack/vm.sh; not a required check), and the
+# push-to-main workflows: docs.yml (the same build + Pages deploy) and screenshots.yml
 # (re-renders docs/screenshots and commits them to main with [skip ci]).
 #
 #   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
-#   tools/ci.sh test|firmware|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check
-#   tools/ci.sh dev          # install dev tooling + activate the pre-commit hook
+#   tools/ci.sh test|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|screenshots|import-clean|vendor-check
+#   tools/ci.sh dev          # install dev tooling + the pre-commit/pre-push hooks (pre-commit framework)
 #
+# The single-check subcommands are also the entries of the repo-local hooks in
+# .pre-commit-config.yaml, so the hook, this script and CI run the same command.
 # Runtime is stdlib-only; dev tools are in requirements-dev.txt.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -83,34 +86,46 @@ web_fresh() {
   diff -q /tmp/oc_screens.json calictl/webui/screens.json \
     || { echo "screens.json stale — run: $PY -m tools.build_web"; exit 1; }
 }
-vendor_check() {
-  local bad
-  bad=$(git ls-files | grep -iE '\.(apk|xapk|dex|jar|aar|aab|cvr|pcap|pcapng|pklg|btsnoop)$|(^|/)decompile/|(^|/)manuals/|ui/assets/svg/' || true)
-  [ -z "$bad" ] || { echo "vendor/binary material committed:"; echo "$bad"; exit 1; }
-  echo "no vendor material committed"
+vendor_check() {   # whole tracked tree: vendor paths, the real vehicle MAC, VINs (= CI no-vendor-material)
+  "$PY" tools/check_vendor_material.py --all
+  echo "no vendor material, vehicle MAC, or VIN committed"
+}
+doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
+codec_fresh() {   # golden vectors + generated C headers match protocol/dictionary.yaml + overrides
+  "$PY" -m tools.gen_codec_vectors --check \
+    || { echo "golden codec vectors stale — run: $PY -m tools.gen_codec_vectors"; exit 1; }
+  "$PY" -m tools.gen_c_dict --check \
+    || { echo "generated C headers stale — run: $PY -m tools.gen_c_dict"; exit 1; }
 }
 screenshots() {   # regenerate docs/screenshots from the live UI over the mock (needs Playwright +
                   # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.
   "$PY" -m tools.ux_gallery --out docs/screenshots
 }
-lint()      { "$PY" -m ruff check .; }           # hard gate — the codebase is ruff-green
+lint() {   # every pre-commit-stage hook over all tracked files (= ci.yml `pre-commit`)
+  if command -v pre-commit >/dev/null 2>&1; then pre-commit run --all-files --show-diff-on-failure
+  elif "$PY" -m pre_commit --version >/dev/null 2>&1; then "$PY" -m pre_commit run --all-files --show-diff-on-failure
+  else echo "lint: pre-commit not installed — run: tools/ci.sh dev"; exit 1; fi
+}
 typecheck() { "$PY" -m mypy calictl || true; }   # best-effort (None-safety / bad returns)
 webcheck() {   # hard gate: the web UI is un-built JS, so this is its only static check. jsconfig.json
                # has checkJs on; `tsc` catches undeclared identifiers ("Cannot find name") that
                # `node --check` (parse only) cannot — one of those once shipped to buspi. Needs node.
   command -v node >/dev/null || { echo "webcheck: node not found (install Node 22+)"; exit 1; }
-  npx --yes -p typescript tsc --noEmit -p calictl/webui/jsconfig.json
+  # typescript is pinned (bump deliberately; the 0-error baseline is per compiler version).
+  npx --yes -p typescript@7.0.2 tsc --noEmit -p calictl/webui/jsconfig.json
   node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js
   echo "web UI typecheck: OK"
 }
 dev() {
   "$PY" -m pip install -r requirements-dev.txt
-  git config core.hooksPath .githooks
-  echo "dev tooling installed; pre-commit hook active (.githooks/pre-commit)"
+  # The retired .githooks/ hook set core.hooksPath; pre-commit refuses to install while it is set.
+  if [ "$(git config --get core.hooksPath || true)" = ".githooks" ]; then git config --unset core.hooksPath; fi
+  "$PY" -m pre_commit install   # pre-commit + pre-push (default_install_hook_types)
+  echo "dev tooling installed; pre-commit + pre-push hooks active (.pre-commit-config.yaml)"
 }
 
 case "${1:-ci}" in
-  ci)            lint; webcheck; test_suite; audit; web_fresh; import_clean; vendor_check; echo "local CI: OK";;
+  ci)            lint; test_suite; audit; echo "local CI: OK";;
   test)          test_suite;;
   firmware)      firmware;;
   lint)          lint;;
@@ -118,9 +133,11 @@ case "${1:-ci}" in
   typecheck)     typecheck;;
   audit)         audit;;
   web-fresh)     web_fresh;;
+  codec-fresh)   codec_fresh;;
+  doc-offset)    doc_offset;;
   screenshots)   screenshots;;
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|firmware|lint|webcheck|typecheck|audit|web-fresh|screenshots|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|screenshots|import-clean|vendor-check|dev]"; exit 2;;
 esac

@@ -190,7 +190,7 @@ Bluetooth jobs at once. The how-to for owners is
   scan on every failed poll would itself be one more client competing for discovery, working
   against the very radio the wizard needs quiet. `_meta.paired` reports this state to the UI.
 
-## Exclusion model (single BLE owner rule, CLAUDE.md)
+## Exclusion model (single BLE owner rule, AGENTS.md)
 
 A guided-pairing flow can run for minutes — the user has to walk to the camper panel and read
 off a passkey — so it deliberately does **not** hold `serve.py`'s `self._ble` lock for the whole
@@ -207,7 +207,7 @@ flow; doing so would freeze `/api/state` (and every other read) for that entire 
 - `poll()` checks `pairing.snapshot()["state"]` and skips the **whole** read cycle (not just
   parts of it) whenever a pairing flow is active (state not in `idle`/`bonded`/`error`) — a
   second bleak `connect()` against `hci0` mid-pairing is exactly what the single-BLE-owner rule
-  (`serve` is the only reader — CLAUDE.md) forbids.
+  (`serve` is the only reader — AGENTS.md) forbids.
 - `pairing_bluez.py` never touches `serve.py`'s `_ble` lock at all — the pairing transport opens
   its own `bleak.BleakScanner`/`BleakClient` directly. Past the brief hold around `start()`, the
   `_ble` lock is **not held** by the pairing flow; exclusion is the supervisor-park + poll-skip

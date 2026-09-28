@@ -10,7 +10,9 @@ def test_humanize_strips_affixes_and_splits_camelcase():
 def test_resolve_label_prefers_strings_then_labels_then_humanize():
     labels = {"coolboxPage_x_text": "Refrigerator box"}
     # local overlay (real VW text) wins when present
-    assert build_web.resolve_label("coolboxPage_x_text", labels, {"coolboxPage_x_text": "Kühlbox"}) == "Kühlbox"
+    assert (
+        build_web.resolve_label("coolboxPage_x_text", labels, {"coolboxPage_x_text": "Kühlbox"}) == "Kühlbox"
+    )
     # committed neutral label next
     assert build_web.resolve_label("coolboxPage_x_text", labels, None) == "Refrigerator box"
     # humanized fallback last
@@ -38,9 +40,7 @@ def test_no_raw_label_keys_leak_into_output():
 def test_humanize_strips_variant_suffix_not_just_bare_suffix():
     # A bare "_text_gc"/"_text_t6" variant tag must not survive as the label
     # (this used to yield "Gc"/"T6" — the suffix regex only matched "_text$").
-    result = build_web.humanize(
-        "lighting_interiorLighting_sectionTitle_interiorLighting_text_gc"
-    )
+    result = build_web.humanize("lighting_interiorLighting_sectionTitle_interiorLighting_text_gc")
     assert result == "Interior lighting"
     assert result not in ("Gc", "T6")
 
@@ -83,15 +83,15 @@ def test_no_intra_screen_label_collisions():
             if not key or not label:
                 continue
             assert label.lower() not in GENERIC_BARE_WORDS, (
-                "%s widget %r has bare generic label %r (key %s)"
-                % (name, built["id"], label, key)
+                "%s widget %r has bare generic label %r (key %s)" % (name, built["id"], label, key)
             )
             by_label[label].add(key)
 
         for label, keys in by_label.items():
-            assert len(keys) <= 1, (
-                "%s: distinct label_keys %s collide on label %r"
-                % (name, sorted(keys), label)
+            assert len(keys) <= 1, "%s: distinct label_keys %s collide on label %r" % (
+                name,
+                sorted(keys),
+                label,
             )
 
 
@@ -107,7 +107,7 @@ def test_labels_yaml_keys_exist_in_screens():
         spec = yaml.safe_load((build_web.SCREENS_DIR / (name + ".yaml")).read_text())
         if spec.get("title_key"):
             real_keys.add(spec["title_key"])
-        for w in (spec.get("widgets") or []):
+        for w in spec.get("widgets") or []:
             if w.get("label_key"):
                 real_keys.add(w["label_key"])
 

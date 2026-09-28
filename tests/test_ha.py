@@ -13,14 +13,20 @@ from an inbound topic back to a ``(function, what)`` that ``control.build`` acce
    command entity carrying that ``command_topic`` for controllable functions, and
    that each topic routes back to the expected pair.
 """
+
 from calictl import mqtt
 
 # Every actuatable (function, what) that control.BUILDERS supports.
 EXPECTED = {
-    ("cooler", "power"), ("cooler", "level"),
-    ("campingmode", "master"), ("campingmode", "lights"), ("campingmode", "usb"),
-    ("lighting", "power"), ("lighting", "brightness"),
-    ("airheater", "power"), ("airheater", "level"),
+    ("cooler", "power"),
+    ("cooler", "level"),
+    ("campingmode", "master"),
+    ("campingmode", "lights"),
+    ("campingmode", "usb"),
+    ("lighting", "power"),
+    ("lighting", "brightness"),
+    ("airheater", "power"),
+    ("airheater", "level"),
 }
 
 
@@ -52,8 +58,9 @@ def test_discovery_emits_command_entity_with_command_topic():
     # the cooler power switch: a switch component carrying the matching command_topic
     cmd_entities = {t: c for t, c in cfgs.items() if "command_topic" in c}
     assert cmd_entities, "no controllable entity emitted"
-    cooler_power = [c for c in cmd_entities.values()
-                    if c["command_topic"] == mqtt.command_topic("cooler", "power")]
+    cooler_power = [
+        c for c in cmd_entities.values() if c["command_topic"] == mqtt.command_topic("cooler", "power")
+    ]
     assert len(cooler_power) == 1
     c = cooler_power[0]
     assert "/switch/" in next(t for t, v in cfgs.items() if v is c)
@@ -65,8 +72,7 @@ def test_discovery_emits_command_entity_with_command_topic():
 
 def test_number_entity_carries_min_max():
     cfgs = mqtt.render_discovery(installed={"cooler"})
-    level = [c for t, c in cfgs.items()
-             if c.get("command_topic") == mqtt.command_topic("cooler", "level")]
+    level = [c for t, c in cfgs.items() if c.get("command_topic") == mqtt.command_topic("cooler", "level")]
     assert len(level) == 1
     c = level[0]
     # a number component with the cooler level range 1..5
@@ -87,7 +93,9 @@ def test_read_only_sensors_carry_expire_after_for_freshness():
     # freshness: read-only sensors expire (-> HA `unavailable`) when the reading stops refreshing,
     # so an automation can gate on availability instead of triggering on a stale (parked) value.
     cfgs = mqtt.render_discovery(installed={"energy"})
-    battery = [c for t, c in cfgs.items() if "/sensor/" in t and c.get("unique_id", "").endswith("soc2_level")]
+    battery = [
+        c for t, c in cfgs.items() if "/sensor/" in t and c.get("unique_id", "").endswith("soc2_level")
+    ]
     assert battery and battery[0]["expire_after"] == mqtt.EXPIRE_AFTER_S
     # command entities must NOT carry expire_after (they're command-driven, not polled)
     for _t, c in mqtt.render_discovery().items():
@@ -98,8 +106,7 @@ def test_read_only_sensors_carry_expire_after_for_freshness():
 def test_command_entities_gated_by_installed():
     # a not-installed controllable function publishes no command entity
     cfgs = mqtt.render_discovery(installed={"cooler"})
-    assert not any(c.get("command_topic") == mqtt.command_topic("airheater", "power")
-                   for c in cfgs.values())
+    assert not any(c.get("command_topic") == mqtt.command_topic("airheater", "power") for c in cfgs.values())
     # unfiltered discovery still exposes all of them
     all_cfgs = mqtt.render_discovery()
     topics = {c["command_topic"] for c in all_cfgs.values() if "command_topic" in c}

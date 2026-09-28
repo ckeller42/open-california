@@ -12,6 +12,7 @@ Outputs (in calictl/webui/):
   maskable-icon-192.png, maskable-icon-512.png            purpose "maskable" (content in safe zone)
   favicon-16x16.png, favicon-32x32.png, favicon.ico       browser tab
 """
+
 from __future__ import annotations
 
 import os
@@ -42,8 +43,7 @@ def master_from_source(source_path: str, crop=None, out_path: str = MASTER) -> N
         return all(abs(c[i] - bg[i]) < 26 for i in range(3))
 
     for y in range(h):  # per-row gradient colour = median of the non-bg, non-white pixels
-        grad = [px[x, y] for x in range(w)
-                if not is_bg(px[x, y]) and not all(v > 235 for v in px[x, y])]
+        grad = [px[x, y] for x in range(w) if not is_bg(px[x, y]) and not all(v > 235 for v in px[x, y])]
         if not grad:
             continue
         grad.sort(key=lambda c: sum(c))
@@ -64,7 +64,7 @@ def _gradient_bg(master: Image.Image, size: int) -> Image.Image:
     bg = Image.new("RGB", (size, size))
     bpx, mpx = bg.load(), m.load()
     for y in range(size):
-        col = mpx[2, y]                       # left edge = pure gradient
+        col = mpx[2, y]  # left edge = pure gradient
         for x in range(size):
             bpx[x, y] = col
     return bg
@@ -81,6 +81,7 @@ def _maskable(master: Image.Image, size: int, scale: float = 0.82) -> Image.Imag
 
 def main(argv=None):
     import argparse
+
     ap = argparse.ArgumentParser(description="build PWA / favicon icons from the master tile")
     ap.add_argument("--from-source", help="re-crop icon-master.png from this spec-sheet render")
     ap.add_argument("--crop", help="explicit crop box l,t,r,b for --from-source")
@@ -91,11 +92,14 @@ def main(argv=None):
         print("wrote", MASTER)
     master = Image.open(MASTER).convert("RGB")
     for name, sz in ANY_SIZES.items():
-        master.resize((sz, sz), Image.LANCZOS).save(os.path.join(WEBUI, name)); print("wrote", name)
+        master.resize((sz, sz), Image.LANCZOS).save(os.path.join(WEBUI, name))
+        print("wrote", name)
     for name, sz in MASKABLE_SIZES.items():
-        _maskable(master, sz).save(os.path.join(WEBUI, name)); print("wrote", name)
+        _maskable(master, sz).save(os.path.join(WEBUI, name))
+        print("wrote", name)
     for name, sz in FAVICON_PNG.items():
-        master.resize((sz, sz), Image.LANCZOS).save(os.path.join(WEBUI, name)); print("wrote", name)
+        master.resize((sz, sz), Image.LANCZOS).save(os.path.join(WEBUI, name))
+        print("wrote", name)
     master.save(os.path.join(WEBUI, "favicon.ico"), sizes=[(16, 16), (32, 32), (48, 48)])
     print("wrote favicon.ico")
 

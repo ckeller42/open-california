@@ -2,7 +2,7 @@
 
 Start with **[../ARCHITECTURE.md](../ARCHITECTURE.md)** (the pipeline + control path + arm
 state machine, and the module walkthrough). Root **[../README.md](../README.md)** is the project front door;
-**[../CLAUDE.md](../CLAUDE.md)** holds the hard rules. Requirement traceability builds from
+**[../AGENTS.md](../AGENTS.md)** holds the hard rules. Requirement traceability builds from
 docstrings via the Sphinx build in this directory (`conf.py`, `api.rst`; how-to in
 [building-the-docs.md](building-the-docs.md)).
 

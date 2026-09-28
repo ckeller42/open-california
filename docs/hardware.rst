@@ -3,7 +3,7 @@ Tested hardware
 
 This page documents the *specific* vehicle and host this project has been reverse-engineered
 and tested against — what's confirmed on real hardware versus decompile/static analysis only.
-Facts here are hand-authored from ``CLAUDE.md`` ("Known state"),
+Facts here are hand-authored from ``AGENTS.md`` ("Known state"),
 ``docs/business-logic/control-and-actuation.md``, and the generated protocol views under
 ``docs/protocol/reference.md``; nothing here is regenerated automatically, so if the
 equipment profile or verification tier changes, update this page by hand.
@@ -183,7 +183,7 @@ make this self-describing at runtime (``calictl status`` only shows what's actua
 
 .. note::
 
-   A former conflict between ``CLAUDE.md`` (which omitted the roof from its not-installed
+   A former conflict between ``AGENTS.md`` (which omitted the roof from its not-installed
    list) and ``control-and-actuation.md`` §4 (which said "not installed here") was **resolved
    2026-08-26 against the live unit**: ``roof.Installed = 1`` — the pop-top IS installed
    (issue #106; the §4 claim had likely conflated it with the roof *A/C*, which is absent).
@@ -252,7 +252,7 @@ Host
 - **OS:** Debian 13 (aarch64).
 - **Python:** 3.13 (the project floor is 3.11+; ``tools/ci.sh`` prefers 3.13 to match buspi).
 - **BLE:** BlueZ via the `bleak <https://github.com/hbldh/bleak>`_ library, imported lazily —
-  the runtime package is stdlib-only at import time (see ``CLAUDE.md``).
+  the runtime package is stdlib-only at import time (see ``AGENTS.md``).
 - **Sinks:** Home Assistant over MQTT, and Grafana over InfluxDB, both fed by the same daemon
   that owns the single BLE connection slot.
 

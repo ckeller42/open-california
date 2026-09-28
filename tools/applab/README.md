@@ -22,7 +22,7 @@ Why it exists:
 
 Everything below is local tooling. **Nothing from the APK or the emulator is committed** — the
 APK, the decompile, screenshots and the SDK all live outside the repo (see the hard rules in
-`CLAUDE.md`), and so does the VIN you type into the app (the pre-commit hook refuses any
+`AGENTS.md`), and so does the VIN you type into the app (the pre-commit hook refuses any
 17-character VIN in a tracked file). Own-account, own-vehicle interoperability research only.
 
 ## One-time setup (macOS, Apple Silicon)

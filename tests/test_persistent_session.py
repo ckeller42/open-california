@@ -5,7 +5,9 @@ from tools.mock_unit import MockBleakClient, MockCamperUnit
 
 
 def _funcs():
-    f = protocol.load(); overrides.apply(f); return f
+    f = protocol.load()
+    overrides.apply(f)
+    return f
 
 
 def test_persistent_session_starts_armed_and_actuates_without_arm_delay(monkeypatch):
@@ -23,8 +25,11 @@ def test_persistent_session_starts_armed_and_actuates_without_arm_delay(monkeypa
 
     slept = []
     real_sleep = asyncio.sleep
+
     async def fake_sleep(s, *a, **k):
-        slept.append(s); await real_sleep(0)
+        slept.append(s)
+        await real_sleep(0)
+
     monkeypatch.setattr(device.asyncio, "sleep", fake_sleep)
 
     async def _run():
@@ -32,13 +37,14 @@ def test_persistent_session_starts_armed_and_actuates_without_arm_delay(monkeypa
         # inject the mock bleak module so _session() builds a MockBleakClient
         import sys
         import types
+
         fake = types.ModuleType("bleak")
         fake.BleakClient = MockBleakClient.bind(unit)
         sys.modules["bleak"] = fake
         sess = device.PersistentSession(dev)
         await sess.start()
         assert sess.is_up is True
-        assert unit.armed is True                       # heartbeat armed the unit at start
+        assert unit.armed is True  # heartbeat armed the unit at start
         frame = control.build(funcs, "cooler", "power", "on", {"State": 0, "Level": 3, "Mode": 4})
         post = await sess.actuate(funcs["cooler"], frame, verify=True)
         raw = await sess.read_all(funcs)
@@ -46,7 +52,7 @@ def test_persistent_session_starts_armed_and_actuates_without_arm_delay(monkeypa
         return post, raw
 
     post, raw = asyncio.run(_run())
-    assert device.ARM_DELAY_S not in slept              # arm-free write
+    assert device.ARM_DELAY_S not in slept  # arm-free write
     assert post.get("State") == 1
     assert "cooler" in raw and protocol.decode(funcs["cooler"], raw["cooler"])["State"] == 1
     assert unit.armed  # still armed after (heartbeat ran through the session)
@@ -78,8 +84,11 @@ def test_persistent_read_all_retries_transient_failures_and_logs(monkeypatch):
 
     sleeps = []
     real_sleep = asyncio.sleep
+
     async def fake_sleep(s, *a, **k):
-        sleeps.append(s); await real_sleep(0)
+        sleeps.append(s)
+        await real_sleep(0)
+
     monkeypatch.setattr(device.asyncio, "sleep", fake_sleep)
 
     sess = device.PersistentSession(device.CamperDevice("MO:CK"))
@@ -91,9 +100,9 @@ def test_persistent_read_all_retries_transient_failures_and_logs(monkeypatch):
         return await sess.read_all({"cooler": funcs["cooler"]})
 
     out = asyncio.run(_run())
-    assert "cooler" in out                    # eventually succeeded via retry
+    assert "cooler" in out  # eventually succeeded via retry
     assert client.calls == 3
-    assert sleeps.count(0.8) == 2              # two retries, same backoff as _read_all_on
+    assert sleeps.count(0.8) == 2  # two retries, same backoff as _read_all_on
 
 
 def test_persistent_read_all_logs_after_exhausted_retries(monkeypatch, capsys):
@@ -112,6 +121,7 @@ def test_persistent_read_all_logs_after_exhausted_retries(monkeypatch, capsys):
 
     async def fast_sleep(s, *a, **k):
         pass
+
     monkeypatch.setattr(device.asyncio, "sleep", fast_sleep)
 
     sess = device.PersistentSession(device.CamperDevice("MO:CK"))
@@ -147,6 +157,7 @@ def test_persistent_read_all_breaks_on_disconnect_mid_loop(monkeypatch):
 
     async def fast_sleep(s, *a, **k):
         pass
+
     monkeypatch.setattr(device.asyncio, "sleep", fast_sleep)
 
     sess = device.PersistentSession(device.CamperDevice("MO:CK"))
@@ -157,7 +168,7 @@ def test_persistent_read_all_breaks_on_disconnect_mid_loop(monkeypatch):
         return await sess.read_all({"cooler": funcs["cooler"], "campingmode": funcs["campingmode"]})
 
     out = asyncio.run(_run())
-    assert out == {}   # first read dropped the link -> loop broke, second func never attempted
+    assert out == {}  # first read dropped the link -> loop broke, second func never attempted
 
 
 def test_read_all_only_trusts_sticky_push_for_push_only_funcs(monkeypatch):
@@ -174,8 +185,8 @@ def test_read_all_only_trusts_sticky_push_for_push_only_funcs(monkeypatch):
     unit = MockCamperUnit()
     cooler_char = str(funcs["cooler"].state_char).lower()
     water_char = str(funcs["water"].state_char).lower()
-    live_cooler_raw = unit.read(funcs["cooler"].state_char)     # the current (fresh) truth
-    stale_cooler_raw = bytes([0xFF] * len(live_cooler_raw))     # obviously-different stale value
+    live_cooler_raw = unit.read(funcs["cooler"].state_char)  # the current (fresh) truth
+    stale_cooler_raw = bytes([0xFF] * len(live_cooler_raw))  # obviously-different stale value
     water_push_raw = unit.read(funcs["water"].state_char)
 
     class Client:
@@ -192,9 +203,9 @@ def test_read_all_only_trusts_sticky_push_for_push_only_funcs(monkeypatch):
         return await sess.read_all({"cooler": funcs["cooler"], "water": funcs["water"]})
 
     out = asyncio.run(_run())
-    assert out["cooler"] == live_cooler_raw          # LIVE read wins for a non-push-only func
+    assert out["cooler"] == live_cooler_raw  # LIVE read wins for a non-push-only func
     assert out["cooler"] != stale_cooler_raw
-    assert out["water"] == water_push_raw            # water still uses the sticky push
+    assert out["water"] == water_push_raw  # water still uses the sticky push
 
 
 def test_read_char_retry_reports_disconnect_on_successful_read():
@@ -209,9 +220,12 @@ def test_read_char_retry_reports_disconnect_on_successful_read():
        before the next func — faithfully reproducing the originals' post-read
        ``if not is_connected: break`` (which a naive extraction dropped).
     """
+
     class _ReadOkButDropped:
-        is_connected = False                       # link already down...
+        is_connected = False  # link already down...
+
         async def read_gatt_char(self, char):
-            return b"\x01\x02"                      # ...but the read still returns bytes
+            return b"\x01\x02"  # ...but the read still returns bytes
+
     data, up = asyncio.run(device._read_char_with_retry(_ReadOkButDropped(), "cooler", "1102"))
-    assert data == b"\x01\x02" and up is False     # data kept, but caller told to stop
+    assert data == b"\x01\x02" and up is False  # data kept, but caller told to stop

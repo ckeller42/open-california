@@ -1,5 +1,5 @@
 # Dev-tooling config only (lint + type-check). Intentionally NO [project]/packaging table: the
-# runtime is stdlib-only and installed via git checkout, not pip — see CLAUDE.md. ruff + mypy are
+# runtime is stdlib-only and installed via git checkout, not pip — see AGENTS.md. ruff + mypy are
 # DEV tools (CI + pre-commit), never imported by the runtime.
 
 [tool.ruff]

@@ -20,6 +20,7 @@ Three gaps the app exposed in one session:
    :id: T_MOCK_SENTINELS
    :links: R_AIRHEATER_SET
 """
+
 from calictl import control, overrides, protocol
 from tools.mock_unit import MockCamperUnit
 
@@ -31,26 +32,44 @@ def _armed_unit(**seed):
 
 
 def _funcs():
-    f = protocol.load(); overrides.apply(f); return f
+    f = protocol.load()
+    overrides.apply(f)
+    return f
 
 
 def test_app_frame_sentinels_leave_untargeted_fields_alone():
     """The app's real Dauerbetrieb-OFF frame: only PermanentOperationRequest=0 is a value; level 11,
     mode 7, run time 127, timer 31:63 are the leave-unchanged defaults and must not be applied."""
     f = _funcs()
-    u = _armed_unit(airheater={"Installed": 1, "PermanentOperation": 1, "NormalOperation": 0,
-                               "HeatingLevel": 5, "RunningTime": 60, "TimerHour": 12, "TimerMin": 0})
+    u = _armed_unit(
+        airheater={
+            "Installed": 1,
+            "PermanentOperation": 1,
+            "NormalOperation": 0,
+            "HeatingLevel": 5,
+            "RunningTime": 60,
+            "TimerHour": 12,
+            "TimerMin": 0,
+        }
+    )
     u.write(f["airheater"].control_char, bytes.fromhex("0f7b007f1f3f"))
     st = u.decoded("airheater")
     assert st["HeatingLevel"] == 5 and st["RunningTime"] == 60
     assert (st["TimerHour"], st["TimerMin"]) == (12, 0)
-    assert st["PermanentOperation"] == 0          # the one targeted field took effect
+    assert st["PermanentOperation"] == 0  # the one targeted field took effect
 
 
 def test_request_fields_drive_their_state_bits():
     f = _funcs()
-    u = _armed_unit(airheater={"Installed": 1, "PermanentOperation": 0, "NormalOperation": 0,
-                               "HeatingLevel": 5, "RunningTime": 60})
+    u = _armed_unit(
+        airheater={
+            "Installed": 1,
+            "PermanentOperation": 0,
+            "NormalOperation": 0,
+            "HeatingLevel": 5,
+            "RunningTime": 60,
+        }
+    )
     on = control.build(f, "airheater", "power", "on", u.state["airheater"])
     u.write(f["airheater"].control_char, on)
     assert u.decoded("airheater")["NormalOperation"] == 1
@@ -63,11 +82,19 @@ def test_immediate_heating_starts_the_remaining_time_countdown():
     """The app's status bar reads RunningTimeinAction ("Active • N min remaining"); the unit loads
     it from RunningTime when immediate heating starts and clears it when it stops."""
     f = _funcs()
-    u = _armed_unit(airheater={"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0,
-                               "HeatingLevel": 5, "RunningTime": 60, "RunningTimeinAction": 0})
-    u.write(f["airheater"].control_char, bytes.fromhex("3d7b007f1f3f"))   # the app's ON frame
+    u = _armed_unit(
+        airheater={
+            "Installed": 1,
+            "NormalOperation": 0,
+            "PermanentOperation": 0,
+            "HeatingLevel": 5,
+            "RunningTime": 60,
+            "RunningTimeinAction": 0,
+        }
+    )
+    u.write(f["airheater"].control_char, bytes.fromhex("3d7b007f1f3f"))  # the app's ON frame
     assert u.decoded("airheater")["RunningTimeinAction"] == 60
-    u.write(f["airheater"].control_char, bytes.fromhex("3c7b007f1f3f"))   # the app's OFF frame
+    u.write(f["airheater"].control_char, bytes.fromhex("3c7b007f1f3f"))  # the app's OFF frame
     assert u.decoded("airheater")["RunningTimeinAction"] == 0
 
 
@@ -76,10 +103,18 @@ def test_app_neutral_frame_with_all_2bit_sentinels_is_accepted():
     wider field at its default (cooler `ff771e3e1f1f`). The unit accepts it; so must the mock — the
     curated `State in {0,1}` constraint is for calictl's own commands, not for the sentinel."""
     f = _funcs()
-    u = _armed_unit(cooler={"Installed": 1, "State": 0, "Level": 3, "Mode": 4,
-                            "NightTimerHourOn": 22, "NightTimerHourOff": 6})
-    u.write(f["cooler"].control_char, bytes.fromhex("fc771e3e1f1f"))   # the app's OFF frame
-    u.write(f["cooler"].control_char, bytes.fromhex("ff771e3e1f1f"))   # its neutral follow-up
+    u = _armed_unit(
+        cooler={
+            "Installed": 1,
+            "State": 0,
+            "Level": 3,
+            "Mode": 4,
+            "NightTimerHourOn": 22,
+            "NightTimerHourOff": 6,
+        }
+    )
+    u.write(f["cooler"].control_char, bytes.fromhex("fc771e3e1f1f"))  # the app's OFF frame
+    u.write(f["cooler"].control_char, bytes.fromhex("ff771e3e1f1f"))  # its neutral follow-up
     st = u.decoded("cooler")
     assert st["State"] == 0 and st["Level"] == 3 and st["Mode"] == 4
     assert (st["NightTimerHourOn"], st["NightTimerHourOff"]) == (22, 6)
@@ -89,24 +124,34 @@ def test_cooler_time_picker_frame_sets_the_start_time_fields():
     """The app's Time picker writes TimerHour/TimerMin alone (ff7704021f1f = 04:02, observed) and
     then displays the unit's TimerHourSet/TimerMinSet — the mock must map control→state names."""
     f = _funcs()
-    u = _armed_unit(cooler={"Installed": 1, "State": 0, "Level": 3, "Mode": 4,
-                            "TimerHourSet": 0, "TimerMinSet": 0})
+    u = _armed_unit(
+        cooler={"Installed": 1, "State": 0, "Level": 3, "Mode": 4, "TimerHourSet": 0, "TimerMinSet": 0}
+    )
     u.write(f["cooler"].control_char, bytes.fromhex("ff7704021f1f"))
     st = u.decoded("cooler")
     assert (st["TimerHourSet"], st["TimerMinSet"]) == (4, 2)
-    assert st["State"] == 0 and st["Level"] == 3           # sentinels left everything else alone
+    assert st["State"] == 0 and st["Level"] == 3  # sentinels left everything else alone
 
 
 def test_cooler_timer_action_bits_arm_and_clear_the_timer():
     """The app's "Timer" switch (box off) writes only TimerStart=1 with everything else at the
     sentinels (`f7771e3e1f1f`, observed); the unit reports TimerState=1. TimerCancel=1 clears it."""
     f = _funcs()
-    u = _armed_unit(cooler={"Installed": 1, "State": 0, "Level": 3, "Mode": 0, "TimerState": 0,
-                            "TimerHourSet": 9, "TimerMinSet": 0})
+    u = _armed_unit(
+        cooler={
+            "Installed": 1,
+            "State": 0,
+            "Level": 3,
+            "Mode": 0,
+            "TimerState": 0,
+            "TimerHourSet": 9,
+            "TimerMinSet": 0,
+        }
+    )
     u.write(f["cooler"].control_char, bytes.fromhex("f7771e3e1f1f"))
     st = u.decoded("cooler")
     assert st["TimerState"] == 1 and (st["TimerHourSet"], st["TimerMinSet"]) == (9, 0)
-    u.write(f["cooler"].control_char, bytes.fromhex("df771e3e1f1f"))   # TimerCancel=1 (bits 2-3)
+    u.write(f["cooler"].control_char, bytes.fromhex("df771e3e1f1f"))  # TimerCancel=1 (bits 2-3)
     assert u.decoded("cooler")["TimerState"] == 0
 
 
@@ -114,24 +159,29 @@ def test_real_value_equal_to_default_is_not_mistaken_for_a_sentinel_on_2bit_fiel
     """2-bit fields keep the existing rule (3 = leave unchanged; 0/1 are values)."""
     f = _funcs()
     u = _armed_unit(campingmode={"Installed": 1, "State": 1, "UsbCharger": 1})
-    u.write(f["campingmode"].control_char, control.build(f, "campingmode", "master", "off",
-                                                          u.state["campingmode"]))
+    u.write(
+        f["campingmode"].control_char,
+        control.build(f, "campingmode", "master", "off", u.state["campingmode"]),
+    )
     assert u.decoded("campingmode")["State"] == 0
 
 
 def _roof_frame(f, up, down, counter):
-    return protocol.encode(f["roof"], {"Up": up, "Down": down, "SafetyCounter": counter},
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["roof"])
+    return protocol.encode(
+        f["roof"],
+        {"Up": up, "Down": down, "SafetyCounter": counter},
+        frame_bytes=overrides.CONTROL_FRAME_BYTES["roof"],
+    )
 
 
 def test_roof_counter_validates_only_when_incrementing():
     f = _funcs()
     u = _armed_unit(roof={"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 0})
     u.write(f["roof"].control_char, _roof_frame(f, 0, 0, 0x5024))
-    assert u.decoded("roof")["SafetyCounterValid"] == 0     # first frame: nothing to compare
+    assert u.decoded("roof")["SafetyCounterValid"] == 0  # first frame: nothing to compare
     u.write(f["roof"].control_char, _roof_frame(f, 0, 0, 0x5025))
     u.write(f["roof"].control_char, _roof_frame(f, 0, 0, 0x5026))
-    assert u.decoded("roof")["SafetyCounterValid"] == 1     # seen incrementing -> valid
+    assert u.decoded("roof")["SafetyCounterValid"] == 1  # seen incrementing -> valid
     u.write(f["roof"].control_char, _roof_frame(f, 0, 0, 0x5024))  # a restarted counter
     assert u.decoded("roof")["SafetyCounterValid"] == 0
 
@@ -144,20 +194,25 @@ def test_roof_counter_stays_valid_when_frames_repeat_a_value_at_high_rate():
     f = _funcs()
     u = _armed_unit(roof={"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 0})
     c = 500
-    for _ in range(3):                                       # idle stream: +1 per 500 ms frame
-        u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c)); c += 1; u.tick(0.5)
+    for _ in range(3):  # idle stream: +1 per 500 ms frame
+        u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))
+        c += 1
+        u.tick(0.5)
     assert u.decoded("roof")["SafetyCounterValid"] == 1
-    for i in range(16):                                      # press: 8 Hz, counter +1 every 4 frames
-        u.write(f["roof"].control_char, _roof_frame(f, 1, 0, c + i // 4)); u.tick(0.125)
+    for i in range(16):  # press: 8 Hz, counter +1 every 4 frames
+        u.write(f["roof"].control_char, _roof_frame(f, 1, 0, c + i // 4))
+        u.tick(0.125)
     assert u.decoded("roof")["SafetyCounterValid"] == 1
-    u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))            # counter went backwards
+    u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))  # counter went backwards
     assert u.decoded("roof")["SafetyCounterValid"] == 0
     for _ in range(3):
-        c += 10; u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c)); u.tick(0.5)
-    assert u.decoded("roof")["SafetyCounterValid"] == 1                # re-validated
+        c += 10
+        u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))
+        u.tick(0.5)
+    assert u.decoded("roof")["SafetyCounterValid"] == 1  # re-validated
     u.tick(2.0)
-    u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))            # same value after 2 s idle
-    assert u.decoded("roof")["SafetyCounterValid"] == 0                # frozen counter -> invalid
+    u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))  # same value after 2 s idle
+    assert u.decoded("roof")["SafetyCounterValid"] == 0  # frozen counter -> invalid
 
 
 def test_roof_validity_expires_when_the_stream_stops():
@@ -166,9 +221,10 @@ def test_roof_validity_expires_when_the_stream_stops():
     f = _funcs()
     u = _armed_unit(roof={"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 0})
     for c in (10, 11, 12):
-        u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c)); u.tick(0.5)
+        u.write(f["roof"].control_char, _roof_frame(f, 0, 0, c))
+        u.tick(0.5)
     assert u.decoded("roof")["SafetyCounterValid"] == 1
-    assert "roof" in u.tick(2.0)                                # stream gone -> cleared, notified
+    assert "roof" in u.tick(2.0)  # stream gone -> cleared, notified
     assert u.decoded("roof")["SafetyCounterValid"] == 0
 
 
@@ -182,29 +238,30 @@ def test_roof_travels_on_the_clock_while_a_valid_move_is_held():
 
     def hold(up, down, seconds):
         nonlocal c
-        for _ in range(int(seconds * 2)):                    # a frame every 500 ms, like the app
-            u.write(f["roof"].control_char, _roof_frame(f, up, down, c)); c += 1
+        for _ in range(int(seconds * 2)):  # a frame every 500 ms, like the app
+            u.write(f["roof"].control_char, _roof_frame(f, up, down, c))
+            c += 1
             u.tick(0.5)
 
-    hold(0, 0, 1.5)                                          # counter validates (stop frames)
+    hold(0, 0, 1.5)  # counter validates (stop frames)
     assert u.decoded("roof")["SafetyCounterValid"] == 1
     # A valid counter is NOT enough: the unit withholds the motor ROOF_WITHHOLD_S (~3 s) while it
     # satisfies itself the stream is live, and only then does travel start.
     hold(1, 0, 3.0)
-    assert u.decoded("roof")["Position"] == 0                # still inside the motor withhold
-    hold(1, 0, 5.0)                                          # withhold over + ROOF_STEP_S of travel
+    assert u.decoded("roof")["Position"] == 0  # still inside the motor withhold
+    hold(1, 0, 5.0)  # withhold over + ROOF_STEP_S of travel
     assert u.decoded("roof")["Position"] == 2
-    u.tick(3.0)                                              # released: no frames -> motion stops,
-    assert u.decoded("roof")["Position"] == 2                # and the counter validity expires
+    u.tick(3.0)  # released: no frames -> motion stops,
+    assert u.decoded("roof")["Position"] == 2  # and the counter validity expires
     assert u.decoded("roof")["SafetyCounterValid"] == 0
     # Re-press: the counter restarts, so the withhold is paid AGAIN (~1 s re-validate + 3 s
     # withhold + 5 s travel) — this is why the GUI debounces a re-press within 1000 ms.
     hold(1, 0, 9.5)
-    assert u.decoded("roof")["Position"] == 1                # middle -> open
+    assert u.decoded("roof")["Position"] == 1  # middle -> open
     hold(1, 0, 5.0)
-    assert u.decoded("roof")["Position"] == 1                # open: stays
+    assert u.decoded("roof")["Position"] == 1  # open: stays
     hold(0, 1, 5.0)
-    assert u.decoded("roof")["Position"] == 2                # open -> middle
+    assert u.decoded("roof")["Position"] == 2  # open -> middle
     hold(0, 1, 5.0)
     assert u.decoded("roof")["Position"] == 0
 
@@ -215,6 +272,7 @@ def test_subscribe_pushes_the_current_value_once():
     import asyncio
 
     from tools.mock_unit import MockBleakClient
+
     u = _armed_unit(cooler={"Installed": 1, "State": 1, "Level": 3, "Mode": 4})
     client = MockBleakClient.bind(u)("MO:CK")
     got = []
@@ -226,9 +284,9 @@ def _subscribe(unit, fn, sink):
     import asyncio
 
     from tools.mock_unit import MockBleakClient
+
     client = MockBleakClient.bind(unit)("MO:CK")
-    asyncio.run(client.start_notify(unit.funcs[fn].state_char,
-                                    lambda ch, data: sink.append(bytes(data))))
+    asyncio.run(client.start_notify(unit.funcs[fn].state_char, lambda ch, data: sink.append(bytes(data))))
     return client
 
 
@@ -236,13 +294,21 @@ def _commit_brightness(unit, zone_field, value):
     """Drive a real SET_BRIGHTNESS + commit pair through the write path."""
     f = _funcs()["lighting"]
     frame_bytes = overrides.CONTROL_FRAME_BYTES["lighting"]
-    zones = {c.name: 14 for c in f.control_fields          # 14 = per-zone leave-unchanged
-             if c.placed and c.name.startswith("BrightnessL")}
+    zones = {
+        c.name: 14
+        for c in f.control_fields  # 14 = per-zone leave-unchanged
+        if c.placed and c.name.startswith("BrightnessL")
+    }
     zones[zone_field] = value
-    unit.write(f.control_char, protocol.encode(
-        f, {"Mode": 4, "ProfileNumber": 9, **zones}, frame_bytes=frame_bytes))
-    unit.write(f.control_char, protocol.encode(
-        f, {"Mode": 0, "ProfileNumber": 0, **{k: 14 for k in zones}}, frame_bytes=frame_bytes))
+    unit.write(
+        f.control_char, protocol.encode(f, {"Mode": 4, "ProfileNumber": 9, **zones}, frame_bytes=frame_bytes)
+    )
+    unit.write(
+        f.control_char,
+        protocol.encode(
+            f, {"Mode": 0, "ProfileNumber": 0, **{k: 14 for k in zones}}, frame_bytes=frame_bytes
+        ),
+    )
 
 
 def test_lighting_readback_is_an_echo_while_the_lamps_ramp():
@@ -257,19 +323,19 @@ def test_lighting_readback_is_an_echo_while_the_lamps_ramp():
     u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLOne": 1})
     pushes = []
     _subscribe(u, "lighting", pushes)
-    pushes.clear()                                   # drop the one-shot push at subscribe time
+    pushes.clear()  # drop the one-shot push at subscribe time
 
     _commit_brightness(u, "BrightnessLOne", 4)
     # the ECHO is instant — this is exactly what must NOT be treated as proof of actuation
     assert u.decoded("lighting")["BrightnessLOne"] == 4
-    assert u.light_actual["BrightnessLOne"] == 1             # the lamp is still where it was
-    assert pushes == []                                       # and nothing was notified yet
+    assert u.light_actual["BrightnessLOne"] == 1  # the lamp is still where it was
+    assert pushes == []  # and nothing was notified yet
 
     seen = []
-    for _ in range(4):                                # ramp 1 -> 2 -> 3 -> 4, one step per tick
+    for _ in range(4):  # ramp 1 -> 2 -> 3 -> 4, one step per tick
         u.tick(0.5)
         seen.append(protocol.decode(_funcs()["lighting"], pushes[-1])["BrightnessLOne"])
-    assert seen == [2, 3, 4, 4]                       # steps, then holds at the target
+    assert seen == [2, 3, 4, 4]  # steps, then holds at the target
     assert u.light_actual["BrightnessLOne"] == 4
     # the ramp frames are Mode 4 — the SET_BRIGHTNESS notification the app confirms on
     assert protocol.decode(_funcs()["lighting"], pushes[-1])["Mode"] == 4
@@ -285,22 +351,22 @@ def test_lighting_echo_still_confirms_when_the_lamps_never_move():
        :id: T_MOCK_LIGHT_ECHO_LIES
     """
     u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLOne": 1})
-    u.light_applies = False                           # ACK + echo, but the lamps do not move
+    u.light_applies = False  # ACK + echo, but the lamps do not move
     pushes = []
     _subscribe(u, "lighting", pushes)
     pushes.clear()
 
     _commit_brightness(u, "BrightnessLOne", 9)
-    assert u.decoded("lighting")["BrightnessLOne"] == 9      # the echo lies
+    assert u.decoded("lighting")["BrightnessLOne"] == 9  # the echo lies
     for _ in range(5):
         u.tick(0.5)
-    assert pushes == []                                       # no ramp notification, ever
-    assert u.light_actual == {}                               # and the lamp really never moved
+    assert pushes == []  # no ramp notification, ever
+    assert u.light_actual == {}  # and the lamp really never moved
 
 
 def test_lighting_actuates_on_an_awake_unit_without_the_heartbeat():
     """The real unit actuates lighting on an AWAKE unit with a bare SET_BRIGHTNESS + ``0e00…``
-    commit and NO 1003 heartbeat (photon-verified 2026-08-16; CLAUDE.md Known state). The mock used
+    commit and NO 1003 heartbeat (photon-verified 2026-08-16; AGENTS.md Known state). The mock used
     to apply the generic arm gate to lighting too, so it was stricter than the van. Every other
     control write stays heartbeat-gated, and lighting keeps its own gates (commit, non-zero PN).
 
@@ -308,27 +374,39 @@ def test_lighting_actuates_on_an_awake_unit_without_the_heartbeat():
        :id: T_MOCK_LIGHT_NO_HEARTBEAT
     """
     f = _funcs()
-    u = MockCamperUnit(seed={"lighting": {"Installed": 1, "ProfileNumber": 9, "BrightnessLOne": 1},
-                             "cooler": {"Installed": 1, "State": 0, "Level": 3, "Mode": 0}})
-    assert u.armed is False                                    # no heartbeat ever written
+    u = MockCamperUnit(
+        seed={
+            "lighting": {"Installed": 1, "ProfileNumber": 9, "BrightnessLOne": 1},
+            "cooler": {"Installed": 1, "State": 0, "Level": 3, "Mode": 0},
+        }
+    )
+    assert u.armed is False  # no heartbeat ever written
     pushes = []
     _subscribe(u, "lighting", pushes)
     pushes.clear()
 
     _commit_brightness(u, "BrightnessLOne", 3)
-    assert u.decoded("lighting")["BrightnessLOne"] == 3        # applied (echo) ...
+    assert u.decoded("lighting")["BrightnessLOne"] == 3  # applied (echo) ...
     u.tick(0.5)
-    assert pushes and u.light_actual["BrightnessLOne"] == 2    # ... and the lamp really ramps
+    assert pushes and u.light_actual["BrightnessLOne"] == 2  # ... and the lamp really ramps
 
     # the lighting gates themselves are untouched: a PN=0 brightness frame is still ignored
     frame_bytes = overrides.CONTROL_FRAME_BYTES["lighting"]
-    zones = {c.name: 14 for c in f["lighting"].control_fields
-             if c.placed and c.name.startswith("BrightnessL")}
-    u.write(f["lighting"].control_char, protocol.encode(
-        f["lighting"], {"Mode": 4, "ProfileNumber": 0, **zones, "BrightnessLOne": 8},
-        frame_bytes=frame_bytes))
-    u.write(f["lighting"].control_char, protocol.encode(
-        f["lighting"], {"Mode": 0, "ProfileNumber": 0, **zones}, frame_bytes=frame_bytes))
+    zones = {
+        c.name: 14 for c in f["lighting"].control_fields if c.placed and c.name.startswith("BrightnessL")
+    }
+    u.write(
+        f["lighting"].control_char,
+        protocol.encode(
+            f["lighting"],
+            {"Mode": 4, "ProfileNumber": 0, **zones, "BrightnessLOne": 8},
+            frame_bytes=frame_bytes,
+        ),
+    )
+    u.write(
+        f["lighting"].control_char,
+        protocol.encode(f["lighting"], {"Mode": 0, "ProfileNumber": 0, **zones}, frame_bytes=frame_bytes),
+    )
     assert u.decoded("lighting")["BrightnessLOne"] == 3
 
     # ... and every other control write still needs the heartbeat: ACKed and ignored unarmed
@@ -344,25 +422,39 @@ def test_change_pushes_only_for_the_chars_the_unit_really_pushes():
     .. test:: Change-driven pushes are modelled only for the confirmed channels
        :id: T_MOCK_CHANGE_PUSH_SCOPE
     """
-    u = _armed_unit(vehicle={"TerminalOneFive": 0, "CarTimeYear": 126, "CarTimeMonth": 8,
-                             "CarTimeDay": 16, "CarTimeHour": 12, "CarTimeMinute": 0,
-                             "CarTimeSecond": 0},
-                    campingmode={"Installed": 1, "State": 1, "Enable": 0},
-                    airheater={"Installed": 1, "NormalOperation": 1, "RunningTime": 2,
-                               "RunningTimeinAction": 2, "HeatingLevel": 5})
+    u = _armed_unit(
+        vehicle={
+            "TerminalOneFive": 0,
+            "CarTimeYear": 126,
+            "CarTimeMonth": 8,
+            "CarTimeDay": 16,
+            "CarTimeHour": 12,
+            "CarTimeMinute": 0,
+            "CarTimeSecond": 0,
+        },
+        campingmode={"Installed": 1, "State": 1, "Enable": 0},
+        airheater={
+            "Installed": 1,
+            "NormalOperation": 1,
+            "RunningTime": 2,
+            "RunningTimeinAction": 2,
+            "HeatingLevel": 5,
+        },
+    )
     camping, heater = [], []
     _subscribe(u, "campingmode", camping)
     _subscribe(u, "airheater", heater)
-    u.tick(1.0)                                       # establish the ignition-edge baseline
-    camping.clear(); heater.clear()
+    u.tick(1.0)  # establish the ignition-edge baseline
+    camping.clear()
+    heater.clear()
 
-    u.state["vehicle"]["TerminalOneFive"] = 1         # key turned -> camping couples + pushes
+    u.state["vehicle"]["TerminalOneFive"] = 1  # key turned -> camping couples + pushes
     changed = u.tick(1.0)
     assert "campingmode" in changed and camping, "camping must push on the confirmed 1202 channel"
 
     # the heater DOES change on the clock (its countdown) but must not push: not a confirmed channel
     u.tick(120)
-    assert u.decoded("airheater")["RunningTimeinAction"] < 2   # it really did change
+    assert u.decoded("airheater")["RunningTimeinAction"] < 2  # it really did change
     assert heater == []
 
 
@@ -375,16 +467,24 @@ def test_water_freezes_both_tanks_while_the_system_is_unpowered():
     .. test:: Unpowered water freezes both tanks regardless of the heartbeat
        :id: T_MOCK_WATER_MEASUREMENT_GATE
     """
-    u = _armed_unit(water={"Installed": 1, "FreshWaterUnit": 1, "FreshWaterVolume": 22,
-                           "FreshWaterLevel": 19, "WasteWaterUnit": 1, "WasteWaterVolume": 22,
-                           "WasteWaterLevel": 3})
-    assert u.armed is True                                   # heartbeat running the whole time
-    u.set_water_power(False)                                 # van parked/locked
+    u = _armed_unit(
+        water={
+            "Installed": 1,
+            "FreshWaterUnit": 1,
+            "FreshWaterVolume": 22,
+            "FreshWaterLevel": 19,
+            "WasteWaterUnit": 1,
+            "WasteWaterVolume": 22,
+            "WasteWaterLevel": 3,
+        }
+    )
+    assert u.armed is True  # heartbeat running the whole time
+    u.set_water_power(False)  # van parked/locked
     # the true levels move on (someone drains grey at a dump station) but the unit isn't measuring
     u.state["water"].update(FreshWaterLevel=11, WasteWaterLevel=0)
     w = u.decoded("water")
-    assert (w["FreshWaterLevel"], w["WasteWaterLevel"]) == (19, 3)   # BOTH frozen at the latch
-    u.set_water_power(True)                                  # water system on -> it measures again
+    assert (w["FreshWaterLevel"], w["WasteWaterLevel"]) == (19, 3)  # BOTH frozen at the latch
+    u.set_water_power(True)  # water system on -> it measures again
     w = u.decoded("water")
     assert (w["FreshWaterLevel"], w["WasteWaterLevel"]) == (11, 0)
 
@@ -399,18 +499,27 @@ def test_unpowered_water_latch_is_exactly_what_the_stale_guard_rejects():
        :links: R_WATER_STALE_GUARD
     """
     from calictl import freshness, semantics
-    u = _armed_unit(water={"Installed": 1, "FreshWaterUnit": 1, "FreshWaterVolume": 22,
-                           "FreshWaterLevel": 19, "WasteWaterUnit": 1, "WasteWaterVolume": 22,
-                           "WasteWaterLevel": 3})
+
+    u = _armed_unit(
+        water={
+            "Installed": 1,
+            "FreshWaterUnit": 1,
+            "FreshWaterVolume": 22,
+            "FreshWaterLevel": 19,
+            "WasteWaterUnit": 1,
+            "WasteWaterVolume": 22,
+            "WasteWaterLevel": 3,
+        }
+    )
     plausible = semantics.water(u.decoded("water"))
 
     # Parked: the unit latches. A later poll sees a LOWER fresh level with grey exactly frozen —
     # the guard must reject it and the daemon keeps showing the last plausible reading.
     u.set_water_power(False)
-    u.state["water"]["FreshWaterLevel"] = 1                  # the classic parked-decay reading
-    u._water_latch["FreshWaterLevel"] = 1                    # unit re-latches lower (the ratchet)
+    u.state["water"]["FreshWaterLevel"] = 1  # the classic parked-decay reading
+    u._water_latch["FreshWaterLevel"] = 1  # unit re-latches lower (the ratchet)
     parked = semantics.water(u.decoded("water"))
-    assert parked["waste"]["liters"] == plausible["waste"]["liters"]   # grey exactly frozen
+    assert parked["waste"]["liters"] == plausible["waste"]["liters"]  # grey exactly frozen
     assert freshness.implausible_water_drop(parked, plausible) is True
 
     # Powered: real usage moves grey too, so the same fresh drop is accepted as live.
@@ -429,27 +538,35 @@ def test_water_pushes_1302_only_on_a_measured_change():
     .. test:: Water notifies only on a measured change, never while unpowered
        :id: T_MOCK_WATER_PUSH_ON_CHANGE
     """
-    u = _armed_unit(water={"Installed": 1, "FreshWaterUnit": 1, "FreshWaterVolume": 22,
-                           "FreshWaterLevel": 19, "WasteWaterUnit": 1, "WasteWaterVolume": 22,
-                           "WasteWaterLevel": 3})
+    u = _armed_unit(
+        water={
+            "Installed": 1,
+            "FreshWaterUnit": 1,
+            "FreshWaterVolume": 22,
+            "FreshWaterLevel": 19,
+            "WasteWaterUnit": 1,
+            "WasteWaterVolume": 22,
+            "WasteWaterLevel": 3,
+        }
+    )
     pushes = []
     _subscribe(u, "water", pushes)
-    u.tick(1.0)                                    # settle the baseline
+    u.tick(1.0)  # settle the baseline
     pushes.clear()
 
     u.tick(1.0)
-    assert pushes == []                            # powered but nothing moved -> no push
+    assert pushes == []  # powered but nothing moved -> no push
 
-    u.state["water"]["FreshWaterLevel"] = 18       # a tap runs: a real measured change
+    u.state["water"]["FreshWaterLevel"] = 18  # a tap runs: a real measured change
     u.tick(1.0)
     assert len(pushes) == 1
     assert protocol.decode(_funcs()["water"], pushes[-1])["FreshWaterLevel"] == 18
 
     pushes.clear()
-    u.set_water_power(False)                       # parked: measurement stops
-    u.state["water"]["FreshWaterLevel"] = 2        # the true level drifts / the unit latches
+    u.set_water_power(False)  # parked: measurement stops
+    u.state["water"]["FreshWaterLevel"] = 2  # the true level drifts / the unit latches
     u.tick(60)
-    assert pushes == []                            # nothing measured -> nothing notified
+    assert pushes == []  # nothing measured -> nothing notified
 
 
 def test_camping_master_is_acked_but_silently_refused_while_driving():
@@ -463,17 +580,18 @@ def test_camping_master_is_acked_but_silently_refused_while_driving():
        :id: T_MOCK_REFUSES_CAMPING_WHILE_DRIVING
     """
     from calictl import control
+
     f = _funcs()
     u = _armed_unit(campingmode={"Installed": 1, "State": 0, "UsbCharger": 1})
     frame = control.build(f, "campingmode", "master", "on", u.decoded("campingmode"))
 
     u.driving = True
     u.write(f["campingmode"].control_char, frame)
-    assert u.writes[-1][0] == "campingmode"                  # the unit ACKed it (it was received)
-    assert u.decoded("campingmode")["State"] == 0            # ...and silently did not apply it
+    assert u.writes[-1][0] == "campingmode"  # the unit ACKed it (it was received)
+    assert u.decoded("campingmode")["State"] == 0  # ...and silently did not apply it
     assert u.refusals and "driving" in u.refusals[-1][1]
 
-    u.driving = False                                        # stationary: the same frame applies
+    u.driving = False  # stationary: the same frame applies
     u.write(f["campingmode"].control_char, frame)
     assert u.decoded("campingmode")["State"] == 1
 
@@ -486,13 +604,15 @@ def test_roof_reading_light_is_refused_while_the_roof_is_down():
     .. test:: L9 brightness is ACKed and ignored with the roof closed
        :id: T_MOCK_REFUSES_ROOF_LAMP_WHEN_DOWN
     """
-    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLNine": 0},
-                    roof={"Installed": 1, "Position": 0})          # 0 = closed
+    u = _armed_unit(
+        lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLNine": 0},
+        roof={"Installed": 1, "Position": 0},
+    )  # 0 = closed
     _commit_brightness(u, "BrightnessLNine", 8)
-    assert u.decoded("lighting")["BrightnessLNine"] == 0           # refused, echo included
+    assert u.decoded("lighting")["BrightnessLNine"] == 0  # refused, echo included
     assert u.refusals and "roof raised" in u.refusals[-1][1]
 
-    u.state["roof"]["Position"] = 1                                # roof open -> the lamp has power
+    u.state["roof"]["Position"] = 1  # roof open -> the lamp has power
     _commit_brightness(u, "BrightnessLNine", 8)
     assert u.decoded("lighting")["BrightnessLNine"] == 8
 
@@ -507,20 +627,22 @@ def test_cooling_timer_is_refused_while_the_fridge_is_on_but_power_still_works()
        :id: T_MOCK_REFUSES_COOLER_TIMER_WHEN_ON
     """
     from calictl import control
+
     f = _funcs()
-    u = _armed_unit(cooler={"Installed": 1, "State": 1, "Level": 3, "Mode": 0,
-                            "TimerHourSet": 7, "TimerMinSet": 0})
+    u = _armed_unit(
+        cooler={"Installed": 1, "State": 1, "Level": 3, "Mode": 0, "TimerHourSet": 7, "TimerMinSet": 0}
+    )
     cur = u.decoded("cooler")
 
     u.write(f["cooler"].control_char, control.build(f, "cooler", "timer_set", "09:30", cur))
-    assert u.decoded("cooler")["TimerHourSet"] == 7                # refused while the fridge runs
+    assert u.decoded("cooler")["TimerHourSet"] == 7  # refused while the fridge runs
     assert u.refusals and "fridge is off" in u.refusals[-1][1]
 
-    n = len(u.refusals)                                            # an unrelated write must pass
+    n = len(u.refusals)  # an unrelated write must pass
     u.write(f["cooler"].control_char, control.build(f, "cooler", "level", 5, cur))
     assert u.decoded("cooler")["Level"] == 5 and len(u.refusals) == n
 
-    u.state["cooler"]["State"] = 0                                 # fridge off -> the timer sets
+    u.state["cooler"]["State"] = 0  # fridge off -> the timer sets
     u.write(f["cooler"].control_char, control.build(f, "cooler", "timer_set", "09:30", u.decoded("cooler")))
     assert (u.decoded("cooler")["TimerHourSet"], u.decoded("cooler")["TimerMinSet"]) == (9, 30)
 
@@ -535,12 +657,13 @@ def test_the_arm_lapses_when_the_heartbeat_stops():
        :id: T_MOCK_ARM_LAPSES
     """
     from calictl import device
+
     u = MockCamperUnit(seed={"cooler": {"Installed": 1, "State": 0, "Level": 3, "Mode": 0}})
     u.write(device.HEARTBEAT_CHAR, (1).to_bytes(4, "big"))
     assert u.armed is True
     u.tick(10)
-    assert u.armed is True                       # still inside the window
-    u.tick(6)                                    # 16 s since the last beat
+    assert u.armed is True  # still inside the window
+    u.tick(6)  # 16 s since the last beat
     assert u.armed is False and u.online is False
 
     # a hand-armed fixture (no beat seen) must NOT expire underneath itself
@@ -561,8 +684,9 @@ def test_only_one_client_holds_the_connection_slot():
     import asyncio
 
     from tools.mock_unit import MockBleakClient, MockDisconnect
+
     u = _armed_unit(cooler={"Installed": 1, "State": 1})
-    u.one_slot = True                            # opt-in: see the note on MockCamperUnit.one_slot
+    u.one_slot = True  # opt-in: see the note on MockCamperUnit.one_slot
     phone, daemon = MockBleakClient.bind(u)("PH:ON:E"), MockBleakClient.bind(u)("DA:EM:ON")
 
     asyncio.run(phone.connect())
@@ -573,7 +697,7 @@ def test_only_one_client_holds_the_connection_slot():
     else:
         raise AssertionError("second client connected while the slot was held")
 
-    asyncio.run(phone.disconnect())              # phone hangs up -> the slot frees
+    asyncio.run(phone.disconnect())  # phone hangs up -> the slot frees
     asyncio.run(daemon.connect())
     assert daemon.is_connected is True
 
@@ -587,55 +711,100 @@ def test_the_link_drops_for_a_minute_at_the_engine_crank():
     .. test:: The engine crank drops the link for ~1 min after notifying the shed
        :id: T_MOCK_CRANK_DROP
     """
-    u = _armed_unit(vehicle={"TerminalOneFive": 0, "CarTimeYear": 126, "CarTimeMonth": 8,
-                             "CarTimeDay": 17, "CarTimeHour": 9, "CarTimeMinute": 0,
-                             "CarTimeSecond": 0},
-                    campingmode={"Installed": 1, "State": 1, "Enable": 0})
+    u = _armed_unit(
+        vehicle={
+            "TerminalOneFive": 0,
+            "CarTimeYear": 126,
+            "CarTimeMonth": 8,
+            "CarTimeDay": 17,
+            "CarTimeHour": 9,
+            "CarTimeMinute": 0,
+            "CarTimeSecond": 0,
+        },
+        campingmode={"Installed": 1, "State": 1, "Enable": 0},
+    )
     camping = []
     _subscribe(u, "campingmode", camping)
-    u.tick(1.0)                                   # ignition-edge baseline
+    u.tick(1.0)  # ignition-edge baseline
     camping.clear()
 
-    u.state["vehicle"]["TerminalOneFive"] = 1     # crank
+    u.state["vehicle"]["TerminalOneFive"] = 1  # crank
     u.tick(1.0)
     assert camping, "the camping shed must be notified before the link goes"
     assert u.decoded("campingmode")["State"] == 0
-    assert u.online is False                      # ...and then the link drops
+    assert u.online is False  # ...and then the link drops
 
     u.tick(30)
-    assert u.online is False                      # still down
-    u.tick(31)                                    # ~61 s after the crank
-    assert u.online is True                       # the unit comes back by itself
+    assert u.online is False  # still down
+    u.tick(31)  # ~61 s after the crank
+    assert u.online is True  # the unit comes back by itself
 
 
 def test_tick_advances_the_vehicle_clock():
     """CarTimeMonth is 0-based on the wire (the app shows month+1 — app lab 2026-09-16); the
     month rollover below is 8 (= September) -> 9 (= October) at 23:59:30 + 45 s on the 30th."""
-    u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 8, "CarTimeDay": 30,
-                             "CarTimeHour": 23, "CarTimeMinute": 59, "CarTimeSecond": 30,
-                             "TerminalOneFive": 0})
+    u = _armed_unit(
+        vehicle={
+            "CarTimeYear": 126,
+            "CarTimeMonth": 8,
+            "CarTimeDay": 30,
+            "CarTimeHour": 23,
+            "CarTimeMinute": 59,
+            "CarTimeSecond": 30,
+            "TerminalOneFive": 0,
+        }
+    )
     u.tick(45)
     v = u.decoded("vehicle")
-    assert (v["CarTimeMonth"], v["CarTimeDay"], v["CarTimeHour"], v["CarTimeMinute"], v["CarTimeSecond"]) == (9, 1, 0, 0, 15)
+    assert (v["CarTimeMonth"], v["CarTimeDay"], v["CarTimeHour"], v["CarTimeMinute"], v["CarTimeSecond"]) == (
+        9,
+        1,
+        0,
+        0,
+        15,
+    )
 
 
 def test_tick_counts_down_immediate_heating_and_stops_it():
-    u = _armed_unit(airheater={"Installed": 1, "NormalOperation": 1, "PermanentOperation": 0,
-                               "HeatingLevel": 5, "RunningTime": 2, "RunningTimeinAction": 2})
+    u = _armed_unit(
+        airheater={
+            "Installed": 1,
+            "NormalOperation": 1,
+            "PermanentOperation": 0,
+            "HeatingLevel": 5,
+            "RunningTime": 2,
+            "RunningTimeinAction": 2,
+        }
+    )
     u.tick(59)
     assert u.decoded("airheater")["RunningTimeinAction"] == 2
     u.tick(1)
     assert u.decoded("airheater")["RunningTimeinAction"] == 1
     u.tick(60)
     a = u.decoded("airheater")
-    assert a["RunningTimeinAction"] == 0 and a["NormalOperation"] == 0   # run time over -> off
+    assert a["RunningTimeinAction"] == 0 and a["NormalOperation"] == 0  # run time over -> off
 
 
 def test_tick_fires_the_cooler_timer_at_its_start_time():
-    u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 9, "CarTimeDay": 16,
-                             "CarTimeHour": 8, "CarTimeMinute": 59, "CarTimeSecond": 0},
-                    cooler={"Installed": 1, "State": 0, "TimerState": 1, "TimerHourSet": 9,
-                            "TimerMinSet": 0, "Level": 3, "Mode": 0})
+    u = _armed_unit(
+        vehicle={
+            "CarTimeYear": 126,
+            "CarTimeMonth": 9,
+            "CarTimeDay": 16,
+            "CarTimeHour": 8,
+            "CarTimeMinute": 59,
+            "CarTimeSecond": 0,
+        },
+        cooler={
+            "Installed": 1,
+            "State": 0,
+            "TimerState": 1,
+            "TimerHourSet": 9,
+            "TimerMinSet": 0,
+            "Level": 3,
+            "Mode": 0,
+        },
+    )
     u.tick(30)
     c = u.decoded("cooler")
     assert c["State"] == 0 and (c["TimerCounterHour"], c["TimerCounterMin"]) == (0, 1)
@@ -650,12 +819,28 @@ def test_heater_timer_arm_frame_arms_and_fires_at_the_start_time():
     (3f0b007f1f3f) clears it. Armed, the clock fires the heater at TimerHour:TimerMin
     (modelled: NormalOperation=1, countdown loaded, Mode back to 0 — the unit's own
     post-fire Mode value is UNVERIFIED)."""
-    u = _armed_unit(vehicle={"CarTimeYear": 126, "CarTimeMonth": 9, "CarTimeDay": 16,
-                             "CarTimeHour": 11, "CarTimeMinute": 59, "CarTimeSecond": 0},
-                    airheater={"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0,
-                               "HeatingLevel": 5, "RunningTime": 60, "RunningTimeinAction": 0,
-                               "OperationModeAirHeater": 0, "OperationModeCombined": 0,
-                               "TimerHour": 12, "TimerMin": 0})
+    u = _armed_unit(
+        vehicle={
+            "CarTimeYear": 126,
+            "CarTimeMonth": 9,
+            "CarTimeDay": 16,
+            "CarTimeHour": 11,
+            "CarTimeMinute": 59,
+            "CarTimeSecond": 0,
+        },
+        airheater={
+            "Installed": 1,
+            "NormalOperation": 0,
+            "PermanentOperation": 0,
+            "HeatingLevel": 5,
+            "RunningTime": 60,
+            "RunningTimeinAction": 0,
+            "OperationModeAirHeater": 0,
+            "OperationModeCombined": 0,
+            "TimerHour": 12,
+            "TimerMin": 0,
+        },
+    )
     ch = _funcs()["airheater"].control_char
     u.write(ch, bytes.fromhex("3f3b017f1f3f"))
     a = u.decoded("airheater")
@@ -664,24 +849,33 @@ def test_heater_timer_arm_frame_arms_and_fires_at_the_start_time():
     assert u.decoded("airheater")["OperationModeAirHeater"] == 0
     u.write(ch, bytes.fromhex("3f3b017f1f3f"))
     u.tick(30)
-    assert u.decoded("airheater")["NormalOperation"] == 0            # 11:59:30 — not yet
+    assert u.decoded("airheater")["NormalOperation"] == 0  # 11:59:30 — not yet
     u.tick(31)
     a = u.decoded("airheater")
     assert a["NormalOperation"] == 1 and a["RunningTimeinAction"] == 60 and a["OperationModeAirHeater"] == 0
 
 
 def test_ignition_couples_into_camping_and_battery_age():
-    u = _armed_unit(vehicle={"TerminalOneFive": 0, "CarTimeYear": 126, "CarTimeMonth": 9,
-                             "CarTimeDay": 16, "CarTimeHour": 8, "CarTimeMinute": 0, "CarTimeSecond": 0},
-                    campingmode={"Installed": 1, "State": 1, "Enable": 0, "UsbCharger": 1},
-                    energy={"AgeOneBattValuesMinutes": 3})
+    u = _armed_unit(
+        vehicle={
+            "TerminalOneFive": 0,
+            "CarTimeYear": 126,
+            "CarTimeMonth": 9,
+            "CarTimeDay": 16,
+            "CarTimeHour": 8,
+            "CarTimeMinute": 0,
+            "CarTimeSecond": 0,
+        },
+        campingmode={"Installed": 1, "State": 1, "Enable": 0, "UsbCharger": 1},
+        energy={"AgeOneBattValuesMinutes": 3},
+    )
     u.tick(120)
-    assert u.decoded("energy")["AgeOneBattValuesMinutes"] == 5       # starter data ages while parked
-    u.state["vehicle"]["TerminalOneFive"] = 1                       # key turned (e.g. via the console)
+    assert u.decoded("energy")["AgeOneBattValuesMinutes"] == 5  # starter data ages while parked
+    u.state["vehicle"]["TerminalOneFive"] = 1  # key turned (e.g. via the console)
     u.tick(1)
     cm = u.decoded("campingmode")
-    assert cm["Enable"] == 1 and cm["State"] == 0                     # unit sheds camping master
-    assert u.decoded("energy")["AgeOneBattValuesMinutes"] == 0       # starter subsystem awake
+    assert cm["Enable"] == 1 and cm["State"] == 0  # unit sheds camping master
+    assert u.decoded("energy")["AgeOneBattValuesMinutes"] == 0  # starter subsystem awake
     u.state["vehicle"]["TerminalOneFive"] = 0
     u.tick(1)
     assert u.decoded("campingmode")["Enable"] == 0

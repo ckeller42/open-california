@@ -11,13 +11,14 @@ Functions are identified by the `Incoming Data for <Fn>:` debug log that sits in
 same class as the setters. Best-effort + stdlib-only; results are review flags, not
 gospel (the decompiled tree is R8-obfuscated).
 """
+
 from __future__ import annotations
 
 import os
 import re
 
-_INV_WRITE = re.compile(r"!\s*\w+\s*\?\s*1\s*:\s*0|!\s*\w+\s*\?\s*0\s*:\s*1")   # setter inverts value
-_INV_READ = re.compile(r"!\s*\(\(Boolean\)")   # readback getter inverts a field (the READ risk)
+_INV_WRITE = re.compile(r"!\s*\w+\s*\?\s*1\s*:\s*0|!\s*\w+\s*\?\s*0\s*:\s*1")  # setter inverts value
+_INV_READ = re.compile(r"!\s*\(\(Boolean\)")  # readback getter inverts a field (the READ risk)
 _WRITE = re.compile(r"\.o\(Integer\.valueOf\((\w+)\)\)")
 _FN = re.compile(r"Incoming Data for (\w+)")
 
@@ -44,10 +45,11 @@ def nontrivial(root: str) -> dict:
             func = m.group(1).lower()
             inverted = bool(_INV_WRITE.search(txt)) or bool(_INV_READ.search(txt))
             writes = _WRITE.findall(txt)
-            combined = any(writes.count(v) >= 2 for v in set(writes))   # same value -> 2+ holders
+            combined = any(writes.count(v) >= 2 for v in set(writes))  # same value -> 2+ holders
             if inverted or combined:
-                e = out.setdefault(func, {"inverted": False, "combined": False,
-                                          "where": os.path.relpath(path, root)})
+                e = out.setdefault(
+                    func, {"inverted": False, "combined": False, "where": os.path.relpath(path, root)}
+                )
                 e["inverted"] = e["inverted"] or inverted
                 e["combined"] = e["combined"] or combined
     return out

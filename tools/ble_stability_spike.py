@@ -15,6 +15,7 @@ Reports per 5 s tick: connected?, water fresh level, reconnect count, RSSI; then
 (uptime %, drop count, whether water ever refreshed). This is a diagnostic — it makes no writes
 other than the 1003 liveness heartbeat (read-only w.r.t. actuation), same as the app.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,7 +26,8 @@ from calictl import device, overrides, protocol
 
 
 async def run(seconds: float, tick: float = 5.0) -> None:
-    f = protocol.load(); overrides.apply(f)
+    f = protocol.load()
+    overrides.apply(f)
     wc = f["water"].state_char
     dev = device.CamperDevice()
     stats = {"ticks": 0, "connected": 0, "reconnects": 0, "fresh_seen": None, "levels": []}
@@ -48,41 +50,60 @@ async def run(seconds: float, tick: float = 5.0) -> None:
         try:
             raw = await client.read_gatt_char(wc)
             lvl = protocol.decode(f["water"], bytes(raw))["FreshWaterLevel"]
-            stats["connected"] += 1; stats["levels"].append(lvl)
+            stats["connected"] += 1
+            stats["levels"].append(lvl)
             if lvl > 1 and stats["fresh_seen"] is None:
                 stats["fresh_seen"] = round(time.time() - t0, 1)
-            print("t=%3ds  connected=Y  water=%s  reconnects=%d"
-                  % (time.time() - t0, lvl, stats["reconnects"]), flush=True)
+            print(
+                "t=%3ds  connected=Y  water=%s  reconnects=%d" % (time.time() - t0, lvl, stats["reconnects"]),
+                flush=True,
+            )
         except Exception as e:
-            print("t=%3ds  connected=N (%s) -> reconnecting" % (time.time() - t0, type(e).__name__),
-                  flush=True)
+            print(
+                "t=%3ds  connected=N (%s) -> reconnecting" % (time.time() - t0, type(e).__name__), flush=True
+            )
             stop.set()
-            try: await beat
-            except Exception: pass
-            try: await dev._safe_disconnect(client)
-            except Exception: pass
             try:
-                client = await connect_sub(); stats["reconnects"] += 1
-                stop = asyncio.Event(); beat = asyncio.ensure_future(dev._heartbeat(client, stop))
+                await beat
+            except Exception:
+                pass
+            try:
+                await dev._safe_disconnect(client)
+            except Exception:
+                pass
+            try:
+                client = await connect_sub()
+                stats["reconnects"] += 1
+                stop = asyncio.Event()
+                beat = asyncio.ensure_future(dev._heartbeat(client, stop))
             except Exception as e2:
                 print("   reconnect failed: %s" % type(e2).__name__, flush=True)
         await asyncio.sleep(tick)
     stop.set()
-    try: await beat
-    except Exception: pass
-    try: await dev._safe_disconnect(client)
-    except Exception: pass
+    try:
+        await beat
+    except Exception:
+        pass
+    try:
+        await dev._safe_disconnect(client)
+    except Exception:
+        pass
 
     up = stats["connected"] / stats["ticks"] if stats["ticks"] else 0
     print("\n=== SUMMARY ===", flush=True)
     print("uptime: %d/%d ticks (%.0f%%)" % (stats["connected"], stats["ticks"], up * 100))
     print("reconnects (link drops): %d" % stats["reconnects"])
-    print("water refreshed above 1 L:", "yes at t=%ss" % stats["fresh_seen"] if stats["fresh_seen"]
-          else "NO — never refreshed while held")
+    print(
+        "water refreshed above 1 L:",
+        "yes at t=%ss" % stats["fresh_seen"] if stats["fresh_seen"] else "NO — never refreshed while held",
+    )
     print("water levels seen:", sorted(set(stats["levels"])))
-    print("\nverdict:", "buspi CAN sustain a useful session -> persistent-read mode is viable"
-          if up > 0.8 and stats["fresh_seen"] else
-          "buspi canNOT hold the unit awake -> intermittent access is inherent; rely on offline/hold-last")
+    print(
+        "\nverdict:",
+        "buspi CAN sustain a useful session -> persistent-read mode is viable"
+        if up > 0.8 and stats["fresh_seen"]
+        else "buspi canNOT hold the unit awake -> intermittent access is inherent; rely on offline/hold-last",
+    )
 
 
 def main(argv=None):

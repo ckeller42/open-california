@@ -31,6 +31,7 @@ USAGE
   python3 -m tools.van_roof_test                 # on buspi, against localhost:8088
   python3 -m tools.van_roof_test --url http://buspi:8088 --out roof-evidence.json
 """
+
 from __future__ import annotations
 
 import argparse
@@ -43,11 +44,12 @@ import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 
-MOVE_POLL_HZ = 2.0                 # after-move state polling cadence
-DEFAULT_MOVE_TIMEOUT = 35.0        # a hair over the daemon's ROOF_MAX_TRAVEL_S cap (30 s)
+MOVE_POLL_HZ = 2.0  # after-move state polling cadence
+DEFAULT_MOVE_TIMEOUT = 35.0  # a hair over the daemon's ROOF_MAX_TRAVEL_S cap (30 s)
 
 
 # --- tiny HTTP client over the daemon web API --------------------------------
+
 
 class Daemon:
     def __init__(self, base: str):
@@ -59,14 +61,15 @@ class Daemon:
 
     def post(self, path: str, body: dict) -> dict:
         data = json.dumps(body).encode()
-        req = urllib.request.Request(self.base + path, data=data,
-                                     headers={"Content-Type": "application/json"}, method="POST")
+        req = urllib.request.Request(
+            self.base + path, data=data, headers={"Content-Type": "application/json"}, method="POST"
+        )
         try:
-            with urllib.request.urlopen(req, timeout=95) as r:   # a move can block ~30 s
+            with urllib.request.urlopen(req, timeout=95) as r:  # a move can block ~30 s
                 return json.load(r)
         except urllib.error.HTTPError as e:
             try:
-                return json.load(e)                              # our API returns JSON on errors too
+                return json.load(e)  # our API returns JSON on errors too
             except Exception:
                 return {"error": "http_%d" % e.code}
         except Exception as e:
@@ -75,14 +78,16 @@ class Daemon:
             return {"error": "transport", "detail": repr(e)}
 
     def command(self, function: str, what: str, value=None, confirm: bool = False) -> dict:
-        return self.post("/api/command", {"function": function, "what": what,
-                                          "value": value, "confirm": confirm})
+        return self.post(
+            "/api/command", {"function": function, "what": what, "value": value, "confirm": confirm}
+        )
 
     def roof_stop(self) -> dict:
         return self.command("roof", "stop", confirm=True)
 
 
 # --- prompts -----------------------------------------------------------------
+
 
 def ask(prompt: str) -> str:
     try:
@@ -104,10 +109,15 @@ def verdict(question: str) -> dict:
 
 # --- telemetry helpers -------------------------------------------------------
 
+
 def roof_of(state: dict) -> dict:
     r = dict(state.get("roof") or {})
-    return {"position": r.get("position"), "position_name": r.get("position_name"),
-            "safety_valid": r.get("safety_valid"), "alert": r.get("alert")}
+    return {
+        "position": r.get("position"),
+        "position_name": r.get("position_name"),
+        "safety_valid": r.get("safety_valid"),
+        "alert": r.get("alert"),
+    }
 
 
 def poll_until(dae: Daemon, seconds: float) -> list[dict]:
@@ -129,15 +139,18 @@ def journal_since(epoch: float) -> list[str]:
     try:
         out = subprocess.run(
             ["journalctl", "-u", "calictl.service", "--since", "@%d" % int(epoch), "--no-pager"],
-            capture_output=True, text=True, timeout=15)
-        lines = [ln for ln in out.stdout.splitlines()
-                 if "actuate_roof" in ln or "roof" in ln.lower()]
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        lines = [ln for ln in out.stdout.splitlines() if "actuate_roof" in ln or "roof" in ln.lower()]
         return lines[-40:]
     except Exception:
         return []
 
 
 # --- the moves ---------------------------------------------------------------
+
 
 def do_move(dae: Daemon, direction: str, timeout: float) -> dict:
     """Issue a blocking roof move, then capture after-state + the daemon's log window. The command
@@ -147,17 +160,24 @@ def do_move(dae: Daemon, direction: str, timeout: float) -> dict:
     print("     sending roof %s (blocks until the move ends)…" % direction)
     resp = dae.command("roof", direction, confirm=True)
     elapsed = round(time.time() - t0, 1)
-    dae.roof_stop()                                  # belt-and-suspenders STOP
-    after = poll_until(dae, 4.0)                      # let the daemon poll settle post-STOP
-    return {"direction": direction, "before": before, "command_response": resp,
-            "move_seconds": elapsed, "after_timeline": after,
-            "after": after[-1] if after else None, "journal": journal_since(t0)}
+    dae.roof_stop()  # belt-and-suspenders STOP
+    after = poll_until(dae, 4.0)  # let the daemon poll settle post-STOP
+    return {
+        "direction": direction,
+        "before": before,
+        "command_response": resp,
+        "move_seconds": elapsed,
+        "after_timeline": after,
+        "after": after[-1] if after else None,
+        "journal": journal_since(t0),
+    }
 
 
 def do_move_then_stop(dae: Daemon, direction: str, stop_after_s: float, timeout: float) -> dict:
     """Start a move on a background thread and send STOP mid-travel from the main thread — proves the
     lock-free `_roof_stop` interrupt halts the roof before it reaches the limit."""
     import threading
+
     result = {}
     before = roof_of(dae.state())
     t0 = time.time()
@@ -171,15 +191,22 @@ def do_move_then_stop(dae: Daemon, direction: str, stop_after_s: float, timeout:
     time.sleep(stop_after_s)
     stop_resp = dae.roof_stop()
     th.join(timeout=timeout)
-    dae.roof_stop()                                  # ensure stopped
+    dae.roof_stop()  # ensure stopped
     after = poll_until(dae, 4.0)
-    return {"direction": direction, "before": before, "stop_after_s": stop_after_s,
-            "stop_response": stop_resp, "command_response": result.get("command_response"),
-            "move_seconds": round(time.time() - t0, 1),
-            "after": after[-1] if after else None, "journal": journal_since(t0)}
+    return {
+        "direction": direction,
+        "before": before,
+        "stop_after_s": stop_after_s,
+        "stop_response": stop_resp,
+        "command_response": result.get("command_response"),
+        "move_seconds": round(time.time() - t0, 1),
+        "after": after[-1] if after else None,
+        "journal": journal_since(t0),
+    }
 
 
 # --- preflight ---------------------------------------------------------------
+
 
 def preflight(dae: Daemon) -> dict:
     print("== Preflight ==")
@@ -192,9 +219,10 @@ def preflight(dae: Daemon) -> dict:
     roof, veh = st.get("roof") or {}, st.get("vehicle") or {}
     if not roof.get("installed"):
         sys.exit("  roof.installed is false — no pop-top on this unit; nothing to test.")
-    print("  roof: position=%s (%s)  safety_valid=%s  alert=%s"
-          % (roof.get("position"), roof.get("position_name"),
-             roof.get("safety_valid"), roof.get("alert")))
+    print(
+        "  roof: position=%s (%s)  safety_valid=%s  alert=%s"
+        % (roof.get("position"), roof.get("position_name"), roof.get("safety_valid"), roof.get("alert"))
+    )
     ign = veh.get("ignition_on")
     print("  ignition_on=%s" % ign)
     if not ign:
@@ -202,22 +230,25 @@ def preflight(dae: Daemon) -> dict:
         if ask("     Turn the ignition ON now, then type READY (or SKIP to continue anyway): ") == "SKIP":
             pass
         else:
-            st = dae.state(); ign = (st.get("vehicle") or {}).get("ignition_on")
+            st = dae.state()
+            ign = (st.get("vehicle") or {}).get("ignition_on")
             print("  ignition_on=%s" % ign)
     # write-enabled probe: a STOP is harmless (halts nothing when idle) but round-trips the write path.
     print("  probing write path (harmless STOP)…")
     probe = dae.roof_stop()
     if probe.get("error") == "read_only":
-        sys.exit("  daemon is READ-ONLY. On buspi, run `bash tools/roof_test_session.sh` instead — it\n"
-                 "  enables writes for the test and reverts to read-only on exit. (Or restart serve\n"
-                 "  with --enable-writes / CALICTL_ENABLE_WRITES=1.)")
+        sys.exit(
+            "  daemon is READ-ONLY. On buspi, run `bash tools/roof_test_session.sh` instead — it\n"
+            "  enables writes for the test and reverts to read-only on exit. (Or restart serve\n"
+            "  with --enable-writes / CALICTL_ENABLE_WRITES=1.)"
+        )
     print("  write path OK (%s)" % json.dumps(probe))
     print("  warming BLE session…", dae.post("/api/session", {"action": "connect"}))
-    return {"online": meta.get("online"), "as_of": meta.get("as_of"),
-            "roof": roof_of(st), "ignition_on": ign}
+    return {"online": meta.get("online"), "as_of": meta.get("as_of"), "roof": roof_of(st), "ignition_on": ign}
 
 
 # --- main --------------------------------------------------------------------
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="At-the-van roof verification via the calictl daemon.")
@@ -238,12 +269,15 @@ def main() -> None:
         finally:
             print("\n  STOP sent on exit.")
             sys.exit(1)
+
     signal.signal(signal.SIGINT, _panic)
     signal.signal(signal.SIGTERM, _panic)
 
     print("\n=== calictl at-the-van roof test ===")
-    print("Roof control is SAFETY-SENSITIVE and has never driven a real motor. Stop any time with"
-          " Ctrl-C (a STOP frame is sent).\n")
+    print(
+        "Roof control is SAFETY-SENSITIVE and has never driven a real motor. Stop any time with"
+        " Ctrl-C (a STOP frame is sent).\n"
+    )
     try:
         evidence["preflight"] = preflight(dae)
 
@@ -286,8 +320,12 @@ def main() -> None:
         print("  In the web UI, press-and-hold OPEN, release, and immediately mash OPEN a few times.")
         print("  The 1000 ms debounce should ignore the too-quick re-presses (no stutter/restart).")
         if ask("  Run this GUI check now? [y/n]: ").lower().startswith("y"):
-            evidence["checks"].append({"check": "repress_debounce_gui",
-                                       "verdict": verdict("Did rapid re-presses NOT stutter/restart travel?")})
+            evidence["checks"].append(
+                {
+                    "check": "repress_debounce_gui",
+                    "verdict": verdict("Did rapid re-presses NOT stutter/restart travel?"),
+                }
+            )
     finally:
         dae.roof_stop()
         with open(out_path, "w") as f:
@@ -298,8 +336,10 @@ def main() -> None:
             mark = "PASS" if v.get("pass") else ("FAIL" if v else "-")
             print("  [%s] %-24s %s" % (mark, c["check"], v.get("note", "")))
         print("\nEvidence written to %s" % out_path)
-        print("Paste confirmed results into docs/business-logic/evidence-ledger.md "
-              "(roof rows: DECOMPILE → DEVICE).")
+        print(
+            "Paste confirmed results into docs/business-logic/evidence-ledger.md "
+            "(roof rows: DECOMPILE → DEVICE)."
+        )
 
 
 if __name__ == "__main__":

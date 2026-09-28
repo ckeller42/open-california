@@ -13,6 +13,7 @@ This lint runs in the normal pytest CI (which gates merges) and fails BEFORE a b
 deploy. It is a targeted character lint, not a full mermaid parser — it catches the statement-separator
 class of bug. Keep it stdlib-only so the whole suite still runs without third-party deps.
 """
+
 import re
 from pathlib import Path
 
@@ -38,7 +39,7 @@ def _mermaid_blocks(rst_text):
             body = []
             while i < len(lines) and (lines[i].startswith("    ") or lines[i].strip() == ""):
                 body.append((i + 1, lines[i]))
-            # walk to the first non-indented, non-blank line
+                # walk to the first non-indented, non-blank line
                 i += 1
             yield start, body
         else:

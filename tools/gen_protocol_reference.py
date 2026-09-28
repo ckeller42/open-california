@@ -5,6 +5,7 @@ Read-only projection: never hand-edit the generated file, regenerate it instead 
 docs/protocol/README.md. tests/test_protocol_views.py asserts the committed file matches
 a fresh regen (fails CI on drift).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,22 +21,19 @@ OUT_FILE = ROOT / "docs" / "protocol" / "reference.md"
 _COLUMNS = ("offset", "width", "default", "raw_range", "value_semantics")
 
 
-
-
 def _cell(col, value) -> str:
     if value is None:
         return "—"
     text = str(value)
     if col == "offset" and text == "MERGED_AMBIGUOUS":
-        return "**MERGED_AMBIGUOUS**"   # explicitly flag: offset could not be positionally resolved
+        return "**MERGED_AMBIGUOUS**"  # explicitly flag: offset could not be positionally resolved
     return text
 
 
 def _field_table(fields) -> list[str]:
     if not fields:
         return ["_(none)_"]
-    lines = ["| field | " + " | ".join(_COLUMNS) + " |",
-             "|" + "---|" * (len(_COLUMNS) + 1)]
+    lines = ["| field | " + " | ".join(_COLUMNS) + " |", "|" + "---|" * (len(_COLUMNS) + 1)]
     for f in fields:
         row = [_cell(c, f.get(c)) for c in _COLUMNS]
         lines.append("| " + " | ".join([f.get("name", "—")] + row) + " |")

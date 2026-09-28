@@ -21,6 +21,7 @@ dictionary.yaml today is either fully contained in one byte (w in {1,2,4,8} with
 across whole bytes; a field that doesn't fit either shape is skipped with a comment
 (defensive; does not occur in the current dictionary).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,8 +34,6 @@ DICT_FILE = ROOT / "protocol" / "dictionary.yaml"
 OUT_FILE = ROOT / "docs" / "protocol" / "vwcamper.lua"
 
 
-
-
 def _state_char_short(services):
     """Mirrors calictl.protocol.load's state-char pick: prefer the short ending "02"
     (the state characteristic), else fall back to the 2nd listed short, else None."""
@@ -42,8 +41,6 @@ def _state_char_short(services):
         return None
     shorts = [str(s).lower() for s in services]
     return next((s for s in shorts if s.endswith("02")), shorts[1] if len(shorts) > 1 else None)
-
-
 
 
 def _layout(field):
@@ -94,7 +91,9 @@ def build(dict_path=None) -> str:
         short = _state_char_short(spec.get("state_services"))
         uuid = char_uuid(short) if short else None
 
-        field_decls.append("-- %s%s" % (name, " (state char %s)" % uuid if uuid else " (no resolvable state char)"))
+        field_decls.append(
+            "-- %s%s" % (name, " (state char %s)" % uuid if uuid else " (no resolvable state char)")
+        )
         entries: list[tuple[str, int, int]] = []
         skipped = []
         for f in state_fields:
@@ -112,11 +111,13 @@ def build(dict_path=None) -> str:
             mask_lit = _mask_literal(mask, byte_len)
             if ftype == "bool":
                 field_decls.append(
-                    'local %s = ProtoField.bool("%s", "%s", 8, nil, %s)' % (ident, abbr, fname, mask_lit))
+                    'local %s = ProtoField.bool("%s", "%s", 8, nil, %s)' % (ident, abbr, fname, mask_lit)
+                )
             else:
                 field_decls.append(
                     'local %s = ProtoField.%s("%s", "%s", base.DEC, nil, %s)'
-                    % (ident, ftype, abbr, fname, mask_lit))
+                    % (ident, ftype, abbr, fname, mask_lit)
+                )
             entries.append((ident, byte_off, byte_len))
         if skipped:
             note = "-- %s: ambiguous offset (not registered as ProtoFields): %s" % (name, ", ".join(skipped))
@@ -131,7 +132,7 @@ def build(dict_path=None) -> str:
         "-- `python3 -m tools.gen_wireshark_dissector`. See docs/protocol/README.md.",
         "--",
         "-- Best-effort Wireshark Lua dissector for the VW California T7 camper unit's vendor",
-        "-- BLE GATT protocol (see CLAUDE.md / docs/business-logic/). NOT runtime-tested",
+        "-- BLE GATT protocol (see AGENTS.md / docs/business-logic/). NOT runtime-tested",
         "-- against a live Wireshark capture — a captured BTATT value read/notified on a",
         "-- matching characteristic UUID should self-annotate per field, but verify before",
         "-- relying on it.",
@@ -139,7 +140,7 @@ def build(dict_path=None) -> str:
         "-- Bit convention (matches calictl/protocol.py to_bits/get_field): MSB-first. A field",
         "-- at bit-offset `o`, width `w` starts in byte `o // 8`, at bit `7 - (o %% 8)` (7=MSB",
         "-- .. 0=LSB) within that byte, descending for `w` bits. Fields with an unresolved",
-        '-- (`MERGED_AMBIGUOUS`) offset can\'t be masked positionally and are skipped, listed',
+        "-- (`MERGED_AMBIGUOUS`) offset can't be masked positionally and are skipped, listed",
         "-- in a comment per function instead.",
         "",
         'local vwcamper_proto = Proto("vwcamper", "VW California Camper Unit (vendor BLE)")',
@@ -169,46 +170,48 @@ def build(dict_path=None) -> str:
     lines.append("}")
     lines.append("")
 
-    lines.extend([
-        "-- Dissection: best-effort. There's no single documented Wireshark dissector table",
-        "-- keyed on a BTATT 128-bit characteristic UUID across all Wireshark versions, so we",
-        "-- try the most likely one and fall back to no-op registration (pcall-guarded).",
-        "local function char_uuid_from_pinfo()",
-        '    local ok, f = pcall(Field.new, "bluetooth.uuid128")',
-        "    if not ok or not f then",
-        "        return nil",
-        "    end",
-        "    local finfo = f()",
-        "    if not finfo then",
-        "        return nil",
-        "    end",
-        "    return tostring(finfo.value):lower()",
-        "end",
-        "",
-        "function vwcamper_proto.dissector(buffer, pinfo, tree)",
-        "    local uuid = char_uuid_from_pinfo()",
-        "    local spec = uuid and char_table[uuid]",
-        "    if not spec then",
-        "        return",
-        "    end",
-        '    pinfo.cols.protocol = "VWCAMPER"',
-        '    local subtree = tree:add(vwcamper_proto, buffer(), "VW Camper " .. spec.name .. " state")',
-        "    for _, entry in ipairs(spec.fields) do",
-        "        if buffer:len() >= entry.byte + entry.len then",
-        "            subtree:add(entry.field, buffer(entry.byte, entry.len))",
-        "        end",
-        "    end",
-        "end",
-        "",
-        "-- Best-effort registration against a UUID128 dissector table, if one exists in this",
-        "-- Wireshark build; harmless no-op otherwise.",
-        'local uuid_table = DissectorTable.get("bluetooth.uuid128") or DissectorTable.get("btatt.uuid128")',
-        "if uuid_table then",
-        "    for uuid, _ in pairs(char_table) do",
-        "        pcall(function() uuid_table:add(uuid, vwcamper_proto) end)",
-        "    end",
-        "end",
-    ])
+    lines.extend(
+        [
+            "-- Dissection: best-effort. There's no single documented Wireshark dissector table",
+            "-- keyed on a BTATT 128-bit characteristic UUID across all Wireshark versions, so we",
+            "-- try the most likely one and fall back to no-op registration (pcall-guarded).",
+            "local function char_uuid_from_pinfo()",
+            '    local ok, f = pcall(Field.new, "bluetooth.uuid128")',
+            "    if not ok or not f then",
+            "        return nil",
+            "    end",
+            "    local finfo = f()",
+            "    if not finfo then",
+            "        return nil",
+            "    end",
+            "    return tostring(finfo.value):lower()",
+            "end",
+            "",
+            "function vwcamper_proto.dissector(buffer, pinfo, tree)",
+            "    local uuid = char_uuid_from_pinfo()",
+            "    local spec = uuid and char_table[uuid]",
+            "    if not spec then",
+            "        return",
+            "    end",
+            '    pinfo.cols.protocol = "VWCAMPER"',
+            '    local subtree = tree:add(vwcamper_proto, buffer(), "VW Camper " .. spec.name .. " state")',
+            "    for _, entry in ipairs(spec.fields) do",
+            "        if buffer:len() >= entry.byte + entry.len then",
+            "            subtree:add(entry.field, buffer(entry.byte, entry.len))",
+            "        end",
+            "    end",
+            "end",
+            "",
+            "-- Best-effort registration against a UUID128 dissector table, if one exists in this",
+            "-- Wireshark build; harmless no-op otherwise.",
+            'local uuid_table = DissectorTable.get("bluetooth.uuid128") or DissectorTable.get("btatt.uuid128")',
+            "if uuid_table then",
+            "    for uuid, _ in pairs(char_table) do",
+            "        pcall(function() uuid_table:add(uuid, vwcamper_proto) end)",
+            "    end",
+            "end",
+        ]
+    )
     return "\n".join(lines).rstrip("\n") + "\n"
 
 

@@ -4,6 +4,7 @@ Never opens BLE: state comes from the poll cache and commands go through the inj
 `backend` (which bridges to serve.on_command under the BLE lock). Serves the authored
 assets in calictl/webui/ plus a small JSON API. Stdlib-only.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,21 +41,28 @@ class _NoResolveHTTPServer(ThreadingHTTPServer):
     """
 
     def server_bind(self):
-        socketserver.TCPServer.server_bind(self)   # bind the socket; skip the getfqdn() reverse lookup
+        socketserver.TCPServer.server_bind(self)  # bind the socket; skip the getfqdn() reverse lookup
         host, port = self.server_address[:2]
         self.server_name = host
         self.server_port = port
 
+
 ROOF_FUNCTION = "roof"
 # Safety-sensitive / not-live-verified targets that require an explicit client
 # confirmation flag on the POST: roof (physically moves the pop-top) and
-# airheater (fuel-burning parking heater). See CLAUDE.md "Known state".
+# airheater (fuel-burning parking heater). See AGENTS.md "Known state".
 CONFIRM_REQUIRED = {ROOF_FUNCTION, "airheater"}
-_MAX_BODY = 64 * 1024   # command POSTs are tiny JSON; reject anything larger unread
-_CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css",
-                  ".js": "text/javascript", ".json": "application/json", ".svg": "image/svg+xml",
-                  ".png": "image/png", ".webmanifest": "application/manifest+json",
-                  ".ico": "image/x-icon"}
+_MAX_BODY = 64 * 1024  # command POSTs are tiny JSON; reject anything larger unread
+_CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css",
+    ".js": "text/javascript",
+    ".json": "application/json",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".webmanifest": "application/manifest+json",
+    ".ico": "image/x-icon",
+}
 
 
 def make_handler(backend, webui_dir):
@@ -130,7 +138,7 @@ def make_handler(backend, webui_dir):
                 length = int(raw_length)
             except ValueError:
                 length = -1
-            if length < 0 or length > _MAX_BODY:   # cap: commands are tiny JSON objects
+            if length < 0 or length > _MAX_BODY:  # cap: commands are tiny JSON objects
                 return self._send_json({"error": "bad_request"}, 400)
             try:
                 req = json.loads(self.rfile.read(length) or b"{}")
@@ -166,7 +174,9 @@ def make_handler(backend, webui_dir):
                 if action == "reset" and not req.get("confirm"):
                     return self._send_json({"error": "confirm_required"}, 400)
                 value = req.get("value")
-                if action == "passkey" and not (isinstance(value, str) and len(value) == 6 and value.isdigit()):
+                if action == "passkey" and not (
+                    isinstance(value, str) and len(value) == 6 and value.isdigit()
+                ):
                     return self._send_json({"error": "bad_passkey"}, 400)
                 try:
                     return self._send_json(backend.pairing_command(action, value))
@@ -175,8 +185,10 @@ def make_handler(backend, webui_dir):
                     return self._send_json({"error": "pairing_failed"}, 500)
             if backend.read_only:
                 return self._send_json({"error": "read_only"}, 405)
-            fn = req.get("function"); what = req.get("what")
-            value = req.get("value"); confirm = bool(req.get("confirm"))
+            fn = req.get("function")
+            what = req.get("what")
+            value = req.get("value")
+            confirm = bool(req.get("confirm"))
             if not fn or not what:
                 return self._send_json({"error": "missing_function_or_what"}, 400)
             if fn in CONFIRM_REQUIRED and not confirm:

@@ -62,6 +62,7 @@ from(bucket: "buspi")
 ```
 
 ## Notes
+
 - `energy batt1_*` are only valid while the engine runs; the reader already
   suppresses the engine-off sentinel (writes no `batt1_v` then), so a gap in that
   series is expected, not a fault.

@@ -146,4 +146,4 @@ and what each does and doesn't prove.
 | Per-signal provenance + scales | [`docs/business-logic/signals.md`](https://ckeller42.github.io/open-california/business-logic/signals.html) |
 | The tested hardware + GATT map | the [hardware reference](https://ckeller42.github.io/open-california/hardware.html) |
 | Test layers, the mock unit + its fidelity gaps, CI jobs | [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html) |
-| Contributor rules + hard invariants | [`CLAUDE.md`](CLAUDE.md) |
+| Contributor rules + hard invariants | [`AGENTS.md`](AGENTS.md) |

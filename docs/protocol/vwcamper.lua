@@ -2,7 +2,7 @@
 -- `python3 -m tools.gen_wireshark_dissector`. See docs/protocol/README.md.
 --
 -- Best-effort Wireshark Lua dissector for the VW California T7 camper unit's vendor
--- BLE GATT protocol (see CLAUDE.md / docs/business-logic/). NOT runtime-tested
+-- BLE GATT protocol (see AGENTS.md / docs/business-logic/). NOT runtime-tested
 -- against a live Wireshark capture — a captured BTATT value read/notified on a
 -- matching characteristic UUID should self-annotate per field, but verify before
 -- relying on it.

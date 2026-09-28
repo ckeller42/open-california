@@ -17,6 +17,7 @@ it — unset, the fake shows a fresh random code per attempt, so this reads the 
 ``### PASSKEY nnnnnn`` line from the log instead), FAKE_UNIT_LOG (the fake unit's log, read for
 that code and tailed for the result; default $TMPDIR/applab/fake_unit.log, matching labctl.sh).
 """
+
 from __future__ import annotations
 
 import os
@@ -27,9 +28,10 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ADBUI = [sys.executable, os.path.join(HERE, "adbui.py")]
-PASSKEY = os.environ.get("FAKE_UNIT_PASSKEY")   # unset: read the fake's fresh code from its log
+PASSKEY = os.environ.get("FAKE_UNIT_PASSKEY")  # unset: read the fake's fresh code from its log
 FAKE_LOG = os.environ.get(
-    "FAKE_UNIT_LOG", os.path.join(os.environ.get("TMPDIR", "/tmp"), "applab", "fake_unit.log"))
+    "FAKE_UNIT_LOG", os.path.join(os.environ.get("TMPDIR", "/tmp"), "applab", "fake_unit.log")
+)
 PRIMARY = ("Connect now", "Continue with Remote Control", "Set up Remote Control", "Next")
 
 
@@ -66,36 +68,47 @@ def notif_has(text: str) -> bool:
 def main() -> None:
     for k in range(10):
         t = tree()
-        for line in t.splitlines():                      # tick any confirmation checkbox first
+        for line in t.splitlines():  # tick any confirmation checkbox first
             if "CheckBox" in line and "chk=false" in line and bounds(line):
-                tap_bounds(bounds(line)); time.sleep(1); t = tree()
+                tap_bounds(bounds(line))
+                time.sleep(1)
+                t = tree()
         btn = next((c for c in PRIMARY if re.search(r"'%s'" % re.escape(c), t)), None)
         title = re.findall(r"'([^']{6,70})'\s+TextView", t)
         print("[%d] %s -> %s" % (k, title[:2], btn), flush=True)
         if not btn:
             break
-        sh(*ADBUI, "tap", "^%s$" % re.escape(btn)); time.sleep(3)
+        sh(*ADBUI, "tap", "^%s$" % re.escape(btn))
+        time.sleep(3)
         if btn == "Connect now":
             break
 
     for i in range(35):
         time.sleep(1)
         if notif_has("Pairing request"):
-            print("pairing request after %ds" % (i + 1), flush=True); break
+            print("pairing request after %ds" % (i + 1), flush=True)
+            break
     else:
-        print("no pairing request appeared", flush=True); return
+        print("no pairing request appeared", flush=True)
+        return
 
-    sh("adb", "shell", "cmd", "statusbar", "expand-notifications"); time.sleep(1.5)
-    sh(*ADBUI, "tap", "Pairing request"); time.sleep(2)
+    sh("adb", "shell", "cmd", "statusbar", "expand-notifications")
+    time.sleep(1.5)
+    sh(*ADBUI, "tap", "Pairing request")
+    time.sleep(2)
     t = tree()
     ed = next((bounds(l) for l in t.splitlines() if "EditText" in l), None)
     if not ed:
-        print("no passkey field found", flush=True); return
+        print("no passkey field found", flush=True)
+        return
     passkey = PASSKEY or logged_passkey()
     if not passkey:
-        print("no passkey: set FAKE_UNIT_PASSKEY or FAKE_UNIT_LOG (none in %s)" % FAKE_LOG, flush=True); return
-    tap_bounds(ed); time.sleep(0.5)
-    sh("adb", "shell", "input", "text", passkey); time.sleep(0.7)
+        print("no passkey: set FAKE_UNIT_PASSKEY or FAKE_UNIT_LOG (none in %s)" % FAKE_LOG, flush=True)
+        return
+    tap_bounds(ed)
+    time.sleep(0.5)
+    sh("adb", "shell", "input", "text", passkey)
+    time.sleep(0.7)
     ok = next((bounds(l) for l in tree().splitlines() if re.search(r"'OK'", l)), None)
     print("OK button:", ok, flush=True)
     if ok:

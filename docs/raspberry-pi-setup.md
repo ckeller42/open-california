@@ -61,6 +61,7 @@ The installer will:
    Keep it on that screen during pairing.
 2. Scan for `VWCAMPER` and find its current address.
 3. Open `bluetoothctl` for you. Run:
+
    ```
    agent KeyboardDisplay
    default-agent
@@ -69,6 +70,7 @@ The installer will:
    trust <address>
    quit
    ```
+
 4. Verify the bond (`Paired: yes`) and capture the resolved identity address.
 
 **Gotcha:** the passkey changes on every attempt — always read the number currently on the
@@ -99,6 +101,7 @@ printf '{"address": "%s"}\n' "<your-identity-mac>" > ~/.local/state/calictl/pair
 chmod 600 ~/.local/state/calictl/pairing.json
 .venv/bin/python -m calictl status                        # verify reads (resolves from the cache)
 ```
+
 Then adapt `calictl/deploy/calictl.service` (paths, `User`, `EnvironmentFile`) and
 `sudo systemctl enable --now calictl`.
 

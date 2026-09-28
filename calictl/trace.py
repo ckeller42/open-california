@@ -25,6 +25,7 @@ heartbeat (~1.5 writes/s for hours) is skipped unless ``CALICTL_BLE_TRACE_HEARTB
    payload hex), skip the ``1003`` heartbeat unless asked, cap the file size, and stay a
    no-op otherwise.
 """
+
 from __future__ import annotations
 
 import json
@@ -48,6 +49,7 @@ def fn_name(uuid: str) -> str | None:
     global _FN_BY_CHAR
     if _FN_BY_CHAR is None:
         from . import overrides, protocol  # lazy: keep import cheap for the no-trace path
+
         funcs = protocol.load()
         overrides.apply(funcs)
         m: dict[str, str] = {"1003": "heartbeat"}
@@ -69,9 +71,11 @@ class Tracer:
 
     @classmethod
     def from_env(cls, max_bytes: int | None = None) -> Tracer:
-        return cls(os.environ.get("CALICTL_BLE_TRACE") or None,
-                   heartbeat=os.environ.get("CALICTL_BLE_TRACE_HEARTBEAT", "") not in ("", "0"),
-                   max_bytes=max_bytes or DEFAULT_MAX_BYTES)
+        return cls(
+            os.environ.get("CALICTL_BLE_TRACE") or None,
+            heartbeat=os.environ.get("CALICTL_BLE_TRACE_HEARTBEAT", "") not in ("", "0"),
+            max_bytes=max_bytes or DEFAULT_MAX_BYTES,
+        )
 
     @property
     def enabled(self) -> bool:
@@ -101,17 +105,16 @@ class Tracer:
         short = char_short(uuid)
         if short == "1003" and not self.heartbeat:
             return
-        self._emit({"t": time.time(), "ev": ev, "char": short, "fn": fn_name(uuid),
-                    "hex": bytes(data).hex()})
+        self._emit({"t": time.time(), "ev": ev, "char": short, "fn": fn_name(uuid), "hex": bytes(data).hex()})
 
     def _emit(self, rec: dict) -> None:
         try:
             if os.path.exists(self.path) and os.path.getsize(self.path) >= self.max_bytes:
-                os.replace(self.path, self.path + ".1")        # keep one predecessor
+                os.replace(self.path, self.path + ".1")  # keep one predecessor
             with open(self.path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, separators=(",", ":")) + "\n")
         except OSError:
-            pass                                               # tracing must never break BLE I/O
+            pass  # tracing must never break BLE I/O
 
 
 def get() -> Tracer:

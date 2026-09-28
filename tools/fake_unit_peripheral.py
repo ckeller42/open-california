@@ -11,6 +11,7 @@ app, so "the app accepts it" carries over to "calictl passes against it".
    refuses new bonds while its pairing screen is closed; holds one connection at a time. Evidence per
    behaviour: docs/business-logic/protocol-crosscheck-applab.md ("Pairing").
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -91,19 +92,19 @@ class FakeUnit:
             if fn in self.funcs:
                 seed[fn] = protocol.decode(self.funcs[fn], frame)
         self.unit = MockCamperUnit(seed=seed)
-        self.unit.armed = True             # the emulator app keeps its own heartbeat; don't gate
+        self.unit.armed = True  # the emulator app keeps its own heartbeat; don't gate
         self.dirty: set[str] = set()
-        self.by_state: dict[str, str] = {}   # state char uuid -> fn
+        self.by_state: dict[str, str] = {}  # state char uuid -> fn
         self.chars: dict[str, Characteristic] = {}
         self.device: Device | None = None
-        self.tasks: list = []                # keep task refs (else GC kills them)
-        self.last_beat_t: float = 0.0        # monotonic time of the last 1003 write
-        self.seen_beat = False               # a beat arrived on the current link (watchdog arms)
-        self.beats = 0                       # 1003 writes seen since start (test hook)
-        self.control_writes = 0              # control-char writes seen since start (test hook)
-        self.conn = None                     # current Bumble connection (single-link unit)
-        self.pairing_mode = True           # the unit's "Gerät verbinden" screen is open
-        self.refuse_connections = False    # test knob: drop every link at once
+        self.tasks: list = []  # keep task refs (else GC kills them)
+        self.last_beat_t: float = 0.0  # monotonic time of the last 1003 write
+        self.seen_beat = False  # a beat arrived on the current link (watchdog arms)
+        self.beats = 0  # 1003 writes seen since start (test hook)
+        self.control_writes = 0  # control-char writes seen since start (test hook)
+        self.conn = None  # current Bumble connection (single-link unit)
+        self.pairing_mode = True  # the unit's "Gerät verbinden" screen is open
+        self.refuse_connections = False  # test knob: drop every link at once
         self.drop_on_read: str | None = None  # test knob: hang up on the next GATT read of this fn
         self.fixed_passkey: int | None = None
         self.last_passkey: int | None = None
@@ -114,8 +115,13 @@ class FakeUnit:
             if fn in seed:
                 repack = _pack_state(f, seed[fn])
                 if repack != self.raw[fn]:
-                    log.warning("%s: dictionary does not round-trip the baseline frame (%s vs %s); "
-                                "serving raw until modified", fn, repack.hex(), self.raw[fn].hex())
+                    log.warning(
+                        "%s: dictionary does not round-trip the baseline frame (%s vs %s); "
+                        "serving raw until modified",
+                        fn,
+                        repack.hex(),
+                        self.raw[fn].hex(),
+                    )
 
     # --- reads / writes -------------------------------------------------------------
     def read_state(self, fn: str) -> bytes:
@@ -139,7 +145,7 @@ class FakeUnit:
         async def hang_up() -> bytes:
             log.info("READ %s -> dropping the link", fn)
             await conn.disconnect()
-            return b""                        # nobody left to answer
+            return b""  # nobody left to answer
 
         return hang_up()
 
@@ -157,6 +163,7 @@ class FakeUnit:
 
     def on_beat(self, data: bytes) -> None:
         import time
+
         self.unit.beat(data)
         self.last_beat_t = time.monotonic()
         self.seen_beat = True
@@ -189,63 +196,102 @@ class FakeUnit:
         if ch is not None and self.device is not None:
             # the value explicitly: Bumble would otherwise fetch it through the char's GATT read
             # callback, which is the central-read path (gatt_read, drop_on_read)
-            self.tasks.append(asyncio.get_event_loop().create_task(
-                self.device.notify_subscribers(ch, self.read_state(fn))))
+            self.tasks.append(
+                asyncio.get_event_loop().create_task(self.device.notify_subscribers(ch, self.read_state(fn)))
+            )
             self.tasks = [t for t in self.tasks if not t.done()]
 
     # --- GATT --------------------------------------------------------------------------
     def build_services(self) -> list[Service]:
         services = []
-        desc = lambda s: Descriptor(GATT_CHARACTERISTIC_USER_DESCRIPTION_DESCRIPTOR,  # noqa: E731
-                                    Attribute.READABLE, s.encode())
+        desc = lambda s: Descriptor(  # noqa: E731
+            GATT_CHARACTERISTIC_USER_DESCRIPTION_DESCRIPTOR,
+            Attribute.READABLE,
+            s.encode(),
+        )
         groups: dict[str, list[Characteristic]] = {}
         for fn, f in self.funcs.items():
-            slot = f.state_char[4:8]              # e.g. "1102"
+            slot = f.state_char[4:8]  # e.g. "1102"
             svc = slot[:2] + "00"
-            if fn == "general":                   # 1001 = versions, read-only (no notify)
-                groups.setdefault(svc, []).append(Characteristic(
-                    cu("1001"), Characteristic.Properties.READ, Attribute.READABLE,
-                    AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn)), [desc("Info")]))
+            if fn == "general":  # 1001 = versions, read-only (no notify)
+                groups.setdefault(svc, []).append(
+                    Characteristic(
+                        cu("1001"),
+                        Characteristic.Properties.READ,
+                        Attribute.READABLE,
+                        AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn)),
+                        [desc("Info")],
+                    )
+                )
                 continue
             props = Characteristic.Properties.READ | Characteristic.Properties.NOTIFY
             perms = Attribute.READABLE
-            if fn == "vehicle":                   # the auth-gated read that forces bonding
+            if fn == "vehicle":  # the auth-gated read that forces bonding
                 perms = Attribute.READABLE | Attribute.READ_REQUIRES_AUTHENTICATION
-            st = Characteristic(f.state_char, props, perms,
-                                AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn)),
-                                [desc("State")])
+            st = Characteristic(
+                f.state_char,
+                props,
+                perms,
+                AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn)),
+                [desc("State")],
+            )
             # The unit pushes the current value once as soon as a client enables notifications
             # (observed on buspi 2026-09-16: one notify per char right after each CCCD write).
-            st.on(Characteristic.EVENT_SUBSCRIPTION,
-                  lambda conn, notify, indicate, fn=fn: notify and self.schedule_notify(fn))
+            st.on(
+                Characteristic.EVENT_SUBSCRIPTION,
+                lambda conn, notify, indicate, fn=fn: notify and self.schedule_notify(fn),
+            )
             self.chars[fn] = st
             lst = groups.setdefault(svc, [])
             if f.control_char:
-                lst.append(Characteristic(
-                    f.control_char,
-                    Characteristic.Properties.WRITE | Characteristic.Properties.WRITE_WITHOUT_RESPONSE,
-                    Attribute.WRITEABLE,
-                    AttributeValue(write=lambda c, v, fn=fn: self.on_write(fn, v)), [desc("Control")]))
+                lst.append(
+                    Characteristic(
+                        f.control_char,
+                        Characteristic.Properties.WRITE | Characteristic.Properties.WRITE_WITHOUT_RESPONSE,
+                        Attribute.WRITEABLE,
+                        AttributeValue(write=lambda c, v, fn=fn: self.on_write(fn, v)),
+                        [desc("Control")],
+                    )
+                )
             lst.append(st)
         # service 1000 extras: 1002 opaque vehicle id, 1003 liveness counter (write)
-        groups.setdefault("1000", []).extend([
-            Characteristic(cu("1002"), Characteristic.Properties.READ, Attribute.READABLE,
-                           self.vin_fingerprint, [desc("VIN")]),
-            Characteristic(cu("1003"),
-                           Characteristic.Properties.WRITE | Characteristic.Properties.WRITE_WITHOUT_RESPONSE,
-                           Attribute.WRITEABLE,
-                           AttributeValue(write=lambda c, v: self.on_beat(bytes(v))), [desc("Counter")]),
-        ])
+        groups.setdefault("1000", []).extend(
+            [
+                Characteristic(
+                    cu("1002"),
+                    Characteristic.Properties.READ,
+                    Attribute.READABLE,
+                    self.vin_fingerprint,
+                    [desc("VIN")],
+                ),
+                Characteristic(
+                    cu("1003"),
+                    Characteristic.Properties.WRITE | Characteristic.Properties.WRITE_WITHOUT_RESPONSE,
+                    Attribute.WRITEABLE,
+                    AttributeValue(write=lambda c, v: self.on_beat(bytes(v))),
+                    [desc("Counter")],
+                ),
+            ]
+        )
         # 1900 extras the app may read on the SAT/system page
-        groups.setdefault("1900", []).extend([
-            Characteristic(cu("1903"), Characteristic.Properties.READ, Attribute.READABLE, b"0410\x000207\x00"),
-            Characteristic(cu("1904"), Characteristic.Properties.READ, Attribute.READABLE, b"California"),
-            Characteristic(cu("1905"), Characteristic.Properties.READ, Attribute.READABLE, b"********"),
-        ])
+        groups.setdefault("1900", []).extend(
+            [
+                Characteristic(
+                    cu("1903"), Characteristic.Properties.READ, Attribute.READABLE, b"0410\x000207\x00"
+                ),
+                Characteristic(cu("1904"), Characteristic.Properties.READ, Attribute.READABLE, b"California"),
+                Characteristic(cu("1905"), Characteristic.Properties.READ, Attribute.READABLE, b"********"),
+            ]
+        )
         # f000 generic write
-        groups.setdefault("f000", []).append(Characteristic(
-            cu("f000"), Characteristic.Properties.WRITE | Characteristic.Properties.WRITE_WITHOUT_RESPONSE,
-            Attribute.WRITEABLE, AttributeValue(write=lambda c, v: log.info("f000 write %s", bytes(v).hex()))))
+        groups.setdefault("f000", []).append(
+            Characteristic(
+                cu("f000"),
+                Characteristic.Properties.WRITE | Characteristic.Properties.WRITE_WITHOUT_RESPONSE,
+                Attribute.WRITEABLE,
+                AttributeValue(write=lambda c, v: log.info("f000 write %s", bytes(v).hex())),
+            )
+        )
         for svc, chars in sorted(groups.items()):
             # sort control before state before extras, by slot
             chars.sort(key=lambda ch: str(ch.uuid))
@@ -266,7 +312,8 @@ class FakeUnit:
 
         loop = asyncio.get_event_loop()
         path = os.environ.get(
-            "FAKE_UNIT_FIFO", os.path.join(os.environ.get("TMPDIR", "/tmp"), "applab", "fake_unit.in"))
+            "FAKE_UNIT_FIFO", os.path.join(os.environ.get("TMPDIR", "/tmp"), "applab", "fake_unit.in")
+        )
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             if not os.path.exists(path):
@@ -274,12 +321,15 @@ class FakeUnit:
         except OSError as e:
             log.info("scenario console disabled (no FIFO at %s: %s)", path, e)
             return
-        log.info("scenario console: echo commands into %s "
-                 "(set <fn> F=v | raw <fn> <hex> | show <fn> | pair on|off | rotate | forget | q)", path)
+        log.info(
+            "scenario console: echo commands into %s "
+            "(set <fn> F=v | raw <fn> <hex> | show <fn> | pair on|off | rotate | forget | q)",
+            path,
+        )
 
         def pump():
             while True:
-                with open(path, encoding="utf-8") as fifo:   # reopen after each writer closes (EOF)
+                with open(path, encoding="utf-8") as fifo:  # reopen after each writer closes (EOF)
                     for line in fifo:
                         loop.call_soon_threadsafe(self._console_line, line)
 
@@ -307,19 +357,25 @@ class FakeUnit:
                     self.schedule_notify(fn)
                 elif parts[0] == "show":
                     fn = parts[1]
-                    print(f"{fn} raw={self.read_state(fn).hex()} decoded={protocol.decode(self.funcs[fn], self.read_state(fn))}", flush=True)
-                elif parts[0] == "pair":          # pair on | pair off — the unit's pairing screen
+                    print(
+                        f"{fn} raw={self.read_state(fn).hex()} decoded={protocol.decode(self.funcs[fn], self.read_state(fn))}",
+                        flush=True,
+                    )
+                elif parts[0] == "pair":  # pair on | pair off — the unit's pairing screen
                     self.pairing_mode = parts[1] == "on"
                     print(f"pairing mode {'ON' if self.pairing_mode else 'off'}", flush=True)
                 elif parts[0] == "rotate":
                     self.tasks.append(asyncio.get_running_loop().create_task(self.rotate_address()))
                     self.tasks = [t for t in self.tasks if not t.done()]
-                elif parts[0] == "forget":        # like "Bluetooth zurücksetzen"
+                elif parts[0] == "forget":  # like "Bluetooth zurücksetzen"
                     self.tasks.append(asyncio.get_running_loop().create_task(self.forget_bonds()))
                     self.tasks = [t for t in self.tasks if not t.done()]
                     print("bonds forgotten", flush=True)
                 else:
-                    print("commands: set <fn> F=v ... | raw <fn> <hex> | show <fn> | pair on|off | rotate | forget | q", flush=True)
+                    print(
+                        "commands: set <fn> F=v ... | raw <fn> <hex> | show <fn> | pair on|off | rotate | forget | q",
+                        flush=True,
+                    )
             except Exception as e:  # noqa: BLE001
                 print(f"error: {e}", flush=True)
 
@@ -339,18 +395,32 @@ class FakeUnit:
             self.conn = None
 
     async def _advertise(self) -> None:
-        adv = bytes(AdvertisingData([
-            (AdvertisingData.FLAGS, bytes([0x06])),
-            (AdvertisingData.COMPLETE_LOCAL_NAME, NAME.encode()),
-        ]))
-        scan_rsp = bytes(AdvertisingData([
-            (AdvertisingData.COMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS, UUID(cu("1000")).to_bytes()),
-        ]))
+        adv = bytes(
+            AdvertisingData(
+                [
+                    (AdvertisingData.FLAGS, bytes([0x06])),
+                    (AdvertisingData.COMPLETE_LOCAL_NAME, NAME.encode()),
+                ]
+            )
+        )
+        scan_rsp = bytes(
+            AdvertisingData(
+                [
+                    (
+                        AdvertisingData.COMPLETE_LIST_OF_128_BIT_SERVICE_CLASS_UUIDS,
+                        UUID(cu("1000")).to_bytes(),
+                    ),
+                ]
+            )
+        )
         # Legacy connectable advertising stops by itself when a central connects and auto_restart
         # resumes it on disconnect -> exactly one connection slot, like the real unit.
         await self.device.start_advertising(
-            auto_restart=True, advertising_data=adv, scan_response_data=scan_rsp,
-            own_address_type=OwnAddressType.RESOLVABLE_OR_RANDOM)
+            auto_restart=True,
+            advertising_data=adv,
+            scan_response_data=scan_rsp,
+            own_address_type=OwnAddressType.RESOLVABLE_OR_RANDOM,
+        )
 
     async def start(self) -> None:
         await self.device.power_on()
@@ -394,9 +464,18 @@ class FakeUnit:
         return str(self.device.random_address)
 
 
-def build_unit(hci_source, hci_sink, *, identity: str = IDENTITY, irk: bytes = IRK,
-               keystore: str | None = None, vin: str = "", fixed_passkey: int | None = None,
-               pairing_mode: bool = True, rpa_timeout_s: int = 900) -> FakeUnit:
+def build_unit(
+    hci_source,
+    hci_sink,
+    *,
+    identity: str = IDENTITY,
+    irk: bytes = IRK,
+    keystore: str | None = None,
+    vin: str = "",
+    fixed_passkey: int | None = None,
+    pairing_mode: bool = True,
+    rpa_timeout_s: int = 900,
+) -> FakeUnit:
     """Build (not start) the fake unit on any Bumble HCI pair: an ``open_transport`` source/sink
     (netsim, vhci) or a ``Controller`` passed as both (``LocalLink`` tests).
 
@@ -408,14 +487,20 @@ def build_unit(hci_source, hci_sink, *, identity: str = IDENTITY, irk: bytes = I
     unit.fixed_passkey = fixed_passkey
     unit.pairing_mode = pairing_mode
     cfg = DeviceConfiguration(
-        name=NAME, address=Address(identity), irk=irk,
-        le_privacy_enabled=True, le_rpa_timeout=rpa_timeout_s,
-        advertising_interval_min=100, advertising_interval_max=100,
-        keystore=f"JsonKeyStore:{keystore}" if keystore else None)
+        name=NAME,
+        address=Address(identity),
+        irk=irk,
+        le_privacy_enabled=True,
+        le_rpa_timeout=rpa_timeout_s,
+        advertising_interval_min=100,
+        advertising_interval_max=100,
+        keystore=f"JsonKeyStore:{keystore}" if keystore else None,
+    )
     dev = Device.from_config_with_hci(cfg, hci_source, hci_sink)
     unit.device = dev
     dev.add_services(unit.build_services())
     dev.pairing_config_factory = lambda conn: PairingConfig(
-        sc=True, mitm=True, bonding=True, delegate=UnitDelegate(unit))
+        sc=True, mitm=True, bonding=True, delegate=UnitDelegate(unit)
+    )
     dev.on("connection", unit._on_connection)
     return unit

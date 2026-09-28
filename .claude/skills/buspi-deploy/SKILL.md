@@ -46,16 +46,19 @@ the guided-pairing wizard's `persist_bond()`, cleared by unpair — reboot-durab
 placeholder. The systemd unit currently loads `CALICTL_ADDR`
 from `/etc/buspi/calictl.env`; a manual `calictl` run has no env, so source it (without printing
 it) first, or rely on the cache once migrated:
+
 ```sh
 export CALICTL_ADDR=$(sudo grep -oP "(?<=CALICTL_ADDR=).*" /etc/buspi/calictl.env)
 ~/solix-env/bin/python -m calictl get cooler      # or pass --addr "$CALICTL_ADDR"
 ```
 
 ### One-time migration: env → cache (APPLIED on buspi 2026-08-31; procedure kept for re-provisioning)
+
 So that the wizard's unpair actually survives a reboot (env-first would otherwise re-target the
 removed bond), make the pairing cache the source and stop setting the env var. Already done on the
 current buspi (cache seeded, `CALICTL_ADDR` removed, daemon polling from cache; env backed up at
 `/etc/buspi/calictl.env.bak-pre-cache-migration`). Re-run only on a fresh box:
+
 ```sh
 # 1) seed the cache from the current env addr (cache is home-owned; the read needs the box
 #    sudo password, so this is interactive) — additive, no risk
@@ -67,9 +70,11 @@ ssh buspi 'cd ~/open-california && env -u CALICTL_ADDR ~/solix-env/bin/python -c
 # 3) drop the CALICTL_ADDR line from the unit env (needs the box sudo password — interactive)
 ssh -t buspi 'sudo sed -i "/^CALICTL_ADDR=/d" /etc/buspi/calictl.env && sudo -n systemctl restart calictl.service'
 ```
+
 `CALICTL_ADDR` then reverts to a pure manual override (dev boxes, forcing a target).
 
 ## Notes
+
 - Long BLE ops (`get`, `set`, actuate) take ~10-60 s; run detached with a log + poll, or use
   `timeout 70`. `set` competes with the daemon for the slot — stop the daemon for clean reads.
 - buspi can drop off the network (travel router); if `ssh buspi` times out, try the Tailscale

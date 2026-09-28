@@ -1,6 +1,7 @@
 """device.py tests with a stubbed `bleak` — locks in the actuate arming protocol
 (handshake reads -> subscribe-all -> 1003 heartbeat -> control write -> readback) and
 the _session retry -> ConnectionUnavailable path, with no real BLE."""
+
 import asyncio
 import sys
 import types
@@ -22,12 +23,13 @@ class _Svc:
 
 class _FakeClient:
     """Records every GATT call in order; connect() can be told to fail N times first."""
+
     instances = []
 
     def __init__(self, addr, timeout=None, adapter=None):
         self.addr = addr
         self.is_connected = False
-        self.calls = []                 # (op, uuid, data)
+        self.calls = []  # (op, uuid, data)
         self.notified = []
         _FakeClient.instances.append(self)
 
@@ -43,13 +45,19 @@ class _FakeClient:
     @property
     def services(self):
         # two notifiable status chars + one write-only control char
-        return [_Svc([_Char(device._aux_uuid("1102"), ["read", "notify"]),
-                      _Char(device._aux_uuid("1101"), ["write"]),
-                      _Char(device._aux_uuid("1202"), ["read", "notify"])])]
+        return [
+            _Svc(
+                [
+                    _Char(device._aux_uuid("1102"), ["read", "notify"]),
+                    _Char(device._aux_uuid("1101"), ["write"]),
+                    _Char(device._aux_uuid("1202"), ["read", "notify"]),
+                ]
+            )
+        ]
 
     async def read_gatt_char(self, uuid):
         self.calls.append(("read", str(uuid), None))
-        return bytes(6)                 # any decodable payload
+        return bytes(6)  # any decodable payload
 
     async def write_gatt_char(self, uuid, data, response=None):
         self.calls.append(("write", str(uuid), bytes(data)))
@@ -66,14 +74,18 @@ def fake_bleak(monkeypatch):
     mod.BleakClient = _FakeClient
     monkeypatch.setitem(sys.modules, "bleak", mod)
     real_sleep = asyncio.sleep
-    async def _fast(*_a, **_k):        # keep sleeps instant but still yield to the loop
+
+    async def _fast(*_a, **_k):  # keep sleeps instant but still yield to the loop
         await real_sleep(0)
+
     monkeypatch.setattr(device.asyncio, "sleep", _fast)
     return _FakeClient
 
 
 def _cooler():
-    f = protocol.load(); overrides.apply(f); return f["cooler"]
+    f = protocol.load()
+    overrides.apply(f)
+    return f["cooler"]
 
 
 def test_actuate_arms_then_writes(fake_bleak):
@@ -109,13 +121,14 @@ def test_actuate_no_verify_returns_none(fake_bleak):
 
 
 def test_session_retries_then_raises(fake_bleak):
-    fake_bleak.fail_connect = 99          # every connect attempt fails
+    fake_bleak.fail_connect = 99  # every connect attempt fails
     with pytest.raises(device.ConnectionUnavailable):
         asyncio.run(device.CamperDevice("11:22:33:44:55:66").read(_cooler()))
 
 
 def test_read_all_skips_and_returns_bytes(fake_bleak):
-    funcs = protocol.load(); overrides.apply(funcs)
+    funcs = protocol.load()
+    overrides.apply(funcs)
     out = asyncio.run(device.CamperDevice("11:22:33:44:55:66").read_all(funcs))
     # every function with a state_char is present as bytes
     assert out and all(isinstance(v, bytes) for v in out.values())
@@ -124,27 +137,33 @@ def test_read_all_skips_and_returns_bytes(fake_bleak):
 
 def test_serve_poll_caches_and_interprets(fake_bleak):
     from calictl import serve
+
     s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
+
     async def _run():
-        s._ble = asyncio.Lock()             # normally created inside run()'s loop
+        s._ble = asyncio.Lock()  # normally created inside run()'s loop
         return await s.poll()
+
     states = asyncio.run(_run())
-    assert "cooler" in states and states["cooler"]     # interpreted
-    assert "cooler" in s._last                          # DECODED state cached for on_command
+    assert "cooler" in states and states["cooler"]  # interpreted
+    assert "cooler" in s._last  # DECODED state cached for on_command
 
 
 def test_on_command_reads_state_when_cache_cold(fake_bleak):
     # H1: a cold cache must NOT build a frame from defaults (would force cooler ON);
     # on_command reads the live state first.
     from calictl import serve
+
     s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
-    s._read_only = False                            # writes enabled for this actuation test
+    s._read_only = False  # writes enabled for this actuation test
+
     async def _run():
         s._ble = asyncio.Lock()
         await s.on_command("cooler", "power", "off")
+
     assert "cooler" not in s._last
     asyncio.run(_run())
-    assert "cooler" in s._last               # it did a fresh state read before actuating
+    assert "cooler" in s._last  # it did a fresh state read before actuating
 
 
 def test_actuate_on_arm_false_skips_handshake_and_arm_delay(monkeypatch):
@@ -152,15 +171,20 @@ def test_actuate_on_arm_false_skips_handshake_and_arm_delay(monkeypatch):
     handshake or wait ARM_DELAY_S -- that is the entire latency win."""
     from calictl import control
     from tools.mock_unit import MockBleakClient, MockCamperUnit
-    funcs = protocol.load(); overrides.apply(funcs)
-    unit = MockCamperUnit(); unit.armed = True            # heartbeat already ticking
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    unit = MockCamperUnit()
+    unit.armed = True  # heartbeat already ticking
     client = MockBleakClient.bind(unit)("MO:CK", timeout=1)
 
     slept = []
     real_sleep = asyncio.sleep
+
     async def fake_sleep(s, *a, **k):
         slept.append(s)
         await real_sleep(0)
+
     monkeypatch.setattr(device.asyncio, "sleep", fake_sleep)
 
     async def _run():
@@ -170,8 +194,8 @@ def test_actuate_on_arm_false_skips_handshake_and_arm_delay(monkeypatch):
         return await dev._actuate_on(client, funcs["cooler"], frame, verify=True, arm=False)
 
     post = asyncio.run(_run())
-    assert device.ARM_DELAY_S not in slept          # no 3s arm wait
-    assert post is not None and post.get("State") == 1   # write applied
+    assert device.ARM_DELAY_S not in slept  # no 3s arm wait
+    assert post is not None and post.get("State") == 1  # write applied
     assert unit.decoded("cooler")["State"] == 1
 
 
@@ -179,14 +203,20 @@ def test_actuate_roof_stops_when_event_set(fake_bleak):
     import asyncio as _a
 
     from calictl import control, overrides, protocol
-    funcs = protocol.load(); overrides.apply(funcs)
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
     f = funcs["roof"]
-    move = control.roof_frame(funcs, "open"); stop = control.roof_frame(funcs, "stop")
-    ev = _a.Event(); ev.set()                       # already-set -> loop must not stream, just STOP
+    move = control.roof_frame(funcs, "open")
+    stop = control.roof_frame(funcs, "stop")
+    ev = _a.Event()
+    ev.set()  # already-set -> loop must not stream, just STOP
+
     async def _run():
         dev = device.CamperDevice("11:22:33:44:55:66")
         await dev.actuate_roof(f, move, stop, verify=False, validate_s=None, stop_event=ev)
         return fake_bleak.instances[-1]
+
     cli = asyncio.run(_run())
     # byte 0 is the direction (bytes 1-4 are the live counter); with the event pre-set the move
     # loop never streams an open frame (dir 0x01) — only the STOP frame (dir 0x00) is written.
@@ -203,22 +233,30 @@ def test_actuate_roof_stops_at_limit_position(fake_bleak, monkeypatch):
        :links: R_ROOF_ACTUATE
     """
     from calictl import control, overrides, protocol
-    funcs = protocol.load(); overrides.apply(funcs)
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
     f = funcs["roof"]
-    move = control.roof_frame(funcs, "open"); stop = control.roof_frame(funcs, "stop")
+    move = control.roof_frame(funcs, "open")
+    stop = control.roof_frame(funcs, "stop")
     # Position is the 4-bit field at offset 0 (MSB-first) -> high nibble. 0x10 -> Position 1 = "open",
     # the terminal for an "open" move. State-char reads report already-at-limit; other reads = zeros.
     open_payload = bytes([0x10]) + bytes(15)
+
     async def _read(self, uuid):
         self.calls.append(("read", str(uuid), None))
         return open_payload if str(uuid) == f.state_char else bytes(6)
+
     monkeypatch.setattr(fake_bleak, "read_gatt_char", _read)
-    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.0)   # poll after every frame
+    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.0)  # poll after every frame
+
     async def _run():
         dev = device.CamperDevice("11:22:33:44:55:66")
-        await dev.actuate_roof(f, move, stop, verify=False, validate_s=None,
-                               limit_positions=control.roof_limit_positions("open"))
+        await dev.actuate_roof(
+            f, move, stop, verify=False, validate_s=None, limit_positions=control.roof_limit_positions("open")
+        )
         return fake_bleak.instances[-1]
+
     cli = asyncio.run(_run())
     dirs = [d[0] for op, u, d in cli.calls if op == "write" and u == f.control_char]
     # reached the open limit right after the first frame -> exactly one move (0x01), then STOP (0x00)
@@ -319,7 +357,7 @@ def test_unpaired_device_refuses_without_touching_ble(monkeypatch):
     dev = device.CamperDevice(device.UNPAIRED_ADDR)
     assert dev.paired is False
     with pytest.raises(device.ConnectionUnavailable, match="^not paired"):
-        asyncio.run(asyncio.wait_for(dev._session(), 1.0))   # no 3x4 s retry sleep either
+        asyncio.run(asyncio.wait_for(dev._session(), 1.0))  # no 3x4 s retry sleep either
 
 
 def test_paired_flag_and_placeholder_constant(monkeypatch, tmp_path):
@@ -339,6 +377,7 @@ def test_session_passes_the_adapter_to_bleak(monkeypatch):
 
         async def connect(self):
             return True
+
     fake_bleak.BleakClient = _Client
     monkeypatch.setitem(sys.modules, "bleak", fake_bleak)
     asyncio.run(device.CamperDevice("11:22:33:44:55:66", adapter="hci1")._session())

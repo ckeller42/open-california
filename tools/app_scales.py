@@ -1,4 +1,5 @@
 """Harvest per-field scale multipliers + enums from the decompiled app."""
+
 from __future__ import annotations
 
 import os
@@ -19,6 +20,5 @@ def scales(root: str) -> dict:
             for m in re.finditer(r"\b(\w+)\s*\*\s*([0-9.]+)f?", txt):
                 field, mul = m.group(1), m.group(2).rstrip(".")
                 if field[0].isupper() and field not in out and mul not in ("0", "1"):
-                    out[field] = {"scale": mul, "getter": "%s" % os.path.relpath(path, root),
-                                  "enum": None}
+                    out[field] = {"scale": mul, "getter": "%s" % os.path.relpath(path, root), "enum": None}
     return out

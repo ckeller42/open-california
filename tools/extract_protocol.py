@@ -18,26 +18,31 @@ Sources joined per field object:
 Usage:  python3 extract_protocol.py <decompile/.../sources> [out.yaml]
 Stdlib only. Output holds protocol facts only (names, bits) — no app source.
 """
+
 from __future__ import annotations
 
 import os
 import re
 import sys
 
-UUID_RE = re.compile(r'0000([0-9a-fA-F]{4})-6[cC]77-4[bB]7[dD]-[bB][bB][fF]6-[aA]5[eE]587701[fF]3[dD]')
+UUID_RE = re.compile(r"0000([0-9a-fA-F]{4})-6[cC]77-4[bB]7[dD]-[bB][bB][fF]6-[aA]5[eE]587701[fF]3[dD]")
 INCOMING_RE = re.compile(r'"<-- Incoming Data for ([A-Za-z0-9]+)')
 SENDING_RE = re.compile(r'"--> Sending Data')
 QUOTED_RE = re.compile(r'"([^"]*)"')
-LABEL_RE = re.compile(r'^([A-Za-z][A-Za-z0-9]*):?$')
-SGA_RE = re.compile(r'this\.(\w+)\s*=\s*new sg\.a\((\d+),\s*(\d+)\)')
-BOBJ_RE = re.compile(r'this\.(\w+)\)?\.f398b')           # field objects in log order (tolerate cast `)`)
-FLOCAL_RE = re.compile(r'\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c')  # obj -> local (by position)
-FLOCAL_DECL_RE = re.compile(r'(\w+)\s*=\s*\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c')  # local = this.obj
-FPLACE_RE = re.compile(r'\w+\[(\d+)\]\s*=\s*(\w+)\[(\d+)\]')  # frame[P] = local[k]
-SUBLIST_RE = re.compile(r'(\w+)\.p\(\(Boolean\[\]\)[^;]*?subList\((\d+),\s*(\d+)\)')  # state decode aVar<-bits
+LABEL_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*):?$")
+SGA_RE = re.compile(r"this\.(\w+)\s*=\s*new sg\.a\((\d+),\s*(\d+)\)")
+BOBJ_RE = re.compile(r"this\.(\w+)\)?\.f398b")  # field objects in log order (tolerate cast `)`)
+FLOCAL_RE = re.compile(r"\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c")  # obj -> local (by position)
+FLOCAL_DECL_RE = re.compile(
+    r"(\w+)\s*=\s*\(Boolean\[\]\)\s*(?:\(sg\.a\)\s*)?this\.(\w+)\.f399c"
+)  # local = this.obj
+FPLACE_RE = re.compile(r"\w+\[(\d+)\]\s*=\s*(\w+)\[(\d+)\]")  # frame[P] = local[k]
+SUBLIST_RE = re.compile(
+    r"(\w+)\.p\(\(Boolean\[\]\)[^;]*?subList\((\d+),\s*(\d+)\)"
+)  # state decode aVar<-bits
 ENUM_RE = re.compile(r'new \w+\("([A-Z][A-Z0-9_]{2,})"')  # command/mode enum constants
 TYPECODE_WIDTH = {0: 1, 2: 8, 3: 16, 4: 2, 5: 32, 6: 4, 7: 8}
-LOG_END = re.compile(r'\.toString\(\)|xm\.a\.b\(')
+LOG_END = re.compile(r"\.toString\(\)|xm\.a\.b\(")
 
 
 def read(path):
@@ -59,8 +64,8 @@ def uuids(text):
 def _labels(window):
     out = []
     for q in QUOTED_RE.finditer(window):
-        s = re.sub(r'^<-- Incoming Data for [A-Za-z0-9]+:', '', q.group(1))
-        s = re.sub(r'^--> Sending Data:?', '', s).strip()
+        s = re.sub(r"^<-- Incoming Data for [A-Za-z0-9]+:", "", q.group(1))
+        s = re.sub(r"^--> Sending Data:?", "", s).strip()
         m = LABEL_RE.match(s)
         if m and m.group(1) not in out:
             out.append(m.group(1))
@@ -83,21 +88,21 @@ def obj_names(text, marker_re):
     result = []
     for win, _mstart in _methods_with(text, marker_re):
         objs = BOBJ_RE.findall(win)
-        names = _labels(win)   # same order as objs (each field printed once with its label)
+        names = _labels(win)  # same order as objs (each field printed once with its label)
         result.append({o: n for o, n in zip(objs, names)})
     return result
 
 
 def constructors(text):
-    cm = re.search(r'class\s+(\w+)', text)
+    cm = re.search(r"class\s+(\w+)", text)
     if not cm:
         return []
-    ctor_re = re.compile(r'\n    public ' + re.escape(cm.group(1)) + r'\(')
-    boundary = re.compile(r'\n    (?:public|private|protected|final|static|void|Object|boolean|int) ')
+    ctor_re = re.compile(r"\n    public " + re.escape(cm.group(1)) + r"\(")
+    boundary = re.compile(r"\n    (?:public|private|protected|final|static|void|Object|boolean|int) ")
     blocks = []
     for m in ctor_re.finditer(text):
         nxt = boundary.search(text, m.start() + 5)
-        blocks.append(text[m.start(): nxt.start() if nxt else len(text)])
+        blocks.append(text[m.start() : nxt.start() if nxt else len(text)])
     return blocks
 
 
@@ -128,7 +133,8 @@ def _validate_state_layout(fn_hint, fields):
         if f["offset"] < prev_end:
             sys.stderr.write(
                 "WARN: %s state overlap: %s @%d/w%d starts before bit %d\n"
-                % (fn_hint, f["name"], f["offset"], f["width"], prev_end))
+                % (fn_hint, f["name"], f["offset"], f["width"], prev_end)
+            )
         prev_end = max(prev_end, f["offset"] + f["width"])
 
 
@@ -145,7 +151,7 @@ def state_offsets(text, fn_hint=""):
         slices = [(int(a), int(b) - int(a)) for _av, a, b in SUBLIST_RE.findall(win)]
         names = _labels(win)
         if not slices:
-            return [{"name": n} for n in names]   # no layout recoverable; name-only
+            return [{"name": n} for n in names]  # no layout recoverable; name-only
         fields = []
         for i, (off, width) in enumerate(slices):
             nm = names[i] if i < len(names) else "bits_%d_%d" % (off, off + width)
@@ -175,12 +181,29 @@ def main():
         t = read(p)
         rel = os.path.relpath(p, root)
         # harvest command-enum vocabularies (drop alert IDs + BLE-internal error enums)
-        INTERNAL = ("BLUETOOTH", "SCANNING", "PERMISSION", "TIMEOUT", "TIMED_OUT",
-                    "RECONNECT", "VERSION_CHECK", "SUBSCRIPTION", "WIFI_EXLAP", "DISCONNECT")
-        ens = [e for e in enums(t)
-               if not e.endswith(("_ID", "_NOTIFICATION", "_CONFIRMED", "_INTERACTED"))
-               and not any(k in e for k in INTERNAL)]
-        cmds = [e for e in ens if any(k in e for k in ("SET_", "MODE", "_TIME", "REQUEST", "PROFILE", "PREVIEW", "WAKEUP"))]
+        INTERNAL = (
+            "BLUETOOTH",
+            "SCANNING",
+            "PERMISSION",
+            "TIMEOUT",
+            "TIMED_OUT",
+            "RECONNECT",
+            "VERSION_CHECK",
+            "SUBSCRIPTION",
+            "WIFI_EXLAP",
+            "DISCONNECT",
+        )
+        ens = [
+            e
+            for e in enums(t)
+            if not e.endswith(("_ID", "_NOTIFICATION", "_CONFIRMED", "_INTERACTED"))
+            and not any(k in e for k in INTERNAL)
+        ]
+        cmds = [
+            e
+            for e in ens
+            if any(k in e for k in ("SET_", "MODE", "_TIME", "REQUEST", "PROFILE", "PREVIEW", "WAKEUP"))
+        ]
         # keep only where command verbs dominate the group (drops incidental constants)
         if len(cmds) >= 3 and len(cmds) >= 0.5 * len(ens):
             command_enums[rel] = sorted(set(ens))
@@ -189,20 +212,25 @@ def main():
             fn = im.group(1)
             sfields = state_offsets(t, fn)
             functions[fn] = {
-                "state_fields": sfields, "state_names": [f["name"] for f in sfields],
+                "state_fields": sfields,
+                "state_names": [f["name"] for f in sfields],
                 "state_uuids": uuids(t),
-                "control": [], "control_uuid": None, "control_source": None,
+                "control": [],
+                "control_uuid": None,
+                "control_source": None,
             }
         if SENDING_RE.search(t):
             blogs = obj_names(t, SENDING_RE)
             offsets = field_offsets(t)
             for ctor in constructors(t):
                 cu = uuids(ctor)
-                decls = {o: (int(d), TYPECODE_WIDTH.get(int(tc), int(tc)))
-                         for o, d, tc in SGA_RE.findall(ctor)}
+                decls = {
+                    o: (int(d), TYPECODE_WIDTH.get(int(tc), int(tc))) for o, d, tc in SGA_RE.findall(ctor)
+                }
                 if cu and decls:
-                    control_ctors.append({"file": rel, "ctrl_uuid": cu[0],
-                                          "decls": decls, "offsets": offsets, "blogs": blogs})
+                    control_ctors.append(
+                        {"file": rel, "ctrl_uuid": cu[0], "decls": decls, "offsets": offsets, "blogs": blogs}
+                    )
 
     fn_by_prefix = {}
     for fn, e in functions.items():
@@ -217,8 +245,9 @@ def main():
             continue
         state_names = set(functions[fn]["state_names"])
         # pick the debug-log name map whose values best overlap this function's state
-        blog = max((b for b in cc["blogs"] if b),
-                   key=lambda b: len(set(b.values()) & state_names), default={})
+        blog = max(
+            (b for b in cc["blogs"] if b), key=lambda b: len(set(b.values()) & state_names), default={}
+        )
         # iterate the full named field set (log order), plus any sg.a-only objs, so
         # nothing is dropped; attach width/default/offset per object where present.
         order = list(blog.keys()) + [o for o in cc["decls"] if o not in blog]
@@ -227,9 +256,15 @@ def main():
             default, width = cc["decls"].get(obj, (None, None))
             ps = cc["offsets"].get(obj, [])
             ok = width is not None and len(ps) == width and ps[-1] - ps[0] + 1 == width
-            fields.append({"obj": obj, "name": blog.get(obj, obj),
-                           "width": width, "default": default,
-                           "offset": ps[0] if ok else None})
+            fields.append(
+                {
+                    "obj": obj,
+                    "name": blog.get(obj, obj),
+                    "width": width,
+                    "default": default,
+                    "offset": ps[0] if ok else None,
+                }
+            )
         functions[fn]["control"] = fields
         functions[fn]["control_uuid"] = cc["ctrl_uuid"]
         functions[fn]["control_source"] = cc["file"]
@@ -241,12 +276,14 @@ def main():
 
 def _emit(functions, unresolved, command_enums, out):
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    L = ["# VW California Camper Unit control dictionary",
-         "# Auto-extracted (static, object-keyed) by tools/extract_protocol.py.",
-         "# name/width/default/offset are per field object. offset MERGED_AMBIGUOUS when a",
-         "# field is placed differently across a shared (fridge/heater) control model.",
-         "# value_semantics UNVERIFIED (enum meanings/ranges) until a live pass.",
-         "functions:"]
+    L = [
+        "# VW California Camper Unit control dictionary",
+        "# Auto-extracted (static, object-keyed) by tools/extract_protocol.py.",
+        "# name/width/default/offset are per field object. offset MERGED_AMBIGUOUS when a",
+        "# field is placed differently across a shared (fridge/heater) control model.",
+        "# value_semantics UNVERIFIED (enum meanings/ranges) until a live pass.",
+        "functions:",
+    ]
     for fn in sorted(functions):
         e = functions[fn]
         L.append("  %s:" % fn.lower())
@@ -263,24 +300,29 @@ def _emit(functions, unresolved, command_enums, out):
                 wd = "width: %d, default: %d, raw_range: %s" % (f["width"], f["default"], rng)
             else:
                 wd = "width: UNKNOWN, default: UNKNOWN"
-            L.append("      - {name: %s, offset: %s, %s, value_semantics: UNVERIFIED}"
-                     % (f["name"], off, wd))
+            L.append("      - {name: %s, offset: %s, %s, value_semantics: UNVERIFIED}" % (f["name"], off, wd))
         L.append("    state_fields:")
         for f in e["state_fields"]:
             if "offset" in f:
                 L.append("      - {name: %s, offset: %d, width: %d}" % (f["name"], f["offset"], f["width"]))
             else:
                 L.append("      - {name: %s}" % f["name"])
-    L += ["", "# Control models with no matching state function (resolve via a live pass).",
-          "control_models_unresolved:"]
+    L += [
+        "",
+        "# Control models with no matching state function (resolve via a live pass).",
+        "control_models_unresolved:",
+    ]
     for cm in unresolved:
         names = [b for b in cm["blogs"] if b]
         flds = list((names[0] if names else {}).values()) or list(cm["decls"].keys())
         L.append("  - file: %s   # control char %s" % (cm["file"], cm["ctrl_uuid"]))
         L.append("    fields: [%s]" % ", ".join(flds))
-    L += ["", "# Command / mode enum vocabularies found in the app (value semantics for the",
-          "# Mode-style fields above; map to a service by package).",
-          "command_enums:"]
+    L += [
+        "",
+        "# Command / mode enum vocabularies found in the app (value semantics for the",
+        "# Mode-style fields above; map to a service by package).",
+        "command_enums:",
+    ]
     for f in sorted(command_enums):
         L.append("  %s: [%s]" % (f.replace("/", "_").replace(".java", ""), ", ".join(command_enums[f])))
     with open(out, "w") as f:
@@ -294,8 +336,10 @@ def _report(functions, unresolved):
         e = functions[fn]
         c = e["control"]
         placed = sum(1 for f in c if f["offset"] is not None)
-        print("  %-22s control=%2d (offsets %d/%d)  state=%2d  src=%s" % (
-            fn, len(c), placed, len(c), len(e["state_names"]), e["control_source"] or "-"))
+        print(
+            "  %-22s control=%2d (offsets %d/%d)  state=%2d  src=%s"
+            % (fn, len(c), placed, len(c), len(e["state_names"]), e["control_source"] or "-")
+        )
     print("=== unresolved: %d ===" % len(unresolved))
     for cm in unresolved:
         print("  %-12s ctrl=%s" % (cm["file"], cm["ctrl_uuid"]))

@@ -27,8 +27,10 @@ for how strongly each fact is proven.
 | C codec parity (`csrc/`) | the C port of the codec and three decision ports | Python and C produce identical results | `codec-parity` |
 
 `tools/ci.sh` runs most of this locally. It skips `gui-e2e` without Playwright and the C tests
-without a compiler, and it never runs the real-BlueZ VM job. The notes on the `tools/ci.sh` line
-in `CLAUDE.md` list exactly what only GitHub runs.
+without a compiler, and it never runs the real-BlueZ VM job. The git hooks (`tools/ci.sh dev`
+installs them from `.pre-commit-config.yaml`) run the fast guards and linters on every commit and
+the full suite plus the signal audit on every push. The notes on the `tools/ci.sh` line
+in `AGENTS.md` list exactly what only GitHub runs.
 
 ## Unit tests
 
@@ -241,12 +243,13 @@ the postcheck port, the ESP-IDF build).
 
 | Workflow / job | When | Runs |
 |---|---|---|
-| `ci.yml` `test` | every PR and push | full pytest suite on 3.11/3.12/3.13 (unit, mock, Bumble pairing link, vector freshness, and the C parity tests since `gcc` is present; `tests/e2e` skips without Playwright), signal audit, `screens.json` freshness, import-clean |
-| `ci.yml` `lint` | every PR and push | `ruff`, web-UI `tsc --checkJs` + `node --check` |
-| `ci.yml` `gui-e2e` | every PR and push | `tests/e2e` in Chromium over the mock daemon |
-| `ci.yml` `codec-parity` | every PR and push | C header and vector `--check`, the four codec/ports parity test modules with `gcc` |
-| `ci.yml` `pairing-real-stack` | every PR and push | `tests/realstack/vm.sh` (real BlueZ in a VM); not a required check |
-| `ci.yml` `no-vendor-material` | every PR and push | no APK/decompile/manual/vendor binaries, no real vehicle MAC, no VIN in any tracked file |
-| `ci.yml` `install-script` | every PR and push | `sh -n` + `shellcheck install.sh` |
+| `ci.yml` `test` | every PR and push to `main` | full pytest suite on 3.11/3.12/3.13 (unit, mock, Bumble pairing link, vector freshness, and the C parity tests since `gcc` is present; `tests/e2e` skips without Playwright), signal audit, `screens.json` freshness, import-clean |
+| `ci.yml` `pre-commit` | every PR and push to `main` | `pre-commit run --all-files`: `ruff` + `ruff format`, markdownlint, gitleaks (plus a working-tree scan), whitespace/YAML checks, the vendor/MAC/VIN guard, import-clean, doc-offset, `screens.json` + codec freshness, web-UI `tsc --checkJs` + `node --check` |
+| `ci.yml` `docs` | every PR | the `sphinx -W` site build (both builds) that `docs.yml` deploys from `main` (see {doc}`building-the-docs`) |
+| `ci.yml` `gui-e2e` | every PR and push to `main` | `tests/e2e` in Chromium over the mock daemon |
+| `ci.yml` `codec-parity` | every PR and push to `main` | C header and vector `--check`, the four codec/ports parity test modules with `gcc` |
+| `ci.yml` `pairing-real-stack` | every PR and push to `main` | `tests/realstack/vm.sh` (real BlueZ in a VM); not a required check |
+| `ci.yml` `no-vendor-material` | every PR and push to `main` | no APK/decompile/manual/vendor binaries, no real vehicle MAC, no VIN in any tracked file |
+| `ci.yml` `install-script` | every PR and push to `main` | `sh -n` + `shellcheck install.sh` |
 | `docs.yml` | push to `main` (docs/code paths) only | `sphinx -W` site build + GitHub Pages deploy (see {doc}`building-the-docs`) |
 | `screenshots.yml` | push to `main` (web UI / mock paths) only | re-render `docs/screenshots` over the mock and commit them with `[skip ci]` |

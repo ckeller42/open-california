@@ -24,6 +24,7 @@ Checks (each a section of the report):
 The trace is evidence, the mock is a model: a difference here is a mock bug or a new protocol fact,
 never a reason to edit the trace.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -69,8 +70,11 @@ def cadence(events) -> dict:
         ts.sort()
         span = (ts[-1] - ts[0]) if len(ts) > 1 else 0.0
         gaps = [b - a for a, b in zip(ts, ts[1:])]
-        out[ch] = {"n": len(ts), "per_min": round(60 * (len(ts) - 1) / span, 2) if span else None,
-                   "median_s": round(statistics.median(gaps), 3) if gaps else None}
+        out[ch] = {
+            "n": len(ts),
+            "per_min": round(60 * (len(ts) - 1) / span, 2) if span else None,
+            "median_s": round(statistics.median(gaps), 3) if gaps else None,
+        }
     return out
 
 
@@ -131,6 +135,7 @@ def writes(events, funcs) -> list[dict]:
             f = funcs[e["fn"]]
             try:
                 from calictl import control
+
                 dec = control.decode_control(f, bytes.fromhex(e["hex"]))
             except Exception:  # noqa: BLE001
                 dec = None
@@ -142,12 +147,14 @@ def report(path: str) -> dict:
     funcs = protocol.load()
     overrides.apply(funcs)
     events = load(path)
-    return {"events": len(events),
-            "span_s": round(events[-1]["t"] - events[0]["t"], 1) if len(events) > 1 else 0,
-            "round_trip": round_trip(events, funcs),
-            "cadence": cadence(events),
-            "dynamics": dynamics(events, funcs),
-            "writes": writes(events, funcs)}
+    return {
+        "events": len(events),
+        "span_s": round(events[-1]["t"] - events[0]["t"], 1) if len(events) > 1 else 0,
+        "round_trip": round_trip(events, funcs),
+        "cadence": cadence(events),
+        "dynamics": dynamics(events, funcs),
+        "writes": writes(events, funcs),
+    }
 
 
 def main(argv=None) -> int:
@@ -163,7 +170,10 @@ def main(argv=None) -> int:
     print("\nround-trip (unit frame -> dictionary decode -> repack):")
     for fn, d in sorted(r["round_trip"].items()):
         flag = "OK " if not d["mismatch"] else "MISMATCH"
-        print(f"  {flag:9s} {fn:22s} {d['frames']} frames" + (f"  e.g. {d['mismatch'][0][0]} -> {d['mismatch'][0][1]}" if d["mismatch"] else ""))
+        print(
+            f"  {flag:9s} {fn:22s} {d['frames']} frames"
+            + (f"  e.g. {d['mismatch'][0][0]} -> {d['mismatch'][0][1]}" if d["mismatch"] else "")
+        )
     print("\nnotification cadence:")
     for ch, c in sorted(r["cadence"].items()):
         print(f"  {ch}  n={c['n']:5d}  per_min={c['per_min']}  median_gap={c['median_s']} s")

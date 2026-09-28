@@ -267,6 +267,7 @@ flag, source one hop unresolved); calictl offers ECO unconditionally.
 value, "Two Batt" = second/auxiliary battery, "Emp"/"Lad" = installed-equipment flags.)
 
 Post-processing (`xf/a.java:328-390`, `xf/d.java`) derives UI values from the raw fields:
+
 - SOC (state of charge) percentages: raw value × 10 → percent (`xf/a.java:333-337`, fields A0/B0 → ×10).
 - Voltage fields (`U*BemAfs`): raw ÷ 10 → volts (`:351-362`).
 - Power fields (`P*Afs`): raw × 10 → watts (`:363-374`).
@@ -413,6 +414,7 @@ the action-dispatch interface).
 f(int i)   // stage Down = i   (no send by itself)
 g(int i)   // stage Up = i, THEN send: aVar.A(); aVar.y(false)
 ```
+
 Because only `g()` transmits, the caller always calls `f(down)` first, then `g(up)` — sending both fields
 together in one write, `y(false)` (write-without-response semantics, inferred).
 

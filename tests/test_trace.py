@@ -5,6 +5,7 @@ REAL unit's traffic can be replayed through the mock and compared (tools/trace_c
    :id: T_BLE_TRACE
    :links: R_BLE_TRACE
 """
+
 import json
 import os
 
@@ -15,7 +16,7 @@ def test_trace_off_by_default_is_a_noop(tmp_path, monkeypatch):
     monkeypatch.delenv("CALICTL_BLE_TRACE", raising=False)
     t = trace.Tracer.from_env()
     assert not t.enabled
-    t.notify("00001602-6c77-4b7d-bbf6-a5e587701f3d", b"\x01\x02")   # must not raise or write
+    t.notify("00001602-6c77-4b7d-bbf6-a5e587701f3d", b"\x01\x02")  # must not raise or write
     assert list(tmp_path.iterdir()) == []
 
 
@@ -33,7 +34,7 @@ def test_trace_records_events_as_jsonl(tmp_path, monkeypatch):
     assert [e["ev"] for e in lines] == ["connect", "notify", "read", "write", "disconnect"]
     n = lines[1]
     assert n["char"] == "1602" and n["fn"] == "energy" and n["hex"] == "00d0"
-    assert isinstance(n["t"], float) and n["t"] > 1.7e9          # epoch seconds
+    assert isinstance(n["t"], float) and n["t"] > 1.7e9  # epoch seconds
     assert lines[3]["char"] == "1101" and lines[3]["fn"] == "cooler"
     assert lines[4]["reason"] == "idle"
 
@@ -58,8 +59,8 @@ def test_trace_rotates_when_too_large(tmp_path, monkeypatch):
     t = trace.Tracer.from_env(max_bytes=400)
     for i in range(40):
         t.notify("00001602-6c77-4b7d-bbf6-a5e587701f3d", bytes([i]) * 8)
-    assert p.exists() and os.path.getsize(p) <= 400 + 200            # current file stays small
-    assert (tmp_path / "ble.jsonl.1").exists()                        # one rotated predecessor
+    assert p.exists() and os.path.getsize(p) <= 400 + 200  # current file stays small
+    assert (tmp_path / "ble.jsonl.1").exists()  # one rotated predecessor
 
 
 def test_trace_reader_yields_events_in_order(tmp_path, monkeypatch):

@@ -113,6 +113,7 @@ light in the app and the read disagreed.
 logic* — polarity, combination, gating — matches the app's setter/getter code.
 `interior_light` was surfaced and emitted, so the guardrail was green while the semantics were
 wrong. Two compounding causes:
+
 1. **`semantics.campingmode` predated the catalog** and was hand-written with a naive
    `bool(field)` mapping; the signal sweep only *added missing* signals, it never re-validated
    existing interpreters against the GUI setters.

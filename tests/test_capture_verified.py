@@ -3,11 +3,14 @@
 The owner captured the CaliforniaOnTour app driving the van (idevicebtlogger). These pin the
 frames that capture verified, so a refactor can't silently drift from the app.
 """
+
 from calictl import control, overrides, protocol
 
 
 def _f():
-    f = protocol.load(); overrides.apply(f); return f
+    f = protocol.load()
+    overrides.apply(f)
+    return f
 
 
 def test_airheater_on_off_match_app_bytes():
@@ -28,6 +31,7 @@ def test_roof_direction_bytes_match_app():
 def test_vehicle_leveling_is_degrees():
     # captured raw 1004 (017e0608123b00ff930023): roll ff93 = -1.09°, pitch 0023 = 0.35°
     from calictl import semantics
+
     f = _f()
     d = protocol.decode(f["vehicle"], bytes.fromhex("017e0608123b00ff930023"))
     interp = semantics.interpret("vehicle", d)
@@ -42,6 +46,7 @@ def test_vehicle_leveling_is_degrees():
 def test_vehicle_clock_unavailable_when_rtc_unset():
     # ignition off / asleep -> all-zero time fields; clock must be None, not "1900-01-00..."
     from calictl import semantics
+
     f = _f()
     d = protocol.decode(f["vehicle"], bytes(11))
     assert semantics.interpret("vehicle", d)["car_clock"] is None

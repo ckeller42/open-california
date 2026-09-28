@@ -18,6 +18,7 @@ Kept pure so every branch is unit-tested without a live vehicle; :class:`serve.S
 persistent state and does the actuation. NB the ``enable`` bit on the camping state char mirrors
 ignition (it reads 1 while driving = blocked), so ignition-off IS the "stationary again" signal.
 """
+
 from __future__ import annotations
 
 import os
@@ -36,11 +37,27 @@ AUTO_CAMPER_MAX_FAILS = 3
 AUTO_CAMPER_MIN_SOC = 20
 
 
-def auto_camper_restore_decide(*, ignition_on, prev_ignition, master_on, prev_master,
-                               usb_on, lights_on, prev_usb, prev_lights, soc, warning, now,
-                               owe_restore, pre_drive, restore_until, fails,
-                               min_soc=AUTO_CAMPER_MIN_SOC, max_fails=AUTO_CAMPER_MAX_FAILS,
-                               window_s=AUTO_CAMPER_WINDOW_S):
+def auto_camper_restore_decide(
+    *,
+    ignition_on,
+    prev_ignition,
+    master_on,
+    prev_master,
+    usb_on,
+    lights_on,
+    prev_usb,
+    prev_lights,
+    soc,
+    warning,
+    now,
+    owe_restore,
+    pre_drive,
+    restore_until,
+    fails,
+    min_soc=AUTO_CAMPER_MIN_SOC,
+    max_fails=AUTO_CAMPER_MAX_FAILS,
+    window_s=AUTO_CAMPER_WINDOW_S,
+):
     """Decide what the restore-after-park rule does this poll. PURE — returns new state + any action.
 
     State machine (see module docstring):
@@ -92,10 +109,20 @@ def auto_camper_restore_decide(*, ignition_on, prev_ignition, master_on, prev_ma
     # master similarly faked a "manual cancel". Nothing can be actuated during a gap anyway;
     # prevs stay at the last KNOWN values and the window doesn't tick.
     if ignition_on is None or master_on is None:
-        return {"actuate": False, "restore_config": None, "owe_restore": owe_restore,
-                "pre_drive": pre_drive, "restore_until": restore_until, "fails": fails,
-                "notice": None, "restored": False, "prev_ignition": prev_ignition,
-                "prev_master": prev_master, "prev_usb": prev_usb, "prev_lights": prev_lights}
+        return {
+            "actuate": False,
+            "restore_config": None,
+            "owe_restore": owe_restore,
+            "pre_drive": pre_drive,
+            "restore_until": restore_until,
+            "fails": fails,
+            "notice": None,
+            "restored": False,
+            "prev_ignition": prev_ignition,
+            "prev_master": prev_master,
+            "prev_usb": prev_usb,
+            "prev_lights": prev_lights,
+        }
 
     ign, pign = bool(ignition_on), bool(prev_ignition)
     m, pm = bool(master_on), bool(prev_master)
@@ -126,30 +153,43 @@ def auto_camper_restore_decide(*, ignition_on, prev_ignition, master_on, prev_ma
 
     # RESTORING: parked, within the window, still owe it.
     if owe_restore and restore_until is not None and not ign:
-        if now > restore_until:                     # window elapsed without success
+        if now > restore_until:  # window elapsed without success
             owe_restore, restore_until = False, None
             notice = "Auto camper gave up: camping did not come back within the window after park."
-        elif m:                                     # camping is back on -> success
+        elif m:  # camping is back on -> success
             owe_restore, restore_until, fails, restored = False, None, 0, True
             notice = "Auto camper: camping restored after park."
         elif (soc is not None and soc < min_soc) or warning:
             # GUARD 1: low battery / warning -> the unit is protecting itself; don't restore.
             owe_restore, restore_until = False, None
-            notice = ("Auto camper stood down: battery low / warning"
-                      + (" (SoC %d%%)" % soc if soc is not None else "") + " — not restoring.")
+            notice = (
+                "Auto camper stood down: battery low / warning"
+                + (" (SoC %d%%)" % soc if soc is not None else "")
+                + " — not restoring."
+            )
         elif fails >= max_fails:
             # GUARD 2: the unit keeps refusing after park (lingering lock / low-power) -> give up.
             owe_restore, restore_until = False, None
             notice = "Auto camper gave up: camping would not re-enable after park."
         else:
-            actuate = True                          # healthy + still off -> (re)assert the restore
+            actuate = True  # healthy + still off -> (re)assert the restore
             restore_config = pre_drive
             fails += 1
 
-    return {"actuate": actuate, "restore_config": restore_config, "owe_restore": owe_restore,
-            "pre_drive": pre_drive, "restore_until": restore_until, "fails": fails,
-            "notice": notice, "restored": restored, "prev_ignition": ign, "prev_master": m,
-            "prev_usb": bool(usb_on), "prev_lights": bool(lights_on)}
+    return {
+        "actuate": actuate,
+        "restore_config": restore_config,
+        "owe_restore": owe_restore,
+        "pre_drive": pre_drive,
+        "restore_until": restore_until,
+        "fails": fails,
+        "notice": notice,
+        "restored": restored,
+        "prev_ignition": ign,
+        "prev_master": m,
+        "prev_usb": bool(usb_on),
+        "prev_lights": bool(lights_on),
+    }
 
 
 class AutoCamper:
@@ -177,16 +217,25 @@ class AutoCamper:
         self.prev_usb = None
         self.prev_lights = None
         self.owe_restore = False
-        self.pre_drive = None            # remembered {master,usb,lights} to restore after park
-        self.restore_until = None        # WALL-CLOCK deadline while restoring (persisted), else None
+        self.pre_drive = None  # remembered {master,usb,lights} to restore after park
+        self.restore_until = None  # WALL-CLOCK deadline while restoring (persisted), else None
         self.fails = 0
-        self.notice = None               # {ts, msg} — one-time log + web toast
-        self.min_soc = int(min_soc if min_soc is not None
-                           else os.environ.get("CALICTL_AUTO_CAMPER_MIN_SOC", AUTO_CAMPER_MIN_SOC))
-        self.max_fails = int(max_fails if max_fails is not None
-                             else os.environ.get("CALICTL_AUTO_CAMPER_MAX_FAILS", AUTO_CAMPER_MAX_FAILS))
-        self.window_s = float(window_s if window_s is not None
-                              else os.environ.get("CALICTL_AUTO_CAMPER_WINDOW_S", AUTO_CAMPER_WINDOW_S))
+        self.notice = None  # {ts, msg} — one-time log + web toast
+        self.min_soc = int(
+            min_soc
+            if min_soc is not None
+            else os.environ.get("CALICTL_AUTO_CAMPER_MIN_SOC", AUTO_CAMPER_MIN_SOC)
+        )
+        self.max_fails = int(
+            max_fails
+            if max_fails is not None
+            else os.environ.get("CALICTL_AUTO_CAMPER_MAX_FAILS", AUTO_CAMPER_MAX_FAILS)
+        )
+        self.window_s = float(
+            window_s
+            if window_s is not None
+            else os.environ.get("CALICTL_AUTO_CAMPER_WINDOW_S", AUTO_CAMPER_WINDOW_S)
+        )
 
     def set_enabled(self, on):
         """Toggle the feature (returns the new state). Disabling clears any owed restore. Persistence
@@ -222,19 +271,34 @@ class AutoCamper:
         usb = camp.get("usb_charger")
         lights = camp.get("lights_on")
         if not self.enabled:
-            self._track_prev(ign, master, usb, lights)   # keep edges tracked so a mid-cycle enable won't misfire
+            self._track_prev(
+                ign, master, usb, lights
+            )  # keep edges tracked so a mid-cycle enable won't misfire
             return
         soc = e.get("soc2_pct")
-        warning = bool(e.get("sleep_warning") or e.get("warning_active")
-                       or (e.get("warning_level") or 0) >= 1)
+        warning = bool(
+            e.get("sleep_warning") or e.get("warning_active") or (e.get("warning_level") or 0) >= 1
+        )
         d = auto_camper_restore_decide(
-            ignition_on=ign, prev_ignition=self.prev_ignition,
-            master_on=master, prev_master=self.prev_master,
-            usb_on=usb, lights_on=lights, prev_usb=self.prev_usb, prev_lights=self.prev_lights,
-            soc=soc, warning=warning, now=now if now is not None else time.time(),
-            owe_restore=self.owe_restore, pre_drive=self.pre_drive,
-            restore_until=self.restore_until, fails=self.fails,
-            min_soc=self.min_soc, max_fails=self.max_fails, window_s=self.window_s)
+            ignition_on=ign,
+            prev_ignition=self.prev_ignition,
+            master_on=master,
+            prev_master=self.prev_master,
+            usb_on=usb,
+            lights_on=lights,
+            prev_usb=self.prev_usb,
+            prev_lights=self.prev_lights,
+            soc=soc,
+            warning=warning,
+            now=now if now is not None else time.time(),
+            owe_restore=self.owe_restore,
+            pre_drive=self.pre_drive,
+            restore_until=self.restore_until,
+            fails=self.fails,
+            min_soc=self.min_soc,
+            max_fails=self.max_fails,
+            window_s=self.window_s,
+        )
         armed_before = self.owe_restore
         self.owe_restore = d["owe_restore"]
         self.pre_drive = d["pre_drive"]
@@ -254,26 +318,38 @@ class AutoCamper:
         else:
             event = "idle"
         if event != "idle":
-            log.warning("auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d owe=%s)"
-                  % (event, d["notice"] or event.replace("_", " "), ign, master, soc, warning,
-                     self.fails, d["owe_restore"]))
+            log.warning(
+                "auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d owe=%s)"
+                % (
+                    event,
+                    d["notice"] or event.replace("_", " "),
+                    ign,
+                    master,
+                    soc,
+                    warning,
+                    self.fails,
+                    d["owe_restore"],
+                )
+            )
         if d["notice"]:
             self.notice = {"ts": round(time.time(), 1), "msg": d["notice"]}
 
         if d["actuate"]:
             cfg = d["restore_config"] or {}
             if read_only:
-                log.warning("auto-camper: parked with a restore owed but writes are read-only; not restoring",
-                      flush=True)
-                self.owe_restore, self.restore_until = False, None   # can't act -> don't spin
+                log.warning(
+                    "auto-camper: parked with a restore owed but writes are read-only; not restoring",
+                    flush=True,
+                )
+                self.owe_restore, self.restore_until = False, None  # can't act -> don't spin
                 return
             try:
-                await actuate("campingmode", "master", "on")        # master first (gates USB+lights)
+                await actuate("campingmode", "master", "on")  # master first (gates USB+lights)
                 if cfg.get("usb"):
                     await actuate("campingmode", "usb", "on")
                 if cfg.get("lights"):
                     await actuate("campingmode", "lights", "on")
-            except Exception as ex:           # BLE hiccup etc. -> counts as a failed attempt via fails
+            except Exception as ex:  # BLE hiccup etc. -> counts as a failed attempt via fails
                 log.warning("auto-camper: restore actuation failed: %r", ex)
 
     def snapshot(self):
@@ -282,10 +358,16 @@ class AutoCamper:
 
     def to_state_dict(self):
         """The persisted per-cycle restore debt (survives a restart mid-cycle)."""
-        return {"owe_restore": self.owe_restore, "pre_drive": self.pre_drive,
-                "restore_until": self.restore_until, "fails": self.fails,
-                "prev_ignition": self.prev_ignition, "prev_master": self.prev_master,
-                "prev_usb": self.prev_usb, "prev_lights": self.prev_lights}
+        return {
+            "owe_restore": self.owe_restore,
+            "pre_drive": self.pre_drive,
+            "restore_until": self.restore_until,
+            "fails": self.fails,
+            "prev_ignition": self.prev_ignition,
+            "prev_master": self.prev_master,
+            "prev_usb": self.prev_usb,
+            "prev_lights": self.prev_lights,
+        }
 
     def load(self, enabled, state):
         """Restore the toggle + per-cycle debt from a persisted blob (best-effort; missing/null ->

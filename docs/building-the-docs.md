@@ -27,13 +27,16 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
 
 ## Where the site is built and published
 
-- **Not on pull requests.** `.github/workflows/docs.yml` runs only on a push to `main` that touches
-  `docs/**`, `ARCHITECTURE.md`, `calictl/**`, `tests/**`, `tools/gen_c_dict.py`,
-  `tools/gen_codec_vectors.py` or the workflow itself (plus a manual `workflow_dispatch`). Neither
-  `ci.yml` nor `tools/ci.sh` builds the docs, so a `sphinx -W` failure (a broken `:links:`, a bad
-  cross-reference, a new page missing from a toctree) first shows up **after merge**. Run
-  `sh docs/build_site.sh` locally before merging any docs or docstring change.
-- **Deploy:** the `build` job runs `sh docs/build_site.sh docs/_build/html` (both builds, `-W`) with
+- **On every pull request:** the `docs` job in `.github/workflows/ci.yml` runs
+  `sh docs/build_site.sh docs/_build/html` (both builds, `-W`) with `docs/requirements.txt` on
+  Python 3.12, so a `sphinx -W` failure (a broken `:links:`, a bad cross-reference, a new page
+  missing from a toctree) fails the PR instead of first showing up after merge. It only builds;
+  nothing is published from a PR. `tools/ci.sh` does not build the docs — run
+  `sh docs/build_site.sh` locally for fast feedback.
+- **On `main`:** `.github/workflows/docs.yml` runs on a push to `main` that touches `docs/**`,
+  `ARCHITECTURE.md`, `calictl/**`, `tests/**`, `tools/gen_c_dict.py`, `tools/gen_codec_vectors.py`
+  or the workflow itself (plus a manual `workflow_dispatch`).
+- **Deploy:** its `build` job runs `sh docs/build_site.sh docs/_build/html` (both builds, `-W`) with
   `docs/requirements.txt` on Python 3.12, uploads the result as a Pages artifact, and the `deploy`
   job publishes it with `actions/deploy-pages` to <https://ckeller42.github.io/open-california/>.
 - **Mermaid** renders in the browser, so `-W` does not catch a broken diagram;

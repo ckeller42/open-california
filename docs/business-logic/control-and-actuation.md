@@ -22,11 +22,13 @@ debug log and the write path never references it — it is a generic liveness si
 per-command repeat.
 
 **Confirmed on-device**, phone app **closed**, buspi the sole controller:
+
 - With the heartbeat running, `cooler.on` goes **False → True** on a `State=1` write to
   `1101` (True → False on `State=0`). Proof: `scratchpad/heartbeat_actuate.py`, then the
   productionized `calictl set cooler power on|off` (frames `3d4300000000` / `3c4300000000`).
 
 **Arm behaviour** (`scratchpad/sustain_test.py`):
+
 - **One-shot arm, NOT a deadman.** After actuation the load **latches**: cooler stayed ON
   for a full 120 s window with the heartbeat **stopped and the client disconnected**.
   Actuation is a bounded operation — the heartbeat only needs to span the write window, not
@@ -100,6 +102,7 @@ Every action setter does `field.o(value); A()/B(); y(true)`. `m2.a.y(boolean z11
 `tt.u8.e`) → `qd.q` (writeType 2, 5 s response timeout via `td/d.java:30`).
 
 **Packing / byte order (state this once):**
+
 - `tt.u8.e(Boolean[])` (`tt/u8.java:115-126`) packs **MSB-first within each byte**, into
   `ceil(nbits/8)` bytes. Multi-byte fields are **little-endian** across bytes
   (`tt/u8.java:88 c()`). Inverse for incoming state = `u8.d` (`tt/u8.java:102-113`).
@@ -118,6 +121,7 @@ Every action setter does `field.o(value); A()/B(); y(true)`. `m2.a.y(boolean z11
 
 **Cadence — one-shot release, only roof repeats.** The `jn.a` timer's 3rd ctor arg is the
 **repeat flag**:
+
 - Control release: `jn.a(500L, …, false, false)` → **one-shot** (the general case). Its
   runnable (`b1/d.java:234-245`, case 8) does **not** resend the command — it calls `v()`
   (reset all slots to sentinel) then writes **one** idle/release frame. It is a plain delay,
@@ -216,7 +220,7 @@ the owner's 2026-08-27 "roof light moved L5" observation, which the app's map do
 **on is refused by the unit while the vehicle is being driven** — a write of `campingmode master=on`
 with the engine running does NOT take: the daemon's actuation returns `applied:false` (its verify
 reads the state unchanged), no genuine `1202` push reports a change, and the **unit's own console
-display pops _"Diese Funktion ist während der Fahrt nicht verfügbar"_** ("not available while
+display pops *"Diese Funktion ist während der Fahrt nicht verfügbar"*** ("not available while
 driving"). This is the decompile's `dialog_info_campingMode_onlyPossibleWhenStationary` gate,
 enforced **unit-side** (not just an app UI block). Conversely, an engine start **sheds** camping —
 `master_on`→0 and `lights_on`→0 (and the rear USB with them, since USB is master-gated — see
@@ -231,6 +235,7 @@ for ~1 min at the engine crank** — buspi cannot reach the unit right at the st
 **Lighting — SOLVED 2026-08-16: physical actuation works; the real gate is the unit's
 WAKE/active state, not any arming frame (photon-verified).** The gap's long history, kept
 because it is instructive RE:
+
 - **2026-07-07:** SET_BRIGHTNESS (`Mode=4`) ACKed at ATT (no `0x0E`) but nothing changed under
   the identical heartbeat that actuates cooler/camping — a lighting-specific gap. The
   ProfileNumber-echo theory (`dg/h.java:615`) was **disproved live 2026-07-08**

@@ -63,6 +63,7 @@ State and Control values are **bit-packed structures**: a value is a bit array
 sliced/packed into fields at hardcoded bit offsets, per subsystem.
 
 **Encoding** (see `calictl/protocol.py`):
+
 - field value → bits: low `n` bits, **MSB-first**
 - bits → bytes: **MSB-first** (`bit 0 → byte0 0x80`)
 - round-trip verified against the app's LSB-first decoder

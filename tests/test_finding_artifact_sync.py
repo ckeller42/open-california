@@ -11,6 +11,7 @@ freshness-assertion style of ``tests/test_gen_c_dict.py``.
    :id: T_FINDING_SYNC_CODEC_ONLY
    :links: R_CHARS_PAIRING_SINGLE_SOURCE
 """
+
 import json
 import subprocess
 import sys
@@ -21,8 +22,9 @@ HOOK = Path(__file__).resolve().parents[1] / "tools" / "hooks" / "finding-artifa
 
 def _run(file_path: str) -> str:
     event = json.dumps({"tool_input": {"file_path": file_path}})
-    proc = subprocess.run([sys.executable, str(HOOK)], input=event,
-                           capture_output=True, text=True, check=True)
+    proc = subprocess.run(
+        [sys.executable, str(HOOK)], input=event, capture_output=True, text=True, check=True
+    )
     return proc.stdout.strip()
 
 

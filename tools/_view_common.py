@@ -5,6 +5,7 @@ and the YAML-load boilerplate. One home now; the UUID comes straight from
 :func:`calictl.protocol._char_uuid` so the runtime codec stays the single source of truth
 (``calictl`` is stdlib-only at import, so tools may import it freely).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -30,6 +31,7 @@ def is_placed(field) -> bool:
 def load_functions(dict_path=None) -> dict:
     """The ``functions:`` map of ``protocol/dictionary.yaml`` (PyYAML — tools-only dep)."""
     import yaml
+
     doc = yaml.safe_load(Path(dict_path or DICT_FILE).read_text())
     return doc.get("functions", doc)
 
@@ -37,4 +39,5 @@ def load_functions(dict_path=None) -> dict:
 def load_catalog(signals_path=None) -> dict:
     """The signal catalog (``protocol/signals.yaml``)."""
     import yaml
+
     return yaml.safe_load(Path(signals_path or SIGNALS_FILE).read_text()) or {}

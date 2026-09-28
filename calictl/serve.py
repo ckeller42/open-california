@@ -9,6 +9,7 @@ control write can never race a poll for the one connection slot.
 `on_command` (both may be absent on a dev box / not-yet-built), so
 `import calictl.serve` stays cheap and offline-safe.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -59,7 +60,6 @@ PAIRING_START_WAIT_S = 2.0
 _WEBUI_DIR = str(Path(__file__).resolve().parent / "webui")
 
 
-
 def installed_from(states: dict) -> set:
     """Functions whose interpreted state reports `installed` truthy."""
     return {fn for fn, i in states.items() if i.get("installed")}
@@ -104,11 +104,11 @@ class ServeBackend:
         when the van is parked and then can't be reached at all, so the UI must show the last
         known values *with an "as of" age* and an offline indicator — never a blank or a stale
         number dressed as live. `_meta` is not a function name, so it never renders as a tile."""
-        self._s._note_ui_activity()   # a browser is polling -> the UI is active; hold the session
+        self._s._note_ui_activity()  # a browser is polling -> the UI is active; hold the session
         out = {}
         for fn, decoded in dict(self._s._last or {}).items():
             out[fn] = semantics.interpret(fn, decoded)
-        semantics.apply_sw_corrections(out)   # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
+        semantics.apply_sw_corrections(out)  # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
         # Stale fresh-water: serve the last PLAUSIBLE reading (not the parked latch), flagged stale.
         water = out.get("water")
         if isinstance(water, dict) and isinstance(water.get("fresh"), dict):
@@ -117,8 +117,7 @@ class ServeBackend:
             if stale_since and isinstance(good, dict) and isinstance(good.get("fresh"), dict):
                 # the hold substitutes the WHOLE dict, so flag BOTH tanks — waste is just as held
                 # as fresh (it was served frozen-but-unflagged for a month before 2026-08-16)
-                out["water"] = {**good, "fresh": {**good["fresh"], "stale": True},
-                                "stale_since": stale_since}
+                out["water"] = {**good, "fresh": {**good["fresh"], "stale": True}, "stale_since": stale_since}
                 if isinstance(good.get("waste"), dict):
                     out["water"]["waste"] = {**good["waste"], "stale": True}
         ts = self._s._last_ok_ts
@@ -164,7 +163,7 @@ class ServeBackend:
             "cm_sw_version": g.get("cm_sw_version"),
             "comm_version": g.get("comm_version"),
             "untested": bool(g.get("firmware_untested")),
-            "tested": "amb 0409/0410 · comm 2",   # what this project was validated against
+            "tested": "amb 0409/0410 · comm 2",  # what this project was validated against
         }
 
     def set_session(self, action):
@@ -238,13 +237,19 @@ class ServeBackend:
         # the outcome collapses into on_command's None and the UI misreports it as "Sent". on_command
         # keeps its own gate for the MQTT/HA path.
         from . import control  # lazy
+
         reason = control.command_precondition(function, what, value, self._s._last or {})
         if reason:
-            return {"ok": True, "applied": False, "refused": reason, "state": None,
-                    "error": None, "function": function}
-        fut = asyncio.run_coroutine_threadsafe(
-            self._s.on_command(function, what, value), self._loop)
-        applied = fut.result(timeout=90)   # on_command returns applied-ness
+            return {
+                "ok": True,
+                "applied": False,
+                "refused": reason,
+                "state": None,
+                "error": None,
+                "function": function,
+            }
+        fut = asyncio.run_coroutine_threadsafe(self._s.on_command(function, what, value), self._loop)
+        applied = fut.result(timeout=90)  # on_command returns applied-ness
         interp = self.state().get(function)
         return {"ok": True, "applied": applied, "state": interp, "error": None, "function": function}
 
@@ -252,7 +257,8 @@ class ServeBackend:
 async def dry_run(addr=None):
     """Print the MQTT discovery configs + one live poll — no broker, no InfluxDB.
     Backs `calictl serve --dry-run`."""
-    funcs = protocol.load(); overrides.apply(funcs)
+    funcs = protocol.load()
+    overrides.apply(funcs)
     log.warning("# --- HA discovery configs ---")
     for topic, cfg in mqtt.render_discovery().items():
         print(topic, "=>", json.dumps(cfg))
@@ -261,7 +267,8 @@ async def dry_run(addr=None):
     try:
         states = await influx.poll_states(funcs, dev)
     except ConnectionUnavailable as e:
-        print("(device unreachable: %s)" % e); return
+        print("(device unreachable: %s)" % e)
+        return
     for fn, interp in states.items():
         topic, payload = mqtt.render_state(fn, interp)
         print(topic, "=>", payload)
@@ -269,42 +276,46 @@ async def dry_run(addr=None):
 
 class Server:
     def __init__(self, addr=None, *, interval=30.0, influx_enabled=True):
-        self.funcs = protocol.load(); overrides.apply(self.funcs)
+        self.funcs = protocol.load()
+        overrides.apply(self.funcs)
         self.dev = CamperDevice(addr) if addr else CamperDevice()
         self.interval = interval
         self.influx_enabled = influx_enabled
-        self._ble = None                    # asyncio.Lock(); created inside run()'s loop (shared)
-        self._published = set()             # functions whose discovery is sent
-        self._last = {}                     # function -> last DECODED state (for commands)
-        self._roof_stop = None              # asyncio.Event (lazy, loop-bound): interrupts an in-flight roof move
-        self._pairing = None                # pairing_bluez.PairingRunner (lazy: created on first /api/pairing use)
+        self._ble = None  # asyncio.Lock(); created inside run()'s loop (shared)
+        self._published = set()  # functions whose discovery is sent
+        self._last = {}  # function -> last DECODED state (for commands)
+        self._roof_stop = None  # asyncio.Event (lazy, loop-bound): interrupts an in-flight roof move
+        self._pairing = None  # pairing_bluez.PairingRunner (lazy: created on first /api/pairing use)
         self._poll_skipped_for_pairing = False  # edge-detect so the skip/resume log prints once per flow
-        self._pairing_pending = False       # "start" accepted, waiting for the _ble lock (poll skips)
-        self._pairing_start_task = None     # that waiting task (cancel/reset abandon it)
-        self._last_ok_ts = None             # epoch of the last SUCCESSFUL poll (for offline/age)
+        self._pairing_pending = False  # "start" accepted, waiting for the _ble lock (poll skips)
+        self._pairing_start_task = None  # that waiting task (cancel/reset abandon it)
+        self._last_ok_ts = None  # epoch of the last SUCCESSFUL poll (for offline/age)
         # Persist the last-known state so a restart while the van is asleep still shows the last
         # real values (the unit can be unreachable for days when parked). Env-overridable path.
         self._state_cache = os.environ.get(
-            "CALICTL_STATE_CACHE", os.path.expanduser("~/.cache/calictl/last_state.json"))
-        self._water_stale_since = None      # ts the fresh-water read went physically-impossible (stale latch)
-        self._water_good = None             # last PLAUSIBLE interpreted water (baseline for the stale guard)
+            "CALICTL_STATE_CACHE", os.path.expanduser("~/.cache/calictl/last_state.json")
+        )
+        self._water_stale_since = None  # ts the fresh-water read went physically-impossible (stale latch)
+        self._water_good = None  # last PLAUSIBLE interpreted water (baseline for the stale guard)
         # Leisure-battery history for the web UI's 24 h chart. Its own append-only file (NOT the
         # state blob: that gets rewritten every poll, and 24 h of samples would mean ~330 MB/day
         # of SD-card writes). The GUI reads this instead of Influx -- see calictl/history.py.
         self._history_cache = os.environ.get(
-            "CALICTL_HISTORY_CACHE", os.path.expanduser("~/.cache/calictl/history.jsonl"))
+            "CALICTL_HISTORY_CACHE", os.path.expanduser("~/.cache/calictl/history.jsonl")
+        )
         # Durable per-poll OUTCOME log so telemetry gaps can be classified after the fact (van
         # deep-sleep vs our-side BLE/daemon failure vs Influx-write failure). One tiny JSONL line
         # per poll cycle; a poll gap with matching "asleep" rows = deep sleep, "ble_error" rows =
         # connection loss while awake, and NO rows at all = the daemon itself was down.
         self._outcomes_cache = os.environ.get(
-            "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl"))
-        self._appends = 0                   # appends since the last trim rewrite
+            "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl")
+        )
+        self._appends = 0  # appends since the last trim rewrite
         self._mqtt = None
-        self._iw = None                     # influx write_api
+        self._iw = None  # influx write_api
         self._loop = None
-        self._web_port = None                # set by the CLI to enable the web UI
-        self._read_only = True               # SAFE DEFAULT: reject writes until explicitly enabled
+        self._web_port = None  # set by the CLI to enable the web UI
+        self._read_only = True  # SAFE DEFAULT: reject writes until explicitly enabled
         self._httpd = None
         # Persistent armed session (fast actuation). Default on; CALICTL_PERSISTENT_SESSION=0
         # falls back to the connect-per-op model. See docs/.../persistent-ble-session-design.md.
@@ -319,9 +330,13 @@ class Server:
         # the session state + wake event; the daemon shares its _ble lock (attached in run()). The
         # supervisor is the SINGLE owner of the persistent-on flag — Server._persistent is a property
         # over it (below), so there is no second copy to drift out of sync.
-        self._sessions = session.SessionSupervisor(self.dev, interval=self.interval,
-                                                   persistent=persistent,
-                                                   on_push=self._observer.on_push, ui_idle_s=_UI_IDLE_S)
+        self._sessions = session.SessionSupervisor(
+            self.dev,
+            interval=self.interval,
+            persistent=persistent,
+            on_push=self._observer.on_push,
+            ui_idle_s=_UI_IDLE_S,
+        )
         # Auto camper mode — RESTORE camping after you park (the unit refuses camping-on while driving).
         # A self-contained controller (automation.AutoCamper): owns the toggle + per-cycle restore
         # debt + step; actuates through on_command (injected). See auto-camper-mode.md. Loaded below.
@@ -330,9 +345,10 @@ class Server:
         # CHANGE triggers a raw-frame capture (calictl/firmware.py) — the only moment the old-firmware
         # wire data is recoverable. Plus plausibility anchors (calictl/anchors.py) surfaced in _meta.
         self._fw_seen = None
-        self._anchors = []                  # last poll's plausibility-anchor violations (for _meta)
+        self._anchors = []  # last poll's plausibility-anchor violations (for _meta)
         self._fw_snapshot_dir = os.environ.get(
-            "CALICTL_FW_SNAPSHOT_DIR", os.path.expanduser("~/.cache/calictl/fw-snapshots"))
+            "CALICTL_FW_SNAPSHOT_DIR", os.path.expanduser("~/.cache/calictl/fw-snapshots")
+        )
         # RE probe: log the raw F000/F001 general-purpose diagnostic register to InfluxDB (opt-in).
         self._store_gp = os.environ.get("CALICTL_STORE_GENERALPURPOSE", "").lower() in ("1", "true", "yes")
         # Load persisted state LAST — it must run AFTER every default above so it can override them
@@ -347,12 +363,16 @@ class Server:
                 blob = json.load(f)
             self._last = {fn: v for fn, v in (blob.get("last") or {}).items() if fn in self.funcs}
             self._last_ok_ts = blob.get("ts")
-            self._water_good = blob.get("water_good")      # last plausible water survives restarts
+            self._water_good = blob.get("water_good")  # last plausible water survives restarts
             self._water_stale_since = blob.get("water_stale_since")
             self._autocamper.load(blob.get("auto_camper"), blob.get("auto_camper_state"))
             fw = blob.get("fw_seen")
             self._fw_seen = tuple(fw) if isinstance(fw, list) else fw
-        except (OSError, ValueError, TypeError):   # missing/corrupt cache -> keep the defaults, never crash __init__
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+        ):  # missing/corrupt cache -> keep the defaults, never crash __init__
             pass
 
     def _save_last(self):
@@ -361,12 +381,18 @@ class Server:
             os.makedirs(os.path.dirname(self._state_cache), exist_ok=True)
             tmp = self._state_cache + ".tmp"
             with open(tmp, "w") as f:
-                json.dump({"ts": self._last_ok_ts, "last": self._last,
-                           "water_good": self._water_good,
-                           "water_stale_since": self._water_stale_since,
-                           "auto_camper": self._autocamper.enabled,
-                           "auto_camper_state": self._autocamper.to_state_dict(),
-                           "fw_seen": list(self._fw_seen) if self._fw_seen else None}, f)
+                json.dump(
+                    {
+                        "ts": self._last_ok_ts,
+                        "last": self._last,
+                        "water_good": self._water_good,
+                        "water_stale_since": self._water_stale_since,
+                        "auto_camper": self._autocamper.enabled,
+                        "auto_camper_state": self._autocamper.to_state_dict(),
+                        "fw_seen": list(self._fw_seen) if self._fw_seen else None,
+                    },
+                    f,
+                )
             os.replace(tmp, self._state_cache)
         except OSError:
             pass
@@ -377,8 +403,12 @@ class Server:
         consecutive-fail count are recorded alongside so `tools.analyze_battery --diagnose` can tell
         van deep-sleep (asleep) from an our-side connection loss (ble_error) from a dead daemon
         (no rows at all)."""
-        rec = {"ts": round(time.time(), 1), "outcome": outcome,
-               "session": self._sessions.session_state, "fails": self._sessions._backoff_fails}
+        rec = {
+            "ts": round(time.time(), 1),
+            "outcome": outcome,
+            "session": self._sessions.session_state,
+            "fails": self._sessions._backoff_fails,
+        }
         if detail:
             rec["detail"] = str(detail)[:120]
         history.append_jsonl(self._outcomes_cache, rec)
@@ -395,10 +425,11 @@ class Server:
         """
         if not energy:
             return
-        if history.append(self._history_cache, self._last_ok_ts,
-                          energy.get("batt2_v"), energy.get("batt2_current")):
+        if history.append(
+            self._history_cache, self._last_ok_ts, energy.get("batt2_v"), energy.get("batt2_current")
+        ):
             self._appends += 1
-            if self._appends >= history.TRIM_EVERY:      # amortised: ~1 rewrite per 4 h of polling
+            if self._appends >= history.TRIM_EVERY:  # amortised: ~1 rewrite per 4 h of polling
                 self._appends = 0
                 history.trim(self._history_cache)
 
@@ -461,8 +492,7 @@ class Server:
                 snap = dict(snap, state="scanning", attempts=0, error=None)
             return snap
         address = _pairing_cache_address() or os.environ.get("CALICTL_ADDR", "").strip() or None
-        return {"state": "idle", "attempts": 0, "error": None, "address": address,
-                "radio_busy": False}
+        return {"state": "idle", "attempts": 0, "error": None, "address": address, "radio_busy": False}
 
     def _ensure_pairing_runner(self):
         """Lazily construct the `PairingRunner` + `BluezTransport` pair on first use. Construction
@@ -470,6 +500,7 @@ class Server:
         cheap and safe to call even on a dev box with no BLE stack installed."""
         if self._pairing is None:
             from . import pairing_bluez  # lazy: keeps bleak/dbus_fast off calictl.serve's import path
+
             transport = pairing_bluez.BluezTransport()
             self._pairing = pairing_bluez.PairingRunner(transport)
             transport.on_event = self._pairing.handle
@@ -492,7 +523,7 @@ class Server:
         `confirm` flag already gated).
 
         On "start", parks the persistent-session supervisor FIRST (`set_mode("disconnect")`)
-        before arming the runner. RULING (single BLE owner, see CLAUDE.md): the runner's `start()`
+        before arming the runner. RULING (single BLE owner, see AGENTS.md): the runner's `start()`
         runs while holding `self._ble`, so an in-flight poll/command finishes first and no poll
         slips in between. The HTTP request never blocks on that lock: a poll can hold it ~100 s
         when the paired unit is unreachable (3 x (connect timeout + backoff)), far past the web
@@ -513,7 +544,7 @@ class Server:
         """
         if action == "start":
             self._ensure_pairing_runner()
-            if self._pairing_pending:           # a second tab pressed "Connect" meanwhile
+            if self._pairing_pending:  # a second tab pressed "Connect" meanwhile
                 return self.pairing_snapshot()
             await self._sessions.set_mode("disconnect")
             if self._ble is None:
@@ -522,7 +553,7 @@ class Server:
                 self._pairing_pending = True
                 task = asyncio.ensure_future(self._start_pairing_when_radio_free())
                 self._pairing_start_task = task
-                await asyncio.wait({task}, timeout=PAIRING_START_WAIT_S)   # never cancels it
+                await asyncio.wait({task}, timeout=PAIRING_START_WAIT_S)  # never cancels it
         elif action == "passkey":
             if self._pairing is None:
                 return self.pairing_snapshot()
@@ -546,7 +577,7 @@ class Server:
             async with self._ble:
                 if self._pairing_pending:
                     await self._pairing.start()
-                self._pairing_pending = False   # still under the lock: no poll can slip in
+                self._pairing_pending = False  # still under the lock: no poll can slip in
         except Exception as e:
             log.warning("pairing: start failed: %r" % (e,))
         finally:
@@ -568,11 +599,11 @@ class Server:
         """True while a pairing flow is accepted (pending start) or mid-flight (not idle/bonded/
         error): poll() must not open a BLE connection then."""
         return self._pairing_pending or (
-            self._pairing is not None
-            and self._pairing.snapshot()["state"] not in ("idle", "bonded", "error"))
+            self._pairing is not None and self._pairing.snapshot()["state"] not in ("idle", "bonded", "error")
+        )
 
     async def poll(self):
-        # Single BLE owner rule (CLAUDE.md): a pairing flow OWNS the radio while active (design
+        # Single BLE owner rule (AGENTS.md): a pairing flow OWNS the radio while active (design
         # spec, transport section: "the poll loop skips while pairing is active"). Polling opens
         # its OWN bleak connect -- a second BLE actor against hci0 mid-pairing is exactly what the
         # single-owner rule forbids. Skip the WHOLE read (not just parts) while a wizard run is
@@ -593,15 +624,14 @@ class Server:
                 # a "start" won the race while this poll waited for the lock: it owns the radio now
                 return {}
             sess = self._live_session()
-            raw = await (sess.read_all(self.funcs) if sess is not None
-                         else self.dev.read_all(self.funcs))
+            raw = await (sess.read_all(self.funcs) if sess is not None else self.dev.read_all(self.funcs))
         states = {}
-        new_last = dict(self._last)         # build a fresh copy, then publish atomically
+        new_last = dict(self._last)  # build a fresh copy, then publish atomically
         for fn, data in raw.items():
             decoded = protocol.decode(self.funcs[fn], data)
             new_last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
-        semantics.apply_sw_corrections(states)   # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
+        semantics.apply_sw_corrections(states)  # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
         # Firmware/protocol DRIFT: if the (amb_sw, comm) identity changed since we last saw it, dump a
         # raw-frame snapshot NOW — the old-firmware wire bytes vanish once the unit updates, and that
         # snapshot is the only thing that makes a new correction derivable. Log either way; remember +
@@ -611,16 +641,26 @@ class Server:
             # First firmware ever seen -> BASELINE snapshot. A future drift diff needs the OLD-side
             # frames, and this is the only time we can bank them before the unit updates.
             try:
-                log.info("firmware baseline (amb %s comm %s) -> %s" % (cur_fw[0], cur_fw[1],
-                      firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="baseline")))
+                log.info(
+                    "firmware baseline (amb %s comm %s) -> %s"
+                    % (
+                        cur_fw[0],
+                        cur_fw[1],
+                        firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="baseline"),
+                    )
+                )
             except Exception as e:
                 log.warning("firmware baseline snapshot failed: %s" % e)
         elif firmware.changed(self._fw_seen, cur_fw):
-            log.warning("FIRMWARE CHANGED: amb %s->%s comm %s->%s — capturing raw frames"
-                  % (self._fw_seen[0], cur_fw[0], self._fw_seen[1], cur_fw[1]))
+            log.warning(
+                "FIRMWARE CHANGED: amb %s->%s comm %s->%s — capturing raw frames"
+                % (self._fw_seen[0], cur_fw[0], self._fw_seen[1], cur_fw[1])
+            )
             try:
-                log.info("firmware drift snapshot -> %s"
-                      % firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="drift"))
+                log.info(
+                    "firmware drift snapshot -> %s"
+                    % firmware.write_snapshot(states, raw, self._fw_snapshot_dir, reason="drift")
+                )
             except Exception as e:
                 log.warning("firmware snapshot failed: %s" % e)
         if cur_fw != (None, None):
@@ -644,12 +684,12 @@ class Server:
         if new_water is not None and (new_water.get("fresh") or {}).get("liters") is not None:
             base = self._water_good
             if base is not None and freshness.implausible_water_drop(new_water, base):
-                states["water"] = base                # MQTT/Influx get the plausible level, not the latch
+                states["water"] = base  # MQTT/Influx get the plausible level, not the latch
                 self._water_stale_since = self._water_stale_since or self._last_ok_ts or time.time()
             else:
-                self._water_good = new_water           # a plausible read -> new baseline
+                self._water_good = new_water  # a plausible read -> new baseline
                 self._water_stale_since = None
-        if states:                          # a real read happened -> mark fresh + persist
+        if states:  # a real read happened -> mark fresh + persist
             # Rebind (never mutate in place): the web thread reads `_last` unlocked in
             # ServeBackend.state(), so it must only ever see a complete dict, not one
             # growing mid-iteration (RuntimeError). Reference assignment is atomic (GIL).
@@ -657,11 +697,13 @@ class Server:
             self._last_ok_ts = time.time()
             self._record_history(states.get("energy"))
             try:
-                self._observer.observe(states)          # PASSIVE: log camping/ignition changes + burst
+                self._observer.observe(states)  # PASSIVE: log camping/ignition changes + burst
             except Exception:
                 log.exception("camping-watch error:")
             try:
-                await self._autocamper.step(states, actuate=self.on_command, read_only=self._read_only)   # re-enable camper+USB after an engine start
+                await self._autocamper.step(
+                    states, actuate=self.on_command, read_only=self._read_only
+                )  # re-enable camper+USB after an engine start
             except Exception:
                 log.exception("auto-camper step error:")
             # Persist AFTER the auto-camper step so a restore debt armed THIS poll is saved this poll,
@@ -690,9 +732,11 @@ class Server:
             # against events over time to decode what the unit puts there. Off by default (noise).
             if self._store_gp and "generalpurposesignals" in states:
                 store.add("generalpurposesignals")
-            self._iw.write(bucket=os.environ.get("INFLUX_BUCKET", "buspi"),
-                           org=os.environ.get("INFLUX_ORG", "home"),
-                           record=influx.points_for({fn: states[fn] for fn in store}))
+            self._iw.write(
+                bucket=os.environ.get("INFLUX_BUCKET", "buspi"),
+                org=os.environ.get("INFLUX_ORG", "home"),
+                record=influx.points_for({fn: states[fn] for fn in store}),
+            )
         return states
 
     async def on_command(self, function, what, value):
@@ -708,6 +752,7 @@ class Server:
             path ignores this; `ServeBackend.command` surfaces it to the web UI.
         """
         from . import control  # lazy
+
         if self._read_only:
             # SAFE DEFAULT: no vehicle writes unless writes were explicitly enabled. Central gate,
             # so it also blocks the MQTT/HA command path (web.py rejects earlier with a 405).
@@ -772,6 +817,7 @@ class Server:
         lock-free — never waiting on the session/lock. The in-flight loop then breaks + writes its
         own STOP. If no move is in flight, send a real STOP under the lock."""
         from . import control  # lazy
+
         moving = self._roof_stop is not None and not self._roof_stop.is_set()
         if self._roof_stop is not None:
             self._roof_stop.set()
@@ -798,6 +844,7 @@ class Server:
         _roof_stop must run lock-free (this coroutine holds the _ble lock for the whole move).
         Caller holds the _ble lock."""
         from . import control  # lazy
+
         try:
             move_frame = control.roof_frame(self.funcs, what)
             stop_frame = control.roof_frame(self.funcs, "stop")
@@ -812,9 +859,14 @@ class Server:
         # heartbeat and the roof's arming contract requires none (the SafetyCounter is the liveness
         # proof, #150). Transient — the supervisor brings the session back after the move.
         await self._sessions.drop_for_handover()
-        await self.dev.actuate_roof(self.funcs["roof"], move_frame, stop_frame,
-                                    verify=True, stop_event=self._roof_stop,
-                                    limit_positions=control.roof_limit_positions(what))
+        await self.dev.actuate_roof(
+            self.funcs["roof"],
+            move_frame,
+            stop_frame,
+            verify=True,
+            stop_event=self._roof_stop,
+            limit_positions=control.roof_limit_positions(what),
+        )
         # roof has no set_check row -- keep the honest "not applied" (unknown).
         return None
 
@@ -829,10 +881,13 @@ class Server:
             return last
         try:
             sess = self._live_session()
-            raw = await (sess.read_one(self.funcs[function]) if sess is not None
-                         else self.dev.read(self.funcs[function]))
+            raw = await (
+                sess.read_one(self.funcs[function])
+                if sess is not None
+                else self.dev.read(self.funcs[function])
+            )
             last = protocol.decode(self.funcs[function], raw)
-            self._last = {**self._last, function: last}   # atomic rebind (web thread reads unlocked)
+            self._last = {**self._last, function: last}  # atomic rebind (web thread reads unlocked)
             return last
         except ConnectionUnavailable as e:
             log.warning("command %s skipped (no state read): %s" % (function, e))
@@ -844,6 +899,7 @@ class Server:
         precondition gate."""
         from . import control  # lazy
         from .postcheck import set_check  # lazy; shared post-write field check (no daemon->CLI import)
+
         frame = control.build(self.funcs, function, what, value, last)
         if frame is None:
             return None
@@ -861,17 +917,17 @@ class Server:
         before = None
         if is_light and getattr(sess, "_notif", None) is not None:
             before = sess._notif.get(str(self.funcs[function].state_char).lower())
-        post = await target.actuate(self.funcs[function], frame,
-                                    verify=not is_light,
-                                    follow=control.commit_for(function))
+        post = await target.actuate(
+            self.funcs[function], frame, verify=not is_light, follow=control.commit_for(function)
+        )
         if is_light:
             return await self._confirm_lighting(sess, function, what, value, before)
         if post is None:
             return None
-        self._last = {**self._last, function: post}   # atomic rebind (web thread reads unlocked)
+        self._last = {**self._last, function: post}  # atomic rebind (web thread reads unlocked)
         interp = semantics.interpret(function, post)
         _, got, want = set_check(function, what, value, interp, post)
-        if got is None and want is None:   # no table entry for this target
+        if got is None and want is None:  # no table entry for this target
             return None
         return got == want
 
@@ -887,6 +943,7 @@ class Server:
         cold path can't cheaply confirm; the next poll reconciles).
         """
         from .postcheck import set_check  # lazy
+
         f = self.funcs[function]
         notif = getattr(sess, "_notif", None)
         if notif is None:
@@ -895,7 +952,7 @@ class Server:
         deadline = time.monotonic() + _FAST_CONFIRM_S
         while time.monotonic() < deadline:
             cur = notif.get(key)
-            if cur is not None and cur is not before:          # a fresh push arrived
+            if cur is not None and cur is not before:  # a fresh push arrived
                 decoded = protocol.decode(f, cur)
                 self._last = {**self._last, function: decoded}  # atomic rebind (web thread reads unlocked)
                 interp = semantics.interpret(function, decoded)
@@ -923,7 +980,7 @@ class Server:
         try:
             cli = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION1)
         except AttributeError:
-            cli = mqtt_client.Client()   # paho-mqtt < 2.0
+            cli = mqtt_client.Client()  # paho-mqtt < 2.0
         if user:
             cli.username_pw_set(user, password)
         cli.will_set(mqtt.availability_topic(), "offline", retain=True)
@@ -954,8 +1011,9 @@ class Server:
         try:
             cli.connect(host, port, keepalive=60)
         except OSError as e:
-            log.warning("mqtt: connect to %s:%d failed (%s) — skipping MQTT (polling + web only)"
-                  % (host, port, e))
+            log.warning(
+                "mqtt: connect to %s:%d failed (%s) — skipping MQTT (polling + web only)" % (host, port, e)
+            )
             return None
         cli.loop_start()
         return cli
@@ -970,15 +1028,17 @@ class Server:
         if port is None:
             return None
         from . import web  # lazy: stdlib http.server only, keep serve.py's import light
+
         backend = ServeBackend(self, loop, read_only=getattr(self, "_read_only", False))
         try:
             httpd = web.serve_http(backend, _WEBUI_DIR, "0.0.0.0", port)
         except OSError as e:
-            log.warning("web UI failed to start on port %d (%s) — continuing without it"
-                  % (port, e))
+            log.warning("web UI failed to start on port %d (%s) — continuing without it" % (port, e))
             return None
-        log.info("web UI on http://0.0.0.0:%d%s"
-              % (port, "  (read-only)" if getattr(self, "_read_only", False) else ""))
+        log.info(
+            "web UI on http://0.0.0.0:%d%s"
+            % (port, "  (read-only)" if getattr(self, "_read_only", False) else "")
+        )
         return httpd
 
     def run(self):
@@ -987,7 +1047,7 @@ class Server:
         loop = asyncio.new_event_loop()
         self._loop = loop
         asyncio.set_event_loop(loop)
-        self._ble = asyncio.Lock()          # the van allows ONE connection; created on this loop
+        self._ble = asyncio.Lock()  # the van allows ONE connection; created on this loop
         # Hand the loop-created shared lock to the session supervisor (which also creates its own
         # loop-bound wake event in attach()). Both must be born on THIS loop, hence not in __init__.
         self._sessions.attach(self._ble)
@@ -1001,6 +1061,7 @@ class Server:
             if token:
                 from influxdb_client import InfluxDBClient
                 from influxdb_client.client.write_api import SYNCHRONOUS
+
                 url = os.environ.get("INFLUX_URL", "http://localhost:8086")
                 org = os.environ.get("INFLUX_ORG", "home")
                 client = InfluxDBClient(url=url, token=token, org=org)
@@ -1018,7 +1079,7 @@ class Server:
             while True:
                 try:
                     if self._persistent and self._sessions.session_state == "connecting":
-                        await asyncio.sleep(2)        # supervisor is mid-connect; don't race it cold
+                        await asyncio.sleep(2)  # supervisor is mid-connect; don't race it cold
                         continue
                     states = await self.poll()
                     log.debug("polled %d functions" % len(states))
@@ -1027,7 +1088,9 @@ class Server:
                     log.warning("poll skipped: %s" % e)
                     # van unreachable: "asleep" once the supervisor's backoff hit the cap (deep
                     # sleep), else a transient connection loss while it may still be awake.
-                    self._record_outcome("asleep" if self._sessions.session_state == "asleep" else "ble_error", e)
+                    self._record_outcome(
+                        "asleep" if self._sessions.session_state == "asleep" else "ble_error", e
+                    )
                 except Exception as e:
                     log.exception("poll error:")
                     self._record_outcome("error", e)
@@ -1041,7 +1104,7 @@ class Server:
             if self._mqtt is not None:
                 info = self._mqtt.publish(mqtt.availability_topic(), "offline", retain=True)
                 try:
-                    info.wait_for_publish(timeout=2)   # flush the retained "offline" before stopping
+                    info.wait_for_publish(timeout=2)  # flush the retained "offline" before stopping
                 except Exception:
                     pass
                 self._mqtt.loop_stop()

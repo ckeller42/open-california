@@ -20,6 +20,7 @@ lock + this supervisor's wake event are loop-created — they cannot exist at ``
    the reconnect backoff, and the keep-warm nudge shall live in one unit that shares the daemon's
    ``_ble`` lock but owns the session state.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,8 +42,8 @@ class SessionSupervisor:
     :param ui_idle_s: seconds of UI inactivity after which the slot is released.
     """
 
-    SESSION_BACKOFF = (5, 10, 30, 60)   # reconnect backoff seconds, capped
-    ASLEEP_AFTER = 4                    # consecutive fails at cap -> label 'asleep'
+    SESSION_BACKOFF = (5, 10, 30, 60)  # reconnect backoff seconds, capped
+    ASLEEP_AFTER = 4  # consecutive fails at cap -> label 'asleep'
 
     def __init__(self, dev, *, interval, persistent, on_push, ui_idle_s):
         self._dev = dev
@@ -51,12 +52,12 @@ class SessionSupervisor:
         self._on_push = on_push
         self._ui_idle_s = ui_idle_s
         self._session = None
-        self.session_state = "off"         # off|connecting|up|degraded|asleep
+        self.session_state = "off"  # off|connecting|up|degraded|asleep
         self._backoff_fails = 0
-        self._session_mode = None          # None = auto (activity-scoped); "release" = user disconnected
+        self._session_mode = None  # None = auto (activity-scoped); "release" = user disconnected
         self._last_ui_activity = None
-        self._ble = None                   # the SHARED lock, set by attach() in run()'s loop
-        self._wake = None                  # asyncio.Event(), created in attach() (loop-bound)
+        self._ble = None  # the SHARED lock, set by attach() in run()'s loop
+        self._wake = None  # asyncio.Event(), created in attach() (loop-bound)
 
     def attach(self, ble_lock):
         """Bind the loop-created shared ``_ble`` lock and create the wake event. Call from ``run()``
@@ -98,7 +99,7 @@ class SessionSupervisor:
         elif action == "disconnect":
             self._session_mode = "release"
             if self._wake is not None:
-                self._wake.set()   # wake the supervisor to drop the session immediately
+                self._wake.set()  # wake the supervisor to drop the session immediately
         return {"ok": True, "mode": self.mode, "session": self.session_state}
 
     def claim_intent(self):
@@ -133,7 +134,7 @@ class SessionSupervisor:
             return False
         try:
             await self._session.aclose()
-        except Exception:                     # a half-dead session still yields the slot
+        except Exception:  # a half-dead session still yields the slot
             pass
         self._session = None
         self.session_state = "off"
@@ -143,7 +144,7 @@ class SessionSupervisor:
         """Keep-warm: a command wants to actuate. If no session is up, reset the backoff the
         supervisor grew while the van slept and wake it to reconnect NOW. No-op when a session is
         already live."""
-        if (self._persistent and self._wake is not None and self.live_session() is None):
+        if self._persistent and self._wake is not None and self.live_session() is None:
             self._backoff_fails = 0
             self._wake.set()
 
@@ -151,6 +152,7 @@ class SessionSupervisor:
         """One connect attempt. Updates session_state + _backoff_fails. Returns True if it came up.
         The CALLER holds ``_ble`` around this (single-owner)."""
         from . import device  # lazy
+
         self.session_state = "connecting"
         if self._session is not None:
             # Close the outgoing session before replacing it: else its heartbeat task loops forever

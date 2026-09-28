@@ -3,6 +3,7 @@
 Imported by the Bumble-based pairing tests only; ``calictl/`` never imports Bumble. The leading
 underscore keeps pytest from collecting it.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -69,7 +70,8 @@ class KeyboardCentral(PairingDelegate):
 def pair_with(central: Device, passkey_source) -> None:
     """Make ``central`` pair (LE SC, MITM, bonding) typing codes from ``passkey_source``."""
     central.pairing_config_factory = lambda conn: PairingConfig(
-        sc=True, mitm=True, bonding=True, delegate=KeyboardCentral(passkey_source))
+        sc=True, mitm=True, bonding=True, delegate=KeyboardCentral(passkey_source)
+    )
 
 
 async def _or_link_drop(conn, coro):
@@ -105,8 +107,15 @@ class BumbleTransport:
     """The pairing runner's transport interface on a Bumble central — the CI stand-in for
     ``calictl.pairing_bluez.BluezTransport`` (BlueZ cannot run on GitHub's runners)."""
 
-    def __init__(self, central, *, device_name: str = NAME, cache_path: Path | None = None,
-                 connect_timeout: float = 5.0, on_event=None):
+    def __init__(
+        self,
+        central,
+        *,
+        device_name: str = NAME,
+        cache_path: Path | None = None,
+        connect_timeout: float = 5.0,
+        on_event=None,
+    ):
         self.on_event = on_event
         self.central = central
         self._name = device_name
@@ -157,7 +166,8 @@ class BumbleTransport:
             # connect attempt (this central's own controller) with COMMAND_DISALLOWED_ERROR.
             self._conn = await asyncio.wait_for(
                 self.central.connect(self._found, timeout=self._connect_timeout),
-                timeout=self._connect_timeout + 2.0)
+                timeout=self._connect_timeout + 2.0,
+            )
         except TimeoutError as e:
             self.central.host.controller.pending_le_connection = None
             raise ConnectionError("connect timed out (stale address)") from e
@@ -177,15 +187,22 @@ class BumbleTransport:
         try:
             await peer.discover_services()
             await peer.discover_characteristics()
-            for uuid in (device_mod.VERSION_CHAR, device_mod.AUTH_CHAR):   # 1004 is auth-gated
+            for uuid in (device_mod.VERSION_CHAR, device_mod.AUTH_CHAR):  # 1004 is auth-gated
                 await peer.get_characteristics_by_uuid(UUID(uuid))[0].read_value()
-            return sum(1 for s in peer.services for c in s.characteristics
-                       if c.properties & Characteristic.Properties.READ) or None
+            return (
+                sum(
+                    1
+                    for s in peer.services
+                    for c in s.characteristics
+                    if c.properties & Characteristic.Properties.READ
+                )
+                or None
+            )
         except Exception:
             return None
 
     async def persist_bond(self):
-        identity = str(self._conn.peer_address)   # resolved from the RPA once the IRK arrived
+        identity = str(self._conn.peer_address)  # resolved from the RPA once the IRK arrived
         if self._cache_path is not None:
             self._cache_path.write_text(json.dumps({"address": identity}))
         return identity

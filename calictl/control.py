@@ -5,12 +5,13 @@ build identical frames. Cooler/camping frames are written under a 1003 liveness 
 (`device.actuate` -> `_arm`), which is what arms actuation on-device (issue #2); the daemon's
 lighting path writes bare on an awake unit (persistent session, `arm=False`); roof streams its
 own SafetyCounter after a plain handshake (`device.actuate_roof`, no heartbeat)."""
+
 from __future__ import annotations
 
 from . import overrides, protocol, semantics
 
-LIGHT_ON, LIGHT_OFF = 0, 1   # camping lights inverted (app K0 writes (!on)?1:0). VERIFY live.
-SENTINEL = 3                 # 2-bit "leave unchanged" (sg.a default)
+LIGHT_ON, LIGHT_OFF = 0, 1  # camping lights inverted (app K0 writes (!on)?1:0). VERIFY live.
+SENTINEL = 3  # 2-bit "leave unchanged" (sg.a default)
 
 
 def _truthy(value) -> bool:
@@ -64,8 +65,7 @@ def camping_values(**changes) -> dict:
     """Only the changed field is set; every other camping field stays at the
     leave-unchanged sentinel 3 (the lights are inverted, so carrying a state
     value would be wrong; 3 = no-op per the app's control model)."""
-    vals = {"State": SENTINEL, "UsbCharger": SENTINEL,
-            "InteriorLight": SENTINEL, "OutsideLight": SENTINEL}
+    vals = {"State": SENTINEL, "UsbCharger": SENTINEL, "InteriorLight": SENTINEL, "OutsideLight": SENTINEL}
     vals.update(changes)
     return vals
 
@@ -74,13 +74,13 @@ def _camping(funcs, what, value, last):
     # Matches the app's camping screen: ONE combined "lights" toggle (tf/a K0 writes
     # 0 to BOTH light fields for ON, inverted), USB (B2) + master (z2) normal.
     # lights/usb are only effective while master (camping mode) is on.
-    on = _truthy(value)   # strips whitespace; "on " must not read as OFF
-    if what == "lights":                       # combined interior+outside, inverted
+    on = _truthy(value)  # strips whitespace; "on " must not read as OFF
+    if what == "lights":  # combined interior+outside, inverted
         v = LIGHT_ON if on else LIGHT_OFF
         ch = {"InteriorLight": v, "OutsideLight": v}
-    elif what == "usb":                        # rear USB ports, normal
+    elif what == "usb":  # rear USB ports, normal
         ch = {"UsbCharger": 1 if on else 0}
-    elif what == "master":                     # camping mode on/off, normal
+    elif what == "master":  # camping mode on/off, normal
         ch = {"State": 1 if on else 0}
     else:
         return None
@@ -93,7 +93,7 @@ def _camping(funcs, what, value, last):
 # a one-shot actuate, no commit/preamble). Mode ordinals match the read side (semantics.energy
 # `energy_mode`, enum bf/c.java). DECOMPILE-DERIVED, not yet wire-captured / live-verified.
 ENERGY_MODES = {"normal": 0, "max_charge": 1, "eco": 2}
-ENERGY_MODE_UNCHANGED = 3   # 2-bit leave-unchanged sentinel (pg/a v())
+ENERGY_MODE_UNCHANGED = 3  # 2-bit leave-unchanged sentinel (pg/a v())
 
 
 def _energy(funcs, what, value, last):
@@ -109,8 +109,7 @@ def _energy(funcs, what, value, last):
     if key not in ENERGY_MODES:
         return None
     vals = {"EnergyModeSet": ENERGY_MODES[key], "DisplayRefresh": 0}
-    return protocol.encode(funcs["energy"], vals,
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["energy"])
+    return protocol.encode(funcs["energy"], vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["energy"])
 
 
 def _cooler_values(state: dict, **changes) -> dict:
@@ -118,7 +117,8 @@ def _cooler_values(state: dict, **changes) -> dict:
     schedule (writing the current schedule back = no change), timer ACTION fields
     at no-op, then apply `changes`. (Moved from cli.cmd_set so the daemon shares it.)"""
     vals = dict(
-        State=state.get("State", 1), Mode=state.get("Mode", 4),
+        State=state.get("State", 1),
+        Mode=state.get("Mode", 4),
         Level=state.get("Level", 3),
         # Timer ACTIONS stay at their no-op sentinels; the night-schedule VALUES must carry the
         # CURRENT state. LIVE-VERIFIED 2026-08-26 (issue #99 write test): the unit takes the hour
@@ -127,11 +127,13 @@ def _cooler_values(state: dict, **changes) -> dict:
         # from the app's power-on capture, but that van had NO schedule set — 0 simply WAS the
         # current value there, so the capture couldn't distinguish "send 0" from "send current".
         # NightTimerSet is carried for the same reason (a literal 0 would disarm a set schedule).
-        TimerStart=3, TimerCancel=3,
+        TimerStart=3,
+        TimerCancel=3,
         NightTimerSet=state.get("NightTimerSet", 0),
         NightTimerHourOn=state.get("NightTimerHourOn", 0),
         NightTimerHourOff=state.get("NightTimerHourOff", 0),
-        TimerHour=state.get("TimerHourSet", 0), TimerMin=state.get("TimerMinSet", 0),
+        TimerHour=state.get("TimerHourSet", 0),
+        TimerMin=state.get("TimerMinSet", 0),
     )
     vals.update(changes)
     return vals
@@ -152,19 +154,19 @@ def _cooler(funcs, what, value, last):
     elif what == "level":
         lvl = _int_range(value, 1, 5, "cooler level")
         ch = {"Level": lvl}
-    elif what == "mode":                       # quiet mode (vf/c.java T1/x0/k0 -> Mode 0/2/4)
+    elif what == "mode":  # quiet mode (vf/c.java T1/x0/k0 -> Mode 0/2/4)
         key = str(value).strip().lower()
         if key not in COOLER_MODES:
             return None
         ch = {"Mode": COOLER_MODES[key]}
-    elif what == "timer_set":                  # start-at TimerHour:TimerMin (vf/c.java:635 y0())
+    elif what == "timer_set":  # start-at TimerHour:TimerMin (vf/c.java:635 y0())
         hh, mm = _hhmm(value)
         ch = {"TimerHour": hh, "TimerMin": mm}
-    elif what == "timer_start":                # arm cooling-start timer (vf/c.java:193 D())
+    elif what == "timer_start":  # arm cooling-start timer (vf/c.java:193 D())
         ch = {"TimerStart": 1}
-    elif what == "timer_cancel":               # cancel it (vf/c.java:251 X0())
+    elif what == "timer_cancel":  # cancel it (vf/c.java:251 X0())
         ch = {"TimerCancel": 1}
-    elif what in ("night_on", "night_off"):    # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
+    elif what in ("night_on", "night_off"):  # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
         hr = _int_range(value, 0, 23, "night timer hour")
         ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
     # NB: to ARM scheduled ("Automatisch") quiet, use `mode timer_quiet` (Mode=4) — that is the app's
@@ -175,26 +177,35 @@ def _cooler(funcs, what, value, last):
     # actually setCoolingLevel — retracted rather than ship an off-protocol write.
     else:
         return None
-    return protocol.encode(funcs["cooler"], _cooler_values(last, **ch),
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"])
+    return protocol.encode(
+        funcs["cooler"], _cooler_values(last, **ch), frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"]
+    )
 
 
 # dg/n.java Mode enum (full, verified 2026-08-17): 0=NO_MODE, 4=SET_BRIGHTNESS, 6=SET_COLOR,
 # 8=SET_DOUBLE, 12=REQUEST_CONFIG, 16=SET_PROFILE, 20=WAKEUP_TIME, 24=SYSTEM_TIME, 28=PREVIEW.
 LIGHT_MODE_SET_BRIGHTNESS = 4
-LIGHT_MODE_SET_COLOR = 6         # recolour the active profile: LightValue = palette index (1-10)
-LIGHT_MODE_SET_PROFILE = 16      # switch active profile (payload carries the ProfileNumber)
+LIGHT_MODE_SET_COLOR = 6  # recolour the active profile: LightValue = palette index (1-10)
+LIGHT_MODE_SET_PROFILE = 16  # switch active profile (payload carries the ProfileNumber)
 # Profile-number enum (dg/l.java mirrors ef/k.java): 0=LIGHTS_OFF, 1-7=FAVORITE1-7, 8=DOOR_CONTACT,
 # 9=LIVE_VIEW (the per-zone-edit profile SET_BRIGHTNESS hardcodes), 10=WAKEUP_LIGHT,
 # 11=INTERIOR_LIGHT, 12=LIGHTS_ON, 13=DEFAULT, 14=INIT sentinel.
-LIGHT_PROFILE_ALL_ON = 12        # LIGHTS_ON  — the app's "Alle Lichter" master ON  (dg/h.java:323 Q())
-LIGHT_PROFILE_ALL_OFF = 0        # LIGHTS_OFF — the app's "Alle Lichter" master OFF
+LIGHT_PROFILE_ALL_ON = 12  # LIGHTS_ON  — the app's "Alle Lichter" master ON  (dg/h.java:323 Q())
+LIGHT_PROFILE_ALL_OFF = 0  # LIGHTS_OFF — the app's "Alle Lichter" master OFF
 # Colour palette (dg/j.java, decompile 2026-07-12): SET_COLOR carries ONE index in LightValue for
 # the whole target profile — not RGB. On-device apply is UNVERIFIED (the app exposes no colour
 # control, so there is nothing to capture against); the frame layout is byte-decoded from the app.
 LIGHT_COLORS = {
-    "warm-white": 1, "blood-orange": 2, "amber": 3, "pistachio": 4, "peppermint": 5,
-    "mint": 6, "azure": 7, "dark-blue": 8, "red": 9, "salmon": 10,
+    "warm-white": 1,
+    "blood-orange": 2,
+    "amber": 3,
+    "pistachio": 4,
+    "peppermint": 5,
+    "mint": 6,
+    "azure": 7,
+    "dark-blue": 8,
+    "red": 9,
+    "salmon": 10,
 }
 # Per-zone "leave unchanged" sentinel — CRACKED via HCI capture 2026-07-08: the app fills every
 # zone it is NOT changing with 14 (0xe), not 0. 0 means "set this zone to 0"; 14 = "no change".
@@ -202,8 +213,8 @@ LIGHT_UNCHANGED = 14
 # Brightness is the dg/i.java enum, NOT a raw 0-13 scale: 0=OFF, 1-10 = 10%..100% in 10% steps,
 # 11=DEFAULT, 12 unused, 13=NOT_EQUIPPED (read-only marker for absent zones — writing it is
 # garbage; we did exactly that for "power on" until the 2026-08-16 capture).
-LIGHT_ON_BRIGHTNESS = 10         # "on" = 100% (enum PERCENTAGE_100)
-LIGHT_MAX_SET = 11               # highest settable value (11 = DEFAULT brightness)
+LIGHT_ON_BRIGHTNESS = 10  # "on" = 100% (enum PERCENTAGE_100)
+LIGHT_MAX_SET = 11  # highest settable value (11 = DEFAULT brightness)
 # Every SET_BRIGHTNESS frame the app sends hardcodes ProfileNumber=9 (LIVE_VIEW, the "live editing"
 # profile) — `w(9, PENDING)` in dg/h.java:170-264 — NOT the currently-active profile. Echoing the
 # live ProfileNumber instead (0 when the lights are off) is why our SET_BRIGHTNESS was ignored until
@@ -226,14 +237,18 @@ LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
 #     L5 = Küche Ambient, L6 = Küche Schrank, L9 = Dach Lesen, L12 = Eingang. The full real set is
 #     semantics._REAL_LIGHT_ZONES = {1..9, 12}; the older "L5/L6 by elimination" inference is superseded.
 LIGHT_ZONES = {
-    "reading-1": "BrightnessLTwo", "reading-2": "BrightnessLOne", "reading-3": "BrightnessLFour",
-    "kitchen": "BrightnessLSeven", "roof-ambient": "BrightnessLEight", "outside-rear": "BrightnessLThree",
-    "kitchen-ambient": "BrightnessLFive",    # Küche Ambientelicht (capture 2026-08-16 + isolation)
-    "kitchen-cabinet": "BrightnessLSix",     # Küche Schrank — DEVICE 2026-08-30 (owner-watched write
+    "reading-1": "BrightnessLTwo",
+    "reading-2": "BrightnessLOne",
+    "reading-3": "BrightnessLFour",
+    "kitchen": "BrightnessLSeven",
+    "roof-ambient": "BrightnessLEight",
+    "outside-rear": "BrightnessLThree",
+    "kitchen-ambient": "BrightnessLFive",  # Küche Ambientelicht (capture 2026-08-16 + isolation)
+    "kitchen-cabinet": "BrightnessLSix",  # Küche Schrank — DEVICE 2026-08-30 (owner-watched write
     #   lit the cabinet; matches decompile L6=KITCHEN_CABINETS/case16). Was mislabelled "roof-reading".
-    "roof-reading": "BrightnessLNine",       # Dach Lesen (L9) — corrected: decompile case19
+    "roof-reading": "BrightnessLNine",  # Dach Lesen (L9) — corrected: decompile case19
     #   ROOF_READING->BrightnessLNine, and L9 isolation lit the roof reading lamp 2026-08-30.
-    "entrance": "BrightnessLOneTwo",         # Eingang (L12) — DEVICE 2026-08-30 isolation.
+    "entrance": "BrightnessLOneTwo",  # Eingang (L12) — DEVICE 2026-08-30 isolation.
 }
 
 
@@ -242,8 +257,8 @@ LIGHT_ZONES = {
 # frame the unit ACKs still does nothing. Refuse-with-reason beats a silent no-op. Two known gates
 # (owner-confirmed 2026-08-30): the pop-top roof reading light (L9) is unpowered while the roof is
 # down; the cooler cooling-timer can only be set while the fridge is OFF.
-_ROOF_CLOSED_POSITIONS = (0, 14)   # matches semantics._ROOF_POS closed values
-AIRHEATER_MAX_RUNTIME_MIN = 120    # the app's cap on immediate heating (its heating info page)
+_ROOF_CLOSED_POSITIONS = (0, 14)  # matches semantics._ROOF_POS closed values
+AIRHEATER_MAX_RUNTIME_MIN = 120  # the app's cap on immediate heating (its heating info page)
 # OperationModeAirHeater is the departure-timer arm (app-observed 2026-09-16, tools/applab):
 # 7 = the app's leave-unchanged sentinel in every frame that doesn't target it, 3 = timer armed
 # (rf/b.java a2()), 0 = cancelled (j4()). OperationModeCombined names the device the timer drives
@@ -265,8 +280,18 @@ _ROOF_LIMIT_POSITIONS = {"open": frozenset({1}), "close": frozenset(_ROOF_CLOSED
 # Alerts (semantics.roof()["alert"]) under which the app refuses a roof MOVE. Must stay in step with
 # `ROOF_MOVE_BLOCK` in webui/app.js — the GUI greys open/close on exactly these. `sensor_error` is
 # deliberately NOT here (the app still allows a move with it); "stop" is never blocked by anything.
-ROOF_MOVE_BLOCK = frozenset({"child_lock", "error", "driving", "emergency_locked", "not_possible",
-                             "low_battery", "in_use", "not_stationary"})
+ROOF_MOVE_BLOCK = frozenset(
+    {
+        "child_lock",
+        "error",
+        "driving",
+        "emergency_locked",
+        "not_possible",
+        "low_battery",
+        "in_use",
+        "not_stationary",
+    }
+)
 
 
 def roof_limit_positions(direction):
@@ -288,20 +313,20 @@ def command_precondition(function, what, value, states):
     """
     if function == "lighting" and what == "roof-reading":
         try:
-            on = int(value) > 0            # brightness 0-11; only an ON write is gated
+            on = int(value) > 0  # brightness 0-11; only an ON write is gated
         except (TypeError, ValueError):
             on = False
         pos = (states.get("roof") or {}).get("Position")
         if on and pos in _ROOF_CLOSED_POSITIONS:
             return "the pop-top roof reading light needs the roof raised (roof is closed)"
     if function == "cooler" and what in ("timer_set", "timer_start"):
-        if (states.get("cooler") or {}).get("State") == 1:   # fridge currently ON
+        if (states.get("cooler") or {}).get("State") == 1:  # fridge currently ON
             return "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
     # The mirror of the above: the quiet mode and its schedule are only settable while the fridge is
     # ON (the app greys those rows when it is off — APP-OBSERVED, `evidence-ledger.md`). Without this
     # the CLI/API/HA paths could send what the app never sends; the web UI already greys them.
     if function == "cooler" and what in ("mode", "night_on", "night_off"):
-        if (states.get("cooler") or {}).get("State") == 0:   # fridge currently OFF
+        if (states.get("cooler") or {}).get("State") == 0:  # fridge currently OFF
             return "quiet mode can only be set while the fridge is on (switch the cooler on first)"
     # Camping lights + rear USB are only actionable while the camping master is ON: the rear USB is
     # physically dead without it (issue #111) and the light bits read back meaningless.
@@ -341,6 +366,7 @@ def _all_real_zones(zone_fields, b):
     conservative: never touch phantom zones.
     """
     from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
+
     real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
     return {z: (b if z in real else LIGHT_UNCHANGED) for z in zone_fields}
 
@@ -372,21 +398,31 @@ def _lighting(funcs, what, value, last):
     zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
     # SET_BRIGHTNESS/power/all hardcode ProfileNumber=9 like the app (writes land even with the
     # lights off / PN=0). SET_PROFILE overrides it with the target; SET_COLOR recolours that same 9.
-    base = {"ProfileNumber": LIGHT_BRIGHTNESS_PROFILE, "Mode": LIGHT_MODE_SET_BRIGHTNESS,
-            "Timestamp": 0, "LightValue": 0}
+    base = {
+        "ProfileNumber": LIGHT_BRIGHTNESS_PROFILE,
+        "Mode": LIGHT_MODE_SET_BRIGHTNESS,
+        "Timestamp": 0,
+        "LightValue": 0,
+    }
 
     def _b(v):
         # settable brightness is the dg/i enum 0-11 (0=off, 1-10=10%..100%, 11=default);
         # 12 is unused, 13=NOT_EQUIPPED and 14=unchanged are markers, never valid to set.
         b = int(v)
         if not 0 <= b <= LIGHT_MAX_SET:
-            raise ValueError("lighting brightness must be 0-%d (0=off, 1-10=10%%..100%%, "
-                             "11=default), got %r" % (LIGHT_MAX_SET, v))
+            raise ValueError(
+                "lighting brightness must be 0-%d (0=off, 1-10=10%%..100%%, "
+                "11=default), got %r" % (LIGHT_MAX_SET, v)
+            )
         return b
 
     if what == "profile":
-        vals = {**base, "Mode": LIGHT_MODE_SET_PROFILE, "ProfileNumber": int(value),
-                **{z: LIGHT_UNCHANGED for z in zone_fields}}
+        vals = {
+            **base,
+            "Mode": LIGHT_MODE_SET_PROFILE,
+            "ProfileNumber": int(value),
+            **{z: LIGHT_UNCHANGED for z in zone_fields},
+        }
     elif what == "save_profile":
         # Save the CURRENT lighting into a favorite (dg/h.java:564 l3 applyProfileBrightness):
         # SET_BRIGHTNESS with ProfileNumber = the favorite N (NOT the live-view 9), every equipped
@@ -394,33 +430,42 @@ def _lighting(funcs, what, value, last):
         # This is how the app DEFINES a favorite. Decompile-derived; NOT yet wire-verified.
         n = _int_range(value, 1, 7, "save_profile favorite")
         from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
+
         real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
         st = last or {}
         zones = {}
         for z in zone_fields:
             cur = st.get(z)
-            zones[z] = cur if (z in real and isinstance(cur, int) and 0 <= cur <= LIGHT_MAX_SET) \
-                else LIGHT_UNCHANGED
+            zones[z] = (
+                cur if (z in real and isinstance(cur, int) and 0 <= cur <= LIGHT_MAX_SET) else LIGHT_UNCHANGED
+            )
         vals = {**base, "Mode": LIGHT_MODE_SET_BRIGHTNESS, "ProfileNumber": n, **zones}
-    elif what == "color":                   # recolour the active profile (LightValue = palette idx)
+    elif what == "color":  # recolour the active profile (LightValue = palette idx)
         idx = LIGHT_COLORS.get(str(value).lower().replace("_", "-"))
         if idx is None:
-            raise ValueError("unknown light colour %r; one of: %s"
-                             % (value, ", ".join(sorted(LIGHT_COLORS))))
-        vals = {**base, "Mode": LIGHT_MODE_SET_COLOR, "LightValue": idx,
-                **{z: LIGHT_UNCHANGED for z in zone_fields}}
+            raise ValueError("unknown light colour %r; one of: %s" % (value, ", ".join(sorted(LIGHT_COLORS))))
+        vals = {
+            **base,
+            "Mode": LIGHT_MODE_SET_COLOR,
+            "LightValue": idx,
+            **{z: LIGHT_UNCHANGED for z in zone_fields},
+        }
     elif what == "power":
         # app-faithful master toggle (dg/h.java:323-337 Q()): a SET_PROFILE selecting LIGHTS_ON
         # (12) / LIGHTS_OFF (0), NOT per-zone brightness. Matches how the app's "Alle Lichter"
         # switch works, so it restores the user's saved on-state rather than forcing every lamp
         # to 100%. Zones carry the unchanged sentinel like every other profile-select frame.
         pn = LIGHT_PROFILE_ALL_ON if _truthy(value) else LIGHT_PROFILE_ALL_OFF
-        vals = {**base, "Mode": LIGHT_MODE_SET_PROFILE, "ProfileNumber": pn,
-                **{z: LIGHT_UNCHANGED for z in zone_fields}}
+        vals = {
+            **base,
+            "Mode": LIGHT_MODE_SET_PROFILE,
+            "ProfileNumber": pn,
+            **{z: LIGHT_UNCHANGED for z in zone_fields},
+        }
     elif what == "all":
         # not an app action (the app is per-zone) — our convenience: every REAL lamp to one level
         vals = {**base, **_all_real_zones(zone_fields, _b(value))}
-    else:                                   # a single zone (friendly key or BrightnessL field)
+    else:  # a single zone (friendly key or BrightnessL field)
         field = LIGHT_ZONES.get(what, what)
         if field not in zone_fields:
             return None
@@ -445,14 +490,16 @@ def _airheater_values(state: dict, **changes) -> dict:
     """
     del state
     vals = dict(
-        NormalOperationRequest=SENTINEL, PermanentOperationRequest=SENTINEL,
+        NormalOperationRequest=SENTINEL,
+        PermanentOperationRequest=SENTINEL,
         PermanentOperationConfirmation=SENTINEL,
         AirDistribution=0,
         OperationModeAirHeater=AIRHEATER_MODE_UNCHANGED,
         HeatingLevel=AIRHEATER_LEVEL_UNCHANGED,
         OperationModeCombined=0,
         RunningTime=AIRHEATER_RUNTIME_UNCHANGED,
-        TimerHour=AIRHEATER_TIMER_HOUR_UNCHANGED, TimerMin=AIRHEATER_TIMER_MIN_UNCHANGED,
+        TimerHour=AIRHEATER_TIMER_HOUR_UNCHANGED,
+        TimerMin=AIRHEATER_TIMER_MIN_UNCHANGED,
     )
     vals.update(changes)
     return vals
@@ -506,7 +553,7 @@ def _airheater(funcs, what, value, last):
         # what the app never sends; 255 is the field WIDTH, not a valid request.
         rt = _int_range(value, 0, AIRHEATER_MAX_RUNTIME_MIN, "airheater runtime (minutes)")
         ch = {"RunningTime": rt}
-    elif what == "timer":                       # start-at TimerHour:TimerMin (rf/b.java:165 B0())
+    elif what == "timer":  # start-at TimerHour:TimerMin (rf/b.java:165 B0())
         hh, mm = _hhmm(value)
         ch = {"TimerHour": hh, "TimerMin": mm}
     elif what == "timer_start":
@@ -515,8 +562,10 @@ def _airheater(funcs, what, value, last):
         # device combo (AIR_HEATER -> 1; Truma/roof-A/C combos 2-7 are other-model equipment).
         # App-observed on the wire 2026-09-16: `3f3b017f1f3f`; the unit then shows the timer as
         # "Inactive • Timer: HH:MM" until TimerHour:TimerMin, when NormalOperation starts.
-        ch = {"OperationModeAirHeater": AIRHEATER_MODE_TIMER_ARMED,
-              "OperationModeCombined": AIRHEATER_COMBINED_AIR_HEATER}
+        ch = {
+            "OperationModeAirHeater": AIRHEATER_MODE_TIMER_ARMED,
+            "OperationModeCombined": AIRHEATER_COMBINED_AIR_HEATER,
+        }
     elif what == "timer_cancel":
         # "Stop" on the same widget (rf/b.java:745-749 j4()): Mode back to 0 — `3f0b007f1f3f`.
         ch = {"OperationModeAirHeater": AIRHEATER_MODE_IDLE}
@@ -527,17 +576,21 @@ def _airheater(funcs, what, value, last):
         # Mirror that exactly: accept "off", refuse "on" (never guess a write that arms a
         # fuel-burning heater).
         if str(value).strip().lower() not in ("off", "false", "0"):
-            raise ValueError("continuous heating can only be started from inside the vehicle; "
-                             "only 'off' is accepted")
+            raise ValueError(
+                "continuous heating can only be started from inside the vehicle; only 'off' is accepted"
+            )
         ch = {"PermanentOperationRequest": 0}
     else:
         return None
-    return protocol.encode(funcs["airheater"], _airheater_values(last, **ch),
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["airheater"])
+    return protocol.encode(
+        funcs["airheater"],
+        _airheater_values(last, **ch),
+        frame_bytes=overrides.CONTROL_FRAME_BYTES["airheater"],
+    )
 
 
 # --- roof / roof-A/C / stairs / LR-heater ------------------------------------
-# ALL FOUR ARE NOT-LIVE-VERIFIED (none installed on this van; see CLAUDE.md "Known state").
+# ALL FOUR ARE NOT-LIVE-VERIFIED (none installed on this van; see AGENTS.md "Known state").
 # Their frames are offset-resolved in overrides.py; encode() validates bit-widths only. Enum
 # meanings vary in confidence: roof-A/C Mode (jf/c.java: 0=AUTOMATIC/1=MANUAL_COOLING/
 # 2=MANUAL_HEATING/3=VENTING) + FanSpeed (jf/b.java: 0-4=LEVEL_0..AUTO) are STATICALLY VERIFIED
@@ -553,8 +606,10 @@ def _roofac_values(state: dict, **changes) -> dict:
     apply ``changes``. NOTE: the state decode names the fan field ``Fanspeed`` while
     the control field is ``FanSpeed``."""
     vals = dict(
-        State=state.get("State", 0), Mode=state.get("Mode", 0),
-        FanSpeed=state.get("Fanspeed", 0), Temperature=state.get("Temperature", 0),
+        State=state.get("State", 0),
+        Mode=state.get("Mode", 0),
+        FanSpeed=state.get("Fanspeed", 0),
+        Temperature=state.get("Temperature", 0),
     )
     vals.update(changes)
     return vals
@@ -579,8 +634,11 @@ def _roofaircondition(funcs, what, value, last):
         ch = {"Temperature": v}
     else:
         return None
-    return protocol.encode(funcs["roofaircondition"], _roofac_values(last, **ch),
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["roofaircondition"])
+    return protocol.encode(
+        funcs["roofaircondition"],
+        _roofac_values(last, **ch),
+        frame_bytes=overrides.CONTROL_FRAME_BYTES["roofaircondition"],
+    )
 
 
 # og/b.java:289 h1() emits only Movement 2 or 1 (z11?2:1); 0 is the field's power-up/sentinel
@@ -613,8 +671,9 @@ def _stairs(funcs, what, value, last):
         ch = {"OperationMode": m}
     else:
         return None
-    return protocol.encode(funcs["stairs"], _stairs_values(last, **ch),
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["stairs"])
+    return protocol.encode(
+        funcs["stairs"], _stairs_values(last, **ch), frame_bytes=overrides.CONTROL_FRAME_BYTES["stairs"]
+    )
 
 
 def _lrheater_values(state: dict, **changes) -> dict:
@@ -622,9 +681,11 @@ def _lrheater_values(state: dict, **changes) -> dict:
     current StateAir/StateWater/TemperatureWater/Mode/TemperatureAir; then apply
     ``changes``."""
     vals = dict(
-        StateAir=state.get("StateAir", 0), StateWater=state.get("StateWater", 0),
+        StateAir=state.get("StateAir", 0),
+        StateWater=state.get("StateWater", 0),
         TemperatureWater=state.get("TemperatureWater", 0),
-        Mode=state.get("Mode", 5), TemperatureAir=state.get("TemperatureAir", 0),
+        Mode=state.get("Mode", 5),
+        TemperatureAir=state.get("TemperatureAir", 0),
     )
     vals.update(changes)
     return vals
@@ -646,8 +707,11 @@ def _livingroomheater(funcs, what, value, last):
         ch = {"TemperatureAir": v}
     else:
         return None
-    return protocol.encode(funcs["livingroomheater"], _lrheater_values(last, **ch),
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["livingroomheater"])
+    return protocol.encode(
+        funcs["livingroomheater"],
+        _lrheater_values(last, **ch),
+        frame_bytes=overrides.CONTROL_FRAME_BYTES["livingroomheater"],
+    )
 
 
 # roof (char 1401, jg/a.java f()) — SAFETY-SENSITIVE + NOT-LIVE-VERIFIED.
@@ -665,7 +729,7 @@ def _livingroomheater(funcs, what, value, last):
 # duplicate re-sends); protocol-correct, same counter trajectory the unit validates. A fixed 0 is
 # valid only for a lone STOP. The unit withholds the motor until SafetyCounterValid (1402 bit 7);
 # a one-shot 3000 ms dead-man (ig/c) flags an error if it never validates.
-ROOF_MOVES = {"open": (1, 0), "close": (0, 1), "stop": (0, 0)}   # -> (Up, Down)
+ROOF_MOVES = {"open": (1, 0), "close": (0, 1), "stop": (0, 0)}  # -> (Up, Down)
 
 
 def roof_frame(funcs, direction: str, counter: int = 0) -> bytes:
@@ -679,8 +743,7 @@ def roof_frame(funcs, direction: str, counter: int = 0) -> bytes:
         raise ValueError("roof direction must be open/close/stop, got %r" % direction)
     up, down = ROOF_MOVES[direction]
     vals = {"Up": up, "Down": down, "SafetyCounter": counter}
-    return protocol.encode(funcs["roof"], vals,
-                           frame_bytes=overrides.CONTROL_FRAME_BYTES["roof"])
+    return protocol.encode(funcs["roof"], vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["roof"])
 
 
 def _roof(funcs, what, value, last):
@@ -693,10 +756,17 @@ def _roof(funcs, what, value, last):
     return roof_frame(funcs, what)
 
 
-BUILDERS = {"campingmode": _camping, "cooler": _cooler, "lighting": _lighting,
-            "airheater": _airheater, "roofaircondition": _roofaircondition,
-            "stairs": _stairs, "livingroomheater": _livingroomheater, "roof": _roof,
-            "energy": _energy}
+BUILDERS = {
+    "campingmode": _camping,
+    "cooler": _cooler,
+    "lighting": _lighting,
+    "airheater": _airheater,
+    "roofaircondition": _roofaircondition,
+    "stairs": _stairs,
+    "livingroomheater": _livingroomheater,
+    "roof": _roof,
+    "energy": _energy,
+}
 
 
 def build(funcs, function, what, value, last_decoded):
@@ -735,6 +805,8 @@ def decode_control(func, frame: bytes) -> dict:
     """Decode a control frame using the function's CONTROL field offsets
     (protocol.decode uses STATE offsets, which differ)."""
     bits = protocol.to_bits(frame)
-    return {f.name: protocol.get_field(bits, f.offset, f.width)
-            for f in func.control_fields
-            if f.placed and f.offset + f.width <= len(bits)}   # skip fields past a short frame
+    return {
+        f.name: protocol.get_field(bits, f.offset, f.width)
+        for f in func.control_fields
+        if f.placed and f.offset + f.width <= len(bits)
+    }  # skip fields past a short frame

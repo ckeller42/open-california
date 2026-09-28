@@ -8,6 +8,7 @@ read directly), so we supply it here to complete the 6-byte control frame.
 These are the only manual offsets in calictl; everything else comes from the
 auto-generated dictionary.
 """
+
 from __future__ import annotations
 
 # function -> {field_name: (offset, width)}   (source: sf/a.java f())
@@ -45,28 +46,45 @@ CONTROL_OFFSETS = {
     # from each function's f() builder (2026-07-08). Not installed on this van (except roof),
     # so `set` isn't wired for them yet; this just completes the frame layout. Enum value
     # semantics remain UNVERIFIED. See docs/business-logic/re-gap-inventory.md §A3.
-    "roof": {                       # jg/a.java f() — 5-byte frame (Up@6/Down@4 already placed)
-        "SafetyCounter": (8, 32),   # app-GENERATED monotonic BE-uint32 (~+1/500ms), NOT unit-echoed
+    "roof": {  # jg/a.java f() — 5-byte frame (Up@6/Down@4 already placed)
+        "SafetyCounter": (8, 32),  # app-GENERATED monotonic BE-uint32 (~+1/500ms), NOT unit-echoed
     },
-    "roofaircondition": {           # lg/a.java f() case0 — 3-byte frame (State@6 already placed)
-        "Mode": (8, 4), "FanSpeed": (12, 4), "Temperature": (16, 8),
+    "roofaircondition": {  # lg/a.java f() case0 — 3-byte frame (State@6 already placed)
+        "Mode": (8, 4),
+        "FanSpeed": (12, 4),
+        "Temperature": (16, 8),
     },
-    "stairs": {                     # pg/a.java f() case0 — 1-byte frame
-        "OperationMode": (6, 2), "Movement": (4, 2),
+    "stairs": {  # pg/a.java f() case0 — 1-byte frame
+        "OperationMode": (6, 2),
+        "Movement": (4, 2),
     },
-    "livingroomheater": {           # gg/a.java f() case0 — 3-byte frame (Mode@12 already placed)
-        "TemperatureWater": (2, 2), "StateWater": (4, 2),
-        "StateAir": (6, 2), "TemperatureAir": (16, 8),
+    "livingroomheater": {  # gg/a.java f() case0 — 3-byte frame (Mode@12 already placed)
+        "TemperatureWater": (2, 2),
+        "StateWater": (4, 2),
+        "StateAir": (6, 2),
+        "TemperatureAir": (16, 8),
     },
-    "satelliteantenna": {           # gg/a.java f() default branch — 2-byte frame (SatelliteSelection@12 placed)
-        "Dish": (0, 2), "System": (2, 2), "Wlan": (6, 1), "DishStop": (7, 1),
+    "satelliteantenna": {  # gg/a.java f() default branch — 2-byte frame (SatelliteSelection@12 placed)
+        "Dish": (0, 2),
+        "System": (2, 2),
+        "Wlan": (6, 1),
+        "DishStop": (7, 1),
     },
 }
 
 # control frame lengths confirmed on-device / from the model (bytes)
-CONTROL_FRAME_BYTES = {"cooler": 6, "airheater": 6, "campingmode": 1, "lighting": 16,
-                       "roof": 5, "roofaircondition": 3, "stairs": 1, "livingroomheater": 3,
-                       "satelliteantenna": 2, "energy": 1}
+CONTROL_FRAME_BYTES = {
+    "cooler": 6,
+    "airheater": 6,
+    "campingmode": 1,
+    "lighting": 16,
+    "roof": 5,
+    "roofaircondition": 3,
+    "stairs": 1,
+    "livingroomheater": 3,
+    "satelliteantenna": 2,
+    "energy": 1,
+}
 
 # Semantic value constraints beyond the field's bit-width. The unit's firmware
 # range-VALIDATES control writes and drops the ATT link with 0x0E on an out-of-range

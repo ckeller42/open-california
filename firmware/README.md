@@ -285,6 +285,7 @@ with `-m "not linux_only"`).
 10. **Bumble: resolving list, connect cancel, lost host.** The firmware-side controller is a
    `Controller` subclass (`tests/firmware/conftest.py`, `_fw_controller_class`) adding three
    controller duties Bumble leaves out. (a) *LL privacy:* NimBLE writes the bonded unit's identity
+
    + IRK to the controller's resolving list and reconnects by the identity address; the controller
    must match the unit's current RPA. Bumble ignores the list, so a restart after the unit rotated
    its address never connected. The harness resolves the advertiser's RPA with the listed IRK,
@@ -297,6 +298,7 @@ with `-m "not linux_only"`).
    connect-cancel races deterministic (`hold_connects`, `cancel_delay_s`, `connect_on_cancel`,
    used by `test_unit_forgot_us_repairs`), and the fake unit's `drop_on_read` hangs up on one GATT
    read so a link is lost mid read-all (`test_link_drop_mid_read_all_reconnects`).
+
 11. **Just Works regression build (`make cali-host-jw`).** `ble_nimble.c` compiled with
    `-DCALI_TEST_LATE_IO_CAP`: the IO capability is NoInputNoOutput (no MITM) until `pair()` has
    sent the Pairing Request, then set to KEYBOARD_ONLY — the 2026-09-26 calictl bug (the agent

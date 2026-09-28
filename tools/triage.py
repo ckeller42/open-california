@@ -7,6 +7,7 @@ everything not surfaced is omitted with a concrete, category-based reason.
 
 Run: `python3 -m tools.triage`  (rewrites protocol/signals.yaml)
 """
+
 from __future__ import annotations
 
 import os
@@ -25,10 +26,10 @@ SURFACE = {
     },
     "energy": {
         "UOneBattBemAfs": ("batt1_v", "V", "0.1", "battery"),
-        "IOneBattBemAfs": ("batt1_current", "A", "raw", "current"),   # current, not voltage-ranged
+        "IOneBattBemAfs": ("batt1_current", "A", "raw", "current"),  # current, not voltage-ranged
         "SocOneBattAfs": ("soc1_level", None, "raw", "level"),
         "UTwoBattBemAfs": ("batt2_v", "V", "0.1", "leisure_battery"),
-        "ITwoBattBemAfs": ("batt2_current", "A", "0.1", "current"),   # xf/d.java:159 /10.0d
+        "ITwoBattBemAfs": ("batt2_current", "A", "0.1", "current"),  # xf/d.java:159 /10.0d
         "SocTwoBattAfs": ("soc2_level", None, "raw", "level"),
         "tTwoBattRemainingh": ("batt2_remaining_h", "h", "raw", "level"),
         "tTwoBattRemainingmin": ("batt2_remaining_min", "min", "raw", "level"),
@@ -36,9 +37,9 @@ SURFACE = {
         "PDcdcAfs": ("dcdc_power", "W", "raw", "source"),
         "PLandAfs": ("shore_power", "W", "raw", "source"),
         "PPvAfs": ("solar_power", "W", "raw", "source"),
-        "IDcdcAfs": ("dcdc_current", "A", "raw", "source"),     # xf/d.java:171 no scale (+2 on SW 0409/0410)
-        "ILandAfs": ("shore_current", "A", "0.1", "source"),    # xf/d.java:173 /10.0d
-        "IPvAfs": ("solar_current", "A", "0.1", "source"),      # xf/d.java:175 /10.0d
+        "IDcdcAfs": ("dcdc_current", "A", "raw", "source"),  # xf/d.java:171 no scale (+2 on SW 0409/0410)
+        "ILandAfs": ("shore_current", "A", "0.1", "source"),  # xf/d.java:173 /10.0d
+        "IPvAfs": ("solar_current", "A", "0.1", "source"),  # xf/d.java:175 /10.0d
         "AgeOneBattValuesMinutes": ("age_min", "min", "raw", "level"),
         "EnergyMode": ("energy_mode", None, "raw", "state"),
         "EnergyModeNotSelectable": ("energy_mode_locked", None, "raw", "state"),
@@ -115,23 +116,43 @@ SURFACE = {
     },
 }
 # lighting per-zone brightness -> zone_NN (surface all 16)
-_ZMAP = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seven": 7,
-         "Eight": 8, "Nine": 9, "OneZero": 10, "OneOne": 11, "OneTwo": 12, "OneThree": 13,
-         "OneFour": 14, "OneFive": 15, "OneSix": 16}
+_ZMAP = {
+    "One": 1,
+    "Two": 2,
+    "Three": 3,
+    "Four": 4,
+    "Five": 5,
+    "Six": 6,
+    "Seven": 7,
+    "Eight": 8,
+    "Nine": 9,
+    "OneZero": 10,
+    "OneOne": 11,
+    "OneTwo": 12,
+    "OneThree": 13,
+    "OneFour": 14,
+    "OneFive": 15,
+    "OneSix": 16,
+}
 for suf, num in _ZMAP.items():
     SURFACE["lighting"]["BrightnessL" + suf] = ("brightness_zone_%d" % num, None, "raw", "level")
+
 
 # explicit omit reasons by category (checked in order; else a default).
 def omit_reason(fn, field, kind="state"):
     f = field
     if kind == "control":
-        return ("control command field — definition captured in dictionary/overrides; "
-                "command surfacing deferred while control writes are blocked (issue #2)")
+        return (
+            "control command field — definition captured in dictionary/overrides; "
+            "command surfacing deferred while control writes are blocked (issue #2)"
+        )
     if fn == "generalpurposesignals":
         return "opaque general-purpose signal — no GUI widget or getter; meaning undetermined"
     if fn == "campingmode" and f == "OutsideLight":
-        return ("tied to InteriorLight — the app's single Lights toggle (tf/a K0) writes "
-                "both together (inverted); surfaced via the combined lights_on")
+        return (
+            "tied to InteriorLight — the app's single Lights toggle (tf/a K0) writes "
+            "both together (inverted); surfaced via the combined lights_on"
+        )
     if f.endswith("InfoPopUp"):
         return "UI transient popup flag, not telemetry"
     if f == "Timestamp":
@@ -140,21 +161,46 @@ def omit_reason(fn, field, kind="state"):
         return "per-function feature-availability flag — surfaced as the 'installed' key"
     if f in ("EmpInstalled",):
         return "EMP feature-availability flag — not a measurement"
-    if f in ("DcdcDefect", "LandDefect", "PvDefect", "SystemError", "FaultTriggerBit",
-             "LandNotAvailable", "TwoBattNotCharged", "WarningLevelActive", "WarningLevelTwo",
-             "TwoBattSwitchAtCharging", "TwoBattSwitchAtWorkshop", "StatePvAfs", "StateLandAfs"):
+    if f in (
+        "DcdcDefect",
+        "LandDefect",
+        "PvDefect",
+        "SystemError",
+        "FaultTriggerBit",
+        "LandNotAvailable",
+        "TwoBattNotCharged",
+        "WarningLevelActive",
+        "WarningLevelTwo",
+        "TwoBattSwitchAtCharging",
+        "TwoBattSwitchAtWorkshop",
+        "StatePvAfs",
+        "StateLandAfs",
+    ):
         return "fault/warning/source-state bit — aggregated into the faults[] / source status, not standalone"
-    if f in ("NightTimerHourOff", "NightTimerHourOn", "NightTimerSet", "TimerCounterHour",
-             "TimerCounterMin", "TimerElapsed", "TimerHourSet", "TimerMinSet",
-             "RunningTimeinAction", "PermanentOperationRequestConfirmation",
-             "OperationModeCombined"):
+    if f in (
+        "NightTimerHourOff",
+        "NightTimerHourOn",
+        "NightTimerSet",
+        "TimerCounterHour",
+        "TimerCounterMin",
+        "TimerElapsed",
+        "TimerHourSet",
+        "TimerMinSet",
+        "RunningTimeinAction",
+        "PermanentOperationRequestConfirmation",
+        "OperationModeCombined",
+    ):
         return "granular timer/mode detail — surfaced via the aggregate state, not standalone"
     return "control/telemetry field with no GUI or getter evidence; not surfaced (revisit if needed)"
+
 
 # VW T7 California owner's-manual cross-check (citations only; the manual itself is
 # copyrighted and NOT stored). Confirms terminology/units for the key families.
 VWDOC = {
-    ("energy", "UTwoBattBemAfs"): "T7 manual: 80-Ah lithium leisure battery, voltage monitored on the display",
+    (
+        "energy",
+        "UTwoBattBemAfs",
+    ): "T7 manual: 80-Ah lithium leisure battery, voltage monitored on the display",
     ("energy", "ITwoBattBemAfs"): "T7 manual: leisure-battery current shown on the control panel",
     ("energy", "UOneBattBemAfs"): "T7 manual: starter battery, split-charge relay to the leisure battery",
     ("energy", "PDcdcAfs"): "T7 manual: charging from the vehicle (alternator via split-charge relay)",
@@ -176,17 +222,28 @@ def main():
                     src = dict(fields[field].get("sources", {}))
                     if (fn, field) in VWDOC:
                         src["vwdoc"] = VWDOC[(fn, field)]
-                    fields[field] = {"decision": "surface", "name": name, "unit": unit,
-                                     "scale": scale, "kind": kd, "sources": src,
-                                     "confidence": "medium" if scale == "UNVERIFIED" else "high"}
+                    fields[field] = {
+                        "decision": "surface",
+                        "name": name,
+                        "unit": unit,
+                        "scale": scale,
+                        "kind": kd,
+                        "sources": src,
+                        "confidence": "medium" if scale == "UNVERIFIED" else "high",
+                    }
                 else:
-                    fields[field] = {"decision": "omit", "reason": omit_reason(fn, field, kind),
-                                     "sources": fields[field].get("sources", {})}
+                    fields[field] = {
+                        "decision": "omit",
+                        "reason": omit_reason(fn, field, kind),
+                        "sources": fields[field].get("sources", {}),
+                    }
     with open(os.path.join(root, "protocol", "signals.yaml"), "w") as fh:
         yaml.safe_dump(cat, fh, sort_keys=True, default_flow_style=False)
-    surf = sum(1 for ks in cat.values() for fs in ks.values() for e in fs.values()
-               if e["decision"] == "surface")
+    surf = sum(
+        1 for ks in cat.values() for fs in ks.values() for e in fs.values() if e["decision"] == "surface"
+    )
     print("triaged: %d surface" % surf)
+
 
 if __name__ == "__main__":
     main()

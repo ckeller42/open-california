@@ -28,6 +28,7 @@ corrupt line is skipped rather than aborting the load.
    gaps (the unit deep-sleeps for days when parked) are represented by absent samples, never by
    interpolated or fabricated values.
 """
+
 from __future__ import annotations
 
 import json
@@ -52,7 +53,7 @@ def append(path: str, ts: float, volts, amps) -> bool:
     :returns: True if a sample was written; False if it was skipped or the write failed.
     """
     if volts is None or amps is None:
-        return False                      # a half-read sample is not a data point; never write nulls
+        return False  # a half-read sample is not a data point; never write nulls
     try:
         d = os.path.dirname(path)
         if d:
@@ -74,7 +75,7 @@ def append_jsonl(path: str, record, max_lines: int = 300_000) -> bool:
             os.makedirs(d, exist_ok=True)
         with open(path, "a") as f:
             f.write(json.dumps(record, separators=(",", ":")) + "\n")
-        if os.path.getsize(path) > max_lines * 96:      # cheap size gate before the O(n) rewrite
+        if os.path.getsize(path) > max_lines * 96:  # cheap size gate before the O(n) rewrite
             with open(path) as f:
                 lines = f.readlines()
             if len(lines) > max_lines:
@@ -122,7 +123,7 @@ def load(path: str, since: float = None) -> list:
                 try:
                     row = json.loads(line)
                 except ValueError:
-                    continue              # a torn/corrupt line loses one sample, not the history
+                    continue  # a torn/corrupt line loses one sample, not the history
                 if not isinstance(row, list) or len(row) != 3:
                     continue
                 ts = row[0]
@@ -153,7 +154,7 @@ def trim(path: str, retention_s: float = RETENTION_S, now: float = None) -> int:
         with open(tmp, "w") as f:
             for r in rows:
                 f.write(json.dumps(r) + "\n")
-        os.replace(tmp, path)             # atomic: a reader never sees a half-rewritten history
+        os.replace(tmp, path)  # atomic: a reader never sees a half-rewritten history
     except OSError:
         return len(rows)
     return len(rows)

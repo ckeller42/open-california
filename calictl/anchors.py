@@ -16,6 +16,7 @@ noticed the firmware changed. A violation is a strong hint to look at :mod:`firm
 
 Stdlib-only at import.
 """
+
 from __future__ import annotations
 
 

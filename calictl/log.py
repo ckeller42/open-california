@@ -29,6 +29,7 @@ daemon started by systemd keeps writing to the journal. The CLI's user-facing ou
    unless running under the systemd journal, and never let a logging failure interrupt the
    daemon.
 """
+
 from __future__ import annotations
 
 import logging
@@ -72,8 +73,11 @@ def configure(level: str | None = None, force: bool = False) -> logging.Logger:
     for h in list(root.handlers):
         if isinstance(h, _StdoutHandler):
             root.removeHandler(h)
-    fmt = "%(asctime)s %(levelname)s %(name)s: %(message)s" if _want_timestamp() \
+    fmt = (
+        "%(asctime)s %(levelname)s %(name)s: %(message)s"
+        if _want_timestamp()
         else "%(levelname)s %(name)s: %(message)s"
+    )
     h = _StdoutHandler()
     h.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S"))
     root.addHandler(h)

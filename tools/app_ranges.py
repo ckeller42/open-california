@@ -14,6 +14,7 @@ This tool reports, per placed control field: the width bound, whether a curated 
 constraint exists, and flags any curated constraint inconsistent with the width bound
 (a curated value that can't fit the field — a catalog error). stdlib-only.
 """
+
 from __future__ import annotations
 
 
@@ -41,16 +42,21 @@ def audit(funcs) -> list[str]:
                 continue
             hi = (1 << cf.width) - 1
             if cf.valid is None:
-                lines.append("WIDTH-ONLY   %s.%s  0..%d  (semantic range UNVERIFIED — firmware-validated)"
-                             % (name, cf.name, hi))
+                lines.append(
+                    "WIDTH-ONLY   %s.%s  0..%d  (semantic range UNVERIFIED — firmware-validated)"
+                    % (name, cf.name, hi)
+                )
                 continue
             bad = [v for v in _allowed_values(cf.valid) if not (0 <= v <= hi)]
             if bad:
-                lines.append("RANGE-INCONSISTENT %s.%s curated %s exceeds field width 0..%d (values %s)"
-                             % (name, cf.name, _fmt(cf.valid), hi, bad))
+                lines.append(
+                    "RANGE-INCONSISTENT %s.%s curated %s exceeds field width 0..%d (values %s)"
+                    % (name, cf.name, _fmt(cf.valid), hi, bad)
+                )
             else:
-                lines.append("CURATED      %s.%s  width 0..%d  allowed %s"
-                             % (name, cf.name, hi, _fmt(cf.valid)))
+                lines.append(
+                    "CURATED      %s.%s  width 0..%d  allowed %s" % (name, cf.name, hi, _fmt(cf.valid))
+                )
     return lines
 
 
@@ -60,15 +66,21 @@ def inconsistencies(funcs) -> list[str]:
 
 def main(argv=None):
     from calictl import overrides, protocol
-    funcs = protocol.load(); overrides.apply(funcs)
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
     lines = audit(funcs)
     print("\n".join(lines))
     bad = [ln for ln in lines if ln.startswith("RANGE-INCONSISTENT")]
-    print("\n%d control fields, %d curated, %d width-only, %d inconsistent" % (
-        len([ln for ln in lines if not ln.startswith("RANGE-INCONSISTENT")]),
-        len([ln for ln in lines if ln.startswith("CURATED")]),
-        len([ln for ln in lines if ln.startswith("WIDTH-ONLY")]),
-        len(bad)))
+    print(
+        "\n%d control fields, %d curated, %d width-only, %d inconsistent"
+        % (
+            len([ln for ln in lines if not ln.startswith("RANGE-INCONSISTENT")]),
+            len([ln for ln in lines if ln.startswith("CURATED")]),
+            len([ln for ln in lines if ln.startswith("WIDTH-ONLY")]),
+            len(bad),
+        )
+    )
     return 1 if bad else 0
 
 

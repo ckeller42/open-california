@@ -1,0 +1,113 @@
+# pre-commit: the single source of truth for lint/guard tool versions (local hooks + CI's
+# `pre-commit` job run exactly this). Install once per clone:  tools/ci.sh dev
+# (= pip install -r requirements-dev.txt && pre-commit install; installs both hook types below).
+#
+#   pre-commit stage (every commit, staged files only): fast guards + linters.
+#   pre-push stage   (every push): the full pytest suite + the signal audit.
+#
+# Repo-local hooks reuse tools/ci.sh subcommands (language: system), so the hook, `tools/ci.sh`
+# and CI run the same command; ci.sh picks a Python >= 3.11 (PY=... overrides) and needs the
+# dev deps from requirements-dev.txt. pre-commit stashes unstaged changes before running, so the
+# generated-artifact --check hooks always validate what is actually being committed.
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]   # fast hooks: commit only (not re-run on push); slow ones opt into pre-push
+exclude: ^(docs/_build/|docs/screenshots/)
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        # generated artifacts: their generators (and --check guards) own their exact bytes
+        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts)\.h|tests/vectors/.*\.json|calictl/webui/screens\.json|ui/prototype\.html)$
+      - id: end-of-file-fixer
+        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts)\.h|tests/vectors/.*\.json|calictl/webui/screens\.json|ui/prototype\.html)$
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks          # staged changes only (a commit's diff)
+      # The same pinned gitleaks over the whole working tree; the staged-only hook above scans
+      # nothing under --all-files. CI runs it: pre-commit run --hook-stage manual gitleaks-dir --all-files
+      - id: gitleaks
+        alias: gitleaks-dir
+        name: gitleaks (working tree)
+        entry: gitleaks dir --redact --verbose .
+        pass_filenames: false
+        stages: [manual]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9   # keep in step with ruff== in requirements-dev.txt
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.3
+    hooks:
+      - id: markdownlint-cli2   # config + ignores: .markdownlint-cli2.jsonc
+
+  - repo: local
+    hooks:
+      # No VW/vendor material, real vehicle BLE MAC or VIN (CI `no-vendor-material` runs the same
+      # script over the whole tree).
+      - id: vendor-material
+        name: no vendor material / vehicle MAC / VIN
+        entry: python3 tools/check_vendor_material.py
+        language: system
+      # Runtime calictl/* stays stdlib-only at import.
+      - id: import-clean
+        name: runtime is stdlib-only at import
+        entry: tools/ci.sh import-clean
+        language: system
+        pass_filenames: false
+        files: ^(calictl/.*\.py|tools/check_import_clean\.py)$
+      # Doc/comment `Field@offset` citations agree with the dictionary.
+      - id: doc-offset
+        name: doc offset citations match the dictionary
+        entry: tools/ci.sh doc-offset
+        language: system
+        pass_filenames: false
+        files: ^(AGENTS\.md|docs/business-logic/.*\.md|calictl/.*\.py|protocol/dictionary\.yaml|tests/test_doc_offset_consistency\.py)$
+      # calictl/webui/screens.json == tools.build_web output.
+      - id: web-fresh
+        name: web assets are fresh (screens.json)
+        entry: tools/ci.sh web-fresh
+        language: system
+        pass_filenames: false
+        files: ^(calictl/webui/|calictl/semantics\.py|ui/|tools/build_web\.py)
+      # Golden vectors + generated C headers (issue #156, #154) are fresh.
+      - id: codec-fresh
+        name: codec vectors + C headers are fresh
+        entry: tools/ci.sh codec-fresh
+        language: system
+        pass_filenames: false
+        files: ^(protocol/dictionary\.yaml|calictl/(overrides|pairing|device|protocol)\.py|csrc/(codec_dict|codec_chars|pairing_consts)\.h|tests/vectors/camper_codec\.json|tools/gen_(c_dict|codec_vectors)\.py)$
+      # The un-built web UI's only static check: tsc --checkJs (0 errors) + node --check. Needs node.
+      - id: webcheck
+        name: web UI typecheck (tsc --checkJs)
+        entry: tools/ci.sh webcheck
+        language: system
+        pass_filenames: false
+        files: ^calictl/webui/(.*\.js|jsconfig\.json)$
+
+      # --- pre-push: the slow gates ---
+      - id: pytest
+        name: full test suite
+        entry: tools/ci.sh test
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: audit-signals
+        name: signal-coverage + semantic-review audit
+        entry: tools/ci.sh audit
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

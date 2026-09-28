@@ -1,6 +1,6 @@
 # Review style guide — open-california
 
-`CLAUDE.md` is the authority; this is the review-facing subset. Flag violations of these repo
+`AGENTS.md` is the authority; this is the review-facing subset. Flag violations of these repo
 invariants — they are the high-value, non-obvious checks a generic reviewer misses. Prefer a few
 substantive findings over many nits (CodeRabbit already covers style).
 

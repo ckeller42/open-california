@@ -17,6 +17,7 @@ full raw-frame snapshot — that is what makes a *future* correction derivable a
 
 Runtime is stdlib-only at import (``json``/``time`` are stdlib); no bleak/yaml here.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,8 +46,9 @@ def changed(prev, cur) -> bool:
     return False
 
 
-def write_snapshot(states: dict, raw: dict, out_dir: str, *, reason: str = "drift",
-                   now: float | None = None) -> str:
+def write_snapshot(
+    states: dict, raw: dict, out_dir: str, *, reason: str = "drift", now: float | None = None
+) -> str:
     """Persist the irreplaceable evidence for the CURRENT firmware: the raw per-char bytes (hex) +
     the decoded/interpreted state + the version. Returns the file path.
 

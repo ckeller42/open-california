@@ -13,20 +13,25 @@ def test_catalog_schema_surface_needs_name(tmp_path):
     with pytest.raises(catalog.SchemaError):
         catalog.load_catalog(str(p))
 
+
 def test_catalog_schema_omit_needs_reason(tmp_path):
     p = tmp_path / "s.yaml"
     p.write_text("energy:\n  state:\n    Foo: {decision: omit}\n")
     with pytest.raises(catalog.SchemaError):
         catalog.load_catalog(str(p))
 
+
 def test_catalog_loads_valid():
     c = catalog.load_catalog()
     assert "energy" in c and "state" in c["energy"]
 
+
 def test_dictionary_keys_and_emitted():
     from calictl import overrides, protocol
     from tools import catalog
-    f = protocol.load(); overrides.apply(f)
+
+    f = protocol.load()
+    overrides.apply(f)
     dk = catalog.dictionary_keys(f)
     assert "energy.state.ITwoBattBemAfs" in dk
     assert "cooler.control.State" in dk
@@ -37,18 +42,23 @@ def test_dictionary_keys_and_emitted():
 # --- Guardrail: the three invariants that prevent a silent drop/mislabel ---
 def _guard_funcs():
     from calictl import overrides, protocol
-    f = protocol.load(); overrides.apply(f); return f
+
+    f = protocol.load()
+    overrides.apply(f)
+    return f
 
 
 def test_coverage_every_field_has_a_decision():
-    f = _guard_funcs(); cat = catalog.load_catalog()
+    f = _guard_funcs()
+    cat = catalog.load_catalog()
     dk, ck = catalog.dictionary_keys(f), catalog.keys(cat)
     assert dk - ck == set(), "dictionary fields with no catalog decision: %s" % sorted(dk - ck)
     assert ck - dk == set(), "stale catalog entries: %s" % sorted(ck - dk)
 
 
 def test_surfaced_state_fields_are_emitted():
-    f = _guard_funcs(); cat = catalog.load_catalog()
+    f = _guard_funcs()
+    cat = catalog.load_catalog()
     missing = []
     for fn, kinds in cat.items():
         for field, e in (kinds.get("state") or {}).items():
@@ -58,7 +68,8 @@ def test_surfaced_state_fields_are_emitted():
 
 
 def test_surfaced_control_fields_are_placed():
-    f = _guard_funcs(); cat = catalog.load_catalog()
+    f = _guard_funcs()
+    cat = catalog.load_catalog()
     bad = []
     for fn, kinds in cat.items():
         placed = {cf.name for cf in f[fn].control_fields if cf.placed}

@@ -32,6 +32,7 @@ See `ARCHITECTURE.md`.
    (`docs/business-logic/signal-scales.md`).
 
 ## Gotchas
+
 - Adding an emitted key that is NOT in the catalog is fine (guardrail only checks
   surfaced⇒emitted). Removing/renaming a surfaced key breaks CI.
 - Bools/lists become InfluxDB fields (`influx.numeric_fields`: bool→1/0, list→`_count`).

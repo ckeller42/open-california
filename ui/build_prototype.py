@@ -21,6 +21,7 @@ a static artifact behind a strict Content-Security-Policy.
 Requires PyYAML. If it isn't installed, this script prints an install
 hint and exits non-zero rather than hand-rolling a YAML parser.
 """
+
 from __future__ import annotations
 
 import html
@@ -51,14 +52,24 @@ DICTIONARY_PATH = ROOT.parent / "protocol" / "dictionary.yaml"
 OUTPUT_PATH = ROOT / "prototype.html"
 
 KNOWN_WIDGET_TYPES = {
-    "slider", "toggle", "button", "drawer", "timer", "section",
-    "readout", "label", "list", "nav", "colorpicker",
+    "slider",
+    "toggle",
+    "button",
+    "drawer",
+    "timer",
+    "section",
+    "readout",
+    "label",
+    "list",
+    "nav",
+    "colorpicker",
 }
 
 
 # --------------------------------------------------------------------------
 # Loading
 # --------------------------------------------------------------------------
+
 
 def load_screens() -> list[dict[str, Any]]:
     """Load and lightly validate every ui/screens/*.yaml file. Never raises
@@ -107,8 +118,9 @@ def load_dictionary() -> dict[str, Any] | None:
     return data
 
 
-def lookup_dictionary_field(dictionary: dict[str, Any] | None, function: str | None,
-                             field: str | None) -> dict[str, Any] | None:
+def lookup_dictionary_field(
+    dictionary: dict[str, Any] | None, function: str | None, field: str | None
+) -> dict[str, Any] | None:
     if not dictionary or not function or not field:
         return None
     functions = dictionary.get("functions") or {}
@@ -125,6 +137,7 @@ def lookup_dictionary_field(dictionary: dict[str, Any] | None, function: str | N
 # --------------------------------------------------------------------------
 # Label humanization
 # --------------------------------------------------------------------------
+
 
 def _camel_to_words(token: str) -> str:
     token = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", token)
@@ -162,6 +175,7 @@ def humanize_label(label_key: str | None, screen: str, widget_id: str | None = N
 # Small helpers
 # --------------------------------------------------------------------------
 
+
 def esc(value: Any) -> str:
     return html.escape(str(value), quote=True)
 
@@ -197,11 +211,13 @@ def _clean_svg_markup(markup: str) -> str:
     markup = re.sub(r"<\?xml[^>]*\?>", "", markup)
     markup = re.sub(r"<!DOCTYPE[^>]*>", "", markup, flags=re.IGNORECASE)
     markup = re.sub(r"<!--.*?-->", "", markup, flags=re.DOTALL)
+
     # Drop hard-coded width/height on the root <svg> so CSS controls sizing.
     def _strip_wh(m: re.Match[str]) -> str:
         tag = m.group(0)
         tag = re.sub(r'\s(?:width|height)="[^"]*"', "", tag)
         return tag
+
     markup = re.sub(r"<svg\b[^>]*>", _strip_wh, markup, count=1)
     return markup.strip()
 
@@ -248,8 +264,10 @@ def icon_span(name: str | None, css_class: str = "icon") -> str:
 # Control-binding traceability annotation
 # --------------------------------------------------------------------------
 
-def format_binding(controls: dict[str, Any] | None, function: str | None,
-                    dictionary: dict[str, Any] | None) -> str:
+
+def format_binding(
+    controls: dict[str, Any] | None, function: str | None, dictionary: dict[str, Any] | None
+) -> str:
     if not controls or not isinstance(controls, dict):
         return ""
     field = controls.get("field")
@@ -285,8 +303,10 @@ def constraint_note(widget: dict[str, Any]) -> str:
 # Widget rendering
 # --------------------------------------------------------------------------
 
-def render_widget(screen: str, widget: dict[str, Any], function: str | None,
-                   dictionary: dict[str, Any] | None) -> str:
+
+def render_widget(
+    screen: str, widget: dict[str, Any], function: str | None, dictionary: dict[str, Any] | None
+) -> str:
     wtype = widget.get("type", "label")
     wid = widget.get("id") or slugify(widget.get("label_key") or wtype)
     dom_id = f"{slugify(screen)}-{slugify(wid)}"
@@ -295,8 +315,7 @@ def render_widget(screen: str, widget: dict[str, Any], function: str | None,
     constraint = constraint_note(widget)
 
     if wtype not in KNOWN_WIDGET_TYPES:
-        print(f"warning: {screen}.{wid}: unknown widget type '{wtype}', rendering as label",
-              file=sys.stderr)
+        print(f"warning: {screen}.{wid}: unknown widget type '{wtype}', rendering as label", file=sys.stderr)
         wtype = "label"
 
     if wtype == "section":
@@ -351,7 +370,7 @@ def render_widget(screen: str, widget: dict[str, Any], function: str | None,
         return (
             f'<div class="widget widget-button">'
             f'<button type="button" class="btn" id="{dom_id}" '
-            f'onclick="this.classList.toggle(\'pressed\')">{esc(label)}</button>'
+            f"onclick=\"this.classList.toggle('pressed')\">{esc(label)}</button>"
             f"{constraint}{binding}</div>"
         )
 
@@ -397,7 +416,7 @@ def render_widget(screen: str, widget: dict[str, Any], function: str | None,
     if wtype == "list":
         elements = widget.get("elements") or []
         items = "".join(
-            f'<li>{esc(el.get("label", "") if isinstance(el, dict) else el)}</li>' for el in elements
+            f"<li>{esc(el.get('label', '') if isinstance(el, dict) else el)}</li>" for el in elements
         )
         return (
             f'<div class="widget widget-list">'
@@ -424,7 +443,7 @@ def render_widget(screen: str, widget: dict[str, Any], function: str | None,
                 body_parts.append(f'<p class="drawer-item">{esc(el)}</p>')
         return (
             f'<details class="widget widget-drawer">'
-            f'<summary>{esc(label)}</summary>'
+            f"<summary>{esc(label)}</summary>"
             f'<div class="drawer-body">{"".join(body_parts)}</div>'
             f"{constraint}{binding}</details>"
         )
@@ -436,6 +455,7 @@ def render_widget(screen: str, widget: dict[str, Any], function: str | None,
 # --------------------------------------------------------------------------
 # Screen / navigation assembly
 # --------------------------------------------------------------------------
+
 
 def render_screen(screen_def: dict[str, Any], dictionary: dict[str, Any] | None) -> str:
     name = screen_def["screen"]
@@ -473,18 +493,20 @@ def render_screen(screen_def: dict[str, Any], dictionary: dict[str, Any] | None)
 def render_home(screens: list[dict[str, Any]]) -> str:
     if screens:
         cards = "".join(
-            f'''<button type="button" class="home-card" onclick="showScreen({js_str(s["screen"])})">
+            f"""<button type="button" class="home-card" onclick="showScreen({js_str(s["screen"])})">
                 <span class="home-card-icon">{
-                    icon_span((s.get("icons") or [None])[0], "icon icon-home") or _placeholder_icon(s["screen"])
-                }</span>
-                <span class="home-card-title">{esc(humanize_label(s.get("title_key"), s["screen"]) or s["screen"].capitalize())}</span>
-            </button>'''
+                icon_span((s.get("icons") or [None])[0], "icon icon-home") or _placeholder_icon(s["screen"])
+            }</span>
+                <span class="home-card-title">{
+                esc(humanize_label(s.get("title_key"), s["screen"]) or s["screen"].capitalize())
+            }</span>
+            </button>"""
             for s in screens
         )
     else:
         cards = (
             '<p class="empty-state">No screens found. Add YAML files under '
-            '<code>ui/screens/</code> and regenerate.</p>'
+            "<code>ui/screens/</code> and regenerate.</p>"
         )
     return f"""
     <section class="screen active" id="screen-home" data-title="VW California">
@@ -1093,7 +1115,9 @@ def main() -> int:
     OUTPUT_PATH.write_text(output, encoding="utf-8")
     print(f"wrote {OUTPUT_PATH} ({len(output):,} bytes) from {len(screens)} screen(s)")
     if dictionary is None:
-        print(f"note: {DICTIONARY_PATH} not found — control-binding annotations will skip dictionary cross-reference")
+        print(
+            f"note: {DICTIONARY_PATH} not found — control-binding annotations will skip dictionary cross-reference"
+        )
     return 0
 
 

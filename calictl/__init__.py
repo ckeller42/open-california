@@ -10,5 +10,6 @@ auto-extracted, live-verified protocol map). Layers:
 - cli      : `calictl status | get | set`
 - mqtt     : Home Assistant discovery
 """
+
 __all__ = ["protocol", "semantics"]
 __version__ = "0.1.0"

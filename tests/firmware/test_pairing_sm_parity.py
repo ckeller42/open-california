@@ -16,6 +16,7 @@
    :id: T_FW_PAIRING_SM_PARITY
    :links: R_PAIRING_SM, R_FW_PAIRING_SM
 """
+
 import json
 import shutil
 import subprocess
@@ -31,9 +32,24 @@ CORE = ROOT / "firmware" / "components" / "cali_core"
 def sm_cli(tmp_path_factory):
     cc = shutil.which("cc") or pytest.skip("no C compiler")
     out = tmp_path_factory.mktemp("sm") / "pairing_sm_cli"
-    subprocess.run([cc, "-std=c99", "-Wall", "-Wextra", "-Werror", "-I", str(CORE / "include"),
-                    "-I", str(ROOT / "csrc"), str(CORE / "pairing_sm.c"),
-                    str(CORE / "test" / "pairing_sm_cli.c"), "-o", str(out)], check=True)
+    subprocess.run(
+        [
+            cc,
+            "-std=c99",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(CORE / "include"),
+            "-I",
+            str(ROOT / "csrc"),
+            str(CORE / "pairing_sm.c"),
+            str(CORE / "test" / "pairing_sm_cli.c"),
+            "-o",
+            str(out),
+        ],
+        check=True,
+    )
     return out
 
 
@@ -44,8 +60,9 @@ def test_c_pairing_sm_replays_the_golden_vectors(sm_cli):
         lines.append("S %d %d %d" % tuple(c["start"]))
         for s in c["steps"]:
             lines.append("E %d %d" % (s["ev"], s.get("arg", 0)))
-    out = subprocess.run([str(sm_cli)], input="\n".join(lines) + "\n", capture_output=True,
-                         text=True, check=True).stdout.splitlines()
+    out = subprocess.run(
+        [str(sm_cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True
+    ).stdout.splitlines()
     i = 0
     for c in cases:
         for s in c["steps"]:
@@ -57,6 +74,7 @@ def test_c_pairing_sm_replays_the_golden_vectors(sm_cli):
 
 def test_a_passkey_outside_waiting_passkey_is_ignored(sm_cli):
     # PAIRING (4) + EV_PASSKEY_ENTERED (4) -> unchanged, no action (same as Python's fall-through)
-    out = subprocess.run([str(sm_cli)], input="S 4 0 0\nE 4 123456\n", capture_output=True,
-                         text=True, check=True).stdout.splitlines()
+    out = subprocess.run(
+        [str(sm_cli)], input="S 4 0 0\nE 4 123456\n", capture_output=True, text=True, check=True
+    ).stdout.splitlines()
     assert out == ["4 0 0 |"]

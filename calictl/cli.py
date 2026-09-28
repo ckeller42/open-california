@@ -39,6 +39,7 @@ moves the pop-up roof and needs a ~1 Hz move-heartbeat, so it runs via
 `device.actuate_roof` (re-send move at 1 Hz, bounded, always STOP) rather than the
 one-shot `device.actuate`. Nothing runs automatically.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -90,10 +91,17 @@ async def cmd_status(funcs, dev, args):
 async def cmd_get(funcs, dev, args):
     f = funcs[args.function]
     decoded = protocol.decode(f, await dev.read(f))
-    print(json.dumps({"function": args.function,
-                      "decoded": decoded,
-                      "interpreted": semantics.interpret(args.function, decoded)},
-                     indent=2, default=str))
+    print(
+        json.dumps(
+            {
+                "function": args.function,
+                "decoded": decoded,
+                "interpreted": semantics.interpret(args.function, decoded),
+            },
+            indent=2,
+            default=str,
+        )
+    )
 
 
 async def cmd_raw(funcs, dev, args):
@@ -116,65 +124,85 @@ async def _set_roof(f, funcs, dev, args):
     (roof not installed here) before writing."""
     from . import control
     from . import device as _device
+
     direction = args.what
     if direction not in control.ROOF_MOVES:
         print("roof direction must be open|close|stop, got %r" % direction, file=sys.stderr)
         return 2
     print("*** SAFETY-SENSITIVE + NOT-LIVE-VERIFIED ***", file=sys.stderr)
-    print("roof %s: pop-up roof actuation. Not installed on this van -> enum polarity + "
-          "SafetyCounter handshake are UNVERIFIED; this has never moved real hardware. "
-          "Ensure the roof path is physically clear." % direction, file=sys.stderr)
+    print(
+        "roof %s: pop-up roof actuation. Not installed on this van -> enum polarity + "
+        "SafetyCounter handshake are UNVERIFIED; this has never moved real hardware. "
+        "Ensure the roof path is physically clear." % direction,
+        file=sys.stderr,
+    )
     stop_frame = control.roof_frame(funcs, "stop")
     if direction == "stop":
         print("writing one-shot STOP %s (heartbeat-armed) ..." % stop_frame.hex())
         post = await dev.actuate(f, stop_frame, verify=True)
     else:
         move_frame = control.roof_frame(funcs, direction)
-        print("writing roof %s: streaming move %s (~%.2fs cadence, live SafetyCounter) for "
-              "<= %.0fs then STOP %s; unit self-gates the first ~%.0fs ..."
-              % (direction, move_frame.hex(), _device.ROOF_MOVE_PERIOD_S,
-                 _device.ROOF_MAX_TRAVEL_S, stop_frame.hex(), _device.ROOF_SAFETY_VALIDATE_S))
+        print(
+            "writing roof %s: streaming move %s (~%.2fs cadence, live SafetyCounter) for "
+            "<= %.0fs then STOP %s; unit self-gates the first ~%.0fs ..."
+            % (
+                direction,
+                move_frame.hex(),
+                _device.ROOF_MOVE_PERIOD_S,
+                _device.ROOF_MAX_TRAVEL_S,
+                stop_frame.hex(),
+                _device.ROOF_SAFETY_VALIDATE_S,
+            )
+        )
         post = await dev.actuate_roof(f, move_frame, stop_frame, verify=True)
     if post is None:
-        print("write sent, no readback"); return 1
-    print("after write: roof state = %s"
-          % json.dumps(semantics.interpret("roof", post), default=str))
+        print("write sent, no readback")
+        return 1
+    print("after write: roof state = %s" % json.dumps(semantics.interpret("roof", post), default=str))
     return 0
 
 
 async def cmd_set(funcs, dev, args):
     from . import control
+
     fn = args.function
     if fn not in control.BUILDERS:
-        print("set not implemented for %r (have: %s)"
-              % (fn, ", ".join(sorted(control.BUILDERS))), file=sys.stderr)
+        print(
+            "set not implemented for %r (have: %s)" % (fn, ", ".join(sorted(control.BUILDERS))),
+            file=sys.stderr,
+        )
         return 2
     f = funcs[fn]
     if fn == "roof":
         return await _set_roof(f, funcs, dev, args)
     if args.value is None:
-        print("set %s %s needs a value" % (fn, args.what), file=sys.stderr); return 2
+        print("set %s %s needs a value" % (fn, args.what), file=sys.stderr)
+        return 2
     cur = protocol.decode(f, await dev.read(f))
     print("current %s: %s" % (fn, json.dumps(semantics.interpret(fn, cur), default=str)))
     try:
-        gate_state = {fn: cur}                 # `cur` is the freshly-read target state
+        gate_state = {fn: cur}  # `cur` is the freshly-read target state
         if fn == "lighting" and args.what == "roof-reading":
             try:
                 gate_state["roof"] = protocol.decode(funcs["roof"], await dev.read(funcs["roof"]))
             except Exception:
-                pass                           # unknown roof state -> allow (can't prove it's down)
+                pass  # unknown roof state -> allow (can't prove it's down)
         reason = control.command_precondition(fn, args.what, args.value, gate_state)
         if reason:
-            print(reason, file=sys.stderr); return 2
+            print(reason, file=sys.stderr)
+            return 2
         frame = control.build(funcs, fn, args.what, args.value, cur)
     except ValueError as e:
-        print(str(e), file=sys.stderr); return 2
+        print(str(e), file=sys.stderr)
+        return 2
     if frame is None:
-        print("unknown target %r for %s" % (args.what, fn), file=sys.stderr); return 2
+        print("unknown target %r for %s" % (args.what, fn), file=sys.stderr)
+        return 2
     print("writing %s to %s control (heartbeat-armed) ..." % (frame.hex(), fn))
     post = await dev.actuate(f, frame, verify=True, follow=control.commit_for(fn))
     if post is None:
-        print("write sent, no readback"); return 1
+        print("write sent, no readback")
+        return 1
     interp = semantics.interpret(fn, post)
     label, got, want = _set_check(fn, args.what, args.value, interp, post)
     ok = got == want
@@ -187,10 +215,13 @@ def build_parser():
     p.add_argument("--addr", default=CamperDevice().addr, help="BLE identity address")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status")
-    g = sub.add_parser("get"); g.add_argument("function")
-    r = sub.add_parser("raw"); r.add_argument("function")
+    g = sub.add_parser("get")
+    g.add_argument("function")
+    r = sub.add_parser("raw")
+    r.add_argument("function")
     s = sub.add_parser("set")
-    s.add_argument("function"); s.add_argument("what")
+    s.add_argument("function")
+    s.add_argument("what")
     # value is optional: `set roof open|close|stop` takes no value (the direction is `what`).
     s.add_argument("value", nargs="?", default=None)
     sub.add_parser("influx", help="single InfluxDB test write; the serve daemon does this continuously")
@@ -198,11 +229,21 @@ def build_parser():
     sv.add_argument("--interval", type=float, default=30.0)
     sv.add_argument("--no-influx", action="store_true", help="skip InfluxDB writes")
     sv.add_argument("--dry-run", action="store_true", help="print discovery + one poll, no broker/InfluxDB")
-    sv.add_argument("--web", nargs="?", const=8080, type=int, default=None,
-                    metavar="PORT", help="serve the replica web UI on PORT (default 8080)")
-    sv.add_argument("--enable-writes", action="store_true",
-                    help="allow control writes to the vehicle (DEFAULT is read-only). Also enabled "
-                         "by the env CALICTL_ENABLE_WRITES=1")
+    sv.add_argument(
+        "--web",
+        nargs="?",
+        const=8080,
+        type=int,
+        default=None,
+        metavar="PORT",
+        help="serve the replica web UI on PORT (default 8080)",
+    )
+    sv.add_argument(
+        "--enable-writes",
+        action="store_true",
+        help="allow control writes to the vehicle (DEFAULT is read-only). Also enabled "
+        "by the env CALICTL_ENABLE_WRITES=1",
+    )
     return p
 
 
@@ -210,26 +251,30 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.cmd == "influx":
         from . import influx
+
         influx.write_once(args.addr)
         return 0
     if args.cmd == "serve":
         from . import serve
+
         if args.dry_run:
             asyncio.run(serve.dry_run(args.addr))
         else:
-            srv = serve.Server(args.addr, interval=args.interval,
-                                influx_enabled=not args.no_influx)
+            srv = serve.Server(args.addr, interval=args.interval, influx_enabled=not args.no_influx)
             srv._web_port = args.web
             # SAFE DEFAULT: read-only. Writes require an explicit opt-in (flag or env), so a stray
             # deploy never actuates the vehicle by accident.
-            writes = args.enable_writes or os.environ.get("CALICTL_ENABLE_WRITES", "").lower() in ("1", "true", "yes")
+            writes = args.enable_writes or os.environ.get("CALICTL_ENABLE_WRITES", "").lower() in (
+                "1",
+                "true",
+                "yes",
+            )
             srv._read_only = not writes
             srv.run()
         return 0
     funcs = _load()
     if getattr(args, "function", None) and args.function not in funcs:
-        print("unknown function %r. known: %s" % (args.function, ", ".join(sorted(funcs))),
-              file=sys.stderr)
+        print("unknown function %r. known: %s" % (args.function, ", ".join(sorted(funcs))), file=sys.stderr)
         return 2
     dev = CamperDevice(args.addr)
     handler = {"status": cmd_status, "get": cmd_get, "raw": cmd_raw, "set": cmd_set}[args.cmd]

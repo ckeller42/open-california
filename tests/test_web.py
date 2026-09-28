@@ -14,8 +14,7 @@ class FakeBackend:
     def __init__(self, read_only=False):
         self.read_only = read_only
         self.commands = []
-        self._state = {"cooler": {"installed": True, "on": False, "level": 3},
-                       "stairs": {"installed": False}}
+        self._state = {"cooler": {"installed": True, "on": False, "level": 3}, "stairs": {"installed": False}}
 
     def state(self):
         return self._state
@@ -26,7 +25,7 @@ class FakeBackend:
     def command(self, function, what, value, confirm=False):
         self.commands.append((function, what, value, confirm))
         if function == "cooler" and what == "power":
-            self._state["cooler"]["on"] = (str(value).lower() in ("on", "true", "1"))
+            self._state["cooler"]["on"] = str(value).lower() in ("on", "true", "1")
             return {"ok": True, "applied": True, "state": self._state["cooler"], "error": None}
         if function == "lighting":
             return {"ok": True, "applied": False, "state": {}, "error": None}
@@ -36,7 +35,7 @@ class FakeBackend:
 @pytest.fixture
 def server():
     be = FakeBackend()
-    srv = web.serve_http(be, WEBUI, "127.0.0.1", 0)   # port 0 -> ephemeral
+    srv = web.serve_http(be, WEBUI, "127.0.0.1", 0)  # port 0 -> ephemeral
     port = srv.server_address[1]
     yield be, "http://127.0.0.1:%d" % port
     srv.shutdown()
@@ -49,8 +48,7 @@ def _get(url):
 
 def _post(url, obj):
     data = json.dumps(obj).encode()
-    req = urllib.request.Request(url, data=data, method="POST",
-                                 headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(url, data=data, method="POST", headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req) as r:
             return r.status, json.loads(r.read())
@@ -88,12 +86,12 @@ def test_roof_requires_confirm(server):
 
 def test_airheater_requires_confirm(server):
     be, base = server
-    status, body = _post(base + "/api/command",
-                          {"function": "airheater", "what": "power", "value": "on"})
+    status, body = _post(base + "/api/command", {"function": "airheater", "what": "power", "value": "on"})
     assert status == 400 and body["error"] == "confirm_required"
-    assert be.commands == []   # unconfirmed request must never reach the backend
-    status2, body2 = _post(base + "/api/command",
-                            {"function": "airheater", "what": "power", "value": "on", "confirm": True})
+    assert be.commands == []  # unconfirmed request must never reach the backend
+    status2, body2 = _post(
+        base + "/api/command", {"function": "airheater", "what": "power", "value": "on", "confirm": True}
+    )
     assert status2 == 200 and body2["ok"] is True
     assert be.commands[-1] == ("airheater", "power", "on", True)
 
@@ -112,8 +110,10 @@ def test_read_only_rejects_commands():
 
 def test_import_is_stdlib_only():
     import sys
+
     before = set(sys.modules)
     import importlib
+
     importlib.reload(web)
     for banned in ("bleak", "yaml", "paho", "influxdb_client"):
         assert banned not in sys.modules or banned in before
@@ -140,8 +140,9 @@ def _raw_post(base, path, body_bytes, headers):
 def test_bad_content_length_header_is_clean_400(server):
     be, base = server
     body = json.dumps({"function": "cooler", "what": "power", "value": "on"}).encode()
-    status, raw = _raw_post(base, "/api/command", body,
-                             {"Content-Type": "application/json", "Content-Length": "not-a-number"})
+    status, raw = _raw_post(
+        base, "/api/command", body, {"Content-Type": "application/json", "Content-Length": "not-a-number"}
+    )
     assert status == 400
     assert json.loads(raw)["error"] == "bad_request"
     assert be.commands == []
@@ -150,8 +151,9 @@ def test_bad_content_length_header_is_clean_400(server):
 def test_negative_content_length_header_is_clean_400_not_hang(server):
     be, base = server
     body = json.dumps({"function": "cooler", "what": "power", "value": "on"}).encode()
-    status, raw = _raw_post(base, "/api/command", body,
-                             {"Content-Type": "application/json", "Content-Length": "-5"})
+    status, raw = _raw_post(
+        base, "/api/command", body, {"Content-Type": "application/json", "Content-Length": "-5"}
+    )
     assert status == 400
     assert json.loads(raw)["error"] == "bad_request"
     assert be.commands == []
@@ -219,6 +221,7 @@ def test_path_traversal_returns_404(server):
 
 def test_responses_are_no_cache(server):
     import urllib.request
+
     _, base = server
     for path in ("/", "/api/state"):
         with urllib.request.urlopen(base + path) as r:
@@ -229,6 +232,7 @@ def test_pwa_manifest_and_icons_served_with_correct_types(server):
     # Installable web app: the manifest + icons must serve with correct content-types, and
     # index.html must link them (else "Add to Home Screen" gets no name/icon).
     import urllib.request
+
     _, base = server
     for path, ctype, magic in (
         ("/manifest.webmanifest", "application/manifest+json", b"{"),

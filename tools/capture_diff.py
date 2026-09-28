@@ -19,6 +19,7 @@ Frontend: BLE reassembly is delegated to `tshark` (handles HCI/L2CAP fragmentati
 correctly) — we do NOT re-implement it. Alternatively pass `--frames FILE`, a normalized
 list a human extracts from any capture tool (`<uuid-or-handle>: <hex>` per line).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -44,31 +45,41 @@ class Scenario:
     """One (feature, action) capture target: the calictl args to reproduce it, plus
     which control char the app writes and the decoded state at capture time (for the
     full-packet carry-forward `control.build` needs)."""
+
     name: str
     function: str
     what: str
     value: object
-    control_char: str                 # short UUID, e.g. "1501"
+    control_char: str  # short UUID, e.g. "1501"
     capture_label: str = ""
-    handle: int | None = None         # ATT handle of that char, if known
+    handle: int | None = None  # ATT handle of that char, if known
     state: dict = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, name: str, d: dict) -> Scenario:
-        return cls(name=name, function=d["function"], what=d["what"], value=d["value"],
-                   control_char=str(d["control_char"]), capture_label=d.get("capture_label", ""),
-                   handle=d.get("handle"), state=d.get("state") or {})
+        return cls(
+            name=name,
+            function=d["function"],
+            what=d["what"],
+            value=d["value"],
+            control_char=str(d["control_char"]),
+            capture_label=d.get("capture_label", ""),
+            handle=d.get("handle"),
+            state=d.get("state") or {},
+        )
 
 
 def load_scenario(name: str, root: str | Path | None = None) -> Scenario:
     """Load `tools/scenarios/<name>.yaml` (needs PyYAML — this is tooling, deps allowed)."""
     import yaml  # lazy: keep the module importable in the bleak/yaml-less test env
+
     base = Path(root) if root else Path(__file__).resolve().parent / "scenarios"
     path = base / (name + ".yaml")
     return Scenario.from_dict(name, yaml.safe_load(path.read_text()))
 
 
 # --- capture frontends ------------------------------------------------------
+
 
 def parse_frames_file(path: str | Path) -> list[tuple[str, bytes]]:
     """Normalized fallback input: lines `<uuid-or-handle>: <hex>`. Keys are a short UUID
@@ -85,14 +96,26 @@ def parse_frames_file(path: str | Path) -> list[tuple[str, bytes]]:
 
 def extract_att_writes(path: str | Path, tshark: str = "tshark") -> list[tuple[int, bytes]]:
     """Extract (handle, value) for every ATT Write via tshark (correct reassembly)."""
-    cmd = [tshark, "-r", str(path),
-           "-Y", "btatt.opcode.method==0x12 || btatt.opcode.method==0x52",
-           "-T", "fields", "-e", "btatt.handle", "-e", "btatt.value"]
+    cmd = [
+        tshark,
+        "-r",
+        str(path),
+        "-Y",
+        "btatt.opcode.method==0x12 || btatt.opcode.method==0x52",
+        "-T",
+        "fields",
+        "-e",
+        "btatt.handle",
+        "-e",
+        "btatt.value",
+    ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     except FileNotFoundError:
-        raise SystemExit("tshark not found — install Wireshark CLI, or use --frames. "
-                         "See .claude/skills/capture-and-diff/SKILL.md") from None
+        raise SystemExit(
+            "tshark not found — install Wireshark CLI, or use --frames. "
+            "See .claude/skills/capture-and-diff/SKILL.md"
+        ) from None
     if res.returncode != 0:
         raise SystemExit("tshark failed: %s" % res.stderr.strip())
     return _parse_tshark_fields(res.stdout)
@@ -123,7 +146,8 @@ def select_app_frame(scenario: Scenario, writes: list[tuple], *, from_frames: bo
     for key, value in writes:
         if from_frames:
             matches = _short(str(key)) == target_short or (
-                str(key).lower().startswith("0x") and scenario.handle == int(str(key), 16))
+                str(key).lower().startswith("0x") and scenario.handle == int(str(key), 16)
+            )
         else:
             matches = scenario.handle is not None and key == scenario.handle
             if not matches and key in HANDLE_UUID:
@@ -131,13 +155,15 @@ def select_app_frame(scenario: Scenario, writes: list[tuple], *, from_frames: bo
         if matches:
             chosen = value
     if chosen is None:
-        raise SystemExit("no app write to control char %s (%s) found in the capture"
-                         % (scenario.control_char, "handle %s" % scenario.handle
-                            if scenario.handle else "unknown handle"))
+        raise SystemExit(
+            "no app write to control char %s (%s) found in the capture"
+            % (scenario.control_char, "handle %s" % scenario.handle if scenario.handle else "unknown handle")
+        )
     return chosen
 
 
 # --- the diff engine (the tested core) --------------------------------------
+
 
 @dataclass
 class DiffRow:
@@ -154,8 +180,9 @@ def diff(funcs: dict, scenario: Scenario, app_frame: bytes) -> tuple[list[DiffRo
     carries a meaningful value that calictl leaves at 0 or the leave-unchanged sentinel —
     i.e. exactly the missing ingredient to reproduce the app's effect."""
     func = funcs[scenario.function]
-    calictl_frame = control.build(funcs, scenario.function, scenario.what,
-                                  scenario.value, dict(scenario.state))
+    calictl_frame = control.build(
+        funcs, scenario.function, scenario.what, scenario.value, dict(scenario.state)
+    )
     if calictl_frame is None:
         raise SystemExit("calictl has no builder for %s/%s" % (scenario.function, scenario.what))
     ours = control.decode_control(func, calictl_frame)
@@ -172,15 +199,17 @@ def diff(funcs: dict, scenario: Scenario, app_frame: bytes) -> tuple[list[DiffRo
     return rows, leads, calictl_frame
 
 
-def format_report(scenario: Scenario, rows: list[DiffRow], leads: list[str],
-                  app_frame: bytes, calictl_frame: bytes) -> str:
-    lines = ["scenario: %s   (%s/%s = %s)"
-             % (scenario.name, scenario.function, scenario.what, scenario.value),
-             "app frame:     %s" % app_frame.hex(),
-             "calictl frame: %s" % calictl_frame.hex(),
-             "",
-             "  %-22s %-8s %-8s %s" % ("field", "app", "calictl", ""),
-             "  " + "-" * 46]
+def format_report(
+    scenario: Scenario, rows: list[DiffRow], leads: list[str], app_frame: bytes, calictl_frame: bytes
+) -> str:
+    lines = [
+        "scenario: %s   (%s/%s = %s)" % (scenario.name, scenario.function, scenario.what, scenario.value),
+        "app frame:     %s" % app_frame.hex(),
+        "calictl frame: %s" % calictl_frame.hex(),
+        "",
+        "  %-22s %-8s %-8s %s" % ("field", "app", "calictl", ""),
+        "  " + "-" * 46,
+    ]
     for r in rows:
         flag = "" if r.match else ("  <-- LEAD" if r.name in leads else "  <-- differs")
         lines.append("  %-22s %-8s %-8s%s" % (r.name, r.app, r.calictl, flag))
@@ -188,15 +217,18 @@ def format_report(scenario: Scenario, rows: list[DiffRow], leads: list[str],
     if not any(not r.match for r in rows):
         lines.append("RESULT: identical — calictl reproduces the app's frame for this action.")
     elif leads:
-        lines.append("RESULT: LEADS — the app sets %s that calictl leaves at 0/sentinel. "
-                     "This is the missing ingredient." % ", ".join(leads))
+        lines.append(
+            "RESULT: LEADS — the app sets %s that calictl leaves at 0/sentinel. "
+            "This is the missing ingredient." % ", ".join(leads)
+        )
     else:
         lines.append("RESULT: differs (no zero-vs-value leads; review the mismatches above).")
     return "\n".join(lines)
 
 
 def run(capture: str, scenario_name: str, *, frames: bool = False) -> int:
-    funcs = protocol.load(); overrides.apply(funcs)
+    funcs = protocol.load()
+    overrides.apply(funcs)
     scenario = load_scenario(scenario_name)
     if frames:
         writes = parse_frames_file(capture)
@@ -209,12 +241,14 @@ def run(capture: str, scenario_name: str, *, frames: bool = False) -> int:
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="capture_diff",
-                                description="Diff the real app's BLE control writes vs calictl's")
+    p = argparse.ArgumentParser(
+        prog="capture_diff", description="Diff the real app's BLE control writes vs calictl's"
+    )
     p.add_argument("capture", help="HCI capture (pcap/pcapng via tshark) or a --frames file")
     p.add_argument("scenario", help="scenario name under tools/scenarios/, e.g. lighting/kitchen-50")
-    p.add_argument("--frames", action="store_true",
-                   help="treat `capture` as a normalized `<uuid|handle>: <hex>` list")
+    p.add_argument(
+        "--frames", action="store_true", help="treat `capture` as a normalized `<uuid|handle>: <hex>` list"
+    )
     args = p.parse_args(argv)
     return run(args.capture, args.scenario, frames=args.frames)
 

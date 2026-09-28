@@ -4,6 +4,7 @@
    :id: T_DAEMON_LOGGING
    :links: R_DAEMON_LOGGING
 """
+
 import logging
 
 from calictl import log
@@ -30,7 +31,7 @@ def test_level_knob_hides_info_but_not_warning(capsys, monkeypatch):
     lg.info("quiet")
     lg.warning("loud")
     assert capsys.readouterr().out == "WARNING calictl.device: loud\n"
-    log.configure(level="INFO", force=True)          # leave the process at the default again
+    log.configure(level="INFO", force=True)  # leave the process at the default again
 
 
 def test_timestamp_on_by_default_off_under_journald(capsys, monkeypatch):

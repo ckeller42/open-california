@@ -124,8 +124,8 @@ STOP was **deadlocked**: the web command queue is single-flight and the "open" P
 while the server streams the move, so STOP could only go out after the move ended by itself — STOP
 now goes **out-of-band** straight to `/api/command` (the server handles it lock-free via
 `_roof_stop`). A re-press within 1000 ms is debounced (a restarted counter costs another ~3 s
-withhold). Guards: `tsc --checkJs` is a hard gate (CI `lint`, `tools/ci.sh webcheck`, pre-commit
-4f; baseline 0 errors), the e2e `page` fixture fails any test that raises a `pageerror`, every tile
+withhold). Guards: `tsc --checkJs` is a hard gate (CI `pre-commit`, `tools/ci.sh webcheck`, the `webcheck`
+pre-commit hook; baseline 0 errors), the e2e `page` fixture fails any test that raises a `pageerror`, every tile
 is opened once, and the mock seeds every function the van has fitted.
 
 ## 2026-09-16 — air-heater run-time cap 120 min, ErrorCode names, refrigerator-box UI gates
