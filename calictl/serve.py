@@ -281,15 +281,17 @@ class Server:
         self.dev = CamperDevice(addr) if addr else CamperDevice()
         self.interval = interval
         self.influx_enabled = influx_enabled
-        self._ble = None  # asyncio.Lock(); created inside run()'s loop (shared)
+        self._ble: asyncio.Lock | None = None  # created inside run()'s loop (shared)
         self._published = set()  # functions whose discovery is sent
         self._last = {}  # function -> last DECODED state (for commands)
-        self._roof_stop = None  # asyncio.Event (lazy, loop-bound): interrupts an in-flight roof move
-        self._pairing = None  # pairing_bluez.PairingRunner (lazy: created on first /api/pairing use)
+        self._roof_stop: asyncio.Event | None = None  # lazy, loop-bound: interrupts an in-flight roof move
+        self._pairing = None  # PairingRunner (lazy: created on first /api/pairing use)
         self._poll_skipped_for_pairing = False  # edge-detect so the skip/resume log prints once per flow
         self._pairing_pending = False  # "start" accepted, waiting for the _ble lock (poll skips)
-        self._pairing_start_task = None  # that waiting task (cancel/reset abandon it)
-        self._last_ok_ts = None  # epoch of the last SUCCESSFUL poll (for offline/age)
+        self._pairing_start_task: asyncio.Task[None] | None = (
+            None  # that waiting task (cancel/reset abandon it)
+        )
+        self._last_ok_ts: float | None = None  # epoch of the last SUCCESSFUL poll (for offline/age)
         # Persist the last-known state so a restart while the van is asleep still shows the last
         # real values (the unit can be unreachable for days when parked). Env-overridable path.
         self._state_cache = os.environ.get(
@@ -313,8 +315,8 @@ class Server:
         self._appends = 0  # appends since the last trim rewrite
         self._mqtt = None
         self._iw = None  # influx write_api
-        self._loop = None
-        self._web_port = None  # set by the CLI to enable the web UI
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._web_port: int | None = None  # set by the CLI to enable the web UI
         self._read_only = True  # SAFE DEFAULT: reject writes until explicitly enabled
         self._httpd = None
         # Persistent armed session (fast actuation). Default on; CALICTL_PERSISTENT_SESSION=0
@@ -426,7 +428,10 @@ class Server:
         if not energy:
             return
         if history.append(
-            self._history_cache, self._last_ok_ts, energy.get("batt2_v"), energy.get("batt2_current")
+            self._history_cache,
+            self._last_ok_ts,  # type: ignore[arg-type]
+            energy.get("batt2_v"),
+            energy.get("batt2_current"),
         ):
             self._appends += 1
             if self._appends >= history.TRIM_EVERY:  # amortised: ~1 rewrite per 4 h of polling
@@ -504,7 +509,8 @@ class Server:
             transport = pairing_bluez.BluezTransport()
             self._pairing = pairing_bluez.PairingRunner(transport)
             transport.on_event = self._pairing.handle
-            self._pairing.on_bonded = self._on_pairing_bonded
+        assert self._pairing is not None  # _ensure_pairing_runner guarantees _pairing is set
+        self._pairing.on_bonded = self._on_pairing_bonded
         return self._pairing
 
     def _on_pairing_bonded(self, address):
@@ -544,6 +550,7 @@ class Server:
         """
         if action == "start":
             self._ensure_pairing_runner()
+            assert self._pairing is not None  # _ensure_pairing_runner() just set it
             if self._pairing_pending:  # a second tab pressed "Connect" meanwhile
                 return self.pairing_snapshot()
             await self._sessions.set_mode("disconnect")
@@ -566,6 +573,7 @@ class Server:
         elif action == "reset":
             await self._abandon_pending_pairing_start()
             self._ensure_pairing_runner()
+            assert self._pairing is not None  # _ensure_pairing_runner() just set it
             await self._pairing.reset()
         return self.pairing_snapshot()
 
@@ -573,6 +581,9 @@ class Server:
         """Take `self._ble` (let an in-flight poll/command finish), then enter SCANNING while
         holding it; `_pairing_pending` is cleared only once the flow's own state keeps poll()
         away. Runs as a task so `pairing_command("start")` never blocks the HTTP request."""
+        # _pairing_pending is only set in _pairing_command after run() initialized _ble
+        assert self._ble is not None
+        assert self._pairing is not None  # _pairing_command("start") ensures this before creating the task
         try:
             async with self._ble:
                 if self._pairing_pending:
@@ -603,6 +614,9 @@ class Server:
         )
 
     async def poll(self):
+        # poll() is called from run() after _ble is initialized; guard allows unit tests
+        if self._ble is None:
+            return {}
         # Single BLE owner rule (AGENTS.md): a pairing flow OWNS the radio while active (design
         # spec, transport section: "the poll loop skips while pairing is active"). Polling opens
         # its OWN bleak connect -- a second BLE actor against hci0 mid-pairing is exactly what the
@@ -652,6 +666,8 @@ class Server:
             except Exception as e:
                 log.warning("firmware baseline snapshot failed: %s" % e)
         elif firmware.changed(self._fw_seen, cur_fw):
+            # firmware.changed() returns True only when self._fw_seen is not None
+            assert self._fw_seen is not None
             log.warning(
                 "FIRMWARE CHANGED: amb %s->%s comm %s->%s — capturing raw frames"
                 % (self._fw_seen[0], cur_fw[0], self._fw_seen[1], cur_fw[1])
@@ -751,6 +767,8 @@ class Server:
             can't be built, or a cold-cache read failure). The MQTT command
             path ignores this; `ServeBackend.command` surfaces it to the web UI.
         """
+        # on_command is called after run() initializes _ble
+        assert self._ble is not None
         from . import control  # lazy
 
         if self._read_only:
@@ -804,6 +822,8 @@ class Server:
         press reaches the unit. It still records the intent (clears a manual release, marks the UI
         active), still drops an ALREADY-live session for the handover, and nudges the supervisor
         once the move has released the lock, so the fast path comes back afterwards."""
+        # _roof_move_command is called after run() initializes _ble
+        assert self._ble is not None
         self._sessions.claim_intent()
         try:
             async with self._ble:
@@ -816,6 +836,8 @@ class Server:
         open/close (which HOLDS the _ble lock) immediately, so it flips the move loop's event
         lock-free — never waiting on the session/lock. The in-flight loop then breaks + writes its
         own STOP. If no move is in flight, send a real STOP under the lock."""
+        # _roof_stop_command is called after run() initializes _ble
+        assert self._ble is not None
         from . import control  # lazy
 
         moving = self._roof_stop is not None and not self._roof_stop.is_set()
@@ -974,7 +996,7 @@ class Server:
         port = int(os.environ.get("MQTT_PORT", "1883"))
         user = os.environ.get("MQTT_USER")
         password = os.environ.get("MQTT_PASSWORD")
-        cmd_map = getattr(mqtt, "command_topics", lambda: {})()
+        cmd_map: dict = getattr(mqtt, "command_topics", lambda: {})()
         # paho-mqtt >= 2.0 requires an explicit callback API version; request V1 so the
         # 4-arg on_connect / 3-arg on_message below stay valid on both 1.x and 2.x.
         try:

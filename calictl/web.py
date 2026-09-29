@@ -43,7 +43,7 @@ class _NoResolveHTTPServer(ThreadingHTTPServer):
     def server_bind(self):
         socketserver.TCPServer.server_bind(self)  # bind the socket; skip the getfqdn() reverse lookup
         host, port = self.server_address[:2]
-        self.server_name = host
+        self.server_name = str(host)  # server_address may be bytes on some Python versions
         self.server_port = port
 
 

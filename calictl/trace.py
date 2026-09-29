@@ -109,9 +109,12 @@ class Tracer:
 
     def _emit(self, rec: dict) -> None:
         try:
-            if os.path.exists(self.path) and os.path.getsize(self.path) >= self.max_bytes:
-                os.replace(self.path, self.path + ".1")  # keep one predecessor
-            with open(self.path, "a", encoding="utf-8") as f:
+            # _io() and link() already guard on self.path being truthy
+            path = self.path
+            assert path is not None
+            if os.path.exists(path) and os.path.getsize(path) >= self.max_bytes:
+                os.replace(path, path + ".1")  # keep one predecessor
+            with open(path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, separators=(",", ":")) + "\n")
         except OSError:
             pass  # tracing must never break BLE I/O

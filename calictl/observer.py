@@ -127,6 +127,8 @@ class CampingObserver:
         into bleak (the caller swallows exceptions). Tagged ``camping-push`` to distinguish it from
         the poll observer's ``camping-watch``."""
         fn = self._push_char_to_fn.get(uuid)
+        if fn is None:
+            return  # not a char we know about
         fields = _PUSH_FIELDS.get(fn)
         if not fields:
             return  # not a char we watch (only campingmode / vehicle)

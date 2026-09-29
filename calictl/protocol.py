@@ -116,8 +116,12 @@ def load(dict_path: str | Path | None = None) -> dict[str, Function]:
         fm = _FIELD_RE.search(s)
         if fm and section:
             d = _parse_field(fm.group("body"))
+            # protocol.yaml always defines name/offset/width for every field
             f = Field(
-                name=d.get("name"), offset=d.get("offset"), width=d.get("width"), default=d.get("default")
+                name=d.get("name"),  # type: ignore[arg-type]
+                offset=d.get("offset"),
+                width=d.get("width"),
+                default=d.get("default"),
             )
             (cur.control_fields if section == "control" else cur.state_fields).append(f)
     return funcs
@@ -182,10 +186,11 @@ def pack(frame_bits: list[int]) -> bytes:
 def decode(func: Function, raw: bytes) -> dict[str, int]:
     """Decode a state frame into {field_name: raw_int} for all placed fields."""
     bits = to_bits(raw)
-    out = {}
+    out: dict[str, int] = {}
     for f in func.state_fields:
-        if f.placed and f.offset + f.width <= len(bits):
-            out[f.name] = get_field(bits, f.offset, f.width)
+        # .placed guarantees offset/width are int; mypy can't narrow through dataclass property
+        if f.placed and f.offset + f.width <= len(bits):  # type: ignore[operator]
+            out[f.name] = get_field(bits, f.offset, f.width)  # type: ignore[arg-type]
     return out
 
 
@@ -202,20 +207,23 @@ def encode(func: Function, values: dict[str, int], *, frame_bytes: int | None = 
             "cannot encode %s: unresolved offset for %s (supply explicitly or "
             "disambiguate)" % (func.name, ", ".join(missing))
         )
-    total = (frame_bytes * 8) if frame_bytes else max((f.offset + f.width for f in placed), default=0)
-    frame = [0] * total
+    # .placed guarantees offset/width are int (dataclass invariant); mypy can't narrow through filter
+    total = (frame_bytes * 8) if frame_bytes else max((f.offset + f.width for f in placed), default=0)  # type: ignore[operator]
+    frame: list[int] = [0] * total
     for f in placed:
-        if f.offset + f.width > total:
+        # .placed guarantees f.offset and f.width are int
+        if f.offset + f.width > total:  # type: ignore[operator]
             # a too-small frame_bytes would let list-slice assignment GROW the frame
             # and silently misplace bits -> a corrupt write the firmware may reject by
             # dropping the ATT link. Fail loudly instead.
             raise ValueError(
                 "%s.%s (offset %d width %d) exceeds the %d-bit frame"
-                % (func.name, f.name, f.offset, f.width, total)
+                % (func.name, f.name, f.offset, f.width, total)  # type: ignore[str-format]
             )
         val = values.get(f.name, f.default)
         if val is None or val == "UNKNOWN":
             raise ValueError("no value/default for %s.%s" % (func.name, f.name))
-        check_value(func, f.name, f.width, int(val), f.valid)
-        frame[f.offset : f.offset + f.width] = _bits_of(int(val), f.width)
+        # .placed guarantees f.width is int; mypy can't narrow through dataclass property
+        check_value(func, f.name, f.width, int(val), f.valid)  # type: ignore[arg-type, call-overload]
+        frame[f.offset : f.offset + f.width] = _bits_of(int(val), f.width)  # type: ignore[arg-type, call-overload, index, operator]
     return pack(frame)

@@ -106,7 +106,7 @@ lint() {   # every pre-commit-stage hook over all tracked files (= ci.yml `pre-c
   elif "$PY" -m pre_commit --version >/dev/null 2>&1; then "$PY" -m pre_commit run --all-files --show-diff-on-failure
   else echo "lint: pre-commit not installed — run: tools/ci.sh dev"; exit 1; fi
 }
-typecheck() { "$PY" -m mypy calictl || true; }   # best-effort (None-safety / bad returns)
+typecheck() { "$PY" -m mypy calictl; }   # blocking: all mypy errors resolved 2025-07-28
 webcheck() {   # hard gate: the web UI is un-built JS, so this is its only static check. jsconfig.json
                # has checkJs on; `tsc` catches undeclared identifiers ("Cannot find name") that
                # `node --check` (parse only) cannot — one of those once shipped to buspi. Needs node.
