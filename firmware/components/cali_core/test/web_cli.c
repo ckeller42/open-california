@@ -23,6 +23,7 @@
  *   pair <name>      the runner's state, by PAIR_STATE_NAMES name
  *   bond 0|1         has_bond() (identity() = C0:FF:EE:CA:11:F0 while 1)
  *   active 0|1       cali_session_active()
+ *   linkup 0|1       cali_session_link_up() (defaults to 0: set both when a test wants "up")
  *   stamp <ms>       cali_session_last_update_ms()
  *   now <ms>         cali_uptime_ms()
  *   kv <key>         print "KV <value>" or "KV <missing>"
@@ -94,7 +95,7 @@ static const cali_net_t fake_net = {
 /* ---- the fake session ---- */
 static uint8_t s_cooler[6] = {0x08, 0x03, 0, 0, 0, 0};   /* Installed=1 (bit 4), Level=3 (bits 12-15) */
 static const uint8_t s_roof[5] = {0x12, 0, 0, 0, 0};     /* Position=1 (bits 0-3), Installed=1 (bit 6) */
-static int s_nofn, s_active;
+static int s_nofn, s_active, s_linkup;
 static uint64_t s_stamp, s_now = 1000;
 
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
@@ -112,6 +113,7 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     return 0;
 }
 int cali_session_active(void) { return s_active; }
+int cali_session_link_up(void) { return s_linkup; }
 uint64_t cali_session_last_update_ms(void) { return s_stamp; }
 
 /* ---- the fake runner + transport ---- */
@@ -252,6 +254,7 @@ int main(void) {
         else if (strcmp(w, "joined") == 0) s_wifi.joined_once = (uint8_t)v;
         else if (strcmp(w, "bond") == 0) s_bond = (int)v;
         else if (strcmp(w, "active") == 0) s_active = (int)v;
+        else if (strcmp(w, "linkup") == 0) s_linkup = (int)v;
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
         else if (strcmp(w, "apclear") == 0) s_naps = 0;
         else if (strcmp(w, "lastfail") == 0)

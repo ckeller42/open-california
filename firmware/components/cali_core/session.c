@@ -278,6 +278,8 @@ void cali_session_tick(uint64_t now_ms) {
 
 int cali_session_active(void) { return s_active; }
 
+int cali_session_link_up(void) { return s_link == LINK_UP; }
+
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     if (i >= CODEC_NCHARS || !s_fr[i].have) return 0;
     *frame = s_fr[i].frame;

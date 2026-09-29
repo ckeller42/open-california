@@ -274,6 +274,43 @@ def test_setup_flow_in_browser(host_fw, hci_unit, tmp_path, locale, lang):
     assert not any(PSK in line for line in fw.log)
 
 
+def test_rescan_then_connect_keeps_the_join_result_in_browser(host_fw, hci_unit, tmp_path):
+    """Regression for the CodeRabbit review on #220: ``scan()``'s delayed re-read (``2 *
+    CFG.pollMs`` after the click) must not blindly overwrite ``#setup-msg``. Click "Search again",
+    then "Connect" right after (before that delayed read lands) — the join's success link must
+    still be there once the delayed read fires. The old code cleared the text unconditionally,
+    which also hides ``#setup`` (its visibility check looks for that link once WiFi mode is no
+    longer "setup")."""
+    sync_playwright = _require_chromium()
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel ok 192.168.1.42\n")
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    fw.expect("LOG", lambda l: l == AP_UP)
+    link = "http://%s.local" % CONSTS["NET_HOSTNAME"]
+    wait_ms = 10 * CONSTS["NET_PAGE_POLL_MS"]
+    errors = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_context().new_page()
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto("http://127.0.0.1:%d/" % fw.http_port)
+        page.wait_for_selector("#setup", state="visible", timeout=wait_ms)
+        page.wait_for_selector("#ssid option[value=minsel]", state="attached", timeout=wait_ms)
+
+        page.click("#rescan")  # starts scan()'s pending delayed re-read, 2 * CFG.pollMs out
+        page.select_option("#ssid", "minsel")
+        page.fill("#psk", PSK)
+        page.click("#connect")  # quickly, before that delayed read lands
+        a = page.wait_for_selector('#setup-msg a[href="%s"]' % link, timeout=wait_ms)
+        assert a.inner_text() == link
+
+        # outlive the rescan's pending timer (2 * CFG.pollMs after the click above)
+        page.wait_for_timeout(2 * CONSTS["NET_PAGE_POLL_MS"] + 500)
+        assert page.query_selector('#setup-msg a[href="%s"]' % link) is not None
+        assert page.is_visible("#setup")
+        browser.close()
+    assert not errors, errors
+
+
 @pytest.mark.parametrize("bad", ["0", "abc", "80x", "65536", "-1", ""])
 def test_http_port_must_be_a_valid_port(bad):
     """``--http 0`` or a non-numeric/out-of-range port is a usage error (exit 2), never a silent run

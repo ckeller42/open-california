@@ -144,6 +144,7 @@ back**. The replies you'll see:
 | Joined the hotspot, no page pops up | Open **<http://192.168.4.1>** in a browser. Some phones only show the sign-in notice once; others open it in a small window you have to tap. |
 | Your network is missing from the list | Tap **Search again**. 5 GHz-only networks, and networks that hide their name, never appear — use a 2.4 GHz network; for a hidden one, try `wifi set` on the USB console (untested). |
 | "The password needs 8–63 characters." | The password is too short or too long. An open network (no password) cannot be used. |
+| A network in the list is greyed out, labelled "open network, not supported" | It has no password (open). The page lists it so you know it's there, but it can't be selected — the device needs a WPA2-Personal password. |
 | "Wrong password — try again." | The network turned the password down. The satellite is back on its setup hotspot; type the password again (it is case-sensitive). |
 | "Network not found — check that it is in range, then try again." | The satellite could not see the network when it tried to join: it is out of range, switched off, or 5 GHz-only. Move the satellite closer or pick another network. |
 | "Could not join the network — try again." | Anything else (the router did not answer, or gave no address). The satellite is back on its setup hotspot; try again, and check the router if it keeps happening. |

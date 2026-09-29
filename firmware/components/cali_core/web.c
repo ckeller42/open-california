@@ -113,7 +113,7 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_key(&j, "link");
     cali_json_obj_begin(&j);
     cali_json_key(&j, "up");
-    cali_json_bool(&j, cali_session_active());
+    cali_json_bool(&j, cali_session_link_up());
     cali_json_key(&j, "last_snap_age_ms");
     if (last) cali_json_int(&j, (long long)(now >= last ? now - last : 0)); else cali_json_null(&j);
     cali_json_obj_end(&j);

@@ -26,7 +26,7 @@
   "rescan": {"en": "Search again", "de": "Erneut suchen"},
   "scanning": {"en": "Searching for networks…", "de": "Suche Netzwerke…"},
   "no_networks": {"en": "No networks found", "de": "Keine Netzwerke gefunden"},
-  "open_network": {"en": "open", "de": "offen"},
+  "open_unsupported": {"en": "open network, not supported", "de": "offenes Netz, nicht unterstützt"},
   "err_ssid": {"en": "Choose a network (1–{max} characters).", "de": "Wähle ein Netzwerk (1–{max} Zeichen)."},
   "err_psk": {"en": "The password needs {min}–{max} characters.", "de": "Das Passwort braucht {min}–{max} Zeichen."},
   "err_json": {"en": "The device rejected the request.", "de": "Das Gerät hat die Anfrage abgelehnt."},

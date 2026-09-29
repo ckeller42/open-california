@@ -160,7 +160,14 @@ def test_api_state_shape(web_cli):
         get(
             web_cli,
             "/api/state",
-            setup=["now 5000", "stamp 4000", "active 1", "bond 1", "wifi online minsel 192.168.1.23 -61"],
+            setup=[
+                "now 5000",
+                "stamp 4000",
+                "active 1",
+                "linkup 1",
+                "bond 1",
+                "wifi online minsel 192.168.1.23 -61",
+            ],
         )
     )
     assert set(body) == STATE_KEYS and body["fn"]["cooler"]["Installed"] == 1
@@ -183,6 +190,13 @@ def test_api_state_nulls(web_cli):
     assert body["device"]["pairing"] == {"state": "idle", "address": None}
     assert body["device"]["link"] == {"up": False, "last_snap_age_ms": None}
     assert body["device"]["wifi"] == {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
+
+
+def test_api_state_link_up_is_the_real_link_not_the_kept_bond(web_cli):
+    """A session stays "active" (keeps/re-establishes a link for a stored bond) through reconnect
+    backoff, while the link itself is down. ``link.up`` must report the link, not "active"."""
+    body = json.loads(get(web_cli, "/api/state", setup=["active 1", "linkup 0", "bond 1", "stamp 0"]))
+    assert body["device"]["link"]["up"] is False
 
 
 @pytest.mark.parametrize(

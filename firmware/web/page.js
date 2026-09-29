@@ -141,27 +141,37 @@ function renderNetworks(scan) {
   sel.textContent = "";
   if (!scan.length) { sel.appendChild(el("option", t("no_networks"))).value = ""; return; }
   for (const ap of scan) {
-    const o = el("option", ap.ssid + "  (" + ap.rssi + " dBm" + (ap.secure ? "" : ", " + t("open_network")) + ")");
+    const o = el("option", ap.ssid + "  (" + ap.rssi + " dBm" + (ap.secure ? "" : ", " + t("open_unsupported")) + ")");
     o.value = ap.ssid;
+    o.disabled = !ap.secure;  /* the device requires a NET_PSK_MIN..NET_PSK_MAX passphrase */
     sel.appendChild(o);
   }
   if (scan.some((ap) => ap.ssid === keep)) sel.value = keep;
 }
 
+/** @type {ReturnType<typeof setTimeout>|null} the pending delayed re-read from the last scan() */
+let scanTimer = null;
+
 async function scan() {
-  $("setup-msg").textContent = t("scanning");
+  const msg = $("setup-msg");
+  if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
+  msg.className = "";
+  msg.textContent = t("scanning");
+  const still = () => msg.textContent === t("scanning");  /* nothing newer (join result, error) landed */
   try {
     renderNetworks((await getWifi()).scan);
     /* each GET starts a fresh scan for the next one: read its result a moment later */
-    setTimeout(async () => {
-      try { renderNetworks((await getWifi()).scan); $("setup-msg").textContent = ""; }
-      catch (e) { $("setup-msg").textContent = t("err_net"); }
+    scanTimer = setTimeout(async () => {
+      scanTimer = null;
+      try { renderNetworks((await getWifi()).scan); if (still()) msg.textContent = ""; }
+      catch (e) { if (still()) msg.textContent = t("err_net"); }
     }, 2 * CFG.pollMs);
-  } catch (e) { $("setup-msg").textContent = t("err_net"); }
+  } catch (e) { if (still()) msg.textContent = t("err_net"); }
 }
 
 async function connect() {
   const ssid = select("ssid").value, psk = input("psk").value, msg = $("setup-msg");
+  if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
   msg.className = "bad";
   if (!ssid || ssid.length > CFG.ssidMax) { msg.textContent = t("err_ssid", {max: CFG.ssidMax}); return; }
   if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
