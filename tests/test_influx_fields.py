@@ -13,7 +13,6 @@ import pytest
 
 from calictl import influx
 
-
 # --------------------------------------------------------------------- numeric_fields
 
 
@@ -104,9 +103,7 @@ def test_points_for_one_point_per_nonempty_function(fake_influx):
 def test_build_points_shares_points_for(fake_influx):
     states = {"cooler": {"state": True}}
     b, p = influx.build_points(states), influx.points_for(states)
-    assert [(x.measurement, x.tags, x.fields) for x in b] == [
-        (x.measurement, x.tags, x.fields) for x in p
-    ]
+    assert [(x.measurement, x.tags, x.fields) for x in b] == [(x.measurement, x.tags, x.fields) for x in p]
 
 
 # --------------------------------------------------------------------- field_series
@@ -117,7 +114,7 @@ class _Rec:
         import datetime
 
         self._v = value
-        self._t = datetime.datetime.fromtimestamp(seconds, tz=datetime.timezone.utc)
+        self._t = datetime.datetime.fromtimestamp(seconds, tz=datetime.UTC)
 
     def get_value(self):
         return self._v
