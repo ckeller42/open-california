@@ -15,6 +15,15 @@
  * operation; a small "core" task then plays the host task's part (same do_work, woken by a task
  * notification instead of the NimBLE event), so it still prints the idle STATE and answers lines.
  *
+ * WiFi (#154): after the BLE side, esp_netif + the default event loop + cali_net_esp_init()
+ * (platform/esp/net_esp.c); on success the WiFi runner (wifi_run.c), the web endpoints (web.c, the
+ * page = strings_gen.h's WEB_INDEX_HTML, the same bytes the host serves) and the runner's boot. The
+ * tick then also runs cali_net_esp_poll (the only place WiFi/IP events, queued by the ESP event
+ * task, reach the runner) -> cali_wifi_run_tick -> cali_captive_dns_poll -> cali_web_poll, in
+ * host_main.c's order, on the owner task. No WiFi driver (esp_wifi_init fails, or the QEMU image,
+ * built with CONFIG_CALI_WIFI=n): "LOG wifi: driver unavailable" once; the WiFi SM stays
+ * WIFI_UNPROVISIONED (console: no "wifi" in STATE, "wifi: not enabled"), nothing listens.
+ *
  * QEMU build (CONFIG_CALI_QEMU_PROBE, firmware/qemu/sdkconfig.qemu only): nimble_port_init() is not
  * called at all (QEMU does not model the controller; esp_bt_controller_init asserts there and the
  * chip reboots in a loop), so the no-controller path above runs, and the bond store is still loaded
@@ -38,6 +47,8 @@
 #error "console must be USB-Serial/JTAG (device) or UART (QEMU): see firmware/README.md"
 #endif
 #include "esp_err.h"
+#include "esp_event.h"
+#include "esp_netif.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -50,10 +61,14 @@
 #include "nimble/nimble_port_freertos.h"
 
 #include "cali_ble_nimble.h"
+#include "cali_captive.h"
 #include "cali_console.h"
+#include "cali_net_esp.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
+#include "cali_web.h"
+#include "cali_wifi_run.h"
 
 #define TICK_MS 100
 #define NLINES 16
@@ -64,6 +79,7 @@ static atomic_int s_tick_due;          /* set by the timer, cleared by the owner
 static atomic_int s_ready;             /* the owner may take lines (NimBLE synced / core up) */
 static struct ble_npl_event s_work_ev; /* BLE: the owner is the NimBLE host task */
 static TaskHandle_t s_core_task;       /* no BLE: the owner is this task */
+static int s_wifi;                     /* cali_net_esp_init succeeded: the network runs on the tick */
 
 #if CONFIG_CALI_QEMU_PROBE
 #define KVPROBE_KEY "kvprobe"
@@ -145,15 +161,22 @@ static void do_work(void) {
     char line[LINE_MAX_LEN];
     if (atomic_exchange(&s_tick_due, 0)) {
         uint64_t now = cali_uptime_ms();
-        cali_runner_tick(now);
-        cali_session_tick(now);
+        cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
+        cali_session_tick(now);       /* delays this tick's heartbeat decision */
+        if (s_wifi) {
+            cali_net_esp_poll(now);   /* WiFi events -> the runner's sink */
+            cali_wifi_run_tick(now);
+            cali_captive_dns_poll();
+            cali_web_poll(now);
+        }
     }
     if (!atomic_load(&s_ready)) return;
     while (xQueueReceive(s_lines, line, 0) == pdTRUE) {
 #if CONFIG_CALI_QEMU_PROBE
-        if (kvprobe_line(line)) continue;
+        if (!kvprobe_line(line))
 #endif
-        cali_console_line(line);
+            cali_console_line(line);
+        memset(line, 0, sizeof line);   /* a "wifi set" line holds a passphrase */
     }
 }
 
@@ -262,6 +285,7 @@ static void console_task(void *param) {
         line[n] = 0;
         n = 0;
         xQueueSend(s_lines, line, portMAX_DELAY);           /* owner behind: wait for a slot */
+        memset(line, 0, sizeof line);                       /* the queue holds its own copy */
         wake_owner();
     }
 }
@@ -269,6 +293,25 @@ static void console_task(void *param) {
 static void console_init(void) {
     console_io_init();
     setvbuf(stdout, NULL, _IOLBF, 0);
+}
+
+/* The network side, before the owner task starts (like cali_console_init). t: the BLE transport the
+ * console runs on (the page's pairing address). */
+static void wifi_init(const cali_transport_t *t) {
+    esp_err_t e = esp_netif_init();
+    if (e == ESP_OK) {
+        e = esp_event_loop_create_default();   /* NimBLE does not create it; tolerate one anyway */
+        if (e == ESP_ERR_INVALID_STATE) e = ESP_OK;
+    }
+    if (e != ESP_OK) cali_log("net: esp_netif/event loop: %s", esp_err_to_name(e));
+    if (e != ESP_OK || cali_net_esp_init() != 0) {
+        cali_log("wifi: driver unavailable");   /* exact text: test_qemu_boot.py */
+        return;
+    }
+    s_wifi = 1;
+    cali_wifi_run_init(&cali_net_esp);
+    if (cali_web_init(&cali_net_esp, t, NET_HTTP_PORT) != 0) cali_log("http: cannot listen on port %d", NET_HTTP_PORT);
+    cali_wifi_run_boot();        /* saved creds -> join; none -> setup hotspot (events on the tick) */
 }
 
 void app_main(void) {
@@ -305,6 +348,7 @@ void app_main(void) {
 #endif
         cali_console_init(&s_no_ble);
     }
+    wifi_init(err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble);
 
     const esp_timer_create_args_t targs = {.callback = tick_cb, .name = "cali_tick"};
     esp_timer_handle_t tick;

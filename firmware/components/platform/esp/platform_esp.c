@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "nvs.h"
 
@@ -35,6 +36,12 @@ void cali_log(const char *fmt, ...) {
     va_end(ap);
     fputc('\n', stdout);
     fflush(stdout);
+}
+
+/* The app description's version: PROJECT_VER, which firmware/CMakeLists.txt sets from `git describe`
+ * at configure time (esp_app_desc_t.version, 32 bytes, NUL-terminated). */
+const char *cali_fw_version(void) {
+    return esp_app_get_description()->version;
 }
 
 /* store_dir is the host's; on the ESP the store is NVS (nvs_flash_init() must have run). */
@@ -112,6 +119,16 @@ int cali_kv_set(const char *key, const void *buf, size_t len) {
     if (nvs_set_blob(s_nvs, key, raw, len + 8) == ESP_OK && nvs_commit(s_nvs) == ESP_OK) rc = 0;
     free(raw);
     return rc;
+}
+
+/* Needed now, not only from Task 9: console.c links the WiFi runner (wifi_run.c), whose credential
+ * clear calls this, into every build that has the console. */
+int cali_kv_erase(const char *key) {
+    esp_err_t err;
+    if (!s_nvs_open || !key_ok(key)) return -1;
+    err = nvs_erase_key(s_nvs, key);
+    if (err == ESP_ERR_NVS_NOT_FOUND) return 0;
+    return err == ESP_OK && nvs_commit(s_nvs) == ESP_OK ? 0 : -1;
 }
 
 int cali_kv_erase_all(void) {

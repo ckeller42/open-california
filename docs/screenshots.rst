@@ -46,3 +46,18 @@ Vehicle
    :alt: Vehicle screen — ignition, leveling, clock
 
 Every screen also renders in dark mode (``docs/screenshots/dark_*.png``).
+
+ESP32 satellite page
+--------------------
+
+The status/setup page the ESP32 firmware serves (#154) — setup-hotspot mode and station mode. Rendered
+by ``python -m tools.ux_gallery --esp`` from the generated page bytes plus canned API responses (no
+firmware or radio involved); see :doc:`howto-esp-wifi-setup`.
+
+.. image:: screenshots/esp-setup-page.png
+   :width: 300
+   :alt: ESP32 setup page — network list, password, Connect
+
+.. image:: screenshots/esp-status-page.png
+   :width: 300
+   :alt: ESP32 status page — device state and camper-unit functions

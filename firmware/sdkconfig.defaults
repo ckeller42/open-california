@@ -13,7 +13,10 @@ CONFIG_BT_NIMBLE_NVS_PERSIST=n
 # UART0 (qemu/sdkconfig.qemu).
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# partitions.csv (ruling R18): nvs + phy_init + a 3 MB factory app at 0x10000 (the WiFi build is
+# ~1.08 MB; IDF's single-app-large table has only 1500K). Offsets unchanged: 0x0 / 0x8000 / 0x10000.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # Same as the host build (firmware/README.md "Host build notes" 3 + Task 7 review):
 # LE Secure Connections only (a legacy-only peer fails before any passkey), RPA resolution in the
@@ -51,3 +54,16 @@ CONFIG_BT_NIMBLE_EXT_SCAN=n
 #   the protocol lines a board-side reader parses. WARNING (not ERROR/NONE) keeps the stack's rare
 #   warnings — the diagnostics the unverified board tier needs.
 CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
+
+# WiFi (#154, Task 9): cali_net on esp_wifi + lwIP + mdns (components/platform/esp/net_esp.c).
+# The station/setup-AP runtime and the web page (main/Kconfig.projbuild; the QEMU overlay turns it
+# off: QEMU's esp32s3 has no WiFi radio).
+CONFIG_CALI_WIFI=y
+# The credentials live in cali_kv (NVS namespace "cali", "wifi_ssid"/"wifi_psk"); net_esp.c also
+# sets WIFI_STORAGE_RAM, so the driver never keeps its own copy of the passphrase in NVS.
+CONFIG_ESP_WIFI_NVS_ENABLED=n
+# DHCP hostname: net_esp.c sets NET_HOSTNAME (csrc/net_consts.h) on both netifs at init, so no copy
+# of the name lives here (CONFIG_LWIP_LOCAL_HOSTNAME stays the IDF default, overridden in code).
+# Socket budget: the HTTP listener + one connection (+ one being torn down) + the captive DNS UDP
+# socket = 4; 6 leaves room (the mdns component uses lwIP PCBs, not sockets, by default).
+CONFIG_LWIP_MAX_SOCKETS=6

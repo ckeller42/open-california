@@ -10,8 +10,9 @@
 # header + vector freshness always; the C parity tests only if a C compiler is present), the Bumble
 # pairing harness (tests/test_pairing_link.py, if bumble is installed — requirements-dev pins it)
 # and `gui-e2e` (tests/e2e, if Playwright + Chromium are installed; otherwise they SKIP), and the
-# pure-C firmware tests (tests/firmware minus the `linux_only` NimBLE host e2e; `tools/ci.sh
-# firmware` runs those = ci.yml `firmware-host-e2e`). pre-commit only sees git-TRACKED files:
+# pure-C firmware tests (tests/firmware minus the `linux_only` NimBLE host tier; `tools/ci.sh
+# firmware` runs all of tests/firmware = ci.yml `firmware-host-e2e`: BLE host e2e, bond store,
+# WiFi/web e2e incl. the Playwright status-page test). pre-commit only sees git-TRACKED files:
 # `git add` a new file before running this, or it gets a false green.
 # Only GitHub runs: `install-script` (sh -n + shellcheck install.sh), `docs` (sphinx -W site build
 # on PRs; locally `sh docs/build_site.sh`), `firmware-build` + `firmware-qemu` (ESP-IDF container),
@@ -52,27 +53,31 @@ test_suite() {   # parallel when pytest-xdist is present (tools/ci.sh dev), else
     "$PY" -m pytest tests/ -q -m "not linux_only"
   fi
 }
-firmware() {   # CI's firmware-host-e2e job: NimBLE Linux host over TCP HCI to the Bumble fake unit.
-               # Linux + gcc-multilib/g++-multilib (or CROSS_COMPILE=i686-linux-gnu-); the linux_only
-               # host tier (test_host_e2e.py + test_ble_store_kv.py; see tests/firmware/conftest.py
-               # _skip_reason()) SKIPS -- not errors -- off that environment, so a bare pytest run
-               # exits 0 even though the host e2e it's presented as never ran. Fail loud instead: this
-               # is a targeted check, not the general suite (which filters `-m "not linux_only"` and
-               # keeps the quiet skip in test_suite() above).
+firmware() {   # CI's firmware-host-e2e job: all of tests/firmware, incl. the linux_only host tier --
+               # NimBLE Linux host over TCP HCI to the Bumble fake unit (test_host_e2e.py,
+               # test_ble_store_kv.py) and the WiFi/web e2e (test_web_e2e.py, whose status-page test
+               # needs Playwright + Chromium: pip install -r requirements-e2e.txt && python -m
+               # playwright install chromium). Linux + gcc-multilib/g++-multilib (or
+               # CROSS_COMPILE=i686-linux-gnu-). The linux_only tier SKIPS -- not errors -- off that
+               # environment (tests/firmware/conftest.py _skip_reason()), so a bare pytest run exits 0
+               # even though the host tier never ran. Fail loud instead: this is a targeted check, not
+               # the general suite (which filters `-m "not linux_only"` and keeps the quiet skip in
+               # test_suite() above). CALI_REQUIRE_CHROMIUM=1 (as in CI) makes a missing browser a
+               # failure of the page test rather than a skip.
   local f
-  for f in tests/firmware/test_host_e2e.py tests/firmware/test_ble_store_kv.py; do
+  for f in tests/firmware/test_host_e2e.py tests/firmware/test_ble_store_kv.py tests/firmware/test_web_e2e.py; do
     [ -f "$f" ] || { echo "firmware: expected test file missing: $f" >&2; exit 1; }
   done
-  local out status
-  out=$("$PY" -m pytest tests/firmware -v -rs 2>&1)
-  status=$?
+  local out status=0
+  out=$(CALI_REQUIRE_CHROMIUM=1 "$PY" -m pytest tests/firmware -v -rs 2>&1) || status=$?
   printf '%s\n' "$out"
   [ $status -eq 0 ] || exit $status
   # test_qemu_boot.py is a separate tier (gated on CALI_QEMU=1, its own CI job firmware-qemu) and
-  # stays a quiet skip here; only the two linux_only host-tier files count as "not validated".
+  # stays a quiet skip here; only the linux_only host-tier files count as "not validated".
   local skip_lines reason
   skip_lines=$(printf '%s\n' "$out" \
-    | grep -E '^SKIPPED \[[0-9]+\] tests/firmware/(test_host_e2e|test_ble_store_kv)\.py')
+    | grep -E '^SKIPPED \[[0-9]+\] tests/firmware/(test_host_e2e|test_ble_store_kv|test_web_e2e)\.py' || true)
+  # (|| true: no match is the green case -- under set -euo pipefail a bare grep miss would exit 1)
   if [ -n "$skip_lines" ]; then
     reason=$(printf '%s\n' "$skip_lines" | sed -E 's/^SKIPPED \[[0-9]+\] [^:]+(:[0-9]+)?: //' | sort -u | paste -sd '; ' -)
     echo "firmware: host tier NOT validated: $reason" >&2
@@ -92,10 +97,13 @@ vendor_check() {   # whole tracked tree: vendor paths, the real vehicle MAC, VIN
 }
 doc_offset() { "$PY" -m pytest tests/test_doc_offset_consistency.py -q -p no:cacheprovider; }
 codec_fresh() {   # golden vectors + generated C headers match protocol/dictionary.yaml + overrides
+                  # (+ the ESP32 WiFi SM vectors / net_consts.h from tools/wifi_sm_ref.py + wifi_consts.py)
   "$PY" -m tools.gen_codec_vectors --check \
     || { echo "golden codec vectors stale — run: $PY -m tools.gen_codec_vectors"; exit 1; }
   "$PY" -m tools.gen_c_dict --check \
     || { echo "generated C headers stale — run: $PY -m tools.gen_c_dict"; exit 1; }
+  "$PY" -m tools.gen_wifi_vectors --check \
+    || { echo "WiFi SM golden vectors stale — run: $PY -m tools.gen_wifi_vectors"; exit 1; }
 }
 screenshots() {   # regenerate docs/screenshots from the live UI over the mock (needs Playwright +
                   # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.
@@ -107,19 +115,25 @@ lint() {   # every pre-commit-stage hook over all tracked files (= ci.yml `pre-c
   else echo "lint: pre-commit not installed — run: tools/ci.sh dev"; exit 1; fi
 }
 typecheck() { "$PY" -m mypy calictl; }   # blocking: all mypy errors resolved 2025-07-28
-webcheck() {   # hard gate: the web UI is un-built JS, so this is its only static check. jsconfig.json
-               # has checkJs on; `tsc` catches undeclared identifiers ("Cannot find name") that
-               # `node --check` (parse only) cannot — one of those once shipped to buspi. Needs node.
+webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only static check. Each
+               # jsconfig.json has checkJs on; `tsc` catches undeclared identifiers ("Cannot find
+               # name") that `node --check` (parse only) cannot — one of those once shipped to buspi.
+               # Covers the calictl web UI and the ESP32 firmware page script. Needs node.
   command -v node >/dev/null || { echo "webcheck: node not found (install Node 22+)"; exit 1; }
   # typescript is pinned (bump deliberately; the 0-error baseline is per compiler version).
   npx --yes -p typescript@7.0.2 tsc --noEmit -p calictl/webui/jsconfig.json
+  npx --yes -p typescript@7.0.2 tsc --noEmit -p firmware/web/jsconfig.json
   node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js
+  node --check firmware/web/page.js
   echo "web UI typecheck: OK"
 }
 dev() {
   "$PY" -m pip install -r requirements-dev.txt
   # The retired .githooks/ hook set core.hooksPath; pre-commit refuses to install while it is set.
-  if [ "$(git config --get core.hooksPath || true)" = ".githooks" ]; then git config --unset core.hooksPath; fi
+  # Relative (".githooks") or absolute ("/…/.githooks", with or without a trailing slash) alike.
+  case "$(git config --get core.hooksPath || true)" in
+    .githooks | .githooks/ | */.githooks | */.githooks/) git config --unset core.hooksPath;;
+  esac
   "$PY" -m pre_commit install   # pre-commit + pre-push (default_install_hook_types)
   echo "dev tooling installed; pre-commit + pre-push hooks active (.pre-commit-config.yaml)"
 }

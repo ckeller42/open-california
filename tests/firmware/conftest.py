@@ -472,15 +472,24 @@ def build_host(binary="cali-host"):
 
 @pytest.fixture
 def host_fw(tmp_path):
-    """Factory ``host_fw(hu, store_dir=None, extra=(), binary="cali-host")`` -> a running
-    :class:`Firmware` on ``hu.port``. Without ``store_dir`` each firmware gets the per-test
-    ``tmp_path/"store"`` (so two calls in one test share the bond store, like a reboot). Every
-    firmware started is stopped at teardown."""
+    """Factory ``host_fw(hu, store_dir=None, extra=(), binary="cali-host", http=False,
+    fake_wifi=None)`` -> a running :class:`Firmware` on ``hu.port``. Without ``store_dir`` each
+    firmware gets the per-test ``tmp_path/"store"`` (so two calls in one test share the bond store —
+    and the saved WiFi credentials — like a reboot). ``http=True`` adds ``--http <free port>`` (the
+    port is ``fw.http_port``; ``None`` without it); ``fake_wifi`` adds ``--fake-wifi <path>`` (the
+    scripted fake WiFi, ``cali_net_host.h``). Every firmware started is stopped at teardown."""
     started: list[Firmware] = []
 
-    def make(hu, store_dir=None, extra=(), binary="cali-host"):
+    def make(hu, store_dir=None, extra=(), binary="cali-host", http=False, fake_wifi=None):
         store = Path(store_dir) if store_dir is not None else tmp_path / "store"
+        extra = list(extra)
+        port = _free_port() if http else None
+        if http:
+            extra += ["--http", str(port)]
+        if fake_wifi is not None:
+            extra += ["--fake-wifi", str(fake_wifi)]
         fw = Firmware(build_host(binary), hu.port, store, extra)
+        fw.http_port = port
         started.append(fw)
         return fw
 

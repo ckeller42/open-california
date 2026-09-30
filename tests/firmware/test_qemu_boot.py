@@ -58,3 +58,31 @@ def test_corrupt_bond_record_boots_unpaired(qemu):
     s2.send("status")
     assert s2.expect("STATE")["state"] == "idle"
     assert sum(line.startswith(BOOT_BANNER) for line in s2.log) == 1, "rebooted:\n" + "\n".join(s2.log)
+
+
+def test_no_wifi_driver_boots_and_serves_nothing(qemu):
+    """QEMU's esp32s3 has no WiFi radio, and the QEMU image is built without the WiFi driver
+    (``qemu/sdkconfig.qemu``: ``CONFIG_CALI_WIFI=n``), so ``cali_net_esp_init`` returns -1: the
+    firmware logs ``LOG wifi: driver unavailable`` once, never starts the WiFi runner or the HTTP
+    server, and keeps answering the console. The WiFi SM stays ``WIFI_UNPROVISIONED`` = mode "off",
+    which ``status`` shows by leaving the ``wifi`` member out (console.c: it appears only once the
+    runner booted) and ``wifi status`` by ``LOG wifi: not enabled``. No crash loop.
+
+    .. test:: A board without a working WiFi driver boots with WiFi off (QEMU tier)
+       :id: T_FW_QEMU_NO_WIFI_DRIVER
+       :links: R_FW_WIFI_PROVISION
+    """
+    s = qemu.boot()
+    s.expect("LOG wifi: driver unavailable", timeout=90)
+    s.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
+    s.send("status")
+    v = s.expect("STATE")
+    assert v["state"] == "idle"
+    assert "wifi" not in v, v  # WiFi off: the runner never booted
+    s.send("wifi status")
+    s.expect("LOG wifi: not enabled")
+    time.sleep(3)  # a crash would reboot within ~0.4 s (QEMU)
+    s.send("status")
+    assert s.expect("STATE")["state"] == "idle"
+    assert sum(line.startswith(BOOT_BANNER) for line in s.log) == 1, "rebooted:\n" + "\n".join(s.log)
+    assert sum(line.strip() == "LOG wifi: driver unavailable" for line in s.log) == 1, "\n".join(s.log)

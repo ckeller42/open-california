@@ -35,6 +35,8 @@ static uint64_t now_ms(void) {
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
 }
 
+const char *cali_fw_version(void) { return "host"; }
+
 uint64_t cali_uptime_ms(void) {
     if (!s_clock_started) {
         s_t0_ms = now_ms();
@@ -155,6 +157,17 @@ int cali_kv_set(const char *key, const void *buf, size_t len) {
 static int ends_with(const char *s, const char *suffix) {
     size_t n = strlen(s), m = strlen(suffix);
     return n >= m && strcmp(s + n - m, suffix) == 0;
+}
+
+int cali_kv_erase(const char *key) {
+    char path[sizeof s_dir + 32];
+    int rc = 0;
+    if (!key_ok(key)) return -1;
+    key_path(path, sizeof path, key, KV_TMP_EXT);
+    if (remove(path) != 0 && errno != ENOENT) rc = -1;
+    key_path(path, sizeof path, key, KV_EXT);
+    if (remove(path) != 0 && errno != ENOENT) rc = -1;
+    return rc;
 }
 
 int cali_kv_erase_all(void) {

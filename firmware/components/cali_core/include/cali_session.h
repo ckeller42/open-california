@@ -53,12 +53,23 @@ void cali_session_on_bonded(void);        /* runner -> session: discover, subscr
 void cali_session_stop(void);
 void cali_session_tick(uint64_t now_ms);  /* heartbeat every CODEC_HEARTBEAT_PERIOD_MS, reconnect backoff */
 
-/* 1 while the session holds a bond it keeps (or re-establishes) a link for. */
+/* 1 while the session holds a bond it keeps (or re-establishes) a link for — true through
+ * reconnect backoff too, while no link exists. For the actual encrypted BLE link, see
+ * cali_session_link_up(). */
 int cali_session_active(void);
+
+/* 1 only while the link is up (encrypted, past ENC_OK/discover) — 0 during CONNECTING/CONNECTED
+ * (pre-encryption), reconnect backoff, and whenever cali_session_active() is 0. This is what
+ * /api/state's device.link.up reports (T_FW_WEB_HANDLERS). */
+int cali_session_link_up(void);
 
 /* The stored frame of CODEC_CHARS[i] (i < CODEC_NCHARS): 1 and *frame, *len set, or 0 when that
  * function has not been read yet (or its read failed and no notification came). */
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len);
+
+/* The now_ms (of the latest cali_session_tick) at which the session last stored a frame — a READ or
+ * a NOTIFY; 0 = no frame stored since cali_session_init. */
+uint64_t cali_session_last_update_ms(void);
 
 #ifdef __cplusplus
 }

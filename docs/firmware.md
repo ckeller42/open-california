@@ -1,6 +1,6 @@
 # ESP32 firmware (satellite, #154)
 
-**Status: sub-project 1 of #154 — read-only, no hardware run yet.** ESP-IDF + NimBLE firmware for
+**Status: sub-projects 1 and 2b/3a of #154 — read-only, no hardware run yet.** ESP-IDF + NimBLE firmware for
 a planned ESP32-S3 "satellite" (the M5Stack CoreS3) that pairs with the camper unit and reads its
 state independently of `calictl`/buspi — the explicit target for the pairing state machine
 (`calictl/pairing.py`, `R_PAIRING_SM`) that the web wizard already runs. The firmware **only ever
@@ -8,7 +8,10 @@ sends the `1003` liveness write** (the same heartbeat the Pi build uses to keep 
 never actuates anything. Everything here is proven on Linux (a NimBLE host build against a fake
 unit) and on an emulated chip (QEMU); the real CoreS3 board has not arrived yet, so nothing below
 is hardware-verified — see `firmware/README.md`'s "On-board verification (queued until the CoreS3
-arrives)" section for the exact plan.
+arrives)" section for the exact plan. Since the WiFi/web slice the firmware also joins a WiFi
+network (set up through its own hotspot + captive portal) and serves a read-only status page +
+JSON state API — see [Network: WiFi setup and the status page](#network-wifi-setup-and-the-status-page)
+below, and the owner how-to [How to put the ESP32 satellite on your WiFi](howto-esp-wifi-setup.md).
 
 The full build/porting detail (every NimBLE/Bumble adaptation, exact pins, warnings policy) lives
 in [`firmware/README.md`](https://github.com/ckeller42/open-california/blob/main/firmware/README.md)
@@ -18,8 +21,8 @@ in the repository; this page is the traceability + orientation view.
 
 ```mermaid
 flowchart LR
-  H["Host tier<br/>NimBLE Linux port + Bumble fake unit"] --> HP(("pairing, session, SNAP decode,<br/>heartbeat, reconnect, read-only guard"))
-  Q["QEMU tier<br/>real esp32s3 image, no radio"] --> QP(("boot, console protocol,<br/>NVS bond store survives reboot"))
+  H["Host tier<br/>NimBLE Linux port + Bumble fake unit + scripted fake WiFi"] --> HP(("pairing, session, SNAP decode,<br/>heartbeat, reconnect, read-only guard,<br/>WiFi setup flow, status page and API"))
+  Q["QEMU tier<br/>real esp32s3 image, no radio"] --> QP(("boot, console protocol,<br/>NVS bond store survives reboot,<br/>no-WiFi-driver path"))
   B["Board tier<br/>CoreS3 hardware, queued"] --> BP(("the real radio stack end to end"))
 ```
 
@@ -27,8 +30,10 @@ flowchart LR
 |---|---|---|---|
 | **Host + Bumble** (CI `firmware-host-e2e`) | The firmware's C code — pairing runner, session, console — driving the **real upstream NimBLE host stack** (Linux port) over HCI-over-TCP against a Bumble virtual controller linked to the repo's fake unit (`tools/fake_unit_peripheral.py`). Proves pairing (KEYBOARD_ONLY + MITM + SC), bond persistence/reconnect, the full `SNAP` read-all against `calictl.protocol.decode`, the 1003 heartbeat, notification push, link-drop recovery, and the read-only guard (`codec_encode` absent from the link). | Nothing about the real esp-nimble port or a real radio — this is upstream NimBLE 1.10 on Linux, not the ESP-IDF-vendored esp-nimble 1.6-based stack (gap documented in `firmware/README.md` Pins). | `firmware/host/fetch_nimble.sh && make -C firmware/host cali-host && python -m pytest tests/firmware -v` (Linux only, needs a 32-bit toolchain — see `firmware/README.md` "Host build notes" for the Docker recipe on macOS) |
 | **QEMU boot** (CI `firmware-qemu`) | The **real ESP-IDF image** (compiled for the esp32s3) boots in Espressif's QEMU: the console line protocol on the no-controller path, and the NVS-backed bond store (`cali_kv_*`) surviving a reboot, including a CRC-broken record recovering as "unpaired" instead of crashing. | Bluetooth — QEMU's esp32s3 machine has no radio, so BLE stays with the host tier and hardware. | `docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build && cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v'` |
+| **Host web e2e** (CI `firmware-host-e2e`, `tests/firmware/test_web_e2e.py`) | `cali-host --http PORT --fake-wifi SCRIPT`: the WiFi runner, captive DNS and web endpoints on the same 100 ms tick as the BLE session, over `net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi radio) and the Bumble fake unit. Proves the setup flow (fresh boot -> setup mode -> POST credentials -> station), a wrong password falling back to setup with the credentials cleared, saved credentials reconnecting after a restart + `DELETE /api/wifi`, `/api/state` equal to the console's `SNAP` after pairing, a WiFi loss leaving the BLE link and heartbeat alone, the page rendering in Chromium (EN + DE), and the setup flow clicked in Chromium (a wrong password shows the wrong-password text, the right one the `http://calictl-esp.local` link; EN + DE). | The real esp_wifi/lwIP/mdns stack, a real phone's captive-portal detection, radio coexistence — the fake WiFi only replays the script's outcomes. | `tools/ci.sh firmware` (Linux; on a Mac see `firmware/README.md` "Host build" for the Docker recipe) |
+| **QEMU no-WiFi-driver** (CI `firmware-qemu`, `test_qemu_boot.py::test_no_wifi_driver_boots_and_serves_nothing`) | The QEMU image is built with `CONFIG_CALI_WIFI=n` (no esp_wifi call compiled in): it logs `LOG wifi: driver unavailable` once, keeps WiFi off (`status` has no `wifi` member, `wifi status` -> `LOG wifi: not enabled`), listens on nothing, and does not reboot — the same path a board takes when `esp_wifi_init`/`esp_wifi_start` fails. | Anything about a working WiFi driver (QEMU's esp32s3 has no WiFi). | The QEMU command above |
 | **Board** (queued) | Nothing yet — no hardware. Once the CoreS3 arrives: flashing, the real esp-nimble port against the real unit, the USB-Serial/JTAG console, and every hardware watch item below. | — | See `firmware/README.md` "On-board verification (queued until the CoreS3 arrives)" |
-| **Pure-C unit tests** (in the normal `test`/`pytest` job, no BLE) | The pairing state machine (`pairing_sm.c`) replays the same golden vectors as `calictl.pairing`; the runner and the session+console compile and run against scripted fake transports on any host with a C compiler (macOS included). | Real NimBLE call sequencing (that's the host tier's job). | `python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py -v` |
+| **Pure-C unit tests** (in the normal `test`/`pytest` job, no BLE) | The pairing state machine (`pairing_sm.c`) replays the same golden vectors as `calictl.pairing`; the runner and the session+console compile and run against scripted fake transports on any host with a C compiler (macOS included). The network pieces too: the WiFi SM replays `tests/vectors/wifi_sm.json` from its Python twin (`tools/wifi_sm_ref.py`), the HTTP core (`http_core.c`), captive DNS (`captive_dns.c`), web handlers (`web.c`), JSON writer and the host `cali_net` (`net_host.c`) each run under a small C driver, and the WiFi runner runs next to the BLE session in `test_session_fake.py`. | Real NimBLE call sequencing (that's the host tier's job); real sockets under load; any radio. | `python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py tests/firmware/test_wifi_sm_parity.py tests/firmware/test_http_core.py tests/firmware/test_captive_dns.py tests/firmware/test_web_handlers.py tests/firmware/test_json.py tests/firmware/test_net_host.py -v` |
 
 CI also builds the release esp32s3 image compile-only (job `firmware-build`, container
 `espressif/idf:v6.1`, uploads the images + `flasher_args.json`) — it does not run the image
@@ -43,9 +48,11 @@ Identical on the host build (stdin/stdout) and the device (UART/USB-Serial-JTAG 
 
 - **In**, one command per line: `pair` (start pairing), `passkey N` (the code the unit displays,
   ignored unless waiting for one), `forget` (drop the bond), `status` (reprint `STATE`), `quit`
-  (host only — exits the process; no-op on the device).
+  (host only — exits the process; no-op on the device), and the WiFi commands `wifi set <ssid>
+  <psk>`, `wifi status`, `wifi forget`, `wifi scan` (see [the network section](#network-wifi-setup-and-the-status-page);
+  `LOG wifi: not enabled` while WiFi is off).
 - **Out**, one line each: `STATE {json}` (the pairing state machine's snapshot — the same keys as
-  calictl's `/api/pairing`), `SNAP {"t":ms,"fn":{...}}` (every function the session holds a frame
+  calictl's `/api/pairing`; the `status` command's line gains a `"wifi"` member once WiFi runs), `SNAP {"t":ms,"fn":{...}}` (every function the session holds a frame
   for, `codec_decode`d, in `CODEC_CHARS` order), `LOG text` (everything else, including every
   watch item below).
 
@@ -56,14 +63,124 @@ then read the functions in order — skipping any the unit pushed since the subs
 letting a read completion overwrite a frame pushed while that read was outstanding (a
 notification is fresher than the read latch). The first `SNAP` of a link follows that pass.
 
+## Network: WiFi setup and the status page
+
+The firmware joins a WiFi network and serves a **read-only** status page and JSON state API on
+port 80 — the same C code on the host tier (`cali-host --http`) and the device. Owner-facing steps:
+[How to put the ESP32 satellite on your WiFi](howto-esp-wifi-setup.md).
+
+**Pieces** (`firmware/components/cali_core/`, all platform-free C99, no malloc, reaching the network
+only through the `cali_net_t` socket/WiFi table in `include/cali_net.h`):
+
+| File | Role |
+|---|---|
+| `wifi_sm.c` | The WiFi provisioning/connectivity state machine — a line-for-line C twin of `tools/wifi_sm_ref.py` (no strings, radio or clock; time only as `WEV_TICK`'s argument). |
+| `wifi_run.c` | The WiFi runtime: feeds `cali_net` events + ticks into the SM, runs its actions on `cali_net`, the captive DNS and the kv store, and owns the one BLE-coex gate (scans). |
+| `http_core.c` | A single-connection HTTP/1.1 responder (below). |
+| `captive_dns.c` | The setup hotspot's DNS: every A query answered with `192.168.4.1`, plus the table of OS captive-portal probe paths. |
+| `web.c` | The endpoints and the page. |
+| `snapshot.c` | The `fn` object shared by the console's `SNAP` and `/api/state`. |
+
+Platforms: `components/platform/host/net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi,
+`cali_net_host.h`) and `components/platform/esp/net_esp.c` (esp_wifi + esp_netif + lwIP sockets +
+the `espressif/mdns` component, pinned `==1.13.1`). The constants are generated into
+`csrc/net_consts.h` from `tools/wifi_consts.py` (`R_NET_CONSTS_SINGLE_SOURCE`): setup SSID
+`calictl-esp-setup`, passphrase `calictl-setup`, address `192.168.4.1`, hostname `calictl-esp`
+(DHCP + mDNS `calictl-esp.local`, `_http._tcp` on port 80), `NET_AP_CLOSE_MS` 30000,
+`NET_RETRY_MIN_MS` 1000 -> `NET_RETRY_MAX_MS` 60000, `NET_SETUP_AFTER_MS` 300000, page poll
+`NET_PAGE_POLL_MS` 2000, `NET_JSON_MAX` 8192, SSID 1–32 bytes, PSK 8–63 bytes.
+
+### The WiFi state machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> UNPROVISIONED
+  UNPROVISIONED --> SETUP_AP : boot, no saved credentials, hotspot up
+  UNPROVISIONED --> CONNECTING : boot with saved credentials, joined_once set
+  SETUP_AP --> CONNECTING : credentials set on the page or console
+  CONNECTING --> ONLINE : got an IP, mDNS announced
+  CONNECTING --> SETUP_AP : failed and typed in this setup flow, credentials cleared
+  CONNECTING --> RETRYING : failed and joined once or loaded from flash
+  ONLINE --> RETRYING : link lost
+  RETRYING --> ONLINE : got an IP
+  RETRYING --> SETUP_AP_RETRYING : 5 min without a join, hotspot reopens
+  SETUP_AP_RETRYING --> ONLINE : got an IP
+  SETUP_AP_RETRYING --> CONNECTING : new credentials set, now a setup-flow join
+```
+
+Not drawn: `CREDS_FORGET` (console `wifi forget`, `DELETE /api/wifi`) goes from **every** state to
+`SETUP_AP` — station stopped, credentials erased, hotspot up. Rules the diagram compresses:
+
+- **Retry.** In `RETRYING`/`SETUP_AP_RETRYING` the station re-joins on a backoff that starts at
+  1000 ms and doubles to a 60000 ms cap; saved credentials are **never** wiped by a failure there.
+- **Credentials from flash count as "joined once"** (ruling R6): booting with saved credentials and
+  an unreachable router retries forever — after 5 min the setup hotspot opens alongside
+  (`SETUP_AP_RETRYING`), the retries go on. Only credentials typed in the current setup flow are
+  cleared by a failed join (a typo never bricks setup: back to `SETUP_AP`, hotspot still up).
+- **Hotspot close.** Once `ONLINE`, a hotspot that is still up closes 30000 ms later (the phone that
+  did the setup gets to see the "connected as" answer first).
+- **Replacing credentials** (`wifi set` or a `POST /api/wifi` while online/retrying/mid-join,
+  rulings R14/R16): the runner takes the SM through a forget that keeps the new credentials (station
+  down, hotspot up) and joins them as a setup-flow join — a typo lands the device back in setup,
+  like a first-time flow, and the old network is not restored.
+- **Mode** reported by the page and console (`cali_wifi_mode`): `setup` in `SETUP_AP` /
+  `SETUP_AP_RETRYING`; `station` in `ONLINE`, and in `CONNECTING`/`RETRYING` when `joined_once`;
+  `off` otherwise (`UNPROVISIONED` = WiFi off, and a setup-flow join in progress).
+
+Console lines (`LOG wifi: …`, exact texts from `cali_wifi_run.h`/`console.c`): `setup hotspot up
+(calictl-esp-setup)`, `setup hotspot closed`, `joining <ssid>`, `online <a.b.c.d>`, `lost`,
+`failed <not_found|auth|other>`, `credentials cleared`, `credential erase failed`, `credentials
+replaced, reconnecting`, `setup hotspot failed to start`, `captive DNS unavailable`; from `wifi set`
+also `usage: wifi set <ssid> <psk>`, `bad ssid`, `bad psk`, `storing credentials failed`; before the
+WiFi runtime booted `not enabled`; on the device also `driver unavailable`. `wifi status` answers `LOG wifi:
+<setup|station|off> ssid=<ssid|-> ip=<a.b.c.d|-> rssi=<dBm|-> scan=<n>`. The passphrase is never
+printed: the console does not echo input, an unknown/mistyped `wifi` line is logged by its first
+word(s) only, and the line buffers are wiped after every command (on the ESP the console queue's
+slot keeps its copy until a later line reuses it).
+
+### Endpoints (`web.c`, contract in `include/cali_web.h`)
+
+| Method + path | Answer |
+|---|---|
+| `GET /` | 200 `text/html` — the status/setup page: `strings_gen.h`'s `WEB_INDEX_HTML`, the byte array generated from `firmware/web/index.html` + `page.js` + `strings.json` (EN + DE) by `tools/gen_c_dict.py`. One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
+| `GET /api/state` | 200 JSON `{"t","fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,last_snap_age_ms}`, `wifi {mode,ssid,ip,rssi}`, `uptime_ms`, `fw`. Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
+| `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining) — the setup page turns it into one of three texts; in setup mode it also asks for a fresh scan for the next GET. |
+| `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
+| `DELETE /api/wifi` | Forget the WiFi (-> `SETUP_AP`) -> 200 `{"ok":true}`. |
+| other method on `/api/state` or `/api/wifi` | 405 `{"ok":false,"error":"method"}` |
+| an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
+| any other path | setup mode: 302 `Location: /`; station mode: 404 |
+
+No control endpoint exists, by design (`R_FW_READ_ONLY`). **HTTP core** (`include/cali_http.h`):
+one connection at a time, one request per connection, every response `Connection: close`;
+requests up to `NET_HTTP_REQ_MAX` (2048 B) of headers, no chunked bodies (400), 413/431 on
+oversize; the response is streamed across as many ticks as the socket needs (`tcp_send` "would
+block" = retry next poll — never blocks, never spins); a connection idle for `CALI_HTTP_IDLE_MS`
+(5000 ms) is closed. The page polls `/api/state` every 2000 ms.
+
+**Where the credentials live:** the kv store keys `wifi_ssid` / `wifi_psk` — NVS namespace `cali`
+on the device (esp_wifi's own NVS copy is off: `WIFI_STORAGE_RAM`, `CONFIG_ESP_WIFI_NVS_ENABLED=n`),
+`<store>/wifi_ssid.kv` / `wifi_psk.kv` on the host — in plain text (CRC-framed, not encrypted), per
+the project's trusted-LAN stance.
+
+**BLE coexistence** (ruling R15): WiFi events never reach the BLE session or its heartbeat — they
+share only the tick. The one gate is scans: `cali_wifi_run_scan()` holds a scan back while a BLE
+pairing flow is **active** (runner state not idle/bonded/error — a failed pairing does not block
+it) and starts it on the first tick after the flow ends.
+
+**Size** (ruling R18): the WiFi stack (net80211, wpa_supplicant + PSA crypto, lwIP, pp/phy, mdns)
+adds ~615 KB (+615,632 B) to the release image — `cali_fw.bin` 463,248 B -> 1,078,880 B — so `partitions.csv`
+gives the factory app **3 MB** on the 16 MB flash (66 % free); the plan's ~250 KB estimate was off
+by about 2.5x. Details: `firmware/README.md` "WiFi build".
+
 ## CI jobs (`.github/workflows/ci.yml`)
 
 | Job | Runs |
 |---|---|
-| `test` (the normal matrix) | `tests/firmware`'s pure-C tests (SM parity, runner fake, session fake) via `-m "not linux_only"` — no BLE, runs on every Python version |
-| `firmware-host-e2e` | The NimBLE-Linux + Bumble end-to-end tier (`tools/ci.sh firmware`) |
+| `test` (the normal matrix) | `tests/firmware`'s pure-C tests (pairing + WiFi SM parity, runner fake, session fake, HTTP core, captive DNS, web handlers, JSON, host `cali_net`) via `-m "not linux_only"` — no BLE, runs on every Python version |
+| `firmware-host-e2e` | The NimBLE-Linux + Bumble end-to-end tier, incl. the WiFi/web e2e and the page in Chromium (`tools/ci.sh firmware`) |
 | `firmware-build` | Compiles the release esp32s3 image against ESP-IDF's real esp-nimble; uploads the flashable images |
-| `firmware-qemu` | Builds the QEMU-probe variant and boots it in QEMU |
+| `firmware-qemu` | Builds the QEMU-probe variant (no WiFi driver) and boots it in QEMU |
 
 ## Hardware watch items (unresolved until the CoreS3 board runs)
 
@@ -106,6 +223,33 @@ chip":
    must show as one `CONNECT_FAIL`-driven retry of the SM/session (no silent second link), the
    unit must be found by the legacy scan, and no NimBLE INFO lines may appear between the console
    lines.
+
+## Network watch items (board only)
+
+The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait for the CoreS3:
+
+1. **BLE + WiFi coexistence.** The S3 shares one 2.4 GHz radio (IDF's default software coex).
+   With the setup hotspot up and a phone attached, the BLE link must hold, the `1003` heartbeat keep
+   its period and `SNAP`s keep their cadence; the same while the station scans and joins.
+2. **Captive portal per OS.** Join `calictl-esp-setup` from iOS, macOS, Android and Windows: the
+   sign-in sheet should open the page by itself (DNS answers everything with `192.168.4.1`, probe
+   paths get a 302). Record per OS whether it pops, and that `http://192.168.4.1` always works.
+3. **mDNS.** `http://calictl-esp.local` from iOS, macOS and Android (Android's `.local` support
+   varies — the router list and `wifi status` are the documented fallbacks).
+4. **Single-connection HTTP.** Browsers open several parallel connections; the core serves one at
+   a time. Check the page stays responsive with one tab, and how it degrades with two or three.
+5. **ESP event behaviours assumed from the IDF docs** (`net_esp.c`, join generations): our own
+   `esp_wifi_disconnect` ends an attempt with reason `ASSOC_LEAVE` (8); the disconnect event carries
+   the SSID; `esp_wifi_connect` straight after `esp_wifi_disconnect` works; a `SCAN_DONE` arrives
+   when a join aborts a running scan (the 15 s scan watchdog is the backstop).
+6. **Typo, then the fix.** Type a wrong password, then the right one within ~2 s: `LOG wifi:
+   online` must follow and no `LOG wifi: failed auth`.
+7. **Out of range and back.** Leave the saved network out of range for minutes, then restore it:
+   at most one `esp_wifi_connect` per driver attempt (`LOG net:` stays quiet), `ONLINE` within one
+   retry period of the AP returning, the hotspot opening after 5 min and closing 30 s after the join.
+8. **Size + heap.** The 1,078,880 B image in the 3 MB partition flashes from the build's own
+   flasher args; DIRAM use (160,018 B, 46.8 %) leaves the NimBLE host task and the 8 KB JSON buffer
+   room under real traffic.
 
 ## Design rulings worth knowing
 
@@ -184,6 +328,44 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    step too late — so the fake unit refuses it and ``test_just_works_build_is_refused`` proves the
    firmware (and the test setup) would actually catch this class of regression, not just assert
    it away. Never compiled into a device build (``#error`` if ``ESP_PLATFORM`` is also defined).
+
+.. req:: WiFi provisioning — setup hotspot, captive portal, station join with retry, credentials in the kv store
+   :id: R_FW_WIFI_PROVISION
+
+   A satellite with no saved WiFi opens a WPA2 setup hotspot (``calictl-esp-setup``, fixed
+   passphrase, address ``192.168.4.1``) whose DNS answers every A query with its own address and whose
+   HTTP server redirects the OS captive-portal probe paths to the setup page, so a phone that joins
+   is led to it. Credentials entered there (or with the console's ``wifi set``) are validated (SSID
+   1-32 bytes, PSK 8-63 bytes — open networks unsupported), stored in the kv store (``wifi_ssid`` /
+   ``wifi_psk``) and joined as a station; on success mDNS announces ``calictl-esp.local`` and the
+   hotspot closes ``NET_AP_CLOSE_MS`` later. A failed join of credentials typed in the current setup
+   flow clears them and returns to the hotspot; credentials that joined before or were loaded from
+   flash are never wiped by a failure — the station retries on a 1 s to 60 s doubling backoff and
+   reopens the hotspot alongside after ``NET_SETUP_AFTER_MS`` (5 min) without a join. ``wifi forget``
+   / ``DELETE /api/wifi`` erase them and reopen the hotspot from any state. The state machine is a
+   pure C twin of ``tools/wifi_sm_ref.py`` (golden-vector parity). A board whose WiFi driver cannot
+   start boots with WiFi off and the BLE side unaffected.
+
+.. req:: Read-only status page and JSON state over a bounded, non-blocking, single-connection HTTP server
+   :id: R_FW_HTTP_STATUS
+
+   The firmware serves, on both tiers from the same C code, a status/setup page (one generated byte
+   array from ``firmware/web/index.html`` + ``page.js`` + ``strings.json``, EN + DE) and ``GET /api/state``: the
+   ``fn`` object of the console's ``SNAP`` line plus the device's pairing, link, WiFi, uptime and
+   firmware version, built as one consistent snapshot into a fixed ``NET_JSON_MAX`` (8192 B) buffer
+   — an overflow answers 500, never a truncated body. The HTTP core serves one connection at a
+   time, one request each, ``Connection: close``, with bounded request/body sizes, and streams a
+   response across ticks without ever blocking or spinning the tick that also drives BLE. It
+   exposes no control endpoint (``R_FW_READ_ONLY``).
+
+.. req:: WiFi never disturbs the BLE session; scans wait for an active pairing flow
+   :id: R_FW_WIFI_BLE_COEX
+
+   WiFi events (join, loss, retries, hotspot up/down) never call into the BLE session: the link,
+   the ``1003`` heartbeat cadence and notification-driven ``SNAP`` lines continue unchanged through a
+   WiFi loss and reconnect. The only coupling is scans: a WiFi scan is deferred while a BLE pairing
+   flow is **active** (runner state not idle, bonded or error — a failed pairing does not block it)
+   and started on the first tick after it ends.
 ```
 
 - **`R_FW_PAIRING_SM`** (C twin of the pairing state machine, `firmware/components/cali_core/pairing_sm.c`)
@@ -206,6 +388,24 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 - **`R_FW_IO_CAP_BEFORE_LINK`** — verified by `T_FW_HOST_E2E`'s
   `test_just_works_build_is_refused`, which runs the `-DCALI_TEST_LATE_IO_CAP` regression build
   against the fake unit and asserts pairing ends in `error` (the unit refusing Just Works).
+
+- **`R_FW_WIFI_PROVISION`** — verified by `T_WIFI_SM_REF` (`tests/test_wifi_sm_ref.py`, the Python
+  twin's transition rules), `T_FW_WIFI_SM_PARITY` (`tests/firmware/test_wifi_sm_parity.py`, the C SM
+  replaying `tests/vectors/wifi_sm.json`), `T_FW_CAPTIVE_DNS` (`tests/firmware/test_captive_dns.py`),
+  `T_FW_NET_HOST` (`tests/firmware/test_net_host.py`, the host `cali_net` + fake-WiFi script),
+  `T_FW_WEB_E2E` (`tests/firmware/test_web_e2e.py`, the setup flow end to end on the host tier) and
+  `T_FW_QEMU_NO_WIFI_DRIVER` (`tests/firmware/test_qemu_boot.py`, the no-driver path on the real
+  image). The runner's rules (typo, retry, forget, replace) are also exercised in
+  `test_session_fake.py`'s `test_wifi_*` cases.
+- **`R_FW_HTTP_STATUS`** — verified by `T_FW_HTTP_CORE` (`tests/firmware/test_http_core.py`),
+  `T_FW_WEB_HANDLERS` (`tests/firmware/test_web_handlers.py`), `T_FW_JSON_WRITER`
+  (`tests/firmware/test_json.py`), `T_FW_WEB_STRINGS` (`tests/test_web_strings.py`, the page's
+  generated strings), `T_FW_ESP_SCREENSHOT_FIXTURES` (`tests/test_ux_gallery_esp_fixtures.py`, the
+  docs screenshots' fixtures keep the handlers' JSON shape) and `T_FW_WEB_E2E`.
+- **`R_FW_WIFI_BLE_COEX`** — verified by `T_FW_WIFI_LOSS_SESSION` (`tests/firmware/test_session_fake.py`)
+  and `T_FW_WEB_E2E`'s `test_wifi_loss_keeps_ble_link`; the scan gate by `test_session_fake.py`'s
+  `test_wifi_scan_deferred_while_ble_pairing_is_active` / `test_wifi_scan_not_blocked_by_pairing_error`.
+  Real radio coexistence is board-only ([network watch item 1](#network-watch-items-board-only)).
 
 The full needs table for the whole project, not just firmware, is at the bottom of
 [the docs home page](index.md).

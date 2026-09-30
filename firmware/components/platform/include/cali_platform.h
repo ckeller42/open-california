@@ -34,6 +34,10 @@ int cali_kv_get(const char *key, void *buf, size_t *len);
  * Returns 0 ok, -1 on failure (bad key, I/O error). */
 int cali_kv_set(const char *key, const void *buf, size_t len);
 
+/* Remove one key; a key that is not stored is not an error. Returns 0 ok, -1 on failure (bad key,
+ * I/O error). (#154: the WiFi runner drops exactly "wifi_ssid" + "wifi_psk", never the bond.) */
+int cali_kv_erase(const char *key);
+
 /* Remove every key. Returns 0 ok, -1 on failure. */
 int cali_kv_erase_all(void);
 
@@ -43,6 +47,10 @@ void cali_log(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)))
 #endif
     ;
+
+/* The firmware's version string, reported as device.fw by the web page's /api/state. host:
+ * "host"; esp: the build's version (Task 9). Static storage, never NULL. */
+const char *cali_fw_version(void);
 
 /* host: store_dir is the directory for the kv files (created if missing; NULL = "."); esp: ignored
  * (NVS). Starts the uptime clock. Returns 0 ok, -1 if the store directory is unusable. */

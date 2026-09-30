@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>calictl-esp</title>
+<!-- The ESP32 firmware's status/setup page (#154). SOURCE: tools/gen_c_dict.py renders it into
+     index_gen.html (the double-brace placeholders: generated constants, the strings.json table and
+     the page script from page.js) and strings_gen.h; never edit those. Self-contained: no external
+     assets. -->
+<style>
+:root{--bg:#f6f6f3;--fg:#1d1d1b;--muted:#6b6b66;--card:#fff;--line:#deded8;--accent:#1f6f5c;--bad:#a8322d}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ececea;--muted:#9a9a94;--card:#21211f;--line:#34342f;--accent:#5bbf9f;--bad:#e0716b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 12px}
+h2{font-size:16px;margin:0 0 8px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0}
+dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
+#functions{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+#functions .box{margin:0}
+.muted{color:var(--muted)}.bad{color:var(--bad)}
+#banner{display:none;background:var(--bad);color:#fff;border-radius:8px;padding:8px 12px;margin:0 0 12px}
+label{display:block;margin:10px 0 4px;color:var(--muted)}
+select,input,button{font:inherit;width:100%;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px;cursor:pointer}
+button.secondary{background:transparent;color:var(--accent)}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+<h1 id="title"></h1>
+<div id="banner"></div>
+<section id="setup" class="box" hidden>
+  <h2 id="setup-title"></h2>
+  <p id="setup-hint" class="muted"></p>
+  <label for="ssid" id="ssid-label"></label>
+  <select id="ssid"></select>
+  <label for="psk" id="psk-label"></label>
+  <input id="psk" type="password" autocomplete="off">
+  <button id="connect" type="button"></button>
+  <button id="rescan" class="secondary" type="button"></button>
+  <p id="setup-msg"></p>
+</section>
+<section id="device" class="box"></section>
+<h2 id="functions-title"></h2>
+<section id="functions"></section>
+</main>
+<script>
+const CFG = {pollMs: 2000, host: "calictl-esp", ssidMax: 32, pskMin: 8, pskMax: 63};
+const STR = {"address":{"de":"Gekoppelte Einheit","en":"Paired unit"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"firmware":{"de":"Firmware","en":"Firmware"},"fn_airheater":{"de":"Luftstandheizung","en":"Air heater"},"fn_campingmode":{"de":"Campingmodus","en":"Camping mode"},"fn_cooler":{"de":"Kühlbox","en":"Cooler"},"fn_energy":{"de":"Energie","en":"Energy"},"fn_lighting":{"de":"Beleuchtung","en":"Lighting"},"fn_roof":{"de":"Aufstelldach","en":"Roof"},"fn_vehicle":{"de":"Fahrzeug","en":"Vehicle"},"fn_water":{"de":"Wasser","en":"Water"},"functions":{"de":"Camper-Einheit","en":"Camper unit"},"ip":{"de":"IP-Adresse","en":"IP address"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"last_update":{"de":"Letzte Aktualisierung","en":"Last update"},"link":{"de":"Verbindung zur Camper-Einheit","en":"Link to the camper unit"},"link_down":{"de":"nicht verbunden","en":"not connected"},"link_up":{"de":"verbunden","en":"connected"},"mode_off":{"de":"aus","en":"off"},"mode_setup":{"de":"Einrichtungs-Hotspot","en":"setup hotspot"},"mode_station":{"de":"verbunden","en":"connected"},"network":{"de":"Netzwerk","en":"Network"},"no_data":{"de":"Noch keine Daten von der Camper-Einheit.","en":"No data from the camper unit yet."},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"none":{"de":"keine","en":"none"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"pairing":{"de":"Bluetooth-Kopplung","en":"Bluetooth pairing"},"password":{"de":"Passwort","en":"Password"},"rescan":{"de":"Erneut suchen","en":"Search again"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"seconds_ago":{"de":"vor {n} s","en":"{n} s ago"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"signal":{"de":"Signal","en":"Signal"},"title":{"de":"Camper-Status","en":"Camper status"},"uptime":{"de":"Laufzeit","en":"Uptime"},"wifi":{"de":"WLAN","en":"WiFi"}};
+</script>
+<script>
+/* page.js — the ESP32 firmware's status/setup page script (#154). SOURCE: tools/gen_c_dict.py inlines
+ * it into index_gen.html (index.html's PAGE_JS placeholder), right after the script that defines
+ * CFG (generated constants) and STR (the strings.json table) — their types: globals.d.ts.
+ * Un-built JS: `tools/ci.sh webcheck` type-checks it (tsc --checkJs, jsconfig.json, 0 errors) and
+ * tests/firmware/test_web_e2e.py drives it in Chromium. */
+// @ts-check
+"use strict";
+
+/* The firmware API shapes (firmware/components/cali_core/include/cali_web.h). */
+/**
+ * @typedef {{ mode: string, ssid: string|null, ip: string|null, rssi: number|null }} Wifi
+ * @typedef {{ ssid: string, rssi: number, secure: boolean }} Ap
+ * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
+ * @typedef {{ pairing: { state: string, address: string|null },
+ *             link: { up: boolean, last_snap_age_ms: number|null },
+ *             wifi: Wifi, uptime_ms: number, fw: string }} Device
+ * @typedef {{ t: number, fn: Record<string, Record<string, unknown>>, device: Device }} State
+ * @typedef {{ ok: boolean, error?: string }} PostResult
+ * @typedef {{ ssid: string, polls: number, left: boolean }} Join
+ */
+
+const LANG = /^de\b/i.test(navigator.language || "") ? "de" : "en";
+/**
+ * @param {string} key a strings.json key
+ * @param {Record<string, string|number>} [vars] "{name}" substitutions
+ * @returns {string}
+ */
+function t(key, vars) {
+  let s = STR[key] ? STR[key][LANG] : key;
+  for (const k in vars || {}) s = s.split("{" + k + "}").join(String((vars || {})[k]));
+  return s;
+}
+/* the unit's own function titles (calictl web UI vocabulary); other functions show their raw name */
+/** @type {Record<string, string>} */
+const FN = {vehicle: "fn_vehicle", cooler: "fn_cooler", campingmode: "fn_campingmode", lighting: "fn_lighting",
+            airheater: "fn_airheater", water: "fn_water", energy: "fn_energy", roof: "fn_roof"};
+/** @type {Record<string, string>} */
+const MODE = {setup: "mode_setup", station: "mode_station", off: "mode_off"};
+/* /api/wifi last_error -> the text that says why a join failed */
+/** @type {Record<string, string>} */
+const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
+/** @type {Record<string, string>} */
+const POST_ERROR = {ssid: "err_ssid", psk: "err_psk", store: "err_store"};
+
+/**
+ * @param {string} id
+ * @returns {HTMLElement} the element (index.html has every id this script uses)
+ */
+function $(id) {
+  const e = document.getElementById(id);
+  if (!e) throw new Error("missing #" + id);
+  return e;
+}
+/** @param {string} id @returns {HTMLInputElement} */
+const input = (id) => /** @type {HTMLInputElement} */ ($(id));
+/** @param {string} id @returns {HTMLSelectElement} */
+const select = (id) => /** @type {HTMLSelectElement} */ ($(id));
+/**
+ * @template {keyof HTMLElementTagNameMap} K
+ * @param {K} tag
+ * @param {string} [text]
+ * @param {string} [cls]
+ * @returns {HTMLElementTagNameMap[K]}
+ */
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+/** @param {[string, string][]} rows @returns {HTMLDListElement} */
+function list(rows) {
+  const dl = el("dl");
+  for (const [k, v] of rows) { dl.appendChild(el("dt", k)); dl.appendChild(el("dd", v)); }
+  return dl;
+}
+/**
+ * @template T
+ * @param {string} url
+ * @param {RequestInit} [opts]
+ * @returns {Promise<{status: number, body: T}>}
+ */
+async function fetchJson(url, opts) {
+  const r = await fetch(url, Object.assign({cache: "no-store"}, opts));
+  return {status: r.status, body: await r.json()};
+}
+/** @returns {Promise<WifiGet>} */
+async function getWifi() {
+  return (/** @type {{body: WifiGet}} */ (await fetchJson("/api/wifi"))).body;
+}
+
+$("title").textContent = t("title");
+$("setup-title").textContent = t("setup_title");
+$("setup-hint").textContent = t("setup_hint");
+$("ssid-label").textContent = t("network");
+$("psk-label").textContent = t("password");
+$("connect").textContent = t("connect");
+$("rescan").textContent = t("rescan");
+$("functions-title").textContent = t("functions");
+document.documentElement.lang = LANG;
+
+/** @type {Join|null} a submitted join being watched */
+let joining = null;
+
+/** @param {Device} d */
+function renderDevice(d) {
+  const box = $("device");
+  box.textContent = "";
+  box.appendChild(el("h2", t("device")));
+  const w = d.wifi, age = d.link.last_snap_age_ms;
+  box.appendChild(list([
+    [t("pairing"), d.pairing.state],
+    [t("address"), d.pairing.address || t("none")],
+    [t("link"), t(d.link.up ? "link_up" : "link_down")],
+    [t("last_update"), age === null ? t("none") : t("seconds_ago", {n: Math.round(age / 1000)})],
+    [t("wifi"), t(MODE[w.mode] || "mode_off") + (w.ssid ? " · " + w.ssid : "")],
+    [t("ip"), w.ip || t("none")],
+    [t("signal"), w.rssi === null ? t("none") : w.rssi + " dBm"],
+    [t("uptime"), Math.round(d.uptime_ms / 1000) + " s"],
+    [t("firmware"), d.fw],
+  ]));
+}
+
+/** @param {State["fn"]} fn */
+function renderFunctions(fn) {
+  const box = $("functions");
+  box.textContent = "";
+  const names = Object.keys(fn);
+  if (!names.length) { box.appendChild(el("p", t("no_data"), "muted")); return; }
+  for (const name of names) {
+    const card = el("div", undefined, "box");
+    card.appendChild(el("h2", FN[name] ? t(FN[name]) : name));
+    card.appendChild(list(Object.keys(fn[name]).map((k) => /** @type {[string, string]} */ ([k, String(fn[name][k])]))));
+    box.appendChild(card);
+  }
+}
+
+/** @param {Ap[]} scan */
+function renderNetworks(scan) {
+  const sel = select("ssid"), keep = sel.value;
+  sel.textContent = "";
+  if (!scan.length) { sel.appendChild(el("option", t("no_networks"))).value = ""; return; }
+  for (const ap of scan) {
+    const o = el("option", ap.ssid + "  (" + ap.rssi + " dBm" + (ap.secure ? "" : ", " + t("open_unsupported")) + ")");
+    o.value = ap.ssid;
+    o.disabled = !ap.secure;  /* the device requires a NET_PSK_MIN..NET_PSK_MAX passphrase */
+    sel.appendChild(o);
+  }
+  if (scan.some((ap) => ap.ssid === keep)) sel.value = keep;
+}
+
+/** @type {ReturnType<typeof setTimeout>|null} the pending delayed re-read from the last scan() */
+let scanTimer = null;
+
+async function scan() {
+  const msg = $("setup-msg");
+  if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
+  msg.className = "";
+  msg.textContent = t("scanning");
+  const still = () => msg.textContent === t("scanning");  /* nothing newer (join result, error) landed */
+  try {
+    renderNetworks((await getWifi()).scan);
+    /* each GET starts a fresh scan for the next one: read its result a moment later */
+    scanTimer = setTimeout(async () => {
+      scanTimer = null;
+      try { renderNetworks((await getWifi()).scan); if (still()) msg.textContent = ""; }
+      catch (e) { if (still()) msg.textContent = t("err_net"); }
+    }, 2 * CFG.pollMs);
+  } catch (e) { if (still()) msg.textContent = t("err_net"); }
+}
+
+async function connect() {
+  const ssid = select("ssid").value, psk = input("psk").value, msg = $("setup-msg");
+  if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
+  msg.className = "bad";
+  if (!ssid || ssid.length > CFG.ssidMax) { msg.textContent = t("err_ssid", {max: CFG.ssidMax}); return; }
+  if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
+    msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
+  }
+  try {
+    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/wifi", {
+      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})}));
+    if (!r.body.ok) {
+      const e = POST_ERROR[r.body.error || ""] || "err_json";
+      msg.textContent = t(e, {max: e === "err_ssid" ? CFG.ssidMax : CFG.pskMax, min: CFG.pskMin});
+      return;
+    }
+    input("psk").value = "";
+    msg.className = "";
+    msg.textContent = t("joining", {ssid: ssid});
+    joining = {ssid: ssid, polls: 0, left: false};
+  } catch (e) { msg.textContent = t("err_net"); }
+}
+
+/** @param {Join} j the join being watched */
+async function watchJoin(j) {
+  const msg = $("setup-msg");
+  const w = await getWifi();
+  j.polls++;
+  if (w.mode !== "setup") j.left = true;
+  if (w.mode === "station" && w.ip) {
+    msg.className = "";
+    msg.textContent = t("joined", {ip: w.ip, ssid: j.ssid}) + " ";
+    const url = "http://" + CFG.host + ".local";
+    const a = el("a", url);
+    a.href = url;
+    msg.appendChild(a);
+    joining = null;
+  } else if (w.mode === "setup" && (j.left || j.polls > 3)) {
+    msg.className = "bad";
+    /* why it failed (/api/wifi last_error): out of range, a typo, or anything else */
+    msg.textContent = t(JOIN_FAILED[w.last_error || ""] || "join_failed_other");
+    joining = null;
+  }
+}
+
+let setupShown = false;
+async function poll() {
+  try {
+    if (joining) await watchJoin(joining);
+    const s = (/** @type {{body: State}} */ (await fetchJson("/api/state"))).body;
+    $("banner").style.display = "none";
+    renderDevice(s.device);
+    renderFunctions(s.fn);
+    const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
+    $("setup").hidden = !setup;
+    if (setup && !setupShown && !joining) scan();
+    setupShown = setup;
+  } catch (e) {
+    $("banner").textContent = t("offline");
+    $("banner").style.display = "block";
+  }
+  setTimeout(poll, CFG.pollMs);
+}
+
+$("connect").addEventListener("click", connect);
+$("rescan").addEventListener("click", scan);
+poll();
+</script>
+</body>
+</html>

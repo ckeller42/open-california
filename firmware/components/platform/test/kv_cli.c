@@ -6,6 +6,7 @@
  *   get KEY        cali_kv_get into a 256-byte buffer; prints the value as lowercase hex ("-" if
  *                  empty) | MISSING | CORRUPT
  *   erase          cali_kv_erase_all; prints OK | FAIL
+ *   erase KEY      cali_kv_erase(KEY); prints OK | FAIL
  */
 #include <stdio.h>
 #include <string.h>
@@ -55,6 +56,8 @@ int main(int argc, char **argv) {
                 for (size_t i = 0; i < len; i++) printf("%02x", out[i]);
                 putchar('\n');
             }
+        } else if (strcmp(cmd, "erase") == 0 && n >= 2) {
+            puts(cali_kv_erase(key) == 0 ? "OK" : "FAIL");
         } else if (strcmp(cmd, "erase") == 0) {
             puts(cali_kv_erase_all() == 0 ? "OK" : "FAIL");
         } else {

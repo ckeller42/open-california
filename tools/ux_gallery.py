@@ -12,22 +12,38 @@ installed feature screen in light and dark themes.
 Review the PNGs (or send them on) after any GUI change — layout, label, and data-rendering
 issues show up here that a headless assertion can't judge. The hard-assertion counterpart is
 `tests/e2e/test_gui.py::test_no_red_flag_text`.
+
+It also renders the ESP32 satellite's status/setup page (#154) for the docs
+(``docs/howto-esp-wifi-setup.md``): ``esp-setup-page.png`` (setup hotspot mode) and
+``esp-status-page.png`` (station mode). No firmware, BLE or radio is involved: a small stdlib HTTP
+stub (``EspStub``) serves the generated page bytes the firmware serves (``firmware/web/index_gen.html``)
+plus canned ``/api/state`` / ``/api/wifi`` JSON (``esp_fixtures``) whose key sets
+``tests/test_ux_gallery_esp_fixtures.py`` pins to what ``tests/firmware/test_web_handlers.py``
+asserts of the real handlers, so the pictures cannot drift from the firmware's API shape.
+
+    python -m tools.ux_gallery --esp --out docs/screenshots   # only the two ESP page shots
 """
 
 from __future__ import annotations
 
 import argparse
+import http.server
 import json
 import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The Vehicle-tab feature screens, by dashboard-tile title.
 SCREENS = ["Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Vehicle"]
+ESP_PAGE = os.path.join(ROOT, "firmware", "web", "index_gen.html")
+# The functions the station-mode fixture shows, decoded from the mock unit's seeded state (the page
+# shows every function the session holds; a few keep the figure readable).
+ESP_FUNCTIONS = ("cooler", "water")
 
 
 def _free_port():
@@ -123,9 +139,157 @@ def capture(out_dir, screens=SCREENS):
     return paths
 
 
+def _esp_fn():
+    """The station fixture's ``fn`` object: ``ESP_FUNCTIONS`` decoded from the mock unit's seeded
+    frames with ``calictl.protocol.decode`` (what the firmware's ``codec_decode`` produces — the host
+    e2e tier asserts the two agree), in ``CODEC_CHARS`` (sorted) order."""
+    from calictl import overrides, protocol
+    from tools.mock_unit import MockCamperUnit, _pack_state
+
+    unit = MockCamperUnit()
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    return {
+        name: protocol.decode(funcs[name], _pack_state(funcs[name], unit.state[name]))
+        for name in sorted(ESP_FUNCTIONS)
+    }
+
+
+def esp_fixtures():
+    """Canned firmware API responses for the two page modes.
+
+    :returns: ``{"setup": {"/api/state": {...}, "/api/wifi": {...}}, "station": {...}}`` — the
+        shapes ``firmware/components/cali_core/include/cali_web.h`` documents (a first boot: no
+        bond, no data, the setup hotspot up; and later: joined to the home network, reading the unit).
+    """
+    setup_wifi = {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
+    station_wifi = {"mode": "station", "ssid": "HomeNet", "ip": "192.168.1.57", "rssi": -58}
+    return {
+        "setup": {
+            "/api/state": {
+                "t": 41250,
+                "fn": {},
+                "device": {
+                    "pairing": {"state": "idle", "address": None},
+                    "link": {"up": False, "last_snap_age_ms": None},
+                    "wifi": setup_wifi,
+                    "uptime_ms": 41250,
+                    "fw": "bef07f1",
+                },
+            },
+            "/api/wifi": dict(
+                setup_wifi,
+                last_error=None,
+                scan=[
+                    {"ssid": "HomeNet", "rssi": -52, "secure": True},
+                    {"ssid": "Campsite-Guest", "rssi": -71, "secure": True},
+                    {"ssid": "Neighbour-5G", "rssi": -83, "secure": True},
+                ],
+            ),
+        },
+        "station": {
+            "/api/state": {
+                "t": 3912400,
+                "fn": _esp_fn(),
+                "device": {
+                    "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
+                    "link": {"up": True, "last_snap_age_ms": 1200},
+                    "wifi": station_wifi,
+                    "uptime_ms": 3912400,
+                    "fw": "bef07f1",
+                },
+            },
+            "/api/wifi": dict(station_wifi, last_error=None, scan=[]),
+        },
+    }
+
+
+class EspStub:
+    """A stdlib HTTP stub of the firmware's web endpoints: ``GET /`` = the generated page bytes,
+    ``GET /api/state`` / ``/api/wifi`` = ``esp_fixtures()[mode]``. Switch pages with ``mode``."""
+
+    def __init__(self, mode="setup"):
+        self.mode = mode
+        self.fixtures = esp_fixtures()
+        with open(ESP_PAGE, "rb") as f:
+            page = f.read()
+        stub = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802 (http.server API)
+                if self.path == "/":
+                    body, ctype = page, "text/html; charset=utf-8"
+                elif self.path in stub.fixtures[stub.mode]:
+                    body, ctype = json.dumps(stub.fixtures[stub.mode][self.path]).encode(), "application/json"
+                else:
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *a):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.base = "http://127.0.0.1:%d" % self.server.server_address[1]
+        self._thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def capture_esp(out_dir):
+    """Screenshot the firmware page in setup and station mode (light, English) into out_dir.
+
+    :returns: the two PNG paths (``esp-setup-page.png``, ``esp-status-page.png``)
+    """
+    from playwright.sync_api import sync_playwright  # tool dep; imported lazily
+
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+    with EspStub() as stub, sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        ctx = browser.new_context(
+            color_scheme="light",
+            locale="en-US",
+            viewport={"width": 420, "height": 900},
+            device_scale_factor=2,
+        )
+        for mode, name in (("setup", "esp-setup-page.png"), ("station", "esp-status-page.png")):
+            stub.mode = mode
+            pg = ctx.new_page()
+            pg.goto(stub.base)
+            if mode == "setup":
+                pg.wait_for_selector("#ssid option", state="attached")
+                pg.fill("#psk", "example-passphrase")
+                pg.wait_for_timeout(4500)  # the page's follow-up re-scan read clears "Searching…"
+            else:
+                pg.wait_for_selector("#functions .box")
+                pg.wait_for_timeout(500)
+            p = os.path.join(out_dir, name)
+            pg.screenshot(path=p, full_page=True)
+            paths.append(p)
+            pg.close()
+        browser.close()
+    return paths
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="screenshot the web UI (over the mock) for review")
     ap.add_argument("--out", default="/tmp/ux", help="output directory for the PNGs")
+    ap.add_argument(
+        "--esp",
+        action="store_true",
+        help="only the ESP32 firmware page (setup + station mode, from fixtures)",
+    )
     args = ap.parse_args(argv)
     try:
         import playwright  # noqa: F401
@@ -133,7 +297,8 @@ def main(argv=None):
         raise SystemExit(
             "needs playwright: pip install playwright && python -m playwright install chromium"
         ) from None
-    paths = capture(args.out)
+    paths = [] if args.esp else capture(args.out)
+    paths += capture_esp(args.out)
     print("wrote %d screenshots to %s" % (len(paths), args.out))
 
 
