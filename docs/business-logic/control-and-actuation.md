@@ -171,6 +171,7 @@ stale read would be re-asserted — see the "carry current state" note in `_cool
 | heater run-time slider → 60 | `3f7b003c1f3f` → neutral | `runtime 60` → `3f7b003c1f3f` | `RunningTime=60` — **identical** |
 | heater **Start timer** | `3f3b017f1f3f` → neutral | `timer_start` → `3f3b017f1f3f` | `OperationModeAirHeater=3` + `OperationModeCombined=1` (AIR_HEATER) — **identical**; the page's toggle `uh/d` → `rf/b` `a2(AIR_HEATER)`. The unit then shows "Timer: On" / status "Inactive • Timer: HH:MM" |
 | heater timer **Stop** | `3f0b007f1f3f` → neutral | `timer_cancel` → `3f0b007f1f3f` | `OperationModeAirHeater=0` (`j4`) — **identical**; status back to "Inactive" |
+| heater timer **"Start heating at" wheel → 09:31** (APP-OBSERVED 2026-09-27, screens 35-37) | `3f7b007f091f` → neutral | `timer 09:31` → `3f7b007f091f` | `TimerHour=9` (byte 4, bit 32 = `0x09`) + `TimerMin=31` (byte 5, bit 40 = `0x1f`), every other field at its sentinel — **identical**. Written on the wheel's **OK** (`rf/b` `B0`), with no confirm dialog and **without arming** (`OperationModeAirHeater` stays the sentinel 7; arming is the separate **Start timer** row above). Wheel driven with `adb shell input draganddrop` (~145 px, 1500 ms = one row) |
 | cooler OFF | `fc771e3e1f1f` → `ff771e3e1f1f` | `3c4309001606` | `State=0` |
 | cooler manual quiet | `ff271e3e1f1f` | `3d2309001606` | `Mode=2` |
 | cooler automatic quiet | `ff471e3e1f1f` | `3d4309001606` | `Mode=4` |
@@ -212,7 +213,7 @@ the owner's 2026-08-27 "roof light moved L5" observation, which the app's map do
 | **cooler** | `power` on/off, `level` 1-5, `mode` (incl. `timer_quiet`=scheduled), `night_on`/`night_off` 0-23, timers | ✅ actuates (schedule live 2026-08-26) | State 0↔1, Level applied. Scheduled quiet = **Mode 4** (the unit's "Automatischer Flüstermodus" toggle; manual = Mode 2); the window is `NightTimerHourOn/Off`, stored on the unit (survive reconnects) and **broadcast on 1102**. ⚠️ Hour bytes are LITERAL — every write must carry the current schedule (`_cooler_values` does; hard-coded 0s used to clobber it). No `night_set` command: the app never writes cooler `NightTimerSet` (that state bit is read-only/unit-driven; arm via `mode timer_quiet`). |
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates **when stationary** | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). **REFUSED while driving** — see the stationary gate below. |
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
-| **airheater** | `power`, `level` 1-10, `runtime` 0-120, `timer` HH:MM, `timer_start`/`timer_cancel`, `permanent` off | frames identical to the app's (applab 2026-09-16); not live-verified on the van | Installed; every untargeted field is the app's sentinel (nothing carried from the readback). |
+| **airheater** | `power`, `level` 1-10, `runtime` 0-120, `timer` HH:MM, `timer_start`/`timer_cancel`, `permanent` off | frames identical to the app's (applab 2026-09-16; the `timer` HH:MM wheel frame too, 2026-09-27); not live-verified on the van | Installed; every untargeted field is the app's sentinel (nothing carried from the readback). |
 | **roof** | wired (`control._roof` + `device.actuate_roof`: press-and-hold ~500 ms SafetyCounter stream, auto-stop at the limit) | installed, never driven | Pop-top IS installed (live `Installed=1`, 2026-08-26 — the earlier "not installed here" claim was wrong, issue #106). Protocol-correct (decompile + capture, §3) + needs ignition ON; the motor has NEVER been driven by calictl. |
 | roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
 
@@ -329,7 +330,7 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | DV |
 | airheater | `power` / `level` | NormalOperationRequest 1/0 / HeatingLevel | `rf/b` C2/q4 | live (power capture 07-08) |
 | airheater | `runtime` | RunningTime (min) | `rf/b` D4 | APP-OBSERVED (`3f7b003c1f3f` identical) |
-| airheater | `timer` | TimerHour:TimerMin (HH:MM) | `rf/b` B0 | DV |
+| airheater | `timer` | TimerHour:TimerMin (HH:MM) | `rf/b` B0 (fired on the time-wheel OK, no confirm, does not arm) | APP-OBSERVED (2026-09-27): 09:31 → `3f7b007f091f` identical |
 | airheater | `timer_start` / `timer_cancel` | OperationModeAirHeater 3 (+ OperationModeCombined 1) / 0 | `rf/b` a2(AIR_HEATER) / j4 via `uh/d` | APP-OBSERVED (`3f3b017f1f3f` / `3f0b007f1f3f` identical) |
 | energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | DV |
 | lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |

@@ -89,3 +89,30 @@ def test_load_scenario_reads_yaml():
     pytest.importorskip("yaml")
     scen = capture_diff.load_scenario("cooler/power-on")
     assert scen.function == "cooler" and scen.handle == 0x0022
+
+
+def test_airheater_timer_time_scenario_zero_diff(tmp_path):
+    """tools/scenarios/airheater/timer-time.yaml: the app's "Start heating at" 09:31 write
+    (APP-OBSERVED 2026-09-27, ``3f7b007f091f``) diffs to zero against calictl."""
+    pytest.importorskip("yaml")
+    scen = capture_diff.load_scenario("airheater/timer-time")
+    assert (scen.function, scen.what, scen.value, scen.control_char) == ("airheater", "timer", "09:31", "1701")
+    rows, leads, ours = capture_diff.diff(_funcs(), scen, bytes.fromhex("3f7b007f091f"))
+    assert ours.hex() == "3f7b007f091f" and leads == [] and all(r.match for r in rows)
+    p = tmp_path / "frames.txt"
+    p.write_text("1701: 3f7b007f091f\n")
+    assert capture_diff.run(str(p), "airheater/timer-time", frames=True) == 0
+
+
+def test_every_scenario_loads_and_builds():
+    """Every committed scenario yaml loads and calictl can build its frame (catches a typo'd
+    scenario before it is needed at the van)."""
+    pytest.importorskip("yaml")
+    from pathlib import Path
+    root = Path(capture_diff.__file__).resolve().parent / "scenarios"
+    names = sorted(str(p.relative_to(root).with_suffix("")) for p in root.rglob("*.yaml"))
+    assert "airheater/timer-time" in names
+    funcs = _funcs()
+    for name in names:
+        scen = capture_diff.load_scenario(name)
+        assert control.build(funcs, scen.function, scen.what, scen.value, scen.state), name

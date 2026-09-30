@@ -180,7 +180,11 @@ unconditionally available on any unit that answers BLE at all:
   derived from the same `0x1004` frame above: `CarLevelRoll`/`CarLevelPitch` (exposed via
   `ye.a.R1()`/`ye.a.F3()`, `zf/d.java:196-204`) and `CarLevelPopUp` (`ye.a.t3()`/`ye.a.B4()`,
   `zf/d.java:160-161,363-366`). Since it rides on the always-true General handshake, treat
-  LevelIndicator as always available too.
+  LevelIndicator as always available too. **Caveat (APP-OBSERVED 2026-09-27):** the app's
+  *dedicated* Level Indicator screen showed only "No data available. The ignition needs to be
+  turned on for data." even with 1004 `TerminalOneFive=1` and roll/pitch set on the fake unit —
+  its ignition gate is not 1004 terminal-15. Hypothesis: it reads the phone's own vehicle-data API;
+  next step: trace that screen's view-model flow. The data itself (1004) stays always readable.
 
 ### 2e. `CarVariant` / vehicle model — parsed, weakly wired, not a gating signal
 
@@ -201,6 +205,24 @@ feature-presence gate.
 
 **Conclusion for interop: model/variant is not a reliable or fully-wired feature-gating signal in
 this codebase. Don't build your HA integration's capability detection around it.**
+
+### 2f. Connect-time version gate (ex080) and the ECO gate — APP-OBSERVED 2026-09-27
+
+Observed with app 5.0.8.3028 against the fake unit (`tools/applab`, session inventory screens
+57-59); texts in `alert-states.md` §15.
+
+- **Firmware / version gate = hard refusal.** With `general` (1001) set to implausible versions
+  (AmbSw/CmSw ASCII "9999"/"0000", `CommunicationVersion=99`) the app refuses to connect:
+  "Connection failure", "App version outdated.", "Error code: ex080", [Try again] [Close]. It is
+  not a banner and there is no read-only mode. **Restore path:** set the baseline versions back
+  ("0410"/"0207", `CommunicationVersion=2`), Try again (one transient "Error accessing data"
+  prompt), then a fresh Connect succeeds. Which version values the checker accepts, and the
+  checker class itself, are not yet traced (next step: find the ex080 string key in the decompile,
+  then its call site). calictl keeps reading and flags `firmware_untested` instead (by design).
+- **ECO energy mode is not an `Installed` bit and not BLE-reachable.** The Energy Mode picker
+  showed Normal / Max only with `EnergyModeNotSelectable=0`, with `energy.PvInstalled=1`, and with
+  `vehicle.CarVariant=2` (GRAND_CALIFORNIA). **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` (account/config vs vehicle) is still unresolved — next step: SootUp def-use trace of `N0`'s writer. None of the BLE fields the fake unit serves
+  drives it.
 
 ## Part 3 — Recommended detection rule for the HA integration
 

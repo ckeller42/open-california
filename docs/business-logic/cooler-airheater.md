@@ -204,7 +204,7 @@ unlike Cooler's single `af.a`). State/read-back characteristic `00001702-...`; l
 | `E3` | `we.b` | `(fz.i)` | PermanentOperationRequest | `0` (only "off" is exposed here) | `rf/b.java:209-218` |
 | `H3` | `we.b` | `(we.a, uh.b)` | AirDistribution | `1/2/3` from `we.a` enum ordinal+1 | `rf/b.java:220-242` |
 | `q4` | `we.b` | `(int, uh.c)` | HeatingLevel | raw int, **guarded 1 ≤ i ≤ 10, else silently dropped (no send)** | `rf/b.java:771-783` |
-| `B0` | `df.a` | `(m, fz.i)` | TimerHour = `m.f24999a`, TimerMin = `m.f25000b` | raw ints (hour, min) | `rf/b.java:164-175` |
+| `B0` | `df.a` | `(m, fz.i)` | TimerHour = `m.f24999a`, TimerMin = `m.f25000b` — fired by the "Start heating at" wheel's **OK**; 09:31 → `3f7b007f091f` (APP-OBSERVED 2026-09-27) | raw ints (hour, min) | `rf/b.java:164-175` |
 | `a2` | `df.a` | `(df.b, fz.i)` | **"Start timer"**: OperationModeCombined = ordinal+1 (AIR_HEATER → 1) **and** OperationModeAirHeater(Mode) = `3` → `3f3b017f1f3f` (APP-OBSERVED 2026-09-16; caller `uh/d.java`) | `rf/b.java:274-308` |
 | `j4` | `df.a` | `(fz.i)` | **timer "Stop"**: OperationModeAirHeater(Mode) = `0` (via `f(this,0)`) → `3f0b007f1f3f` (APP-OBSERVED) | `rf/b.java:745-749, 154-162` |
 
@@ -224,8 +224,32 @@ in-vehicle-only (no write site in the app).
 
 The heater's "timer start" trigger is therefore NOT a bit like Cooler's `TimerStart` but the
 `OperationModeAirHeater` value itself — physical slot `f23983f0` (Cooler's `TimerStart`) is named `PermanentOperationConfirmation`
-for the heater and is never written by `rf/b.java`. Inference: writing non-zero
-`TimerHour`/`TimerMin` via `B0()` alone is what arms the heater's departure timer (UNVERIFIED).
+for the heater and is never written by `rf/b.java`. The earlier inference "writing
+`TimerHour`/`TimerMin` via `B0()` alone arms the departure timer" is **superseded**: the app writes
+the time (`B0`) and the arm (`a2`, "Start timer") as two separate frames, and the time frame leaves
+`OperationModeAirHeater` at its sentinel `7` (APP-OBSERVED 2026-09-27, below).
+
+**Timer time frame — APP-OBSERVED 2026-09-27** (`tools/applab`, session inventory screens
+35-37). The Timer accordion reads "After the timer is activated, the heating starts tomorrow at
+07:30." with a "Start heating at" value and one button (Start timer / Stop). Tapping the value
+opens a bottom-sheet hour/minute wheel; **OK** writes the time at once, with no confirm dialog
+and without arming:
+
+| Byte | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|---|
+| 09:31 → `3f7b007f091f` | `3f` AirDistribution 0 + the three 2-bit requests at 3 | `7b` Mode 7 + HeatingLevel 11 (sentinels) | `00` Combined 0 | `7f` RunningTime 127 (sentinel) | **`09` TimerHour = 9** (bit 32) | **`1f` TimerMin = 31** (bit 40) |
+
+So `TimerHour` sits at byte 4 (bit 32, width 8) and `TimerMin` at byte 5 (bit 40, width 8) —
+capture-grade confirmation of `overrides.CONTROL_OFFSETS["airheater"]` (the extractor still marks
+these fields MERGED_AMBIGUOUS). calictl's `set airheater timer 09:31` builds the same six bytes
+(`T_AIRHEATER_TIMER_TIME`, scenario `tools/scenarios/airheater/timer-time.yaml`). Unit side is
+still owed: that the unit stores the time and reads it back on 1702.
+
+**Status line under the page title "Heating" — APP-OBSERVED 2026-09-27** (screen 34 variants):
+"Inactive" (idle); "Active • 45 min remaining" (`NormalOperation=1`, `RunningTimeinAction=45`);
+"Active • Continuous heating" (`PermanentOperation=1`); "Inactive • Timer: 07:30"
+(`OperationModeAirHeater=3`, `OperationModeCombined=1`, TimerHour 7 / TimerMin 30; the Timer row
+then reads "Timer: On").
 
 ### 2. Value semantics / enums
 

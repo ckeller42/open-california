@@ -23,6 +23,9 @@ CONTROL_OFFSETS = {
     },
     "airheater": {  # 1701; from sf/a.java f() (airheater ctor branch, read directly).
         # NOT the cooler layout — airheater's four MERGED_AMBIGUOUS control fields differ.
+        # CAPTURE-grade (applab 2026-09-27): the real app's "Start heating at" wheel, set to
+        # 09:31, wrote 3f7b007f091f — TimerHour@32 = 0x09 (byte 4), TimerMin@40 = 0x1f (byte 5);
+        # RunningTime@24 likewise from the 60-min slider frame 3f7b003c1f3f (2026-09-16).
         "OperationModeCombined": (20, 4),
         "RunningTime": (24, 8),
         "TimerHour": (32, 8),

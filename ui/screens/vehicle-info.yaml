@@ -9,6 +9,13 @@
 #   NavigationConnectivity$LevelIndicatorScreen    - vehicle tilt/leveling display
 #   NavigationConnectivity$HeatingAndCoolingTimerScreen - shared timer UI used by
 #                                                    airheater/cooler/roofaircondition
+# SCOPE NOTE (APP-OBSERVED 2026-09-27, app 5.0.8.3028): this file mixes three
+# app pages. howToAndInfo_* = the Help > "How-to & Info" page (model photo,
+# "More info on this model" -> leaves the app for an external browser,
+# "How-to Videos"); levelIndicatorReadout = the dedicated "Level Indicator"
+# screen (a Remote Control row on the vehicle page); the page the app titles
+# "Vehicle Information" (status + energy rows) is modeled in energy.yaml.
+# A future split into help.yaml / level-indicator.yaml is owed.
 screen: vehicle-info
 title_key: howToAndInfo_titleBar_pageTitle_text
 function: null
@@ -78,9 +85,18 @@ widgets:
       CarLevelRoll/CarLevelPitch (exposed via ye.a.R1()/ye.a.F3(),
       zf/d.java:196-204) and CarLevelPopUp (ye.a.t3()/ye.a.B4(),
       zf/d.java:160-161,363-366). Since it rides the always-true General
-      handshake (b4() hardcoded Boolean.TRUE, zf/d.java:155,222-224), this
-      widget should be treated as ALWAYS available, unlike every
-      Installed-bit-gated feature screen in this task.
+      handshake (b4() hardcoded Boolean.TRUE, zf/d.java:155,222-224), the
+      DATA is always readable. The SCREEN is NOT always available:
+      APP-OBSERVED 2026-09-27 (inventory screen 45) the dedicated Level
+      Indicator screen showed only "No data available. The ignition needs to
+      be turned on for data." even with 1004 TerminalOneFive=1 and
+      CarLevelRoll/CarLevelPitch/CarLevelPopUp set on the fake unit, after two
+      re-entries — so its ignition gate is NOT 1004 terminal-15. HYPOTHESIS:
+      it reads the phone's own vehicle-data API (cf. LEVELING_OVER_SPEED_ID,
+      alert-states.md §12). Next step: trace the LevelIndicatorScreen
+      view-model to the flow that supplies "ignition".
+    label_text: "Level Indicator"
+    evidence: APP-OBSERVED 2026-09-27 (gate text) | DECOMPILE (data source)
 
   - id: vehicleHandshakeSection
     type: section
@@ -109,7 +125,7 @@ widgets:
     range: null
     controls: null
     elements: [infoPage_timer_headline, infoPage_timer_description]
-    constraints: "Shared timer editor reused by airheater/cooler (TimerHour/TimerMin/NightTimer* fields) and roofaircondition; owned jointly, documented here as the shell entry point only"
+    constraints: "Shared timer editor reused by airheater/cooler (TimerHour/TimerMin/NightTimer* fields) and roofaircondition; owned jointly, documented here as the shell entry point only. APP-OBSERVED 2026-09-27: on 5.0.8.3028 both the cooler and the heater timer are INLINE accordions on their own pages (coolbox.yaml / air-heater.yaml timerWidget); no separate timer page was reached."
 icons:
   - drawable/level
   - drawable/level_grid_indicator

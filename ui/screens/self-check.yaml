@@ -60,6 +60,17 @@ widgets:
     range: null
     controls: null
     elements: null
+    constraints: "APP-OBSERVED 2026-09-27 (screen 46): one-time 'Disclaimer' bottom sheet on first entry (guidance only; the vehicle's operating instructions are the binding source) [OK] [Cancel]."
+
+  - id: checklistCatalogue
+    type: list
+    label_key: null
+    label_text: "California Checklists:"
+    range: null
+    controls: null
+    elements: ["Quick Check (Before every trip) 0/20", "Allround Check (Before going on holiday) 0/25", "Standby Check (Before longer standby periods) 0/11"]
+    constraints: "APP-OBSERVED 2026-09-27 (screens 47-48): three built-in lists with item counts; Quick Check opens 'Open Tasks:' (first items: side windows closed, gas control knobs off, sink cover closed, mini kitchen stowed, …). Static app content, no BLE."
+    evidence: APP-OBSERVED 2026-09-27
 
   - id: exitScreen
     type: nav

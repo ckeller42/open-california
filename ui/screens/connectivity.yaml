@@ -83,6 +83,18 @@ widgets:
       - bluetoothReset_headline_pleaseGoToYour_text
       - bluetoothReset_headline_theBluetoothResetWasSucessful_text
       - bluetoothReset_primaryButton_continueWithRemoteControl_button
+    constraints: "APP-OBSERVED 2026-09-27 (screens 52-53): reached from Account > Vehicle > 'Bluetooth Reset' (subline 'Reset Bluetooth if connection problems can not be resolved otherwise.'); first a confirm: 'Resetting Bluetooth will permanently disconnect all previously connected smartphones. The Remote Control will require setup again.' [OK] [Cancel]. It is a UNIT-WIDE reset (all phones), not a phone-side unpair. Cancelled — the steps after OK were not observed. Sibling row 'Smartphone connection' opens a 'Setup remote control' sheet (remove the existing 'VWCAMPER' device in the phone's Bluetooth settings; [Open Bluetooth settings] [Set up Remote Control]) (screen 55)."
+    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
+
+  - id: connectionFailureSheet
+    type: drawer
+    label_key: null
+    label_text: "Connection failure — App version outdated."
+    range: null
+    controls: null
+    elements: []
+    constraints: "APP-OBSERVED 2026-09-27 (screen 57): shown at connect when general (1001) carries implausible versions (tested AmbSw/CmSw ASCII '9999'/'0000', CommunicationVersion=99). Full-screen sheet: 'Connection failure', 'App version outdated.', tip '1. Update app', a support-contact block, 'Error code: ex080', [Try again] [Close]. HARD refusal — the app does not connect. After restoring the baseline versions, Try again gave one transient 'Error accessing data' retry prompt; a fresh Connect succeeded. Accepted version ranges and the checker class are not yet traced. Distinct from onboarding.yaml updateScreen (store-update prompt). calictl does not copy this gate (firmware_untested warns, reads continue)."
+    evidence: APP-OBSERVED 2026-09-27
 
   - id: wifiResetFlow
     type: list

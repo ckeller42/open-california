@@ -29,7 +29,18 @@ widgets:
     range: null
     controls: {field: null, action: null}
     elements: null
-    constraints: "Convenience toggle; likely fans out to all 16 BrightnessL* fields at once rather than a single dictionary field. UNVERIFIED."
+    constraints: "Master 'All lights' toggle at the top of the page. APP-OBSERVED 2026-09-16: ON = SET_PROFILE 12 (0c10…) + commit, byte-identical to calictl 'power on' (control-and-actuation.md §3)."
+    evidence: APP-OBSERVED 2026-09-27 (layout) | APP-OBSERVED 2026-09-16 (frame)
+
+  - id: profileTiles
+    type: button
+    label_key: null
+    label_text: "A B C D (profile tiles, '+' when empty)"
+    range: "A..D"
+    controls: {field: ProfileNumber, action: "SET_BRIGHTNESS (save, long-press) / SET_PROFILE (apply)"}
+    elements: [lighting_pleasePressAndHold_headline, lighting_pleasePressAndHold_text]
+    constraints: "APP-OBSERVED 2026-09-27 (screens 20, 32): four profile tiles A-D under 'All lights', each with a '+' while empty. A SHORT tap shows 'Please press and hold' — 'To save or change lighting settings, press and hold the profile button until you see a confirmation.' [OK]; press-and-hold saves. Tile A long-press = ProfileNumber 1 save frame (APP-OBSERVED 2026-09-16, control-and-actuation.md §3); the ProfileNumber of tiles B-D is not yet captured (owed before naming them in calictl)."
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16
 
   - id: profileSelector
     type: drawer
@@ -73,7 +84,7 @@ widgets:
     elements:
       - lighting_kitchen_SectionLight_backgroundLighting_text
       - lighting_kitchen_SectionLight_cooking_text
-    constraints: "Base layout; kitchen broken out as its own section instead of nested under interiorLighting/livingArea."
+    constraints: "Base layout; kitchen broken out as its own section instead of nested under interiorLighting/livingArea. APP-OBSERVED 2026-09-27 (Ocean, screen 22): exactly two rows, 'Background Lighting' and 'Cooking' — no cabinet light (calictl's kitchen-cabinet L6 has no app control)."
 
   - id: sectionReadingLights
     type: section
@@ -100,7 +111,8 @@ widgets:
       - lighting_popupRoof_SectionLight_left_text_t6
       - lighting_popupRoof_SectionLight_readingLight_text
       - lighting_popupRoof_SectionLight_right_text_t6
-    constraints: "Subline: lighting_popupRoof_SectionLightSubline_onlyAvailableWhenPopUpRoof_text (only shown/enabled when pop-up roof installed)."
+    constraints: "Subline: lighting_popupRoof_SectionLightSubline_onlyAvailableWhenPopUpRoof_text. APP-OBSERVED 2026-09-27 (screen 23): the gate is the roof being OPEN, not installed — 'Reading Light' is greyed with 'Only available when the pop-up roof is open.' while the roof is closed; 'Background Lighting' stays adjustable."
+    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
 
   - id: sectionRear_t6
     type: section
@@ -130,7 +142,7 @@ widgets:
     elements:
       - lighting_outerLights_SectionLight_entrance_text
       - lighting_outerLights_SectionLight_rearSurroundings_text
-    constraints: "Subline: lighting_outerLights_SectionLightSubline_onlyAvailableWhenCamping_text. General constraint across all zone sections: lighting_general_SectionLightSubline_onlyAvailableWhenEngineOff_text (some zones only adjustable with engine off)."
+    constraints: "APP-OBSERVED 2026-09-27 (screens 24-25, section titled 'Exterior Light'): 'Rear Surroundings' has a slider; 'Entrance' is greyed with no slider — gate source UNKNOWN (camping-mode subline below, or not equipped); next step: toggle camping mode on the fake unit and re-check. Subline: lighting_outerLights_SectionLightSubline_onlyAvailableWhenCamping_text. General constraint across all zone sections: lighting_general_SectionLightSubline_onlyAvailableWhenEngineOff_text (some zones only adjustable with engine off)."
 
   - id: zoneBrightnessSlider
     type: slider
@@ -138,7 +150,8 @@ widgets:
     range: "0..11 settable (4-bit enum: 0=OFF, 1-10=10..100% in 10% steps, 11=DEFAULT; 13=NOT_EQUIPPED read-only, 14=leave-unchanged sentinel — capture-confirmed 2026-08-16, 'on'=10)"
     controls: {field: "BrightnessLOne..BrightnessLOneSix (per selected zone, index-to-area mapping UNVERIFIED)", action: SET_BRIGHTNESS}
     elements: null
-    constraints: "Per-zone brightness slider shown when a SectionLight row is expanded/tapped; long-press behavior: lighting_pleasePressAndHold_headline / lighting_pleasePressAndHold_text."
+    label_text: "N %"
+    constraints: "Per-zone brightness slider shown when a section is expanded; the app DISPLAYS the value as a percentage ('0%' … '100%', APP-OBSERVED 2026-09-27 screens 21-24) while the wire carries the 0-11 enum. (The pleasePressAndHold texts belong to profileTiles, not this slider.)"
 
   - id: zoneColorPicker
     type: colorpicker
@@ -156,7 +169,7 @@ widgets:
       - lighting_lightColor_red_text
       - lighting_lightColor_salmon_text
       - lighting_lightColor_warmWhite_text
-    constraints: "Shown for zones marked colour-adjustable (see interiorLighting subline)."
+    constraints: "Shown for zones marked colour-adjustable (see interiorLighting subline). NOT shown on the Ocean profile (APP-OBSERVED 2026-09-27) — like the _gc sections, dead on this van."
 
   - id: functionsAndSettingsMenu
     type: section
@@ -213,12 +226,11 @@ widgets:
       - lighting_wakeUpLight_description_toBeWoken_text
       - lighting_wakeUpLight_wakeUpLightPreview_button
       - lighting_wakeUpLight_wakeUpLightPreview_button_disbaled
-    constraints: "Sub-screen (SLIDER_FOR_WAKE_UP_LIGHT_BRIGHTNESS in lr/a.java confirms distinct slider id from main SLIDER_FOR_LIGHTS_BRIGHTNESS). vehicleArea picker chooses which zone(s) light up at wake time (mirrors zone list, gc-only colour picker). Preview button maps to PREVIEW command enum; brightness slider -> SET_BRIGHTNESS; time/lead-time -> WAKEUP_TIME."
+    constraints: "APP-OBSERVED 2026-09-27 (screen 27): toggle 'Wake-up light', a wake-up 'Time' (00:00) and a 'Lead time' slider 0..30 min; the wake-up light must be re-activated after each use. No frame captured (wake-up TIME packing still unknown). Sub-screen (SLIDER_FOR_WAKE_UP_LIGHT_BRIGHTNESS in lr/a.java confirms distinct slider id from main SLIDER_FOR_LIGHTS_BRIGHTNESS). vehicleArea picker chooses which zone(s) light up at wake time (mirrors zone list, gc-only colour picker). Preview button maps to PREVIEW command enum; brightness slider -> SET_BRIGHTNESS; time/lead-time -> WAKEUP_TIME."
 
   - id: doubleTapSettings
     type: drawer
     label_key: lighting_functionsAndSettings_setting_lightingDoubleTap_text
-    range: null
     controls: {field: null, action: SET_DOUBLE}
     elements:
       - lighting_doubleTap_configureOperation_text
@@ -227,7 +239,8 @@ widgets:
       - lighting_doubleTap_lightingDoubleTap_text
       - lighting_doubleTap_speedFast_text
       - lighting_doubleTap_speedSlow_text
-    constraints: "Configures double-tap-to-toggle behavior + speed (fast/slow) on reading lights. No dedicated dictionary state/control field identified beyond the SET_DOUBLE command enum; UNVERIFIED."
+    range: "1..7"
+    constraints: "Configures double-tap-to-switch-off behaviour on the reading lights / lighting button. APP-OBSERVED 2026-09-27 (screen 30): 'Double tap speed' slider 1..7 between 'Fast' and 'Slow'. No dedicated dictionary state/control field identified beyond the SET_DOUBLE command enum; frame not captured, UNVERIFIED."
 
   - id: roofConsoleSettings
     type: drawer
@@ -239,7 +252,7 @@ widgets:
       - lighting_roofConsole_configureRoofConsoleLightSwitch_text
       - lighting_roofConsole_roofConsoleLightSwitch_text
       - lighting_roofConsole_saveLightSetting_button
-    constraints: "Icon RoofConsoleSwitch present in drawables (x2/e.java). No dictionary field identified."
+    constraints: "Icon RoofConsoleSwitch present in drawables (x2/e.java). No dictionary field identified. APP-OBSERVED 2026-09-27 (screen 29): one action button 'Save light setting' (stores the current light settings for the roof-console switch) — its frame is UNKNOWN (not pressed)."
 
   - id: lightingAndSlidingDoor
     type: drawer
@@ -255,7 +268,7 @@ widgets:
       - lighting_lightingAndSlidingDoor_openingSlidingDoorTriggers_text
       - lighting_lightingAndSlidingDoor_saveLightSetting_button
       - lighting_lightingAndSlidingDoor_theLightThatComesOnWhenTheSliding_text
-    constraints: "Enabled/disabled toggle for which light comes on when sliding door opens (camping-mode variant text also present)."
+    constraints: "APP-OBSERVED 2026-09-27 (screen 28): 'Save light setting' button (stores the current lighting as the sliding-door configuration — frame UNKNOWN, not pressed) plus a camping-mode part: 'Opening sliding door activates the rear interior lights.' with an Enabled/Disabled state (read 'Disabled' on the fake unit). Probably the DOOR_CONTACT profile (8) — HYPOTHESIS, also the likely source of the camping page's sliding-door row (camping-mode.yaml slidingDoorRow)."
 
   - id: factorySettingReset
     type: button
@@ -272,7 +285,7 @@ widgets:
       - lighting_factorySetting_toast_configurationSuccessful_text
       - lighting_factorySetting_toast_theLightSettingsCouldNotBeReset_text
       - lighting_factorySetting_toast_youHaveResetYourLightSettings_text
-    constraints: "Confirm dialog + success/failure toasts for resetting all lighting (incl. wake-up light) to factory defaults."
+    constraints: "Confirm dialog + success/failure toasts for resetting all lighting (incl. wake-up light) to factory defaults. APP-OBSERVED 2026-09-27 (screen 31): the list it resets = general lighting settings, wake-up light, lighting & sliding door, roof console light switch, lighting double tap, profiles (A, B, C, D). Not pressed (destructive); frame unknown."
 
   - id: infoTutorialOverlay
     type: label

@@ -141,13 +141,20 @@
         },
         {
           "id": "timerWidget",
-          "type": "timer",
+          "type": "toggle",
           "label": "Timer",
           "range": null,
           "controls": {
             "field": "TimerStart/TimerCancel",
             "action": "D/X0"
           }
+        },
+        {
+          "id": "faultDialog",
+          "type": "dialog",
+          "label": null,
+          "range": null,
+          "controls": null
         },
         {
           "id": "timerSetupDrawer",
@@ -178,7 +185,7 @@
         },
         {
           "id": "usbChargerToggle",
-          "type": "toggle",
+          "type": "label",
           "label": "Rear USB ports",
           "range": null,
           "controls": {
@@ -188,7 +195,7 @@
         },
         {
           "id": "allLightsToggle",
-          "type": "toggle",
+          "type": "label",
           "label": null,
           "range": null,
           "controls": {
@@ -205,6 +212,13 @@
             "field": "InteriorLight",
             "action": null
           }
+        },
+        {
+          "id": "slidingDoorRow",
+          "type": "label",
+          "label": null,
+          "range": null,
+          "controls": null
         },
         {
           "id": "behaviorInfoSection",
@@ -263,6 +277,16 @@
           "controls": {
             "field": null,
             "action": null
+          }
+        },
+        {
+          "id": "profileTiles",
+          "type": "button",
+          "label": null,
+          "range": "A..D",
+          "controls": {
+            "field": "ProfileNumber",
+            "action": "SET_BRIGHTNESS (save, long-press) / SET_PROFILE (apply)"
           }
         },
         {
@@ -372,7 +396,7 @@
           "id": "doubleTapSettings",
           "type": "drawer",
           "label": "Lighting double tap",
-          "range": null,
+          "range": "1..7",
           "controls": {
             "field": null,
             "action": "SET_DOUBLE"
@@ -436,7 +460,7 @@
           "id": "heatingSlider",
           "type": "slider",
           "label": "Heating temperature",
-          "range": "1..10",
+          "range": "1..10 (ticks 1-9, HI = 10)",
           "controls": {
             "field": "HeatingLevel",
             "action": "q4"
@@ -446,7 +470,7 @@
           "id": "runTimeSlider",
           "type": "slider",
           "label": "Run time",
-          "range": null,
+          "range": "10..120",
           "controls": {
             "field": "RunningTime",
             "action": "D4"
@@ -515,6 +539,13 @@
           "label": "Inactive",
           "range": null,
           "controls": null
+        },
+        {
+          "id": "faultToasts",
+          "type": "dialog",
+          "label": null,
+          "range": null,
+          "controls": null
         }
       ]
     },
@@ -561,6 +592,16 @@
           "controls": {
             "field": null,
             "action": "X1"
+          }
+        },
+        {
+          "id": "screenEntryProbe",
+          "type": "label",
+          "label": null,
+          "range": null,
+          "controls": {
+            "field": "Up/Down/SafetyCounter",
+            "action": null
           }
         },
         {
@@ -730,6 +771,13 @@
           "id": "chargingSection",
           "type": "section",
           "label": "Charging",
+          "range": null,
+          "controls": null
+        },
+        {
+          "id": "chargingInfoSheet",
+          "type": "drawer",
+          "label": null,
           "range": null,
           "controls": null
         },

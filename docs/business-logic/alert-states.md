@@ -96,6 +96,11 @@ enum (`iOrdinal` of a `c` enum compared against `cVar2`/`cVar3` sentinels) drive
 | 1 | `COOLER_ERROR_ID` | **MEDIUM** (differs from primary's HIGH) | `fh/a.java:353` |
 | 2 | `COOLER_ERROR_SENSOR_ID` | MEDIUM | `fh/a.java:363` |
 
+**App text (APP-OBSERVED 2026-09-27, inventory screen 19; same text seen 2026-09-16):** `Error=1`
+pops a modal with a red warning triangle — headline "Refrigerator Box", body "Please visit a
+workshop.", single [OK]. (2 and 3: "Refrigerator box in emergency mode." / "Please close the
+refrigerator box door fully.", `protocol-crosscheck-applab.md`.)
+
 `COOLER_ERROR_SENSOR_ID` has no primary-surface counterpart — UNVERIFIED whether it's a second
 physical cooler zone or a sensor-fault sub-case of the same `Error` field folded in only on the
 dashboard. Flagged UNVERIFIED.
@@ -112,7 +117,7 @@ width: 4` (raw range 0-15, only 0-5 used). Decoded at `rf/b.java:441` (`aVar19` 
 |---|---|---|---|---|
 | 0 | *(clears all five + sets sticky "deactivated" flag)* | No error | — | — |
 | 1 | `AIR_HEATER_LOW_BATTERY_ID` | Vehicle/heater battery too low to operate | HIGH / ERROR (`rf/b.java:473`) | `AIR_HEATER_LOW_BATTERY_NOTIFICATION_ID` |
-| 2 | `AIR_HEATER_FUEL_LOW_ID` | Fuel level too low to run heater | HIGH / ERROR (`rf/b.java:522`) | `AIR_HEATER_FUEL_LOW_NOTIFICATION_ID` |
+| 2 | `AIR_HEATER_FUEL_LOW_ID` | Fuel level too low to run heater. App toast (APP-OBSERVED 2026-09-16, re-seen 2026-09-27 screen 34): headline "Low fuel", body "The auxiliary air heater was switched off because the fuel level is low. It can only be activated again when there is sufficient fuel. Please refuel." [OK] | HIGH / ERROR (`rf/b.java:522`) | `AIR_HEATER_FUEL_LOW_NOTIFICATION_ID` |
 | 3 | `AIR_HEATER_SYSTEM_ERROR_ID` | Generic heater system fault | HIGH / ERROR (`rf/b.java:571`) | `AIR_HEATER_SYSTEM_ERROR_NOTIFICATION_ID` |
 | 4 | `AIR_HEATER_HEATING_TIME_EXCEEDED_ID` | Continuous-run time limit exceeded (plausibly EU emissions/runtime cap — see `cooler-airheater.md`) | HIGH / ERROR (`rf/b.java:620`) | `AIR_HEATER_HEATING_TIME_EXCEEDED_NOTIFICATION_ID` |
 | 5 | `AIR_HEATER_OPERATION_NOT_POSSIBLE_ID` | Heater cannot start (precondition not met) | HIGH / ERROR (`rf/b.java:671`) | `AIR_HEATER_OPERATION_NOT_POSSIBLE_NOTIFICATION_ID` |
@@ -325,7 +330,7 @@ three separate boolean flows:
 
 | Alert ID | Meaning | Trigger (as read in `ij/c.java`) | Cite |
 |---|---|---|---|
-| `ROOF_TERMINAL15_ID` | Roof-lift blocked because ignition ("Terminal 15") is on | boolean flow, raised when **not** `z11` | `ij/c.java:88-98` |
+| `ROOF_TERMINAL15_ID` | Roof-lift blocked because ignition ("Terminal 15") is **off** (the app's dialog asks to switch it on — see §15) | boolean flow, raised when **not** `z11` | `ij/c.java:88-98` |
 | `ROOF_SAFETY_COUNTER_HAS_ERROR_ID` | Roof-lift safety counter reports an error state | `cVar2.f11724e0.e() == te.i.X` | `ij/c.java:100-111` |
 | `ROOF_SPEEDLOCK_ID` | Roof-lift locked because vehicle speed exceeds threshold | boolean flow, raised when `z14` true | `ij/c.java:112-123` |
 
@@ -442,3 +447,14 @@ dialog, not a fault).
 
 **Resolved since first pass:** `CLOCK_OUT_OF_SYNC_ID` threshold (>5 min, §12); roof `1402`
 `InfoPopUp` fault alerts + their `BLUETOOTH_ROOF_*` ack keys (§11).
+
+## 15. Connect-time and screen-entry gates (APP-OBSERVED 2026-09-27)
+
+Observed with app 5.0.8.3028 against the fake unit (`tools/applab`); screen numbers are the
+2026-09-27 session inventory. These are gates, not `*_ID` alerts: the app blocks a flow and says why.
+
+| Gate | Trigger | App text | Effect |
+|---|---|---|---|
+| **ex080 — app version outdated** | at connect, `general` (1001) carries implausible versions (tested: AmbSw/CmSw ASCII "9999"/"0000", `CommunicationVersion=99`) | full-screen "Connection failure", "App version outdated.", tip "1. Update app", "Error code: ex080", [Try again] [Close] (screen 57) | **hard refusal** — the app does not connect at all (no read-only fallback). With the baseline versions restored, Try again gave one transient "Error accessing data" retry prompt; a fresh Connect then succeeded. The checker class is not yet named in the decompile (next step: find the ex080 string key, then its call site). calictl deliberately does NOT copy this: `firmware_untested` warns and keeps reading (`feature-availability.md`) |
+| **roof — switch on the ignition** | pop-up roof page opened with `vehicle.TerminalOneFive=0` | dialog "Switch on the ignition" / "Please switch on the ignition to operate the pop-up roof." [Not now] (screen 41) | no roof controls until ignition is on (the `ROOF_TERMINAL15_ID` flow, §11). With ignition on, opening the page writes a probe frame `0000097b00` (Up=0 / Down=0 + SafetyCounter) before any press |
+| **Level Indicator — no data** | the dedicated Level Indicator screen | "No data available. The ignition needs to be turned on for data." (screen 45) | shown even with 1004 `TerminalOneFive=1` and roll/pitch set — so its "ignition" is NOT 1004 terminal-15. Hypothesis: the phone's own vehicle-data API (cf. `LEVELING_OVER_SPEED_ID`, §12); next step: trace the screen's view-model flow |

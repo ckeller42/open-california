@@ -198,6 +198,30 @@ def test_airheater_runtime_and_timer_frames():
         raise AssertionError("expected ValueError for out-of-range timer")
 
 
+def test_airheater_timer_time_matches_app_frame():
+    """The heater's "Start heating at" time, APP-OBSERVED 2026-09-27 (tools/applab, the real app's
+    time wheel set to 09:31 and confirmed with OK): the app writes ``3f7b007f091f`` — ``TimerHour`` 9
+    in byte 4 (bit 32), ``TimerMin`` 31 (``0x1f``) in byte 5 (bit 40), every other field at its
+    leave-unchanged sentinel (``OperationModeAirHeater`` stays 7: setting the time does NOT arm the
+    timer). calictl's ``timer 09:31`` builds the same six bytes, whatever the readback says.
+
+    .. test:: Air-heater timer time frame equals the app's wheel write
+       :id: T_AIRHEATER_TIMER_TIME
+       :links: R_AIRHEATER_SET
+    """
+    from calictl import control
+    f = _funcs()
+    armed = {"NormalOperation": 0, "HeatingLevel": 5, "RunningTime": 60, "AirDistribution": 0,
+             "OperationModeAirHeater": 3, "TimerHour": 7, "TimerMin": 30}
+    for last in ({}, armed):                     # nothing is carried from the readback
+        frame = control.build(f, "airheater", "timer", "09:31", last)
+        assert frame.hex() == "3f7b007f091f"     # == the app's wheel-OK frame
+    vals = control.decode_control(f["airheater"], frame)
+    assert (vals["TimerHour"], vals["TimerMin"]) == (9, 31)
+    assert frame[4] == 0x09 and frame[5] == 0x1F
+    assert vals["OperationModeAirHeater"] == 7   # sentinel: the time write does not arm/cancel
+
+
 def test_lighting_save_favorite_frame():
     """`save_profile` writes the CURRENT lighting into a favorite (dg/h.java:564 l3): SET_BRIGHTNESS
     with ProfileNumber = the favorite N (not the live-view 9), real zones carrying their current

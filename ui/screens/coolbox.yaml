@@ -48,7 +48,9 @@ widgets:
     range: null
     controls: {field: Mode, action: f}
     elements: []
-    constraints: "UNVERIFIED — appears to be a standalone/summary-row switch for manual quiet mode, distinct from (but overlapping) quietModeWidget below; same underlying Mode field"
+    label_text: Manual quiet mode
+    constraints: "The 'Manual quiet mode' toggle INSIDE the Quiet mode accordion (quietModeWidget), not a separate summary row (APP-OBSERVED 2026-09-27, screen 14). On = Mode 2."
+    evidence: APP-OBSERVED 2026-09-27 | DEVICE 2026-08-26
 
   - id: quietModeWidget
     type: section
@@ -63,7 +65,9 @@ widgets:
       - endsAt_text
       - quietModeCanOnlyBeActivated_text
       - quietModeCanOnlyBeSwitchedOn_text
-    constraints: "Manual quiet mode 'can only be switched on' (not off) directly per key name coolboxPage_quietModeWidget_quietModeCanOnlyBeSwitchedOn_text; timer-based quiet mode 'can only be activated' under some precondition per coolboxPage_quietModeWidget_quietModeCanOnlyBeActivated_text — exact rule UNVERIFIED (likely requires refrigeratorBoxWidget State == on)"
+    label_text: "Quiet mode: 22:00-06:00"
+    constraints: "APP-OBSERVED 2026-09-27 (screens 11, 14, 18): collapsed row 'Quiet mode: HH:MM-HH:MM' (the NightTimerHourOn/Off window) while the box is on, 'Quiet mode: Off' when the box is off. Expanded: 'Quiet mode can be switched on for up to 23 hours.' (the text behind quietModeCanOnlyBeSwitchedOn — a duration limit, NOT an on-only rule; the earlier key-name reading was wrong), then TWO toggles — 'Manual quiet mode' (Mode 2) and 'Automatic quiet mode' (Mode 4) — and 'Starts at' / 'Ends at' hour rows. Quiet mode needs the box ON (cooler onboarding slide 3)."
+    evidence: APP-OBSERVED 2026-09-27 | DEVICE 2026-08-26 | DECOMPILE
 
   - id: quietModeDrawer
     type: drawer
@@ -76,8 +80,9 @@ widgets:
     constraints: null
 
   - id: timerWidget
-    type: timer
+    type: toggle
     label_key: coolboxPage_timerWidget_timer_text
+    label_text: "Timer: Off"
     range: null
     controls: {field: "TimerStart/TimerCancel", action: "D/X0"}
     elements:
@@ -93,7 +98,18 @@ widgets:
       - theBoxWillBeCooled_text
       - afterTheTimerIsActivated_text
       - afterContinuingTheBoxWillbeCooled_text
-    constraints: null
+    constraints: "APP-OBSERVED 2026-09-27 (screen 13): collapsed row 'Timer: Off' / 'Timer: On'; expanded = hint 'To set the timer, please switch off the refrigerator box above.', a Timer TOGGLE and a 'Time 00:00' row — both greyed while the box is ON (timer needs the box OFF; quiet mode needs it ON). Frames: timer start f7771e3e1f1f, time picker ff7704021f1f (APP-OBSERVED 2026-09-16)."
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE
+
+  - id: faultDialog
+    type: dialog
+    label_key: null
+    label_text: "Refrigerator Box — Please visit a workshop. [OK]"
+    range: null
+    controls: null
+    elements: []
+    constraints: "Modal with a red warning triangle, single OK, the moment 1102 Error changes (APP-OBSERVED 2026-09-27 screen 19 for Error=1; 2 'Refrigerator box in emergency mode.', 3 'Please close the refrigerator box door fully.' seen 2026-09-16)."
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16
 
   - id: timerSetupDrawer
     type: drawer
@@ -109,7 +125,7 @@ widgets:
 icons:
   - coolingbox           # drawable/coolingbox — main fridge icon (x9/d.java)
   - heating_cooling_timer # drawable/heating_cooling_timer — shared timer icon (also used by air-heater)
-  - snowflake            # drawable/snowflake — UNVERIFIED, could belong to roofaircondition instead of coolbox
+  - snowflake            # drawable/snowflake — the coolbox page hero icon (APP-OBSERVED 2026-09-27, screen 11)
 
 notes: |
   Screen composed from two parallel Java resource-accessor classes in the
@@ -134,7 +150,7 @@ notes: |
   at the same bit offsets, which is exactly what protocol/dictionary.yaml
   flags as "MERGED_AMBIGUOUS" offsets.
 
-  quietModeWidget's Mode field write value semantics (0/2/4) are UNVERIFIED —
-  the ViewModel only shows raw integer writes (f(this,0), f(this,2), f(this,4))
-  without a decoded enum; a live protocol capture is needed to confirm which
-  int corresponds to Off/Manual/TimerBased.
+  quietModeWidget's Mode values are settled: 0 = off, 2 = manual, 4 =
+  automatic/scheduled — DEVICE-verified 2026-08-26 (the unit's own
+  Flüstermodus screen) and APP-OBSERVED 2026-09-16 (manual ff271e3e1f1f,
+  automatic ff471e3e1f1f).
