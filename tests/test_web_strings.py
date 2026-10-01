@@ -24,6 +24,8 @@ WEB = ROOT / "firmware" / "web"
 STRINGS = json.loads((WEB / "strings.json").read_text(encoding="utf-8"))
 # the page source: the markup + its script (page.js, inlined by the generator)
 PAGE = (WEB / "index.html").read_text(encoding="utf-8") + (WEB / "page.js").read_text(encoding="utf-8")
+# the on-device display model names its keys as WEB_STR_DE_<KEY> macros (no token pasting)
+DISPLAY_SRC = (ROOT / "firmware/components/cali_core/display_model.c").read_text(encoding="utf-8")
 
 
 def test_every_key_has_en_and_de():
@@ -35,7 +37,13 @@ def test_every_key_has_en_and_de():
 
 
 def test_no_key_unused_by_the_page():
-    unused = [k for k in STRINGS if '"%s"' % k not in PAGE and "'%s'" % k not in PAGE]
+    unused = [
+        k
+        for k in STRINGS
+        if '"%s"' % k not in PAGE
+        and "'%s'" % k not in PAGE
+        and ("WEB_STR_DE_%s" % k.upper()) not in DISPLAY_SRC
+    ]
     assert unused == []
 
 
@@ -56,6 +64,16 @@ def test_rendered_page_is_small_and_self_contained():
     assert len(rendered) <= CONSTS["NET_HTTP_BODY_MAX"]
     assert not re.search(rb"""(src|href)\s*=\s*["']?(https?:)?//""", rendered)
     assert b"@import" not in rendered and b'id="setup"' in rendered and b'id="functions"' in rendered
+
+
+def test_display_keys_stay_out_of_the_page():
+    page = (WEB / "index_gen.html").read_text(encoding="utf-8")
+    d_keys = [k for k in STRINGS if k.startswith("d_")]
+    assert d_keys
+    for k in d_keys:
+        assert '"%s"' % k not in page, k
+    assert len(page.encode()) <= CONSTS["NET_HTTP_BODY_MAX"]
+    assert "WEB_STR_EN_D_RUNNING" in (WEB / "strings_gen.h").read_text(encoding="utf-8")
 
 
 def test_generated_files_are_fresh():
