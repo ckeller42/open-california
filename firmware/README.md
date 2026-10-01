@@ -362,7 +362,8 @@ with `-m "not linux_only"`).
 On a CoreS3 build the console command `screenshot` streams the live screen as `[SHOT 320 240 RLE16 <n>]`,
 base64 lines of 76 characters, `[/SHOT]` (kws-de's format). Capture the serial log, then
 `python -m tools.esp_shot decode <log> <out_dir>` writes one PNG per frame. Refusals are
-`LOG display: screenshot failed (no screen|no memory|busy|snapshot)`. It runs on the NimBLE host task and
+`LOG display: screenshot failed (no screen|no host|no memory|busy|snapshot)`; `no host` means no reader is
+attached to the USB-Serial/JTAG port (the command needs one, else printing could block BLE). It runs on the NimBLE host task and
 blocks it while printing (manual debug command).
 
 ## Pins

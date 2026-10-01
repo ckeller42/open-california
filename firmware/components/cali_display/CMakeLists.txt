@@ -7,7 +7,7 @@ endif()
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS "include"
                        REQUIRES cali_core
-                       PRIV_REQUIRES platform esp_driver_i2c heap)
+                       PRIV_REQUIRES platform esp_driver_i2c esp_driver_usb_serial_jtag heap)
 # A source-less component is an INTERFACE library: no compile options to set.
 if(CONFIG_CALI_DISPLAY)
     include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/cali_strict.cmake)

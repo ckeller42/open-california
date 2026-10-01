@@ -23,8 +23,9 @@ void cali_display_tick(uint64_t now_ms);
 int cali_display_ready(void);
 /* Console hook (shot.c): handles the exact line "screenshot" (returns 1) by streaming the screen as
  * "[SHOT w h RLE16 n]", base64 lines of 76 chars, "[/SHOT]" (decode with tools/esp_shot.py). Refuses with
- * "LOG display: screenshot failed (no screen|no memory|busy|snapshot)" and no frame. Runs on the
+ * "LOG display: screenshot failed (no screen|no host|no memory|busy|snapshot)" and no frame. Runs on the
  * caller's task (the NimBLE host task) and blocks it while the frame prints; the LVGL lock is held
- * only for the snapshot itself. Any other line returns 0. */
+ * only for the snapshot itself. Needs a host attached to the USB-Serial/JTAG console (refused with
+ * "no host" otherwise: a puts with nobody draining the CDC could block the host task). Any other line returns 0. */
 int cali_display_shot_line(const char *line);
 #endif

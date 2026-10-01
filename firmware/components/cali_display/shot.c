@@ -19,6 +19,10 @@
 #include "freertos/task.h"
 #include "lvgl.h"
 #include "net_consts.h"
+#include "sdkconfig.h"
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#include "driver/usb_serial_jtag.h"
+#endif
 
 #define SHOT_W 320
 #define SHOT_H 240
@@ -77,25 +81,35 @@ static void shot(void) {
         cali_log("display: screenshot failed (no screen)");
         return;
     }
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+    /* The frame is printed on the NimBLE host task through the driver's small tx ring: with no host
+     * draining the CDC endpoint a puts could block indefinitely and stall BLE. */
+    if (!usb_serial_jtag_is_connected()) {
+        cali_log("display: screenshot failed (no host)");
+        return;
+    }
+#endif
+    lv_draw_buf_t d;
+    lv_result_t res;
+    size_t n;
     uint8_t *snap = heap_caps_aligned_alloc(LV_DRAW_BUF_ALIGN, SHOT_BYTES, MALLOC_CAP_SPIRAM);
     uint8_t *rle = heap_caps_malloc(RLE_BYTES, MALLOC_CAP_SPIRAM);
     if (!snap || !rle) {
         cali_log("display: screenshot failed (no memory)");
         goto out;
     }
-    lv_draw_buf_t d;
     lv_draw_buf_init(&d, SHOT_W, SHOT_H, LV_COLOR_FORMAT_RGB565, 0, snap, SHOT_BYTES);
     if (!bsp_display_lock(DISPLAY_LOCK_TIMEOUT_MS)) {
         cali_log("display: screenshot failed (busy)");
         goto out;
     }
-    lv_result_t res = lv_snapshot_take_to_draw_buf(lv_screen_active(), LV_COLOR_FORMAT_RGB565, &d);
+    res = lv_snapshot_take_to_draw_buf(lv_screen_active(), LV_COLOR_FORMAT_RGB565, &d);
     bsp_display_unlock();
     if (res != LV_RESULT_OK) {
         cali_log("display: screenshot failed (snapshot)");
         goto out;
     }
-    size_t n = rle_encode(&d, rle);
+    n = rle_encode(&d, rle);
     printf("[SHOT %u %u RLE16 %u]\n", (unsigned)d.header.w, (unsigned)d.header.h, (unsigned)n);
     b64_print(rle, n);
     printf("[/SHOT]\n");

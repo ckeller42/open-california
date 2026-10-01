@@ -55,10 +55,30 @@ def rle16_decode(data: bytes, w: int, h: int) -> bytes:
 
 
 def parse_log(text: str) -> list[Frame]:
+    """All complete frames in a console log. A truncated frame (no [/SHOT], or fewer payload bytes
+    than the header's n) is skipped with a warning on stderr, never decoded into garbage."""
     frames = []
-    for m in BLOCK.finditer(text):
+    pos = 0
+    while m := BLOCK.search(text, pos):
+        inner = m[4].rfind("[SHOT ")
+        if inner >= 0:  # header without trailer, then a later frame: resume at the later header
+            print("esp_shot: skipping truncated frame (no [/SHOT])", file=sys.stderr)
+            pos = m.start(4) + inner
+            continue
+        pos = m.end()
         w, h, n = int(m[1]), int(m[2]), int(m[3])
-        data = base64.b64decode("".join(re.findall(r"[A-Za-z0-9+/=]", m[4])))[:n]
+        # per LINE: drop whole non-base64 lines (another task's LOG mid-frame), never single characters
+        b64 = "".join(ln for ln in map(str.strip, m[4].splitlines()) if re.fullmatch(r"[A-Za-z0-9+/=]+", ln))
+        try:
+            data = base64.b64decode(b64, validate=True)
+        except ValueError:
+            data = b""
+        if len(data) != n or n % 4:
+            print(
+                "esp_shot: skipping frame with bad payload (%d bytes, header says %d)" % (len(data), n),
+                file=sys.stderr,
+            )
+            continue
         frames.append(Frame(w, h, rle16_decode(data, w, h)))
     return frames
 
