@@ -119,6 +119,7 @@ Cross-language codec (issue #156)
 .. automodule:: tests.test_codec_parity
 .. automodule:: tests.test_semantics_js_parity
 .. automodule:: tests.test_gen_c_dict
+.. automodule:: tests.test_app_bundle
 .. automodule:: tests.test_wifi_consts
 .. automodule:: tests.test_ports_parity
 
