@@ -15,14 +15,15 @@
 #   6 stale        SIGSTOP the mock 13 s      -> red camper "no data" (link up, data > 10 s old)
 #   7 link lost    SIGCONT, then stop mock    -> red camper "link lost, reconnecting"
 #   8 dimmed       75 s without a change      -> `LOG display: brightness <pct>` (timestamped log)
-#   9 reconnected  start the mock again       -> green camper, full brightness again
+#   9 reconnected  start the mock again       -> 09a right after the start (reconnect in progress),
+#                                                then green camper, full brightness again
 #
 # The ESP is left on the target network and bonded to the mock unit (which keeps running).
 # Secrets: the target network's passphrase is read from $PSK_DIR/$PSK_FILE inside a python process
 # and piped to curl; it never appears on a command line or in the output.
 #
 # Env (defaults = the thinky bench): PORT ESP_DIR REPO OUT PSK_DIR PSK_FILE SSID HCI PASSKEY
-#   SETUP_CON TARGET_CON ESP_SHOT PY
+#   SETUP_CON TARGET_CON ESP_SHOT PY AP_ADDR
 set -euo pipefail
 
 PORT=${PORT:-/dev/ttyACM0}
@@ -38,6 +39,7 @@ SETUP_CON=${SETUP_CON:-esp-setup}                 # NM profile: the ESP's setup 
 TARGET_CON=${TARGET_CON:-esp-minsel}              # NM profile: back to the target network
 ESP_SHOT=${ESP_SHOT:-$REPO/tools/esp_shot.py}
 PY=${PY:-$HOME/esp-venv/bin/python}
+AP_ADDR=${AP_ADDR:-192.168.4.1}                   # = NET_AP_ADDR (tools/wifi_consts.py), the hotspot's own address
 
 mkdir -p "$OUT"
 LOG="$OUT/walk.log"
@@ -69,13 +71,13 @@ mock_start() {
     # the whole subshell is redirected: nothing keeps this script's stdout (an ssh channel) open
     (cd "$REPO" && exec sudo -n env FAKE_UNIT_PASSKEY="$PASSKEY" FAKE_UNIT_FIFO="$ESP_DIR/fake_unit.in" \
         FAKE_UNIT_KEYSTORE="$ESP_DIR/fake_unit_keys.json" HOME="$HOME" \
-        setsid nohup "$PY" tools/applab/fake_unit_ble.py "hci-socket:$HCI") >/tmp/fake.log 2>&1 </dev/null &
+        setsid nohup "$PY" tools/applab/fake_unit_ble.py "hci-socket:$HCI") >>"$OUT/fake_unit.log" 2>&1 </dev/null &
     sleep 8
 }
 post_wifi() {  # JSON {"ssid","psk"} built from the psk file, piped to curl (never on a command line)
     SSID="$SSID" PSKF="$PSK_DIR/$PSK_FILE" "$PY" -c 'import json,os,pathlib
 print(json.dumps({"ssid": os.environ["SSID"], "psk": pathlib.Path(os.environ["PSKF"]).read_text().strip()}))' |
-        curl -s -m 10 -H 'Content-Type: application/json' --data-binary @- http://192.168.4.1/api/wifi
+        curl -s -m 10 -H 'Content-Type: application/json' --data-binary @- "http://$AP_ADDR/api/wifi"
     echo
 }
 
@@ -126,6 +128,7 @@ shot 08-dimmed
 
 say "9 reconnected: mock unit back (same keystore -> bond kept)"
 mock_start
+shot 09a-reconnecting   # as early as possible: a red "no data" flash here = the kept pre-drop age (M11)
 esp 20 status
 shot 09-reconnected
 grep 'display: brightness' "$LOG" | tee "$OUT/brightness.txt" || true

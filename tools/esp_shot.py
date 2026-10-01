@@ -44,6 +44,9 @@ def rle16_encode(rgb565: bytes) -> bytes:
     return bytes(out)
 
 
+MAX_SIDE = 1024  # a screen side; the CoreS3 is 320 x 240
+
+
 def rle16_decode(data: bytes, w: int, h: int) -> bytes:
     """RLE16 pairs -> RGB888, padded/truncated to w*h pixels."""
     out = bytearray()
@@ -73,6 +76,9 @@ def parse_log(text: str) -> list[Frame]:
             data = base64.b64decode(b64, validate=True)
         except ValueError:
             data = b""
+        if not (0 < w <= MAX_SIDE and 0 < h <= MAX_SIDE):  # garbled header: never allocate w*h*3 for it
+            print("esp_shot: skipping frame with bad size %dx%d" % (w, h), file=sys.stderr)
+            continue
         if len(data) != n or n % 4:
             print(
                 "esp_shot: skipping frame with bad payload (%d bytes, header says %d)" % (len(data), n),

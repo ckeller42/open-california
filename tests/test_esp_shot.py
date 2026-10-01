@@ -57,7 +57,8 @@ def test_truncated_frames_are_skipped(capsys):
     good = shot(2, 1, px(0xF800, 0x07E0))
     no_trailer = "[SHOT 2 2 RLE16 4]\nAAAA\nLOG x\n"  # then a later complete frame
     short = "[SHOT 2 2 RLE16 400]\nAwAA+A==\n[/SHOT]\n"  # payload shorter than the header says
-    frames = esp_shot.parse_log(no_trailer + good + short + "[SHOT 2 2 RLE16 4]\nAwA")
+    huge = shot(2, 1, px(0xF800, 0x07E0)).replace("[SHOT 2 1", "[SHOT 99999 99999")  # line noise in w/h
+    frames = esp_shot.parse_log(no_trailer + good + short + huge + "[SHOT 2 2 RLE16 4]\nAwA")
     assert [(f.w, f.h) for f in frames] == [(2, 1)]
     assert frames[0].rgb == bytes((255, 0, 0, 0, 255, 0))
     assert "skipping" in capsys.readouterr().err
