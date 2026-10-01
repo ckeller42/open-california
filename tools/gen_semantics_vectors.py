@@ -239,6 +239,35 @@ def _hand_cases() -> list:
     c.append(
         ("lighting/zone9-only", "lighting", {"BrightnessL" + z: (5 if z == "Nine" else 0) for z in _ZONES})
     )
+    for lvl, vol in (
+        (50, 29),
+        (99, 29),
+        (1, 29),
+        (50, 45),
+        (67, 15),
+    ):  # percent unit: litres floor, not round
+        c.append(
+            (
+                "water/pct-floor-%d-%d" % (lvl, vol),
+                "water",
+                {"FreshWaterUnit": 0, "FreshWaterLevel": lvl, "FreshWaterVolume": vol},
+            )
+        )
+    for sentinel in (13, 14):  # only a not-equipped / leave-unchanged zone: any_on must stay false
+        c.append(
+            (
+                "lighting/only-%d" % sentinel,
+                "lighting",
+                {"BrightnessL" + z: (sentinel if z == "Four" else 0) for z in _ZONES},
+            )
+        )
+        c.append(
+            (
+                "lighting/only-%d-others-13" % sentinel,
+                "lighting",
+                {"BrightnessL" + z: (sentinel if z == "Four" else 13) for z in _ZONES},
+            )
+        )
     c.append(
         (
             "lighting/sentinels",

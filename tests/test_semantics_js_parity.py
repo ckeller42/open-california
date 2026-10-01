@@ -12,6 +12,7 @@ so 12 == 12.0 and -0.0 == 0.0). Skipped only when node is absent (CI runners hav
 """
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -34,9 +35,27 @@ _HARNESS = (
 )
 
 
+def same(a, b):
+    """Deep equality that tells bool from number (``True != 1``) but not int from float (JSON has one number)."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b, strict=True))
+    return a == b
+
+
+def test_same_distinguishes_bool_from_number():
+    assert not same(True, 1) and not same({"k": [0]}, {"k": [False]}) and not same({"a": 1}, {"a": 1, "b": 1})
+    assert same(12, 12.0) and same({"k": [True, None, -0.0]}, {"k": [True, None, 0.0]})
+
+
 def node_eval(expr, data_path=None):
     """Evaluate ``expr`` in a fresh context holding semantics.js; returns the JSON-decoded result."""
-    node = shutil.which("node") or pytest.skip("node not available")
+    node = shutil.which("node")
+    if not node:  # a missing node must not silently skip the gate in CI
+        (pytest.fail if os.environ.get("CI") else pytest.skip)("node not available")
     args = [node, "-e", _HARNESS, str(SEM_JS), expr] + ([str(data_path)] if data_path else [])
     out = subprocess.run(args, capture_output=True, text=True, check=True, timeout=60)
     return json.loads(out.stdout)
@@ -71,17 +90,17 @@ def test_vectors_are_fresh(vectors):
 
 def test_interpret_matches_python(js, vectors):
     for case, got in zip(vectors["interpret"], js["interpret"], strict=True):
-        assert got == case["expect"], case["id"]
+        assert same(got, case["expect"]), case["id"]
 
 
 def test_whole_states_match_python(js, vectors):
     for case, got in zip(vectors["states"], js["states"], strict=True):
-        assert got == case["expect"], case["id"]
+        assert same(got, case["expect"]), case["id"]
 
 
 def test_py_round_matches_python_round(js, vectors):
     for case, got in zip(vectors["round"], js["round"], strict=True):
-        assert got == case["expect"], case
+        assert same(got, case["expect"]), case
 
 
 def test_sat_stale_s_is_the_display_stale_threshold(js):

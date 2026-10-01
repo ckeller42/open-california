@@ -9648,6 +9648,302 @@
   },
   {
    "expect": {
+    "fresh": {
+     "capacity_l": 29,
+     "liters": 14,
+     "percent": 50
+    },
+    "fresh_alert": null,
+    "installed": false,
+    "waste": {
+     "capacity_l": null,
+     "liters": null,
+     "percent": null
+    },
+    "waste_alert": null
+   },
+   "fields": {
+    "FreshWaterLevel": 50,
+    "FreshWaterUnit": 0,
+    "FreshWaterVolume": 29
+   },
+   "function": "water",
+   "id": "water/pct-floor-50-29"
+  },
+  {
+   "expect": {
+    "fresh": {
+     "capacity_l": 29,
+     "liters": 28,
+     "percent": 99
+    },
+    "fresh_alert": null,
+    "installed": false,
+    "waste": {
+     "capacity_l": null,
+     "liters": null,
+     "percent": null
+    },
+    "waste_alert": null
+   },
+   "fields": {
+    "FreshWaterLevel": 99,
+    "FreshWaterUnit": 0,
+    "FreshWaterVolume": 29
+   },
+   "function": "water",
+   "id": "water/pct-floor-99-29"
+  },
+  {
+   "expect": {
+    "fresh": {
+     "capacity_l": 29,
+     "liters": 0,
+     "percent": 1
+    },
+    "fresh_alert": null,
+    "installed": false,
+    "waste": {
+     "capacity_l": null,
+     "liters": null,
+     "percent": null
+    },
+    "waste_alert": null
+   },
+   "fields": {
+    "FreshWaterLevel": 1,
+    "FreshWaterUnit": 0,
+    "FreshWaterVolume": 29
+   },
+   "function": "water",
+   "id": "water/pct-floor-1-29"
+  },
+  {
+   "expect": {
+    "fresh": {
+     "capacity_l": 45,
+     "liters": 22,
+     "percent": 50
+    },
+    "fresh_alert": null,
+    "installed": false,
+    "waste": {
+     "capacity_l": null,
+     "liters": null,
+     "percent": null
+    },
+    "waste_alert": null
+   },
+   "fields": {
+    "FreshWaterLevel": 50,
+    "FreshWaterUnit": 0,
+    "FreshWaterVolume": 45
+   },
+   "function": "water",
+   "id": "water/pct-floor-50-45"
+  },
+  {
+   "expect": {
+    "fresh": {
+     "capacity_l": 15,
+     "liters": 10,
+     "percent": 67
+    },
+    "fresh_alert": null,
+    "installed": false,
+    "waste": {
+     "capacity_l": null,
+     "liters": null,
+     "percent": null
+    },
+    "waste_alert": null
+   },
+   "fields": {
+    "FreshWaterLevel": 67,
+    "FreshWaterUnit": 0,
+    "FreshWaterVolume": 15
+   },
+   "function": "water",
+   "id": "water/pct-floor-67-15"
+  },
+  {
+   "expect": {
+    "any_on": false,
+    "brightness_zone_1": 0,
+    "brightness_zone_10": 0,
+    "brightness_zone_11": 0,
+    "brightness_zone_12": 0,
+    "brightness_zone_13": 0,
+    "brightness_zone_14": 0,
+    "brightness_zone_15": 0,
+    "brightness_zone_16": 0,
+    "brightness_zone_2": 0,
+    "brightness_zone_3": 0,
+    "brightness_zone_4": 13,
+    "brightness_zone_5": 0,
+    "brightness_zone_6": 0,
+    "brightness_zone_7": 0,
+    "brightness_zone_8": 0,
+    "brightness_zone_9": 0,
+    "installed": true,
+    "mode": null,
+    "profile": null
+   },
+   "fields": {
+    "BrightnessLEight": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLFour": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLOneFive": 0,
+    "BrightnessLOneFour": 0,
+    "BrightnessLOneOne": 0,
+    "BrightnessLOneSix": 0,
+    "BrightnessLOneThree": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLTwo": 0
+   },
+   "function": "lighting",
+   "id": "lighting/only-13"
+  },
+  {
+   "expect": {
+    "any_on": false,
+    "brightness_zone_1": 13,
+    "brightness_zone_10": 13,
+    "brightness_zone_11": 13,
+    "brightness_zone_12": 13,
+    "brightness_zone_13": 13,
+    "brightness_zone_14": 13,
+    "brightness_zone_15": 13,
+    "brightness_zone_16": 13,
+    "brightness_zone_2": 13,
+    "brightness_zone_3": 13,
+    "brightness_zone_4": 13,
+    "brightness_zone_5": 13,
+    "brightness_zone_6": 13,
+    "brightness_zone_7": 13,
+    "brightness_zone_8": 13,
+    "brightness_zone_9": 13,
+    "installed": true,
+    "mode": null,
+    "profile": null
+   },
+   "fields": {
+    "BrightnessLEight": 13,
+    "BrightnessLFive": 13,
+    "BrightnessLFour": 13,
+    "BrightnessLNine": 13,
+    "BrightnessLOne": 13,
+    "BrightnessLOneFive": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneTwo": 13,
+    "BrightnessLOneZero": 13,
+    "BrightnessLSeven": 13,
+    "BrightnessLSix": 13,
+    "BrightnessLThree": 13,
+    "BrightnessLTwo": 13
+   },
+   "function": "lighting",
+   "id": "lighting/only-13-others-13"
+  },
+  {
+   "expect": {
+    "any_on": false,
+    "brightness_zone_1": 0,
+    "brightness_zone_10": 0,
+    "brightness_zone_11": 0,
+    "brightness_zone_12": 0,
+    "brightness_zone_13": 0,
+    "brightness_zone_14": 0,
+    "brightness_zone_15": 0,
+    "brightness_zone_16": 0,
+    "brightness_zone_2": 0,
+    "brightness_zone_3": 0,
+    "brightness_zone_4": 14,
+    "brightness_zone_5": 0,
+    "brightness_zone_6": 0,
+    "brightness_zone_7": 0,
+    "brightness_zone_8": 0,
+    "brightness_zone_9": 0,
+    "installed": true,
+    "mode": null,
+    "profile": null
+   },
+   "fields": {
+    "BrightnessLEight": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLFour": 14,
+    "BrightnessLNine": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLOneFive": 0,
+    "BrightnessLOneFour": 0,
+    "BrightnessLOneOne": 0,
+    "BrightnessLOneSix": 0,
+    "BrightnessLOneThree": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneZero": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLTwo": 0
+   },
+   "function": "lighting",
+   "id": "lighting/only-14"
+  },
+  {
+   "expect": {
+    "any_on": false,
+    "brightness_zone_1": 13,
+    "brightness_zone_10": 13,
+    "brightness_zone_11": 13,
+    "brightness_zone_12": 13,
+    "brightness_zone_13": 13,
+    "brightness_zone_14": 13,
+    "brightness_zone_15": 13,
+    "brightness_zone_16": 13,
+    "brightness_zone_2": 13,
+    "brightness_zone_3": 13,
+    "brightness_zone_4": 14,
+    "brightness_zone_5": 13,
+    "brightness_zone_6": 13,
+    "brightness_zone_7": 13,
+    "brightness_zone_8": 13,
+    "brightness_zone_9": 13,
+    "installed": true,
+    "mode": null,
+    "profile": null
+   },
+   "fields": {
+    "BrightnessLEight": 13,
+    "BrightnessLFive": 13,
+    "BrightnessLFour": 14,
+    "BrightnessLNine": 13,
+    "BrightnessLOne": 13,
+    "BrightnessLOneFive": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneTwo": 13,
+    "BrightnessLOneZero": 13,
+    "BrightnessLSeven": 13,
+    "BrightnessLSix": 13,
+    "BrightnessLThree": 13,
+    "BrightnessLTwo": 13
+   },
+   "function": "lighting",
+   "id": "lighting/only-14-others-13"
+  },
+  {
+   "expect": {
     "any_on": true,
     "brightness_zone_1": 14,
     "brightness_zone_10": null,
