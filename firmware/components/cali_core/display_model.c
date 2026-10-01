@@ -1,13 +1,8 @@
 /* display_model.c — pure status-display model, see include/cali_display_model.h (#154).
- *
- * .. req:: Status display model
- *    :id: R_FW_STATUS_DISPLAY_MODEL
- *
- *    Three rows (device always green; WiFi green/amber/red; camper green/amber/red/grey), a stale
- *    rule (no snapshot for DISPLAY_STALE_MS turns the camper row red), the setup footer, and a
- *    dim-after-idle brightness, all derived from one cali_status_t. Every text is an EN/DE pair
- *    generated from firmware/web/strings.json.
- */
+ * Implements ``R_FW_STATUS_DISPLAY`` (docs/firmware.md): three rows (device always green; WiFi
+ * green/amber/red; camper green/amber/red/grey), a stale rule (no snapshot for DISPLAY_STALE_MS turns
+ * the camper row red), the footer, and a dim-after-idle brightness, all derived from one
+ * cali_status_t. Every text is an EN/DE pair generated from firmware/web/strings.json. */
 #include "cali_display_model.h"
 
 #include <stdio.h>
@@ -49,8 +44,6 @@ static const struct { const char *de, *en; } TXT[K_COUNT] = {
 
 static const char *tx(int key, int lang) { return lang == CALI_LANG_EN ? TXT[key].en : TXT[key].de; }
 
-const char *cali_display_footer_setup_fmt(int lang) { return tx(K_FOOTER_SETUP, lang); }
-
 /* Set the row text from a bounded temp copy; a cut never splits a UTF-8 sequence. */
 void cali_display_fit_text(char dst[CALI_ROW_TEXT_MAX], const char *src) {
     size_t n = strlen(src);
@@ -85,7 +78,8 @@ static int wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
     if (s->wifi_mode == CALI_WIFI_MODE_STATION && s->ip != 0) {
         char ip[16], tmp[2 * CALI_ROW_TEXT_MAX];
         cali_status_ip_str(s->ip, ip);
-        snprintf(tmp, sizeof tmp, "%s · %s · %d dBm", s->ssid, ip, s->rssi);
+        if (s->rssi) snprintf(tmp, sizeof tmp, "%s · %s · %d dBm", s->ssid, ip, s->rssi);
+        else snprintf(tmp, sizeof tmp, "%s · %s", s->ssid, ip);  /* 0 = unknown, as /api/state's null */
         r->dot = CALI_DOT_GREEN;
         r->label = label;
         set_text(r, tmp);
@@ -170,6 +164,13 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
     fmt_uptime(s->uptime_ms, up);
     row(&out->device, CALI_DOT_GREEN, tx(K_DEVICE, lang), K_RUNNING, lang, up, NULL);
     out->footer_setup = s->wifi_mode == CALI_WIFI_MODE_SETUP;
+    if (out->footer_setup) {
+        char tmp[2 * CALI_ROW_TEXT_MAX];
+        snprintf(tmp, sizeof tmp, tx(K_FOOTER_SETUP, lang), NET_AP_SSID, NET_AP_PSK);
+        cali_display_fit_text(out->footer, tmp);
+    } else {
+        cali_display_fit_text(out->footer, "http://" NET_HOSTNAME ".local");
+    }
 
     /* dim signature: dots, text keys and footer; never the changing numbers */
     sig = 2166136261u;

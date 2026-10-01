@@ -26,11 +26,13 @@
 /* layout, 320 x 240 landscape */
 #define W 320
 #define PAD 8
-#define ROW_Y0 56
-#define ROW_H 40
+#define HEAD_SEP_Y 40
+#define ROW_Y0 46
+#define ROW_H 46 /* two 21 px text lines + gap */
 #define DOT 12
 #define LABEL_X 30
-#define VALUE_X 100
+#define VALUE_X 106 /* LABEL_X + widest label ("Camper" 65 px) + gap; tests/test_display_font.py checks */
+#define TITLE_END_X 200 /* "calictl satellite" at 24 px ends at about x 190 */
 
 LV_FONT_DECLARE(font_latin1_16);
 LV_FONT_DECLARE(font_latin1_24);
@@ -82,8 +84,14 @@ static void build(void) {
 
     lv_obj_set_pos(label(scr, &font_latin1_24, "calictl satellite"), PAD, PAD);
     snprintf(fw, sizeof fw, "fw %s", cali_fw_version());
-    lv_obj_align(label(scr, &font_latin1_16, fw), LV_ALIGN_TOP_RIGHT, -PAD, PAD + 6);
-    box(scr, PAD, 44, W - 2 * PAD, 1, 0x3a4048);
+    {  /* a long version (-dirty, git describe) ends in "…" instead of running into the title */
+        lv_obj_t *l = label(scr, &font_latin1_16, fw);
+        lv_label_set_long_mode(l, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_width(l, W - PAD - TITLE_END_X);
+        lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_pos(l, TITLE_END_X, PAD + 6);
+    }
+    box(scr, PAD, HEAD_SEP_Y, W - 2 * PAD, 1, 0x3a4048);
 
     for (int i = 0; i < 3; i++) {
         row_ui_t *r = &s_rows[i];
@@ -95,16 +103,16 @@ static void build(void) {
         r->value = label(scr, &font_latin1_16, "");
         lv_label_set_long_mode(r->value, LV_LABEL_LONG_MODE_DOTS);
         lv_obj_set_pos(r->value, VALUE_X, y);
-        lv_obj_set_size(r->value, W - PAD - VALUE_X, line);  /* one line: DOTS cuts at the row end */
+        lv_obj_set_size(r->value, W - PAD - VALUE_X, 2 * line);  /* two lines: DOTS cuts at the end of the 2nd */
         r->dot_now = -1;
     }
 
-    box(scr, PAD, ROW_Y0 + 3 * ROW_H - 4, W - 2 * PAD, 1, 0x3a4048);
+    box(scr, PAD, ROW_Y0 + 3 * ROW_H - 2, W - 2 * PAD, 1, 0x3a4048);
     s_footer = label(scr, &font_latin1_16, "");
     lv_label_set_long_mode(s_footer, LV_LABEL_LONG_MODE_WRAP);  /* setup: SSID + password may need 2 lines */
     lv_obj_set_width(s_footer, W - 2 * PAD);
     lv_obj_set_style_text_align(s_footer, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_pos(s_footer, PAD, ROW_Y0 + 3 * ROW_H + 6);
+    lv_obj_set_pos(s_footer, PAD, ROW_Y0 + 3 * ROW_H + 4);  /* two setup lines end at 230 */
 }
 
 int cali_display_ready(void) { return s_ok; }
@@ -151,7 +159,6 @@ static void paint_row(row_ui_t *r, const cali_row_t *m) {
 void cali_display_tick(uint64_t now_ms) {
     cali_status_t st;
     cali_display_view_t v;
-    char tmp[2 * CALI_ROW_TEXT_MAX], footer[CALI_ROW_TEXT_MAX];
     if (!s_ok || now_ms - s_last_paint < DISPLAY_REFRESH_MS) return;
     s_last_paint = now_ms;
     /* The owner task is the NimBLE host task: never wait on a wedged render. A skipped paint leaves
@@ -159,16 +166,13 @@ void cali_display_tick(uint64_t now_ms) {
     if (!bsp_display_lock(DISPLAY_LOCK_TIMEOUT_MS)) return;
     cali_status_get(&st, s_t, now_ms);
     cali_display_model(&s_model, &st, now_ms, LANG, &v);
-    if (v.footer_setup) snprintf(tmp, sizeof tmp, cali_display_footer_setup_fmt(LANG), NET_AP_SSID, NET_AP_PSK);
-    else snprintf(tmp, sizeof tmp, "http://" NET_HOSTNAME ".local");
-    cali_display_fit_text(footer, tmp);
 
     paint_row(&s_rows[0], &v.device);
     paint_row(&s_rows[1], &v.wifi);
     paint_row(&s_rows[2], &v.camper);
-    if (strcmp(s_footer_now, footer)) {
-        memcpy(s_footer_now, footer, sizeof s_footer_now);
-        lv_label_set_text(s_footer, footer);
+    if (strcmp(s_footer_now, v.footer)) {
+        memcpy(s_footer_now, v.footer, sizeof s_footer_now);
+        lv_label_set_text(s_footer, v.footer);
     }
     bsp_display_unlock();
 

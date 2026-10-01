@@ -3,7 +3,8 @@
 ESP-IDF + NimBLE firmware for the camper-unit satellite. Work in progress: the host build
 (`host/host_main.c` -> `cali-host`: console, pairing runner and session on the NimBLE Linux port),
 the platform-free component `components/cali_core` (below), and the ESP-IDF project for the
-esp32s3 / M5Stack CoreS3 (`main/app_main.c`, compile-only so far: no hardware yet).
+esp32s3 / M5Stack CoreS3 (`main/app_main.c`; runs on a bench CoreS3 against the mock unit, not yet
+against the real camper unit).
 
 ## ESP-IDF build (`firmware/`, esp32s3)
 
@@ -391,9 +392,10 @@ in setup mode the hotspot SSID and passphrase. The full row table with the Germa
   directory); pass `-DPROJECT_VER=$(git describe --always --tags --dirty)` to `idf.py` there.
 - **Bench walk:** `tools/esplab_display_walk.sh` runs on the Linux bench (CoreS3 on USB, the mock
   unit `tools/applab/fake_unit_ble.py` on a USB BLE dongle, a second WiFi stick with a profile for
-  the setup hotspot and one for the target network) and screenshots every state: setup, joining,
-  online, pairing, connected, stale (mock frozen with SIGSTOP: link up, no data), link lost, dimmed,
-  reconnected. Its header lists the environment variables; no secret is stored in it.
+  the setup hotspot and one for the target network) and screenshots the spec's seven states (setup,
+  joining, online, pairing, connected, stale — mock frozen with SIGSTOP: link up, no data — link lost)
+  plus dimmed and reconnected; not WiFi red, WiFi retrying, pairing failed, link-up-no-data amber or the
+  English build (those are host-tested in `test_display_model.py`). Its header lists the environment variables; no secret is stored in it.
 
 ### Remote screen check (`screenshot`)
 
@@ -568,10 +570,10 @@ defined in `docs/firmware.md` too, with their verifying tests (`T_WIFI_SM_REF`,
 `T_FW_ESP_SCREENSHOT_FIXTURES`, `T_FW_WIFI_LOSS_SESSION`, `T_FW_WEB_E2E`) declared in the test
 modules' docstrings.
 
-## On-board verification (queued until the CoreS3 arrives)
+## On-board verification
 
-Nothing below has run: the host and QEMU tiers above are the only proof so far. This is the plan
-for the first time a real M5Stack CoreS3 is on the bench, in order:
+The bring-up plan for a real M5Stack CoreS3 on the bench, in order (run 2026-10-01 against the
+mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record what has been proven):
 
 1. **Flash from the build's own flasher args — never hand-type offsets.** `idf.py build` (the
    release variant, table above) writes `firmware/build/flasher_args.json` alongside the images;

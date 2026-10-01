@@ -1,6 +1,6 @@
 /* display_cli.c — host driver for display_model.c: one stdin line per case ("key=value ..." for the
  * cali_status_t fields plus now= and lang=; "reset" restarts the model), one stdout line per case:
- *   device=<dot>|<text> ;; wifi=<dot>|<text> ;; camper=<dot>|<text> ;; footer=<0|1> ;; bright=<pct>
+ *   device=<dot>|<text> ;; wifi=<dot>|<text> ;; camper=<dot>|<text> ;; setup=<0|1> ;; footer=<text> ;; bright=<pct>
  * The model state persists across lines (brightness) until "reset". */
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,7 +60,7 @@ int main(void) {
         put_row("device", &v.device);
         put_row("wifi", &v.wifi);
         put_row("camper", &v.camper);
-        printf("footer=%d ;; bright=%u\n", v.footer_setup, (unsigned)v.brightness_pct);
+        printf("setup=%d ;; footer=%s ;; bright=%u\n", v.footer_setup, v.footer, (unsigned)v.brightness_pct);
     }
     return 0;
 }

@@ -70,7 +70,12 @@ def test_all_green_online(cli):
     assert v["device"] == "green|läuft · seit 2 h 13 min"
     assert v["wifi"] == "green|Insel · 192.168.178.86 · -58 dBm"
     assert v["camper"] == "green|verbunden · Daten vor 1 s"
-    assert v["footer"] == "0"
+    assert v["setup"] == "0" and v["footer"] == "http://calictl-esp.local"
+
+
+def test_wifi_unknown_rssi_is_left_out(cli):  # rssi 0 = unknown (null in /api/state), never "0 dBm"
+    (v,) = run(cli, BASE.replace("rssi=-58", "rssi=0") + " now=1 lang=0")
+    assert v["wifi"] == "green|Insel · 192.168.178.86"
 
 
 def test_camper_link_up_no_data_yet(cli):  # Review Focus 2
@@ -119,8 +124,19 @@ def test_wifi_setup_mode_and_footer(cli):
         .replace("ip=3232281174", "ip=0")
         + " now=1 lang=0",
     )
-    assert v["wifi"] == "amber|Einrichtungs-Hotspot calictl-esp-setup · 192.168.4.1"
-    assert v["footer"] == "1"
+    assert v["wifi"] == "amber|Hotspot calictl-esp-setup · 192.168.4.1"
+    assert v["setup"] == "1" and v["footer"] == "WLAN calictl-esp-setup · Passwort calictl-setup"
+
+
+def test_footer_english(cli):
+    s, o = run(
+        cli,
+        BASE.replace("wmode=2 wstate=3", "wmode=1 wstate=1").replace("ip=3232281174", "ip=0")
+        + " now=1 lang=1",
+        BASE + " now=1 lang=1",
+    )
+    assert s["footer"] == "WiFi calictl-esp-setup · password calictl-setup"
+    assert o["footer"] == "http://calictl-esp.local"
 
 
 def test_wifi_off_with_reason(cli):
@@ -141,7 +157,7 @@ def test_wifi_joining_and_retrying(cli):
         BASE.replace("wstate=3", "wstate=4").replace("ip=3232281174", "ip=0") + " now=1 lang=0",
     )
     assert j["wifi"] == "amber|verbinde mit Insel"
-    assert r["wifi"] == "amber|Insel nicht erreichbar, neuer Versuch"
+    assert r["wifi"] == "amber|Insel nicht erreichbar, versuche neu"
 
 
 def test_wifi_off_reasons_are_translated(cli):
@@ -152,13 +168,13 @@ def test_wifi_off_reasons_are_translated(cli):
     ]
     assert got == [
         "red|nicht verbunden · Netz nicht gefunden",
-        "red|nicht verbunden · Verbindung fehlgeschlagen",
+        "red|nicht verbunden · Verbindungsfehler",
         "red|not connected · wrong password",
     ]
 
 
-def test_wifi_long_ssid_truncates_exactly(cli):  # Review Focus 3
-    long = "Ä" * 16  # 32 bytes UTF-8; the retrying row is then 64 bytes and gets cut
+def test_wifi_longest_ssid_fits_the_row_buffer(cli):  # Review Focus 3 (the screen ellipsizes, not the model)
+    long = "Ä" * 16  # 32 bytes UTF-8 = NET_SSID_MAX; the retrying row is then exactly 63 bytes
     (v,) = run(
         cli,
         BASE.replace("ssid=Insel", "ssid=" + long)
@@ -167,7 +183,7 @@ def test_wifi_long_ssid_truncates_exactly(cli):  # Review Focus 3
         + " now=1 lang=0",
     )
     text = v["wifi"].split("|", 1)[1]
-    assert text == long + " nicht erreichbar, neuer Versuc"
+    assert text == long + " nicht erreichbar, versuche neu"
     assert len(text.encode()) == 63
 
 
@@ -220,17 +236,23 @@ def test_brightness_numbers_do_not_rebrighten(cli):
     assert v[2]["camper"] == "green|verbunden · Daten vor 4 s"  # the text did change, the screen stays dim
 
 
-def test_brightness_bright_then_dim_then_rebright(cli):
+@pytest.mark.parametrize(
+    "changed",
+    [
+        BASE.replace("link=1", "link=0"),  # camper colour
+        BASE.replace("wstate=3", "wstate=4").replace("ip=3232281174", "ip=0"),  # WiFi online -> retrying
+        BASE.replace("wmode=2 wstate=3", "wmode=1 wstate=1").replace(
+            "ip=3232281174", "ip=0"
+        ),  # setup + footer
+    ],
+)
+def test_brightness_bright_then_dim_then_rebright(cli, changed):
     v = run(
         cli,
+        "reset",
         BASE + " now=0 lang=0",
         BASE + " now=59999 lang=0",
         BASE + " now=60000 lang=0",
-        BASE.replace("link=1", "link=0") + " now=61000 lang=0",
+        changed + " now=61000 lang=0",
     )
     assert [x["bright"] for x in v] == ["100", "100", "10", "100"]
-
-
-def test_footer_template_is_exposed_for_the_view():
-    src = (CORE / "display_model.c").read_text(encoding="utf-8")
-    assert "cali_display_footer_setup_fmt" in src and "WEB_STR_DE_D_FOOTER_SETUP" in src

@@ -1,5 +1,5 @@
 /* cali_display_model.h — pure status-display model (#154): a cali_status_t snapshot in, three rows
- * (device / WiFi / camper), the footer mode and the screen brightness out. No LVGL, no platform:
+ * (device / WiFi / camper), the footer text and the screen brightness out. No LVGL, no platform:
  * host-tested by tests/firmware/test_display_model.py; the LVGL view (Task 4) only paints this. */
 #ifndef CALI_DISPLAY_MODEL_H
 #define CALI_DISPLAY_MODEL_H
@@ -24,7 +24,8 @@ typedef struct {
 
 typedef struct {
     cali_row_t device, wifi, camper;
-    int footer_setup;        /* 1: show NET_AP_SSID / NET_AP_PSK; 0: http://NET_HOSTNAME.local */
+    int footer_setup;        /* 1: footer shows NET_AP_SSID / NET_AP_PSK; 0: http://NET_HOSTNAME.local */
+    char footer[CALI_ROW_TEXT_MAX];
     uint8_t brightness_pct;  /* DISPLAY_BRIGHT_PCT or DISPLAY_DIM_PCT */
 } cali_display_view_t;
 
@@ -44,9 +45,6 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
 
 /* Copies src into dst (CALI_ROW_TEXT_MAX bytes), cut at a UTF-8 boundary when too long. */
 void cali_display_fit_text(char dst[CALI_ROW_TEXT_MAX], const char *src);
-
-/* The setup-footer template "WiFi %s · password %s" (SSID, PSK) in the chosen language. */
-const char *cali_display_footer_setup_fmt(int lang);
 
 #ifdef __cplusplus
 }
