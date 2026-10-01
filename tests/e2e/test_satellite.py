@@ -127,6 +127,26 @@ def test_a_failed_first_poll_never_reaches_calictl_only_endpoints(stub):
     assert set(stub.requests) <= ALLOWED, stub.requests
 
 
+def test_unpaired_satellite_shows_the_banner_without_a_wizard_button(stub, error_gated_page):
+    # The satellite pairs over its console: the banner's "Set up remote control" (-> the wizard ->
+    # /api/pairing every 1 s against the single-connection core) must not exist there.
+    stub.fixtures["satellite"]["/api/state"]["device"]["pairing"].update(state="idle", address=None)
+    with error_gated_page(stub.base) as pg:
+        expect(pg.locator("#unpaired-banner")).to_be_visible()
+        assert pg.locator("#unpaired-banner button").count() == 0
+        assert pg.get_by_text("Set up remote control").count() == 0
+        pg.wait_for_timeout(2500)  # at least one more state poll
+    assert set(stub.requests) <= ALLOWED, stub.requests
+
+
+def test_api_refuses_every_path_but_state_on_the_satellite(sat, stub):
+    # Defence in depth for any future caller: api() throws before fetch() for a non-/api/state path.
+    for path in ("/api/pairing", "/api/command", "/api/history", "/api/session", "/api/auto_camper"):
+        got = sat.evaluate("p => api(p).then(() => 'fetched', e => e.message)", path)
+        assert got == "satellite: no " + path
+    assert set(stub.requests) <= ALLOWED, stub.requests
+
+
 def test_device_page_links_back_only_in_station_mode(stub, error_gated_page):
     with error_gated_page(stub.base + "/device") as pg:
         pg.wait_for_selector("#device h2")

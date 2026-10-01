@@ -674,6 +674,9 @@ const FEATURES = {
  * @returns {Promise<any>}
  */
 async function api(path, opts) {
+  // Defence in depth: the satellite's single-connection core serves only /api/state; never let any
+  // (future) caller fan out to a calictl-only endpoint there -- refuse before any network request.
+  if (satellite() && path !== "/api/state") throw new Error("satellite: no " + path);
   const r = await fetch(path, opts);
   return r.json();
 }
