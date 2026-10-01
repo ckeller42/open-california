@@ -154,8 +154,8 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   wpa_supplicant + PSA crypto, lwIP, pp/phy, mdns) = **66 % of the 3 MB partition free** (it would
   have been 30 % of the old 1.5 MB one). The plan's ~250 KB estimate for WiFi + lwIP was wrong by
   about 2.5x. DIRAM 103,802 -> 160,018 B used (46.8 %). QEMU image (no WiFi): 0x55cf0 B, 89 % free.
-- **Size with the status display (#154, Task 1 spike):** `cali_fw.bin` **0x1720b0 = 1,515,696 B**
-  (+436,816 B: LVGL 9.6 + `esp_lvgl_port` + the CoreS3 board package) = **52 % of the 3 MB partition
+- **Size with the status display (#154, Task 1 spike):** `cali_fw.bin` **0x172400 = 1,516,544 B**
+  (+437,664 B: LVGL 9.6 + `esp_lvgl_port` + the CoreS3 board package) = **52 % of the 3 MB partition
   free**. DIRAM 178,222 B (52.2 %; 160,018 B before the display): LVGL uses the C heap (PSRAM) and the
   draw buffer is one 320x20 internal DMA strip. QEMU image (`CONFIG_CALI_DISPLAY=n`): `cali_fw.bin`
   0x5d630 = 382,512 B, 88 % free (was 0x55cf0 B: the shared `sdkconfig.defaults` PSRAM lines are off

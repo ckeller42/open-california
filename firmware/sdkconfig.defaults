@@ -78,8 +78,8 @@ CONFIG_LWIP_MAX_SOCKETS=6
 # - BSP_ERROR_CHECK stays y (BSP default): =n does NOT build with m5stack_core_s3 4.1.0 (its
 #   BSP_ERROR_CHECK_RETURN_NULL/_ERR macros are used in functions of the wrong return type:
 #   -Wint-conversion errors in bsp_io_expander.c / bsp_feature_en.c, and forcing them through would
-#   hand an esp_err_t back as an IO-expander pointer). So bsp_display_start() aborts on a display
-#   fault; only our own bsp_i2c_init() check in display.c can return -1.
+#   hand an esp_err_t back as an IO-expander pointer). So bsp_display_start() aborts on a fault;
+#   display.c probes I2C + the AXP2101/AW9523 chips first and returns -1 (contract: cali_display.h).
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_QUAD=y
 CONFIG_SPIRAM_SPEED_80M=y
