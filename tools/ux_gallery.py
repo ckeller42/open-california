@@ -22,6 +22,9 @@ plus canned ``/api/state`` / ``/api/wifi`` JSON (``esp_fixtures``) whose key set
 asserts of the real handlers, so the pictures cannot drift from the firmware's API shape.
 
     python -m tools.ux_gallery --esp --out docs/screenshots   # only the two ESP page shots
+
+Station-like stub modes serve the gzipped calictl UI bundle at ``/`` (as ``web.c``) and the page at
+``/device``; the ``satellite`` / ``calictl`` modes back ``tests/e2e/test_satellite.py``.
 """
 
 from __future__ import annotations
@@ -41,6 +44,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The Vehicle-tab feature screens, by dashboard-tile title.
 SCREENS = ["Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Vehicle"]
 ESP_PAGE = os.path.join(ROOT, "firmware", "web", "index_gen.html")
+APP_BUNDLE_HEADER = os.path.join(ROOT, "firmware", "web", "app_bundle_gen.h")
+APP_MODES = ("station", "satellite", "calictl")  # GET / = the calictl UI bundle, as web.c in station mode
 # The functions the station-mode fixture shows, decoded from the mock unit's seeded state (the page
 # shows every function the session holds; a few keep the figure readable).
 ESP_FUNCTIONS = ("cooler", "water")
@@ -139,7 +144,7 @@ def capture(out_dir, screens=SCREENS):
     return paths
 
 
-def _esp_fn():
+def _esp_fn(functions=ESP_FUNCTIONS):
     """The station fixture's ``fn`` object: ``ESP_FUNCTIONS`` decoded from the mock unit's seeded
     frames with ``calictl.protocol.decode`` (what the firmware's ``codec_decode`` produces — the host
     e2e tier asserts the two agree), in ``CODEC_CHARS`` (sorted) order."""
@@ -151,8 +156,30 @@ def _esp_fn():
     overrides.apply(funcs)
     return {
         name: protocol.decode(funcs[name], _pack_state(funcs[name], unit.state[name]))
-        for name in sorted(ESP_FUNCTIONS)
+        for name in sorted(functions)
     }
+
+
+def calictl_state(fn):
+    """calictl's /api/state for these decoded functions: Python semantics + a live, read-only _meta —
+    the reference the satellite page must render identically (tests/e2e/test_satellite.py)."""
+    from calictl import anchors, semantics
+    from calictl.serve import ServeBackend
+
+    out = {name: semantics.interpret(name, dict(f)) for name, f in fn.items()}
+    semantics.apply_sw_corrections(out)
+    out["_meta"] = {
+        "last_seen": time.time() - 1,
+        "age_s": 1,
+        "online": True,
+        "paired": True,
+        "read_only": True,
+        "session": "off",
+        "session_mode": "off",
+        "firmware": ServeBackend._firmware_meta(out.get("general")),
+        "anchors": anchors.check(out),
+    }
+    return out
 
 
 def esp_fixtures():
@@ -163,8 +190,21 @@ def esp_fixtures():
         bond, no data, the setup hotspot up; and later: joined to the home network, reading the unit).
     """
     setup_wifi = {"mode": "setup", "ssid": None, "ip": None, "rssi": None}
+    from tools.mock_unit import DEFAULT_SEED
+
     station_wifi = {"mode": "station", "ssid": "HomeNet", "ip": "192.168.1.57", "rssi": -58}
-    return {
+    station_state = {
+        "t": 3912400,
+        "fn": _esp_fn(),
+        "device": {
+            "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
+            "link": {"up": True, "last_snap_age_ms": 1200},
+            "wifi": station_wifi,
+            "uptime_ms": 3912400,
+            "fw": "bef07f1",
+        },
+    }
+    fx = {
         "setup": {
             "/api/state": {
                 "t": 41250,
@@ -188,20 +228,19 @@ def esp_fixtures():
             ),
         },
         "station": {
-            "/api/state": {
-                "t": 3912400,
-                "fn": _esp_fn(),
-                "device": {
-                    "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
-                    "link": {"up": True, "last_snap_age_ms": 1200},
-                    "wifi": station_wifi,
-                    "uptime_ms": 3912400,
-                    "fw": "bef07f1",
-                },
-            },
+            "/api/state": station_state,
             "/api/wifi": dict(station_wifi, last_error=None, scan=[]),
         },
+        "satellite": {
+            "/api/state": dict(station_state, fn=_esp_fn(DEFAULT_SEED)),
+            "/api/wifi": dict(station_wifi, last_error=None, scan=[]),
+        },
+        "calictl": {
+            "/api/state": calictl_state(_esp_fn(DEFAULT_SEED)),
+            "/api/pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
+        },
     }
+    return json.loads(json.dumps(fx))  # independent copies: a test mutating one mode never touches another
 
 
 class EspStub:
@@ -209,24 +248,43 @@ class EspStub:
     ``GET /api/state`` / ``/api/wifi`` = ``esp_fixtures()[mode]``. Switch pages with ``mode``."""
 
     def __init__(self, mode="setup"):
+        from tools import gen_c_dict
+
         self.mode = mode
         self.fixtures = esp_fixtures()
+        self.requests = []  # request paths, in order
+        self.fail_state = 0  # the next N GET /api/state answer 503
         with open(ESP_PAGE, "rb") as f:
             page = f.read()
+        with open(APP_BUNDLE_HEADER, encoding="utf-8") as f:
+            bundle = gen_c_dict.header_array_bytes(f.read())
         stub = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):  # noqa: N802 (http.server API)
-                if self.path == "/":
+                path = self.path.split("?", 1)[0]
+                stub.requests.append(path)
+                fx = stub.fixtures[stub.mode]
+                enc = None
+                if path == "/api/state" and stub.fail_state > 0:
+                    stub.fail_state -= 1
+                    self.send_error(503)
+                    return
+                if path == "/" and stub.mode in APP_MODES:  # web.c: station mode serves the UI bundle
+                    body, ctype, enc = bundle, "text/html; charset=utf-8", "gzip"
+                elif path in ("/", "/device"):
                     body, ctype = page, "text/html; charset=utf-8"
-                elif self.path in stub.fixtures[stub.mode]:
-                    body, ctype = json.dumps(stub.fixtures[stub.mode][self.path]).encode(), "application/json"
+                elif path in fx:
+                    body, ctype = json.dumps(fx[path]).encode(), "application/json"
                 else:
                     self.send_error(404)
                     return
                 self.send_response(200)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
+                if enc:
+                    self.send_header("Content-Encoding", enc)
+                    self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 self.wfile.write(body)
 
@@ -266,7 +324,7 @@ def capture_esp(out_dir):
         for mode, name in (("setup", "esp-setup-page.png"), ("station", "esp-status-page.png")):
             stub.mode = mode
             pg = ctx.new_page()
-            pg.goto(stub.base)
+            pg.goto(stub.base + ("/device" if mode == "station" else "/"))
             if mode == "setup":
                 pg.wait_for_selector("#ssid option", state="attached")
                 pg.fill("#psk", "example-passphrase")

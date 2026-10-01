@@ -33,7 +33,7 @@ def fixtures():
     return ux_gallery.esp_fixtures()
 
 
-@pytest.mark.parametrize("mode", ["setup", "station"])
+@pytest.mark.parametrize("mode", ["setup", "station", "satellite"])
 def test_state_fixture_shape(fixtures, mode):
     state = fixtures[mode]["/api/state"]
     assert set(state) == STATE_KEYS
@@ -41,11 +41,11 @@ def test_state_fixture_shape(fixtures, mode):
     assert set(d) == DEVICE_KEYS
     assert set(d["pairing"]) == PAIRING_KEYS
     assert set(d["link"]) == LINK_KEYS
-    assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == mode
+    assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == ("station" if mode == "satellite" else mode)
     assert d["uptime_ms"] == state["t"]
 
 
-@pytest.mark.parametrize("mode", ["setup", "station"])
+@pytest.mark.parametrize("mode", ["setup", "station", "satellite"])
 def test_wifi_fixture_shape(fixtures, mode):
     w = fixtures[mode]["/api/wifi"]
     assert set(w) == WIFI_GET_KEYS
@@ -66,12 +66,21 @@ def test_station_fn_is_codec_decoded(fixtures):
         assert set(fields) == placed  # a whole frame, decoded
 
 
-def test_stub_serves_the_generated_page_and_fixtures(fixtures):
+def test_stub_serves_like_the_firmware(fixtures):
+    from tools import gen_c_dict
+
     with open(ux_gallery.ESP_PAGE, "rb") as f:
         page = f.read()
+    with open(ux_gallery.APP_BUNDLE_HEADER, encoding="utf-8") as f:
+        bundle = gen_c_dict.header_array_bytes(f.read())
     with ux_gallery.EspStub("station") as stub:
-        with urllib.request.urlopen(stub.base + "/", timeout=5) as r:
+        with urllib.request.urlopen(stub.base + "/", timeout=5) as r:  # urllib does not gunzip
+            assert r.headers["Content-Encoding"] == "gzip" and r.read() == bundle
+        with urllib.request.urlopen(stub.base + "/device", timeout=5) as r:
             assert r.read() == page
         for path in ("/api/state", "/api/wifi"):
             with urllib.request.urlopen(stub.base + path, timeout=5) as r:
                 assert json.load(r) == json.loads(json.dumps(fixtures["station"][path]))
+        stub.mode = "setup"
+        with urllib.request.urlopen(stub.base + "/", timeout=5) as r:
+            assert r.headers["Content-Encoding"] is None and r.read() == page
