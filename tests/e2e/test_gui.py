@@ -162,7 +162,7 @@ def base_url():
 
 
 @pytest.fixture
-def page(base_url):
+def page(base_url, error_gated_page):
     """A page whose uncaught JS errors FAIL the test that produced them.
 
     The web UI is un-built, client-side JS: a ReferenceError in a renderer only shows up when that
@@ -171,25 +171,8 @@ def page(base_url):
     else could see it. Now EVERY e2e test doubles as a runtime-error detector: `pageerror`
     (uncaught exceptions) and console `error`s are collected and asserted empty at teardown.
     """
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        pg = browser.new_page()
-        js_errors = []
-        pg.on("pageerror", lambda err: js_errors.append("pageerror: %s" % err))
-        pg.on(
-            "console",
-            lambda msg: (
-                js_errors.append("console.error: %s" % msg.text)
-                if msg.type == "error" and "favicon" not in msg.text
-                else None
-            ),
-        )
-        pg.goto(base_url)
-        try:
-            yield pg
-        finally:
-            browser.close()
-        assert not js_errors, "uncaught JS errors during this test:\n  " + "\n  ".join(js_errors)
+    with error_gated_page(base_url) as pg:
+        yield pg
 
 
 @pytest.fixture
@@ -868,3 +851,13 @@ def test_language_toggle_to_german(page):
     page.get_by_role("button", name="English").click()
     expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
     assert page.get_by_text("Kühlbox", exact=True).count() == 0
+
+
+def test_calictl_is_never_satellite(page):
+    # The same app.js runs on the ESP32 satellite; on calictl the satellite gates must stay off and
+    # semantics.js must still load (index.html serves it; unused here).
+    assert page.evaluate("() => typeof adaptSatellite") == "function"
+    assert page.evaluate("() => !!(STATE._meta && STATE._meta.satellite)") is False
+    page.click("#menu")
+    expect(page.locator(".menupop").get_by_text("Bluetooth pairing…")).to_be_visible()
+    assert page.locator(".menupop").get_by_text("Device & WiFi").count() == 0
