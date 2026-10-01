@@ -50,7 +50,7 @@
   "d_wifi": {"en": "WiFi", "de": "WLAN"},
   "d_camper": {"en": "Camper", "de": "Camper"},
   "d_running": {"en": "running · for %s", "de": "läuft · seit %s"},
-  "d_setup": {"en": "setup hotspot %s", "de": "Einrichtungs-Hotspot %s"},
+  "d_setup": {"en": "setup hotspot %s · %s", "de": "Einrichtungs-Hotspot %s · %s"},
   "d_joining": {"en": "joining %s", "de": "verbinde mit %s"},
   "d_retrying": {"en": "%s not reachable, retrying", "de": "%s nicht erreichbar, neuer Versuch"},
   "d_wifi_off": {"en": "not connected", "de": "nicht verbunden"},
@@ -62,5 +62,8 @@
   "d_stale": {"en": "no data for %s", "de": "keine Daten seit %s"},
   "d_pair_error": {"en": "pairing failed", "de": "Kopplung fehlgeschlagen"},
   "d_not_paired": {"en": "not paired", "de": "nicht gekoppelt"},
+  "d_fail_not_found": {"en": "network not found", "de": "Netz nicht gefunden"},
+  "d_fail_auth": {"en": "wrong password", "de": "falsches Passwort"},
+  "d_fail_other": {"en": "could not connect", "de": "Verbindung fehlgeschlagen"},
   "d_footer_setup": {"en": "WiFi %s · password %s", "de": "WLAN %s · Passwort %s"}
 }

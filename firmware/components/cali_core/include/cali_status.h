@@ -5,6 +5,7 @@
 #define CALI_STATUS_H
 
 #include <stdint.h>
+#include <stdio.h>
 
 #include "cali_transport.h"
 #include "net_consts.h"
@@ -30,7 +31,11 @@ typedef struct {
 
 /* Fills *s from the live accessors; t is the BLE transport (may be NULL), now_ms the uptime. */
 void cali_status_get(cali_status_t *s, const cali_transport_t *t, uint64_t now_ms);
-void cali_status_ip_str(uint32_t ip, char out[16]);   /* "a.b.c.d" */
+/* "a.b.c.d" from a host-order address (one implementation for status.c and the display). */
+static inline void cali_status_ip_str(uint32_t ip, char out[16]) {
+    snprintf(out, 16, "%u.%u.%u.%u", (unsigned)(ip >> 24), (unsigned)(ip >> 16 & 0xffu),
+             (unsigned)(ip >> 8 & 0xffu), (unsigned)(ip & 0xffu));
+}
 
 #ifdef __cplusplus
 }

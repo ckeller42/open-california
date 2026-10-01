@@ -51,6 +51,14 @@ def run(cli, *lines):
     return [dict(f.split("=", 1) for f in line.split(" ;; ")) for line in out]
 
 
+def run_raw(cli, *lines):
+    return (
+        subprocess.run([str(cli)], input="\n".join(lines) + "\n", capture_output=True, text=True, check=True)
+        .stdout.strip()
+        .splitlines()
+    )
+
+
 BASE = (
     "pair=6 addr=AA:BB:CC:DD:EE:FF link=1 age=800 wmode=2 wstate=3 ssid=Insel "
     "ip=3232281174 rssi=-58 fail= up=7980000"
@@ -111,7 +119,7 @@ def test_wifi_setup_mode_and_footer(cli):
         .replace("ip=3232281174", "ip=0")
         + " now=1 lang=0",
     )
-    assert v["wifi"] == "amber|Einrichtungs-Hotspot calictl-esp-setup"
+    assert v["wifi"] == "amber|Einrichtungs-Hotspot calictl-esp-setup · 192.168.4.1"
     assert v["footer"] == "1"
 
 
@@ -123,7 +131,7 @@ def test_wifi_off_with_reason(cli):
         .replace("ip=3232281174", "ip=0")
         + " now=1 lang=0",
     )
-    assert v["wifi"].startswith("red|nicht verbunden")
+    assert v["wifi"] == "red|nicht verbunden · falsches Passwort"
 
 
 def test_wifi_joining_and_retrying(cli):
@@ -136,12 +144,58 @@ def test_wifi_joining_and_retrying(cli):
     assert r["wifi"] == "amber|Insel nicht erreichbar, neuer Versuch"
 
 
-def test_wifi_long_ssid_truncates(cli):  # Review Focus 3
-    long = "Ä" * 16  # 32 bytes UTF-8
-    (v,) = run(cli, BASE.replace("ssid=Insel", "ssid=" + long) + " now=1 lang=0")
+def test_wifi_off_reasons_are_translated(cli):
+    base = BASE.replace("wmode=2 wstate=3", "wmode=0 wstate=0").replace("ip=3232281174", "ip=0")
+    got = [
+        run(cli, base.replace("fail=", "fail=" + f) + " now=1 lang=%d" % lang)[0]["wifi"]
+        for f, lang in [("not_found", 0), ("other", 0), ("auth", 1)]
+    ]
+    assert got == [
+        "red|nicht verbunden · Netz nicht gefunden",
+        "red|nicht verbunden · Verbindung fehlgeschlagen",
+        "red|not connected · wrong password",
+    ]
+
+
+def test_wifi_long_ssid_truncates_exactly(cli):  # Review Focus 3
+    long = "Ä" * 16  # 32 bytes UTF-8; the retrying row is then 64 bytes and gets cut
+    (v,) = run(
+        cli,
+        BASE.replace("ssid=Insel", "ssid=" + long)
+        .replace("wstate=3", "wstate=4")
+        .replace("ip=3232281174", "ip=0")
+        + " now=1 lang=0",
+    )
     text = v["wifi"].split("|", 1)[1]
-    assert len(text.encode()) < 64 and text.startswith(long[:8])
-    text.encode().decode("utf-8")  # never a split UTF-8 sequence
+    assert text == long + " nicht erreichbar, neuer Versuc"
+    assert len(text.encode()) == 63
+
+
+def test_utf8_cut_backs_up_to_a_lead_byte(cli):
+    # no real row puts a multi-byte char at the cut, so drive the cut itself: 62 ASCII + "Ä" (bytes 62-63)
+    (out,) = run_raw(cli, "fit=" + "a" * 62 + "Ä")
+    assert out == "fit=" + "a" * 62
+    (out,) = run_raw(cli, "fit=" + "a" * 61 + "Ä")  # fits exactly (63 bytes): kept
+    assert out == "fit=" + "a" * 61 + "Ä"
+
+
+@pytest.mark.parametrize(
+    "link,want", [(1, "green|verbunden · Daten vor 1 s"), (0, "red|Verbindung verloren, verbinde neu")]
+)
+def test_camper_bonded_after_reboot(cli, link, want):  # PAIR_IDLE with a stored address
+    (v,) = run(
+        cli, BASE.replace("pair=6", "pair=0").replace("link=1", "link=%d" % link) + " now=20000 lang=0"
+    )
+    assert v["camper"] == want
+
+
+def test_stale_boundary(cli):
+    a, b = run(
+        cli,
+        BASE.replace("age=800", "age=10000") + " now=1 lang=0",
+        BASE.replace("age=800", "age=10001") + " now=1 lang=0",
+    )
+    assert a["camper"] == "green|verbunden · Daten vor 10 s" and b["camper"] == "red|keine Daten seit 10 s"
 
 
 @pytest.mark.parametrize("ms,txt", [(61_000, "1 min"), (7_980_000, "2 h 13 min"), (273_600_000, "3 d 4 h")])
@@ -153,6 +207,17 @@ def test_device_uptime_formats(cli, ms, txt):  # Review Focus 4
 def test_english(cli):
     (v,) = run(cli, BASE + " now=7980000 lang=1")
     assert v["camper"] == "green|connected · data 1 s ago"
+
+
+def test_brightness_numbers_do_not_rebrighten(cli):
+    moved = (
+        BASE.replace("age=800", "age=3100")
+        .replace("rssi=-58", "rssi=-71")
+        .replace("up=7980000", "up=8100000")
+    )
+    v = run(cli, "reset", BASE + " now=0 lang=0", BASE + " now=60000 lang=0", moved + " now=65000 lang=0")
+    assert [x["bright"] for x in v] == ["100", "10", "10"]
+    assert v[2]["camper"] == "green|verbunden · Daten vor 4 s"  # the text did change, the screen stays dim
 
 
 def test_brightness_bright_then_dim_then_rebright(cli):

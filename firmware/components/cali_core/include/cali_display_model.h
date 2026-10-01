@@ -42,6 +42,9 @@ void cali_display_model_init(cali_display_model_t *m);
 void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_t now_ms, int lang,
                         cali_display_view_t *out);
 
+/* Copies src into dst (CALI_ROW_TEXT_MAX bytes), cut at a UTF-8 boundary when too long. */
+void cali_display_fit_text(char dst[CALI_ROW_TEXT_MAX], const char *src);
+
 /* The setup-footer template "WiFi %s · password %s" (SSID, PSK) in the chosen language. */
 const char *cali_display_footer_setup_fmt(int lang);
 

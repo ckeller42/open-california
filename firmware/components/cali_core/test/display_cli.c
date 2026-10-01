@@ -8,12 +8,6 @@
 
 #include "cali_display_model.h"
 
-/* test double of status.c's formatter (status.c needs the runner/platform); same "a.b.c.d" output */
-void cali_status_ip_str(uint32_t ip, char out[16]) {
-    snprintf(out, 16, "%u.%u.%u.%u", (unsigned)(ip >> 24), (unsigned)((ip >> 16) & 255),
-             (unsigned)((ip >> 8) & 255), (unsigned)(ip & 255));
-}
-
 static const char *dot_name(cali_dot_t d) {
     return d == CALI_DOT_GREEN ? "green" : d == CALI_DOT_AMBER ? "amber" : d == CALI_DOT_RED ? "red" : "grey";
 }
@@ -31,6 +25,12 @@ int main(void) {
         int lang = CALI_LANG_DE;
         char *tok;
         line[strcspn(line, "\r\n")] = 0;
+        if (!strncmp(line, "fit=", 4)) {  /* the UTF-8-safe cut on its own: fit=<text> */
+            char dst[CALI_ROW_TEXT_MAX];
+            cali_display_fit_text(dst, line + 4);
+            printf("fit=%s\n", dst);
+            continue;
+        }
         if (!strcmp(line, "reset")) {
             cali_display_model_init(&m);
             continue;

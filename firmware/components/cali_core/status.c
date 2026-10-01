@@ -18,11 +18,6 @@ static void copy(char *dst, size_t cap, const char *src) {
     snprintf(dst, cap, "%s", src);
 }
 
-void cali_status_ip_str(uint32_t ip, char out[16]) {
-    snprintf(out, 16, "%u.%u.%u.%u", (unsigned)(ip >> 24), (unsigned)(ip >> 16 & 0xffu),
-             (unsigned)(ip >> 8 & 0xffu), (unsigned)(ip & 0xffu));
-}
-
 void cali_status_get(cali_status_t *s, const cali_transport_t *t, uint64_t now_ms) {
     const cali_wifi_state_t *w = cali_wifi_run_state();
     uint64_t last = cali_session_last_update_ms();
