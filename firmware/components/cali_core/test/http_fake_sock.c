@@ -2,7 +2,7 @@
  * ESP build.
  *
  * A cali_net_t whose tcp ops run over an in-memory script, plus a trivial handler:
- * GET /hello -> 200 text/plain "hi"; POST /echo -> 200 text/plain <request body>; else unhandled.
+ * GET /hello -> 200 text/plain "hi"; GET /gz -> the same with content_encoding gzip; POST /echo -> 200 text/plain <request body>; else unhandled.
  *
  * Reads lines from stdin, executed in order:
  *   conn          script one more connection: each tcp_accept that finds one pending returns it
@@ -109,6 +109,12 @@ static int handler(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx
     if (strcmp(req->method, "GET") == 0 && strcmp(req->path, "/hello") == 0) {
         resp->body = "hi";
         resp->body_len = 2;
+        return 1;
+    }
+    if (strcmp(req->method, "GET") == 0 && strcmp(req->path, "/gz") == 0) {
+        resp->body = "hi";
+        resp->body_len = 2;
+        resp->content_encoding = "gzip";
         return 1;
     }
     if (strcmp(req->method, "GET") == 0 && strcmp(req->path, "/big") == 0) {

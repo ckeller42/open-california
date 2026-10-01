@@ -11,6 +11,7 @@ clock, log and the WiFi runtime. Every assertion is on the bytes the core sent.
    :links: R_FW_HTTP_STATUS
 """
 
+import gzip
 import json
 import shutil
 import subprocess
@@ -18,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from tools import gen_c_dict
 from tools.wifi_consts import CONSTS
 
 from .api_shape import AP_KEYS, DEVICE_KEYS, LINK_KEYS, PAIRING_KEYS, STATE_KEYS, WIFI_GET_KEYS, WIFI_KEYS
@@ -25,6 +27,9 @@ from .api_shape import AP_KEYS, DEVICE_KEYS, LINK_KEYS, PAIRING_KEYS, STATE_KEYS
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware" / "components" / "cali_core"
 PAGE = ROOT / "firmware" / "web" / "index_gen.html"
+BUNDLE = gen_c_dict.header_array_bytes(
+    (ROOT / "firmware" / "web" / "app_bundle_gen.h").read_text(encoding="utf-8")
+)
 IDENTITY = "C0:FF:EE:CA:11:F0"
 PROBES = [
     "/generate_204",
@@ -469,9 +474,33 @@ def test_station_mode_404(web_cli, state, joined):
         assert r.status == 404
 
 
-@pytest.mark.parametrize("state", ["online", "setup_ap"])
-def test_page_served(web_cli, state):
-    r, _ = one(web_cli, "GET", "/", setup=["wifi " + state])
+@pytest.mark.parametrize("state,joined", [("online", 1), ("online", 0), ("connecting", 1), ("retrying", 1)])
+def test_station_root_serves_the_gzipped_calictl_ui(web_cli, state, joined):
+    r, _ = one(web_cli, "GET", "/", setup=["wifi " + state, "joined %d" % joined])
+    assert r.status == 200 and r.headers["content-type"] == "text/html; charset=utf-8"
+    assert r.headers["content-encoding"] == "gzip" and r.headers["cache-control"] == "no-cache"
+    assert r.body == BUNDLE
+    assert gzip.decompress(r.body) == gen_c_dict.render_app_bundle().encode("utf-8")
+
+
+@pytest.mark.parametrize(
+    "state,joined", [("setup_ap", 0), ("setup_ap_retrying", 1), ("unprovisioned", 0), ("connecting", 0)]
+)
+def test_root_outside_station_mode_is_the_setup_page(web_cli, state, joined):
+    """Setup hotspot and a setup-flow join (mode "off": connecting, joined 0) keep the setup page at /."""
+    r, _ = one(web_cli, "GET", "/", setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.headers["content-type"].startswith("text/html")
     assert r.body == PAGE.read_bytes()
+    assert "content-encoding" not in r.headers and "cache-control" not in r.headers
     assert b'id="setup"' in r.body and b'id="functions"' in r.body
+
+
+@pytest.mark.parametrize("state,joined", [("online", 1), ("setup_ap", 0), ("unprovisioned", 0)])
+def test_device_is_the_status_page_in_every_mode(web_cli, state, joined):
+    r, _ = one(web_cli, "GET", "/device", setup=["wifi " + state, "joined %d" % joined])
+    assert r.status == 200 and r.body == PAGE.read_bytes() and "content-encoding" not in r.headers
+
+
+def test_post_root_is_not_served(web_cli):
+    r, _ = one(web_cli, "POST", "/", "", setup=["wifi online", "joined 1"])
+    assert r.status == 404

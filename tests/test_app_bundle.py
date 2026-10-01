@@ -71,6 +71,15 @@ def _webui_copy(tmp_path):
     return d
 
 
+def test_script_order_is_strings_semantics_app():
+    html = gen_c_dict.render_app_bundle()
+    at = [
+        html.index((WEBUI / n).read_text(encoding="utf-8"))
+        for n in ("strings.de.js", "semantics.js", "app.js")
+    ]
+    assert at == sorted(at)
+
+
 @pytest.mark.parametrize(
     "name,text", [("app.js", "const s = '</script>';\n"), ("app.css", "/* </style> */\n")]
 )

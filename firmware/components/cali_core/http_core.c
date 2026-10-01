@@ -77,11 +77,13 @@ static void respond(const cali_http_resp_t *r, uint64_t now_ms) {
     int n = -1; /* a redirect without a Location is the handler's error: 500 */
     if (!(r->status >= 300 && r->status < 400 && r->status != 304 && !r->location))
         n = snprintf(S.out_head, sizeof S.out_head,
-                     "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %lu\r\n%s%s%s"
+                     "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %lu\r\n%s%s%s%s%s%s"
                      "Connection: close\r\n\r\n",
                      r->status, reason(r->status), r->content_type ? r->content_type : "text/plain",
                      (unsigned long)body_len, r->location ? "Location: " : "", r->location ? r->location : "",
-                     r->location ? "\r\n" : "");
+                     r->location ? "\r\n" : "", r->content_encoding ? "Content-Encoding: " : "",
+                     r->content_encoding ? r->content_encoding : "",
+                     r->content_encoding ? "\r\nCache-Control: no-cache\r\n" : "");
     if (n < 0 || (size_t)n >= sizeof S.out_head) {
         body = reason(500);
         body_len = strlen(body);
@@ -99,7 +101,7 @@ static void respond(const cali_http_resp_t *r, uint64_t now_ms) {
 }
 
 static void respond_error(int status, uint64_t now_ms) {
-    cali_http_resp_t r = {status, "text/plain", reason(status), strlen(reason(status)), NULL};
+    cali_http_resp_t r = {status, "text/plain", reason(status), strlen(reason(status)), NULL, NULL};
     respond(&r, now_ms);
 }
 
@@ -178,7 +180,7 @@ static size_t request_line_end(void) {
 
 static void dispatch(uint64_t now_ms) {
     cali_http_req_t req;
-    cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL};
+    cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL};
     if (parse_request_line(request_line_end(), &req) != 0) {
         respond_error(400, now_ms);
         return;

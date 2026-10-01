@@ -17,6 +17,7 @@
 #include "cali_wifi_sm.h"
 #include "pairing_consts.h"
 #include "strings_gen.h"   /* WEB_INDEX_HTML: firmware/web/index_gen.html, generated */
+#include "app_bundle_gen.h"   /* WEB_APP_HTML_GZ: the calictl web UI bundle (satellite UI), generated */
 
 /* The JSON response buffer; a test build may shrink it (-DCALI_WEB_JSON_MAX=64) to force overflow. */
 #ifndef CALI_WEB_JSON_MAX
@@ -245,7 +246,16 @@ static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
-    if (strcmp(req->path, "/") == 0 && get) {
+    if (get && strcmp(req->path, "/") == 0) {
+        if (wifi_mode() == CALI_WIFI_MODE_STATION) {   /* the calictl web UI (R_FW_SHARED_UI) */
+            set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN);
+            resp->content_encoding = "gzip";
+        } else {                                       /* setup hotspot / setup-flow join: the setup page */
+            set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_INDEX_HTML, WEB_INDEX_HTML_LEN);
+        }
+        return 1;
+    }
+    if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */
         set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_INDEX_HTML, WEB_INDEX_HTML_LEN);
         return 1;
     }

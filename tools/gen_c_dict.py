@@ -496,7 +496,7 @@ def render_app_bundle() -> str:
             raise ValueError("calictl/webui/index.html: expected exactly one %s, found %d" % (what, n))
         return out
 
-    html = re.sub(r'<link rel="(?:manifest|apple-touch-icon|icon)"[^>]*>\n', "", html)
+    html = re.sub(r'<link rel="(?:manifest|apple-touch-icon|icon)"[^>]*>\r?\n?', "", html)
     html = once(r"</head>", '<link rel="icon" href="data:,">\n</head>', html, "</head>")
     html = once(
         r'<link rel="stylesheet" href="/app\.css">',
