@@ -107,6 +107,8 @@ static void build(void) {
     lv_obj_set_pos(s_footer, PAD, ROW_Y0 + 3 * ROW_H + 6);
 }
 
+int cali_display_ready(void) { return s_ok; }
+
 int cali_display_init(const cali_transport_t *t) {
 #if CONFIG_CALI_DISPLAY_FORCE_FAIL  /* test-only: the failure path without unplugging anything */
     cali_log("display: unavailable (forced)");

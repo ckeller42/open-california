@@ -357,6 +357,14 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
 `linux_only`, which need the 32-bit NimBLE Linux host build; the default test run deselects them
 with `-m "not linux_only"`).
 
+### Remote screen check (`screenshot`)
+
+On a CoreS3 build the console command `screenshot` streams the live screen as `[SHOT 320 240 RLE16 <n>]`,
+base64 lines of 76 characters, `[/SHOT]` (kws-de's format). Capture the serial log, then
+`python -m tools.esp_shot decode <log> <out_dir>` writes one PNG per frame. Refusals are
+`LOG display: screenshot failed (no screen|no memory|busy|snapshot)`. It runs on the NimBLE host task and
+blocks it while printing (manual debug command).
+
 ## Pins
 
 | What | Pin | Why |

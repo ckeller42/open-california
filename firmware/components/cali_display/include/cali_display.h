@@ -19,4 +19,12 @@ int cali_display_init(const cali_transport_t *t);
  * paint, only when the level changed) is an I2C write to the AXP2101 inside the board package and,
  * like the init probe, can still stall there or abort under BSP_ERROR_CHECK=y. */
 void cali_display_tick(uint64_t now_ms);
+/* 1 once cali_display_init succeeded (the screen exists). */
+int cali_display_ready(void);
+/* Console hook (shot.c): handles the exact line "screenshot" (returns 1) by streaming the screen as
+ * "[SHOT w h RLE16 n]", base64 lines of 76 chars, "[/SHOT]" (decode with tools/esp_shot.py). Refuses with
+ * "LOG display: screenshot failed (no screen|no memory|busy|snapshot)" and no frame. Runs on the
+ * caller's task (the NimBLE host task) and blocks it while the frame prints; the LVGL lock is held
+ * only for the snapshot itself. Any other line returns 0. */
+int cali_display_shot_line(const char *line);
 #endif

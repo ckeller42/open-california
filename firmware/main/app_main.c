@@ -181,7 +181,10 @@ static void do_work(void) {
 #if CONFIG_CALI_QEMU_PROBE
         if (!kvprobe_line(line))
 #endif
-            cali_console_line(line);
+#if CONFIG_CALI_DISPLAY
+            if (!cali_display_shot_line(line))
+#endif
+                cali_console_line(line);
         memset(line, 0, sizeof line);   /* a "wifi set" line holds a passphrase */
     }
 }
