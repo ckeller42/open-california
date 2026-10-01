@@ -67,3 +67,24 @@ CONFIG_ESP_WIFI_NVS_ENABLED=n
 # Socket budget: the HTTP listener + one connection (+ one being torn down) + the captive DNS UDP
 # socket = 4; 6 leaves room (the mdns component uses lwIP PCBs, not sockets, by default).
 CONFIG_LWIP_MAX_SOCKETS=6
+
+# Status display (#154). CoreS3 has 8 MB quad PSRAM.
+# - PSRAM: malloc() may use it (SPIRAM_USE_MALLOC default); allocations < 16 KB stay internal
+#   (SPIRAM_MALLOC_ALWAYSINTERNAL), WiFi/NimBLE stay internal.
+# - LVGL uses the C heap (not its 64 KB static pool in internal .bss), so its big allocations
+#   (LV_MEM_SIZE is then unused) land in PSRAM.
+# - Draw buffers: the BSP hard-codes internal DMA memory (bsp_display_start), so keep them small:
+#   one 320x20 buffer = 12.8 KB instead of 2 x 64 KB.
+# - BSP_ERROR_CHECK stays y (BSP default): =n does NOT build with m5stack_core_s3 4.1.0 (its
+#   BSP_ERROR_CHECK_RETURN_NULL/_ERR macros are used in functions of the wrong return type:
+#   -Wint-conversion errors in bsp_io_expander.c / bsp_feature_en.c, and forcing them through would
+#   hand an esp_err_t back as an IO-expander pointer). So bsp_display_start() aborts on a fault;
+#   display.c probes I2C + the AXP2101/AW9523 chips first and returns -1 (contract: cali_display.h).
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_QUAD=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_LV_COLOR_DEPTH_16=y
+CONFIG_LV_USE_CLIB_MALLOC=y
+CONFIG_LV_USE_SNAPSHOT=y
+CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=20
+CONFIG_BSP_LCD_DRAW_BUF_DOUBLE=n

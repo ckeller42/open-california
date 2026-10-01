@@ -382,7 +382,8 @@ def render_web_page() -> str:
     """Render ``firmware/web/index.html`` into the page the firmware serves (``index_gen.html``).
 
     :returns: the page with every ``{{NAME}}`` placeholder substituted: ``{{STRINGS}}`` by the
-        ``strings.json`` table as compact JSON (``{"key": {"en": …, "de": …}}``, sorted keys),
+        ``strings.json`` table (minus the ``d_*`` display keys, which stay out of the page to
+        keep it under ``NET_HTTP_BODY_MAX``) as compact JSON (``{"key": {"en": …, "de": …}}``, sorted keys),
         ``{{PAGE_JS}}`` by the page script ``firmware/web/page.js`` verbatim (its own file so
         ``tsc --checkJs`` can gate it), and ``{{NET_*}}`` by that
         :data:`tools.wifi_consts.CONSTS` value (strings unquoted, numbers decimal) — so the page
@@ -396,7 +397,9 @@ def render_web_page() -> str:
 
     from tools import wifi_consts
 
-    table = json.dumps(_web_strings(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    # "d_*" keys belong to the on-device display (strings_gen.h macros only); the page never reads them
+    page_strings = {k: v for k, v in _web_strings().items() if not k.startswith("d_")}
+    table = json.dumps(page_strings, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     # "</" never appears inside the inline <script> (an SSID-free table, but keep it robust)
     table = table.replace("</", "<\\/")
 
