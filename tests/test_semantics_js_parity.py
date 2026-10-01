@@ -151,6 +151,19 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
     )
 
 
+def test_adapter_wires_anchor_violations():
+    """Raw fields that trip anchors reach _meta.anchors exactly as calictl.anchors.check reports them."""
+    fn = gen_semantics_vectors.decoded_seed()
+    fn["energy"] = {**fn["energy"], "UTwoBattBemAfs": 50}  # 5.0 V, below 8-16 V
+    fn["cooler"] = {**fn["cooler"], "Installed": 1, "Level": 7}
+    body = _body(fn=fn)
+    py = {k: semantics.interpret(k, dict(f)) for k, f in fn.items()}
+    semantics.apply_sw_corrections(py)
+    want = anchors.check(py)
+    assert len(want) >= 2
+    assert same(_adapt(body)["_meta"]["anchors"], want)
+
+
 @pytest.mark.parametrize(
     "up,age_ms,online",
     [(True, 10000, True), (True, 10001, False), (True, None, False), (False, 500, False), (True, 0, True)],
@@ -178,6 +191,8 @@ def test_adapter_with_no_functions():
     [
         ({"t": 1, "fn": {}, "device": {}}, True),
         ({"cooler": {"installed": True}, "_meta": {"online": True}}, False),
+        ({"fn": {}, "device": {}, "_meta": {}}, False),
+        ({"fn": {}}, False),
         ({"error": "state_failed"}, False),
         (None, False),
         ("x", False),
