@@ -83,17 +83,17 @@ per row, the firmware version top right, and the page address (or, in setup, the
 password) at the bottom. The texts are German by default; an English build exists.
 
 ![The screen of a fresh satellite: setup hotspot (amber), camper not paired (grey), hotspot name and password at the bottom](screenshots/esp-screen-setup.png)
-![The screen in normal use: on the WiFi with address and signal, camper connected with data 1 s old](screenshots/esp-screen-connected.png)
+![The screen in normal use: on the WiFi with address (greyed out here) and signal, camper connected with data 1 s old](screenshots/esp-screen-connected.png)
 
 | Row | Green | Amber | Red | Grey |
 |---|---|---|---|---|
 | **Gerät** (device) | *läuft · seit 2 h 13 min* — running, and for how long | — | — (a crash shows as a restart: the time starts again) | — |
-| **WLAN** (WiFi) | *\<network\> · 192.168.x.y · −58 dBm* — on your network, its address and signal | *Einrichtungs-Hotspot calictl-esp-setup · 192.168.4.1* (setup hotspot open); *verbinde mit \<network\>* (joining); *\<network\> nicht erreichbar, neuer Versuch* (out of reach, retrying) | *nicht verbunden* plus the reason: *Netz nicht gefunden*, *falsches Passwort* or *Verbindung fehlgeschlagen* | — |
+| **WLAN** (WiFi) | *\<network\> · 192.168.x.y · −58 dBm* — on your network, its address and signal | *Hotspot calictl-esp-setup · 192.168.4.1* (setup hotspot open); *verbinde mit \<network\>* (joining); *\<network\> nicht erreichbar, versuche neu* (out of reach, retrying) | *nicht verbunden* plus the reason: *Netz nicht gefunden*, *falsches Passwort* or *Verbindungsfehler* | — |
 | **Camper** | *verbunden · Daten vor 1 s* — linked, and how old the last reading is | *verbinde …* (connecting); *Kopplung läuft …* (pairing); *Code der Einheit eingeben* (type the code the unit shows) | *Verbindung verloren, verbinde neu* (link lost, reconnecting); *keine Daten seit 14 s* (linked, but no reading for more than 10 s); *Kopplung fehlgeschlagen* (pairing failed) | *nicht gekoppelt* — not paired yet |
 
 The screen is at full brightness for **60 seconds** after any row changes colour or wording (a
-ticking age or uptime does not count), then dims to 10 %. Long texts are cut with "…" — the WiFi
-signal or the end of the setup text can be cut off; the page shows them in full.
+ticking age or uptime does not count), then dims to 10 %. Each row has room for two lines; only an unusually long network name is cut
+with "…" — the page shows it in full.
 
 ## If your network is out of reach
 
