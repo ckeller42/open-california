@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+from calictl import anchors, semantics
+from calictl.serve import ServeBackend
 from tools import gen_semantics_vectors
 from tools.wifi_consts import CONSTS
 
@@ -105,3 +107,81 @@ def test_py_round_matches_python_round(js, vectors):
 
 def test_sat_stale_s_is_the_display_stale_threshold(js):
     assert js["SAT_STALE_S"] == CONSTS["DISPLAY_STALE_MS"] / 1000
+
+
+_DEVICE = {
+    "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
+    "link": {"up": True, "last_snap_age_ms": 1200},
+    "wifi": {"mode": "station", "ssid": "HomeNet", "ip": "192.168.1.57", "rssi": -58},
+    "uptime_ms": 5000,
+    "fw": "abc1234",
+}
+
+
+def _body(fn=None, **device):
+    seed = gen_semantics_vectors.decoded_seed() if fn is None else fn
+    return {"t": 5000, "fn": seed, "device": {**_DEVICE, **device}}
+
+
+def _adapt(body, now_ms=1_000_000):
+    return node_eval("adaptSatellite(%s, %d)" % (json.dumps(body), now_ms))
+
+
+def test_adapter_interprets_like_python_and_synthesizes_meta():
+    body = _body()
+    got = _adapt(body)
+    py = {k: semantics.interpret(k, dict(f)) for k, f in body["fn"].items()}
+    semantics.apply_sw_corrections(py)
+    meta = got.pop("_meta")
+    assert same(got, json.loads(json.dumps(py)))
+    assert same(
+        meta,
+        {
+            "online": True,
+            "age_s": 1.2,
+            "last_seen": 1000 - 1.2,
+            "paired": True,
+            "read_only": True,
+            "session": "off",
+            "session_mode": "off",
+            "satellite": True,
+            "firmware": ServeBackend._firmware_meta(py["general"]),
+            "anchors": anchors.check(py),
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "up,age_ms,online",
+    [(True, 10000, True), (True, 10001, False), (True, None, False), (False, 500, False), (True, 0, True)],
+)
+def test_online_matches_the_screens_stale_rule(up, age_ms, online):
+    """display_model.c: stale only when snap_age_ms > DISPLAY_STALE_MS -> exactly 10 s is still live."""
+    meta = _adapt(_body(link={"up": up, "last_snap_age_ms": age_ms}))["_meta"]
+    assert meta["online"] is online
+    if age_ms is None:
+        assert meta["age_s"] is None and meta["last_seen"] is None
+
+
+def test_unpaired_device_is_not_paired():
+    assert _adapt(_body(pairing={"state": "idle", "address": None}))["_meta"]["paired"] is False
+
+
+def test_adapter_with_no_functions():
+    got = _adapt(_body(fn={}, link={"up": True, "last_snap_age_ms": None}))
+    assert list(got) == ["_meta"]
+    assert got["_meta"]["firmware"] == ServeBackend._firmware_meta(None) and got["_meta"]["anchors"] == []
+
+
+@pytest.mark.parametrize(
+    "body,want",
+    [
+        ({"t": 1, "fn": {}, "device": {}}, True),
+        ({"cooler": {"installed": True}, "_meta": {"online": True}}, False),
+        ({"error": "state_failed"}, False),
+        (None, False),
+        ("x", False),
+    ],
+)
+def test_is_satellite_body(body, want):
+    assert node_eval("isSatelliteBody(%s)" % json.dumps(body)) is want

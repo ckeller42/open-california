@@ -390,3 +390,44 @@ function firmwareMeta(general) {
     tested: "amb 0409/0410 · comm 2",
   };
 }
+
+/**
+ * True for the ESP32 satellite's raw GET /api/state ({t, fn, device}, firmware web.c api_state()),
+ * false for calictl's interpreted body (which always carries _meta) or anything else.
+ * @param {any} b @returns {boolean}
+ */
+function isSatelliteBody(b) {
+  return !!b && typeof b === "object" && "fn" in b && "device" in b && !("_meta" in b);
+}
+
+/**
+ * The satellite's raw /api/state -> the interpreted STATE calictl's /api/state carries, with a
+ * synthesized `_meta` shaped like serve.py:135 ServeBackend.state(): always read-only, no session,
+ * no auto-camper, plus `satellite: true` (app.js gates calictl-only chrome on it).
+ * @param {any} body  {t, fn, device}
+ * @param {number} nowMs  Date.now(): the ESP has no wall clock, so last_seen = now - age
+ * @returns {Record<string, any>}
+ */
+function adaptSatellite(body, nowMs) {
+  const fn = body.fn || {}, dev = body.device || {};
+  const link = dev.link || {}, pairing = dev.pairing || {};
+  /** @type {Record<string, any>} */
+  const out = {};
+  for (const name of Object.keys(fn)) out[name] = interpret(name, fn[name]);
+  applySwCorrections(out);
+  const ms = link.last_snap_age_ms;
+  const age = typeof ms === "number" ? ms / 1000 : null;
+  out._meta = {
+    online: !!link.up && age !== null && age <= SAT_STALE_S,
+    age_s: age,
+    last_seen: age === null ? null : nowMs / 1000 - age,
+    paired: !!pairing.address,
+    read_only: true,
+    session: "off",
+    session_mode: "off",
+    satellite: true,
+    firmware: firmwareMeta(out.general),
+    anchors: anchorsCheck(out),
+  };
+  return out;
+}
