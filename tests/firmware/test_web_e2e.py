@@ -8,19 +8,27 @@ and the Bumble fake unit for the camper. Requests go to ``127.0.0.1:PORT`` with 
 .. test:: WiFi provisioning and the status API end to end (host tier)
    :id: T_FW_WEB_E2E
    :links: R_FW_WIFI_PROVISION, R_FW_HTTP_STATUS, R_FW_WIFI_BLE_COEX
+
+.. test:: The satellite UI over the real firmware HTTP core equals Python semantics (host tier)
+   :id: T_FW_SHARED_UI_HOST
+   :links: R_FW_SHARED_UI
 """
 
+import gzip
 import json
 import os
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
 import pytest
 
-from calictl import protocol
+from calictl import protocol, semantics
+from tools import gen_c_dict
+from tools.gen_semantics_vectors import UI_FUNCTIONS
 from tools.wifi_consts import CONSTS
 
 from .conftest import build_host
@@ -30,6 +38,7 @@ from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw, _served_frame
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
 
 PSK = "test-psk-1234"
+PAGE = Path(__file__).resolve().parents[2] / "firmware" / "web" / "index_gen.html"
 AP_UP = "wifi: setup hotspot up (%s)" % CONSTS["NET_AP_SSID"]
 STRINGS = json.loads(
     (Path(__file__).resolve().parents[2] / "firmware" / "web" / "strings.json").read_text(encoding="utf-8")
@@ -202,6 +211,55 @@ def _require_chromium():
             pytest.fail("CALI_REQUIRE_CHROMIUM=1 but " + why)
         pytest.skip(why)
     return sync_playwright
+
+
+def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_unit, tmp_path):
+    """Station mode: GET / is the gzipped calictl UI (no-cache), /device the status page; in Chromium
+    the bundle's semantics.js turns the firmware's real /api/state into exactly what Python semantics
+    makes of the same fn; no JS error; nothing requested but / and /api/state."""
+    sync_playwright = _require_chromium()
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel ok 192.168.1.42\n")
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    _pair(fw, hci_unit)
+    fw.expect("SNAP", timeout=40)
+    fw.send("wifi set minsel %s" % PSK)
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
+
+    r = get(fw, "/")
+    assert (
+        r.status == 200
+        and r.headers["Content-Encoding"] == "gzip"
+        and r.headers["Cache-Control"] == "no-cache"
+    )
+    assert gzip.decompress(r.body) == gen_c_dict.render_app_bundle().encode("utf-8")
+    assert get(fw, "/device").body == PAGE.read_bytes()
+
+    errors, paths = [], []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        page.on("request", lambda q: paths.append(urllib.parse.urlsplit(q.url).path))
+        page.goto("http://127.0.0.1:%d/" % fw.http_port)
+        page.wait_for_function(
+            "() => !!(STATE._meta && STATE._meta.satellite && STATE._meta.online)", timeout=15000
+        )
+        # one fresh body, interpreted by the page's own semantics.js: no race with the app's 2 s poll
+        got = page.evaluate(
+            "async () => { const b = await (await fetch('/api/state')).json();"
+            " return {fn: b.fn, state: adaptSatellite(b, Date.now())}; }"
+        )
+        page.get_by_text("Satellite — display only").wait_for(timeout=3000)
+        browser.close()
+    py = {name: semantics.interpret(name, dict(f)) for name, f in got["fn"].items()}
+    semantics.apply_sw_corrections(py)
+    ui = sorted(set(UI_FUNCTIONS) & set(py))
+    assert "cooler" in ui, sorted(py)
+    assert {k: got["state"][k] for k in ui} == json.loads(json.dumps({k: py[k] for k in ui}))
+    assert got["state"]["_meta"]["read_only"] is True
+    assert not errors, errors
+    assert set(paths) <= {"/", "/api/state"}, paths
 
 
 @pytest.mark.parametrize(

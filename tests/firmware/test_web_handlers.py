@@ -483,6 +483,15 @@ def test_station_root_serves_the_gzipped_calictl_ui(web_cli, state, joined):
     assert gzip.decompress(r.body) == gen_c_dict.render_app_bundle().encode("utf-8")
 
 
+@pytest.mark.parametrize("sendmax", [1000, 777])
+def test_station_root_streams_the_real_bundle_across_polls(web_cli, sendmax):
+    """The 51 KB bundle leaves the core in ``sendmax``-byte chunks over many polls and reassembles
+    byte-exact (gunzips to the rendered document)."""
+    r, _ = one(web_cli, "GET", "/", setup=["wifi online", "joined 1", "sendmax %d" % sendmax])
+    assert len(BUNDLE) > 40 * sendmax / 2 and r.body == BUNDLE
+    assert gzip.decompress(r.body) == gen_c_dict.render_app_bundle().encode("utf-8")
+
+
 @pytest.mark.parametrize(
     "state,joined", [("setup_ap", 0), ("setup_ap_retrying", 1), ("unprovisioned", 0), ("connecting", 0)]
 )
