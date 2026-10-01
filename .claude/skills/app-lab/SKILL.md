@@ -101,6 +101,7 @@ Error=1` (workshop dialog), `set roof Position=…`/`InfoPopUp=9`, `set campingm
    print(control.build(funcs, 'airheater', 'timer', '09:31', {}).hex())   # what calictl would send
    "
    ```
+
    `what` names: see the `:param what:` list in each `calictl/control.py` builder (`_airheater`: power,
    level, runtime, timer, timer_start, …).
 

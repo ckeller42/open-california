@@ -210,16 +210,24 @@ def test_airheater_timer_time_matches_app_frame():
        :links: R_AIRHEATER_SET
     """
     from calictl import control
+
     f = _funcs()
-    armed = {"NormalOperation": 0, "HeatingLevel": 5, "RunningTime": 60, "AirDistribution": 0,
-             "OperationModeAirHeater": 3, "TimerHour": 7, "TimerMin": 30}
-    for last in ({}, armed):                     # nothing is carried from the readback
+    armed = {
+        "NormalOperation": 0,
+        "HeatingLevel": 5,
+        "RunningTime": 60,
+        "AirDistribution": 0,
+        "OperationModeAirHeater": 3,
+        "TimerHour": 7,
+        "TimerMin": 30,
+    }
+    for last in ({}, armed):  # nothing is carried from the readback
         frame = control.build(f, "airheater", "timer", "09:31", last)
-        assert frame.hex() == "3f7b007f091f"     # == the app's wheel-OK frame
+        assert frame.hex() == "3f7b007f091f"  # == the app's wheel-OK frame
     vals = control.decode_control(f["airheater"], frame)
     assert (vals["TimerHour"], vals["TimerMin"]) == (9, 31)
     assert frame[4] == 0x09 and frame[5] == 0x1F
-    assert vals["OperationModeAirHeater"] == 7   # sentinel: the time write does not arm/cancel
+    assert vals["OperationModeAirHeater"] == 7  # sentinel: the time write does not arm/cancel
 
 
 def test_lighting_save_favorite_frame():
