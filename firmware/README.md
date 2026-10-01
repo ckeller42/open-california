@@ -154,9 +154,13 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   wpa_supplicant + PSA crypto, lwIP, pp/phy, mdns) = **66 % of the 3 MB partition free** (it would
   have been 30 % of the old 1.5 MB one). The plan's ~250 KB estimate for WiFi + lwIP was wrong by
   about 2.5x. DIRAM 103,802 -> 160,018 B used (46.8 %). QEMU image (no WiFi): 0x55cf0 B, 89 % free.
-- **Size with the status display (#154, Task 1 spike):** `cali_fw.bin` **0x172970 = 1,517,936 B**
-  (+439,056 B: LVGL 9.6 + `esp_lvgl_port` + the CoreS3 board package) = **52 % of the 3 MB partition
-  free**; DIRAM 243,774 B (71.3 %). QEMU image (`CONFIG_CALI_DISPLAY=n`): 382,396 B.
+- **Size with the status display (#154, Task 1 spike):** `cali_fw.bin` **0x1720b0 = 1,515,696 B**
+  (+436,816 B: LVGL 9.6 + `esp_lvgl_port` + the CoreS3 board package) = **52 % of the 3 MB partition
+  free**. DIRAM 178,222 B (52.2 %; 160,018 B before the display): LVGL uses the C heap (PSRAM) and the
+  draw buffer is one 320x20 internal DMA strip. QEMU image (`CONFIG_CALI_DISPLAY=n`): `cali_fw.bin`
+  0x5d630 = 382,512 B, 88 % free (was 0x55cf0 B: the shared `sdkconfig.defaults` PSRAM lines are off
+  there, so the delta is not display code; the QEMU map links no lvgl/BSP member). The `idf.py size`
+  "IRAM 100 %" row is the fixed 16 KB slice on the S3, not a budget; DIRAM is the real one.
 - **Display package pin:** `components/cali_display/idf_component.yml` pins `espressif/m5stack_core_s3`
   `==4.1.0` (newest on the registry for IDF v6.1 on 2026-10-01), which resolves `esp_lvgl_port` 2.9.0 and
   `lvgl/lvgl` 9.6.0~1 (kws-de's 2.0.1 / LVGL 9.5.0 pairing is the older IDF 5.5 one). LVGL 9.6 renamed
