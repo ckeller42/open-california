@@ -99,3 +99,15 @@ def test_header_macros_and_page_bytes():
         assert "#define WEB_STR_DE_%s %s" % (key.upper(), json.dumps(tr["de"], ensure_ascii=False)) in text
     page = (WEB / "index_gen.html").read_bytes()
     assert "#define WEB_INDEX_HTML_LEN %du" % len(page) in text
+
+
+def test_display_format_strings_are_safe():
+    # display texts are printf formats (display_model.c row()): a "%d", a lone "%" ("100 %") or a
+    # third "%s" in either language is undefined behaviour on the device, and -Wformat can't see it
+    for key, tr in STRINGS.items():
+        if not key.startswith("d_"):
+            continue
+        en, de = (re.findall(r"%.?", tr[lang]) for lang in ("en", "de"))
+        assert en == de, key
+        assert set(en) <= {"%s"} and len(en) <= 2, key
+    assert re.findall(r"%.?", STRINGS["d_footer_setup"]["de"]) == ["%s", "%s"]  # SSID + PSK
