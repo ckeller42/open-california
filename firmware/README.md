@@ -357,6 +357,44 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
 `linux_only`, which need the 32-bit NimBLE Linux host build; the default test run deselects them
 with `-m "not linux_only"`).
 
+### Status display (CoreS3 screen, `R_FW_STATUS_DISPLAY`)
+
+The board build paints a 320 x 240 status screen: title + `fw <version>`, then three rows with a
+coloured dot — **Gerät/Device** (running · uptime), **WLAN/WiFi** (setup hotspot / joining /
+retrying = amber, SSID · IP · RSSI = green, not connected + reason = red), **Camper** (not paired
+= grey, connecting / pairing / enter the code = amber, connected · data age = green, link lost /
+no data for more than 10 s / pairing failed = red) — and a footer: `http://calictl-esp.local`, or
+in setup mode the hotspot SSID and passphrase. The full row table with the German texts is in
+`docs/howto-esp-wifi-setup.md` "What the screen tells you". Pieces: `cali_core/status.c` (one
+`cali_status_t`, shared with `/api/state`), `cali_core/display_model.c` (pure model, host-tested),
+`components/cali_display/` (LVGL painter + `screenshot`, board only).
+
+- **Timing and brightness** come from `csrc/net_consts.h` (generated from `tools/wifi_consts.py`):
+  `DISPLAY_REFRESH_MS` 500, `DISPLAY_STALE_MS` 10000, `DISPLAY_DIM_AFTER_MS` 60000,
+  `DISPLAY_BRIGHT_PCT` 100, `DISPLAY_DIM_PCT` 10, `DISPLAY_LOCK_TIMEOUT_MS` 50. Full brightness at
+  boot and on any change of a row's colour or wording or of the footer mode (a ticking age or
+  uptime does not count); dimmed after 60 s without one. The painter logs
+  `LOG display: brightness <pct>` on every change.
+- **Language:** German by default; `CONFIG_CALI_DISPLAY_LANG_EN=y` selects English. Texts are the
+  `d_*` keys of `firmware/web/strings.json` (same generator as the page); the fonts are generated
+  Latin-1 subsets (`tools/gen_display_font.sh`, OFL notice in `components/cali_display/FONTS-LICENSE`).
+- **No screen:** an init failure logs `LOG display: unavailable (<reason>)` once and the firmware runs
+  on without it. `CONFIG_CALI_DISPLAY_FORCE_FAIL=y` (test only, never ship) forces that path:
+  on the bench (2026-10-01) it logged `unavailable (forced)`, `screenshot` answered `no screen`,
+  `/api/state` kept answering and the mock unit kept being read.
+- **PSRAM** is on for the board build (`CONFIG_SPIRAM`, quad, 80 MHz): LVGL's heap and the
+  screenshot buffer live there.
+- **Size (2026-10-01, `4bfd38e`):** `cali_fw.bin` 0x17e810 = 1,566,736 B, 50 % of the 3 MB partition
+  free. With `FORCE_FAIL` the linker drops the painter: 0x11c050 B.
+- **Version label:** `fw` is `git describe` at configure time. A build from a **git worktree** in the
+  Docker container shows `fw unknown` (the worktree's `.git` file points outside the mounted
+  directory); pass `-DPROJECT_VER=$(git describe --always --tags --dirty)` to `idf.py` there.
+- **Bench walk:** `tools/esplab_display_walk.sh` runs on the Linux bench (CoreS3 on USB, the mock
+  unit `tools/applab/fake_unit_ble.py` on a USB BLE dongle, a second WiFi stick with a profile for
+  the setup hotspot and one for the target network) and screenshots every state: setup, joining,
+  online, pairing, connected, stale (mock frozen with SIGSTOP: link up, no data), link lost, dimmed,
+  reconnected. Its header lists the environment variables; no secret is stored in it.
+
 ### Remote screen check (`screenshot`)
 
 On a CoreS3 build the console command `screenshot` streams the live screen as `[SHOT 320 240 RLE16 <n>]`,
@@ -364,7 +402,10 @@ base64 lines of 76 characters, `[/SHOT]` (kws-de's format). Capture the serial l
 `python -m tools.esp_shot decode <log> <out_dir>` writes one PNG per frame. Refusals are
 `LOG display: screenshot failed (no screen|no host|no memory|busy|snapshot)`; `no host` means no reader is
 attached to the USB-Serial/JTAG port (the command needs one, else printing could block BLE). It runs on the NimBLE host task and
-blocks it while printing (manual debug command).
+blocks it while printing (manual debug command). The host check only sees the USB bus, not an open
+port: on the bench (2026-10-01) three `screenshot`s whose sender closed the port at once left BLE
+alone all the same — the mock unit kept being read about once a second, `/api/state` kept
+`device.link.up` true, no reboot — and the next `screenshot` with a reader came through whole.
 
 ## Pins
 

@@ -6,7 +6,7 @@ glyph bitmap), so a glyph the TTF lacks fails here, not as a blank box on the sc
 
 .. test:: Status display fonts cover every display string (EN + DE, setup footer as rendered)
    :id: T_FW_DISPLAY_FONT
-   :links: R_FW_STATUS_DISPLAY_MODEL
+   :links: R_FW_STATUS_DISPLAY
 """
 
 import json

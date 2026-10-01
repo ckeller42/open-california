@@ -9,6 +9,7 @@ proves what actually happens.
 | **CAPTURE** | Matched byte-for-byte against a real HCI/PacketLogger capture of the app | `tools/scenarios/<fn>/*.yaml` (fed to `tools/capture_diff.py`) + `tests/test_capture_diff.py` |
 | **DECOMPILE** | Grounded in the app's decompiled decode/setter + the enigma mapping, but never seen on the wire | agent cross-checks; `mapping.enigma` (54 verified classes) |
 | **DEVICE** | Physically observed on the van (photons / a human at the hardware), frame not necessarily diffed | owner report, dated |
+| **BOARD** | Firmware behaviour seen on the real ESP32 board (CoreS3) on the bench, against the **mock** unit — proves the firmware, not a unit-protocol fact | console log + remote `screenshot`, dated (section below) |
 
 Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ catalog),
 `test_doc_offset_consistency.py` (prose/comment `Field@offset` citations ↔ dictionary),
@@ -149,3 +150,20 @@ comment says what to do at the van (see `tools/scenarios/lighting/kitchen-50.yam
 - cooler **cooling-timer decode** — DEVICE (2026-08-30, owner set Startzeit 09:00): live wire
   `timer_active=True, timer_hour=9, timer_min=0` matched the unit screen (was decompile-only). The
   timer can only be armed while the fridge is off — gated.
+
+## ESP32 satellite — BOARD rows (CoreS3 on the thinky bench, mock unit)
+
+Firmware `4bfd38e` (#154 status display), mock unit `tools/applab/fake_unit_ble.py` on a USB BLE
+dongle, walk `tools/esplab_display_walk.sh`. Screens are LVGL snapshots (the framebuffer, so they
+show the content, not the backlight level).
+
+| Date | Fact | Evidence |
+|---|---|---|
+| 2026-10-01 | Setup screen: `wifi forget` + `forget` → WLAN amber *Einrichtungs-Hotspot calictl-esp-setup …* (cut with "…"), Camper grey *nicht gekoppelt*, footer *WLAN calictl-esp-setup · Passwort calictl-setup* | `LOG wifi: setup hotspot up`, `STATE … idle`; screenshot (`docs/screenshots/esp-screen-setup.png`) |
+| 2026-10-01 | `POST /api/wifi` over the setup hotspot → WLAN amber *verbinde mit minsel* → green *minsel · 192.168.8.183 · −32…* (RSSI cut) | `{"ok":true}`, `LOG wifi: online 192.168.8.183`; screenshots taken right after the POST and 15 s later |
+| 2026-10-01 | `pair` → Camper amber *Code der Einheit eingeben* (`waiting_passkey`); `passkey 123456` → green *verbunden · Daten vor 1 s* | `STATE` scanning → connecting → pairing → waiting_passkey → pairing → verifying → bonded; screenshot (`docs/screenshots/esp-screen-connected.png`) |
+| 2026-10-01 | Stale rule: mock frozen with SIGSTOP (link up, no data) → Camper red *keine Daten seit 14 s* | screenshot ~13 s after the freeze; the link dropped later (`LOG session: link lost (event 6, status 531)`) |
+| 2026-10-01 | Mock stopped → Camper red *Verbindung verloren, verbinde neu*; the reconnect attempts (2 s → 32 s backoff) keep the same class, no flicker | `LOG session: link lost (event 2, status 13)`, `reconnect in …`; screenshot |
+| 2026-10-01 | Dimming: last class change (link lost) ~20:23:16 → `LOG display: brightness 10` at 20:24:16 (60 s); mock back → bond reconnect → `LOG display: brightness 100` at 20:25:09; boot → `brightness 100` | timestamped console log of the walk |
+| 2026-10-01 | `screenshot` with no reader (sender closes the port at once, 3×): BLE unaffected — mock reads +22 in 20 s, `/api/state` `device.link.up` true, no reboot; next `screenshot` with a reader complete | console + mock log + `/api/state` |
+| 2026-10-01 | `CONFIG_CALI_DISPLAY_FORCE_FAIL=y` build: `LOG display: unavailable (forced)`, `screenshot` → `LOG display: screenshot failed (no screen)`, `/api/state` HTTP 200 with `link.up` true, mock reads +15 in 15 s | console + mock log + `/api/state` |

@@ -4,11 +4,12 @@ This walks you through connecting the ESP32 "satellite" — the small M5Stack Co
 pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 firmware](firmware.md))
 — to your WiFi, so you can see its status page from a phone or laptop.
 
-> **Status — read this first.** The CoreS3 board has not arrived yet, so none of this has run on
-> real hardware. Everything below is proven on a Linux build of the same firmware with a
-> simulated WiFi radio, and on an emulated chip. The steps describe how the firmware is built to
-> behave; the list of things still to confirm on the board is in
-> [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
+> **Status — read this first.** The firmware is proven on a Linux build with a simulated WiFi
+> radio and on an emulated chip. A real CoreS3 runs it on a test bench (2026-10-01): it joined a
+> 2.4 GHz network through its setup hotspot and the page, and its screen showed every state in
+> [What the screen tells you](#what-the-screen-tells-you) — but against a *simulated* camper unit,
+> with a Linux laptop (not a phone) on the hotspot, and never in the van. The list of things still
+> to confirm is in [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
 
 The satellite only **reads** the camper unit. Its page shows what the unit reports and the
 device's own state (Bluetooth pairing, link, WiFi); it has no controls.
@@ -74,6 +75,25 @@ real page lists every function the unit reports).
 - on the **USB console**, type `wifi status` — the answer contains `ip=192.168.x.y`.
 
 Then open `http://192.168.x.y` directly.
+
+## What the screen tells you
+
+The CoreS3's own screen shows the same status as the page, without a browser: one coloured dot
+per row, the firmware version top right, and the page address (or, in setup, the hotspot and its
+password) at the bottom. The texts are German by default; an English build exists.
+
+![The screen of a fresh satellite: setup hotspot (amber), camper not paired (grey), hotspot name and password at the bottom](screenshots/esp-screen-setup.png)
+![The screen in normal use: on the WiFi with address and signal, camper connected with data 1 s old](screenshots/esp-screen-connected.png)
+
+| Row | Green | Amber | Red | Grey |
+|---|---|---|---|---|
+| **Gerät** (device) | *läuft · seit 2 h 13 min* — running, and for how long | — | — (a crash shows as a restart: the time starts again) | — |
+| **WLAN** (WiFi) | *\<network\> · 192.168.x.y · −58 dBm* — on your network, its address and signal | *Einrichtungs-Hotspot calictl-esp-setup · 192.168.4.1* (setup hotspot open); *verbinde mit \<network\>* (joining); *\<network\> nicht erreichbar, neuer Versuch* (out of reach, retrying) | *nicht verbunden* plus the reason: *Netz nicht gefunden*, *falsches Passwort* or *Verbindung fehlgeschlagen* | — |
+| **Camper** | *verbunden · Daten vor 1 s* — linked, and how old the last reading is | *verbinde …* (connecting); *Kopplung läuft …* (pairing); *Code der Einheit eingeben* (type the code the unit shows) | *Verbindung verloren, verbinde neu* (link lost, reconnecting); *keine Daten seit 14 s* (linked, but no reading for more than 10 s); *Kopplung fehlgeschlagen* (pairing failed) | *nicht gekoppelt* — not paired yet |
+
+The screen is at full brightness for **60 seconds** after any row changes colour or wording (a
+ticking age or uptime does not count), then dims to 10 %. Long texts are cut with "…" — the WiFi
+signal or the end of the setup text can be cut off; the page shows them in full.
 
 ## If your network is out of reach
 
