@@ -891,3 +891,34 @@ def test_unknown_runtime_is_restrictive(base_url):
     assert not errs, errs
     api = [u for u in seen if u.startswith("/api/")]
     assert set(api) == {"/api/state"}, api
+
+
+def test_a_failed_first_poll_still_loads_pairing_once(base_url):
+    # Deploy restart on buspi: the page's first /api/state fails (503 {error}, no `_meta`). The
+    # one-off /api/pairing fetch must still happen once a calictl `_meta` answers on a later poll,
+    # or "Unpair…" (and the setup card's prominence) is lost for the page's whole life.
+    seen = []
+    fails = [1]
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        errs = []
+        pg.on("pageerror", lambda e: errs.append(str(e)))
+        pg.on("request", lambda r: seen.append(r.url.replace(base_url, "")))
+
+        def _first_fails(route):
+            if fails[0]:
+                fails[0] -= 1
+                route.fulfill(status=503, content_type="application/json", body='{"error": "state_failed"}')
+            else:
+                route.continue_()
+
+        pg.route("**/api/state", _first_fails)
+        pg.goto(base_url)
+        pg.wait_for_function("() => typeof STATE !== 'undefined' && !!STATE._meta", timeout=10000)
+        pg.click("#menu")
+        expect(pg.locator(".menupop").get_by_text("Unpair…")).to_be_visible()
+        pg.wait_for_timeout(2500)  # more polls: still fetched exactly once
+        browser.close()
+    assert not errs, errs
+    assert seen.count("/api/pairing") == 1, seen

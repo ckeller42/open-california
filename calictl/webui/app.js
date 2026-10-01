@@ -729,6 +729,10 @@ async function refreshState(force) {
   }
   // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
   STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
+  // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
+  // menu's "Unpair…". Taken the first time a calictl `_meta` answers -- also when the first poll
+  // failed (daemon restarting) -- and never on the satellite or an unknown runtime.
+  if (isCalictl() && !pairingFetched) { pairingFetched = true; await pairingFetch(); }
   // Auto-camper give-up/stand-down notice: the daemon stamps a one-time {ts,msg} when it stands
   // down (low battery) or gives up (keeps dropping). Show it as a toast once.
   const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
@@ -1101,6 +1105,7 @@ let pairingReady = false;              // "I'm on that screen" checkbox
 let pairingLoading = false;
 /** @type {{state:string, attempts:number, error:string|null, address:string|null, radio_busy?: boolean}|null} */
 let PAIRING = null;
+let pairingFetched = false;            // the one-off load-time fetch (refreshState) has run
 /** @type {ReturnType<typeof setInterval>|null} */
 let pairingTimer = null;
 
@@ -1980,15 +1985,7 @@ function roofControls(s) {
 }
 
 async function main() {
-  await refreshState(true);
-  // One-off (not the recurring 1 s poll, which only runs once the wizard is opened): needed just
-  // to decide the setup card's prominence if it's opened, and (`_meta.paired`) the dashboard's
-  // unpaired banner. Task 11 replaced the old "auto-open the card on true first-run" behaviour
-  // with that persistent banner -- a working install never had pairing chrome forced open, and
-  // now neither does a fresh one; the banner is the entry point, same as the ⋮ menu.
-  // Only once a calictl daemon answered: the satellite has no /api/pairing, and a failed first poll
-  // must not fan out to an endpoint the satellite's single-connection core would 404.
-  if (isCalictl()) await pairingFetch();
+  await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
   render();
   setInterval(() => refreshState(false), 2000);
 }
