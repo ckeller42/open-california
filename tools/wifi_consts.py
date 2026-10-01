@@ -33,12 +33,14 @@ CONSTS = {
     "NET_HTTP_PORT": 80,
     "NET_HTTP_REQ_MAX": 2048,
     "NET_HTTP_BODY_MAX": 16384,
-    # Status display (#154, spec 2026-10-01): refresh, stale threshold, dimming.
+    # Status display (#154, spec 2026-10-01): refresh, stale threshold, dimming, LVGL lock bound
+    # (the tick runs on the NimBLE host task: never wait on a wedged render longer than this).
     "DISPLAY_REFRESH_MS": 500,
     "DISPLAY_STALE_MS": 10000,
     "DISPLAY_DIM_AFTER_MS": 60000,
     "DISPLAY_BRIGHT_PCT": 100,
     "DISPLAY_DIM_PCT": 10,
+    "DISPLAY_LOCK_TIMEOUT_MS": 50,
     "NET_JSON_MAX": 8192,
     "NET_SSID_MAX": 32,
     "NET_PSK_MIN": 8,

@@ -161,8 +161,8 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   0x5d630 = 382,512 B, 88 % free (was 0x55cf0 B: the shared `sdkconfig.defaults` PSRAM lines are off
   there, so the delta is not display code; the QEMU map links no lvgl/BSP member). The `idf.py size`
   "IRAM 100 %" row is the fixed 16 KB slice on the S3, not a budget; DIRAM is the real one.
-- **Size with the painted status screen (#154, Task 4):** `cali_fw.bin` **0x17e100 = 1,564,928 B**
-  (+48,384 B: the two generated Latin-1 fonts, 16 + 24 px, 4 bpp uncompressed, plus the painter) =
+- **Size with the painted status screen (#154, Task 4):** `cali_fw.bin` **0x17e130 = 1,564,976 B**
+  (+48,432 B: the two generated Latin-1 fonts, 16 + 24 px, 4 bpp uncompressed, plus the painter) =
   **50 % of the 3 MB partition free**. DIRAM 178,558 B (52.2 %, +336 B). QEMU image unchanged in
   content (`CONFIG_CALI_DISPLAY=n`): 0x5d740 = 382,784 B.
 - **Display package pin:** `components/cali_display/idf_component.yml` pins `espressif/m5stack_core_s3`

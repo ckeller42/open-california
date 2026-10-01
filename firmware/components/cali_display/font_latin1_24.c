@@ -1,3 +1,4 @@
+/* Montserrat, Copyright 2011 The Montserrat Project Authors, SIL Open Font License 1.1: see FONTS-LICENSE. */
 /*******************************************************************************
  * Size: 24 px
  * Bpp: 4

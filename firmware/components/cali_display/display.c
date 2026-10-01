@@ -118,7 +118,10 @@ int cali_display_init(const cali_transport_t *t) {
     if (i2c_master_probe(bsp_i2c_get_handle(), AXP2101_ADDR, PROBE_MS) != ESP_OK) { cali_log("display: unavailable (axp2101)"); return -1; }
     if (i2c_master_probe(bsp_i2c_get_handle(), AW9523_ADDR, PROBE_MS) != ESP_OK) { cali_log("display: unavailable (aw9523)"); return -1; }
     (void)bsp_display_start();
-    bsp_display_lock(0);
+    if (!bsp_display_lock(DISPLAY_LOCK_TIMEOUT_MS)) {  /* LVGL task wedged already: no UI, tick stays a no-op */
+        cali_log("display: unavailable (lock)");
+        return -1;
+    }
     build();
     bsp_display_unlock();
     bsp_display_backlight_on();
@@ -149,13 +152,15 @@ void cali_display_tick(uint64_t now_ms) {
     char tmp[2 * CALI_ROW_TEXT_MAX], footer[CALI_ROW_TEXT_MAX];
     if (!s_ok || now_ms - s_last_paint < DISPLAY_REFRESH_MS) return;
     s_last_paint = now_ms;
+    /* The owner task is the NimBLE host task: never wait on a wedged render. A skipped paint leaves
+     * the model and the painted-text buffers untouched, so the next try repaints whatever changed. */
+    if (!bsp_display_lock(DISPLAY_LOCK_TIMEOUT_MS)) return;
     cali_status_get(&st, s_t, now_ms);
     cali_display_model(&s_model, &st, now_ms, LANG, &v);
     if (v.footer_setup) snprintf(tmp, sizeof tmp, cali_display_footer_setup_fmt(LANG), NET_AP_SSID, NET_AP_PSK);
     else snprintf(tmp, sizeof tmp, "http://" NET_HOSTNAME ".local");
     cali_display_fit_text(footer, tmp);
 
-    bsp_display_lock(0);
     paint_row(&s_rows[0], &v.device);
     paint_row(&s_rows[1], &v.wifi);
     paint_row(&s_rows[2], &v.camper);
@@ -165,6 +170,7 @@ void cali_display_tick(uint64_t now_ms) {
     }
     bsp_display_unlock();
 
+    /* only after a successful paint; can still block/abort inside the board package (cali_display.h) */
     if (s_brightness != v.brightness_pct) {
         s_brightness = v.brightness_pct;
         bsp_display_brightness_set(v.brightness_pct);
