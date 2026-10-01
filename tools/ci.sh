@@ -104,6 +104,8 @@ codec_fresh() {   # golden vectors + generated C headers match protocol/dictiona
     || { echo "generated C headers stale — run: $PY -m tools.gen_c_dict"; exit 1; }
   "$PY" -m tools.gen_wifi_vectors --check \
     || { echo "WiFi SM golden vectors stale — run: $PY -m tools.gen_wifi_vectors"; exit 1; }
+  "$PY" -m tools.gen_semantics_vectors --check \
+    || { echo "semantics golden vectors stale — run: $PY -m tools.gen_semantics_vectors"; exit 1; }
 }
 screenshots() {   # regenerate docs/screenshots from the live UI over the mock (needs Playwright +
                   # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.
@@ -123,7 +125,7 @@ webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only s
   # typescript is pinned (bump deliberately; the 0-error baseline is per compiler version).
   npx --yes -p typescript@7.0.2 tsc --noEmit -p calictl/webui/jsconfig.json
   npx --yes -p typescript@7.0.2 tsc --noEmit -p firmware/web/jsconfig.json
-  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js
+  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/semantics.js
   node --check firmware/web/page.js
   echo "web UI typecheck: OK"
 }
