@@ -558,17 +558,21 @@ def bundle_is_fresh() -> bool:
 
     Compares the DOCUMENT, not the gzip bytes: zlib builds (MacPorts vs Ubuntu CI) may compress the
     same input differently, and that must neither fail ``--check`` nor churn the checked-in header.
+    The text around the array must equal today's template too (an edit to the doc comment or the
+    include guard is stale) -- rebuilt around the checked-in array, so still zlib-independent.
     """
     import gzip
     import zlib
 
     if not APP_BUNDLE_OUT.is_file():
         return False
+    text = APP_BUNDLE_OUT.read_text(encoding="utf-8")
+    gz = header_array_bytes(text)
     try:
-        doc = gzip.decompress(header_array_bytes(APP_BUNDLE_OUT.read_text(encoding="utf-8")))
+        doc = gzip.decompress(gz)
     except (OSError, EOFError, zlib.error):
         return False
-    return doc == render_app_bundle().encode("utf-8")
+    return text == app_bundle_header(gz) and doc == render_app_bundle().encode("utf-8")
 
 
 def _is_fresh(path: Path, gen) -> bool:

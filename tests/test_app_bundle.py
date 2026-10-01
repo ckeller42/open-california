@@ -118,3 +118,16 @@ def test_freshness_compares_the_document_not_the_gzip_bytes(tmp_path, monkeypatc
     assert not gen_c_dict.bundle_is_fresh()
     hdr.write_text("garbage", encoding="utf-8")
     assert not gen_c_dict.bundle_is_fresh()
+
+
+def test_freshness_also_checks_the_header_text_around_the_array(tmp_path, monkeypatch):
+    # A template edit (doc comment, include guard) must make --check report stale, not just a doc edit.
+    hdr = tmp_path / "app_bundle_gen.h"
+    monkeypatch.setattr(gen_c_dict, "APP_BUNDLE_OUT", hdr)
+    good = gen_c_dict.generate_app_bundle()
+    hdr.write_text(good.replace("DO NOT EDIT.", "DO NOT EDIT!"), encoding="utf-8")
+    assert not gen_c_dict.bundle_is_fresh()
+    hdr.write_text(good.replace("#endif /* WEB_APP_BUNDLE_GEN_H */", "#endif"), encoding="utf-8")
+    assert not gen_c_dict.bundle_is_fresh()
+    hdr.write_text(good, encoding="utf-8")
+    assert gen_c_dict.bundle_is_fresh()

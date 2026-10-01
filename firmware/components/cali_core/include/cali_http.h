@@ -20,8 +20,9 @@
  * counted from its accept or its last received byte (closed without a response); while sending,
  * from the last byte the socket took (the response is cut short). A connection the peer closes
  * mid-request is closed without a response. Every response carries Content-Type, Content-Length and
- * Connection: close; a response with a location (302) also carries Location; a response with a content_encoding also carries Content-Encoding and Cache-Control: no-cache. A 302 MUST set
+ * Connection: close; a response with a location (302) also carries Location. A 302 MUST set
  * location (see 500 above).
+ * A response with a content_encoding also carries Content-Encoding and Cache-Control: no-cache.
  *
  * Request views (method, path, query, body) are NUL-terminated and point into the core's request
  * buffer; query is "" when the target has no '?'. The buffer is not touched again until the
