@@ -25,6 +25,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from test_semantics_js_parity import same  # bool-strict deep equality (True != 1), one definition
 
 from calictl import protocol, semantics
 from tools import gen_c_dict
@@ -256,7 +257,8 @@ def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_u
     semantics.apply_sw_corrections(py)
     ui = sorted(set(UI_FUNCTIONS) & set(py))
     assert "cooler" in ui, sorted(py)
-    assert {k: got["state"][k] for k in ui} == json.loads(json.dumps({k: py[k] for k in ui}))
+    want = json.loads(json.dumps({k: py[k] for k in ui}))
+    assert same({k: got["state"][k] for k in ui}, want), (got["state"], want)
     assert got["state"]["_meta"]["read_only"] is True
     assert not errors, errors
     assert set(paths) <= {"/", "/api/state"}, paths
