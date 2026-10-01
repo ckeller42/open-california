@@ -96,7 +96,12 @@ def test_airheater_timer_time_scenario_zero_diff(tmp_path):
     (APP-OBSERVED 2026-09-27, ``3f7b007f091f``) diffs to zero against calictl."""
     pytest.importorskip("yaml")
     scen = capture_diff.load_scenario("airheater/timer-time")
-    assert (scen.function, scen.what, scen.value, scen.control_char) == ("airheater", "timer", "09:31", "1701")
+    assert (scen.function, scen.what, scen.value, scen.control_char) == (
+        "airheater",
+        "timer",
+        "09:31",
+        "1701",
+    )
     rows, leads, ours = capture_diff.diff(_funcs(), scen, bytes.fromhex("3f7b007f091f"))
     assert ours.hex() == "3f7b007f091f" and leads == [] and all(r.match for r in rows)
     p = tmp_path / "frames.txt"
@@ -109,6 +114,7 @@ def test_every_scenario_loads_and_builds():
     scenario before it is needed at the van)."""
     pytest.importorskip("yaml")
     from pathlib import Path
+
     root = Path(capture_diff.__file__).resolve().parent / "scenarios"
     names = sorted(str(p.relative_to(root).with_suffix("")) for p in root.rglob("*.yaml"))
     assert "airheater/timer-time" in names
