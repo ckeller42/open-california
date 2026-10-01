@@ -1,0 +1,7 @@
+menu "calictl status display"
+    config CALI_DISPLAY
+        bool "Show device / WiFi / camper status on the CoreS3 screen"
+        default y
+        help
+            Board package espressif/m5stack_core_s3 + LVGL. Off in the QEMU build (no screen).
+endmenu

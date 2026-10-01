@@ -63,6 +63,9 @@
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
+#if CONFIG_CALI_DISPLAY
+#include "cali_display.h"
+#endif
 #include "cali_net_esp.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
@@ -349,6 +352,9 @@ void app_main(void) {
         cali_console_init(&s_no_ble);
     }
     wifi_init(err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble);
+#if CONFIG_CALI_DISPLAY
+    (void)cali_display_init();   /* -1: no screen; BLE/WiFi carry on */
+#endif
 
     const esp_timer_create_args_t targs = {.callback = tick_cb, .name = "cali_tick"};
     esp_timer_handle_t tick;

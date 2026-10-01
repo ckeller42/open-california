@@ -10,3 +10,7 @@ CONFIG_CALI_QEMU_PROBE=y
 # esp_wifi call, cali_net_esp_init() returns -1, app_main logs "LOG wifi: driver unavailable" and the
 # WiFi SM stays WIFI_UNPROVISIONED (test_no_wifi_driver_boots_and_serves_nothing).
 CONFIG_CALI_WIFI=n
+
+# QEMU's esp32s3 has no screen (and no PSRAM model we rely on).
+CONFIG_CALI_DISPLAY=n
+CONFIG_SPIRAM=n

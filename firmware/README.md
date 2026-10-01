@@ -154,6 +154,15 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   wpa_supplicant + PSA crypto, lwIP, pp/phy, mdns) = **66 % of the 3 MB partition free** (it would
   have been 30 % of the old 1.5 MB one). The plan's ~250 KB estimate for WiFi + lwIP was wrong by
   about 2.5x. DIRAM 103,802 -> 160,018 B used (46.8 %). QEMU image (no WiFi): 0x55cf0 B, 89 % free.
+- **Size with the status display (#154, Task 1 spike):** `cali_fw.bin` **0x172970 = 1,517,936 B**
+  (+439,056 B: LVGL 9.6 + `esp_lvgl_port` + the CoreS3 board package) = **52 % of the 3 MB partition
+  free**; DIRAM 243,774 B (71.3 %). QEMU image (`CONFIG_CALI_DISPLAY=n`): 382,396 B.
+- **Display package pin:** `components/cali_display/idf_component.yml` pins `espressif/m5stack_core_s3`
+  `==4.1.0` (newest on the registry for IDF v6.1 on 2026-10-01), which resolves `esp_lvgl_port` 2.9.0 and
+  `lvgl/lvgl` 9.6.0~1 (kws-de's 2.0.1 / LVGL 9.5.0 pairing is the older IDF 5.5 one). LVGL 9.6 renamed
+  `CONFIG_LV_MEM_SIZE_KILOBYTES` to `CONFIG_LV_MEM_SIZE` (bytes; the old name is a `-Werror` `#warning`).
+  `main` requires `cali_display` unconditionally: `CONFIG_*` is undefined while IDF expands component
+  requirements on a clean build, so the component itself compiles to nothing when `CONFIG_CALI_DISPLAY=n`.
 
 ## QEMU boot tier (`firmware/qemu`, CI job `firmware-qemu`)
 

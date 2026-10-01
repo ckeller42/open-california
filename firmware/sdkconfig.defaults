@@ -67,3 +67,11 @@ CONFIG_ESP_WIFI_NVS_ENABLED=n
 # Socket budget: the HTTP listener + one connection (+ one being torn down) + the captive DNS UDP
 # socket = 4; 6 leaves room (the mdns component uses lwIP PCBs, not sockets, by default).
 CONFIG_LWIP_MAX_SOCKETS=6
+
+# Status display (#154): LVGL buffers + the screenshot buffer live in PSRAM (CoreS3: 8 MB quad).
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_QUAD=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_LV_COLOR_DEPTH_16=y
+CONFIG_LV_MEM_SIZE=65536
+CONFIG_LV_USE_SNAPSHOT=y
