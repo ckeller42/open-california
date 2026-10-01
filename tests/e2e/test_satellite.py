@@ -22,7 +22,10 @@ except Exception as _e:  # noqa: BLE001 — any launch failure (missing executab
 
 TILES = ("Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Roof", "Vehicle")
 ALLOWED = {"/", "/api/state"}
-ENABLED_CONTROLS = "#app button:enabled, #app input:enabled, #app select:enabled"
+ENABLED_CONTROLS = (
+    "#app :is(button,input,select,textarea):enabled, #app [role=button]:not([aria-disabled=true]),"
+    " #app [role=switch]:not([disabled])"
+)
 
 
 @pytest.fixture
@@ -52,10 +55,13 @@ def _home(pg):
 
 
 def test_every_tile_renders_and_every_control_is_disabled(sat, stub):
+    sat.wait_for_selector(".tilegrid .tile")
+    expect(sat.locator(".tile")).to_have_count(len(TILES))  # a new dashboard tile must join TILES
     for name in TILES:
         _open(sat, name)
         assert sat.locator("#app").inner_text().strip(), "%s screen rendered empty" % name
-        assert sat.locator(ENABLED_CONTROLS).count() == 0, "%s has an enabled control" % name
+        sat.wait_for_timeout(2100)  # past a state poll's re-render, which must not re-enable a control
+        expect(sat.locator(ENABLED_CONTROLS), "%s has an enabled control" % name).to_have_count(0)
         _home(sat)
     sat.wait_for_timeout(2500)  # at least one more state poll
     assert set(stub.requests) <= ALLOWED, stub.requests

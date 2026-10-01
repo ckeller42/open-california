@@ -27,7 +27,8 @@ from pathlib import Path
 import pytest
 from test_semantics_js_parity import same  # bool-strict deep equality (True != 1), one definition
 
-from calictl import protocol, semantics
+from calictl import anchors, protocol, semantics
+from calictl.serve import ServeBackend
 from tools import gen_c_dict
 from tools.gen_semantics_vectors import UI_FUNCTIONS
 from tools.wifi_consts import CONSTS
@@ -260,6 +261,9 @@ def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_u
     want = json.loads(json.dumps({k: py[k] for k in ui}))
     assert same({k: got["state"][k] for k in ui}, want), (got["state"], want)
     assert got["state"]["_meta"]["read_only"] is True
+    # the satellite _meta the UI reads (firmware warning, anchors) equals calictl's for the same frames
+    assert same(got["state"]["_meta"]["firmware"], ServeBackend._firmware_meta(py.get("general")))
+    assert same(got["state"]["_meta"]["anchors"], anchors.check(py))
     assert not errors, errors
     assert set(paths) <= {"/", "/api/state"}, paths
 
