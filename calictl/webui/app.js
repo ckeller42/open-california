@@ -242,7 +242,7 @@ menuEl.onclick = (ev) => {
     dev.textContent = /** @type {string} */ (t("Device & WiFi"));
     dev.onclick = () => { closeMenu(); location.assign("/device"); };
     menuPop.appendChild(dev);
-  } else {
+  } else if (isCalictl()) {
     const pair = document.createElement("button");
     pair.type = "button";
     pair.textContent = /** @type {string} */ (t("Bluetooth pairing…"));
@@ -698,9 +698,13 @@ function installed(fn) {
 
 // read-only = the daemon rejects control writes (the safe default; enable with --enable-writes /
 // CALICTL_ENABLE_WRITES=1). The UI disables every control and shows a banner when true.
-const readOnly = () => !!(STATE._meta && STATE._meta.read_only);
+// Unknown runtime (no `_meta` answered yet) is treated restrictively: read-only, and no calictl-only
+// affordance (the same app.js runs on the ESP32 satellite, which must never see /api/pairing|command|...).
+const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
 // The ESP32 satellite (semantics.js adaptSatellite): no pairing, history, auto-camper or session API.
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
+// A calictl daemon has answered (positively known; not the satellite, not still unknown).
+const isCalictl = () => !!(STATE._meta && !STATE._meta.satellite);
 
 /**
  * @param {string} msg
@@ -1353,7 +1357,7 @@ function render() {
   if (sp) app.appendChild(sp);
   const ob = offlineBanner();
   if (ob) app.appendChild(ob);
-  if (readOnly()) {
+  if (readOnly() && STATE._meta) {
     const b = document.createElement("div");
     b.className = "readonly";
     b.textContent = /** @type {string} */ (satellite() ? t("Satellite — display only")
@@ -1430,7 +1434,7 @@ function renderDashboard() {
     const msg = document.createElement("span"); msg.className = "lbl";
     msg.textContent = /** @type {string} */ (t("No camper unit is paired yet."));
     b.append(msg);
-    if (!satellite()) {   // the satellite pairs over its console: no web wizard to open
+    if (isCalictl()) {   // the satellite pairs over its console: no web wizard to open
       const go = document.createElement("button"); go.type = "button"; go.className = "btn";
       go.textContent = /** @type {string} */ (t("Set up remote control"));
       go.onclick = () => openPairingWizard();
@@ -1635,14 +1639,14 @@ function renderFeature(fn) {
     app.appendChild(card);
   }
   if (f.roof) app.appendChild(roofControls(s));
-  if (fn === "campingmode" && !satellite()) app.appendChild(autoCamperCard());
+  if (fn === "campingmode" && isCalictl()) app.appendChild(autoCamperCard());
   if (f.readouts && f.readouts.length) {
     const card = document.createElement("div");
     card.className = "card";
     for (const r of f.readouts) card.appendChild(renderReadout(r, s));
     app.appendChild(card);
   }
-  if (f.chart && !satellite()) app.appendChild(energyChart());   // no /api/history on the satellite
+  if (f.chart && isCalictl()) app.appendChild(energyChart());   // no /api/history on the satellite
 }
 
 /**
@@ -1984,7 +1988,7 @@ async function main() {
   // now neither does a fresh one; the banner is the entry point, same as the ⋮ menu.
   // Only once a calictl daemon answered: the satellite has no /api/pairing, and a failed first poll
   // must not fan out to an endpoint the satellite's single-connection core would 404.
-  if (STATE._meta && !STATE._meta.satellite) await pairingFetch();
+  if (isCalictl()) await pairingFetch();
   render();
   setInterval(() => refreshState(false), 2000);
 }

@@ -861,3 +861,33 @@ def test_calictl_is_never_satellite(page):
     page.click("#menu")
     expect(page.locator(".menupop").get_by_text("Bluetooth pairing…")).to_be_visible()
     assert page.locator(".menupop").get_by_text("Device & WiFi").count() == 0
+
+
+def test_unknown_runtime_is_restrictive(base_url):
+    # The ESP32 satellite runs this same app.js. Until a `_meta` answers we cannot tell it from calictl, so
+    # the page must stay restrictive: controls read-only, no pairing menu, and no request beyond
+    # "/" + static assets + /api/state (never /api/pairing|command|history|...).
+    seen = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        errs = []
+        pg.on("pageerror", lambda e: errs.append(str(e)))
+        pg.on("request", lambda r: seen.append(r.url.replace(base_url, "")))
+        pg.route(
+            "**/api/state",
+            lambda route: route.fulfill(status=200, content_type="text/plain", body="not json"),
+        )
+        pg.goto(base_url)
+        pg.wait_for_function("() => typeof STATE !== 'undefined' && document.querySelector('#app *')")
+        assert pg.evaluate("() => !STATE._meta && readOnly()") is True
+        pg.click("#menu")
+        menu = pg.locator(".menupop")
+        expect(menu).to_be_visible()
+        assert menu.get_by_text("Bluetooth pairing…").count() == 0
+        assert menu.get_by_text("Unpair…").count() == 0
+        pg.wait_for_timeout(2500)  # past one refresh tick: still nothing fetched but /api/state
+        browser.close()
+    assert not errs, errs
+    api = [u for u in seen if u.startswith("/api/")]
+    assert set(api) == {"/api/state"}, api
