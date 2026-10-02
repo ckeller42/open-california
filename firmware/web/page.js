@@ -102,6 +102,15 @@ document.documentElement.lang = LANG;
 /** @type {Join|null} a submitted join being watched */
 let joining = null;
 
+/* uptime like the device's own screen (display_model.c): "45 s", "N min", "H h M min", "D d H h" */
+/** @param {number} ms @returns {string} */
+function fmtUptime(ms) {
+  const s = Math.floor(ms / 1000), min = Math.floor(s / 60), h = Math.floor(min / 60), d = Math.floor(h / 24);
+  if (!min) return s + " s";
+  if (!h) return min + " min";
+  return d ? d + " d " + (h % 24) + " h" : h + " h " + (min % 60) + " min";
+}
+
 /** @param {Device} d */
 function renderDevice(d) {
   const box = $("device");
@@ -109,14 +118,15 @@ function renderDevice(d) {
   box.appendChild(el("h2", t("device")));
   const w = d.wifi, age = d.link.last_snap_age_ms;
   box.appendChild(list([
-    [t("pairing"), d.pairing.state],
+    /* reconnected by the stored bond, the pairing flow never ran: "idle" would read as unpaired */
+    [t("pairing"), d.pairing.address && d.link.up && d.pairing.state === "idle" ? t("paired") : d.pairing.state],
     [t("address"), d.pairing.address || t("none")],
     [t("link"), t(d.link.up ? "link_up" : "link_down")],
     [t("last_update"), age === null ? t("none") : t("seconds_ago", {n: Math.round(age / 1000)})],
     [t("wifi"), t(MODE[w.mode] || "mode_off") + (w.ssid ? " · " + w.ssid : "")],
     [t("ip"), w.ip || t("none")],
     [t("signal"), w.rssi === null ? t("none") : w.rssi + " dBm"],
-    [t("uptime"), Math.round(d.uptime_ms / 1000) + " s"],
+    [t("uptime"), fmtUptime(d.uptime_ms)],
     [t("firmware"), d.fw],
   ]));
   if (w.mode === "station") {   // GET / is the calictl web UI in station mode

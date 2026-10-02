@@ -5,6 +5,7 @@
   "app_link": {"en": "Open the camper UI", "de": "Camper-Oberfläche öffnen"},
   "pairing": {"en": "Bluetooth pairing", "de": "Bluetooth-Kopplung"},
   "address": {"en": "Paired unit", "de": "Gekoppelte Einheit"},
+  "paired": {"en": "paired", "de": "gekoppelt"},
   "link": {"en": "Link to the camper unit", "de": "Verbindung zur Camper-Einheit"},
   "link_up": {"en": "connected", "de": "verbunden"},
   "link_down": {"en": "not connected", "de": "nicht verbunden"},
