@@ -145,7 +145,8 @@ slot keeps its copy until a later line reuses it).
 
 | Method + path | Answer |
 |---|---|
-| `GET /` | 200 `text/html` — the status/setup page: `strings_gen.h`'s `WEB_INDEX_HTML`, the byte array generated from `firmware/web/index.html` + `page.js` + `strings.json` (EN + DE) by `tools/gen_c_dict.py`. One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
+| `GET /` | Station mode: 200 `text/html; charset=utf-8` — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). Setup/off mode: the status/setup page (as `GET /device`). |
+| `GET /device` | 200 `text/html` in every mode — the status/setup page: `strings_gen.h`'s `WEB_INDEX_HTML`, the byte array generated from `firmware/web/index.html` + `page.js` + `strings.json` (EN + DE) by `tools/gen_c_dict.py`; in station mode it links back with "Open the camper UI". One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
 | `GET /api/state` | 200 JSON `{"t","fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,last_snap_age_ms}`, `wifi {mode,ssid,ip,rssi}`, `uptime_ms`, `fw`. Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
 | `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining) — the setup page turns it into one of three texts; in setup mode it also asks for a fresh scan for the next GET. |
 | `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
@@ -160,6 +161,32 @@ requests up to `NET_HTTP_REQ_MAX` (2048 B) of headers, no chunked bodies (400), 
 oversize; the response is streamed across as many ticks as the socket needs (`tcp_send` "would
 block" = retry next poll — never blocks, never spins); a connection idle for `CALI_HTTP_IDLE_MS`
 (5000 ms) is closed. The page polls `/api/state` every 2000 ms.
+
+### The satellite UI (`R_FW_SHARED_UI`)
+
+In station mode `GET /` serves calictl's own web UI — the same `calictl/webui` bytes buspi serves,
+inlined into one document by `tools/gen_c_dict.py` (`render_app_bundle`), gzipped with `mtime=0`
+(reproducible bytes) into `firmware/web/app_bundle_gen.h`; `--check` compares the decompressed
+document, so a stale bundle fails CI. The browser does the interpretation: the firmware's raw
+`/api/state` goes through `calictl/webui/semantics.js`, the JavaScript twin of
+`calictl/semantics.py`, pinned to it by the golden vectors in `tests/vectors/semantics.json`.
+`adaptSatellite` turns the body into the daemon's state shape and synthesizes `_meta`; `online` =
+link up and snapshot age ≤ 10 s (`SAT_STALE_S`), the same instant the CoreS3 screen goes stale. It
+is **read-only**: every control is shown greyed out, the page requests only `/` and `/api/state`,
+and a "Satellite — display only" banner says so. Device and WiFi details stay on `/device` (⋮ menu
+"Device & WiFi").
+
+Known gaps (accepted):
+
+- No water stale-hold: a parked, latched-low fresh tank shows unflagged on the satellite (calictl
+  holds it via `freshness.implausible_water_drop` + a persisted baseline).
+- No battery history chart; no pairing wizard (ESP pairs via console); no auto-camper.
+- UI changes reach the satellite only with a firmware rebuild + reflash.
+
+**Measured first load** (2026-10-02, thinky → CoreS3 over a 2.4 GHz home network, bench mock unit,
+`tools/esplab_ui_load.py`, 5 cold runs, fresh browser context each): median `loadEventEnd`
+**960 ms**, median time to a live state **1065 ms** (curl of the 51,574 B gzip body alone: median
+0.91 s). The bundle is 51,574 B gzipped, 79 % of `WEB_APP_GZ_MAX` (65,536 B).
 
 **Where the credentials live:** the kv store keys `wifi_ssid` / `wifi_psk` — NVS namespace `cali`
 on the device (esp_wifi's own NVS copy is off: `WIFI_STORAGE_RAM`, `CONFIG_ESP_WIFI_NVS_ENABLED=n`),
@@ -430,6 +457,11 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   and `T_FW_WEB_E2E`'s `test_wifi_loss_keeps_ble_link`; the scan gate by `test_session_fake.py`'s
   `test_wifi_scan_deferred_while_ble_pairing_is_active` / `test_wifi_scan_not_blocked_by_pairing_error`.
   Real radio coexistence is board-only ([network watch item 1](#network-watch-items-board-only)).
+- **`R_FW_SHARED_UI`** — verified by `T_SEMANTICS_JS_PARITY` (`tests/test_semantics_js_parity.py`,
+  `semantics.js` vs the Python golden vectors), `T_FW_APP_BUNDLE` (`tests/test_app_bundle.py`, the
+  generated bundle) and `T_FW_SHARED_UI_HOST` (`tests/firmware/test_web_e2e.py`, the host tier's
+  `STATE` equals Python's), plus `tests/e2e/test_satellite.py` (macOS/CI e2e, not autodoc'd) and
+  the board run (`tools/esplab_ui_load.py`, see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)).
 - **`R_FW_STATUS_DISPLAY`** — verified by `T_FW_DISPLAY_MODEL` (`tests/firmware/test_display_model.py`,
   every row state, the 10 s stale rule, the setup footer and the bright/dim timing through a C driver
   over `display_model.c`), `T_FW_DISPLAY_FONT` (`tests/test_display_font.py`, every EN/DE screen
