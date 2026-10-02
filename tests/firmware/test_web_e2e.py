@@ -25,10 +25,10 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from test_semantics_js_parity import same  # bool-strict deep equality (True != 1), one definition
 
 from calictl import anchors, protocol, semantics
 from calictl.serve import ServeBackend
+from tests.test_semantics_js_parity import same  # bool-strict deep equality (True != 1), one definition
 from tools import gen_c_dict
 from tools.gen_semantics_vectors import UI_FUNCTIONS
 from tools.wifi_consts import CONSTS
