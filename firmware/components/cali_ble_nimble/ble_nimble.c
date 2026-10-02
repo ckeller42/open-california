@@ -641,7 +641,10 @@ static int t_remove_bond(void) {
     int rc;
     while ((rc = first_bond(&id)) == 0) {
         rc = ble_store_util_delete_peer(&id);
-        if (rc != 0) return rc;
+        if (rc != 0) {
+            cali_log("ble: remove bond failed %d", rc);   /* the runner's RESETTING times out */
+            return rc;
+        }
     }
     return rc == BLE_HS_ENOENT ? 0 : rc;
 }
