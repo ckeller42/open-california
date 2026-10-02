@@ -236,7 +236,13 @@ static void feed_creds_set(void) {
 
 void cali_wifi_run_set_creds(const char *ssid, const char *psk) {
     uint8_t st = W.sm.st;
-    if (!W.net || !ssid || !psk || copy_creds(ssid, strlen(ssid), psk, strlen(psk)) != 0) return;
+    if (!W.net || !ssid || !psk) return;
+    /* The same network again while it joins or is joined (the setup page's retry of a POST whose
+     * answer got lost — the first one arrived): keep that join, never restart it. */
+    if (W.have_creds && (st == WIFI_CONNECTING || st == WIFI_ONLINE) && strcmp(ssid, W.ssid) == 0 &&
+        strcmp(psk, W.psk) == 0)
+        return;
+    if (copy_creds(ssid, strlen(ssid), psk, strlen(psk)) != 0) return;
     if (st == WIFI_SETUP_AP || st == WIFI_SETUP_AP_RETRYING) {
         feed_creds_set();
     } else if (st != WIFI_UNPROVISIONED) {

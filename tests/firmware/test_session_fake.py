@@ -752,6 +752,33 @@ def test_wifi_set_while_online_replaces_and_reconnects(fake):
     ]
 
 
+def test_wifi_same_creds_again_while_joining_is_a_no_op(fake):
+    """Review I1: the setup page retries a Connect whose answer got lost — the first POST may well
+    have arrived (the join's channel switch dropped the phone). The same SSID + PSK again while that
+    join runs must not restart it: no ``sta_stop``, no second ``sta_start``, no extra scan."""
+    out = run(
+        fake,
+        "wifi_boot",
+        "NET_AP_STARTED",
+        "NET_SCAN_DONE minsel",
+        "> wifi set minsel " + PSK,
+        "tick 100",
+        "> wifi set minsel " + PSK,
+        "tick 200",
+    )
+    rest = after(out, AP_UP)
+    assert rest.count("NET sta_start minsel " + PSK) == 1, rest
+    assert "NET sta_stop" not in rest and "NET scan" not in rest, rest
+    assert "LOG wifi: credentials replaced, reconnecting" not in rest, rest
+
+
+def test_wifi_same_creds_again_while_online_keeps_the_link(fake):
+    """... and once that join is online, the late retry keeps the station link up."""
+    out = run(fake, *_online("> wifi set minsel " + PSK, "tick 100"))
+    rest = after(out, "LOG wifi: online 192.168.1.42")
+    assert not [line for line in rest if line.startswith("NET ") or "replaced" in line], rest
+
+
 def test_wifi_scan_waits_while_a_scan_is_in_flight(fake):
     """A scan request while one is in flight (until its SCAN_DONE) is dropped, not queued."""
     out = run(

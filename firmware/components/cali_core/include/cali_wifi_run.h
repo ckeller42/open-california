@@ -43,7 +43,9 @@ extern "C" {
 void cali_wifi_run_init(const cali_net_t *net);
 void cali_wifi_run_boot(void);                       /* stored creds -> WEV_BOOT_WITH_CREDS, else _NO_CREDS */
 void cali_wifi_run_tick(uint64_t now_ms);
-void cali_wifi_run_set_creds(const char *ssid, const char *psk);   /* -> WEV_CREDS_SET */
+/* -> WEV_CREDS_SET; the same SSID + PSK again while CONNECTING or ONLINE is a no-op (the setup
+ * page's retry of a POST that arrived but whose answer got lost must not restart the join). */
+void cali_wifi_run_set_creds(const char *ssid, const char *psk);
 void cali_wifi_run_forget(void);                     /* -> WEV_CREDS_FORGET */
 const cali_wifi_state_t *cali_wifi_run_state(void);
 void cali_wifi_run_scan(void);                       /* starts a scan; its SCAN_DONE replaces the list
