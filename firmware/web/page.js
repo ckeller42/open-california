@@ -174,6 +174,8 @@ async function scan() {
   } catch (e) { if (still()) msg.textContent = t("err_net"); }
 }
 
+const CONNECT_RETRY_MS = 3000;  /* the one retry of a Connect POST that got no answer */
+
 async function connect() {
   const ssid = select("ssid").value, psk = input("psk").value, msg = $("setup-msg");
   if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
@@ -182,9 +184,21 @@ async function connect() {
   if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
     msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
   }
+  const send = () => fetch("/api/wifi", {cache: "no-store", method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})});
   try {
-    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/wifi", {
-      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})}));
+    let res;
+    try { res = await send(); }
+    catch (e) {
+      /* no answer: the phone can drop off the setup hotspot for a moment (the shared radio scans or
+       * switches channel) — say so, wait, and try once more */
+      msg.className = "";
+      msg.textContent = t("retrying");
+      await new Promise((done) => setTimeout(done, CONNECT_RETRY_MS));
+      msg.className = "bad";
+      res = await send();
+    }
+    const r = {body: /** @type {PostResult} */ (await res.json())};
     if (!r.body.ok) {
       const e = POST_ERROR[r.body.error || ""] || "err_json";
       msg.textContent = t(e, {max: e === "err_ssid" ? CFG.ssidMax : CFG.pskMax, min: CFG.pskMin});
