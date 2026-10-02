@@ -131,7 +131,8 @@ reads its state without going through buspi at all. It reuses the *design*, not 
 against the same golden vectors, and the frame codec is the same generated C already used for
 codec parity (`csrc/`, issue #156) — so the dictionary stays the single source of truth for both
 consumers. It is **read-only** (only the `1003` heartbeat is ever written) and, as of this writing,
-proven only on a Linux host build against a fake unit and in QEMU — no real hardware run yet. It
+proven on a Linux host build against a fake unit, in QEMU, and on a real CoreS3 against the Bumble
+mock unit over real BLE — not yet against the real camper unit. It
 also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
 then it serves a read-only status page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)
