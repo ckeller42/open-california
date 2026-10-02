@@ -48,6 +48,11 @@ void cali_wifi_run_forget(void);                     /* -> WEV_CREDS_FORGET */
 const cali_wifi_state_t *cali_wifi_run_state(void);
 void cali_wifi_run_scan(void);                       /* starts a scan; its SCAN_DONE replaces the list
                                                         (a failed one, nscan < 0, keeps the last list) */
+/* A scan nobody explicitly asked for (web.c: each setup-mode GET /api/wifi): like
+ * cali_wifi_run_scan(), but only if no scan started in the last NET_SCAN_MIN_INTERVAL_MS (by the
+ * tick's clock) — every scan takes the shared radio off the setup hotspot's channel. The first one
+ * (no scan started yet) always runs; the scan AP_START starts counts. */
+void cali_wifi_run_scan_auto(void);
 
 /* What the web page reports. */
 const char *cali_wifi_run_ssid(void);                /* the station SSID, or NULL when none */

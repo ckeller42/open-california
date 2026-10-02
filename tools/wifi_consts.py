@@ -32,7 +32,8 @@ CONSTS = {
     "NET_PAGE_POLL_MS": 2000,
     "NET_HTTP_PORT": 80,
     "NET_HTTP_REQ_MAX": 2048,
-    "NET_HTTP_BODY_MAX": 16384,
+    # The status/setup page budget (tests/test_web_strings.py): the rendered index_gen.html must fit.
+    "NET_HTTP_BODY_MAX": 20480,
     # Status display (#154, spec 2026-10-01): refresh, stale threshold, dimming, LVGL lock bound
     # (the tick runs on the NimBLE host task: never wait on a wedged render longer than this).
     "DISPLAY_REFRESH_MS": 500,
@@ -46,6 +47,14 @@ CONSTS = {
     "NET_PSK_MIN": 8,
     "NET_PSK_MAX": 63,
     "NET_SCAN_MAX": 16,
+    # Scans vs the setup hotspot (bench walk #154): one radio serves the softAP and the scan, so a
+    # scan that leaves the AP channel for whole seconds disassociates the phone on the setup page
+    # (its Connect POST then fails). Return to the AP channel between scanned channels (IDF
+    # home_chan_dwell_time, 30..150 ms) and keep each active channel short; and start at most one
+    # scan nobody explicitly asked for (a setup-page GET) per interval.
+    "NET_SCAN_HOME_DWELL_MS": 100,
+    "NET_SCAN_CHAN_MAX_MS": 60,
+    "NET_SCAN_MIN_INTERVAL_MS": 30000,
     # The satellite UI bundle (spec 2026-10-01 shared UI): gzipped calictl web UI served at GET /.
     # A budget for the flash array and the ~1 s first load over the single-connection core.
     "WEB_APP_GZ_MAX": 65536,

@@ -451,11 +451,20 @@ static int ap_stop(void) {
 }
 
 static int scan(void) {
+    /* The softAP shares the one radio: go back to its channel between scanned channels, short active
+     * dwell per channel, so a phone on the setup hotspot stays associated (bench walk #154: with the
+     * defaults under BLE coexistence it dropped for ~12 s and its Connect POST failed). */
+    wifi_scan_config_t cfg = {
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time.active.max = NET_SCAN_CHAN_MAX_MS,
+        .home_chan_dwell_time = NET_SCAN_HOME_DWELL_MS,
+        .coex_background_scan = true,          /* return home under coexistence too */
+    };
     esp_err_t err;
     if (!s_ready || s_scan_busy) return -1;   /* one at a time: the one in flight ends in SCAN_DONE */
     s_scan_busy = 1;
     s_scan_ms = cali_uptime_ms();
-    err = esp_wifi_scan_start(NULL, false);    /* async: WIFI_EVENT_SCAN_DONE */
+    err = esp_wifi_scan_start(&cfg, false);    /* async: WIFI_EVENT_SCAN_DONE */
     if (err != ESP_OK) {                       /* e.g. ESP_ERR_WIFI_STATE while a join runs */
         entry_t e;
         cali_log("net: esp_wifi_scan_start: %s", esp_err_to_name(err));

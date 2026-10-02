@@ -114,6 +114,20 @@ def test_fresh_device_opens_setup_and_joins(host_fw, hci_unit, tmp_path):
     assert not any(PSK in line for line in fw.log)  # the passphrase is never printed
 
 
+def test_setup_page_gets_scan_at_most_once_per_interval(host_fw, hci_unit, tmp_path):
+    """Bench walk #154: every setup-mode GET /api/wifi used to start a scan, and a real scan takes
+    the shared radio off the hotspot's channel — the phone on the page dropped and its Connect POST
+    failed. Repeated GETs inside NET_SCAN_MIN_INTERVAL_MS start no scan beyond the setup start's
+    own one (net_host.c logs each fake scan)."""
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\n")
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    fw.expect("LOG", lambda l: l == AP_UP)
+    for _ in range(6):
+        assert [a["ssid"] for a in get_json(fw, "/api/wifi")["scan"]] == ["minsel"]
+        time.sleep(0.3)  # a few 100 ms ticks: each scan's SCAN_DONE lands, so none is "in flight"
+    assert [line for line in fw.log if line == "LOG net: fake scan"] == ["LOG net: fake scan"], fw.log
+
+
 def test_wrong_password_returns_to_setup(host_fw, hci_unit, tmp_path):
     wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel fail auth\n")
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)

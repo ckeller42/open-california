@@ -21,7 +21,7 @@
 #define NET_AP_PSK "calictl-setup"
 #define NET_AP_SSID "calictl-esp-setup"
 #define NET_HOSTNAME "calictl-esp"
-#define NET_HTTP_BODY_MAX 16384
+#define NET_HTTP_BODY_MAX 20480
 #define NET_HTTP_PORT 80
 #define NET_HTTP_REQ_MAX 2048
 #define NET_JSON_MAX 8192
@@ -30,7 +30,10 @@
 #define NET_PSK_MIN 8
 #define NET_RETRY_MAX_MS 60000
 #define NET_RETRY_MIN_MS 1000
+#define NET_SCAN_CHAN_MAX_MS 60
+#define NET_SCAN_HOME_DWELL_MS 100
 #define NET_SCAN_MAX 16
+#define NET_SCAN_MIN_INTERVAL_MS 30000
 #define NET_SETUP_AFTER_MS 300000
 #define NET_SSID_MAX 32
 #define WEB_APP_GZ_MAX 65536

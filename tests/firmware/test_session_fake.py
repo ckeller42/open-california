@@ -767,6 +767,49 @@ def test_wifi_scan_waits_while_a_scan_is_in_flight(fake):
     assert [line for line in out if line == "NET scan"] == ["NET scan"] * 2  # boot's, then one more
 
 
+def test_wifi_page_scans_at_most_once_per_interval(fake):
+    """Bench walk #154: the setup page GETs ``/api/wifi`` on load and again a moment later, and every
+    scan takes the shared radio off the hotspot's channel (the phone on the page drops, its Connect
+    POST fails). A page-asked scan (``cali_wifi_run_scan_auto``) starts only if none started in the
+    last ``NET_SCAN_MIN_INTERVAL_MS`` — the setup start's own scan counts."""
+    gap = CONSTS["NET_SCAN_MIN_INTERVAL_MS"]
+    out = run(
+        fake,
+        "wifi_boot",  # AP_START's scan, at 0
+        "NET_AP_STARTED",
+        "NET_SCAN_DONE a",
+        "tick 100",
+        "webscan",
+        "tick 2100",
+        "webscan",
+        "tick %d" % (gap - 1),
+        "webscan",
+        "tick %d" % gap,
+        "webscan",  # the interval is over: one more
+        "NET_SCAN_DONE a",
+        "tick %d" % (gap + 100),
+        "webscan",
+    )
+    assert out.count("NET scan") == 2, out
+
+
+def test_wifi_first_page_scan_runs_at_once(fake):
+    """No scan yet (a station booting from saved creds never opened the hotspot): the first
+    page-asked scan starts right away, the next one inside the interval does not."""
+    out = run(
+        fake,
+        "kvset wifi_ssid minsel",
+        "kvset wifi_psk " + PSK,
+        "wifi_boot",
+        "tick 5000",
+        "webscan",
+        "NET_SCAN_DONE a",
+        "tick 5100",
+        "webscan",
+    )
+    assert out.count("NET scan") == 1, out
+
+
 def test_wifi_failed_scan_keeps_the_last_list(fake):
     """M2: a scan the radio refused or aborted (a join in flight: SCAN_DONE with nscan -1) keeps
     the last good list instead of blanking it ("No networks found"), and ends the in-flight scan so

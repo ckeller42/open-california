@@ -32,6 +32,9 @@ static struct {
     int nscan;
     int scan_in_flight;              /* net->scan() started, its SCAN_DONE not seen yet */
     int scan_wanted;                 /* held back by the BLE-pairing gate: start on a later tick */
+    int scanned;                     /* a scan started since init (scan_at is valid) */
+    uint64_t scan_at;                /* when the last scan started (the tick's clock) */
+    uint64_t now;                    /* the last tick's now_ms */
     int join_failed;                 /* a STA_START that could not start: FAILED(OTHER) next tick */
     int ap_running;                  /* ap_start() succeeded and no WACT_AP_STOP since */
     uint32_t last_fail;              /* the last WACT_LOG_REASON's reason; NONE after CREDS_SET/GOT_IP */
@@ -66,7 +69,11 @@ static void start_scan(void) {
         return;
     }
     W.scan_wanted = 0;
-    if (W.net->scan() == 0) W.scan_in_flight = 1;
+    if (W.net->scan() == 0) {
+        W.scan_in_flight = 1;
+        W.scanned = 1;
+        W.scan_at = W.now;
+    }
 }
 
 static const char *reason_name(uint32_t r) {
@@ -208,6 +215,7 @@ void cali_wifi_run_boot(void) {
 
 void cali_wifi_run_tick(uint64_t now_ms) {
     if (!W.net) return;
+    W.now = now_ms;
     if (W.join_failed) {                   /* a join that never started fails like a real one */
         W.join_failed = 0;
         feed(WEV_FAILED, CALI_NET_REASON_OTHER);
@@ -255,6 +263,10 @@ const cali_wifi_state_t *cali_wifi_run_state(void) { return &W.sm; }
 
 void cali_wifi_run_scan(void) {
     if (W.net) start_scan();
+}
+
+void cali_wifi_run_scan_auto(void) {
+    if (W.net && (!W.scanned || W.now - W.scan_at >= NET_SCAN_MIN_INTERVAL_MS)) start_scan();
 }
 
 const char *cali_wifi_run_ssid(void) { return W.have_creds ? W.ssid : NULL; }
