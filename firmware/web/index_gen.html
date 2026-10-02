@@ -50,7 +50,7 @@ a{color:var(--accent)}
 <section id="functions"></section>
 </main>
 <script>
-const CFG = {pollMs: 2000, host: "calictl-esp", ssidMax: 32, pskMin: 8, pskMax: 63};
+const CFG = {pollMs: 2000, connectTimeoutMs: 8000, connectRetryMs: 3000, host: "calictl-esp", ssidMax: 32, pskMin: 8, pskMax: 63};
 const STR = {"address":{"de":"Gekoppelte Einheit","en":"Paired unit"},"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"firmware":{"de":"Firmware","en":"Firmware"},"fn_airheater":{"de":"Luftstandheizung","en":"Air heater"},"fn_campingmode":{"de":"Campingmodus","en":"Camping mode"},"fn_cooler":{"de":"Kühlbox","en":"Cooler"},"fn_energy":{"de":"Energie","en":"Energy"},"fn_lighting":{"de":"Beleuchtung","en":"Lighting"},"fn_roof":{"de":"Aufstelldach","en":"Roof"},"fn_vehicle":{"de":"Fahrzeug","en":"Vehicle"},"fn_water":{"de":"Wasser","en":"Water"},"functions":{"de":"Camper-Einheit","en":"Camper unit"},"ip":{"de":"IP-Adresse","en":"IP address"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"last_update":{"de":"Letzte Aktualisierung","en":"Last update"},"link":{"de":"Verbindung zur Camper-Einheit","en":"Link to the camper unit"},"link_down":{"de":"nicht verbunden","en":"not connected"},"link_up":{"de":"verbunden","en":"connected"},"mode_off":{"de":"aus","en":"off"},"mode_setup":{"de":"Einrichtungs-Hotspot","en":"setup hotspot"},"mode_station":{"de":"verbunden","en":"connected"},"network":{"de":"Netzwerk","en":"Network"},"no_data":{"de":"Noch keine Daten von der Camper-Einheit.","en":"No data from the camper unit yet."},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"none":{"de":"keine","en":"none"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"paired":{"de":"gekoppelt","en":"paired"},"pairing":{"de":"Bluetooth-Kopplung","en":"Bluetooth pairing"},"password":{"de":"Passwort","en":"Password"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"seconds_ago":{"de":"vor {n} s","en":"{n} s ago"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"signal":{"de":"Signal","en":"Signal"},"title":{"de":"Camper-Status","en":"Camper status"},"uptime":{"de":"Laufzeit","en":"Uptime"},"wifi":{"de":"WLAN","en":"WiFi"}};
 </script>
 <script>
@@ -240,8 +240,6 @@ async function scan() {
   } catch (e) { if (still()) msg.textContent = t("err_net"); }
 }
 
-const CONNECT_RETRY_MS = 3000;  /* the one retry of a Connect POST that got no answer */
-
 async function connect() {
   const ssid = select("ssid").value, psk = input("psk").value, msg = $("setup-msg");
   if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
@@ -250,8 +248,13 @@ async function connect() {
   if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
     msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
   }
-  const send = () => fetch("/api/wifi", {cache: "no-store", method: "POST",
-    headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})});
+  /* a hanging POST (answers lost, connection still open) ends after CFG.connectTimeoutMs: the retry path */
+  const send = () => {
+    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), CFG.connectTimeoutMs);
+    return fetch("/api/wifi", {cache: "no-store", method: "POST", signal: ac.signal,
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})})
+      .finally(() => clearTimeout(timer));
+  };
   try {
     let res;
     try { res = await send(); }
@@ -260,7 +263,7 @@ async function connect() {
        * switches channel) — say so, wait, and try once more */
       msg.className = "";
       msg.textContent = t("retrying");
-      await new Promise((done) => setTimeout(done, CONNECT_RETRY_MS));
+      await new Promise((done) => setTimeout(done, CFG.connectRetryMs));
       msg.className = "bad";
       res = await send();
     }

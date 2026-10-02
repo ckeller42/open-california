@@ -184,8 +184,6 @@ async function scan() {
   } catch (e) { if (still()) msg.textContent = t("err_net"); }
 }
 
-const CONNECT_RETRY_MS = 3000;  /* the one retry of a Connect POST that got no answer */
-
 async function connect() {
   const ssid = select("ssid").value, psk = input("psk").value, msg = $("setup-msg");
   if (scanTimer !== null) { clearTimeout(scanTimer); scanTimer = null; }
@@ -194,8 +192,13 @@ async function connect() {
   if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
     msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
   }
-  const send = () => fetch("/api/wifi", {cache: "no-store", method: "POST",
-    headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})});
+  /* a hanging POST (answers lost, connection still open) ends after CFG.connectTimeoutMs: the retry path */
+  const send = () => {
+    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), CFG.connectTimeoutMs);
+    return fetch("/api/wifi", {cache: "no-store", method: "POST", signal: ac.signal,
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})})
+      .finally(() => clearTimeout(timer));
+  };
   try {
     let res;
     try { res = await send(); }
@@ -204,7 +207,7 @@ async function connect() {
        * switches channel) — say so, wait, and try once more */
       msg.className = "";
       msg.textContent = t("retrying");
-      await new Promise((done) => setTimeout(done, CONNECT_RETRY_MS));
+      await new Promise((done) => setTimeout(done, CFG.connectRetryMs));
       msg.className = "bad";
       res = await send();
     }

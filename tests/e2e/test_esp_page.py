@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from tools import ux_gallery
+from tools.wifi_consts import CONSTS
 
 sync_api = pytest.importorskip("playwright.sync_api")
 expect = sync_api.expect
@@ -95,6 +96,34 @@ def test_connect_retries_once_after_a_network_error(stub, page, locale, lang):
         assert pg.input_value("#psk") == ""
 
 
+def test_a_hanging_connect_times_out_into_the_retry(stub, page):
+    """Review M4: the answer is lost but the connection stays open (the phone is still associated):
+    the POST must not hang for good — after NET_CONNECT_TIMEOUT_MS it takes the retry path."""
+    posts = []
+
+    def on_post(route):
+        if route.request.method != "POST":
+            route.continue_()
+            return
+        posts.append(1)
+        if len(posts) > 1:
+            route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
+        # the first one: never answered (left pending)
+
+    wait = CONSTS["NET_CONNECT_TIMEOUT_MS"] + CONSTS["NET_CONNECT_RETRY_MS"] + 3000
+    with page(stub.base, locale="en-US") as pg:
+        pg.route("**/api/wifi", on_post)
+        pg.wait_for_selector("#ssid option[value=HomeNet]", state="attached")
+        pg.select_option("#ssid", "HomeNet")
+        pg.fill("#psk", "test-psk-1234")
+        pg.click("#connect")
+        expect(pg.locator("#setup-msg")).to_have_text(
+            STRINGS["retrying"]["en"], timeout=CONSTS["NET_CONNECT_TIMEOUT_MS"] + 2000
+        )
+        expect(pg.locator("#setup-msg")).to_have_text("Connecting to HomeNet…", timeout=wait)
+        assert len(posts) == 2
+
+
 def test_connect_gives_up_after_the_one_retry(stub, page):
     """Both POSTs unanswered: the page says the device did not answer (no endless retry)."""
     posts = []
@@ -113,7 +142,7 @@ def test_connect_gives_up_after_the_one_retry(stub, page):
         pg.fill("#psk", "test-psk-1234")
         pg.click("#connect")
         expect(pg.locator("#setup-msg")).to_have_text(STRINGS["err_net"]["en"], timeout=6000)
-        pg.wait_for_timeout(3500)
+        pg.wait_for_timeout(CONSTS["NET_CONNECT_RETRY_MS"] + 500)
         assert len(posts) == 2
 
 

@@ -20,6 +20,8 @@
 #define NET_AP_CLOSE_MS 30000
 #define NET_AP_PSK "calictl-setup"
 #define NET_AP_SSID "calictl-esp-setup"
+#define NET_CONNECT_RETRY_MS 3000
+#define NET_CONNECT_TIMEOUT_MS 8000
 #define NET_HOSTNAME "calictl-esp"
 #define NET_HTTP_BODY_MAX 20480
 #define NET_HTTP_PORT 80

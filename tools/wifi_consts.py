@@ -30,6 +30,10 @@ CONSTS = {
     "NET_RETRY_MAX_MS": 60000,
     "NET_SETUP_AFTER_MS": 300000,
     "NET_PAGE_POLL_MS": 2000,
+    # The setup page's Connect POST: give up on an answer after NET_CONNECT_TIMEOUT_MS, then retry
+    # once NET_CONNECT_RETRY_MS later (the phone can drop off the hotspot for a moment, bench walk).
+    "NET_CONNECT_TIMEOUT_MS": 8000,
+    "NET_CONNECT_RETRY_MS": 3000,
     "NET_HTTP_PORT": 80,
     "NET_HTTP_REQ_MAX": 2048,
     # The status/setup page budget (tests/test_web_strings.py): the rendered index_gen.html must fit.
