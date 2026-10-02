@@ -451,12 +451,12 @@ static int ap_stop(void) {
 }
 
 static int scan(void) {
-    /* The softAP shares the one radio: go back to its channel between scanned channels, short active
-     * dwell per channel, so a phone on the setup hotspot stays associated (bench walk #154: with the
-     * defaults under BLE coexistence it dropped for ~12 s and its Connect POST failed). */
+    /* The softAP shares the one radio: go back to its channel between scanned channels, so a phone
+     * on the setup hotspot stays associated (bench walk #154: with the defaults under BLE coexistence
+     * it dropped for ~12 s and its Connect POST failed). The per-channel dwell stays at the default:
+     * IDF requires it with Bluetooth on ("Should use default active scan time ..."). */
     wifi_scan_config_t cfg = {
         .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-        .scan_time.active.max = NET_SCAN_CHAN_MAX_MS,
         .home_chan_dwell_time = NET_SCAN_HOME_DWELL_MS,
         .coex_background_scan = true,          /* return home under coexistence too */
     };

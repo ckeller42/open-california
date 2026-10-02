@@ -167,17 +167,19 @@ def test_device_page_uptime_is_readable(stub, page, ms, text):
         expect(row).to_have_text(text)
 
 
+@pytest.mark.parametrize("state", ["idle", "bonded"])
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
-def test_device_page_says_paired_when_bonded_and_linked(stub, page, locale, lang):
+def test_device_page_says_paired_when_bonded_and_linked(stub, page, locale, lang, state):
     """Bench walk #154: a satellite that reconnected by its stored bond reports pairing state
-    "idle" (the pairing flow never ran this boot) — /device said "idle" next to a paired unit and a
-    live link. With an address and the link up it says paired; without the link the raw state."""
+    "idle" (the pairing flow never ran this boot), one fresh from a console pair "bonded" — /device
+    showed the raw word next to a paired unit and a live link (untranslated in DE). With an address
+    and the link up it says paired; without the link the raw state."""
     stub.mode = "station"
     dev = stub.fixtures["station"]["/api/state"]["device"]
-    dev["pairing"] = {"state": "idle", "address": "C0:FF:EE:CA:11:F0"}
+    dev["pairing"] = {"state": state, "address": "C0:FF:EE:CA:11:F0"}
     label = "dt:text-is('%s')" % STRINGS["pairing"][lang]
     with page(stub.base + "/device", locale=locale) as pg:
         row = pg.locator("#device " + label).locator("xpath=following-sibling::dd[1]")
         expect(row).to_have_text(STRINGS["paired"][lang])
         dev["link"]["up"] = False
-        expect(row).to_have_text("idle", timeout=6000)  # the next poll
+        expect(row).to_have_text(state, timeout=6000)  # the next poll

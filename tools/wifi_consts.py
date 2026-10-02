@@ -54,10 +54,10 @@ CONSTS = {
     # Scans vs the setup hotspot (bench walk #154): one radio serves the softAP and the scan, so a
     # scan that leaves the AP channel for whole seconds disassociates the phone on the setup page
     # (its Connect POST then fails). Return to the AP channel between scanned channels (IDF
-    # home_chan_dwell_time, 30..150 ms) and keep each active channel short; and start at most one
-    # scan nobody explicitly asked for (a setup-page GET) per interval.
+    # home_chan_dwell_time, 30..150 ms; the per-channel dwell stays at IDF's default, which it
+    # requires with Bluetooth on); and start at most one scan nobody explicitly asked for (a
+    # setup-page GET) per interval.
     "NET_SCAN_HOME_DWELL_MS": 100,
-    "NET_SCAN_CHAN_MAX_MS": 60,
     "NET_SCAN_MIN_INTERVAL_MS": 30000,
     # The satellite UI bundle (spec 2026-10-01 shared UI): gzipped calictl web UI served at GET /.
     # A budget for the flash array and the ~1 s first load over the single-connection core.

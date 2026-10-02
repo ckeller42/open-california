@@ -174,8 +174,10 @@ function renderDevice(d) {
   box.appendChild(el("h2", t("device")));
   const w = d.wifi, age = d.link.last_snap_age_ms;
   box.appendChild(list([
-    /* reconnected by the stored bond, the pairing flow never ran: "idle" would read as unpaired */
-    [t("pairing"), d.pairing.address && d.link.up && d.pairing.state === "idle" ? t("paired") : d.pairing.state],
+    /* a bonded address with a live link is paired: "idle" (reconnected by the stored bond, the
+     * pairing flow never ran) or "bonded" (fresh from a pair) would show a raw, untranslated word */
+    [t("pairing"), d.pairing.address && d.link.up && (d.pairing.state === "idle" || d.pairing.state === "bonded")
+      ? t("paired") : d.pairing.state],
     [t("address"), d.pairing.address || t("none")],
     [t("link"), t(d.link.up ? "link_up" : "link_down")],
     [t("last_update"), age === null ? t("none") : t("seconds_ago", {n: Math.round(age / 1000)})],
