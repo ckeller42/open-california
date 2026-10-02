@@ -119,6 +119,11 @@ function renderDevice(d) {
     [t("uptime"), Math.round(d.uptime_ms / 1000) + " s"],
     [t("firmware"), d.fw],
   ]));
+  if (w.mode === "station") {   // GET / is the calictl web UI in station mode
+    const a = el("a", t("app_link"));
+    a.href = "/";
+    box.appendChild(a);
+  }
 }
 
 /** @param {State["fn"]} fn */

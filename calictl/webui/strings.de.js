@@ -9,6 +9,7 @@ window.STRINGS_DE = {
   "Sending…": "Wird gesendet…",
 
   // --- ⋮ menu --------------------------------------------------------------------------------
+  "Device & WiFi": "Gerät & WLAN",
   "Bluetooth pairing…": "Bluetooth-Kopplung…",
   "Unpair…": "Entkoppeln…",
   "Unpair removes the working bond; telemetry stops until re-paired. Continue?":
@@ -276,6 +277,7 @@ window.STRINGS_DE = {
   "Pairing request failed": "Kopplungsanfrage fehlgeschlagen",
 
   // --- banners -------------------------------------------------------------------------------
+  "Satellite — display only": "Satellit — nur Anzeige",
   "🔒 Read-only — control is disabled on this daemon.":
     "🔒 Nur-Lesen — die Steuerung ist auf diesem Dienst deaktiviert.",
   "Offline — van asleep. Last data {clock} ({ago}).":

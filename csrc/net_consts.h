@@ -33,6 +33,7 @@
 #define NET_SCAN_MAX 16
 #define NET_SETUP_AFTER_MS 300000
 #define NET_SSID_MAX 32
+#define WEB_APP_GZ_MAX 65536
 enum {
     WIFI_UNPROVISIONED = 0,
     WIFI_SETUP_AP = 1,

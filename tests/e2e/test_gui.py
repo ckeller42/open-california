@@ -162,7 +162,7 @@ def base_url():
 
 
 @pytest.fixture
-def page(base_url):
+def page(base_url, error_gated_page):
     """A page whose uncaught JS errors FAIL the test that produced them.
 
     The web UI is un-built, client-side JS: a ReferenceError in a renderer only shows up when that
@@ -171,25 +171,8 @@ def page(base_url):
     else could see it. Now EVERY e2e test doubles as a runtime-error detector: `pageerror`
     (uncaught exceptions) and console `error`s are collected and asserted empty at teardown.
     """
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        pg = browser.new_page()
-        js_errors = []
-        pg.on("pageerror", lambda err: js_errors.append("pageerror: %s" % err))
-        pg.on(
-            "console",
-            lambda msg: (
-                js_errors.append("console.error: %s" % msg.text)
-                if msg.type == "error" and "favicon" not in msg.text
-                else None
-            ),
-        )
-        pg.goto(base_url)
-        try:
-            yield pg
-        finally:
-            browser.close()
-        assert not js_errors, "uncaught JS errors during this test:\n  " + "\n  ".join(js_errors)
+    with error_gated_page(base_url) as pg:
+        yield pg
 
 
 @pytest.fixture
@@ -868,3 +851,74 @@ def test_language_toggle_to_german(page):
     page.get_by_role("button", name="English").click()
     expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
     assert page.get_by_text("Kühlbox", exact=True).count() == 0
+
+
+def test_calictl_is_never_satellite(page):
+    # The same app.js runs on the ESP32 satellite; on calictl the satellite gates must stay off and
+    # semantics.js must still load (index.html serves it; unused here).
+    assert page.evaluate("() => typeof adaptSatellite") == "function"
+    assert page.evaluate("() => !!(STATE._meta && STATE._meta.satellite)") is False
+    page.click("#menu")
+    expect(page.locator(".menupop").get_by_text("Bluetooth pairing…")).to_be_visible()
+    assert page.locator(".menupop").get_by_text("Device & WiFi").count() == 0
+
+
+def test_unknown_runtime_is_restrictive(base_url):
+    # The ESP32 satellite runs this same app.js. Until a `_meta` answers we cannot tell it from calictl, so
+    # the page must stay restrictive: controls read-only, no pairing menu, and no request beyond
+    # "/" + static assets + /api/state (never /api/pairing|command|history|...).
+    seen = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        errs = []
+        pg.on("pageerror", lambda e: errs.append(str(e)))
+        pg.on("request", lambda r: seen.append(r.url.replace(base_url, "")))
+        pg.route(
+            "**/api/state",
+            lambda route: route.fulfill(status=200, content_type="text/plain", body="not json"),
+        )
+        pg.goto(base_url)
+        pg.wait_for_function("() => typeof STATE !== 'undefined' && document.querySelector('#app *')")
+        assert pg.evaluate("() => !STATE._meta && readOnly()") is True
+        pg.click("#menu")
+        menu = pg.locator(".menupop")
+        expect(menu).to_be_visible()
+        assert menu.get_by_text("Bluetooth pairing…").count() == 0
+        assert menu.get_by_text("Unpair…").count() == 0
+        pg.wait_for_timeout(2500)  # past one refresh tick: still nothing fetched but /api/state
+        browser.close()
+    assert not errs, errs
+    api = [u for u in seen if u.startswith("/api/")]
+    assert set(api) == {"/api/state"}, api
+
+
+def test_a_failed_first_poll_still_loads_pairing_once(base_url):
+    # Deploy restart on buspi: the page's first /api/state fails (503 {error}, no `_meta`). The
+    # one-off /api/pairing fetch must still happen once a calictl `_meta` answers on a later poll,
+    # or "Unpair…" (and the setup card's prominence) is lost for the page's whole life.
+    seen = []
+    fails = [1]
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        errs = []
+        pg.on("pageerror", lambda e: errs.append(str(e)))
+        pg.on("request", lambda r: seen.append(r.url.replace(base_url, "")))
+
+        def _first_fails(route):
+            if fails[0]:
+                fails[0] -= 1
+                route.fulfill(status=503, content_type="application/json", body='{"error": "state_failed"}')
+            else:
+                route.continue_()
+
+        pg.route("**/api/state", _first_fails)
+        pg.goto(base_url)
+        pg.wait_for_function("() => typeof STATE !== 'undefined' && !!STATE._meta", timeout=10000)
+        pg.click("#menu")
+        expect(pg.locator(".menupop").get_by_text("Unpair…")).to_be_visible()
+        pg.wait_for_timeout(2500)  # more polls: still fetched exactly once
+        browser.close()
+    assert not errs, errs
+    assert seen.count("/api/pairing") == 1, seen
