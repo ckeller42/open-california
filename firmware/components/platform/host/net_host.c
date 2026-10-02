@@ -322,6 +322,7 @@ static int ap_stop(void) {
 }
 
 static int scan(void) {
+    cali_log("net: fake scan");   /* tests count scans: each one costs the real hotspot's channel */
     return enqueue(CALI_NET_EV_SCAN_DONE) ? 0 : -1;
 }
 

@@ -12,8 +12,11 @@
  *   wcccd A H F       write a CCCD for A, chr_val_handle H, flags F (decimal)
  *   rcccd A H I       read (key peer_addr A, chr_val_handle H, idx I) -> rc=0 addr=XX h=H f=F
  *   dcccd A H I       delete (key peer_addr A, chr_val_handle H, idx I)
+ *   dtype N           delete an object of store type N (decimal), zeroed key — e.g. esp-nimble's
+ *                     PEER_ADDR (6) / CSFC (8), which its ble_store_util_delete_peer also deletes
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "host/ble_hs.h"
@@ -69,6 +72,8 @@ int main(int argc, char **argv) {
              * (ble_hs_pvcy_set_default_irk -> ble_store_config_init): the RAM store takes over. */
             ble_store_config_init();
             printf("rc=0\n");
+        } else if (strcmp(cmd, "dtype") == 0 && n >= 2) {
+            printf("rc=%d\n", ble_hs_cfg.store_delete_cb(atoi(a1), &key));
         } else if (strcmp(cmd, "ensure") == 0) {
             printf("rc=%d\n", cali_ble_store_ensure());
         } else if (strcmp(cmd, "wsec") == 0 && n >= 4 && (type = parse_type(a1)) > 0 &&

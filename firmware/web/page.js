@@ -102,6 +102,15 @@ document.documentElement.lang = LANG;
 /** @type {Join|null} a submitted join being watched */
 let joining = null;
 
+/* uptime like the device's own screen (display_model.c): "45 s", "N min", "H h M min", "D d H h" */
+/** @param {number} ms @returns {string} */
+function fmtUptime(ms) {
+  const s = Math.floor(ms / 1000), min = Math.floor(s / 60), h = Math.floor(min / 60), d = Math.floor(h / 24);
+  if (!min) return s + " s";
+  if (!h) return min + " min";
+  return d ? d + " d " + (h % 24) + " h" : h + " h " + (min % 60) + " min";
+}
+
 /** @param {Device} d */
 function renderDevice(d) {
   const box = $("device");
@@ -109,14 +118,17 @@ function renderDevice(d) {
   box.appendChild(el("h2", t("device")));
   const w = d.wifi, age = d.link.last_snap_age_ms;
   box.appendChild(list([
-    [t("pairing"), d.pairing.state],
+    /* a bonded address with a live link is paired: "idle" (reconnected by the stored bond, the
+     * pairing flow never ran) or "bonded" (fresh from a pair) would show a raw, untranslated word */
+    [t("pairing"), d.pairing.address && d.link.up && (d.pairing.state === "idle" || d.pairing.state === "bonded")
+      ? t("paired") : d.pairing.state],
     [t("address"), d.pairing.address || t("none")],
     [t("link"), t(d.link.up ? "link_up" : "link_down")],
     [t("last_update"), age === null ? t("none") : t("seconds_ago", {n: Math.round(age / 1000)})],
     [t("wifi"), t(MODE[w.mode] || "mode_off") + (w.ssid ? " · " + w.ssid : "")],
     [t("ip"), w.ip || t("none")],
     [t("signal"), w.rssi === null ? t("none") : w.rssi + " dBm"],
-    [t("uptime"), Math.round(d.uptime_ms / 1000) + " s"],
+    [t("uptime"), fmtUptime(d.uptime_ms)],
     [t("firmware"), d.fw],
   ]));
   if (w.mode === "station") {   // GET / is the calictl web UI in station mode
@@ -182,9 +194,26 @@ async function connect() {
   if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
     msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
   }
+  /* a hanging POST (answers lost, connection still open) ends after CFG.connectTimeoutMs: the retry path */
+  const send = () => {
+    const ac = new AbortController(), timer = setTimeout(() => ac.abort(), CFG.connectTimeoutMs);
+    return fetch("/api/wifi", {cache: "no-store", method: "POST", signal: ac.signal,
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})})
+      .finally(() => clearTimeout(timer));
+  };
   try {
-    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/wifi", {
-      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ssid: ssid, psk: psk})}));
+    let res;
+    try { res = await send(); }
+    catch (e) {
+      /* no answer: the phone can drop off the setup hotspot for a moment (the shared radio scans or
+       * switches channel) — say so, wait, and try once more */
+      msg.className = "";
+      msg.textContent = t("retrying");
+      await new Promise((done) => setTimeout(done, CFG.connectRetryMs));
+      msg.className = "bad";
+      res = await send();
+    }
+    const r = {body: /** @type {PostResult} */ (await res.json())};
     if (!r.body.ok) {
       const e = POST_ERROR[r.body.error || ""] || "err_json";
       msg.textContent = t(e, {max: e === "err_ssid" ? CFG.ssidMax : CFG.pskMax, min: CFG.pskMin});

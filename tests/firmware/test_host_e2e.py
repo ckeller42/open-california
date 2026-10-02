@@ -228,6 +228,29 @@ def test_unit_forgot_us_repairs(host_fw, hci_unit, tmp_path, race):
         assert any("GAP procedure initiated: terminate connection" in line for line in fw2.log[mark:])
 
 
+@pytest.mark.parametrize("when", ["live_link", "reconnecting"])
+def test_forget_reaches_idle_at_once(host_fw, hci_unit, when):
+    """#225: one ``forget`` ends in idle without a bond in under 2 s — on a live link (SNAPs
+    flowing) and while a background reconnect by bond is still connecting (held pending) — never
+    in resetting's timeout. (The board failure itself was the bond store's delete answering
+    ENOTSUP to esp-nimble; the store test pins that, this pins the flow.)"""
+    fw = host_fw(hci_unit)
+    _pair(fw, hci_unit)
+    fw.expect("SNAP", timeout=40)
+    if when == "reconnecting":
+        hci_unit.call(_hold_connects, hci_unit, True)
+        hci_unit.call(_drop_link, hci_unit.unit)
+        fw.expect("LOG ble: connect_bonded started", timeout=20)
+    mark = len(fw.log)
+    t0 = time.monotonic()
+    fw.send("forget")
+    s = fw.expect("STATE", lambda s: s["state"] in ("idle", "error"), timeout=15)
+    took = time.monotonic() - t0
+    hci_unit.call(_hold_connects, hci_unit, False)
+    assert s["state"] == "idle" and not s["address"], (s, fw.log[mark:])
+    assert took < 2.0, (took, fw.log[mark:])
+
+
 def test_pairing_mode_off_is_pairing_failed(host_fw):
     """The unit's pairing screen is closed: every attempt is refused -> pairing_failed after 3."""
     from .conftest import HciUnit

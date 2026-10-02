@@ -81,6 +81,20 @@ def test_delete_compacts_and_survives_restart(store_cli, tmp_path):
     assert run(store_cli, tmp_path, "wsec our 13 a3\nrsec our 13 0\n") == ["rc=0", "rc=0 addr=13 ltk=a3"]
 
 
+def test_delete_of_a_type_the_store_does_not_keep_is_enoent(store_cli, tmp_path):
+    """#225 (``forget`` timed out on the board): esp-nimble's ``ble_store_util_delete_peer`` also
+    deletes object types this store never keeps (PEER_ADDR 6, CSFC 8; ENC_ADV_DATA 5) and loops
+    ``ble_store_delete`` until it is not 0, requiring BLE_HS_ENOENT. Anything else (ENOTSUP) failed
+    the whole delete after the sec records were gone, so ``remove_bond`` failed and the runner sat
+    in RESETTING until its timeout. Nothing stored of that type = nothing to delete = ENOENT."""
+    run(store_cli, tmp_path, "wsec our 10 a0\nwsec peer 10 a0\n")
+    assert run(store_cli, tmp_path, "dtype 4\ndtype 5\ndtype 6\ndtype 7\ndtype 8\n") == ["rc=5"] * 5
+    assert run(store_cli, tmp_path, "rsec our 10 0\nrsec peer 10 0\n") == [  # untouched
+        "rc=0 addr=10 ltk=a0",
+        "rc=0 addr=10 ltk=a0",
+    ]
+
+
 def test_cccd_matching_write_delete_and_restart(store_cli, tmp_path):
     assert (
         run(store_cli, tmp_path, "wcccd 10 5 1\nwcccd 10 7 2\nwcccd 11 5 1\nwcccd 10 5 3\n") == ["rc=0"] * 4

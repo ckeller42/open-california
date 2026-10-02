@@ -153,9 +153,10 @@ static void api_wifi_get(cali_http_resp_t *resp) {
     }
     cali_json_arr_end(&j);
     finish_json(&j, resp);
-    /* the list above is the last SCAN_DONE; a fresh one for the next GET (the runner holds it back
-     * while a BLE pairing flow is active: the one coex gate, ruling R15) */
-    if (st.wifi_mode == CALI_WIFI_MODE_SETUP) cali_wifi_run_scan();
+    /* the list above is the last SCAN_DONE; a fresh one for a later GET — at most one per
+     * NET_SCAN_MIN_INTERVAL_MS (the page GETs twice on load, and each scan takes the radio off the
+     * hotspot's channel), held back while a BLE pairing flow is active (the coex gate, ruling R15) */
+    if (st.wifi_mode == CALI_WIFI_MODE_SETUP) cali_wifi_run_scan_auto();
 }
 
 /* ---- the fixed-shape {"ssid":"…","psk":"…"} parser ---- */

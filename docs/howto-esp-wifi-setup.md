@@ -46,6 +46,10 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
    joined your network it shows *Connected as 192.168.x.y. Join <your network> with this device
    too, then open:* followed by a link to **<http://calictl-esp.local>**.
 
+   While the satellite joins, its hotspot moves to your network's channel, so your phone may drop
+   off the setup WiFi for a moment; it comes back by itself and the page then shows the result.
+   (The page also retries a **Connect** that got no answer once, saying *Retrying the connection…*.)
+
    If joining failed, the page says why: *Wrong password — try again.*, *Network not found — check
    that it is in range, then try again.*, or *Could not join the network — try again.* The
    satellite forgets the failed password and keeps its setup hotspot open, so you can simply try

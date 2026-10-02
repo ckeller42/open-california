@@ -390,7 +390,7 @@ def test_delete_wifi_forgets(web_cli):
 
 def test_get_wifi_in_setup_lists_last_scan_and_rescans(web_cli):
     r, other = one(web_cli, "GET", "/api/wifi", setup=["wifi setup_ap", "ap minsel -48 1", "ap cafe -80 0"])
-    assert r.status == 200 and other == ["CALL scan"]
+    assert r.status == 200 and other == ["CALL scan_auto"]
     assert set(r.json()) == WIFI_GET_KEYS and all(set(ap) == AP_KEYS for ap in r.json()["scan"])
     assert r.json() == {
         "mode": "setup",
@@ -425,10 +425,10 @@ def test_get_wifi_last_error_null_without_a_failure(web_cli):
     "pair", ["scanning", "connecting", "waiting_passkey", "pairing", "verifying", "resetting"]
 )
 def test_get_wifi_leaves_the_ble_pairing_gate_to_the_runner(web_cli, pair):
-    """R15: the one BLE-coex scan gate lives in the WiFi runner (cali_wifi_run_scan defers a scan
+    """R15: the one BLE-coex scan gate lives in the WiFi runner (cali_wifi_run_scan_auto defers a scan
     while a pairing flow is active — tests/firmware/test_session_fake.py); web.c asks regardless."""
     r, other = one(web_cli, "GET", "/api/wifi", setup=["wifi setup_ap", "pair " + pair])
-    assert r.status == 200 and other == ["CALL scan"]
+    assert r.status == 200 and other == ["CALL scan_auto"]
 
 
 def test_get_wifi_in_station_mode_does_not_scan(web_cli):
