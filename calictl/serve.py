@@ -958,10 +958,10 @@ class Server:
         post = await target.actuate(
             self.funcs[function], frame, verify=not is_light, follow=control.commit_for(function), **kw
         )
-        if is_light:  # latch what we just configured (wake-up / door / favourite) — "as last set"
-            cur = self._last.get(function) or {}
-            written = control.decode_control(self.funcs[function], frame)
-            self._last = {**self._last, function: {**cur, **semantics.lighting_config(cur, written)}}
+        if is_light:
+            # No latch from our own frame: the wake-up / door / favourite config is latched only from
+            # the unit's own 1502 frames (poll + push) — a write-through echo is never proof of
+            # actuation, so an ACK-but-not-applied write must leave it unchanged (ruling R4).
             return await self._confirm_lighting(sess, function, what, value, before)
         if post is None:
             return None

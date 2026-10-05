@@ -939,6 +939,8 @@ def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
     sw = page.get_by_role("switch", name="Wake-up light")
     expect(tm).to_have_value("06:00", timeout=15000)
     expect(sw).to_have_attribute("aria-checked", "true")
+    bodies = []
+    page.on("request", lambda rq: bodies.append(rq.post_data) if rq.url.endswith("/api/command") else None)
     tm.fill("07:00")  # one change, like a user; the field must keep it through re-renders
     expect(tm).to_have_value("07:00")
     page.wait_for_function(
@@ -956,6 +958,11 @@ def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
         arg=base_url,
         timeout=15000,
     )
+    page.wait_for_timeout(300)  # let the request events drain
+    sent = [json.loads(b)["value"] for b in bodies]
+    # a time edit carries NO on/off (the daemon fills the unit-reported one); the switch's does
+    assert sent[0].startswith("07:00") and sent[0].split()[-1] not in ("on", "off")
+    assert sent[1].endswith(" off")
 
 
 def test_door_contact_switch_round_trips(page, base_url):

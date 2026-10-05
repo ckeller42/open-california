@@ -1713,8 +1713,8 @@ def _light_server(monkeypatch, pushes):
     return s, writes
 
 
-def test_wakeup_write_latches_the_config_into_the_served_state(monkeypatch):
-    """.. test:: The daemon latches the wake-up config from its own write and the unit's echo
+def test_wakeup_write_is_not_latched_only_the_units_own_frames_are(monkeypatch):
+    """.. test:: The daemon never latches the wake-up config from its OWN write (ACK-but-not-applied stays unknown)
     :id: T_SERVE_LIGHT_LATCH
     :links: R_LIGHT_CONFIG_LATCH
     """
@@ -1730,7 +1730,11 @@ def test_wakeup_write_latches_the_config_into_the_served_state(monkeypatch):
     asyncio.run(_run())
     assert writes[0] == "0e146ac49c701101eeeeeeeeeeeeeeee"
     st = serve.ServeBackend(s, None).state()["lighting"]
-    assert st["wakeup"]["time"] == "07:00" and st["wakeup"]["enabled"] is True  # survived the Mode-16 push
+    # Controller ruling R4: the latch is fed only by the unit's 1502 frames, never by the frame we
+    # wrote (a write-through echo is not proof of actuation); the unit pushed no Mode-20 frame here.
+    assert st["wakeup"] is None
+    # and a CLI time-only edit with no config must not make the card look unit-reported
+    assert "WakeupTimestamp" not in s._last["lighting"]
 
 
 def test_save_profile_with_colour_writes_the_set_color_preface_first(monkeypatch):
