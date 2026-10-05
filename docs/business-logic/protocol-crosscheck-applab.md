@@ -170,7 +170,7 @@ The frames in this document were captured by hand. The app-fidelity harness rege
 committed recordings: `tools/applab/walk.py <scenario>` writes `tests/vectors/app/<scenario>.jsonl`
 and CI replays it against `control.build` (`tests/test_app_recordings.py`,
 `python3 -m tools.capture_diff <file> --recording`); `tools/app_parity.py` reports the connection
-lifecycle. See {doc}`../simulation-and-testing`.
+lifecycle. See `simulation-and-testing`.
 
 First recording session (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools/applab/README.md`
 "Linux host"): four scenarios are now **APP-RECORDED** and replay clean against `control.build`:
