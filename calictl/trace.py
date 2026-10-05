@@ -36,6 +36,8 @@ from collections.abc import Iterator
 DEFAULT_MAX_BYTES = 50 * 1024 * 1024
 _FN_BY_CHAR: dict[str, str] | None = None
 _TRACER: Tracer | None = None
+# What a recorder writes instead of the 1002 payload (SHA-256 tail of the VIN — PII by proxy).
+REDACTED_VIN_HASH = "<vin-hash>"
 
 
 def char_short(uuid: str) -> str:

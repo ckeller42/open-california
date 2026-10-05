@@ -122,3 +122,38 @@ def test_every_scenario_loads_and_builds():
     for name in names:
         scen = capture_diff.load_scenario(name)
         assert control.build(funcs, scen.function, scen.what, scen.value, scen.state), name
+
+
+def test_frames_jsonl_equals_the_frames_file(tmp_path):
+    """--frames also takes an app recording (JSONL): its write events, 1003/f000 skipped."""
+    import json
+
+    rows = [
+        {"recorded_by": "app 5.0.8.3028", "date": "2026-10-02", "avd": "lab34", "scenario": "cooler"},
+        {"t": 1.0, "ev": "connect", "conn": 1, "t_ms": 0},
+        {
+            "t": 1.1,
+            "ev": "write",
+            "char": "1003",
+            "fn": "heartbeat",
+            "hex": "00000000",
+            "conn": 1,
+            "t_ms": 100,
+        },
+        {
+            "t": 1.2,
+            "ev": "write",
+            "char": "1101",
+            "fn": "cooler",
+            "hex": "3d4300000000",
+            "conn": 1,
+            "t_ms": 200,
+        },
+    ]
+    jl = tmp_path / "cooler.jsonl"
+    jl.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    txt = tmp_path / "frames.txt"
+    txt.write_text("1101: 3d4300000000\n")
+    assert capture_diff.parse_frames_file(jl) == capture_diff.parse_frames_file(txt)
+    pytest.importorskip("yaml")
+    assert capture_diff.run(str(jl), "cooler/power-on", frames=True) == 0

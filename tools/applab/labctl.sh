@@ -14,13 +14,13 @@
 # Config via env (defaults suit the 2026 California lab):
 #   LAB_DIR       lab install root (env.sh, sdk/, apks/)   [/Volumes/External/android-lab]
 #   BUMBLE_PY     a python with `bumble` installed          [$LAB_DIR/venv-bumble/bin/python]
-#   AVD           emulator AVD name                          [cali34]
+#   AVD           emulator AVD name                          [lab34]  (Mac lab: export AVD=cali34)
 #   FAKE_UNIT_VIN the VIN typed into the app (REQUIRED for a fresh pair; never committed)
 #   APP_ID / APP_ACTIVITY  app package / activity            [de.volkswagen.CaliforniaOnTour/…]
 set -euo pipefail
 
 LAB_DIR="${LAB_DIR:-/Volumes/External/android-lab}"
-AVD="${AVD:-cali34}"
+AVD="${AVD:-lab34}"   # thinky's AVD; the Mac lab is cali34 (export AVD=cali34 there)
 BUMBLE_PY="${BUMBLE_PY:-$LAB_DIR/venv-bumble/bin/python}"
 APP_ID="${APP_ID:-de.volkswagen.CaliforniaOnTour}"
 APP_ACTIVITY="${APP_ACTIVITY:-de.volkswagen.caliontour.development.CaliforniaOnTourMainActivity}"
@@ -34,7 +34,14 @@ FAKE_FIFO="$STATE/fake_unit.in"   # scenario console: `echo 'set airheater Error
 command -v adb >/dev/null || { echo "adb not on PATH — is LAB_DIR ($LAB_DIR) correct?" >&2; exit 1; }
 
 emu_up()  { adb devices | grep -q 'emulator-.*device$'; }
-fake_up() { pgrep -f 'applab/fake_unit_ble.py' >/dev/null; }
+# By pid file, never by pattern: on thinky the ESP's fake (UB500) runs the same script.
+fake_up() { [ -f "$FAKE_PID" ] && kill -0 "$(cat "$FAKE_PID")" 2>/dev/null; }
+stop_fake() {   # SIGTERM only: a hard kill leaves a ghost radio in netsim
+  fake_up || { rm -f "$FAKE_PID"; return 0; }
+  kill -TERM "$(cat "$FAKE_PID")"
+  for _ in $(seq 1 20); do fake_up || break; sleep 0.5; done
+  rm -f "$FAKE_PID"
+}
 
 start_emulator() {
   emu_up && { echo "emulator: already up"; return; }
@@ -49,13 +56,13 @@ start_emulator() {
 }
 
 start_fake() {
-  if fake_up; then echo "fake: already up (pkill for a restart)"; return; fi
+  if fake_up; then echo "fake: already up (labctl.sh fake for a restart)"; return; fi
   : "${FAKE_UNIT_VIN:?set FAKE_UNIT_VIN to the VIN typed into the app}"
   [ -x "$BUMBLE_PY" ] || { echo "no bumble python at $BUMBLE_PY (set BUMBLE_PY)" >&2; exit 1; }
   echo "fake: starting (keys persist; stable address = bond survives restarts)…"
   # The fake makes its own scenario FIFO ($FAKE_FIFO) and reads it in a thread, so no stdin wiring.
   ( cd "$REPO" && FAKE_UNIT_VIN="$FAKE_UNIT_VIN" FAKE_UNIT_FIFO="$FAKE_FIFO" \
-      nohup "$BUMBLE_PY" tools/applab/fake_unit_ble.py >>"$FAKE_LOG" 2>&1 & echo $! >"$FAKE_PID" )
+      nohup "$BUMBLE_PY" tools/applab/fake_unit_ble.py android-netsim >>"$FAKE_LOG" 2>&1 & echo $! >"$FAKE_PID" )
   sleep 6
   fake_up && tail -1 "$FAKE_LOG" || { echo "fake failed to start — see $FAKE_LOG" >&2; exit 1; }
 }
@@ -65,9 +72,9 @@ launch_app() { adb shell am start -n "$APP_ID/$APP_ACTIVITY" >/dev/null 2>&1 && 
 case "${1:-status}" in
   up)     start_emulator; start_fake; launch_app
           echo "lab up. If the app can't find the vehicle, re-pair: Account > Vehicle > Bluetooth Reset, then the wizard." ;;
-  fake)   pkill -TERM -f 'applab/fake_unit_ble.py' 2>/dev/null && sleep 2 || true; start_fake ;;
+  fake)   stop_fake; start_fake ;;
   down)   echo "stopping fake cleanly (SIGTERM → netsim drops the radio)…"
-          pkill -TERM -f 'applab/fake_unit_ble.py' 2>/dev/null && sleep 3 || true
+          stop_fake
           adb emu kill 2>/dev/null || true
           # netsimd is a SEPARATE long-lived process that outlives the emulator, and it is what
           # holds a hard-killed fake's radio. Killing the emulator alone leaves that ghost, so a

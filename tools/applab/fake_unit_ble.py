@@ -12,6 +12,9 @@ Run (emulator started with ``-packet-streamer-endpoint default``; needs ``bumble
 
     FAKE_UNIT_VIN=<vin typed into the app> python tools/applab/fake_unit_ble.py [android-netsim]
 
+With ``FAKE_UNIT_RECORD=<path.jsonl>`` every GATT and link event is appended to that file
+(``tools.fake_unit_peripheral.Recorder``; ``tools/applab/walk.py`` sets it per scenario).
+
 Then, via the scenario-console FIFO (``FAKE_UNIT_FIFO``, default ``$TMPDIR/applab/fake_unit.in``;
 one command per ``echo … > "$FIFO"``), live scenario control (each change notifies subscribers):
 
@@ -94,6 +97,7 @@ async def main():
             keystore=KEYSTORE_PATH,
             vin=VIN,
             fixed_passkey=int(FIXED) if FIXED else None,
+            record=os.environ.get("FAKE_UNIT_RECORD") or None,
         )
         loop = asyncio.get_event_loop()
 

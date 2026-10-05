@@ -163,3 +163,25 @@ and retries silently — so they are calictl's own contribution, not a mirror of
 `0x0E` link drop on out-of-range values; water measurement-gating / stale latch; deep-sleep and
 advertising stop when parked; real motor withhold (~3 s) and travel time; `1502` Mode-4 ramp
 notifications; readback-is-an-echo; RPA rotation.
+
+## Automated recordings (harness)
+
+The frames in this document were captured by hand. The app-fidelity harness regenerates them as
+committed recordings: `tools/applab/walk.py <scenario>` writes `tests/vectors/app/<scenario>.jsonl`
+and CI replays it against `control.build` (`tests/test_app_recordings.py`,
+`python3 -m tools.capture_diff <file> --recording`); `tools/app_parity.py` reports the connection
+lifecycle. See `simulation-and-testing`.
+
+First recording session (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools/applab/README.md`
+"Linux host"): four scenarios are now **APP-RECORDED** and replay clean against `control.build`:
+
+- `tests/vectors/app/energy-mode.jsonl` — Max `10` and Normal `00` (+ neutral `30`), both matched.
+- `tests/vectors/app/campingmode.jsonl` — master OFF `fc` / ON `fd` (+ neutral `ff`), both matched.
+- `tests/vectors/app/airheater-permanent-on.jsonl` — the greyed Permanent-Heating switch is inert
+  (no write), confirming the "can be activated only in the vehicle" gate.
+- `tests/vectors/app/session.jsonl` — the two-connection lifecycle (connect → background drop →
+  foreground reconnect); `tools/app_parity` prints one section per connection + the reconnect gap.
+
+Still to record (deferred — the real-app UI is mapped in `tools/applab/scenarios.py` but each needs
+a slider/sub-screen pass, and the lighting screen crashed the emulator on this bench): `cooler`,
+`airheater`, `lighting-zone`, `lighting-profile`, `lighting-wakeup`, `roof-hold`.

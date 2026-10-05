@@ -25,6 +25,7 @@ for how strongly each fact is proven.
 | Pairing over a virtual radio (`tests/test_pairing_link.py`) | the fake unit as a Bumble peripheral, Bumble `LocalLink` | the real pairing runner + state machine with real SMP passkey pairing | `test` |
 | Pairing over real BlueZ (`tests/realstack/`) | the same fake unit, real BlueZ + kernel in a VM | calictl's real `BluezTransport` (D-Bus agent, scan, connect, Pair, bond probe) | `pairing-real-stack` (not required yet) |
 | App lab (`tools/applab/`) | the **vendor Android app** in an emulator against the fake unit | that the fake behaves like the unit *as the app sees it*, and app-vs-calictl frame diffs | manual (local only) |
+| App recordings (`tests/vectors/app/`) | the real app's recorded GATT steps and writes, per scenario and APK version (none committed yet) | that calictl's frames equal the app's on the fields the app targets | `test` |
 | C codec parity (`csrc/`) | the C port of the codec and three decision ports | Python and C produce identical results | `codec-parity` |
 
 `tools/ci.sh` runs most of this locally. It skips `gui-e2e` without Playwright and the C tests
@@ -224,6 +225,36 @@ It is local-only tooling: nothing from the APK or the emulator is committed. Set
 App **captures** from the real van are a separate path. `tools/capture_diff.py` diffs an HCI
 capture against a scenario in `tools/scenarios/<fn>/<case>.yaml` (see the `capture-and-diff`
 skill).
+
+## App recordings (`tests/vectors/app/`)
+
+The app lab can **record** what the real app does. `tools/applab/walk.py <scenario>` starts the
+fake unit with `FAKE_UNIT_RECORD`, walks the app through the steps in `tools/applab/scenarios.py`,
+and writes `tests/vectors/app/<scenario>.jsonl`: a header line naming the app version, then every
+connect, read, subscribe, write (the `1003` heartbeat included), notification and disconnect the
+unit saw, in calictl's trace schema, merged with the runner's `step` events. `1002` is stored as
+`<vin-hash>`; passkeys are never stored.
+
+```sh
+~/esp-venv/bin/python tools/applab/walk.py cooler            # on thinky, lab up (tools/applab/README.md)
+python3 -m tools.capture_diff tests/vectors/app/cooler.jsonl --recording
+python3 -m tools.app_parity tests/vectors/app/session.jsonl  # app / calictl / ESP lifecycle report
+```
+
+**Replay** runs in CI without an emulator: `tests/test_app_recordings.py` attributes every
+non-neutral write to the step that caused it and requires `control.build` to produce the same
+values on the fields the app targets. Known gaps live in `capture_diff.GAPS` and fail once calictl
+closes them. **Parity report:** `tools/app_parity.py` prints the app's connection lifecycle (MTU,
+subscribe order, heartbeat start and period, reads, disconnects) next to calictl's and the ESP
+satellite's. It is a report, not a test: nothing asserts.
+
+**Recorded, not generated.** There is no `--check`: a new APK version means re-recording by hand
+on thinky and committing the new files, with the evidence-ledger rows that name them. The header's
+`recorded_by` is the only version signal.
+
+Status: `tests/vectors/app/` is **empty** until the first recording session on thinky (it needs the
+APK). Until then no evidence-ledger row is APP-RECORDED. The owed scenarios are `airheater-permanent-on`,
+`energy-mode`, `lighting-profile` and `lighting-wakeup`, plus `cooler` and `airheater`.
 
 ## C codec parity (`csrc/`)
 

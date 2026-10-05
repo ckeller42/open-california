@@ -26,8 +26,8 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 | airheater `timer` HH:MM (`B0`, TimerHour/TimerMin) | APP-OBSERVED (2026-09-27, inventory screens 35-37): the "Start heating at" wheel set to 09:31 + OK → `3f7b007f091f` (`TimerHour` byte 4 = `0x09`, `TimerMin` byte 5 = `0x1f`), **identical** to calictl's `timer 09:31`; written on OK, no confirm, does not arm. Pinned by `T_AIRHEATER_TIMER_TIME` + `tools/scenarios/airheater/timer-time.yaml` | unit-side: does the unit store TimerHour/TimerMin, and does 1702 read them back (mock assumes yes) |
 | fault dialogs: heater ErrorCode 1–5, cooler Error 1–3, 11 energy flags, water InfoPopUps (fresh 1–5/7, waste 1–3) → the app's exact dialog texts | APP-OBSERVED (fake unit injection 2026-09-16; `alert-states.md`, `cooler-airheater.md`) | unit-side: which real conditions raise each code (only cooler door-open and heater codes have ever been seen live) |
 | `Installed` bit gates a function's tile; stairs / LR-heater / satellite / roof-A/C screens + vocabulary | APP-OBSERVED (Installed flipped on the fake unit) | — (not fitted on this van) |
-| airheater **permanent-ON** (NOT wired — only OFF is known) | unknown | app: enable permanent heating → learn the ON value |
-| energy `mode` (EnergyModeSet 0/1/2) | DECOMPILE | app: switch eco/normal/max → diff 1601 frames |
+| airheater **permanent-ON** | **APP-RECORDED** 2026-10-05 (`tests/vectors/app/airheater-permanent-on.jsonl`): the Permanent-Heating switch is **inert** when continuous heating is off — greyed "can be activated only in the vehicle", and tapping it sends **no frame** | in-vehicle only: the ON value is not reachable from the app, so it cannot be learned here |
+| energy `mode` — Normal `00` / Max `10` (EnergyModeSet 0/1; +neutral `30`) | **APP-RECORDED** 2026-10-05 (`tests/vectors/app/energy-mode.jsonl`): both match `control.build` on the targeted field | — (ECO not offered on this profile / not BLE-reachable, §ECO) |
 | lighting `profile` activate + `save_profile` (favorite define) | DECOMPILE | app: activate a favorite; edit+save a favorite → diff 1501 frames |
 | lighting **wake-up TIME** (`m0`, Mode 20 — LightValue bitmask packing unknown) | unknown | app: arm a wake-up alarm → learn the Timestamp + LightValue packing |
 | roof drive end-to-end (frames match app; motor never driven by calictl) | DECOMPILE + partial DEVICE | calictl drives the roof with ignition on, owner-watched |
@@ -96,6 +96,25 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   the next Connect; with the unit refusing pairing (`PAIRING_NOT_SUPPORTED`, "not in Gerät
   verbinden") the app retries silently with `autoConnect` and never shows an error. Table in
   `protocol-crosscheck-applab.md` "Pairing".
+- **APP-RECORDED (2026-10-05, app 5.0.8.3028, thinky lab34 — the app-fidelity harness, #154):** the
+  first committed recordings under `tests/vectors/app/`, each replayed against `control.build` in CI
+  (`tests/test_app_recordings.py`): `energy-mode.jsonl` (Max `10` / Normal `00` / neutral `30`,
+  matched), `campingmode.jsonl` (master OFF `fc` / ON `fd` / neutral `ff`, matched),
+  `airheater-permanent-on.jsonl` (the Permanent-Heating switch is inert when continuous heating is
+  off — no frame), and `session.jsonl` (two-connection lifecycle: connect → background drop →
+  foreground reconnect, `conn` 1 then 2).
+- **APP-RECORDED (2026-10-05, same harness, task 6b):** `lighting-zone.jsonl` — All-lights master
+  OFF→ON writes `0c10` (profile `LIGHTS_ON`, matches `control.build("lighting","power","on")`), and
+  the **Kitchen** zone's *Cooking* lamp at 50 % writes `0904…eeeeeee5…` (`BrightnessLSeven`=L7=5,
+  matches `control.build("lighting","kitchen",5)`). Both replay clean. The app groups lamps into
+  named zones (Reading Lights, **Kitchen** = *Background Lighting*=L5 + *Cooking*=L7, Pop-up roof,
+  Exterior Light), confirming the DEVICE `LIGHT_ZONES` map below with the app's own EN labels. The
+  lighting control screen renders fine under the emulator's NVIDIA `-gpu host` (the crash was a
+  SwiftShader-only software-render fault). And `airheater.jsonl` — immediate heating set in the
+  INACTIVE state: temperature level 8 `3f78007f1f3f`, run time 60 min `3f7b003c1f3f`, then Immediate
+  heating ON `3d7b007f1f3f`, all matching `control.build` (once active the app locks the run-time
+  slider and shifts the toggle, so those are the reachable writes). Still to record (harness proven,
+  scenarios mapped): `cooler`, `lighting-profile`, `lighting-wakeup`, `roof-hold`.
 - energy current scales — DECOMPILE (2026-09-07): `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` ÷10 → A
   (`xf/d.java:159,173,175`, holders bound `xf/a.java:150-157,239,307`), `IDcdcAfs` unscaled A + the
   SW-0409/0410 `+2` (`xf/d.java:171`). Plausibility from 14 d telemetry: `batt2_current` raw −49…318

@@ -53,6 +53,68 @@ removable volumes mid-session (`Operation not permitted` on every read while exe
 run) — grant *Files and Folders → Removable Volumes* to the terminal app, or keep the Bumble venv
 on the internal disk.
 
+## One-time setup (Linux x86_64 with KVM — thinky)
+
+The APK ships x86_64 native libraries, so on an x86_64 Linux host the emulator runs the
+`google_apis;x86_64` image natively under KVM, headless. `tools/applab/setup_linux.sh` installs
+everything idempotently under `~/android-lab` (SDK + emulator + image, AVD `lab34` on a `pixel_6`
+profile, `grpcio`/`protobuf` into the Bumble venv, the APK by `scp` from `pi@buspi:~/apks/`). It
+stops with the exact command when a prerequisite is missing: group `kvm`, Java 17, `unzip`, and
+`loginctl enable-linger` (netsim's `netsim.ini` lives in `$XDG_RUNTIME_DIR`, which systemd removes
+when the last ssh session ends).
+
+```sh
+tools/applab/setup_linux.sh
+export LAB_DIR=~/android-lab AVD=lab34 BUMBLE_PY=~/esp-venv/bin/python
+. $LAB_DIR/env.sh
+FAKE_UNIT_VIN=$(cat $LAB_DIR/vin) tools/applab/labctl.sh up
+adb install -r "$(ls $LAB_DIR/apks/*.apk | head -1)"
+```
+
+The emulator flag that bridges netsim Bluetooth is `-packet-streamer-endpoint default`
+(`labctl.sh up` passes it); boot it by hand with
+`emulator -avd lab34 -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -packet-streamer-endpoint default`.
+
+**GPU on thinky (2026-10-05): `swiftshader_indirect` CRASHES the CaliforniaOnTour app.** The
+software renderer (SwiftShader Vulkan *and* GLES, and Xvfb+llvmpipe) segfaults qemu the moment the
+app renders its home/onboarding screens — the whole emulator dies with no log line (benign apps like
+Settings render fine; it is the app's Skia/Compose content). The emulator must render on the NVIDIA
+GPU: thinky has an xrdp Xorg session on the NVIDIA card at display `:10`
+(`/usr/lib/xorg/Xorg :10 … xorg_nvidia_auto.conf`, owner uid 1000). Boot the emulator against it:
+
+```sh
+DISPLAY=:10 XAUTHORITY=/run/xrdp/sockdir/1000/Xauthority \
+  "$ANDROID_SDK_ROOT/emulator/emulator" -avd lab34 -no-window -no-audio -no-boot-anim -no-snapshot \
+  -gpu host -packet-streamer-endpoint default >/tmp/applab/emulator.log 2>&1 &
+```
+
+The log then reads `Graphics Adapter … NVIDIA GeForce RTX 3090 Ti` and the app is stable. Needs a live
+`:10` session (check `ls /tmp/.X11-unix`; `DISPLAY=:10 glxinfo | grep renderer` must say NVIDIA).
+`labctl.sh up` still passes `swiftshader_indirect`, so on thinky launch the emulator by hand with the
+command above, then `labctl.sh fake` for the fake unit. Also: on a cold start grant location once so
+the permission sheet does not block automation — `adb shell pm grant de.volkswagen.CaliforniaOnTour
+android.permission.ACCESS_FINE_LOCATION` (+ `ACCESS_COARSE_LOCATION`).
+
+**Reconnect / ghost radios (recording caveat).** After the fake restarts (every `walk.py` scenario
+does), netsimd can keep a stale radio at the fake's identity so the app reconnects to a dead link and
+stalls ("Connection lost. Reconnecting…", then a spinner that only polls `vehicle`). Clearing it needs
+an emulator restart (netsimd is separate and outlives the emulator). A cold emulator reboot in turn
+drops the Android↔fake bond, so the app then *re-pairs* on Connect, and that re-pair has been seen to
+drop with `reason=19` right after the passkey — leaving the session wedged. Net effect first seen
+2026-10-05: onboarding + the first full connect work, but `walk.py`'s per-scenario fake restart could
+not be driven to a clean reconnect on this netsim. A boot-from-snapshot (pair once → snapshot → boot
+the snapshot per scenario: bond intact *and* fresh netsim) is the untried candidate fix.
+
+`$LAB_DIR/vin` (mode 600) holds the test VIN the app was set up with — never print it, never
+commit it. **If buspi is offline when you run setup**, the APK copy is skipped with a note; copy it
+by hand once buspi is back (`scp pi@buspi:~/apks/*.apk ~/android-lab/apks/`), then `adb install -r`.
+
+**Radio separation.** On thinky a second fake unit serves the ESP satellite over the UB500 radio
+(find it by USB id `2357:0604` → `hci-socket:<N>`, the index moves across reboots); it runs the same
+script, so `labctl.sh` and `walk.py` only ever signal the pid in `$TMPDIR/applab/fake_unit.pid` —
+the app's fake is on `android-netsim`, the ESP's on the UB500. Never point both fakes at one
+transport, never start NetworkManager, never touch the `wlx*`/`enp1s0` interfaces.
+
 ## Each session
 
 ```sh
@@ -150,7 +212,7 @@ tools/applab/labctl.sh down                                       # stop the fak
 | `labctl.sh` subcommand | What it does |
 |---|---|
 | `up` | start the emulator if it is down (headless, netsim Bluetooth), start the fake if it is down, launch the app. Idempotent. |
-| `fake` | (re)start only the fake unit: `SIGTERM` a running one, then start it again (needs `FAKE_UNIT_VIN`) |
+| `fake` | (re)start only the fake unit: `SIGTERM` the one in the pid file, then start it again (needs `FAKE_UNIT_VIN`) |
 | `status` (default) | emulator / fake / `netsimd` up or down, plus the scenario-console command line |
 | `down` | `SIGTERM` the fake (so netsim drops its radio), kill the emulator, then stop `netsimd` |
 
@@ -174,6 +236,7 @@ State lives in `${TMPDIR:-/tmp}/applab/`: `fake_unit.log`, `fake_unit.pid`, `emu
 | `FAKE_UNIT_RPA_S` | fake | `600` | resolvable-private-address rotation period, seconds |
 | `FAKE_UNIT_HEARTBEAT_TIMEOUT_S` | fake | `15` | drop a link with no `1003` beat for this long (after the first beat) |
 | `FAKE_UNIT_PAIRING_GRACE_S` | fake | `90` | the same, before the first beat (passkey entry) |
+| `FAKE_UNIT_RECORD` | fake | unset (off) | append every GATT/link event to this JSONL file (`walk.py` sets it; `1002` written as `<vin-hash>`, passkeys never) |
 | `BUMBLE_LOGLEVEL` | fake | `INFO` | `DEBUG` adds the ATT/SMP trace |
 | `OC_REPO` | fake | the checkout containing the script | repo root put on `sys.path` |
 | `ADB` / `ANDROID_SDK_ROOT` | `adbui.py` | `$ANDROID_SDK_ROOT/platform-tools/adb`, else `adb` | which `adb` to run |
@@ -215,6 +278,63 @@ content-description), `tree` (nodes with bounds/clickable/checked), `shot <name>
 `$APPLAB_SHOTS`, default `./applab-shots` — keep it out of the repo). The app is Compose, so
 switches show up as clickable `View`s with `checked`; sliders and the roof press-and-hold switch
 are plain images — drive them by coordinates.
+
+## Recording a scenario (`walk.py`)
+
+`tools/applab/walk.py <scenario>…` records the app doing one scripted thing
+(`tools/applab/scenarios.py`) into `tests/vectors/app/<scenario>.jsonl`, which CI replays against
+`control.build` (`tests/test_app_recordings.py`). Per scenario it SIGTERMs the lab's fake, starts a
+fresh one with `FAKE_UNIT_RECORD`, runs the steps with a screenshot after each
+(`$TMPDIR/applab/shots/`), SIGTERMs the fake and writes the header + the merged events. A failed
+step stops the run, leaves the fake running and prints the last screenshot — fix the selector or
+the XY point and run it again; nothing retries.
+
+```sh
+. $LAB_DIR/env.sh
+~/esp-venv/bin/python tools/applab/walk.py cooler airheater
+python3 -m tools.capture_diff tests/vectors/app/cooler.jsonl --recording    # the replay, write by write
+python3 -m tools.app_parity tests/vectors/app/session.jsonl                  # app / calictl / ESP lifecycle
+```
+
+`--live --esp-fifo <the ESP fake's FIFO>` also records, after every step, the app's visible texts
+and the ESP satellite's `/api/state` + page texts; `set`/`raw` console lines then go to both fakes
+(link commands such as `forget` only to the app's). Recordings are made by hand once per APK
+version; commit them with the evidence-ledger rows they flip.
+
+### Measuring XY points
+
+Sliders, the roof hold and the time wheels have no text to tap, so `scenarios.XY` holds named
+screen points, valid only for the screen in `scenarios.XY_SCREEN` (`walk.py` refuses any other).
+To measure one: open the screen, run `python3 tools/applab/adbui.py tree`, take the control's
+bounds `[x1, y1, x2, y2]` and use the centre for a tap; for a slider use
+`x = x1 + (x2 - x1) * fraction` at the centre `y` (level 8 of 1–10 → fraction 7/9); a long press
+appends the hold in ms; a wheel row is `(x, y, x, y - 145)`. Check the point with
+`adb shell input tap x y` and a screenshot before committing it.
+
+### Coachmarks (one-time info sheets per tile)
+
+Each control tile opens the first time behind a one-time **info coachmark** that covers the
+controls — Lighting shows a one-sheet "LIGHTING … press and hold the selected profile" (dismiss:
+**Close**), the Air heater a 4-page "IMMEDIATE HEATING" tutorial (**Skip**/Next), and so on. The
+"seen" flag lives in app data: it is set once the sheet is viewed and **does not reappear in the
+same session**, but a boot from the `clean_paired` snapshot (which `applab-record.sh` does between
+retries) resets it. So a scenario that opens a tile either needs a dismiss step (when the coachmark
+is present, e.g. `lighting-zone`'s `ui("^Close$")`) or expects it already dismissed (e.g.
+`airheater`, recorded after the sheet was skipped once in the session). The robust habit for a
+recording session: open each tile once by hand and dismiss its coachmark before running `walk.py`
+without a dismiss step.
+
+### Pairing is a DHKEY flake — retry, don't reboot per attempt (task 6b, 2026-10-05)
+
+A fresh pair fails intermittently with `pairing failure (DHKEY_CHECK_FAILED)` → the central drops
+the link with `reason=19` right after the passkey (the passkey itself verifies — all 20 SC steps
+pass). It is a Bumble SC/ECDH value-dependent flake (#228 family), ~50 % per attempt on a healthy
+boot and worse once the emulator has been rebooted many times (netsim degrades, `GOAWAY` in
+`emulator.log`). What works: **one** fresh boot from `clean_paired` (NVIDIA `-gpu host`), then retry
+the walk **without** rebooting between attempts — `walk.py` SIGTERMs its own fake so netsim keeps no
+ghost, and the reboot does not help the DHKEY roll. `lighting-zone` and `airheater` each landed in
+≤ 2 attempts this way. Reboot only when `adb`/netsim actually wedges (Another-emulator-instance, or
+`adb` hangs), and when you do, wait for `qemu-system-x86_64` to fully exit before relaunching.
 
 ## What the app itself told us (2026-09-16)
 
