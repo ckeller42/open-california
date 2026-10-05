@@ -226,3 +226,80 @@ def test_every_scenario_is_well_formed():
                 fn, what, value = s.expect
                 st = protocol.decode(funcs[fn], bytes.fromhex(base[fn]))
                 assert control.build(funcs, fn, what, value, st) is not None, (name, s)
+
+
+class DeadEsp:
+    """An unreachable ESP: state() reports the error, texts() would raise like a Chromium goto."""
+
+    closed = False
+
+    def __init__(self, url=None):
+        pass
+
+    def state(self):
+        return {"error": "timed out"}
+
+    def texts(self, screen):
+        raise RuntimeError("page.goto: net::ERR_NAME_NOT_RESOLVED")
+
+    def close(self):
+        DeadEsp.closed = True
+
+
+def test_an_unreachable_esp_skips_the_live_capture_and_the_walk_completes(tmp_path, monkeypatch):
+    stopped = []
+    monkeypatch.setattr(walk, "STATE", tmp_path)
+    monkeypatch.setattr(walk, "start_fake", lambda raw, vin: type("P", (), {"pid": 1})())
+    monkeypatch.setattr(walk, "app_vin", lambda: "x")
+    monkeypatch.setattr(walk, "app_version", lambda: "1.0")
+    monkeypatch.setattr(walk, "_stop_child", lambda proc: stopped.append(proc))
+    monkeypatch.setattr(walk, "EspProbe", DeadEsp)
+    monkeypatch.setattr(walk, "Lab", lambda fifos, log, shots: FakeLab(screens=[["Go"]]))
+    monkeypatch.setitem(walk.SCENARIOS, "t", [ui("^Go$")])
+    import calictl.trace as trace
+
+    monkeypatch.setattr(trace, "read_events", lambda p: iter(()))
+    rc = walk.record("t", tmp_path, tmp_path, live=True, esp_fifo="/x", esp_url="http://esp.invalid")
+    assert rc == 0 and len(stopped) == 1  # the fake was SIGTERM'd
+    _, events = capture_diff.load_recording(tmp_path / "t.jsonl")
+    evs = [e for _, e in events]
+    assert any(
+        e["ev"] == "note" and "ESP unreachable at http://esp.invalid" in e["text"] and "skipped" in e["text"]
+        for e in evs
+    )
+    assert not [e for e in evs if e["ev"] in ("app_screen", "esp_state")]
+
+
+def test_raw_mirrors_to_both_fifos_and_forget_to_the_app_only(tmp_path, monkeypatch):
+    monkeypatch.setattr(walk.adbui, "SHOTS", str(tmp_path))
+    paths = [tmp_path / "app.in", tmp_path / "esp.in"]
+    fds = []
+    for p in paths:
+        os.mkfifo(p)
+        fds.append(os.open(p, os.O_RDONLY | os.O_NONBLOCK))
+    try:
+        lab = walk.Lab([str(p) for p in paths], tmp_path / "fake.log", tmp_path)
+        lab.fifo("raw 1502 00")
+        got = [os.read(fd, 4096) for fd in fds]
+        lab.fifo("forget")
+        got2 = [os.read(fd, 4096) for fd in fds]
+    finally:
+        for fd in fds:
+            os.close(fd)
+    assert got == [b"raw 1502 00\n", b"raw 1502 00\n"]
+    assert got2 == [b"forget\n", b""]
+
+
+def test_lab_pair_propagates_the_wizard_result(tmp_path, monkeypatch):
+    monkeypatch.setattr(walk.adbui, "SHOTS", str(tmp_path))
+    lab = walk.Lab(["/x"], tmp_path / "fake.log", tmp_path)
+    monkeypatch.setattr(pair_wizard, "main", lambda: False)
+    assert lab.pair() is False
+    monkeypatch.setattr(pair_wizard, "main", lambda: True)
+    assert lab.pair() is True
+
+
+def test_an_empty_fifo_command_is_a_clear_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(walk.adbui, "SHOTS", str(tmp_path))
+    with pytest.raises(ValueError, match="empty"):
+        walk.Lab(["/x"], tmp_path / "fake.log", tmp_path).fifo("  ")

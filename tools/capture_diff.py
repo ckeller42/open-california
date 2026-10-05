@@ -272,6 +272,7 @@ RECORDING_EVENTS = frozenset(
         "step",
         "app_screen",
         "esp_state",
+        "note",
     }
 )
 SKIP_CHARS = frozenset({"1003", "f000"})  # liveness heartbeat + the unmodelled generic write

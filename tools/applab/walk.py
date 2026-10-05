@@ -89,6 +89,8 @@ class Lab:
         return (size.group(1) if size else "?", int(dens.group(1)) if dens else 0)
 
     def fifo(self, cmd: str) -> str | None:
+        if not cmd.strip():
+            raise ValueError("empty fifo command")
         targets = self.fifos if cmd.split()[0] in STATE_COMMANDS else self.fifos[:1]
         for path in targets:
             try:
@@ -411,9 +413,21 @@ def record(
 
     raw = STATE / ("%s.raw.jsonl" % name)
     proc = start_fake(raw, app_vin())
+    esp = EspProbe(esp_url) if live else None
+    notes: list[dict] = []
+    if esp is not None:
+        try:
+            err = esp.state().get("error")
+        except Exception as e:  # noqa: BLE001 - any probe failure means "unreachable"
+            err = str(e)
+        if err:
+            msg = "live: ESP unreachable at %s — skipped (%s)" % (esp_url, err)
+            print("walk %s: %s" % (name, msg), flush=True)
+            notes.append({"t": time.time(), "ev": "note", "text": msg})
+            esp.close()
+            esp, live = None, False
     fifos = [str(STATE / "fake_unit.in")] + ([esp_fifo] if live and esp_fifo else [])
     lab = Lab(fifos, STATE / "fake_unit.log", shots)
-    esp = EspProbe(esp_url) if live else None
     try:
         events = run_steps(name, SCENARIOS[name], lab, esp=esp)
     except StepFailed as e:
@@ -429,7 +443,7 @@ def record(
             esp.close()
     _stop_child(proc)
     out = out_dir / ("%s.jsonl" % name)
-    write_recording(out, recording_header(app_version(), name), list(read_events(raw)), events)
+    write_recording(out, recording_header(app_version(), name), list(read_events(raw)), notes + events)
     print("walk %s: wrote %s" % (name, out), flush=True)
     return 0
 
@@ -441,6 +455,7 @@ def main(argv=None) -> int:
         "--live", action="store_true", help="also record the app's and the ESP satellite's screens per step"
     )
     ap.add_argument("--esp-fifo", help="the ESP-side fake unit's console FIFO (required with --live)")
+    # Task 6 passes the bench route (the ESP is reached via the wlx stick, not mDNS on the wired path)
     ap.add_argument("--esp-url", default="http://calictl-esp.local")
     ap.add_argument("--out", type=Path, default=REPO / "tests" / "vectors" / "app")
     ap.add_argument("--shots", type=Path, default=STATE / "shots")
