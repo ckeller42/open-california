@@ -356,35 +356,148 @@ def test_serve_refuses_a_roof_move_under_a_blocking_alert_but_never_a_stop(mock,
     asyncio.run(_run())
 
 
-def test_roof_move_takes_the_single_connection_slot_from_the_persistent_session(mock):
-    """The unit has ONE connection slot. `actuate_roof` opens its own session, so a live persistent
-    session would be a SECOND connection and the unit refuses it — and reusing that session instead
-    is not an option, because it runs a 1003 heartbeat while the roof's arming contract requires
-    none (the SafetyCounter is the liveness proof, #150). So the roof hands the slot over first.
+async def _real_wait(seconds):
+    """A real-time wait: the ``mock`` fixture turns ``asyncio.sleep`` into a no-op."""
+    try:
+        await asyncio.wait_for(asyncio.Event().wait(), seconds)
+    except TimeoutError:
+        pass
 
-    Found by modelling the single slot in the mock: `actuate_roof` has never driven a real motor, so
-    this path had never met hardware. Without `drop_for_handover` this test fails on the mock the
-    same way it would fail at the van.
+
+def _log_unit_writes(unit):
+    """Record the ORDER of 1003 beats and roof frames reaching the unit: ``[("beat"|"roof", byte0)]``."""
+    events = []
+    real_write = unit.write
+
+    def _write(uuid, data):
+        if uuid == device.HEARTBEAT_CHAR:
+            events.append(("beat", None))
+        elif uuid == unit.funcs["roof"].control_char:
+            events.append(("roof", bytes(data)[0]))
+        return real_write(uuid, data)
+
+    unit.write = _write
+    return events
+
+
+def test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking(mock):
+    """A roof move with a live persistent session runs INSIDE it: the 1003 heartbeat keeps ticking
+    between the move frames, the single slot is never released or re-taken (the mock's ``one_slot``
+    stays happy), and a release STOP still interrupts the move at once, lock-free.
+
+    Replaces the #198 handover test. That handover existed only because the roof contract was read
+    as "no 1003 heartbeat during a roof move"; the decompile shows the app keeps its session-global
+    heartbeat ticking during roof moves (#235), so calictl now follows the app and reuses the
+    session instead of dropping it.
+
+    .. test:: Roof move inside the live session: heartbeat interleaved, one slot, immediate STOP
+       :id: T_ROOF_IN_SESSION_MOCK
+       :links: R_ROOF_ACTUATE, R_PERSISTENT_SESSION
     """
+    import time
+
     from calictl import serve
 
     mock.one_slot = True  # model the unit's single slot
     s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
     s._read_only = False
     s._last["roof"] = {"Installed": 1, "InfoPopUp": 0, "Position": 0}
+    stop_latency = []
+
+    async def _release():
+        # hold for >= 2 beats into the move (bounded), then release -> STOP
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline and sum(e[0] == "beat" for e in events[n0:]) < 2:
+            await _real_wait(0.05)
+        t0 = time.monotonic()
+        await s.on_command("roof", "stop", None)
+        stop_latency.append(time.monotonic() - t0)
 
     async def _run():
+        nonlocal n0
         s._ble = asyncio.Lock()
         s._persistent = True
         # No supervisor task in a bare Server, so bring the session up the way it would.
         async with s._ble:
             await s._sessions._connect_once()
-        assert s._live_session() is not None, "persistent session did not come up"
-        await s.on_command("roof", "open", None)  # must not fail on a busy slot
+        sess = s._live_session()
+        assert sess is not None, "persistent session did not come up"
+        holder = mock.holder
+        n0 = len(events)
+        rel = asyncio.ensure_future(_release())
+        await asyncio.wait_for(s.on_command("roof", "open", None), timeout=10.0)
+        await rel
+        survived = s._live_session() is sess  # checked while the loop (and its heartbeat) is alive
+        return holder, survived
 
-    asyncio.run(_run())
+    events = _log_unit_writes(mock)
+    n0 = 0
+    holder, survived = asyncio.run(_run())
 
-    assert any(fn == "roof" for fn, _frame in mock.writes), "the roof move never reached the unit"
+    move = events[n0:]
+    roof_idx = [i for i, e in enumerate(move) if e[0] == "roof"]
+    assert roof_idx, "the roof move never reached the unit"
+    beats_in_move = [i for i, e in enumerate(move) if e[0] == "beat" and roof_idx[0] < i < roof_idx[-1]]
+    assert beats_in_move, "the 1003 heartbeat must tick between the roof frames"
+    assert move[roof_idx[-1]] == ("roof", 0x00), "the move ends in a STOP"
+    assert mock.holder is holder, "the single slot was released/re-taken (handover) instead of reused"
+    assert survived, "the persistent session must survive the roof move"
+    assert stop_latency and stop_latency[0] < 0.5, "release STOP must be immediate (lock-free)"
+
+
+def test_roof_opens_and_closes_on_the_mock_with_the_heartbeat_ticking(mock, monkeypatch):
+    """calictl's own roof drive moves the mock roof open and closed from a COLD unit (never armed,
+    no session), with the 1003 heartbeat ticking alongside the SafetyCounter stream. The mock
+    honours a roof frame only while the heartbeat has armed the unit, so a heartbeat-less drive
+    (the pre-#235 contract) leaves the roof where it was.
+
+    The unit's clock follows real time here; the withhold and per-step travel are shortened so the
+    full open + close takes a few seconds.
+
+    .. test:: calictl opens and closes the mock roof with the heartbeat ticking
+       :id: T_ROOF_MOCK_OPEN_CLOSE_HEARTBEAT
+       :links: R_ROOF_ACTUATE
+    """
+    import time
+
+    from tools import mock_unit
+
+    monkeypatch.setattr(mock_unit, "ROOF_WITHHOLD_S", 0.2)
+    monkeypatch.setattr(mock_unit, "ROOF_STEP_S", 0.3)
+    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.05)
+    funcs = _funcs()
+    f = funcs["roof"]
+    stop = control.roof_frame(funcs, "stop")
+    assert mock.armed is False and mock.decoded("roof")["Position"] == 0
+
+    async def _ticker(done):
+        last = time.monotonic()
+        while not done.is_set():
+            await _real_wait(0.05)
+            now = time.monotonic()
+            mock.tick(now - last)
+            last = now
+
+    async def _drive(direction):
+        done = asyncio.Event()
+        tick = asyncio.ensure_future(_ticker(done))
+        try:
+            await device.CamperDevice("MO:CK").actuate_roof(
+                f,
+                control.roof_frame(funcs, direction),
+                stop,
+                max_duration_s=8.0,
+                validate_s=2.0,
+                limit_positions=control.roof_limit_positions(direction),
+                verify=False,
+            )
+        finally:
+            done.set()
+            await tick
+        return mock.decoded("roof")["Position"]
+
+    assert asyncio.run(_drive("open")) == 1  # closed -> middle -> open
+    assert asyncio.run(_drive("close")) == 0  # open -> middle -> closed
 
 
 def test_read_only_is_default_and_refuses_writes(mock):

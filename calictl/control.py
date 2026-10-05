@@ -4,7 +4,8 @@ Shared by the CLI (`calictl set`) and the daemon (`serve.on_command`) so both
 build identical frames. Cooler/camping frames are written under a 1003 liveness heartbeat
 (`device.actuate` -> `_arm`), which is what arms actuation on-device (issue #2); the daemon's
 lighting path writes bare on an awake unit (persistent session, `arm=False`); roof streams its
-own SafetyCounter after a plain handshake (`device.actuate_roof`, no heartbeat)."""
+own SafetyCounter at once with the 1003 heartbeat ticking but no pre-arm delay
+(`device.actuate_roof`, as the app does, #235)."""
 
 from __future__ import annotations
 

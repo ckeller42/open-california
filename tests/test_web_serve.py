@@ -763,8 +763,10 @@ def _roof_server(monkeypatch, order):
 
 def test_roof_move_skips_the_session_warmup(monkeypatch):
     """A roof move must NOT warm the persistent session first: no ``set_mode("connect")`` and no
-    wait for the session (a wait would be the full ``CALICTL_SESSION_WAIT_S`` here), because the
-    move takes the single slot for its own connection and would close that session unused.
+    wait for the session (a wait would be the full ``CALICTL_SESSION_WAIT_S`` here) — the press
+    must reach the unit at once. With no session up, the move opens its own connection (1003
+    heartbeat on, as the app's ticks during roof moves, #235); a live session is reused instead
+    (:func:`test_roof_move_reuses_a_live_session`).
     Intent is still recorded (manual release cleared, UI active) and the supervisor is nudged
     AFTER the move so the fast path comes back.
 
@@ -799,19 +801,40 @@ def test_roof_move_skips_the_session_warmup(monkeypatch):
     assert woke is True and s._sessions._backoff_fails == 0  # supervisor nudged after the move
 
 
-def test_roof_move_still_drops_a_live_session_for_handover(monkeypatch):
-    """Skipping the warm-up must not skip the handover: an ALREADY-live persistent session is
-    closed before ``actuate_roof`` opens its own connection (single slot, #198)."""
+class _LiveRoofSess:
+    """A live persistent session spy: records roof moves/one-shot writes and any close."""
+
+    is_up = True
+
+    def __init__(self, order):
+        self._order = order
+
+    async def actuate_roof(
+        self, f, move_frame, stop_frame, verify=True, stop_event=None, limit_positions=None
+    ):
+        self._order.append(("sess.actuate_roof", f.name))
+
+    async def actuate(self, f, frame, verify=True, **_k):
+        self._order.append(("sess.actuate", f.name, frame[0]))
+
+    async def aclose(self):
+        self._order.append(("aclose",))
+
+
+def test_roof_move_reuses_a_live_session(monkeypatch):
+    """A roof move with a live persistent session runs INSIDE that session — no handover drop, no
+    second connection. The app keeps its 1003 heartbeat ticking during roof moves (decompile, #235),
+    so the session's heartbeat is app-faithful; the old #198 handover (close the session because
+    "the roof contract forbids a heartbeat") is gone.
+
+    .. test:: A roof move reuses the live persistent session (heartbeat ticking, no handover)
+       :id: T_ROOF_REUSES_SESSION
+       :links: R_ROOF_ACTUATE, R_PERSISTENT_SESSION
+    """
     order = []
     s = _roof_server(monkeypatch, order)
-
-    class FakeSess:
-        is_up = True
-
-        async def aclose(self):
-            order.append(("aclose",))
-
-    s._sessions._session = FakeSess()
+    s._sessions._session = _LiveRoofSess(order)
+    s._sessions.session_state = "up"
 
     async def _run():
         s._ble = asyncio.Lock()
@@ -819,8 +842,24 @@ def test_roof_move_still_drops_a_live_session_for_handover(monkeypatch):
         await s.on_command("roof", "close", None)
 
     asyncio.run(_run())
-    assert order == [("aclose",), ("actuate_roof", True)]  # dropped first, then the move
-    assert s._sessions.session_state == "off"
+    assert order == [("sess.actuate_roof", "roof")]  # in the live session, never closed first
+    assert s._sessions.session_state == "up"
+
+
+def test_roof_stop_with_no_move_in_flight_uses_the_live_session(monkeypatch):
+    """A STOP with no move in flight goes out over the live session (heartbeat already ticking),
+    not a handover + fresh connection (the old #198 path)."""
+    order = []
+    s = _roof_server(monkeypatch, order)
+    s._sessions._session = _LiveRoofSess(order)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._sessions.attach(s._ble)
+        await s.on_command("roof", "stop", None)
+
+    asyncio.run(_run())
+    assert order == [("sess.actuate", "roof", 0x00)]
 
 
 def test_non_roof_command_keeps_the_session_warmup(monkeypatch):

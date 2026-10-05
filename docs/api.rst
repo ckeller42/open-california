@@ -78,7 +78,7 @@ Automation
 .. autoclass:: calictl.web._NoResolveHTTPServer
    :no-members:
 .. autoclass:: calictl.session.SessionSupervisor
-   :members: attach, live_session, note_activity, set_mode, claim_intent, drop_for_handover, nudge, supervise, mode
+   :members: attach, live_session, note_activity, set_mode, claim_intent, nudge, supervise, mode
 
 Tests
 -----
@@ -104,6 +104,9 @@ Tests
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
 .. autofunction:: tests.test_web_serve.test_roof_move_skips_the_session_warmup
+.. autofunction:: tests.test_web_serve.test_roof_move_reuses_a_live_session
+.. autofunction:: tests.test_mock_integration.test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking
+.. autofunction:: tests.test_mock_integration.test_roof_opens_and_closes_on_the_mock_with_the_heartbeat_ticking
 .. autofunction:: tests.test_firmware_anchors.test_firmware_snapshot_captures_raw_frames
 .. autofunction:: tests.test_firmware_anchors.test_anchors_flag_implausible_decode
 .. autofunction:: tests.test_web_serve.test_web_server_binds_without_reverse_dns
