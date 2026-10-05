@@ -106,39 +106,12 @@ class SessionSupervisor:
         """A command means intent to control: clear any manual release and mark the UI active,
         WITHOUT nudging the supervisor to connect.
 
-        ``set_mode("connect")`` is this plus :meth:`nudge`. A roof move calls this alone: it takes
-        the single slot for its own dedicated connection (:meth:`drop_for_handover`), so warming
-        the persistent session first would only be closed again unused.
+        ``set_mode("connect")`` is this plus :meth:`nudge`. A roof move calls this alone: it runs
+        inside a session that is already live, or opens its own connection at once — waiting for
+        a session to warm up would only delay the press reaching the unit.
         """
         self._session_mode = None
         self.note_activity()
-
-    async def drop_for_handover(self) -> bool:
-        """Close the live session so another path can own the unit's single connection slot.
-
-        TRANSIENT, unlike ``set_mode("disconnect")``: the manual-release mode is untouched, so the
-        supervisor brings the session back by itself afterwards.
-
-        The roof needs this for two independent reasons. The unit has ONE connection slot, so a
-        second client opened alongside the live session is refused; and the persistent session runs
-        a 1003 heartbeat, while the roof's arming contract requires NONE — the SafetyCounter is the
-        liveness proof, and a heartbeat alongside it is not the sequence that was verified (#150).
-        So the roof takes the slot outright rather than borrowing this session.
-
-        The caller must hold the ``_ble`` lock (the supervisor takes it to reconnect, so holding it
-        keeps the slot free for the handover).
-
-        :returns: True if a live session was closed.
-        """
-        if self._session is None:
-            return False
-        try:
-            await self._session.aclose()
-        except Exception:  # a half-dead session still yields the slot
-            pass
-        self._session = None
-        self.session_state = "off"
-        return True
 
     def nudge(self):
         """Keep-warm: a command wants to actuate. If no session is up, reset the backoff the

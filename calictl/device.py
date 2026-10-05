@@ -451,9 +451,10 @@ class CamperDevice:
         ``R_ACTUATE_ARM`` prologue (issue #2's 1003 gate) for the CONTROL actuation path.
 
         NB the ROOF path does NOT use this: the app streams its SafetyCounter immediately with no
-        1003 heartbeat and no pre-write sleep (the counter itself is the roof's liveness proof, and
-        a 3 s pre-arm gap would make the unit see a fresh counter and withhold the motor another
-        ~3 s — verified against the decompiled roof driver 2026-08-30). Roof uses ``_handshake``.
+        pre-write sleep (a 3 s pre-arm gap would make the unit see a fresh counter and withhold the
+        motor another ~3 s — decompiled roof driver 2026-08-30). Roof uses ``_handshake`` + the
+        heartbeat WITHOUT the delay (the app's heartbeat is session-global and ticks during roof
+        moves, #235).
         """
         await self._handshake(client, label, noun)
         beat = asyncio.create_task(self._heartbeat(client, stop))
@@ -518,7 +519,7 @@ class CamperDevice:
         *,
         max_duration_s: float = ROOF_MAX_TRAVEL_S,
         period_s: float = ROOF_MOVE_PERIOD_S,
-        validate_s: float = ROOF_SAFETY_VALIDATE_S,
+        validate_s: float | None = ROOF_SAFETY_VALIDATE_S,
         counter_seed: int | None = None,
         stop_event=None,
         limit_positions=None,
@@ -550,11 +551,15 @@ class CamperDevice:
 
         Runs in ONE BLE session (single-owner model, held under the ``serve`` lock):
         connect, replay the connect handshake (version + auth reads, subscribe-all via
-        ``_handshake`` — NO 1003 heartbeat, NO ``ARM_DELAY_S``; the SafetyCounter stream
-        itself is the liveness proof), then re-send ``move_frame`` (with the live
-        time-derived counter) every ``period_s`` for at most ``max_duration_s`` — a
-        bounded travel cap — and then send ``stop_frame``. The unit self-gates the first
-        ~3 s via counter validation, so early frames may not move the roof.
+        ``_handshake``) and start the 1003 liveness heartbeat — as the app does: its heartbeat is
+        session-global and keeps ticking during roof moves (decompile ``zf/d:183 -> d2/s:795-802
+        -> mj/d:247 -> c/i:349-367``, #235). There is NO ``ARM_DELAY_S`` pre-arm: the move stream
+        starts immediately. Then re-send ``move_frame`` (with the live time-derived counter) every
+        ``period_s`` for at most ``max_duration_s`` — a bounded travel cap — and then send
+        ``stop_frame``. The unit self-gates the first ~3 s via counter validation, so early frames
+        may not move the roof. The daemon runs the same stream inside its live
+        :class:`PersistentSession` instead (:meth:`PersistentSession.actuate_roof`), whose
+        heartbeat is already ticking.
 
         The final STOP is **best-effort**: on a clean end it is written and confirmed,
         but on a mid-move link drop the STOP write itself fails and is swallowed. The real
@@ -589,23 +594,64 @@ class CamperDevice:
            :status: implemented
            :tags: ble, control, roof, safety
 
-           ``calictl`` shall, in one BLE session armed by the handshake alone (no 1003
-           heartbeat, no pre-arm delay), immediately stream the roof move frame with a
+           ``calictl`` shall, in one BLE session with the 1003 liveness heartbeat ticking (as the
+           app does, #235) and no pre-arm delay, immediately stream the roof move frame with a
            monotonic app-generated SafetyCounter for a bounded maximum duration and then
            unconditionally send a STOP frame — so roof travel is completed but never left
            running unbounded — and shall abort (STOP) if the unit does not validate the
            SafetyCounter within the ~3 s dead-man window.
         """
+        if not func.control_char:
+            raise ValueError("%s has no control characteristic" % func.name)
+        client = await self._session()
+        try:
+            return await self._actuate_roof_on(
+                client,
+                func,
+                move_frame,
+                stop_frame,
+                max_duration_s=max_duration_s,
+                period_s=period_s,
+                validate_s=validate_s,
+                counter_seed=counter_seed,
+                stop_event=stop_event,
+                limit_positions=limit_positions,
+                verify=verify,
+                arm=True,
+            )
+        finally:
+            await self._safe_disconnect(client)
+
+    async def _actuate_roof_on(
+        self,
+        client,
+        func,
+        move_frame: bytes,
+        stop_frame: bytes,
+        *,
+        max_duration_s: float = ROOF_MAX_TRAVEL_S,
+        period_s: float = ROOF_MOVE_PERIOD_S,
+        validate_s: float | None = ROOF_SAFETY_VALIDATE_S,
+        counter_seed: int | None = None,
+        stop_event=None,
+        limit_positions=None,
+        verify: bool = True,
+        arm: bool = True,
+    ) -> dict | None:
+        """The roof move stream over an ALREADY-CONNECTED client (see :meth:`actuate_roof`).
+        Never connects/disconnects.
+
+        ``arm=True`` (own connection): replay the handshake and start the 1003 heartbeat, with NO
+        ``ARM_DELAY_S`` — the stream starts at once. ``arm=False`` (persistent session): the
+        session's heartbeat is already ticking, so stream immediately."""
         import random
         import time
 
         from . import protocol  # lazy
 
-        if not func.control_char:
-            raise ValueError("%s has no control characteristic" % func.name)
-        client = await self._session()
         stop = asyncio.Event()
         beat = None
+        stopped = False  # the final STOP went out (else the finally sends one, e.g. on cancel)
         seed = counter_seed if counter_seed is not None else random.randint(1, ROOF_SAFETY_SEED_MAX)
         start = None  # set once the move stream begins (arms the counter clock)
 
@@ -625,11 +671,13 @@ class CamperDevice:
                 return True  # transient write error on a live link: keep driving
 
         try:
-            # App-faithful roof arm (decompile-verified 2026-08-30): handshake ONLY — no 1003
-            # heartbeat, no ARM_DELAY_S pre-arm sleep. The app streams the SafetyCounter immediately
-            # on button press; a pre-arm gap would make the unit see a fresh counter and withhold
-            # the motor another ~3 s. The counter IS the roof's liveness proof.
-            await self._handshake(client, "actuate_roof", "move")
+            # App-faithful roof arm: the 1003 heartbeat ticks during the move (the app's is
+            # session-global, #235), but there is NO ARM_DELAY_S pre-arm sleep — the app streams the
+            # SafetyCounter immediately on button press, and a gap would make the unit see a fresh
+            # counter and withhold the motor another ~3 s (#150).
+            if arm:
+                await self._handshake(client, "actuate_roof", "move")
+                beat = asyncio.create_task(self._heartbeat(client, stop))
 
             # Stream the move frame with the live time-derived counter until the safety cap. The
             # unit self-gates motion for the first ~validate_s until the counter validates; we
@@ -670,8 +718,16 @@ class CamperDevice:
                     if pos is not None and pos in limit_positions:
                         log.info("actuate_roof: roof reached limit position %s — ceasing (STOP)" % pos)
                         break
-                await asyncio.sleep(period_s)
+                if stop_event is not None:
+                    # interruptible: a release sends STOP at once, not after the rest of the period
+                    try:
+                        await asyncio.wait_for(stop_event.wait(), period_s)
+                    except TimeoutError:
+                        pass
+                else:
+                    await asyncio.sleep(period_s)
             # ALWAYS force a STOP (best-effort even if the link is flaky), with the live counter.
+            stopped = True
             await _send(stop_frame)
             if not verify or not func.state_char:
                 return None
@@ -679,13 +735,19 @@ class CamperDevice:
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw)
         finally:
+            if not stopped and client.is_connected:
+                # cancelled (daemon shutdown) or raised mid-move: best-effort STOP rather than
+                # relying on the unit's unverified dead-man
+                try:
+                    await _send(stop_frame)
+                except Exception:
+                    pass
             stop.set()
             if beat is not None:
                 try:
                     await beat
                 except Exception:
                     pass
-            await self._safe_disconnect(client)
 
     @staticmethod
     async def _roof_counter_valid(client, func) -> bool:
@@ -863,6 +925,14 @@ class PersistentSession:
         self, func, frame: bytes, *, follow: bytes | None = None, verify: bool = True
     ) -> dict | None:
         return await self._dev._actuate_on(self._client, func, frame, follow=follow, verify=verify, arm=False)
+
+    async def actuate_roof(self, func, move_frame: bytes, stop_frame: bytes, **kw) -> dict | None:
+        """Stream a roof move over the live link, inside this session's ticking 1003 heartbeat — no
+        handover, no second connection (the app's heartbeat ticks during roof moves too, #235).
+        Keyword arguments as :meth:`CamperDevice.actuate_roof`."""
+        if not func.control_char:
+            raise ValueError("%s has no control characteristic" % func.name)
+        return await self._dev._actuate_roof_on(self._client, func, move_frame, stop_frame, arm=False, **kw)
 
     async def aclose(self) -> None:
         if self._stop is not None:

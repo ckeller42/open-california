@@ -255,9 +255,8 @@ class MockCamperUnit:
         # actually SEEN a beat can lapse — `_beat_t` stays None when a test arms the unit directly,
         # so hand-armed fixtures never expire underneath themselves.
         self._beat_t: float | None = None
-        # ONE connection slot (the phone holding it is why buspi can't connect). OPT-IN: enabling it
-        # globally makes calictl's own roof flow fail, because it opens a second client while the
-        # persistent session still holds one — see test_single_connection_slot for the detail.
+        # ONE connection slot (the phone holding it is why buspi can't connect). OPT-IN: the tests
+        # that model the single slot turn it on (e.g. the roof move inside the live session).
         self.one_slot = False
         self.holder: object | None = None  # the one connection slot (phone or daemon)
         self._wake_at: float | None = None  # scheduled re-wake (engine-crank drop)

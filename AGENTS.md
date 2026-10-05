@@ -125,20 +125,19 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   (no confirmation phase). Direction bytes match the app (open `0x01`/stop `0x00`/close `0x04`). The
   **SafetyCounter is app-generated** (monotonic BE-uint32, ~+1 per 500 ms), NOT echoed; the unit
   withholds the motor ~3 s until it validates (`1402` bit 7). `actuate_roof` is protocol-correct but
-  **has NEVER driven a real motor**. App-faithful arm (fixed #150): it handshakes (reads+subscribe)
-  then streams the counter IMMEDIATELY — NO 1003 heartbeat, NO `ARM_DELAY_S` pre-arm (a gap would make
-  the unit see a fresh counter and withhold the motor another ~3 s); the counter IS the liveness proof.
-  `_handshake` = no-heartbeat/no-delay arm; old `_arm` (heartbeat+delay) still serves cooler/camping.
-  GUI is press-and-hold (release → STOP via lock-free `_roof_stop`); a re-press within 1000 ms is
+  **has NEVER driven a real motor**. App-faithful arm: the **1003 heartbeat ticks during the move**
+  (the app's is session-global, decompile + `roof-hold` recording, #235) and the counter streams
+  IMMEDIATELY — NO `ARM_DELAY_S` pre-arm (#150: a gap would make the unit see a fresh counter and
+  withhold the motor another ~3 s). Not yet device-verified (first owner-watched drive, #157/#230).
+  GUI is press-and-hold (release → STOP via lock-free `_roof_stop`, a fresh token per press made
+  before the `_ble` wait, so an early release cancels a queued press); a re-press within 1000 ms is
   debounced (would restart the counter → another ~3 s withhold). `actuate_roof` polls `Position`
   (`1402`) ~1 Hz and auto-stops at the limit (open `1` / closed `0`/`14`; `control.roof_limit_positions`)
-  — best-effort over the unit's own limit switches. **A roof move/STOP TAKES the single connection
-  slot** (`session.drop_for_handover`, 2026-09-17): `actuate_roof`/`actuate` open their own session,
-  so a live persistent session would be a second connection the unit refuses — and that session
-  can't be reused instead, because it runs a 1003 heartbeat the roof's arming contract forbids. A roof
-  command never warms that session first (no keep-warm nudge, no `CALICTL_SESSION_WAIT_S` wait) — it
-  only drops one that is already live. The drop is transient; the supervisor reconnects afterwards. See `protocol-alignment.md` +
-  `protocol-sequences`.
+  — best-effort over the unit's own limit switches. **A roof move/STOP runs inside a live persistent
+  session** (`PersistentSession.actuate_roof`, its heartbeat ticking — no second connection on the
+  single slot); with none up it opens its own connection, heartbeat on. A roof command never warms
+  the session first (no keep-warm nudge, no `CALICTL_SESSION_WAIT_S` wait). See
+  `protocol-alignment.md` + `protocol-sequences`.
 - **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads (`device.read_all`/
   `read` do) to keep the link up (dropped after ~15 s otherwise) and refresh the re-read chars. It does
   NOT refresh water: water is measurement-gated (the unit measures only while its water system is

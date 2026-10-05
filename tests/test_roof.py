@@ -287,3 +287,82 @@ def test_actuate_roof_continues_when_safetycounter_valid(roof):
     # ran to the max-duration cap (many frames), not aborted after the first check
     assert len(ctrl) > 3, "a valid SafetyCounter must not abort the move"
     assert b0[-1] == 0x00, "the move still ends in a STOP"
+
+
+def test_actuate_roof_ticks_the_1003_heartbeat_with_no_prearm_gap(roof, monkeypatch):
+    """The roof move runs with the 1003 liveness heartbeat ticking, and the SafetyCounter still
+    streams immediately — no ``ARM_DELAY_S`` pre-arm, no warm-up sleep before the first frame.
+
+    calictl follows the app (owner decision 2026-10-05): the app's 1003 heartbeat is session-global
+    and keeps ticking during a roof move (decompile ``zf/d:183 -> d2/s:795-802 -> mj/d:247 ->
+    c/i:349-367``, #235). The pre-#235 "no heartbeat during a roof move" contract is gone; the
+    "no pre-arm gap" half of #150 stands (a gap would restart the unit's ~3 s counter withhold).
+
+    .. test:: A roof move ticks the 1003 heartbeat and streams the counter with no pre-arm gap
+       :id: T_ROOF_HEARTBEAT_NO_GAP
+       :links: R_ROOF_ACTUATE
+    """
+    slept = []
+    real_sleep = asyncio.sleep
+
+    async def _rec(s=0, *_a, **_k):
+        slept.append(s)
+        await real_sleep(0)
+
+    monkeypatch.setattr(device.asyncio, "sleep", _rec)
+    move = control.roof_frame(roof, "open")
+    stop = control.roof_frame(roof, "stop")
+    asyncio.run(
+        device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+            roof["roof"],
+            move,
+            stop,
+            max_duration_s=device.HEARTBEAT_PERIOD_S * 2.5,  # long enough for >= 2 beats
+            period_s=0.001,
+            validate_s=None,
+            counter_seed=1000,
+            verify=False,
+        )
+    )
+    writes = _RoofClient.instances[-1].writes
+    hb = str(device.HEARTBEAT_CHAR)
+    beats = [i for i, (u, _d) in enumerate(writes) if u == hb]
+    ctrl = [i for i, (u, _d) in enumerate(writes) if u == roof["roof"].control_char]
+    assert len(beats) >= 2, "the 1003 heartbeat must tick during the roof move"
+    assert ctrl[0] < beats[-1] < ctrl[-1], "beats must interleave with the move frames"
+    beat_ctrs = [int.from_bytes(writes[i][1], "big") for i in beats]
+    assert beat_ctrs == list(range(beat_ctrs[0], beat_ctrs[0] + len(beat_ctrs))), "heartbeat is +1"
+    # no pre-arm gap: the only sleeps are the frame period (no ARM_DELAY_S, no warm-up)
+    assert device.ARM_DELAY_S not in slept and device.HEARTBEAT_WARMUP_S not in slept
+    assert set(slept) <= {0.001}
+    assert _counters([writes[i][1] for i in ctrl])[0] == 1000, "first frame carries the seed (t=0)"
+
+
+def test_actuate_roof_sends_stop_when_cancelled_mid_move(roof):
+    """A move cancelled mid-stream (daemon shutdown) still attempts a best-effort STOP instead of
+    relying on the unit's unverified dead-man (review minor 3 on #238).
+
+    .. test:: A cancelled roof move still attempts a STOP
+       :id: T_ROOF_STOP_ON_CANCEL
+       :links: R_ROOF_ACTUATE
+    """
+    move = control.roof_frame(roof, "open")
+    stop = control.roof_frame(roof, "stop")
+
+    async def _run():
+        task = asyncio.ensure_future(
+            device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+                roof["roof"], move, stop, max_duration_s=30.0, period_s=0.001, validate_s=None, verify=False
+            )
+        )
+        while not _RoofClient.instances or len(_ctrl_writes(_RoofClient.instances[-1], roof)) < 3:
+            await asyncio.sleep(0)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(_run())
+    ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
+    assert ctrl[-1][0] == 0x00, "a cancelled move must still attempt STOP"

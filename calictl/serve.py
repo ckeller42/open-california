@@ -778,9 +778,9 @@ class Server:
             return None
         if function == "roof" and what == "stop":
             return await self._roof_stop_command()
-        # Roof MOVES gate here and branch off before the session warm-up: the move takes the single
-        # slot for its own connection (_roof_move_command), so it never reaches the precondition
-        # check at the bottom (the gap that once left /api/command, CLI and HA able to drive the
+        # Roof MOVES gate here and branch off before the session warm-up (_roof_move_command: a press
+        # must reach the unit at once, not after a wait for the session), so it never reaches the
+        # precondition check at the bottom (the gap that once left /api/command, CLI and HA able to drive the
         # roof under a blocking InfoPopUp). Refusing up here also avoids waking the unit for a move
         # we are about to refuse. STOP never gets here — it returned above — and must never be gated.
         if function == "roof":
@@ -815,20 +815,32 @@ class Server:
     async def _roof_move_command(self, what):
         """A roof MOVE skips the persistent-session warm-up every other command gets.
 
-        The move takes the unit's single slot for its own dedicated connection
-        (:meth:`_roof_move` -> ``drop_for_handover``), so nudging the supervisor to connect and
-        waiting up to ``CALICTL_SESSION_WAIT_S`` for that session would only bring up a connection
-        that is closed again, unused, the moment the move starts — seconds of delay before the
-        press reaches the unit. It still records the intent (clears a manual release, marks the UI
-        active), still drops an ALREADY-live session for the handover, and nudges the supervisor
-        once the move has released the lock, so the fast path comes back afterwards."""
+        Waiting up to ``CALICTL_SESSION_WAIT_S`` for the session would be seconds of delay before
+        the press reaches the unit. Instead the move runs inside an ALREADY-live session (its 1003
+        heartbeat ticking, as the app's does, #235), or — with none up — opens its own connection
+        with the heartbeat on (:meth:`_roof_move`). It still records the intent (clears a manual
+        release, marks the UI active) and nudges the supervisor once the move has released the
+        lock, so the fast path comes back afterwards."""
         # _roof_move_command is called after run() initializes _ble
         assert self._ble is not None
+        # SAFETY: a fresh stop token per press, created BEFORE waiting for the lock. A release that
+        # arrives while the press still queues behind a poll/write must find this token "pending"
+        # and set it — the press then never starts. (The token used to be created/cleared only once
+        # the lock was held, so such a release was lost and the roof drove to the limit.) A new
+        # press supersedes any earlier pending/running move. Never cleared; set when the move ends.
+        if self._roof_stop is not None:
+            self._roof_stop.set()
+        ev = asyncio.Event()
+        self._roof_stop = ev
         self._sessions.claim_intent()
         try:
             async with self._ble:
-                return await self._roof_move(what)
+                if ev.is_set():
+                    log.info("roof %s released before it started — not moving" % what)
+                    return None
+                return await self._roof_move(what, ev)
         finally:
+            ev.set()  # the move is over: a later STOP is a real standalone STOP
             self._sessions.nudge()
 
     async def _roof_stop_command(self):
@@ -850,21 +862,24 @@ class Server:
                 stop_frame = control.roof_frame(self.funcs, "stop")
             except ValueError:
                 return None
-            # Same single-slot handover as a move: `dev.actuate` opens its own session, so a live
-            # persistent session would be a second connection the unit refuses. A STOP that fails
-            # because the slot was busy is the worst outcome here, so it takes the slot too.
-            await self._sessions.drop_for_handover()
-            await self.dev.actuate(self.funcs["roof"], stop_frame, verify=True)
+            # The roof path with a zero-length move: over the live session when one is up (heartbeat
+            # already ticking, no second connection on the single slot), else an own connection with
+            # the heartbeat on — never the arm delay. One STOP with a live counter, then a 1402 read.
+            target = self._live_session() or self.dev
+            await target.actuate_roof(
+                self.funcs["roof"], stop_frame, stop_frame, max_duration_s=0.0, validate_s=None, verify=True
+            )
         return None
 
-    async def _roof_move(self, what):
+    async def _roof_move(self, what, stop_event):
         """SAFETY-SENSITIVE: a single roof frame won't complete travel and has no guaranteed STOP,
         so roof must stream the move frame with a live SafetyCounter, bounded then always STOP
         (device.actuate_roof), never the one-shot device.actuate. ``what`` = direction (open/close).
         Press-and-hold: the GUI streams the move while held and sends "stop" on release. That STOP
         arrives OUT-OF-BAND — a separate POST while this move is still in flight — which is why
         _roof_stop must run lock-free (this coroutine holds the _ble lock for the whole move).
-        Caller holds the _ble lock."""
+        ``stop_event`` is this press's stop token (:meth:`_roof_move_command`). Caller holds the
+        _ble lock."""
         from . import control  # lazy
 
         try:
@@ -872,21 +887,16 @@ class Server:
             stop_frame = control.roof_frame(self.funcs, "stop")
         except ValueError:
             return None
-        if self._roof_stop is None:
-            self._roof_stop = asyncio.Event()
-        self._roof_stop.clear()
-        # The roof OWNS the connection for its move. `actuate_roof` opens its own session, and the
-        # unit has a single slot — leaving the persistent session up means two connections, which
-        # the unit refuses. Reusing that session instead is not an option either: it runs a 1003
-        # heartbeat and the roof's arming contract requires none (the SafetyCounter is the liveness
-        # proof, #150). Transient — the supervisor brings the session back after the move.
-        await self._sessions.drop_for_handover()
-        await self.dev.actuate_roof(
+        # The unit has a single slot: a live persistent session carries the move (its 1003 heartbeat
+        # keeps ticking, as the app's does during roof moves, #235) — never a second connection.
+        # With no session up, `dev.actuate_roof` opens its own, heartbeat on, no pre-arm delay.
+        target = self._live_session() or self.dev
+        await target.actuate_roof(
             self.funcs["roof"],
             move_frame,
             stop_frame,
             verify=True,
-            stop_event=self._roof_stop,
+            stop_event=stop_event,
             limit_positions=control.roof_limit_positions(what),
         )
         # roof has no set_check row -- keep the honest "not applied" (unknown).
@@ -930,7 +940,7 @@ class Server:
         # its path skips the blocking echo-readback. The lamp reacts in ~0.3 s; confirmation comes from the real
         # 1502 Mode-4 notification, not the write-through echo. cooler/camping keep the armed +
         # verified path (`_arm`: 1003 heartbeat gate, issue #2, untouched); roof goes through
-        # `actuate_roof` (`_handshake` only, no heartbeat).
+        # `actuate_roof` (heartbeat ticking, no pre-arm delay).
         is_light = function == "lighting"
         target = sess if sess is not None else self.dev
         # Snapshot the 1502 notification BEFORE the write: the unit's Mode-4 ramp push arrives

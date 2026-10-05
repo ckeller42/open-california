@@ -124,8 +124,12 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
   wires it, `d2/s.java:795-802` runs it while the link is Connected and the control state is ACTIVE
   (`mj/d.java:247`, `pf/k.java:335-337`), and `c/i.java:349-367` sets a random seed of 1–1 000 000 and a random
   period of 750–850 ms. Each tick writes counter+1 (`t0/c.java:262-266`). No function starts or stops it, so it
-  also runs during roof moves. calictl's roof arm sends no 1003, which differs from the app on that point. The
-  roof's own frames never touch 1003.
+  also runs during roof moves. The roof's own frames never touch 1003. **calictl follows the app** (owner
+  decision 2026-10-05, A1): a roof move runs with the 1003 heartbeat ticking — inside the live persistent
+  session, or a fresh connection that starts it — and still streams the counter with no `ARM_DELAY_S`
+  pre-arm. The app's `roof-hold` recording agrees: 11 beats during a 9.1 s hold. Not yet device-verified
+  (first owner-watched drive, #157/#230). calictl keeps its own fixed 0.6 s period and fixed seed (device-verified)
+  rather than the app's random 750–850 ms.
 
 ## Full call-stack cross-check (2026-08-17)
 
