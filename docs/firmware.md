@@ -1,14 +1,14 @@
 # ESP32 firmware (satellite, #154)
 
-**Status: sub-projects 1 and 2b/3a of #154 — read-only, no hardware run yet.** ESP-IDF + NimBLE firmware for
+**Status: sub-projects 1 and 2b/3a of #154 + the status display — read-only, bench-tested on a CoreS3 against the mock unit, never yet against the real unit.** ESP-IDF + NimBLE firmware for
 a planned ESP32-S3 "satellite" (the M5Stack CoreS3) that pairs with the camper unit and reads its
 state independently of `calictl`/buspi — the explicit target for the pairing state machine
 (`calictl/pairing.py`, `R_PAIRING_SM`) that the web wizard already runs. The firmware **only ever
 sends the `1003` liveness write** (the same heartbeat the Pi build uses to keep reads fresh); it
 never actuates anything. Everything here is proven on Linux (a NimBLE host build against a fake
-unit) and on an emulated chip (QEMU); the real CoreS3 board has not arrived yet, so nothing below
-is hardware-verified — see `firmware/README.md`'s "On-board verification (queued until the CoreS3
-arrives)" section for the exact plan. Since the WiFi/web slice the firmware also joins a WiFi
+unit) and on an emulated chip (QEMU); a real CoreS3 runs it on a Linux bench against the mock
+camper unit (the Board tier below), but it has never talked to the real unit — see
+`firmware/README.md`'s "On-board verification" section for that plan. Since the WiFi/web slice the firmware also joins a WiFi
 network (set up through its own hotspot + captive portal) and serves a read-only status page +
 JSON state API — see [Network: WiFi setup and the status page](#network-wifi-setup-and-the-status-page)
 below, and the owner how-to [How to put the ESP32 satellite on your WiFi](howto-esp-wifi-setup.md).
@@ -23,7 +23,7 @@ in the repository; this page is the traceability + orientation view.
 flowchart LR
   H["Host tier<br/>NimBLE Linux port + Bumble fake unit + scripted fake WiFi"] --> HP(("pairing, session, SNAP decode,<br/>heartbeat, reconnect, read-only guard,<br/>WiFi setup flow, status page and API"))
   Q["QEMU tier<br/>real esp32s3 image, no radio"] --> QP(("boot, console protocol,<br/>NVS bond store survives reboot,<br/>no-WiFi-driver path"))
-  B["Board tier<br/>CoreS3 hardware, queued"] --> BP(("the real radio stack end to end"))
+  B["Board tier<br/>CoreS3 on the bench, mock unit"] --> BP(("the real radio stack end to end,<br/>status screen states"))
 ```
 
 | Tier | What it proves | What it cannot prove | Run locally |
@@ -32,7 +32,7 @@ flowchart LR
 | **QEMU boot** (CI `firmware-qemu`) | The **real ESP-IDF image** (compiled for the esp32s3) boots in Espressif's QEMU: the console line protocol on the no-controller path, and the NVS-backed bond store (`cali_kv_*`) surviving a reboot, including a CRC-broken record recovering as "unpaired" instead of crashing. | Bluetooth — QEMU's esp32s3 machine has no radio, so BLE stays with the host tier and hardware. | `docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build && cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v'` |
 | **Host web e2e** (CI `firmware-host-e2e`, `tests/firmware/test_web_e2e.py`) | `cali-host --http PORT --fake-wifi SCRIPT`: the WiFi runner, captive DNS and web endpoints on the same 100 ms tick as the BLE session, over `net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi radio) and the Bumble fake unit. Proves the setup flow (fresh boot -> setup mode -> POST credentials -> station), a wrong password falling back to setup with the credentials cleared, saved credentials reconnecting after a restart + `DELETE /api/wifi`, `/api/state` equal to the console's `SNAP` after pairing, a WiFi loss leaving the BLE link and heartbeat alone, the page rendering in Chromium (EN + DE), and the setup flow clicked in Chromium (a wrong password shows the wrong-password text, the right one the `http://calictl-esp.local` link; EN + DE). | The real esp_wifi/lwIP/mdns stack, a real phone's captive-portal detection, radio coexistence — the fake WiFi only replays the script's outcomes. | `tools/ci.sh firmware` (Linux; on a Mac see `firmware/README.md` "Host build" for the Docker recipe) |
 | **QEMU no-WiFi-driver** (CI `firmware-qemu`, `test_qemu_boot.py::test_no_wifi_driver_boots_and_serves_nothing`) | The QEMU image is built with `CONFIG_CALI_WIFI=n` (no esp_wifi call compiled in): it logs `LOG wifi: driver unavailable` once, keeps WiFi off (`status` has no `wifi` member, `wifi status` -> `LOG wifi: not enabled`), listens on nothing, and does not reboot — the same path a board takes when `esp_wifi_init`/`esp_wifi_start` fails. | Anything about a working WiFi driver (QEMU's esp32s3 has no WiFi). | The QEMU command above |
-| **Board** (queued) | Nothing yet — no hardware. Once the CoreS3 arrives: flashing, the real esp-nimble port against the real unit, the USB-Serial/JTAG console, and every hardware watch item below. | — | See `firmware/README.md` "On-board verification (queued until the CoreS3 arrives)" |
+| **Board** (bench, not CI) | The real CoreS3 on a Linux bench against the mock camper unit (`tools/applab/fake_unit_ble.py` on a USB BLE dongle) and a second WiFi stick: flashing from `flasher_args.json`, the USB-Serial/JTAG console, esp-nimble passkey pairing + reconnect by bond, the setup hotspot -> `POST /api/wifi` -> station join, and the spec's seven status-display states (setup, joining, online, pairing, connected, stale, link lost) + dimming by remote `screenshot` (2026-10-01, `tools/esplab_display_walk.sh`; dated rows in `docs/business-logic/evidence-ledger.md`). | The real camper unit (only the mock so far), a phone's captive portal, the van's radio environment, and the hardware watch items below that need the real unit. | `tools/esplab_display_walk.sh` on the bench (header lists its env); `firmware/README.md` "Status display" |
 | **Pure-C unit tests** (in the normal `test`/`pytest` job, no BLE) | The pairing state machine (`pairing_sm.c`) replays the same golden vectors as `calictl.pairing`; the runner and the session+console compile and run against scripted fake transports on any host with a C compiler (macOS included). The network pieces too: the WiFi SM replays `tests/vectors/wifi_sm.json` from its Python twin (`tools/wifi_sm_ref.py`), the HTTP core (`http_core.c`), captive DNS (`captive_dns.c`), web handlers (`web.c`), JSON writer and the host `cali_net` (`net_host.c`) each run under a small C driver, and the WiFi runner runs next to the BLE session in `test_session_fake.py`. | Real NimBLE call sequencing (that's the host tier's job); real sockets under load; any radio. | `python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py tests/firmware/test_wifi_sm_parity.py tests/firmware/test_http_core.py tests/firmware/test_captive_dns.py tests/firmware/test_web_handlers.py tests/firmware/test_json.py tests/firmware/test_net_host.py -v` |
 
 CI also builds the release esp32s3 image compile-only (job `firmware-build`, container
@@ -80,6 +80,9 @@ only through the `cali_net_t` socket/WiFi table in `include/cali_net.h`):
 | `captive_dns.c` | The setup hotspot's DNS: every A query answered with `192.168.4.1`, plus the table of OS captive-portal probe paths. |
 | `web.c` | The endpoints and the page. |
 | `snapshot.c` | The `fn` object shared by the console's `SNAP` and `/api/state`. |
+| `status.c` (`include/cali_status.h`) | `cali_status_get()`: one `cali_status_t` snapshot (pairing state + bonded address, link up, last-`SNAP` age, WiFi mode/SSID/IP/RSSI/last failure, uptime, fw). `/api/state`'s `device` block and the screen both read it, so they cannot disagree. |
+| `display_model.c` (`include/cali_display_model.h`) | The pure status-display model: a `cali_status_t` in, three rows (colour + EN/DE text), the footer mode and the brightness out — no LVGL, no clock (`R_FW_STATUS_DISPLAY`). |
+| `components/cali_display/` (board build only) | The CoreS3 painter: the `espressif/m5stack_core_s3` board package + LVGL, ticked every `DISPLAY_REFRESH_MS` from the main loop, plus the `screenshot` console command (`shot.c`). Excluded from the host and QEMU builds (`CONFIG_CALI_DISPLAY`). |
 
 Platforms: `components/platform/host/net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi,
 `cali_net_host.h`) and `components/platform/esp/net_esp.c` (esp_wifi + esp_netif + lwIP sockets +
@@ -358,6 +361,16 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    response across ticks without ever blocking or spinning the tick that also drives BLE. It
    exposes no control endpoint (``R_FW_READ_ONLY``).
 
+.. req:: The CoreS3 screen shows device, WiFi and camper-unit status
+   :id: R_FW_STATUS_DISPLAY
+   :status: implemented
+   :tags: esp32, display
+
+   The satellite's screen shall show three rows — device running, WiFi (setup hotspot / joining /
+   online with SSID, IP and signal / off with reason), camper unit (not paired / pairing / connected
+   with data age / stale after 10 s / link lost) — in German or English, at full brightness for 60 s
+   after any change and dimmed otherwise, using the same status snapshot as ``/api/state``.
+
 .. req:: WiFi never disturbs the BLE session; scans wait for an active pairing flow
    :id: R_FW_WIFI_BLE_COEX
 
@@ -406,6 +419,12 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   and `T_FW_WEB_E2E`'s `test_wifi_loss_keeps_ble_link`; the scan gate by `test_session_fake.py`'s
   `test_wifi_scan_deferred_while_ble_pairing_is_active` / `test_wifi_scan_not_blocked_by_pairing_error`.
   Real radio coexistence is board-only ([network watch item 1](#network-watch-items-board-only)).
+- **`R_FW_STATUS_DISPLAY`** — verified by `T_FW_DISPLAY_MODEL` (`tests/firmware/test_display_model.py`,
+  every row state, the 10 s stale rule, the setup footer and the bright/dim timing through a C driver
+  over `display_model.c`), `T_FW_DISPLAY_FONT` (`tests/test_display_font.py`, every EN/DE screen
+  string drawable with the generated fonts) and on the board by `tools/esplab_display_walk.sh`
+  (screenshots of the spec's seven states + dimming, decoded by `tools/esp_shot.py`, `tests/test_esp_shot.py`; BOARD rows
+  in `docs/business-logic/evidence-ledger.md`).
 
 The full needs table for the whole project, not just firmware, is at the bottom of
 [the docs home page](index.md).

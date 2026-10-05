@@ -63,6 +63,9 @@
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
+#if CONFIG_CALI_DISPLAY
+#include "cali_display.h"
+#endif
 #include "cali_net_esp.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
@@ -169,13 +172,19 @@ static void do_work(void) {
             cali_captive_dns_poll();
             cali_web_poll(now);
         }
+#if CONFIG_CALI_DISPLAY
+        cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */
+#endif
     }
     if (!atomic_load(&s_ready)) return;
     while (xQueueReceive(s_lines, line, 0) == pdTRUE) {
 #if CONFIG_CALI_QEMU_PROBE
         if (!kvprobe_line(line))
 #endif
-            cali_console_line(line);
+#if CONFIG_CALI_DISPLAY
+            if (!cali_display_shot_line(line))
+#endif
+                cali_console_line(line);
         memset(line, 0, sizeof line);   /* a "wifi set" line holds a passphrase */
     }
 }
@@ -348,7 +357,11 @@ void app_main(void) {
 #endif
         cali_console_init(&s_no_ble);
     }
-    wifi_init(err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble);
+    const cali_transport_t *ble = err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble;
+    wifi_init(ble);
+#if CONFIG_CALI_DISPLAY
+    (void)cali_display_init(ble);   /* -1: no screen; BLE/WiFi carry on */
+#endif
 
     const esp_timer_create_args_t targs = {.callback = tick_cb, .name = "cali_tick"};
     esp_timer_handle_t tick;

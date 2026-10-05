@@ -1,0 +1,5 @@
+## ESP-IDF component manager manifest for cali_display (#154 status display).
+## Exact pin: the newest espressif/m5stack_core_s3 the registry serves for ESP-IDF v6.1 on 2026-10-01
+## (kws-de runs 2.0.1 on IDF 5.5). It brings esp_lvgl_port + LVGL 9.
+dependencies:
+  espressif/m5stack_core_s3: "==4.1.0"

@@ -12,6 +12,7 @@
 #include "cali_runner.h"
 #include "cali_session.h"
 #include "cali_snapshot.h"
+#include "cali_status.h"
 #include "cali_wifi_run.h"
 #include "cali_wifi_sm.h"
 #include "pairing_consts.h"
@@ -52,25 +53,21 @@ static void set_body(cali_http_resp_t *resp, int status, const char *type, const
 #define SET_CONST(resp, status, body) set_body((resp), (status), JSON_TYPE, (body), sizeof (body) - 1)
 
 /* The "mode","ssid","ip","rssi" members shared by /api/state's device.wifi and /api/wifi. */
-static void wifi_members(cali_json_t *j) {
-    const char *ssid = cali_wifi_run_ssid();
-    uint32_t ip = cali_wifi_run_ip();
-    int rssi = cali_wifi_run_rssi();
+static void wifi_members(cali_json_t *j, const cali_status_t *st) {
     cali_json_key(j, "mode");
-    cali_json_str(j, cali_wifi_mode_name(wifi_mode()));
+    cali_json_str(j, cali_wifi_mode_name(st->wifi_mode));
     cali_json_key(j, "ssid");
-    if (ssid) cali_json_str(j, ssid); else cali_json_null(j);
+    if (st->ssid[0]) cali_json_str(j, st->ssid); else cali_json_null(j);
     cali_json_key(j, "ip");
-    if (ip) {
+    if (st->ip) {
         char a[16];
-        snprintf(a, sizeof a, "%u.%u.%u.%u", (unsigned)(ip >> 24), (unsigned)(ip >> 16 & 0xffu),
-                 (unsigned)(ip >> 8 & 0xffu), (unsigned)(ip & 0xffu));
+        cali_status_ip_str(st->ip, a);
         cali_json_str(j, a);
     } else {
         cali_json_null(j);
     }
     cali_json_key(j, "rssi");
-    if (rssi) cali_json_int(j, rssi); else cali_json_null(j);
+    if (st->rssi) cali_json_int(j, st->rssi); else cali_json_null(j);
 }
 
 /* Closes j into s_json as the response, or answers 500 + logs on overflow. */
@@ -86,14 +83,12 @@ static void finish_json(cali_json_t *j, cali_http_resp_t *resp) {
 
 static void api_state(cali_http_resp_t *resp) {
     cali_json_t j;
-    uint64_t now = cali_uptime_ms();
-    uint64_t last = cali_session_last_update_ms();
-    const cali_pair_state_t *ps = cali_runner_state();
-    const char *addr = cali_snapshot_pair_address(s_t);
+    cali_status_t st;
+    cali_status_get(&st, s_t, cali_uptime_ms());
 
     cali_json_begin(&j, s_json, sizeof s_json);
     cali_json_key(&j, "t");
-    cali_json_int(&j, (long long)now);
+    cali_json_int(&j, (long long)st.uptime_ms);
     cali_json_key(&j, "fn");
     cali_json_obj_begin(&j);
     cali_snapshot_fn(&j);
@@ -104,29 +99,30 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_key(&j, "pairing");
     cali_json_obj_begin(&j);
     cali_json_key(&j, "state");
-    cali_json_str(&j, (size_t)ps->st < N_OF(PAIR_STATE_NAMES) && PAIR_STATE_NAMES[ps->st] ? PAIR_STATE_NAMES[ps->st]
-                                                                                          : "unknown");
+    cali_json_str(&j, (size_t)st.pair_state < N_OF(PAIR_STATE_NAMES) && PAIR_STATE_NAMES[st.pair_state]
+                          ? PAIR_STATE_NAMES[st.pair_state]
+                          : "unknown");
     cali_json_key(&j, "address");
-    if (addr) cali_json_str(&j, addr); else cali_json_null(&j);
+    if (st.address[0]) cali_json_str(&j, st.address); else cali_json_null(&j);
     cali_json_obj_end(&j);
 
     cali_json_key(&j, "link");
     cali_json_obj_begin(&j);
     cali_json_key(&j, "up");
-    cali_json_bool(&j, cali_session_link_up());
+    cali_json_bool(&j, st.link_up);
     cali_json_key(&j, "last_snap_age_ms");
-    if (last) cali_json_int(&j, (long long)(now >= last ? now - last : 0)); else cali_json_null(&j);
+    if (st.snap_age_ms >= 0) cali_json_int(&j, (long long)st.snap_age_ms); else cali_json_null(&j);
     cali_json_obj_end(&j);
 
     cali_json_key(&j, "wifi");
     cali_json_obj_begin(&j);
-    wifi_members(&j);
+    wifi_members(&j, &st);
     cali_json_obj_end(&j);
 
     cali_json_key(&j, "uptime_ms");
-    cali_json_int(&j, (long long)now);
+    cali_json_int(&j, (long long)st.uptime_ms);
     cali_json_key(&j, "fw");
-    cali_json_str(&j, cali_fw_version());
+    cali_json_str(&j, st.fw);
     cali_json_obj_end(&j);
     finish_json(&j, resp);
 }
@@ -135,13 +131,13 @@ static void api_wifi_get(cali_http_resp_t *resp) {
     cali_json_t j;
     const cali_net_ap_t *aps = NULL;
     int n = cali_wifi_run_scan_list(&aps);
+    cali_status_t st;
 
-    const char *fail = cali_wifi_run_last_fail();
-
+    cali_status_get(&st, s_t, cali_uptime_ms());
     cali_json_begin(&j, s_json, sizeof s_json);
-    wifi_members(&j);
+    wifi_members(&j, &st);
     cali_json_key(&j, "last_error");
-    if (fail) cali_json_str(&j, fail); else cali_json_null(&j);
+    if (st.last_fail[0]) cali_json_str(&j, st.last_fail); else cali_json_null(&j);
     cali_json_key(&j, "scan");
     cali_json_arr_begin(&j);
     for (int i = 0; aps && i < n && i < NET_SCAN_MAX; i++) {
@@ -158,7 +154,7 @@ static void api_wifi_get(cali_http_resp_t *resp) {
     finish_json(&j, resp);
     /* the list above is the last SCAN_DONE; a fresh one for the next GET (the runner holds it back
      * while a BLE pairing flow is active: the one coex gate, ruling R15) */
-    if (wifi_mode() == CALI_WIFI_MODE_SETUP) cali_wifi_run_scan();
+    if (st.wifi_mode == CALI_WIFI_MODE_SETUP) cali_wifi_run_scan();
 }
 
 /* ---- the fixed-shape {"ssid":"…","psk":"…"} parser ---- */

@@ -2,7 +2,7 @@
 
 ``firmware/components/cali_core/web.c`` answers ``/``, ``/api/state``, ``/api/wifi`` (GET/POST/
 DELETE) and, in setup mode, the OS captive-portal probes. Driven here through ``test/web_cli.c``:
-the real ``web.c`` + ``http_core.c`` + ``json.c`` + ``snapshot.c`` + ``csrc/codec.c`` over a
+the real ``web.c`` + ``http_core.c`` + ``json.c`` + ``snapshot.c`` + ``status.c`` + ``csrc/codec.c`` over a
 scripted socket, with fakes for the session (a cooler + a roof frame), runner, transport, kv store,
 clock, log and the WiFi runtime. Every assertion is on the bytes the core sent.
 
@@ -63,6 +63,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "captive_dns.c"),
             str(CORE / "json.c"),
             str(CORE / "snapshot.c"),
+            str(CORE / "status.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
             "-o",
@@ -182,6 +183,36 @@ def test_api_state_shape(web_cli):
     assert d["pairing"] == {"state": "idle", "address": IDENTITY}
     assert d["link"] == {"up": True, "last_snap_age_ms": body["t"] - 4000}
     assert d["wifi"] == {"mode": "station", "ssid": "minsel", "ip": "192.168.1.23", "rssi": -61}
+
+
+# Pinned before the cali_status refactor (Task 2): the device block + /api/wifi bytes must not move.
+_PIN_SETUP = [
+    "now 5000",
+    "stamp 4000",
+    "active 1",
+    "linkup 1",
+    "bond 1",
+    "wifi online minsel 192.168.1.23 -61",
+]
+EXPECTED_DEVICE_TAIL = (
+    '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
+    '"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
+    '"uptime_ms":5010,"fw":"test"}}'
+)
+EXPECTED_WIFI_BODY = (
+    '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
+)
+
+
+def test_api_state_device_block_bytes_are_pinned(web_cli):
+    """Pins the exact /api/state device block (the cali_status refactor must not move a byte)."""
+    body = get(web_cli, "/api/state", setup=_PIN_SETUP).decode()
+    assert body[body.index('"device":') :] == EXPECTED_DEVICE_TAIL
+
+
+def test_api_wifi_body_bytes_are_pinned(web_cli):
+    """/api/wifi shares wifi_members with /api/state; pin its bytes too."""
+    assert get(web_cli, "/api/wifi", setup=[_PIN_SETUP[-1], "lastfail auth"]).decode() == EXPECTED_WIFI_BODY
 
 
 def test_api_state_nulls(web_cli):

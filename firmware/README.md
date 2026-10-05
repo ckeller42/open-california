@@ -3,7 +3,8 @@
 ESP-IDF + NimBLE firmware for the camper-unit satellite. Work in progress: the host build
 (`host/host_main.c` -> `cali-host`: console, pairing runner and session on the NimBLE Linux port),
 the platform-free component `components/cali_core` (below), and the ESP-IDF project for the
-esp32s3 / M5Stack CoreS3 (`main/app_main.c`, compile-only so far: no hardware yet).
+esp32s3 / M5Stack CoreS3 (`main/app_main.c`; runs on a bench CoreS3 against the mock unit, not yet
+against the real camper unit).
 
 ## ESP-IDF build (`firmware/`, esp32s3)
 
@@ -154,6 +155,23 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   wpa_supplicant + PSA crypto, lwIP, pp/phy, mdns) = **66 % of the 3 MB partition free** (it would
   have been 30 % of the old 1.5 MB one). The plan's ~250 KB estimate for WiFi + lwIP was wrong by
   about 2.5x. DIRAM 103,802 -> 160,018 B used (46.8 %). QEMU image (no WiFi): 0x55cf0 B, 89 % free.
+- **Size with the status display (#154, Task 1 spike):** `cali_fw.bin` **0x172400 = 1,516,544 B**
+  (+437,664 B: LVGL 9.6 + `esp_lvgl_port` + the CoreS3 board package) = **52 % of the 3 MB partition
+  free**. DIRAM 178,222 B (52.2 %; 160,018 B before the display): LVGL uses the C heap (PSRAM) and the
+  draw buffer is one 320x20 internal DMA strip. QEMU image (`CONFIG_CALI_DISPLAY=n`): `cali_fw.bin`
+  0x5d630 = 382,512 B, 88 % free (was 0x55cf0 B: the shared `sdkconfig.defaults` PSRAM lines are off
+  there, so the delta is not display code; the QEMU map links no lvgl/BSP member). The `idf.py size`
+  "IRAM 100 %" row is the fixed 16 KB slice on the S3, not a budget; DIRAM is the real one.
+- **Size with the painted status screen (#154, Task 4):** `cali_fw.bin` **0x17e130 = 1,564,976 B**
+  (+48,432 B: the two generated Latin-1 fonts, 16 + 24 px, 4 bpp uncompressed, plus the painter) =
+  **50 % of the 3 MB partition free**. DIRAM 178,558 B (52.2 %, +336 B). QEMU image unchanged in
+  content (`CONFIG_CALI_DISPLAY=n`): 0x5d740 = 382,784 B.
+- **Display package pin:** `components/cali_display/idf_component.yml` pins `espressif/m5stack_core_s3`
+  `==4.1.0` (newest on the registry for IDF v6.1 on 2026-10-01), which resolves `esp_lvgl_port` 2.9.0 and
+  `lvgl/lvgl` 9.6.0~1 (kws-de's 2.0.1 / LVGL 9.5.0 pairing is the older IDF 5.5 one). LVGL 9.6 renamed
+  `CONFIG_LV_MEM_SIZE_KILOBYTES` to `CONFIG_LV_MEM_SIZE` (bytes; the old name is a `-Werror` `#warning`).
+  `main` requires `cali_display` unconditionally: `CONFIG_*` is undefined while IDF expands component
+  requirements on a clean build, so the component itself compiles to nothing when `CONFIG_CALI_DISPLAY=n`.
 
 ## QEMU boot tier (`firmware/qemu`, CI job `firmware-qemu`)
 
@@ -340,6 +358,57 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
 `linux_only`, which need the 32-bit NimBLE Linux host build; the default test run deselects them
 with `-m "not linux_only"`).
 
+### Status display (CoreS3 screen, `R_FW_STATUS_DISPLAY`)
+
+The board build paints a 320 x 240 status screen: title + `fw <version>`, then three rows with a
+coloured dot — **Gerät/Device** (running · uptime), **WLAN/WiFi** (setup hotspot / joining /
+retrying = amber, SSID · IP · RSSI = green, not connected + reason = red), **Camper** (not paired
+= grey, connecting / pairing / enter the code = amber, connected · data age = green, link lost /
+no data for more than 10 s / pairing failed = red) — and a footer: `http://calictl-esp.local`, or
+in setup mode the hotspot SSID and passphrase. The full row table with the German texts is in
+`docs/howto-esp-wifi-setup.md` "What the screen tells you". Pieces: `cali_core/status.c` (one
+`cali_status_t`, shared with `/api/state`), `cali_core/display_model.c` (pure model, host-tested),
+`components/cali_display/` (LVGL painter + `screenshot`, board only).
+
+- **Timing and brightness** come from `csrc/net_consts.h` (generated from `tools/wifi_consts.py`):
+  `DISPLAY_REFRESH_MS` 500, `DISPLAY_STALE_MS` 10000, `DISPLAY_DIM_AFTER_MS` 60000,
+  `DISPLAY_BRIGHT_PCT` 100, `DISPLAY_DIM_PCT` 10, `DISPLAY_LOCK_TIMEOUT_MS` 50. Full brightness at
+  boot and on any change of a row's colour or wording or of the footer mode (a ticking age or
+  uptime does not count); dimmed after 60 s without one. The painter logs
+  `LOG display: brightness <pct>` on every change.
+- **Language:** German by default; `CONFIG_CALI_DISPLAY_LANG_EN=y` selects English. Texts are the
+  `d_*` keys of `firmware/web/strings.json` (same generator as the page); the fonts are generated
+  Latin-1 subsets (`tools/gen_display_font.sh`, OFL notice in `components/cali_display/FONTS-LICENSE`).
+- **No screen:** an init failure logs `LOG display: unavailable (<reason>)` once and the firmware runs
+  on without it. `CONFIG_CALI_DISPLAY_FORCE_FAIL=y` (test only, never ship) forces that path:
+  on the bench (2026-10-01) it logged `unavailable (forced)`, `screenshot` answered `no screen`,
+  `/api/state` kept answering and the mock unit kept being read.
+- **PSRAM** is on for the board build (`CONFIG_SPIRAM`, quad, 80 MHz): LVGL's heap and the
+  screenshot buffer live there.
+- **Size (2026-10-01, `4bfd38e`):** `cali_fw.bin` 0x17e810 = 1,566,736 B, 50 % of the 3 MB partition
+  free. With `FORCE_FAIL` the linker drops the painter: 0x11c050 B.
+- **Version label:** `fw` is `git describe` at configure time. A build from a **git worktree** in the
+  Docker container shows `fw unknown` (the worktree's `.git` file points outside the mounted
+  directory); pass `-DPROJECT_VER=$(git describe --always --tags --dirty)` to `idf.py` there.
+- **Bench walk:** `tools/esplab_display_walk.sh` runs on the Linux bench (CoreS3 on USB, the mock
+  unit `tools/applab/fake_unit_ble.py` on a USB BLE dongle, a second WiFi stick with a profile for
+  the setup hotspot and one for the target network) and screenshots the spec's seven states (setup,
+  joining, online, pairing, connected, stale — mock frozen with SIGSTOP: link up, no data — link lost)
+  plus dimmed and reconnected; not WiFi red, WiFi retrying, pairing failed, link-up-no-data amber or the
+  English build (those are host-tested in `test_display_model.py`). Its header lists the environment variables; no secret is stored in it.
+
+### Remote screen check (`screenshot`)
+
+On a CoreS3 build the console command `screenshot` streams the live screen as `[SHOT 320 240 RLE16 <n>]`,
+base64 lines of 76 characters, `[/SHOT]` (kws-de's format). Capture the serial log, then
+`python -m tools.esp_shot decode <log> <out_dir>` writes one PNG per frame. Refusals are
+`LOG display: screenshot failed (no screen|no host|no memory|busy|snapshot)`; `no host` means no reader is
+attached to the USB-Serial/JTAG port (the command needs one, else printing could block BLE). It runs on the NimBLE host task and
+blocks it while printing (manual debug command). The host check only sees the USB bus, not an open
+port: on the bench (2026-10-01) three `screenshot`s whose sender closed the port at once left BLE
+alone all the same — the mock unit kept being read about once a second, `/api/state` kept
+`device.link.up` true, no reboot — and the next `screenshot` with a reader came through whole.
+
 ## Pins
 
 | What | Pin | Why |
@@ -501,10 +570,10 @@ defined in `docs/firmware.md` too, with their verifying tests (`T_WIFI_SM_REF`,
 `T_FW_ESP_SCREENSHOT_FIXTURES`, `T_FW_WIFI_LOSS_SESSION`, `T_FW_WEB_E2E`) declared in the test
 modules' docstrings.
 
-## On-board verification (queued until the CoreS3 arrives)
+## On-board verification
 
-Nothing below has run: the host and QEMU tiers above are the only proof so far. This is the plan
-for the first time a real M5Stack CoreS3 is on the bench, in order:
+The bring-up plan for a real M5Stack CoreS3 on the bench, in order (run 2026-10-01 against the
+mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record what has been proven):
 
 1. **Flash from the build's own flasher args — never hand-type offsets.** `idf.py build` (the
    release variant, table above) writes `firmware/build/flasher_args.json` alongside the images;
