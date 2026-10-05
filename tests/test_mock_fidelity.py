@@ -133,6 +133,40 @@ def test_cooler_time_picker_frame_sets_the_start_time_fields():
     assert st["State"] == 0 and st["Level"] == 3  # sentinels left everything else alone
 
 
+def _fridge_on_unit():
+    """The fake unit's baseline (``baseline-0410``): fridge ON, level 3, timer set 00:00."""
+    return _armed_unit(
+        cooler={"Installed": 1, "State": 1, "Level": 3, "Mode": 4, "TimerHourSet": 0, "TimerMinSet": 0}
+    )
+
+
+def test_app_level_and_power_writes_apply_while_the_fridge_is_on():
+    """The app's level/power frames carry TimerHour/TimerMin at their dictionary defaults (30/62,
+    the leave-unchanged sentinel), not the set time. They are not a timer change, so the unit
+    applies them while the fridge is on — the real app shows "Something went wrong" otherwise
+    (app lab 2026-10-05: level 3->5 reverted to 3, power-off reverted)."""
+    f = _funcs()
+    u = _fridge_on_unit()
+    u.write(f["cooler"].control_char, bytes.fromhex("ff751e3e1f1f"))  # app: level 5, rest sentinel
+    assert u.decoded("cooler")["Level"] == 5
+    u.write(f["cooler"].control_char, bytes.fromhex("fc771e3e1f1f"))  # app: power off
+    assert u.decoded("cooler")["State"] == 0
+    assert u.refusals == []
+
+
+def test_a_real_timer_change_is_still_refused_while_the_fridge_is_on():
+    """The DEVICE-confirmed rule stays: picking a start time (04:02, the app's `ff7704021f1f`) or
+    arming the timer (`f7771e3e1f1f`) while the fridge is on is ACKed and ignored."""
+    f = _funcs()
+    u = _fridge_on_unit()
+    u.write(f["cooler"].control_char, bytes.fromhex("ff7704021f1f"))
+    st = u.decoded("cooler")
+    assert (st["TimerHourSet"], st["TimerMinSet"]) == (0, 0)
+    u.write(f["cooler"].control_char, bytes.fromhex("f7771e3e1f1f"))
+    assert u.decoded("cooler")["TimerState"] == 0
+    assert [why for _, why in u.refusals] == ["the cooling timer can only be set while the fridge is off"] * 2
+
+
 def test_cooler_timer_action_bits_arm_and_clear_the_timer():
     """The app's "Timer" switch (box off) writes only TimerStart=1 with everything else at the
     sentinels (`f7771e3e1f1f`, observed); the unit reports TimerState=1. TimerCancel=1 clears it."""

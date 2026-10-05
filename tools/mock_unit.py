@@ -573,12 +573,15 @@ class MockCamperUnit:
             if pos in (0, 14) and zone not in (None, LIGHT_ZONE_UNCHANGED) and zone > 0:
                 return "the pop-top reading light needs the roof raised"
         # The cooling timer can only be set while the fridge is OFF. Only an actual CHANGE counts:
-        # a full-packet write carries the current timer values back on every unrelated command
-        # (power, level), and the unit obviously does not refuse those.
+        # a full-packet write carries the timer fields on every unrelated command (power, level) —
+        # the app sends them at their dictionary default (30/62, the leave-unchanged sentinel the
+        # apply step below also skips), calictl sends the current set time — and the unit does not
+        # refuse those.
         cs = self.state.get("cooler") or {}
         if fn == "cooler" and cs.get("State") == 1:
+            sentinel = {cf.name: cf.default for cf in self.funcs["cooler"].control_fields}
             moves_timer = any(
-                ctrl.get(c) is not None and ctrl.get(c) != cs.get(s)
+                ctrl.get(c) is not None and ctrl.get(c) != sentinel.get(c) and ctrl.get(c) != cs.get(s)
                 for c, s in (("TimerHour", "TimerHourSet"), ("TimerMin", "TimerMinSet"))
             )
             if ctrl.get("TimerStart") == 1 or moves_timer:
