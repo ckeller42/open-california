@@ -163,3 +163,16 @@ and retries silently — so they are calictl's own contribution, not a mirror of
 `0x0E` link drop on out-of-range values; water measurement-gating / stale latch; deep-sleep and
 advertising stop when parked; real motor withhold (~3 s) and travel time; `1502` Mode-4 ramp
 notifications; readback-is-an-echo; RPA rotation.
+
+## Automated recordings (harness)
+
+The frames in this document were captured by hand. The app-fidelity harness regenerates them as
+committed recordings: `tools/applab/walk.py <scenario>` writes `tests/vectors/app/<scenario>.jsonl`
+and CI replays it against `control.build` (`tests/test_app_recordings.py`,
+`python3 -m tools.capture_diff <file> --recording`); `tools/app_parity.py` reports the connection
+lifecycle. See {doc}`../simulation-and-testing`.
+
+No recording is committed yet, so **no row here or in the evidence ledger is APP-RECORDED**; tier
+values are unchanged. They flip when the first recording session lands the scenarios
+`airheater-permanent-on`, `energy-mode`, `lighting-profile`, `lighting-wakeup`, `cooler` and
+`airheater`.

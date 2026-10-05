@@ -105,6 +105,20 @@ Error=1` (workshop dialog), `set roof Position=…`/`InfoPopUp=9`, `set campingm
    `what` names: see the `:param what:` list in each `calictl/control.py` builder (`_airheater`: power,
    level, runtime, timer, timer_start, …).
 
+## Recording a scenario (walk.py)
+
+Scripted recording beats grepping the log: add a scenario in `tools/applab/scenarios.py`, then on
+thinky (Linux lab: `tools/applab/README.md`, "One-time setup") run:
+
+```bash
+~/esp-venv/bin/python tools/applab/walk.py <scenario>      # -> tests/vectors/app/<scenario>.jsonl
+python3 -m tools.capture_diff tests/vectors/app/<scenario>.jsonl --recording
+python3 -m pytest tests/test_app_recordings.py -k <scenario>
+```
+
+A failed step names its screenshot; fix the selector or XY point and rerun. Recordings are made by
+hand once per APK version. Never `pkill -f` the fake: use `labctl.sh` and the pid file.
+
 ## Recording (the owner's rule: every protocol fact lands in the docs in the same PR)
 
 | Fact | Where |
