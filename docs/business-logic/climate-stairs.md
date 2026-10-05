@@ -265,9 +265,13 @@ page has one switch (the master) and three status rows. The fake unit's four `In
 So the front-door row ("Opening front door activates the exterior and interior lighting at the
 front.") is exactly `m2()` — Enabled iff both raw fields are 0 — and the single inverted toggle model
 holds. The sliding-door row ("Opening sliding door activates the rear interior lights.") never moved
-with any 1202 field: it is not a campingmode field. **Hypothesis:** it follows the lighting
-function's DOOR_CONTACT profile (`dg/h.n4`; the page's tip reads "See also lighting > lighting &
-sliding door"); next step: set the lighting DOOR_CONTACT state on the fake unit and watch the row.
+with any 1202 field: it is not a campingmode field. **SETTLED by call stack (#154, 2026-10-05):** the
+camping page VM binds the row at `wh/c.java:98`. On a `CALIFORNIA_6_1` it reads a camping flag; on every other
+variant, including the T7, it reads the lighting facade `yg/o.l0` = `dg/h.s4()` = the DOOR_CONTACT flag `D0`.
+`D0` is set from a 1502 notification with Mode=`SET_PROFILE`(16), ProfileNumber=`DOOR_CONTACT`(8) and
+`LightValue==1` (vineflower `dg/a.java:293-306`). Tapping the row (`wh/b.java:91-104`) calls `dg/h.n4`. On a T7
+that writes a **lighting** 1501 frame (Mode 16, PN 8, LightValue 0/1). On a 6.1 it calls the camping `q0`, which
+is a no-op on `tf/a`. Owed: an APP-OBSERVED pass that sets DOOR_CONTACT on the fake unit and watches the row.
 The USB row follows `UsbCharger` 1/0 (Enabled/Disabled). With the master off (`State=0`) the page
 body is unchanged. No lights or USB **switch** is shown on this page; whether tapping the row icons
 writes (the 2026-09-16 session recorded `0f` / `f3` from the front-door / USB row icons,

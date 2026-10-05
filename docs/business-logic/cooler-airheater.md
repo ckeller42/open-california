@@ -114,6 +114,9 @@ transmits whatever Level/Mode/timer values are currently held in the model.
   "Automatisch") + call-stack (`vf/c` K0/L0 → QuietModeViewModel `yh/e`):
   **Mode 0 = off, Mode 2 = manual Quiet ("Ein/Aus"), Mode 4 = scheduled Quiet ("Automatischer
   Flüstermodus").** `quiet_scheduled` is derived from Mode 4, NOT `NightTimerSet` (a dead-end bit).
+  **`NightTimerSet` RETIRED (#154, 2026-10-05):** it flows `vf/c` `J0` (`vf/c.java:166,406`) → `D3()` →
+  the cooler facade `yg/g.w0` (`yg/g.java:1014,1026`). Jadx and smali find no reader outside the facade's own
+  lambdas and no writer on the cooler path. The bit has no meaning the app can show, so calictl keeps it omitted.
 - **Error** (read-back field, not directly settable): `0` = none, `1` = Error, `2` = Emergency
   operation, `3` = Door open (`vf/c.java:408, 420-437` dispatches to
   `COOLER_ERROR_NOTIFICATION_ID` / `COOLER_EMERGENCY_OPERATION_NOTIFICATION_ID` /
@@ -221,6 +224,11 @@ above); it has nothing to do with turning Permanent Heating on. The string-resou
 (`..._permanentHeatingTimerDialog_permanentHeatingWillTurnOff_text`) say arming the timer
 turns permanent heating off, i.e. the two are mutually exclusive. Permanent Heating ON stays
 in-vehicle-only (no write site in the app).
+**Call stack (#154, 2026-10-05):** a whole-app search (jadx + a smali grep for the `sf/a` `g0` holder) finds
+exactly one write of `PermanentOperationRequest`: `rf/b.E3` (`rf/b.java:210-214`), which always writes 0. It is
+reached from the heater page switch lambdas `ni/a.java:419` and `:466` through the `yg/b.java:560` facade. The only
+other hit is the cooler's reuse of the same slot as `TimerCancel` (`vf/c.java:255`). **SETTLED:** the app never
+sends ON. This matches the APP-RECORDED 2026-10-05 inert switch.
 
 The heater's "timer start" trigger is therefore NOT a bit like Cooler's `TimerStart` but the
 `OperationModeAirHeater` value itself — physical slot `f23983f0` (Cooler's `TimerStart`) is named `PermanentOperationConfirmation`
