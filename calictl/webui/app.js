@@ -1501,6 +1501,9 @@ const LIGHT_LAMPS = [
     { label: "Rear surroundings", what: "outside-rear", zone: 3 },
     { label: "Entrance", what: "entrance", zone: 12 } ] },
 ];
+// The app's T7 wake-up area labels (ti/b: AREA_1..4)
+const WAKE_AREAS = ["Living area reading lights", "Kitchen background lighting",
+  "Pop-up roof reading lights", "Pop-up roof background lighting"];
 const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NOT_EQUIPPED — never send)
 
 /** @param {FnState} s */
@@ -1537,14 +1540,15 @@ function renderLighting(s) {
   psel.disabled = readOnly();
   const opt0 = document.createElement("option");
   opt0.value = ""; opt0.textContent = /** @type {string} */ (t("Choose…")); opt0.selected = true; psel.appendChild(opt0);
+  // The app's four favourite tiles A/B/C/D are FAVORITE 1/5/6/7 (gv/z0, hi/f); CLI/API take 1-7.
+  const FAV_TILES = /** @type {[number, string][]} */ ([[1, "A"], [5, "B"], [6, "C"], [7, "D"]]);
   /** @type {[number, string][]} */
-  const PROFILES = [[1, "Profile 1"], [2, "Profile 2"], [3, "Profile 3"], [4, "Profile 4"],
-                    [5, "Profile 5"], [6, "Profile 6"], [7, "Profile 7"],
+  const PROFILES = [...FAV_TILES.map(([n, l]) => /** @type {[number, string]} */ ([n, "Profile " + l])),
                     [11, "Interior lighting"], [10, "Wake-up light"]];
   for (const [n, lab] of PROFILES) {
-    // "Profile N" -> translate the word, keep the number; named profiles have their own keys.
-    const labT = /^Profile \d+$/.test(lab) ? t("Profile") + " " + lab.split(" ")[1] : t(lab);
-    const filled = n <= 7 && !!s.favourites_stored && s.favourites_stored.includes(n);   // saved on the unit
+    // "Profile X" -> translate the word, keep the tile letter; named profiles have their own keys.
+    const labT = /^Profile \w$/.test(lab) ? t("Profile") + " " + lab.split(" ")[1] : t(lab);
+    const filled = !!s.favourites_stored && s.favourites_stored.includes(n);   // saved on the unit
     const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = labT + (filled ? " ✓" : ""); psel.appendChild(o);
   }
   psel.onchange = () => {
@@ -1562,8 +1566,8 @@ function renderLighting(s) {
   const ssel = document.createElement("select");
   ssel.disabled = readOnly();
   const s0 = document.createElement("option"); s0.value = ""; s0.textContent = /** @type {string} */ (t("Profile…")); s0.selected = true; ssel.appendChild(s0);
-  for (let n = 1; n <= 7; n++) {
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Profile") + " " + n; ssel.appendChild(o);
+  for (const [n, l] of FAV_TILES) {
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Profile") + " " + l; ssel.appendChild(o);
   }
   ssel.onchange = () => {
     if (ssel.value === "") return;
@@ -1649,7 +1653,7 @@ function renderLighting(s) {
     // never untick the last area: the unit needs one (the app's "no area chosen" dialog)
     cb.disabled = wkOff || (cb.checked && curAreas.length === 1);
     cb.onchange = () => wakeCmd({ areas: cb.checked ? [...curAreas, a].sort() : curAreas.filter((x) => x !== a) });
-    lab.append(cb, document.createTextNode(" " + tf("Area {n}", { n: a })));
+    lab.append(cb, document.createTextNode(" " + t(WAKE_AREAS[a - 1])));
     arow.appendChild(lab);
   }
   wc.appendChild(arow);
@@ -1663,6 +1667,8 @@ function renderLighting(s) {
   // Lighting & sliding door (dg/h.n4: SET_PROFILE PN 8, LightValue 1/0). Not variant-gated (see
   // control.command_precondition): the app's T7 page shows it, and this T7 reads CarVariant=4.
   const dc = document.createElement("div"); dc.className = "card";
+  // the app hides the row only on Grand California (CarVariant 2); no equipment gate (wh/c.h0)
+  const gc = !!STATE.vehicle && STATE.vehicle.car_variant === 2;
   const dh = document.createElement("div"); dh.className = "note"; dh.style.padding = ".6rem 0 0";
   dh.textContent = /** @type {string} */ (t("Lighting & sliding door")); dc.appendChild(dh);
   const drow = document.createElement("div"); drow.className = "row";
@@ -1676,7 +1682,7 @@ function renderLighting(s) {
   dsw.setAttribute("aria-checked", dOn ? "true" : "false"); dsw.disabled = readOnly();
   dsw.onclick = () => command("lighting", "door_contact", dOn ? "off" : "on");
   drow.appendChild(dsw); dc.appendChild(drow);
-  app.appendChild(dc);
+  if (!gc) app.appendChild(dc);
 
   // lamp sliders, grouped like the app (always controllable)
   for (const grp of LIGHT_LAMPS) {

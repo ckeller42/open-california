@@ -431,7 +431,7 @@ def test_lighting_screen_lamps_are_directly_controllable(page):
     # like the app: lamps are always controllable (no "activate a profile first" gate). Dragging
     # a lamp from the lights-off state applies directly — the SET_BRIGHTNESS self-carries profile 9.
     page.get_by_text("Lighting", exact=True).first.click()
-    expect(page.get_by_text("Reading lights")).to_be_visible()
+    expect(page.get_by_text("Reading lights", exact=True)).to_be_visible()
     expect(page.get_by_text("Left", exact=True)).to_be_visible()  # a reading lamp
     # no manual Activate step, and controls are live from the start
     assert page.get_by_role("button", name="Activate").count() == 0
@@ -1009,3 +1009,58 @@ def test_favourite_save_then_activate(page, base_url):
         base_url + "/api/command", data={"function": "lighting", "what": "color", "value": "red"}
     )
     assert r.status == 400 and "retired" in r.json()["error"]
+
+
+def test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7(page):
+    """.. test:: The profile selectors offer the app's four tiles A-D = favourites 1/5/6/7
+    :id: T_E2E_LIGHT_TILES
+    :links: R_LIGHT_FAVOURITE
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    for sel in (page.locator("select").nth(0), page.locator("select").nth(1)):
+        opts = {
+            o.get_attribute("value"): o.inner_text()
+            for o in sel.locator("option").all()
+            if o.get_attribute("value")
+        }
+        letters = {v: t.replace(" ✓", "") for v, t in opts.items() if v in ("1", "5", "6", "7")}
+        assert letters == {"1": "Profile A", "5": "Profile B", "6": "Profile C", "7": "Profile D"}
+        assert "2" not in opts and "3" not in opts and "4" not in opts
+
+
+def test_wakeup_areas_use_the_t7_labels_and_ranges(page):
+    """.. test:: Wake-up areas carry the app's T7 labels; brightness 0..10; lead time 0/10/20/30
+    :id: T_E2E_LIGHT_WAKEUP_LABELS
+    :links: R_LIGHT_WAKEUP
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    for label in (
+        "Living area reading lights",
+        "Kitchen background lighting",
+        "Pop-up roof reading lights",
+        "Pop-up roof background lighting",
+    ):
+        expect(page.get_by_text(label, exact=False).first).to_be_visible()
+    bright = page.get_by_label("Wake-up brightness")
+    assert (bright.get_attribute("min"), bright.get_attribute("max")) == ("0", "10")
+    ramps = [o.get_attribute("value") for o in page.locator("select").nth(2).locator("option").all()]
+    assert ramps == ["0", "10", "20", "30"]
+
+
+def test_door_contact_row_hidden_on_grand_california(page, base_url):
+    """.. test:: The sliding-door row is shown on every variant except Grand California (2)
+    :id: T_E2E_LIGHT_DOOR_GATE
+    :links: R_LIGHT_DOOR_CONTACT
+    """
+
+    def patch(route):
+        r = route.fetch()
+        body = r.json()
+        body.setdefault("vehicle", {})["car_variant"] = 2
+        route.fulfill(response=r, json=body)
+
+    page.route("**/api/state", patch)
+    page.goto(base_url)
+    page.get_by_text("Lighting", exact=True).first.click()
+    expect(page.get_by_label("Wake-up time")).to_be_visible()
+    assert page.get_by_role("switch", name="Sliding door lighting").count() == 0
