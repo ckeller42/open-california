@@ -10,7 +10,8 @@
     calictl set lighting <zone> <0-11>            # 0=off, 1-10=10%..100%, 11=default; zones: reading-1/2/3, kitchen, kitchen-ambient, roof-ambient, roof-reading, outside-rear
     calictl set lighting all <0-11>               # every real zone to one level
     calictl set lighting profile <N>              # switch the active lighting profile
-    calictl set lighting color <name>             # recolour active profile: warm-white/amber/red/azure/... (apply UNVERIFIED)
+    calictl set lighting save_profile "<N> [colour]"  # save favourite N (colour: warm-white/amber/red/azure/...)
+    calictl set lighting door_contact on|off      # sliding-door light
     calictl set airheater power on|off            # immediate heating
     calictl set airheater permanent off           # continuous heating: OFF only (start it from inside the vehicle)
     calictl set airheater level <1-10>

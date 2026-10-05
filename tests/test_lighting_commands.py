@@ -154,3 +154,67 @@ def test_wakeup_keeps_a_non_default_colour(at_rec_time):
         _funcs()["lighting"], control.build(_funcs(), "lighting", "wakeup", "off", last)
     )
     assert d["LightValue"] >> 12 == 5
+
+
+# The notify the app had seen right before its save (lighting-profile.jsonl): Cooking (L7) = 5.
+SAVE_STATE_HEX = "091000000000000000000005d00ddddd"
+SAVE_FRAME_HEX = "010400000000000000000005e00eeeee"  # recorded: press-and-hold tile A
+
+
+def test_door_contact_on_off_is_set_profile_8_with_light_value():
+    """.. test:: Door contact builds dg/h.n4 (Mode 16, PN 8, LightValue 1/0)
+    :id: T_LIGHT_DOOR_CONTACT
+    :links: R_LIGHT_DOOR_CONTACT
+    """
+    f = _funcs()
+    assert control.build(f, "lighting", "door_contact", "on", {}).hex() == "0810000000000001eeeeeeeeeeeeeeee"
+    assert control.build(f, "lighting", "door_contact", "off", {}).hex() == "0810000000000000eeeeeeeeeeeeeeee"
+    with pytest.raises(ValueError, match="on or off"):
+        control.build(f, "lighting", "door_contact", "maybe", {})
+
+
+def test_profile_activate_is_one_set_profile_frame():
+    """dg/h.u0: v(16, PENDING) then w(N, DIRECT) — one frame, everything else at the reset values.
+
+    .. test:: Favourite activate is one SET_PROFILE frame
+       :id: T_LIGHT_FAVOURITE_ACTIVATE
+       :links: R_LIGHT_FAVOURITE
+    """
+    f = _funcs()
+    assert control.build(f, "lighting", "profile", 1, {}).hex() == "0110000000000000eeeeeeeeeeeeeeee"
+    assert control.build(f, "lighting", "profile", "7", {}).hex() == "0710000000000000eeeeeeeeeeeeeeee"
+    with pytest.raises(ValueError, match="door_contact"):
+        control.build(f, "lighting", "profile", 8, {})  # PN 8 = the door-contact frame
+    with pytest.raises(ValueError):
+        control.build(f, "lighting", "profile", 14, {})
+
+
+def test_save_profile_stays_byte_exact_and_colour_adds_a_set_color_preface():
+    """.. test:: save_profile N [colour] = optional SET_COLOR then the recorded SET_BRIGHTNESS
+    :id: T_LIGHT_FAVOURITE_SAVE
+    :links: R_LIGHT_FAVOURITE
+    """
+    f = _funcs()
+    st = _st(SAVE_STATE_HEX)
+    assert control.build(f, "lighting", "save_profile", 1, st).hex() == SAVE_FRAME_HEX
+    assert control.build(f, "lighting", "save_profile", "1 red", st).hex() == SAVE_FRAME_HEX
+    assert control.preface_for(f, "lighting", "save_profile", 1, st) is None
+    assert (
+        control.preface_for(f, "lighting", "save_profile", "1 red", st).hex()
+        == "010600000000000900000005e00eeeee"
+    )
+    assert control.preface_for(f, "cooler", "power", "on", {}) is None
+    with pytest.raises(ValueError, match="unknown light colour"):
+        control.build(f, "lighting", "save_profile", "1 chartreuse", st)
+    with pytest.raises(ValueError, match="N \\[colour\\]"):
+        control.build(f, "lighting", "save_profile", "1 red extra", st)
+
+
+def test_retired_color_raises_with_a_pointer():
+    with pytest.raises(ValueError, match="retired.*save_profile"):
+        control.build(_funcs(), "lighting", "color", "red", {"ProfileNumber": 9})
+
+
+def test_unknown_lighting_target_raises_not_none():
+    with pytest.raises(ValueError, match="unknown lighting control"):
+        control.build(_funcs(), "lighting", "disco", 5, {})

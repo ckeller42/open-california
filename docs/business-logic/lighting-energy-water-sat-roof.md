@@ -253,9 +253,9 @@ colour UI (`lighting_interiorLighting_SectionLightSubline_adjustLightColour_text
 10 `lighting_lightColor_*_text` names, rendered by `tt/x9.java`), but it is shown only behind a boolean flow
 whose source is unresolved — sibling keys carry the `_gc` suffix, so it is likely Grand-California-only and
 never appears on a T7. So SET_COLOR is a real capability, not N/A — but it recolours a
-stored profile. `control._lighting`'s `color` builds `ProfileNumber=9` + sentinel zones, which is NOT what the
-app sends (target profile + its brightness), so our `set lighting color` frame is mis-shaped and likely won't
-actuate as built. The other `dg.j` use is the wake-up-light `LightValue` packing (`dg/h.java:656`).
+stored profile. The old standalone `color` (PN 9 + sentinel zones) was mis-shaped vs the app and is
+**retired**; `save_profile N <colour>` now sends SET_COLOR (PN N + the profile's zones) before the save
+(`control.preface_for`, decompile-only). The other `dg.j` use is the wake-up-light `LightValue` packing (`dg/h.java:656`).
 
 ### Wake mode enum (`dg/k.java:39-53`)
 

@@ -283,8 +283,8 @@ WAKEUP_DEFAULT = {
 LIGHT_PROFILE_ALL_ON = 12  # LIGHTS_ON  — the app's "Alle Lichter" master ON  (dg/h.java:323 Q())
 LIGHT_PROFILE_ALL_OFF = 0  # LIGHTS_OFF — the app's "Alle Lichter" master OFF
 # Colour palette (dg/j.java, decompile 2026-07-12): SET_COLOR carries ONE index in LightValue for
-# the whole target profile — not RGB. On-device apply is UNVERIFIED (the app exposes no colour
-# control, so there is nothing to capture against); the frame layout is byte-decoded from the app.
+# the whole target profile — not RGB. Used by `save_profile N <colour>` (SET_COLOR preface) and the
+# wake-up colour nibble. On-device apply is UNVERIFIED (colour UI not shown on this model).
 LIGHT_COLORS = {
     "warm-white": 1,
     "blood-orange": 2,
@@ -461,6 +461,41 @@ def _all_real_zones(zone_fields, b):
     return {z: (b if z in real else LIGHT_UNCHANGED) for z in zone_fields}
 
 
+def _zone_fields(f):
+    return [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
+
+
+def _saved_zones(zone_fields, last):
+    """Every equipped (real) zone at its current level from ``last``; anything else 14 —
+    the zones of the app's favourite save (``dg/h.l3`` step b)."""
+    from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
+
+    real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
+    st = last or {}
+    return {
+        z: (
+            st[z]
+            if z in real and isinstance(st.get(z), int) and 0 <= st[z] <= LIGHT_MAX_SET
+            else LIGHT_UNCHANGED
+        )
+        for z in zone_fields
+    }
+
+
+def _save_profile_args(value):
+    """``"N"`` or ``"N <colour>"`` -> ``(N, palette index or None)``."""
+    tokens = str(value).split()
+    if not 1 <= len(tokens) <= 2:
+        raise ValueError("save_profile takes N [colour], got %r" % value)
+    n = _int_range(tokens[0], 1, 7, "save_profile favorite")
+    if len(tokens) == 1:
+        return n, None
+    idx = LIGHT_COLORS.get(tokens[1].lower().replace("_", "-"))
+    if idx is None:
+        raise ValueError("unknown light colour %r; one of: %s" % (tokens[1], ", ".join(sorted(LIGHT_COLORS))))
+    return n, idx
+
+
 def _lighting(funcs, what, value, last):
     """Build a lighting control frame (char 1501). CRACKED via HCI capture 2026-07-08.
 
@@ -480,10 +515,27 @@ def _lighting(funcs, what, value, last):
         ``value`` (a calictl convenience, not an app action); never-equipped zones always get the
         unchanged sentinel.
       * ``"wakeup"`` -> the wake-up light (Mode 20); ``value`` = :func:`wakeup_request` words.
-      * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = target ProfileNumber.
-      * ``"color"`` -> SET_COLOR (Mode 6); ``value`` = a ``LIGHT_COLORS`` name; recolours the
-        active profile (LightValue = palette index 1-10). On-device apply UNVERIFIED (app has no
-        colour UI to capture against).
+      * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = favourite 0-13 (not 8).
+      * ``"door_contact"`` -> SET_PROFILE PN 8, LightValue 1/0 (``on``/``off``).
+      * ``"save_profile"`` -> ``value`` = ``N`` or ``N <colour>`` (colour via :func:`preface_for`).
+
+    .. req:: Build the app's door-contact frame
+       :id: R_LIGHT_DOOR_CONTACT
+       :status: implemented
+       :tags: control, lighting
+
+       ``door_contact on|off`` shall build ``dg/h.n4``: Mode 16, ProfileNumber 8, LightValue 1/0,
+       zones unchanged.
+
+    .. req:: Save and activate favourites like the app
+       :id: R_LIGHT_FAVOURITE
+       :status: implemented
+       :tags: control, lighting
+
+       ``profile N`` shall build one SET_PROFILE frame (``dg/h.u0``); ``save_profile N`` the
+       recorded SET_BRIGHTNESS with ProfileNumber N and every equipped zone at its level
+       (``dg/h.l3``), preceded by a SET_COLOR frame (Mode 6, PN N) when a colour is given. The
+       standalone ``color`` command is retired.
 
     .. req:: Build the app's wake-up light frame
        :id: R_LIGHT_WAKEUP
@@ -495,7 +547,7 @@ def _lighting(funcs, what, value, last):
        ``(ramp/10)<<1 | enabled``, zones unchanged — byte-identical to the app recording.
     """
     f = funcs["lighting"]
-    zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
+    zone_fields = _zone_fields(f)
     # SET_BRIGHTNESS/power/all hardcode ProfileNumber=9 like the app (writes land even with the
     # lights off / PN=0). SET_PROFILE overrides it with the target; SET_COLOR recolours that same 9.
     base = {
@@ -517,37 +569,36 @@ def _lighting(funcs, what, value, last):
         return b
 
     if what == "profile":
+        # dg/h.u0: one SET_PROFILE frame, ProfileNumber = the target (FAVORITE_n = n).
+        n = _int_range(value, 0, 13, "lighting profile")
+        if n == LIGHT_PROFILE_DOOR_CONTACT:
+            raise ValueError("profile 8 is the door-contact frame; use door_contact on|off")
         vals = {
             **base,
             "Mode": LIGHT_MODE_SET_PROFILE,
-            "ProfileNumber": int(value),
+            "ProfileNumber": n,
             **{z: LIGHT_UNCHANGED for z in zone_fields},
         }
     elif what == "save_profile":
-        # Save the CURRENT lighting into a favorite (dg/h.java:564 l3 applyProfileBrightness):
-        # SET_BRIGHTNESS with ProfileNumber = the favorite N (NOT the live-view 9), every equipped
-        # zone carrying its current brightness (read from `last`), NOT_EQUIPPED zones left at 14.
-        # This is how the app DEFINES a favorite. Decompile-derived; NOT yet wire-verified.
-        n = _int_range(value, 1, 7, "save_profile favorite")
-        from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
-
-        real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
-        st = last or {}
-        zones = {}
-        for z in zone_fields:
-            cur = st.get(z)
-            zones[z] = (
-                cur if (z in real and isinstance(cur, int) and 0 <= cur <= LIGHT_MAX_SET) else LIGHT_UNCHANGED
-            )
-        vals = {**base, "Mode": LIGHT_MODE_SET_BRIGHTNESS, "ProfileNumber": n, **zones}
-    elif what == "color":  # recolour the active profile (LightValue = palette idx)
-        idx = LIGHT_COLORS.get(str(value).lower().replace("_", "-"))
-        if idx is None:
-            raise ValueError("unknown light colour %r; one of: %s" % (value, ", ".join(sorted(LIGHT_COLORS))))
+        # dg/h.l3 step (b): SET_BRIGHTNESS with ProfileNumber = the favourite N (NOT the live-view 9),
+        # every equipped zone at its current level. APP-RECORDED (lighting-profile.jsonl). A colour
+        # goes out FIRST as its own SET_COLOR frame (preface_for).
+        n, _ = _save_profile_args(value)
         vals = {
             **base,
-            "Mode": LIGHT_MODE_SET_COLOR,
-            "LightValue": idx,
+            "Mode": LIGHT_MODE_SET_BRIGHTNESS,
+            "ProfileNumber": n,
+            **_saved_zones(zone_fields, last),
+        }
+    elif what == "door_contact":
+        # dg/h.n4: SET_PROFILE + ProfileNumber 8 (DOOR_CONTACT) staged, LightValue on?1:0 sent.
+        if str(value).strip().lower() not in ("on", "off", "true", "false", "1", "0"):
+            raise ValueError("door_contact takes on or off, got %r" % value)
+        vals = {
+            **base,
+            "Mode": LIGHT_MODE_SET_PROFILE,
+            "ProfileNumber": LIGHT_PROFILE_DOOR_CONTACT,
+            "LightValue": 1 if _truthy(value) else 0,
             **{z: LIGHT_UNCHANGED for z in zone_fields},
         }
     elif what == "wakeup":
@@ -577,9 +628,13 @@ def _lighting(funcs, what, value, last):
         # not an app action (the app is per-zone) — our convenience: every REAL lamp to one level
         vals = {**base, **_all_real_zones(zone_fields, _b(value))}
     else:  # a single zone (friendly key or BrightnessL field)
+        if what == "color":
+            raise ValueError(
+                "lighting color was retired: the app recolours a saved favourite — use save_profile N <colour>"
+            )
         field = LIGHT_ZONES.get(what, what)
         if field not in zone_fields:
-            return None
+            raise ValueError("unknown lighting control %r" % what)
         vals = {**base, **{z: LIGHT_UNCHANGED for z in zone_fields}, field: _b(value)}
     return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 
@@ -903,6 +958,30 @@ def commit_for(function):
        app's continuous frame stream. Diagram: :need:`S_SEQ_LIGHT_COMMIT`.
     """
     return LIGHT_COMMIT if function == "lighting" else None
+
+
+def preface_for(funcs, function, what, value, last):
+    """The frame the app sends BEFORE the main one, or ``None``. Only ``lighting save_profile N
+    <colour>``: ``dg/h.l3`` step (a), a SET_COLOR (Mode 6) with ProfileNumber N, LightValue = the
+    palette index and the zones of the save that follows. DECOMPILE-only (the colour UI is not shown
+    on this model, so the app cannot be recorded doing it).
+
+    :returns: the SET_COLOR frame, or ``None`` when the action has no preface.
+    """
+    if function != "lighting" or what != "save_profile":
+        return None
+    n, idx = _save_profile_args(value)
+    if idx is None:
+        return None
+    f = funcs["lighting"]
+    vals = {
+        "ProfileNumber": n,
+        "Mode": LIGHT_MODE_SET_COLOR,
+        "Timestamp": 0,
+        "LightValue": idx,
+        **_saved_zones(_zone_fields(f), last),
+    }
+    return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 
 
 # Screen-open config pull — retired. The app opens its Lighting screen with a REQUEST_CONFIG

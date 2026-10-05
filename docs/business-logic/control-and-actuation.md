@@ -301,8 +301,8 @@ because it is instructive RE:
   record.
 - **Still open:** SET_COLOR on-device apply — the app DOES have colour control (`dg/h.java:644`,
   a profile-recolour: Mode 6, LightValue=colour, ProfileNumber=target profile + its brightness),
-  but our `set lighting color` frame is mis-shaped vs the app's (PN=9 + sentinel zones) so it
-  likely won't actuate as built; whether a deep-asleep unit needs any arming at all; pinning the
+  the old standalone `color` was retired; `save_profile N <colour>` now sends the app-shaped
+  SET_COLOR preface (`control.preface_for`, decompile-only, unverified on-device); whether a deep-asleep unit needs any arming at all; pinning the
   exact wake-state determinant with controlled trials (awake duration, parked vs active).
 
 **Lighting frame layout** (16 bytes / 128 bits): `ProfileNumber@4/w4`, `Mode@8/w8`
