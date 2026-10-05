@@ -30,6 +30,10 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
     models "ACKed + echoed, lamps dark". Zone 9 (pop-top reading light) is refused while the roof
     is closed. NOT gated on the 1003 heartbeat (see the arm-gate above): the only wake gate is
     that the mock is connectable at all (``drop()`` = deep sleep refuses the link).
+  * **Lighting configuration:** favourites 1-7 (save = store without a live change, activate =
+    apply + 1502 ack, empty = ACK-and-ignore), the wake-up config (Mode 20) and the door-contact
+    flag (Mode 16 / PN 8) are stored and echoed in the state char; REQUEST_CONFIG (Mode 12)
+    answers with the favourite bits in LightValue.
   * **Roof (1401/1402):** the app-style SafetyCounter stream is modelled — validity needs a
     monotonic, still-advancing counter (two increments), a restart drops it, a validated counter
     withholds the motor ``ROOF_WITHHOLD_S`` (~3 s, SEMI-VERIFIED), a held move steps ``Position``
@@ -205,6 +209,12 @@ class MockCamperUnit:
         self.online = True  # False models the parked unit deep-asleep (not advertising)
         self.last_beat: int | None = None
         self._pending_light = None  # staged lighting change, applied on commit
+        # Lighting configuration the unit STORES (dg/h l3/u0/m0/n4 — DECOMPILE + app recordings):
+        # FAVORITE1-7 slots (ProfileNumber 1-7; None = empty), the wake-up config, the door flag.
+        self.favourites: dict[int, dict | None] = {n: None for n in range(1, 8)}
+        self.favourite_colour: dict[int, int] = {}  # SET_COLOR (Mode 6) per slot, applied at save
+        self.wakeup: dict | None = None  # {"Timestamp", "LightValue"} as last written (Mode 20)
+        self.door_contact = 0  # DOOR_CONTACT (PN 8) flag
         self._roof_ctr: int | None = None  # last SafetyCounter seen (roof frames)
         self._roof_streak = 0  # counter increments observed (monotonic run)
         self._roof_ctr_advanced = 0.0  # self.now when the counter last incremented
@@ -321,6 +331,10 @@ class MockCamperUnit:
         frame = _pack_state(f, {**self.state.get(function, {}), **(values or {})})
         for cb in list(subs):
             cb(_Char(f.state_char, ["notify"]), frame)
+
+    def favourite_bits(self) -> int:
+        """FavoriteProfileModifiedState as the REQUEST_CONFIG reply carries it (bit 0 = favourite 1)."""
+        return sum(1 << (n - 1) for n, v in self.favourites.items() if v)
 
     def set_water_power(self, on: bool) -> None:
         """Power the van's water system on/off — the real gate on water measurement.
@@ -585,6 +599,12 @@ class MockCamperUnit:
             )
             if ctrl.get("TimerStart") == 1 or moves_timer:
                 return "the cooling timer can only be set while the fridge is off"
+        # An empty favourite: NOT device-confirmed — decompile-backed (dg/h u0: the app only offers
+        # activation on a stored tile). Modelled as ACKed and ignored (spec A2).
+        if fn == "lighting" and ctrl.get("Mode") == LIGHT_MODE_SET_PROFILE:
+            pn = ctrl.get("ProfileNumber")
+            if pn in self.favourites and self.favourites[pn] is None:
+                return "favourite %d is empty" % pn
         return None
 
     def write(self, uuid: str, data: bytes) -> None:
@@ -643,6 +663,39 @@ class MockCamperUnit:
         # was a wake-state confound; the app's E() writes DIRECT and never sends the preamble).
         if fn == "lighting":
             mode = ctrl.get("Mode")
+            pn = ctrl.get("ProfileNumber")
+            lv = ctrl.get("LightValue", 0)
+            # Configuration frames are stored and ECHOED in the state char at once (the app reads
+            # its wake-up page / door row / favourite tiles from these 1502 frames).
+            if mode == control.LIGHT_MODE_WAKEUP_TIME:  # m0
+                self.wakeup = {"Timestamp": ctrl.get("Timestamp", 0), "LightValue": lv}
+                st.update(Mode=mode, **self.wakeup)
+                self.push("lighting")
+                return
+            if mode == LIGHT_MODE_SET_PROFILE and pn == control.LIGHT_PROFILE_DOOR_CONTACT:  # n4
+                self.door_contact = 1 if lv == 1 else 0
+                st.update(Mode=mode, ProfileNumber=pn, LightValue=self.door_contact)
+                self.push("lighting")
+                return
+            if mode == control.LIGHT_MODE_REQUEST_CONFIG:  # d0: reply = Mode 12 + favourite bits
+                st.update(Mode=mode, LightValue=self.favourite_bits())
+                self.push("lighting")
+                return
+            if mode == control.LIGHT_MODE_SET_COLOR and pn in self.favourites:  # l3 step a
+                self.favourite_colour[pn] = lv
+                return
+            if mode == LIGHT_MODE_SET_BRIGHTNESS and pn in self.favourites:  # l3 step b: SAVE, not live
+                zones = {
+                    cf.name: ctrl[cf.name]
+                    for cf in func.control_fields
+                    if cf.placed
+                    and cf.name.startswith("BrightnessL")
+                    and cf.name in ctrl
+                    and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED
+                    and func.state_field(cf.name)
+                }
+                self._pending_light = ("save", pn, zones)
+                return
             if mode == LIGHT_MODE_SET_PROFILE:
                 self._pending_light = ("profile", ctrl.get("ProfileNumber", st.get("ProfileNumber", 0)))
                 return
@@ -663,8 +716,22 @@ class MockCamperUnit:
                 return
             if mode == LIGHT_MODE_COMMIT:  # apply the staged change
                 p = getattr(self, "_pending_light", None)
-                if p and p[0] == "profile":
+                if p and p[0] == "save":
+                    _, n, zones = p
+                    self.favourites[n] = {"zones": zones, "colour": self.favourite_colour.get(n, 1)}
+                    st["Mode"] = LIGHT_MODE_SET_BRIGHTNESS  # save ack: Mode 4 (the active PN is untouched)
+                    self.push("lighting", {"ProfileNumber": n})
+                elif p and p[0] == "profile":
                     st["ProfileNumber"] = p[1]
+                    fav = self.favourites.get(p[1])
+                    if fav:  # u0 on a stored favourite: apply its levels, ack on 1502
+                        if self.light_applies:
+                            for zone in fav["zones"]:
+                                self.light_actual.setdefault(zone, st.get(zone, 0))
+                            self._light_ramp.update(fav["zones"])
+                        st.update(fav["zones"])
+                        st["Mode"] = LIGHT_MODE_SET_PROFILE
+                        self.push("lighting")
                 elif p and p[0] == "zones":
                     # Snapshot the PHYSICAL baseline before the echo lands: `st` is about to be
                     # overwritten with the written value, so reading the ramp's starting point

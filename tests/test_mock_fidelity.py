@@ -913,3 +913,105 @@ def test_ignition_couples_into_camping_and_battery_age():
     u.state["vehicle"]["TerminalOneFive"] = 0
     u.tick(1)
     assert u.decoded("campingmode")["Enable"] == 0
+
+
+WAKE_0700 = "0e146ac49c701100eeeeeeeeeeeeeeee"  # lighting-wakeup.jsonl
+SAVE_A = "010400000000000000000005e00eeeee"  # lighting-profile.jsonl (L7 = 5)
+
+
+def _w(u, hexframe):
+    f = _funcs()["lighting"]
+    u.write(f.control_char, bytes.fromhex(hexframe))
+
+
+def test_wakeup_is_stored_and_echoed_on_1502_through_the_commit():
+    """The app's wake-up page reads its time from the 1502 Mode-20 frame (app-rec2: without an echo
+    the switch resent 00:00). The echo must survive the app's 0e00 flush.
+
+    .. test:: Mock stores the wake-up config and echoes it on 1502
+       :id: T_MOCK_LIGHT_WAKEUP
+       :links: R_LIGHT_WAKEUP
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 12, "Mode": 16})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, WAKE_0700)
+    assert u.wakeup == {"Timestamp": 0x6AC49C70, "LightValue": 0x1100}
+    assert protocol.decode(_funcs()["lighting"], pushes[-1])["Mode"] == 20
+    _w(u, control.LIGHT_COMMIT.hex())
+    d = u.decoded("lighting")
+    assert (d["Mode"], d["Timestamp"], d["LightValue"]) == (20, 0x6AC49C70, 0x1100)
+
+
+def test_door_contact_flag_is_reported_on_1502_and_never_becomes_the_active_profile():
+    """Door contact = SET_PROFILE PN 8 with LightValue 1/0 (dg/h n4; lighting-door-contact recording).
+
+    .. test:: Mock reports the door-contact flag as Mode 16 / PN 8 / LightValue
+       :id: T_MOCK_LIGHT_DOOR
+       :links: R_LIGHT_DOOR_CONTACT
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 12, "Mode": 16})
+    _w(u, "0810000000000001eeeeeeeeeeeeeeee")
+    _w(u, control.LIGHT_COMMIT.hex())
+    d = u.decoded("lighting")
+    assert u.door_contact == 1 and (d["Mode"], d["ProfileNumber"], d["LightValue"]) == (16, 8, 1)
+    _w(u, "0810000000000000eeeeeeeeeeeeeeee")
+    assert u.door_contact == 0 and u.decoded("lighting")["LightValue"] == 0
+
+
+def test_activating_an_empty_favourite_is_acked_and_ignored():
+    """Evidence: decompile only (dg/h u0 is offered by the app on a stored tile); not device-confirmed.
+
+    .. test:: Mock refuses (ACK-and-ignore) an empty favourite
+       :id: T_MOCK_LIGHT_FAV_EMPTY
+       :links: R_LIGHT_FAVOURITE
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 12, "Mode": 16})
+    _w(u, "0210000000000000eeeeeeeeeeeeeeee")
+    _w(u, control.LIGHT_COMMIT.hex())
+    assert ("lighting", "favourite 2 is empty") in u.refusals
+    assert u.decoded("lighting")["ProfileNumber"] == 12
+
+
+def test_save_then_activate_restores_the_saved_levels():
+    """dg/h l3: SET_COLOR then SET_BRIGHTNESS under the favourite's PN = save, not a live change
+    (lighting-profile.jsonl); activation = SET_PROFILE PN n.
+
+    .. test:: Mock saves a favourite without a live change and applies it on activate
+       :id: T_MOCK_LIGHT_FAV_SAVE
+       :links: R_LIGHT_FAVOURITE
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLSeven": 5})
+    _w(u, "010600000000000900000005e00eeeee")  # SET_COLOR red for favourite 1 (preface)
+    _w(u, control.LIGHT_COMMIT.hex())
+    _w(u, SAVE_A)
+    _w(u, control.LIGHT_COMMIT.hex())
+    assert u.favourites[1]["zones"]["BrightnessLSeven"] == 5 and u.favourites[1]["colour"] == 9
+    assert u.decoded("lighting")["ProfileNumber"] == 9  # a save is not an activation
+    _commit_brightness(u, "BrightnessLSeven", 0)  # lamp off
+    _w(u, "0110000000000000eeeeeeeeeeeeeeee")
+    _w(u, control.LIGHT_COMMIT.hex())
+    d = u.decoded("lighting")
+    assert d["ProfileNumber"] == 1 and d["BrightnessLSeven"] == 5
+
+
+def test_request_config_reply_comes_after_the_save_ack():
+    """dg/h.l3 sends d0() REQUEST_CONFIG right after the save ack and awaits the Mode-12 reply whose
+    LightValue bits 0-6 are FavoriteProfileModifiedState (vineflower dg/a.java:286-290). Back to back,
+    the reply must be the LAST 1502 frame, with favourite 1's bit set.
+
+    .. test:: REQUEST_CONFIG reply follows the save ack and carries the favourite bit
+       :id: T_MOCK_LIGHT_REQUEST_CONFIG
+       :links: R_LIGHT_FAVOURITE
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLSeven": 5})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, SAVE_A)
+    _w(u, control.LIGHT_COMMIT.hex())
+    _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")  # the app's REQUEST_CONFIG
+    modes = [protocol.decode(_funcs()["lighting"], p)["Mode"] for p in pushes]
+    assert modes == [4, 12]
+    assert protocol.decode(_funcs()["lighting"], pushes[-1])["LightValue"] & 1 == 1

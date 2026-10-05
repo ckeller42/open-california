@@ -370,3 +370,39 @@ def test_a_write_error_disables_recording_once(tmp_path, caplog):
     assert v1 and v1 == v2  # the lab keeps serving
     assert unit.rec.path is None and not unit.rec.enabled
     assert sum("recording disabled" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_lighting_config_frames_are_notified_to_a_subscribed_central():
+    """Wake-up (Mode 20) and REQUEST_CONFIG (Mode 12, favourite bits) replies reach a 1502 subscriber
+    (dg/h m0/d0; lighting-wakeup.jsonl + vineflower dg/a.java:286-290).
+
+    .. test:: Fake peripheral notifies the lighting config echoes
+       :id: T_FAKE_LIGHT_CONFIG_NOTIFY
+       :links: R_LIGHT_WAKEUP
+    """
+    from calictl import overrides, protocol
+
+    f = protocol.load()
+    overrides.apply(f)
+    light = f["lighting"]
+
+    async def run():
+        unit, peer = await _connected_peer()
+        got: asyncio.Queue = asyncio.Queue()
+        await _char(peer, "1502").subscribe(lambda v: got.put_nowait(bytes(v)))
+        await asyncio.wait_for(got.get(), 2.0)  # on-subscribe push
+        ctl = _char(peer, "1501")
+        out = []
+        for hx in (
+            "0e146ac49c701100eeeeeeeeeeeeeeee",  # wake-up 07:00
+            "010400000000000000000005e00eeeee",  # save favourite 1
+            "0e00000000000000eeeeeeeeeeeeeeee",  # commit
+            "0d0c000000000000eeeeeeeeeeeeeeee",  # REQUEST_CONFIG
+        ):
+            await ctl.write_value(bytes.fromhex(hx), with_response=True)
+            out.append(protocol.decode(light, await asyncio.wait_for(got.get(), 2.0)))
+        return out
+
+    wake, _save, _commit, cfg = asyncio.run(run())
+    assert (wake["Mode"], wake["Timestamp"]) == (20, 0x6AC49C70)
+    assert cfg["Mode"] == 12 and cfg["LightValue"] & 1 == 1
