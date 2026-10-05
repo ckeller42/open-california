@@ -1687,13 +1687,16 @@ def _light_server(monkeypatch, pushes):
     s._read_only = False
     s._last = {"lighting": {"ProfileNumber": 9, "Mode": 4}}
     key = str(s.funcs["lighting"].state_char).lower()
-    writes = []
+    writes, calls = [], []
 
     class FakeSession:
         is_up = True
         _notif = {}
 
-        async def actuate(self, func, frame, *, follow=None, verify=True):
+        async def actuate(self, func, frame, *, follow=None, verify=True, preface=None):
+            calls.append(1)
+            if preface is not None:
+                writes.append(preface.hex())
             writes.append(frame.hex())
             if pushes:
                 nxt = bytes.fromhex(pushes.pop(0))
@@ -1706,6 +1709,7 @@ def _light_server(monkeypatch, pushes):
             return None
 
     s._sessions._session = FakeSession()
+    s.calls = calls
     return s, writes
 
 
@@ -1741,6 +1745,47 @@ def test_save_profile_with_colour_writes_the_set_color_preface_first(monkeypatch
 
     asyncio.run(_run())
     assert writes == ["010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee"]
+    assert len(s.calls) == 1  # preface + save in ONE actuate (one arm window)
+
+
+def test_save_profile_cold_path_is_one_actuate_with_the_preface(monkeypatch):
+    s, _ = _light_server(monkeypatch, [])
+    s._sessions._session = None  # no persistent session: the daemon's own connection
+    s._last = {
+        "lighting": protocol.decode(s.funcs["lighting"], bytes.fromhex("091000000000000000000005d00ddddd"))
+    }
+    got = []
+
+    async def dev_actuate(func, frame, *, verify=True, follow=None, preface=None):
+        got.append((preface.hex() if preface else None, frame.hex()))
+        return None
+
+    monkeypatch.setattr(s.dev, "actuate", dev_actuate)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "save_profile", "1 red")
+
+    asyncio.run(_run())
+    assert got == [("010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee")]
+
+
+def test_wakeup_time_edit_never_re_enables_from_the_latch(monkeypatch):
+    """The app's time picker writes enabled=0; a cached 'enabled' latch must not re-arm it."""
+    import datetime
+
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
+    s, writes = _light_server(monkeypatch, [])
+    s._last = {"lighting": {"Mode": 4, "WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1301}}  # ON
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "wakeup", "07:00")
+
+    asyncio.run(_run())
+    d = control.decode_control(s.funcs["lighting"], bytes.fromhex(writes[0]))
+    assert d["LightValue"] & 1 == 0  # enabled=0
+    assert d["LightValue"] >> 8 & 0xF == 0b0011  # areas carried
 
 
 def test_poll_keeps_the_lighting_config_across_a_later_frame(monkeypatch):

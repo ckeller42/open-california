@@ -256,7 +256,9 @@ def test_pwa_manifest_and_icons_served_with_correct_types(server):
 class RaisingBackend(FakeBackend):
     def command(self, function, what, value, confirm=False):
         if function == "lighting" and what == "color":
-            raise ValueError(
+            from calictl import control
+
+            raise control.CommandError(
                 "lighting color was retired: the app recolours a saved favourite — use save_profile N <colour>"
             )
         return super().command(function, what, value, confirm)
@@ -273,3 +275,20 @@ def test_api_command_retired_color_is_a_400_not_sent():
     finally:
         srv.shutdown()
     assert status == 400 and "retired" in body["error"]
+
+
+class InternalValueErrorBackend(FakeBackend):
+    def command(self, function, what, value, confirm=False):
+        raise ValueError("invalid literal for int() with base 10: 'x'")  # not a user-input error
+
+
+def test_api_command_internal_value_error_stays_a_500():
+    srv = web.serve_http(InternalValueErrorBackend(), WEBUI, "127.0.0.1", 0)
+    try:
+        status, body = _post(
+            "http://127.0.0.1:%d/api/command" % srv.server_address[1],
+            {"function": "cooler", "what": "level", "value": "x"},
+        )
+    finally:
+        srv.shutdown()
+    assert status == 500 and body["error"] == "command_failed"

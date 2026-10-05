@@ -204,11 +204,12 @@ async def cmd_set(funcs, dev, args):
     if frame is None:
         print("unknown target %r for %s" % (args.what, fn), file=sys.stderr)
         return 2
-    if pre is not None:
-        print("writing %s to %s control (SET_COLOR first) ..." % (pre.hex(), fn))
-        await dev.actuate(f, pre, verify=False, follow=control.commit_for(fn))
+    kw = {}
+    if pre is not None:  # same link, same arm window as the save (device._actuate_on)
+        print("writing %s to %s control first (SET_COLOR) ..." % (pre.hex(), fn))
+        kw["preface"] = pre
     print("writing %s to %s control (heartbeat-armed) ..." % (frame.hex(), fn))
-    post = await dev.actuate(f, frame, verify=True, follow=control.commit_for(fn))
+    post = await dev.actuate(f, frame, verify=True, follow=control.commit_for(fn), **kw)
     if post is None:
         print("write sent, no readback")
         return 1

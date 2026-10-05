@@ -24,7 +24,7 @@ def set_check(function, what, value, interp, decoded):
 
     on = str(value).strip().lower() in ("on", "true", "1")
     if function == "lighting" and what != "power":
-        return _lighting_check(what, value, interp)
+        return _lighting_check(what, value, interp, on)
     table = {
         ("cooler", "power"): lambda: ("State", decoded.get("State"), 1 if on else 0),
         ("cooler", "level"): lambda: ("Level", decoded.get("Level"), int(value)),
@@ -82,10 +82,10 @@ _LIGHT_ZONE_NUM = {
 }  # L5/L6 inferred (unverified)
 
 
-def _lighting_check(what, value, interp):
+def _lighting_check(what, value, interp, on):
     """Applied-check for the per-zone lighting grammar (zone / all / profile / door_contact)."""
     if what == "door_contact":  # the unit's Mode-16/PN-8 flag (semantics.lighting door_contact)
-        return ("door_contact", interp.get("door_contact"), str(value).strip().lower() in ("on", "true", "1"))
+        return ("door_contact", interp.get("door_contact"), on)
     if what in ("wakeup", "save_profile"):  # a config echo is not proof of anything: no applied-check
         return (what, None, None)
     if what == "profile":

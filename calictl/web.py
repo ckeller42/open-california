@@ -15,6 +15,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
+from . import control
 from . import log as _log
 
 log = _log.get(__name__)
@@ -195,7 +196,7 @@ def make_handler(backend, webui_dir):
                 return self._send_json({"error": "confirm_required"}, 400)
             try:
                 result = backend.command(fn, what, value, confirm=confirm)
-            except ValueError as e:  # calictl's own grammar/range message (no internals): show it
+            except control.CommandError as e:  # calictl's own grammar/range message: show it
                 return self._send_json({"error": str(e)}, 400)
             except Exception as e:  # log server-side only; never leak exception text to client
                 log.warning("web: command failed: %r" % (e,))

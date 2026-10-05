@@ -65,6 +65,11 @@ def _hhmm(value):
     return hh, mm
 
 
+class CommandError(ValueError):
+    """A command the operator worded wrongly (grammar, range, retired target). Raised by
+    :func:`build` before anything is written; the web API maps it — and only it — to HTTP 400."""
+
+
 def local_now() -> datetime.datetime:
     """The local wall clock the wake-up builder counts from. Tests and the recording replay
     (``tools.capture_diff``) replace this module attribute to pin "now"."""
@@ -99,8 +104,10 @@ def wakeup_request(value, last):
 
     ``value`` is one string of words: ``HH:MM`` (time), ``on``/``off`` (the app's switch), and up to
     three positionals ``areas brightness ramp`` (areas = comma list of 1-4, brightness 0-10, ramp
-    0/10/20/30 min). Missing parts come from the wake-up config latched in ``last``
-    (:func:`calictl.semantics.lighting_config`), else :data:`WAKEUP_DEFAULT`.
+    0/10/20/30 min). Missing time/areas/brightness/ramp/colour come from the wake-up config latched
+    in ``last`` (:func:`calictl.semantics.lighting_config`), else :data:`WAKEUP_DEFAULT`. The
+    enabled switch is NEVER inherited: it is on only when ``on`` is given (the app's time picker
+    writes enabled=0; its separate switch enables).
 
     :param value: the command value.
     :param last: the decoded lighting state (may carry latch keys or be a Mode-20 frame).
@@ -112,6 +119,9 @@ def wakeup_request(value, last):
     if not tokens:
         raise ValueError("wakeup needs HH:MM and/or on|off")
     c = {k: v for k, v in (cur or WAKEUP_DEFAULT).items() if k != "time"}
+    # Never inherit the switch: the app's time picker writes enabled=0 (recorded 0x1100) and only
+    # its separate switch enables, so a cached "on" must never re-arm a wake-up the owner disabled.
+    c["enabled"] = False
     pos, timed = [], False
     for tok in tokens:
         if tok.lower() in ("on", "off"):
@@ -957,8 +967,18 @@ BUILDERS = {
 
 
 def build(funcs, function, what, value, last_decoded):
+    """Build the control frame for ``set function what value`` over the decoded state.
+
+    :raises CommandError: the value is malformed or out of range (nothing has been written yet,
+        so every ``ValueError`` a builder raises is the operator's input error).
+    """
     b = BUILDERS.get(function)
-    return b(funcs, what, value, last_decoded) if b else None
+    try:
+        return b(funcs, what, value, last_decoded) if b else None
+    except CommandError:
+        raise
+    except ValueError as e:
+        raise CommandError(str(e)) from e
 
 
 def commit_for(function):

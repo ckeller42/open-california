@@ -382,3 +382,35 @@ def test_session_passes_the_adapter_to_bleak(monkeypatch):
     monkeypatch.setitem(sys.modules, "bleak", fake_bleak)
     asyncio.run(device.CamperDevice("11:22:33:44:55:66", adapter="hci1")._session())
     assert seen["adapter"] == "hci1"
+
+
+def test_actuate_writes_the_preface_first_on_one_armed_link(fake_bleak):
+    """A preface (save_profile's SET_COLOR) goes out on the SAME client inside the SAME arm as
+    the main frame: one connect, heartbeat first, then preface + commit, then frame + commit."""
+    f = _cooler()
+    pre, frame, commit = b"\x01\x06", b"\x01\x04", b"\x0e\x00"
+    asyncio.run(
+        device.CamperDevice("11:22:33:44:55:66").actuate(f, frame, verify=False, follow=commit, preface=pre)
+    )
+    assert len(fake_bleak.instances) == 1  # one connection
+    calls = [(u, d) for op, u, d in fake_bleak.instances[0].calls if op == "write"]
+    ctrl = [d for u, d in calls if u == f.control_char]
+    assert ctrl == [pre, commit, frame, commit]
+    first_hb = next(i for i, (u, _) in enumerate(calls) if u == device.HEARTBEAT_CHAR)
+    assert first_hb < calls.index((f.control_char, pre))  # armed before the preface
+
+
+def test_actuate_preface_failure_stops_the_main_frame(fake_bleak, monkeypatch):
+    f = _cooler()
+    pre, frame = b"\x01\x06", b"\x01\x04"
+    real = _FakeClient.write_gatt_char
+
+    async def flaky(self, uuid, data, response=None):
+        if str(uuid) == f.control_char and bytes(data) == pre:
+            raise RuntimeError("write failed")
+        await real(self, uuid, data, response)
+
+    monkeypatch.setattr(_FakeClient, "write_gatt_char", flaky)
+    with pytest.raises(RuntimeError):
+        asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate(f, frame, verify=False, preface=pre))
+    assert not [d for op, u, d in fake_bleak.instances[0].calls if op == "write" and u == f.control_char]

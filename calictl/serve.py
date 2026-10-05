@@ -951,12 +951,12 @@ class Server:
         before = None
         if is_light and getattr(sess, "_notif", None) is not None:
             before = sess._notif.get(str(self.funcs[function].state_char).lower())
-        # save_profile N <colour>: the app's SET_COLOR goes out first (dg/h.l3 step a).
+        # save_profile N <colour>: the app's SET_COLOR goes out first (dg/h.l3 step a), on the same
+        # link inside the same arm window as the save.
         pre = control.preface_for(self.funcs, function, what, value, last)
-        if pre is not None:
-            await target.actuate(self.funcs[function], pre, verify=False, follow=control.commit_for(function))
+        kw = {"preface": pre} if pre is not None else {}
         post = await target.actuate(
-            self.funcs[function], frame, verify=not is_light, follow=control.commit_for(function)
+            self.funcs[function], frame, verify=not is_light, follow=control.commit_for(function), **kw
         )
         if is_light:  # latch what we just configured (wake-up / door / favourite) — "as last set"
             cur = self._last.get(function) or {}

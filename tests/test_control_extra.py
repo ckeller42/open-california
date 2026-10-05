@@ -319,24 +319,68 @@ def test_postcheck_handles_the_new_lighting_values():
     assert set_check("lighting", "door_contact", "off", {"door_contact": True}, {})[1:] == (True, False)
 
 
-def test_cli_save_profile_with_colour_writes_the_set_color_preface_first():
-    """The CLI sends the SET_COLOR preface BEFORE the save frame, and joins multi-word values."""
-    import argparse
-
+def _cli_run(argv, state_hex):
+    """Parse a real argv with the CLI parser and run cmd_set against a fake device; returns the
+    (preface, frame) of every actuate call."""
     from calictl import cli
 
     funcs = P.load()
     overrides.apply(funcs)
-    writes = []
+    calls = []
 
     class FakeDev:
         async def read(self, func):
-            return bytes.fromhex("091000000000000000000005d00ddddd")
+            return bytes.fromhex(state_hex)
 
-        async def actuate(self, func, frame, *, verify=True, follow=None):
-            writes.append(frame.hex())
+        async def actuate(self, func, frame, *, verify=True, follow=None, preface=None):
+            calls.append((preface.hex() if preface else None, frame.hex()))
             return None
 
-    args = argparse.Namespace(function="lighting", what="save_profile", value=["1", "red"])
+    args = cli.build_parser().parse_args(argv)
     asyncio.run(cli.cmd_set(funcs, FakeDev(), args))
-    assert writes == ["010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee"]
+    return calls
+
+
+def test_cli_save_profile_with_colour_writes_the_set_color_preface_first():
+    """The CLI sends the SET_COLOR preface with the save in ONE actuate (one link, one arm)."""
+    calls = _cli_run(["set", "lighting", "save_profile", "1", "red"], "091000000000000000000005d00ddddd")
+    assert calls == [("010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee")]
+
+
+def test_cli_parser_takes_multi_word_values():
+    from calictl import cli
+
+    p = cli.build_parser()
+    assert p.parse_args(["set", "lighting", "wakeup", "07:00", "1,2", "5", "10", "on"]).value == [
+        "07:00",
+        "1,2",
+        "5",
+        "10",
+        "on",
+    ]
+    assert p.parse_args(["set", "roof", "open"]).value == []
+
+
+def test_cli_wakeup_time_edit_is_the_app_time_picker_frame(monkeypatch):
+    """CLI and daemon build the same frame: the app's recorded time-picker write (enabled=0)."""
+    import datetime
+
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
+    calls = _cli_run(["set", "lighting", "wakeup", "07:00"], "0c1000000000000000000000d00ddddd")
+    assert calls == [(None, "0e146ac49c701100eeeeeeeeeeeeeeee")]
+
+
+def test_wakeup_time_edit_never_inherits_enabled():
+    last = {"WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1301}  # latched: ON, areas 1+2
+    c = control.wakeup_request("07:30", last)
+    assert c["enabled"] is False and c["areas"] == [1, 2]
+    assert control.wakeup_request("on", last)["enabled"] is True  # the switch, latched time
+    assert control.wakeup_request("off", last)["enabled"] is False
+
+
+def test_build_input_errors_are_command_errors():
+    funcs = P.load()
+    overrides.apply(funcs)
+    for what, value in (("color", "red"), ("wakeup", "25:00"), ("wakeup", "bogus"), ("kitchen", "x")):
+        with pytest.raises(control.CommandError):
+            control.build(funcs, "lighting", what, value, {})
