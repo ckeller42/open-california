@@ -370,12 +370,22 @@ def test_cli_wakeup_time_edit_is_the_app_time_picker_frame(monkeypatch):
     assert calls == [(None, "0e146ac49c701100eeeeeeeeeeeeeeee")]
 
 
-def test_wakeup_time_edit_never_inherits_enabled():
+def test_wakeup_edit_carries_the_unit_reported_enabled_state():
+    """Controller ruling (Task 6 fix round 1): the decompile ``m0(ef.m config, ...)`` receives the
+    whole current config, so an edit (time/areas/brightness/ramp) keeps the enabled state AS LAST
+    REPORTED BY THE UNIT; only on/off changes it. Unknown config + time only = the app's recorded
+    frame (enabled=0, nothing reported to carry).
+    """
     last = {"WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1301}  # latched: ON, areas 1+2
     c = control.wakeup_request("07:30", last)
-    assert c["enabled"] is False and c["areas"] == [1, 2]
-    assert control.wakeup_request("on", last)["enabled"] is True  # the switch, latched time
+    assert c["enabled"] is True and c["areas"] == [1, 2]
     assert control.wakeup_request("off", last)["enabled"] is False
+    off = {"WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1300}
+    assert control.wakeup_request("07:30", off)["enabled"] is False
+    assert control.wakeup_request("on", off)["enabled"] is True
+    assert control.wakeup_request("07:30", None)["enabled"] is False
+    with pytest.raises(ValueError, match="not known yet"):
+        control.wakeup_request("1,2", None)  # areas edit with no unit-reported config
 
 
 def test_build_input_errors_are_command_errors():

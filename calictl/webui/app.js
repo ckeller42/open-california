@@ -1544,7 +1544,8 @@ function renderLighting(s) {
   for (const [n, lab] of PROFILES) {
     // "Profile N" -> translate the word, keep the number; named profiles have their own keys.
     const labT = /^Profile \d+$/.test(lab) ? t("Profile") + " " + lab.split(" ")[1] : t(lab);
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = /** @type {string} */ (labT); psel.appendChild(o);
+    const filled = n <= 7 && !!s.favourites_stored && s.favourites_stored.includes(n);   // saved on the unit
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = labT + (filled ? " ✓" : ""); psel.appendChild(o);
   }
   psel.onchange = () => {
     if (psel.value === "") return;
@@ -1577,15 +1578,32 @@ function renderLighting(s) {
   // Wake-up light (the app's Lighting > Functions & Settings > Wake-up light; dg/h.m0, Mode 20).
   // The unit reports its config only in a Mode-20 frame (latched by the daemon). Every change
   // resends the whole config like the app; the time picker never flips the switch (app-recorded).
-  const wk = s.wakeup || null;
+  // The unit-reported config (null until a Mode-20 frame was latched). Until the state confirms,
+  // the user's last sent edit overlays it (optimistic), so a re-render never resets a time that was
+  // just entered. We never invent a config: with none known the card is disabled, and an edit
+  // omits on/off so the daemon carries the enabled state the UNIT reported.
+  const wkReal = s.wakeup || null;
+  const wkOpt = optimistic[qKey("lighting", "wakeup")];
+  /** @type {typeof wkReal} */
+  let wk = wkReal;
+  if (wkReal && typeof wkOpt === "string") {
+    const tk = wkOpt.split(/\s+/);
+    const pos = tk.filter((x) => x !== "on" && x !== "off" && !x.includes(":"));
+    wk = Object.assign({}, wkReal, {
+      time: tk.find((x) => x.includes(":")) || wkReal.time,
+      areas: pos[0] ? pos[0].split(",").map(Number) : wkReal.areas,
+      brightness: pos[1] != null ? Number(pos[1]) : wkReal.brightness,
+      ramp: pos[2] != null ? Number(pos[2]) : wkReal.ramp,
+      enabled: tk.includes("on") ? true : tk.includes("off") ? false : wkReal.enabled,
+    });
+  }
+  const wkOff = readOnly() || !wk;
   /** @param {{time?: string, areas?: number[], brightness?: number, ramp?: number, on?: boolean}} p */
   const wakeCmd = (p) => {
-    const time = p.time || (wk ? wk.time : "00:00");
-    const areas = p.areas || (wk ? wk.areas : [1]);
-    const bright = p.brightness != null ? p.brightness : (wk ? wk.brightness : 0);
-    const ramp = p.ramp != null ? p.ramp : (wk ? wk.ramp : 0);
-    const on = p.on != null ? p.on : !!(wk && wk.enabled);
-    command("lighting", "wakeup", `${time} ${areas.join(",")} ${bright} ${ramp} ${on ? "on" : "off"}`);
+    if (!wk) return;
+    const base = `${p.time || wk.time} ${(p.areas || wk.areas).join(",")} ` +
+      `${p.brightness != null ? p.brightness : wk.brightness} ${p.ramp != null ? p.ramp : wk.ramp}`;
+    command("lighting", "wakeup", p.on == null ? base : `${base} ${p.on ? "on" : "off"}`);
   };
   const wc = document.createElement("div"); wc.className = "card";
   const wh = document.createElement("div"); wh.className = "note"; wh.style.padding = ".6rem 0 0";
@@ -1596,20 +1614,20 @@ function renderLighting(s) {
   if (pending_is("lighting", "wakeup")) wrow.appendChild(spinner());
   const wsw = document.createElement("button"); wsw.className = "switch";
   wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", "Wake-up light");
-  wsw.setAttribute("aria-checked", wk && wk.enabled ? "true" : "false"); wsw.disabled = readOnly();
+  wsw.setAttribute("aria-checked", wk && wk.enabled ? "true" : "false"); wsw.disabled = wkOff;
   wsw.onclick = () => wakeCmd({ on: !(wk && wk.enabled) });
   wrow.appendChild(wsw); wc.appendChild(wrow);
   const trow = document.createElement("div"); trow.className = "row";
   const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
   const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time : "00:00";
-  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = readOnly();
+  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = wkOff;
   tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
   trow.append(tl, tin); wc.appendChild(trow);
   const rrow = document.createElement("div"); rrow.className = "row";
   const rl = document.createElement("span"); rl.className = "lbl"; rl.textContent = /** @type {string} */ (t("Lead time"));
-  const rsel = document.createElement("select"); rsel.disabled = readOnly();
+  const rsel = document.createElement("select"); rsel.disabled = wkOff;
   for (const m of [0, 10, 20, 30]) {
-    const o = document.createElement("option"); o.value = /** @type {any} */ (m); o.textContent = m + " min";
+    const o = document.createElement("option"); o.value = /** @type {any} */ (m); o.textContent = tf("{n} min", { n: m });
     o.selected = (wk ? wk.ramp : 0) === m; rsel.appendChild(o);
   }
   rsel.onchange = () => wakeCmd({ ramp: Number(rsel.value) });
@@ -1617,24 +1635,29 @@ function renderLighting(s) {
   const brow = document.createElement("div"); brow.className = "row";
   const bl = document.createElement("span"); bl.className = "lbl"; bl.textContent = /** @type {string} */ (t("Brightness"));
   const bin = document.createElement("input"); bin.type = "range"; bin.min = /** @type {any} */ (0); bin.max = /** @type {any} */ (LIGHT_MAX);
-  bin.value = /** @type {any} */ (wk ? wk.brightness : 0); bin.disabled = readOnly();
+  bin.value = /** @type {any} */ (wk ? wk.brightness : 0); bin.disabled = wkOff;
   bin.setAttribute("aria-label", "Wake-up brightness");
   bin.onchange = () => wakeCmd({ brightness: Number(bin.value) });
   brow.append(bl, bin); wc.appendChild(brow);
   const arow = document.createElement("div"); arow.className = "row";
   const al = document.createElement("span"); al.className = "lbl"; al.textContent = /** @type {string} */ (t("Vehicle area"));
   arow.appendChild(al);
-  const curAreas = wk ? wk.areas : [1];
+  const curAreas = wk ? wk.areas : [];
   for (let a = 1; a <= 4; a++) {
     const lab = document.createElement("label");
     const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = curAreas.includes(a);
     // never untick the last area: the unit needs one (the app's "no area chosen" dialog)
-    cb.disabled = readOnly() || (cb.checked && curAreas.length === 1);
+    cb.disabled = wkOff || (cb.checked && curAreas.length === 1);
     cb.onchange = () => wakeCmd({ areas: cb.checked ? [...curAreas, a].sort() : curAreas.filter((x) => x !== a) });
     lab.append(cb, document.createTextNode(" " + tf("Area {n}", { n: a })));
     arow.appendChild(lab);
   }
   wc.appendChild(arow);
+  if (!wk) {
+    const nk = document.createElement("div"); nk.className = "note";
+    nk.textContent = /** @type {string} */ (t("Wake-up settings not known yet — the unit has not reported them"));
+    wc.appendChild(nk);
+  }
   app.appendChild(wc);
 
   // Lighting & sliding door (dg/h.n4: SET_PROFILE PN 8, LightValue 1/0). Not variant-gated (see

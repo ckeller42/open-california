@@ -1770,8 +1770,9 @@ def test_save_profile_cold_path_is_one_actuate_with_the_preface(monkeypatch):
     assert got == [("010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee")]
 
 
-def test_wakeup_time_edit_never_re_enables_from_the_latch(monkeypatch):
-    """The app's time picker writes enabled=0; a cached 'enabled' latch must not re-arm it."""
+def test_wakeup_time_edit_keeps_the_unit_reported_enabled_state(monkeypatch):
+    """Controller ruling (Task 6 fix round 1): a time edit carries the enabled state the unit last
+    reported (the decompile passes the whole current config to dg/h.m0)."""
     import datetime
 
     monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
@@ -1784,7 +1785,7 @@ def test_wakeup_time_edit_never_re_enables_from_the_latch(monkeypatch):
 
     asyncio.run(_run())
     d = control.decode_control(s.funcs["lighting"], bytes.fromhex(writes[0]))
-    assert d["LightValue"] & 1 == 0  # enabled=0
+    assert d["LightValue"] & 1 == 1  # unit-reported ON carried
     assert d["LightValue"] >> 8 & 0xF == 0b0011  # areas carried
 
 

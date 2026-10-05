@@ -106,8 +106,8 @@ def wakeup_request(value, last):
     three positionals ``areas brightness ramp`` (areas = comma list of 1-4, brightness 0-10, ramp
     0/10/20/30 min). Missing time/areas/brightness/ramp/colour come from the wake-up config latched
     in ``last`` (:func:`calictl.semantics.lighting_config`), else :data:`WAKEUP_DEFAULT`. The
-    enabled switch is NEVER inherited: it is on only when ``on`` is given (the app's time picker
-    writes enabled=0; its separate switch enables).
+    enabled switch is inherited from the unit-reported config (off when none was reported) and
+    changed only by ``on``/``off``.
 
     :param value: the command value.
     :param last: the decoded lighting state (may carry latch keys or be a Mode-20 frame).
@@ -119,9 +119,9 @@ def wakeup_request(value, last):
     if not tokens:
         raise ValueError("wakeup needs HH:MM and/or on|off")
     c = {k: v for k, v in (cur or WAKEUP_DEFAULT).items() if k != "time"}
-    # Never inherit the switch: the app's time picker writes enabled=0 (recorded 0x1100) and only
-    # its separate switch enables, so a cached "on" must never re-arm a wake-up the owner disabled.
-    c["enabled"] = False
+    # An edit carries the enabled state the UNIT last reported (the app passes the whole current
+    # config to dg/h.m0); only on/off changes it. Nothing reported -> off (the recorded 0x1100).
+    c["enabled"] = bool(cur and cur["enabled"])
     pos, timed = [], False
     for tok in tokens:
         if tok.lower() in ("on", "off"):

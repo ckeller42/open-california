@@ -925,24 +925,37 @@ def test_a_failed_first_poll_still_loads_pairing_once(base_url):
 
 
 def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
-    """.. test:: The web UI sets the wake-up time and switch; the state shows the mock's echo
+    """.. test:: The web UI edits the wake-up time and switch; an edit keeps the unit-reported switch
     :id: T_E2E_LIGHT_WAKEUP
     :links: R_LIGHT_WAKEUP
     """
+    # seed the unit-reported config (the card is disabled until the unit has reported one)
+    r = page.request.post(
+        base_url + "/api/command", data={"function": "lighting", "what": "wakeup", "value": "06:00 1 0 0 on"}
+    )
+    assert r.ok
     page.get_by_text("Lighting", exact=True).first.click()
     tm = page.get_by_label("Wake-up time")
-    tm.fill("07:00")
-    tm.dispatch_event("change")
-    expect(page.get_by_text("Sent — check the lamp").or_(page.get_by_text("✓ Applied")).first).to_be_visible(
-        timeout=15000
-    )
     sw = page.get_by_role("switch", name="Wake-up light")
-    sw.click()
-    expect(sw).to_have_attribute("aria-checked", "true", timeout=15000)
+    expect(tm).to_have_value("06:00", timeout=15000)
+    expect(sw).to_have_attribute("aria-checked", "true")
+    tm.fill("07:00")  # one change, like a user; the field must keep it through re-renders
+    expect(tm).to_have_value("07:00")
+    page.wait_for_function(
+        "async (u) => (await (await fetch(u + '/api/state')).json()).lighting.wakeup.time === '07:00'",
+        arg=base_url,
+        timeout=15000,
+    )
     st = page.request.get(base_url + "/api/state").json()["lighting"]["wakeup"]
-    assert st["time"] == "07:00" and st["enabled"] is True
-    sw.click()  # leave the shared mock with the wake-up light off
+    assert st["enabled"] is True  # the edit carried the unit-reported switch
+    expect(tm).to_have_value("07:00")
+    sw.click()
     expect(sw).to_have_attribute("aria-checked", "false", timeout=15000)
+    page.wait_for_function(
+        "async (u) => (await (await fetch(u + '/api/state')).json()).lighting.wakeup.enabled === false",
+        arg=base_url,
+        timeout=15000,
+    )
 
 
 def test_door_contact_switch_round_trips(page, base_url):
@@ -975,6 +988,11 @@ def test_favourite_save_then_activate(page, base_url):
     expect(page.get_by_text("Sent — check the lamp").or_(page.get_by_text("✓ Applied")).first).to_be_visible(
         timeout=15000
     )
+    page.wait_for_function(
+        "async (u) => ((await (await fetch(u + '/api/state')).json()).lighting.favourites_stored || []).includes(1)",
+        arg=base_url,
+        timeout=15000,
+    )  # the save landed on the unit
     page.locator("select").nth(0).select_option("1")  # activate Profile 1
     expect(page.get_by_text("this favourite is empty on the unit — save it first")).to_have_count(0)
     r = page.request.post(
