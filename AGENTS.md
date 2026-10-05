@@ -113,7 +113,8 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   **campingmode** (master/lights/usb), **lighting** (per-zone brightness).
 - **Lighting** actuates on an **awake** unit with a bare `SET_BRIGHTNESS` + `0e00…` commit — no
   REQUEST_CONFIG preamble, no 1003 heartbeat, no delay (the wake state is the gate, not any arming
-  frame; the app's screen-open REQUEST_CONFIG pull is NOT required and calictl no longer sends it).
+  frame; the app's screen-open REQUEST_CONFIG pull is NOT required for actuation — calictl sends it only to
+  read the wake-up/door/favourite config before a wake-up edit whose config is unknown, R5).
   Brightness is the **0-11 enum** (0=OFF, 1-10 = 10–100 %, 11=DEFAULT; 13=NOT_EQUIPPED read-only,
   14=leave-unchanged; `LIGHT_ON_BRIGHTNESS=10`, slider max 10). The `1502` **Mode-4 notification** is a
   decodable state frame carrying the real ramping brightness — the truthful feedback channel; the

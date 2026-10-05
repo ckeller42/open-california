@@ -40,6 +40,8 @@ log = _log.get(__name__)
 # How long a lighting command waits for the unit's real 1502 Mode-4 notification before returning
 # an optimistic "sent" (the lamp itself already reacted; this only bounds the UI confirm latency).
 _FAST_CONFIRM_S = float(os.environ.get("CALICTL_FAST_CONFIRM_S", "1.2"))
+# The app waits up to 2000 ms for its REQUEST_CONFIG reply frames (decompile cross-check 2026-10-06).
+_CONFIG_PULL_S = float(os.environ.get("CALICTL_CONFIG_PULL_S", "2.0"))
 
 # Hold the fast-path persistent BLE session only while the web UI is ACTIVE (a browser polling
 # /api/state every ~2 s, or a recent command). The van allows ONE connection at a time, so a
@@ -791,7 +793,7 @@ class Server:
             return
         f = self.funcs["lighting"]
         await sess.actuate(f, control.LIGHT_REQUEST_CONFIG, verify=False, follow=control.LIGHT_COMMIT)
-        deadline = time.monotonic() + _FAST_CONFIRM_S
+        deadline = time.monotonic() + _CONFIG_PULL_S
         while time.monotonic() < deadline:
             if (self._last.get("lighting") or {}).get("WakeupTimestamp") is not None:
                 return

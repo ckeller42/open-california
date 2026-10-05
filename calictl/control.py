@@ -454,8 +454,9 @@ def command_precondition(function, what, value, states):
         if roof["position_name"] == "error":
             return "the unit reports a roof position error — move refused"
     # Favourites: refuse only a slot the unit positively reported empty (the REQUEST_CONFIG reply's
-    # FavoriteProfileModifiedState bits, latched by serve). Unknown bits allow (calictl no longer
-    # sends REQUEST_CONFIG, so they are usually unknown). The mock ACKs and ignores an empty one.
+    # FavoriteProfileModifiedState bits, latched by serve). Unknown bits allow (serve only sends
+    # REQUEST_CONFIG before a wake-up edit, R5, so they are often unknown). The mock ACKs and ignores
+    # an empty one.
     if function == "lighting" and what == "profile":
         stored = semantics.lighting_config(None, states.get("lighting") or {}).get("FavouritesStored")
         try:
@@ -1037,11 +1038,12 @@ def preface_for(funcs, function, what, value, last):
     return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 
 
-# Screen-open config pull — retired. The app opens its Lighting screen with a REQUEST_CONFIG
+# Screen-open config pull. The app opens its Lighting screen with a REQUEST_CONFIG
 # (0d0c000000000000eeeeeeeeeeeeeeee, Mode=12 PN=13) + commit; photon-verified 2026-08-16 that it is
 # NOT an actuation gate (a bare SET + 0e00 commit actuates an awake unit; the app's dg/h.java E()
-# writes DIRECT and never sends it). calictl no longer sends it on any path — the frame is kept
-# in docs/protocol-sequences.rst as the RE record.
+# writes DIRECT and never sends it). calictl sends it only to READ the configuration: serve pulls
+# it before a wake-up edit whose config is unknown (R5, ``LIGHT_REQUEST_CONFIG``), never as a
+# write preamble.
 
 
 def decode_control(func, frame: bytes) -> dict:
