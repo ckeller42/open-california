@@ -13,6 +13,7 @@
  *   drop-after <ms>                    STA_LOST <ms> after each STA_GOT_IP delivery
  * An SSID without a join rule fails NOT_FOUND. The PSK is validated (empty = open, else
  * NET_PSK_MIN..NET_PSK_MAX characters) but otherwise ignored — the rule decides.
+ * Every scan() logs "net: fake scan" (tests count them).
  */
 #ifndef CALI_NET_HOST_H
 #define CALI_NET_HOST_H

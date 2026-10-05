@@ -245,7 +245,9 @@ static int store_delete(int obj_type, const union ble_store_key *key) {
         table_delete_at(&s_cccd, idx);
         return table_persist(&s_cccd);
     default:
-        return BLE_HS_ENOTSUP;
+        /* A type this store never keeps: nothing to delete. esp-nimble's ble_store_util_delete_peer
+         * deletes PEER_ADDR/CSFC/... too and fails on anything but ENOENT (#225: forget timed out). */
+        return BLE_HS_ENOENT;
     }
 }
 

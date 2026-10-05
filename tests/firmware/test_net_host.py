@@ -24,6 +24,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = ROOT / "firmware" / "components"
 PLATFORM = COMPONENTS / "platform"
+SCAN_LOG = "LOG net: fake scan"  # each scan() says so: the web e2e counts them
 
 
 @pytest.fixture(scope="module")
@@ -67,6 +68,7 @@ def test_fake_wifi_join_and_drop(net_cli, tmp_path):
     script.write_text("ap minsel -55 1\nap other -80 1\njoin minsel ok 192.168.1.42\ndrop-after 500\n")
     out = run(net_cli, script, "scan\npoll 1\nsta_start minsel test-psk-1234\npoll 1\npoll 600\n")
     assert out.splitlines() == [
+        SCAN_LOG,
         "EV SCAN_DONE NONE 0 2",
         "EV STA_GOT_IP NONE 192.168.1.42 0",
         "EV STA_LOST NONE 0 0",
@@ -130,7 +132,7 @@ def test_missing_script_means_no_networks(net_cli, tmp_path):
         if script.name == "empty.txt":
             script.write_text("")
         out = run(net_cli, script, "scan\nsta_start minsel test-psk-1234\npoll 1\n")
-        assert out.splitlines() == ["EV SCAN_DONE NONE 0 0", "EV STA_FAILED NOT_FOUND 0 0"]
+        assert out.splitlines() == [SCAN_LOG, "EV SCAN_DONE NONE 0 0", "EV STA_FAILED NOT_FOUND 0 0"]
 
 
 def test_events_only_from_poll(net_cli, tmp_path):
@@ -185,7 +187,7 @@ def test_scan_lists_the_visible_networks(net_cli, tmp_path):
     script = tmp_path / "wifi.txt"
     script.write_text("# comment\n\nap minsel -55 1\nap open-cafe -70 0\n")
     out = run(net_cli, script, "scan\npoll 1\naps\n")
-    assert out.splitlines() == ["EV SCAN_DONE NONE 0 2", "AP minsel -55 1", "AP open-cafe -70 0"]
+    assert out.splitlines() == [SCAN_LOG, "EV SCAN_DONE NONE 0 2", "AP minsel -55 1", "AP open-cafe -70 0"]
 
 
 def test_bad_arguments_are_refused_without_an_event(net_cli, tmp_path):
@@ -220,6 +222,7 @@ def test_ssid_length_boundary_follows_net_ssid_max(net_cli, tmp_path):
     script.write_text("ap %s -60 1\njoin %s ok 192.168.1.9\n" % (longest, longest))
     out = run(net_cli, script, "scan\npoll 1\naps\nsta_start %s test-psk-1234\npoll 1\n" % longest)
     assert out.splitlines() == [
+        SCAN_LOG,
         "EV SCAN_DONE NONE 0 1",
         "AP %s -60 1" % longest,
         "EV STA_GOT_IP NONE 192.168.1.9 0",

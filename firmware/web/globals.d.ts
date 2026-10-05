@@ -2,7 +2,7 @@
  * tools/gen_c_dict.py): for `tsc --checkJs` only (firmware/web/jsconfig.json); never served. */
 
 /** Generated constants (tools/wifi_consts.py). */
-declare const CFG: { pollMs: number; host: string; ssidMax: number; pskMin: number; pskMax: number };
+declare const CFG: { pollMs: number; connectTimeoutMs: number; connectRetryMs: number; host: string; ssidMax: number; pskMin: number; pskMax: number };
 
 /** The strings.json table: key -> EN/DE text. */
 declare const STR: Record<string, { en: string; de: string }>;

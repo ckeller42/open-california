@@ -29,7 +29,7 @@
  *   kv <key>         print "KV <value>" or "KV <missing>"
  *   kvfail 0|1       cali_kv_set fails
  * Calls into the fake WiFi runtime print "CALL set_creds [<ssid>] [<psk>]", "CALL forget",
- * "CALL scan"; cali_log prints "LOG <text>". cali_web_init's result goes to stderr as "init=<rc>".
+ * "CALL scan_auto"; cali_log prints "LOG <text>". cali_web_init's result goes to stderr as "init=<rc>".
  */
 #include <stdarg.h>
 #include <stdio.h>
@@ -186,7 +186,7 @@ int cali_wifi_run_scan_list(const cali_net_ap_t **out) {
 const char *cali_wifi_run_last_fail(void) { return s_lastfail[0] ? s_lastfail : NULL; }
 void cali_wifi_run_set_creds(const char *ssid, const char *psk) { printf("CALL set_creds [%s] [%s]\n", ssid, psk); }
 void cali_wifi_run_forget(void) { printf("CALL forget\n"); }
-void cali_wifi_run_scan(void) { printf("CALL scan\n"); }
+void cali_wifi_run_scan_auto(void) { printf("CALL scan_auto\n"); }
 
 static const char *const WIFI_NAMES[] = {"unprovisioned", "setup_ap", "connecting", "online", "retrying",
                                          "setup_ap_retrying"};
