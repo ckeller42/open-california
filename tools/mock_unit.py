@@ -240,6 +240,9 @@ class MockCamperUnit:
         # real unit does. Without this the offline harness only ever saw the one-shot push at
         # subscribe and `serve._confirm_lighting` / `device`'s on_push were unreachable in CI.
         self._subs: dict[str, list] = {}
+        # One-off frame sink for hosts that are not in-process subscribers (the BLE fake peripheral
+        # sets it): called as ``event_sink(function, frame)`` for every ``push(..., event=True)``.
+        self.event_sink = None
         # LIGHTING, the unit's most treacherous behaviour (control-and-actuation.md): the state
         # char is a write-through ECHO — it reports what you WROTE, not what the lamps did (an
         # owner check in 2026-07 saw a "confirmed" readback while the lamps stayed dark). The only
@@ -315,21 +318,21 @@ class MockCamperUnit:
         self._beat_t = self.now
 
     # --- notifications ---------------------------------------------------------
-    def push(self, function: str, values: dict | None = None) -> None:
+    def push(self, function: str, values: dict | None = None, event: bool = False) -> None:
         """Push a state-char notification to every subscribed client, as the real unit does.
 
         ``values`` overlays the stored state for this one frame (the lighting ramp uses it to send
         the REAL brightness while the stored state still holds the write-through echo). A no-op
-        when nobody is subscribed or the unit is asleep.
+        when nobody is subscribed or the unit is asleep. ``event=True`` marks a one-off ack/echo frame
+        (never stored): it is also handed to :attr:`event_sink`.
         """
         f = self.funcs.get(function)
         if f is None or not f.state_char or not self.online:
             return
-        subs = self._subs.get(f.state_char)
-        if not subs:
-            return
         frame = _pack_state(f, {**self.state.get(function, {}), **(values or {})})
-        for cb in list(subs):
+        if event and self.event_sink:
+            self.event_sink(function, frame)
+        for cb in list(self._subs.get(f.state_char) or ()):
             cb(_Char(f.state_char, ["notify"]), frame)
 
     def favourite_bits(self) -> int:
@@ -665,21 +668,22 @@ class MockCamperUnit:
             mode = ctrl.get("Mode")
             pn = ctrl.get("ProfileNumber")
             lv = ctrl.get("LightValue", 0)
-            # Configuration frames are stored and ECHOED in the state char at once (the app reads
+            # Configuration frames are ECHOED as one-off 1502 frames (never stored state) (the app reads
             # its wake-up page / door row / favourite tiles from these 1502 frames).
             if mode == control.LIGHT_MODE_WAKEUP_TIME:  # m0
                 self.wakeup = {"Timestamp": ctrl.get("Timestamp", 0), "LightValue": lv}
-                st.update(Mode=mode, **self.wakeup)
-                self.push("lighting")
+                self.push("lighting", {"Mode": mode, **self.wakeup}, event=True)
                 return
             if mode == LIGHT_MODE_SET_PROFILE and pn == control.LIGHT_PROFILE_DOOR_CONTACT:  # n4
                 self.door_contact = 1 if lv == 1 else 0
-                st.update(Mode=mode, ProfileNumber=pn, LightValue=self.door_contact)
-                self.push("lighting")
+                self.push(
+                    "lighting",
+                    {"Mode": mode, "ProfileNumber": pn, "LightValue": self.door_contact},
+                    event=True,
+                )
                 return
             if mode == control.LIGHT_MODE_REQUEST_CONFIG:  # d0: reply = Mode 12 + favourite bits
-                st.update(Mode=mode, LightValue=self.favourite_bits())
-                self.push("lighting")
+                self.push("lighting", {"Mode": mode, "LightValue": self.favourite_bits()}, event=True)
                 return
             if mode == control.LIGHT_MODE_SET_COLOR and pn in self.favourites:  # l3 step a
                 self.favourite_colour[pn] = lv
@@ -719,8 +723,7 @@ class MockCamperUnit:
                 if p and p[0] == "save":
                     _, n, zones = p
                     self.favourites[n] = {"zones": zones, "colour": self.favourite_colour.get(n, 1)}
-                    st["Mode"] = LIGHT_MODE_SET_BRIGHTNESS  # save ack: Mode 4 (the active PN is untouched)
-                    self.push("lighting", {"ProfileNumber": n})
+                    self.push("lighting", {"Mode": LIGHT_MODE_SET_BRIGHTNESS, "ProfileNumber": n}, event=True)
                 elif p and p[0] == "profile":
                     st["ProfileNumber"] = p[1]
                     fav = self.favourites.get(p[1])
@@ -730,8 +733,7 @@ class MockCamperUnit:
                                 self.light_actual.setdefault(zone, st.get(zone, 0))
                             self._light_ramp.update(fav["zones"])
                         st.update(fav["zones"])
-                        st["Mode"] = LIGHT_MODE_SET_PROFILE
-                        self.push("lighting")
+                        self.push("lighting", {"Mode": LIGHT_MODE_SET_PROFILE}, event=True)
                 elif p and p[0] == "zones":
                     # Snapshot the PHYSICAL baseline before the echo lands: `st` is about to be
                     # overwritten with the written value, so reading the ramp's starting point

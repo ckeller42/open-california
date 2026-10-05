@@ -392,17 +392,27 @@ def test_lighting_config_frames_are_notified_to_a_subscribed_central():
         await _char(peer, "1502").subscribe(lambda v: got.put_nowait(bytes(v)))
         await asyncio.wait_for(got.get(), 2.0)  # on-subscribe push
         ctl = _char(peer, "1501")
-        out = []
-        for hx in (
-            "0e146ac49c701100eeeeeeeeeeeeeeee",  # wake-up 07:00
-            "010400000000000000000005e00eeeee",  # save favourite 1
-            "0e00000000000000eeeeeeeeeeeeeeee",  # commit
-            "0d0c000000000000eeeeeeeeeeeeeeee",  # REQUEST_CONFIG
-        ):
-            await ctl.write_value(bytes.fromhex(hx), with_response=True)
-            out.append(protocol.decode(light, await asyncio.wait_for(got.get(), 2.0)))
-        return out
 
-    wake, _save, _commit, cfg = asyncio.run(run())
+        async def drain():  # every notify of one write; the ack is the first, the stored state last
+            await asyncio.sleep(0.3)
+            frames = []
+            while not got.empty():
+                frames.append(protocol.decode(light, got.get_nowait()))
+            return frames
+
+        async def w(hx):
+            await ctl.write_value(bytes.fromhex(hx), with_response=True)
+            return await drain()
+
+        wake = (await w("0e146ac49c701100eeeeeeeeeeeeeeee"))[0]  # wake-up 07:00
+        await w("010400000000000000000005e00eeeee")  # save favourite 1 (staged, no notify of note)
+        save = (await w("0e00000000000000eeeeeeeeeeeeeeee"))[0]  # commit -> save ack
+        cfg = (await w("0d0c000000000000eeeeeeeeeeeeeeee"))[0]  # REQUEST_CONFIG
+        real = protocol.decode(light, bytes(await _char(peer, "1502").read_value()))
+        return wake, save, cfg, real
+
+    wake, save, cfg, real = asyncio.run(run())
     assert (wake["Mode"], wake["Timestamp"]) == (20, 0x6AC49C70)
+    assert (save["Mode"], save["ProfileNumber"]) == (4, 1)  # the save ack names favourite 1
     assert cfg["Mode"] == 12 and cfg["LightValue"] & 1 == 1
+    assert real["Mode"] not in (4, 12, 20)  # a read returns the real state, no sticky ack

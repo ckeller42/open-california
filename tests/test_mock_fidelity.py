@@ -21,7 +21,7 @@ Three gaps the app exposed in one session:
    :links: R_AIRHEATER_SET
 """
 
-from calictl import control, overrides, protocol
+from calictl import control, overrides, protocol, semantics
 from tools.mock_unit import MockCamperUnit
 
 
@@ -940,8 +940,14 @@ def test_wakeup_is_stored_and_echoed_on_1502_through_the_commit():
     assert u.wakeup == {"Timestamp": 0x6AC49C70, "LightValue": 0x1100}
     assert protocol.decode(_funcs()["lighting"], pushes[-1])["Mode"] == 20
     _w(u, control.LIGHT_COMMIT.hex())
-    d = u.decoded("lighting")
-    assert (d["Mode"], d["Timestamp"], d["LightValue"]) == (20, 0x6AC49C70, 0x1100)
+    assert u.decoded("lighting")["Mode"] == 16  # the echo is a one-off frame, never stored state
+    # builder -> mock -> semantics round trip: the 1502 echo decodes to the wake-up the CLI asked for
+    pushes.clear()
+    u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "wakeup", "07:00 on", {}))
+    cfg = semantics.wakeup_config(
+        semantics.lighting_config(None, protocol.decode(_funcs()["lighting"], pushes[-1]))
+    )
+    assert cfg["time"] == "07:00" and cfg["enabled"]
 
 
 def test_door_contact_flag_is_reported_on_1502_and_never_becomes_the_active_profile():
@@ -952,12 +958,22 @@ def test_door_contact_flag_is_reported_on_1502_and_never_becomes_the_active_prof
        :links: R_LIGHT_DOOR_CONTACT
     """
     u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 12, "Mode": 16})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
     _w(u, "0810000000000001eeeeeeeeeeeeeeee")
     _w(u, control.LIGHT_COMMIT.hex())
     d = u.decoded("lighting")
-    assert u.door_contact == 1 and (d["Mode"], d["ProfileNumber"], d["LightValue"]) == (16, 8, 1)
+    assert u.door_contact == 1 and (d["Mode"], d["ProfileNumber"]) == (16, 12)  # real state untouched
+    echo = protocol.decode(_funcs()["lighting"], pushes[0])
+    assert (echo["Mode"], echo["ProfileNumber"], echo["LightValue"]) == (16, 8, 1)
     _w(u, "0810000000000000eeeeeeeeeeeeeeee")
-    assert u.door_contact == 0 and u.decoded("lighting")["LightValue"] == 0
+    assert u.door_contact == 0
+    # builder -> mock -> semantics round trip (polarity: on = True)
+    pushes.clear()
+    u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "door_contact", "on", {}))
+    got = semantics.lighting(protocol.decode(_funcs()["lighting"], pushes[-1]))
+    assert got["door_contact"] is True
 
 
 def test_activating_an_empty_favourite_is_acked_and_ignored():
@@ -1014,4 +1030,8 @@ def test_request_config_reply_comes_after_the_save_ack():
     _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")  # the app's REQUEST_CONFIG
     modes = [protocol.decode(_funcs()["lighting"], p)["Mode"] for p in pushes]
     assert modes == [4, 12]
+    ack = protocol.decode(_funcs()["lighting"], pushes[0])
+    assert ack["ProfileNumber"] == 1  # the save ack names the saved favourite
     assert protocol.decode(_funcs()["lighting"], pushes[-1])["LightValue"] & 1 == 1
+    d = u.decoded("lighting")  # nothing sticky: reads still return the real lighting state
+    assert d["ProfileNumber"] == 9 and d["Mode"] not in (4, 12, 20)
