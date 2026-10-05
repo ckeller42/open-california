@@ -25,6 +25,8 @@ repos:
       - id: check-yaml
       - id: check-merge-conflict
       - id: check-added-large-files
+        # 1 MB ceiling: docs carry small demo media (e.g. docs/_static/*.webm); still blocks the APK etc.
+        args: ['--maxkb=1024']
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1

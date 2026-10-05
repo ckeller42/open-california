@@ -4,7 +4,8 @@ The camper unit is usually out of reach. It sits in a parked van, deep-sleeps fo
 single BLE connection slot. It also drives real loads. So nearly all of `calictl` is tested against
 **fakes of the unit**, in layers. Each layer is closer to real hardware than the one below it and
 runs less often. This page lists the layers, what each one proves, what it does *not* prove, and
-which CI job runs it.
+which CI job runs it. For a usage-first walkthrough — how to actually run the mock and point
+`calictl`, the vendor app or the ESP satellite at it — see {doc}`mock-unit-guide`.
 
 The one rule that applies to every layer: **a fake encodes only behaviour that has already been
 reverse-engineered.** It is a regression harness and executable documentation, not an oracle. New
