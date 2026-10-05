@@ -53,6 +53,38 @@ removable volumes mid-session (`Operation not permitted` on every read while exe
 run) — grant *Files and Folders → Removable Volumes* to the terminal app, or keep the Bumble venv
 on the internal disk.
 
+## One-time setup (Linux x86_64 with KVM — thinky)
+
+The APK ships x86_64 native libraries, so on an x86_64 Linux host the emulator runs the
+`google_apis;x86_64` image natively under KVM, headless. `tools/applab/setup_linux.sh` installs
+everything idempotently under `~/android-lab` (SDK + emulator + image, AVD `lab34` on a `pixel_6`
+profile, `grpcio`/`protobuf` into the Bumble venv, the APK by `scp` from `pi@buspi:~/apks/`). It
+stops with the exact command when a prerequisite is missing: group `kvm`, Java 17, `unzip`, and
+`loginctl enable-linger` (netsim's `netsim.ini` lives in `$XDG_RUNTIME_DIR`, which systemd removes
+when the last ssh session ends).
+
+```sh
+tools/applab/setup_linux.sh
+export LAB_DIR=~/android-lab AVD=lab34 BUMBLE_PY=~/esp-venv/bin/python
+. $LAB_DIR/env.sh
+FAKE_UNIT_VIN=$(cat $LAB_DIR/vin) tools/applab/labctl.sh up
+adb install -r "$(ls $LAB_DIR/apks/*.apk | head -1)"
+```
+
+The emulator flag that bridges netsim Bluetooth is `-packet-streamer-endpoint default`
+(`labctl.sh up` passes it); boot it by hand with
+`emulator -avd lab34 -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -packet-streamer-endpoint default`.
+
+`$LAB_DIR/vin` (mode 600) holds the test VIN the app was set up with — never print it, never
+commit it. **If buspi is offline when you run setup**, the APK copy is skipped with a note; copy it
+by hand once buspi is back (`scp pi@buspi:~/apks/*.apk ~/android-lab/apks/`), then `adb install -r`.
+
+**Radio separation.** On thinky a second fake unit serves the ESP satellite over the UB500 radio
+(find it by USB id `2357:0604` → `hci-socket:<N>`, the index moves across reboots); it runs the same
+script, so `labctl.sh` and `walk.py` only ever signal the pid in `$TMPDIR/applab/fake_unit.pid` —
+the app's fake is on `android-netsim`, the ESP's on the UB500. Never point both fakes at one
+transport, never start NetworkManager, never touch the `wlx*`/`enp1s0` interfaces.
+
 ## Each session
 
 ```sh
@@ -150,7 +182,7 @@ tools/applab/labctl.sh down                                       # stop the fak
 | `labctl.sh` subcommand | What it does |
 |---|---|
 | `up` | start the emulator if it is down (headless, netsim Bluetooth), start the fake if it is down, launch the app. Idempotent. |
-| `fake` | (re)start only the fake unit: `SIGTERM` a running one, then start it again (needs `FAKE_UNIT_VIN`) |
+| `fake` | (re)start only the fake unit: `SIGTERM` the one in the pid file, then start it again (needs `FAKE_UNIT_VIN`) |
 | `status` (default) | emulator / fake / `netsimd` up or down, plus the scenario-console command line |
 | `down` | `SIGTERM` the fake (so netsim drops its radio), kill the emulator, then stop `netsimd` |
 
