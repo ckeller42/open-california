@@ -95,6 +95,17 @@ command above, then `labctl.sh fake` for the fake unit. Also: on a cold start gr
 the permission sheet does not block automation — `adb shell pm grant de.volkswagen.CaliforniaOnTour
 android.permission.ACCESS_FINE_LOCATION` (+ `ACCESS_COARSE_LOCATION`).
 
+**Fallback when `:10` is unusable (2026-10-05, second session).** With other users' xrdp/NVIDIA
+sessions active, `-gpu host` on `:10` began dying right after boot (`DisplaySurfaceGlContextHelper
+context was preempted by others`, then a qemu segfault). What recorded `cooler`, `roof-hold`,
+`lighting-profile` and `lighting-wakeup`: a private `Xvfb :120` plus **`-gpu guest`** (guest-side
+rendering — the app renders fine; it is host SwiftShader/llvmpipe that crashes it). `-gpu guest`
+cannot load `clean_paired` (taken under `-gpu host`), so the AVD cold-boots on its disk state (the
+app stays onboarded). It is still flaky: qemu often segfaults silently (no crash report) within ~15 s
+of the first walk after a boot or after a failed walk, while the app starts against the fake; once a
+walk connects, later walks run fine. A loop that re-boots whenever qemu is gone and retries the walk
+landed each scenario in 2–8 attempts. Stop the Xvfb afterwards.
+
 **Reconnect / ghost radios (recording caveat).** After the fake restarts (every `walk.py` scenario
 does), netsimd can keep a stale radio at the fake's identity so the app reconnects to a dead link and
 stalls ("Connection lost. Reconnecting…", then a spinner that only polls `vehicle`). Clearing it needs

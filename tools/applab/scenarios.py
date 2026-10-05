@@ -65,11 +65,15 @@ XY_SCREEN = ("1080x2400", 420)  # `adb shell wm size` / `wm density` of the AVD 
 
 XY: dict[str, tuple[int, ...] | None] = {
     "vehicle_tab": (745, 2290),  # Vehicle tab (the app-lab runbook, pixel_6 lab34 on the Mac)
-    "cooler_power": None,
-    "cooler_level_5": None,  # cooling-level slider, right end (level 5)
-    "cooler_manual_quiet": None,
-    "cooler_auto_quiet": None,
-    "cooler_timer": None,
+    # Cooler (measured 2026-10-05). The Timer / Quiet-mode rows expand inline (an accordion: opening
+    # one collapses the other) and the page scrolls, so each point names its layout: "top" = page
+    # unscrolled; the rest = after `_SCROLL_END` (the swipe clamps at the page end, so it is stable).
+    "cooler_power": (905, 1770),  # top: the Refrigerator box on/off switch
+    "cooler_level_5": (990, 1440),  # top: cooling-level slider (1-5) at level 5
+    "cooler_power_quiet_open": (905, 738),  # Quiet mode expanded, scrolled to the end: the on/off switch
+    "cooler_manual_quiet": (905, 1486),  # Quiet mode expanded, scrolled to the end: Manual quiet switch
+    "cooler_auto_quiet": (905, 1680),  # Quiet mode expanded, scrolled to the end: Automatic quiet switch
+    "cooler_timer": (905, 1632),  # Timer expanded (Quiet collapsed), scrolled to the end: Timer switch
     "heater_immediate": (
         900,
         1640,
@@ -85,10 +89,12 @@ XY: dict[str, tuple[int, ...] | None] = {
         582,
         1450,
     ),  # Kitchen > "Background Lighting" slider at 50 % = BrightnessLFive (L5)
-    "lighting_kitchen_50": None,  # kitchen zone slider at 50 % (unused: Kitchen is two lamps, see above)
-    "lighting_profile_a_hold": None,  # (x, y, 2000): press-and-hold profile tile A = edit
-    "roof_open_hold": None,  # (x, y, 12000): the upper roof button held 12 s, then released
-    "wakeup_hour_wheel": None,  # (x, y, x, y - 145): one row of the wake-up hour wheel
+    "lighting_profile_a_hold": (148, 640, 2500),  # press-and-hold profile tile A = save the current lighting
+    # The roof rocker ("roof switch", bounds [376,1397][704,2132]): its upper half held 16 s. The mock
+    # withholds the motor ROOF_WITHHOLD_S (3 s), then steps closed->middle->open every ROOF_STEP_S (5 s),
+    # so open is first reached at ~13 s (12 s stopped at middle).
+    "roof_open_hold": (540, 1580, 16000),
+    "wakeup_hour_wheel": (469, 1666, 469, 1521),  # the wake-up sheet's hour wheel: one row up = +1 h
 }
 
 TILE = {
@@ -119,6 +125,11 @@ def _connect() -> list[Step]:
         pair(),
         wait(r"Disconnect", 60),
     ]
+
+
+_SCROLL_END = adb(
+    "shell", "input", "swipe", "540", "1900", "540", "900", "1000"
+)  # slow: no fling; clamps at the page end
 
 
 def _open_app() -> list[Step]:
@@ -153,17 +164,32 @@ SCENARIOS: dict[str, list[Step]] = {
         idle(10),
     ],
     "cooler": [
+        # The tile opens behind a one-time 3-page "COOLING LEVEL" coachmark: skip it once in the session
+        # before recording (README "coachmarks"). Quiet mode needs the box ON, the timer needs it OFF
+        # (control.refusal mirrors both), so: power on -> level -> quiet modes -> power off -> timer.
         *_open_app(),
         fifo("set cooler State=0 Mode=0 Level=3"),
         ui(TILE["cooler"]),
-        wait(r"Manual quiet mode"),
+        wait(r"Cooling level"),
         xy("cooler_power", expect=("cooler", "power", "on")),
         xy("cooler_level_5", expect=("cooler", "level", 5)),
+        _SCROLL_END,
+        ui(r"^Quiet mode"),  # expand the Quiet mode row (client-side; no write)
+        wait(r"Manual quiet mode"),
+        _SCROLL_END,
         xy("cooler_manual_quiet", expect=("cooler", "mode", "quiet")),
+        idle(2),  # a re-tap of the same switch inside the app's write window is swallowed
         xy("cooler_manual_quiet", expect=("cooler", "mode", "normal")),
         xy("cooler_auto_quiet", expect=("cooler", "mode", "timer_quiet")),
-        xy("cooler_power", expect=("cooler", "power", "off")),
+        xy("cooler_power_quiet_open", expect=("cooler", "power", "off")),
+        ui(r"^Timer: "),  # expand the Timer row (collapses Quiet mode)
+        wait(r"As soon as the timer is activated"),
+        _SCROLL_END,
         xy("cooler_timer", expect=("cooler", "timer_start", None)),  # the timer is offered with the box off
+        # The first tap on the switch after arming writes nothing (lab 2026-10-05, 3 of 3: the switch
+        # shows ON but the first tap is absorbed, at 3 s or at 20 s alike); the second tap cancels.
+        idle(2),
+        xy("cooler_timer"),
         xy("cooler_timer", expect=("cooler", "timer_cancel", None)),
     ],
     "airheater": [
@@ -211,7 +237,7 @@ SCENARIOS: dict[str, list[Step]] = {
         fifo("set roof Position=0 InfoPopUp=0"),
         ui(TILE["roof"]),
         wait(r"press and hold the upper button"),
-        xy("roof_open_hold", expect=("roof", "open", None)),
+        xy("roof_open_hold", expect=("roof", "open", None)),  # adb returns on release (16 s)
         wait(r"roof is open", 20),
     ],
     "energy-mode": [  # ECO is not offered on this profile (protocol-crosscheck-applab.md).
@@ -229,21 +255,35 @@ SCENARIOS: dict[str, list[Step]] = {
         ui(r"^Normal$", expect=("energy", "mode", "normal")),
     ],
     "lighting-profile": [
+        # Save = press-and-hold a profile tile: the app writes SET_BRIGHTNESS with ProfileNumber = the
+        # favorite and every equipped zone at its current level (no Save button). Run after the lighting
+        # coachmark was closed once (lighting-zone dismisses it). Selecting the saved profile is NOT
+        # recordable against the mock: it does not model stored favorites, so the app keeps the tile as
+        # empty ("+") and a tap only shows "Please press and hold".
         *_open_app(),
         ui(TILE["lighting"]),
         wait(r"All lights|Alle Lichter"),
-        ui(r"^A$", expect=("lighting", "profile", 1)),
-        xy("lighting_profile_a_hold"),
-        xy("lighting_kitchen_50", expect=("lighting", "kitchen", 5)),
-        ui(r"^Save$", expect=("lighting", "save_profile", 1)),
+        xy("lighting_all", expect=("lighting", "power", "on")),
+        xy("lighting_kitchen_row"),  # expand Kitchen (client-side)
+        xy("lighting_cooking_50", expect=("lighting", "kitchen", 5)),
+        xy("lighting_profile_a_hold", expect=("lighting", "save_profile", 1)),
     ],
     "lighting-wakeup": [
+        # Lighting > Functions & Settings > Wake-up Light > tap the time > wheel to 07:00 > OK writes the
+        # Mode-20 WAKEUP_TIME frame at once (a GAPS entry in tools/capture_diff.py). The "Wake-up light"
+        # enable switch is not driven: the mock does not echo the wake-up time, so the switch's frame
+        # would carry the stale 00:00 readback, not the time set here.
         *_open_app(),
         ui(TILE["lighting"]),
         wait(r"All lights|Alle Lichter"),
-        ui(r"[Ww]ake.?up"),
-        xy("wakeup_hour_wheel"),
-        ui(r"^(OK|Save)$", expect=("lighting", "wakeup", "07:00")),
+        ui(r"^Functions & Settings$"),  # expand (client-side)
+        _SCROLL_END,
+        ui(r"^Wake-up Light$"),
+        wait(r"Wake-up time"),
+        ui(r"^\d\d:\d\d$"),  # the Time field opens the wheel sheet
+        wait(r"Wake-up time:"),
+        *[xy("wakeup_hour_wheel") for _ in range(7)],  # 00 -> 07
+        ui(r"^OK$", expect=("lighting", "wakeup", "07:00")),
     ],
     "airheater-permanent-on": [  # expected: NO write — the switch is inert while continuous heating is off
         *_open_app(),

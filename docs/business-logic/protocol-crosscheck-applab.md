@@ -172,8 +172,8 @@ and CI replays it against `control.build` (`tests/test_app_recordings.py`,
 `python3 -m tools.capture_diff <file> --recording`); `tools/app_parity.py` reports the connection
 lifecycle. See `simulation-and-testing`.
 
-First recording session (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools/applab/README.md`
-"Linux host"): four scenarios are now **APP-RECORDED** and replay clean against `control.build`:
+Recording sessions (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools/applab/README.md`
+"Linux host"): all ten scenarios are **APP-RECORDED** and replay clean against `control.build`:
 
 - `tests/vectors/app/energy-mode.jsonl` — Max `10` and Normal `00` (+ neutral `30`), both matched.
 - `tests/vectors/app/campingmode.jsonl` — master OFF `fc` / ON `fd` (+ neutral `ff`), both matched.
@@ -181,7 +181,17 @@ First recording session (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools
   (no write), confirming the "can be activated only in the vehicle" gate.
 - `tests/vectors/app/session.jsonl` — the two-connection lifecycle (connect → background drop →
   foreground reconnect); `tools/app_parity` prints one section per connection + the reconnect gap.
-
-Still to record (deferred — the real-app UI is mapped in `tools/applab/scenarios.py` but each needs
-a slider/sub-screen pass, and the lighting screen crashed the emulator on this bench): `cooler`,
-`airheater`, `lighting-zone`, `lighting-profile`, `lighting-wakeup`, `roof-hold`.
+- `tests/vectors/app/airheater.jsonl` — temperature 8 `3f78007f1f3f`, run time 60 `3f7b003c1f3f`,
+  Immediate heating ON `3d7b007f1f3f`.
+- `tests/vectors/app/lighting-zone.jsonl` — All lights OFF→ON `0c10…` (LIGHTS_ON), Kitchen >
+  *Cooking* 50 % `0904…eeeeeee5…` (L7 = calictl `kitchen`).
+- `tests/vectors/app/cooler.jsonl` — power on `fd77…`, level 5 `ff75…`, manual quiet on/off
+  `ff27…`/`ff07…`, automatic quiet `ff47…`, power off `fc77…`, timer start `f777…` / cancel `df77…`.
+  The app absorbs the first tap on the timer switch after arming; the second tap cancels.
+- `tests/vectors/app/roof-hold.jsonl` — ignition on, the rocker's upper half held 16 s: `Up=1` frames
+  with an incrementing SafetyCounter until the mock reports the roof open.
+- `tests/vectors/app/lighting-profile.jsonl` — press-and-hold tile A = `save_profile 1`
+  `010400000000000000000005e00eeeee` (current zone levels, NOT_EQUIPPED → 14), matching calictl.
+- `tests/vectors/app/lighting-wakeup.jsonl` — wake-up time 07:00 via the wheel + OK writes the Mode-20
+  frame `0e146ac49c701100…` (Timestamp = the next 07:00 packed as if UTC, LightValue `0x11`); a
+  declared `GAPS` entry until calictl has a wake-up builder.
