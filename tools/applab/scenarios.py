@@ -70,13 +70,22 @@ XY: dict[str, tuple[int, ...] | None] = {
     "cooler_manual_quiet": None,
     "cooler_auto_quiet": None,
     "cooler_timer": None,
-    "heater_immediate": (905, 1558),  # Immediate heating toggle
+    "heater_immediate": (
+        900,
+        1640,
+    ),  # Immediate heating toggle (measured 2026-10-05; the 905,1558 map was ~80px high)
     "heater_temp_8": (790, 1104),  # Heating Temperature slider (1-9,HI) at level 8
     "heater_runtime_60": (499, 1386),  # Run Time slider (10-120) at 60 min
     "heater_permanent": (905, 2015),  # Permanent Heating toggle (greyed: "only in the vehicle")
     "camping_master": (905, 1010),  # Camping mode detail: the master toggle switch
-    "lighting_all": (905, 457),  # All lights master toggle
-    "lighting_kitchen_50": None,  # kitchen zone slider at 50 %
+    "lighting_all": (905, 457),  # All lights master toggle (OFF->ON writes 0c10 = profile LIGHTS_ON)
+    "lighting_kitchen_row": (540, 1175),  # tap the collapsed Kitchen zone row to expand its lamps
+    "lighting_cooking_50": (582, 1690),  # Kitchen > "Cooking" slider at 50 % = BrightnessLSeven (L7) = 5
+    "lighting_background_50": (
+        582,
+        1450,
+    ),  # Kitchen > "Background Lighting" slider at 50 % = BrightnessLFive (L5)
+    "lighting_kitchen_50": None,  # kitchen zone slider at 50 % (unused: Kitchen is two lamps, see above)
     "lighting_profile_a_hold": None,  # (x, y, 2000): press-and-hold profile tile A = edit
     "roof_open_hold": None,  # (x, y, 12000): the upper roof button held 12 s, then released
     "wakeup_hour_wheel": None,  # (x, y, x, y - 145): one row of the wake-up hour wheel
@@ -158,21 +167,22 @@ SCENARIOS: dict[str, list[Step]] = {
         xy("cooler_timer", expect=("cooler", "timer_cancel", None)),
     ],
     "airheater": [
+        # Core immediate-heating controls (power/level/runtime). The timer-time frame is already
+        # APP-OBSERVED (evidence-ledger, `3f7b007f091f`) and permanent-OFF is covered by
+        # airheater-permanent-on, so this records the live power/level/runtime frames only. The tile
+        # The tile opens behind a one-time 4-page "IMMEDIATE HEATING" info coachmark (Next/Skip);
+        # dismiss it once in the app before recording (it does not reappear in the same session, like
+        # the other tiles' coachmarks — see README "coachmarks").
+        # Set temperature + run time while INACTIVE (both sliders adjustable, stable layout), then
+        # activate Immediate heating LAST: once active the app shows "Active • N min", locks the run-time
+        # slider and shifts the toggle, so a run-time or power-off change afterwards writes no frame.
         *_open_app(),
         fifo("set airheater NormalOperation=0 PermanentOperation=0 OperationModeAirHeater=0"),
         ui(TILE["airheater"]),
         wait(r"Heating Temperature"),
-        xy("heater_immediate", expect=("airheater", "power", "on")),
         xy("heater_temp_8", expect=("airheater", "level", 8)),
         xy("heater_runtime_60", expect=("airheater", "runtime", 60)),
-        xy("heater_immediate", expect=("airheater", "power", "off")),
-        ui(r"^Start timer$", expect=("airheater", "timer_start", None)),
-        ui(r"^Stop$", expect=("airheater", "timer_cancel", None)),
-        fifo("set airheater PermanentOperation=1"),
-        wait(r"[Cc]ontinuous heating"),
-        xy("heater_permanent"),
-        wait(r"Turn off continuous heating"),
-        ui(r"^(Turn off|Switch off|Yes)$", expect=("airheater", "permanent", "off")),
+        xy("heater_immediate", expect=("airheater", "power", "on")),
     ],
     "campingmode": [
         *_open_app(),
@@ -184,11 +194,16 @@ SCENARIOS: dict[str, list[Step]] = {
         xy("camping_master", expect=("campingmode", "master", "on")),
     ],
     "lighting-zone": [
+        # The app models each zone as a tap-to-expand row of named lamps, not one slider: lab 2026-10-05
+        # proved Kitchen = "Background Lighting" (BrightnessLFive=L5) + "Cooking" (BrightnessLSeven=L7),
+        # so calictl "kitchen"=L7 is the Cooking lamp. A one-time info coachmark covers the controls first.
         *_open_app(),
         ui(TILE["lighting"]),
+        ui(r"^Close$"),  # dismiss the one-time lighting info coachmark sheet
         wait(r"All lights|Alle Lichter"),
-        xy("lighting_all", expect=("lighting", "power", "on")),
-        xy("lighting_kitchen_50", expect=("lighting", "kitchen", 5)),
+        xy("lighting_all", expect=("lighting", "power", "on")),  # master OFF->ON = 0c10 (LIGHTS_ON)
+        xy("lighting_kitchen_row"),  # expand the Kitchen zone (client-side; no BLE write)
+        xy("lighting_cooking_50", expect=("lighting", "kitchen", 5)),  # Cooking = BrightnessLSeven (L7) = 5
     ],
     "roof-hold": [
         *_open_app(),

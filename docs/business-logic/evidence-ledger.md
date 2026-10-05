@@ -101,8 +101,19 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   matched), `campingmode.jsonl` (master OFF `fc` / ON `fd` / neutral `ff`, matched),
   `airheater-permanent-on.jsonl` (the Permanent-Heating switch is inert when continuous heating is
   off — no frame), and `session.jsonl` (two-connection lifecycle: connect → background drop →
-  foreground reconnect, `conn` 1 then 2). Still to record (harness proven, scenarios mapped):
-  `cooler`, `airheater`, `lighting-zone`, `lighting-profile`, `lighting-wakeup`, `roof-hold`.
+  foreground reconnect, `conn` 1 then 2).
+- **APP-RECORDED (2026-10-05, same harness, task 6b):** `lighting-zone.jsonl` — All-lights master
+  OFF→ON writes `0c10` (profile `LIGHTS_ON`, matches `control.build("lighting","power","on")`), and
+  the **Kitchen** zone's *Cooking* lamp at 50 % writes `0904…eeeeeee5…` (`BrightnessLSeven`=L7=5,
+  matches `control.build("lighting","kitchen",5)`). Both replay clean. The app groups lamps into
+  named zones (Reading Lights, **Kitchen** = *Background Lighting*=L5 + *Cooking*=L7, Pop-up roof,
+  Exterior Light), confirming the DEVICE `LIGHT_ZONES` map below with the app's own EN labels. The
+  lighting control screen renders fine under the emulator's NVIDIA `-gpu host` (the crash was a
+  SwiftShader-only software-render fault). And `airheater.jsonl` — immediate heating set in the
+  INACTIVE state: temperature level 8 `3f78007f1f3f`, run time 60 min `3f7b003c1f3f`, then Immediate
+  heating ON `3d7b007f1f3f`, all matching `control.build` (once active the app locks the run-time
+  slider and shifts the toggle, so those are the reachable writes). Still to record (harness proven,
+  scenarios mapped): `cooler`, `lighting-profile`, `lighting-wakeup`, `roof-hold`.
 - energy current scales — DECOMPILE (2026-09-07): `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` ÷10 → A
   (`xf/d.java:159,173,175`, holders bound `xf/a.java:150-157,239,307`), `IDcdcAfs` unscaled A + the
   SW-0409/0410 `+2` (`xf/d.java:171`). Plausibility from 14 d telemetry: `batt2_current` raw −49…318

@@ -311,6 +311,31 @@ bounds `[x1, y1, x2, y2]` and use the centre for a tap; for a slider use
 appends the hold in ms; a wheel row is `(x, y, x, y - 145)`. Check the point with
 `adb shell input tap x y` and a screenshot before committing it.
 
+### Coachmarks (one-time info sheets per tile)
+
+Each control tile opens the first time behind a one-time **info coachmark** that covers the
+controls — Lighting shows a one-sheet "LIGHTING … press and hold the selected profile" (dismiss:
+**Close**), the Air heater a 4-page "IMMEDIATE HEATING" tutorial (**Skip**/Next), and so on. The
+"seen" flag lives in app data: it is set once the sheet is viewed and **does not reappear in the
+same session**, but a boot from the `clean_paired` snapshot (which `applab-record.sh` does between
+retries) resets it. So a scenario that opens a tile either needs a dismiss step (when the coachmark
+is present, e.g. `lighting-zone`'s `ui("^Close$")`) or expects it already dismissed (e.g.
+`airheater`, recorded after the sheet was skipped once in the session). The robust habit for a
+recording session: open each tile once by hand and dismiss its coachmark before running `walk.py`
+without a dismiss step.
+
+### Pairing is a DHKEY flake — retry, don't reboot per attempt (task 6b, 2026-10-05)
+
+A fresh pair fails intermittently with `pairing failure (DHKEY_CHECK_FAILED)` → the central drops
+the link with `reason=19` right after the passkey (the passkey itself verifies — all 20 SC steps
+pass). It is a Bumble SC/ECDH value-dependent flake (#228 family), ~50 % per attempt on a healthy
+boot and worse once the emulator has been rebooted many times (netsim degrades, `GOAWAY` in
+`emulator.log`). What works: **one** fresh boot from `clean_paired` (NVIDIA `-gpu host`), then retry
+the walk **without** rebooting between attempts — `walk.py` SIGTERMs its own fake so netsim keeps no
+ghost, and the reboot does not help the DHKEY roll. `lighting-zone` and `airheater` each landed in
+≤ 2 attempts this way. Reboot only when `adb`/netsim actually wedges (Another-emulator-instance, or
+`adb` hangs), and when you do, wait for `qemu-system-x86_64` to fully exit before relaunching.
+
 ## What the app itself told us (2026-09-16)
 
 - `1002` = last 16 bytes of SHA-256 of the VIN string (`ny/c.java` case 8) — the "wrong
