@@ -133,6 +133,9 @@ BLE trace recorder + replay (real-unit evidence for the mock)
 .. automodule:: tests.test_trace_compare
 .. automodule:: tests.test_mock_fidelity
 
+.. automodule:: tools.capture_diff
+.. automodule:: tests.test_app_recordings
+
 Daemon logging
 --------------
 

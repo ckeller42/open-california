@@ -18,16 +18,34 @@ automated. See `.claude/skills/capture-and-diff/SKILL.md` for the capture SOP.
 Frontend: BLE reassembly is delegated to `tshark` (handles HCI/L2CAP fragmentation
 correctly) — we do NOT re-implement it. Alternatively pass `--frames FILE`, a normalized
 list a human extracts from any capture tool (`<uuid-or-handle>: <hex>` per line).
+
+App recordings (``tests/vectors/app/*.jsonl``, written by ``tools/applab/walk.py``) are a third
+input: ``--frames`` reads their ``write`` events, and :func:`check_recording` replays a whole
+recording — every non-neutral write attributed to the scenario step that caused it and diffed on
+the fields the app targets. ``--recording FILE`` prints that replay.
+
+.. req:: Hold calictl to the real app's recorded frames
+   :id: R_APP_FIDELITY
+   :status: implemented
+   :tags: control, evidence, applab
+
+   Every control write the real app made in a committed recording (``tests/vectors/app/*.jsonl``)
+   shall decode, on the fields the app targets, to the same values as ``control.build`` for the
+   action its scenario step names; a write calictl cannot attribute or build shall fail the
+   replay; a recording shall start with its header and carry no VIN, VIN hash, passkey or MAC
+   other than the fake unit's test identity.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from calictl import control, overrides, protocol
+from calictl import control, overrides, protocol, trace
 
 # ATT write opcodes (method bits): 0x12 Write Request, 0x52 Write Command.
 _ATT_WRITE_OPCODES = {0x12, 0x52}
@@ -83,9 +101,21 @@ def load_scenario(name: str, root: str | Path | None = None) -> Scenario:
 
 def parse_frames_file(path: str | Path) -> list[tuple[str, bytes]]:
     """Normalized fallback input: lines `<uuid-or-handle>: <hex>`. Keys are a short UUID
-    (`1501`), a full UUID, or a handle (`0x0022`). `#` comments and blanks ignored."""
+    (`1501`), a full UUID, or a handle (`0x0022`). `#` comments and blanks ignored.
+    An app recording (JSONL, first character ``{``) yields its ``write`` events instead,
+    the ``1003`` heartbeat and ``f000`` skipped."""
+    text = Path(path).read_text()
+    if text.lstrip().startswith("{"):
+        out_jl: list[tuple[str, bytes]] = []
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            ev = json.loads(line)
+            if ev.get("ev") == "write" and ev.get("char") not in SKIP_CHARS:
+                out_jl.append((ev["char"], bytes.fromhex(ev["hex"])))
+        return out_jl
     out: list[tuple[str, bytes]] = []
-    for line in Path(path).read_text().splitlines():
+    for line in text.splitlines():
         line = line.split("#", 1)[0].strip()
         if not line or ":" not in line:
             continue
@@ -226,6 +256,284 @@ def format_report(
     return "\n".join(lines)
 
 
+# --- app recordings (tests/vectors/app/*.jsonl, tools/applab/walk.py) --------------------------
+
+HEADER_KEYS = frozenset({"recorded_by", "date", "avd", "scenario"})
+RECORDING_EVENTS = frozenset(
+    {
+        "connect",
+        "disconnect",
+        "read",
+        "write",
+        "notify",
+        "mtu",
+        "subscribe",
+        "pair",
+        "step",
+        "app_screen",
+        "esp_state",
+    }
+)
+SKIP_CHARS = frozenset({"1003", "f000"})  # liveness heartbeat + the unmodelled generic write
+# The app's neutral frame per function — every field at its leave-unchanged default. The app writes
+# it 500 ms after every action (protocol-crosscheck-applab.md, "Heartbeat / arming"). A write's
+# TARGETED fields are the ones that differ from it; a write with none is that flush.
+APP_NEUTRAL_HEX = {
+    "cooler": "ff771e3e1f1f",
+    "airheater": "3f7b007f1f3f",
+    "campingmode": "ff",
+    "energy": "30",
+    "lighting": "0e00000000000000eeeeeeeeeeeeeeee",
+}
+ROOF_NEUTRAL = {"Up": 0, "Down": 0}  # page-open / STOP frame; the SafetyCounter always moves
+# Frames the app writes that are not an action calictl models — each with its evidence.
+APP_ONLY_HEX = {
+    "0d0c000000000000eeeeeeeeeeeeeeee": "lighting REQUEST_CONFIG screen-open pull; retired in calictl "
+    "(photon-verified not an actuation gate, see the comment above control.decode_control)",
+}
+# Actions the app performs that calictl cannot build (or builds differently) yet, with the reason.
+# A recorded write for one is reported as a gap; once calictl matches it the replay FAILS until the
+# entry is removed, so this list cannot rot.
+GAPS: dict[tuple[str, str], str] = {
+    ("lighting", "wakeup"): "no calictl builder: the wake-up frame (Mode 20, Timestamp + LightValue "
+    "packing) is unknown (evidence-ledger 'lighting wake-up TIME'); sub-project 3 builds it from the recording",
+}
+TEST_IDENTITY = "C0:FF:EE:CA:11:F0"  # the fake unit's identity — the only MAC a recording may hold
+_MAC_RE = re.compile(r"\b[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\b")
+_VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
+_PAIR_KEYS = frozenset({"t", "t_ms", "conn", "ev", "state", "reason"})
+
+
+class RecordingError(ValueError):
+    """A recording that is not in the format: the message names the file and line."""
+
+
+def load_recording(path: str | Path) -> tuple[dict, list[tuple[int, dict]]]:
+    """Read an app recording.
+
+    :param path: a ``tests/vectors/app/<scenario>.jsonl`` file.
+    :returns: ``(header, [(line_no, event), ...])``.
+    :raises RecordingError: no header on line 1, a line that is not JSON, or an unknown ``ev``.
+    """
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    try:
+        header = json.loads(lines[0]) if lines else None
+    except ValueError:
+        header = None
+    if not isinstance(header, dict) or set(header) != HEADER_KEYS:
+        raise RecordingError("%s:1: first line must be the header %s" % (path, sorted(HEADER_KEYS)))
+    events: list[tuple[int, dict]] = []
+    for n, line in enumerate(lines[1:], 2):
+        if not line.strip():
+            continue
+        try:
+            ev = json.loads(line)
+        except ValueError as e:
+            raise RecordingError("%s:%d: not JSON (%s)" % (path, n, e)) from None
+        if ev.get("ev") not in RECORDING_EVENTS:
+            raise RecordingError("%s:%d: unknown ev %r" % (path, n, ev.get("ev")))
+        events.append((n, ev))
+    return header, events
+
+
+def recording_hygiene(path: str | Path) -> list[str]:
+    """The PII guard for a committed recording: ``avd`` is ``lab34``; every ``1002`` payload is
+    ``<vin-hash>``; no VIN-shaped token; no MAC but :data:`TEST_IDENTITY`; ``pair`` events carry
+    no extra key (a passkey).
+
+    :returns: one message per violation, ``file:line: what`` (empty = clean).
+    """
+    header, events = load_recording(path)
+    problems = []
+    if header["avd"] != "lab34":
+        problems.append("%s:1: avd %r (recordings are made on lab34)" % (path, header["avd"]))
+    for n, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        if _VIN_RE.search(line):
+            problems.append("%s:%d: VIN-shaped token" % (path, n))
+        for mac in _MAC_RE.findall(line):
+            if mac.upper() != TEST_IDENTITY:
+                problems.append("%s:%d: MAC %s (only %s may appear)" % (path, n, mac, TEST_IDENTITY))
+    for n, ev in events:
+        if ev.get("char") == "1002" and "hex" in ev and ev["hex"] != trace.REDACTED_VIN_HASH:
+            problems.append("%s:%d: 1002 payload not redacted" % (path, n))
+        if ev["ev"] == "pair" and set(ev) - _PAIR_KEYS:
+            problems.append("%s:%d: pair event carries %s" % (path, n, sorted(set(ev) - _PAIR_KEYS)))
+    return problems
+
+
+def neutral_fields(funcs: dict, fn: str) -> dict | None:
+    """The app's neutral control values for ``fn`` (:data:`APP_NEUTRAL_HEX` decoded; roof: Up/Down 0),
+    or ``None`` when none is known (then every field of a write counts as targeted)."""
+    if fn == "roof":
+        return dict(ROOF_NEUTRAL)
+    hx = APP_NEUTRAL_HEX.get(fn)
+    return None if hx is None else control.decode_control(funcs[fn], bytes.fromhex(hx))
+
+
+@dataclass
+class WriteCheck:
+    """One recorded control write and what the replay made of it.
+
+    ``kind``: ``action`` (matched calictl), ``flush`` (the neutral frame), ``app-only``
+    (:data:`APP_ONLY_HEX`), ``gap`` (:data:`GAPS`), ``error`` (see ``problem``)."""
+
+    line: int
+    fn: str | None
+    hex: str
+    kind: str
+    step: int | None = None
+    problem: str | None = None
+
+
+def check_recording(
+    path: str | Path, *, funcs: dict | None = None, gaps: dict | None = None
+) -> list[WriteCheck]:
+    """Replay a recording's control writes against calictl (:need:`R_APP_FIDELITY`).
+
+    State for ``control.build``'s full-packet carry is the last ``read``/``notify`` of each function's
+    state char. A write to ``1003``/``f000`` is skipped; a write for a function without a calictl
+    builder fails; the app's neutral frame is a ``flush``; any other write must sit under a ``step``
+    whose ``expect`` names its function, and its targeted fields must equal calictl's. Every step with
+    an ``expect`` must have produced such a write.
+
+    :param path: the recording.
+    :param funcs: the loaded + overridden function table (loaded if omitted).
+    :param gaps: known gaps, ``{(function, what): reason}``; default :data:`GAPS`.
+    :returns: one :class:`WriteCheck` per checked write, plus one ``error`` per expectation no write met.
+    """
+    if funcs is None:
+        funcs = protocol.load()
+        overrides.apply(funcs)
+    gaps = GAPS if gaps is None else gaps
+    _, events = load_recording(path)
+    state: dict[str, dict] = {}
+    step: dict | None = None
+    expected: dict[int, tuple[int, dict]] = {}
+    hit: set[int] = set()
+    out: list[WriteCheck] = []
+    for line, ev in events:
+        kind = ev["ev"]
+        if kind == "step":
+            step = ev
+            if ev.get("expect"):
+                expected[ev["n"]] = (line, ev)
+            continue
+        fn, hx = ev.get("fn"), ev.get("hex")
+        if kind in ("read", "notify"):
+            if fn in funcs and hx and hx != trace.REDACTED_VIN_HASH:
+                state[fn] = protocol.decode(funcs[fn], bytes.fromhex(hx))
+            continue
+        if kind != "write" or ev.get("char") in SKIP_CHARS:
+            continue
+        out.append(_check_write(funcs, gaps, state, step, line, ev, hit))
+    for sn, (line, sev) in sorted(expected.items()):
+        fn, what, value = sev["expect"]
+        if sn not in hit and (fn, what) not in gaps:
+            out.append(
+                WriteCheck(
+                    line,
+                    fn,
+                    "",
+                    "error",
+                    sn,
+                    "step %d (%s %s) expected %s/%s=%r but the app wrote no such frame"
+                    % (sn, sev["verb"], sev["arg"], fn, what, value),
+                )
+            )
+    return out
+
+
+def _check_write(funcs, gaps, state, step, line, ev, hit) -> WriteCheck:
+    fn, hx, char = ev.get("fn"), ev["hex"], ev.get("char")
+    if fn not in control.BUILDERS:
+        return WriteCheck(
+            line,
+            fn,
+            hx,
+            "error",
+            problem="write to char %s (fn=%s): calictl has no control builder for it" % (char, fn),
+        )
+    if hx in APP_ONLY_HEX:
+        return WriteCheck(line, fn, hx, "app-only")
+    app = control.decode_control(funcs[fn], bytes.fromhex(hx))
+    neutral = neutral_fields(funcs, fn)
+    targeted = list(app) if neutral is None else [k for k, v in neutral.items() if app.get(k) != v]
+    if not targeted:
+        return WriteCheck(line, fn, hx, "flush")
+    sn = step["n"] if step else None
+    exp = step.get("expect") if step else None
+    if not exp or exp[0] != fn:
+        return WriteCheck(
+            line,
+            fn,
+            hx,
+            "error",
+            sn,
+            "unattributed %s write %s (targets %s): step %s expects %s" % (fn, hx, targeted, sn, exp),
+        )
+    _, what, value = exp
+    hit.add(sn)
+    st = dict(state.get(fn, {}))
+    try:
+        ours = control.build(funcs, fn, what, value, st)
+    except ValueError as e:
+        return WriteCheck(line, fn, hx, "error", sn, "calictl refuses %s/%s=%r: %s" % (fn, what, value, e))
+    bad: list[DiffRow] = []
+    leads: list[str] = []
+    if ours is not None:
+        scen = Scenario(
+            name="step %s" % sn, function=fn, what=what, value=value, control_char=str(char), state=st
+        )
+        rows, leads, _ = diff(funcs, scen, bytes.fromhex(hx))
+        bad = [r for r in rows if r.name in targeted and not r.match]
+    if (fn, what) in gaps:
+        if ours is not None and not bad:
+            return WriteCheck(
+                line,
+                fn,
+                hx,
+                "error",
+                sn,
+                "gap %s/%s is closed (calictl now matches %s): remove it from GAPS" % (fn, what, hx),
+            )
+        return WriteCheck(line, fn, hx, "gap", sn)
+    if ours is None:
+        return WriteCheck(
+            line,
+            fn,
+            hx,
+            "error",
+            sn,
+            "calictl has no builder for %s/%s=%r (add one, or list (%r, %r) in GAPS with a reason)"
+            % (fn, what, value, fn, what),
+        )
+    if bad:
+        detail = ", ".join(
+            "%s app=%s calictl=%s%s" % (r.name, r.app, r.calictl, " LEAD" if r.name in leads else "")
+            for r in bad
+        )
+        return WriteCheck(
+            line,
+            fn,
+            hx,
+            "error",
+            sn,
+            "step %s %s/%s=%r: app %s vs calictl %s: %s" % (sn, fn, what, value, hx, ours.hex(), detail),
+        )
+    return WriteCheck(line, fn, hx, "action", sn)
+
+
+def run_recording(path: str) -> int:
+    """Print the replay of one recording; exit status 1 if any write failed."""
+    checks = check_recording(path)
+    for c in checks:
+        print(
+            "%5d %-8s %-11s %-34s step=%-4s %s"
+            % (c.line, c.kind, c.fn or "-", c.hex, c.step, c.problem or "")
+        )
+    return 1 if any(c.problem for c in checks) else 0
+
+
 def run(capture: str, scenario_name: str, *, frames: bool = False) -> int:
     funcs = protocol.load()
     overrides.apply(funcs)
@@ -244,12 +552,27 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(
         prog="capture_diff", description="Diff the real app's BLE control writes vs calictl's"
     )
-    p.add_argument("capture", help="HCI capture (pcap/pcapng via tshark) or a --frames file")
-    p.add_argument("scenario", help="scenario name under tools/scenarios/, e.g. lighting/kitchen-50")
     p.add_argument(
-        "--frames", action="store_true", help="treat `capture` as a normalized `<uuid|handle>: <hex>` list"
+        "capture", help="HCI capture (pcap/pcapng via tshark), a --frames file, or an app recording"
+    )
+    p.add_argument(
+        "scenario", nargs="?", help="scenario name under tools/scenarios/, e.g. lighting/kitchen-50"
+    )
+    p.add_argument(
+        "--frames",
+        action="store_true",
+        help="treat `capture` as a normalized `<uuid|handle>: <hex>` list or an app recording (JSONL)",
+    )
+    p.add_argument(
+        "--recording",
+        action="store_true",
+        help="replay every write of an app recording (tests/vectors/app/*.jsonl)",
     )
     args = p.parse_args(argv)
+    if args.recording:
+        return run_recording(args.capture)
+    if not args.scenario:
+        p.error("a scenario is required unless --recording")
     return run(args.capture, args.scenario, frames=args.frames)
 
 
