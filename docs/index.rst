@@ -49,6 +49,7 @@ clean and shows an empty "incoming" list).
 
    UI-DESIGN-RATIONALE
    simulation-and-testing
+   mock-unit-guide
    building-the-docs
 
 Reverse-engineering lab notes
