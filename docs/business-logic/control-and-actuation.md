@@ -367,7 +367,10 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
   reading light (L9)** needs the roof raised (`roof.Position` not closed), and the **cooler cooling
   timer** (`timer_set`/`timer_start`) can only be set while the fridge is off (`cooler.State==0`).
   Enforced in `serve.on_command` + `cli` (unknown gating state allows the write — can't prove it's
-  blocked). Both DEVICE-confirmed at the van.
+  blocked). Both DEVICE-confirmed at the van. Only a real timer change counts: the app's power and
+  level frames carry `TimerHour`/`TimerMin` at their dictionary default `30`/`62` (the
+  leave-unchanged sentinel, e.g. level 5 = `ff751e3e1f1f`), and those apply while the fridge is on
+  (app lab 2026-10-05; the mock wrongly refused them until then).
 - **Web GUI roof contract (`webui/app.js`, #176):** open/close are **press-and-hold** — `pointerdown`
   posts the move (the server streams frames + counter until told to stop, `_roof_move`), and the
   release is caught ONCE at **document** level (`pointerup`/`pointercancel`, plus `pointerleave` on
