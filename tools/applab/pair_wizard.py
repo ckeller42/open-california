@@ -4,7 +4,7 @@ The pairing flow is several sheets deep and Android surfaces the passkey prompt 
 notification with a ~30 s SMP window, which is fiddly to do by hand. This walks whatever sheet is
 open — ticks any confirmation checkbox, taps the primary button (*Set up Remote Control* /
 *Continue with Remote Control* / *Next* / *Connect now*) — then waits for the "Pairing request"
-notification, opens it, types the passkey and taps OK. It prints each step.
+notification, opens it, types the passkey and taps OK. It prints each step. It returns (exits) true/0 only when the passkey was typed and OK tapped.
 
 Prereqs: the emulator is up with the app open (`labctl.sh up`), and the fake unit is advertising.
 Only needed for a *fresh* pair; a persisted bond reconnects on its own (see the README).
@@ -65,7 +65,7 @@ def notif_has(text: str) -> bool:
     return text in sh("adb", "shell", "dumpsys", "notification", "--noredact")
 
 
-def main() -> None:
+def main() -> bool:
     for k in range(10):
         t = tree()
         for line in t.splitlines():  # tick any confirmation checkbox first
@@ -90,7 +90,7 @@ def main() -> None:
             break
     else:
         print("no pairing request appeared", flush=True)
-        return
+        return False
 
     sh("adb", "shell", "cmd", "statusbar", "expand-notifications")
     time.sleep(1.5)
@@ -100,11 +100,11 @@ def main() -> None:
     ed = next((bounds(l) for l in t.splitlines() if "EditText" in l), None)
     if not ed:
         print("no passkey field found", flush=True)
-        return
+        return False
     passkey = PASSKEY or logged_passkey()
     if not passkey:
         print("no passkey: set FAKE_UNIT_PASSKEY or FAKE_UNIT_LOG (none in %s)" % FAKE_LOG, flush=True)
-        return
+        return False
     tap_bounds(ed)
     time.sleep(0.5)
     sh("adb", "shell", "input", "text", passkey)
@@ -122,7 +122,8 @@ def main() -> None:
             print("  " + line[:120])
     except OSError:
         pass
+    return ok is not None
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(0 if main() else 1)

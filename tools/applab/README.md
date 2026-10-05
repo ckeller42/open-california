@@ -217,6 +217,38 @@ content-description), `tree` (nodes with bounds/clickable/checked), `shot <name>
 switches show up as clickable `View`s with `checked`; sliders and the roof press-and-hold switch
 are plain images — drive them by coordinates.
 
+## Recording a scenario (`walk.py`)
+
+`tools/applab/walk.py <scenario>…` records the app doing one scripted thing
+(`tools/applab/scenarios.py`) into `tests/vectors/app/<scenario>.jsonl`, which CI replays against
+`control.build` (`tests/test_app_recordings.py`). Per scenario it SIGTERMs the lab's fake, starts a
+fresh one with `FAKE_UNIT_RECORD`, runs the steps with a screenshot after each
+(`$TMPDIR/applab/shots/`), SIGTERMs the fake and writes the header + the merged events. A failed
+step stops the run, leaves the fake running and prints the last screenshot — fix the selector or
+the XY point and run it again; nothing retries.
+
+```sh
+. $LAB_DIR/env.sh
+~/esp-venv/bin/python tools/applab/walk.py cooler airheater
+python3 -m tools.capture_diff tests/vectors/app/cooler.jsonl --recording    # the replay, write by write
+python3 -m tools.app_parity tests/vectors/app/session.jsonl                  # app / calictl / ESP lifecycle
+```
+
+`--live --esp-fifo <the ESP fake's FIFO>` also records, after every step, the app's visible texts
+and the ESP satellite's `/api/state` + page texts; `set`/`raw` console lines then go to both fakes
+(link commands such as `forget` only to the app's). Recordings are made by hand once per APK
+version; commit them with the evidence-ledger rows they flip.
+
+### Measuring XY points
+
+Sliders, the roof hold and the time wheels have no text to tap, so `scenarios.XY` holds named
+screen points, valid only for the screen in `scenarios.XY_SCREEN` (`walk.py` refuses any other).
+To measure one: open the screen, run `python3 tools/applab/adbui.py tree`, take the control's
+bounds `[x1, y1, x2, y2]` and use the centre for a tap; for a slider use
+`x = x1 + (x2 - x1) * fraction` at the centre `y` (level 8 of 1–10 → fraction 7/9); a long press
+appends the hold in ms; a wheel row is `(x, y, x, y - 145)`. Check the point with
+`adb shell input tap x y` and a screenshot before committing it.
+
 ## What the app itself told us (2026-09-16)
 
 - `1002` = last 16 bytes of SHA-256 of the VIN string (`ny/c.java` case 8) — the "wrong
