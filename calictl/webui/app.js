@@ -63,6 +63,9 @@
  * // lighting (semantics.lighting): brightness_zone_1..16 read dynamically -> see note at renderLighting
  * @property {number|null} [profile]
  * @property {boolean} [any_on]
+ * @property {{time: string, enabled: boolean, ramp: number, brightness: number, areas: number[], colour: number}|null} [wakeup]
+ * @property {boolean|null} [door_contact]
+ * @property {number[]|null} [favourites_stored]
  * // airheater (semantics.airheater)
  * @property {boolean} [running]
  * @property {boolean} [permanent]
@@ -1570,6 +1573,87 @@ function renderLighting(s) {
   };
   srow.appendChild(ssel); mc.appendChild(srow);
   app.appendChild(mc);
+
+  // Wake-up light (the app's Lighting > Functions & Settings > Wake-up light; dg/h.m0, Mode 20).
+  // The unit reports its config only in a Mode-20 frame (latched by the daemon). Every change
+  // resends the whole config like the app; the time picker never flips the switch (app-recorded).
+  const wk = s.wakeup || null;
+  /** @param {{time?: string, areas?: number[], brightness?: number, ramp?: number, on?: boolean}} p */
+  const wakeCmd = (p) => {
+    const time = p.time || (wk ? wk.time : "00:00");
+    const areas = p.areas || (wk ? wk.areas : [1]);
+    const bright = p.brightness != null ? p.brightness : (wk ? wk.brightness : 0);
+    const ramp = p.ramp != null ? p.ramp : (wk ? wk.ramp : 0);
+    const on = p.on != null ? p.on : !!(wk && wk.enabled);
+    command("lighting", "wakeup", `${time} ${areas.join(",")} ${bright} ${ramp} ${on ? "on" : "off"}`);
+  };
+  const wc = document.createElement("div"); wc.className = "card";
+  const wh = document.createElement("div"); wh.className = "note"; wh.style.padding = ".6rem 0 0";
+  wh.textContent = /** @type {string} */ (t("Wake-up light")); wc.appendChild(wh);
+  const wrow = document.createElement("div"); wrow.className = "row";
+  const wl = document.createElement("span"); wl.className = "lbl"; wl.textContent = /** @type {string} */ (t("Wake-up light"));
+  wrow.appendChild(wl);
+  if (pending_is("lighting", "wakeup")) wrow.appendChild(spinner());
+  const wsw = document.createElement("button"); wsw.className = "switch";
+  wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", "Wake-up light");
+  wsw.setAttribute("aria-checked", wk && wk.enabled ? "true" : "false"); wsw.disabled = readOnly();
+  wsw.onclick = () => wakeCmd({ on: !(wk && wk.enabled) });
+  wrow.appendChild(wsw); wc.appendChild(wrow);
+  const trow = document.createElement("div"); trow.className = "row";
+  const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
+  const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time : "00:00";
+  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = readOnly();
+  tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
+  trow.append(tl, tin); wc.appendChild(trow);
+  const rrow = document.createElement("div"); rrow.className = "row";
+  const rl = document.createElement("span"); rl.className = "lbl"; rl.textContent = /** @type {string} */ (t("Lead time"));
+  const rsel = document.createElement("select"); rsel.disabled = readOnly();
+  for (const m of [0, 10, 20, 30]) {
+    const o = document.createElement("option"); o.value = /** @type {any} */ (m); o.textContent = m + " min";
+    o.selected = (wk ? wk.ramp : 0) === m; rsel.appendChild(o);
+  }
+  rsel.onchange = () => wakeCmd({ ramp: Number(rsel.value) });
+  rrow.append(rl, rsel); wc.appendChild(rrow);
+  const brow = document.createElement("div"); brow.className = "row";
+  const bl = document.createElement("span"); bl.className = "lbl"; bl.textContent = /** @type {string} */ (t("Brightness"));
+  const bin = document.createElement("input"); bin.type = "range"; bin.min = /** @type {any} */ (0); bin.max = /** @type {any} */ (LIGHT_MAX);
+  bin.value = /** @type {any} */ (wk ? wk.brightness : 0); bin.disabled = readOnly();
+  bin.setAttribute("aria-label", "Wake-up brightness");
+  bin.onchange = () => wakeCmd({ brightness: Number(bin.value) });
+  brow.append(bl, bin); wc.appendChild(brow);
+  const arow = document.createElement("div"); arow.className = "row";
+  const al = document.createElement("span"); al.className = "lbl"; al.textContent = /** @type {string} */ (t("Vehicle area"));
+  arow.appendChild(al);
+  const curAreas = wk ? wk.areas : [1];
+  for (let a = 1; a <= 4; a++) {
+    const lab = document.createElement("label");
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = curAreas.includes(a);
+    // never untick the last area: the unit needs one (the app's "no area chosen" dialog)
+    cb.disabled = readOnly() || (cb.checked && curAreas.length === 1);
+    cb.onchange = () => wakeCmd({ areas: cb.checked ? [...curAreas, a].sort() : curAreas.filter((x) => x !== a) });
+    lab.append(cb, document.createTextNode(" " + tf("Area {n}", { n: a })));
+    arow.appendChild(lab);
+  }
+  wc.appendChild(arow);
+  app.appendChild(wc);
+
+  // Lighting & sliding door (dg/h.n4: SET_PROFILE PN 8, LightValue 1/0). Not variant-gated (see
+  // control.command_precondition): the app's T7 page shows it, and this T7 reads CarVariant=4.
+  const dc = document.createElement("div"); dc.className = "card";
+  const dh = document.createElement("div"); dh.className = "note"; dh.style.padding = ".6rem 0 0";
+  dh.textContent = /** @type {string} */ (t("Lighting & sliding door")); dc.appendChild(dh);
+  const drow = document.createElement("div"); drow.className = "row";
+  const dl = document.createElement("span"); dl.className = "lbl";
+  dl.textContent = /** @type {string} */ (t("Opening sliding door activates the rear interior lights."));
+  drow.appendChild(dl);
+  if (pending_is("lighting", "door_contact")) drow.appendChild(spinner());
+  const dOn = optOn("lighting", "door_contact", s.door_contact === true);
+  const dsw = document.createElement("button"); dsw.className = "switch";
+  dsw.setAttribute("role", "switch"); dsw.setAttribute("aria-label", "Sliding door lighting");
+  dsw.setAttribute("aria-checked", dOn ? "true" : "false"); dsw.disabled = readOnly();
+  dsw.onclick = () => command("lighting", "door_contact", dOn ? "off" : "on");
+  drow.appendChild(dsw); dc.appendChild(drow);
+  app.appendChild(dc);
 
   // lamp sliders, grouped like the app (always controllable)
   for (const grp of LIGHT_LAMPS) {

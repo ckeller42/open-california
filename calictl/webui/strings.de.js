@@ -106,6 +106,18 @@ window.STRINGS_DE = {
   "Profile…": "Profil…",
   "Interior lighting": "Innenlicht",
   "Wake-up light": "Wecklicht",
+  "Wake-up time": "Weckzeit",
+  "Lead time": "Vorlaufzeit",
+  "Brightness": "Helligkeit",
+  "Vehicle area": "Fahrzeugbereich",
+  "Area {n}": "Bereich {n}",
+  "Lighting & sliding door": "Licht & Schiebetür",
+  "Opening sliding door activates the rear interior lights.":
+    "Beim Öffnen der Schiebetür geht die Innenbeleuchtung hinten an.",
+  "this favourite is empty on the unit — save it first":
+    "Dieser Favorit ist auf der Einheit leer — speichere ihn zuerst",
+  "the wake-up light needs at least one vehicle area":
+    "Das Wecklicht braucht mindestens einen Fahrzeugbereich",
   "Reading lights": "Leselichter",
   "Kitchen": "Küche",
   "Pop-up roof": "Aufstelldach",

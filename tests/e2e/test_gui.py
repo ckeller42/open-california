@@ -435,7 +435,7 @@ def test_lighting_screen_lamps_are_directly_controllable(page):
     expect(page.get_by_text("Left", exact=True)).to_be_visible()  # a reading lamp
     # no manual Activate step, and controls are live from the start
     assert page.get_by_role("button", name="Activate").count() == 0
-    slider = page.locator("input[type=range]").first
+    slider = page.locator("input[type=range]:not([aria-label='Wake-up brightness'])").first
     expect(slider).to_be_enabled()
     assert page.locator(".switch").first.is_enabled()  # all-lights master too
     slider.fill("8")  # drag a lamp
@@ -922,3 +922,62 @@ def test_a_failed_first_poll_still_loads_pairing_once(base_url):
         browser.close()
     assert not errs, errs
     assert seen.count("/api/pairing") == 1, seen
+
+
+def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
+    """.. test:: The web UI sets the wake-up time and switch; the state shows the mock's echo
+    :id: T_E2E_LIGHT_WAKEUP
+    :links: R_LIGHT_WAKEUP
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    tm = page.get_by_label("Wake-up time")
+    tm.fill("07:00")
+    tm.dispatch_event("change")
+    expect(page.get_by_text("Sent — check the lamp").or_(page.get_by_text("✓ Applied")).first).to_be_visible(
+        timeout=15000
+    )
+    sw = page.get_by_role("switch", name="Wake-up light")
+    sw.click()
+    expect(sw).to_have_attribute("aria-checked", "true", timeout=15000)
+    st = page.request.get(base_url + "/api/state").json()["lighting"]["wakeup"]
+    assert st["time"] == "07:00" and st["enabled"] is True
+    sw.click()  # leave the shared mock with the wake-up light off
+    expect(sw).to_have_attribute("aria-checked", "false", timeout=15000)
+
+
+def test_door_contact_switch_round_trips(page, base_url):
+    """.. test:: The web UI toggles the sliding-door light; the state shows the mock's flag
+    :id: T_E2E_LIGHT_DOOR
+    :links: R_LIGHT_DOOR_CONTACT
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    sw = page.get_by_role("switch", name="Sliding door lighting")
+    was = sw.get_attribute("aria-checked") == "true"
+    sw.click()
+    expect(sw).to_have_attribute("aria-checked", "false" if was else "true", timeout=15000)
+    # aria-checked is optimistic: wait for the mock's echo to reach the state
+    page.wait_for_function(
+        "async ([u, w]) => (await (await fetch(u + '/api/state')).json()).lighting.door_contact === !w",
+        arg=[base_url, was],
+        timeout=15000,
+    )
+    sw.click()  # restore
+
+
+def test_favourite_save_then_activate(page, base_url):
+    """.. test:: Save favourite 1 then activate it from the web UI against the mock
+    :id: T_E2E_LIGHT_FAVOURITE
+    :links: R_LIGHT_FAVOURITE
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    page.once("dialog", lambda d: d.accept())
+    page.locator("select").nth(1).select_option("1")  # "Save current as" -> Profile 1
+    expect(page.get_by_text("Sent — check the lamp").or_(page.get_by_text("✓ Applied")).first).to_be_visible(
+        timeout=15000
+    )
+    page.locator("select").nth(0).select_option("1")  # activate Profile 1
+    expect(page.get_by_text("this favourite is empty on the unit — save it first")).to_have_count(0)
+    r = page.request.post(
+        base_url + "/api/command", data={"function": "lighting", "what": "color", "value": "red"}
+    )
+    assert r.status == 400 and "retired" in r.json()["error"]
