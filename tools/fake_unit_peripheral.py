@@ -58,6 +58,10 @@ class Recorder(Tracer):
     / ``failed`` — never the code). ``1002`` is written as ``"<vin-hash>"``; the ``1003`` heartbeat
     is recorded. A write error logs once and turns recording off; the unit keeps serving.
 
+    Unlike a long-lived :class:`~calictl.trace.Tracer`, this tap intentionally forgoes any size cap
+    or file rotation: a recording spans one scripted scenario (seconds, a few hundred frames), so the
+    file stays small and is overwritten per scenario by ``walk.py``.
+
     :param path: the JSONL file to append to, or ``None`` (recording off).
     """
 

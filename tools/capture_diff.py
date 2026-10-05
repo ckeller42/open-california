@@ -295,6 +295,10 @@ APP_ONLY_HEX = {
 # Actions the app performs that calictl cannot build (or builds differently) yet, with the reason.
 # A recorded write for one is reported as a gap; once calictl matches it the replay FAILS until the
 # entry is removed, so this list cannot rot.
+# Ordering assumption: ``_check_write`` runs ``control.build`` (in a ``try/except ValueError``) before
+# the gap check, so a gapped ``(fn, what)`` whose builder *raises* ``ValueError`` would be reported as
+# "calictl refuses …" rather than ``gap``. Gapped builders must therefore return ``None`` (no builder
+# yet), not raise — true for the current entries; revisit when a real builder for a gap lands.
 GAPS: dict[tuple[str, str], str] = {
     ("lighting", "wakeup"): "no calictl builder: the wake-up frame (Mode 20, Timestamp + LightValue "
     "packing) is unknown (evidence-ledger 'lighting wake-up TIME'); sub-project 3 builds it from the recording",

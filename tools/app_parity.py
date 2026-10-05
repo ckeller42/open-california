@@ -41,7 +41,9 @@ REPO = Path(__file__).resolve().parents[1]
 CODEC_CHARS_H = REPO / "csrc" / "codec_chars.h"
 CALI_SESSION_H = REPO / "firmware" / "components" / "cali_core" / "include" / "cali_session.h"
 TOLERANCE = 0.2
-_UNIT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s?(%|°C|°|min|h|V|A|L|l)(?![A-Za-z])")
+# German unit labels (Std = Stunden/h, Min = Minuten) appear in the app and the ESP page; re.I so
+# "Min"/"Std" and the upper-case SI letters all match.
+_UNIT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s?(%|°C|°|Std|Min|min|h|V|A|L|l)(?![A-Za-z])", re.I)
 
 
 def _c_defines(path: Path) -> dict[str, int]:

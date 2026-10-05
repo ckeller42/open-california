@@ -14,13 +14,13 @@
 # Config via env (defaults suit the 2026 California lab):
 #   LAB_DIR       lab install root (env.sh, sdk/, apks/)   [/Volumes/External/android-lab]
 #   BUMBLE_PY     a python with `bumble` installed          [$LAB_DIR/venv-bumble/bin/python]
-#   AVD           emulator AVD name                          [cali34]
+#   AVD           emulator AVD name                          [lab34]  (Mac lab: export AVD=cali34)
 #   FAKE_UNIT_VIN the VIN typed into the app (REQUIRED for a fresh pair; never committed)
 #   APP_ID / APP_ACTIVITY  app package / activity            [de.volkswagen.CaliforniaOnTour/…]
 set -euo pipefail
 
 LAB_DIR="${LAB_DIR:-/Volumes/External/android-lab}"
-AVD="${AVD:-cali34}"
+AVD="${AVD:-lab34}"   # thinky's AVD; the Mac lab is cali34 (export AVD=cali34 there)
 BUMBLE_PY="${BUMBLE_PY:-$LAB_DIR/venv-bumble/bin/python}"
 APP_ID="${APP_ID:-de.volkswagen.CaliforniaOnTour}"
 APP_ACTIVITY="${APP_ACTIVITY:-de.volkswagen.caliontour.development.CaliforniaOnTourMainActivity}"

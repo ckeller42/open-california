@@ -333,7 +333,7 @@ def test_recording_taps_every_event_kind(tmp_path):
     assert isinstance(next(e for e in evs if e["ev"] == "disconnect")["reason"], int)
     assert all(e["conn"] == 1 for e in evs)
     t_ms = [e["t_ms"] for e in evs]
-    assert t_ms[0] == 0 and t_ms == sorted(t_ms)
+    assert t_ms[0] <= 1 and t_ms == sorted(t_ms)  # connect emits ~0 ms after _t0; <=1 absorbs rounding
 
 
 def test_a_second_connection_is_numbered_and_restarts_t_ms(tmp_path):
@@ -353,7 +353,7 @@ def test_a_second_connection_is_numbered_and_restarts_t_ms(tmp_path):
     evs = _events(rec)
     assert [e["conn"] for e in evs if e["ev"] == "connect"] == [1, 2]
     second = [e for e in evs if e["conn"] == 2]
-    assert second[0]["ev"] == "connect" and second[0]["t_ms"] == 0
+    assert second[0]["ev"] == "connect" and second[0]["t_ms"] <= 1
     assert [e["ev"] for e in evs].count("disconnect") == 2
 
 
