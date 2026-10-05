@@ -75,6 +75,36 @@ The emulator flag that bridges netsim Bluetooth is `-packet-streamer-endpoint de
 (`labctl.sh up` passes it); boot it by hand with
 `emulator -avd lab34 -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -packet-streamer-endpoint default`.
 
+**GPU on thinky (2026-10-05): `swiftshader_indirect` CRASHES the CaliforniaOnTour app.** The
+software renderer (SwiftShader Vulkan *and* GLES, and Xvfb+llvmpipe) segfaults qemu the moment the
+app renders its home/onboarding screens — the whole emulator dies with no log line (benign apps like
+Settings render fine; it is the app's Skia/Compose content). The emulator must render on the NVIDIA
+GPU: thinky has an xrdp Xorg session on the NVIDIA card at display `:10`
+(`/usr/lib/xorg/Xorg :10 … xorg_nvidia_auto.conf`, owner uid 1000). Boot the emulator against it:
+
+```sh
+DISPLAY=:10 XAUTHORITY=/run/xrdp/sockdir/1000/Xauthority \
+  "$ANDROID_SDK_ROOT/emulator/emulator" -avd lab34 -no-window -no-audio -no-boot-anim -no-snapshot \
+  -gpu host -packet-streamer-endpoint default >/tmp/applab/emulator.log 2>&1 &
+```
+
+The log then reads `Graphics Adapter … NVIDIA GeForce RTX 3090 Ti` and the app is stable. Needs a live
+`:10` session (check `ls /tmp/.X11-unix`; `DISPLAY=:10 glxinfo | grep renderer` must say NVIDIA).
+`labctl.sh up` still passes `swiftshader_indirect`, so on thinky launch the emulator by hand with the
+command above, then `labctl.sh fake` for the fake unit. Also: on a cold start grant location once so
+the permission sheet does not block automation — `adb shell pm grant de.volkswagen.CaliforniaOnTour
+android.permission.ACCESS_FINE_LOCATION` (+ `ACCESS_COARSE_LOCATION`).
+
+**Reconnect / ghost radios (recording caveat).** After the fake restarts (every `walk.py` scenario
+does), netsimd can keep a stale radio at the fake's identity so the app reconnects to a dead link and
+stalls ("Connection lost. Reconnecting…", then a spinner that only polls `vehicle`). Clearing it needs
+an emulator restart (netsimd is separate and outlives the emulator). A cold emulator reboot in turn
+drops the Android↔fake bond, so the app then *re-pairs* on Connect, and that re-pair has been seen to
+drop with `reason=19` right after the passkey — leaving the session wedged. Net effect first seen
+2026-10-05: onboarding + the first full connect work, but `walk.py`'s per-scenario fake restart could
+not be driven to a clean reconnect on this netsim. A boot-from-snapshot (pair once → snapshot → boot
+the snapshot per scenario: bond intact *and* fresh netsim) is the untried candidate fix.
+
 `$LAB_DIR/vin` (mode 600) holds the test VIN the app was set up with — never print it, never
 commit it. **If buspi is offline when you run setup**, the APK copy is skipped with a note; copy it
 by hand once buspi is back (`scp pi@buspi:~/apks/*.apk ~/android-lab/apks/`), then `adb install -r`.

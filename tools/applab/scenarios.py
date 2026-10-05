@@ -70,12 +70,12 @@ XY: dict[str, tuple[int, ...] | None] = {
     "cooler_manual_quiet": None,
     "cooler_auto_quiet": None,
     "cooler_timer": None,
-    "heater_immediate": None,
-    "heater_temp_8": None,  # Heating Temperature slider at level 8
-    "heater_runtime_60": None,  # Run Time slider at 60 min
-    "heater_permanent": None,
-    "camping_master": None,
-    "lighting_all": None,
+    "heater_immediate": (905, 1558),  # Immediate heating toggle
+    "heater_temp_8": (790, 1104),  # Heating Temperature slider (1-9,HI) at level 8
+    "heater_runtime_60": (499, 1386),  # Run Time slider (10-120) at 60 min
+    "heater_permanent": (905, 2015),  # Permanent Heating toggle (greyed: "only in the vehicle")
+    "camping_master": (905, 1010),  # Camping mode detail: the master toggle switch
+    "lighting_all": (905, 457),  # All lights master toggle
     "lighting_kitchen_50": None,  # kitchen zone slider at 50 %
     "lighting_profile_a_hold": None,  # (x, y, 2000): press-and-hold profile tile A = edit
     "roof_open_hold": None,  # (x, y, 12000): the upper roof button held 12 s, then released
@@ -84,7 +84,7 @@ XY: dict[str, tuple[int, ...] | None] = {
 
 TILE = {
     "cooler": r"^Refrigerator Box$",
-    "airheater": r"^(Air heater|Parking heater|Heater)$",
+    "airheater": r"[Aa]ir heater",  # the tile reads "Auxiliary air heater" on app 5.0.8.3028
     "lighting": r"^Lighting$",
     "campingmode": r"^Camping mode$",
     "roof": r"^Pop-up roof$",
@@ -92,13 +92,32 @@ TILE = {
 }
 
 
-def _open_app() -> list[Step]:
-    """App to the front, Vehicle tab, reconnect on the stored bond (every walk starts a fresh fake)."""
+def _connect() -> list[Step]:
+    """Cold-start the app on the Vehicle tab and establish a session to this walk's fresh fake unit.
+
+    A silent *reconnect* over the stored bond stalls on this emulator/netsim (the app connects, polls
+    ``vehicle`` at 1 Hz and never completes the subscribe/read-all — see ``README.md`` "Reconnect /
+    ghost radios"); a fresh *pair* is the path that completes. So this drops the fake's bond
+    (``forget``) and re-pairs through the passkey wizard, exactly as the ``session`` scenario does."""
     return [
+        adb("shell", "am", "force-stop", APP_ID),
+        fifo("forget"),  # the fake drops its bond so Connect triggers a fresh pair, not a stalling reconnect
         adb("shell", "am", "start", "-n", f"{APP_ID}/{APP_ACTIVITY}"),
+        idle(8),  # let the cold start finish rendering before tapping the Vehicle tab
         xy("vehicle_tab"),
+        wait(r"^Connect$", 45),
         ui(r"^Connect$"),
-        wait(r"Remote Control", 30),
+        pair(),
+        wait(r"Disconnect", 60),
+    ]
+
+
+def _open_app() -> list[Step]:
+    """:func:`_connect`, then scroll the *Remote Control* tiles into view."""
+    return [
+        *_connect(),
+        adb("shell", "input", "swipe", "540", "1800", "540", "600", "400"),  # reveal the tiles
+        wait(r"Remote Control", 15),
     ]
 
 
@@ -107,15 +126,21 @@ SCENARIOS: dict[str, list[Step]] = {
         adb("shell", "am", "force-stop", APP_ID),
         fifo("forget"),  # the unit drops its bond: the app pairs afresh on Connect
         adb("shell", "am", "start", "-n", f"{APP_ID}/{APP_ACTIVITY}"),
+        idle(8),  # cold-start render
         xy("vehicle_tab"),
+        wait(r"^Connect$", 45),
         ui(r"^Connect$"),
         pair(),
-        wait(r"Remote Control", 45),
+        wait(r"Disconnect", 60),  # connected (first connection)
         idle(20),
         adb("shell", "input", "keyevent", "KEYCODE_HOME"),
-        logwait(r"### DISCONNECTED", 120),
+        logwait(r"### DISCONNECTED", 120),  # background drops the link
         adb("shell", "am", "start", "-n", f"{APP_ID}/{APP_ACTIVITY}"),
-        logwait(r"### CONNECTED", 60),
+        idle(5),
+        xy("vehicle_tab"),
+        wait(r"^Connect$", 45),
+        ui(r"^Connect$"),  # the app does not auto-reconnect on foreground; tap to reconnect
+        logwait(r"### CONNECTED", 60),  # second connection
         idle(10),
     ],
     "cooler": [
@@ -174,12 +199,19 @@ SCENARIOS: dict[str, list[Step]] = {
         xy("roof_open_hold", expect=("roof", "open", None)),
         wait(r"roof is open", 20),
     ],
-    "energy-mode": [  # ECO is not offered on this profile (protocol-crosscheck-applab.md)
-        *_open_app(),
-        ui(TILE["energy"]),
-        wait(r"Second battery|Charging"),
-        ui(r"^Max", expect=("energy", "mode", "max_charge")),
-        ui(r"^Normal", expect=("energy", "mode", "normal")),
+    "energy-mode": [  # ECO is not offered on this profile (protocol-crosscheck-applab.md).
+        # Energy Mode is NOT a Remote Control tile: it is a dropdown under Vehicle Information >
+        # Charging (app 5.0.8.3028). The readback echo keeps EnergyMode at Normal after a write, so
+        # the fake is nudged to Max before the Normal tap or the app treats Normal as a no-op.
+        *_connect(),
+        ui(r"See all info"),
+        wait(r"Vehicle Information", 20),
+        adb("shell", "input", "swipe", "540", "1700", "540", "700", "400"),  # reveal Charging
+        ui(r"Energy Mode"),  # expand the dropdown (it stays open across selections + pushes)
+        ui(r"^Max$", expect=("energy", "mode", "max_charge")),
+        fifo("set energy EnergyMode=1"),  # readback = Max so the Normal tap is a real change, not a no-op
+        idle(3),  # let the push re-render the current value before the next tap
+        ui(r"^Normal$", expect=("energy", "mode", "normal")),
     ],
     "lighting-profile": [
         *_open_app(),
