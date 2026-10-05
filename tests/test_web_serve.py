@@ -462,13 +462,15 @@ def test_on_command_roof_open_routes_to_actuate_roof(monkeypatch):
 
 
 def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
-    """roof stop is a one-shot STOP frame -- device.actuate, not the move-heartbeat."""
+    """roof stop (no move in flight, no session) is ONE STOP frame through the roof path --
+    ``actuate_roof`` with a zero-length move (handshake, heartbeat with no arm delay, a live
+    counter), never the armed one-shot ``device.actuate`` with its ``ARM_DELAY_S`` (review I1, #238)."""
     s = serve.Server(influx_enabled=False)
     s._read_only = False  # writes enabled for this actuation test
     calls = {"actuate_roof": None, "actuate": None}
 
-    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True):
-        calls["actuate_roof"] = (f.name, move_frame, stop_frame)
+    async def fake_actuate_roof(f, move_frame, stop_frame, verify=True, **kw):
+        calls["actuate_roof"] = (f.name, move_frame[0], stop_frame[0], kw.get("max_duration_s"))
         return None
 
     async def fake_actuate(f, frame, verify=True):
@@ -484,8 +486,8 @@ def test_on_command_roof_stop_routes_to_actuate(monkeypatch):
 
     result = asyncio.run(_run())
     assert result is None
-    assert calls["actuate"] is not None
-    assert calls["actuate_roof"] is None
+    assert calls["actuate"] is None
+    assert calls["actuate_roof"] == ("roof", 0x00, 0x00, 0.0)
 
 
 def test_on_command_refuses_precondition_without_actuating(monkeypatch):
@@ -809,10 +811,10 @@ class _LiveRoofSess:
     def __init__(self, order):
         self._order = order
 
-    async def actuate_roof(
-        self, f, move_frame, stop_frame, verify=True, stop_event=None, limit_positions=None
-    ):
-        self._order.append(("sess.actuate_roof", f.name))
+    async def actuate_roof(self, f, move_frame, stop_frame, verify=True, limit_positions=None, **kw):
+        self._order.append(
+            ("sess.actuate_roof", f.name, move_frame[0], limit_positions, kw.get("max_duration_s"))
+        )
 
     async def actuate(self, f, frame, verify=True, **_k):
         self._order.append(("sess.actuate", f.name, frame[0]))
@@ -842,13 +844,15 @@ def test_roof_move_reuses_a_live_session(monkeypatch):
         await s.on_command("roof", "close", None)
 
     asyncio.run(_run())
-    assert order == [("sess.actuate_roof", "roof")]  # in the live session, never closed first
+    # in the live session, never closed first, with this direction's limit set (auto-stop)
+    assert order == [("sess.actuate_roof", "roof", 0x04, frozenset({0, 14}), None)]
     assert s._sessions.session_state == "up"
 
 
 def test_roof_stop_with_no_move_in_flight_uses_the_live_session(monkeypatch):
     """A STOP with no move in flight goes out over the live session (heartbeat already ticking),
-    not a handover + fresh connection (the old #198 path)."""
+    not a handover + fresh connection (the old #198 path) — as a zero-length roof move, so it
+    carries a live SafetyCounter and never goes through the arm delay."""
     order = []
     s = _roof_server(monkeypatch, order)
     s._sessions._session = _LiveRoofSess(order)
@@ -859,7 +863,7 @@ def test_roof_stop_with_no_move_in_flight_uses_the_live_session(monkeypatch):
         await s.on_command("roof", "stop", None)
 
     asyncio.run(_run())
-    assert order == [("sess.actuate", "roof", 0x00)]
+    assert order == [("sess.actuate_roof", "roof", 0x00, None, 0.0)]
 
 
 def test_non_roof_command_keeps_the_session_warmup(monkeypatch):

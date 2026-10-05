@@ -107,6 +107,9 @@ Tests
 .. autofunction:: tests.test_web_serve.test_roof_move_reuses_a_live_session
 .. autofunction:: tests.test_mock_integration.test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking
 .. autofunction:: tests.test_mock_integration.test_roof_opens_and_closes_on_the_mock_with_the_heartbeat_ticking
+.. autofunction:: tests.test_mock_integration.test_roof_release_while_the_press_waits_on_the_lock_never_moves
+.. autofunction:: tests.test_mock_integration.test_standalone_roof_stop_without_a_session_has_no_arm_delay
+.. autofunction:: tests.test_mock_integration.test_roof_auto_stops_at_the_limit_inside_the_live_session
 .. autofunction:: tests.test_firmware_anchors.test_firmware_snapshot_captures_raw_frames
 .. autofunction:: tests.test_firmware_anchors.test_anchors_flag_implausible_decode
 .. autofunction:: tests.test_web_serve.test_web_server_binds_without_reverse_dns

@@ -336,3 +336,33 @@ def test_actuate_roof_ticks_the_1003_heartbeat_with_no_prearm_gap(roof, monkeypa
     assert device.ARM_DELAY_S not in slept and device.HEARTBEAT_WARMUP_S not in slept
     assert set(slept) <= {0.001}
     assert _counters([writes[i][1] for i in ctrl])[0] == 1000, "first frame carries the seed (t=0)"
+
+
+def test_actuate_roof_sends_stop_when_cancelled_mid_move(roof):
+    """A move cancelled mid-stream (daemon shutdown) still attempts a best-effort STOP instead of
+    relying on the unit's unverified dead-man (review minor 3 on #238).
+
+    .. test:: A cancelled roof move still attempts a STOP
+       :id: T_ROOF_STOP_ON_CANCEL
+       :links: R_ROOF_ACTUATE
+    """
+    move = control.roof_frame(roof, "open")
+    stop = control.roof_frame(roof, "stop")
+
+    async def _run():
+        task = asyncio.ensure_future(
+            device.CamperDevice("11:22:33:44:55:66").actuate_roof(
+                roof["roof"], move, stop, max_duration_s=30.0, period_s=0.001, validate_s=None, verify=False
+            )
+        )
+        while not _RoofClient.instances or len(_ctrl_writes(_RoofClient.instances[-1], roof)) < 3:
+            await asyncio.sleep(0)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(_run())
+    ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
+    assert ctrl[-1][0] == 0x00, "a cancelled move must still attempt STOP"

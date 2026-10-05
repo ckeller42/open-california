@@ -519,7 +519,7 @@ class CamperDevice:
         *,
         max_duration_s: float = ROOF_MAX_TRAVEL_S,
         period_s: float = ROOF_MOVE_PERIOD_S,
-        validate_s: float = ROOF_SAFETY_VALIDATE_S,
+        validate_s: float | None = ROOF_SAFETY_VALIDATE_S,
         counter_seed: int | None = None,
         stop_event=None,
         limit_positions=None,
@@ -651,6 +651,7 @@ class CamperDevice:
 
         stop = asyncio.Event()
         beat = None
+        stopped = False  # the final STOP went out (else the finally sends one, e.g. on cancel)
         seed = counter_seed if counter_seed is not None else random.randint(1, ROOF_SAFETY_SEED_MAX)
         start = None  # set once the move stream begins (arms the counter clock)
 
@@ -717,8 +718,16 @@ class CamperDevice:
                     if pos is not None and pos in limit_positions:
                         log.info("actuate_roof: roof reached limit position %s — ceasing (STOP)" % pos)
                         break
-                await asyncio.sleep(period_s)
+                if stop_event is not None:
+                    # interruptible: a release sends STOP at once, not after the rest of the period
+                    try:
+                        await asyncio.wait_for(stop_event.wait(), period_s)
+                    except TimeoutError:
+                        pass
+                else:
+                    await asyncio.sleep(period_s)
             # ALWAYS force a STOP (best-effort even if the link is flaky), with the live counter.
+            stopped = True
             await _send(stop_frame)
             if not verify or not func.state_char:
                 return None
@@ -726,6 +735,13 @@ class CamperDevice:
             raw = bytes(await client.read_gatt_char(func.state_char))
             return protocol.decode(func, raw)
         finally:
+            if not stopped and client.is_connected:
+                # cancelled (daemon shutdown) or raised mid-move: best-effort STOP rather than
+                # relying on the unit's unverified dead-man
+                try:
+                    await _send(stop_frame)
+                except Exception:
+                    pass
             stop.set()
             if beat is not None:
                 try:

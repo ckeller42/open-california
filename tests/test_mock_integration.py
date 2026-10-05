@@ -330,7 +330,7 @@ def test_serve_refuses_a_roof_move_under_a_blocking_alert_but_never_a_stop(mock,
     s._read_only = False
     moved, stopped = [], []
 
-    async def _fake_move(what):
+    async def _fake_move(what, *_a):
         moved.append(what)
 
     async def _fake_stop():
@@ -365,15 +365,21 @@ async def _real_wait(seconds):
 
 
 def _log_unit_writes(unit):
-    """Record the ORDER of 1003 beats and roof frames reaching the unit: ``[("beat"|"roof", byte0)]``."""
+    """Record the ORDER of 1003 beats and roof frames reaching the unit:
+    ``[("beat", counter) | ("roof", byte0)]``; ``unit.write_times`` holds the matching monotonic times."""
+    import time
+
     events = []
+    unit.write_times = []
     real_write = unit.write
 
     def _write(uuid, data):
         if uuid == device.HEARTBEAT_CHAR:
-            events.append(("beat", None))
+            events.append(("beat", int.from_bytes(bytes(data), "big")))
+            unit.write_times.append(time.monotonic())
         elif uuid == unit.funcs["roof"].control_char:
             events.append(("roof", bytes(data)[0]))
+            unit.write_times.append(time.monotonic())
         return real_write(uuid, data)
 
     unit.write = _write
@@ -403,6 +409,7 @@ def test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking(mock)
     s._read_only = False
     s._last["roof"] = {"Installed": 1, "InfoPopUp": 0, "Position": 0}
     stop_latency = []
+    released_at = []
 
     async def _release():
         # hold for >= 2 beats into the move (bounded), then release -> STOP
@@ -410,6 +417,7 @@ def test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking(mock)
         while time.monotonic() < deadline and sum(e[0] == "beat" for e in events[n0:]) < 2:
             await _real_wait(0.05)
         t0 = time.monotonic()
+        released_at.append(t0)
         await s.on_command("roof", "stop", None)
         stop_latency.append(time.monotonic() - t0)
 
@@ -443,6 +451,160 @@ def test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking(mock)
     assert mock.holder is holder, "the single slot was released/re-taken (handover) instead of reused"
     assert survived, "the persistent session must survive the roof move"
     assert stop_latency and stop_latency[0] < 0.5, "release STOP must be immediate (lock-free)"
+    # the STOP frame itself reaches the unit promptly after the release (not a whole frame period)
+    t_stop = mock.write_times[n0 + roof_idx[-1]]
+    assert t_stop - released_at[0] < 0.3, "STOP frame must follow the release at once"
+    # ONE heartbeat writer across the whole move: the session's counter, strictly +1 (a second
+    # writer — a re-arm inside the session — would restart at HEARTBEAT_START and jump back)
+    beats = [c for k, c in events if k == "beat"]
+    assert beats == list(range(beats[0], beats[0] + len(beats))), "1003 must be strictly +1"
+
+
+def _session_server(mock):
+    from calictl import serve
+
+    mock.one_slot = True
+    s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
+    s._read_only = False
+    s._last["roof"] = {"Installed": 1, "InfoPopUp": 0, "Position": 0}
+    return s
+
+
+async def _bring_up_session(s):
+    s._ble = asyncio.Lock()
+    s._persistent = True
+    async with s._ble:
+        await s._sessions._connect_once()
+    assert s._live_session() is not None, "persistent session did not come up"
+
+
+def test_roof_release_while_the_press_waits_on_the_lock_never_moves(mock):
+    """SAFETY (pre-existing bug, review C1 on #238): a quick tap whose release arrives while the press
+    still waits for the ``_ble`` lock (a poll, a cooler/lighting write or a supervisor connect holds
+    it) must not start the move. The stop token used to be created/cleared only once the press held
+    the lock, so the early release set a stale event, the press then cleared it and the roof drove to
+    the limit or the 30 s cap.
+
+    .. test:: A release that arrives before the move starts cancels the move
+       :id: T_ROOF_EARLY_RELEASE
+       :links: R_ROOF_ACTUATE
+    """
+    s = _session_server(mock)
+    events = _log_unit_writes(mock)
+    out = {}
+
+    async def _run():
+        await _bring_up_session(s)
+        await s._ble.acquire()  # a poll holds the lock
+        press = asyncio.ensure_future(s.on_command("roof", "open", None))
+        await _real_wait(0.05)
+        rel = asyncio.ensure_future(s.on_command("roof", "stop", None))  # the tap is released
+        await _real_wait(0.05)
+        n_rel = len(events)
+        s._ble.release()  # the poll is done
+        await _real_wait(1.0)
+        out["move_frames_after_release"] = sum(1 for e in events[n_rel:] if e == ("roof", 0x01))
+        out["press_done"], out["stop_done"] = press.done(), rel.done()
+        if s._roof_stop is not None:
+            s._roof_stop.set()  # end a runaway move so the test terminates
+        await press
+        await rel
+
+    asyncio.run(_run())
+    assert out["move_frames_after_release"] == 0, out
+    assert out["press_done"] and out["stop_done"], out
+
+
+def test_standalone_roof_stop_without_a_session_has_no_arm_delay(mock, monkeypatch):
+    """A STOP with no move in flight and no live session goes through the roof path: handshake,
+    1003 heartbeat with NO ``ARM_DELAY_S``, one STOP frame with a live counter (review I1 on #238).
+    A STOP is never delayed by an arm delay.
+
+    .. test:: A standalone roof STOP has no arm delay and carries a live counter
+       :id: T_ROOF_STOP_NO_ARM_DELAY
+       :links: R_ROOF_ACTUATE
+    """
+    from calictl import serve
+
+    slept = []
+    real_sleep = asyncio.sleep
+
+    async def _rec(sec=0, *_a, **_k):
+        slept.append(sec)
+        await real_sleep(0)
+
+    monkeypatch.setattr(device.asyncio, "sleep", _rec)
+    s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
+    s._read_only = False
+    writes = []
+    real_write = mock.write
+
+    def _w(uuid, data):
+        writes.append((uuid, bytes(data)))
+        return real_write(uuid, data)
+
+    mock.write = _w
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        await s.on_command("roof", "stop", None)
+
+    asyncio.run(_run())
+    roof = [d for u, d in writes if u == mock.funcs["roof"].control_char]
+    assert device.ARM_DELAY_S not in slept, "a STOP must never wait the arm delay"
+    assert any(u == device.HEARTBEAT_CHAR for u, _d in writes), "the heartbeat runs for the STOP"
+    assert len(roof) == 1 and roof[0][0] == 0x00, "exactly one STOP frame"
+    assert int.from_bytes(roof[0][1:5], "big") != 0, "the STOP carries a live (seeded) counter"
+
+
+def test_roof_auto_stops_at_the_limit_inside_the_live_session(mock, monkeypatch):
+    """Auto-stop at the limit works on the daemon's main roof path (the move inside the live
+    session, review I2 on #238): with no release, the move ceases at Position 1 (open) and sends
+    STOP. Afterwards the stop token is set (the move is over), so a later standalone STOP really
+    sends a frame instead of only flipping an event (review minor 2).
+
+    .. test:: The in-session roof move auto-stops at the limit
+       :id: T_ROOF_IN_SESSION_LIMIT
+       :links: R_ROOF_ACTUATE, R_PERSISTENT_SESSION
+    """
+    import time
+
+    from tools import mock_unit
+
+    monkeypatch.setattr(mock_unit, "ROOF_WITHHOLD_S", 0.2)
+    monkeypatch.setattr(mock_unit, "ROOF_STEP_S", 0.3)
+    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.05)
+    s = _session_server(mock)
+    events = _log_unit_writes(mock)
+
+    async def _ticker(done):
+        last = time.monotonic()
+        while not done.is_set():
+            await _real_wait(0.05)
+            now = time.monotonic()
+            mock.tick(now - last)
+            last = now
+
+    async def _run():
+        await _bring_up_session(s)
+        done = asyncio.Event()
+        tick = asyncio.ensure_future(_ticker(done))
+        try:
+            await asyncio.wait_for(s.on_command("roof", "open", None), timeout=10.0)
+        finally:
+            done.set()
+            await tick
+        token_set = s._roof_stop is not None and s._roof_stop.is_set()
+        n = len(events)
+        await s.on_command("roof", "stop", None)  # a later standalone STOP
+        return token_set, events[n:]
+
+    token_set, after = asyncio.run(_run())
+    assert mock.decoded("roof")["Position"] == 1, "the move must stop at the open limit"
+    roof = [e for e in events if e[0] == "roof"]
+    assert roof[-1] == ("roof", 0x00)
+    assert token_set, "the stop token must be set once the move has ended"
+    assert ("roof", 0x00) in after, "a later STOP must send a real STOP frame"
 
 
 def test_roof_opens_and_closes_on_the_mock_with_the_heartbeat_ticking(mock, monkeypatch):

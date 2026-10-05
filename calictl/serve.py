@@ -823,11 +823,24 @@ class Server:
         lock, so the fast path comes back afterwards."""
         # _roof_move_command is called after run() initializes _ble
         assert self._ble is not None
+        # SAFETY: a fresh stop token per press, created BEFORE waiting for the lock. A release that
+        # arrives while the press still queues behind a poll/write must find this token "pending"
+        # and set it — the press then never starts. (The token used to be created/cleared only once
+        # the lock was held, so such a release was lost and the roof drove to the limit.) A new
+        # press supersedes any earlier pending/running move. Never cleared; set when the move ends.
+        if self._roof_stop is not None:
+            self._roof_stop.set()
+        ev = asyncio.Event()
+        self._roof_stop = ev
         self._sessions.claim_intent()
         try:
             async with self._ble:
-                return await self._roof_move(what)
+                if ev.is_set():
+                    log.info("roof %s released before it started — not moving" % what)
+                    return None
+                return await self._roof_move(what, ev)
         finally:
+            ev.set()  # the move is over: a later STOP is a real standalone STOP
             self._sessions.nudge()
 
     async def _roof_stop_command(self):
@@ -849,20 +862,24 @@ class Server:
                 stop_frame = control.roof_frame(self.funcs, "stop")
             except ValueError:
                 return None
-            # Over the live session when one is up (heartbeat already ticking, no second connection
-            # on the single slot); else a one-shot armed connection.
+            # The roof path with a zero-length move: over the live session when one is up (heartbeat
+            # already ticking, no second connection on the single slot), else an own connection with
+            # the heartbeat on — never the arm delay. One STOP with a live counter, then a 1402 read.
             target = self._live_session() or self.dev
-            await target.actuate(self.funcs["roof"], stop_frame, verify=True)
+            await target.actuate_roof(
+                self.funcs["roof"], stop_frame, stop_frame, max_duration_s=0.0, validate_s=None, verify=True
+            )
         return None
 
-    async def _roof_move(self, what):
+    async def _roof_move(self, what, stop_event):
         """SAFETY-SENSITIVE: a single roof frame won't complete travel and has no guaranteed STOP,
         so roof must stream the move frame with a live SafetyCounter, bounded then always STOP
         (device.actuate_roof), never the one-shot device.actuate. ``what`` = direction (open/close).
         Press-and-hold: the GUI streams the move while held and sends "stop" on release. That STOP
         arrives OUT-OF-BAND — a separate POST while this move is still in flight — which is why
         _roof_stop must run lock-free (this coroutine holds the _ble lock for the whole move).
-        Caller holds the _ble lock."""
+        ``stop_event`` is this press's stop token (:meth:`_roof_move_command`). Caller holds the
+        _ble lock."""
         from . import control  # lazy
 
         try:
@@ -870,9 +887,6 @@ class Server:
             stop_frame = control.roof_frame(self.funcs, "stop")
         except ValueError:
             return None
-        if self._roof_stop is None:
-            self._roof_stop = asyncio.Event()
-        self._roof_stop.clear()
         # The unit has a single slot: a live persistent session carries the move (its 1003 heartbeat
         # keeps ticking, as the app's does during roof moves, #235) — never a second connection.
         # With no session up, `dev.actuate_roof` opens its own, heartbeat on, no pre-arm delay.
@@ -882,7 +896,7 @@ class Server:
             move_frame,
             stop_frame,
             verify=True,
-            stop_event=self._roof_stop,
+            stop_event=stop_event,
             limit_positions=control.roof_limit_positions(what),
         )
         # roof has no set_check row -- keep the honest "not applied" (unknown).
