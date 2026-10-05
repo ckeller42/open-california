@@ -194,8 +194,18 @@ How strongly each underlying protocol fact is proven is tracked in the
 
 ## Demo video
 
-<!-- VIDEO-SLOT: mock-unit-demo — a screen recording of the mock driving the ESP satellite / calictl UI with live values; file + embed added separately. Do not reference a non-existent asset here; keep the docs build clean. -->
+calictl's own web UI, served over the in-process mock, reacting to control writes — the fridge
+toggled on and its cooling level changed, a lighting zone set, and the energy mode switched. Every
+value comes from `MockCamperUnit`; no vehicle and no vendor app are involved.
 
-*Planned:* a short screen recording of the mock driving the ESP32 satellite's status display and the
-calictl web UI side by side, with live values changed through the FIFO console. The file and its
-embed will be added separately.
+```{raw} html
+<video controls muted playsinline width="360" style="max-width:100%;border-radius:8px">
+  <source src="_static/mock-webui.webm" type="video/webm">
+  Your browser does not display the embedded video; the file is at
+  <a href="_static/mock-webui.webm">_static/mock-webui.webm</a>.
+</video>
+```
+
+Recorded with Playwright over `python -m tools.run_against_mock serve --web` (the recipe in the
+"Usage recipes" section above). The vendor app driving the same model is cross-checked in the app
+lab, but that footage is not committed — the app's UI is VW's.
