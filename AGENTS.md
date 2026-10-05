@@ -129,7 +129,8 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   (the app's is session-global, decompile + `roof-hold` recording, #235) and the counter streams
   IMMEDIATELY — NO `ARM_DELAY_S` pre-arm (#150: a gap would make the unit see a fresh counter and
   withhold the motor another ~3 s). Not yet device-verified (first owner-watched drive, #157/#230).
-  GUI is press-and-hold (release → STOP via lock-free `_roof_stop`); a re-press within 1000 ms is
+  GUI is press-and-hold (release → STOP via lock-free `_roof_stop`, a fresh token per press made
+  before the `_ble` wait, so an early release cancels a queued press); a re-press within 1000 ms is
   debounced (would restart the counter → another ~3 s withhold). `actuate_roof` polls `Position`
   (`1402`) ~1 Hz and auto-stops at the limit (open `1` / closed `0`/`14`; `control.roof_limit_positions`)
   — best-effort over the unit's own limit switches. **A roof move/STOP runs inside a live persistent

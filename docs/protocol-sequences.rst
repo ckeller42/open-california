@@ -550,9 +550,14 @@ Roof actuation — press-and-hold, SafetyCounter-gated
      or at ``CALICTL_ROOF_MAX_TRAVEL_S`` (30 s).
    * **Always** write STOP ``[0x00][counter]``, which is best-effort on a dropped link. Then read
      ``1402``. An own connection disconnects. A live session stays up.
-   * **Release** is lock-free: it sets ``stop_event``. A **standalone STOP** (nothing in flight)
-     goes over the live session, or else the armed ``device.actuate``, with a zero counter. The web
-     UI ignores a move press within **1000 ms** of the previous move start (``ROOF_REPRESS_MS``).
+   * **Release** is lock-free: it sets ``stop_event``. Each press gets a fresh stop token
+     **before** it waits for the ``_ble`` lock, so a release that arrives while the press still
+     queues behind a poll or another write cancels the move before it starts. A new press stops an
+     earlier one. The interval wait is interruptible, so STOP follows a release at once. A
+     cancelled move (shutdown) still attempts STOP.
+   * A **standalone STOP** (nothing in flight) is a zero-length roof move: over the live session,
+     or else an own connection with the heartbeat on, one STOP with a live counter. It never
+     waits ``ARM_DELAY_S``. The web UI ignores a move press within **1000 ms** of the previous move start (``ROOF_REPRESS_MS``).
      STOP is never debounced.
 
 .. mermaid::

@@ -45,7 +45,7 @@ One daemon (`serve.py`) owns the single BLE connection and drives that pipeline:
 Supporting the daemon: `session.py` (a supervisor that holds the BLE slot while the UI is active and
 releases it when idle; a roof move or STOP runs inside a live session with its `1003` heartbeat
 ticking, as the app's does, and never warms the session first — with none up it opens its own
-connection), `observer.py` / `automation.py` (passive camping observer + auto-camper),
+connection; not yet device-verified), `observer.py` / `automation.py` (passive camping observer + auto-camper),
 `firmware.py` / `anchors.py` (firmware-drift capture + plausibility checks), `history.py` +
 `freshness.py` (energy history + stale-read handling).
 

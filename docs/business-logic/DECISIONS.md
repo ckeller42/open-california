@@ -20,6 +20,12 @@ heartbeat on; the counter still streams immediately with no `ARM_DELAY_S` (that 
 `drop_for_handover` is deleted (no other caller). calictl keeps its device-verified 0.6 s period and fixed
 seed. Not yet device-verified — first owner-watched drive (#157/#230).
 
+Review fixes in the same PR: a release that arrived while the press still waited for the `_ble` lock
+was lost and the roof would have driven to the limit or the 30 s cap (pre-existing) — the stop token
+is now made per press before the lock wait, never cleared, and set when the move ends. A standalone
+STOP is a zero-length roof move (heartbeat, no `ARM_DELAY_S`, live counter), the interval wait is
+interruptible and a cancelled move still attempts STOP.
+
 ## 2026-09-16 — fault-dialog sweep: every fault code's dialog text, water alerts surfaced
 
 Injecting each fault field on the fake unit while the app watched (`protocol-crosscheck-applab.md`
