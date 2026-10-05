@@ -39,6 +39,7 @@ the fields the app targets. ``--recording FILE`` prints that replay.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import subprocess
@@ -294,16 +295,8 @@ APP_ONLY_HEX = {
 }
 # Actions the app performs that calictl cannot build (or builds differently) yet, with the reason.
 # A recorded write for one is reported as a gap; once calictl matches it the replay FAILS until the
-# entry is removed, so this list cannot rot.
-# Ordering assumption: ``_check_write`` runs ``control.build`` (in a ``try/except ValueError``) before
-# the gap check, so a gapped ``(fn, what)`` whose builder *raises* ``ValueError`` would be reported as
-# "calictl refuses …" rather than ``gap``. Gapped builders must therefore return ``None`` (no builder
-# yet), not raise — true for the current entries; revisit when a real builder for a gap lands.
-GAPS: dict[tuple[str, str], str] = {
-    ("lighting", "wakeup"): "no calictl builder: the wake-up frame (Mode 20, Timestamp + LightValue "
-    "packing) is unknown (evidence-ledger 'lighting wake-up TIME'); sub-project 3 builds it from the recording "
-    "(tests/vectors/app/lighting-wakeup.jsonl: 07:00 -> 0e146ac49c701100...)",
-}
+# entry is removed, so this list cannot rot. Empty since the wake-up builder landed (A2).
+GAPS: dict[tuple[str, str], str] = {}
 TEST_IDENTITY = "C0:FF:EE:CA:11:F0"  # the fake unit's identity — the only MAC a recording may hold
 _MAC_RE = re.compile(r"\b[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\b")
 _VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
@@ -480,10 +473,18 @@ def _check_write(funcs, gaps, state, step, line, ev, hit) -> WriteCheck:
     _, what, value = exp
     hit.add(sn)
     st = dict(state.get(fn, {}))
+    # Pin the wake-up builder's clock to the recorded write: the phone's local time, read as UTC
+    # (the lab AVD runs UTC; Task 7 of the A2 plan sets it).
+    saved_now = control.local_now
+    if ev.get("t") is not None:
+        rec_now = datetime.datetime.fromtimestamp(ev["t"], datetime.UTC).replace(tzinfo=None)
+        control.local_now = lambda: rec_now
     try:
         ours = control.build(funcs, fn, what, value, st)
     except ValueError as e:
         return WriteCheck(line, fn, hx, "error", sn, "calictl refuses %s/%s=%r: %s" % (fn, what, value, e))
+    finally:
+        control.local_now = saved_now
     bad: list[DiffRow] = []
     leads: list[str] = []
     if ours is not None:

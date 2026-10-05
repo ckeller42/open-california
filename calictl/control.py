@@ -9,6 +9,9 @@ own SafetyCounter at once with the 1003 heartbeat ticking but no pre-arm delay
 
 from __future__ import annotations
 
+import calendar
+import datetime
+
 from . import overrides, protocol, semantics
 
 LIGHT_ON, LIGHT_OFF = 0, 1  # camping lights inverted (app K0 writes (!on)?1:0). VERIFY live.
@@ -60,6 +63,77 @@ def _hhmm(value):
     if not (0 <= hh <= 23 and 0 <= mm <= 59):
         raise ValueError("time out of range (0-23:0-59), got %r" % value)
     return hh, mm
+
+
+def local_now() -> datetime.datetime:
+    """The local wall clock the wake-up builder counts from. Tests and the recording replay
+    (``tools.capture_diff``) replace this module attribute to pin "now"."""
+    return datetime.datetime.now()
+
+
+def next_wakeup_epoch(hour: int, minute: int, now: datetime.datetime) -> int:
+    """Seconds since 1970-01-01T00:00 of the next local ``hour:minute`` after ``now``, packed as
+    if UTC — the app builds a ``LocalDateTime`` and converts it with ``TimeZone.UTC``
+    (``dg/h.java:778-874``). Today if still ahead, else tomorrow (an exact match is tomorrow).
+    Naive calendar arithmetic, so a DST change never shifts the wall-clock time.
+
+    :param hour: 0-23.
+    :param minute: 0-59.
+    :param now: naive local time.
+    :returns: the 32-bit ``Timestamp`` value.
+    """
+    t = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if t <= now:
+        t += datetime.timedelta(days=1)
+    return calendar.timegm(t.timetuple())
+
+
+def _wakeup_light_value(c) -> int:
+    """Pack ``colour:4 | A4 A3 A2 A1 | brightness:4 | (ramp/10)<<1 | enabled`` (``dg/h.m0``)."""
+    areas = sum(1 << (a - 1) for a in c["areas"])
+    return c["colour"] << 12 | areas << 8 | c["brightness"] << 4 | (c["ramp"] // 10) << 1 | int(c["enabled"])
+
+
+def wakeup_request(value, last):
+    """The wake-up config a ``wakeup`` command asks for: ``value`` over the latched config.
+
+    ``value`` is one string of words: ``HH:MM`` (time), ``on``/``off`` (the app's switch), and up to
+    three positionals ``areas brightness ramp`` (areas = comma list of 1-4, brightness 0-10, ramp
+    0/10/20/30 min). Missing parts come from the wake-up config latched in ``last``
+    (:func:`calictl.semantics.lighting_config`), else :data:`WAKEUP_DEFAULT`.
+
+    :param value: the command value.
+    :param last: the decoded lighting state (may carry latch keys or be a Mode-20 frame).
+    :returns: ``{"hour", "minute", "colour", "areas", "brightness", "ramp", "enabled"}``.
+    :raises ValueError: malformed value, or ``on``/``off`` with no time known.
+    """
+    cur = semantics.wakeup_config(semantics.lighting_config(None, last or {}))
+    tokens = str("" if value is None else value).split()
+    if not tokens:
+        raise ValueError("wakeup needs HH:MM and/or on|off")
+    c = {k: v for k, v in (cur or WAKEUP_DEFAULT).items() if k != "time"}
+    pos, timed = [], False
+    for tok in tokens:
+        if tok.lower() in ("on", "off"):
+            c["enabled"] = tok.lower() == "on"
+        elif ":" in tok:
+            c["hour"], c["minute"] = _hhmm(tok)
+            timed = True
+        else:
+            pos.append(tok)
+    if cur is None and not timed:
+        raise ValueError("wake-up time not known yet (no wake-up frame seen): give it, e.g. wakeup 07:00 on")
+    if len(pos) > 3:
+        raise ValueError("wakeup takes HH:MM [areas] [brightness] [ramp] [on|off], got %r" % value)
+    if pos:
+        c["areas"] = sorted({_int_range(a, 1, 4, "wake-up area") for a in pos[0].split(",")})
+    if len(pos) > 1:
+        c["brightness"] = _int_range(pos[1], 0, 10, "wake-up brightness")
+    if len(pos) > 2:
+        c["ramp"] = int(pos[2])
+        if c["ramp"] not in WAKEUP_RAMPS_MIN:
+            raise ValueError("wake-up ramp must be one of %s min, got %r" % (WAKEUP_RAMPS_MIN, pos[2]))
+    return c
 
 
 def camping_values(**changes) -> dict:
@@ -188,6 +262,21 @@ def _cooler(funcs, what, value, last):
 LIGHT_MODE_SET_BRIGHTNESS = 4
 LIGHT_MODE_SET_COLOR = 6  # recolour the active profile: LightValue = palette index (1-10)
 LIGHT_MODE_SET_PROFILE = 16  # switch active profile (payload carries the ProfileNumber)
+LIGHT_MODE_REQUEST_CONFIG = 12  # d0(): the app's config pull; the reply carries the favourite bits
+LIGHT_MODE_WAKEUP_TIME = 20  # m0(): wake-up light (Timestamp + packed LightValue)
+LIGHT_PROFILE_DOOR_CONTACT = 8  # n4(): SET_PROFILE PN 8, LightValue 1/0 = sliding-door light on/off
+WAKEUP_RAMPS_MIN = (0, 10, 20, 30)  # dg/k: WAKE_UP_{ON,OFF}[_10|_20|_30]
+# The app's wake-up defaults when the unit has reported none (recorded 0x1100: warm white, area 1,
+# brightness 0, no ramp, off) — its time picker sends exactly these with the chosen time.
+WAKEUP_DEFAULT = {
+    "hour": 0,
+    "minute": 0,
+    "colour": 1,
+    "areas": [1],
+    "brightness": 0,
+    "ramp": 0,
+    "enabled": False,
+}
 # Profile-number enum (dg/l.java mirrors ef/k.java): 0=LIGHTS_OFF, 1-7=FAVORITE1-7, 8=DOOR_CONTACT,
 # 9=LIVE_VIEW (the per-zone-edit profile SET_BRIGHTNESS hardcodes), 10=WAKEUP_LIGHT,
 # 11=INTERIOR_LIGHT, 12=LIGHTS_ON, 13=DEFAULT, 14=INIT sentinel.
@@ -390,10 +479,20 @@ def _lighting(funcs, what, value, last):
       * ``"all"`` -> set every REAL zone (``semantics._REAL_LIGHT_ZONES``: L1-L9 + L12) to
         ``value`` (a calictl convenience, not an app action); never-equipped zones always get the
         unchanged sentinel.
+      * ``"wakeup"`` -> the wake-up light (Mode 20); ``value`` = :func:`wakeup_request` words.
       * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = target ProfileNumber.
       * ``"color"`` -> SET_COLOR (Mode 6); ``value`` = a ``LIGHT_COLORS`` name; recolours the
         active profile (LightValue = palette index 1-10). On-device apply UNVERIFIED (app has no
         colour UI to capture against).
+
+    .. req:: Build the app's wake-up light frame
+       :id: R_LIGHT_WAKEUP
+       :status: implemented
+       :tags: control, lighting
+
+       ``wakeup`` shall build the app's Mode-20 frame (``dg/h.m0``): ProfileNumber 14,
+       Timestamp = the next local HH:MM packed as UTC, LightValue = colour, areas, brightness and
+       ``(ramp/10)<<1 | enabled``, zones unchanged — byte-identical to the app recording.
     """
     f = funcs["lighting"]
     zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
@@ -449,6 +548,17 @@ def _lighting(funcs, what, value, last):
             **base,
             "Mode": LIGHT_MODE_SET_COLOR,
             "LightValue": idx,
+            **{z: LIGHT_UNCHANGED for z in zone_fields},
+        }
+    elif what == "wakeup":
+        # dg/h.m0: Mode 20; ProfileNumber is not staged, so it keeps the buffer's 14 (recorded).
+        c = wakeup_request(value, last)
+        vals = {
+            **base,
+            "ProfileNumber": LIGHT_UNCHANGED,
+            "Mode": LIGHT_MODE_WAKEUP_TIME,
+            "Timestamp": next_wakeup_epoch(c["hour"], c["minute"], local_now()),
+            "LightValue": _wakeup_light_value(c),
             **{z: LIGHT_UNCHANGED for z in zone_fields},
         }
     elif what == "power":

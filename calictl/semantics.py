@@ -361,6 +361,73 @@ _REAL_LIGHT_ZONES = frozenset(
     (1, 2, 3, 4, 5, 6, 7, 8, 9, 12)
 )  # full van lamp set, DEVICE-mapped 2026-08-30 (L12=Eingang)
 
+# Lighting CONFIGURATION the unit reports in specific 1502 frames (decode: vineflower dg/a.java
+# :286-415): Mode 20 = wake-up (Timestamp + packed LightValue), Mode 16 / ProfileNumber 8 = the
+# door-contact (sliding-door) flag in LightValue, Mode 12 = the REQUEST_CONFIG reply whose
+# LightValue bits 0-6 are FavoriteProfileModifiedState (bit 0 = favourite 1). The state char holds
+# ONE frame at a time, so serve carries these keys across later frames (lighting_config(prev, new)).
+LIGHT_CONFIG_KEYS = ("WakeupTimestamp", "WakeupLightValue", "DoorContact", "FavouritesStored")
+
+
+def lighting_config(prev, frame):
+    """The lighting configuration latch keys after ``frame`` (a decoded 1502 state frame, a decoded
+    1501 control frame calictl wrote, or a cached decode that already carries the keys).
+
+    :param prev: the previous decode (or ``None``); its latch keys carry over.
+    :param frame: the new decoded frame.
+    :returns: a dict holding only :data:`LIGHT_CONFIG_KEYS` that are known.
+
+    .. req:: Latch the lighting configuration across 1502 frames
+       :id: R_LIGHT_CONFIG_LATCH
+       :status: implemented
+       :tags: lighting, semantics
+
+       calictl shall keep the wake-up, door-contact and stored-favourite configuration the unit
+       reported in a Mode-20, Mode-16/PN-8 or Mode-12 frame until a newer such frame replaces it;
+       its own save of favourite N shall add bit N only when the stored bits are already known.
+    """
+    out = {}
+    for src in (prev or {}, frame):
+        for k in LIGHT_CONFIG_KEYS:
+            if src.get(k) is not None:
+                out[k] = src[k]
+    mode, pn, lv = frame.get("Mode"), frame.get("ProfileNumber"), frame.get("LightValue")
+    if mode == 20 and lv is not None and frame.get("Timestamp") is not None:
+        out["WakeupTimestamp"], out["WakeupLightValue"] = frame["Timestamp"], lv
+    elif mode == 16 and pn == 8 and lv is not None:
+        out["DoorContact"] = lv
+    elif mode == 12 and lv is not None:
+        out["FavouritesStored"] = lv & 0x7F
+    elif mode == 4 and pn is not None and 1 <= pn <= 7 and "FavouritesStored" in out:
+        out["FavouritesStored"] |= 1 << (pn - 1)  # only ADD to known bits: never invent "empty"
+    return out
+
+
+def wakeup_config(cfg):
+    """Unpack the latched wake-up config (inverse of ``dg/h.m0``, decode ``dg/a.java:311-415``).
+
+    ``LightValue`` = ``colour:4 | A4 A3 A2 A1 | brightness:4 | wakeMode:4`` with
+    ``wakeMode = (ramp/10) << 1 | enabled``. The decode reads only hour + minute of ``Timestamp``
+    (local wall clock packed as UTC).
+
+    :param cfg: a dict holding ``WakeupTimestamp`` + ``WakeupLightValue`` (see :func:`lighting_config`).
+    :returns: the config dict, or ``None`` when no wake-up frame has been seen.
+    """
+    ts, lv = cfg.get("WakeupTimestamp"), cfg.get("WakeupLightValue")
+    if ts is None or lv is None:
+        return None
+    hour, minute = ts // 3600 % 24, ts // 60 % 60
+    return {
+        "time": "%02d:%02d" % (hour, minute),
+        "hour": hour,
+        "minute": minute,
+        "enabled": bool(lv & 1),
+        "ramp": ((lv & 0xF) >> 1) * 10,
+        "brightness": lv >> 4 & 0xF,
+        "areas": [a for a in range(1, 5) if lv >> (7 + a) & 1],
+        "colour": lv >> 12 & 0xF,
+    }
+
 
 def lighting(d: dict) -> dict:
     out = {"installed": True, "profile": d.get("ProfileNumber"), "mode": d.get("Mode")}
