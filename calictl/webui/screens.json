@@ -418,8 +418,8 @@
           "label": "Lighting and sliding door",
           "range": null,
           "controls": {
-            "field": null,
-            "action": null
+            "field": "LightValue",
+            "action": "SET_PROFILE ProfileNumber 8 (door contact on/off)"
           }
         },
         {

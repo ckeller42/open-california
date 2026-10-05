@@ -117,10 +117,13 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   Brightness is the **0-11 enum** (0=OFF, 1-10 = 10–100 %, 11=DEFAULT; 13=NOT_EQUIPPED read-only,
   14=leave-unchanged; `LIGHT_ON_BRIGHTNESS=10`, slider max 10). The `1502` **Mode-4 notification** is a
   decodable state frame carrying the real ramping brightness — the truthful feedback channel; the
-  state-char **readback is a write-through echo, never proof of actuation**. standalone `lighting color`
-  is **retired** (raises); colour is `save_profile N <colour>` = SET_COLOR preface + save frame (the app
-  recolours a stored PROFILE; its colour UI exists but is model-gated — likely Grand-California-only — and excludes profiles
-  DOOR_CONTACT(8)/INTERIOR_LIGHT(11)). Extend via `control.BUILDERS`. See `control-and-actuation.md`.
+  state-char **readback is a write-through echo, never proof of actuation**. `set lighting color` is
+  **retired**; the app's lighting commands calictl builds are `power`, zones, `profile`,
+  `save_profile N [colour]` (colour = SET_COLOR preface, DECOMPILE-only; the app's colour UI is
+  model-gated), `wakeup`, `door_contact`. App-recorded: zones, save, wake-up time edit; `profile`
+  activate, wake-up on/off and `door_contact` are DECOMPILE + mock-tested (recordings owed). Wake-up /
+  door / favourite config is latched **only** from the unit's own 1502 Mode-20 / Mode-16-PN-8 / Mode-12
+  frames, never from calictl's write. Extend via `control.BUILDERS`. See `control-and-actuation.md`.
 - **Roof** (needs ignition ON): press-and-hold — stream move frames while held, STOP/cease on release
   (no confirmation phase). Direction bytes match the app (open `0x01`/stop `0x00`/close `0x04`). The
   **SafetyCounter is app-generated** (monotonic BE-uint32, ~+1 per 500 ms), NOT echoed; the unit

@@ -162,9 +162,10 @@ SAVE_FRAME_HEX = "010400000000000000000005e00eeeee"  # recorded: press-and-hold 
 
 
 def test_door_contact_on_off_is_set_profile_8_with_light_value():
-    """.. test:: Door contact builds dg/h.n4 (Mode 16, PN 8, LightValue 1/0)
-    :id: T_LIGHT_DOOR_CONTACT
-    :links: R_LIGHT_DOOR_CONTACT
+    """
+    .. test:: Door contact builds dg/h.n4 (Mode 16, PN 8, LightValue 1/0)
+       :id: T_LIGHT_DOOR_CONTACT
+       :links: R_LIGHT_DOOR_CONTACT
     """
     f = _funcs()
     assert control.build(f, "lighting", "door_contact", "on", {}).hex() == "0810000000000001eeeeeeeeeeeeeeee"
@@ -190,9 +191,10 @@ def test_profile_activate_is_one_set_profile_frame():
 
 
 def test_save_profile_stays_byte_exact_and_colour_adds_a_set_color_preface():
-    """.. test:: save_profile N [colour] = optional SET_COLOR then the recorded SET_BRIGHTNESS
-    :id: T_LIGHT_FAVOURITE_SAVE
-    :links: R_LIGHT_FAVOURITE
+    """
+    .. test:: save_profile N [colour] = optional SET_COLOR then the recorded SET_BRIGHTNESS
+       :id: T_LIGHT_FAVOURITE_SAVE
+       :links: R_LIGHT_FAVOURITE
     """
     f = _funcs()
     st = _st(SAVE_STATE_HEX)
@@ -221,9 +223,10 @@ def test_unknown_lighting_target_raises_not_none():
 
 
 def test_lighting_state_surfaces_wakeup_door_contact_and_favourites():
-    """.. test:: The lighting state shows the latched wake-up, door contact and stored favourites
-    :id: T_LIGHT_CONFIG_STATE
-    :links: R_LIGHT_CONFIG_LATCH
+    """
+    .. test:: The lighting state shows the latched wake-up, door contact and stored favourites
+       :id: T_LIGHT_CONFIG_STATE
+       :links: R_LIGHT_CONFIG_LATCH
     """
     plain = semantics.lighting(_st(REC_STATE_HEX))
     assert plain["wakeup"] is None and plain["door_contact"] is None and plain["favourites_stored"] is None

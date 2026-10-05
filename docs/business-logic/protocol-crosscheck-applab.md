@@ -193,5 +193,6 @@ Recording sessions (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools/appl
 - `tests/vectors/app/lighting-profile.jsonl` — press-and-hold tile A = `save_profile 1`
   `010400000000000000000005e00eeeee` (current zone levels, NOT_EQUIPPED → 14), matching calictl.
 - `tests/vectors/app/lighting-wakeup.jsonl` — wake-up time 07:00 via the wheel + OK writes the Mode-20
-  frame `0e146ac49c701100…` (Timestamp = the next 07:00 packed as if UTC, LightValue `0x11`); a
-  declared `GAPS` entry until calictl has a wake-up builder.
+  frame `0e146ac49c701100…` (Timestamp = the next 07:00 packed as if UTC, LightValue `0x1100` = warm
+  white, area 1, brightness 0, enabled 0). Since A2 calictl's `wakeup` builder reproduces it, so it
+  replays as `action` (`capture_diff.GAPS` is empty).

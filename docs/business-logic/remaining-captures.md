@@ -92,7 +92,7 @@ answers wire facts; it adds nothing for app-side logic or unexposed features.
 | **Air-heater level range** (is it 1–10 or the raw 0–15?) | ✅ **yes, fully** | In the app, set the heater to its **lowest** then **highest** level. The writes to char `1701` carry the exact min/max `HeatingLevel` raw values → pins the real range. Until then `semantics.airheater` keeps the honest raw 0–15 (`HeatingLevel` is 4-bit, dict-marked `UNVERIFIED`). |
 | **`car_variant` → model name** | 🟡 **partial** | A single **read** of char `1004` shows this van's raw `CarVariant`; the app screen shows the model. Pairs raw→label for *this* van (confirms whether `1 = California 7`, per `te/a.java`). Can't prove the other variants — only one vehicle. Kept as raw int meanwhile. |
 | **Vehicle clock-out-of-sync** | ❌ **no — not on the wire** | The RTC decode is already correct. "Out of sync" is the app comparing the unit clock to the **phone** clock (>5 min, `zf/d.java:235`). Nothing to capture — implement daemon-side (compare `vehicle.car_clock` to the Pi system clock) if wanted. |
-| **Lighting colour (`SET_COLOR`)** | ❌ **no — not exposed** | The app has **no colour UI** (decompile-confirmed), so it never emits a colour frame. A capture only confirms the negative. `set lighting color` stays inferred/N-A. |
+| **Lighting colour (`SET_COLOR`)** | ❌ **no — not exposed** | The colour UI is model-gated (likely Grand-California-only), so a T7 app never emits a colour frame. calictl sends SET_COLOR only as the `save_profile N <colour>` preface (DECOMPILE-only); the standalone `set lighting color` is retired. |
 
 **Highest-leverage capturable targets** (all wire facts, grab them in one at-the-van session):
 
@@ -235,8 +235,9 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 
 - **air-heater level + runtime** (only on/off captured; the physical fields were at sentinels):
   drag Heizstufe to 3 then 8; Laufzeit to 30 then 90 min.
-- **WAKEUP_TIME** (Wecklicht): set a wake-alarm → capture → confirm the epoch-seconds `Timestamp`
-  + the internal packing of `LightValue` (both currently INFERRED).
+- **WAKEUP_TIME** (Wecklicht): time edit **APP-RECORDED** (`lighting-wakeup.jsonl`, packing settled by
+  call stack) and built by calictl `wakeup`. Owed: an app recording of the on/off switch and of a time
+  edit while enabled (A2 Task 7); on the van, does the unit ramp the lights at that time.
 - **full lamp→nibble map**: ~6 of 16 lamps mapped; set each remaining lamp to a distinct level.
 - **roof drive from calictl** (SAFETY-SENSITIVE — **needs ignition ON**, roof path clear): the
   sequence is now settled (decompiled roof class — press-and-hold, app-generated monotonic

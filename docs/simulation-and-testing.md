@@ -81,6 +81,12 @@ What it models:
   applies it. A brightness frame must carry a non-zero ProfileNumber. The state char is a
   write-through **echo**, while the physical lamps ramp on the clock and push 1502 Mode-4 frames.
   `light_applies = False` models "ACKed and echoed, but the lamps stay dark".
+- **Lighting configuration (A2).** Seven favourite slots: a save (SET_BRIGHTNESS PN 1-7, with an
+  optional SET_COLOR before it) stores without a live change, an activate (SET_PROFILE PN N) applies
+  the stored levels, and an empty slot is ACKed and ignored. The wake-up config (Mode 20) and the
+  door-contact flag (Mode 16 / PN 8) are stored. Every config change, the save/activate acks and the
+  REQUEST_CONFIG reply (Mode 12, favourite bits) go out as **one-off** 1502 frames, never as stored
+  state-char content. Whether the real unit echoes them this way is unverified.
 - **The roof SafetyCounter.** The counter is valid only while it is monotonic and still advancing.
   A restart invalidates it. A freshly validated counter withholds the motor for about 3 s
   (`ROOF_WITHHOLD_S`, semi-verified). A held move steps `Position`, and releasing it (no frames)

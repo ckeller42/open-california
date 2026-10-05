@@ -273,9 +273,10 @@ def test_command_precondition_roof_move_blocked_but_stop_never_is():
 
 
 def test_favourite_gate_refuses_only_a_known_empty_slot():
-    """.. test:: Activating a favourite is refused only when the unit reported it empty
-    :id: T_LIGHT_FAVOURITE_GATE
-    :links: R_LIGHT_FAVOURITE
+    """
+    .. test:: Activating a favourite is refused only when the unit reported it empty
+       :id: T_LIGHT_FAVOURITE_GATE
+       :links: R_LIGHT_FAVOURITE
     """
     known = {"lighting": {"Mode": 4, "FavouritesStored": 0b001}}
     assert control.command_precondition("lighting", "profile", 1, known) is None

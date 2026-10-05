@@ -194,7 +194,9 @@ van is wired differently. Only a labeled L5-only toggle at the van can tell whic
    (`FAVORITE_n` = n, 1–7). Every other field keeps its staged/reset value (zones = 14). This is the same shape as the
    All-lights master (`Q`, PN 12/0). The app then waits up to 2000 ms in `A(SET_PROFILE, profile)` for the matching
    1502 notification and records the active profile. Activating `DEFAULT`(13) is followed by `d0()` REQUEST_CONFIG.
-   **DECOMPILE (call stack, #154).**
+   **DECOMPILE (call stack, #154).** calictl: `profile N` (`control._lighting`, N 0–13, 8 refused → `door_contact`;
+   refused when the latched favourite bits say slot N is empty); frame shape pinned by `T_LIGHT_FAVOURITE_ACTIVATE`,
+   mock-tested — app recording OWED.
 
 8. **Save / edit a profile (`l3(ef.k profile, ...)`, `dg/h.java:564-700`)**. Two steps:
    (a) Only when a colour-capable zone exists and the profile is not `DOOR_CONTACT`/`INTERIOR_LIGHT`: send a
@@ -204,13 +206,18 @@ van is wired differently. Only a labeled L5-only toggle at the van can tell whic
    **ProfileNumber = N (not the live-edit 9)**, every equipped zone at its current brightness. After the ack the app
    sends `d0()` REQUEST_CONFIG. Callers: the profile editor (`ni/a.java:340`) and the door-settings page (`ii/a`).
    The REQUEST_CONFIG reply on 1502 carries `FavoriteProfileModifiedState` (`ef/a`) in `LightValue` bits 0–6
-   (bit 0 = favourite 1; vineflower `dg/a.java:286-290`). **DECOMPILE (call stack, #154).**
+   (bit 0 = favourite 1; vineflower `dg/a.java:286-290`). **DECOMPILE (call stack, #154).** calictl:
+   `save_profile N [colour]` (`control._lighting` + `control.preface_for`), step (b) byte-exact vs
+   `tests/vectors/app/lighting-profile.jsonl`; step (a) DECOMPILE-only. calictl sends both on one armed link with a
+   0.3 s gap and does **not** wait for the SET_COLOR ack nor send the trailing REQUEST_CONFIG (known gap).
 
 9. **Toggle profile 8 (`n4(boolean on)`, `dg/h.java:877-884`)**: Mode=`SET_PROFILE`(16) staged, `ProfileNumber=8`
    (`DOOR_CONTACT`) staged, `LightValue = on?1:0` sent `DIRECT`. This enables or disables the door-contact auto-light
    profile. Read side: a 1502 notification with Mode=`SET_PROFILE` and ProfileNumber=`DOOR_CONTACT` sets the flag
    `D0 := (LightValue == 1)` (vineflower `dg/a.java:293-306`, exposed as `s4()`). **This flag is the camping page's
-   sliding-door row** on a California 7. See `climate-stairs.md` §camping.
+   sliding-door row** on a California 7. See `climate-stairs.md` §camping. calictl: `door_contact on|off`
+   (`control._lighting`), pinned by `T_LIGHT_DOOR_CONTACT`, mock-tested — app recording OWED; no CarVariant gate
+   (the app gates the page on its onboarding model, not on BLE).
 
 10. **Set wake-up light (`m0(ef.m config, ...)`, `dg/h.java:778-874`)**. **Settled from the decompile (#154).**
     The 1502 decode (vineflower `dg/a.java:311-415`) is its exact inverse, so the two cross-check each other.
@@ -225,6 +232,26 @@ van is wired differently. Only a labeled L5-only toggle at the van can tell whic
       - wakeMode = `(foreRunMinutes / 10) << 1 | enabled`, the `dg.k` value. Example: ON with a 10-minute ramp = 3.
       - A1–A4 = the four area flags. On a California 7 they are `T7_1..T7_4` (`dg/m.a`).
     - Worked example: ON with a 10-min ramp, brightness 5, warm white, area 1 only gives `LightValue = 0x1153`.
+    - calictl: `wakeup [HH:MM] [areas] [brightness] [ramp] [on|off]` (`control._lighting` /
+      `control.wakeup_request`), byte-exact vs `tests/vectors/app/lighting-wakeup.jsonl` (07:00 →
+      `LightValue 0x1100`: warm white, area 1, brightness 0, no ramp, **off**). Missing parts come from the
+      unit-reported config; an edit keeps the unit-reported enabled bit and only `on`/`off` changes it (the
+      app hands `m0` the whole config — ruling R3, to be confirmed by a recording of a time edit while
+      enabled). With nothing reported, a time-only edit sends enabled=0 and `on`/`off` is refused.
+
+### Configuration on 1502
+
+The unit reports its lighting configuration in specific 1502 frames: Mode 20 (wake-up `Timestamp` +
+`LightValue`), Mode 16 / ProfileNumber 8 (door-contact flag in `LightValue`) and Mode 12 (the
+REQUEST_CONFIG reply, favourite bits 0–6 in `LightValue`). The state char holds one frame at a time, so
+`serve` carries these keys across later frames (`semantics.lighting_config`, `R_LIGHT_CONFIG_LATCH`) and
+surfaces them as `lighting.wakeup` / `door_contact` / `favourites_stored`. The latch takes **only the
+unit's own 1502 frames**, never calictl's write (ruling R4: an echo is no proof). calictl no longer sends
+REQUEST_CONFIG, so `favourites_stored` is usually unknown (a save of N adds bit N only when the bits are
+already known). The mock stores 7 favourite slots (empty slot = ACK-and-ignore), the wake-up config and the
+door flag, and sends each config change as a **one-off** 1502 frame (wake-up / door echo, save and activate
+acks, REQUEST_CONFIG reply) — not re-readable state. Whether the **real unit** echoes these frames this way
+is **UNVERIFIED** (van check).
 
 ### Profile-number enum (`dg/l.java` mirrors `ef/k.java`)
 

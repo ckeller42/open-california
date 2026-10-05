@@ -1714,9 +1714,10 @@ def _light_server(monkeypatch, pushes):
 
 
 def test_wakeup_write_is_not_latched_only_the_units_own_frames_are(monkeypatch):
-    """.. test:: The daemon never latches the wake-up config from its OWN write (ACK-but-not-applied stays unknown)
-    :id: T_SERVE_LIGHT_LATCH
-    :links: R_LIGHT_CONFIG_LATCH
+    """
+    .. test:: The daemon never latches the wake-up config from its OWN write (ACK-but-not-applied stays unknown)
+       :id: T_SERVE_LIGHT_LATCH
+       :links: R_LIGHT_CONFIG_LATCH
     """
     import datetime
 

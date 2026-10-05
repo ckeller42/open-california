@@ -301,9 +301,13 @@ because it is instructive RE:
   record.
 - **Still open:** SET_COLOR on-device apply — the app DOES have colour control (`dg/h.java:644`,
   a profile-recolour: Mode 6, LightValue=colour, ProfileNumber=target profile + its brightness),
-  the old standalone `color` was retired; `save_profile N <colour>` now sends the app-shaped
-  SET_COLOR preface (`control.preface_for`, decompile-only, unverified on-device); whether a deep-asleep unit needs any arming at all; pinning the
-  exact wake-state determinant with controlled trials (awake duration, parked vs active).
+  the old standalone `color` was **retired** (A2, 2026-10); `save_profile N <colour>` now sends the
+  app-shaped SET_COLOR preface (`control.preface_for`, DECOMPILE-only, unverified on-device). **Known
+  gap vs the app:** `dg/h.l3` waits for the SET_COLOR 1502 ack before the save and sends a
+  REQUEST_CONFIG after it; calictl sends preface, commit, save, commit on one armed link with only the
+  `FOLLOW_DELAY_S` (0.3 s) gap and no ack wait or REQUEST_CONFIG. Also open: whether a deep-asleep
+  unit needs any arming at all; pinning the exact wake-state determinant with controlled trials
+  (awake duration, parked vs active).
 
 **Lighting frame layout** (16 bytes / 128 bits): `ProfileNumber@4/w4`, `Mode@8/w8`
 (4=SET_BRIGHTNESS, 16=SET_PROFILE), `Timestamp@16/w32` (`sg.a()` no-arg, default 0 — part of
@@ -334,15 +338,28 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | airheater | `timer_start` / `timer_cancel` | OperationModeAirHeater 3 (+ OperationModeCombined 1) / 0 | `rf/b` a2(AIR_HEATER) / j4 via `uh/d` | APP-OBSERVED (`3f3b017f1f3f` / `3f0b007f1f3f` identical) |
 | energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | DV |
 | lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |
-| lighting | `profile` | SET_PROFILE, ProfileNumber (Fav 1-7, 10 wake, 11 interior) | `dg/h` u0 | DV (activate) |
-| lighting | `save_profile` | SET_BRIGHTNESS w/ ProfileNumber=N + all zones (define a favorite) | `dg/h` l3 | DV |
+| lighting | `profile N` | SET_PROFILE, ProfileNumber N 0-13 (Fav 1-7, 10 wake, 11 interior); 8 refused → `door_contact`; a favourite the unit reported empty is refused | `dg/h` u0 | DV + mock-tested; app recording OWED |
+| lighting | `save_profile N [colour]` | [SET_COLOR Mode 6 PN N] + SET_BRIGHTNESS PN N, equipped zones at their level; one armed link (preface, commit, save, commit) | `dg/h` l3 | save **APP-RECORDED** (`lighting-profile.jsonl`); colour preface DECOMPILE-only |
+| lighting | `wakeup [HH:MM] [areas] [brightness] [ramp] [on\|off]` | Mode 20, PN 14, Timestamp = next local HH:MM packed as UTC, LightValue packed; edits keep the unit-reported enabled bit | `dg/h` m0 | time edit **APP-RECORDED** (`lighting-wakeup.jsonl`); on/off DV + mock-tested, recording OWED |
+| lighting | `door_contact on\|off` | SET_PROFILE PN 8, LightValue 1/0 | `dg/h` n4 | DV + mock-tested; recording OWED |
 | campingmode | `master`/`lights`/`usb` | State / lights (inverted) / UsbCharger | `tf/a` | live-verified (on **only when stationary** — §4 gate) |
 | roof | `open`/`close`/`stop` | Up/Down + app-gen SafetyCounter | `ig/c` | not-live-verified |
 
 **Not wired (deliberately):** airheater `permanent` (the app's `E3()` only writes OFF; ON value
-unknown — won't arm a fuel burner on a guess), lighting wake-up **time** (`m0`, Mode 20 — the
-LightValue bitmask packing is unverified; needs a capture), lighting `color` (frame mis-shaped +
-not on this variant).
+unknown — won't arm a fuel burner on a guess); lighting `color` — **retired** (2026-10, A2): the
+app recolours a stored favourite, so use `save_profile N <colour>` (`set lighting color …` raises
+`CommandError`, the API answers 400).
+
+**Wake-up edits (ruling R3, A2):** the app passes the whole current config to `dg/h.m0`, so a
+time/area/brightness/ramp edit carries the **unit-reported** enabled bit; only `on`/`off` changes it.
+With no wake-up frame seen, a time-only edit sends enabled=0 (reproduces the recorded `0x1100`) and
+`on`/`off` without a time is refused. The recorded enabled=0 is likely an artefact of the then
+non-echoing mock; a Task-7 recording (app time edit while enabled) must confirm the rule.
+
+**Lighting config latch (ruling R4):** the wake-up (Mode 20), door-contact (Mode 16 / PN 8) and
+stored-favourite bits (Mode 12 reply) are latched by `serve` **only from the unit's own 1502
+frames** (`semantics.lighting_config`), never from calictl's own write — a write-through echo is no
+proof of actuation, so an ACK-but-not-applied write leaves the latch unchanged.
 
 **State readback surfaced** (decoded straight from the state chars, cross-checked against the
 app decoders): cooler `quiet_from`/`quiet_to`/`timer_hour`/`timer_min` (`vf/c.java:321 e()`,

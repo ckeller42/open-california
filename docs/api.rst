@@ -46,6 +46,7 @@ Control frames
 
 .. autofunction:: calictl.control._airheater
 .. autofunction:: calictl.control._int_range
+.. autofunction:: calictl.control._lighting
 .. automodule:: calictl.postcheck
    :no-members:
 .. autofunction:: calictl.postcheck.set_check
@@ -56,6 +57,7 @@ Control frames
 .. autofunction:: calictl.semantics.lighting_config
 .. autofunction:: calictl.semantics.wakeup_config
 .. automodule:: tests.test_lighting_commands
+.. autofunction:: tests.test_web_serve.test_wakeup_write_is_not_latched_only_the_units_own_frames_are
 
 Sinks (MQTT / Home Assistant)
 -----------------------------

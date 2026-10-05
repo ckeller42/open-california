@@ -925,9 +925,10 @@ def test_a_failed_first_poll_still_loads_pairing_once(base_url):
 
 
 def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
-    """.. test:: The web UI edits the wake-up time and switch; an edit keeps the unit-reported switch
-    :id: T_E2E_LIGHT_WAKEUP
-    :links: R_LIGHT_WAKEUP
+    """
+    .. test:: The web UI edits the wake-up time and switch; an edit keeps the unit-reported switch
+       :id: T_E2E_LIGHT_WAKEUP
+       :links: R_LIGHT_WAKEUP
     """
     # seed the unit-reported config (the card is disabled until the unit has reported one)
     r = page.request.post(
@@ -966,9 +967,10 @@ def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
 
 
 def test_door_contact_switch_round_trips(page, base_url):
-    """.. test:: The web UI toggles the sliding-door light; the state shows the mock's flag
-    :id: T_E2E_LIGHT_DOOR
-    :links: R_LIGHT_DOOR_CONTACT
+    """
+    .. test:: The web UI toggles the sliding-door light; the state shows the mock's flag
+       :id: T_E2E_LIGHT_DOOR
+       :links: R_LIGHT_DOOR_CONTACT
     """
     page.get_by_text("Lighting", exact=True).first.click()
     sw = page.get_by_role("switch", name="Sliding door lighting")
@@ -985,9 +987,10 @@ def test_door_contact_switch_round_trips(page, base_url):
 
 
 def test_favourite_save_then_activate(page, base_url):
-    """.. test:: Save favourite 1 then activate it from the web UI against the mock
-    :id: T_E2E_LIGHT_FAVOURITE
-    :links: R_LIGHT_FAVOURITE
+    """
+    .. test:: Save favourite 1 then activate it from the web UI against the mock
+       :id: T_E2E_LIGHT_FAVOURITE
+       :links: R_LIGHT_FAVOURITE
     """
     page.get_by_text("Lighting", exact=True).first.click()
     page.once("dialog", lambda d: d.accept())

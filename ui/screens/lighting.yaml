@@ -39,7 +39,7 @@ widgets:
     range: "A..D"
     controls: {field: ProfileNumber, action: "SET_BRIGHTNESS (save, long-press) / SET_PROFILE (apply)"}
     elements: [lighting_pleasePressAndHold_headline, lighting_pleasePressAndHold_text]
-    constraints: "APP-OBSERVED 2026-09-27 (screens 20, 32): four profile tiles A-D under 'All lights', each with a '+' while empty. A SHORT tap shows 'Please press and hold' — 'To save or change lighting settings, press and hold the profile button until you see a confirmation.' [OK]; press-and-hold saves. Tile A long-press = ProfileNumber 1 save frame (APP-OBSERVED 2026-09-16, control-and-actuation.md §3); the ProfileNumber of tiles B-D is not yet captured (owed before naming them in calictl)."
+    constraints: "APP-OBSERVED 2026-09-27 (screens 20, 32): four profile tiles A-D under 'All lights', each with a '+' while empty. A SHORT tap shows 'Please press and hold' — 'To save or change lighting settings, press and hold the profile button until you see a confirmation.' [OK]; press-and-hold saves. Tile A long-press = ProfileNumber 1 save frame (APP-RECORDED 2026-10-05, lighting-profile.jsonl; = calictl save_profile 1). Activate (short tap on a stored tile) = dg/h.u0 one SET_PROFILE frame PN N (DECOMPILE; calictl profile N, mock-tested; app recording owed). The ProfileNumber of tiles B-D is not yet captured (owed before naming them in calictl)."
     evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16
 
   - id: profileSelector
@@ -226,7 +226,7 @@ widgets:
       - lighting_wakeUpLight_description_toBeWoken_text
       - lighting_wakeUpLight_wakeUpLightPreview_button
       - lighting_wakeUpLight_wakeUpLightPreview_button_disbaled
-    constraints: "APP-OBSERVED 2026-09-27 (screen 27): toggle 'Wake-up light', a wake-up 'Time' (00:00) and a 'Lead time' slider 0..30 min; the wake-up light must be re-activated after each use. No frame captured (wake-up TIME packing still unknown). Sub-screen (SLIDER_FOR_WAKE_UP_LIGHT_BRIGHTNESS in lr/a.java confirms distinct slider id from main SLIDER_FOR_LIGHTS_BRIGHTNESS). vehicleArea picker chooses which zone(s) light up at wake time (mirrors zone list, gc-only colour picker). Preview button maps to PREVIEW command enum; brightness slider -> SET_BRIGHTNESS; time/lead-time -> WAKEUP_TIME."
+    constraints: "APP-OBSERVED 2026-09-27 (screen 27): toggle 'Wake-up light', a wake-up 'Time' (00:00) and a 'Lead time' slider 0..30 min; the wake-up light must be re-activated after each use. Time + OK writes Mode 20 (dg/h.m0): Timestamp = next local HH:MM packed as UTC, LightValue = colour:4|A4..A1|brightness:4|(ramp/10)<<1|enabled — APP-RECORDED (tests/vectors/app/lighting-wakeup.jsonl, 07:00 -> LightValue 0x1100, enabled 0), calictl wakeup byte-exact; the switch (enabled bit) is DECOMPILE + mock-tested, recording owed. Sub-screen (SLIDER_FOR_WAKE_UP_LIGHT_BRIGHTNESS in lr/a.java confirms distinct slider id from main SLIDER_FOR_LIGHTS_BRIGHTNESS). vehicleArea picker chooses which zone(s) light up at wake time (mirrors zone list, gc-only colour picker). Preview button maps to PREVIEW command enum; brightness slider -> SET_BRIGHTNESS; time/lead-time -> WAKEUP_TIME."
 
   - id: doubleTapSettings
     type: drawer
@@ -258,7 +258,7 @@ widgets:
     type: drawer
     label_key: lighting_functionsAndSettings_function_lightingAndSlidingDoor_text
     range: null
-    controls: {field: null, action: null}
+    controls: {field: LightValue, action: "SET_PROFILE ProfileNumber 8 (door contact on/off)"}
     elements:
       - lighting_lightingAndSlidingDoor_applyTheCurrentConfigurationFor_text
       - lighting_lightingAndSlidingDoor_disabled_text
@@ -268,7 +268,7 @@ widgets:
       - lighting_lightingAndSlidingDoor_openingSlidingDoorTriggers_text
       - lighting_lightingAndSlidingDoor_saveLightSetting_button
       - lighting_lightingAndSlidingDoor_theLightThatComesOnWhenTheSliding_text
-    constraints: "APP-OBSERVED 2026-09-27 (screen 28): 'Save light setting' button (stores the current lighting as the sliding-door configuration — frame UNKNOWN, not pressed) plus a camping-mode part: 'Opening sliding door activates the rear interior lights.' with an Enabled/Disabled state (read 'Disabled' on the fake unit). Probably the DOOR_CONTACT profile (8) — HYPOTHESIS, also the likely source of the camping page's sliding-door row (camping-mode.yaml slidingDoorRow)."
+    constraints: "APP-OBSERVED 2026-09-27 (screen 28): 'Save light setting' button (stores the current lighting as the sliding-door configuration — frame UNKNOWN, not pressed) plus a camping-mode part: 'Opening sliding door activates the rear interior lights.' with an Enabled/Disabled state (read 'Disabled' on the fake unit). The Enabled/Disabled state = DOOR_CONTACT profile (8): dg/h.n4 writes Mode 16 / PN 8 / LightValue 1|0, read back from a 1502 Mode 16 / PN 8 frame (DECOMPILE, call stack #154; calictl door_contact, mock-tested; app recording door-contact.jsonl owed). Likely also the source of the camping page's sliding-door row (camping-mode.yaml slidingDoorRow)."
 
   - id: factorySettingReset
     type: button
