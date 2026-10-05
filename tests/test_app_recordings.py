@@ -201,3 +201,23 @@ def test_hygiene_flags_vin_hash_vin_mac_and_passkey(tmp_path):
     assert any("pair event carries ['passkey']" in x for x in probs)
     ok = _rec(tmp_path, [_ev(1.0, "app_screen", step=1, texts=["C0:FF:EE:CA:11:F0"])])
     assert capture_diff.recording_hygiene(ok) == []
+
+
+def test_replay_pins_the_clock_for_every_build(monkeypatch):
+    """The wake-up replay must not depend on the host's date or TZ: a "today" after the recording
+    (and a far-east TZ) still reproduces the recorded 07:00 frame."""
+    import datetime
+    import time
+
+    from calictl import control
+
+    monkeypatch.setenv("TZ", "Pacific/Auckland")
+    time.tzset()
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2030, 1, 1, 23, 59))
+    try:
+        checks = capture_diff.check_recording(str(HERE / "vectors" / "app" / "lighting-wakeup.jsonl"))
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+    assert [c for c in checks if c.kind == "error"] == []
+    assert any(c.kind == "action" and c.hex.startswith("0e146ac4") for c in checks)

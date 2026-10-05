@@ -479,20 +479,23 @@ def _check_write(funcs, gaps, state, step, line, ev, hit) -> WriteCheck:
     if ev.get("t") is not None:
         rec_now = datetime.datetime.fromtimestamp(ev["t"], datetime.UTC).replace(tzinfo=None)
         control.local_now = lambda: rec_now
-    try:
-        ours = control.build(funcs, fn, what, value, st)
-    except ValueError as e:
-        return WriteCheck(line, fn, hx, "error", sn, "calictl refuses %s/%s=%r: %s" % (fn, what, value, e))
-    finally:
-        control.local_now = saved_now
     bad: list[DiffRow] = []
     leads: list[str] = []
-    if ours is not None:
-        scen = Scenario(
-            name="step %s" % sn, function=fn, what=what, value=value, control_char=str(char), state=st
-        )
-        rows, leads, _ = diff(funcs, scen, bytes.fromhex(hx))
-        bad = [r for r in rows if r.name in targeted and not r.match]
+    try:  # one pin spans the builder AND diff()'s own control.build
+        try:
+            ours = control.build(funcs, fn, what, value, st)
+        except ValueError as e:
+            return WriteCheck(
+                line, fn, hx, "error", sn, "calictl refuses %s/%s=%r: %s" % (fn, what, value, e)
+            )
+        if ours is not None:
+            scen = Scenario(
+                name="step %s" % sn, function=fn, what=what, value=value, control_char=str(char), state=st
+            )
+            rows, leads, _ = diff(funcs, scen, bytes.fromhex(hx))
+            bad = [r for r in rows if r.name in targeted and not r.match]
+    finally:
+        control.local_now = saved_now
     if (fn, what) in gaps:
         if ours is not None and not bad:
             return WriteCheck(

@@ -126,3 +126,31 @@ def test_lighting_config_latches_and_carries():
     favs = semantics.lighting_config(door, {"Mode": 12, "ProfileNumber": 12, "LightValue": 0b0000101})
     assert favs["FavouritesStored"] == 0b101
     assert semantics.lighting_config(favs, {"Mode": 4, "ProfileNumber": 2})["FavouritesStored"] == 0b111
+
+
+@pytest.mark.parametrize(
+    "colour, areas, brightness, ramp, enabled",
+    [
+        (1, [1], 0, 0, False),
+        (2, [1, 2, 3, 4], 10, 30, True),
+        (5, [2, 4], 7, 20, False),
+        (15, [3], 1, 10, True),
+        (0, [4], 5, 0, True),
+    ],
+)
+def test_wakeup_light_value_round_trips_through_semantics(colour, areas, brightness, ramp, enabled):
+    c = {"colour": colour, "areas": areas, "brightness": brightness, "ramp": ramp, "enabled": enabled}
+    lv = control._wakeup_light_value(c)
+    got = semantics.wakeup_config({"WakeupTimestamp": 7 * 3600 + 5 * 60, "WakeupLightValue": lv})
+    assert {k: got[k] for k in c} == c and got["time"] == "07:05"
+
+
+def test_wakeup_keeps_a_non_default_colour(at_rec_time):
+    lv = control._wakeup_light_value(
+        {"colour": 5, "areas": [2], "brightness": 3, "ramp": 10, "enabled": True}
+    )
+    last = {"Mode": 20, "ProfileNumber": 14, "Timestamp": 3600, "LightValue": lv}
+    d = control.decode_control(
+        _funcs()["lighting"], control.build(_funcs(), "lighting", "wakeup", "off", last)
+    )
+    assert d["LightValue"] >> 12 == 5
