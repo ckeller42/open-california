@@ -120,6 +120,12 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
 - **Alerts / fault codes**: already complete in `alert-states.md`.
 - **Wake / liveness**: only the `1003` heartbeat on BLE (Exlap "Alive" tokens belong to the WiFi
   transport). No door/terminal signal is *written*; ignition/leveling are *read* from `1004`.
+  **Who ticks `1003` in the app (#154, 2026-10-05, call stack):** the ticker is session-global. `zf/d.java:183`
+  wires it, `d2/s.java:795-802` runs it while the link is Connected and the control state is ACTIVE
+  (`mj/d.java:247`, `pf/k.java:335-337`), and `c/i.java:349-367` sets a random seed of 1–1 000 000 and a random
+  period of 750–850 ms. Each tick writes counter+1 (`t0/c.java:262-266`). No function starts or stops it, so it
+  also runs during roof moves. calictl's roof arm sends no 1003, which differs from the app on that point. The
+  roof's own frames never touch 1003.
 
 ## Full call-stack cross-check (2026-08-17)
 

@@ -27,7 +27,7 @@ setters) + `dg/h.java` (feature class, service `00001500-...`, `dg/a.java:73`).
 |---|---|---|---|---|
 | ProfileNumber | `f7182d0` | 4 | 14 | selects a stored profile slot (see `dg.l`/`ef.k` below); 14 = `INIT` sentinel |
 | Mode | `f7183e0` | 8 | 0 | command opcode, see `dg/n.java` enum |
-| Timestamp | `f7184f0` | 32 | 0 | epoch seconds, only meaningful for `WAKEUP_TIME` |
+| Timestamp | `f7184f0` | 32 | 0 | *local* epoch seconds of the next wake time (see action 10), only meaningful for `WAKEUP_TIME` |
 | LightValue | `f7185g0` | 16 | 0 | opcode-dependent payload (bit-packed) |
 | BrightnessLOne … BrightnessLOneSix | `f7186h0` … `f7200w0` | 4 each | 14 | per-zone brightness, 16 zones total |
 
@@ -135,6 +135,29 @@ so it stays a **web-only** lamp) — so the "L6 = Aufstelldach Leselicht by elim
 over: L6 is the cabinet light, the roof reading light is L9. Only the owner's 2026-08-27 "roof light
 moved L5" observation remains unexplained.
 
+**Decompile cross-check of the full map (#154, 2026-10-05).** The setter dispatch (`dg/h.E` `dg/h.java:174-265` =
+`p0` `:886-934`) together with the `eg/a` debug-dump field order (`eg/a.java:116-128`) gives the zone table above.
+On a California 7 the app's own lamp names and groups (`dg/h.V`, `dg/h.java:360-386`) are:
+
+| Zone | App lamp (T7) | App group |
+|---|---|---|
+| L1 | Reading right | Reading lights |
+| L2 | Reading left | Reading lights |
+| L3 | Exterior rear surroundings | Exterior |
+| L4 | Reading front passenger | Reading lights |
+| L5 | Kitchen background lighting | Kitchen |
+| L6 | Kitchen cabinets | none: no app control |
+| L7 | Kitchen cooking | Kitchen |
+| L8 | Roof background lighting | Roof |
+| L9 | Roof reading | Roof |
+| L12 | Exterior entrance | Exterior |
+
+L10/L11/L13 are Grand California rooms (living, dining, bathroom). L14–L16 have no setter at all, and `ef/i`
+ordinals 20–28 have no `case`, so they cannot be addressed over 1501. This matches the DEVICE map and the
+APP-OBSERVED nibbles exactly. In the app's model **no roof fixture sits on L5**, so the owner's 2026-08-27
+"pop-top light = zone 5" note contradicts the app. Either that toggle lit the kitchen background strip, or this
+van is wired differently. Only a labeled L5-only toggle at the van can tell which.
+
 ### Action → field map
 
 1. **Set one zone's brightness (`E(ef.i zone, dg.i level, boolean stage)`, `dg/h.java:174`)**
@@ -166,25 +189,42 @@ moved L5" observation remains unexplained.
    13 = `DEFAULT` per enum below), then Mode = `REQUEST_CONFIG`(12) sent with `NO_INIT` (still transmits — only
    `PENDING` suppresses sending), and awaits the device's async response via a coroutine helper `A(...)`.
 
-7. **Activate a stored profile (`u0(ef.k profile, ...)`, `dg/h.java:751-829`)**: Mode = `SET_PROFILE`(16) staged;
-   `dg.a.x(this, dg.l-value-for(profile))` (`dg/h.java:798`, exact wiring of per-zone brightness `UNVERIFIED` —
-   not fully decompiled) then transmits via the `A(SET_PROFILE, ...)` awaiting-response path.
+7. **Activate a stored profile (`u0(ef.k profile, ...)`, `dg/h.java:944-992` in the 2026-10-05 tree)**:
+   `v(16, PENDING)` then `w(N, DIRECT)`. One 1501 frame goes out: Mode = `SET_PROFILE`(16), ProfileNumber = N
+   (`FAVORITE_n` = n, 1–7). Every other field keeps its staged/reset value (zones = 14). This is the same shape as the
+   All-lights master (`Q`, PN 12/0). The app then waits up to 2000 ms in `A(SET_PROFILE, profile)` for the matching
+   1502 notification and records the active profile. Activating `DEFAULT`(13) is followed by `d0()` REQUEST_CONFIG.
+   **DECOMPILE (call stack, #154).**
 
-8. **`l3(ef.k profile, ...)` (`dg/h.java:572-578`)**: same signature shape as `u0` but body not decompiled
-   (`UNVERIFIED`) — likely "save current zone brightness state into profile slot" (only meaningful for the
-   `FAVORITE_1..7` user slots).
+8. **Save / edit a profile (`l3(ef.k profile, ...)`, `dg/h.java:564-700`)**. Two steps:
+   (a) Only when a colour-capable zone exists and the profile is not `DOOR_CONTACT`/`INTERIOR_LIGHT`: send a
+   `SET_COLOR`(6) frame with `LightValue` = colour wire value (1–10) and ProfileNumber = N, then wait for the ack.
+   (b) Snapshot every zone's current brightness, stage Mode = `SET_BRIGHTNESS`(4), stage every **equipped** zone
+   (zones that report `NOT_EQUIPPED` are skipped), then send `w(N, DIRECT)`. The result is ONE frame: Mode 4,
+   **ProfileNumber = N (not the live-edit 9)**, every equipped zone at its current brightness. After the ack the app
+   sends `d0()` REQUEST_CONFIG. Callers: the profile editor (`ni/a.java:340`) and the door-settings page (`ii/a`).
+   The REQUEST_CONFIG reply on 1502 carries `FavoriteProfileModifiedState` (`ef/a`) in `LightValue` bits 0–6
+   (bit 0 = favourite 1; vineflower `dg/a.java:286-290`). **DECOMPILE (call stack, #154).**
 
-9. **Toggle profile 8 (`n4(boolean on)`, `dg/h.java:679-688`)**: Mode=`SET_PROFILE`(16) staged, `ProfileNumber=8`
-   (`DOOR_CONTACT`) staged, `LightValue = on?1:0` sent `DIRECT` — enables/disables the "door-contact" auto-light
-   profile.
+9. **Toggle profile 8 (`n4(boolean on)`, `dg/h.java:877-884`)**: Mode=`SET_PROFILE`(16) staged, `ProfileNumber=8`
+   (`DOOR_CONTACT`) staged, `LightValue = on?1:0` sent `DIRECT`. This enables or disables the door-contact auto-light
+   profile. Read side: a 1502 notification with Mode=`SET_PROFILE` and ProfileNumber=`DOOR_CONTACT` sets the flag
+   `D0 := (LightValue == 1)` (vineflower `dg/a.java:293-306`, exposed as `s4()`). **This flag is the camping page's
+   sliding-door row** on a California 7. See `climate-stairs.md` §camping.
 
-10. **Set wake-up light (`m0(ef.m area, ef.j wakeupConfig, ...)`, `dg/h.java:581-677`)**: computes the next
-    epoch timestamp ≥ now matching the requested hour/minute (`i5`=hour, `i`=minute), packs `LightValue` (16 bits)
-    from: 4-bit `dg.k` wake mode + 4-bit color (`dg.j`, via `u.i(jVar)`) + 4 area-membership bits
-    (`dg.m.AREA_1..4`) — sent via `s(..., PENDING)` then finalized when `Timestamp` is set and
-    `aVar.y(true)` fires; Mode = `WAKEUP_TIME`(20). Recipe: pick a wake time, a `dg.k` mode
-    (`WAKE_UP_ON`/`WAKE_UP_ON_10/20/30` = on with N-minute gentle-wake ramp, or the `_OFF_*` variants to
-    disable), a `dg.j` color preset, and which of the 4 `AREA_n` zone-groups light up.
+10. **Set wake-up light (`m0(ef.m config, ...)`, `dg/h.java:778-874`)**. **Settled from the decompile (#154).**
+    The 1502 decode (vineflower `dg/a.java:311-415`) is its exact inverse, so the two cross-check each other.
+    - Mode = `WAKEUP_TIME`(20). `m0` does not stage ProfileNumber, so the field keeps its buffer value.
+    - `Timestamp` (32 bit) = whole seconds since 1970-01-01T00:00 of the **next local wall-clock** occurrence of
+      HH:MM: today, or tomorrow if that time has passed. The app builds a LocalDateTime and converts it with
+      `TimeZone.UTC`, so the value is "local epoch seconds", not a true UTC instant. The decode reads only the
+      hour and minute back.
+    - `LightValue` (16 bit, MSB-first) = `colour:4 | A4 | A3 | A2 | A1 | brightness:4 | wakeMode:4`:
+      - colour = the `dg.j` wire value 1–10.
+      - brightness = the raw slider int (range not traced).
+      - wakeMode = `(foreRunMinutes / 10) << 1 | enabled`, the `dg.k` value. Example: ON with a 10-minute ramp = 3.
+      - A1–A4 = the four area flags. On a California 7 they are `T7_1..T7_4` (`dg/m.a`).
+    - Worked example: ON with a 10-min ramp, brightness 5, warm white, area 1 only gives `LightValue = 0x1153`.
 
 ### Profile-number enum (`dg/l.java` mirrors `ef/k.java`)
 
