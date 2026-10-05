@@ -338,7 +338,7 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | airheater | `timer_start` / `timer_cancel` | OperationModeAirHeater 3 (+ OperationModeCombined 1) / 0 | `rf/b` a2(AIR_HEATER) / j4 via `uh/d` | APP-OBSERVED (`3f3b017f1f3f` / `3f0b007f1f3f` identical) |
 | energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | DV |
 | lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |
-| lighting | `profile N` | SET_PROFILE, ProfileNumber N 0-13 (Fav 1-7, 10 wake, 11 interior); 8 refused → `door_contact`; a favourite the unit reported empty is refused | `dg/h` u0 | DV + mock-tested; app recording OWED |
+| lighting | `profile N` | SET_PROFILE, ProfileNumber N 0-13 (Fav 1-7, 10 wake, 11 interior; the app's tiles A/B/C/D = favourites 1/5/6/7); 8 refused → `door_contact`; a favourite the unit reported empty is refused | `dg/h` u0 | DV + mock-tested; app recording OWED |
 | lighting | `save_profile N [colour]` | [SET_COLOR Mode 6 PN N] + SET_BRIGHTNESS PN N, equipped zones at their level; one armed link (preface, commit, save, commit) | `dg/h` l3 | save **APP-RECORDED** (`lighting-profile.jsonl`); colour preface DECOMPILE-only |
 | lighting | `wakeup [HH:MM] [areas] [brightness] [ramp] [on\|off]` | Mode 20, PN 14, Timestamp = next local HH:MM packed as UTC, LightValue packed; edits keep the unit-reported enabled bit | `dg/h` m0 | time edit **APP-RECORDED** (`lighting-wakeup.jsonl`); on/off DV + mock-tested, recording OWED |
 | lighting | `door_contact on\|off` | SET_PROFILE PN 8, LightValue 1/0 | `dg/h` n4 | DV + mock-tested; recording OWED |
@@ -350,11 +350,16 @@ unknown — won't arm a fuel burner on a guess); lighting `color` — **retired*
 app recolours a stored favourite, so use `save_profile N <colour>` (`set lighting color …` raises
 `CommandError`, the API answers 400).
 
-**Wake-up edits (ruling R3, A2):** the app passes the whole current config to `dg/h.m0`, so a
-time/area/brightness/ramp edit carries the **unit-reported** enabled bit; only `on`/`off` changes it.
-With no wake-up frame seen, a time-only edit sends enabled=0 (reproduces the recorded `0x1100`) and
-`on`/`off` without a time is refused. The recorded enabled=0 is likely an artefact of the then
-non-echoing mock; a Task-7 recording (app time edit while enabled) must confirm the rule.
+**Wake-up edits (ruling R3, A2 — DECOMPILE-CONFIRMED, decompile cross-check 2026-10-06, enigma `46f982d3`):** the app builds every write in
+`si/h.j` (`si/h.java:387-414`) field by field as "the edited value, else the unit-reported config
+`dg/h.F0`". `F0` is written only by the 1502 Mode-20 decode (vineflower `dg/a.java:395-413`), never
+optimistically by `m0`. So a time/area/brightness/ramp/colour edit carries the **unit-reported** enabled
+bit; only the switch changes it. With no Mode-20 frame decoded yet, `F0` still holds its seed
+(OFF, 00:00), so the app sends enabled=0 — calictl's time-only exception (enabled=0, reproduces the
+recorded `0x1100`) matches; `on`/`off` without a known time is refused. After the write the app waits
+≤ 2000 ms for any 1502 frame, then checks `F0` 3 × 1000 ms; if the unit has not echoed a matching
+Mode-20 frame it reverts and toasts "Something went wrong" — so the **real unit must echo Mode 20 within
+~3 s** (van check). A Task-7 recording (time edit while enabled) is still owed as wire evidence.
 
 **Lighting config latch (ruling R4):** the wake-up (Mode 20), door-contact (Mode 16 / PN 8) and
 stored-favourite bits (Mode 12 reply) are latched by `serve` **only from the unit's own 1502

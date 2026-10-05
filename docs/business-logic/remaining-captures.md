@@ -231,6 +231,20 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 - ~~**SET_COLOR** (Mode 6)~~: **dropped** — the app exposes no colour control (decompile-confirmed
   2026-07-13), so there is no colour write to capture.
 
+## App-lab retests from the decompile cross-check (2026-10-06)
+
+Questions the static trace (enigma `46f982d3`) could not settle; each is an app-lab run against the mock:
+
+- **ECO selector (#230):** with `PvInstalled=1`, open Energy, leave, open again (or change the energy
+  mode). ECO on the second visit confirms the stale-first-read explanation (`ak/a.java:196-197,714`).
+- **Wake-up echo:** does the app accept a wake-up write when the mock echoes Mode 20 (it reverts with
+  "Something went wrong" after ~3 s otherwise)? On the van: does the real unit echo it?
+- **Level Indicator:** `CarLevelPopUp=0` with roll/pitch set should show the gauges; 1 = ignition card,
+  2 = "Please slow down".
+- **Roof overlay:** the roof-page warning text for InfoPopUp 2 vs 3 (`hj/c.p0`/`k0`, unresolved).
+- **Sliding-door row:** whether `tf/a.R2` (show-rear-USB flag) is the row's divider or its enabled state.
+- **Wake brightness 0:** the slider reaches 0; what the unit does with it is unknown (van).
+
 ## Priority 5 — finish the smaller gaps
 
 - **air-heater level + runtime** (only on/off captured; the physical fields were at sentinels):

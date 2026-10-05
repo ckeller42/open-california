@@ -70,8 +70,8 @@ widgets:
     range: null
     controls: null
     elements: null
-    constraints: "Status row 'Enabled'/'Disabled' (APP-OBSERVED 2026-09-27, screens 38-40). It never moved with any 1202 field (all four InteriorLight/OutsideLight combinations, UsbCharger, State) — NOT a campingmode field. HYPOTHESIS: it follows the lighting function's DOOR_CONTACT profile (dg/h.n4; Lighting > Functions & Settings > 'Lighting & Sliding door'). Next step: set the lighting DOOR_CONTACT state on the fake unit and watch this row. The 2026-09-16 session saw no write on tapping it."
-    evidence: APP-OBSERVED 2026-09-27 (row); source = hypothesis
+    constraints: "Status row 'Enabled'/'Disabled' (APP-OBSERVED 2026-09-27, screens 38-40). It never moved with any 1202 field (all four InteriorLight/OutsideLight combinations, UsbCharger, State) — NOT a campingmode field. DECOMPILE (#154 + cross-check 2026-10-06, enigma 46f982d3): on a T7 it reads the lighting DOOR_CONTACT flag (wh/c.java:98 -> dg/h.s4) and its toggle writes dg/h.n4 (Mode 16 / PN 8 / LightValue 0|1); shown on every variant except Grand California, no equipment gate; the last row argument tf/a.R2 is the show-rear-USB flag (probably the divider, unverified). Owed: set DOOR_CONTACT on the fake unit and watch this row. The 2026-09-16 session saw no write on tapping it."
+    evidence: APP-OBSERVED 2026-09-27 (row); source = DECOMPILE (#154, 2026-10-06)
 
   - id: behaviorInfoSection
     type: section

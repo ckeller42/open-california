@@ -283,7 +283,7 @@
           "id": "profileTiles",
           "type": "button",
           "label": null,
-          "range": "A..D",
+          "range": "A..D = FAVORITE 1/5/6/7",
           "controls": {
             "field": "ProfileNumber",
             "action": "SET_BRIGHTNESS (save, long-press) / SET_PROFILE (apply)"

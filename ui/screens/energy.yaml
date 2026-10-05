@@ -79,7 +79,7 @@ widgets:
     range: "0..3 (2-bit OperationMode field, offset MERGED_AMBIGUOUS)"
     controls: {field: OperationMode, action: null}
     elements: [energyMode_eco_text, energyMode_max_text, energyMode_normal_text, energyMode_text]
-    constraints: "Chevron row 'Energy Mode: Normal' expanding to an inline radio group. Normal / Max ALWAYS; ECO only when zj/c.N0 is true — DECOMPILE-VERIFIED (ak/a.java:712-716: ak/a.b reads N0 and conditionally prepends bf.c.X ECO_MODE); the SOURCE of N0 (account/config vs vehicle) is unresolved, next step a SootUp def-use trace of N0's writer. APP-OBSERVED 2026-09-27 (screens 58-59): ECO absent with EnergyModeNotSelectable=0, PvInstalled=1 and CarVariant=2 alike. EnergyModeNotSelectable is decoded but never read by any UI (dead). Max frame 10 -> 30 APP-OBSERVED 2026-09-16."
+    constraints: "Chevron row 'Energy Mode: Normal' expanding to an inline radio group. Normal / Max ALWAYS; ECO only when zj/c.N0 is true — DECOMPILE-VERIFIED (ak/a.java:712-716: ak/a.b reads N0 and conditionally prepends bf.c.X ECO_MODE); the SOURCE of N0 is RESOLVED (#154): 1602 bit 10 PvInstalled. Likely stale first read (decompile cross-check 2026-10-06, enigma 46f982d3): ak/a.b reads N0's raw value (ak/a.java:714) before :197 subscribes it, so the first visit sees the seed; retest a second Energy visit with PvInstalled=1. APP-OBSERVED 2026-09-27 (screens 58-59): ECO absent with EnergyModeNotSelectable=0, PvInstalled=1 and CarVariant=2 alike. EnergyModeNotSelectable is decoded but never read by any UI (dead). Max frame 10 -> 30 APP-OBSERVED 2026-09-16."
     evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE
 
   - id: vehicleInfoListItems
