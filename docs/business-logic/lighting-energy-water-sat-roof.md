@@ -228,7 +228,9 @@ with L5 = kitchen: the wake-up area AREA_2 "Kitchen background lighting" maps to
    `D0 := (LightValue == 1)` (vineflower `dg/a.java:293-306`, exposed as `s4()`). **This flag is the camping page's
    sliding-door row** on a California 7. See `climate-stairs.md` §camping. calictl: `door_contact on|off`
    (`control._lighting`), pinned by `T_LIGHT_DOOR_CONTACT`, mock-tested — app recording OWED; no CarVariant gate
-   (the app gates the page on its onboarding model, not on BLE). Camping-page row gates (decompile cross-check 2026-10-06, enigma `46f982d3`): shown on
+   in the builder/CLI (the app gates the page on its onboarding model, not on BLE). The web UI hides the row
+   when the live BLE `CarVariant` is Grand California (2), the nearest available stand-in for that onboarding
+   model (this T7 reads 4, so it is shown). Camping-page row gates (decompile cross-check 2026-10-06, enigma `46f982d3`): shown on
    every variant except Grand California (`wh/c.h0`, `bc/a.java:117-140`), no equipment gate; the whole camping
    page is blocked by "Only possible when stationary" while 1202 `Enable` (terminal-15 mirror) is set
    (`ut/hf.java:68-80`).
@@ -270,8 +272,10 @@ The unit reports its lighting configuration in specific 1502 frames: Mode 20 (wa
 REQUEST_CONFIG reply, favourite bits 0–6 in `LightValue`). The state char holds one frame at a time, so
 `serve` carries these keys across later frames (`semantics.lighting_config`, `R_LIGHT_CONFIG_LATCH`) and
 surfaces them as `lighting.wakeup` / `door_contact` / `favourites_stored`. The latch takes **only the
-unit's own 1502 frames**, never calictl's write (ruling R4: an echo is no proof). calictl no longer sends
-REQUEST_CONFIG, so `favourites_stored` is usually unknown (a save of N adds bit N only when the bits are
+unit's own 1502 frames** (polls + pushes), never calictl's write (ruling R4; if the state char echoes config
+writes, a poll could still latch an unapplied write — van check). The daemon sends REQUEST_CONFIG
+only to learn the wake-up config before a wake-up edit (ruling R5), so `favourites_stored` is otherwise
+usually unknown (a save of N adds bit N only when the bits are
 already known). The mock stores 7 favourite slots (empty slot = ACK-and-ignore), the wake-up config and the
 door flag, and sends each config change as a **one-off** 1502 frame (wake-up / door echo, save and activate
 acks, REQUEST_CONFIG reply) — not re-readable state. Whether the **real unit** echoes these frames this way

@@ -235,3 +235,11 @@ def test_lighting_state_surfaces_wakeup_door_contact_and_favourites():
     assert wake["wakeup"]["areas"] == [1]
     carried = semantics.lighting({**_st(REC_STATE_HEX), "DoorContact": 1, "FavouritesStored": 0b11})
     assert carried["door_contact"] is True and carried["favourites_stored"] == [1, 2]
+
+
+def test_an_echoed_request_shaped_mode12_frame_is_not_a_favourites_reply():
+    """The app's own REQUEST_CONFIG (Mode 12, PN 13, LightValue 0) must never latch "all empty"."""
+    req = {"Mode": 12, "ProfileNumber": 13, "LightValue": 0}
+    assert "FavouritesStored" not in semantics.lighting_config(None, req)
+    reply = {"Mode": 12, "ProfileNumber": 9, "LightValue": 0b101}
+    assert semantics.lighting_config(None, reply)["FavouritesStored"] == 0b101

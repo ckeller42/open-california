@@ -245,7 +245,7 @@ function semLightingConfig(d) {
   const mode = semGet(d, "Mode"), pn = semGet(d, "ProfileNumber"), lv = semGet(d, "LightValue"), ts = semGet(d, "Timestamp");
   if (mode === 20 && lv !== null && ts !== null) { out.WakeupTimestamp = ts; out.WakeupLightValue = lv; }
   else if (mode === 16 && pn === 8 && lv !== null) out.DoorContact = lv;
-  else if (mode === 12 && lv !== null) out.FavouritesStored = lv & 0x7f;
+  else if (mode === 12 && lv !== null && pn !== 13) out.FavouritesStored = lv & 0x7f;
   else if (mode === 4 && pn !== null && pn >= 1 && pn <= 7 && "FavouritesStored" in out) out.FavouritesStored |= 1 << (pn - 1);
   return out;
 }

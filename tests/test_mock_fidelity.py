@@ -1035,3 +1035,40 @@ def test_request_config_reply_comes_after_the_save_ack():
     assert protocol.decode(_funcs()["lighting"], pushes[-1])["LightValue"] & 1 == 1
     d = u.decoded("lighting")  # nothing sticky: reads still return the real lighting state
     assert d["ProfileNumber"] == 9 and d["Mode"] not in (4, 12, 20)
+
+
+def test_request_config_reply_also_reports_the_wakeup_and_door_frames():
+    """The app awaits 6 frames after REQUEST_CONFIG and fills its wake-up/door state from them
+    (decompile d0 / F0): after the Mode-12 favourites frame the mock re-reports the stored Mode-20
+    wake-up and the Mode-16/PN-8 door frame (only when set).
+
+    .. test:: REQUEST_CONFIG reply re-reports wake-up and door
+       :id: T_MOCK_LIGHT_REQUEST_CONFIG_FULL
+       :links: R_LIGHT_FAVOURITE
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")
+    assert [protocol.decode(_funcs()["lighting"], p)["Mode"] for p in pushes] == [12]  # nothing stored yet
+    u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "wakeup", "07:00 on", {}))
+    u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "door_contact", "on", {}))
+    pushes.clear()
+    _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")
+    got = [protocol.decode(_funcs()["lighting"], p) for p in pushes]
+    assert [(g["Mode"], g.get("ProfileNumber")) for g in got][:1] == [(12, 9)]
+    assert [g["Mode"] for g in got] == [12, 20, 16]
+    assert got[1]["LightValue"] & 1 == 1 and got[2]["ProfileNumber"] == 8 and got[2]["LightValue"] == 1
+
+
+def test_set_color_is_acked_on_1502():
+    """dg/h.l3 step (a) awaits an ack for SET_COLOR (Mode 6, PN N)."""
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, "010600000000000900000005e00eeeee")  # SET_COLOR red for favourite 1
+    _w(u, control.LIGHT_COMMIT.hex())
+    got = [protocol.decode(_funcs()["lighting"], p) for p in pushes]
+    assert [(g["Mode"], g["ProfileNumber"]) for g in got] == [(6, 1)]

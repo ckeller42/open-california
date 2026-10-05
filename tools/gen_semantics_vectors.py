@@ -319,6 +319,22 @@ def _hand_cases() -> list:
                 {"Mode": 20, "ProfileNumber": 14, "Timestamp": 0x6AC49C70, "LightValue": lv},
             )
         )
+    for hh, mm in ((0, 0), (13, 37), (23, 59)):  # other times: hour/minute decode, not just 07:00
+        c.append(
+            (
+                "lighting/wakeup-time-%02d%02d" % (hh, mm),
+                "lighting",
+                {
+                    "Mode": 20,
+                    "ProfileNumber": 14,
+                    "Timestamp": 0x6AC40000 + hh * 3600 + mm * 60,
+                    "LightValue": 0x1311,
+                },
+            )
+        )
+    c.append(
+        ("lighting/favourites-request-echo", "lighting", {"Mode": 12, "ProfileNumber": 13, "LightValue": 0})
+    )
     for lv in (0, 1):  # door contact (Mode 16 / PN 8)
         c.append(
             ("lighting/door-contact-%d" % lv, "lighting", {"Mode": 16, "ProfileNumber": 8, "LightValue": lv})

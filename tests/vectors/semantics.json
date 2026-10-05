@@ -10765,6 +10765,181 @@
     "brightness_zone_7": null,
     "brightness_zone_8": null,
     "brightness_zone_9": null,
+    "door_contact": null,
+    "favourites_stored": null,
+    "installed": true,
+    "mode": 20,
+    "profile": 14,
+    "wakeup": {
+     "areas": [
+      1,
+      2
+     ],
+     "brightness": 1,
+     "colour": 1,
+     "enabled": true,
+     "hour": 19,
+     "minute": 52,
+     "ramp": 0,
+     "time": "19:52"
+    }
+   },
+   "fields": {
+    "LightValue": 4881,
+    "Mode": 20,
+    "ProfileNumber": 14,
+    "Timestamp": 1791229952
+   },
+   "function": "lighting",
+   "id": "lighting/wakeup-time-0000"
+  },
+  {
+   "expect": {
+    "any_on": false,
+    "brightness_zone_1": null,
+    "brightness_zone_10": null,
+    "brightness_zone_11": null,
+    "brightness_zone_12": null,
+    "brightness_zone_13": null,
+    "brightness_zone_14": null,
+    "brightness_zone_15": null,
+    "brightness_zone_16": null,
+    "brightness_zone_2": null,
+    "brightness_zone_3": null,
+    "brightness_zone_4": null,
+    "brightness_zone_5": null,
+    "brightness_zone_6": null,
+    "brightness_zone_7": null,
+    "brightness_zone_8": null,
+    "brightness_zone_9": null,
+    "door_contact": null,
+    "favourites_stored": null,
+    "installed": true,
+    "mode": 20,
+    "profile": 14,
+    "wakeup": {
+     "areas": [
+      1,
+      2
+     ],
+     "brightness": 1,
+     "colour": 1,
+     "enabled": true,
+     "hour": 9,
+     "minute": 29,
+     "ramp": 0,
+     "time": "09:29"
+    }
+   },
+   "fields": {
+    "LightValue": 4881,
+    "Mode": 20,
+    "ProfileNumber": 14,
+    "Timestamp": 1791278972
+   },
+   "function": "lighting",
+   "id": "lighting/wakeup-time-1337"
+  },
+  {
+   "expect": {
+    "any_on": false,
+    "brightness_zone_1": null,
+    "brightness_zone_10": null,
+    "brightness_zone_11": null,
+    "brightness_zone_12": null,
+    "brightness_zone_13": null,
+    "brightness_zone_14": null,
+    "brightness_zone_15": null,
+    "brightness_zone_16": null,
+    "brightness_zone_2": null,
+    "brightness_zone_3": null,
+    "brightness_zone_4": null,
+    "brightness_zone_5": null,
+    "brightness_zone_6": null,
+    "brightness_zone_7": null,
+    "brightness_zone_8": null,
+    "brightness_zone_9": null,
+    "door_contact": null,
+    "favourites_stored": null,
+    "installed": true,
+    "mode": 20,
+    "profile": 14,
+    "wakeup": {
+     "areas": [
+      1,
+      2
+     ],
+     "brightness": 1,
+     "colour": 1,
+     "enabled": true,
+     "hour": 19,
+     "minute": 51,
+     "ramp": 0,
+     "time": "19:51"
+    }
+   },
+   "fields": {
+    "LightValue": 4881,
+    "Mode": 20,
+    "ProfileNumber": 14,
+    "Timestamp": 1791316292
+   },
+   "function": "lighting",
+   "id": "lighting/wakeup-time-2359"
+  },
+  {
+   "expect": {
+    "any_on": false,
+    "brightness_zone_1": null,
+    "brightness_zone_10": null,
+    "brightness_zone_11": null,
+    "brightness_zone_12": null,
+    "brightness_zone_13": null,
+    "brightness_zone_14": null,
+    "brightness_zone_15": null,
+    "brightness_zone_16": null,
+    "brightness_zone_2": null,
+    "brightness_zone_3": null,
+    "brightness_zone_4": null,
+    "brightness_zone_5": null,
+    "brightness_zone_6": null,
+    "brightness_zone_7": null,
+    "brightness_zone_8": null,
+    "brightness_zone_9": null,
+    "door_contact": null,
+    "favourites_stored": null,
+    "installed": true,
+    "mode": 12,
+    "profile": 13,
+    "wakeup": null
+   },
+   "fields": {
+    "LightValue": 0,
+    "Mode": 12,
+    "ProfileNumber": 13
+   },
+   "function": "lighting",
+   "id": "lighting/favourites-request-echo"
+  },
+  {
+   "expect": {
+    "any_on": false,
+    "brightness_zone_1": null,
+    "brightness_zone_10": null,
+    "brightness_zone_11": null,
+    "brightness_zone_12": null,
+    "brightness_zone_13": null,
+    "brightness_zone_14": null,
+    "brightness_zone_15": null,
+    "brightness_zone_16": null,
+    "brightness_zone_2": null,
+    "brightness_zone_3": null,
+    "brightness_zone_4": null,
+    "brightness_zone_5": null,
+    "brightness_zone_6": null,
+    "brightness_zone_7": null,
+    "brightness_zone_8": null,
+    "brightness_zone_9": null,
     "door_contact": false,
     "favourites_stored": null,
     "installed": true,

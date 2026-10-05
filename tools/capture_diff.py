@@ -46,7 +46,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from calictl import control, overrides, protocol, trace
+from calictl import control, overrides, protocol, semantics, trace
 
 # ATT write opcodes (method bits): 0x12 Write Request, 0x52 Write Command.
 _ATT_WRITE_OPCODES = {0x12, 0x52}
@@ -420,7 +420,10 @@ def check_recording(
         fn, hx = ev.get("fn"), ev.get("hex")
         if kind in ("read", "notify"):
             if fn in funcs and hx and hx != trace.REDACTED_VIN_HASH:
-                state[fn] = protocol.decode(funcs[fn], bytes.fromhex(hx))
+                decoded = protocol.decode(funcs[fn], bytes.fromhex(hx))
+                if fn == "lighting":  # carry the config latch across later frames, exactly like serve
+                    decoded = {**decoded, **semantics.lighting_config(state.get(fn), decoded)}
+                state[fn] = decoded
             continue
         if kind != "write" or ev.get("char") in SKIP_CHARS:
             continue

@@ -32,8 +32,9 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
     that the mock is connectable at all (``drop()`` = deep sleep refuses the link).
   * **Lighting configuration:** favourites 1-7 (save = store without a live change, activate =
     apply + 1502 ack, empty = ACK-and-ignore), the wake-up config (Mode 20) and the door-contact
-    flag (Mode 16 / PN 8) are stored and echoed in the state char; REQUEST_CONFIG (Mode 12)
-    answers with the favourite bits in LightValue.
+    flag (Mode 16 / PN 8) are stored, and each write is ECHOED as a one-off 1502 frame (never
+    re-readable state); SET_COLOR is acked (Mode 6 / PN N). REQUEST_CONFIG (Mode 12) answers with
+    the favourite bits in LightValue, then re-reports the stored wake-up and door frames.
   * **Roof (1401/1402):** the app-style SafetyCounter stream is modelled — validity needs a
     monotonic, still-advancing counter (two increments), a restart drops it, a validated counter
     withholds the motor ``ROOF_WITHHOLD_S`` (~3 s, SEMI-VERIFIED), a held move steps ``Position``
@@ -682,11 +683,27 @@ class MockCamperUnit:
                     event=True,
                 )
                 return
-            if mode == control.LIGHT_MODE_REQUEST_CONFIG:  # d0: reply = Mode 12 + favourite bits
+            if mode == control.LIGHT_MODE_REQUEST_CONFIG:  # d0: reply = Mode 12 + favourite bits, then
+                # the stored wake-up (Mode 20) and door-contact (Mode 16/PN 8) frames — the app awaits
+                # 6 frames and fills its wake-up/door state (F0) from them. The exact 6-frame
+                # composition of the real unit is not captured; these are the ones the app decodes.
                 self.push("lighting", {"Mode": mode, "LightValue": self.favourite_bits()}, event=True)
+                if self.wakeup is not None:
+                    self.push("lighting", {"Mode": control.LIGHT_MODE_WAKEUP_TIME, **self.wakeup}, event=True)
+                if self.door_contact:
+                    self.push(
+                        "lighting",
+                        {
+                            "Mode": LIGHT_MODE_SET_PROFILE,
+                            "ProfileNumber": control.LIGHT_PROFILE_DOOR_CONTACT,
+                            "LightValue": self.door_contact,
+                        },
+                        event=True,
+                    )
                 return
             if mode == control.LIGHT_MODE_SET_COLOR and pn in self.favourites:  # l3 step a
                 self.favourite_colour[pn] = lv
+                self.push("lighting", {"Mode": mode, "ProfileNumber": pn}, event=True)  # its own ack
                 return
             if mode == LIGHT_MODE_SET_BRIGHTNESS and pn in self.favourites:  # l3 step b: SAVE, not live
                 zones = {

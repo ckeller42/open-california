@@ -356,15 +356,24 @@ app recolours a stored favourite, so use `save_profile N <colour>` (`set lightin
 optimistically by `m0`. So a time/area/brightness/ramp/colour edit carries the **unit-reported** enabled
 bit; only the switch changes it. With no Mode-20 frame decoded yet, `F0` still holds its seed
 (OFF, 00:00), so the app sends enabled=0 — calictl's time-only exception (enabled=0, reproduces the
-recorded `0x1100`) matches; `on`/`off` without a known time is refused. After the write the app waits
+recorded `0x1100`) is what the **builder** still produces (the recording replay needs it), but the **gate**
+refuses a wake-up edit (no `on`/`off`) while no unit-reported config is known (ruling R5, `WAKEUP_UNKNOWN`:
+never a silent disarm). The daemon first does what the app's lighting page does: it sends REQUEST_CONFIG
+(Mode 12 + commit) on the live session, latches the reply frames (`serve._on_push`) and re-checks; with no
+session, or after the CLI direct path (no latch at all), the edit is refused unless the user gives an
+explicit `on`/`off`. `on`/`off` without a known time is refused too. After the write the app waits
 ≤ 2000 ms for any 1502 frame, then checks `F0` 3 × 1000 ms; if the unit has not echoed a matching
 Mode-20 frame it reverts and toasts "Something went wrong" — so the **real unit must echo Mode 20 within
 ~3 s** (van check). A Task-7 recording (time edit while enabled) is still owed as wire evidence.
 
 **Lighting config latch (ruling R4):** the wake-up (Mode 20), door-contact (Mode 16 / PN 8) and
-stored-favourite bits (Mode 12 reply) are latched by `serve` **only from the unit's own 1502
-frames** (`semantics.lighting_config`), never from calictl's own write — a write-through echo is no
-proof of actuation, so an ACK-but-not-applied write leaves the latch unchanged.
+stored-favourite bits (Mode 12 reply) are latched by `serve` **only from 1502 frames the unit
+itself sent** (polls + pushes, `semantics.lighting_config`), never from the frame calictl wrote — an
+ACK-but-not-applied write leaves the latch unchanged. Caveat (van check): the state char may itself
+write-through-echo config frames, as it does for SET_BRIGHTNESS, in which case a poll would latch calictl's
+own (unapplied) write; the mock does not model that. The echoed REQUEST shape (Mode 12 / PN 13) is never
+read as a favourites reply. The wake-up date (today vs tomorrow) follows the **daemon host's** clock, so
+buspi's timezone must equal the van's.
 
 **State readback surfaced** (decoded straight from the state chars, cross-checked against the
 app decoders): cooler `quiet_from`/`quiet_to`/`timer_hour`/`timer_min` (`vf/c.java:321 e()`,

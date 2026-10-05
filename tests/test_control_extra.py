@@ -362,13 +362,31 @@ def test_cli_parser_takes_multi_word_values():
     assert p.parse_args(["set", "roof", "open"]).value == []
 
 
-def test_cli_wakeup_time_edit_is_the_app_time_picker_frame(monkeypatch):
-    """CLI and daemon build the same frame: the app's recorded time-picker write (enabled=0)."""
+def test_cli_wakeup_time_edit_without_a_known_config_is_refused(capsys):
+    """Ruling R5: the CLI has no latch, so a time edit with no on/off is refused (never a silent
+    disarm); an explicit switch token still builds the app's recorded time-picker frame."""
+    assert (
+        _cli_run(["set", "lighting", "wakeup", "07:00"], "0c1000000000000000000000d00ddddd") == []
+    )  # nothing written
+    assert "not known yet" in capsys.readouterr().err
+
+
+def test_cli_wakeup_time_with_explicit_off_is_the_app_time_picker_frame(monkeypatch):
     import datetime
 
     monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
-    calls = _cli_run(["set", "lighting", "wakeup", "07:00"], "0c1000000000000000000000d00ddddd")
+    calls = _cli_run(["set", "lighting", "wakeup", "07:00", "off"], "0c1000000000000000000000d00ddddd")
     assert calls == [(None, "0e146ac49c701100eeeeeeeeeeeeeeee")]
+
+
+def test_wakeup_edit_with_no_unit_reported_config_is_refused():
+    """Ruling R5: never silently disarm. Edits (no on/off) need a unit-reported config; an explicit
+    on/off carries its own enabled state and passes."""
+    for v in ("07:00", "07:00 1 5 10"):  # (no-time edits: the builder refuses "not known yet")
+        assert "not known yet" in control.command_precondition("lighting", "wakeup", v, {"lighting": {}})
+    assert control.command_precondition("lighting", "wakeup", "07:00 off", {"lighting": {}}) is None
+    known = {"lighting": {"WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1301}}
+    assert control.command_precondition("lighting", "wakeup", "07:00", known) is None
 
 
 def test_wakeup_edit_carries_the_unit_reported_enabled_state():

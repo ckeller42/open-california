@@ -414,3 +414,18 @@ def test_actuate_preface_failure_stops_the_main_frame(fake_bleak, monkeypatch):
     with pytest.raises(RuntimeError):
         asyncio.run(device.CamperDevice("11:22:33:44:55:66").actuate(f, frame, verify=False, preface=pre))
     assert not [d for op, u, d in fake_bleak.instances[0].calls if op == "write" and u == f.control_char]
+
+
+def test_persistent_session_actuate_forwards_the_preface():
+    """The daemon's main path: PersistentSession.actuate must hand the preface to _actuate_on."""
+    seen = {}
+
+    class FakeDev:
+        async def _actuate_on(self, client, func, frame, **kw):
+            seen.update(kw)
+            return None
+
+    sess = device.PersistentSession(FakeDev())
+    sess._client = object()
+    asyncio.run(sess.actuate(object(), b"\x01", preface=b"\x02", follow=b"\x03"))
+    assert seen["preface"] == b"\x02" and seen["follow"] == b"\x03"

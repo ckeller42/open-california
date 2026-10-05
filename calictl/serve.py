@@ -239,7 +239,7 @@ class ServeBackend:
         from . import control  # lazy
 
         reason = control.command_precondition(function, what, value, self._s._last or {})
-        if reason:
+        if reason and reason != control.WAKEUP_UNKNOWN:  # the daemon pulls the config first (R5)
             return {
                 "ok": True,
                 "applied": False,
@@ -250,6 +250,16 @@ class ServeBackend:
             }
         fut = asyncio.run_coroutine_threadsafe(self._s.on_command(function, what, value), self._loop)
         applied = fut.result(timeout=90)  # on_command returns applied-ness
+        reason = control.command_precondition(function, what, value, self._s._last or {})
+        if reason == control.WAKEUP_UNKNOWN:  # still unknown after the pull: refused, not "Sent"
+            return {
+                "ok": True,
+                "applied": False,
+                "refused": reason,
+                "state": None,
+                "error": None,
+                "function": function,
+            }
         interp = self.state().get(function)
         return {"ok": True, "applied": applied, "state": interp, "error": None, "function": function}
 
@@ -336,7 +346,7 @@ class Server:
             self.dev,
             interval=self.interval,
             persistent=persistent,
-            on_push=self._observer.on_push,
+            on_push=self._on_push,
             ui_idle_s=_UI_IDLE_S,
         )
         # Auto camper mode — RESTORE camping after you park (the unit refuses camping-on while driving).
@@ -757,6 +767,36 @@ class Server:
             )
         return states
 
+    def _on_push(self, uuid, data):
+        """Every notification of the persistent session: the camping observer, plus the lighting
+        config latch — the unit's own 1502 frames (wake-up / door contact / favourite bits) are
+        latched here as well as on polls, so a REQUEST_CONFIG reply (several frames in a row, of which
+        the session cache keeps only the last) is not lost. Needs a cached lighting decode."""
+        self._observer.on_push(uuid, data)
+        f = self.funcs.get("lighting")
+        cur = self._last.get("lighting")
+        if f is not None and cur and uuid == str(f.state_char).lower():
+            decoded = protocol.decode(f, data)
+            self._last = {**self._last, "lighting": {**cur, **semantics.lighting_config(cur, decoded)}}
+
+    async def _pull_lighting_config(self):
+        """The app's lighting page pulls the unit's configuration with REQUEST_CONFIG (Mode 12 + commit)
+        and fills its wake-up/door/favourite state from the reply frames. Do the same on the live
+        session (no session: nothing to latch from, so nothing is sent) and wait briefly for the
+        wake-up config to arrive via :meth:`_on_push`. Caller holds the _ble lock."""
+        from . import control  # lazy
+
+        sess = self._live_session()
+        if sess is None:
+            return
+        f = self.funcs["lighting"]
+        await sess.actuate(f, control.LIGHT_REQUEST_CONFIG, verify=False, follow=control.LIGHT_COMMIT)
+        deadline = time.monotonic() + _FAST_CONFIRM_S
+        while time.monotonic() < deadline:
+            if (self._last.get("lighting") or {}).get("WakeupTimestamp") is not None:
+                return
+            await asyncio.sleep(0.05)
+
     async def on_command(self, function, what, value):
         """Build + write a control frame, then read back and report applied-ness.
 
@@ -809,6 +849,10 @@ class Server:
             if last is None:
                 return None
             reason = control.command_precondition(function, what, value, self._last)
+            if reason == control.WAKEUP_UNKNOWN:  # like the app: pull the unit's config, then re-check
+                await self._pull_lighting_config()
+                last = self._last.get(function) or last
+                reason = control.command_precondition(function, what, value, self._last)
             if reason:
                 log.warning("refusing %s/%s: %s" % (function, what, reason))
                 return None
@@ -995,7 +1039,12 @@ class Server:
             cur = notif.get(key)
             if cur is not None and cur is not before:  # a fresh push arrived
                 decoded = protocol.decode(f, cur)
-                decoded = {**decoded, **semantics.lighting_config(self._last.get(function), decoded)}
+                prev = self._last.get(function) or {}
+                decoded = {**decoded, **semantics.lighting_config(prev, decoded)}
+                if what in ("save_profile", "wakeup", "door_contact"):
+                    # these only ack/echo CONFIG frames (Mode 4/PN N, Mode 20/PN 14, Mode 16/PN 8): the
+                    # active profile and mode are unchanged — only an ACTIVATE sets them
+                    decoded = {**decoded, **{k: prev[k] for k in ("ProfileNumber", "Mode") if k in prev}}
                 self._last = {**self._last, function: decoded}  # atomic rebind (web thread reads unlocked)
                 interp = semantics.interpret(function, decoded)
                 _, got, want = set_check(function, what, value, interp, decoded)

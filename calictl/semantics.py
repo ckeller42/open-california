@@ -396,7 +396,7 @@ def lighting_config(prev, frame):
         out["WakeupTimestamp"], out["WakeupLightValue"] = frame["Timestamp"], lv
     elif mode == 16 and pn == 8 and lv is not None:
         out["DoorContact"] = lv
-    elif mode == 12 and lv is not None:
+    elif mode == 12 and lv is not None and pn != 13:  # PN 13 = the app's REQUEST (echo), not a reply
         out["FavouritesStored"] = lv & 0x7F
     elif mode == 4 and pn is not None and 1 <= pn <= 7 and "FavouritesStored" in out:
         out["FavouritesStored"] |= 1 << (pn - 1)  # only ADD to known bits: never invent "empty"

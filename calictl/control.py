@@ -328,6 +328,11 @@ LIGHT_BRIGHTNESS_PROFILE = 9
 # the unit's wake state (photon-verified 2026-08-16); readback is a write-through echo, never proof.
 # Sent as the `follow` frame of device.actuate for every lighting write.
 LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
+# The app's REQUEST_CONFIG (Mode 12, PN 13; dg/h d0): the unit answers with its lighting configuration
+# (favourite bits, wake-up, door contact) as 1502 frames. Only the daemon sends it, to learn the
+# wake-up config before an edit (:data:`WAKEUP_UNKNOWN`).
+LIGHT_REQUEST_CONFIG = bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee")
+WAKEUP_UNKNOWN = "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
 
 # Friendly zone key -> BrightnessL control field. Two provenance tiers:
 #   CONFIRMED by the 2026-07-08 HCI capture (which nibble tracked each dragged slider):
@@ -464,9 +469,16 @@ def command_precondition(function, what, value, states):
         try:
             c = wakeup_request(value, states.get("lighting"))
         except ValueError:
-            c = None  # malformed: the builder reports it
-        if c and c["enabled"] and not c["areas"]:
+            return None  # malformed: the builder reports it
+        if c["enabled"] and not c["areas"]:
             return "the wake-up light needs at least one vehicle area"
+        # Ruling R5: an edit (no on/off) carries the enabled state the UNIT reported; with none
+        # reported it would silently disarm, so it is refused. The daemon first pulls the config with
+        # REQUEST_CONFIG (serve.on_command); the CLI has no latch, so it needs an explicit on|off.
+        toks = str(value).lower().split()
+        if "on" not in toks and "off" not in toks:
+            if semantics.wakeup_config(semantics.lighting_config(None, states.get("lighting") or {})) is None:
+                return WAKEUP_UNKNOWN
     # door_contact: deliberately NOT gated on vehicle.CarVariant — the app gates the sliding-door
     # page on its onboarding model, not on BLE, and this T7 reads CarVariant=4 (feature-availability.md).
     return None
