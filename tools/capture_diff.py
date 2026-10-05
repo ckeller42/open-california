@@ -301,7 +301,8 @@ APP_ONLY_HEX = {
 # yet), not raise — true for the current entries; revisit when a real builder for a gap lands.
 GAPS: dict[tuple[str, str], str] = {
     ("lighting", "wakeup"): "no calictl builder: the wake-up frame (Mode 20, Timestamp + LightValue "
-    "packing) is unknown (evidence-ledger 'lighting wake-up TIME'); sub-project 3 builds it from the recording",
+    "packing) is unknown (evidence-ledger 'lighting wake-up TIME'); sub-project 3 builds it from the recording "
+    "(tests/vectors/app/lighting-wakeup.jsonl: 07:00 -> 0e146ac49c701100...)",
 }
 TEST_IDENTITY = "C0:FF:EE:CA:11:F0"  # the fake unit's identity — the only MAC a recording may hold
 _MAC_RE = re.compile(r"\b[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\b")
