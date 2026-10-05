@@ -112,11 +112,14 @@ Cross-language codec (issue #156)
 ---------------------------------
 
 .. automodule:: tools.gen_codec_vectors
+.. automodule:: tools.gen_semantics_vectors
 .. automodule:: tools.gen_c_dict
 .. automodule:: tools.wifi_consts
 .. automodule:: tests.test_codec_vectors
 .. automodule:: tests.test_codec_parity
+.. automodule:: tests.test_semantics_js_parity
 .. automodule:: tests.test_gen_c_dict
+.. automodule:: tests.test_app_bundle
 .. automodule:: tests.test_wifi_consts
 .. automodule:: tests.test_ports_parity
 

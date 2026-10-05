@@ -46,4 +46,7 @@ CONSTS = {
     "NET_PSK_MIN": 8,
     "NET_PSK_MAX": 63,
     "NET_SCAN_MAX": 16,
+    # The satellite UI bundle (spec 2026-10-01 shared UI): gzipped calictl web UI served at GET /.
+    # A budget for the flash array and the ~1 s first load over the single-connection core.
+    "WEB_APP_GZ_MAX": 65536,
 }

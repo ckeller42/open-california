@@ -32,6 +32,7 @@
  * @property {{enabled:boolean, armed:boolean, notice:?{ts:number,msg:string}}} [auto_camper] auto-camper toggle + notice
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
+ * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state, display only)
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -234,23 +235,32 @@ menuEl.onclick = (ev) => {
   if (menuPop) { closeMenu(); return; }
   menuPop = document.createElement("div");
   menuPop.className = "menupop";
-  const pair = document.createElement("button");
-  pair.type = "button";
-  pair.textContent = /** @type {string} */ (t("Bluetooth pairing…"));
-  pair.onclick = () => { closeMenu(); openPairingWizard(); };
-  menuPop.appendChild(pair);
-  // Unpair only makes sense once a bond exists (PAIRING is fetched at load + while the wizard polls).
-  if (PAIRING && PAIRING.address) {
-    const unpair = document.createElement("button");
-    unpair.type = "button";
-    unpair.textContent = /** @type {string} */ (t("Unpair…"));
-    unpair.onclick = async () => {
-      closeMenu();
-      if (!confirm(/** @type {string} */ (t("Unpair removes the working bond; telemetry stops until re-paired. Continue?")))) return;
-      await openPairingWizard();               // show the flow while the reset runs
-      pairingAction("reset", undefined, true); // then guides straight into re-pairing (idle step)
-    };
-    menuPop.appendChild(unpair);
+  if (satellite()) {
+    // The satellite pairs over its USB console, not the web; its own device/WiFi page is /device.
+    const dev = document.createElement("button");
+    dev.type = "button";
+    dev.textContent = /** @type {string} */ (t("Device & WiFi"));
+    dev.onclick = () => { closeMenu(); location.assign("/device"); };
+    menuPop.appendChild(dev);
+  } else if (isCalictl()) {
+    const pair = document.createElement("button");
+    pair.type = "button";
+    pair.textContent = /** @type {string} */ (t("Bluetooth pairing…"));
+    pair.onclick = () => { closeMenu(); openPairingWizard(); };
+    menuPop.appendChild(pair);
+    // Unpair only makes sense once a bond exists (PAIRING is fetched at load + while the wizard polls).
+    if (PAIRING && PAIRING.address) {
+      const unpair = document.createElement("button");
+      unpair.type = "button";
+      unpair.textContent = /** @type {string} */ (t("Unpair…"));
+      unpair.onclick = async () => {
+        closeMenu();
+        if (!confirm(/** @type {string} */ (t("Unpair removes the working bond; telemetry stops until re-paired. Continue?")))) return;
+        await openPairingWizard();               // show the flow while the reset runs
+        pairingAction("reset", undefined, true); // then guides straight into re-pairing (idle step)
+      };
+      menuPop.appendChild(unpair);
+    }
   }
   // Language toggle: label names the language you'd switch TO.
   const lang = document.createElement("button");
@@ -664,6 +674,9 @@ const FEATURES = {
  * @returns {Promise<any>}
  */
 async function api(path, opts) {
+  // Defence in depth: the satellite's single-connection core serves only /api/state; never let any
+  // (future) caller fan out to a calictl-only endpoint there -- refuse before any network request.
+  if (satellite() && path !== "/api/state") throw new Error("satellite: no " + path);
   const r = await fetch(path, opts);
   return r.json();
 }
@@ -688,7 +701,13 @@ function installed(fn) {
 
 // read-only = the daemon rejects control writes (the safe default; enable with --enable-writes /
 // CALICTL_ENABLE_WRITES=1). The UI disables every control and shows a banner when true.
-const readOnly = () => !!(STATE._meta && STATE._meta.read_only);
+// Unknown runtime (no `_meta` answered yet) is treated restrictively: read-only, and no calictl-only
+// affordance (the same app.js runs on the ESP32 satellite, which must never see /api/pairing|command|...).
+const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
+// The ESP32 satellite (semantics.js adaptSatellite): no pairing, history, auto-camper or session API.
+const satellite = () => !!(STATE._meta && STATE._meta.satellite);
+// A calictl daemon has answered (positively known; not the satellite, not still unknown).
+const isCalictl = () => !!(STATE._meta && !STATE._meta.satellite);
 
 /**
  * @param {string} msg
@@ -711,7 +730,12 @@ async function refreshState(force) {
     setStatus("offline", "error");
     return;
   }
-  STATE = next;
+  // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
+  STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
+  // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
+  // menu's "Unpair…". Taken the first time a calictl `_meta` answers -- also when the first poll
+  // failed (daemon restarting) -- and never on the satellite or an unknown runtime.
+  if (isCalictl() && !pairingFetched) { pairingFetched = true; await pairingFetch(); }
   // Auto-camper give-up/stand-down notice: the daemon stamps a one-time {ts,msg} when it stands
   // down (low battery) or gives up (keeps dropping). Show it as a toast once.
   const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
@@ -1084,6 +1108,7 @@ let pairingReady = false;              // "I'm on that screen" checkbox
 let pairingLoading = false;
 /** @type {{state:string, attempts:number, error:string|null, address:string|null, radio_busy?: boolean}|null} */
 let PAIRING = null;
+let pairingFetched = false;            // the one-off load-time fetch (refreshState) has run
 /** @type {ReturnType<typeof setInterval>|null} */
 let pairingTimer = null;
 
@@ -1340,10 +1365,11 @@ function render() {
   if (sp) app.appendChild(sp);
   const ob = offlineBanner();
   if (ob) app.appendChild(ob);
-  if (readOnly()) {
+  if (readOnly() && STATE._meta) {
     const b = document.createElement("div");
     b.className = "readonly";
-    b.textContent = /** @type {string} */ (t("🔒 Read-only — control is disabled on this daemon."));
+    b.textContent = /** @type {string} */ (satellite() ? t("Satellite — display only")
+      : t("🔒 Read-only — control is disabled on this daemon."));
     app.appendChild(b);
   }
   const fw = STATE._meta && STATE._meta.firmware;
@@ -1415,10 +1441,13 @@ function renderDashboard() {
     const b = document.createElement("div"); b.className = "card"; b.id = "unpaired-banner";
     const msg = document.createElement("span"); msg.className = "lbl";
     msg.textContent = /** @type {string} */ (t("No camper unit is paired yet."));
-    const go = document.createElement("button"); go.type = "button"; go.className = "btn";
-    go.textContent = /** @type {string} */ (t("Set up remote control"));
-    go.onclick = () => openPairingWizard();
-    b.append(msg, go);
+    b.append(msg);
+    if (isCalictl()) {   // the satellite pairs over its console: no web wizard to open
+      const go = document.createElement("button"); go.type = "button"; go.className = "btn";
+      go.textContent = /** @type {string} */ (t("Set up remote control"));
+      go.onclick = () => openPairingWizard();
+      b.append(go);
+    }
     app.appendChild(b);
   }
   const summary = renderSummary();
@@ -1618,14 +1647,14 @@ function renderFeature(fn) {
     app.appendChild(card);
   }
   if (f.roof) app.appendChild(roofControls(s));
-  if (fn === "campingmode") app.appendChild(autoCamperCard());
+  if (fn === "campingmode" && isCalictl()) app.appendChild(autoCamperCard());
   if (f.readouts && f.readouts.length) {
     const card = document.createElement("div");
     card.className = "card";
     for (const r of f.readouts) card.appendChild(renderReadout(r, s));
     app.appendChild(card);
   }
-  if (f.chart) app.appendChild(energyChart());
+  if (f.chart && isCalictl()) app.appendChild(energyChart());   // no /api/history on the satellite
 }
 
 /**
@@ -1959,13 +1988,7 @@ function roofControls(s) {
 }
 
 async function main() {
-  await refreshState(true);
-  // One-off (not the recurring 1 s poll, which only runs once the wizard is opened): needed just
-  // to decide the setup card's prominence if it's opened, and (`_meta.paired`) the dashboard's
-  // unpaired banner. Task 11 replaced the old "auto-open the card on true first-run" behaviour
-  // with that persistent banner -- a working install never had pairing chrome forced open, and
-  // now neither does a fresh one; the banner is the entry point, same as the ⋮ menu.
-  await pairingFetch();
+  await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
   render();
   setInterval(() => refreshState(false), 2000);
 }

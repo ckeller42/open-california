@@ -32,6 +32,7 @@ WANT = {
     "NET_PSK_MIN": 8,
     "NET_PSK_MAX": 63,
     "NET_SCAN_MAX": 16,
+    "WEB_APP_GZ_MAX": 65536,
 }
 
 

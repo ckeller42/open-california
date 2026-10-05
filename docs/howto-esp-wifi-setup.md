@@ -58,8 +58,10 @@ From now on the satellite joins your network by itself every time it starts.
 
 ## Finding the satellite on your network
 
-Open **<http://calictl-esp.local>** from any device on the same network. The page refreshes every
-2 seconds:
+Open **<http://calictl-esp.local>** from any device on the same network: after setup it shows the
+calictl UI — the same tiles as on the Pi, display only (every control is greyed out). Device and
+WiFi details are at **<http://calictl-esp.local/device>** (also in the ⋮ menu, "Device & WiFi").
+That page refreshes every 2 seconds:
 
 ![The satellite's status page on the home network: device state and the camper unit's functions](screenshots/esp-status-page.png)
 

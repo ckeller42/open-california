@@ -131,12 +131,15 @@ reads its state without going through buspi at all. It reuses the *design*, not 
 against the same golden vectors, and the frame codec is the same generated C already used for
 codec parity (`csrc/`, issue #156) — so the dictionary stays the single source of truth for both
 consumers. It is **read-only** (only the `1003` heartbeat is ever written) and, as of this writing,
-proven only on a Linux host build against a fake unit and in QEMU — no real hardware run yet. It
+proven on a Linux host build against a fake unit, in QEMU, and on a real CoreS3 against the Bumble
+mock unit over real BLE — not yet against the real camper unit. It
 also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
-then it serves a read-only status page and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
+then it serves a read-only status page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)
-on the host tier, where a scripted fake WiFi stands in for the radio, and on the chip. It has no
-control endpoint and nothing talks to buspi; see the
+on the host tier, where a scripted fake WiFi stands in for the radio, and on the chip. In station mode
+the satellite serves the same calictl web UI at `/` (display only); `calictl/webui/semantics.js`
+twins `semantics.py` in the browser, and golden vectors (`tools/gen_semantics_vectors.py`) keep the
+two equal. It has no control endpoint and nothing talks to buspi; see the
 [WiFi how-to](https://ckeller42.github.io/open-california/howto-esp-wifi-setup.html). See
 [the firmware docs](https://ckeller42.github.io/open-california/firmware.html) for the test tiers
 and what each does and doesn't prove.

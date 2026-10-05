@@ -22,6 +22,7 @@
  * mid-request is closed without a response. Every response carries Content-Type, Content-Length and
  * Connection: close; a response with a location (302) also carries Location. A 302 MUST set
  * location (see 500 above).
+ * A response with a content_encoding also carries Content-Encoding and Cache-Control: no-cache.
  *
  * Request views (method, path, query, body) are NUL-terminated and point into the core's request
  * buffer; query is "" when the target has no '?'. The buffer is not touched again until the
@@ -45,8 +46,11 @@ extern "C" {
 #define CALI_HTTP_IDLE_MS 5000u
 
 typedef struct { const char *method; const char *path; const char *query; const char *body; size_t body_len; } cali_http_req_t;
-/* Pre-filled before the handler runs: status 200, content_type "text/plain", no body, no location. */
-typedef struct { int status; const char *content_type; const char *body; size_t body_len; const char *location; } cali_http_resp_t;
+/* Pre-filled before the handler runs: status 200, content_type "text/plain", no body, no location,
+ * no content_encoding. A content_encoding (e.g. "gzip" for a pre-compressed static body) adds
+ * "Content-Encoding: <it>" and "Cache-Control: no-cache" (an encoded body is an asset baked into the
+ * image: a reflash must show on the next load); without it the headers are unchanged. */
+typedef struct { int status; const char *content_type; const char *body; size_t body_len; const char *location; const char *content_encoding; } cali_http_resp_t;
 typedef int (*cali_http_handler_t)(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx);   /* 1 = handled */
 
 /* Listens on port: 0 ok; -1 tcp_listen failed, and cali_http_poll stays a no-op. */

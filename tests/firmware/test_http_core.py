@@ -329,3 +329,11 @@ def test_header_overflow_falls_back_to_500(http_cli):
     out = run(http_cli, ["GET /longtype HTTP/1.1\r\n\r\n"])
     assert out.startswith("HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n")
     assert "ttttt" not in out
+
+
+def test_content_encoding_adds_encoding_and_no_cache(http_cli):
+    out = run(http_cli, ["GET /gz HTTP/1.1\r\nHost: x\r\n\r\n"])
+    assert out == (
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n"
+        "Content-Encoding: gzip\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\nhi"
+    )
