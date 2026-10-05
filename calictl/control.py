@@ -438,6 +438,27 @@ def command_precondition(function, what, value, states):
             return "the unit reports the roof as %s — move refused" % roof["alert"].replace("_", " ")
         if roof["position_name"] == "error":
             return "the unit reports a roof position error — move refused"
+    # Favourites: refuse only a slot the unit positively reported empty (the REQUEST_CONFIG reply's
+    # FavoriteProfileModifiedState bits, latched by serve). Unknown bits allow (calictl no longer
+    # sends REQUEST_CONFIG, so they are usually unknown). The mock ACKs and ignores an empty one.
+    if function == "lighting" and what == "profile":
+        stored = semantics.lighting_config(None, states.get("lighting") or {}).get("FavouritesStored")
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            n = None
+        if stored is not None and n is not None and 1 <= n <= 7 and not stored >> (n - 1) & 1:
+            return "this favourite is empty on the unit — save it first"
+    # Wake-up: the app's "no area chosen" dialog — enabling with no vehicle area is refused.
+    if function == "lighting" and what == "wakeup":
+        try:
+            c = wakeup_request(value, states.get("lighting"))
+        except ValueError:
+            c = None  # malformed: the builder reports it
+        if c and c["enabled"] and not c["areas"]:
+            return "the wake-up light needs at least one vehicle area"
+    # door_contact: deliberately NOT gated on vehicle.CarVariant — the app gates the sliding-door
+    # page on its onboarding model, not on BLE, and this T7 reads CarVariant=4 (feature-availability.md).
     return None
 
 

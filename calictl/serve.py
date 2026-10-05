@@ -643,6 +643,8 @@ class Server:
         new_last = dict(self._last)  # build a fresh copy, then publish atomically
         for fn, data in raw.items():
             decoded = protocol.decode(self.funcs[fn], data)
+            if fn == "lighting":  # carry the wake-up / door / favourite config across frames
+                decoded = {**decoded, **semantics.lighting_config(self._last.get("lighting"), decoded)}
             new_last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
         semantics.apply_sw_corrections(states)  # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
@@ -949,10 +951,17 @@ class Server:
         before = None
         if is_light and getattr(sess, "_notif", None) is not None:
             before = sess._notif.get(str(self.funcs[function].state_char).lower())
+        # save_profile N <colour>: the app's SET_COLOR goes out first (dg/h.l3 step a).
+        pre = control.preface_for(self.funcs, function, what, value, last)
+        if pre is not None:
+            await target.actuate(self.funcs[function], pre, verify=False, follow=control.commit_for(function))
         post = await target.actuate(
             self.funcs[function], frame, verify=not is_light, follow=control.commit_for(function)
         )
-        if is_light:
+        if is_light:  # latch what we just configured (wake-up / door / favourite) — "as last set"
+            cur = self._last.get(function) or {}
+            written = control.decode_control(self.funcs[function], frame)
+            self._last = {**self._last, function: {**cur, **semantics.lighting_config(cur, written)}}
             return await self._confirm_lighting(sess, function, what, value, before)
         if post is None:
             return None
@@ -986,6 +995,7 @@ class Server:
             cur = notif.get(key)
             if cur is not None and cur is not before:  # a fresh push arrived
                 decoded = protocol.decode(f, cur)
+                decoded = {**decoded, **semantics.lighting_config(self._last.get(function), decoded)}
                 self._last = {**self._last, function: decoded}  # atomic rebind (web thread reads unlocked)
                 interp = semantics.interpret(function, decoded)
                 _, got, want = set_check(function, what, value, interp, decoded)

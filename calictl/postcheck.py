@@ -83,7 +83,11 @@ _LIGHT_ZONE_NUM = {
 
 
 def _lighting_check(what, value, interp):
-    """Applied-check for the per-zone lighting grammar (zone / all / profile)."""
+    """Applied-check for the per-zone lighting grammar (zone / all / profile / door_contact)."""
+    if what == "door_contact":  # the unit's Mode-16/PN-8 flag (semantics.lighting door_contact)
+        return ("door_contact", interp.get("door_contact"), str(value).strip().lower() in ("on", "true", "1"))
+    if what in ("wakeup", "save_profile"):  # a config echo is not proof of anything: no applied-check
+        return (what, None, None)
     if what == "profile":
         return ("profile", interp.get("profile"), int(value))
     znum = _LIGHT_ZONE_NUM.get(what)

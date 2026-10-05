@@ -251,3 +251,25 @@ def test_pwa_manifest_and_icons_served_with_correct_types(server):
     with urllib.request.urlopen(base + "/") as r:
         html = r.read().decode()
     assert 'rel="manifest"' in html and 'rel="apple-touch-icon"' in html
+
+
+class RaisingBackend(FakeBackend):
+    def command(self, function, what, value, confirm=False):
+        if function == "lighting" and what == "color":
+            raise ValueError(
+                "lighting color was retired: the app recolours a saved favourite — use save_profile N <colour>"
+            )
+        return super().command(function, what, value, confirm)
+
+
+def test_api_command_retired_color_is_a_400_not_sent():
+    be = RaisingBackend()
+    srv = web.serve_http(be, WEBUI, "127.0.0.1", 0)
+    try:
+        status, body = _post(
+            "http://127.0.0.1:%d/api/command" % srv.server_address[1],
+            {"function": "lighting", "what": "color", "value": "red"},
+        )
+    finally:
+        srv.shutdown()
+    assert status == 400 and "retired" in body["error"]

@@ -11,6 +11,8 @@ this only proves the frame layout + value packing, not on-device behaviour.
    :links: R_AIRHEATER_SET, R_ROOF_ACTUATE
 """
 
+import asyncio
+
 import pytest
 
 from calictl import control, overrides
@@ -268,3 +270,73 @@ def test_command_precondition_roof_move_blocked_but_stop_never_is():
     # unknown / not-installed state allows (can't prove it's blocked), per the doctrine
     assert control.command_precondition("roof", "open", None, {}) is None
     assert control.command_precondition("roof", "open", None, state(1, installed=0)) is None
+
+
+def test_favourite_gate_refuses_only_a_known_empty_slot():
+    """.. test:: Activating a favourite is refused only when the unit reported it empty
+    :id: T_LIGHT_FAVOURITE_GATE
+    :links: R_LIGHT_FAVOURITE
+    """
+    known = {"lighting": {"Mode": 4, "FavouritesStored": 0b001}}
+    assert control.command_precondition("lighting", "profile", 1, known) is None
+    assert control.command_precondition("lighting", "profile", 2, known) == (
+        "this favourite is empty on the unit — save it first"
+    )
+    assert (
+        control.command_precondition("lighting", "profile", 2, {"lighting": {"Mode": 4}}) is None
+    )  # unknown
+    assert control.command_precondition("lighting", "profile", 12, known) is None  # not a favourite
+
+
+def test_wakeup_gate_refuses_enabling_with_no_area():
+    no_area = {"lighting": {"WakeupTimestamp": 25200, "WakeupLightValue": 0x1000}}  # 07:00, no areas, off
+    assert control.command_precondition("lighting", "wakeup", "on", no_area) == (
+        "the wake-up light needs at least one vehicle area"
+    )
+    assert control.command_precondition("lighting", "wakeup", "07:30", no_area) is None  # stays off
+    assert control.command_precondition("lighting", "wakeup", "07:30 2 on", no_area) is None
+    assert control.command_precondition("lighting", "wakeup", "bogus", {}) is None  # the builder reports it
+
+
+def test_door_contact_is_not_gated_on_car_variant():
+    for variant in (0, 1, 2, 4, None):
+        assert (
+            control.command_precondition(
+                "lighting", "door_contact", "on", {"vehicle": {"CarVariant": variant}}
+            )
+            is None
+        )
+
+
+def test_postcheck_handles_the_new_lighting_values():
+    # _lighting_check used to int() every value: "07:00 on" / "1 red" / "on" raised inside
+    # serve._confirm_lighting and failed the command after the frame was already written.
+    from calictl.postcheck import set_check
+
+    assert set_check("lighting", "wakeup", "07:00 on", {}, {})[1:] == (None, None)  # no applied-check
+    assert set_check("lighting", "save_profile", "1 red", {}, {})[1:] == (None, None)
+    assert set_check("lighting", "door_contact", "on", {"door_contact": True}, {})[1:] == (True, True)
+    assert set_check("lighting", "door_contact", "off", {"door_contact": True}, {})[1:] == (True, False)
+
+
+def test_cli_save_profile_with_colour_writes_the_set_color_preface_first():
+    """The CLI sends the SET_COLOR preface BEFORE the save frame, and joins multi-word values."""
+    import argparse
+
+    from calictl import cli
+
+    funcs = P.load()
+    overrides.apply(funcs)
+    writes = []
+
+    class FakeDev:
+        async def read(self, func):
+            return bytes.fromhex("091000000000000000000005d00ddddd")
+
+        async def actuate(self, func, frame, *, verify=True, follow=None):
+            writes.append(frame.hex())
+            return None
+
+    args = argparse.Namespace(function="lighting", what="save_profile", value=["1", "red"])
+    asyncio.run(cli.cmd_set(funcs, FakeDev(), args))
+    assert writes == ["010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee"]

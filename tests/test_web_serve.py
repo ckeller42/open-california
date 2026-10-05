@@ -1679,3 +1679,84 @@ def test_pairing_command_passkey_keeps_leading_zero_value():
     s._pairing = FakeRunner()
     asyncio.run(s.pairing_command("passkey", "012345"))
     assert seen["pk"] == 12345
+
+
+def _light_server(monkeypatch, pushes):
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._last = {"lighting": {"ProfileNumber": 9, "Mode": 4}}
+    key = str(s.funcs["lighting"].state_char).lower()
+    writes = []
+
+    class FakeSession:
+        is_up = True
+        _notif = {}
+
+        async def actuate(self, func, frame, *, follow=None, verify=True):
+            writes.append(frame.hex())
+            if pushes:
+                nxt = bytes.fromhex(pushes.pop(0))
+
+                async def push():
+                    await asyncio.sleep(0.02)
+                    self._notif[key] = nxt
+
+                asyncio.ensure_future(push())
+            return None
+
+    s._sessions._session = FakeSession()
+    return s, writes
+
+
+def test_wakeup_write_latches_the_config_into_the_served_state(monkeypatch):
+    """.. test:: The daemon latches the wake-up config from its own write and the unit's echo
+    :id: T_SERVE_LIGHT_LATCH
+    :links: R_LIGHT_CONFIG_LATCH
+    """
+    import datetime
+
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
+    s, writes = _light_server(monkeypatch, ["091000000000000000000005d00ddddd"])  # a later non-config push
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "wakeup", "07:00 on")
+
+    asyncio.run(_run())
+    assert writes[0] == "0e146ac49c701101eeeeeeeeeeeeeeee"
+    st = serve.ServeBackend(s, None).state()["lighting"]
+    assert st["wakeup"]["time"] == "07:00" and st["wakeup"]["enabled"] is True  # survived the Mode-16 push
+
+
+def test_save_profile_with_colour_writes_the_set_color_preface_first(monkeypatch):
+    s, writes = _light_server(monkeypatch, [])
+    s._last = {
+        "lighting": protocol.decode(s.funcs["lighting"], bytes.fromhex("091000000000000000000005d00ddddd"))
+    }
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "save_profile", "1 red")
+
+    asyncio.run(_run())
+    assert writes == ["010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee"]
+
+
+def test_poll_keeps_the_lighting_config_across_a_later_frame(monkeypatch):
+    """A polled non-config 1502 frame must not wipe the latched wake-up config."""
+    s = serve.Server(influx_enabled=False)
+    s._last = {"lighting": {"WakeupTimestamp": 25200, "WakeupLightValue": 0x1311}}
+
+    async def fake_read_all(fns):
+        return {"lighting": bytes.fromhex("091000000000000000000005d00ddddd")}
+
+    monkeypatch.setattr(s.dev, "read_all", fake_read_all)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        await s.poll()
+
+    asyncio.run(_run())
+    assert s._last["lighting"]["WakeupTimestamp"] == 25200
+    assert serve.ServeBackend(s, None).state()["lighting"]["wakeup"]["time"] == "07:00"
