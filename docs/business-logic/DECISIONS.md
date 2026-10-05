@@ -8,6 +8,18 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-05 — roof follows the app's heartbeat (A1)
+
+The #235 call-stack trace shows the app's `1003` ticker is session-global (`zf/d.java:183` →
+`d2/s.java:795-802` → `mj/d.java:247`, `c/i.java:349-367`): it keeps ticking during roof moves, and the
+`roof-hold` app recording has 11 beats inside a 9.1 s hold. calictl's "no heartbeat during a roof move"
+arm (#150) and the single-slot handover it forced (#198, `session.drop_for_handover`) were therefore
+not what the app does. Owner decision: calictl follows the app. A roof move/STOP now runs inside the live
+persistent session (heartbeat ticking, no second connection), or opens its own connection with the
+heartbeat on; the counter still streams immediately with no `ARM_DELAY_S` (that half of #150 stands).
+`drop_for_handover` is deleted (no other caller). calictl keeps its device-verified 0.6 s period and fixed
+seed. Not yet device-verified — first owner-watched drive (#157/#230).
+
 ## 2026-09-16 — fault-dialog sweep: every fault code's dialog text, water alerts surfaced
 
 Injecting each fault field on the fake unit while the app watched (`protocol-crosscheck-applab.md`

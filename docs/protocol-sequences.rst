@@ -351,17 +351,17 @@ Persistent session supervisor
    * **Held**: polls and commands run over it. Writes skip the handshake and the 3 s arm delay
      (``arm=False``), so they land in well under a second. A command first waits up to
      ``CALICTL_SESSION_WAIT_S`` (6 s) for the session to come up instead of racing it cold. A roof
-     move is the exception: it neither nudges nor waits (see Handover).
+     move is the exception: it neither nudges nor waits (see Roof).
    * **Idle**: close the session under the ``_ble`` lock, so the phone app gets the single slot.
      Polls fall back to brief cold per-op reads.
    * **Unreachable**: back off 5 / 10 / 30 / 60 s (capped). After 4 consecutive failures the state
      is ``asleep``. A command resets the backoff and reconnects immediately (keep-warm nudge).
-   * **Handover**: a roof move or STOP calls ``drop_for_handover()``, which closes an
-     already-live session *without* setting the manual release. It never warms the session first:
-     a roof command skips the keep-warm nudge and the ``CALICTL_SESSION_WAIT_S`` wait, because
-     that session would only be closed again unused. After a move, the daemon nudges the
-     supervisor, which reconnects once the lock is free. Guided
-     pairing parks the session with ``set_mode("disconnect")``.
+   * **Roof**: a roof move or STOP runs **inside** an already-live session, with its ``1003``
+     heartbeat still ticking, as the app's does (#235). It never warms the session first: a roof
+     command skips the keep-warm nudge and the ``CALICTL_SESSION_WAIT_S`` wait, and with no
+     session up it opens its own connection (heartbeat on). After a move, the daemon nudges the
+     supervisor, which reconnects once the lock is free. Guided pairing parks the session with
+     ``set_mode("disconnect")``.
 
 .. mermaid::
 
@@ -376,9 +376,8 @@ Persistent session supervisor
         end
         W->>S: POST /api/command
         S->>U: control frame over the live session (no handshake, no 3 s arm delay)
-        opt roof move or STOP (handover)
-            S->>U: drop_for_handover closes the session, the roof opens its own connection
-            S->>U: afterwards the supervisor reconnects by itself
+        opt roof move or STOP
+            S->>U: roof frames over the live session, the 1003 heartbeat keeps ticking
         end
         Note over W,S: no UI activity for CALICTL_UI_IDLE_S (25 s) or a manual Disconnect
         S->>U: close the session under the _ble lock (slot free for the phone app)
@@ -388,9 +387,9 @@ Persistent session supervisor
 **Evidence.** On buspi (2026-09-16 trace) the session repeatedly came up on a web nudge and was
 released for UI idleness (``persistent session released (web UI idle)``). No unit-side drop was
 found while the heartbeat ticked. The 2026-07-13 stability spike held the link 180 s with 100 %
-uptime and 0 drops. The roof handover (#198), and the roof command skipping the session warm-up (it
-used to nudge the session up and wait up to 6 s for it, only to close it unused), are covered by
-tests only; the roof itself has never
+uptime and 0 drops. The roof running inside the live session (#235, replacing the #198 handover),
+and the roof command skipping the session warm-up, are covered by tests only; the roof itself has
+never
 moved under ``calictl`` (see :need:`S_SEQ_ROOF`). Design notes:
 `protocol-crosscheck-applab.md
 <https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html>`_.
@@ -532,15 +531,16 @@ Roof actuation — press-and-hold, SafetyCounter-gated
    or ``Position`` 15 = error). STOP is never gated. For a move,
    :py:meth:`calictl.device.CamperDevice.actuate_roof` does the following:
 
-   * **Slot handover (#198)**: the daemon does **not** warm the persistent session for a roof
-     command (no keep-warm nudge, no ``CALICTL_SESSION_WAIT_S`` wait). Under the ``_ble`` lock,
-     ``drop_for_handover()`` closes the session only if one is already live. The unit has one connection slot, and that session's ``1003`` heartbeat
-     is forbidden during a roof move. Then open a **dedicated connection**. The supervisor
-     reconnects after the move.
-   * **Arm = handshake only** (``_handshake``: ``1001`` + ``1004`` reads, subscribe-all). There is
-     **no 1003 heartbeat and no** ``ARM_DELAY_S`` **pre-arm**, so the counter streams immediately
-     (#150). A gap would make the unit see a fresh counter and withhold the motor for another
-     ~3 s.
+   * **Connection**: the daemon does **not** warm the persistent session for a roof command (no
+     keep-warm nudge, no ``CALICTL_SESSION_WAIT_S`` wait). Under the ``_ble`` lock, a live session
+     carries the move (:py:meth:`calictl.device.PersistentSession.actuate_roof`): no second
+     connection on the single slot. With no session up, ``actuate_roof`` opens its own.
+   * **Arm = the app's**: the ``1003`` heartbeat **ticks during the move**, as the app's
+     session-global heartbeat does (decompile ``zf/d:183``, ``d2/s:795-802``, ``mj/d:247``,
+     ``c/i:349-367``, #235). A live session's heartbeat is already running; an own connection
+     replays the handshake (``1001`` + ``1004`` reads, subscribe-all) and starts it. There is
+     **no** ``ARM_DELAY_S`` **pre-arm**, so the counter streams immediately (#150). A gap would
+     make the unit see a fresh counter and withhold the motor for another ~3 s.
    * Stream ``[direction][SafetyCounter]`` to ``1401`` every ``CALICTL_ROOF_PERIOD_S`` (0.5 s).
      The direction is open ``0x01`` / close ``0x04``. The counter is app-style: a random seed in
      1..1 000 000 plus 1 per 500 ms of wall-clock, big-endian uint32.
@@ -549,9 +549,9 @@ Roof actuation — press-and-hold, SafetyCounter-gated
      direction's limit (open ``1``, closed ``0``/``14``). Also cease on release (``stop_event``)
      or at ``CALICTL_ROOF_MAX_TRAVEL_S`` (30 s).
    * **Always** write STOP ``[0x00][counter]``, which is best-effort on a dropped link. Then read
-     ``1402`` and disconnect.
+     ``1402``. An own connection disconnects. A live session stays up.
    * **Release** is lock-free: it sets ``stop_event``. A **standalone STOP** (nothing in flight)
-     also takes the slot and goes through the armed ``device.actuate`` with a zero counter. The web
+     goes over the live session, or else the armed ``device.actuate``, with a zero counter. The web
      UI ignores a move press within **1000 ms** of the previous move start (``ROOF_REPRESS_MS``).
      STOP is never debounced.
 
@@ -563,8 +563,11 @@ Roof actuation — press-and-hold, SafetyCounter-gated
         participant U as Roof (1401 / state 1402)
         participant A as App (reference only)
         Note over C,U: ignition ON, no blocking InfoPopUp, roof path clear
-        S->>S: no session warm-up, drop_for_handover closes a live session (one slot, no heartbeat allowed)
-        C->>U: dedicated connect, read 1001 and 1004, subscribe-all (no 1003 heartbeat, no pre-arm)
+        S->>S: no session warm-up, a live session carries the move (one slot, no second connection)
+        C->>U: no live session only - connect, read 1001 and 1004, subscribe-all
+        loop the whole move, calictl ~0.6 s (the app ticks it too)
+            C-)U: write 1003 = N, N+1 (heartbeat, no pre-arm delay)
+        end
         loop app only, while the roof page is open and before any press
             A->>U: frame [0x00 stop] plus SafetyCounter every ~500 ms (pre-validates the counter)
         end
@@ -578,8 +581,7 @@ Roof actuation — press-and-hold, SafetyCounter-gated
         Note over C,U: after about 3 s the pop-top travels while frames continue
         C->>U: STOP frame [0x00] on release, limit, abort or the 30 s cap (always sent)
         Note right of U: halts (frames ceasing is the hardware dead-man, unverified here)
-        C->>U: read 1402, disconnect
-        S->>U: supervisor reconnects the persistent session afterwards
+        C->>U: read 1402, an own connection disconnects (a live session stays up)
 
 **Evidence.** Settled 2026-07-13 from the **decompiled roof class** (``w8/a``), reconciled against
 an at-the-van capture of a full open and close. Control char ``1401`` is ATT handle ``0x0037``;
@@ -601,8 +603,9 @@ valid, and ``23xx`` means middle. ``InfoPopUp@12`` is byte 1's low nibble (the a
 ``R_ROOF_ALERT``). **APP-OBSERVED 2026-09-16** (``tools/applab``): the roof page pre-streams
 ``[0x00][counter]`` from the moment it opens. While a button is held the rate rises to ~8 frames/s,
 with four consecutive frames carrying the same counter. Without terminal 15 the page hides its
-controls ("Switch on the ignition"). The no-heartbeat arm is from the 2026-08-30 decompile
-cross-check (#150), and the handover is #198. **Mock-tested only**: ``calictl`` has never driven
+controls ("Switch on the ignition"). The no-pre-arm stream is from the 2026-08-30 decompile
+cross-check (#150). The heartbeat during the move follows the app (decompile + the ``roof-hold``
+recording, #235); it replaced the #198 no-heartbeat handover. **Mock-tested only**: ``calictl`` has never driven
 the real motor. See `lighting-energy-water-sat-roof.md (Roof)
 <https://ckeller42.github.io/open-california/business-logic/lighting-energy-water-sat-roof.html>`_
 and `alert-states.md

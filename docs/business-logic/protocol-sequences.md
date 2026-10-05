@@ -36,8 +36,8 @@ Now [Lighting SET and neutral flush](https://ckeller42.github.io/open-california
 
 Now [Roof actuation](https://ckeller42.github.io/open-california/protocol-sequences.html#roof-actuation-press-and-hold-safetycounter-gated)
 (`S_SEQ_ROOF`, status mock-only). It covers the press-and-hold stream, the app-generated
-SafetyCounter, the ~3 s unit self-gate, the no-heartbeat handshake-only arm (#150), the
-connection-slot handover (#198) and the 1000 ms re-press debounce.
+SafetyCounter, the ~3 s unit self-gate, the app-faithful arm (1003 heartbeat ticking, no pre-arm
+delay, #150/#235), the move running inside the live session and the 1000 ms re-press debounce.
 
 ## 3b. Range validation and the 0x0E link drop
 
