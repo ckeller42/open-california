@@ -1523,12 +1523,16 @@ lighting:
         vwdoc: null
       unit: null
     Timestamp:
-      decision: omit
-      reason: frame timestamp, not a user-facing signal
+      confidence: high
+      decision: surface
+      kind: state
+      name: wakeup
+      scale: raw
       sources:
         app: null
         gui: null
         vwdoc: null
+      unit: null
 livingroomheater:
   control:
     Mode:

@@ -218,3 +218,17 @@ def test_retired_color_raises_with_a_pointer():
 def test_unknown_lighting_target_raises_not_none():
     with pytest.raises(ValueError, match="unknown lighting control"):
         control.build(_funcs(), "lighting", "disco", 5, {})
+
+
+def test_lighting_state_surfaces_wakeup_door_contact_and_favourites():
+    """.. test:: The lighting state shows the latched wake-up, door contact and stored favourites
+    :id: T_LIGHT_CONFIG_STATE
+    :links: R_LIGHT_CONFIG_LATCH
+    """
+    plain = semantics.lighting(_st(REC_STATE_HEX))
+    assert plain["wakeup"] is None and plain["door_contact"] is None and plain["favourites_stored"] is None
+    wake = semantics.lighting(_st("0e146ac49c701100eeeeeeeeeeeeeeee"))  # a Mode-20 frame (mock echo)
+    assert wake["wakeup"]["time"] == "07:00" and wake["wakeup"]["enabled"] is False
+    assert wake["wakeup"]["areas"] == [1]
+    carried = semantics.lighting({**_st(REC_STATE_HEX), "DoorContact": 1, "FavouritesStored": 0b11})
+    assert carried["door_contact"] is True and carried["favourites_stored"] == [1, 2]

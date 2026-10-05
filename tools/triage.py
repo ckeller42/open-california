@@ -96,6 +96,7 @@ SURFACE = {
         "LightValue": ("any_on", None, "raw", "state"),
         "ProfileNumber": ("profile", None, "raw", "state"),
         "Mode": ("mode", None, "raw", "state"),
+        "Timestamp": ("wakeup", None, "raw", "state"),  # Mode-20 wake-up time (local as UTC), A2
     },
     "satelliteantenna": {
         "Dish": ("dish", None, "raw", "state"),

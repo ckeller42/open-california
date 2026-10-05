@@ -311,6 +311,29 @@ def _hand_cases() -> list:
                 {"CarLevelRoll": roll, "CarLevelPitch": pitch},
             )
         )
+    for lv in (0x1100, 0x1101, 0x1153, 0x1FA6, 0x0001):  # wake-up packings (Mode 20)
+        c.append(
+            (
+                "lighting/wakeup-%04x" % lv,
+                "lighting",
+                {"Mode": 20, "ProfileNumber": 14, "Timestamp": 0x6AC49C70, "LightValue": lv},
+            )
+        )
+    for lv in (0, 1):  # door contact (Mode 16 / PN 8)
+        c.append(
+            ("lighting/door-contact-%d" % lv, "lighting", {"Mode": 16, "ProfileNumber": 8, "LightValue": lv})
+        )
+    for lv in (0, 0b101, 0x7F, 0xFF):  # REQUEST_CONFIG reply favourite bits (Mode 12)
+        c.append(
+            ("lighting/favourites-%02x" % lv, "lighting", {"Mode": 12, "ProfileNumber": 12, "LightValue": lv})
+        )
+    c.append(
+        (
+            "lighting/carried-keys",
+            "lighting",
+            {"Mode": 4, "ProfileNumber": 2, "DoorContact": 0, "FavouritesStored": 1},
+        )
+    )
     return c
 
 

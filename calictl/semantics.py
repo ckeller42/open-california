@@ -441,6 +441,11 @@ def lighting(d: dict) -> dict:
             # by a 1..8 whitelist -> any_on lied False while the lamp burned).
             any_on = True
     out["any_on"] = any_on
+    cfg = lighting_config(None, d)  # this frame's own config, or keys serve carried over
+    out["wakeup"] = wakeup_config(cfg)
+    out["door_contact"] = None if cfg.get("DoorContact") is None else cfg["DoorContact"] == 1
+    fs = cfg.get("FavouritesStored")
+    out["favourites_stored"] = None if fs is None else [n for n in range(1, 8) if fs >> (n - 1) & 1]
     return out
 
 

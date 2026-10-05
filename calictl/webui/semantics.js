@@ -235,6 +235,36 @@ const SEM_LZONES = /** @type {[string, number][]} */ ([ // :335 _LZONES, in orde
   ["OneFive", 15], ["OneSix", 16],
 ]);
 
+const SEM_LIGHT_CONFIG_KEYS = ["WakeupTimestamp", "WakeupLightValue", "DoorContact", "FavouritesStored"]; // LIGHT_CONFIG_KEYS
+
+/** semantics.py lighting_config(None, d). @param {Fields} d @returns {Record<string, number>} */
+function semLightingConfig(d) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const k of SEM_LIGHT_CONFIG_KEYS) { const v = semGet(d, k); if (v !== null) out[k] = v; }
+  const mode = semGet(d, "Mode"), pn = semGet(d, "ProfileNumber"), lv = semGet(d, "LightValue"), ts = semGet(d, "Timestamp");
+  if (mode === 20 && lv !== null && ts !== null) { out.WakeupTimestamp = ts; out.WakeupLightValue = lv; }
+  else if (mode === 16 && pn === 8 && lv !== null) out.DoorContact = lv;
+  else if (mode === 12 && lv !== null) out.FavouritesStored = lv & 0x7f;
+  else if (mode === 4 && pn !== null && pn >= 1 && pn <= 7 && "FavouritesStored" in out) out.FavouritesStored |= 1 << (pn - 1);
+  return out;
+}
+
+/** semantics.py wakeup_config(). @param {Record<string, number>} cfg @returns {Interp|null} */
+function semWakeup(cfg) {
+  const ts = cfg.WakeupTimestamp, lv = cfg.WakeupLightValue;
+  if (ts === undefined || lv === undefined) return null;
+  const hour = Math.floor(ts / 3600) % 24, minute = Math.floor(ts / 60) % 60;
+  /** @type {number[]} */
+  const areas = [];
+  for (let a = 1; a <= 4; a++) if ((lv >> (7 + a)) & 1) areas.push(a);
+  return {
+    time: String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0"),
+    hour, minute, enabled: !!(lv & 1), ramp: ((lv & 0xf) >> 1) * 10,
+    brightness: (lv >> 4) & 0xf, areas, colour: (lv >> 12) & 0xf,
+  };
+}
+
 /** semantics.py:365 lighting(): any_on ignores 13 (not equipped) and 14 (leave-unchanged). @param {Fields} d @returns {Interp} */
 function semLighting(d) {
   /** @type {Interp} */
@@ -246,6 +276,14 @@ function semLighting(d) {
     if (v && v !== 13 && v !== 14) anyOn = true;
   }
   out.any_on = anyOn;
+  const cfg = semLightingConfig(d);
+  out.wakeup = semWakeup(cfg);
+  out.door_contact = cfg.DoorContact === undefined ? null : cfg.DoorContact === 1;
+  const fs = cfg.FavouritesStored;
+  /** @type {number[]|null} */
+  let favs = null;
+  if (fs !== undefined) { favs = []; for (let n = 1; n <= 7; n++) if ((fs >> (n - 1)) & 1) favs.push(n); }
+  out.favourites_stored = favs;
   return out;
 }
 
