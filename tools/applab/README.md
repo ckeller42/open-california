@@ -174,6 +174,7 @@ State lives in `${TMPDIR:-/tmp}/applab/`: `fake_unit.log`, `fake_unit.pid`, `emu
 | `FAKE_UNIT_RPA_S` | fake | `600` | resolvable-private-address rotation period, seconds |
 | `FAKE_UNIT_HEARTBEAT_TIMEOUT_S` | fake | `15` | drop a link with no `1003` beat for this long (after the first beat) |
 | `FAKE_UNIT_PAIRING_GRACE_S` | fake | `90` | the same, before the first beat (passkey entry) |
+| `FAKE_UNIT_RECORD` | fake | unset (off) | append every GATT/link event to this JSONL file (`walk.py` sets it; `1002` written as `<vin-hash>`, passkeys never) |
 | `BUMBLE_LOGLEVEL` | fake | `INFO` | `DEBUG` adds the ATT/SMP trace |
 | `OC_REPO` | fake | the checkout containing the script | repo root put on `sys.path` |
 | `ADB` / `ANDROID_SDK_ROOT` | `adbui.py` | `$ANDROID_SDK_ROOT/platform-tools/adb`, else `adb` | which `adb` to run |

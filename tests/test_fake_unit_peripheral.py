@@ -184,10 +184,10 @@ def test_console_rotate_command_changes_advertising_address():
     assert advertising_address == second
 
 
-async def _connected_peer():
+async def _connected_peer(**kw):
     from bumble.device import Peer
 
-    _, unit, central = await _unit_and_central()
+    _, unit, central = await _unit_and_central(**kw)
     conn = await central.connect(await scan_for(central))
     peer = Peer(conn)
     await peer.discover_services()
@@ -256,3 +256,117 @@ def test_drop_on_read_hangs_up_on_that_read_only_once():
 
     other, knob = asyncio.run(run())
     assert other and knob is None  # one-shot
+
+
+# --- FAKE_UNIT_RECORD: the app-recording tap -------------------------------------------------
+
+
+def _events(path):
+    from calictl.trace import read_events
+
+    return list(read_events(path))
+
+
+def test_recording_is_off_by_default(tmp_path, monkeypatch):
+    """build_unit() records nothing unless given a path — the env var is read by the lab CLI only,
+    so tests and the realstack rig never pick up a stray FAKE_UNIT_RECORD."""
+    monkeypatch.setenv("FAKE_UNIT_RECORD", str(tmp_path / "r.jsonl"))
+
+    async def run():
+        unit, peer = await _connected_peer()
+        await _char(peer, "1102").read_value()
+        return unit
+
+    unit = asyncio.run(run())
+    assert not unit.rec.enabled
+    assert not (tmp_path / "r.jsonl").exists()
+
+
+def test_recording_taps_every_event_kind(tmp_path):
+    from bumble.device import Peer
+
+    rec = tmp_path / "r.jsonl"
+
+    async def run():
+        _, unit, central = await _unit_and_central(record=str(rec), vin="TESTVIN")
+        pair_with(central, unit.next_passkey)
+        conn = await central.connect(await scan_for(central))
+        await central.pair(conn)
+        peer = Peer(conn)
+        await peer.request_mtu(247)
+        await peer.discover_services()
+        await peer.discover_characteristics()
+        got: asyncio.Queue = asyncio.Queue()
+        await _char(peer, "1102").subscribe(lambda v: got.put_nowait(bytes(v)))
+        await asyncio.wait_for(got.get(), 2.0)  # the on-subscribe push
+        await _char(peer, "1602").read_value()
+        await _char(peer, "1002").read_value()
+        await _char(peer, "1003").write_value((0x100000).to_bytes(4, "big"), with_response=True)
+        await _char(peer, "f000").write_value(b"\x01", with_response=True)
+        # cooler ON with every other field at the app's leave-unchanged default
+        await _char(peer, "1101").write_value(bytes.fromhex("fd771e3e1f1f"), with_response=True)
+        await asyncio.sleep(0.1)  # (the on-subscribe push above is already a recorded notify)
+        await conn.disconnect()
+        await asyncio.sleep(0.2)
+        return unit
+
+    unit = asyncio.run(run())
+    evs = _events(rec)
+    kinds = [e["ev"] for e in evs]
+    assert kinds[0] == "connect"
+    for k in ("pair", "mtu", "subscribe", "read", "write", "notify", "disconnect"):
+        assert k in kinds, k
+    assert [e["state"] for e in evs if e["ev"] == "pair"][:2] == ["passkey_shown", "bonded"]
+    assert all(set(e) <= {"t", "t_ms", "conn", "ev", "state", "reason"} for e in evs if e["ev"] == "pair")
+    assert next(e for e in evs if e["ev"] == "mtu")["mtu"] >= 23
+    sub = next(e for e in evs if e["ev"] == "subscribe")
+    assert (sub["char"], sub["fn"], sub["hex"]) == ("1102", "cooler", "0100")
+    assert kinds.index("subscribe") < kinds.index("notify")  # no notify recorded before a subscribe
+    reads = {e["char"]: e for e in evs if e["ev"] == "read"}
+    assert reads["1602"]["fn"] == "energy"
+    assert reads["1002"]["hex"] == "<vin-hash>"
+    assert unit.vin_fingerprint.hex() not in rec.read_text()
+    writes = {e["char"]: e for e in evs if e["ev"] == "write"}
+    assert (writes["1003"]["fn"], writes["1003"]["hex"]) == ("heartbeat", "00100000")
+    assert writes["f000"]["fn"] is None
+    assert (writes["1101"]["fn"], writes["1101"]["hex"]) == ("cooler", "fd771e3e1f1f")
+    assert isinstance(next(e for e in evs if e["ev"] == "disconnect")["reason"], int)
+    assert all(e["conn"] == 1 for e in evs)
+    t_ms = [e["t_ms"] for e in evs]
+    assert t_ms[0] == 0 and t_ms == sorted(t_ms)
+
+
+def test_a_second_connection_is_numbered_and_restarts_t_ms(tmp_path):
+    rec = tmp_path / "r.jsonl"
+
+    async def run():
+        _, unit, central = await _unit_and_central(record=str(rec))
+        conn = await central.connect(await scan_for(central))
+        await asyncio.sleep(0.05)
+        await conn.disconnect()
+        await asyncio.sleep(0.2)
+        conn2 = await central.connect(await scan_for(central))
+        await conn2.disconnect()
+        await asyncio.sleep(0.2)
+
+    asyncio.run(run())
+    evs = _events(rec)
+    assert [e["conn"] for e in evs if e["ev"] == "connect"] == [1, 2]
+    second = [e for e in evs if e["conn"] == 2]
+    assert second[0]["ev"] == "connect" and second[0]["t_ms"] == 0
+    assert [e["ev"] for e in evs].count("disconnect") == 2
+
+
+def test_a_write_error_disables_recording_once(tmp_path, caplog):
+    bad = tmp_path / "missing-dir" / "r.jsonl"
+
+    async def run():
+        unit, peer = await _connected_peer(record=str(bad))
+        v1 = bytes(await _char(peer, "1602").read_value())
+        v2 = bytes(await _char(peer, "1602").read_value())
+        return unit, v1, v2
+
+    unit, v1, v2 = asyncio.run(run())
+    assert v1 and v1 == v2  # the lab keeps serving
+    assert unit.rec.path is None and not unit.rec.enabled
+    assert sum("recording disabled" in r.getMessage() for r in caplog.records) == 1

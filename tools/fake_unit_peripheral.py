@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import secrets
+import time
 
 from bumble.att import Attribute, AttributeValue
 from bumble.core import UUID, AdvertisingData
@@ -34,6 +35,7 @@ from bumble.hci import Address, OwnAddressType
 from bumble.pairing import PairingConfig, PairingDelegate
 
 from calictl import overrides, protocol
+from calictl.trace import REDACTED_VIN_HASH, Tracer, char_short
 from tools.mock_unit import MockCamperUnit, MockDisconnect, _pack_state
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,6 +45,52 @@ IDENTITY = "C0:FF:EE:CA:11:F0"
 IRK = bytes.fromhex("865F81FF5A8B486EAAE29A27AD9F77DC")
 BASELINE = os.path.join(REPO, "tests", "scenarios", "firmware", "baseline-0410.json")
 log = logging.getLogger("fake_unit")
+
+
+class Recorder(Tracer):
+    """The app-recording tap: :mod:`calictl.trace`'s writer and schema, seen from the unit's side of
+    the link. Off unless built with a path (``FAKE_UNIT_RECORD``, read by
+    ``tools/applab/fake_unit_ble.py`` only).
+
+    Adds to the trace schema: ``t_ms`` (ms since this connection's ``connect``), ``conn`` (1-based
+    connection number; 0 before the first), and the events ``mtu``, ``subscribe`` (``hex`` ``0100``
+    notify / ``0200`` indicate / ``0000`` off) and ``pair`` (``state`` ``passkey_shown`` / ``bonded``
+    / ``failed`` — never the code). ``1002`` is written as ``"<vin-hash>"``; the ``1003`` heartbeat
+    is recorded. A write error logs once and turns recording off; the unit keeps serving.
+
+    :param path: the JSONL file to append to, or ``None`` (recording off).
+    """
+
+    def __init__(self, path: str | None):
+        super().__init__(path, heartbeat=True)
+        self.conn_n = 0
+        self._t0: float | None = None
+
+    def connected(self) -> None:
+        """A central's link came up: number it and restart ``t_ms``."""
+        self.conn_n += 1
+        self._t0 = time.monotonic()
+        self.event("connect")
+
+    def event(self, ev: str, **extra) -> None:
+        """A non-I/O event (connect, disconnect, mtu, subscribe, pair)."""
+        if self.path:
+            self._emit({"t": time.time(), "ev": ev, **extra})
+
+    def _emit(self, rec: dict) -> None:
+        if rec.get("char") == "1002":
+            rec["hex"] = REDACTED_VIN_HASH
+        rec["conn"] = self.conn_n
+        rec["t_ms"] = None if self._t0 is None else round((time.monotonic() - self._t0) * 1000)
+        path = self.path
+        if not path:
+            return
+        try:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, separators=(",", ":")) + "\n")
+        except OSError as e:
+            log.error("FAKE_UNIT_RECORD: cannot write %s (%s); recording disabled for this run", path, e)
+            self.path = None
 
 
 def cu(slot: str) -> str:
@@ -71,6 +119,7 @@ class UnitDelegate(PairingDelegate):
         code = u.fixed_passkey if u.fixed_passkey is not None else secrets.randbelow(1_000_000)
         u.last_passkey = code
         u.passkey_shown.set()
+        u.rec.event("pair", state="passkey_shown")
         print(f"\n### PASSKEY {code:06d} — the unit shows this; type it on the central ###\n", flush=True)
         return code
 
@@ -109,6 +158,8 @@ class FakeUnit:
         self.fixed_passkey: int | None = None
         self.last_passkey: int | None = None
         self.passkey_shown = asyncio.Event()
+        self.rec = Recorder(None)  # build_unit(record=...) replaces it; off by default
+        self.subscribed: set[str] = set()  # fns whose state char the current central subscribed
         for fn, f in self.funcs.items():
             if f.state_char:
                 self.by_state[f.state_char.lower()] = fn
@@ -138,7 +189,9 @@ class FakeUnit:
         never completes — a link lost mid read-all.
         (Bumble awaits an awaitable read value; this one returns only after the link is gone.)"""
         if self.drop_on_read != fn or self.conn is None:
-            return self.read_state(fn)
+            v = self.read_state(fn)
+            self.rec.read(self.funcs[fn].state_char, v)
+            return v
         self.drop_on_read = None
         conn = self.conn
 
@@ -149,9 +202,15 @@ class FakeUnit:
 
         return hang_up()
 
+    def static_read(self, slot: str, value: bytes) -> bytes:
+        """A central's read of a fixed aux char (``1002`` VIN hash, ``1903``-``1905``), recorded."""
+        self.rec.read(cu(slot), value)
+        return value
+
     def on_write(self, fn: str, data: bytes) -> None:
         self.control_writes += 1
         f = self.funcs[fn]
+        self.rec.write(f.control_char, bytes(data))
         try:
             self.unit.write(f.control_char, bytes(data))
         except MockDisconnect as e:
@@ -162,12 +221,32 @@ class FakeUnit:
         self.schedule_notify(fn)
 
     def on_beat(self, data: bytes) -> None:
-        import time
-
+        self.rec.write(cu("1003"), data)
         self.unit.beat(data)
         self.last_beat_t = time.monotonic()
         self.seen_beat = True
         self.beats += 1
+
+    def on_f000(self, data: bytes) -> None:
+        """The generic ``f000`` write (unmodelled), recorded."""
+        self.rec.write(cu("f000"), data)
+        log.info("f000 write %s", data.hex())
+
+    def on_subscription(self, fn: str, notify: bool, indicate: bool) -> None:
+        """A CCCD write on ``fn``'s state char. The unit pushes the current value once as soon as
+        notifications are enabled (buspi 2026-09-16: one notify per char right after its CCCD write)."""
+        self.rec.event(
+            "subscribe",
+            char=char_short(self.funcs[fn].state_char),
+            fn=fn,
+            hex="0100" if notify else "0200" if indicate else "0000",
+        )
+        if notify or indicate:
+            self.subscribed.add(fn)
+        else:
+            self.subscribed.discard(fn)
+        if notify:
+            self.schedule_notify(fn)
 
     def set_raw(self, fn: str, frame: bytes, notify: bool = True) -> None:
         """Serve ``frame`` verbatim for ``fn`` from now on (reads and notifications), e.g. a frame
@@ -196,9 +275,10 @@ class FakeUnit:
         if ch is not None and self.device is not None:
             # the value explicitly: Bumble would otherwise fetch it through the char's GATT read
             # callback, which is the central-read path (gatt_read, drop_on_read)
-            self.tasks.append(
-                asyncio.get_event_loop().create_task(self.device.notify_subscribers(ch, self.read_state(fn)))
-            )
+            value = self.read_state(fn)
+            if self.conn is not None and fn in self.subscribed:
+                self.rec.notify(self.funcs[fn].state_char, value)
+            self.tasks.append(asyncio.get_event_loop().create_task(self.device.notify_subscribers(ch, value)))
             self.tasks = [t for t in self.tasks if not t.done()]
 
     # --- GATT --------------------------------------------------------------------------
@@ -239,7 +319,7 @@ class FakeUnit:
             # (observed on buspi 2026-09-16: one notify per char right after each CCCD write).
             st.on(
                 Characteristic.EVENT_SUBSCRIPTION,
-                lambda conn, notify, indicate, fn=fn: notify and self.schedule_notify(fn),
+                lambda conn, notify, indicate, fn=fn: self.on_subscription(fn, notify, indicate),
             )
             self.chars[fn] = st
             lst = groups.setdefault(svc, [])
@@ -261,7 +341,7 @@ class FakeUnit:
                     cu("1002"),
                     Characteristic.Properties.READ,
                     Attribute.READABLE,
-                    self.vin_fingerprint,
+                    AttributeValue(read=lambda c: self.static_read("1002", self.vin_fingerprint)),
                     [desc("VIN")],
                 ),
                 Characteristic(
@@ -277,10 +357,16 @@ class FakeUnit:
         groups.setdefault("1900", []).extend(
             [
                 Characteristic(
-                    cu("1903"), Characteristic.Properties.READ, Attribute.READABLE, b"0410\x000207\x00"
-                ),
-                Characteristic(cu("1904"), Characteristic.Properties.READ, Attribute.READABLE, b"California"),
-                Characteristic(cu("1905"), Characteristic.Properties.READ, Attribute.READABLE, b"********"),
+                    cu(slot),
+                    Characteristic.Properties.READ,
+                    Attribute.READABLE,
+                    AttributeValue(read=lambda c, slot=slot, value=value: self.static_read(slot, value)),
+                )
+                for slot, value in (
+                    ("1903", b"0410\x000207\x00"),
+                    ("1904", b"California"),
+                    ("1905", b"********"),
+                )
             ]
         )
         # f000 generic write
@@ -289,7 +375,7 @@ class FakeUnit:
                 cu("f000"),
                 Characteristic.Properties.WRITE | Characteristic.Properties.WRITE_WITHOUT_RESPONSE,
                 Attribute.WRITEABLE,
-                AttributeValue(write=lambda c, v: log.info("f000 write %s", bytes(v).hex())),
+                AttributeValue(write=lambda c, v: self.on_f000(bytes(v))),
             )
         )
         for svc, chars in sorted(groups.items()):
@@ -388,11 +474,17 @@ class FakeUnit:
             self.tasks = [t for t in self.tasks if not t.done()]
             return
         self.conn = conn
-        conn.on("disconnection", lambda reason, c=conn: self._on_disconnection(c))
+        self.rec.connected()
+        conn.on("disconnection", lambda reason, c=conn: self._on_disconnection(c, reason))
+        conn.on("connection_att_mtu_update", lambda c=conn: self.rec.event("mtu", mtu=c.att_mtu))
+        conn.on("pairing", lambda keys: self.rec.event("pair", state="bonded"))
+        conn.on("pairing_failure", lambda reason: self.rec.event("pair", state="failed", reason=int(reason)))
 
-    def _on_disconnection(self, conn) -> None:
+    def _on_disconnection(self, conn, reason=None) -> None:
+        self.rec.event("disconnect", reason=None if reason is None else int(reason))
         if self.conn is conn:
             self.conn = None
+            self.subscribed.clear()
 
     async def _advertise(self) -> None:
         adv = bytes(
@@ -475,15 +567,19 @@ def build_unit(
     fixed_passkey: int | None = None,
     pairing_mode: bool = True,
     rpa_timeout_s: int = 900,
+    record: str | None = None,
 ) -> FakeUnit:
     """Build (not start) the fake unit on any Bumble HCI pair: an ``open_transport`` source/sink
     (netsim, vhci) or a ``Controller`` passed as both (``LocalLink`` tests).
 
     :param keystore: a JSON keystore path to persist bonds across restarts (the app lab); ``None``
         keeps them in memory (tests — nothing is written to disk).
+    :param record: append every GATT/link event to this JSONL file (:class:`Recorder`); ``None``
+        (default) records nothing. The lab CLI passes ``FAKE_UNIT_RECORD``; nothing here reads it.
     :returns: the :class:`FakeUnit`; call ``await unit.start()`` to power on and advertise.
     """
     unit = FakeUnit(vin=vin)
+    unit.rec = Recorder(record)
     unit.fixed_passkey = fixed_passkey
     unit.pairing_mode = pairing_mode
     cfg = DeviceConfiguration(
