@@ -215,7 +215,7 @@ the owner's 2026-08-27 "roof light moved L5" observation, which the app's map do
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
 | **airheater** | `power`, `level` 1-10, `runtime` 0-120, `timer` HH:MM, `timer_start`/`timer_cancel`, `permanent` off | frames identical to the app's (applab 2026-09-16; the `timer` HH:MM wheel frame too, 2026-09-27); not live-verified on the van | Installed; every untargeted field is the app's sentinel (nothing carried from the readback). |
 | **roof** | wired (`control._roof` + `device.actuate_roof`: press-and-hold ~500 ms SafetyCounter stream, auto-stop at the limit) | installed, never driven | Pop-top IS installed (live `Installed=1`, 2026-08-26 — the earlier "not installed here" claim was wrong, issue #106). Protocol-correct (decompile + capture, §3) + needs ignition ON; the motor has NEVER been driven by calictl. The 1003 heartbeat ticks during a move (as in the app, #235): a live persistent session carries the move, else `actuate_roof` opens its own connection and starts the heartbeat — no `ARM_DELAY_S` pre-arm either way. |
-| roofAC / stairs / LR-heater | not wired | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
+| roofAC / stairs / LR-heater | frames built (DECOMPILE only, §5) | — | Not installed; offsets derivable, enum semantics UNVERIFIED. |
 
 **Camping mode — a firmware STATIONARY GATE (live-verified 2026-08-19).** Turning camping mode
 **on is refused by the unit while the vehicle is being driven** — a write of `campingmode master=on`
@@ -319,33 +319,40 @@ Extend actuation via `control.BUILDERS`.
 
 ---
 
-## 5. Control command surface (`control.BUILDERS`, updated 2026-08-17)
+## 5. Control command surface (`control.BUILDERS`, updated 2026-10-06)
 
 Every command below is a full-packet write on the function's control char. Those marked
 **DV** are decompile-verified (frame byte-checked against the app's own setter) but **not yet
-live-verified on the van** — the web UI guards each with a "not verified" confirm.
+live-verified on the van** — the web UI guards each with a "not verified" confirm. Every
+`(function, what)` that `control.BUILDERS` accepts must have a row here with an evidence tier
+(CAPTURE / DEVICE / APP-RECORDED / APP-OBSERVED / DECOMPILE / DV, see `evidence-ledger.md`) —
+`tests/test_command_coverage.py` fails otherwise.
 
 | Function | `what` | Effect / field | Source | Status |
 |---|---|---|---|---|
-| cooler | `power` / `level` | State / Level 1-5 | `vf/c` U0 (level = **X1**) | live-verified |
-| cooler | `mode` | quiet Mode 0=off/2=manual(K0)/4=scheduled(L0) | `vf/c` T1/x0/k0 | 4=scheduled ("Automatisch") **live (08-26)**; 0/2 DV |
-| cooler | `night_on` / `night_off` | NightTimerHourOn/Off (0-23) | `vf/c` c0/Y2 | **live (08-26)** — stored + 1102-broadcast; bytes LITERAL (carry current) |
-| cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | DV |
-| cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | DV |
-| airheater | `power` / `level` | NormalOperationRequest 1/0 / HeatingLevel | `rf/b` C2/q4 | live (power capture 07-08) |
-| airheater | `runtime` | RunningTime (min) | `rf/b` D4 | APP-OBSERVED (`3f7b003c1f3f` identical) |
+| cooler | `power` / `level` | State / Level 1-5 | `vf/c` U0 (level = **X1**) | CAPTURE (HCI 07-08/14) + DEVICE (live-verified); **APP-RECORDED** (`cooler.jsonl`) |
+| cooler | `mode` | quiet Mode 0=off/2=manual(K0)/4=scheduled(L0) | `vf/c` T1/x0/k0 | DEVICE 4=scheduled ("Automatisch", live 08-26); **APP-RECORDED** 0/2/4 (`cooler.jsonl`) |
+| cooler | `night_on` / `night_off` | NightTimerHourOn/Off (0-23) | `vf/c` c0/Y2 | DEVICE (live 08-26) — stored + 1102-broadcast; bytes LITERAL (carry current) |
+| cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | APP-OBSERVED (applab 2026-09-16: time picker, targeted fields match) |
+| cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | **APP-RECORDED** (`cooler.jsonl`: `f777…` / `df77…`) |
+| airheater | `power` / `level` | NormalOperationRequest 1/0 / HeatingLevel | `rf/b` C2/q4 | CAPTURE (power, HCI 07-08); **APP-RECORDED** (`airheater.jsonl`: level 8, immediate ON) |
+| airheater | `runtime` | RunningTime (min) | `rf/b` D4 | **APP-RECORDED** (`airheater.jsonl`: `3f7b003c1f3f` identical) |
 | airheater | `timer` | TimerHour:TimerMin (HH:MM) | `rf/b` B0 (fired on the time-wheel OK, no confirm, does not arm) | APP-OBSERVED (2026-09-27): 09:31 → `3f7b007f091f` identical |
 | airheater | `timer_start` / `timer_cancel` | OperationModeAirHeater 3 (+ OperationModeCombined 1) / 0 | `rf/b` a2(AIR_HEATER) / j4 via `uh/d` | APP-OBSERVED (`3f3b017f1f3f` / `3f0b007f1f3f` identical) |
-| energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | DV |
-| lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |
+| airheater | `permanent off` | PermanentOperationRequest 0 (`on` refused — the app has no ON write site) | `rf/b` E3 | APP-OBSERVED (`0f7b007f1f3f` identical, §3) + DECOMPILE (E3 only ever writes 0) |
+| energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | **APP-RECORDED** normal/max (`energy-mode.jsonl`); eco DV only (not offered on this profile) |
+| lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | DEVICE (photon 08-16); **APP-RECORDED** `power on` + kitchen zone (`lighting-zone.jsonl`); `all` is a calictl convenience, not an app action |
 | lighting | `profile N` | SET_PROFILE, ProfileNumber N 0-13 (Fav 1-7, 10 wake, 11 interior; the app's tiles A/B/C/D = favourites 1/5/6/7); 8 refused → `door_contact`; a favourite the unit reported empty is refused | `dg/h` u0 | **APP-RECORDED** (`lighting-favourite.jsonl`: tile A → `0110…`) |
 | lighting | `save_profile N [colour]` | [SET_COLOR Mode 6 PN N] + SET_BRIGHTNESS PN N, equipped zones at their level; one armed link (preface, commit, save, commit) | `dg/h` l3 | save **APP-RECORDED** (`lighting-profile.jsonl`); colour preface DECOMPILE-only |
 | lighting | `wakeup [HH:MM] [areas] [brightness] [ramp] [on\|off]` | Mode 20, PN 14, Timestamp = next local HH:MM packed as UTC, LightValue packed; edits keep the unit-reported enabled bit | `dg/h` m0 | **APP-RECORDED** (`lighting-wakeup.jsonl`: time edit, switch on, time edit while on keeps enabled=1, switch off) |
 | lighting | `door_contact on\|off` | SET_PROFILE PN 8, LightValue 1/0 | `dg/h` n4 | **APP-RECORDED** (`door-contact.jsonl`: `0810…01` / `0810…00`) |
-| campingmode | `master`/`lights`/`usb` | State / lights (inverted) / UsbCharger | `tf/a` | live-verified (on **only when stationary** — §4 gate) |
-| roof | `open`/`close`/`stop` | Up/Down + app-gen SafetyCounter | `ig/c` | not-live-verified |
+| campingmode | `master`/`lights`/`usb` | State / lights (inverted) / UsbCharger | `tf/a` | DEVICE (live-verified; on **only when stationary** — §4 gate); **APP-RECORDED** master (`campingmode.jsonl`) |
+| roof | `open`/`close`/`stop` | Up/Down + app-gen SafetyCounter | `ig/c` | DECOMPILE + **APP-RECORDED** `open` (`roof-hold.jsonl`); motor never driven by calictl (no DEVICE) |
+| roofaircondition | `power` / `fanspeed` / `mode` / `temperature` | State 1/0 / FanSpeed 0-4 / Mode 0-3 / Temperature raw 0-255 | re-gap §A3 (`jf/b`, `jf/c`) | DECOMPILE only (not installed; Temperature scale UNVERIFIED) |
+| stairs | `move` / `mode` | Movement extend 2/retract 1/stop 0 / OperationMode 0-3 | re-gap §A3 (`pg/a`) | DECOMPILE only (not installed; enum polarity UNVERIFIED) |
+| livingroomheater | `air` / `water` / `temperature` (alias `temperatureair`) | StateAir / StateWater 1/0 / TemperatureAir raw 0-255 | re-gap §A3 (`gg/a`) | DECOMPILE only (not installed; scale UNVERIFIED) |
 
-**Not wired (deliberately):** airheater `permanent` (the app's `E3()` only writes OFF; ON value
+**Not wired (deliberately):** airheater `permanent on` (the app's `E3()` only writes OFF; ON value
 unknown — won't arm a fuel burner on a guess); lighting `color` — **retired** (2026-10, A2): the
 app recolours a stored favourite, so use `save_profile N <colour>` (`set lighting color …` raises
 `CommandError`, the API answers 400).

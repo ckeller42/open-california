@@ -41,6 +41,12 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
   (`strings.de.js`; `tests/test_i18n_de.py` guards literal `t()` keys).
 - **Every dictionary field has a catalog decision** (`surface` w/ name, or `omit` w/ reason).
   A dropped or unaccounted field **fails CI** (`tests/test_signal_coverage.py`).
+- **Every buildable command is documented with an evidence tier** (`control-and-actuation.md` §5);
+  a new `what` in `control.BUILDERS` without a row fails CI (`tests/test_command_coverage.py`).
+- **Every app recording is cited in `evidence-ledger.md`** and every cited one exists
+  (`tests/test_evidence_recordings.py`).
+- **No `async` predicate in `wait_for_function`** (tests/e2e) — it never waits; use a sync predicate
+  or poll `/api/state` from Python (`tests/test_e2e_patterns.py`).
 - **Semantics correctness isn't auto-checked.** The guardrail validates *presence + scale*,
   not interpretation logic. When a field's app setter/getter is **inverted** or **combined**
   (`python3 -m tools.audit_signals --report` → `SEMANTIC-REVIEW-NEEDED`), verify the polarity
@@ -184,6 +190,9 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   (`T_VEHICLE_DECODE`). Add each autodoc'd target to `docs/api.rst`.
 - Build/verify the trace: `docs/building-the-docs.md` (`sphinx -b html -W` and `-b needs`; a
   resolved trace shows up as the req's `links_back` in `needs.json`). `needs_id_required=True`.
+- `tests/test_needs_docstrings.py` fails on a need with no/unprefixed/duplicate `:id:` (e.g. options
+  pushed out by a directive on the docstring's first line), a dangling `:links:`, or one `docs/api.rst`
+  never autodocs. tests/e2e needs are autodoc'd per function (pytest is mocked, Playwright never imported).
 
 ## Working style
 
