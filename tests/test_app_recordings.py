@@ -220,7 +220,8 @@ def test_replay_pins_the_clock_for_every_build(monkeypatch):
         monkeypatch.undo()
         time.tzset()
     assert [c for c in checks if c.kind == "error"] == []
-    assert any(c.kind == "action" and c.hex.startswith("0e146ac4") for c in checks)
+    # the recorded 07:00 frame (Timestamp 2026-10-07 07:00, packed as if UTC)
+    assert any(c.kind == "action" and c.hex.startswith("0e146ac5edf0") for c in checks)
 
 
 def test_replay_latches_the_lighting_config_across_later_notifies(tmp_path, monkeypatch):
