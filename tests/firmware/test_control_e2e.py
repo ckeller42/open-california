@@ -39,17 +39,6 @@ HEARTBEAT_S = 0.6  # CODEC_HEARTBEAT_PERIOD_MS
 ELSEWHERE = "Only via buspi or the app"
 
 
-@pytest.fixture
-def rec_unit(tmp_path):
-    """(HciUnit, its FAKE_UNIT_RECORD path)."""
-    from .conftest import HciUnit
-
-    rec = tmp_path / "unit.jsonl"
-    hu = HciUnit(record=str(rec))
-    yield hu, rec
-    hu.close()
-
-
 def _online(host_fw, hu, tmp_path):
     """A paired, read, station-mode firmware whose link is armed (up for CODEC_ARM_DELAY_MS)."""
     fw = host_fw(hu, http=True, fake_wifi=_wifi_script(tmp_path, WIFI))

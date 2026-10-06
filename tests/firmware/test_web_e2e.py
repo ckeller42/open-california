@@ -232,7 +232,8 @@ def _require_chromium():
 def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_unit, tmp_path):
     """Station mode: GET / is the gzipped calictl UI (no-cache), /device the status page; in Chromium
     the bundle's semantics.js turns the firmware's real /api/state into exactly what Python semantics
-    makes of the same fn; no JS error; nothing requested but / and /api/state."""
+    makes of the same fn; the UI is live (``device.control.writes`` -> ``_meta.read_only`` false);
+    no JS error; nothing requested but / and /api/state."""
     sync_playwright = _require_chromium()
     wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel ok 192.168.1.42\n")
     fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
@@ -266,7 +267,7 @@ def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_u
             "async () => { const b = await (await fetch('/api/state')).json();"
             " return {fn: b.fn, state: adaptSatellite(b, Date.now())}; }"
         )
-        page.get_by_text("Satellite — display only").wait_for(timeout=3000)
+        page.wait_for_function("() => STATE._meta.read_only === false", timeout=3000)
         browser.close()
     py = {name: semantics.interpret(name, dict(f)) for name, f in got["fn"].items()}
     semantics.apply_sw_corrections(py)
@@ -274,12 +275,147 @@ def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_u
     assert "cooler" in ui, sorted(py)
     want = json.loads(json.dumps({k: py[k] for k in ui}))
     assert same({k: got["state"][k] for k in ui}, want), (got["state"], want)
-    assert got["state"]["_meta"]["read_only"] is True
+    assert got["state"]["_meta"]["read_only"] is False
     # the satellite _meta the UI reads (firmware warning, anchors) equals calictl's for the same frames
     assert same(got["state"]["_meta"]["firmware"], ServeBackend._firmware_meta(py.get("general")))
     assert same(got["state"]["_meta"]["anchors"], anchors.check(py))
     assert not errors, errors
     assert set(paths) <= {"/", "/api/state"}, paths
+
+
+LIVE_UI = (
+    "() => !!(STATE._meta && STATE._meta.satellite && STATE._meta.online && STATE._meta.read_only === false)"
+)
+UI_PATHS = {"/", "/api/state", "/api/command"}
+
+
+def _live_ui(p, fw, locale="en-US"):
+    """Chromium on the live satellite UI: (browser, page, errors, paths) once the page holds an
+    online, writable satellite state; every page/console error lands in ``errors``."""
+    browser = p.chromium.launch()
+    page = browser.new_context(locale=locale).new_page()
+    errors, paths = [], []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.on("request", lambda q: paths.append(urllib.parse.urlsplit(q.url).path))
+    page.on("dialog", lambda d: d.accept())
+    page.goto("http://127.0.0.1:%d/" % fw.http_port)
+    page.wait_for_function(LIVE_UI, timeout=15000)
+    return browser, page, errors, paths
+
+
+def _open_tile(page, name):
+    page.locator(".tile", has_text=name).first.click()
+    page.locator("#title").get_by_text(name, exact=True).wait_for(timeout=3000)
+
+
+def test_live_cooler_toggle_reaches_the_unit_byte_exact(host_fw, rec_unit, tmp_path):
+    """The satellite UI in Chromium: the fridge switch -> POST /api/command -> the real sequencer ->
+    NimBLE -> the fake unit records exactly ``control.build``'s frame. The unit ACKs 2.5 s late, so
+    the POST pends and the single-connection core serves no /api/state meanwhile (Task 4 review
+    minor 6): the page shows "Sending…" the whole time, never the offline banner, then the honest
+    "Sent — the unit didn't confirm it" toast (``applied`` is never true on the ESP).
+
+    .. test:: A UI control on the live satellite reaches the unit with calictl's bytes
+       :id: T_FW_UI_LIVE_CONTROL
+       :links: R_FW_SHARED_UI, R_FW_CONTROL_API
+    """
+    import tools.esplab_control_walk as walker
+    from calictl import control
+
+    from .test_control_e2e import _online  # lazily: that module imports this one
+
+    sync_playwright = _require_chromium()
+    hu, rec = rec_unit
+    fw = _online(host_fw, hu, tmp_path)
+    before = get_json(fw, "/api/state")["fn"]["cooler"]
+    value = "off" if before["State"] else "on"  # the switch sends the opposite of what the unit reports
+    want = control.build(_funcs(), "cooler", "power", value, before).hex()
+    from .test_control_e2e import _ack_after
+
+    hu.call(_ack_after, hu.unit, 2.5)
+    with sync_playwright() as p:
+        browser, page, errors, paths = _live_ui(p, fw)
+        _open_tile(page, "Cooler")
+        sw = page.get_by_role("switch", name="Refrigerator box")
+        assert sw.is_enabled() and sw.get_attribute("aria-checked") == (
+            "true" if before["State"] else "false"
+        )
+        sw.click()
+        seen = set()
+        for _ in range(10):  # 2.5 s: the whole stall
+            seen.add(page.locator("#status").inner_text())
+            assert page.locator(".offline").count() == 0
+            page.wait_for_timeout(250)
+        assert seen == {"Sending…"}, seen
+        page.locator(".toast").get_by_text("Sent — the unit didn't confirm it").wait_for(timeout=4000)
+        page.wait_for_function("() => document.getElementById('status').textContent === 'live'", timeout=5000)
+        browser.close()
+    assert not errors, errors
+    assert set(paths) <= UI_PATHS, paths
+    assert [(c, h) for c, h, _ in walker.unit_writes(rec)] == [("1101", want)]
+
+
+@pytest.mark.parametrize(
+    "locale,roof,hint",
+    [
+        ("en-US", "Roof", "Only via buspi or the app"),
+        ("de-DE", "Aufstelldach", "Nur über buspi oder die App"),
+    ],
+)
+def test_roof_and_wakeup_stay_with_buspi_or_the_app(host_fw, rec_unit, tmp_path, locale, roof, hint):
+    """On the live satellite the roof buttons and the wake-up light are greyed with the firmware's
+    own refusal text (EN + DE) while the fridge switch next door is live; nothing is written."""
+    import tools.esplab_control_walk as walker
+
+    from .test_control_e2e import _online  # lazily: that module imports this one
+
+    sync_playwright = _require_chromium()
+    hu, rec = rec_unit
+    fw = _online(host_fw, hu, tmp_path)
+    with sync_playwright() as p:
+        browser, page, errors, paths = _live_ui(p, fw, locale)
+        _open_tile(page, roof)
+        btns = page.locator(".btnrow button")
+        assert btns.count() == 3
+        for i in range(3):
+            assert btns.nth(i).is_disabled() and btns.nth(i).get_attribute("title") == hint
+        assert page.get_by_text(hint, exact=True).count() >= 1
+        page.evaluate("document.getElementById('back').click()")
+        _open_tile(page, "Beleuchtung" if locale == "de-DE" else "Lighting")
+        assert page.get_by_role("switch", name="Wake-up light").is_disabled()
+        assert page.get_by_label("Wake-up time").is_disabled()
+        assert page.get_by_text(hint, exact=True).count() >= 1
+        page.evaluate("document.getElementById('back').click()")
+        _open_tile(page, "Kühlbox" if locale == "de-DE" else "Cooler")
+        assert page.get_by_role("switch", name="Refrigerator box").is_enabled()
+        browser.close()
+    assert not errors, errors
+    assert set(paths) <= {"/", "/api/state"}, paths
+    assert walker.unit_writes(rec) == []
+
+
+def test_busy_satellite_tells_the_user_to_retry(host_fw, rec_unit, tmp_path):
+    """A console ``set`` holds the sequencer (slow ACK); the UI's click meanwhile is the firmware's
+    ``409 busy``, shown as a sentence the owner can act on, not a bare code."""
+    from .test_control_e2e import _ack_after, _online  # lazily: that module imports this one
+
+    sync_playwright = _require_chromium()
+    hu, rec = rec_unit
+    fw = _online(host_fw, hu, tmp_path)
+    hu.call(_ack_after, hu.unit, 2.5)
+    with sync_playwright() as p:
+        browser, page, errors, paths = _live_ui(p, fw)
+        _open_tile(page, "Cooler")
+        fw.send("set lighting kitchen 5")
+        fw.expect("LOG", lambda line: line == "control: lighting/kitchen sending")
+        page.get_by_role("switch", name="Refrigerator box").click()
+        page.locator(".toast").get_by_text(
+            "The satellite is still sending the previous command — try again in a moment"
+        ).wait_for(timeout=3000)
+        browser.close()
+    # the 409 itself is the browser's "Failed to load resource" console line, by design
+    assert not [e for e in errors if "409" not in e], errors
 
 
 @pytest.mark.parametrize(

@@ -343,6 +343,16 @@ def hci_unit():
     hu.close()
 
 
+@pytest.fixture
+def rec_unit(tmp_path):
+    """(HciUnit, its FAKE_UNIT_RECORD path): a fake unit that records every write it receives
+    (test_control_e2e.py, test_web_e2e.py)."""
+    rec = tmp_path / "unit.jsonl"
+    hu = HciUnit(record=str(rec))
+    yield hu, rec
+    hu.close()
+
+
 class Firmware:
     """The host firmware as a subprocess; lines on stdout are queued for expect()."""
 

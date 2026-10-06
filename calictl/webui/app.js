@@ -677,9 +677,10 @@ const FEATURES = {
  * @returns {Promise<any>}
  */
 async function api(path, opts) {
-  // Defence in depth: the satellite's single-connection core serves only /api/state; never let any
-  // (future) caller fan out to a calictl-only endpoint there -- refuse before any network request.
-  if (satellite() && path !== "/api/state") throw new Error("satellite: no " + path);
+  // Defence in depth: the satellite serves /api/state and, when it accepts writes, /api/command --
+  // never let any caller fan out to a calictl-only endpoint there; refuse before any network request.
+  if (satellite() && path !== "/api/state" && !(path === "/api/command" && !readOnly()))
+    throw new Error("satellite: no " + path);
   const r = await fetch(path, opts);
   return r.json();
 }
@@ -711,6 +712,16 @@ const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
 // A calictl daemon has answered (positively known; not the satellite, not still unknown).
 const isCalictl = () => !!(STATE._meta && !STATE._meta.satellite);
+// What the satellite cannot do (roof, wake-up light): the firmware answers the same words.
+const ELSEWHERE = "Only via buspi or the app";
+// The firmware's /api/command error codes the owner can act on, as a sentence (the rest stay
+// "Command failed: <code>"): 403 setup_mode, 409 busy, 503 not_connected (web.c).
+/** @type {Record<string, string>} */
+const CMD_ERRORS = {
+  setup_mode: "Controls work only on your home WiFi — not over the setup hotspot",
+  busy: "The satellite is still sending the previous command — try again in a moment",
+  not_connected: "Not connected to the camper unit yet — try again in a few seconds",
+};
 
 /**
  * @param {string} msg
@@ -726,6 +737,9 @@ function toast(msg, kind) {
 
 /** @param {boolean} [force] */
 async function refreshState(force) {
+  // The satellite answers POST /api/command only after the unit's ACK (<= 4 s) and serves nothing
+  // meanwhile: a poll just waits (no error, so no offline flash), and the browser's HTTP cache lock
+  // holds a second same-URL poll behind it (tests/e2e/test_satellite.py pins "at most one waiting").
   let next;
   try {
     next = await api("/api/state");
@@ -811,6 +825,7 @@ async function processQueue() {
   // that return null (e.g. roof, which has no readback check) keep the neutral phrasing.
   else if (res && res.ok && res.applied == null && res.function === "lighting") toast("Sent — check the lamp", "ok");
   else if (res && res.ok) toast("Sent — the unit didn't confirm it", "warn");
+  else if (res && res.error && CMD_ERRORS[res.error]) toast(CMD_ERRORS[res.error], "error");
   else toast("Command failed" + (res && res.error ? `: ${res.error}` : ""), "error");
   // drop the optimistic value only if no newer change for this control is still queued
   if (!queue.some((c) => c.key === done.key)) delete optimistic[done.key];
@@ -1601,7 +1616,8 @@ function renderLighting(s) {
       enabled: tk.includes("on") ? true : tk.includes("off") ? false : wkReal.enabled,
     });
   }
-  const wkOff = readOnly() || !wk;
+  // The satellite has no wake-up config latch and no wall clock: only via buspi or the app.
+  const wkOff = readOnly() || !wk || satellite();
   /** @param {{time?: string, areas?: number[], brightness?: number, ramp?: number, on?: boolean}} p */
   const wakeCmd = (p) => {
     if (!wk) return;
@@ -1657,9 +1673,10 @@ function renderLighting(s) {
     arow.appendChild(lab);
   }
   wc.appendChild(arow);
-  if (!wk) {
+  if (satellite() || !wk) {
     const nk = document.createElement("div"); nk.className = "note";
-    nk.textContent = /** @type {string} */ (t("Wake-up settings not known yet — the unit has not reported them"));
+    nk.textContent = /** @type {string} */ (t(satellite() ? ELSEWHERE
+      : "Wake-up settings not known yet — the unit has not reported them"));
     wc.appendChild(nk);
   }
   app.appendChild(wc);
@@ -2056,6 +2073,12 @@ function roofControls(s) {
   warn.className = "warn";
   warn.textContent = /** @type {string} */ (t("Roof control is safety-sensitive and not live-verified."));
   card.appendChild(warn);
+  // No roof control on the ESP satellite (owner ruling): greyed, with the firmware's own words.
+  if (satellite()) {
+    const n = document.createElement("div"); n.className = "note";
+    n.textContent = /** @type {string} */ (t(ELSEWHERE));
+    card.appendChild(n);
+  }
   // The app hard-blocks the roof MOVE (open/close) — ig/c.java j() "movable" — when the unit
   // reports InfoPopUp child_lock / error / driving / emergency_locked / not_possible / low_battery,
   // or Position == 15 (error). It does NOT block on sensor_error (that one is warn-only in the
@@ -2069,8 +2092,9 @@ function roofControls(s) {
     b.className = "btn";
     b.textContent = /** @type {string} */ (t(dir));
     const blocked = dir !== "stop" && moveBlocked;
-    b.disabled = readOnly() || blocked;
+    b.disabled = readOnly() || blocked || satellite();
     if (blocked) b.title = /** @type {string} */ (t(ROOF_ALERT_MSG[/** @type {string} */ (s.alert)] || "Roof move blocked"));
+    if (satellite()) b.title = /** @type {string} */ (t(ELSEWHERE));
     if (pending_is("roof", dir)) b.appendChild(spinner());
     if (dir === "stop") {
       b.onclick = () => command("roof", "stop", null);
@@ -2081,7 +2105,7 @@ function roofControls(s) {
       /** @param {PointerEvent} ev */
       const start = (ev) => {
         ev.preventDefault();
-        if (readOnly() || roofHold || blocked) return;
+        if (readOnly() || roofHold || blocked || satellite()) return;
         if (Date.now() - roofLastMoveStart < ROOF_REPRESS_MS) return;  // debounce a too-quick re-press
         if (!confirm(tf("Roof {dir}: hold to move the pop-top (UNVERIFIED on this vehicle). Release to stop. Path clear?", { dir: t(dir) }))) return;
         roofHold = dir;                 // set BEFORE command(): it gates render() and the release

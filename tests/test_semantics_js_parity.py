@@ -180,6 +180,16 @@ def test_unpaired_device_is_not_paired():
     assert _adapt(_body(pairing={"state": "idle", "address": None}))["_meta"]["paired"] is False
 
 
+@pytest.mark.parametrize(
+    "control,read_only", [(None, True), ({"writes": False}, True), ({"writes": True}, False)]
+)
+def test_adapter_read_only_follows_the_firmwares_control_flag(control, read_only):
+    """Read-only-ness comes from ``device.control.writes`` (station mode), not from "is a satellite":
+    an older firmware without the field stays display-only."""
+    body = _body() if control is None else _body(control=control)
+    assert _adapt(body)["_meta"]["read_only"] is read_only
+
+
 def test_adapter_with_no_functions():
     got = _adapt(_body(fn={}, link={"up": True, "last_snap_age_ms": None}))
     assert list(got) == ["_meta"]

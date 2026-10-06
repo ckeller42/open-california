@@ -291,6 +291,15 @@ window.STRINGS_DE = {
   "Sent — the unit didn't confirm it": "Gesendet — die Einheit hat es nicht bestätigt",
   "Command failed": "Befehl fehlgeschlagen",
   "Read-only mode — writes are disabled": "Nur-Lesen-Modus — Schreibzugriffe sind deaktiviert",
+  // the ESP satellite's own answers (app.js ELSEWHERE / CMD_ERRORS; the app has no such strings —
+  // proposals, see the PR body). "Einrichtungs-Hotspot" = firmware/web/strings.json mode_setup.
+  "Only via buspi or the app": "Nur über buspi oder die App",
+  "Controls work only on your home WiFi — not over the setup hotspot":
+    "Steuerung nur im eigenen WLAN — nicht über den Einrichtungs-Hotspot",
+  "The satellite is still sending the previous command — try again in a moment":
+    "Der Satellit sendet noch den vorherigen Befehl — gleich noch einmal versuchen",
+  "Not connected to the camper unit yet — try again in a few seconds":
+    "Noch nicht mit der Camper-Einheit verbunden — in ein paar Sekunden noch einmal versuchen",
   "The passcode has 6 digits": "Der Passcode hat 6 Ziffern",
   "Pairing request failed": "Kopplungsanfrage fehlgeschlagen",
 
