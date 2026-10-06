@@ -8,6 +8,22 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-06 — cooler frames follow the app (ruling R1)
+
+calictl's cooler builder used to re-assert the unit's current State/Mode/Level/timer/schedule in
+every untargeted field (`_cooler_values`). The app (5.0.8, `tests/vectors/app/cooler.jsonl`) sends
+each untargeted field at its dictionary default instead — the leave-unchanged value: power on
+`fd771e3e1f1f`, level 5 `ff751e3e1f1f`, quiet `ff271e3e1f1f`, timer start `f7771e3e1f1f`, timer
+cancel `df771e3e1f1f`. Owner rule "calictl follows the app": every cooler command except
+`night_on`/`night_off` now builds the app's frame byte for byte (`control._cooler_neutral`), and
+the recording replay compares whole frames for every function but the roof
+(`capture_diff.TARGETED_ONLY`). `night_on`/`night_off` keep the current-state carry: no app
+recording shows those writes, and that carry is the DEVICE-verified 2026-08-26 frame. The 31
+night hours do not clobber a schedule the way 0 did (31 is outside 0-23; the app sends it in every
+frame). `overrides.CONTROL_RANGES` cooler `State` now allows the sentinel 3 (the app's level/mode
+frames carry it). The 2026-07-05 `State=3` → `0x0E` drop (below) predates the 1003 heartbeat and has
+not been re-tested; the first live cooler level/mode write after this change is the check.
+
 ## 2026-10-05 — roof follows the app's heartbeat (A1)
 
 The #235 call-stack trace shows the app's `1003` ticker is session-global (`zf/d.java:183` →

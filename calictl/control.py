@@ -197,10 +197,21 @@ def _energy(funcs, what, value, last):
     return protocol.encode(funcs["energy"], vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["energy"])
 
 
+def _cooler_neutral(funcs) -> dict:
+    """The app's cooler frame for every field it does not target: each control field at its
+    dictionary default — 2-bit 3, Level/Mode 7, TimerHour/Min 30/62, NightTimerHourOn/Off 31 — i.e.
+    ``ff771e3e1f1f``, the app's neutral frame (APP-RECORDED, ``tests/vectors/app/cooler.jsonl``: power
+    on ``fd771e3e1f1f``, level 5 ``ff751e3e1f1f``, timer start ``f7771e3e1f1f`` …). Ruling R1:
+    calictl follows the app; the unit treats each default as leave-unchanged."""
+    return {cf.name: cf.default for cf in funcs["cooler"].control_fields}
+
+
 def _cooler_values(state: dict, **changes) -> dict:
-    """Full-packet cooler control values: carry current State/Mode/Level and the
-    schedule (writing the current schedule back = no change), timer ACTION fields
-    at no-op, then apply `changes`. (Moved from cli.cmd_set so the daemon shares it.)"""
+    """Full-packet cooler control values that carry the CURRENT state: State/Mode/Level and the
+    schedule (writing the current schedule back = no change), timer ACTION fields at no-op, then
+    apply `changes`. Used only for ``night_on``/``night_off`` — no app recording shows what the app
+    sends in the other schedule bytes there, and this exact carry is what was DEVICE-verified
+    2026-08-26 (every other cooler command sends :func:`_cooler_neutral`, ruling R1)."""
     vals = dict(
         State=state.get("State", 1),
         Mode=state.get("Mode", 4),
@@ -232,8 +243,9 @@ COOLER_MODES = {"normal": 0, "quiet": 2, "timer_quiet": 4}
 def _cooler(funcs, what, value, last):
     # `power` on/off flips State (encode validates State in {0,1}); `level` sets the cooling
     # intensity 1-5; `mode` sets the quiet Mode enum; the timer/night branches arm the cooler's
-    # scheduling (all decompile-verified from vf/c.java, NOT yet live-verified). Everything else
-    # carries current state, so only the targeted field changes.
+    # scheduling (all decompile-verified from vf/c.java, NOT yet live-verified). Every untargeted
+    # field rides at the app's leave-unchanged value (_cooler_neutral, byte-identical to the app's
+    # recorded frames); only night_on/night_off still carry the current state (_cooler_values).
     if what == "power":
         ch = {"State": 1 if _truthy(value) else 0}
     elif what == "level":
@@ -254,6 +266,9 @@ def _cooler(funcs, what, value, last):
     elif what in ("night_on", "night_off"):  # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
         hr = _int_range(value, 0, 23, "night timer hour")
         ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
+        return protocol.encode(
+            funcs["cooler"], _cooler_values(last, **ch), frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"]
+        )
     # NB: to ARM scheduled ("Automatisch") quiet, use `mode timer_quiet` (Mode=4) — that is the app's
     # own path (the "Automatischer Flüstermodus" toggle stages Mode). There is deliberately NO
     # `night_set` command: the app NEVER writes the cooler NightTimerSet bit (verified 2026-08-26 —
@@ -263,7 +278,7 @@ def _cooler(funcs, what, value, last):
     else:
         return None
     return protocol.encode(
-        funcs["cooler"], _cooler_values(last, **ch), frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"]
+        funcs["cooler"], {**_cooler_neutral(funcs), **ch}, frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"]
     )
 
 

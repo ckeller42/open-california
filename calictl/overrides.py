@@ -98,9 +98,12 @@ CONTROL_FRAME_BYTES = {
 # sentinel 3 IS valid for the campingmode 2-bit fields (full-packet resend), so those are
 # deliberately left width-bounded (0..3), not restricted here.
 CONTROL_RANGES = {
-    # State=3 (the dict default, a leave-unchanged sentinel) is NOT valid for cooler —
-    # it was rejected 0x0E on-device. A full-packet cooler write must send 0=off / 1=on.
-    "cooler": {"State": {0, 1}},
+    # State: 0=off / 1=on as a command; 3 = the dictionary default, the app's leave-unchanged
+    # sentinel in every cooler frame that does not target State (APP-RECORDED, cooler.jsonl: level 5
+    # `ff751e3e1f1f`; ruling R1: calictl sends the app's frames). A 2026-07-05 write carrying State=3
+    # was dropped with 0x0E on-device (before the 1003 heartbeat was known; not re-tested since) —
+    # `_cooler` never sends 3 for a `power` command. 2 is never legal.
+    "cooler": {"State": {0, 1, 3}},
     # lighting Mode enum (dg/n.java, full set decoded 2026-07-12): 0=NO_MODE, 4=SET_BRIGHTNESS,
     # 6=SET_COLOR, 8=SET_DOUBLE, 12=REQUEST_CONFIG, 16=SET_PROFILE, 20=WAKEUP_TIME, 24=SYSTEM_TIME,
     # 28=PREVIEW — all legitimate firmware modes (guard against out-of-enum values only).

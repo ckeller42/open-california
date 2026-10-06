@@ -3697,7 +3697,7 @@
    "id": "cooler/encode/defaults-explicit-sentinel",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3709,22 +3709,20 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fc771e3e1f1f"
+   "expect_hex": "ff771e3e1f1f"
   },
   {
    "id": "cooler/encode/defaults-implicit",
    "function": "cooler",
-   "values": {
-    "State": 0
-   },
+   "values": {},
    "frame_bytes": 6,
-   "expect_hex": "fc771e3e1f1f"
+   "expect_hex": "ff771e3e1f1f"
   },
   {
    "id": "cooler/encode/State/max",
    "function": "cooler",
    "values": {
-    "State": 1,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3736,13 +3734,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fd771e3e1f1f"
+   "expect_hex": "ff771e3e1f1f"
   },
   {
    "id": "cooler/encode/TimerStart/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3754,13 +3752,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fc771e3e1f1f"
+   "expect_hex": "ff771e3e1f1f"
   },
   {
    "id": "cooler/encode/TimerCancel/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3772,13 +3770,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fc771e3e1f1f"
+   "expect_hex": "ff771e3e1f1f"
   },
   {
    "id": "cooler/encode/NightTimerSet/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3790,13 +3788,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fc771e3e1f1f"
+   "expect_hex": "ff771e3e1f1f"
   },
   {
    "id": "cooler/encode/Level/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3808,13 +3806,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fc7f1e3e1f1f"
+   "expect_hex": "ff7f1e3e1f1f"
   },
   {
    "id": "cooler/encode/Mode/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3826,13 +3824,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fcf71e3e1f1f"
+   "expect_hex": "fff71e3e1f1f"
   },
   {
    "id": "cooler/encode/TimerHour/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3844,13 +3842,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fc77ff3e1f1f"
+   "expect_hex": "ff77ff3e1f1f"
   },
   {
    "id": "cooler/encode/TimerMin/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3862,13 +3860,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fc771eff1f1f"
+   "expect_hex": "ff771eff1f1f"
   },
   {
    "id": "cooler/encode/NightTimerHourOn/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3880,13 +3878,13 @@
     "NightTimerHourOff": 31
    },
    "frame_bytes": 6,
-   "expect_hex": "fc771e3eff1f"
+   "expect_hex": "ff771e3eff1f"
   },
   {
    "id": "cooler/encode/NightTimerHourOff/max",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,
@@ -3898,13 +3896,13 @@
     "NightTimerHourOff": 255
    },
    "frame_bytes": 6,
-   "expect_hex": "fc771e3e1fff"
+   "expect_hex": "ff771e3e1fff"
   },
   {
    "id": "cooler/encode/err-width-overflow",
    "function": "cooler",
    "values": {
-    "State": 0,
+    "State": 3,
     "TimerStart": 3,
     "TimerCancel": 3,
     "NightTimerSet": 3,

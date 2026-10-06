@@ -153,8 +153,10 @@ the wire captures. Corrections applied:
   2026-08-26). The audit proposed `NightTimerSet=3`/hours=`31` from the app builder defaults, and
   the captured power-on frame sends `0` — but that capture van simply had **no schedule set**, so
   `0` was the *current* value, not a sentinel. Live proof: a write carrying `NightTimerHourOn=0`
-  **clobbered** a set `quiet_from=22`. So `_cooler_values` now carries the current schedule in
-  every write. Lesson: a capture only validates the state it was taken in.
+  **clobbered** a set `quiet_from=22`. So `_cooler_values` carried the current schedule in
+  every write — since 2026-10-06 (ruling R1) only `night_on`/`night_off` do; every other cooler
+  write sends the app's own 31 (APP-RECORDED `fd771e3e1f1f`, leave unchanged).
+  Lesson: a capture only validates the state it was taken in.
 
 - **`energy` control fields renamed** `OperationMode→EnergyModeSet`(@2/w2/def3),
   `Movement→DisplayRefresh`(@7/w1). The old names were the **stairs (1801)** layout mis-copied into

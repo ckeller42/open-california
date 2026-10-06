@@ -36,7 +36,7 @@ def _cooler_scenario():
 
 def test_cooler_scenario_zero_diff():
     funcs = _funcs()
-    app_frame = bytes.fromhex("3d4300000000")  # the app's real cooler-ON frame
+    app_frame = bytes.fromhex("fd771e3e1f1f")  # the app's cooler-ON frame (APP-RECORDED, cooler.jsonl)
     rows, leads, ours = capture_diff.diff(funcs, _cooler_scenario(), app_frame)
     assert ours == app_frame  # calictl reproduces it byte-for-byte
     assert all(r.match for r in rows) and leads == []
@@ -81,7 +81,7 @@ def test_parse_tshark_fields():
 def test_run_frames_cooler_zero_diff(tmp_path):
     pytest.importorskip("yaml")  # run() loads the scenario yaml
     p = tmp_path / "frames.txt"
-    p.write_text("0x0022: 3d4300000000\n")
+    p.write_text("0x0022: fd771e3e1f1f\n")
     assert capture_diff.run(str(p), "cooler/power-on", frames=True) == 0
 
 
@@ -145,7 +145,7 @@ def test_frames_jsonl_equals_the_frames_file(tmp_path):
             "ev": "write",
             "char": "1101",
             "fn": "cooler",
-            "hex": "3d4300000000",
+            "hex": "fd771e3e1f1f",
             "conn": 1,
             "t_ms": 200,
         },
@@ -153,7 +153,7 @@ def test_frames_jsonl_equals_the_frames_file(tmp_path):
     jl = tmp_path / "cooler.jsonl"
     jl.write_text("".join(json.dumps(r) + "\n" for r in rows))
     txt = tmp_path / "frames.txt"
-    txt.write_text("1101: 3d4300000000\n")
+    txt.write_text("1101: fd771e3e1f1f\n")
     assert capture_diff.parse_frames_file(jl) == capture_diff.parse_frames_file(txt)
     pytest.importorskip("yaml")
     assert capture_diff.run(str(jl), "cooler/power-on", frames=True) == 0

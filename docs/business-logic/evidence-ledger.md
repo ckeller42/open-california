@@ -19,7 +19,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 
 | Fact | Tier now | Capture that would verify it |
 |---|---|---|
-| cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | **APP-RECORDED** 2026-10-05 for `timer_start` `f7771e3e1f1f` / `timer_cancel` `df771e3e1f1f` (`tests/vectors/app/cooler.jsonl`, both match `control.build`; the app absorbs the first tap on the switch after arming, the second cancels). APP-OBSERVED (tools/applab 2026-09-16): timer start `f7771e3e1f1f`, time picker 04:02 `ff7704021f1f` — targeted fields match calictl's (`354309001606` / `3d43091e1606`); untargeted fields differ in convention only (`control-and-actuation.md` §3, `protocol-crosscheck-applab.md`) | unit-side: does the box switch on at TimerHour:TimerMin (the 2026-08-30 DEVICE read confirms the stored time, not the switch-on) |
+| cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | **APP-RECORDED** 2026-10-05 for `timer_start` `f7771e3e1f1f` / `timer_cancel` `df771e3e1f1f` (`tests/vectors/app/cooler.jsonl`, both match `control.build`; the app absorbs the first tap on the switch after arming, the second cancels). APP-OBSERVED (tools/applab 2026-09-16): timer start `f7771e3e1f1f`, time picker 04:02 `ff7704021f1f` — calictl's frames are byte-identical since 2026-10-06 (`f7771e3e1f1f` / `timer_set 04:02` → `ff7704021f1f`; until then only the targeted fields matched, `control-and-actuation.md` §3, `protocol-crosscheck-applab.md`) | unit-side: does the box switch on at TimerHour:TimerMin (the 2026-08-30 DEVICE read confirms the stored time, not the switch-on) |
 | cooler `mode` quiet=2(manual)/4=scheduled — DISPLAY-CONFIRMED 2026-08-26: the unit's Flüstermodus screen shows "Ein/Aus"(manual=Mode2) + "Automatisch"(scheduled=Mode4) toggles; scheduled quiet = Mode 4 (vf/c L0), decompile-cross-checked end to end (yh/e QuietModeViewModel). No physical compressor-audible confirm yet | DEVICE (display) | a human hearing the compressor quieten in the window |
 | cooler `NightTimerSet` bit — meaning UNKNOWN: decoded (1102 bit3) + plumbed into a StateFlow (vf/c D3) but NEVER rendered (dead-end, zero UI consumers) and NEVER written by any cooler path (only air-heater rf/b.H3 stages that shared frame slot). NOT the schedule-arm bit (that's Mode 4); "within-window active flag" hypothesis **REFUTED** DEVICE 2026-08-26 — read 0 with the unit RTC at 22:06 INSIDE the armed 22:00–06:00 window (also 0 outside it). Vestigial on this unit, or asserts only under some unseen condition. Not surfaced | DEVICE (refuted) + **RETIRED by call stack (#154):** `vf/c` J0 → `D3()` → `yg/g.w0` (`yg/g.java:1014,1026`) has no reader outside the facade lambdas and no cooler writer | — |
 | airheater `runtime` (`3f7b003c1f3f`), `timer_start` (`3f3b017f1f3f` = Mode 3 + Combined 1), `timer_cancel` (`3f0b007f1f3f`) | APP-OBSERVED (tools/applab 2026-09-16; frames identical to calictl's) | unit-side: does the heater actually start at TimerHour:TimerMin, and what Mode does 1702 report after it fires (mock assumes 0) |
@@ -47,7 +47,8 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   van had **no schedule set**, so 0 was simply the current value — the capture never showed that 0 means
   leave-unchanged (it doesn't; the leave-unchanged sentinels are `v()`'s 31/3, and the app re-sends them
   in its 500 ms post-write neutral frame). **A capture only validates the state it was taken in.**
-  `_cooler_values` now carries the current schedule in every write.
+  Since 2026-10-06 (ruling R1) every cooler write but `night_on`/`night_off` sends the app's 31
+  (`fd771e3e1f1f` = power on, APP-RECORDED); those two still carry the current schedule.
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
 - roof InfoPopUp `5` = DRIVING (`_ROOF_ALERT`) + the web move-gate's block set {child_lock, error,
@@ -121,7 +122,9 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   slider and shifts the toggle, so those are the reachable writes).
 - **APP-RECORDED (2026-10-05, same harness, after the #234 mock fix):** `cooler.jsonl` — power on
   `fd77…`, level 5 `ff75…`, manual quiet `ff27…` / off `ff07…`, automatic quiet `ff47…` (Mode 2/0/4),
-  power off `fc77…`, timer start `f777…` / cancel `df77…`, all matching `control.build`;
+  power off `fc77…`, timer start `f777…` / cancel `df77…`, all matching `control.build` — **byte for
+  byte since 2026-10-06** (ruling R1: every untargeted field at the app's leave-unchanged value; the
+  replay now compares whole frames for every function but the roof);
   `roof-hold.jsonl` — ignition on, the rocker's upper half held 16 s streams `Up=1` until the mock
   reports open (matches `control.build("roof","open")` on `Up`; the SafetyCounter is not a targeted
   field); `lighting-profile.jsonl` — press-and-hold tile A = `save_profile 1` (matches calictl);
