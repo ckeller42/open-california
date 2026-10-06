@@ -60,12 +60,15 @@ A plain serial open (screen, pyserial, `cat`) **resets** the chip; `esp_cmd.py` 
 Runbook: `tools/applab/README.md` ("One-time setup (Linux)", GPU notes, ghost radios, DHKEY flake) and
 the `app-lab` skill. thinky-specific:
 
-- GPU: `swiftshader_indirect` **crashes the app**. Use `-gpu host` on the NVIDIA xrdp display `:10`;
-  when other GPU sessions are active it dies after boot → private `Xvfb :120` + **`-gpu guest`**.
+- GPU: `swiftshader_indirect` **crashes the app**, and so does `-gpu guest` (it silently falls back
+  to host lavapipe: qemu died on ~23 of 25 cold starts, 2026-10-06). Stable: a private `Xvfb :120` +
+  **`-gpu swangle_indirect`**. `-gpu host` on the NVIDIA xrdp display `:10` works only while no other
+  GPU session is busy. Stop your Xvfb afterwards.
 - Run the emulator in **UTC** (the recording replay assumes it).
 - Fake unit env: `FAKE_UNIT_HEARTBEAT_TIMEOUT_S=600 FAKE_UNIT_PAIRING_GRACE_S=600 FAKE_UNIT_RPA_S=99999`
   + a pinned passkey.
-- Pairing fails ~50 % with a DHKEY mismatch → **retry without rebooting** anything.
+- Pairing fails ~50 % with a DHKEY mismatch → **retry without rebooting** anything. A *second* pair
+  inside one `walk.py` run failed 5/5 — re-pair in a manual loop instead.
 - App connects to nothing after a fake restart → ghost radio in netsimd (it outlives the emulator):
   stop the fake with SIGTERM, kill qemu, wait, kill netsimd, start again.
 - Run the fake from the **branch under test** (sync the checkout first) or the recording tests the wrong mock.
