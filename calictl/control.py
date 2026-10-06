@@ -420,6 +420,21 @@ def roof_limit_positions(direction):
     return _ROOF_LIMIT_POSITIONS.get(direction)
 
 
+# The gate texts (command_precondition), as constants: tools/gen_c_dict.py emits every REASON_* into
+# csrc/control_consts.h, so the ESP's C twin refuses with the same words (ruling B: same reason texts).
+REASON_ROOF_READING = "the pop-top roof reading light needs the roof raised (roof is closed)"
+REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF = (
+    "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+)
+REASON_QUIET_NEEDS_FRIDGE_ON = (
+    "quiet mode can only be set while the fridge is on (switch the cooler on first)"
+)
+REASON_CAMPING_NEEDS_MASTER = "camping lights and USB need camping mode on (turn the camping master on first)"
+REASON_ENERGY_LOCKED = "the unit currently does not allow changing the energy mode"
+REASON_FAVOURITE_EMPTY = "this favourite is empty on the unit — save it first"
+REASON_WAKEUP_NO_AREA = "the wake-up light needs at least one vehicle area"
+
+
 def command_precondition(function, what, value, states):
     """Return a human reason to refuse a control write, or ``None`` to allow it.
 
@@ -438,25 +453,25 @@ def command_precondition(function, what, value, states):
             on = False
         pos = (states.get("roof") or {}).get("Position")
         if on and pos in _ROOF_CLOSED_POSITIONS:
-            return "the pop-top roof reading light needs the roof raised (roof is closed)"
+            return REASON_ROOF_READING
     if function == "cooler" and what in ("timer_set", "timer_start"):
         if (states.get("cooler") or {}).get("State") == 1:  # fridge currently ON
-            return "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+            return REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF
     # The mirror of the above: the quiet mode and its schedule are only settable while the fridge is
     # ON (the app greys those rows when it is off — APP-OBSERVED, `evidence-ledger.md`). Without this
     # the CLI/API/HA paths could send what the app never sends; the web UI already greys them.
     if function == "cooler" and what in ("mode", "night_on", "night_off"):
         if (states.get("cooler") or {}).get("State") == 0:  # fridge currently OFF
-            return "quiet mode can only be set while the fridge is on (switch the cooler on first)"
+            return REASON_QUIET_NEEDS_FRIDGE_ON
     # Camping lights + rear USB are only actionable while the camping master is ON: the rear USB is
     # physically dead without it (issue #111) and the light bits read back meaningless.
     if function == "campingmode" and what in ("lights", "usb"):
         if (states.get("campingmode") or {}).get("State") == 0:
-            return "camping lights and USB need camping mode on (turn the camping master on first)"
+            return REASON_CAMPING_NEEDS_MASTER
     # The unit can lock the energy-mode selector (EnergyModeNotSelectable); honour it off-UI too.
     if function == "energy" and what == "mode":
         if (states.get("energy") or {}).get("EnergyModeNotSelectable") == 1:
-            return "the unit currently does not allow changing the energy mode"
+            return REASON_ENERGY_LOCKED
     # Roof MOVES (never "stop" — a stop must always get through; it is the safety action and the web
     # UI never greys it either) are refused under the same alert set the GUI blocks on
     # (`ROOF_MOVE_BLOCK` in webui/app.js) plus a Position the unit reports as `error`. The unit
@@ -479,7 +494,7 @@ def command_precondition(function, what, value, states):
         except (TypeError, ValueError):
             n = None
         if stored is not None and n is not None and 1 <= n <= 7 and not stored >> (n - 1) & 1:
-            return "this favourite is empty on the unit — save it first"
+            return REASON_FAVOURITE_EMPTY
     # Wake-up: the app's "no area chosen" dialog — enabling with no vehicle area is refused.
     if function == "lighting" and what == "wakeup":
         try:
@@ -487,7 +502,7 @@ def command_precondition(function, what, value, states):
         except ValueError:
             return None  # malformed: the builder reports it
         if c["enabled"] and not c["areas"]:
-            return "the wake-up light needs at least one vehicle area"
+            return REASON_WAKEUP_NO_AREA
         # Ruling R5: an edit (no on/off) carries the enabled state the UNIT reported; with none
         # reported it would silently disarm, so it is refused. The daemon first pulls the config with
         # REQUEST_CONFIG (serve.on_command); the CLI has no latch, so it needs an explicit on|off.

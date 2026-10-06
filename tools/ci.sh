@@ -106,6 +106,8 @@ codec_fresh() {   # golden vectors + generated C headers match protocol/dictiona
     || { echo "WiFi SM golden vectors stale — run: $PY -m tools.gen_wifi_vectors"; exit 1; }
   "$PY" -m tools.gen_semantics_vectors --check \
     || { echo "semantics golden vectors stale — run: $PY -m tools.gen_semantics_vectors"; exit 1; }
+  "$PY" -m tools.gen_control_vectors --check \
+    || { echo "ESP control vectors stale — run: $PY -m tools.gen_control_vectors"; exit 1; }
 }
 screenshots() {   # regenerate docs/screenshots from the live UI over the mock (needs Playwright +
                   # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.

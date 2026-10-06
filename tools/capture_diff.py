@@ -387,6 +387,8 @@ class WriteCheck:
     kind: str
     step: int | None = None
     problem: str | None = None
+    expect: list | None = None  # the step's [function, what, value] (kind "action" only)
+    frames: dict = field(default_factory=dict)  # function -> last raw state hex before this write
 
 
 def check_recording(
@@ -412,6 +414,7 @@ def check_recording(
     gaps = GAPS if gaps is None else gaps
     _, events = load_recording(path)
     state: dict[str, dict] = {}
+    raw: dict[str, str] = {}
     step: dict | None = None
     expected: dict[int, tuple[int, dict]] = {}
     hit: set[int] = set()
@@ -426,6 +429,7 @@ def check_recording(
         fn, hx = ev.get("fn"), ev.get("hex")
         if kind in ("read", "notify"):
             if fn in funcs and hx and hx != trace.REDACTED_VIN_HASH:
+                raw[fn] = hx
                 decoded = protocol.decode(funcs[fn], bytes.fromhex(hx))
                 if fn == "lighting":  # carry the config latch across later frames, exactly like serve
                     decoded = {**decoded, **semantics.lighting_config(state.get(fn), decoded)}
@@ -433,7 +437,7 @@ def check_recording(
             continue
         if kind != "write" or ev.get("char") in SKIP_CHARS:
             continue
-        out.append(_check_write(funcs, gaps, state, step, line, ev, hit))
+        out.append(_check_write(funcs, gaps, state, step, line, ev, hit, raw))
     for sn, (line, sev) in sorted(expected.items()):
         fn, what, value = sev["expect"]
         if sn not in hit and (fn, what) not in gaps:
@@ -451,7 +455,7 @@ def check_recording(
     return out
 
 
-def _check_write(funcs, gaps, state, step, line, ev, hit) -> WriteCheck:
+def _check_write(funcs, gaps, state, step, line, ev, hit, raw) -> WriteCheck:
     fn, hx, char = ev.get("fn"), ev["hex"], ev.get("char")
     if fn not in control.BUILDERS:
         return WriteCheck(
@@ -542,7 +546,7 @@ def _check_write(funcs, gaps, state, step, line, ev, hit) -> WriteCheck:
             sn,
             "step %s %s/%s=%r: app %s vs calictl %s: %s" % (sn, fn, what, value, hx, ours.hex(), detail),
         )
-    return WriteCheck(line, fn, hx, "action", sn)
+    return WriteCheck(line, fn, hx, "action", sn, expect=list(exp), frames=dict(raw))
 
 
 def run_recording(path: str) -> int:

@@ -341,6 +341,18 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
      ever written; the host e2e tier observes this at the fake unit (zero control writes over a
      whole pair + read-all + heartbeat run).
 
+.. req:: The firmware's control frames and gates are byte-identical to calictl's
+   :id: R_FW_CONTROL_TWIN
+   :status: implemented
+   :tags: esp32, control
+
+   For cooler, campingmode, lighting (power, zones, ``all``, ``profile``, ``save_profile`` with its
+   SET_COLOR preface, ``door_contact``), airheater and energy, the firmware shall plan exactly the
+   writes ``calictl.control`` would — the same ``command_precondition`` refusal texts, the same
+   frames from ``control.build``, the same lighting commit after each frame — on every vector of
+   ``tests/vectors/control.json`` (generated from the Python, ``--check`` in CI). The roof and the
+   wake-up light are answered "Only via buspi or the app".
+
 .. req:: SM I/O capability and MITM must be set before any link exists
    :id: R_FW_IO_CAP_BEFORE_LINK
 
