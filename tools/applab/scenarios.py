@@ -95,9 +95,13 @@ XY: dict[str, tuple[int, ...] | None] = {
     # so open is first reached at ~13 s (12 s stopped at middle).
     "roof_open_hold": (540, 1580, 16000),
     "wakeup_hour_wheel": (469, 1666, 469, 1521),  # the wake-up sheet's hour wheel: one row up = +1 h
-    "wakeup_switch": None,  # Wake-up Light page: the "Wake-up light" enable switch
-    "door_contact_switch": None,  # Lighting & sliding door page: the Enabled/Disabled switch
-    "lighting_profile_a": None,  # profile tile A (= favourite 1), short tap (= activate once stored)
+    "wakeup_switch": (958, 381),  # Wake-up Light page, unscrolled: the "Wake-up light" enable switch
+    "wakeup_sheet_handle": (
+        540,
+        1603,
+    ),  # the time sheet's drag handle when it opens half-expanded (tap = expand)
+    "door_contact_switch": (590, 1808),  # Lighting & sliding door page: the "Opening sliding door ..." row
+    "lighting_profile_a": (148, 640),  # profile tile A (= favourite 1), short tap (= activate once stored)
 }
 
 TILE = {
@@ -289,14 +293,27 @@ SCENARIOS: dict[str, list[Step]] = {
         ui(r"^OK$", expect=("lighting", "wakeup", "07:00")),
         idle(2),
         xy("wakeup_switch", expect=("lighting", "wakeup", "07:00 on")),
+        # A switch tap compares the phone clock with the unit RTC (1004; the fake's is the baseline's
+        # 2026-08-28): "Different time settings." App/Vehicle dialog, OK dismisses it.
+        wait(r"Different time settings", 10),
+        ui(r"^OK$"),
         idle(2),
         ui(r"^\d\d:\d\d$"),
         wait(r"Wake-up time:"),
+        idle(1),
+        xy("wakeup_sheet_handle"),  # the second open lands half-expanded (OK off screen): expand it
+        idle(1),
         xy("wakeup_hour_wheel"),  # 07 -> 08
         ui(r"^OK$", expect=("lighting", "wakeup", "08:00")),
         idle(2),
         xy("wakeup_switch", expect=("lighting", "wakeup", "08:00 off")),
+        wait(r"Different time settings", 10),  # the switch shows the clock dialog both ways
+        ui(r"^OK$"),
         idle(2),
+        adb("shell", "input", "keyevent", "BACK"),  # reopen: the page shows the time it read back
+        idle(2),
+        ui(r"^Wake-up Light$"),
+        wait(r"^08:00$"),
     ],
     "door-contact": [
         *_open_app(),
@@ -322,6 +339,10 @@ SCENARIOS: dict[str, list[Step]] = {
         xy("lighting_cooking_50", expect=("lighting", "kitchen", 5)),
         xy("lighting_profile_a_hold", expect=("lighting", "save_profile", 1)),
         idle(3),
+        # After the save tile A is the ACTIVE profile and a tap on it is a no-op (dg/h u0 caller hi/f.j):
+        # switch all lights off first so the tap activates.
+        xy("lighting_all", expect=("lighting", "power", "off")),
+        idle(2),
         xy("lighting_profile_a", expect=("lighting", "profile", 1)),
         idle(2),
     ],
