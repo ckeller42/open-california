@@ -95,6 +95,9 @@ XY: dict[str, tuple[int, ...] | None] = {
     # so open is first reached at ~13 s (12 s stopped at middle).
     "roof_open_hold": (540, 1580, 16000),
     "wakeup_hour_wheel": (469, 1666, 469, 1521),  # the wake-up sheet's hour wheel: one row up = +1 h
+    "wakeup_switch": None,  # Wake-up Light page: the "Wake-up light" enable switch
+    "door_contact_switch": None,  # Lighting & sliding door page: the Enabled/Disabled switch
+    "lighting_profile_a": None,  # profile tile A (= favourite 1), short tap (= activate once stored)
 }
 
 TILE = {
@@ -269,10 +272,10 @@ SCENARIOS: dict[str, list[Step]] = {
         xy("lighting_profile_a_hold", expect=("lighting", "save_profile", 1)),
     ],
     "lighting-wakeup": [
-        # Lighting > Functions & Settings > Wake-up Light > tap the time > wheel to 07:00 > OK writes the
-        # Mode-20 WAKEUP_TIME frame at once (a GAPS entry in tools/capture_diff.py). The "Wake-up light"
-        # enable switch is not driven: the mock does not echo the wake-up time, so the switch's frame
-        # would carry the stale 00:00 readback, not the time set here.
+        # Time first (no wake-up config reported yet: the app's write carries enabled=off), then the
+        # switch on, then a second time edit WITH the switch on (ruling R3: the edit keeps the
+        # unit-reported enabled=1), then the switch off. Each write resends the config the app read
+        # back from the mock's Mode-20 echo (dg/h F0). The emulator runs in UTC (the replay pins it).
         *_open_app(),
         ui(TILE["lighting"]),
         wait(r"All lights|Alle Lichter"),
@@ -284,6 +287,43 @@ SCENARIOS: dict[str, list[Step]] = {
         wait(r"Wake-up time:"),
         *[xy("wakeup_hour_wheel") for _ in range(7)],  # 00 -> 07
         ui(r"^OK$", expect=("lighting", "wakeup", "07:00")),
+        idle(2),
+        xy("wakeup_switch", expect=("lighting", "wakeup", "07:00 on")),
+        idle(2),
+        ui(r"^\d\d:\d\d$"),
+        wait(r"Wake-up time:"),
+        xy("wakeup_hour_wheel"),  # 07 -> 08
+        ui(r"^OK$", expect=("lighting", "wakeup", "08:00")),
+        idle(2),
+        xy("wakeup_switch", expect=("lighting", "wakeup", "08:00 off")),
+        idle(2),
+    ],
+    "door-contact": [
+        *_open_app(),
+        ui(TILE["lighting"]),
+        wait(r"All lights|Alle Lichter"),
+        ui(r"^Functions & Settings$"),
+        _SCROLL_END,
+        ui(r"[Ss]liding [Dd]oor"),  # the "Lighting & sliding door" entry
+        wait(r"Opening sliding door"),
+        xy("door_contact_switch", expect=("lighting", "door_contact", "on")),
+        idle(2),
+        xy("door_contact_switch", expect=("lighting", "door_contact", "off")),
+        idle(2),
+    ],
+    "lighting-favourite": [
+        # Save A (press-and-hold) then activate A (tap): the mock stores favourites and answers the
+        # app's post-save REQUEST_CONFIG with favourite 1's bit, so tile A is no longer "+".
+        *_open_app(),
+        ui(TILE["lighting"]),
+        wait(r"All lights|Alle Lichter"),
+        xy("lighting_all", expect=("lighting", "power", "on")),
+        xy("lighting_kitchen_row"),
+        xy("lighting_cooking_50", expect=("lighting", "kitchen", 5)),
+        xy("lighting_profile_a_hold", expect=("lighting", "save_profile", 1)),
+        idle(3),
+        xy("lighting_profile_a", expect=("lighting", "profile", 1)),
+        idle(2),
     ],
     "airheater-permanent-on": [  # expected: NO write — the switch is inert while continuous heating is off
         *_open_app(),

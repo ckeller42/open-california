@@ -214,6 +214,8 @@ def test_every_scenario_is_well_formed():
         "energy-mode",
         "lighting-profile",
         "lighting-wakeup",
+        "door-contact",
+        "lighting-favourite",
         "airheater-permanent-on",
     }
     assert set(scenarios.SCREEN) <= set(scenarios.SCENARIOS)
