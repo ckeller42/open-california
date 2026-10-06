@@ -12,8 +12,8 @@
  *
  * The write allow-list (cali_ctl_write_ok): a characteristic write is allowed only to one of the five
  * control chars of CALI_CTL_CHARS at exactly its frame length — never the roof's control char. The
- * 1003 heartbeat is the transport's own write_heartbeat. From Task 3 of #154 B on, both control_run.c
- * and the NimBLE transport's write() shall call it: the single choke point.
+ * 1003 heartbeat is the transport's own write_heartbeat. Both control_run.c (before every write) and
+ * the NimBLE transport's write() (for any caller) call it: the single choke point.
  *
  * Run (control_run.c, on the owner task like everything in cali_core): cali_ctl_submit() refuses at
  * once (BUSY, NOT_READY, REFUSED, ELSEWHERE, BAD_VALUE, NONE — each logged "control: <fn>/<what> …")

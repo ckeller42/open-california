@@ -214,8 +214,8 @@ jobs:
         run: python -m pytest tests/firmware -v -rs
 
   # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,
-  # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble, with
-  # codec_encode compiled out (the build fails if it reaches the ELF). Pin: firmware/README.md.
+  # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble.
+  # Pin: firmware/README.md.
   firmware-build:
     runs-on: ubuntu-latest
     timeout-minutes: 15   # observed 3.0-4.2 min on the probe runs; a hang must not burn 6 h

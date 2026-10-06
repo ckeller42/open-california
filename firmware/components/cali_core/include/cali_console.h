@@ -19,6 +19,10 @@
  *                (mode as /api/wifi's; scan = networks in the last scan result)
  *   wifi forget  drop the WiFi credentials and reopen the setup hotspot (cali_wifi_run_forget)
  *   wifi scan    ask for a WiFi scan (held back while BLE pairs; cali_wifi_run.h)
+ *   set <fn> <what> [value]   a control command (cali_control.h): the same builders, gates and
+ *                allow-list as POST /api/command, in any WiFi mode (the console is physical
+ *                access); the value is the rest of the line (none = JSON null); outcome on
+ *                "LOG control: …"
  *   Before the WiFi runtime booted (host without --http) every "wifi …" line only prints
  *   "LOG wifi: not enabled".
  * anything else -> "LOG unknown command: <first word>" ("wifi <subcommand>" for an unknown wifi
@@ -58,7 +62,7 @@ extern "C" {
  * stops the session (bonded -> cali_session_on_bonded, anything else -> cali_session_stop). */
 void cali_console_init(const cali_transport_t *t);
 
-void cali_console_line(const char *line);           /* pair | passkey N | forget | status | quit | wifi … */
+void cali_console_line(const char *line);           /* pair | passkey N | forget | status | quit | wifi … | set … */
 void cali_console_state(const cali_pair_state_t *s, const char *address);   /* prints STATE {...} */
 void cali_console_snapshot(uint64_t t_ms);          /* prints SNAP {...} from the session snapshot */
 

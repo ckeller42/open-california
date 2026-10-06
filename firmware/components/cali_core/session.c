@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "cali_console.h"
+#include "cali_control.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "codec.h"
@@ -19,6 +20,7 @@ static int s_active;           /* keep (or re-establish) a link for the stored b
 static int s_link;
 static uint64_t s_now;         /* now_ms of the latest tick */
 static uint64_t s_connected_at;
+static uint64_t s_up_at;       /* now_ms the link came up (encrypted): the arm delay runs from here */
 
 static int s_hb_on;
 static uint32_t s_hb_ctr;
@@ -96,6 +98,7 @@ static void link_lost(void) {
 
 static void link_up(void) {
     s_link = LINK_UP;
+    s_up_at = s_now;
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
     s_hb_on = 1;
@@ -201,6 +204,9 @@ static void on_event(const cali_tevent_t *e) {
             link_lost();
         }
         break;
+    case CALI_TEV_WRITTEN:
+        cali_ctl_on_written(e);
+        break;
     default:
         break;
     }
@@ -214,6 +220,7 @@ void cali_session_init(const cali_transport_t *t) {
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
     memset(s_fr, 0, sizeof s_fr);
     s_last_update = 0;
+    cali_ctl_run_init(t);
     cali_runner_on_other = on_event;
 }
 
@@ -248,6 +255,7 @@ void cali_session_stop(void) {
 
 void cali_session_tick(uint64_t now_ms) {
     s_now = now_ms;
+    cali_ctl_tick(now_ms);   /* the control sequencer runs on the session's tick, even with no link */
     if (!s_active) return;
     if (s_link == LINK_UP && s_hb_on && now_ms >= s_hb_next) {
         uint32_t n = s_hb_ctr++;
@@ -279,6 +287,10 @@ void cali_session_tick(uint64_t now_ms) {
 int cali_session_active(void) { return s_active; }
 
 int cali_session_link_up(void) { return s_link == LINK_UP; }
+
+int cali_session_ready(void) {
+    return s_link == LINK_UP && s_snapped && s_now - s_up_at >= CODEC_ARM_DELAY_MS;
+}
 
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     if (i >= CODEC_NCHARS || !s_fr[i].have) return 0;

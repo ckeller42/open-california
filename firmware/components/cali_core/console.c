@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_control.h"
 #include "cali_json.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
@@ -189,6 +190,21 @@ static void wifi_cmd(char *sub) {
     }
 }
 
+/* "set <fn> <what> [value]": the value is the rest of the line ("" = JSON null). Every outcome is
+ * logged by the control module ("control: …"). */
+static void set_cmd(char *args) {
+    const char *reason;
+    char *fn = strtok(args, " \t"), *what = fn ? strtok(NULL, " \t") : NULL;
+    char *value = what ? strtok(NULL, "") : NULL;
+    if (!fn || !what) {
+        cali_log("control: usage: set <function> <what> [value]");
+        return;
+    }
+    if (!value) value = "";
+    while (*value == ' ' || *value == '\t') value++;
+    (void)cali_ctl_submit(fn, what, value, NULL, &reason);
+}
+
 static void on_state(const cali_pair_state_t *s, const char *address) {
     cali_console_state(s, address);
     if (s->st == PAIR_BONDED) cali_session_on_bonded();
@@ -250,6 +266,8 @@ void cali_console_line(const char *line) {
         wifi_cmd(sub);
     } else if (strcmp(cmd, "wifi") == 0) {
         wifi_cmd(cmd + 4);
+    } else if (strncmp(cmd, "set", 3) == 0 && (cmd[3] == ' ' || cmd[3] == '\t' || cmd[3] == 0)) {
+        set_cmd(cmd + 3);
     } else {
         cali_log("unknown command: %.*s", word_len(cmd), cmd);
     }

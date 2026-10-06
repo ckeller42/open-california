@@ -30,7 +30,10 @@ typedef enum {
     CALI_TEV_READ,          /* read(char_short) completed; status 0 -> data/len valid */
     CALI_TEV_NOTIFY,        /* notification on char_short; data/len valid */
     CALI_TEV_DISCOVERED,    /* discover() completed; status 0 -> every char is known */
-    CALI_TEV_HEARTBEAT      /* a write_heartbeat() completed; status 0 = written (acknowledged) */
+    CALI_TEV_HEARTBEAT,     /* a write_heartbeat() completed; status 0 = written (acknowledged) */
+    CALI_TEV_WRITTEN        /* a write() completed; char_short set; status 0 = ACKed by the unit.
+                               May arrive inside the write() call (a request the stack fails at
+                               once); never for a write() that returned nonzero */
 } cali_tev_t;
 
 /* data points into transport memory valid only for the duration of the sink call: copy it. */
@@ -58,13 +61,16 @@ typedef struct {
     int  (*discover)(void);                        /* DISCOVERED once all chars are known */
     int  (*read)(uint16_t char_short);             /* READ */
     int  (*subscribe)(uint16_t char_short);        /* NOTIFY events afterwards */
-    int  (*write_heartbeat)(uint32_t counter);     /* the only characteristic-value write; target
-                                                      0x1003; HEARTBEAT (subscribe's CCCD write only
-                                                      enables notifications) */
+    int  (*write_heartbeat)(uint32_t counter);     /* the liveness counter, target 0x1003; HEARTBEAT
+                                                      (subscribe's CCCD write only enables
+                                                      notifications) */
     int  (*disconnect)(void);
     int  (*remove_bond)(void);
     int  (*has_bond)(void);
     const char *(*identity)(void);                 /* bonded identity address or NULL */
+    int  (*write)(uint16_t char_short, const uint8_t *data, size_t len);   /* a control frame, write
+                                                      with response: WRITTEN. Refused (nonzero, nothing
+                                                      sent) unless cali_ctl_write_ok(char_short, len) */
 } cali_transport_t;
 
 #ifdef __cplusplus

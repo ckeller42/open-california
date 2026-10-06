@@ -10,6 +10,8 @@
  *   cali_session_stop()         the runner left bonded or starts a flow (forget, pair): no more
  *                               heartbeat, reads or reconnects until the next on_bonded/boot.
  *   cali_session_tick(now_ms)   every ~100 ms: heartbeat + warm-up + reconnect + encryption timers.
+ *                               It also ticks the control sequencer (cali_ctl_tick), and WRITTEN
+ *                               events go to cali_ctl_on_written (cali_control.h).
  *
  * Link up (on_bonded, or ENC_OK on a reconnect): heartbeat write_heartbeat(counter++) every
  * CODEC_HEARTBEAT_PERIOD_MS starting at CODEC_HEARTBEAT_START (first beat on the next tick), and
@@ -62,6 +64,11 @@ int cali_session_active(void);
  * (pre-encryption), reconnect backoff, and whenever cali_session_active() is 0. This is what
  * /api/state's device.link.up reports (T_FW_WEB_HANDLERS). */
 int cali_session_link_up(void);
+
+/* 1 when a control write may go out: the link is up, its first read-all finished, and it has been
+ * up (heartbeat ticking) for CODEC_ARM_DELAY_MS — calictl.device's ARM_DELAY_S, here once per link
+ * instead of per write. */
+int cali_session_ready(void);
 
 /* The stored frame of CODEC_CHARS[i] (i < CODEC_NCHARS): 1 and *frame, *len set, or 0 when that
  * function has not been read yet (or its read failed and no notification came). */

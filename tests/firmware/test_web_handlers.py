@@ -53,7 +53,6 @@ def _build(tmp_path_factory, name, *defines):
             "-Wall",
             "-Wextra",
             "-Werror",
-            "-DCODEC_NO_ENCODE",
             *defines,
             "-I",
             str(CORE / "include"),

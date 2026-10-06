@@ -1,7 +1,7 @@
 # Platform-free core: pairing SM, WiFi SM + runtime, runner, session, console + snapshot, JSON writer, HTTP core,
-# captive DNS, web endpoints. No NimBLE/ESP headers
+# captive DNS, web endpoints, control twin + sequencer. No NimBLE/ESP headers
 # (test/ is host-only).
-idf_component_register(SRCS "pairing_sm.c" "runner.c" "session.c" "console.c" "snapshot.c" "status.c" "json.c" "wifi_sm.c" "wifi_run.c" "http_core.c" "captive_dns.c" "web.c" "display_model.c"
+idf_component_register(SRCS "pairing_sm.c" "runner.c" "session.c" "console.c" "snapshot.c" "status.c" "json.c" "wifi_sm.c" "wifi_run.c" "http_core.c" "captive_dns.c" "web.c" "display_model.c" "control.c" "control_run.c"
                        INCLUDE_DIRS "include"
                        PRIV_INCLUDE_DIRS "../../web"
                        REQUIRES csrc

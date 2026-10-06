@@ -42,15 +42,11 @@ const codec_func_t *codec_func_by_name(const char *name);
 int codec_decode(const codec_func_t *f, const uint8_t *raw, size_t len,
                  codec_kv_t out[CODEC_KV_MAX]);
 
-/* Read-only builds (the #154 firmware until its write path lands) compile with -DCODEC_NO_ENCODE:
- * codec_encode is then neither declared nor defined, so any firmware reference fails to build. */
-#ifndef CODEC_NO_ENCODE
 /* Encode a control frame: every control field is written from vals[] (matched by
  * name) or its dictionary default, validated exactly like protocol.encode
  * (width, valid set, default presence, frame bound). Returns CODEC_OK and sets
  * *out_len, or a CODEC_ERR_* code. */
 int codec_encode(const codec_func_t *f, const codec_kv_t *vals, size_t nvals,
                  size_t frame_bytes, uint8_t out[CODEC_FRAME_MAX], size_t *out_len);
-#endif /* CODEC_NO_ENCODE */
 
 #endif /* CODEC_H */

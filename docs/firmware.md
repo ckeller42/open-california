@@ -28,7 +28,7 @@ flowchart LR
 
 | Tier | What it proves | What it cannot prove | Run locally |
 |---|---|---|---|
-| **Host + Bumble** (CI `firmware-host-e2e`) | The firmware's C code — pairing runner, session, console — driving the **real upstream NimBLE host stack** (Linux port) over HCI-over-TCP against a Bumble virtual controller linked to the repo's fake unit (`tools/fake_unit_peripheral.py`). Proves pairing (KEYBOARD_ONLY + MITM + SC), bond persistence/reconnect, the full `SNAP` read-all against `calictl.protocol.decode`, the 1003 heartbeat, notification push, link-drop recovery, and the read-only guard (`codec_encode` absent from the link). | Nothing about the real esp-nimble port or a real radio — this is upstream NimBLE 1.10 on Linux, not the ESP-IDF-vendored esp-nimble 1.6-based stack (gap documented in `firmware/README.md` Pins). | `firmware/host/fetch_nimble.sh && make -C firmware/host cali-host && python -m pytest tests/firmware -v` (Linux only, needs a 32-bit toolchain — see `firmware/README.md` "Host build notes" for the Docker recipe on macOS) |
+| **Host + Bumble** (CI `firmware-host-e2e`) | The firmware's C code — pairing runner, session, console — driving the **real upstream NimBLE host stack** (Linux port) over HCI-over-TCP against a Bumble virtual controller linked to the repo's fake unit (`tools/fake_unit_peripheral.py`). Proves pairing (KEYBOARD_ONLY + MITM + SC), bond persistence/reconnect, the full `SNAP` read-all against `calictl.protocol.decode`, the 1003 heartbeat, notification push, link-drop recovery, and that the unit sees no control write while no command is sent. | Nothing about the real esp-nimble port or a real radio — this is upstream NimBLE 1.10 on Linux, not the ESP-IDF-vendored esp-nimble 1.6-based stack (gap documented in `firmware/README.md` Pins). | `firmware/host/fetch_nimble.sh && make -C firmware/host cali-host && python -m pytest tests/firmware -v` (Linux only, needs a 32-bit toolchain — see `firmware/README.md` "Host build notes" for the Docker recipe on macOS) |
 | **QEMU boot** (CI `firmware-qemu`) | The **real ESP-IDF image** (compiled for the esp32s3) boots in Espressif's QEMU: the console line protocol on the no-controller path, and the NVS-backed bond store (`cali_kv_*`) surviving a reboot, including a CRC-broken record recovering as "unpaired" instead of crashing. | Bluetooth — QEMU's esp32s3 machine has no radio, so BLE stays with the host tier and hardware. | `docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build && cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v'` |
 | **Host web e2e** (CI `firmware-host-e2e`, `tests/firmware/test_web_e2e.py`) | `cali-host --http PORT --fake-wifi SCRIPT`: the WiFi runner, captive DNS and web endpoints on the same 100 ms tick as the BLE session, over `net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi radio) and the Bumble fake unit. Proves the setup flow (fresh boot -> setup mode -> POST credentials -> station), a wrong password falling back to setup with the credentials cleared, saved credentials reconnecting after a restart + `DELETE /api/wifi`, `/api/state` equal to the console's `SNAP` after pairing, a WiFi loss leaving the BLE link and heartbeat alone, the page rendering in Chromium (EN + DE), and the setup flow clicked in Chromium (a wrong password shows the wrong-password text, the right one the `http://calictl-esp.local` link; EN + DE). | The real esp_wifi/lwIP/mdns stack, a real phone's captive-portal detection, radio coexistence — the fake WiFi only replays the script's outcomes. | `tools/ci.sh firmware` (Linux; on a Mac see `firmware/README.md` "Host build" for the Docker recipe) |
 | **QEMU no-WiFi-driver** (CI `firmware-qemu`, `test_qemu_boot.py::test_no_wifi_driver_boots_and_serves_nothing`) | The QEMU image is built with `CONFIG_CALI_WIFI=n` (no esp_wifi call compiled in): it logs `LOG wifi: driver unavailable` once, keeps WiFi off (`status` has no `wifi` member, `wifi status` -> `LOG wifi: not enabled`), listens on nothing, and does not reboot — the same path a board takes when `esp_wifi_init`/`esp_wifi_start` fails. | Anything about a working WiFi driver (QEMU's esp32s3 has no WiFi). | The QEMU command above |
@@ -38,8 +38,7 @@ flowchart LR
 CI also builds the release esp32s3 image compile-only (job `firmware-build`, container
 `espressif/idf:v6.1`, uploads the images + `flasher_args.json`) — it does not run the image
 anywhere, just proves `cali_core` + `cali_ble_nimble` (unchanged from the host build) compile
-clean against ESP-IDF's real esp-nimble under the host's `-Wall -Wextra -Werror` strictness, and
-that `codec_encode` still does not reach the ELF.
+clean against ESP-IDF's real esp-nimble under the host's `-Wall -Wextra -Werror` strictness.
 
 ## Console line protocol
 
@@ -318,6 +317,12 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 ```{eval-rst}
 .. req:: The firmware writes no control frame: its only characteristic-value write is the 1003 heartbeat
    :id: R_FW_READ_ONLY
+   :status: retired
+
+   **Retired 2026-10-06 (#154 B, the ESP control path):** superseded by ``R_FW_WRITE_ALLOWLIST``
+   (what may be written) and ``R_FW_CONTROL_API`` (when and how). ``-DCODEC_NO_ENCODE`` and both
+   ``nm`` link checks are gone — ``control.c`` needs ``codec_encode`` — and no test links here any
+   more. The text below is kept as the history of the read-only firmware (#154 A).
 
    The firmware never actuates the vehicle. Three mechanisms, each with a stated scope:
 
@@ -357,7 +362,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 
 .. req:: The firmware writes only the five control chars at their frame length, and the 1003 heartbeat
    :id: R_FW_WRITE_ALLOWLIST
-   :status: open
+   :status: implemented
    :tags: esp32, control, safety
 
    The firmware's only characteristic-value writes shall be the ``1003`` liveness heartbeat
@@ -366,10 +371,26 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    cooler, ``1201`` camping mode, ``1501`` lighting, ``1601`` energy, ``1701`` air heater), each at
    exactly its control frame length. One function, ``cali_ctl_write_ok``
    (``firmware/components/cali_core/control.c``), decides it, and both the sequencer
-   (``control_run.c``) and the NimBLE transport's ``write`` shall call it. The roof's ``1401`` is
-   never on the list (the generator asserts it); no roof builder exists. CCCD writes only enable
-   notifications. Status ``open`` until the sequencer and the transport ``write`` exist and call it
-   (#154 B Task 3); the decider itself is proven by the exhaustive scan today.
+   (``control_run.c``, before every write) and the NimBLE transport's ``write`` (``ble_nimble.c``
+   ``t_write``, for any caller) call it. The roof's ``1401`` is never on the list (the generator
+   asserts it); no roof builder exists. CCCD writes only enable notifications.
+
+.. req:: Control commands: armed link, one at a time, station mode only
+   :id: R_FW_CONTROL_API
+   :status: open
+   :tags: esp32, control, web
+
+   The firmware shall accept a control command from ``POST /api/command`` (calictl's request and
+   response shape) only in station mode, and from the console ``set <fn> <what> [value]``; a
+   command is accepted only on an armed link (up ``CODEC_ARM_DELAY_MS`` with its first read-all
+   done) and when the function's state has been read; it writes the planned frames one at a time
+   with response, a lighting commit ``CODEC_FOLLOW_DELAY_MS`` after the previous ACK; it reports
+   success only after every write was ACKed, a refused write or a lost link as a failure (no
+   further frame), and gives up after ``CALI_CTL_DEADLINE_MS``; a second command while one runs
+   — or while a timed-out write still awaits its ACK — is refused (busy). The sequencer is
+   ``firmware/components/cali_core/control_run.c``, ticked by the session. Status ``open`` until
+   ``POST /api/command`` and its station-mode gate exist (#154 B Task 4); the sequencer and the
+   console ``set`` are implemented and proven by the scripted-transport tests.
 
 .. req:: SM I/O capability and MITM must be set before any link exists
    :id: R_FW_IO_CAP_BEFORE_LINK
@@ -456,16 +477,16 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   transport events per `docs/business-logic/guided-pairing.md`'s "ESP mapping") — verified by
   `T_FW_RUNNER_FAKE` (`tests/firmware/test_runner_fake.py`).
 - **`R_FW_SESSION`** (`firmware/components/cali_core/session.c` + `console.c`) — verified by
-  `T_FW_SESSION_FAKE` (`tests/firmware/test_session_fake.py`, a scripted fake transport, and also
-  compiles with `-DCODEC_NO_ENCODE` — a second, independent check that `cali_core` never
-  references `codec_encode`) and end to end by `T_FW_HOST_E2E`
-  (`tests/firmware/test_host_e2e.py`).
-- **`R_FW_READ_ONLY`** — verified by `T_FW_SESSION_FAKE` (compiles `cali_core` with
-  `-DCODEC_NO_ENCODE` under `-Werror`, so a `codec_encode` reference fails that compile) and by
-  `T_FW_HOST_E2E` (builds `cali-host`, whose link rule runs the `nm` check, and asserts the fake
-  unit saw zero control-characteristic writes). The ESP-IDF images' `POST_BUILD` `nm` check runs in
-  the `firmware-build`/`firmware-qemu` CI jobs; no test proves the transport surface on the device
-  build beyond compiling the same `ble_nimble.c`.
+  `T_FW_SESSION_FAKE` (`tests/firmware/test_session_fake.py`, a scripted fake transport) and end to
+  end by `T_FW_HOST_E2E` (`tests/firmware/test_host_e2e.py`).
+- **`R_FW_READ_ONLY`** — retired 2026-10-06 (#154 B): superseded by `R_FW_WRITE_ALLOWLIST` and
+  `R_FW_CONTROL_API`; nothing verifies it any more.
+- **`R_FW_WRITE_ALLOWLIST`** — verified by `T_FW_WRITE_ALLOWLIST_PURE` (exhaustive scan),
+  `T_FW_SESSION_FAKE` + `test_control_roof_and_wakeup_are_refused_without_a_write`, and
+  `T_FW_HOST_E2E` (no command, no control write at the unit).
+- **`R_FW_CONTROL_API`** — verified by `T_FW_CONTROL_READY`, `T_FW_CONTROL_ATT_ERROR`,
+  `T_FW_CONTROL_INTERLEAVE`, `T_FW_CONTROL_LATE_ACK` and `T_FW_CONTROL_LINK_DROP`
+  (`tests/firmware/test_session_fake.py`, the sequencer against the scripted transport).
 - **`R_FW_IO_CAP_BEFORE_LINK`** — verified by `T_FW_HOST_E2E`'s
   `test_just_works_build_is_refused`, which runs the `-DCALI_TEST_LATE_IO_CAP` regression build
   against the fake unit and asserts pairing ends in `error` (the unit refusing Just Works).

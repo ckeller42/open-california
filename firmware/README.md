@@ -41,14 +41,14 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
 | `cali_core` | `pairing_sm.c runner.c session.c console.c` | `test/` |
 | `cali_ble_nimble` | `ble_nimble.c ble_store_kv.c` (UNCHANGED from the host build) | `test/` |
 | `platform` | `esp/platform_esp.c` — `cali_kv_*` on NVS namespace `cali`, same CRC record as the host (bad CRC -> -2); `cali_uptime_ms` from `esp_timer`; `cali_log` -> `printf("LOG …")`; `cali_fw_version` = `esp_app_get_description()->version`. `esp/net_esp.c` — `cali_net` on esp_wifi + esp_netif + lwIP sockets + mdns (`include/cali_net_esp.h`) | `host/`, `test/` |
-| `csrc` | `../../../csrc/codec.c` with `CODEC_NO_ENCODE` PUBLIC (read-only firmware) | — |
+| `csrc` | `../../../csrc/codec.c` (decode + encode) | — |
 
-- **Read-only.** `codec_encode` is compiled out (`CODEC_NO_ENCODE`, as on the host — the primary,
-  compile-time guard), and a POST_BUILD `nm` step in `CMakeLists.txt` fails the build if
-  `codec_encode` is in `cali_fw.elf` (release and QEMU variants; the twin of the `cali-host` link
-  check, and like it fail-open should `nm` itself fail). The only characteristic-value write stays
-  the 1003 heartbeat; `subscribe`'s CCCD descriptor writes only enable notifications
-  (`R_FW_READ_ONLY` in `docs/firmware.md` has the exact scope).
+- **Writes: five control chars + `1003`, never the roof.** A control frame goes out only through
+  the transport's `write`, which — like the sequencer `cali_core/control_run.c` before it — passes
+  `cali_ctl_write_ok` (the generated allow-list: `1101`/`1201`/`1501`/`1601`/`1701` at their exact
+  frame length; `R_FW_WRITE_ALLOWLIST` in `docs/firmware.md`). The 1003 heartbeat is the other
+  write; `subscribe`'s CCCD descriptor writes only enable notifications. (Until #154 B the firmware
+  was read-only — `CODEC_NO_ENCODE` + an `nm` check; `R_FW_READ_ONLY`, now retired.)
 - **NimBLE options pinned to the host tier** (final review I1, `sdkconfig.defaults`): no in-stack
   connection re-attempt, one connection, legacy scan only (no extended adv/scan), NimBLE log
   level WARNING — so the device runs the configuration the host e2e tier proved.
@@ -198,7 +198,7 @@ tier (`test_host_e2e.py`) and hardware.
   The probe build also loads the bond store (`cali_ble_store_init`) on the no-controller path, as
   `cali_ble_nimble_init` does on the BLE path, so damaged bond records meet the real NVS code. **Never in the release image:** a
   POST_BUILD step in `CMakeLists.txt` fails any build without the option whose ELF contains the
-  string `kvprobe` (the `codec_encode` guard's twin). CI builds the variant in its own job and
+  string `kvprobe`. CI builds the variant in its own job and
   uploads nothing from it.
 - **`qemu/run_qemu.sh [BUILD_DIR [FLASH_FILE]]`** (defaults `build-qemu`,
   `build-qemu/qemu_flash.bin`): `idf.py qemu`'s esp32s3 arguments (machine, eFuse image, watchdog
@@ -559,9 +559,8 @@ tests.firmware.test_pairing_sm_parity`, so both objects and their `:links:` reso
 
 Two more requirements are authored directly on the rendered doc page rather than in a test
 docstring shim (they describe cross-cutting build properties, not one C module):
-**R_FW_READ_ONLY** (no control frame: the only characteristic-value write is the `1003`
-heartbeat, CCCD writes only enable notifications; `codec_encode` is compiled out of every firmware
-build, and an `nm` link check backs that up for `cali-host` and both ESP-IDF images)
+**R_FW_READ_ONLY** (retired with #154 B; superseded by `R_FW_WRITE_ALLOWLIST` — only the five
+control chars at their frame length and the `1003` heartbeat are ever written — and `R_FW_CONTROL_API`)
 and **R_FW_IO_CAP_BEFORE_LINK** (the SM's I/O capability and MITM flag must be set before the host
 syncs, i.e. before any link exists — the exact shape of the 2026-09-26 `calictl` bug where the
 pairing agent arrived after SMP had already started; reproduced on purpose by the
