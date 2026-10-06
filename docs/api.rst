@@ -51,6 +51,7 @@ Control frames
 .. automodule:: calictl.postcheck
    :no-members:
 .. autofunction:: calictl.postcheck.set_check
+.. autofunction:: calictl.control.command_precondition
 .. autofunction:: calictl.control.commit_for
 .. autofunction:: calictl.control.preface_for
 .. autofunction:: calictl.control.next_wakeup_epoch

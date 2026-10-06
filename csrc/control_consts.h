@@ -92,9 +92,11 @@ static const struct cali_ctl_name CALI_ENERGY_MODES[] = {
 };
 static const uint8_t CALI_ROOF_CLOSED_POSITIONS[] = {0, 14};
 #define CALI_REASON_CAMPING_NEEDS_MASTER "camping lights and USB need camping mode on (turn the camping master on first)"
+#define CALI_REASON_COOLER_STATE_UNKNOWN "the cooler's current schedule is not known yet (no cooler state read) \342\200\224 refusing to overwrite it"
 #define CALI_REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
 #define CALI_REASON_ENERGY_LOCKED "the unit currently does not allow changing the energy mode"
 #define CALI_REASON_FAVOURITE_EMPTY "this favourite is empty on the unit \342\200\224 save it first"
+#define CALI_REASON_NOT_ONOFF "the value must be on or off (or true/false, 1/0) \342\200\224 anything else is refused, never read as off"
 #define CALI_REASON_QUIET_NEEDS_FRIDGE_ON "quiet mode can only be set while the fridge is on (switch the cooler on first)"
 #define CALI_REASON_ROOF_READING "the pop-top roof reading light needs the roof raised (roof is closed)"
 #define CALI_REASON_WAKEUP_NO_AREA "the wake-up light needs at least one vehicle area"

@@ -102,7 +102,39 @@ def test_every_gate_is_exercised_both_ways():
         "REASON_CAMPING_NEEDS_MASTER",
         "REASON_ENERGY_LOCKED",
         "REASON_FAVOURITE_EMPTY",
+        "REASON_NOT_ONOFF",
+        "REASON_COOLER_STATE_UNKNOWN",
     ):
         text = getattr(control, name)
         assert text in refused, name
         assert refused[text] & allowed, name  # the same command also passes the gate somewhere
+
+
+def test_generator_shape_is_device_actuates_write_order():
+    """A mutation in ``expect()`` (dropped commit, swapped preface) would regenerate self-consistent
+    vectors; pin the shape: lighting = [frame@0, commit@FOLLOW], a colour save = preface first."""
+    assert V["follow_delay_ms"] == 300
+    zone = next(c for c in V["cases"] if c["id"] == "lighting/kitchen/5@seed")["expect"]
+    assert [(f["delay_ms"], f["hex"][:4]) for f in zone["frames"]] == [(0, "0904"), (300, "0e00")]
+    assert zone["frames"][1]["hex"] == control.LIGHT_COMMIT.hex()
+    save = next(c for c in V["cases"] if c["id"] == 'lighting/save_profile/"3 amber"@seed')["expect"]
+    assert [f["delay_ms"] for f in save["frames"]] == [0, 300, 0, 300]
+    assert save["frames"][0]["hex"][2:4] == "06"  # Mode 6 = SET_COLOR preface first
+    assert save["frames"][2]["hex"][2:4] == "04"  # then the SET_BRIGHTNESS save
+    cooler = next(c for c in V["cases"] if c["id"] == 'cooler/power/"on"@seed')["expect"]
+    assert cooler == {"kind": "frames", "frames": [{"char": "1101", "delay_ms": 0, "hex": "fd771e3e1f1f"}]}
+
+
+def test_garbage_and_unknown_state_are_refused_in_the_vectors():
+    """R3/R4: the C twin's spec never says 'build the OFF frame' for a garbage value, nor 'send the
+    default-filled night frame' with no cooler state."""
+    by_id = {c["id"]: c["expect"] for c in V["cases"]}
+    for cid in ("cooler/power/null@seed", 'cooler/power/"x"@seed', 'campingmode/master/"maybe"@camping_on'):
+        assert by_id[cid] == {"kind": "refused", "reason": control.REASON_NOT_ONOFF}, cid
+    for cid in ("cooler/night_on/0@empty", "cooler/night_off/7@empty"):
+        assert by_id[cid] == {"kind": "refused", "reason": control.REASON_COOLER_STATE_UNKNOWN}, cid
+    assert by_id["cooler/night_on/0@cooler_schedule"]["kind"] == "frames"
+
+
+def test_c_string_literals_escape_quotes_backslashes_and_trigraphs():
+    assert gen_c_dict._c_str('a"b\\c??d — e') == '"a\\"b\\\\c\\?\\?d \\342\\200\\224 e"'

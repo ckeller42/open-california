@@ -78,7 +78,7 @@ CONTROL_OUT = ROOT / "csrc" / "control_consts.h"
 # no roof control on the ESP); its control char 0x1401 is asserted absent from the allow-list below.
 ESP_CONTROL_FUNCTIONS = ("airheater", "campingmode", "cooler", "energy", "lighting")
 # What the ESP answers for a command it does not carry (the roof, the wake-up light, any other
-# function); the same words are the web UI's greyed-control hint (calictl/webui/app.js).
+# function); the same words become the web UI's greyed-control hint (calictl/webui/app.js, Task 6).
 ESP_ELSEWHERE_REASON = "Only via buspi or the app"
 _APP_SCRIPTS = ("strings.de.js", "semantics.js", "app.js")
 
@@ -653,7 +653,7 @@ def _c_str(s: str) -> str:
     out = []
     for b in s.encode("utf-8"):
         c = chr(b)
-        if c in '"\\':
+        if c in '"\\?':  # `?` escaped so a `??x` in a text can never form a C99 trigraph
             out.append("\\" + c)
         elif 0x20 <= b < 0x7F:
             out.append(c)

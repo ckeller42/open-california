@@ -115,8 +115,10 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
 
 - **Control writes WORK** (issue #2, 2026-07-07): armed by a **+1 4-byte-BE liveness heartbeat on
   char `1003`** (~0.6 s). One-shot arm — the load latches, so the heartbeat only spans the write
-  window (`device.actuate`, under the `serve` lock). Live-verified on-device: **cooler** (power/level),
-  **campingmode** (master/lights/usb), **lighting** (per-zone brightness).
+  window (`device.actuate`, under the `serve` lock). Live-verified on-device: **cooler** (power; level
+  only with the pre-R1 state-carry frame — the app-faithful `State=3` frames calictl sends since
+  2026-10-06 are a van check, #230), **campingmode** (master/lights/usb), **lighting** (per-zone
+  brightness).
 - **Lighting** actuates on an **awake** unit with a bare `SET_BRIGHTNESS` + `0e00…` commit — no
   REQUEST_CONFIG preamble, no 1003 heartbeat, no delay (the wake state is the gate, not any arming
   frame; the app's screen-open REQUEST_CONFIG pull is NOT required for actuation — calictl sends it only to

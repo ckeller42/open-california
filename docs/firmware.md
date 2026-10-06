@@ -343,7 +343,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 
 .. req:: The firmware's control frames and gates are byte-identical to calictl's
    :id: R_FW_CONTROL_TWIN
-   :status: implemented
+   :status: open
    :tags: esp32, control
 
    For cooler, campingmode, lighting (power, zones, ``all``, ``profile``, ``save_profile`` with its

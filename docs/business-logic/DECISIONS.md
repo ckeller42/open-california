@@ -24,6 +24,13 @@ frame). `overrides.CONTROL_RANGES` cooler `State` now allows the sentinel 3 (the
 frames carry it). The 2026-07-05 `State=3` → `0x0E` drop (below) predates the 1003 heartbeat and has
 not been re-tested; the first live cooler level/mode write after this change is the check.
 
+Review follow-ups (rulings R3/R4, same day): an on/off command with any other value (`null`, `""`,
+`"x"`, `"maybe"`) used to build the OFF frame (`_truthy` fell through to `False`); it is now refused
+(`REASON_NOT_ONOFF`, `control.ONOFF_COMMANDS`) and `_truthy` raises `CommandError` for direct callers.
+Cooler `night_on`/`night_off` with no cooler state known are refused (`REASON_COOLER_STATE_UNKNOWN`)
+instead of sending the default-filled frame. Both are in the ESP control vectors as `refused`, so the
+C twin mirrors them. Owner rule: unknown value or unknown state → refuse, never default (R5 precedent).
+
 ## 2026-10-05 — roof follows the app's heartbeat (A1)
 
 The #235 call-stack trace shows the app's `1003` ticker is session-global (`zf/d.java:183` →

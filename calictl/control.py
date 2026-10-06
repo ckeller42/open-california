@@ -18,8 +18,27 @@ LIGHT_ON, LIGHT_OFF = 0, 1  # camping lights inverted (app K0 writes (!on)?1:0).
 SENTINEL = 3  # 2-bit "leave unchanged" (sg.a default)
 
 
+_ON = ("on", "true", "1")
+_OFF = ("off", "false", "0")
+
+
+def is_onoff(value) -> bool:
+    """Whether ``value`` spells on or off (``on/true/1`` / ``off/false/0``, case- and space-insensitive)."""
+    return str(value).strip().lower() in _ON + _OFF
+
+
 def _truthy(value) -> bool:
-    return str(value).strip().lower() in ("on", "true", "1")
+    """``True`` for on/true/1, ``False`` for off/false/0.
+
+    :raises CommandError: anything else (ruling R3, 2026-10-06: ``null``/``""``/``"x"`` used to read
+        as OFF — a buggy caller could switch the fridge off; unknown now refuses, never defaults).
+    """
+    tok = str(value).strip().lower()
+    if tok in _ON:
+        return True
+    if tok in _OFF:
+        return False
+    raise CommandError("%s, got %r" % (REASON_NOT_ONOFF, value))
 
 
 def _int_range(value, lo, hi, label):
@@ -266,6 +285,8 @@ def _cooler(funcs, what, value, last):
     elif what in ("night_on", "night_off"):  # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
         hr = _int_range(value, 0, 23, "night timer hour")
         ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
+        if not last:  # R4: the daemon/CLI gate (command_precondition) refuses first; keep the builder honest
+            raise CommandError(REASON_COOLER_STATE_UNKNOWN)
         return protocol.encode(
             funcs["cooler"], _cooler_values(last, **ch), frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"]
         )
@@ -422,6 +443,12 @@ def roof_limit_positions(direction):
 
 # The gate texts (command_precondition), as constants: tools/gen_c_dict.py emits every REASON_* into
 # csrc/control_consts.h, so the ESP's C twin refuses with the same words (ruling B: same reason texts).
+REASON_NOT_ONOFF = (
+    "the value must be on or off (or true/false, 1/0) — anything else is refused, never read as off"
+)
+REASON_COOLER_STATE_UNKNOWN = (
+    "the cooler's current schedule is not known yet (no cooler state read) — refusing to overwrite it"
+)
 REASON_ROOF_READING = "the pop-top roof reading light needs the roof raised (roof is closed)"
 REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF = (
     "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
@@ -433,6 +460,22 @@ REASON_CAMPING_NEEDS_MASTER = "camping lights and USB need camping mode on (turn
 REASON_ENERGY_LOCKED = "the unit currently does not allow changing the energy mode"
 REASON_FAVOURITE_EMPTY = "this favourite is empty on the unit — save it first"
 REASON_WAKEUP_NO_AREA = "the wake-up light needs at least one vehicle area"
+# Every (function, what) whose value is an on/off token (ruling R3: anything else is refused up
+# front, with REASON_NOT_ONOFF, before a builder could read it as OFF).
+ONOFF_COMMANDS = frozenset(
+    {
+        ("cooler", "power"),
+        ("campingmode", "master"),
+        ("campingmode", "lights"),
+        ("campingmode", "usb"),
+        ("airheater", "power"),
+        ("lighting", "power"),
+        ("lighting", "door_contact"),
+        ("roofaircondition", "power"),
+        ("livingroomheater", "air"),
+        ("livingroomheater", "water"),
+    }
+)
 
 
 def command_precondition(function, what, value, states):
@@ -444,8 +487,24 @@ def command_precondition(function, what, value, states):
     :param states: mapping function-name -> DECODED state (e.g. ``serve._last`` or a fresh decode).
     :returns: a reason string when the write should be refused, else ``None``. Only blocks when the
         gating state is POSITIVELY wrong; unknown/absent state allows the write (can't prove it's
-        blocked, and the write is otherwise harmless).
+        blocked, and the write is otherwise harmless) — except where a default would be WRITTEN
+        (:data:`REASON_NOT_ONOFF`, :data:`REASON_COOLER_STATE_UNKNOWN`).
+
+    .. req:: An unknown value or unknown state refuses, never defaults
+       :id: R_ONOFF_STRICT
+       :status: implemented
+       :tags: control, safety
+
+       A command whose value is an on/off token shall accept only ``on/off``, ``true/false``,
+       ``1/0`` (case- and space-insensitive) and refuse anything else (``null``, ``""``, ``"x"``)
+       with :data:`REASON_NOT_ONOFF` — never read it as OFF (ruling R3). The cooler ``night_on`` /
+       ``night_off`` edit, which carries the unit's current schedule, shall be refused with
+       :data:`REASON_COOLER_STATE_UNKNOWN` while no cooler state is known — never send the
+       default-filled frame (ruling R4). Both texts are emitted into ``control_consts.h`` for the
+       ESP's C twin.
     """
+    if (function, what) in ONOFF_COMMANDS and not is_onoff(value):
+        return REASON_NOT_ONOFF
     if function == "lighting" and what == "roof-reading":
         try:
             on = int(value) > 0  # brightness 0-11; only an ON write is gated
@@ -463,6 +522,12 @@ def command_precondition(function, what, value, states):
     if function == "cooler" and what in ("mode", "night_on", "night_off"):
         if (states.get("cooler") or {}).get("State") == 0:  # fridge currently OFF
             return REASON_QUIET_NEEDS_FRIDGE_ON
+    # night_on/night_off carry the CURRENT schedule (the hour bytes are literal, 2026-08-26 #99); with
+    # no cooler state known the carry would be the default-filled frame that clobbers it. Ruling R4
+    # (2026-10-06): unknown -> refuse, never default (same rule as the wake-up edit, R5).
+    if function == "cooler" and what in ("night_on", "night_off"):
+        if not states.get("cooler"):
+            return REASON_COOLER_STATE_UNKNOWN
     # Camping lights + rear USB are only actionable while the camping master is ON: the rear USB is
     # physically dead without it (issue #111) and the light bits read back meaningless.
     if function == "campingmode" and what in ("lights", "usb"):
@@ -666,8 +731,6 @@ def _lighting(funcs, what, value, last):
         }
     elif what == "door_contact":
         # dg/h.n4: SET_PROFILE + ProfileNumber 8 (DOOR_CONTACT) staged, LightValue on?1:0 sent.
-        if str(value).strip().lower() not in ("on", "off", "true", "false", "1", "0"):
-            raise ValueError("door_contact takes on or off, got %r" % value)
         vals = {
             **base,
             "Mode": LIGHT_MODE_SET_PROFILE,
