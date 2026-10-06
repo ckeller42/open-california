@@ -17,6 +17,7 @@
  *   recvzero      every tcp_recv of the next tick returns 0 (a cali_net contract breach the core must
  *                 survive without spinning)
  *   sendzero      the next tcp_send returns 0 (likewise)
+ *   senderr       the next tcp_send returns -2 (the peer is gone)
  *   big <n>       GET /big answers <n> bytes (i % 26 + 'a'), at most BIG_MAX
  *   release       GET /later (answers CALI_HTTP_PENDING until then) now answers 200 "done"; a /later
  *                 re-asked with resume 0 (a core bug) answers "BAD"
@@ -40,7 +41,7 @@
 
 static char frags[MAX_FRAGS][LINE_MAX];
 static size_t frag_len[MAX_FRAGS], nfrags, head, head_off;
-static int pending_conns, eof_queued, recv_this_poll, no_listen, recv_zero, send_zero;
+static int pending_conns, eof_queued, recv_this_poll, no_listen, recv_zero, send_zero, send_err;
 static char long_type[600];
 static int released, later_seen;
 static long send_max = -1, send_block;
@@ -80,6 +81,10 @@ static int f_recv(int fd, void *buf, size_t n) {
 
 static int f_send(int fd, const void *buf, size_t n) {
     if (fd != CFD) return -2;
+    if (send_err) {
+        send_err = 0;
+        return -2;
+    }
     if (send_zero) {
         send_zero = 0;
         return 0;
@@ -192,6 +197,8 @@ int main(int argc, char **argv) {
             recv_zero = 1;
         } else if (strncmp(line, "sendzero", 8) == 0) {
             send_zero = 1;
+        } else if (strncmp(line, "senderr", 7) == 0) {
+            send_err = 1;
         } else if (strncmp(line, "eof", 3) == 0) {
             eof_queued = 1;
         } else if (strncmp(line, "release", 7) == 0) {

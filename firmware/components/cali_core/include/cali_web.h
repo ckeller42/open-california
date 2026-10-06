@@ -52,6 +52,13 @@
  *                       bad value -> 400 bad_value; no such control -> 400 unknown_control;
  *                       busy -> 409 busy; not ready (no armed link / state) -> 503 not_connected
  *                     Every error is {"ok":false,"error":<code>}. Any other method: 405 method.
+ *                     Known, deliberate differences from calictl: the Content-Type header is not
+ *                     checked (calictl answers 415 for a non-JSON one; the core does not expose
+ *                     headers, the UI always sends application/json); the integer -0 passes as the
+ *                     text "-0" (Python's json gives int 0 -> "0"), which the C twin refuses as
+ *                     not on/off where calictl would read OFF — the safe direction; a value of
+ *                     CALI_CTL_VALUE_MAX (64) bytes or more is 400 bad_json BEFORE the gates, while
+ *                     the console `set` (Task 2 I1) runs the gate first and refuses — both refuse.
  *   other method on /api/wifi or /api/state -> 405 {"ok":false,"error":"method"}
  *   anything else     setup mode: an OS captive-portal probe path (cali_captive_is_probe) -> 302
  *                     Location "http://" NET_AP_ADDR "/"; any other path -> 302 Location "/".

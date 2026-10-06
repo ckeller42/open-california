@@ -34,8 +34,10 @@
  * A handler may return CALI_HTTP_PENDING: the core then keeps the connection, reads nothing more
  * and accepts no other, and calls the handler again with the same request views and resume = 1 on
  * every poll until it returns 1 (answer) or 0 (404). No idle timeout applies while waiting — the
- * handler guarantees an answer (web.c's command: within CALI_CTL_DEADLINE_MS). cali_http_stop()
- * drops a waiting connection like any other.
+ * handler guarantees an answer (web.c's command: within CALI_CTL_DEADLINE_MS) — but the core has a
+ * bound of its own: a request still pending CALI_HTTP_PENDING_MAX_MS after it arrived is answered
+ * 504 (text/plain) and closed, so a handler that never answers cannot wedge the single connection.
+ * cali_http_stop() drops a waiting connection like any other.
  */
 #ifndef CALI_HTTP_H
 #define CALI_HTTP_H
@@ -51,6 +53,7 @@ extern "C" {
 
 #define CALI_HTTP_IDLE_MS 5000u
 #define CALI_HTTP_PENDING 2   /* handler: not answered yet — re-ask me (req->resume = 1) on every poll */
+#define CALI_HTTP_PENDING_MAX_MS 8000u   /* 2 x CALI_CTL_DEADLINE_MS: never reached by a well-behaved handler */
 
 /* resume: 0 on the first call for a request, 1 on every re-ask after CALI_HTTP_PENDING. */
 typedef struct { const char *method; const char *path; const char *query; const char *body; size_t body_len; int resume; } cali_http_req_t;

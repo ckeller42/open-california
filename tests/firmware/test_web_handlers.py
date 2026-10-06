@@ -556,6 +556,9 @@ def test_command_pends_until_the_write_completes(web_cli):
     """
     r, other = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl pending", "ctldone ok 3"])
     assert (r.status, r.json()) == (200, OK) and r.headers["content-type"] == "application/json"
+    # the same request with the write failing 3 polls in: the answer is 502, so it was NOT given early
+    r, _ = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl pending", "ctldone failed 3"])
+    assert (r.status, r.json()) == (502, {"ok": False, "error": "write_failed"})
     assert submits(other) == [
         "CALL submit [cooler] [power] [on]"
     ]  # 200 only after done: PENDING would be 502

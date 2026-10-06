@@ -245,8 +245,13 @@ void cali_http_poll(uint64_t now_ms) {
         pump(now_ms);
         return;
     }
-    if (S.waiting) {   /* a held request: ask the handler again; no idle timeout meanwhile */
+    if (S.waiting) {   /* a held request: ask the handler again; no idle timeout meanwhile, but a cap */
         cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL};
+        if (now_ms - S.last_ms > CALI_HTTP_PENDING_MAX_MS) {   /* last_ms = the request's last byte */
+            S.waiting = 0;
+            respond_error(504, now_ms);
+            return;
+        }
         answer(&S.req, S.handler(&S.req, &resp, S.ctx), &resp, now_ms);
         return;
     }

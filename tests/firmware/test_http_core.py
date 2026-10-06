@@ -392,3 +392,30 @@ def test_pending_does_not_read_or_accept_meanwhile(http_cli):
     # the fake's fragment queue is shared: the /hello bytes were NOT read (nor dropped) by the waiting
     # connection, and the second connection is accepted only after the first closed
     assert raw == "<accept>" + LATER_200 + "<closed><accept>" + HELLO_200 + "<closed><stopped>"
+
+
+def test_pending_handler_that_never_answers_is_cut_off(http_cli):
+    """I1: the core has a bound of its own while a handler is pending — CALI_HTTP_PENDING_MAX_MS
+    after the request arrived it answers 504 and closes, so a handler that forgets to answer can
+    never wedge the single connection (every other route would be dead until a power cycle)."""
+    define = next(
+        ln
+        for ln in (CORE / "include" / "cali_http.h").read_text().splitlines()
+        if ln.startswith("#define CALI_HTTP_PENDING_MAX_MS")
+    )
+    cap = int(define.split()[2].rstrip("u"))
+    raw = drive(http_cli, ["conn", "frag " + GET_LATER, "tick 10", "tick %d" % cap, "tick 1"])
+    assert raw.startswith("<accept>HTTP/1.1 504 Gateway Timeout\r\n") and raw.endswith("<closed><stopped>")
+    raw = drive(http_cli, ["conn", "frag " + GET_LATER, "tick 10", "tick %d" % cap])
+    assert raw == "<accept><stopped><closed>"  # exactly the cap: still waiting
+
+
+def test_peer_closing_while_pending_frees_the_slot(http_cli):
+    """A peer that goes away while its request pends is noticed at send time (-2): the connection
+    closes without wedging, and the next connection is served."""
+    raw = drive(
+        http_cli,
+        ["conn", "frag " + GET_LATER, "tick 10", "senderr", "release", "tick 10"]
+        + ["conn", "frag GET /hello HTTP/1.1\\r\\n\\r\\n", "tick 10", "tick 10"],
+    )
+    assert raw == "<accept><closed><accept>" + HELLO_200 + "<closed><stopped>"
