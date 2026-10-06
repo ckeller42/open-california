@@ -416,3 +416,38 @@ def test_lighting_config_frames_are_notified_to_a_subscribed_central():
     assert (save["Mode"], save["ProfileNumber"]) == (4, 1)  # the save ack names favourite 1
     assert cfg["Mode"] == 12 and cfg["LightValue"] & 1 == 1
     assert real["Mode"] not in (4, 12, 20)  # a read returns the real state, no sticky ack
+
+
+def test_a_new_connection_wakes_the_mock_after_a_heartbeat_lapse():
+    """A central that re-pairs after a >15 s gap found the unit advertising, so the unit is awake: the
+    mock's own heartbeat-lapse ``drop()`` (``online=False``) must not outlive it, or every one-off
+    ack/echo (REQUEST_CONFIG reply, wake-up/door echoes) is silently swallowed on the new link — the
+    app then shows empty favourite tiles and the switch reverts (app lab 2026-10-06, re-pair walk).
+
+    .. test:: Fake peripheral wakes the mock on a new connection
+       :id: T_FAKE_WAKE_ON_CONNECT
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+    from bumble.device import Peer
+
+    from calictl import overrides, protocol
+
+    f = protocol.load()
+    overrides.apply(f)
+
+    async def run():
+        _, unit, central = await _unit_and_central()
+        unit.unit.drop()  # the mock's internal lapse while the app was gone (beats stopped)
+        conn = await central.connect(await scan_for(central))
+        peer = Peer(conn)
+        await peer.discover_services()
+        await peer.discover_characteristics()
+        got: asyncio.Queue = asyncio.Queue()
+        await _char(peer, "1502").subscribe(lambda v: got.put_nowait(bytes(v)))
+        await asyncio.wait_for(got.get(), 2.0)  # on-subscribe push
+        await _char(peer, "1501").write_value(
+            bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee"), with_response=True
+        )
+        return protocol.decode(f["lighting"], await asyncio.wait_for(got.get(), 2.0))
+
+    assert asyncio.run(run())["Mode"] == 12  # the REQUEST_CONFIG reply, not just the state echo

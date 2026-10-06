@@ -480,6 +480,10 @@ class FakeUnit:
             self.tasks = [t for t in self.tasks if not t.done()]
             return
         self.conn = conn
+        # A central reached us, so the unit is awake: undo the mock's own heartbeat-lapse drop()
+        # (online=False), which this peripheral never models as "not advertising". Without this every
+        # one-off ack/echo is swallowed on a re-paired link (app lab 2026-10-06).
+        self.unit.wake()
         self.rec.connected()
         conn.on("disconnection", lambda reason, c=conn: self._on_disconnection(c, reason))
         conn.on("connection_att_mtu_update", lambda c=conn: self.rec.event("mtu", mtu=c.att_mtu))
