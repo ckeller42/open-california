@@ -30,6 +30,12 @@
  * and location are owned by the handler and MUST stay valid until the core closes the connection
  * (possibly several polls later); the core is single-connection, so the handler is never called
  * again before that close (web.c's static page and its JSON buffer satisfy this).
+ *
+ * A handler may return CALI_HTTP_PENDING: the core then keeps the connection, reads nothing more
+ * and accepts no other, and calls the handler again with the same request views and resume = 1 on
+ * every poll until it returns 1 (answer) or 0 (404). No idle timeout applies while waiting — the
+ * handler guarantees an answer (web.c's command: within CALI_CTL_DEADLINE_MS). cali_http_stop()
+ * drops a waiting connection like any other.
  */
 #ifndef CALI_HTTP_H
 #define CALI_HTTP_H
@@ -44,14 +50,16 @@ extern "C" {
 #endif
 
 #define CALI_HTTP_IDLE_MS 5000u
+#define CALI_HTTP_PENDING 2   /* handler: not answered yet — re-ask me (req->resume = 1) on every poll */
 
-typedef struct { const char *method; const char *path; const char *query; const char *body; size_t body_len; } cali_http_req_t;
+/* resume: 0 on the first call for a request, 1 on every re-ask after CALI_HTTP_PENDING. */
+typedef struct { const char *method; const char *path; const char *query; const char *body; size_t body_len; int resume; } cali_http_req_t;
 /* Pre-filled before the handler runs: status 200, content_type "text/plain", no body, no location,
  * no content_encoding. A content_encoding (e.g. "gzip" for a pre-compressed static body) adds
  * "Content-Encoding: <it>" and "Cache-Control: no-cache" (an encoded body is an asset baked into the
  * image: a reflash must show on the next load); without it the headers are unchanged. */
 typedef struct { int status; const char *content_type; const char *body; size_t body_len; const char *location; const char *content_encoding; } cali_http_resp_t;
-typedef int (*cali_http_handler_t)(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx);   /* 1 = handled */
+typedef int (*cali_http_handler_t)(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx);   /* 1 = handled, 0 = 404, CALI_HTTP_PENDING */
 
 /* Listens on port: 0 ok; -1 tcp_listen failed, and cali_http_poll stays a no-op. */
 int cali_http_init(const cali_net_t *net, uint16_t port, cali_http_handler_t handler, void *ctx);

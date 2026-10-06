@@ -18,6 +18,8 @@
  *                 survive without spinning)
  *   sendzero      the next tcp_send returns 0 (likewise)
  *   big <n>       GET /big answers <n> bytes (i % 26 + 'a'), at most BIG_MAX
+ *   release       GET /later (answers CALI_HTTP_PENDING until then) now answers 200 "done"; a /later
+ *                 re-asked with resume 0 (a core bug) answers "BAD"
  * Other routes: GET /redir -> 302 Location "/"; GET /redir-bare -> 302 without a location;
  * GET /longtype -> a Content-Type longer than the core's response header buffer.
  * Argument "nolisten": tcp_listen fails. cali_http_init's return value goes to stderr as "init=<rc>".
@@ -40,6 +42,7 @@ static char frags[MAX_FRAGS][LINE_MAX];
 static size_t frag_len[MAX_FRAGS], nfrags, head, head_off;
 static int pending_conns, eof_queued, recv_this_poll, no_listen, recv_zero, send_zero;
 static char long_type[600];
+static int released, later_seen;
 static long send_max = -1, send_block;
 static size_t sent_this_poll;
 static char big[BIG_MAX];
@@ -106,6 +109,18 @@ static int handler(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx
     (void)ctx;
     resp->status = 200;
     resp->content_type = "text/plain";
+    if (strcmp(req->method, "GET") == 0 && strcmp(req->path, "/later") == 0) {
+        if (!req->resume && later_seen) {   /* re-asked without resume: a core bug */
+            resp->body = "BAD";
+            resp->body_len = 3;
+            return 1;
+        }
+        later_seen = 1;
+        if (!released) return CALI_HTTP_PENDING;
+        resp->body = "done";
+        resp->body_len = 4;
+        return 1;
+    }
     if (strcmp(req->method, "GET") == 0 && strcmp(req->path, "/hello") == 0) {
         resp->body = "hi";
         resp->body_len = 2;
@@ -179,6 +194,8 @@ int main(int argc, char **argv) {
             send_zero = 1;
         } else if (strncmp(line, "eof", 3) == 0) {
             eof_queued = 1;
+        } else if (strncmp(line, "release", 7) == 0) {
+            released = 1;
         } else if (sscanf(line, "tick %llu", &ms) == 1) {
             now += ms;
             recv_this_poll = 0;

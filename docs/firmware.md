@@ -146,11 +146,12 @@ slot keeps its copy until a later line reuses it).
 |---|---|
 | `GET /` | Station mode: 200 `text/html; charset=utf-8` — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). Setup/off mode: the status/setup page (as `GET /device`). |
 | `GET /device` | 200 `text/html` in every mode — the status/setup page: `strings_gen.h`'s `WEB_INDEX_HTML`, the byte array generated from `firmware/web/index.html` + `page.js` + `strings.json` (EN + DE) by `tools/gen_c_dict.py`; in station mode it links back with "Open the camper UI". One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
-| `GET /api/state` | 200 JSON `{"t","fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,last_snap_age_ms}`, `wifi {mode,ssid,ip,rssi}`, `uptime_ms`, `fw`. Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
+| `GET /api/state` | 200 JSON `{"t","fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,last_snap_age_ms}`, `wifi {mode,ssid,ip,rssi}`, `control {writes}` (`POST /api/command` accepted: station mode), `uptime_ms`, `fw`. Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
 | `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining) — the setup page turns it into one of three texts; in setup mode it also asks for a fresh scan for the next GET. |
 | `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
 | `DELETE /api/wifi` | Forget the WiFi (-> `SETUP_AP`) -> 200 `{"ok":true}`. |
-| other method on `/api/state` or `/api/wifi` | 405 `{"ok":false,"error":"method"}` |
+| `POST /api/command` | calictl's control request `{"function","what","value","confirm"}` (`value` a string, integer or null — booleans/fractions/nesting 400 `bad_json`). **Station mode only**: anywhere else 403 `setup_mode` (ruling B: never over the setup hotspot). Then web.py's 400 `missing_function_or_what` / `confirm_required` (airheater, roof), then the sequencer (`cali_control.h`): accepted -> the answer waits for the write ACKs (`CALI_HTTP_PENDING`, <= `CALI_CTL_DEADLINE_MS`) -> 200 `{"ok":true,"applied":null,"state":null,"error":null,"function":fn}` (`applied` never true: no readback) or 502 `write_failed` / 504 `write_timeout`; a gate or "Only via buspi or the app" -> 200 `{"ok":true,"applied":false,"refused":<text>,…}`; 400 `bad_value` / `unknown_control`, 409 `busy`, 503 `not_connected`. |
+| other method on `/api/state`, `/api/wifi` or `/api/command` | 405 `{"ok":false,"error":"method"}` |
 | an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
 | any other path | setup mode: 302 `Location: /`; station mode: 404 |
 
@@ -377,7 +378,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 
 .. req:: Control commands: armed link, one at a time, station mode only
    :id: R_FW_CONTROL_API
-   :status: open
+   :status: implemented
    :tags: esp32, control, web
 
    The firmware shall accept a control command from ``POST /api/command`` (calictl's request and
@@ -389,9 +390,13 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    success only after every write was ACKed, a refused write or a lost link as a failure (no
    further frame), and gives up after ``CALI_CTL_DEADLINE_MS``; a second command while one runs
    — or while a timed-out write still awaits its ACK — is refused (busy). The sequencer is
-   ``firmware/components/cali_core/control_run.c``, ticked by the session. Status ``open`` until
-   ``POST /api/command`` and its station-mode gate exist (#154 B Task 4); the sequencer and the
-   console ``set`` are implemented and proven by the scripted-transport tests.
+   ``firmware/components/cali_core/control_run.c``, ticked by the session. ``POST /api/command``
+   (``web.c``) answers in calictl's request and response shape — ``applied`` never ``true`` (no
+   readback check), a gate's refusal as ``{"applied":false,"refused":<text>}`` — and only after the
+   sequencer's done callback: the HTTP core holds the connection (``CALI_HTTP_PENDING``, no idle
+   timeout meanwhile) so a refused or timed-out write is a 502/504, never "Sent". Outside station
+   mode (setup hotspot, setup-flow join, unprovisioned) it is ``403 setup_mode`` before anything
+   reaches the control module; ``/api/state`` reports it as ``device.control.writes``.
 
 .. req:: SM I/O capability and MITM must be set before any link exists
    :id: R_FW_IO_CAP_BEFORE_LINK
@@ -487,7 +492,10 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   `T_FW_HOST_E2E` (no command, no control write at the unit).
 - **`R_FW_CONTROL_API`** — verified by `T_FW_CONTROL_READY`, `T_FW_CONTROL_ATT_ERROR`,
   `T_FW_CONTROL_INTERLEAVE`, `T_FW_CONTROL_LATE_ACK` and `T_FW_CONTROL_LINK_DROP`
-  (`tests/firmware/test_session_fake.py`, the sequencer against the scripted transport).
+  (`tests/firmware/test_session_fake.py`, the sequencer against the scripted transport),
+  `T_FW_COMMAND_API` + `T_FW_COMMAND_STATION_ONLY` (`tests/firmware/test_web_handlers.py`: the
+  endpoint's shape, every status code, the station-mode gate, against a fake sequencer) and
+  `T_FW_HTTP_PENDING` (`tests/firmware/test_http_core.py`: the deferred answer).
 - **`R_FW_IO_CAP_BEFORE_LINK`** — verified by `T_FW_HOST_E2E`'s
   `test_just_works_build_is_refused`, which runs the `-DCALI_TEST_LATE_IO_CAP` regression build
   against the fake unit and asserts pairing ends in `error` (the unit refusing Just Works).

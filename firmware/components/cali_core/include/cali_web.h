@@ -15,6 +15,7 @@
  *                                  "link":{"up":<bool>,"last_snap_age_ms":<int>|null},
  *                                  "wifi":{"mode":"setup"|"station"|"off","ssid":"…"|null,
  *                                          "ip":"a.b.c.d"|null,"rssi":<int>|null},
+ *                                  "control":{"writes":<bool>},   -- POST /api/command accepted (station mode)
  *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>"}}
  *                     built whole in one handler call (one consistent snapshot) into a
  *                     NET_JSON_MAX buffer; overflow -> 500 + LOG "http: overflow".
@@ -32,6 +33,25 @@
  *                     -> 200 {"ok":true}; else 400 {"ok":false,"error":"json"|"ssid"|"psk"} (json
  *                     checked first); a kv write failure -> 500 {"ok":false,"error":"store"}.
  *   DELETE /api/wifi  cali_wifi_run_forget() -> 200 {"ok":true}
+ *   POST /api/command calictl's control request {"function":"…","what":"…","value":<string|int|null>,
+ *                     "confirm":<bool>} (fixed-shape parser: one object, those keys in any order, each
+ *                     at most once; value null or absent = ""; an integer is passed as its decimal text;
+ *                     booleans, fractions, nested values, an over-long function/what/value or any
+ *                     other key = 400 bad_json — plan B decision 5). Station mode only: in every other
+ *                     WiFi mode (setup hotspot, setup-flow join = "off", unprovisioned) 403
+ *                     {"ok":false,"error":"setup_mode"} before anything reaches the control module.
+ *                     Then web.py's checks: 400 missing_function_or_what, 400 confirm_required
+ *                     (airheater, roof without "confirm":true). Then cali_ctl_submit (cali_control.h):
+ *                       accepted  -> CALI_HTTP_PENDING until the sequencer's done callback, then
+ *                                    200 {"ok":true,"applied":null,"state":null,"error":null,"function":fn}
+ *                                    (applied never true: no readback check), or 502 write_failed /
+ *                                    504 write_timeout — the answer waits for the write ACKs
+ *                                    (<= CALI_CTL_DEADLINE_MS)
+ *                       refused / elsewhere -> 200 {"ok":true,"applied":false,"refused":<reason>,
+ *                                    "state":null,"error":null,"function":fn} (calictl's shape)
+ *                       bad value -> 400 bad_value; no such control -> 400 unknown_control;
+ *                       busy -> 409 busy; not ready (no armed link / state) -> 503 not_connected
+ *                     Every error is {"ok":false,"error":<code>}. Any other method: 405 method.
  *   other method on /api/wifi or /api/state -> 405 {"ok":false,"error":"method"}
  *   anything else     setup mode: an OS captive-portal probe path (cali_captive_is_probe) -> 302
  *                     Location "http://" NET_AP_ADDR "/"; any other path -> 302 Location "/".

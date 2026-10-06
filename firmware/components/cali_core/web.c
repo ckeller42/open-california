@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "cali_captive.h"
+#include "cali_control.h"
 #include "cali_json.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
@@ -39,6 +40,10 @@ static const char ERR_SSID[] = "{\"ok\":false,\"error\":\"ssid\"}";
 static const char ERR_PSK[] = "{\"ok\":false,\"error\":\"psk\"}";
 static const char ERR_STORE[] = "{\"ok\":false,\"error\":\"store\"}";
 static const char ERR_METHOD[] = "{\"ok\":false,\"error\":\"method\"}";
+static const char ERR_BAD_JSON[] = "{\"ok\":false,\"error\":\"bad_json\"}";
+static const char ERR_MISSING[] = "{\"ok\":false,\"error\":\"missing_function_or_what\"}";
+static const char ERR_CONFIRM[] = "{\"ok\":false,\"error\":\"confirm_required\"}";
+static const char ERR_SETUP_MODE[] = "{\"ok\":false,\"error\":\"setup_mode\"}";
 static const char OVERFLOW_BODY[] = "response too large";
 
 /* See cali_web.h / cali_wifi_run.h for the mapping and why a setup-flow join reports "off". */
@@ -118,6 +123,12 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_key(&j, "wifi");
     cali_json_obj_begin(&j);
     wifi_members(&j, &st);
+    cali_json_obj_end(&j);
+
+    cali_json_key(&j, "control");   /* POST /api/command is accepted: station mode only (ruling B) */
+    cali_json_obj_begin(&j);
+    cali_json_key(&j, "writes");
+    cali_json_bool(&j, st.wifi_mode == CALI_WIFI_MODE_STATION);
     cali_json_obj_end(&j);
 
     cali_json_key(&j, "uptime_ms");
@@ -244,9 +255,170 @@ static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
     memset(psk, 0, sizeof psk);
 }
 
+/* ---- POST /api/command: {"function","what","value","confirm"} (any order, each at most once) ---- */
+
+typedef struct {
+    char fn[24], what[32], value[CALI_CTL_VALUE_MAX];
+    int confirm;
+} cmd_t;
+
+static int parse_bool(cursor_t *c, int *out) {
+    skip_ws(c);
+    if (c->end - c->p >= 4 && memcmp(c->p, "true", 4) == 0) { c->p += 4; *out = 1; return 0; }
+    if (c->end - c->p >= 5 && memcmp(c->p, "false", 5) == 0) { c->p += 5; *out = 0; return 0; }
+    return -1;
+}
+
+/* value: a string (decoded), an integer -?(0|[1-9][0-9]*) passed on as its text, or null (-> "");
+ * -1 for anything else — true/false, an object/array, a fraction or exponent (its '.'/'e' is then
+ * neither ',' nor '}' for the caller) — and for a value of CALI_CTL_VALUE_MAX bytes or more. */
+static int parse_value(cursor_t *c, char *out, size_t cap) {
+    size_t n = 0, len;
+    skip_ws(c);
+    if (c->p < c->end && *c->p == '"') return parse_str(c, out, cap, &len) == 0 && len < cap ? 0 : -1;
+    if (c->end - c->p >= 4 && memcmp(c->p, "null", 4) == 0) {
+        c->p += 4;
+        out[0] = 0;
+        return 0;
+    }
+    if (c->p < c->end && *c->p == '-') out[n++] = *c->p++;
+    if (c->p == c->end || *c->p < '0' || *c->p > '9') return -1;
+    if (*c->p == '0' && c->p + 1 < c->end && c->p[1] >= '0' && c->p[1] <= '9') return -1;
+    while (c->p < c->end && *c->p >= '0' && *c->p <= '9') {
+        if (n + 1 >= cap) return -1;
+        out[n++] = *c->p++;
+    }
+    out[n] = 0;
+    return 0;
+}
+
+/* 0 ok, -1 not one object of the four known keys (each at most once; an over-long function, what
+ * or value is malformed too — calictl would answer "unknown function"/CommandError, both a 4xx). */
+static int parse_command(const char *body, size_t body_len, cmd_t *cmd) {
+    cursor_t c = {body, body + body_len};
+    unsigned seen = 0;
+    memset(cmd, 0, sizeof *cmd);
+    if (expect(&c, '{') != 0) return -1;
+    skip_ws(&c);
+    if (c.p < c.end && *c.p == '}') {
+        c.p++;
+    } else {
+        for (;;) {
+            char key[12];
+            size_t klen, vlen;
+            unsigned bit;
+            int bad;
+            if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
+            if (strcmp(key, "function") == 0) {
+                bit = 1;
+                bad = parse_str(&c, cmd->fn, sizeof cmd->fn, &vlen) != 0 || vlen >= sizeof cmd->fn;
+            } else if (strcmp(key, "what") == 0) {
+                bit = 2;
+                bad = parse_str(&c, cmd->what, sizeof cmd->what, &vlen) != 0 || vlen >= sizeof cmd->what;
+            } else if (strcmp(key, "value") == 0) {
+                bit = 4;
+                bad = parse_value(&c, cmd->value, sizeof cmd->value) != 0;
+            } else if (strcmp(key, "confirm") == 0) {
+                bit = 8;
+                bad = parse_bool(&c, &cmd->confirm) != 0;
+            } else {
+                return -1;
+            }
+            if (bad || (seen & bit)) return -1;
+            seen |= bit;
+            skip_ws(&c);
+            if (c.p < c.end && *c.p == ',') {
+                c.p++;
+                continue;
+            }
+            if (expect(&c, '}') != 0) return -1;
+            break;
+        }
+    }
+    skip_ws(&c);
+    return c.p == c.end ? 0 : -1;
+}
+
+/* The one command the single-connection core can have open: its function (echoed in the answer)
+ * and CALI_CTL_PENDING while the sequencer runs it, then the done callback's result. */
+static char s_cmd_fn[24];
+static int s_cmd = CALI_CTL_OK;
+
+static void cmd_done(int result) { s_cmd = result; }
+
+/* calictl's /api/command answers (serve.ServeBackend.command / web.py), plus the ESP's own codes:
+ * applied is never true (no readback check), a refusal is calictl's {"applied":false,"refused":…}. */
+static void cmd_answer(cali_http_resp_t *resp, int rc, const char *reason) {
+    cali_json_t j;
+    const char *err = NULL;
+    int status = 200;
+    switch (rc) {
+    case CALI_CTL_OK: case CALI_CTL_REFUSED: case CALI_CTL_ELSEWHERE: break;
+    case CALI_CTL_BAD_VALUE: status = 400; err = "bad_value"; break;
+    case CALI_CTL_NONE: status = 400; err = "unknown_control"; break;
+    case CALI_CTL_BUSY: status = 409; err = "busy"; break;
+    case CALI_CTL_NOT_READY: status = 503; err = "not_connected"; break;
+    case CALI_CTL_TIMEOUT: status = 504; err = "write_timeout"; break;
+    default: status = 502; err = "write_failed"; break;   /* FAILED (and PENDING: a bug) */
+    }
+    cali_json_begin(&j, s_json, sizeof s_json);
+    cali_json_key(&j, "ok");
+    cali_json_bool(&j, err == NULL);
+    if (err) {
+        cali_json_key(&j, "error");
+        cali_json_str(&j, err);
+    } else {
+        cali_json_key(&j, "applied");
+        if (reason) cali_json_bool(&j, 0); else cali_json_null(&j);
+        if (reason) {
+            cali_json_key(&j, "refused");
+            cali_json_str(&j, reason);
+        }
+        cali_json_key(&j, "state");
+        cali_json_null(&j);
+        cali_json_key(&j, "error");
+        cali_json_null(&j);
+        cali_json_key(&j, "function");
+        cali_json_str(&j, s_cmd_fn);
+    }
+    finish_json(&j, resp);   /* 200, or 500 on overflow */
+    if (resp->status == 200) resp->status = status;
+}
+
+static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static cmd_t cmd;   /* static: the 8 KB host-task stack */
+    const char *reason = NULL;
+    int rc;
+    if (req->resume) {   /* the core re-asks while we wait for the sequencer */
+        if (s_cmd == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
+        cmd_answer(resp, s_cmd, NULL);
+        return 1;
+    }
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot (ruling B) */
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (parse_command(req->body, req->body_len, &cmd) != 0) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (!cmd.fn[0] || !cmd.what[0]) {
+        SET_CONST(resp, 400, ERR_MISSING);
+    } else if ((strcmp(cmd.fn, "airheater") == 0 || strcmp(cmd.fn, "roof") == 0) && !cmd.confirm) {
+        SET_CONST(resp, 400, ERR_CONFIRM);   /* web.py CONFIRM_REQUIRED */
+    } else {
+        snprintf(s_cmd_fn, sizeof s_cmd_fn, "%s", cmd.fn);
+        s_cmd = CALI_CTL_PENDING;
+        rc = cali_ctl_submit(cmd.fn, cmd.what, cmd.value, cmd_done, &reason);
+        if (rc == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
+        s_cmd = rc;
+        cmd_answer(resp, rc, reason);
+    }
+    return 1;
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
+    if (strcmp(req->path, "/api/command") == 0) return api_command(req, resp);
     if (get && strcmp(req->path, "/") == 0) {
         if (wifi_mode() == CALI_WIFI_MODE_STATION) {   /* the calictl web UI (R_FW_SHARED_UI) */
             set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN);

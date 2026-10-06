@@ -337,3 +337,58 @@ def test_content_encoding_adds_encoding_and_no_cache(http_cli):
         "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n"
         "Content-Encoding: gzip\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\nhi"
     )
+
+
+# ---- deferred answers (CALI_HTTP_PENDING) --------------------------------------------------------
+
+GET_LATER = _esc("GET /later HTTP/1.1\r\n\r\n")
+LATER_200 = (
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone"
+)
+
+
+def test_pending_handler_answers_on_a_later_poll_and_never_idles_out(http_cli):
+    """A handler that returns CALI_HTTP_PENDING is re-asked (resume=1) every poll until it answers;
+    the connection is not closed by the idle timeout meanwhile.
+
+    .. test:: The HTTP core defers an answer while the handler is pending, without an idle timeout
+       :id: T_FW_HTTP_PENDING
+       :links: R_FW_CONTROL_API
+    """
+    raw = drive(http_cli, ["conn", "frag " + GET_LATER, "tick 10", "tick 6000", "tick 10"])
+    assert raw == "<accept><stopped><closed>"  # still waiting at the end: only the driver's stop closes it
+    raw = drive(http_cli, ["conn", "frag " + GET_LATER, "tick 10", "tick 6000", "release", "tick 10"])
+    assert raw == "<accept>" + LATER_200 + "<closed><stopped>"
+
+
+def test_pending_then_the_next_connection_is_served_normally(http_cli):
+    """After a deferred answer the core is back to normal: a second connection gets its answer at once,
+    and a pending handler is never re-asked with resume=0 (the fake answers BAD then)."""
+    raw = drive(
+        http_cli,
+        ["conn", "frag " + GET_LATER, "tick 10", "tick 10", "release", "tick 10"]
+        + ["conn", "frag GET /hello HTTP/1.1\\r\\n\\r\\n", "tick 10", "tick 10"],
+    )
+    assert raw == "<accept>" + LATER_200 + "<closed><accept>" + HELLO_200 + "<closed><stopped>"
+
+
+def test_pending_does_not_read_or_accept_meanwhile(http_cli):
+    """While waiting, bytes the peer sends are left alone and no second connection is accepted."""
+    raw = drive(
+        http_cli,
+        [
+            "conn",
+            "frag " + GET_LATER,
+            "tick 10",
+            "frag GET /hello HTTP/1.1\\r\\n\\r\\n",
+            "conn",
+            "tick 10",
+            "release",
+            "tick 10",
+            "tick 10",
+            "tick 10",
+        ],
+    )
+    # the fake's fragment queue is shared: the /hello bytes were NOT read (nor dropped) by the waiting
+    # connection, and the second connection is accepted only after the first closed
+    assert raw == "<accept>" + LATER_200 + "<closed><accept>" + HELLO_200 + "<closed><stopped>"
