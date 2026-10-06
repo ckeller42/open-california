@@ -235,10 +235,10 @@ unit — must be a physical door/ignition, phone app closed so buspi gets the sl
 
 Questions the static trace (enigma `46f982d3`) could not settle; each is an app-lab run against the mock:
 
-- **ECO selector (#230):** with `PvInstalled=1`, open Energy, leave, open again (or change the energy
-  mode). ECO on the second visit confirms the stale-first-read explanation (`ak/a.java:196-197,714`).
-- **Wake-up echo:** does the app accept a wake-up write when the mock echoes Mode 20 (it reverts with
-  "Something went wrong" after ~3 s otherwise)? On the van: does the real unit echo it?
+- ~~**ECO selector (#230)**~~ DONE 2026-10-06: ECO appears on the second visit with `PvInstalled=1`
+  (stale first read confirmed).
+- **Wake-up echo:** DONE in the lab 2026-10-06 — with the mock's Mode-20 echo the app keeps every wake-up
+  write (no revert, no toast). Still owed on the van: does the real unit echo it?
 - **Level Indicator:** `CarLevelPopUp=0` with roll/pitch set should show the gauges; 1 = ignition card,
   2 = "Please slow down".
 - **Roof overlay:** the roof-page warning text for InfoPopUp 2 vs 3 (`hj/c.p0`/`k0`, unresolved).
@@ -250,8 +250,9 @@ Questions the static trace (enigma `46f982d3`) could not settle; each is an app-
 - **air-heater level + runtime** (only on/off captured; the physical fields were at sentinels):
   drag Heizstufe to 3 then 8; Laufzeit to 30 then 90 min.
 - **WAKEUP_TIME** (Wecklicht): time edit **APP-RECORDED** (`lighting-wakeup.jsonl`, packing settled by
-  call stack) and built by calictl `wakeup`. Owed: an app recording of the on/off switch and of a time
-  edit while enabled (A2 Task 7); on the van, does the unit ramp the lights at that time.
+  call stack) and built by calictl `wakeup`; the on/off switch and a time edit while enabled are
+  **APP-RECORDED** too (2026-10-06, re-recorded `lighting-wakeup.jsonl`). Owed only on the van: does the
+  unit ramp the lights at that time.
 - **full lamp→nibble map**: ~6 of 16 lamps mapped; set each remaining lamp to a distinct level.
 - **roof drive from calictl** (SAFETY-SENSITIVE — **needs ignition ON**, roof path clear): the
   sequence is now settled (decompiled roof class — press-and-hold, app-generated monotonic

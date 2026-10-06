@@ -121,8 +121,8 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   state-char **readback is a write-through echo, never proof of actuation**. `set lighting color` is
   **retired**; the app's lighting commands calictl builds are `power`, zones, `profile`,
   `save_profile N [colour]` (colour = SET_COLOR preface, DECOMPILE-only; the app's colour UI is
-  model-gated), `wakeup`, `door_contact`. App-recorded: zones, save, wake-up time edit; `profile`
-  activate, wake-up on/off and `door_contact` are DECOMPILE + mock-tested (recordings owed). Wake-up /
+  model-gated), `wakeup`, `door_contact`. All of them except the colour preface are
+  app-recorded byte-exact (zones, save, `profile` activate, wake-up time + on/off, `door_contact`). Wake-up /
   door / favourite config is latched **only** from the unit's own 1502 Mode-20 / Mode-16-PN-8 / Mode-12
   frames, never from calictl's write. Extend via `control.BUILDERS`. See `control-and-actuation.md`.
 - **Roof** (needs ignition ON): press-and-hold — stream move frames while held, STOP/cease on release

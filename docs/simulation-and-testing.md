@@ -258,9 +258,9 @@ satellite's. It is a report, not a test: nothing asserts.
 on thinky and committing the new files, with the evidence-ledger rows that name them. The header's
 `recorded_by` is the only version signal.
 
-Status: `tests/vectors/app/` is **empty** until the first recording session on thinky (it needs the
-APK). Until then no evidence-ledger row is APP-RECORDED. The owed scenarios are `airheater-permanent-on`,
-`energy-mode`, `lighting-profile` and `lighting-wakeup`, plus `cooler` and `airheater`.
+Status (2026-10-06): 12 recordings in `tests/vectors/app/` (app 5.0.8.3028, thinky lab34), each named by
+the evidence-ledger rows it flips to APP-RECORDED; the A2 session added `door-contact`,
+`lighting-favourite` and a re-recorded `lighting-wakeup`.
 
 ## C codec parity (`csrc/`)
 

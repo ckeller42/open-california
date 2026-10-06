@@ -70,7 +70,7 @@ ATT/SMP PDU (needed for pairing questions, noisy otherwise); macOS has no `timeo
 State injection that is known to render: `set airheater ErrorCode=2` (Low-fuel toast), `set cooler
 Error=1` (workshop dialog), `set roof Position=…`/`InfoPopUp=9`, `set campingmode …`, `set general
 <version fields>` (→ the app refuses with "App version outdated", ex080 — restore the originals from
-`show general` afterwards). ECO energy mode and the Level Indicator are NOT reachable from any BLE field.
+`show general` afterwards). ECO appears with `set energy PvInstalled=1` but only on the SECOND visit to the Energy Mode picker (stale first read, 2026-10-06).
 
 ## Driving the app
 

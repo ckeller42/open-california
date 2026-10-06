@@ -338,10 +338,10 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | airheater | `timer_start` / `timer_cancel` | OperationModeAirHeater 3 (+ OperationModeCombined 1) / 0 | `rf/b` a2(AIR_HEATER) / j4 via `uh/d` | APP-OBSERVED (`3f3b017f1f3f` / `3f0b007f1f3f` identical) |
 | energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | DV |
 | lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |
-| lighting | `profile N` | SET_PROFILE, ProfileNumber N 0-13 (Fav 1-7, 10 wake, 11 interior; the app's tiles A/B/C/D = favourites 1/5/6/7); 8 refused → `door_contact`; a favourite the unit reported empty is refused | `dg/h` u0 | DV + mock-tested; app recording OWED |
+| lighting | `profile N` | SET_PROFILE, ProfileNumber N 0-13 (Fav 1-7, 10 wake, 11 interior; the app's tiles A/B/C/D = favourites 1/5/6/7); 8 refused → `door_contact`; a favourite the unit reported empty is refused | `dg/h` u0 | **APP-RECORDED** (`lighting-favourite.jsonl`: tile A → `0110…`) |
 | lighting | `save_profile N [colour]` | [SET_COLOR Mode 6 PN N] + SET_BRIGHTNESS PN N, equipped zones at their level; one armed link (preface, commit, save, commit) | `dg/h` l3 | save **APP-RECORDED** (`lighting-profile.jsonl`); colour preface DECOMPILE-only |
-| lighting | `wakeup [HH:MM] [areas] [brightness] [ramp] [on\|off]` | Mode 20, PN 14, Timestamp = next local HH:MM packed as UTC, LightValue packed; edits keep the unit-reported enabled bit | `dg/h` m0 | time edit **APP-RECORDED** (`lighting-wakeup.jsonl`); on/off DV + mock-tested, recording OWED |
-| lighting | `door_contact on\|off` | SET_PROFILE PN 8, LightValue 1/0 | `dg/h` n4 | DV + mock-tested; recording OWED |
+| lighting | `wakeup [HH:MM] [areas] [brightness] [ramp] [on\|off]` | Mode 20, PN 14, Timestamp = next local HH:MM packed as UTC, LightValue packed; edits keep the unit-reported enabled bit | `dg/h` m0 | **APP-RECORDED** (`lighting-wakeup.jsonl`: time edit, switch on, time edit while on keeps enabled=1, switch off) |
+| lighting | `door_contact on\|off` | SET_PROFILE PN 8, LightValue 1/0 | `dg/h` n4 | **APP-RECORDED** (`door-contact.jsonl`: `0810…01` / `0810…00`) |
 | campingmode | `master`/`lights`/`usb` | State / lights (inverted) / UsbCharger | `tf/a` | live-verified (on **only when stationary** — §4 gate) |
 | roof | `open`/`close`/`stop` | Up/Down + app-gen SafetyCounter | `ig/c` | not-live-verified |
 
@@ -364,7 +364,8 @@ session, or after the CLI direct path (no latch at all), the edit is refused unl
 explicit `on`/`off`. `on`/`off` without a known time is refused too. After the write the app waits
 ≤ 2000 ms for any 1502 frame, then checks `F0` 3 × 1000 ms; if the unit has not echoed a matching
 Mode-20 frame it reverts and toasts "Something went wrong" — so the **real unit must echo Mode 20 within
-~3 s** (van check). A Task-7 recording (time edit while enabled) is still owed as wire evidence.
+~3 s** (van check). The app recording of a time edit while enabled keeps enabled=1 on the wire
+(`lighting-wakeup.jsonl`, 2026-10-06), so R3 is APP-RECORDED.
 
 **Lighting config latch (ruling R4):** the wake-up (Mode 20), door-contact (Mode 16 / PN 8) and
 stored-favourite bits (Mode 12 reply) are latched by `serve` **only from 1502 frames the unit

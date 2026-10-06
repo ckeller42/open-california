@@ -247,7 +247,7 @@ SCENARIOS: dict[str, list[Step]] = {
         xy("roof_open_hold", expect=("roof", "open", None)),  # adb returns on release (16 s)
         wait(r"roof is open", 20),
     ],
-    "energy-mode": [  # ECO is not offered on this profile (protocol-crosscheck-applab.md).
+    "energy-mode": [  # ECO needs PvInstalled=1 and shows only on a 2nd visit (protocol-crosscheck-applab.md).
         # Energy Mode is NOT a Remote Control tile: it is a dropdown under Vehicle Information >
         # Charging (app 5.0.8.3028). The readback echo keeps EnergyMode at Normal after a write, so
         # the fake is nudged to Max before the Normal tap or the app treats Normal as a no-op.
@@ -264,9 +264,7 @@ SCENARIOS: dict[str, list[Step]] = {
     "lighting-profile": [
         # Save = press-and-hold a profile tile: the app writes SET_BRIGHTNESS with ProfileNumber = the
         # favorite and every equipped zone at its current level (no Save button). Run after the lighting
-        # coachmark was closed once (lighting-zone dismisses it). Selecting the saved profile is NOT
-        # recordable against the mock: it does not model stored favorites, so the app keeps the tile as
-        # empty ("+") and a tap only shows "Please press and hold".
+        # coachmark was closed once (lighting-zone dismisses it). Activating it: `lighting-favourite`.
         *_open_app(),
         ui(TILE["lighting"]),
         wait(r"All lights|Alle Lichter"),
