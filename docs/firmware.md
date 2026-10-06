@@ -489,13 +489,21 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   `R_FW_CONTROL_API`; nothing verifies it any more.
 - **`R_FW_WRITE_ALLOWLIST`** — verified by `T_FW_WRITE_ALLOWLIST_PURE` (exhaustive scan),
   `T_FW_SESSION_FAKE` + `test_control_roof_and_wakeup_are_refused_without_a_write`, and
-  `T_FW_HOST_E2E` (no command, no control write at the unit).
+  `T_FW_HOST_E2E` (no command, no control write at the unit), and `T_FW_CONTROL_E2E`
+  (`tests/firmware/test_control_e2e.py`: roof/wake-up/unknown commands never reach the fake unit,
+  and a roof, `1003`, wrong-length or empty frame handed straight to the NimBLE transport's
+  `write` — cali-host's test-only `twrite` line — is refused at `t_write`).
 - **`R_FW_CONTROL_API`** — verified by `T_FW_CONTROL_READY`, `T_FW_CONTROL_ATT_ERROR`,
   `T_FW_CONTROL_INTERLEAVE`, `T_FW_CONTROL_LATE_ACK` and `T_FW_CONTROL_LINK_DROP`
   (`tests/firmware/test_session_fake.py`, the sequencer against the scripted transport),
   `T_FW_COMMAND_API` + `T_FW_COMMAND_STATION_ONLY` (`tests/firmware/test_web_handlers.py`: the
   endpoint's shape, every status code, the station-mode gate, against a fake sequencer) and
-  `T_FW_HTTP_PENDING` (`tests/firmware/test_http_core.py`: the deferred answer).
+  `T_FW_HTTP_PENDING` (`tests/firmware/test_http_core.py`: the deferred answer); end to end over
+  the real HTTP core + NimBLE + the Bumble fake unit by `T_FW_CONTROL_E2E`
+  (`tests/firmware/test_control_e2e.py`: every app-recorded action byte-exact at the unit with the
+  commit's spacing, console `set`, `403` in setup mode, the heartbeat ticking through commands, an
+  ATT error = `502` with no commit, ACK-and-ignore = `applied: null`, `409 busy`), which also
+  verifies `R_FW_CONTROL_TWIN` on the wire.
 - **`R_FW_IO_CAP_BEFORE_LINK`** — verified by `T_FW_HOST_E2E`'s
   `test_just_works_build_is_refused`, which runs the `-DCALI_TEST_LATE_IO_CAP` regression build
   against the fake unit and asserts pairing ends in `error` (the unit refusing Just Works).

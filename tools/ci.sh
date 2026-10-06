@@ -65,7 +65,7 @@ firmware() {   # CI's firmware-host-e2e job: all of tests/firmware, incl. the li
                # test_suite() above). CALI_REQUIRE_CHROMIUM=1 (as in CI) makes a missing browser a
                # failure of the page test rather than a skip.
   local f
-  for f in tests/firmware/test_host_e2e.py tests/firmware/test_ble_store_kv.py tests/firmware/test_web_e2e.py; do
+  for f in tests/firmware/test_host_e2e.py tests/firmware/test_ble_store_kv.py tests/firmware/test_web_e2e.py tests/firmware/test_control_e2e.py; do
     [ -f "$f" ] || { echo "firmware: expected test file missing: $f" >&2; exit 1; }
   done
   local out status=0
@@ -76,7 +76,7 @@ firmware() {   # CI's firmware-host-e2e job: all of tests/firmware, incl. the li
   # stays a quiet skip here; only the linux_only host-tier files count as "not validated".
   local skip_lines reason
   skip_lines=$(printf '%s\n' "$out" \
-    | grep -E '^SKIPPED \[[0-9]+\] tests/firmware/(test_host_e2e|test_ble_store_kv|test_web_e2e)\.py' || true)
+    | grep -E '^SKIPPED \[[0-9]+\] tests/firmware/(test_host_e2e|test_ble_store_kv|test_web_e2e|test_control_e2e)\.py' || true)
   # (|| true: no match is the green case -- under set -euo pipefail a bare grep miss would exit 1)
   if [ -n "$skip_lines" ]; then
     reason=$(printf '%s\n' "$skip_lines" | sed -E 's/^SKIPPED \[[0-9]+\] [^:]+(:[0-9]+)?: //' | sort -u | paste -sd '; ' -)

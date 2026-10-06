@@ -204,6 +204,7 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_web_handlers
 .. automodule:: tests.firmware.test_net_host
 .. automodule:: tests.firmware.test_web_e2e
+.. automodule:: tests.firmware.test_control_e2e
 .. automodule:: tests.firmware.test_qemu_boot
 .. automodule:: tests.test_wifi_sm_ref
 .. automodule:: tests.test_web_strings
