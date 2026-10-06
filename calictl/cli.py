@@ -9,8 +9,11 @@
     calictl set lighting power on|off             # master toggle: LIGHTS_ON/LIGHTS_OFF profile (like the app)
     calictl set lighting <zone> <0-11>            # 0=off, 1-10=10%..100%, 11=default; zones: reading-1/2/3, kitchen, kitchen-ambient, roof-ambient, roof-reading, outside-rear
     calictl set lighting all <0-11>               # every real zone to one level
-    calictl set lighting profile <N>              # switch the active lighting profile
-    calictl set lighting color <name>             # recolour active profile: warm-white/amber/red/azure/... (apply UNVERIFIED)
+    calictl set lighting profile <N>              # activate a favourite (1-7) or 10 wake-up / 11 interior
+    calictl set lighting save_profile <N> [colour] # save the current lamps as favourite N (+ SET_COLOR first)
+    calictl set lighting wakeup HH:MM [areas] [brightness] [ramp] [on|off]   # e.g. wakeup 07:00 1,2 5 10 on
+    calictl set lighting wakeup on|off            # the app's wake-up switch (needs a known time)
+    calictl set lighting door_contact on|off      # sliding door switches the rear interior lights
     calictl set airheater power on|off            # immediate heating
     calictl set airheater permanent off           # continuous heating: OFF only (start it from inside the vehicle)
     calictl set airheater level <1-10>
@@ -166,6 +169,8 @@ async def cmd_set(funcs, dev, args):
     from . import control
 
     fn = args.function
+    if isinstance(args.value, list):  # nargs="*": multi-word values, e.g. `wakeup 07:00 1,2 5 10 on`
+        args.value = " ".join(args.value) or None
     if fn not in control.BUILDERS:
         print(
             "set not implemented for %r (have: %s)" % (fn, ", ".join(sorted(control.BUILDERS))),
@@ -192,14 +197,19 @@ async def cmd_set(funcs, dev, args):
             print(reason, file=sys.stderr)
             return 2
         frame = control.build(funcs, fn, args.what, args.value, cur)
+        pre = control.preface_for(funcs, fn, args.what, args.value, cur)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return 2
     if frame is None:
         print("unknown target %r for %s" % (args.what, fn), file=sys.stderr)
         return 2
+    kw = {}
+    if pre is not None:  # same link, same arm window as the save (device._actuate_on)
+        print("writing %s to %s control first (SET_COLOR) ..." % (pre.hex(), fn))
+        kw["preface"] = pre
     print("writing %s to %s control (heartbeat-armed) ..." % (frame.hex(), fn))
-    post = await dev.actuate(f, frame, verify=True, follow=control.commit_for(fn))
+    post = await dev.actuate(f, frame, verify=True, follow=control.commit_for(fn), **kw)
     if post is None:
         print("write sent, no readback")
         return 1
@@ -223,7 +233,7 @@ def build_parser():
     s.add_argument("function")
     s.add_argument("what")
     # value is optional: `set roof open|close|stop` takes no value (the direction is `what`).
-    s.add_argument("value", nargs="?", default=None)
+    s.add_argument("value", nargs="*", help="value words, e.g. 07:00 1,2 5 10 on")
     sub.add_parser("influx", help="single InfluxDB test write; the serve daemon does this continuously")
     sv = sub.add_parser("serve", help="unified daemon: one BLE owner -> InfluxDB + MQTT + commands")
     sv.add_argument("--interval", type=float, default=30.0)

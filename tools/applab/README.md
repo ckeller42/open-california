@@ -106,6 +106,14 @@ of the first walk after a boot or after a failed walk, while the app starts agai
 walk connects, later walks run fine. A loop that re-boots whenever qemu is gone and retries the walk
 landed each scenario in 2–8 attempts. Stop the Xvfb afterwards.
 
+**Better fallback (2026-10-06, A2 Task 7): `-gpu swangle_indirect` on the private `Xvfb :120`.** On this
+image `-gpu guest` silently falls back to host **lavapipe** (`emulator.log`: "Your AVD has been configured
+with an in-guest renderer, but the system image does not support guest rendering. Falling back to
+'lavapipe' mode"), and qemu then died on most cold app starts (2 of ~25 walks connected, with no `:10`
+session at all after a reboot, so not GPU contention). `swangle_indirect` (ANGLE over SwiftShader Vulkan)
+survived repeated cold app starts and every walk that session; failures left were only the pairing DHKEY
+flake. Headless `-gpu host` without an X display does not work (`Failed to get EGL display`).
+
 **Reconnect / ghost radios (recording caveat).** After the fake restarts (every `walk.py` scenario
 does), netsimd can keep a stale radio at the fake's identity so the app reconnects to a dead link and
 stalls ("Connection lost. Reconnecting…", then a spinner that only polls `vehicle`). Clearing it needs
@@ -346,6 +354,18 @@ the walk **without** rebooting between attempts — `walk.py` SIGTERMs its own f
 ghost, and the reboot does not help the DHKEY roll. `lighting-zone` and `airheater` each landed in
 ≤ 2 attempts this way. Reboot only when `adb`/netsim actually wedges (Another-emulator-instance, or
 `adb` hangs), and when you do, wait for `qemu-system-x86_64` to fully exit before relaunching.
+
+### Lighting walks: dialogs and sheets that are not obvious (2026-10-06)
+
+- Every tap on the wake-up switch shows **"Different time settings."** when the phone clock and the
+  fake's 1004 RTC (the baseline's 2026-08-28) differ; dismiss with **OK** (the write is already out).
+- The wake-up time sheet opens fully the first time but **half-expanded** (OK off screen) on a later open
+  in the same page visit; tap the drag handle to expand it before turning the wheel.
+- After a favourite save the saved tile is the ACTIVE profile, so a tap on it writes nothing; change the
+  lights (e.g. All lights off) before recording an activate.
+- To see the app read its config back after a cold app start, keep the fake running (a walk that fails on
+  purpose leaves it up), then force-stop the app, `forget`, and re-pair. The fake now wakes the mock on
+  every new link (its internal heartbeat-lapse `drop()` used to swallow every ack/echo afterwards).
 
 ## What the app itself told us (2026-09-16)
 

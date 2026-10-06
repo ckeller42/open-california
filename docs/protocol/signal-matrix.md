@@ -8,7 +8,7 @@ Every catalogued field, its surface/omit decision, and the evidence behind it. S
 - **provenance**: which of `app` (decompiled getter/setter), `gui` (UI screen spec key), `vwdoc` (vendor manual), `live` (a captured live sample) back this entry — signals.yaml's `sources` map.
 - **semantic-review**: signals.yaml persists **no** dedicated review-status field — `tools/audit_signals.py --report` computes `SEMANTIC-REVIEW-NEEDED` live against a decompile source tree, it isn't stored here. This column is a best-effort proxy: entries whose `scale` mentions "inverted" or "combined" (the only persisted marker of a non-trivial transform, e.g. the camping-lights case) are flagged `needs-review`; run the real auditor for anything authoritative.
 
-Totals: 228 fields catalogued, 93 surfaced, 135 omitted, 1 flagged for review.
+Totals: 228 fields catalogued, 94 surfaced, 134 omitted, 1 flagged for review.
 
 | function | category | field | decision | surfaced-name | confidence | provenance | semantic-review | omit-reason |
 |---|---|---|---|---|---|---|---|---|
@@ -171,7 +171,7 @@ Totals: 228 fields catalogued, 93 surfaced, 135 omitted, 1 flagged for review.
 | lighting | state | LightValue | surface | any_on | high | — | — | — |
 | lighting | state | Mode | surface | mode | high | — | — | — |
 | lighting | state | ProfileNumber | surface | profile | high | — | — | — |
-| lighting | state | Timestamp | omit | — | — | — | — | frame timestamp, not a user-facing signal |
+| lighting | state | Timestamp | surface | wakeup | high | — | — | — |
 | livingroomheater | control | Mode | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
 | livingroomheater | control | StateAir | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |
 | livingroomheater | control | StateWater | omit | — | — | — | — | control command field — definition captured in dictionary/overrides; not surfaced because roof-A/C is not installed on this van / set is not wired (control writes work — issue #2 solved 2026-07-07) |

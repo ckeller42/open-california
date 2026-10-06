@@ -63,6 +63,9 @@
  * // lighting (semantics.lighting): brightness_zone_1..16 read dynamically -> see note at renderLighting
  * @property {number|null} [profile]
  * @property {boolean} [any_on]
+ * @property {{time: string, enabled: boolean, ramp: number, brightness: number, areas: number[], colour: number}|null} [wakeup]
+ * @property {boolean|null} [door_contact]
+ * @property {number[]|null} [favourites_stored]
  * // airheater (semantics.airheater)
  * @property {boolean} [running]
  * @property {boolean} [permanent]
@@ -1498,6 +1501,9 @@ const LIGHT_LAMPS = [
     { label: "Rear surroundings", what: "outside-rear", zone: 3 },
     { label: "Entrance", what: "entrance", zone: 12 } ] },
 ];
+// The app's T7 wake-up area labels (ti/b: AREA_1..4)
+const WAKE_AREAS = ["Living area reading lights", "Kitchen background lighting",
+  "Pop-up roof reading lights", "Pop-up roof background lighting"];
 const LIGHT_MAX = 10;   // dg/i enum: 0=off, 1-10 = 10%..100% (11=default; 13=NOT_EQUIPPED — never send)
 
 /** @param {FnState} s */
@@ -1534,14 +1540,16 @@ function renderLighting(s) {
   psel.disabled = readOnly();
   const opt0 = document.createElement("option");
   opt0.value = ""; opt0.textContent = /** @type {string} */ (t("Choose…")); opt0.selected = true; psel.appendChild(opt0);
+  // The app's four favourite tiles A/B/C/D are FAVORITE 1/5/6/7 (gv/z0, hi/f); CLI/API take 1-7.
+  const FAV_TILES = /** @type {[number, string][]} */ ([[1, "A"], [5, "B"], [6, "C"], [7, "D"]]);
   /** @type {[number, string][]} */
-  const PROFILES = [[1, "Profile 1"], [2, "Profile 2"], [3, "Profile 3"], [4, "Profile 4"],
-                    [5, "Profile 5"], [6, "Profile 6"], [7, "Profile 7"],
+  const PROFILES = [...FAV_TILES.map(([n, l]) => /** @type {[number, string]} */ ([n, "Profile " + l])),
                     [11, "Interior lighting"], [10, "Wake-up light"]];
   for (const [n, lab] of PROFILES) {
-    // "Profile N" -> translate the word, keep the number; named profiles have their own keys.
-    const labT = /^Profile \d+$/.test(lab) ? t("Profile") + " " + lab.split(" ")[1] : t(lab);
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = /** @type {string} */ (labT); psel.appendChild(o);
+    // "Profile X" -> translate the word, keep the tile letter; named profiles have their own keys.
+    const labT = /^Profile \w$/.test(lab) ? t("Profile") + " " + lab.split(" ")[1] : t(lab);
+    const filled = !!s.favourites_stored && s.favourites_stored.includes(n);   // saved on the unit
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = labT + (filled ? " ✓" : ""); psel.appendChild(o);
   }
   psel.onchange = () => {
     if (psel.value === "") return;
@@ -1558,8 +1566,8 @@ function renderLighting(s) {
   const ssel = document.createElement("select");
   ssel.disabled = readOnly();
   const s0 = document.createElement("option"); s0.value = ""; s0.textContent = /** @type {string} */ (t("Profile…")); s0.selected = true; ssel.appendChild(s0);
-  for (let n = 1; n <= 7; n++) {
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Profile") + " " + n; ssel.appendChild(o);
+  for (const [n, l] of FAV_TILES) {
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Profile") + " " + l; ssel.appendChild(o);
   }
   ssel.onchange = () => {
     if (ssel.value === "") return;
@@ -1570,6 +1578,111 @@ function renderLighting(s) {
   };
   srow.appendChild(ssel); mc.appendChild(srow);
   app.appendChild(mc);
+
+  // Wake-up light (the app's Lighting > Functions & Settings > Wake-up light; dg/h.m0, Mode 20).
+  // The unit reports its config only in a Mode-20 frame (latched by the daemon). Every change
+  // resends the whole config like the app; the time picker never flips the switch (app-recorded).
+  // The unit-reported config (null until a Mode-20 frame was latched). Until the state confirms,
+  // the user's last sent edit overlays it (optimistic), so a re-render never resets a time that was
+  // just entered. We never invent a config: with none known the card is disabled, and an edit
+  // omits on/off so the daemon carries the enabled state the UNIT reported.
+  const wkReal = s.wakeup || null;
+  const wkOpt = optimistic[qKey("lighting", "wakeup")];
+  /** @type {typeof wkReal} */
+  let wk = wkReal;
+  if (wkReal && typeof wkOpt === "string") {
+    const tk = wkOpt.split(/\s+/);
+    const pos = tk.filter((x) => x !== "on" && x !== "off" && !x.includes(":"));
+    wk = Object.assign({}, wkReal, {
+      time: tk.find((x) => x.includes(":")) || wkReal.time,
+      areas: pos[0] ? pos[0].split(",").map(Number) : wkReal.areas,
+      brightness: pos[1] != null ? Number(pos[1]) : wkReal.brightness,
+      ramp: pos[2] != null ? Number(pos[2]) : wkReal.ramp,
+      enabled: tk.includes("on") ? true : tk.includes("off") ? false : wkReal.enabled,
+    });
+  }
+  const wkOff = readOnly() || !wk;
+  /** @param {{time?: string, areas?: number[], brightness?: number, ramp?: number, on?: boolean}} p */
+  const wakeCmd = (p) => {
+    if (!wk) return;
+    const base = `${p.time || wk.time} ${(p.areas || wk.areas).join(",")} ` +
+      `${p.brightness != null ? p.brightness : wk.brightness} ${p.ramp != null ? p.ramp : wk.ramp}`;
+    command("lighting", "wakeup", p.on == null ? base : `${base} ${p.on ? "on" : "off"}`);
+  };
+  const wc = document.createElement("div"); wc.className = "card";
+  const wh = document.createElement("div"); wh.className = "note"; wh.style.padding = ".6rem 0 0";
+  wh.textContent = /** @type {string} */ (t("Wake-up light")); wc.appendChild(wh);
+  const wrow = document.createElement("div"); wrow.className = "row";
+  const wl = document.createElement("span"); wl.className = "lbl"; wl.textContent = /** @type {string} */ (t("Wake-up light"));
+  wrow.appendChild(wl);
+  if (pending_is("lighting", "wakeup")) wrow.appendChild(spinner());
+  const wsw = document.createElement("button"); wsw.className = "switch";
+  wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", "Wake-up light");
+  wsw.setAttribute("aria-checked", wk && wk.enabled ? "true" : "false"); wsw.disabled = wkOff;
+  wsw.onclick = () => wakeCmd({ on: !(wk && wk.enabled) });
+  wrow.appendChild(wsw); wc.appendChild(wrow);
+  const trow = document.createElement("div"); trow.className = "row";
+  const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
+  const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time : "00:00";
+  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = wkOff;
+  tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
+  trow.append(tl, tin); wc.appendChild(trow);
+  const rrow = document.createElement("div"); rrow.className = "row";
+  const rl = document.createElement("span"); rl.className = "lbl"; rl.textContent = /** @type {string} */ (t("Lead time"));
+  const rsel = document.createElement("select"); rsel.disabled = wkOff;
+  for (const m of [0, 10, 20, 30]) {
+    const o = document.createElement("option"); o.value = /** @type {any} */ (m); o.textContent = tf("{n} min", { n: m });
+    o.selected = (wk ? wk.ramp : 0) === m; rsel.appendChild(o);
+  }
+  rsel.onchange = () => wakeCmd({ ramp: Number(rsel.value) });
+  rrow.append(rl, rsel); wc.appendChild(rrow);
+  const brow = document.createElement("div"); brow.className = "row";
+  const bl = document.createElement("span"); bl.className = "lbl"; bl.textContent = /** @type {string} */ (t("Brightness"));
+  const bin = document.createElement("input"); bin.type = "range"; bin.min = /** @type {any} */ (0); bin.max = /** @type {any} */ (LIGHT_MAX);
+  bin.value = /** @type {any} */ (wk ? wk.brightness : 0); bin.disabled = wkOff;
+  bin.setAttribute("aria-label", "Wake-up brightness");
+  bin.onchange = () => wakeCmd({ brightness: Number(bin.value) });
+  brow.append(bl, bin); wc.appendChild(brow);
+  const arow = document.createElement("div"); arow.className = "row";
+  const al = document.createElement("span"); al.className = "lbl"; al.textContent = /** @type {string} */ (t("Vehicle area"));
+  arow.appendChild(al);
+  const curAreas = wk ? wk.areas : [];
+  for (let a = 1; a <= 4; a++) {
+    const lab = document.createElement("label");
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = curAreas.includes(a);
+    // never untick the last area: the unit needs one (the app's "no area chosen" dialog)
+    cb.disabled = wkOff || (cb.checked && curAreas.length === 1);
+    cb.onchange = () => wakeCmd({ areas: cb.checked ? [...curAreas, a].sort() : curAreas.filter((x) => x !== a) });
+    lab.append(cb, document.createTextNode(" " + t(WAKE_AREAS[a - 1])));
+    arow.appendChild(lab);
+  }
+  wc.appendChild(arow);
+  if (!wk) {
+    const nk = document.createElement("div"); nk.className = "note";
+    nk.textContent = /** @type {string} */ (t("Wake-up settings not known yet — the unit has not reported them"));
+    wc.appendChild(nk);
+  }
+  app.appendChild(wc);
+
+  // Lighting & sliding door (dg/h.n4: SET_PROFILE PN 8, LightValue 1/0). Not variant-gated (see
+  // control.command_precondition): the app's T7 page shows it, and this T7 reads CarVariant=4.
+  const dc = document.createElement("div"); dc.className = "card";
+  // the app hides the row only on Grand California (CarVariant 2); no equipment gate (wh/c.h0)
+  const gc = !!STATE.vehicle && STATE.vehicle.car_variant === 2;
+  const dh = document.createElement("div"); dh.className = "note"; dh.style.padding = ".6rem 0 0";
+  dh.textContent = /** @type {string} */ (t("Lighting & sliding door")); dc.appendChild(dh);
+  const drow = document.createElement("div"); drow.className = "row";
+  const dl = document.createElement("span"); dl.className = "lbl";
+  dl.textContent = /** @type {string} */ (t("Opening sliding door activates the rear interior lights."));
+  drow.appendChild(dl);
+  if (pending_is("lighting", "door_contact")) drow.appendChild(spinner());
+  const dOn = optOn("lighting", "door_contact", s.door_contact === true);
+  const dsw = document.createElement("button"); dsw.className = "switch";
+  dsw.setAttribute("role", "switch"); dsw.setAttribute("aria-label", "Sliding door lighting");
+  dsw.setAttribute("aria-checked", dOn ? "true" : "false"); dsw.disabled = readOnly();
+  dsw.onclick = () => command("lighting", "door_contact", dOn ? "off" : "on");
+  drow.appendChild(dsw); dc.appendChild(drow);
+  if (!gc) app.appendChild(dc);
 
   // lamp sliders, grouped like the app (always controllable)
   for (const grp of LIGHT_LAMPS) {

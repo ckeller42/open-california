@@ -51,7 +51,7 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | lighting All lights ON | `0c10…eeee…` + `0e00…` | same | OBSERVED identical |
 | lighting lamp on | `0904…` one nibble = **11 DEFAULT** | `0904…` nibble = 10 | CONSISTENT (value convention differs) |
 | lighting save profile | `0104…e00eeeee` + commit, then `0d0c…` (REQUEST_CONFIG @13) + commit | `save_profile 1` identical first frame | OBSERVED identical (app adds a config pull) |
-| energy mode Max | `10` → `30` | `10` | OBSERVED identical; ECO absent from the selector on this profile — and still absent (2026-09-27, screens 58-59) with `energy.PvInstalled=1` and with `vehicle.CarVariant=2` (GRAND_CALIFORNIA): **ECO is not gated by any BLE field the fake serves**. **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; **SOURCE RESOLVED (#154, 2026-10-05):** `zj/c.N0` = `yg/j.f31040t1` (`yg/j.java:2870`, lambda index 19 `:2573`) = energy VM `xf/d.U1()` (`xf/d.java:339`) = flow `v1`, set from 1602 bit 10 = **`PvInstalled`** (`xf/d.java:178`, `xf/a.java:217,386`; the field name comes from the debug-log order). The decompile says ECO is offered iff `PvInstalled==1`, which **contradicts** the screen-58/59 observation above. Re-run that check with a fresh connect and confirm on the fake's wire that bit 10 of 1602 is really set |
+| energy mode Max | `10` → `30` | `10` | OBSERVED identical. **ECO (2026-10-06): OBSERVED on the second visit** to the Energy Mode picker with `PvInstalled=1` (first visit Normal / Max only) — stale first read, decompile confirmed; history: ECO absent from the selector on this profile — and still absent (2026-09-27, screens 58-59) with `energy.PvInstalled=1` and with `vehicle.CarVariant=2` (GRAND_CALIFORNIA): **ECO is not gated by any BLE field the fake serves**. **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; **SOURCE RESOLVED (#154, 2026-10-05):** `zj/c.N0` = `yg/j.f31040t1` (`yg/j.java:2870`, lambda index 19 `:2573`) = energy VM `xf/d.U1()` (`xf/d.java:339`) = flow `v1`, set from 1602 bit 10 = **`PvInstalled`** (`xf/d.java:178`, `xf/a.java:217,386`; the field name comes from the debug-log order). The decompile says ECO is offered iff `PvInstalled==1`, which **contradicts** the screen-58/59 observation above. Re-run that check with a fresh connect and confirm on the fake's wire that bit 10 of 1602 is really set. **Likely cause of the contradiction (decompile cross-check 2026-10-06, enigma `46f982d3`, medium confidence): a stale first read.** `ak/a.b` reads `N0`'s raw value without a Compose state read (`ak/a.java:714`) and is composed at `:196`, before `:197` subscribes the same flow; the proxy StateFlow (`yg/j.t1`, `a40/y`) refreshes only while subscribed, so the first visit sees the seed (false) and `b()` is then skipped. App-lab retest owed: with `PvInstalled=1`, a **second visit** to the Energy page in the same app session (or an energy-mode change) |
 | lamp → zone map (`LIGHT_ZONES`) | 9 lamps → nibble positions match every entry; no app lamp on `LSix` | OBSERVED (DEVICE map confirmed) |
 
 ## Roof (S_SEQ_ROOF, `alert-states.md`)
@@ -66,7 +66,7 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 | stale `SafetyCounterValid=1` with no stream | app reports "Function in use — another user is already using this function" when the unit still says valid=1 while the app has not validated its own counter | OBSERVED → mock now expires validity 1.5 s after the last frame |
 | unit reports `SafetyCounterValid` (1402 bit 7) | unit-side; the app refuses to move until the fake unit raises it | NOT TESTABLE (modelled) |
 | InfoPopUp 1/4/5/6/7/10/11 dialogs | all seven dialogs with the tabled texts | OBSERVED |
-| InfoPopUp 2/3/9/12 (untraced) | 2/3/12 → tile "Function currently in use", 9 → "Only possible when stationary" | OBSERVED → added |
+| InfoPopUp 2/3/9/12 | 2/3/12 → tile "Function currently in use", 9 → "Only possible when stationary" | OBSERVED → added; **DECOMPILE (decompile cross-check 2026-10-06, enigma `46f982d3`)**: dashboard tile `defpackage/i1.java:1652-1673` — "in use" = CALIFORNIA_7 && (InfoPopUp ∈ {2,3,12} or `SafetyCounterValid`), so a stale valid=1 alone also shows it |
 | 8/13/14 | nothing shown | OBSERVED |
 
 ## Fault dialogs and equipment gating (fake unit `set <fn> <Field>=<v>` while the app watches)
@@ -102,14 +102,14 @@ The fake unit's `campingmode` fields were set from the console with `State=1` (m
 | Claim | Observation | Verdict |
 |---|---|---|
 | the lights are ONE inverted toggle, lit iff both fields read 0 (`tf/a` `K0` / `m2`) | the front-door row is Enabled only at (0,0) — exactly `tf/a.m2()` ("true iff both raw fields == 0") | OBSERVED (the model holds; `semantics.campingmode` `lights_on` matches the row) |
-| the sliding-door row is a campingmode (1202) field | it never moved in any of the four combinations, nor with `UsbCharger` | OBSERVED negative. **DECOMPILE-SETTLED (#154):** on a T7 the row is the lighting DOOR_CONTACT flag (`wh/c.java:98` → `yg/o.l0` = `dg/h.s4`, set from 1502 Mode 16 / PN 8 / `LightValue==1`), and its toggle (`wh/b.java:91-104`) writes lighting `n4` (Mode 16, PN 8, LightValue 0/1). Owed: set DOOR_CONTACT on the fake unit and watch the row |
+| the sliding-door row is a campingmode (1202) field | it never moved in any of the four combinations, nor with `UsbCharger` | OBSERVED negative. **DECOMPILE-SETTLED (#154):** on a T7 the row is the lighting DOOR_CONTACT flag (`wh/c.java:98` → `yg/o.l0` = `dg/h.s4`, set from 1502 Mode 16 / PN 8 / `LightValue==1`), and its toggle (`wh/b.java:91-104`) writes lighting `n4` (Mode 16, PN 8, LightValue 0/1). **OBSERVED 2026-10-06:** after `door_contact on` (Lighting & Sliding door page, `door-contact.jsonl`) the camping page's sliding-door row reads **Enabled**, and still does after a cold app restart (filled from the REQUEST_CONFIG reply's Mode 16 / PN 8 frame) — CONSISTENT with the decompile |
 | rear USB row | "Enabled" / "Disabled" follows `UsbCharger` 1 / 0 | OBSERVED |
 | the app offers lights / USB toggles | the page has **one switch** (the master; a custom checkable view). The front-door and USB rows render as status rows ("Disabled" / "Rear USB ports are Enabled"), not switches; they were not tapped in this pass. The 2026-09-16 session did get writes from tapping those row **icons** (front-door `0f`, USB `f3`, `control-and-actuation.md` §3) and none from the sliding-door row | OBSERVED (UI shape). No switch for lights / USB, but the 09-16 icon taps did write — so "read-only rows" is NOT established; next step: tap each row icon with the fake unit logging writes. calictl's `lights` / `usb` writes are unaffected |
 | master off changes the page | `State=0`: the page body is unchanged; only the dashboard tile loses its "On" | OBSERVED |
 
 | Claim | Observation | Verdict |
 |---|---|---|
-| the Level Indicator reads roll/pitch from `1004` once ignition is on | the dedicated Level Indicator screen always shows "No data available. The ignition needs to be turned on for data." — with `vehicle.TerminalOneFive=1` (decoded correctly) and `CarLevelRoll`/`CarLevelPitch`/`CarLevelPopUp` set, after two re-entries | OBSERVED negative: the screen's ignition gate is **not** driven by 1004 terminal-15. **Hypothesis:** it reads the phone's own vehicle-data API (not the camper unit). Next step: trace the LevelIndicatorScreen view-model to the flow that supplies "ignition" |
+| the Level Indicator reads roll/pitch from `1004` once ignition is on | the dedicated Level Indicator screen always shows "No data available. The ignition needs to be turned on for data." — with `vehicle.TerminalOneFive=1` (decoded correctly) and `CarLevelRoll`/`CarLevelPitch`/`CarLevelPopUp` set, after two re-entries | OBSERVED negative: the screen's ignition gate is **not** driven by 1004 terminal-15. **DECOMPILE-SETTLED (decompile cross-check 2026-10-06, enigma `46f982d3`):** the gate is 1004 **`CarLevelPopUp`** (bits 4-5, `zf/d.java:328`): 1 = the "No data available / ignition" card with blank gauges (`zf/d.G0` → `ph/a.h0` → `fi/d.n0`), 2 = "Please slow down / less than 10 km/h" dialog, debounced 300 ms (`fi/d.java:101-125`). The phone-API hypothesis is retired. Retest: `CarLevelPopUp=0` with roll/pitch set should show the gauges |
 
 ## The hardware side: trace the real unit, replay it through the mock
 
@@ -173,7 +173,7 @@ and CI replays it against `control.build` (`tests/test_app_recordings.py`,
 lifecycle. See `simulation-and-testing`.
 
 Recording sessions (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools/applab/README.md`
-"Linux host"): all ten scenarios are **APP-RECORDED** and replay clean against `control.build`:
+"Linux host"): all ten scenarios of that day are **APP-RECORDED** and replay clean against `control.build`:
 
 - `tests/vectors/app/energy-mode.jsonl` — Max `10` and Normal `00` (+ neutral `30`), both matched.
 - `tests/vectors/app/campingmode.jsonl` — master OFF `fc` / ON `fd` (+ neutral `ff`), both matched.
@@ -193,5 +193,29 @@ Recording sessions (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools/appl
 - `tests/vectors/app/lighting-profile.jsonl` — press-and-hold tile A = `save_profile 1`
   `010400000000000000000005e00eeeee` (current zone levels, NOT_EQUIPPED → 14), matching calictl.
 - `tests/vectors/app/lighting-wakeup.jsonl` — wake-up time 07:00 via the wheel + OK writes the Mode-20
-  frame `0e146ac49c701100…` (Timestamp = the next 07:00 packed as if UTC, LightValue `0x11`); a
-  declared `GAPS` entry until calictl has a wake-up builder.
+  frame `0e146ac49c701100…` (Timestamp = the next 07:00 packed as if UTC, LightValue `0x1100` = warm
+  white, area 1, brightness 0, enabled 0). Since A2 calictl's `wakeup` builder reproduces it, so it
+  replays as `action` (`capture_diff.GAPS` is empty).
+
+A2 session (2026-10-06, thinky lab34, emulator in UTC, the A2 mock; `-gpu swangle_indirect`): three more
+recordings, every write `action`/`flush`/`app-only` (12 recordings in all):
+
+- `tests/vectors/app/lighting-wakeup.jsonl` (re-recorded) — time 07:00 `0e146ac5edf01100…`, switch ON
+  `…1101`, time 08:00 while ON `0e146ac5fc001101…`, switch OFF `…1100`. OBSERVED: the time edit while ON
+  keeps enabled=1 (ruling R3, CONSISTENT with `si/h.j`); with the mock's Mode-20 echo the app keeps each
+  write (no revert / toast); reopening the page shows 08:00.
+- `tests/vectors/app/door-contact.jsonl` — the "Opening sliding door…" status row toggles: `0810…01` /
+  `0810…00`, the row text follows the mock's Mode 16 / PN 8 echo (Enabled / Disabled).
+- `tests/vectors/app/lighting-favourite.jsonl` — save A (`0104…`, then REQUEST_CONFIG), all lights off
+  `0010…`, tap A `0110…` (SET_PROFILE PN 1). OBSERVED: after the save tile A is the active profile and a
+  tap on it writes nothing; tile A turns from "+" to filled from the REQUEST_CONFIG reply's bit 0.
+
+Other observations of that session (CONSISTENT unless noted):
+
+| Claim | App | Verdict |
+|---|---|---|
+| wake-up no-config seed = no areas (decompile `F0` seed) | the first time edit with no Mode-20 frame reported writes `LightValue 0x1100` = **area 1** ("Living area reading lights" ticked on the page) | **CONTRADICTED** (decompile reading); `WAKEUP_DEFAULT` area 1 matches the app |
+| wake-up area bits A1–A4 = `ti/b` T7 labels | ticking each entry alone: Living area reading = A1, Kitchen background = A2, Pop-up roof reading = A3, Pop-up roof background = A4 | OBSERVED, CONSISTENT (web UI `WAKE_AREAS`) |
+| the app reads its lighting config from the REQUEST_CONFIG reply | cold app restart + re-pair against a mock holding favourite 1, door on, wake-up 07:00 on: tile A filled, door row Enabled (lighting + camping page), wake-up page 07:00 with the switch on | OBSERVED (Mode 12 / Mode 20 / Mode 16 PN 8 all read) |
+| (new) wake-up switch clock check | every switch tap shows "Different time settings." — App: phone date/time, Vehicle: the 1004 RTC, "Please check the time in the vehicle and on your smartphone to make sure that all the functions operate correctly." [OK]; the write is sent regardless | OBSERVED (the fake's RTC is the baseline's 2026-08-28) |
+| ECO follows `PvInstalled` | first visit Normal / Max, second visit ECO / Normal / Max | OBSERVED, CONSISTENT (stale first read) |

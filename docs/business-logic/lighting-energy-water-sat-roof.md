@@ -156,7 +156,8 @@ L10/L11/L13 are Grand California rooms (living, dining, bathroom). L14–L16 hav
 ordinals 20–28 have no `case`, so they cannot be addressed over 1501. This matches the DEVICE map and the
 APP-OBSERVED nibbles exactly. In the app's model **no roof fixture sits on L5**, so the owner's 2026-08-27
 "pop-top light = zone 5" note contradicts the app. Either that toggle lit the kitchen background strip, or this
-van is wired differently. Only a labeled L5-only toggle at the van can tell which.
+van is wired differently. Only a labeled L5-only toggle at the van can tell which. A second app source agrees
+with L5 = kitchen: the wake-up area AREA_2 "Kitchen background lighting" maps to L5 (`ti/b.java:14-28`, decompile cross-check 2026-10-06, enigma `46f982d3`).
 
 ### Action → field map
 
@@ -192,9 +193,16 @@ van is wired differently. Only a labeled L5-only toggle at the van can tell whic
 7. **Activate a stored profile (`u0(ef.k profile, ...)`, `dg/h.java:944-992` in the 2026-10-05 tree)**:
    `v(16, PENDING)` then `w(N, DIRECT)`. One 1501 frame goes out: Mode = `SET_PROFILE`(16), ProfileNumber = N
    (`FAVORITE_n` = n, 1–7). Every other field keeps its staged/reset value (zones = 14). This is the same shape as the
-   All-lights master (`Q`, PN 12/0). The app then waits up to 2000 ms in `A(SET_PROFILE, profile)` for the matching
-   1502 notification and records the active profile. Activating `DEFAULT`(13) is followed by `d0()` REQUEST_CONFIG.
-   **DECOMPILE (call stack, #154).**
+   All-lights master (`Q`, PN 12/0). The app then waits up to 2000 ms in `A(SET_PROFILE, profile)`: **any** 1502
+   frame whose ProfileNumber == N acks it (its Mode is ignored); TRUE records N as the active profile, FALSE toasts
+   "Something went wrong". Activating `DEFAULT`(13) is followed by `d0()` REQUEST_CONFIG.
+   **DECOMPILE (call stack, #154; ack rule decompile cross-check 2026-10-06, enigma `46f982d3`).** UI (`hi/f`, `tt/ca.b`): the four tiles **A/B/C/D =
+   FAVORITE 1/5/6/7** (`gv/z0` case 26, `hi/f.smali:804-888`); a tile is drawn filled when its
+   `FavoriteProfileModifiedState` bit is set — **A/B/C/D = bits 0/4/5/6**. Tap on a filled tile = activate, tap on
+   an empty one = the "please press and hold" dialog, long press = save (`l3`). calictl: `profile N` (`control._lighting`, N 0–13, 8 refused → `door_contact`;
+   refused when the latched favourite bits say slot N is empty); frame shape pinned by `T_LIGHT_FAVOURITE_ACTIVATE`,
+   **APP-RECORDED** 2026-10-06 (`lighting-favourite.jsonl`: save A, all lights off, tap A → `0110…`, byte-exact).
+   App lab: right after a save the saved tile is the ACTIVE one, and a tap on the active tile writes nothing.
 
 8. **Save / edit a profile (`l3(ef.k profile, ...)`, `dg/h.java:564-700`)**. Two steps:
    (a) Only when a colour-capable zone exists and the profile is not `DOOR_CONTACT`/`INTERIOR_LIGHT`: send a
@@ -202,15 +210,32 @@ van is wired differently. Only a labeled L5-only toggle at the van can tell whic
    (b) Snapshot every zone's current brightness, stage Mode = `SET_BRIGHTNESS`(4), stage every **equipped** zone
    (zones that report `NOT_EQUIPPED` are skipped), then send `w(N, DIRECT)`. The result is ONE frame: Mode 4,
    **ProfileNumber = N (not the live-edit 9)**, every equipped zone at its current brightness. After the ack the app
-   sends `d0()` REQUEST_CONFIG. Callers: the profile editor (`ni/a.java:340`) and the door-settings page (`ii/a`).
+   sends `d0()` REQUEST_CONFIG. Ack rules (decompile cross-check 2026-10-06, enigma `46f982d3`): the SET_COLOR step awaits its own ack, but the
+   SET_BRIGHTNESS save is **always transmitted** (if the colour ack failed it is just not awaited); the save is acked
+   only by an **exact Mode 4 / PN N** 1502 frame within 2000 ms (FALSE → "Something went wrong"); the trailing
+   REQUEST_CONFIG always runs and its result is ignored. Callers: the favourite tiles (`hi/f.k` → `di/a` case 23),
+   the door settings (`b1/x0` saves `l3(DOOR_CONTACT)`, page `ii/a`) and the roof-console switch
+   (`pi/a` RoofConsoleLightSwitchViewModel saves `l3(INTERIOR_LIGHT)`). **Correction:** the #235 note that
+   `ni/a.java:340` is a favourite/profile editor was wrong — it is that roof-console `INTERIOR_LIGHT` save.
    The REQUEST_CONFIG reply on 1502 carries `FavoriteProfileModifiedState` (`ef/a`) in `LightValue` bits 0–6
-   (bit 0 = favourite 1; vineflower `dg/a.java:286-290`). **DECOMPILE (call stack, #154).**
+   (bit 0 = favourite 1; vineflower `dg/a.java:286-290`). **DECOMPILE (call stack, #154).** calictl:
+   `save_profile N [colour]` (`control._lighting` + `control.preface_for`), step (b) byte-exact vs
+   `tests/vectors/app/lighting-profile.jsonl`; step (a) DECOMPILE-only. calictl sends both on one armed link with a
+   0.3 s gap and does **not** wait for the SET_COLOR ack nor send the trailing REQUEST_CONFIG (known gap).
 
 9. **Toggle profile 8 (`n4(boolean on)`, `dg/h.java:877-884`)**: Mode=`SET_PROFILE`(16) staged, `ProfileNumber=8`
    (`DOOR_CONTACT`) staged, `LightValue = on?1:0` sent `DIRECT`. This enables or disables the door-contact auto-light
    profile. Read side: a 1502 notification with Mode=`SET_PROFILE` and ProfileNumber=`DOOR_CONTACT` sets the flag
    `D0 := (LightValue == 1)` (vineflower `dg/a.java:293-306`, exposed as `s4()`). **This flag is the camping page's
-   sliding-door row** on a California 7. See `climate-stairs.md` §camping.
+   sliding-door row** on a California 7. See `climate-stairs.md` §camping. calictl: `door_contact on|off`
+   (`control._lighting`), pinned by `T_LIGHT_DOOR_CONTACT`, **APP-RECORDED** 2026-10-06 (`door-contact.jsonl`:
+   `0810…01` / `0810…00`, byte-exact; the row is one tappable "Enabled"/"Disabled" status row); no CarVariant gate
+   in the builder/CLI (the app gates the page on its onboarding model, not on BLE). The web UI hides the row
+   when the live BLE `CarVariant` is Grand California (2), the nearest available stand-in for that onboarding
+   model (this T7 reads 4, so it is shown). Camping-page row gates (decompile cross-check 2026-10-06, enigma `46f982d3`): shown on
+   every variant except Grand California (`wh/c.h0`, `bc/a.java:117-140`), no equipment gate; the whole camping
+   page is blocked by "Only possible when stationary" while 1202 `Enable` (terminal-15 mirror) is set
+   (`ut/hf.java:68-80`).
 
 10. **Set wake-up light (`m0(ef.m config, ...)`, `dg/h.java:778-874`)**. **Settled from the decompile (#154).**
     The 1502 decode (vineflower `dg/a.java:311-415`) is its exact inverse, so the two cross-check each other.
@@ -221,10 +246,60 @@ van is wired differently. Only a labeled L5-only toggle at the van can tell whic
       hour and minute back.
     - `LightValue` (16 bit, MSB-first) = `colour:4 | A4 | A3 | A2 | A1 | brightness:4 | wakeMode:4`:
       - colour = the `dg.j` wire value 1–10.
-      - brightness = the raw slider int (range not traced).
+      - brightness = the raw slider int, **0..10** (11 stops, `ut/ob.java:363-378`; decompile cross-check 2026-10-06, enigma `46f982d3`). What the unit
+        does with brightness 0 is unknown.
       - wakeMode = `(foreRunMinutes / 10) << 1 | enabled`, the `dg.k` value. Example: ON with a 10-minute ramp = 3.
-      - A1–A4 = the four area flags. On a California 7 they are `T7_1..T7_4` (`dg/m.a`).
+        The lead-time slider offers 0/10/20/30 min (`ut/ob.java:333-355`).
+      - A1–A4 = the four area flags. On a California 7 they are `T7_1..T7_4` (`dg/m.a`), labelled
+        (`ti/b.java:14-28`): AREA_1 "Living area reading lights" = L1+L2, AREA_2 "Kitchen background lighting" =
+        **L5**, AREA_3 "Pop-up roof reading lights" = L9, AREA_4 "Pop-up roof background lighting" = L8.
     - Worked example: ON with a 10-min ramp, brightness 5, warm white, area 1 only gives `LightValue = 0x1153`.
+    - calictl: `wakeup [HH:MM] [areas] [brightness] [ramp] [on|off]` (`control._lighting` /
+      `control.wakeup_request`), byte-exact vs `tests/vectors/app/lighting-wakeup.jsonl` (07:00 →
+      `LightValue 0x1100`: warm white, area 1, brightness 0, no ramp, **off**). Missing parts come from the
+      unit-reported config; an edit keeps the unit-reported enabled bit and only `on`/`off` changes it
+      (ruling R3, **DECOMPILE-CONFIRMED**: `si/h.j` `si/h.java:387-414` takes each field from the edit, else
+      from `dg/h.F0`, which only the Mode-20 decode writes). With nothing reported, a time-only edit sends
+      enabled=0 (the app sends its `F0` seed, OFF) and `on`/`off` is refused. The app's wake-up screen does not
+      request config on open; `F0` is filled by the lighting page's REQUEST_CONFIG (`hi/f.java:103`).
+    - **APP-RECORDED 2026-10-06** (`lighting-wakeup.jsonl`, A2 mock, emulator in UTC): time 07:00 with no
+      config reported → `LightValue 0x1100`; switch on → `0x1101` (time kept); time 08:00 **while on** →
+      `0x1101` (**R3 confirmed on the wire**: the edit keeps enabled=1); switch off → `0x1100`. All byte-exact
+      vs calictl. **The app's no-config seed has area 1 ticked** ("Living area reading lights", the page shows
+      it checked before any Mode-20 frame), so `WAKEUP_DEFAULT` area 1 matches the wire; the decompile reading of
+      the `F0` seed ("no areas") does not (the area default must be set elsewhere — not traced). Area bits app-observed by ticking each entry alone: Living area reading = A1 (bit 8),
+      Kitchen background = A2, Pop-up roof reading = A3, Pop-up roof background = A4 (bit 11) — matches the
+      `ti/b` labels and the web UI's `WAKE_AREAS`. Every switch tap (on and off) first shows the app's
+      **"Different time settings."** dialog (App: phone date/time, Vehicle: the 1004 RTC, "Please check the time
+      in the vehicle and on your smartphone …", OK) when the phone clock and the unit RTC differ; the write is
+      sent regardless.
+    - After the write the app waits ≤ 2000 ms for **any** 1502 frame, then its optimistic holder (`vm/c`) checks
+      `F0` 3 × 1000 ms; with no matching Mode-20 echo it reverts and toasts "Something went wrong". So the
+      real unit must push the new Mode-20 frame within ~3 s (van check; the mock does). Two quick edits before
+      the first echo would let the second carry the stale value of the first.
+
+### Configuration on 1502
+
+The unit reports its lighting configuration in specific 1502 frames: Mode 20 (wake-up `Timestamp` +
+`LightValue`), Mode 16 / ProfileNumber 8 (door-contact flag in `LightValue`) and Mode 12 (the
+REQUEST_CONFIG reply, favourite bits 0–6 in `LightValue`). The state char holds one frame at a time, so
+`serve` carries these keys across later frames (`semantics.lighting_config`, `R_LIGHT_CONFIG_LATCH`) and
+surfaces them as `lighting.wakeup` / `door_contact` / `favourites_stored`. The latch takes **only the
+unit's own 1502 frames** (polls + pushes), never calictl's write (ruling R4; if the state char echoes config
+writes, a poll could still latch an unapplied write — van check). The daemon sends REQUEST_CONFIG
+only to learn the wake-up config before a wake-up edit (ruling R5), so `favourites_stored` is otherwise
+usually unknown (a save of N adds bit N only when the bits are
+already known). The mock stores 7 favourite slots (empty slot = ACK-and-ignore), the wake-up config and the
+door flag, and sends each config change as a **one-off** 1502 frame (wake-up / door echo, save and activate
+acks, REQUEST_CONFIG reply) — not re-readable state. Whether the **real unit** echoes these frames this way
+is **UNVERIFIED** (van check).
+
+**APP-OBSERVED 2026-10-06 (app lab, cold app restart + re-pair against a mock holding favourite 1, door
+contact on and wake-up 07:00 on):** opening the lighting page sends REQUEST_CONFIG, and from the mock's reply
+(Mode 12 favourite bits, Mode 20, Mode 16 / PN 8) the app shows tile A filled, the sliding-door row
+"Enabled" (lighting page and camping page alike) and the wake-up page at 07:00 with the switch on. So the app
+reads all three config frames from the REQUEST_CONFIG reply; the real unit's reply composition is still a van
+check.
 
 ### Profile-number enum (`dg/l.java` mirrors `ef/k.java`)
 
@@ -253,9 +328,9 @@ colour UI (`lighting_interiorLighting_SectionLightSubline_adjustLightColour_text
 10 `lighting_lightColor_*_text` names, rendered by `tt/x9.java`), but it is shown only behind a boolean flow
 whose source is unresolved — sibling keys carry the `_gc` suffix, so it is likely Grand-California-only and
 never appears on a T7. So SET_COLOR is a real capability, not N/A — but it recolours a
-stored profile. `control._lighting`'s `color` builds `ProfileNumber=9` + sentinel zones, which is NOT what the
-app sends (target profile + its brightness), so our `set lighting color` frame is mis-shaped and likely won't
-actuate as built. The other `dg.j` use is the wake-up-light `LightValue` packing (`dg/h.java:656`).
+stored profile. The old standalone `color` (PN 9 + sentinel zones) was mis-shaped vs the app and is
+**retired**; `save_profile N <colour>` now sends SET_COLOR (PN N + the profile's zones) before the save
+(`control.preface_for`, decompile-only). The other `dg.j` use is the wake-up-light `LightValue` packing (`dg/h.java:656`).
 
 ### Wake mode enum (`dg/k.java:39-53`)
 
@@ -305,7 +380,7 @@ flag, source one hop unresolved); calictl offers ECO unconditionally.
 **Negative confirmation, APP-OBSERVED 2026-09-27** (`tools/applab`, inventory screens 58-59): the
 real app's picker showed only Normal / Max with `EnergyModeNotSelectable=0`, with
 `energy.PvInstalled=1`, and with `vehicle.CarVariant=2` (GRAND_CALIFORNIA) — no BLE field the fake
-unit serves unlocks ECO. **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` (account/config vs vehicle) is still unresolved — next step: SootUp def-use trace of `N0`'s writer. The app never sends `EnergyModeSet=2` on this van.
+unit serves unlocks ECO. **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` is **RESOLVED (#154): 1602 bit 10 `PvInstalled`**, contradicting the observation. **Likely cause of the contradiction (decompile cross-check 2026-10-06, enigma `46f982d3`, medium confidence): a stale first read.** `ak/a.b` reads `N0`'s raw value without a Compose state read (`ak/a.java:714`) and is composed at `:196`, before `:197` subscribes the same flow; the proxy StateFlow (`yg/j.t1`, `a40/y`) refreshes only while subscribed, so the first visit sees the seed (false) and `b()` is then skipped. App-lab retest owed: with `PvInstalled=1`, a **second visit** to the Energy page in the same app session (or an energy-mode change). **APP-OBSERVED 2026-10-06 (settles it):** with `PvInstalled=1` on the wire, the first visit to Vehicle Information > Energy Mode offers Normal / Max; leaving and opening it again in the same app session offers **ECO / Normal / Max**. ECO is gated by `PvInstalled`; the 2026-09-27 screens were first visits. This van has no solar (`PvInstalled=0`), so its app never offers ECO and never sends `EnergyModeSet=2` on this van.
 
 ("Land" = shore/landline power, "Pv" = photovoltaic/solar, "Dcdc" = DC-DC converter, "Afs" = raw AFS-scaled
 value, "Two Batt" = second/auxiliary battery, "Emp"/"Lad" = installed-equipment flags.)

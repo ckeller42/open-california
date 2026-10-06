@@ -145,6 +145,7 @@ class FakeUnit:
             if fn in self.funcs:
                 seed[fn] = protocol.decode(self.funcs[fn], frame)
         self.unit = MockCamperUnit(seed=seed)
+        self.unit.event_sink = lambda fn, frame: self.schedule_notify(fn, frame)  # acks/echoes, one-off
         self.unit.armed = True  # the emulator app keeps its own heartbeat; don't gate
         self.dirty: set[str] = set()
         self.by_state: dict[str, str] = {}  # state char uuid -> fn
@@ -274,12 +275,13 @@ class FakeUnit:
             for fn in changed:
                 self.schedule_notify(fn)
 
-    def schedule_notify(self, fn: str) -> None:
+    def schedule_notify(self, fn: str, value: bytes | None = None) -> None:
+        """Notify ``fn``'s state char: the stored state, or an explicit one-off ``value`` (an ack/echo)."""
         ch = self.chars.get(fn)
         if ch is not None and self.device is not None:
             # the value explicitly: Bumble would otherwise fetch it through the char's GATT read
             # callback, which is the central-read path (gatt_read, drop_on_read)
-            value = self.read_state(fn)
+            value = self.read_state(fn) if value is None else value
             if self.conn is not None and fn in self.subscribed:
                 self.rec.notify(self.funcs[fn].state_char, value)
             self.tasks.append(asyncio.get_event_loop().create_task(self.device.notify_subscribers(ch, value)))
@@ -478,6 +480,10 @@ class FakeUnit:
             self.tasks = [t for t in self.tasks if not t.done()]
             return
         self.conn = conn
+        # A central reached us, so the unit is awake: undo the mock's own heartbeat-lapse drop()
+        # (online=False), which this peripheral never models as "not advertising". Without this every
+        # one-off ack/echo is swallowed on a re-paired link (app lab 2026-10-06).
+        self.unit.wake()
         self.rec.connected()
         conn.on("disconnection", lambda reason, c=conn: self._on_disconnection(c, reason))
         conn.on("connection_att_mtu_update", lambda c=conn: self.rec.event("mtu", mtu=c.att_mtu))

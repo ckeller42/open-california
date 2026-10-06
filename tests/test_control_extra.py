@@ -11,6 +11,8 @@ this only proves the frame layout + value packing, not on-device behaviour.
    :links: R_AIRHEATER_SET, R_ROOF_ACTUATE
 """
 
+import asyncio
+
 import pytest
 
 from calictl import control, overrides
@@ -268,3 +270,146 @@ def test_command_precondition_roof_move_blocked_but_stop_never_is():
     # unknown / not-installed state allows (can't prove it's blocked), per the doctrine
     assert control.command_precondition("roof", "open", None, {}) is None
     assert control.command_precondition("roof", "open", None, state(1, installed=0)) is None
+
+
+def test_favourite_gate_refuses_only_a_known_empty_slot():
+    """
+    .. test:: Activating a favourite is refused only when the unit reported it empty
+       :id: T_LIGHT_FAVOURITE_GATE
+       :links: R_LIGHT_FAVOURITE
+    """
+    known = {"lighting": {"Mode": 4, "FavouritesStored": 0b001}}
+    assert control.command_precondition("lighting", "profile", 1, known) is None
+    assert control.command_precondition("lighting", "profile", 2, known) == (
+        "this favourite is empty on the unit — save it first"
+    )
+    assert (
+        control.command_precondition("lighting", "profile", 2, {"lighting": {"Mode": 4}}) is None
+    )  # unknown
+    assert control.command_precondition("lighting", "profile", 12, known) is None  # not a favourite
+
+
+def test_wakeup_gate_refuses_enabling_with_no_area():
+    no_area = {"lighting": {"WakeupTimestamp": 25200, "WakeupLightValue": 0x1000}}  # 07:00, no areas, off
+    assert control.command_precondition("lighting", "wakeup", "on", no_area) == (
+        "the wake-up light needs at least one vehicle area"
+    )
+    assert control.command_precondition("lighting", "wakeup", "07:30", no_area) is None  # stays off
+    assert control.command_precondition("lighting", "wakeup", "07:30 2 on", no_area) is None
+    assert control.command_precondition("lighting", "wakeup", "bogus", {}) is None  # the builder reports it
+
+
+def test_door_contact_is_not_gated_on_car_variant():
+    for variant in (0, 1, 2, 4, None):
+        assert (
+            control.command_precondition(
+                "lighting", "door_contact", "on", {"vehicle": {"CarVariant": variant}}
+            )
+            is None
+        )
+
+
+def test_postcheck_handles_the_new_lighting_values():
+    # _lighting_check used to int() every value: "07:00 on" / "1 red" / "on" raised inside
+    # serve._confirm_lighting and failed the command after the frame was already written.
+    from calictl.postcheck import set_check
+
+    assert set_check("lighting", "wakeup", "07:00 on", {}, {})[1:] == (None, None)  # no applied-check
+    assert set_check("lighting", "save_profile", "1 red", {}, {})[1:] == (None, None)
+    assert set_check("lighting", "door_contact", "on", {"door_contact": True}, {})[1:] == (True, True)
+    assert set_check("lighting", "door_contact", "off", {"door_contact": True}, {})[1:] == (True, False)
+
+
+def _cli_run(argv, state_hex):
+    """Parse a real argv with the CLI parser and run cmd_set against a fake device; returns the
+    (preface, frame) of every actuate call."""
+    from calictl import cli
+
+    funcs = P.load()
+    overrides.apply(funcs)
+    calls = []
+
+    class FakeDev:
+        async def read(self, func):
+            return bytes.fromhex(state_hex)
+
+        async def actuate(self, func, frame, *, verify=True, follow=None, preface=None):
+            calls.append((preface.hex() if preface else None, frame.hex()))
+            return None
+
+    args = cli.build_parser().parse_args(argv)
+    asyncio.run(cli.cmd_set(funcs, FakeDev(), args))
+    return calls
+
+
+def test_cli_save_profile_with_colour_writes_the_set_color_preface_first():
+    """The CLI sends the SET_COLOR preface with the save in ONE actuate (one link, one arm)."""
+    calls = _cli_run(["set", "lighting", "save_profile", "1", "red"], "091000000000000000000005d00ddddd")
+    assert calls == [("010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee")]
+
+
+def test_cli_parser_takes_multi_word_values():
+    from calictl import cli
+
+    p = cli.build_parser()
+    assert p.parse_args(["set", "lighting", "wakeup", "07:00", "1,2", "5", "10", "on"]).value == [
+        "07:00",
+        "1,2",
+        "5",
+        "10",
+        "on",
+    ]
+    assert p.parse_args(["set", "roof", "open"]).value == []
+
+
+def test_cli_wakeup_time_edit_without_a_known_config_is_refused(capsys):
+    """Ruling R5: the CLI has no latch, so a time edit with no on/off is refused (never a silent
+    disarm); an explicit switch token still builds the app's recorded time-picker frame."""
+    assert (
+        _cli_run(["set", "lighting", "wakeup", "07:00"], "0c1000000000000000000000d00ddddd") == []
+    )  # nothing written
+    assert "not known yet" in capsys.readouterr().err
+
+
+def test_cli_wakeup_time_with_explicit_off_is_the_app_time_picker_frame(monkeypatch):
+    import datetime
+
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
+    calls = _cli_run(["set", "lighting", "wakeup", "07:00", "off"], "0c1000000000000000000000d00ddddd")
+    assert calls == [(None, "0e146ac49c701100eeeeeeeeeeeeeeee")]
+
+
+def test_wakeup_edit_with_no_unit_reported_config_is_refused():
+    """Ruling R5: never silently disarm. Edits (no on/off) need a unit-reported config; an explicit
+    on/off carries its own enabled state and passes."""
+    for v in ("07:00", "07:00 1 5 10"):  # (no-time edits: the builder refuses "not known yet")
+        assert "not known yet" in control.command_precondition("lighting", "wakeup", v, {"lighting": {}})
+    assert control.command_precondition("lighting", "wakeup", "07:00 off", {"lighting": {}}) is None
+    known = {"lighting": {"WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1301}}
+    assert control.command_precondition("lighting", "wakeup", "07:00", known) is None
+
+
+def test_wakeup_edit_carries_the_unit_reported_enabled_state():
+    """Controller ruling (Task 6 fix round 1): the decompile ``m0(ef.m config, ...)`` receives the
+    whole current config, so an edit (time/areas/brightness/ramp) keeps the enabled state AS LAST
+    REPORTED BY THE UNIT; only on/off changes it. Unknown config + time only = the app's recorded
+    frame (enabled=0, nothing reported to carry).
+    """
+    last = {"WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1301}  # latched: ON, areas 1+2
+    c = control.wakeup_request("07:30", last)
+    assert c["enabled"] is True and c["areas"] == [1, 2]
+    assert control.wakeup_request("off", last)["enabled"] is False
+    off = {"WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1300}
+    assert control.wakeup_request("07:30", off)["enabled"] is False
+    assert control.wakeup_request("on", off)["enabled"] is True
+    assert control.wakeup_request("07:30", None)["enabled"] is False
+    with pytest.raises(ValueError, match="not known yet"):
+        control.wakeup_request("1,2", None)  # areas edit with no unit-reported config
+
+
+def test_build_input_errors_are_command_errors():
+    funcs = P.load()
+    overrides.apply(funcs)
+    for what, value in (("color", "red"), ("wakeup", "25:00"), ("wakeup", "bogus"), ("kitchen", "x")):
+        with pytest.raises(control.CommandError):
+            control.build(funcs, "lighting", what, value, {})

@@ -354,8 +354,8 @@ bits 12-15** (`ig/c.java:241-246`). Dispatch `switch(InfoPopUp)` (`:311-638`):
 | 7 | ROOF_EMERGENCY_LOCKED (`emergency_locked`) | HIGH | **yes** | "Please secure the pop-up roof manually and follow the instructions from the operating manual." / "Bitte Aufstelldach manuell sichern…" (`dialog_error_popUpRoof_secureManually_text`) |
 | 10 | ROOF_NOT_POSSIBLE_TEMPORARILY (`not_possible`) | HIGH | **yes** | "The function is currently unavailable." / "Die Funktion ist zurzeit nicht möglich." (`dialog_error_popUpRoof_temporarilyOutOfFunction_text`) |
 | 11 | ROOF_LOW_BATTERY (`low_battery`) | HIGH | **yes** | "Battery low. Run engine." / "Batterie ist schwach. Motorlauf durchführen." (`dialog_warning_popUpRoof_lowBattery_text`) |
-| 2, 3, 12 | (`k()` set → `in_use`) | — | **yes** (tile state) | roof tile reads "Function currently in use" — no dialog (`dialog_info_popUpRoof_functionInUse_*`) |
-| 9 | (`E0` flow → `not_stationary`) | — | **yes** (tile state) | roof tile reads "Only possible when stationary" — no dialog (`dialog_info_popUpRoof_onlyPossibleWhenStationary_*`) |
+| 2, 3, 12 | (`k()` set → `in_use`) | — | **yes** (tile state) | dashboard roof tile reads "Function currently in use" (also when `SafetyCounterValid=1` alone); tapping it opens "Function in use / Another user is already using this function". On the roof page 2/3 stop the move with a 300 ms haptic and a warning overlay (`ij/e`; its text not resolved) |
+| 9 | (`E0` flow → `not_stationary`) | — | **yes** (tile state) | dashboard roof tile reads "Only possible when stationary"; the roof page shows `ROOF_SPEEDLOCK_ID` "Only possible when stationary" + [Not now] |
 | 8, 13, 14 | — | — | no | nothing shown (tile stays "Closed") |
 | — | `Position == 15` | — | **yes** | (position error; no dialog of its own) |
 
@@ -367,7 +367,8 @@ roof-tile texts are as tabled). The web UI's banners (`webui/app.js ROOF_ALERT_M
 `ROOF_MOVE_BLOCK` set mirror this table; calictl names 2/3/12 `in_use` and 9 `not_stationary`
 (Influx `alert_code` 8 / 9, appended). The roof page itself also refuses to show its controls
 without terminal 15 ("Switch on the ignition — Please switch on the ignition to operate the
-pop-up roof.", `dialog_info_popUpRoof_activateIgnition_*`).
+pop-up roof.", `dialog_info_popUpRoof_activateIgnition_*`). Dashboard tile + roof-page meanings of 2/3/9/12
+traced decompile cross-check 2026-10-06, enigma `46f982d3` (`defpackage/i1.java:1652-1673`, `tj/f.java:601-606`, roof page `hj/c`).
 
 `ROOF_ERROR`/`ROOF_NOT_POSSIBLE_TEMPORARILY`/`ROOF_OP_DRIVING` are wholly new IDs. Two ack keys
 lack the `_CONFIRMED` suffix (`..._NOT_POSSIBLE_TEMP`, `..._ERROR_WORKSHOP`), which is why a
@@ -457,4 +458,4 @@ Observed with app 5.0.8.3028 against the fake unit (`tools/applab`); screen numb
 |---|---|---|---|
 | **ex080 — app version outdated** | at connect, `general` (1001) carries implausible versions (tested: AmbSw/CmSw ASCII "9999"/"0000", `CommunicationVersion=99`) | full-screen "Connection failure", "App version outdated.", tip "1. Update app", "Error code: ex080", [Try again] [Close] (screen 57) | **hard refusal** — the app does not connect at all (no read-only fallback). With the baseline versions restored, Try again gave one transient "Error accessing data" retry prompt; a fresh Connect then succeeded. The checker class is not yet named in the decompile (next step: find the ex080 string key, then its call site). calictl deliberately does NOT copy this: `firmware_untested` warns and keeps reading (`feature-availability.md`) |
 | **roof — switch on the ignition** | pop-up roof page opened with `vehicle.TerminalOneFive=0` | dialog "Switch on the ignition" / "Please switch on the ignition to operate the pop-up roof." [Not now] (screen 41) | no roof controls until ignition is on (the `ROOF_TERMINAL15_ID` flow, §11). With ignition on, opening the page writes a probe frame `0000097b00` (Up=0 / Down=0 + SafetyCounter) before any press |
-| **Level Indicator — no data** | the dedicated Level Indicator screen | "No data available. The ignition needs to be turned on for data." (screen 45) | shown even with 1004 `TerminalOneFive=1` and roll/pitch set — so its "ignition" is NOT 1004 terminal-15. Hypothesis: the phone's own vehicle-data API (cf. `LEVELING_OVER_SPEED_ID`, §12); next step: trace the screen's view-model flow |
+| **Level Indicator — no data** | the dedicated Level Indicator screen | "No data available. The ignition needs to be turned on for data." (screen 45) | shown even with 1004 `TerminalOneFive=1` and roll/pitch set — its "ignition" is NOT terminal-15 but 1004 **`CarLevelPopUp`=1** (bits 4-5, `zf/d.java:328`; `CarLevelPopUp`=2 = "Please slow down", cf. `LEVELING_OVER_SPEED_ID`, §12) — DECOMPILE-SETTLED, decompile cross-check 2026-10-06, enigma `46f982d3` |

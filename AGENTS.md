@@ -113,14 +113,18 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   **campingmode** (master/lights/usb), **lighting** (per-zone brightness).
 - **Lighting** actuates on an **awake** unit with a bare `SET_BRIGHTNESS` + `0e00…` commit — no
   REQUEST_CONFIG preamble, no 1003 heartbeat, no delay (the wake state is the gate, not any arming
-  frame; the app's screen-open REQUEST_CONFIG pull is NOT required and calictl no longer sends it).
+  frame; the app's screen-open REQUEST_CONFIG pull is NOT required for actuation — calictl sends it only to
+  read the wake-up/door/favourite config before a wake-up edit whose config is unknown, R5).
   Brightness is the **0-11 enum** (0=OFF, 1-10 = 10–100 %, 11=DEFAULT; 13=NOT_EQUIPPED read-only,
   14=leave-unchanged; `LIGHT_ON_BRIGHTNESS=10`, slider max 10). The `1502` **Mode-4 notification** is a
   decodable state frame carrying the real ramping brightness — the truthful feedback channel; the
-  state-char **readback is a write-through echo, never proof of actuation**. `set lighting color`
-  (SET_COLOR) is unverified and **mis-shaped vs the app** (the app recolours a stored PROFILE; its
-  colour UI exists but is model-gated — likely Grand-California-only — and excludes profiles
-  DOOR_CONTACT(8)/INTERIOR_LIGHT(11)). Extend via `control.BUILDERS`. See `control-and-actuation.md`.
+  state-char **readback is a write-through echo, never proof of actuation**. `set lighting color` is
+  **retired**; the app's lighting commands calictl builds are `power`, zones, `profile`,
+  `save_profile N [colour]` (colour = SET_COLOR preface, DECOMPILE-only; the app's colour UI is
+  model-gated), `wakeup`, `door_contact`. All of them except the colour preface are
+  app-recorded byte-exact (zones, save, `profile` activate, wake-up time + on/off, `door_contact`). Wake-up /
+  door / favourite config is latched **only** from the unit's own 1502 Mode-20 / Mode-16-PN-8 / Mode-12
+  frames, never from calictl's write. Extend via `control.BUILDERS`. See `control-and-actuation.md`.
 - **Roof** (needs ignition ON): press-and-hold — stream move frames while held, STOP/cease on release
   (no confirmation phase). Direction bytes match the app (open `0x01`/stop `0x00`/close `0x04`). The
   **SafetyCounter is app-generated** (monotonic BE-uint32, ~+1 per 500 ms), NOT echoed; the unit

@@ -301,9 +301,13 @@ because it is instructive RE:
   record.
 - **Still open:** SET_COLOR on-device apply — the app DOES have colour control (`dg/h.java:644`,
   a profile-recolour: Mode 6, LightValue=colour, ProfileNumber=target profile + its brightness),
-  but our `set lighting color` frame is mis-shaped vs the app's (PN=9 + sentinel zones) so it
-  likely won't actuate as built; whether a deep-asleep unit needs any arming at all; pinning the
-  exact wake-state determinant with controlled trials (awake duration, parked vs active).
+  the old standalone `color` was **retired** (A2, 2026-10); `save_profile N <colour>` now sends the
+  app-shaped SET_COLOR preface (`control.preface_for`, DECOMPILE-only, unverified on-device). **Known
+  gap vs the app:** `dg/h.l3` waits for the SET_COLOR 1502 ack before the save and sends a
+  REQUEST_CONFIG after it; calictl sends preface, commit, save, commit on one armed link with only the
+  `FOLLOW_DELAY_S` (0.3 s) gap and no ack wait or REQUEST_CONFIG. Also open: whether a deep-asleep
+  unit needs any arming at all; pinning the exact wake-state determinant with controlled trials
+  (awake duration, parked vs active).
 
 **Lighting frame layout** (16 bytes / 128 bits): `ProfileNumber@4/w4`, `Mode@8/w8`
 (4=SET_BRIGHTNESS, 16=SET_PROFILE), `Timestamp@16/w32` (`sg.a()` no-arg, default 0 — part of
@@ -334,15 +338,43 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | airheater | `timer_start` / `timer_cancel` | OperationModeAirHeater 3 (+ OperationModeCombined 1) / 0 | `rf/b` a2(AIR_HEATER) / j4 via `uh/d` | APP-OBSERVED (`3f3b017f1f3f` / `3f0b007f1f3f` identical) |
 | energy | `mode` | EnergyModeSet 0=normal/1=max_charge/2=eco | `xf/d`:389 | DV |
 | lighting | `power` / zone / `all` | SET_PROFILE 12/0 · per-zone SET_BRIGHTNESS | `dg/h` Q/E | live (photon 08-16) |
-| lighting | `profile` | SET_PROFILE, ProfileNumber (Fav 1-7, 10 wake, 11 interior) | `dg/h` u0 | DV (activate) |
-| lighting | `save_profile` | SET_BRIGHTNESS w/ ProfileNumber=N + all zones (define a favorite) | `dg/h` l3 | DV |
+| lighting | `profile N` | SET_PROFILE, ProfileNumber N 0-13 (Fav 1-7, 10 wake, 11 interior; the app's tiles A/B/C/D = favourites 1/5/6/7); 8 refused → `door_contact`; a favourite the unit reported empty is refused | `dg/h` u0 | **APP-RECORDED** (`lighting-favourite.jsonl`: tile A → `0110…`) |
+| lighting | `save_profile N [colour]` | [SET_COLOR Mode 6 PN N] + SET_BRIGHTNESS PN N, equipped zones at their level; one armed link (preface, commit, save, commit) | `dg/h` l3 | save **APP-RECORDED** (`lighting-profile.jsonl`); colour preface DECOMPILE-only |
+| lighting | `wakeup [HH:MM] [areas] [brightness] [ramp] [on\|off]` | Mode 20, PN 14, Timestamp = next local HH:MM packed as UTC, LightValue packed; edits keep the unit-reported enabled bit | `dg/h` m0 | **APP-RECORDED** (`lighting-wakeup.jsonl`: time edit, switch on, time edit while on keeps enabled=1, switch off) |
+| lighting | `door_contact on\|off` | SET_PROFILE PN 8, LightValue 1/0 | `dg/h` n4 | **APP-RECORDED** (`door-contact.jsonl`: `0810…01` / `0810…00`) |
 | campingmode | `master`/`lights`/`usb` | State / lights (inverted) / UsbCharger | `tf/a` | live-verified (on **only when stationary** — §4 gate) |
 | roof | `open`/`close`/`stop` | Up/Down + app-gen SafetyCounter | `ig/c` | not-live-verified |
 
 **Not wired (deliberately):** airheater `permanent` (the app's `E3()` only writes OFF; ON value
-unknown — won't arm a fuel burner on a guess), lighting wake-up **time** (`m0`, Mode 20 — the
-LightValue bitmask packing is unverified; needs a capture), lighting `color` (frame mis-shaped +
-not on this variant).
+unknown — won't arm a fuel burner on a guess); lighting `color` — **retired** (2026-10, A2): the
+app recolours a stored favourite, so use `save_profile N <colour>` (`set lighting color …` raises
+`CommandError`, the API answers 400).
+
+**Wake-up edits (ruling R3, A2 — DECOMPILE-CONFIRMED, decompile cross-check 2026-10-06, enigma `46f982d3`):** the app builds every write in
+`si/h.j` (`si/h.java:387-414`) field by field as "the edited value, else the unit-reported config
+`dg/h.F0`". `F0` is written only by the 1502 Mode-20 decode (vineflower `dg/a.java:395-413`), never
+optimistically by `m0`. So a time/area/brightness/ramp/colour edit carries the **unit-reported** enabled
+bit; only the switch changes it. With no Mode-20 frame decoded yet, `F0` still holds its seed
+(OFF, 00:00), so the app sends enabled=0 — calictl's time-only exception (enabled=0, reproduces the
+recorded `0x1100`) is what the **builder** still produces (the recording replay needs it), but the **gate**
+refuses a wake-up edit (no `on`/`off`) while no unit-reported config is known (ruling R5, `WAKEUP_UNKNOWN`:
+never a silent disarm). The daemon first does what the app's lighting page does: it sends REQUEST_CONFIG
+(Mode 12 + commit) on the live session, latches the reply frames (`serve._on_push`) and re-checks; with no
+session, or after the CLI direct path (no latch at all), the edit is refused unless the user gives an
+explicit `on`/`off`. `on`/`off` without a known time is refused too. After the write the app waits
+≤ 2000 ms for any 1502 frame, then checks `F0` 3 × 1000 ms; if the unit has not echoed a matching
+Mode-20 frame it reverts and toasts "Something went wrong" — so the **real unit must echo Mode 20 within
+~3 s** (van check). The app recording of a time edit while enabled keeps enabled=1 on the wire
+(`lighting-wakeup.jsonl`, 2026-10-06), so R3 is APP-RECORDED.
+
+**Lighting config latch (ruling R4):** the wake-up (Mode 20), door-contact (Mode 16 / PN 8) and
+stored-favourite bits (Mode 12 reply) are latched by `serve` **only from 1502 frames the unit
+itself sent** (polls + pushes, `semantics.lighting_config`), never from the frame calictl wrote — an
+ACK-but-not-applied write leaves the latch unchanged. Caveat (van check): the state char may itself
+write-through-echo config frames, as it does for SET_BRIGHTNESS, in which case a poll would latch calictl's
+own (unapplied) write; the mock does not model that. The echoed REQUEST shape (Mode 12 / PN 13) is never
+read as a favourites reply. The wake-up date (today vs tomorrow) follows the **daemon host's** clock, so
+buspi's timezone must equal the van's.
 
 **State readback surfaced** (decoded straight from the state chars, cross-checked against the
 app decoders): cooler `quiet_from`/`quiet_to`/`timer_hour`/`timer_min` (`vf/c.java:321 e()`,

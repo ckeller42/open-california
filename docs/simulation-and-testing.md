@@ -81,6 +81,12 @@ What it models:
   applies it. A brightness frame must carry a non-zero ProfileNumber. The state char is a
   write-through **echo**, while the physical lamps ramp on the clock and push 1502 Mode-4 frames.
   `light_applies = False` models "ACKed and echoed, but the lamps stay dark".
+- **Lighting configuration (A2).** Seven favourite slots: a save (SET_BRIGHTNESS PN 1-7, with an
+  optional SET_COLOR before it) stores without a live change, an activate (SET_PROFILE PN N) applies
+  the stored levels, and an empty slot is ACKed and ignored. The wake-up config (Mode 20) and the
+  door-contact flag (Mode 16 / PN 8) are stored. Every config change, the save/activate acks and the
+  REQUEST_CONFIG reply (Mode 12, favourite bits) go out as **one-off** 1502 frames, never as stored
+  state-char content. Whether the real unit echoes them this way is unverified.
 - **The roof SafetyCounter.** The counter is valid only while it is monotonic and still advancing.
   A restart invalidates it. A freshly validated counter withholds the motor for about 3 s
   (`ROOF_WITHHOLD_S`, semi-verified). A held move steps `Position`, and releasing it (no frames)
@@ -252,9 +258,9 @@ satellite's. It is a report, not a test: nothing asserts.
 on thinky and committing the new files, with the evidence-ledger rows that name them. The header's
 `recorded_by` is the only version signal.
 
-Status: `tests/vectors/app/` is **empty** until the first recording session on thinky (it needs the
-APK). Until then no evidence-ledger row is APP-RECORDED. The owed scenarios are `airheater-permanent-on`,
-`energy-mode`, `lighting-profile` and `lighting-wakeup`, plus `cooler` and `airheater`.
+Status (2026-10-06): 12 recordings in `tests/vectors/app/` (app 5.0.8.3028, thinky lab34), each named by
+the evidence-ledger rows it flips to APP-RECORDED; the A2 session added `door-contact`,
+`lighting-favourite` and a re-recorded `lighting-wakeup`.
 
 ## C codec parity (`csrc/`)
 

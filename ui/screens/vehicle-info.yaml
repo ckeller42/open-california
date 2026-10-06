@@ -91,10 +91,10 @@ widgets:
       Indicator screen showed only "No data available. The ignition needs to
       be turned on for data." even with 1004 TerminalOneFive=1 and
       CarLevelRoll/CarLevelPitch/CarLevelPopUp set on the fake unit, after two
-      re-entries — so its ignition gate is NOT 1004 terminal-15. HYPOTHESIS:
-      it reads the phone's own vehicle-data API (cf. LEVELING_OVER_SPEED_ID,
-      alert-states.md §12). Next step: trace the LevelIndicatorScreen
-      view-model to the flow that supplies "ignition".
+      re-entries — so its ignition gate is NOT 1004 terminal-15.
+      DECOMPILE-SETTLED (decompile cross-check 2026-10-06, enigma 46f982d3): the gate is 1004 CarLevelPopUp
+      (bits 4-5, zf/d.java:328) — 1 = the "No data / ignition" card with
+      blank gauges, 2 = the debounced "Please slow down" dialog.
     label_text: "Level Indicator"
     evidence: APP-OBSERVED 2026-09-27 (gate text) | DECOMPILE (data source)
 

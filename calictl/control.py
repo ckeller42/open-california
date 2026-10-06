@@ -9,6 +9,9 @@ own SafetyCounter at once with the 1003 heartbeat ticking but no pre-arm delay
 
 from __future__ import annotations
 
+import calendar
+import datetime
+
 from . import overrides, protocol, semantics
 
 LIGHT_ON, LIGHT_OFF = 0, 1  # camping lights inverted (app K0 writes (!on)?1:0). VERIFY live.
@@ -60,6 +63,87 @@ def _hhmm(value):
     if not (0 <= hh <= 23 and 0 <= mm <= 59):
         raise ValueError("time out of range (0-23:0-59), got %r" % value)
     return hh, mm
+
+
+class CommandError(ValueError):
+    """A command the operator worded wrongly (grammar, range, retired target). Raised by
+    :func:`build` before anything is written; the web API maps it — and only it — to HTTP 400."""
+
+
+def local_now() -> datetime.datetime:
+    """The local wall clock the wake-up builder counts from. Tests and the recording replay
+    (``tools.capture_diff``) replace this module attribute to pin "now"."""
+    return datetime.datetime.now()
+
+
+def next_wakeup_epoch(hour: int, minute: int, now: datetime.datetime) -> int:
+    """Seconds since 1970-01-01T00:00 of the next local ``hour:minute`` after ``now``, packed as
+    if UTC — the app builds a ``LocalDateTime`` and converts it with ``TimeZone.UTC``
+    (``dg/h.java:778-874``). Today if still ahead, else tomorrow (an exact match is tomorrow).
+    Naive calendar arithmetic, so a DST change never shifts the wall-clock time.
+
+    :param hour: 0-23.
+    :param minute: 0-59.
+    :param now: naive local time.
+    :returns: the 32-bit ``Timestamp`` value.
+    """
+    t = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if t <= now:
+        t += datetime.timedelta(days=1)
+    return calendar.timegm(t.timetuple())
+
+
+def _wakeup_light_value(c) -> int:
+    """Pack ``colour:4 | A4 A3 A2 A1 | brightness:4 | (ramp/10)<<1 | enabled`` (``dg/h.m0``)."""
+    areas = sum(1 << (a - 1) for a in c["areas"])
+    return c["colour"] << 12 | areas << 8 | c["brightness"] << 4 | (c["ramp"] // 10) << 1 | int(c["enabled"])
+
+
+def wakeup_request(value, last):
+    """The wake-up config a ``wakeup`` command asks for: ``value`` over the latched config.
+
+    ``value`` is one string of words: ``HH:MM`` (time), ``on``/``off`` (the app's switch), and up to
+    three positionals ``areas brightness ramp`` (areas = comma list of 1-4, brightness 0-10, ramp
+    0/10/20/30 min). Missing time/areas/brightness/ramp/colour come from the wake-up config latched
+    in ``last`` (:func:`calictl.semantics.lighting_config`), else :data:`WAKEUP_DEFAULT`. The
+    enabled switch is inherited from the unit-reported config (off when none was reported) and
+    changed only by ``on``/``off``.
+
+    :param value: the command value.
+    :param last: the decoded lighting state (may carry latch keys or be a Mode-20 frame).
+    :returns: ``{"hour", "minute", "colour", "areas", "brightness", "ramp", "enabled"}``.
+    :raises ValueError: malformed value, or ``on``/``off`` with no time known.
+    """
+    cur = semantics.wakeup_config(semantics.lighting_config(None, last or {}))
+    tokens = str("" if value is None else value).split()
+    if not tokens:
+        raise ValueError("wakeup needs HH:MM and/or on|off")
+    c = {k: v for k, v in (cur or WAKEUP_DEFAULT).items() if k != "time"}
+    # An edit carries the enabled state the UNIT last reported (the app passes the whole current
+    # config to dg/h.m0); only on/off changes it. Nothing reported -> off (the recorded 0x1100).
+    c["enabled"] = bool(cur and cur["enabled"])
+    pos, timed = [], False
+    for tok in tokens:
+        if tok.lower() in ("on", "off"):
+            c["enabled"] = tok.lower() == "on"
+        elif ":" in tok:
+            c["hour"], c["minute"] = _hhmm(tok)
+            timed = True
+        else:
+            pos.append(tok)
+    if cur is None and not timed:
+        raise ValueError("wake-up time not known yet (no wake-up frame seen): give it, e.g. wakeup 07:00 on")
+    if len(pos) > 3:
+        raise ValueError("wakeup takes HH:MM [areas] [brightness] [ramp] [on|off], got %r" % value)
+    if pos:
+        c["areas"] = sorted({_int_range(a, 1, 4, "wake-up area") for a in pos[0].split(",")})
+    if len(pos) > 1:
+        c["brightness"] = _int_range(pos[1], 0, 10, "wake-up brightness")
+    if len(pos) > 2:
+        c["ramp"] = int(pos[2])
+        if c["ramp"] not in WAKEUP_RAMPS_MIN:
+            raise ValueError("wake-up ramp must be one of %s min, got %r" % (WAKEUP_RAMPS_MIN, pos[2]))
+    return c
 
 
 def camping_values(**changes) -> dict:
@@ -188,14 +272,29 @@ def _cooler(funcs, what, value, last):
 LIGHT_MODE_SET_BRIGHTNESS = 4
 LIGHT_MODE_SET_COLOR = 6  # recolour the active profile: LightValue = palette index (1-10)
 LIGHT_MODE_SET_PROFILE = 16  # switch active profile (payload carries the ProfileNumber)
+LIGHT_MODE_REQUEST_CONFIG = 12  # d0(): the app's config pull; the reply carries the favourite bits
+LIGHT_MODE_WAKEUP_TIME = 20  # m0(): wake-up light (Timestamp + packed LightValue)
+LIGHT_PROFILE_DOOR_CONTACT = 8  # n4(): SET_PROFILE PN 8, LightValue 1/0 = sliding-door light on/off
+WAKEUP_RAMPS_MIN = (0, 10, 20, 30)  # dg/k: WAKE_UP_{ON,OFF}[_10|_20|_30]
+# The app's wake-up defaults when the unit has reported none (recorded 0x1100: warm white, area 1,
+# brightness 0, no ramp, off) — its time picker sends exactly these with the chosen time.
+WAKEUP_DEFAULT = {
+    "hour": 0,
+    "minute": 0,
+    "colour": 1,
+    "areas": [1],
+    "brightness": 0,
+    "ramp": 0,
+    "enabled": False,
+}
 # Profile-number enum (dg/l.java mirrors ef/k.java): 0=LIGHTS_OFF, 1-7=FAVORITE1-7, 8=DOOR_CONTACT,
 # 9=LIVE_VIEW (the per-zone-edit profile SET_BRIGHTNESS hardcodes), 10=WAKEUP_LIGHT,
 # 11=INTERIOR_LIGHT, 12=LIGHTS_ON, 13=DEFAULT, 14=INIT sentinel.
 LIGHT_PROFILE_ALL_ON = 12  # LIGHTS_ON  — the app's "Alle Lichter" master ON  (dg/h.java:323 Q())
 LIGHT_PROFILE_ALL_OFF = 0  # LIGHTS_OFF — the app's "Alle Lichter" master OFF
 # Colour palette (dg/j.java, decompile 2026-07-12): SET_COLOR carries ONE index in LightValue for
-# the whole target profile — not RGB. On-device apply is UNVERIFIED (the app exposes no colour
-# control, so there is nothing to capture against); the frame layout is byte-decoded from the app.
+# the whole target profile — not RGB. Used by `save_profile N <colour>` (SET_COLOR preface) and the
+# wake-up colour nibble. On-device apply is UNVERIFIED (colour UI not shown on this model).
 LIGHT_COLORS = {
     "warm-white": 1,
     "blood-orange": 2,
@@ -229,6 +328,11 @@ LIGHT_BRIGHTNESS_PROFILE = 9
 # the unit's wake state (photon-verified 2026-08-16); readback is a write-through echo, never proof.
 # Sent as the `follow` frame of device.actuate for every lighting write.
 LIGHT_COMMIT = bytes.fromhex("0e00000000000000eeeeeeeeeeeeeeee")
+# The app's REQUEST_CONFIG (Mode 12, PN 13; dg/h d0): the unit answers with its lighting configuration
+# (favourite bits, wake-up, door contact) as 1502 frames. Only the daemon sends it, to learn the
+# wake-up config before an edit (:data:`WAKEUP_UNKNOWN`).
+LIGHT_REQUEST_CONFIG = bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee")
+WAKEUP_UNKNOWN = "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
 
 # Friendly zone key -> BrightnessL control field. Two provenance tiers:
 #   CONFIRMED by the 2026-07-08 HCI capture (which nibble tracked each dragged slider):
@@ -349,6 +453,35 @@ def command_precondition(function, what, value, states):
             return "the unit reports the roof as %s — move refused" % roof["alert"].replace("_", " ")
         if roof["position_name"] == "error":
             return "the unit reports a roof position error — move refused"
+    # Favourites: refuse only a slot the unit positively reported empty (the REQUEST_CONFIG reply's
+    # FavoriteProfileModifiedState bits, latched by serve). Unknown bits allow (serve only sends
+    # REQUEST_CONFIG before a wake-up edit, R5, so they are often unknown). The mock ACKs and ignores
+    # an empty one.
+    if function == "lighting" and what == "profile":
+        stored = semantics.lighting_config(None, states.get("lighting") or {}).get("FavouritesStored")
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            n = None
+        if stored is not None and n is not None and 1 <= n <= 7 and not stored >> (n - 1) & 1:
+            return "this favourite is empty on the unit — save it first"
+    # Wake-up: the app's "no area chosen" dialog — enabling with no vehicle area is refused.
+    if function == "lighting" and what == "wakeup":
+        try:
+            c = wakeup_request(value, states.get("lighting"))
+        except ValueError:
+            return None  # malformed: the builder reports it
+        if c["enabled"] and not c["areas"]:
+            return "the wake-up light needs at least one vehicle area"
+        # Ruling R5: an edit (no on/off) carries the enabled state the UNIT reported; with none
+        # reported it would silently disarm, so it is refused. The daemon first pulls the config with
+        # REQUEST_CONFIG (serve.on_command); the CLI has no latch, so it needs an explicit on|off.
+        toks = str(value).lower().split()
+        if "on" not in toks and "off" not in toks:
+            if semantics.wakeup_config(semantics.lighting_config(None, states.get("lighting") or {})) is None:
+                return WAKEUP_UNKNOWN
+    # door_contact: deliberately NOT gated on vehicle.CarVariant — the app gates the sliding-door
+    # page on its onboarding model, not on BLE, and this T7 reads CarVariant=4 (feature-availability.md).
     return None
 
 
@@ -372,6 +505,41 @@ def _all_real_zones(zone_fields, b):
     return {z: (b if z in real else LIGHT_UNCHANGED) for z in zone_fields}
 
 
+def _zone_fields(f):
+    return [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
+
+
+def _saved_zones(zone_fields, last):
+    """Every equipped (real) zone at its current level from ``last``; anything else 14 —
+    the zones of the app's favourite save (``dg/h.l3`` step b)."""
+    from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
+
+    real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
+    st = last or {}
+    return {
+        z: (
+            st[z]
+            if z in real and isinstance(st.get(z), int) and 0 <= st[z] <= LIGHT_MAX_SET
+            else LIGHT_UNCHANGED
+        )
+        for z in zone_fields
+    }
+
+
+def _save_profile_args(value):
+    """``"N"`` or ``"N <colour>"`` -> ``(N, palette index or None)``."""
+    tokens = str(value).split()
+    if not 1 <= len(tokens) <= 2:
+        raise ValueError("save_profile takes N [colour], got %r" % value)
+    n = _int_range(tokens[0], 1, 7, "save_profile favorite")
+    if len(tokens) == 1:
+        return n, None
+    idx = LIGHT_COLORS.get(tokens[1].lower().replace("_", "-"))
+    if idx is None:
+        raise ValueError("unknown light colour %r; one of: %s" % (tokens[1], ", ".join(sorted(LIGHT_COLORS))))
+    return n, idx
+
+
 def _lighting(funcs, what, value, last):
     """Build a lighting control frame (char 1501). CRACKED via HCI capture 2026-07-08.
 
@@ -390,13 +558,40 @@ def _lighting(funcs, what, value, last):
       * ``"all"`` -> set every REAL zone (``semantics._REAL_LIGHT_ZONES``: L1-L9 + L12) to
         ``value`` (a calictl convenience, not an app action); never-equipped zones always get the
         unchanged sentinel.
-      * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = target ProfileNumber.
-      * ``"color"`` -> SET_COLOR (Mode 6); ``value`` = a ``LIGHT_COLORS`` name; recolours the
-        active profile (LightValue = palette index 1-10). On-device apply UNVERIFIED (app has no
-        colour UI to capture against).
+      * ``"wakeup"`` -> the wake-up light (Mode 20); ``value`` = :func:`wakeup_request` words.
+      * ``"profile"`` -> SET_PROFILE (Mode 16); ``value`` = favourite 0-13 (not 8).
+      * ``"door_contact"`` -> SET_PROFILE PN 8, LightValue 1/0 (``on``/``off``).
+      * ``"save_profile"`` -> ``value`` = ``N`` or ``N <colour>`` (colour via :func:`preface_for`).
+
+    .. req:: Build the app's door-contact frame
+       :id: R_LIGHT_DOOR_CONTACT
+       :status: implemented
+       :tags: control, lighting
+
+       ``door_contact on|off`` shall build ``dg/h.n4``: Mode 16, ProfileNumber 8, LightValue 1/0,
+       zones unchanged.
+
+    .. req:: Save and activate favourites like the app
+       :id: R_LIGHT_FAVOURITE
+       :status: implemented
+       :tags: control, lighting
+
+       ``profile N`` shall build one SET_PROFILE frame (``dg/h.u0``); ``save_profile N`` the
+       recorded SET_BRIGHTNESS with ProfileNumber N and every equipped zone at its level
+       (``dg/h.l3``), preceded by a SET_COLOR frame (Mode 6, PN N) when a colour is given. The
+       standalone ``color`` command is retired.
+
+    .. req:: Build the app's wake-up light frame
+       :id: R_LIGHT_WAKEUP
+       :status: implemented
+       :tags: control, lighting
+
+       ``wakeup`` shall build the app's Mode-20 frame (``dg/h.m0``): ProfileNumber 14,
+       Timestamp = the next local HH:MM packed as UTC, LightValue = colour, areas, brightness and
+       ``(ramp/10)<<1 | enabled``, zones unchanged — byte-identical to the app recording.
     """
     f = funcs["lighting"]
-    zone_fields = [cf.name for cf in f.control_fields if cf.name.startswith("BrightnessL")]
+    zone_fields = _zone_fields(f)
     # SET_BRIGHTNESS/power/all hardcode ProfileNumber=9 like the app (writes land even with the
     # lights off / PN=0). SET_PROFILE overrides it with the target; SET_COLOR recolours that same 9.
     base = {
@@ -418,37 +613,47 @@ def _lighting(funcs, what, value, last):
         return b
 
     if what == "profile":
+        # dg/h.u0: one SET_PROFILE frame, ProfileNumber = the target (FAVORITE_n = n).
+        n = _int_range(value, 0, 13, "lighting profile")
+        if n == LIGHT_PROFILE_DOOR_CONTACT:
+            raise ValueError("profile 8 is the door-contact frame; use door_contact on|off")
         vals = {
             **base,
             "Mode": LIGHT_MODE_SET_PROFILE,
-            "ProfileNumber": int(value),
+            "ProfileNumber": n,
             **{z: LIGHT_UNCHANGED for z in zone_fields},
         }
     elif what == "save_profile":
-        # Save the CURRENT lighting into a favorite (dg/h.java:564 l3 applyProfileBrightness):
-        # SET_BRIGHTNESS with ProfileNumber = the favorite N (NOT the live-view 9), every equipped
-        # zone carrying its current brightness (read from `last`), NOT_EQUIPPED zones left at 14.
-        # This is how the app DEFINES a favorite. Decompile-derived; NOT yet wire-verified.
-        n = _int_range(value, 1, 7, "save_profile favorite")
-        from .semantics import _LZONES, _REAL_LIGHT_ZONES  # stdlib-only sibling; lazy to match style
-
-        real = {"BrightnessL" + suf for suf, num in _LZONES.items() if num in _REAL_LIGHT_ZONES}
-        st = last or {}
-        zones = {}
-        for z in zone_fields:
-            cur = st.get(z)
-            zones[z] = (
-                cur if (z in real and isinstance(cur, int) and 0 <= cur <= LIGHT_MAX_SET) else LIGHT_UNCHANGED
-            )
-        vals = {**base, "Mode": LIGHT_MODE_SET_BRIGHTNESS, "ProfileNumber": n, **zones}
-    elif what == "color":  # recolour the active profile (LightValue = palette idx)
-        idx = LIGHT_COLORS.get(str(value).lower().replace("_", "-"))
-        if idx is None:
-            raise ValueError("unknown light colour %r; one of: %s" % (value, ", ".join(sorted(LIGHT_COLORS))))
+        # dg/h.l3 step (b): SET_BRIGHTNESS with ProfileNumber = the favourite N (NOT the live-view 9),
+        # every equipped zone at its current level. APP-RECORDED (lighting-profile.jsonl). A colour
+        # goes out FIRST as its own SET_COLOR frame (preface_for).
+        n, _ = _save_profile_args(value)
         vals = {
             **base,
-            "Mode": LIGHT_MODE_SET_COLOR,
-            "LightValue": idx,
+            "Mode": LIGHT_MODE_SET_BRIGHTNESS,
+            "ProfileNumber": n,
+            **_saved_zones(zone_fields, last),
+        }
+    elif what == "door_contact":
+        # dg/h.n4: SET_PROFILE + ProfileNumber 8 (DOOR_CONTACT) staged, LightValue on?1:0 sent.
+        if str(value).strip().lower() not in ("on", "off", "true", "false", "1", "0"):
+            raise ValueError("door_contact takes on or off, got %r" % value)
+        vals = {
+            **base,
+            "Mode": LIGHT_MODE_SET_PROFILE,
+            "ProfileNumber": LIGHT_PROFILE_DOOR_CONTACT,
+            "LightValue": 1 if _truthy(value) else 0,
+            **{z: LIGHT_UNCHANGED for z in zone_fields},
+        }
+    elif what == "wakeup":
+        # dg/h.m0: Mode 20; ProfileNumber is not staged, so it keeps the buffer's 14 (recorded).
+        c = wakeup_request(value, last)
+        vals = {
+            **base,
+            "ProfileNumber": LIGHT_UNCHANGED,
+            "Mode": LIGHT_MODE_WAKEUP_TIME,
+            "Timestamp": next_wakeup_epoch(c["hour"], c["minute"], local_now()),
+            "LightValue": _wakeup_light_value(c),
             **{z: LIGHT_UNCHANGED for z in zone_fields},
         }
     elif what == "power":
@@ -467,9 +672,13 @@ def _lighting(funcs, what, value, last):
         # not an app action (the app is per-zone) — our convenience: every REAL lamp to one level
         vals = {**base, **_all_real_zones(zone_fields, _b(value))}
     else:  # a single zone (friendly key or BrightnessL field)
+        if what == "color":
+            raise ValueError(
+                "lighting color was retired: the app recolours a saved favourite — use save_profile N <colour>"
+            )
         field = LIGHT_ZONES.get(what, what)
         if field not in zone_fields:
-            return None
+            raise ValueError("unknown lighting control %r" % what)
         vals = {**base, **{z: LIGHT_UNCHANGED for z in zone_fields}, field: _b(value)}
     return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
 
@@ -771,8 +980,18 @@ BUILDERS = {
 
 
 def build(funcs, function, what, value, last_decoded):
+    """Build the control frame for ``set function what value`` over the decoded state.
+
+    :raises CommandError: the value is malformed or out of range (nothing has been written yet,
+        so every ``ValueError`` a builder raises is the operator's input error).
+    """
     b = BUILDERS.get(function)
-    return b(funcs, what, value, last_decoded) if b else None
+    try:
+        return b(funcs, what, value, last_decoded) if b else None
+    except CommandError:
+        raise
+    except ValueError as e:
+        raise CommandError(str(e)) from e
 
 
 def commit_for(function):
@@ -795,11 +1014,36 @@ def commit_for(function):
     return LIGHT_COMMIT if function == "lighting" else None
 
 
-# Screen-open config pull — retired. The app opens its Lighting screen with a REQUEST_CONFIG
+def preface_for(funcs, function, what, value, last):
+    """The frame the app sends BEFORE the main one, or ``None``. Only ``lighting save_profile N
+    <colour>``: ``dg/h.l3`` step (a), a SET_COLOR (Mode 6) with ProfileNumber N, LightValue = the
+    palette index and the zones of the save that follows. DECOMPILE-only (the colour UI is not shown
+    on this model, so the app cannot be recorded doing it).
+
+    :returns: the SET_COLOR frame, or ``None`` when the action has no preface.
+    """
+    if function != "lighting" or what != "save_profile":
+        return None
+    n, idx = _save_profile_args(value)
+    if idx is None:
+        return None
+    f = funcs["lighting"]
+    vals = {
+        "ProfileNumber": n,
+        "Mode": LIGHT_MODE_SET_COLOR,
+        "Timestamp": 0,
+        "LightValue": idx,
+        **_saved_zones(_zone_fields(f), last),
+    }
+    return protocol.encode(f, vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["lighting"])
+
+
+# Screen-open config pull. The app opens its Lighting screen with a REQUEST_CONFIG
 # (0d0c000000000000eeeeeeeeeeeeeeee, Mode=12 PN=13) + commit; photon-verified 2026-08-16 that it is
 # NOT an actuation gate (a bare SET + 0e00 commit actuates an awake unit; the app's dg/h.java E()
-# writes DIRECT and never sends it). calictl no longer sends it on any path — the frame is kept
-# in docs/protocol-sequences.rst as the RE record.
+# writes DIRECT and never sends it). calictl sends it only to READ the configuration: serve pulls
+# it before a wake-up edit whose config is unknown (R5, ``LIGHT_REQUEST_CONFIG``), never as a
+# write preamble.
 
 
 def decode_control(func, frame: bytes) -> dict:

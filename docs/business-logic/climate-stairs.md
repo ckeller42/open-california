@@ -271,7 +271,12 @@ variant, including the T7, it reads the lighting facade `yg/o.l0` = `dg/h.s4()` 
 `D0` is set from a 1502 notification with Mode=`SET_PROFILE`(16), ProfileNumber=`DOOR_CONTACT`(8) and
 `LightValue==1` (vineflower `dg/a.java:293-306`). Tapping the row (`wh/b.java:91-104`) calls `dg/h.n4`. On a T7
 that writes a **lighting** 1501 frame (Mode 16, PN 8, LightValue 0/1). On a 6.1 it calls the camping `q0`, which
-is a no-op on `tf/a`. Owed: an APP-OBSERVED pass that sets DOOR_CONTACT on the fake unit and watches the row.
+is a no-op on `tf/a`. Row gates (decompile cross-check 2026-10-06, enigma `46f982d3`): shown on every variant except Grand California (`wh/c.h0`,
+`bc/a.java:117-140`), no equipment gate and no enabled-gate on the row; the last boolean passed to the row is
+`tf/a.R2` = `CALIFORNIA_7 && !isRearUsbInT7AlwaysOn` (the show-rear-USB flag — earlier mapping name corrected),
+probably the divider (unverified). The whole page shows "Only possible when stationary" while 1202 `Enable`
+(terminal-15 mirror) is set (`ut/hf.java:68-80`). Owed: an APP-OBSERVED pass that sets DOOR_CONTACT on the fake
+unit and watches the row.
 The USB row follows `UsbCharger` 1/0 (Enabled/Disabled). With the master off (`State=0`) the page
 body is unchanged. No lights or USB **switch** is shown on this page; whether tapping the row icons
 writes (the 2026-09-16 session recorded `0f` / `f3` from the front-door / USB row icons,

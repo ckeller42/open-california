@@ -106,6 +106,24 @@ window.STRINGS_DE = {
   "Profile…": "Profil…",
   "Interior lighting": "Innenlicht",
   "Wake-up light": "Wecklicht",
+  "Wake-up time": "Weckzeit",
+  "{n} min": "{n} Min.",
+  "Wake-up settings not known yet — the unit has not reported them":
+    "Wecklicht-Einstellungen noch nicht bekannt — die Einheit hat sie nicht gemeldet",
+  "Lead time": "Vorlaufzeit",
+  "Brightness": "Helligkeit",
+  "Vehicle area": "Fahrzeugbereich",
+  "Living area reading lights": "Leselichter Wohnraum",
+  "Kitchen background lighting": "Ambientelicht Küche",
+  "Pop-up roof reading lights": "Leselichter Aufstelldach",
+  "Pop-up roof background lighting": "Ambientelicht Aufstelldach",
+  "Lighting & sliding door": "Licht & Schiebetür",
+  "Opening sliding door activates the rear interior lights.":
+    "Beim Öffnen der Schiebetür wird die hintere Innenbeleuchtung eingeschaltet.",
+  "this favourite is empty on the unit — save it first":
+    "Dieser Favorit ist auf der Einheit leer — speichere ihn zuerst",
+  "the wake-up light needs at least one vehicle area":
+    "Das Wecklicht braucht mindestens einen Fahrzeugbereich",
   "Reading lights": "Leselichter",
   "Kitchen": "Küche",
   "Pop-up roof": "Aufstelldach",

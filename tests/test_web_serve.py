@@ -1679,3 +1679,236 @@ def test_pairing_command_passkey_keeps_leading_zero_value():
     s._pairing = FakeRunner()
     asyncio.run(s.pairing_command("passkey", "012345"))
     assert seen["pk"] == 12345
+
+
+def _light_server(monkeypatch, pushes):
+    s = serve.Server(influx_enabled=False)
+    s._persistent = True
+    s._read_only = False
+    s._last = {"lighting": {"ProfileNumber": 9, "Mode": 4}}
+    key = str(s.funcs["lighting"].state_char).lower()
+    writes, calls = [], []
+
+    class FakeSession:
+        is_up = True
+        _notif = {}
+
+        async def actuate(self, func, frame, *, follow=None, verify=True, preface=None):
+            calls.append(1)
+            if preface is not None:
+                writes.append(preface.hex())
+            writes.append(frame.hex())
+            if pushes:
+                nxt = bytes.fromhex(pushes.pop(0))
+
+                async def push():
+                    await asyncio.sleep(0.02)
+                    self._notif[key] = nxt
+
+                asyncio.ensure_future(push())
+            return None
+
+    s._sessions._session = FakeSession()
+    s.calls = calls
+    return s, writes
+
+
+def test_wakeup_write_is_not_latched_only_the_units_own_frames_are(monkeypatch):
+    """
+    .. test:: The daemon never latches the wake-up config from its OWN write (ACK-but-not-applied stays unknown)
+       :id: T_SERVE_LIGHT_LATCH
+       :links: R_LIGHT_CONFIG_LATCH
+    """
+    import datetime
+
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
+    s, writes = _light_server(monkeypatch, ["091000000000000000000005d00ddddd"])  # a later non-config push
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "wakeup", "07:00 on")
+
+    asyncio.run(_run())
+    assert writes[0] == "0e146ac49c701101eeeeeeeeeeeeeeee"
+    st = serve.ServeBackend(s, None).state()["lighting"]
+    # Controller ruling R4: the latch is fed only by the unit's 1502 frames, never by the frame we
+    # wrote (a write-through echo is not proof of actuation); the unit pushed no Mode-20 frame here.
+    assert st["wakeup"] is None
+    # and a CLI time-only edit with no config must not make the card look unit-reported
+    assert "WakeupTimestamp" not in s._last["lighting"]
+
+
+def test_save_profile_with_colour_writes_the_set_color_preface_first(monkeypatch):
+    s, writes = _light_server(monkeypatch, [])
+    s._last = {
+        "lighting": protocol.decode(s.funcs["lighting"], bytes.fromhex("091000000000000000000005d00ddddd"))
+    }
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "save_profile", "1 red")
+
+    asyncio.run(_run())
+    assert writes == ["010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee"]
+    assert len(s.calls) == 1  # preface + save in ONE actuate (one arm window)
+
+
+def test_save_profile_cold_path_is_one_actuate_with_the_preface(monkeypatch):
+    s, _ = _light_server(monkeypatch, [])
+    s._sessions._session = None  # no persistent session: the daemon's own connection
+    s._last = {
+        "lighting": protocol.decode(s.funcs["lighting"], bytes.fromhex("091000000000000000000005d00ddddd"))
+    }
+    got = []
+
+    async def dev_actuate(func, frame, *, verify=True, follow=None, preface=None):
+        got.append((preface.hex() if preface else None, frame.hex()))
+        return None
+
+    monkeypatch.setattr(s.dev, "actuate", dev_actuate)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "save_profile", "1 red")
+
+    asyncio.run(_run())
+    assert got == [("010600000000000900000005e00eeeee", "010400000000000000000005e00eeeee")]
+
+
+def test_wakeup_time_edit_keeps_the_unit_reported_enabled_state(monkeypatch):
+    """Controller ruling (Task 6 fix round 1): a time edit carries the enabled state the unit last
+    reported (the decompile passes the whole current config to dg/h.m0)."""
+    import datetime
+
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
+    s, writes = _light_server(monkeypatch, [])
+    s._last = {"lighting": {"Mode": 4, "WakeupTimestamp": 6 * 3600, "WakeupLightValue": 0x1301}}  # ON
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "wakeup", "07:00")
+
+    asyncio.run(_run())
+    d = control.decode_control(s.funcs["lighting"], bytes.fromhex(writes[0]))
+    assert d["LightValue"] & 1 == 1  # unit-reported ON carried
+    assert d["LightValue"] >> 8 & 0xF == 0b0011  # areas carried
+
+
+def test_poll_keeps_the_lighting_config_across_a_later_frame(monkeypatch):
+    """A polled non-config 1502 frame must not wipe the latched wake-up config."""
+    s = serve.Server(influx_enabled=False)
+    s._last = {"lighting": {"WakeupTimestamp": 25200, "WakeupLightValue": 0x1311}}
+
+    async def fake_read_all(fns):
+        return {"lighting": bytes.fromhex("091000000000000000000005d00ddddd")}
+
+    monkeypatch.setattr(s.dev, "read_all", fake_read_all)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        await s.poll()
+
+    asyncio.run(_run())
+    assert s._last["lighting"]["WakeupTimestamp"] == 25200
+    assert serve.ServeBackend(s, None).state()["lighting"]["wakeup"]["time"] == "07:00"
+
+
+def _wake_state_hex(time_s, lv):
+    from tools import mock_unit
+
+    f = protocol.load()["lighting"]
+    return mock_unit._pack_state(f, {"Mode": 20, "ProfileNumber": 14, "Timestamp": time_s, "LightValue": lv})
+
+
+def test_a_pushed_unit_frame_latches_the_lighting_config():
+    """The daemon latches wake-up / door / favourite config from the unit's own 1502 pushes, not only
+    from polls (ruling R4); a lighting state without a cached decode is left alone.
+
+    .. test:: Push latch feeds the lighting config
+       :id: T_SERVE_PUSH_LATCH
+       :links: R_LIGHT_CONFIG_LATCH
+    """
+    s = serve.Server(influx_enabled=False)
+    ch = str(s.funcs["lighting"].state_char).lower()
+    s._on_push(ch, _wake_state_hex(7 * 3600, 0x1101))
+    assert "lighting" not in s._last  # nothing cached yet: never invent a half state
+    s._last = {"lighting": {"ProfileNumber": 9, "Mode": 4}}
+    s._on_push(ch, _wake_state_hex(7 * 3600, 0x1101))
+    assert serve.ServeBackend(s, None).state()["lighting"]["wakeup"]["time"] == "07:00"
+
+
+def test_wakeup_edit_pulls_the_config_with_request_config_then_proceeds(monkeypatch):
+    """Ruling R5: a wake-up edit with no unit-reported config first sends REQUEST_CONFIG (Mode 12 +
+    commit) on the live session and latches the reply, then re-checks the gate.
+
+    .. test:: Daemon pulls the lighting config before refusing a wake-up edit
+       :id: T_SERVE_WAKEUP_PULL
+       :links: R_LIGHT_WAKEUP
+    """
+    import datetime
+
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2026, 10, 5, 17, 25, 6))
+    s, writes = _light_server(monkeypatch, [])
+    ch = str(s.funcs["lighting"].state_char).lower()
+    sess = s._sessions._session
+    orig = sess.actuate
+
+    async def actuate(func, frame, **kw):
+        await orig(func, frame, **kw)
+        if frame.hex() == control.LIGHT_REQUEST_CONFIG.hex():  # the unit answers with its wake-up config
+            s._on_push(ch, _wake_state_hex(6 * 3600, 0x1301))
+        return None
+
+    sess.actuate = actuate
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "wakeup", "07:00")
+
+    asyncio.run(_run())
+    assert writes[0] == control.LIGHT_REQUEST_CONFIG.hex()  # (the commit rides as `follow`)
+    d = control.decode_control(s.funcs["lighting"], bytes.fromhex(writes[1]))
+    assert d["LightValue"] & 1 == 1 and d["LightValue"] >> 8 & 0xF == 0b0011  # unit-reported ON + areas
+
+
+def test_wakeup_edit_still_unknown_after_the_pull_is_refused_not_written(monkeypatch):
+    s, writes = _light_server(monkeypatch, [])
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "wakeup", "07:00")
+
+    assert asyncio.run(_run()) is None
+    assert writes == [control.LIGHT_REQUEST_CONFIG.hex()]  # only the pull
+
+
+def test_a_save_ack_does_not_make_the_favourite_the_active_profile(monkeypatch):
+    """Only an activate sets the active profile; the save ack (Mode 4 / PN N) must not — nor the door
+    (Mode 16 / PN 8) or wake-up (Mode 20 / PN 14) config echoes."""
+    from tools import mock_unit
+
+    f = protocol.load()["lighting"]
+    ack = mock_unit._pack_state(f, {"Mode": 4, "ProfileNumber": 1}).hex()
+    s, writes = _light_server(monkeypatch, [ack])
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "save_profile", "1")
+
+    asyncio.run(_run())
+    assert s._last["lighting"]["ProfileNumber"] == 9  # unchanged
+
+
+def test_a_door_echo_does_not_become_the_active_profile(monkeypatch):
+    from tools import mock_unit
+
+    f = protocol.load()["lighting"]
+    echo = mock_unit._pack_state(f, {"Mode": 16, "ProfileNumber": 8, "LightValue": 1}).hex()
+    s, writes = _light_server(monkeypatch, [echo])
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "door_contact", "on")
+
+    asyncio.run(_run())
+    assert s._last["lighting"]["ProfileNumber"] == 9 and s._last["lighting"]["DoorContact"] == 1

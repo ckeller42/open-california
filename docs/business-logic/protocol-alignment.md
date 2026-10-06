@@ -72,9 +72,9 @@ confirmed), LightValue@48/16, Brightness×16 @64 (4-bit each, sentinel 14 = leav
 
 Enums: profiles `dg/l` 0=OFF,1–7=FAVORITE,8=DOOR,9=LIVE_VIEW,10=WAKEUP,11=INTERIOR,12=ON,13=DEFAULT;
 brightness `dg/i` OFF=0,10–100%=1–10,DEFAULT=11,NOT_EQUIPPED=13,14=leave-unchanged; colour `dg/j`
-1–10; wake `dg/k` 0–7; areas `dg/m` 0–3. So calictl could add SET_COLOR (index) and WAKEUP_TIME
-(epoch + packed field) — the frame layouts are now known (a live capture would confirm the two
-INFERRED bits: the Timestamp unit and WAKEUP_TIME's internal packing).
+1–10; wake `dg/k` 0–7; areas `dg/m` 0–3. calictl builds WAKEUP_TIME (`wakeup`, byte-exact vs the app
+recording `lighting-wakeup.jsonl`; packing settled by call stack, #154) and SET_COLOR only as the
+`save_profile N <colour>` preface (DECOMPILE-only); the standalone `color` is retired (A2).
 
 ## Semantics verified against the app's getters (2026-07-12) — SOUND
 
@@ -108,7 +108,7 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
 - **Lighting `Mode` wire values** (`Ldg/n;`): `NO_MODE=0, SET_BRIGHTNESS=4, SET_COLOR=6,
   SET_DOUBLE=8, REQUEST_CONFIG=12, SET_PROFILE=16, WAKEUP_TIME=20, SYSTEM_TIME=24, PREVIEW=28`.
   `command_enums.dg_n` currently lists names only — a consumer can't build a frame without these.
-  (`SET_COLOR`/`SET_DOUBLE` have no calictl support at all.)
+  (`SET_DOUBLE` has no calictl support; `SET_COLOR` only as the `save_profile` preface.)
 - **Characteristics**: no unread char — only `1000/1001/1002/1004` are literal; all per-function
   chars are runtime-built and already in the dictionary. `1002` = `SHA-256(VIN)[16:32]` — the app's
   **vehicle-identity check**: right after service discovery + MTU it reads `1002` and compares it with

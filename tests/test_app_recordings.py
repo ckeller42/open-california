@@ -201,3 +201,66 @@ def test_hygiene_flags_vin_hash_vin_mac_and_passkey(tmp_path):
     assert any("pair event carries ['passkey']" in x for x in probs)
     ok = _rec(tmp_path, [_ev(1.0, "app_screen", step=1, texts=["C0:FF:EE:CA:11:F0"])])
     assert capture_diff.recording_hygiene(ok) == []
+
+
+def test_replay_pins_the_clock_for_every_build(monkeypatch):
+    """The wake-up replay must not depend on the host's date or TZ: a "today" after the recording
+    (and a far-east TZ) still reproduces the recorded 07:00 frame."""
+    import datetime
+    import time
+
+    from calictl import control
+
+    monkeypatch.setenv("TZ", "Pacific/Auckland")
+    time.tzset()
+    monkeypatch.setattr(control, "local_now", lambda: datetime.datetime(2030, 1, 1, 23, 59))
+    try:
+        checks = capture_diff.check_recording(str(HERE / "vectors" / "app" / "lighting-wakeup.jsonl"))
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+    assert [c for c in checks if c.kind == "error"] == []
+    # the recorded 07:00 frame (Timestamp 2026-10-07 07:00, packed as if UTC)
+    assert any(c.kind == "action" and c.hex.startswith("0e146ac5edf0") for c in checks)
+
+
+def test_replay_latches_the_lighting_config_across_later_notifies(tmp_path, monkeypatch):
+    """A wake-up echo, then an unrelated door echo, then ``wakeup off``: the app built it from the
+    wake-up config the unit reported, so the replay must keep that latch exactly like serve does.
+
+    .. test:: capture_diff merges the lighting config latch like serve
+       :id: T_CAPDIFF_LIGHT_LATCH
+       :links: R_LIGHT_CONFIG_LATCH
+    """
+    import datetime
+
+    from tools import mock_unit
+
+    funcs = _funcs()
+    f = funcs["lighting"]
+    t = 1791218700.0
+    lv = control._wakeup_light_value(
+        {"colour": 1, "areas": [1, 3], "brightness": 4, "ramp": 20, "enabled": True}
+    )
+    wake = mock_unit._pack_state(
+        f, {"Mode": 20, "ProfileNumber": 14, "Timestamp": 6 * 3600 + 1800, "LightValue": lv}
+    )
+    door = mock_unit._pack_state(f, {"Mode": 16, "ProfileNumber": 8, "LightValue": 1})
+    now = datetime.datetime.fromtimestamp(t + 0.4, datetime.UTC).replace(tzinfo=None)
+    monkeypatch.setattr(control, "local_now", lambda: now)
+    want = control.build(
+        funcs, "lighting", "wakeup", "off", {"WakeupTimestamp": 6 * 3600 + 1800, "WakeupLightValue": lv}
+    )
+    p = _rec(
+        tmp_path,
+        [
+            _ev(t - 3, "connect"),
+            _ev(t - 2, "notify", char="1502", fn="lighting", hex=wake.hex()),
+            _ev(t - 1, "notify", char="1502", fn="lighting", hex=door.hex()),
+            _step(t, 1, ["lighting", "wakeup", "off"]),
+            _ev(t + 0.4, "write", char="1501", fn="lighting", hex=want.hex()),
+        ],
+    )
+    monkeypatch.undo()
+    checks = capture_diff.check_recording(p)
+    assert [c.problem for c in checks if c.kind in ("action", "error")] == [None]

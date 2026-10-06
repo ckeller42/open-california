@@ -21,7 +21,7 @@ Three gaps the app exposed in one session:
    :links: R_AIRHEATER_SET
 """
 
-from calictl import control, overrides, protocol
+from calictl import control, overrides, protocol, semantics
 from tools.mock_unit import MockCamperUnit
 
 
@@ -913,3 +913,162 @@ def test_ignition_couples_into_camping_and_battery_age():
     u.state["vehicle"]["TerminalOneFive"] = 0
     u.tick(1)
     assert u.decoded("campingmode")["Enable"] == 0
+
+
+WAKE_0700 = "0e146ac49c701100eeeeeeeeeeeeeeee"  # lighting-wakeup.jsonl
+SAVE_A = "010400000000000000000005e00eeeee"  # lighting-profile.jsonl (L7 = 5)
+
+
+def _w(u, hexframe):
+    f = _funcs()["lighting"]
+    u.write(f.control_char, bytes.fromhex(hexframe))
+
+
+def test_wakeup_is_stored_and_echoed_on_1502_through_the_commit():
+    """The app's wake-up page reads its time from the 1502 Mode-20 frame (app-rec2: without an echo
+    the switch resent 00:00). The echo must survive the app's 0e00 flush.
+
+    .. test:: Mock stores the wake-up config and echoes it on 1502
+       :id: T_MOCK_LIGHT_WAKEUP
+       :links: R_LIGHT_WAKEUP
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 12, "Mode": 16})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, WAKE_0700)
+    assert u.wakeup == {"Timestamp": 0x6AC49C70, "LightValue": 0x1100}
+    assert protocol.decode(_funcs()["lighting"], pushes[-1])["Mode"] == 20
+    _w(u, control.LIGHT_COMMIT.hex())
+    assert u.decoded("lighting")["Mode"] == 16  # the echo is a one-off frame, never stored state
+    # builder -> mock -> semantics round trip: the 1502 echo decodes to the wake-up the CLI asked for
+    pushes.clear()
+    u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "wakeup", "07:00 on", {}))
+    cfg = semantics.wakeup_config(
+        semantics.lighting_config(None, protocol.decode(_funcs()["lighting"], pushes[-1]))
+    )
+    assert cfg["time"] == "07:00" and cfg["enabled"]
+
+
+def test_door_contact_flag_is_reported_on_1502_and_never_becomes_the_active_profile():
+    """Door contact = SET_PROFILE PN 8 with LightValue 1/0 (dg/h n4; lighting-door-contact recording).
+
+    .. test:: Mock reports the door-contact flag as Mode 16 / PN 8 / LightValue
+       :id: T_MOCK_LIGHT_DOOR
+       :links: R_LIGHT_DOOR_CONTACT
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 12, "Mode": 16})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, "0810000000000001eeeeeeeeeeeeeeee")
+    _w(u, control.LIGHT_COMMIT.hex())
+    d = u.decoded("lighting")
+    assert u.door_contact == 1 and (d["Mode"], d["ProfileNumber"]) == (16, 12)  # real state untouched
+    echo = protocol.decode(_funcs()["lighting"], pushes[0])
+    assert (echo["Mode"], echo["ProfileNumber"], echo["LightValue"]) == (16, 8, 1)
+    _w(u, "0810000000000000eeeeeeeeeeeeeeee")
+    assert u.door_contact == 0
+    # builder -> mock -> semantics round trip (polarity: on = True)
+    pushes.clear()
+    u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "door_contact", "on", {}))
+    got = semantics.lighting(protocol.decode(_funcs()["lighting"], pushes[-1]))
+    assert got["door_contact"] is True
+
+
+def test_activating_an_empty_favourite_is_acked_and_ignored():
+    """Evidence: decompile only (dg/h u0 is offered by the app on a stored tile); not device-confirmed.
+
+    .. test:: Mock refuses (ACK-and-ignore) an empty favourite
+       :id: T_MOCK_LIGHT_FAV_EMPTY
+       :links: R_LIGHT_FAVOURITE
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 12, "Mode": 16})
+    _w(u, "0210000000000000eeeeeeeeeeeeeeee")
+    _w(u, control.LIGHT_COMMIT.hex())
+    assert ("lighting", "favourite 2 is empty") in u.refusals
+    assert u.decoded("lighting")["ProfileNumber"] == 12
+
+
+def test_save_then_activate_restores_the_saved_levels():
+    """dg/h l3: SET_COLOR then SET_BRIGHTNESS under the favourite's PN = save, not a live change
+    (lighting-profile.jsonl); activation = SET_PROFILE PN n.
+
+    .. test:: Mock saves a favourite without a live change and applies it on activate
+       :id: T_MOCK_LIGHT_FAV_SAVE
+       :links: R_LIGHT_FAVOURITE
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLSeven": 5})
+    _w(u, "010600000000000900000005e00eeeee")  # SET_COLOR red for favourite 1 (preface)
+    _w(u, control.LIGHT_COMMIT.hex())
+    _w(u, SAVE_A)
+    _w(u, control.LIGHT_COMMIT.hex())
+    assert u.favourites[1]["zones"]["BrightnessLSeven"] == 5 and u.favourites[1]["colour"] == 9
+    assert u.decoded("lighting")["ProfileNumber"] == 9  # a save is not an activation
+    _commit_brightness(u, "BrightnessLSeven", 0)  # lamp off
+    _w(u, "0110000000000000eeeeeeeeeeeeeeee")
+    _w(u, control.LIGHT_COMMIT.hex())
+    d = u.decoded("lighting")
+    assert d["ProfileNumber"] == 1 and d["BrightnessLSeven"] == 5
+
+
+def test_request_config_reply_comes_after_the_save_ack():
+    """dg/h.l3 sends d0() REQUEST_CONFIG right after the save ack and awaits the Mode-12 reply whose
+    LightValue bits 0-6 are FavoriteProfileModifiedState (vineflower dg/a.java:286-290). Back to back,
+    the reply must be the LAST 1502 frame, with favourite 1's bit set.
+
+    .. test:: REQUEST_CONFIG reply follows the save ack and carries the favourite bit
+       :id: T_MOCK_LIGHT_REQUEST_CONFIG
+       :links: R_LIGHT_FAVOURITE
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLSeven": 5})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, SAVE_A)
+    _w(u, control.LIGHT_COMMIT.hex())
+    _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")  # the app's REQUEST_CONFIG
+    modes = [protocol.decode(_funcs()["lighting"], p)["Mode"] for p in pushes]
+    assert modes == [4, 12]
+    ack = protocol.decode(_funcs()["lighting"], pushes[0])
+    assert ack["ProfileNumber"] == 1  # the save ack names the saved favourite
+    assert protocol.decode(_funcs()["lighting"], pushes[-1])["LightValue"] & 1 == 1
+    d = u.decoded("lighting")  # nothing sticky: reads still return the real lighting state
+    assert d["ProfileNumber"] == 9 and d["Mode"] not in (4, 12, 20)
+
+
+def test_request_config_reply_also_reports_the_wakeup_and_door_frames():
+    """The app awaits 6 frames after REQUEST_CONFIG and fills its wake-up/door state from them
+    (decompile d0 / F0): after the Mode-12 favourites frame the mock re-reports the stored Mode-20
+    wake-up and the Mode-16/PN-8 door frame (only when set).
+
+    .. test:: REQUEST_CONFIG reply re-reports wake-up and door
+       :id: T_MOCK_LIGHT_REQUEST_CONFIG_FULL
+       :links: R_LIGHT_FAVOURITE
+    """
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")
+    assert [protocol.decode(_funcs()["lighting"], p)["Mode"] for p in pushes] == [12]  # nothing stored yet
+    u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "wakeup", "07:00 on", {}))
+    u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "door_contact", "on", {}))
+    pushes.clear()
+    _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")
+    got = [protocol.decode(_funcs()["lighting"], p) for p in pushes]
+    assert [(g["Mode"], g.get("ProfileNumber")) for g in got][:1] == [(12, 9)]
+    assert [g["Mode"] for g in got] == [12, 20, 16]
+    assert got[1]["LightValue"] & 1 == 1 and got[2]["ProfileNumber"] == 8 and got[2]["LightValue"] == 1
+
+
+def test_set_color_is_acked_on_1502():
+    """dg/h.l3 step (a) awaits an ack for SET_COLOR (Mode 6, PN N)."""
+    u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9})
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    _w(u, "010600000000000900000005e00eeeee")  # SET_COLOR red for favourite 1
+    _w(u, control.LIGHT_COMMIT.hex())
+    got = [protocol.decode(_funcs()["lighting"], p) for p in pushes]
+    assert [(g["Mode"], g["ProfileNumber"]) for g in got] == [(6, 1)]

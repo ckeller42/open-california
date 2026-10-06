@@ -431,11 +431,11 @@ def test_lighting_screen_lamps_are_directly_controllable(page):
     # like the app: lamps are always controllable (no "activate a profile first" gate). Dragging
     # a lamp from the lights-off state applies directly — the SET_BRIGHTNESS self-carries profile 9.
     page.get_by_text("Lighting", exact=True).first.click()
-    expect(page.get_by_text("Reading lights")).to_be_visible()
+    expect(page.get_by_text("Reading lights", exact=True)).to_be_visible()
     expect(page.get_by_text("Left", exact=True)).to_be_visible()  # a reading lamp
     # no manual Activate step, and controls are live from the start
     assert page.get_by_role("button", name="Activate").count() == 0
-    slider = page.locator("input[type=range]").first
+    slider = page.locator("input[type=range]:not([aria-label='Wake-up brightness'])").first
     expect(slider).to_be_enabled()
     assert page.locator(".switch").first.is_enabled()  # all-lights master too
     slider.fill("8")  # drag a lamp
@@ -922,3 +922,173 @@ def test_a_failed_first_poll_still_loads_pairing_once(base_url):
         browser.close()
     assert not errs, errs
     assert seen.count("/api/pairing") == 1, seen
+
+
+def _state(base_url, page):
+    return page.request.get(base_url + "/api/state").json()
+
+
+def _poll(page, base_url, pred, what, timeout=15.0):
+    """Poll the daemon's /api/state until ``pred(state)`` holds — the UNIT path (the daemon's latch
+    of the mock's 1502 frames), never the UI's optimistic overlay. (page.wait_for_function with an
+    ``async`` predicate returns a truthy Promise and never waits.)"""
+    import time
+
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        try:
+            if pred(_state(base_url, page)):
+                return
+        except (KeyError, TypeError):
+            pass
+        time.sleep(0.1)
+    raise AssertionError("state never reached: " + what)
+
+
+def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
+    """
+    .. test:: The web UI edits the wake-up time and switch; an edit keeps the unit-reported switch
+       :id: T_E2E_LIGHT_WAKEUP
+       :links: R_LIGHT_WAKEUP
+    """
+    # seed the unit-reported config (the card is disabled until the unit has reported one)
+    r = page.request.post(
+        base_url + "/api/command", data={"function": "lighting", "what": "wakeup", "value": "06:00 1 0 0 on"}
+    )
+    assert r.ok
+    _poll(page, base_url, lambda st: st["lighting"]["wakeup"]["time"] == "06:00", "seeded wake-up 06:00")
+    page.get_by_text("Lighting", exact=True).first.click()
+    tm = page.get_by_label("Wake-up time")
+    sw = page.get_by_role("switch", name="Wake-up light")
+    expect(tm).to_have_value("06:00", timeout=15000)
+    expect(sw).to_have_attribute("aria-checked", "true")
+    bodies = []
+    page.on("request", lambda rq: bodies.append(rq.post_data) if rq.url.endswith("/api/command") else None)
+    tm.fill("07:00")  # one change, like a user; the field must keep it through re-renders
+    expect(tm).to_have_value("07:00")
+    _poll(
+        page,
+        base_url,
+        lambda st: (
+            st["lighting"]["wakeup"]["time"] == "07:00" and st["lighting"]["wakeup"]["enabled"] is True
+        ),
+        "unit-reported wake-up 07:00, still enabled (the edit carried the reported switch)",
+    )
+    expect(tm).to_have_value("07:00")
+    sw.click()
+    _poll(
+        page, base_url, lambda st: st["lighting"]["wakeup"]["enabled"] is False, "unit-reported wake-up off"
+    )
+    expect(sw).to_have_attribute("aria-checked", "false")
+    page.wait_for_timeout(300)  # let the request events drain
+    sent = [json.loads(b)["value"] for b in bodies]
+    # a time edit carries NO on/off (the daemon fills the unit-reported one); the switch's does
+    assert sent[0].startswith("07:00") and sent[0].split()[-1] not in ("on", "off")
+    assert sent[1].endswith(" off")
+
+
+def test_door_contact_switch_round_trips(page, base_url):
+    """
+    .. test:: The web UI toggles the sliding-door light; the state shows the mock's flag
+       :id: T_E2E_LIGHT_DOOR
+       :links: R_LIGHT_DOOR_CONTACT
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    sw = page.get_by_role("switch", name="Sliding door lighting")
+    was = sw.get_attribute("aria-checked") == "true"
+    sw.click()
+    # the unit-reported flag (the mock's 1502 echo, latched by the daemon), not the optimistic switch
+    _poll(
+        page,
+        base_url,
+        lambda st: st["lighting"]["door_contact"] is (not was),
+        "unit-reported door flag flipped",
+    )
+    expect(sw).to_have_attribute("aria-checked", "false" if was else "true")
+    sw.click()  # restore
+    _poll(page, base_url, lambda st: st["lighting"]["door_contact"] is was, "door flag restored")
+
+
+def test_favourite_save_then_activate(page, base_url):
+    """
+    .. test:: Save favourite A then activate it from the web UI against the mock
+       :id: T_E2E_LIGHT_FAVOURITE
+       :links: R_LIGHT_FAVOURITE
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    before = _state(base_url, page)["lighting"]["profile"]
+    assert before != 1  # else activating favourite 1 could not prove anything
+    toasts = page.locator("#toasts")
+    page.once("dialog", lambda d: d.accept())
+    page.locator("select").nth(1).select_option("1")  # "Save current as" -> Profile A (= favourite 1)
+    expect(
+        toasts.get_by_text("Sent — check the lamp").or_(toasts.get_by_text("✓ Applied")).first
+    ).to_be_visible(timeout=15000)
+    # a save is not an activation: the active profile must not become 1
+    assert _state(base_url, page)["lighting"]["profile"] == before
+    # activating proves the save LANDED on the unit: the mock ignores (ACK-only) an empty favourite
+    page.locator("select").nth(0).select_option("1")
+    _poll(page, base_url, lambda st: st["lighting"]["profile"] == 1, "favourite 1 active after activate")
+    expect(page.get_by_text("this favourite is empty on the unit — save it first")).to_have_count(0)
+    r = page.request.post(
+        base_url + "/api/command", data={"function": "lighting", "what": "color", "value": "red"}
+    )
+    assert r.status == 400 and "retired" in r.json()["error"]
+
+
+def test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7(page):
+    """
+    .. test:: The profile selectors offer the app's four tiles A-D = favourites 1/5/6/7
+       :id: T_E2E_LIGHT_TILES
+       :links: R_LIGHT_FAVOURITE
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    for sel in (page.locator("select").nth(0), page.locator("select").nth(1)):
+        opts = {
+            o.get_attribute("value"): o.inner_text()
+            for o in sel.locator("option").all()
+            if o.get_attribute("value")
+        }
+        letters = {v: t.replace(" ✓", "") for v, t in opts.items() if v in ("1", "5", "6", "7")}
+        assert letters == {"1": "Profile A", "5": "Profile B", "6": "Profile C", "7": "Profile D"}
+        assert "2" not in opts and "3" not in opts and "4" not in opts
+
+
+def test_wakeup_areas_use_the_t7_labels_and_ranges(page):
+    """
+    .. test:: Wake-up areas carry the app's T7 labels; brightness 0..10; lead time 0/10/20/30
+       :id: T_E2E_LIGHT_WAKEUP_LABELS
+       :links: R_LIGHT_WAKEUP
+    """
+    page.get_by_text("Lighting", exact=True).first.click()
+    for label in (
+        "Living area reading lights",
+        "Kitchen background lighting",
+        "Pop-up roof reading lights",
+        "Pop-up roof background lighting",
+    ):
+        expect(page.get_by_text(label, exact=False).first).to_be_visible()
+    bright = page.get_by_label("Wake-up brightness")
+    assert (bright.get_attribute("min"), bright.get_attribute("max")) == ("0", "10")
+    ramps = [o.get_attribute("value") for o in page.locator("select").nth(2).locator("option").all()]
+    assert ramps == ["0", "10", "20", "30"]
+
+
+def test_door_contact_row_hidden_on_grand_california(page, base_url):
+    """
+    .. test:: The sliding-door row is shown on every variant except Grand California (2)
+       :id: T_E2E_LIGHT_DOOR_GATE
+       :links: R_LIGHT_DOOR_CONTACT
+    """
+
+    def patch(route):
+        r = route.fetch()
+        body = r.json()
+        body.setdefault("vehicle", {})["car_variant"] = 2
+        route.fulfill(response=r, json=body)
+
+    page.route("**/api/state", patch)
+    page.goto(base_url)
+    page.get_by_text("Lighting", exact=True).first.click()
+    expect(page.get_by_label("Wake-up time")).to_be_visible()
+    assert page.get_by_role("switch", name="Sliding door lighting").count() == 0

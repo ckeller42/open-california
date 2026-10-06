@@ -406,7 +406,9 @@ class CamperDevice:
                 pass
             await self._safe_disconnect(client)
 
-    async def actuate(self, func, frame: bytes, *, verify=True, follow: bytes | None = None) -> dict | None:
+    async def actuate(
+        self, func, frame: bytes, *, verify=True, follow: bytes | None = None, preface: bytes | None = None
+    ) -> dict | None:
         """Connect, arm with a 1003 heartbeat, write a control frame, disconnect (one BLE
         session — the CLI/per-op path). See :meth:`_actuate_on` for the shared write core.
 
@@ -423,7 +425,9 @@ class CamperDevice:
             raise ValueError("%s has no control characteristic" % func.name)
         client = await self._session()
         try:
-            return await self._actuate_on(client, func, frame, follow=follow, verify=verify, arm=True)
+            return await self._actuate_on(
+                client, func, frame, follow=follow, verify=verify, arm=True, preface=preface
+            )
         finally:
             await self._safe_disconnect(client)
 
@@ -470,6 +474,7 @@ class CamperDevice:
         follow: bytes | None = None,
         verify: bool = True,
         arm: bool = True,
+        preface: bytes | None = None,
     ) -> dict | None:
         """Write a control frame over an ALREADY-CONNECTED client. Never connects/disconnects.
 
@@ -480,6 +485,9 @@ class CamperDevice:
 
         :param follow: optional second frame written to the same control char right after ``frame``
             (the lighting commit; see ``control.commit_for``).
+        :param preface: optional frame written BEFORE ``frame`` on the same client inside the same
+            arm (``control.preface_for``: save_profile's SET_COLOR), followed by ``follow`` too. A
+            failed preface write raises, so ``frame`` is never sent without it.
         :returns: the post-write ``protocol.decode`` when ``verify`` and the func has a state char.
         """
         from . import protocol  # lazy
@@ -491,12 +499,13 @@ class CamperDevice:
         try:
             if arm:
                 beat = await self._arm(client, stop, "actuate", "write")
-            await client.write_gatt_char(func.control_char, frame, response=True)
-            trace.get().write(func.control_char, frame)
-            if follow is not None:
-                await asyncio.sleep(FOLLOW_DELAY_S)
-                await client.write_gatt_char(func.control_char, follow, response=True)
-                trace.get().write(func.control_char, follow)
+            for f in (preface, frame) if preface is not None else (frame,):
+                await client.write_gatt_char(func.control_char, f, response=True)
+                trace.get().write(func.control_char, f)
+                if follow is not None:
+                    await asyncio.sleep(FOLLOW_DELAY_S)
+                    await client.write_gatt_char(func.control_char, follow, response=True)
+                    trace.get().write(func.control_char, follow)
             if not verify or not func.state_char:
                 return None
             await asyncio.sleep(SETTLE_S)
@@ -922,9 +931,17 @@ class PersistentSession:
         return bytes(await self._client.read_gatt_char(func.state_char))
 
     async def actuate(
-        self, func, frame: bytes, *, follow: bytes | None = None, verify: bool = True
+        self,
+        func,
+        frame: bytes,
+        *,
+        follow: bytes | None = None,
+        verify: bool = True,
+        preface: bytes | None = None,
     ) -> dict | None:
-        return await self._dev._actuate_on(self._client, func, frame, follow=follow, verify=verify, arm=False)
+        return await self._dev._actuate_on(
+            self._client, func, frame, follow=follow, verify=verify, arm=False, preface=preface
+        )
 
     async def actuate_roof(self, func, move_frame: bytes, stop_frame: bytes, **kw) -> dict | None:
         """Stream a roof move over the live link, inside this session's ticking 1003 heartbeat — no

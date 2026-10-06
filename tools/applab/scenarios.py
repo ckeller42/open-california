@@ -95,6 +95,13 @@ XY: dict[str, tuple[int, ...] | None] = {
     # so open is first reached at ~13 s (12 s stopped at middle).
     "roof_open_hold": (540, 1580, 16000),
     "wakeup_hour_wheel": (469, 1666, 469, 1521),  # the wake-up sheet's hour wheel: one row up = +1 h
+    "wakeup_switch": (958, 381),  # Wake-up Light page, unscrolled: the "Wake-up light" enable switch
+    "wakeup_sheet_handle": (
+        540,
+        1603,
+    ),  # the time sheet's drag handle when it opens half-expanded (tap = expand)
+    "door_contact_switch": (590, 1808),  # Lighting & sliding door page: the "Opening sliding door ..." row
+    "lighting_profile_a": (148, 640),  # profile tile A (= favourite 1), short tap (= activate once stored)
 }
 
 TILE = {
@@ -240,7 +247,7 @@ SCENARIOS: dict[str, list[Step]] = {
         xy("roof_open_hold", expect=("roof", "open", None)),  # adb returns on release (16 s)
         wait(r"roof is open", 20),
     ],
-    "energy-mode": [  # ECO is not offered on this profile (protocol-crosscheck-applab.md).
+    "energy-mode": [  # ECO needs PvInstalled=1 and shows only on a 2nd visit (protocol-crosscheck-applab.md).
         # Energy Mode is NOT a Remote Control tile: it is a dropdown under Vehicle Information >
         # Charging (app 5.0.8.3028). The readback echo keeps EnergyMode at Normal after a write, so
         # the fake is nudged to Max before the Normal tap or the app treats Normal as a no-op.
@@ -257,9 +264,7 @@ SCENARIOS: dict[str, list[Step]] = {
     "lighting-profile": [
         # Save = press-and-hold a profile tile: the app writes SET_BRIGHTNESS with ProfileNumber = the
         # favorite and every equipped zone at its current level (no Save button). Run after the lighting
-        # coachmark was closed once (lighting-zone dismisses it). Selecting the saved profile is NOT
-        # recordable against the mock: it does not model stored favorites, so the app keeps the tile as
-        # empty ("+") and a tap only shows "Please press and hold".
+        # coachmark was closed once (lighting-zone dismisses it). Activating it: `lighting-favourite`.
         *_open_app(),
         ui(TILE["lighting"]),
         wait(r"All lights|Alle Lichter"),
@@ -269,10 +274,10 @@ SCENARIOS: dict[str, list[Step]] = {
         xy("lighting_profile_a_hold", expect=("lighting", "save_profile", 1)),
     ],
     "lighting-wakeup": [
-        # Lighting > Functions & Settings > Wake-up Light > tap the time > wheel to 07:00 > OK writes the
-        # Mode-20 WAKEUP_TIME frame at once (a GAPS entry in tools/capture_diff.py). The "Wake-up light"
-        # enable switch is not driven: the mock does not echo the wake-up time, so the switch's frame
-        # would carry the stale 00:00 readback, not the time set here.
+        # Time first (no wake-up config reported yet: the app's write carries enabled=off), then the
+        # switch on, then a second time edit WITH the switch on (ruling R3: the edit keeps the
+        # unit-reported enabled=1), then the switch off. Each write resends the config the app read
+        # back from the mock's Mode-20 echo (dg/h F0). The emulator runs in UTC (the replay pins it).
         *_open_app(),
         ui(TILE["lighting"]),
         wait(r"All lights|Alle Lichter"),
@@ -284,6 +289,60 @@ SCENARIOS: dict[str, list[Step]] = {
         wait(r"Wake-up time:"),
         *[xy("wakeup_hour_wheel") for _ in range(7)],  # 00 -> 07
         ui(r"^OK$", expect=("lighting", "wakeup", "07:00")),
+        idle(2),
+        xy("wakeup_switch", expect=("lighting", "wakeup", "07:00 on")),
+        # A switch tap compares the phone clock with the unit RTC (1004; the fake's is the baseline's
+        # 2026-08-28): "Different time settings." App/Vehicle dialog, OK dismisses it.
+        wait(r"Different time settings", 10),
+        ui(r"^OK$"),
+        idle(2),
+        ui(r"^\d\d:\d\d$"),
+        wait(r"Wake-up time:"),
+        idle(1),
+        xy("wakeup_sheet_handle"),  # the second open lands half-expanded (OK off screen): expand it
+        idle(1),
+        xy("wakeup_hour_wheel"),  # 07 -> 08
+        ui(r"^OK$", expect=("lighting", "wakeup", "08:00")),
+        idle(2),
+        xy("wakeup_switch", expect=("lighting", "wakeup", "08:00 off")),
+        wait(r"Different time settings", 10),  # the switch shows the clock dialog both ways
+        ui(r"^OK$"),
+        idle(2),
+        adb("shell", "input", "keyevent", "BACK"),  # reopen: the page shows the time it read back
+        idle(2),
+        ui(r"^Wake-up Light$"),
+        wait(r"^08:00$"),
+    ],
+    "door-contact": [
+        *_open_app(),
+        ui(TILE["lighting"]),
+        wait(r"All lights|Alle Lichter"),
+        ui(r"^Functions & Settings$"),
+        _SCROLL_END,
+        ui(r"[Ss]liding [Dd]oor"),  # the "Lighting & sliding door" entry
+        wait(r"Opening sliding door"),
+        xy("door_contact_switch", expect=("lighting", "door_contact", "on")),
+        idle(2),
+        xy("door_contact_switch", expect=("lighting", "door_contact", "off")),
+        idle(2),
+    ],
+    "lighting-favourite": [
+        # Save A (press-and-hold) then activate A (tap): the mock stores favourites and answers the
+        # app's post-save REQUEST_CONFIG with favourite 1's bit, so tile A is no longer "+".
+        *_open_app(),
+        ui(TILE["lighting"]),
+        wait(r"All lights|Alle Lichter"),
+        xy("lighting_all", expect=("lighting", "power", "on")),
+        xy("lighting_kitchen_row"),
+        xy("lighting_cooking_50", expect=("lighting", "kitchen", 5)),
+        xy("lighting_profile_a_hold", expect=("lighting", "save_profile", 1)),
+        idle(3),
+        # After the save tile A is the ACTIVE profile and a tap on it is a no-op (dg/h u0 caller hi/f.j):
+        # switch all lights off first so the tap activates.
+        xy("lighting_all", expect=("lighting", "power", "off")),
+        idle(2),
+        xy("lighting_profile_a", expect=("lighting", "profile", 1)),
+        idle(2),
     ],
     "airheater-permanent-on": [  # expected: NO write — the switch is inert while continuous heating is off
         *_open_app(),
