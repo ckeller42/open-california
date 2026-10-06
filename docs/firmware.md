@@ -343,7 +343,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 
 .. req:: The firmware's control frames and gates are byte-identical to calictl's
    :id: R_FW_CONTROL_TWIN
-   :status: open
+   :status: implemented
    :tags: esp32, control
 
    For cooler, campingmode, lighting (power, zones, ``all``, ``profile``, ``save_profile`` with its
@@ -351,7 +351,25 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    writes ``calictl.control`` would — the same ``command_precondition`` refusal texts, the same
    frames from ``control.build``, the same lighting commit after each frame — on every vector of
    ``tests/vectors/control.json`` (generated from the Python, ``--check`` in CI). The roof and the
-   wake-up light are answered "Only via buspi or the app".
+   wake-up light are answered "Only via buspi or the app". The twin is
+   ``firmware/components/cali_core/control.c`` (``cali_ctl_plan``), pure C99 over the generated
+   ``csrc/control_consts.h``.
+
+.. req:: The firmware writes only the five control chars at their frame length, and the 1003 heartbeat
+   :id: R_FW_WRITE_ALLOWLIST
+   :status: open
+   :tags: esp32, control, safety
+
+   The firmware's only characteristic-value writes shall be the ``1003`` liveness heartbeat
+   (``write_heartbeat``) and control frames to the five chars of ``CALI_CTL_CHARS``
+   (``csrc/control_consts.h``, generated from ``tools/gen_c_dict.ESP_CONTROL_FUNCTIONS``: ``1101``
+   cooler, ``1201`` camping mode, ``1501`` lighting, ``1601`` energy, ``1701`` air heater), each at
+   exactly its control frame length. One function, ``cali_ctl_write_ok``
+   (``firmware/components/cali_core/control.c``), decides it, and both the sequencer
+   (``control_run.c``) and the NimBLE transport's ``write`` shall call it. The roof's ``1401`` is
+   never on the list (the generator asserts it); no roof builder exists. CCCD writes only enable
+   notifications. Status ``open`` until the sequencer and the transport ``write`` exist and call it
+   (#154 B Task 3); the decider itself is proven by the exhaustive scan today.
 
 .. req:: SM I/O capability and MITM must be set before any link exists
    :id: R_FW_IO_CAP_BEFORE_LINK

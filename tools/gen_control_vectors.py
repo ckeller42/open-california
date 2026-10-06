@@ -44,7 +44,7 @@ _ONOFF = ["on", "off", " ON ", 1, 0, None, "x"]
 GRID: dict[str, dict[str, list]] = {
     "cooler": {
         "power": _ONOFF,
-        "level": [1, 5, 0, 6, "3", " 4 ", "+2", "5_0", "0x3", "abc", None, 10**30, -1],
+        "level": [1, 5, 0, 6, "3", " 4 ", "+2", "5_0", "0_5", "0x3", "abc", None, 10**30, -1],
         "mode": ["normal", "quiet", "timer_quiet", "Quiet ", "bogus", None],
         "timer_set": ["07:30", "7:5", "24:00", "07:60", "0730", " 06 : 15 ", "1:2:3", "07:", None],
         "timer_start": [None],

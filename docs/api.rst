@@ -195,6 +195,7 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_pairing_sm_parity
 .. automodule:: tests.firmware.test_runner_fake
 .. automodule:: tests.firmware.test_session_fake
+.. automodule:: tests.firmware.test_control_parity
 .. automodule:: tests.firmware.test_host_e2e
 .. automodule:: tests.firmware.test_json
 .. automodule:: tests.firmware.test_wifi_sm_parity

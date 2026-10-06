@@ -2897,6 +2897,91 @@
    }
   },
   {
+   "id": "cooler/level/\"0_5\"@seed",
+   "function": "cooler",
+   "what": "level",
+   "value": "0_5",
+   "state": "seed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1101",
+      "delay_ms": 0,
+      "hex": "ff751e3e1f1f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "cooler/level/\"0_5\"@empty",
+   "function": "cooler",
+   "what": "level",
+   "value": "0_5",
+   "state": "empty",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1101",
+      "delay_ms": 0,
+      "hex": "ff751e3e1f1f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "cooler/level/\"0_5\"@fridge_on",
+   "function": "cooler",
+   "what": "level",
+   "value": "0_5",
+   "state": "fridge_on",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1101",
+      "delay_ms": 0,
+      "hex": "ff751e3e1f1f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "cooler/level/\"0_5\"@fridge_off",
+   "function": "cooler",
+   "what": "level",
+   "value": "0_5",
+   "state": "fridge_off",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1101",
+      "delay_ms": 0,
+      "hex": "ff751e3e1f1f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "cooler/level/\"0_5\"@cooler_schedule",
+   "function": "cooler",
+   "what": "level",
+   "value": "0_5",
+   "state": "cooler_schedule",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1101",
+      "delay_ms": 0,
+      "hex": "ff751e3e1f1f"
+     }
+    ]
+   }
+  },
+  {
    "id": "cooler/level/\"0x3\"@seed",
    "function": "cooler",
    "what": "level",

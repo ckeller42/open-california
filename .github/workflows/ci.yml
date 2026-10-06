@@ -141,7 +141,7 @@ jobs:
       - name: ESP control vectors are fresh (calictl/control.py -> tests/vectors/control.json)
         run: python -m tools.gen_control_vectors --check
       - name: Vectors + differential parity (compiles csrc/)
-        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py tests/test_wifi_sm_ref.py tests/firmware/test_wifi_sm_parity.py tests/test_semantics_js_parity.py tests/test_app_bundle.py tests/test_control_vectors.py -q
+        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py tests/test_wifi_sm_ref.py tests/firmware/test_wifi_sm_parity.py tests/test_semantics_js_parity.py tests/test_app_bundle.py tests/test_control_vectors.py tests/firmware/test_control_parity.py -q
 
   gui-e2e:
     runs-on: ubuntu-latest

@@ -1,0 +1,91 @@
+/* cali_control.h — the satellite's control path (#154 B): calictl.control's builders + gates in C
+ * (control.c, pure) and the one-command-at-a-time sequencer onto the session's link (control_run.c).
+ *
+ * Plan (control.c): cali_ctl_plan() answers what calictl would for "set <fn> <what> <value>" over the
+ * decoded state behind get(): ELSEWHERE for anything the ESP does not carry (the roof, the wake-up
+ * light, any function but the five in control_consts.h), else REFUSED with command_precondition's
+ * text, else BAD_VALUE / NONE (control.build raised / returned None), else OK with the writes in
+ * calictl.device.actuate's order (preface, commit, frame, commit; commits only for lighting, each
+ * CODEC_FOLLOW_DELAY_MS after the previous write's ACK). value is calictl's string form of the JSON
+ * value (an integer's decimal text; null = ""), shorter than CALI_CTL_VALUE_MAX. Held equal to Python
+ * by tests/vectors/control.json (tests/firmware/test_control_parity.py).
+ *
+ * The write allow-list (cali_ctl_write_ok): a characteristic write is allowed only to one of the five
+ * control chars of CALI_CTL_CHARS at exactly its frame length — never the roof's control char. The
+ * 1003 heartbeat is the transport's own write_heartbeat. Both control_run.c and the NimBLE
+ * transport's write() call it: the single choke point.
+ *
+ * Run (control_run.c, on the owner task like everything in cali_core): cali_ctl_submit() refuses at
+ * once (BUSY, NOT_READY, REFUSED, ELSEWHERE, BAD_VALUE, NONE — each logged "control: <fn>/<what> …")
+ * or accepts (PENDING); the frames then go out on cali_ctl_tick(), one write with response at a time
+ * (transport write -> CALI_TEV_WRITTEN -> cali_ctl_on_written); done(result) is called exactly once
+ * with OK, FAILED (a write not issued, refused with an ATT error, or the link lost) or TIMEOUT
+ * (CALI_CTL_DEADLINE_MS after the submit). NOT_READY = cali_session_ready() is 0 (no armed link: the
+ * link up for CODEC_ARM_DELAY_MS with its first read-all done) or the function's state was never read.
+ *
+ * C99, no malloc, no NimBLE/ESP-IDF includes.
+ */
+#ifndef CALI_CONTROL_H
+#define CALI_CONTROL_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "cali_transport.h"
+#include "codec.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+enum {
+    CALI_CTL_OK = 0,      /* plan: frames to write / run: every frame written and ACKed */
+    CALI_CTL_REFUSED,     /* a command_precondition gate; reason = its text */
+    CALI_CTL_ELSEWHERE,   /* not on the ESP; reason = CALI_REASON_ELSEWHERE */
+    CALI_CTL_BAD_VALUE,   /* control.build raised */
+    CALI_CTL_NONE,        /* control.build returned None */
+    CALI_CTL_PENDING,     /* run: accepted, frames going out */
+    CALI_CTL_BUSY,        /* run: a command (or an unacknowledged write) is still in flight */
+    CALI_CTL_NOT_READY,   /* run: no armed link yet, or the function's state is unknown */
+    CALI_CTL_FAILED,      /* run: a write not issued, refused by the unit, or the link lost */
+    CALI_CTL_TIMEOUT      /* run: not done within CALI_CTL_DEADLINE_MS */
+};
+
+#define CALI_CTL_MAX_FRAMES 4
+#define CALI_CTL_VALUE_MAX 64
+#define CALI_CTL_DEADLINE_MS 4000u
+
+typedef struct {
+    uint16_t chr;       /* control char short id */
+    uint16_t delay_ms;  /* after the previous write's ACK */
+    uint8_t len;
+    uint8_t data[CODEC_FRAME_MAX];
+} cali_ctl_frame_t;
+
+typedef struct {
+    int rc;
+    const char *reason;  /* REFUSED / ELSEWHERE: static text, else NULL */
+    size_t n;
+    cali_ctl_frame_t f[CALI_CTL_MAX_FRAMES];
+} cali_ctl_plan_t;
+
+/* 1 and *out = the decoded value of fn's state field, or 0 when unknown (no frame, or the frame
+ * too short for the field). */
+typedef int (*cali_ctl_get_t)(const char *fn, const char *field, uint32_t *out);
+typedef void (*cali_ctl_done_t)(int result);
+
+void cali_ctl_plan(const char *fn, const char *what, const char *value, cali_ctl_get_t get,
+                   cali_ctl_plan_t *out);
+int cali_ctl_write_ok(uint16_t chr, size_t len);
+
+void cali_ctl_run_init(const cali_transport_t *t);
+int cali_ctl_submit(const char *fn, const char *what, const char *value, cali_ctl_done_t done,
+                    const char **reason);
+void cali_ctl_tick(uint64_t now_ms);
+void cali_ctl_on_written(const cali_tevent_t *e);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* CALI_CONTROL_H */
