@@ -40,6 +40,7 @@ static struct {
     uint8_t frame[CODEC_FRAME_MAX];
     size_t len;
     uint8_t have;
+    uint8_t live;              /* stored on the current link (cleared by link_up) */
 } s_fr[CODEC_NCHARS];
 /* Pushed on this link (since its read-all started with the subscribe): the NOTIFY frame is fresher
  * than the unit's read latch, so the read-all neither reads nor overwrites it (calictl.device
@@ -65,6 +66,7 @@ static void store(size_t i, const uint8_t *data, size_t len) {
     if (len) memcpy(s_fr[i].frame, data, len);
     s_fr[i].len = len;
     s_fr[i].have = 1;
+    s_fr[i].live = 1;
     s_last_update = s_now ? s_now : 1;
 }
 
@@ -108,6 +110,8 @@ static void link_up(void) {
     s_reading = 0;
     s_snapped = 0;
     memset(s_pushed, 0, sizeof s_pushed);
+    for (size_t i = 0; i < CODEC_NCHARS; i++) s_fr[i].live = 0;   /* the last link's frames stay shown,
+                                                                     never gated on */
     int rc = s_t->discover();
     if (rc != 0) {
         cali_log("session: discover failed %d", rc);
@@ -297,6 +301,11 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     *frame = s_fr[i].frame;
     *len = s_fr[i].len;
     return 1;
+}
+
+int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len) {
+    if (i >= CODEC_NCHARS || !s_fr[i].live) return 0;
+    return cali_session_frame(i, frame, len);
 }
 
 uint64_t cali_session_last_update_ms(void) { return s_last_update; }

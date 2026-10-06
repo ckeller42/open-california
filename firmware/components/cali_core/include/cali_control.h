@@ -6,7 +6,7 @@
  * light, any function but the five in control_consts.h), else REFUSED with command_precondition's
  * text, else BAD_VALUE / NONE (control.build raised / returned None), else OK with the writes in
  * calictl.device.actuate's order (preface, commit, frame, commit; commits only for lighting, each
- * CODEC_FOLLOW_DELAY_MS after the previous write's ACK). value is calictl's string form of the JSON
+ * at least CODEC_FOLLOW_DELAY_MS after the previous write's ACK). value is calictl's string form of the JSON
  * value (an integer's decimal text; null = ""), shorter than CALI_CTL_VALUE_MAX. Held equal to Python
  * by tests/vectors/control.json (tests/firmware/test_control_parity.py).
  *
@@ -21,7 +21,8 @@
  * (transport write -> CALI_TEV_WRITTEN -> cali_ctl_on_written); done(result) is called exactly once
  * with OK, FAILED (a write not issued, refused with an ATT error, or the link lost) or TIMEOUT
  * (CALI_CTL_DEADLINE_MS after the submit). NOT_READY = cali_session_ready() is 0 (no armed link: the
- * link up for CODEC_ARM_DELAY_MS with its first read-all done) or the function's state was never read.
+ * link up for CODEC_ARM_DELAY_MS with its first read-all done) or the function's state was not read
+ * (or pushed) on this link. ELSEWHERE, NONE and BAD_VALUE answer without waiting for it, armed or not.
  *
  * C99, no malloc, no NimBLE/ESP-IDF includes.
  */
@@ -54,6 +55,7 @@ enum {
 #define CALI_CTL_MAX_FRAMES 4
 #define CALI_CTL_VALUE_MAX 64
 #define CALI_CTL_DEADLINE_MS 4000u
+#define CALI_CTL_TICK_MS 100u   /* the session tick period (TICK_MS in host_main.c / app_main.c) */
 
 typedef struct {
     uint16_t chr;       /* control char short id */

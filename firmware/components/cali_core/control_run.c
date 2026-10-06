@@ -37,7 +37,7 @@ static int get_field(const char *fn, const char *field, uint32_t *out) {
     size_t len;
     int i = index_of(fn), n;
     const codec_func_t *f = codec_func_by_name(fn);
-    if (i < 0 || !f || !cali_session_frame((size_t)i, &frame, &len)) return 0;
+    if (i < 0 || !f || !cali_session_frame_live((size_t)i, &frame, &len)) return 0;
     n = codec_decode(f, frame, len, kv);
     for (int k = 0; k < n; k++)
         if (strcmp(kv[k].name, field) == 0) {
@@ -51,7 +51,7 @@ static int have_frame(const char *fn) {
     const uint8_t *frame;
     size_t len;
     int i = index_of(fn);
-    return i >= 0 && cali_session_frame((size_t)i, &frame, &len);
+    return i >= 0 && cali_session_frame_live((size_t)i, &frame, &len);
 }
 
 void cali_ctl_run_init(const cali_transport_t *t) {
@@ -77,7 +77,10 @@ int cali_ctl_submit(const char *fn, const char *what, const char *value, cali_ct
         return CALI_CTL_BUSY;
     }
     cali_ctl_plan(fn, what, value, get_field, &plan);
-    if (plan.rc != CALI_CTL_ELSEWHERE && (!cali_session_ready() || !have_frame(fn))) {
+    /* Not on the ESP, no such control, a malformed value: answered without state (the builders'
+     * only state-dependent BAD, night_* with no cooler State, is refused by its gate first). A
+     * frame or a gate's answer waits for an armed link and this link's frame. */
+    if ((plan.rc == CALI_CTL_OK || plan.rc == CALI_CTL_REFUSED) && (!cali_session_ready() || !have_frame(fn))) {
         cali_log("control: %s/%s not ready (no armed link or no state yet)", fn, what);
         return CALI_CTL_NOT_READY;
     }
@@ -107,8 +110,10 @@ int cali_ctl_submit(const char *fn, const char *what, const char *value, cali_ct
     return CALI_CTL_PENDING;
 }
 
-/* ponytail: the next frame goes out on the 100 ms tick, so a commit's gap after its ACK is
- * CODEC_FOLLOW_DELAY_MS..+100 ms (the app streams at ~500 ms); a timer per frame if the unit ever minds. */
+/* ponytail: the next frame goes out on the CALI_CTL_TICK_MS tick and the ACK's own time is unknown
+ * (somewhere after the last tick), so a delayed frame waits delay + one tick from that tick: its gap
+ * after the ACK is CODEC_FOLLOW_DELAY_MS..+CALI_CTL_TICK_MS (the app streams at ~500 ms), never less;
+ * a timer per frame if the unit ever minds. */
 void cali_ctl_tick(uint64_t now_ms) {
     const cali_ctl_frame_t *f;
     s_now = now_ms;
@@ -149,5 +154,6 @@ void cali_ctl_on_written(const cali_tevent_t *e) {
         finish(CALI_CTL_OK, NULL);
         return;
     }
-    O.next_at = s_now + O.plan.f[O.i].delay_ms;
+    if (O.plan.f[O.i].delay_ms) O.next_at = s_now + O.plan.f[O.i].delay_ms + CALI_CTL_TICK_MS;
+    else O.next_at = s_now;
 }

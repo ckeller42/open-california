@@ -931,6 +931,7 @@ from tools.mock_unit import _pack_state  # noqa: E402
 _CH = (ROOT / "csrc" / "codec_chars.h").read_text()
 ARM = int(re.search(r"#define CODEC_ARM_DELAY_MS (\d+)", _CH).group(1))
 FOLLOW = int(re.search(r"#define CODEC_FOLLOW_DELAY_MS (\d+)", _CH).group(1))
+TICK = 100  # the session tick (host_main.c / app_main.c TICK_MS)
 DEADLINE = int(
     re.search(r"#define CALI_CTL_DEADLINE_MS (\d+)", (CORE / "include" / "cali_control.h").read_text()).group(
         1
@@ -1012,7 +1013,7 @@ def test_control_lighting_commit_follows_after_the_follow_delay(fake):
         "> set lighting kitchen 5",
         "tick %d" % t,
         "WRITTEN 1501 0",
-        "tick %d" % (t + FOLLOW - 100),
+        "tick %d" % (t + FOLLOW),  # an ACK just before the next tick: FOLLOW after the tick is too early
     )
     assert len(writes(early)) == 1
     out = run(
@@ -1021,7 +1022,7 @@ def test_control_lighting_commit_follows_after_the_follow_delay(fake):
         "> set lighting kitchen 5",
         "tick %d" % t,
         "WRITTEN 1501 0",
-        "tick %d" % (t + FOLLOW),
+        "tick %d" % (t + FOLLOW + TICK),
         "WRITTEN 1501 0",
     )
     assert writes(out) == want_writes("lighting", "kitchen", "5")
@@ -1036,11 +1037,11 @@ def test_control_save_profile_colour_is_four_writes_in_actuate_order(fake):
         "> set lighting save_profile 3 amber",
         "tick %d" % t,
         "WRITTEN 1501 0",
-        "tick %d" % (t + FOLLOW),
+        "tick %d" % (t + FOLLOW + TICK),
         "WRITTEN 1501 0",
-        "tick %d" % (t + FOLLOW + 100),
+        "tick %d" % (t + FOLLOW + 2 * TICK),  # the save frame: no delay, the next tick
         "WRITTEN 1501 0",
-        "tick %d" % (t + 2 * FOLLOW + 100),
+        "tick %d" % (t + 2 * FOLLOW + 3 * TICK),
         "WRITTEN 1501 0",
     )
     assert writes(out) == want_writes("lighting", "save_profile", "3 amber")
@@ -1165,7 +1166,7 @@ def test_control_survives_interleaved_heartbeat_and_notify(fake):
         "NOTIFY 1502 %s" % pack("lighting", Mode=4, BrightnessLSeven=3),
         "HEARTBEAT 0",
         "WRITTEN 1501 0",
-        "tick %d" % (t + FOLLOW),
+        "tick %d" % (t + FOLLOW + TICK),
         "HEARTBEAT 0",
         "WRITTEN 1501 0",
     )
@@ -1214,3 +1215,88 @@ def test_control_transport_refusal_is_a_failed_write(fake):
 def test_control_set_usage(fake, line):
     out = run(fake, line)
     assert "LOG control: usage: set <function> <what> [value]" in out
+
+
+def test_control_after_a_link_drop_the_relinked_satellite_is_not_busy(fake):
+    """The transport drops its queue with the link (no WRITTEN ever comes): once a new link is
+    up and armed, the next command goes out instead of answering busy forever."""
+    t = ARM + 100
+    up = t + 1200  # the session reconnects 1 s after the drop
+    out = run(
+        fake,
+        *armed(),
+        "> set cooler level 2",
+        "tick %d" % t,
+        "DISCONNECTED",
+        "tick %d" % (t + 100),
+        "tick %d" % up,
+        "CONNECTED",
+        "ENC_OK",
+        *read_all(at=up),
+        "tick %d" % (up + ARM),
+        "> set cooler level 3",
+        "tick %d" % (up + ARM + 100),
+    )
+    assert "CALL connect_bonded" in out
+    assert "LOG control: cooler/level busy" not in out
+    assert writes(out) == [want_writes("cooler", "level", 2)[0], want_writes("cooler", "level", 3)[0]]
+
+
+def test_control_stray_written_between_frames_skips_nothing(fake):
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "WRITTEN 1501 0",  # a duplicate completion while the commit waits its follow delay
+        "tick %d" % (t + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+    )
+    assert writes(out) == want_writes("lighting", "kitchen", "5")
+    assert out[-1] == "LOG control: lighting/kitchen sent"
+
+
+def test_control_never_gates_on_the_previous_links_frame(fake):
+    """A frame read on an earlier link is not this link's state: when the new link's read of it
+    fails, the command is not ready — never built on the stale frame."""
+    frames = {0x1102: pack("cooler", Installed=1, State=0, Mode=4, Level=3)}
+    reads = ["READ %x %d" % (c, 14 if c == 0x1102 else 0) for c in CHARS]  # link 2: cooler read fails
+    up = ARM + 1200
+    out = run(
+        fake,
+        *armed(frames),
+        "DISCONNECTED",
+        "tick %d" % (ARM + 100),
+        "tick %d" % up,
+        "CONNECTED",
+        "ENC_OK",
+        *read_all(at=up, reads=reads),
+        "tick %d" % (up + ARM),
+        "> set cooler power on",
+        "tick %d" % (up + ARM + 100),
+    )
+    assert "LOG control: cooler/power not ready (no armed link or no state yet)" in out and not writes(out)
+
+
+@pytest.mark.parametrize(
+    "line, answer",
+    [
+        ("> set cooler bogus", "no such control"),  # control.build returns None
+        ("> set energy bogus 1", "no such control"),
+        ("> set lighting bogus 1", "bad value"),  # the lighting builder raises (as calictl's)
+        ("> set cooler level", "bad value"),  # no value
+    ],
+)
+def test_control_unknown_control_or_bad_value_answers_without_an_armed_link(fake, line, answer):
+    fn_what = "/".join(line.split()[2:4])
+    out = run(fake, *PAIRED, line)
+    assert "LOG control: %s %s" % (fn_what, answer) in out and not writes(out)
+
+
+def test_control_gate_on_unknown_state_waits_for_the_link(fake):
+    """A gate that refuses for want of state (night_on with no cooler state, R4) is not answered
+    before the link is armed: it is "not ready", the honest answer while the state is still coming."""
+    out = run(fake, *PAIRED, "> set cooler night_on")
+    assert "LOG control: cooler/night_on not ready (no armed link or no state yet)" in out

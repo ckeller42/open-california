@@ -383,8 +383,9 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    The firmware shall accept a control command from ``POST /api/command`` (calictl's request and
    response shape) only in station mode, and from the console ``set <fn> <what> [value]``; a
    command is accepted only on an armed link (up ``CODEC_ARM_DELAY_MS`` with its first read-all
-   done) and when the function's state has been read; it writes the planned frames one at a time
-   with response, a lighting commit ``CODEC_FOLLOW_DELAY_MS`` after the previous ACK; it reports
+   done) and when the function's state has been read on that link; it writes the planned frames
+   one at a time with response, a lighting commit at least ``CODEC_FOLLOW_DELAY_MS`` after the
+   previous ACK; it reports
    success only after every write was ACKed, a refused write or a lost link as a failure (no
    further frame), and gives up after ``CALI_CTL_DEADLINE_MS``; a second command while one runs
    — or while a timed-out write still awaits its ACK — is refused (busy). The sequencer is

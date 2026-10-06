@@ -74,6 +74,10 @@ int cali_session_ready(void);
  * function has not been read yet (or its read failed and no notification came). */
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len);
 
+/* As cali_session_frame, but only a frame read or pushed on the CURRENT link (0 for one kept from an
+ * earlier link): what the control gates run on (cali_control.h), never a previous link's state. */
+int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len);
+
 /* The now_ms (of the latest cali_session_tick) at which the session last stored a frame — a READ or
  * a NOTIFY; 0 = no frame stored since cali_session_init. */
 uint64_t cali_session_last_update_ms(void);
