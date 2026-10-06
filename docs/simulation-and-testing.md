@@ -40,6 +40,15 @@ in `AGENTS.md` list exactly what only GitHub runs.
 runtime is stdlib-only at import. Some guards in this suite protect repo-wide invariants:
 
 - `tests/test_signal_coverage.py`: every dictionary field has a catalog decision.
+- `tests/test_command_coverage.py`: the write-side twin: every `(function, what)` that
+  `control.BUILDERS` accepts has a row with an evidence tier in `control-and-actuation.md` §5, and a
+  retired command (lighting `color`) is refused, not listed.
+- `tests/test_needs_docstrings.py`: every `.. req::`/`.. test::` in a docstring has a prefixed,
+  unique `:id:`, its `:links:` resolve, and `docs/api.rst` autodocs it (else it drops out of the trace).
+- `tests/test_evidence_recordings.py`: the evidence ledger cites every `tests/vectors/app/*.jsonl`
+  recording, and only existing ones.
+- `tests/test_e2e_patterns.py`: no `wait_for_function` with an `async` predicate in `tests/e2e`
+  (the Promise is truthy, so it never waits).
 - `tests/test_mermaid_syntax.py`: diagrams in the docs do not contain characters that break
   mermaid in the browser.
 - `tests/test_gen_c_dict.py`, `tests/test_codec_vectors.py`: the generated C header and the golden

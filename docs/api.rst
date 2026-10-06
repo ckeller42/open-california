@@ -58,6 +58,8 @@ Control frames
 .. autofunction:: calictl.semantics.wakeup_config
 .. automodule:: tests.test_lighting_commands
 .. autofunction:: tests.test_web_serve.test_wakeup_write_is_not_latched_only_the_units_own_frames_are
+.. autofunction:: tests.test_web_serve.test_a_pushed_unit_frame_latches_the_lighting_config
+.. autofunction:: tests.test_web_serve.test_wakeup_edit_pulls_the_config_with_request_config_then_proceeds
 
 Sinks (MQTT / Home Assistant)
 -----------------------------
@@ -94,6 +96,7 @@ Tests
 .. autofunction:: tests.test_calictl.test_vehicle_decode_char_1004
 .. autofunction:: tests.test_calictl.test_airheater_control_frame
 .. autofunction:: tests.test_calictl.test_airheater_timer_time_matches_app_frame
+.. autofunction:: tests.test_calictl.test_airheater_timer_start_and_cancel_match_app_frames
 .. autofunction:: tests.test_calictl.test_roof_position_name_and_infopopup_alert
 .. autofunction:: tests.test_calictl.test_water_stale_latch_guard
 .. autofunction:: tests.test_calictl.test_cli_set_check_all_rows
@@ -108,6 +111,12 @@ Tests
 .. automodule:: tests.test_roof
 .. automodule:: tests.test_history
 .. automodule:: tests.test_ha
+.. autofunction:: tests.e2e.test_gui.test_wakeup_light_time_and_switch_reach_the_unit
+.. autofunction:: tests.e2e.test_gui.test_door_contact_switch_round_trips
+.. autofunction:: tests.e2e.test_gui.test_favourite_save_then_activate
+.. autofunction:: tests.e2e.test_gui.test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7
+.. autofunction:: tests.e2e.test_gui.test_wakeup_areas_use_the_t7_labels_and_ranges
+.. autofunction:: tests.e2e.test_gui.test_door_contact_row_hidden_on_grand_california
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
@@ -133,6 +142,7 @@ Cross-language codec (issue #156)
 .. automodule:: tests.test_codec_parity
 .. automodule:: tests.test_semantics_js_parity
 .. automodule:: tests.test_gen_c_dict
+.. automodule:: tests.test_finding_artifact_sync
 .. automodule:: tests.test_app_bundle
 .. automodule:: tests.test_wifi_consts
 .. automodule:: tests.test_ports_parity
