@@ -31,7 +31,7 @@ SKIP_CHARS = ("1003", "f000")
 
 
 def app_cases() -> list[dict]:
-    """The ``app`` cases of the control vectors (31: 27 frames + 4 wake-up "elsewhere")."""
+    """The ``app`` cases of the control vectors (frames, or a wake-up refused as "elsewhere")."""
     return json.loads(VECTORS.read_text(encoding="utf-8"))["app"]
 
 
@@ -82,7 +82,7 @@ def walk(cases, inject, post, writes) -> list[str]:
         else:
             for i, f in enumerate(exp.get("frames", [])):
                 gap_ms = (got[i][2] - got[i - 1][2]) * 1000 if i else None
-                if f["delay_ms"] and gap_ms < f["delay_ms"]:
+                if i and f["delay_ms"] and gap_ms < f["delay_ms"]:
                     problems.append(
                         "%s: frame %d came %.0f ms after the previous write, calictl waits %d"
                         % (case["id"], i, gap_ms, f["delay_ms"])

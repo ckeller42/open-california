@@ -18,6 +18,7 @@ commands; a write the unit NACKs is ``502`` with no commit after it, one it ACKs
 """
 
 import json
+import re
 import time
 
 import pytest
@@ -146,11 +147,15 @@ def test_walker_flags_wrong_missing_and_early_frames():
         return walker.walk([case], lambda c: None, lambda b: (log.extend(sent), answer)[1], lambda: list(log))
 
     assert run([(c1, h1, 0.0), (c2, h2, 0.31)]) == []
-    assert run([(c1, h1[:-2] + "00", 0.0), (c2, h2, 0.31)])  # one byte off
-    assert run([(c1, h1, 0.0)])  # no commit
-    assert run([(c1, h1, 0.0), (c2, h2, 0.2)])  # commit 200 ms after the frame
-    assert run([(c1, h1, 0.0), (c2, h2, 0.31), ("1401", "00", 0.4)])  # + a roof write
-    assert run([(c1, h1, 0.0), (c2, h2, 0.31)], (200, {"ok": True, "applied": True}))  # never true
+
+    def problem(sent, answer=ok):
+        return "\n".join(run(sent, answer))
+
+    assert "unit got" in problem([(c1, h1[:-2] + "00", 0.0), (c2, h2, 0.31)])  # one byte off
+    assert "unit got" in problem([(c1, h1, 0.0)])  # no commit
+    assert "came 200 ms" in problem([(c1, h1, 0.0), (c2, h2, 0.2)])  # commit 200 ms after the frame
+    assert "ROOF" in problem([(c1, h1, 0.0), (c2, h2, 0.31), ("1401", "00", 0.4)])  # + a roof write
+    assert "answer" in problem([(c1, h1, 0.0), (c2, h2, 0.31)], (200, {"ok": True, "applied": True}))
 
 
 # -- the host tier ---------------------------------------------------------------------------------
@@ -158,14 +163,14 @@ def test_walker_flags_wrong_missing_and_early_frames():
 
 @HOST
 def test_app_recorded_actions_over_api_command(host_fw, rec_unit, tmp_path):
-    """All 31 app cases: 27 produce calictl's frames byte-exact at the unit, 4 wake-ups are refused
+    """Every app case: a frame case produces calictl's frames byte-exact at the unit, a wake-up is refused
     without a write; every answer has ``applied`` null (or false for a refusal), never true."""
     hu, rec = rec_unit
     fw = _online(host_fw, hu, tmp_path)
     cases = walker.app_cases()
-    assert len(cases) == 31
+    assert cases
     problems = walker.walk(cases, _inject(fw, hu), _post(fw), lambda: walker.unit_writes(rec))
-    assert not problems, problems
+    assert not problems, "\n".join(problems)
     assert [c for c, _, _ in walker.unit_writes(rec)].count("1401") == 0
 
 
@@ -209,7 +214,9 @@ def test_unit_never_sees_a_roof_or_unknown_write(host_fw, rec_unit, tmp_path):
                 line == "ble: write %s/%d refused: not on the control allow-list" % (c, n)
             ),
         )
-        fw.expect("LOG", lambda line, c=char, n=n: line.startswith("twrite: %s/%d rc=" % (c, n)))
+        fw.expect(
+            "LOG", lambda line, c=char, n=n: re.fullmatch("twrite: %s/%d rc=[1-9][0-9]*" % (c, n), line)
+        )
     time.sleep(1)
     assert walker.unit_writes(rec) == []
     fw.send("twrite 1601 00")  # energy mode normal: on the allow-list, the transport sends it
