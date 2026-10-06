@@ -66,7 +66,7 @@ static void unpercent(const char *s, char *out, size_t cap) {
 
 static void plan_line(char *rest) {
     char *fn = strtok(rest, " "), *what = strtok(NULL, " "), *tok = strtok(NULL, " ");
-    char value[CALI_CTL_VALUE_MAX];
+    char value[1024];   /* wider than CALI_CTL_VALUE_MAX on purpose: over-long vectors must reach the twin intact */
     static cali_ctl_plan_t p;
     if (!fn || !what || !tok) {
         puts("ERR parse");

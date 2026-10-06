@@ -48,7 +48,9 @@ static int onoff(const char *v) {
 }
 
 /* Python int(str): surrounding whitespace, an optional sign, ASCII digits with single '_' between
- * digits. 1 and *out (saturated at LONG_MIN/LONG_MAX: only its sign and range ever matter), or 0. */
+ * digits. 1 and *out (saturated at LONG_MIN/LONG_MAX: only its sign and range ever matter), or 0.
+ * ASCII only: Python also takes Unicode digits/whitespace ("٣", "  5"), which C refuses as
+ * BAD — the safe direction (C never writes a frame Python would not; the parity vectors are ASCII). */
 static int py_int(const char *s, long *out) {
     int neg = 0, digits = 0, sat = 0;
     long v = 0;
@@ -100,6 +102,7 @@ static int lookup(const struct cali_ctl_name *t, size_t n, const char *k, long *
 typedef struct {
     codec_kv_t kv[CODEC_KV_MAX];
     size_t n;
+    int overflow;   /* a put() past CODEC_KV_MAX: add() then refuses the frame instead of defaulting a field */
 } vals_t;
 
 /* dict assignment: vals[name] = value */
@@ -109,7 +112,10 @@ static void put(vals_t *v, const char *name, uint32_t value) {
             v->kv[i].value = value;
             return;
         }
-    if (v->n == CODEC_KV_MAX) return;   /* cannot happen: lighting, the widest, has 20 fields */
+    if (v->n == CODEC_KV_MAX) {   /* cannot happen: lighting, the widest, has 20 fields */
+        v->overflow = 1;
+        return;
+    }
     v->kv[v->n].name = name;
     v->kv[v->n].value = value;
     v->kv[v->n].supplied = 1;
@@ -134,7 +140,7 @@ static int add(cali_ctl_plan_t *p, const char *fn, const vals_t *v, uint16_t del
     const struct cali_ctl_char *c = ctl_char(fn);
     cali_ctl_frame_t *f = &p->f[p->n];
     size_t len = 0;
-    if (p->n == CALI_CTL_MAX_FRAMES ||
+    if (p->n == CALI_CTL_MAX_FRAMES || v->overflow ||
         codec_encode(codec_func_by_name(fn), v->kv, v->n, c->frame_bytes, f->data, &len) != CODEC_OK)
         return -1;
     f->chr = c->control_short;
@@ -161,6 +167,12 @@ static int add_commit(cali_ctl_plan_t *p) {
 /* ponytail: static scratch (not reentrant): one owner task, and the 8 KB host-task stack also runs the web handler */
 static vals_t s_v, s_c;
 
+static void reset(vals_t *v) { v->n = 0; v->overflow = 0; }
+
+/* The builders' `onoff(value) < 0 -> BAD_VALUE` checks are a second layer: gate() already answers
+ * CALI_REASON_NOT_ONOFF for every on/off command (control.ONOFF_COMMANDS), so via cali_ctl_plan they are
+ * unreachable; they keep a builder honest for any other caller (never garbage -> OFF, ruling R3). */
+
 /* control._cooler: every untargeted field at the app's leave-unchanged value = the dictionary default
  * (_cooler_neutral, ruling R1), which codec_encode fills in for every field not put here. Only
  * night_on/night_off carry the current state (_cooler_values; the hour bytes are literal, #99) and
@@ -169,7 +181,7 @@ static int b_cooler(const char *what, const char *value, cali_ctl_get_t get, cal
     vals_t *v = &s_v;
     long a, b;
     char k[CALI_CTL_VALUE_MAX];
-    v->n = 0;
+    reset(v);
     if (strcmp(what, "power") == 0) {
         int on = onoff(value);
         if (on < 0) return CALI_CTL_BAD_VALUE;
@@ -214,7 +226,7 @@ static int b_camping(const char *what, const char *value, cali_ctl_plan_t *p) {
     vals_t *v = &s_v;
     int on = onoff(value);
     if (on < 0) return CALI_CTL_BAD_VALUE;
-    v->n = 0;
+    reset(v);
     put(v, "State", CALI_SENTINEL);                          /* camping_values */
     put(v, "UsbCharger", CALI_SENTINEL);
     put(v, "InteriorLight", CALI_SENTINEL);
@@ -239,7 +251,7 @@ static int b_energy(const char *what, const char *value, cali_ctl_plan_t *p) {
     if (strcmp(what, "mode") != 0) return CALI_CTL_NONE;
     norm(value, k, sizeof k);
     if (!lookup(CALI_ENERGY_MODES, N_OF(CALI_ENERGY_MODES), k, &m)) return CALI_CTL_NONE;
-    v->n = 0;
+    reset(v);
     put(v, "EnergyModeSet", (uint32_t)m);
     put(v, "DisplayRefresh", 0);
     return add(p, "energy", v, 0) ? CALI_CTL_BAD_VALUE : CALI_CTL_OK;
@@ -250,7 +262,7 @@ static int b_airheater(const char *what, const char *value, cali_ctl_plan_t *p) 
     vals_t *v = &s_v;
     char k[CALI_CTL_VALUE_MAX];
     long a, b;
-    v->n = 0;
+    reset(v);
     put(v, "NormalOperationRequest", CALI_SENTINEL);         /* _airheater_values */
     put(v, "PermanentOperationRequest", CALI_SENTINEL);
     put(v, "PermanentOperationConfirmation", CALI_SENTINEL);
@@ -340,7 +352,7 @@ static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, c
     vals_t *v = &s_v;
     long n, colour;
     int on;
-    v->n = 0;
+    reset(v);
     put(v, "ProfileNumber", CALI_LIGHT_BRIGHTNESS_PROFILE);
     put(v, "Mode", CALI_LIGHT_MODE_SET_BRIGHTNESS);
     put(v, "Timestamp", 0);
@@ -353,7 +365,7 @@ static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, c
     } else if (strcmp(what, "save_profile") == 0) {
         if (!save_args(value, &n, &colour)) return CALI_CTL_BAD_VALUE;
         if (colour >= 0) {                                   /* preface_for: SET_COLOR first */
-            s_c.n = 0;
+            reset(&s_c);
             put(&s_c, "ProfileNumber", (uint32_t)n);
             put(&s_c, "Mode", CALI_LIGHT_MODE_SET_COLOR);
             put(&s_c, "Timestamp", 0);
@@ -392,7 +404,9 @@ static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, c
 
 /* ---- control.command_precondition (the five functions; roof + wakeup never get here) ---- */
 
-/* control.ONOFF_COMMANDS restricted to the ESP's functions */
+/* control.ONOFF_COMMANDS restricted to the ESP's functions (hand-copied: a new on/off command in
+ * Python also needs a row here, else C answers BAD instead of REASON_NOT_ONOFF — never OFF either way;
+ * the generated vectors catch the text divergence once the grid has the case). */
 static int is_onoff_command(const char *fn, const char *what) {
     static const char *const CAMPING[] = {"master", "lights", "usb"};
     static const char *const LIGHTING[] = {"power", "door_contact"};
@@ -447,6 +461,13 @@ void cali_ctl_plan(const char *fn, const char *what, const char *value, cali_ctl
     out->reason = gate(fn, what, value, get);
     if (out->reason) {
         out->rc = CALI_CTL_REFUSED;
+        return;
+    }
+    /* The header's precondition, after the gate like Python (command_precondition never truncates; a
+     * 64+ char value cannot equal an on/off token): control.build would raise, never silently clip
+     * (hhmm/save_args copy value into CALI_CTL_VALUE_MAX bytes). */
+    if (strlen(value) >= CALI_CTL_VALUE_MAX) {
+        out->rc = CALI_CTL_BAD_VALUE;
         return;
     }
     if (strcmp(fn, "cooler") == 0) out->rc = b_cooler(what, value, get, out);

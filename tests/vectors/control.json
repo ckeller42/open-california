@@ -2982,6 +2982,256 @@
    }
   },
   {
+   "id": "cooler/level/\"_5\"@seed",
+   "function": "cooler",
+   "what": "level",
+   "value": "_5",
+   "state": "seed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"_5\"@empty",
+   "function": "cooler",
+   "what": "level",
+   "value": "_5",
+   "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"_5\"@fridge_on",
+   "function": "cooler",
+   "what": "level",
+   "value": "_5",
+   "state": "fridge_on",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"_5\"@fridge_off",
+   "function": "cooler",
+   "what": "level",
+   "value": "_5",
+   "state": "fridge_off",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"_5\"@cooler_schedule",
+   "function": "cooler",
+   "what": "level",
+   "value": "_5",
+   "state": "cooler_schedule",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"5_\"@seed",
+   "function": "cooler",
+   "what": "level",
+   "value": "5_",
+   "state": "seed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"5_\"@empty",
+   "function": "cooler",
+   "what": "level",
+   "value": "5_",
+   "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"5_\"@fridge_on",
+   "function": "cooler",
+   "what": "level",
+   "value": "5_",
+   "state": "fridge_on",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"5_\"@fridge_off",
+   "function": "cooler",
+   "what": "level",
+   "value": "5_",
+   "state": "fridge_off",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"5_\"@cooler_schedule",
+   "function": "cooler",
+   "what": "level",
+   "value": "5_",
+   "state": "cooler_schedule",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"1__0\"@seed",
+   "function": "cooler",
+   "what": "level",
+   "value": "1__0",
+   "state": "seed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"1__0\"@empty",
+   "function": "cooler",
+   "what": "level",
+   "value": "1__0",
+   "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"1__0\"@fridge_on",
+   "function": "cooler",
+   "what": "level",
+   "value": "1__0",
+   "state": "fridge_on",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"1__0\"@fridge_off",
+   "function": "cooler",
+   "what": "level",
+   "value": "1__0",
+   "state": "fridge_off",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"1__0\"@cooler_schedule",
+   "function": "cooler",
+   "what": "level",
+   "value": "1__0",
+   "state": "cooler_schedule",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"-0\"@seed",
+   "function": "cooler",
+   "what": "level",
+   "value": "-0",
+   "state": "seed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"-0\"@empty",
+   "function": "cooler",
+   "what": "level",
+   "value": "-0",
+   "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"-0\"@fridge_on",
+   "function": "cooler",
+   "what": "level",
+   "value": "-0",
+   "state": "fridge_on",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"-0\"@fridge_off",
+   "function": "cooler",
+   "what": "level",
+   "value": "-0",
+   "state": "fridge_off",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"-0\"@cooler_schedule",
+   "function": "cooler",
+   "what": "level",
+   "value": "-0",
+   "state": "cooler_schedule",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"+-3\"@seed",
+   "function": "cooler",
+   "what": "level",
+   "value": "+-3",
+   "state": "seed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"+-3\"@empty",
+   "function": "cooler",
+   "what": "level",
+   "value": "+-3",
+   "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"+-3\"@fridge_on",
+   "function": "cooler",
+   "what": "level",
+   "value": "+-3",
+   "state": "fridge_on",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"+-3\"@fridge_off",
+   "function": "cooler",
+   "what": "level",
+   "value": "+-3",
+   "state": "fridge_off",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/level/\"+-3\"@cooler_schedule",
+   "function": "cooler",
+   "what": "level",
+   "value": "+-3",
+   "state": "cooler_schedule",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "cooler/level/\"0x3\"@seed",
    "function": "cooler",
    "what": "level",
@@ -4152,6 +4402,58 @@
    "function": "cooler",
    "what": "timer_set",
    "value": null,
+   "state": "cooler_schedule",
+   "expect": {
+    "kind": "refused",
+    "reason": "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+   }
+  },
+  {
+   "id": "cooler/timer_set/\"5:30                                                            :7\"@seed",
+   "function": "cooler",
+   "what": "timer_set",
+   "value": "5:30                                                            :7",
+   "state": "seed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/timer_set/\"5:30                                                            :7\"@empty",
+   "function": "cooler",
+   "what": "timer_set",
+   "value": "5:30                                                            :7",
+   "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/timer_set/\"5:30                                                            :7\"@fridge_on",
+   "function": "cooler",
+   "what": "timer_set",
+   "value": "5:30                                                            :7",
+   "state": "fridge_on",
+   "expect": {
+    "kind": "refused",
+    "reason": "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+   }
+  },
+  {
+   "id": "cooler/timer_set/\"5:30                                                            :7\"@fridge_off",
+   "function": "cooler",
+   "what": "timer_set",
+   "value": "5:30                                                            :7",
+   "state": "fridge_off",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "cooler/timer_set/\"5:30                                                            :7\"@cooler_schedule",
+   "function": "cooler",
+   "what": "timer_set",
+   "value": "5:30                                                            :7",
    "state": "cooler_schedule",
    "expect": {
     "kind": "refused",
@@ -10912,6 +11214,86 @@
       "hex": "0e00000000000000eeeeeeeeeeeeeeee"
      }
     ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@seed",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "seed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@empty",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@roof_closed",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "roof_closed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@roof_closed_14",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "roof_closed_14",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@roof_open",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "roof_open",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@fav_3_empty",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "fav_3_empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@fav_request_echo",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@lighting_levels",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "lighting_levels",
+   "expect": {
+    "kind": "bad"
    }
   },
   {
