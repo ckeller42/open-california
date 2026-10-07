@@ -124,6 +124,11 @@ window.STRINGS_DE = {
     "Dieser Favorit ist auf der Einheit leer — speichere ihn zuerst",
   "the wake-up light needs at least one vehicle area":
     "Das Wecklicht braucht mindestens einen Fahrzeugbereich",
+  // refusal reasons a wake-up edit can get (ESP clock / no config reported); proposals, no app string
+  "the wake-up light needs the time from the web page — set it there":
+    "Das Wecklicht braucht die Uhrzeit der Webseite — dort einstellen",
+  "wake-up config not known yet (the unit has not reported it): give on|off with the edit":
+    "Wecklicht-Einstellungen noch nicht bekannt (die Einheit hat sie nicht gemeldet): Ein/Aus mit angeben",
   "Reading lights": "Leselichter",
   "Kitchen": "Küche",
   "Pop-up roof": "Aufstelldach",

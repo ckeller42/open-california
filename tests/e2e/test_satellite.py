@@ -8,6 +8,11 @@ Every test fails on an uncaught JS / console error (``error_gated_page``) unless
 OPT-IN like test_gui.py: skipped without Playwright + Chromium.
 """
 
+import calendar
+import datetime
+import re
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from tools import ux_gallery
@@ -248,7 +253,7 @@ def test_a_command_is_confirmed_from_the_units_own_state(stub, error_gated_page,
         expect(pg.locator(".toast.warn")).to_have_count(0)
 
 
-def test_roof_and_wakeup_are_greyed_with_the_reason(live, stub):
+def test_roof_is_greyed_with_the_reason(live, stub):
     _open(live, "Roof")
     for name in ("open", "close", "stop"):
         b = live.locator(".btnrow button", has_text=name)
@@ -257,13 +262,9 @@ def test_roof_and_wakeup_are_greyed_with_the_reason(live, stub):
     expect(live.get_by_text(ELSEWHERE, exact=True).first).to_be_visible()
     _home(live)
     _open(live, "Lighting")
-    # the satellite never knows the wake-up config: the reason up front, no (empty) inputs
-    expect(live.get_by_role("switch", name="Wake-up light")).to_have_count(0)
-    expect(live.get_by_label("Wake-up time")).to_have_count(0)
-    expect(live.locator(".arealist")).to_have_count(0)
-    expect(live.get_by_text(ELSEWHERE, exact=True).first).to_be_visible()
-    # the rest of the lighting screen is live
+    # the rest of the lighting screen is live; the roof's reason is not repeated on the wake-up card
     expect(live.get_by_role("switch", name="Sliding door lighting")).to_be_enabled()
+    expect(live.get_by_text(ELSEWHERE, exact=True)).to_have_count(0)
     assert not stub.commands
 
 
@@ -276,11 +277,105 @@ def test_german_elsewhere_hint(stub, error_gated_page):
             expect(pg.locator(".btnrow button", has_text=name)).to_have_attribute(
                 "title", "Nur über buspi oder die App"
             )
-        _home(pg)
-        _open(pg, "Beleuchtung")  # the wake-up card: the reason, no empty area checkboxes
-        expect(pg.locator(".arealist")).to_have_count(0)
-        expect(pg.get_by_role("switch", name="Wake-up light")).to_have_count(0)
-        expect(pg.get_by_text("Nur über buspi oder die App", exact=True).first).to_be_visible()
+
+
+# the satellite's raw lighting object carries the firmware session's config latch (snapshot.c)
+LATCH = {
+    "WakeupTimestamp": 6 * 3600,
+    "WakeupLightValue": 0x1101,
+    "DoorContact": 1,
+    "FavouritesStored": 0b10001,
+}
+
+
+@pytest.mark.parametrize(
+    "locale,tile,head", [("en-US", "Lighting", "Wake-up light"), ("de-DE", "Beleuchtung", "Wecklicht")]
+)
+def test_wakeup_card_is_live_and_sends_the_browsers_wall_clock(stub, error_gated_page, locale, tile, head):
+    """Review focus 1: in Auckland the posted local_now is Auckland's wall clock read as UTC; the card
+    shows the unit's latched config (time, switch, vertical areas), the door row and the favourite marks.
+
+    .. test:: The satellite's wake-up card is live and sends the page's clock
+       :id: T_SAT_UI_WAKEUP
+       :links: R_FW_SHARED_UI, R_FW_WAKEUP
+    """
+    stub.fixtures["satellite"]["/api/state"]["fn"]["lighting"].update(LATCH)
+    with error_gated_page(stub.base, locale=locale, timezone_id="Pacific/Auckland") as pg:
+        pg.wait_for_function(LIVE)
+        _open(pg, tile)
+        # the card heading (a profile <option> carries the same words)
+        expect(pg.locator("div.note", has_text=re.compile("^%s$" % head)).first).to_be_visible()
+        tm = pg.get_by_label("Wake-up time")
+        expect(tm).to_be_enabled()
+        expect(tm).to_have_value("06:00")
+        expect(pg.get_by_role("switch", name="Wake-up light")).to_have_attribute("aria-checked", "true")
+        expect(pg.locator(".arealist input[type=checkbox]")).to_have_count(4)
+        expect(pg.get_by_role("switch", name="Sliding door lighting")).to_have_attribute(
+            "aria-checked", "true"
+        )
+        assert pg.evaluate("STATE.lighting.favourites_stored") == [1, 5]
+        expect(pg.get_by_text(ELSEWHERE, exact=True)).to_have_count(0)
+        expect(pg.get_by_text("Nur über buspi oder die App", exact=True)).to_have_count(0)
+        # the browser's own wall clock read as UTC, taken at the moment of the edit
+        js_wall = pg.evaluate(
+            "() => { const d = new Date(); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(),"
+            " d.getHours(), d.getMinutes(), d.getSeconds()) / 1000; }"
+        )
+        tm.fill("07:00")
+        _wait_commands(pg, stub)
+    body = stub.commands[0]
+    want = calendar.timegm(
+        datetime.datetime.now(ZoneInfo("Pacific/Auckland")).replace(tzinfo=None).timetuple()
+    )
+    assert {k: body[k] for k in ("function", "what", "value", "confirm")} == {
+        "function": "lighting",
+        "what": "wakeup",
+        "value": "07:00 1 0 0",
+        "confirm": True,
+    }
+    assert isinstance(body["local_now"], int) and not isinstance(body["local_now"], bool)
+    assert abs(body["local_now"] - want) <= 5 and abs(body["local_now"] - js_wall) <= 5
+    # Auckland is never UTC: the clock is the zone's wall clock, not the epoch
+    assert abs(body["local_now"] - int(datetime.datetime.now(datetime.UTC).timestamp())) >= 11 * 3600
+
+
+def test_wakeup_card_waits_for_the_units_config(live, stub):
+    """No latch yet (the unit has not reported a Mode-20 frame): no invented 00:00, the card says so."""
+    _open(live, "Lighting")
+    expect(live.get_by_label("Wake-up time")).to_be_disabled()
+    expect(live.get_by_role("switch", name="Wake-up light")).to_be_disabled()
+    expect(
+        live.get_by_text("Wake-up settings not known yet — the unit has not reported them", exact=True)
+    ).to_be_visible()
+    assert not stub.commands
+
+
+def test_wakeup_is_confirmed_from_the_units_own_state(stub, error_gated_page):
+    """The ESP answers applied:null; the unit's Mode-20 report (here the stub's latch update) confirms."""
+    stub.fixtures["satellite"]["/api/state"]["fn"]["lighting"].update(LATCH)
+
+    def unit_applies(body):
+        if body["what"] == "wakeup":
+            stub.fixtures["satellite"]["/api/state"]["fn"]["lighting"]["WakeupTimestamp"] = 7 * 3600
+
+    stub.on_command = unit_applies
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_function(LIVE)
+        _open(pg, "Lighting")
+        pg.get_by_label("Wake-up time").fill("07:00")
+        _wait_commands(pg, stub)
+        expect(pg.locator(".toast")).to_have_text("✓ Applied", timeout=6000)
+
+
+def test_wakeup_unconfirmed_when_the_unit_reports_another_config(stub, error_gated_page):
+    """The matcher reads the unit's state: a report that still shows 06:00 is never "Applied"."""
+    stub.fixtures["satellite"]["/api/state"]["fn"]["lighting"].update(LATCH)
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_function(LIVE)
+        _open(pg, "Lighting")
+        pg.get_by_label("Wake-up time").fill("07:00")
+        _wait_commands(pg, stub)
+        expect(pg.locator(".toast")).to_have_text("Sent — check the lamp", timeout=9000)
 
 
 def test_api_still_refuses_calictl_only_paths_on_the_live_satellite(live, stub):

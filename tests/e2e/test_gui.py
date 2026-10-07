@@ -982,6 +982,8 @@ def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
     expect(sw).to_have_attribute("aria-checked", "false")
     page.wait_for_timeout(300)  # let the request events drain
     sent = [json.loads(b)["value"] for b in bodies]
+    clocks = [json.loads(b)["local_now"] for b in bodies]
+    assert all(isinstance(c, int) and c > 1767225600 for c in clocks)  # the page's clock, ignored by calictl
     # a time edit carries NO on/off (the daemon fills the unit-reported one); the switch's does
     assert sent[0].startswith("07:00") and sent[0].split()[-1] not in ("on", "off")
     assert sent[1].endswith(" off")
