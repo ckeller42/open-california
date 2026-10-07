@@ -9,7 +9,9 @@ on:
 # jobs, so cancelling mid-run is safe. Pushes to main are never cancelled: every main commit
 # keeps its own complete CI result.
 concurrency:
-  group: ci-${{ github.ref }}
+  # PRs share one group per ref (superseded runs are cancelled). Every push gets its own group:
+  # a shared group would still cancel an older *pending* run, leaving a main commit without CI.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Least privilege: no CI job writes to the repo (the screenshots workflow keeps its own write scope).

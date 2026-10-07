@@ -24,6 +24,8 @@ concurrency:
 
 jobs:
   screenshots:
+    # workflow_dispatch can target any branch; this job holds a write token, so main only.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Write scope lives on the job (not the workflow): this is the only job that pushes.
