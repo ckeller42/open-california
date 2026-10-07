@@ -1009,6 +1009,32 @@ def test_door_contact_switch_round_trips(page, base_url):
     _poll(page, base_url, lambda st: st["lighting"]["door_contact"] is was, "door flag restored")
 
 
+def test_all_lights_master_stays_on(page, base_url):
+    """The owner saw the All-lights switch flip back off: the mock stored PN 12 but lit no lamp,
+    so the next poll read every zone dark. The switch must stay on from the UNIT's state.
+
+    .. test:: The All-lights master lights the lamps over the mock daemon and stays on
+       :id: T_E2E_LIGHT_ALL_LIGHTS
+    """
+    page.request.post(
+        base_url + "/api/command", data={"function": "lighting", "what": "power", "value": "off"}
+    )
+    _poll(page, base_url, lambda st: st["lighting"]["any_on"] is False, "all lights off first")
+    page.get_by_text("Lighting", exact=True).first.click()
+    sw = page.get_by_role("switch", name="All lights")
+    expect(sw).to_have_attribute("aria-checked", "false")
+    sw.click()
+    _poll(
+        page, base_url, lambda st: st["lighting"]["any_on"] is True and st["lighting"]["profile"] == 12, "lit"
+    )
+    expect(page.locator("#toasts").get_by_text("✓ Applied")).to_be_visible(timeout=15000)
+    page.wait_for_timeout(2500)  # a couple of polls later: still on (the bug flipped it back)
+    expect(sw).to_have_attribute("aria-checked", "true")
+    assert _state(base_url, page)["lighting"]["any_on"] is True
+    sw.click()
+    _poll(page, base_url, lambda st: st["lighting"]["any_on"] is False, "all lights off again")
+
+
 def test_favourite_save_then_activate(page, base_url):
     """
     .. test:: Save favourite A then activate it from the web UI against the mock
@@ -1072,6 +1098,32 @@ def test_wakeup_areas_use_the_t7_labels_and_ranges(page):
     assert (bright.get_attribute("min"), bright.get_attribute("max")) == ("0", "10")
     ramps = [o.get_attribute("value") for o in page.locator("select").nth(2).locator("option").all()]
     assert ramps == ["0", "10", "20", "30"]
+
+
+@pytest.mark.parametrize("locale,tile", [("en-US", "Lighting"), ("de-DE", "Beleuchtung")])
+def test_wakeup_areas_are_a_vertical_checkbox_list(base_url, error_gated_page, locale, tile):
+    """Owner screenshot (DE, phone): each area checkbox sat ABOVE a two-line label, four floating
+    columns. Now: one area per line, the checkbox left of its label on the same row, no wrap, no
+    horizontal page scroll at phone width.
+
+    .. test:: Wake-up areas render as a one-per-line checkbox list (EN + DE, phone width)
+       :id: T_E2E_LIGHT_WAKEUP_AREA_LAYOUT
+    """
+    with error_gated_page(base_url, locale=locale, viewport={"width": 360, "height": 800}) as pg:
+        pg.get_by_text(tile, exact=True).first.click()
+        items = pg.locator(".arealist label")
+        expect(items).to_have_count(4)
+        tops = []
+        for i in range(4):
+            lab = items.nth(i).bounding_box()
+            cb = items.nth(i).locator("input[type=checkbox]").bounding_box()
+            assert lab and cb
+            assert abs((cb["y"] + cb["height"] / 2) - (lab["y"] + lab["height"] / 2)) < 3  # same row
+            assert cb["x"] <= lab["x"] + 1  # checkbox first (left)
+            assert lab["height"] < 2 * cb["height"] + 6, lab  # one line of text, not wrapped
+            tops.append(lab["y"])
+        assert tops == sorted(tops) and len(set(tops)) == 4  # stacked vertically
+        assert pg.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
 
 
 def test_door_contact_row_hidden_on_grand_california(page, base_url):

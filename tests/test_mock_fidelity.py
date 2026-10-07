@@ -1012,6 +1012,48 @@ def test_save_then_activate_restores_the_saved_levels():
     assert d["ProfileNumber"] == 1 and d["BrightnessLSeven"] == 5
 
 
+def test_all_lights_master_switches_every_equipped_zone_and_acks_on_1502():
+    """The app's All-lights master (dg/h Q, ``lighting-zone.jsonl``: ``0c10…`` + ``0e00…``) is a
+    SET_PROFILE PN 12 (LIGHTS_ON) / PN 0 (LIGHTS_OFF). The mock used to only store the profile
+    number, so the lamps stayed dark and the next read showed the master off again.
+
+    MOCK-MODELLED, not van-verified (#230): ON lights every equipped zone that is off at
+    ``control.LIGHT_ON_BRIGHTNESS`` (zones already lit keep their level; NOT_EQUIPPED 13 and the
+    pop-top light with the roof down stay as they are); OFF darkens every equipped zone.
+
+    .. test:: Mock applies the All-lights master to every equipped zone and acks on 1502
+       :id: T_MOCK_LIGHT_ALL_LIGHTS
+    """
+    f = _funcs()["lighting"]
+    u = _armed_unit(
+        lighting={"Installed": 1, "ProfileNumber": 0, "BrightnessLSeven": 4, "BrightnessLOneZero": 13}
+    )
+    pushes = []
+    _subscribe(u, "lighting", pushes)
+    pushes.clear()
+    u.write(f.control_char, control.build(_funcs(), "lighting", "power", "on", u.decoded("lighting")))
+    u.write(f.control_char, control.LIGHT_COMMIT)
+    d = u.decoded("lighting")
+    assert d["ProfileNumber"] == control.LIGHT_PROFILE_ALL_ON
+    assert d["BrightnessLOne"] == control.LIGHT_ON_BRIGHTNESS  # was off -> on
+    assert d["BrightnessLSeven"] == 4  # already lit: kept
+    assert d["BrightnessLOneZero"] == 13  # not equipped: untouched
+    assert d["BrightnessLNine"] == 0  # pop-top light: roof down (seed) -> unpowered
+    assert semantics.lighting(d)["any_on"] is True
+    ack = protocol.decode(f, pushes[0])  # the app awaits a 1502 frame with PN == 12
+    assert (ack["Mode"], ack["ProfileNumber"]) == (16, control.LIGHT_PROFILE_ALL_ON)
+    for _ in range(12):  # the lamps ramp to the target and the Mode-4 pushes carry it
+        u.tick(0.5)
+    assert u.light_actual["BrightnessLOne"] == control.LIGHT_ON_BRIGHTNESS
+
+    u.write(f.control_char, control.build(_funcs(), "lighting", "power", "off", u.decoded("lighting")))
+    u.write(f.control_char, control.LIGHT_COMMIT)
+    d = u.decoded("lighting")
+    assert d["ProfileNumber"] == control.LIGHT_PROFILE_ALL_OFF
+    assert semantics.lighting(d)["any_on"] is False
+    assert d["BrightnessLOneZero"] == 13
+
+
 def test_request_config_reply_comes_after_the_save_ack():
     """dg/h.l3 sends d0() REQUEST_CONFIG right after the save ack and awaits the Mode-12 reply whose
     LightValue bits 0-6 are FavoriteProfileModifiedState (vineflower dg/a.java:286-290). Back to back,

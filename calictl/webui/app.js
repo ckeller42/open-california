@@ -829,8 +829,11 @@ async function processQueue() {
   }
   const done = inflight;
   inflight = null;
+  const expected = satellite() ? expectedState(done) : null;
   if (res && res.ok && res.refused) toast(res.refused, "warn");   // physical precondition not met
   else if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
+  // The ESP satellite has no readback (applied is always null): confirm from the unit's own state.
+  else if (res && res.ok && res.applied == null && expected) confirmFromState(done, expected);
   // applied === null: sent + acknowledged but not verifiable remotely. For lighting the state
   // char is a write-through echo, so only the lamp itself is proof — say so. Other functions
   // that return null (e.g. roof, which has no readback check) keep the neutral phrasing.
@@ -842,6 +845,45 @@ async function processQueue() {
   if (!queue.some((c) => c.key === done.key)) delete optimistic[done.key];
   await refreshState(true);
   processQueue();
+}
+
+/**
+ * What the unit's interpreted state shows once `c` landed — from the same FEATURES row that renders
+ * the control (toggle `state`, slider `state`, select `current`), plus the All-lights master
+ * (`any_on`). `null` = not mappable: the caller keeps the neutral "sent" message.
+ * @param {CommandItem} c
+ * @returns {((s: FnState) => boolean) | null}
+ */
+function expectedState(c) {
+  if (c.fn === "lighting" && c.what === "power") return (s) => !!s.any_on === (c.value === "on");
+  const f = FEATURES[c.fn];
+  const row = f && f.controls ? f.controls.find((x) => x.what === c.what) : null;
+  if (!row) return null;
+  if (row.kind === "toggle") { const key = row.state; return (s) => !!s[key] === (c.value === "on"); }
+  if (row.kind === "slider") { const key = row.state; return (s) => s[key] === Number(c.value); }
+  if (row.kind === "select" && row.current) { const cur = row.current; return (s) => cur(s) === c.value; }
+  return null;
+}
+
+const SAT_CONFIRM_MS = 5000;   // a few 2 s polls: the satellite stores each frame the unit pushes
+
+/**
+ * Watch the next `/api/state` polls (no extra requests) for `ok(STATE[c.fn])`, then toast the result.
+ * A newer command for the same control supersedes this one silently (it reports its own result).
+ * @param {CommandItem} c
+ * @param {(s: FnState) => boolean} ok
+ */
+async function confirmFromState(c, ok) {
+  const fn = c.fn;
+  const end = Date.now() + SAT_CONFIRM_MS;
+  while (Date.now() < end) {
+    if ((inflight && inflight.key === c.key) || queue.some((q) => q.key === c.key)) return;
+    const s = STATE[fn];
+    if (s && ok(/** @type {FnState} */ (s))) { toast("✓ Applied", "ok"); return; }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (fn === "lighting") toast("Sent — check the lamp", "ok");
+  else toast("Sent — the unit didn't confirm it", "warn");
 }
 
 // Actuate a control, gating fuel/motion features behind a confirm() dialog.
@@ -1639,6 +1681,7 @@ function renderLighting(s) {
   const wc = document.createElement("div"); wc.className = "card";
   const wh = document.createElement("div"); wh.className = "note"; wh.style.padding = ".6rem 0 0";
   wh.textContent = /** @type {string} */ (t("Wake-up light")); wc.appendChild(wh);
+  const wf = document.createDocumentFragment();   // the rows: rows stay direct children of the card
   const wrow = document.createElement("div"); wrow.className = "row";
   const wl = document.createElement("span"); wl.className = "lbl"; wl.textContent = /** @type {string} */ (t("Wake-up light"));
   wrow.appendChild(wl);
@@ -1647,13 +1690,13 @@ function renderLighting(s) {
   wsw.setAttribute("role", "switch"); wsw.setAttribute("aria-label", "Wake-up light");
   wsw.setAttribute("aria-checked", wk && wk.enabled ? "true" : "false"); wsw.disabled = wkOff;
   wsw.onclick = () => wakeCmd({ on: !(wk && wk.enabled) });
-  wrow.appendChild(wsw); wc.appendChild(wrow);
+  wrow.appendChild(wsw); wf.appendChild(wrow);
   const trow = document.createElement("div"); trow.className = "row";
   const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
   const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time : "00:00";
   tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = wkOff;
   tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
-  trow.append(tl, tin); wc.appendChild(trow);
+  trow.append(tl, tin); wf.appendChild(trow);
   const rrow = document.createElement("div"); rrow.className = "row";
   const rl = document.createElement("span"); rl.className = "lbl"; rl.textContent = /** @type {string} */ (t("Lead time"));
   const rsel = document.createElement("select"); rsel.disabled = wkOff;
@@ -1662,17 +1705,18 @@ function renderLighting(s) {
     o.selected = (wk ? wk.ramp : 0) === m; rsel.appendChild(o);
   }
   rsel.onchange = () => wakeCmd({ ramp: Number(rsel.value) });
-  rrow.append(rl, rsel); wc.appendChild(rrow);
+  rrow.append(rl, rsel); wf.appendChild(rrow);
   const brow = document.createElement("div"); brow.className = "row";
   const bl = document.createElement("span"); bl.className = "lbl"; bl.textContent = /** @type {string} */ (t("Brightness"));
   const bin = document.createElement("input"); bin.type = "range"; bin.min = /** @type {any} */ (0); bin.max = /** @type {any} */ (LIGHT_MAX);
   bin.value = /** @type {any} */ (wk ? wk.brightness : 0); bin.disabled = wkOff;
   bin.setAttribute("aria-label", "Wake-up brightness");
   bin.onchange = () => wakeCmd({ brightness: Number(bin.value) });
-  brow.append(bl, bin); wc.appendChild(brow);
-  const arow = document.createElement("div"); arow.className = "row";
+  brow.append(bl, bin); wf.appendChild(brow);
+  const arow = document.createElement("div"); arow.className = "row areas";
   const al = document.createElement("span"); al.className = "lbl"; al.textContent = /** @type {string} */ (t("Vehicle area"));
-  arow.appendChild(al);
+  const alist = document.createElement("div"); alist.className = "arealist";
+  arow.append(al, alist);
   const curAreas = wk ? wk.areas : [];
   for (let a = 1; a <= 4; a++) {
     const lab = document.createElement("label");
@@ -1680,15 +1724,23 @@ function renderLighting(s) {
     // never untick the last area: the unit needs one (the app's "no area chosen" dialog)
     cb.disabled = wkOff || (cb.checked && curAreas.length === 1);
     cb.onchange = () => wakeCmd({ areas: cb.checked ? [...curAreas, a].sort() : curAreas.filter((x) => x !== a) });
-    lab.append(cb, document.createTextNode(" " + t(WAKE_AREAS[a - 1])));
-    arow.appendChild(lab);
+    lab.append(cb, document.createTextNode(/** @type {string} */ (t(WAKE_AREAS[a - 1]))));
+    alist.appendChild(lab);
   }
-  wc.appendChild(arow);
-  if (satellite() || !wk) {
+  wf.appendChild(arow);
+  if (satellite()) {
+    // Like the roof card: the reason first. No inputs — the satellite never knows the wake-up
+    // config, and empty fields would read as "no area / 00:00 set".
     const nk = document.createElement("div"); nk.className = "note";
-    nk.textContent = /** @type {string} */ (t(satellite() ? ELSEWHERE
-      : "Wake-up settings not known yet — the unit has not reported them"));
+    nk.textContent = /** @type {string} */ (t(ELSEWHERE));
     wc.appendChild(nk);
+  } else {
+    wc.appendChild(wf);
+    if (!wk) {
+      const nk = document.createElement("div"); nk.className = "note";
+      nk.textContent = /** @type {string} */ (t("Wake-up settings not known yet — the unit has not reported them"));
+      wc.appendChild(nk);
+    }
   }
   app.appendChild(wc);
 

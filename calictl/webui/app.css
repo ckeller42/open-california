@@ -67,6 +67,11 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .card > .row { border-top: 1px solid var(--border); }
 .card > .row:first-child { border-top: 0; }
 .lbl { flex: 1; }
+/* the wake-up "Vehicle area" row: its label above one checkbox+label line per area */
+.row.areas { flex-direction: column; align-items: stretch; gap: .5rem; }
+.arealist { display: flex; flex-direction: column; gap: .5rem; }
+.arealist label { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
+.arealist input { flex: none; margin: 0; }
 /* a control row the current state forbids: grey the label to match the disabled control,
    so the whole row reads as unavailable (set by renderControl when read-only or c.disabled). */
 .row.ctl-off .lbl, .row.ctl-off .sval { opacity: .5; }

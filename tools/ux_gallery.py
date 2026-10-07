@@ -266,6 +266,7 @@ class EspStub:
         self.command_reply = None  # the JSON body; None = the success shape for the posted function
         self.command_delay_s = 0.0  # the ESP answers after the unit's ACK (<= CALI_CTL_DEADLINE_MS)
         self.polls_while_pending = 0
+        self.on_command = None  # callable(body): change the fixtures as the unit would (a push)
         self._pending = threading.Lock()  # held while a command is being answered
         with open(ESP_PAGE, "rb") as f:
             page = f.read()
@@ -292,6 +293,8 @@ class EspStub:
                     return
                 with stub._pending:
                     stub.commands.append(body)
+                    if stub.on_command:
+                        stub.on_command(body)
                     time.sleep(stub.command_delay_s)
                     reply = stub.command_reply or {
                         "ok": True,

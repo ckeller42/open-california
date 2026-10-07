@@ -120,7 +120,10 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 - **APP-RECORDED (2026-10-05, same harness, task 6b):** `lighting-zone.jsonl` — All-lights master
   OFF→ON writes `0c10` (profile `LIGHTS_ON`, matches `control.build("lighting","power","on")`), and
   the **Kitchen** zone's *Cooking* lamp at 50 % writes `0904…eeeeeee5…` (`BrightnessLSeven`=L7=5,
-  matches `control.build("lighting","kitchen",5)`). Both replay clean. The app groups lamps into
+  matches `control.build("lighting","kitchen",5)`). Both replay clean. What the real unit does with
+  the lamps on `LIGHTS_ON` is **unverified** (fixed level, or each lamp's last level). The mock
+  models it as "every equipped zone that is off goes to `LIGHT_ON_BRIGHTNESS`" (2026-10-07). This
+  is a van check (#230). The app groups lamps into
   named zones (Reading Lights, **Kitchen** = *Background Lighting*=L5 + *Cooking*=L7, Pop-up roof,
   Exterior Light), confirming the DEVICE `LIGHT_ZONES` map below with the app's own EN labels. The
   lighting control screen renders fine under the emulator's NVIDIA `-gpu host` (the crash was a

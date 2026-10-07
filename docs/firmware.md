@@ -243,7 +243,11 @@ after the previous write's ACK — the sequencer runs on the 100 ms tick and can
 time, so the real gap is 300–400 ms, never less (the app streams at ~500 ms). An ATT error fails the
 command with no further frame (no commit after a refused frame); a link drop mid-command fails it;
 the whole command gives up after `CALI_CTL_DEADLINE_MS` (4 s). Success means every write was ACKed —
-the ESP does no readback check, so the UI says "Sent — the unit didn't confirm it".
+the ESP does no readback check (`applied: null`). The UI then confirms from the unit's own state:
+it watches the next `/api/state` polls (up to 5 s) for the field the control shows (a toggle, a
+slider, a select, or the All-lights master) to reach the sent value, and says "✓ Applied". When
+the value does not appear in time, or the control has no such field, it says "Sent — the unit
+didn't confirm it" ("Sent — check the lamp" for lighting).
 
 **`POST /api/command`** takes calictl's request shape and answers in calictl's response shape, so
 the shared UI works unchanged (route table above; contract in `cali_web.h`). The answer is deferred
@@ -303,7 +307,10 @@ field) every control is greyed and the "Satellite — display only" banner shows
 own answers get a sentence: `403 setup_mode` → "Controls work only on your home WiFi — not over
 the setup hotspot", `409 busy` → "The satellite is still sending the previous command — try again
 in a moment", `503 not_connected` → "Not connected to the camper unit yet — try again in a few
-seconds"; a success is "Sent — the unit didn't confirm it" (no readback on the ESP). The UI sends
+seconds"; a success is "✓ Applied" once the unit's state shows the sent value, otherwise
+"Sent — the unit didn't confirm it" (no readback on the ESP — see above). The wake-up card shows
+only the `Only via buspi or the app` note under its title: the satellite never knows the wake-up
+config, so it shows no inputs (empty fields would look like "no area set"). The UI sends
 at most one `/api/state` poll at a time (WebKit would otherwise stack one per tick on the
 single-connection core while a command pends). The German texts of these four satellite-only
 strings are **proposals** (the app has none of them; `strings.de.js`): *Nur über buspi oder die
@@ -314,8 +321,8 @@ verbunden — in ein paar Sekunden noch einmal versuchen*. Device and WiFi detai
 
 Known gaps (accepted):
 
-- No roof and no wake-up light from the satellite (above); no `applied: true` — the unit's ACK is
-  the only confirmation.
+- No roof and no wake-up light from the satellite (above); no `applied: true` — the UI confirms
+  from the unit's reported state instead (above).
 - No water stale-hold: a parked, latched-low fresh tank shows unflagged on the satellite (calictl
   holds it via `freshness.implausible_water_drop` + a persisted baseline; whether that guard is still
   needed now that both read 1302 after subscribing is open until a van trace, #230).
