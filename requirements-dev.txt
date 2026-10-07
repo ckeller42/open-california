@@ -1,6 +1,8 @@
 pytest
 pyyaml
 pytest-xdist
+coverage==7.16.2     # tools/ci.sh cov + CI `test` (3.13): floor in pyproject.toml [tool.coverage.report]
+pytest-cov==7.1.0
 ruff==0.16.9        # keep in step with the ruff-pre-commit rev in .pre-commit-config.yaml
 mypy
 bumble==0.0.235

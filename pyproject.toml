@@ -43,3 +43,27 @@ exclude = "(^|/)(tests|tools|docs)/"
 [[tool.mypy.overrides]]
 module = "calictl.pairing_bluez"
 disable_error_code = "name-defined"
+
+# Coverage (tools/ci.sh cov; CI `test` job on 3.13). The FLOOR (fail_under) covers calictl/ only —
+# ci.sh enforces it with `coverage report --include='calictl/*'`; tools/ is measured in the same run
+# (--cov=tools) as an informational number, never gated. Branch coverage is on: measured free
+# (77 s wall either way on the xdist suite). It is a ratchet, not the safety net: the content guards
+# (signal/command coverage, codec parity, vectors) are — see docs/simulation-and-testing.md.
+[tool.coverage.run]
+source = ["calictl"]
+branch = true
+parallel = true          # one data file per xdist worker; pytest-cov combines them
+omit = [
+  # Only these: scripts that never run in the suite and only run by hand at the van/bench/deploy.
+  "calictl/deploy/*",              # push_dashboard.py: pushes Grafana JSON to Pi/Cloud at deploy time
+  "tools/van_roof_test.py",        # at-the-van human-in-the-loop roof checks (real motor)
+  "tools/ble_stability_spike.py",  # timeboxed real-BLE session spike against the parked unit
+  "tools/esplab_ui_load.py",       # CoreS3 bench: browser first-load timing over WiFi
+]
+
+[tool.coverage.report]
+# Ratchet: calictl/ measured 82.95 % (branch) on 2026-10-07 -> floor 82. Owner's target is 90;
+# raise this whenever a PR lifts the number, never lower it.
+fail_under = 82
+show_missing = true
+skip_covered = true
