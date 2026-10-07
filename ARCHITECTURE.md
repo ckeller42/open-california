@@ -271,16 +271,28 @@ and what each does and doesn't prove.
 
 ## 6. Runtime view
 
-The wire-level flows are maintained as sequence diagrams that link to the requirement each one
+The wire-level, daemon and satellite flows are maintained as sequence diagrams that link to the requirement each one
 depicts, so they are not repeated here. Read them in [Protocol sequences](https://ckeller42.github.io/open-california/protocol-sequences.html):
 
-| Scenario | What it shows |
-|---|---|
-| Connect handshake | connect, subscribe to all characteristics, first read |
-| Heartbeat-armed write | the `1003` heartbeat spanning one control write |
-| Lighting | the bare brightness write and its commit frame on an awake unit |
-| Roof | press-and-hold streaming and the release stop |
-| Range rejection | a value refused by `protocol.encode` before anything is written |
+| Scenario | Diagram id | What it shows |
+|---|---|---|
+| Connect handshake | `S_SEQ_CONNECT` | connect with retry, the `1001`/`1004` handshake reads, subscribe to all characteristics |
+| Guided pairing | `S_SEQ_PAIRING` | the web wizard: scan, bond probe, passkey entry, verify, stale-bond recovery |
+| Notifications | `S_SEQ_NOTIFY` | subscribe-time and event pushes, last frame wins, the lighting config latch |
+| Persistent session | `S_SEQ_SESSION` | hold the armed session while the web UI is active, release it when idle, backoff |
+| Fresh read | `S_SEQ_READ` | a cold read under the heartbeat: subscribe, read every characteristic, a later push wins |
+| Poll cycle | `S_SEQ_POLL` | lock, read, decode, interpret, guards, cache with its "as of" time, fan out, the offline path |
+| Deep sleep | `S_SEQ_SLEEP` | a parked unit stops advertising, `serve` keeps the last known state |
+| Home Assistant | `S_SEQ_MQTT` | MQTT discovery, state publish, and a command arriving through `serve.on_command` |
+| Heartbeat-armed write | `S_SEQ_ACTUATE` | the `1003` heartbeat spanning one control write, cold and persistent paths |
+| Cooler command | `S_SEQ_COOLER` | the app-faithful frame (untargeted fields at leave-unchanged), the applied-check |
+| Lighting | `S_SEQ_LIGHT_COMMIT` | the bare brightness write and its commit frame on an awake unit |
+| Wake-up light | `S_SEQ_WAKEUP` | a config edit, the REQUEST_CONFIG pull when the config is unknown, config latched from the unit's frames |
+| Roof | `S_SEQ_ROOF` | press-and-hold streaming with a live heartbeat, the SafetyCounter gate, the release stop |
+| Range rejection | `S_SEQ_REJECT` | a value refused by `protocol.encode` before anything is written |
+| Satellite pairing | `S_SEQ_ESP_PAIRING` | the ESP32 pairs from its USB console, then holds the bonded session |
+| Satellite WiFi | `S_SEQ_ESP_WIFI` | setup hotspot, captive portal, station join and retry |
+| Satellite command | `S_SEQ_ESP_COMMAND` | station-mode `POST /api/command` through the write allow-list |
 
 Two runtime behaviours matter for every scenario:
 
@@ -303,9 +315,12 @@ flowchart LR
   ACT --> RB["read state char back<br/>→ report OK / NOT APPLIED"]
 ```
 
-`control.py` builds a **full-packet** frame — every field is resent, and unchanged fields carry their
-*current* value or the leave-unchanged sentinel, never a default (writing defaults once sent a garbage
-command). `protocol.encode` validates each value against its bit-width and a curated semantic range
+`control.py` builds a **full-packet** frame — every field is resent, and every field the command does
+not target carries the app's own leave-unchanged value (2-bit fields `3`, lighting zones `14`, and so
+on), so the frame equals the one the vendor app sends. The unit's current state is not copied into
+it, with one exception: the cooler's night-schedule hours, which the unit takes literally. (Writing
+*unrelated* defaults once sent a garbage command; the leave-unchanged value is what the unit
+ignores.) `protocol.encode` validates each value against its bit-width and a curated semantic range
 before anything is written. `device.actuate` then writes the frame while the `1003` heartbeat ticks —
 the firmware's arm gate (issue #2). Actuation is **one-shot arm**: the load latches, so the heartbeat
 only needs to span the write window:
@@ -323,8 +338,9 @@ stateDiagram-v2
 ```
 
 The state-char **readback is a write-through echo, never proof of actuation** — trust a human at the
-device, or the unit's genuine `1502` notifications. Full per-step sequence diagrams (connect
-handshake, heartbeat-armed write, lighting, roof, range rejection) are in the
+device, or the unit's genuine `1502` notifications. Full per-step sequence diagrams (the table in section 6: connect,
+pairing, poll cycle, MQTT, heartbeat-armed write, cooler, lighting, wake-up, roof, range rejection and the
+ESP32 satellite) are in the
 [rendered protocol sequences](https://ckeller42.github.io/open-california/protocol-sequences.html);
 recipes and per-feature history in
 [`control-and-actuation.md`](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html).

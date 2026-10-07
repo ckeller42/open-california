@@ -90,6 +90,11 @@ def test_read_only_sensors_have_no_command_topic():
 
 
 def test_read_only_sensors_carry_expire_after_for_freshness():
+    """
+    .. test:: Read-only HA entities expire, command entities do not
+       :id: T_MQTT_DISCOVERY_EXPIRE
+       :links: R_MQTT_DISCOVERY_STATE
+    """
     # freshness: read-only sensors expire (-> HA `unavailable`) when the reading stops refreshing,
     # so an automation can gate on availability instead of triggering on a stale (parked) value.
     cfgs = mqtt.render_discovery(installed={"energy"})
@@ -104,6 +109,11 @@ def test_read_only_sensors_carry_expire_after_for_freshness():
 
 
 def test_command_entities_gated_by_installed():
+    """
+    .. test:: Discovery is gated by the installed functions
+       :id: T_MQTT_DISCOVERY_GATED
+       :links: R_MQTT_DISCOVERY_STATE
+    """
     # a not-installed controllable function publishes no command entity
     cfgs = mqtt.render_discovery(installed={"cooler"})
     assert not any(c.get("command_topic") == mqtt.command_topic("airheater", "power") for c in cfgs.values())

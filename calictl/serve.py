@@ -390,7 +390,19 @@ class Server:
             pass
 
     def _save_last(self):
-        """Atomically persist the last-known decoded state + timestamp (never crashes the poll)."""
+        """Atomically persist the last-known decoded state + timestamp (never crashes the poll).
+
+        .. req:: Keep serving the last-known state with its as-of time
+           :id: R_SERVE_STATE_CACHE
+           :status: implemented
+           :tags: serve, freshness
+
+           After every successful poll the daemon shall write the decoded state and the poll time to
+           its state file (temp file plus rename), reload it on start, and serve it through the web
+           API with ``_meta.last_seen`` / ``age_s`` / ``online`` while the unit is unreachable, so a
+           parked, deep-sleeping unit shows its last values with their age and an offline flag,
+           never a blank or a stale number dressed as live. Diagram: :need:`S_SEQ_POLL`.
+        """
         try:
             os.makedirs(os.path.dirname(self._state_cache), exist_ok=True)
             tmp = self._state_cache + ".tmp"
@@ -785,7 +797,20 @@ class Server:
         """The app's lighting page pulls the unit's configuration with REQUEST_CONFIG (Mode 12 + commit)
         and fills its wake-up/door/favourite state from the reply frames. Do the same on the live
         session (no session: nothing to latch from, so nothing is sent) and wait briefly for the
-        wake-up config to arrive via :meth:`_on_push`. Caller holds the _ble lock."""
+        wake-up config to arrive via :meth:`_on_push`. Caller holds the _ble lock.
+
+        .. req:: Pull the unit's lighting config before a wake-up edit whose config is unknown
+           :id: R_LIGHT_CONFIG_PULL
+           :status: implemented
+           :tags: control, lighting
+
+           A wake-up edit that gives no ``on``/``off`` while the unit has not reported a wake-up
+           config (:data:`calictl.control.WAKEUP_UNKNOWN`, ruling R5) shall first send the app's
+           REQUEST_CONFIG plus the flush frame on the live session and wait at most
+           ``CALICTL_CONFIG_PULL_S`` for the unit's own Mode-20 reply, then re-run the gate. With no
+           live session nothing is sent. The edit is written only if the config became known;
+           otherwise it is refused and nothing is written. Diagram: :need:`S_SEQ_WAKEUP`.
+        """
         from . import control  # lazy
 
         sess = self._live_session()

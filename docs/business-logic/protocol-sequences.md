@@ -28,8 +28,9 @@ Now [Heartbeat-armed control write](https://ckeller42.github.io/open-california/
 ## 2. Lighting SET
 
 Now [Lighting SET and neutral flush](https://ckeller42.github.io/open-california/protocol-sequences.html#lighting-set-and-neutral-flush)
-(`S_SEQ_LIGHT_COMMIT`). That section also keeps the retired REQUEST_CONFIG frame
-`0d0c000000000000eeeeeeeeeeeeeeee` as the RE record. The full lighting history is in
+(`S_SEQ_LIGHT_COMMIT`). That section also keeps the REQUEST_CONFIG frame
+`0d0c000000000000eeeeeeeeeeeeeeee` as the RE record: retired as a write preamble, and sent today
+only by the daemon to read the wake-up config before an edit (ruling R5). The full lighting history is in
 [control-and-actuation.md](control-and-actuation.md) §4.
 
 ## 3. Roof actuation
@@ -55,3 +56,15 @@ Now [Fresh state read under heartbeat](https://ckeller42.github.io/open-californ
 
 Now [Reachability / deep-sleep](https://ckeller42.github.io/open-california/protocol-sequences.html#reachability-deep-sleep)
 (`S_SEQ_SLEEP`).
+
+## 6. Added with the architecture restructure
+
+Not in the old numbering; all in the
+[canonical page](https://ckeller42.github.io/open-california/protocol-sequences.html): the
+[daemon poll cycle](https://ckeller42.github.io/open-california/protocol-sequences.html#daemon-poll-cycle)
+(`S_SEQ_POLL`), [Home Assistant over MQTT](https://ckeller42.github.io/open-california/protocol-sequences.html#home-assistant-over-mqtt)
+(`S_SEQ_MQTT`), the [cooler command](https://ckeller42.github.io/open-california/protocol-sequences.html#cooler-command-the-app-s-frame)
+(`S_SEQ_COOLER`), the [wake-up light and door contact](https://ckeller42.github.io/open-california/protocol-sequences.html#wake-up-light-and-door-contact-config-edit)
+edit (`S_SEQ_WAKEUP`) and the three
+[ESP32 satellite](https://ckeller42.github.io/open-california/protocol-sequences.html#esp32-satellite) flows
+(`S_SEQ_ESP_PAIRING`, `S_SEQ_ESP_WIFI`, `S_SEQ_ESP_COMMAND`).

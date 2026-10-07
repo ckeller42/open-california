@@ -260,6 +260,22 @@ def _command_config(function, spec):
 
 
 def render_discovery(installed=None) -> dict:
+    """Home Assistant discovery configs, ``{topic: config}``, for the read-only and the command
+    entities of the given functions.
+
+    :param installed: the set of functions the unit reports as installed, or ``None`` for all.
+
+    .. req:: Publish Home Assistant discovery only for installed functions, with freshness expiry
+       :id: R_MQTT_DISCOVERY_STATE
+       :status: implemented
+       :tags: mqtt, ha
+
+       The MQTT sink shall describe, as retained discovery configs, only the entities of functions
+       the unit reports as installed. Every read-only entity shall read one field of the function's
+       flattened state topic ``calivan/<function>`` and expire (``expire_after``) so Home Assistant
+       marks it unavailable when readings stop, while command entities do not expire. Diagram:
+       :need:`S_SEQ_MQTT`.
+    """
     out = {}
     for function, specs in ENTITY_SPECS.items():
         if installed is not None and function not in installed:

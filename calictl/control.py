@@ -260,11 +260,24 @@ COOLER_MODES = {"normal": 0, "quiet": 2, "timer_quiet": 4}
 
 
 def _cooler(funcs, what, value, last):
-    # `power` on/off flips State (encode validates State in {0,1}); `level` sets the cooling
-    # intensity 1-5; `mode` sets the quiet Mode enum; the timer/night branches arm the cooler's
-    # scheduling (all decompile-verified from vf/c.java, NOT yet live-verified). Every untargeted
-    # field rides at the app's leave-unchanged value (_cooler_neutral, byte-identical to the app's
-    # recorded frames); only night_on/night_off still carry the current state (_cooler_values).
+    """Build a cooler (fridge) control frame (char 1101, 6 bytes).
+
+    ``power`` on/off flips State (encode validates State in {0,1}); ``level`` sets the cooling
+    intensity 1-5; ``mode`` sets the quiet Mode enum; the timer/night branches arm the cooler's
+    scheduling (all decompile-verified from vf/c.java, NOT yet live-verified).
+
+    .. req:: Cooler frames are the app's, untargeted fields at their leave-unchanged value
+       :id: R_COOLER_APP_FRAMES
+       :status: implemented
+       :tags: control, cooler
+
+       Every cooler command except ``night_on``/``night_off`` shall build the app's own frame byte
+       for byte: the targeted field set, every other control field at its dictionary default (the
+       leave-unchanged value: 2-bit fields 3, Level and Mode 7, TimerHour/TimerMin 30/62, night
+       hours 31), never the unit's current state (ruling R1). ``night_on``/``night_off`` alone carry
+       the current schedule, because the unit takes those hour bytes literally. Diagram:
+       :need:`S_SEQ_COOLER`.
+    """
     if what == "power":
         ch = {"State": 1 if _truthy(value) else 0}
     elif what == "level":
