@@ -122,6 +122,7 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
 int cali_session_active(void) { return s_active; }
 int cali_session_link_up(void) { return s_linkup; }
 uint64_t cali_session_last_update_ms(void) { return s_stamp; }
+int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) { (void)live; (void)out; return 0; }
 
 /* ---- the fake runner + transport ---- */
 static cali_pair_state_t s_pair;

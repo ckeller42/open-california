@@ -15,7 +15,8 @@ extern "C" {
 
 /* Writes the MEMBERS of the "fn" object — one "<function>":{"<Field>":<int>,...} per CODEC_CHARS
  * function the session holds a frame for (cali_session_frame), in CODEC_CHARS order, decoded with
- * codec_decode. The caller writes the key and the braces:
+ * codec_decode; the lighting object also carries the session's config latch (cali_session_light_cfg(0))
+ * after the frame's fields — calictl's serve._last['lighting'] shape. The caller writes the key and the braces:
  *     cali_json_key(j, "fn"); cali_json_obj_begin(j); cali_snapshot_fn(j); cali_json_obj_end(j);
  * The frames are read synchronously in one call, so the output is one consistent snapshot. */
 void cali_snapshot_fn(cali_json_t *j);

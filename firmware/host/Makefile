@@ -144,14 +144,14 @@ console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/
 
 # The "fn" emitter + pairing address shared by console.c (SNAP/STATE) and web.c (/api/state).
 snapshot.o: $(COMPONENTS)/cali_core/snapshot.c $(CORE_H)/cali_snapshot.h $(CORE_H)/cali_json.h \
-		$(CORE_H)/cali_session.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h \
+		$(CORE_H)/cali_session.h $(CORE_H)/cali_control.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h \
 		$(CSRC)/codec.h $(CSRC)/codec_chars.h $(CSRC)/pairing_consts.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The shared status snapshot read by web.c (/api/state, /api/wifi) and the status display.
 status.o: $(COMPONENTS)/cali_core/status.c $(CORE_H)/cali_status.h $(CORE_H)/cali_snapshot.h \
-		$(CORE_H)/cali_session.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_wifi_run.h \
-		$(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_transport.h $(CSRC)/net_consts.h \
+		$(CORE_H)/cali_session.h $(CORE_H)/cali_control.h $(CSRC)/codec.h $(CORE_H)/cali_runner.h \
+		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_transport.h $(CSRC)/net_consts.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -202,8 +202,8 @@ codec.o: $(CSRC)/codec.c $(CSRC)/codec.h $(CSRC)/codec_dict.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 host_main.o: host_main.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h $(CORE_H)/cali_console.h \
-		$(CORE_H)/cali_session.h $(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h \
-		$(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h $(CORE_H)/cali_captive.h \
+		$(CORE_H)/cali_session.h $(CORE_H)/cali_control.h $(CSRC)/codec.h $(CORE_H)/cali_runner.h \
+		$(CORE_H)/cali_transport.h $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h $(CORE_H)/cali_captive.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(COMPONENTS)/platform/include/cali_net_host.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<

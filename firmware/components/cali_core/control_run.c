@@ -37,6 +37,15 @@ static int get_field(const char *fn, const char *field, uint32_t *out) {
     size_t len;
     int i = index_of(fn), n;
     const codec_func_t *f = codec_func_by_name(fn);
+    if (strcmp(fn, "lighting") == 0) {   /* this link's config latch answers like a field (serve._last) */
+        codec_kv_t cfg[CALI_LCFG_N];
+        int nc = cali_session_light_cfg(1, cfg);
+        for (int k = 0; k < nc; k++)
+            if (strcmp(cfg[k].name, field) == 0) {
+                *out = cfg[k].value;
+                return 1;
+            }
+    }
     if (i < 0 || !f || !cali_session_frame_live((size_t)i, &frame, &len)) return 0;
     n = codec_decode(f, frame, len, kv);
     for (int k = 0; k < n; k++)

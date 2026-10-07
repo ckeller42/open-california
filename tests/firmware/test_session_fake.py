@@ -1343,6 +1343,91 @@ def test_control_never_gates_on_the_previous_links_frame(fake):
     assert "LOG control: cooler/power not ready (no armed link or no state yet)" in out and not writes(out)
 
 
+from calictl import semantics  # noqa: E402
+
+WAKE_0700_OFF = pack("lighting", Mode=20, ProfileNumber=14, Timestamp=7 * 3600, LightValue=0x1100)
+FAVS_3_EMPTY = pack("lighting", Mode=12, ProfileNumber=0, LightValue=0b1111011)
+MODE4 = pack("lighting", Mode=4, BrightnessLSeven=3)
+DOOR_ON = pack("lighting", Mode=16, ProfileNumber=8, LightValue=1)
+
+
+def _daemon_latch(*hexes):
+    """semantics.lighting_config chained over the 1502 frames, like serve._last['lighting']."""
+    cfg = {}
+    for hx in hexes:
+        cfg = semantics.lighting_config(cfg, protocol.decode(FUNCS["lighting"], bytes.fromhex(hx)))
+    return cfg
+
+
+def test_lighting_config_latches_from_the_units_frames(fake):
+    """A READ and the later NOTIFYs latch like serve: the wake-up survives a Mode-4 frame after it.
+
+    .. test:: The satellite latches the unit's lighting config from its own 1502 frames only
+       :id: T_FW_LIGHT_LATCH
+       :links: R_FW_WAKEUP
+    """
+    unit = (WAKE_0700_OFF, DOOR_ON, MODE4)
+    out = run(fake, *armed({0x1502: FAVS_3_EMPTY}), *("NOTIFY 1502 %s" % hx for hx in unit))
+    lit = snaps(out)[-1]["fn"]["lighting"]
+    want = _daemon_latch(FAVS_3_EMPTY, *unit)
+    assert set(want) == set(semantics.LIGHT_CONFIG_KEYS)  # the case covers all four keys
+    assert {k: lit[k] for k in semantics.LIGHT_CONFIG_KEYS if k in lit} == want
+    assert lit["Mode"] == 4  # the frame itself is still the latest one
+
+
+def test_own_write_is_never_latched(fake):
+    """R4: the ESP's own save_profile 3 frame (Mode 4, PN 3 — which would add bit 3 if it were a unit
+    frame) goes to 1501 and never reaches the latch; slot 3 stays empty and its gate still refuses."""
+    from calictl import control
+
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed({0x1502: FAVS_3_EMPTY}),
+        "> set lighting save_profile 3",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "tick %d" % (t + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+        "NOTIFY 1502 0102",  # an unrelated unit frame: a fresh SNAP after the write
+        "> set lighting profile 3",
+    )
+    assert "LOG control: lighting/save_profile sent" in out
+    assert snaps(out)[-1]["fn"]["lighting"]["FavouritesStored"] == 0b1111011
+    assert "LOG control: lighting/profile refused: %s" % control.REASON_FAVOURITE_EMPTY in out
+
+
+def test_the_latch_gates_after_the_frame_moved_on(fake):
+    """The favourite gate reads the latch, not only the current frame (serve's rule)."""
+    from calictl import control
+
+    out = run(fake, *armed({0x1502: FAVS_3_EMPTY}), "NOTIFY 1502 %s" % MODE4, "> set lighting profile 3")
+    assert "LOG control: lighting/profile refused: %s" % control.REASON_FAVOURITE_EMPTY in out
+
+
+def test_previous_links_latch_is_shown_but_never_gates(fake):
+    """Review focus 3: after a reconnect the old favourite bits stay on screen (SNAP) but the gate on the
+    new link does not use them — profile 3 goes out. Once the unit reports again, it gates again."""
+    from calictl import control
+
+    up = ARM + 1200
+    relinked = [
+        *armed({0x1502: FAVS_3_EMPTY}),
+        "DISCONNECTED",
+        "tick %d" % (ARM + 100),
+        "tick %d" % up,
+        "CONNECTED",
+        "ENC_OK",
+        *read_all(at=up),
+        "tick %d" % (up + ARM),
+    ]
+    out = run(fake, *relinked, "> set lighting profile 3", "tick %d" % (up + ARM + 100))
+    assert snaps(out)[-1]["fn"]["lighting"]["FavouritesStored"] == 0b1111011
+    assert "LOG control: lighting/profile sending" in out
+    again = run(fake, *relinked, "NOTIFY 1502 %s" % FAVS_3_EMPTY, "> set lighting profile 3")
+    assert "LOG control: lighting/profile refused: %s" % control.REASON_FAVOURITE_EMPTY in again
+
+
 @pytest.mark.parametrize(
     "line, answer",
     [
