@@ -12,8 +12,8 @@ open-california — documentation
    and ``DISCLAIMER.md``.
 
 Reverse-engineered control + monitoring for the VW California T7 camper unit over BLE.
-Start with :doc:`architecture` for the five-minute map, :doc:`arc42/index` for the structured
-architecture (arc42 sections with C4 context, container, component and deployment views) and :doc:`protocol-sequences` for the
+Start with :doc:`architecture` for the architecture (arc42 sections with C4 context, container,
+component and deployment views) and :doc:`protocol-sequences` for the
 wire-level flows (all diagrams are Mermaid); the requirement traceability at the
 bottom of this page is generated from ``sphinx-needs`` objects authored **inside code
 docstrings** (``.. req::``) and traced to the tests that verify them (``.. test:: … :links:``),
@@ -25,7 +25,6 @@ clean and shows an empty "incoming" list).
    :caption: Getting started
 
    architecture
-   arc42/index
    raspberry-pi-setup
    howto-pair-your-camper
    howto-esp-wifi-setup
