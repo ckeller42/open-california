@@ -123,10 +123,14 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   [`csrc/`](csrc/) for the ESP32 satellite (`python3 -m tools.gen_c_dict`; **never hand-edit
   `csrc/codec_dict.h`**). Golden vectors + a seeded differential fuzz harness keep the Python and C
   codecs byte-identical in CI (`codec-parity` job) — see [`csrc/README.md`](csrc/README.md).
-- **ESP32 firmware (work in progress)** — a read-only NimBLE satellite that pairs with the camper
-  unit independently of the Pi, proven on a Linux host build + a Bumble fake unit and in Espressif's
-  QEMU; no hardware run yet. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.
-  It joins your WiFi through its own setup hotspot and serves a read-only status page — **[How to put the ESP32 satellite on your WiFi](https://ckeller42.github.io/open-california/howto-esp-wifi-setup.html)**.
+- **ESP32 firmware (work in progress)** — a NimBLE satellite that pairs with the camper unit
+  independently of the Pi and controls the fridge, camping mode, lights, air heater and energy mode
+  (not the roof, not the wake-up light — "only via buspi or the app") with calictl's own frames,
+  held byte-identical by golden vectors; proven on a Linux host build + a Bumble fake unit and in
+  Espressif's QEMU, the read side also on a CoreS3 against the mock unit (the control path's board
+  run is still owed); never yet against the real unit. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.
+  It joins your WiFi through its own setup hotspot and serves a status page and the calictl UI with
+  live controls on your home network (never over the setup hotspot) — **[How to put the ESP32 satellite on your WiFi](https://ckeller42.github.io/open-california/howto-esp-wifi-setup.html)**.
 
 New here? Start with **[the architecture map](https://ckeller42.github.io/open-california/architecture.html)** — the five-minute map of the data flow and
 where each concern lives. Contributor rules and hard invariants: **[AGENTS.md](AGENTS.md)**.

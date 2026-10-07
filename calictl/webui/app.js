@@ -32,7 +32,7 @@
  * @property {{enabled:boolean, armed:boolean, notice:?{ts:number,msg:string}}} [auto_camper] auto-camper toggle + notice
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
- * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state, display only)
+ * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except roof + wake-up)
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only

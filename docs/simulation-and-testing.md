@@ -25,8 +25,12 @@ for how strongly each fact is proven.
 | Pairing over a virtual radio (`tests/test_pairing_link.py`) | the fake unit as a Bumble peripheral, Bumble `LocalLink` | the real pairing runner + state machine with real SMP passkey pairing | `test` |
 | Pairing over real BlueZ (`tests/realstack/`) | the same fake unit, real BlueZ + kernel in a VM | calictl's real `BluezTransport` (D-Bus agent, scan, connect, Pair, bond probe) | `pairing-real-stack` (not required yet) |
 | App lab (`tools/applab/`) | the **vendor Android app** in an emulator against the fake unit | that the fake behaves like the unit *as the app sees it*, and app-vs-calictl frame diffs | manual (local only) |
-| App recordings (`tests/vectors/app/`) | the real app's recorded GATT steps and writes, per scenario and APK version (none committed yet) | that calictl's frames equal the app's on the fields the app targets | `test` |
+| App recordings (`tests/vectors/app/`) | the real app's recorded GATT steps and writes, per scenario and APK version (12 committed) | that calictl's frames equal the app's — whole frame for every function but the roof | `test` |
 | C codec parity (`csrc/`) | the C port of the codec and three decision ports | Python and C produce identical results | `codec-parity` |
+| ESP control twin (`firmware/components/cali_core/control.c`) | `tests/vectors/control.json`, generated from `calictl.control` | the satellite plans the same gates, frames and commits as calictl, byte for byte; the write allow-list is exactly the five control chars | `codec-parity`, `test` |
+| ESP firmware, pure C (`tests/firmware/test_*_fake.py`, `test_http_core.py`, `test_web_handlers.py`, …) | scripted fake transports and sockets | the pairing/WiFi state machines, the session + control sequencer, the HTTP core and endpoints on any host | `test` |
+| ESP firmware, host tier (`tests/firmware/test_*_e2e.py`) | `cali-host` on upstream NimBLE (Linux) + the Bumble fake unit + a scripted fake WiFi | pairing, reads, the heartbeat, the setup flow, the live UI in Chromium, and the control path end to end (every app-recorded action byte-exact at the fake unit) | `firmware-host-e2e` |
+| ESP firmware, QEMU + board | the real esp32s3 image in QEMU; a CoreS3 on the bench against the fake unit on a dongle | boot, console, NVS; the real radio stack and the screen (read side done; the control path's board run is **owed**) | `firmware-qemu`; bench (manual) |
 
 `tools/ci.sh` runs most of this locally. It skips `gui-e2e` without Playwright and the C tests
 without a compiler, and it never runs the real-BlueZ VM job. The git hooks (`tools/ci.sh dev`
@@ -283,8 +287,37 @@ differential fuzz pass) and `tests/test_ports_parity.py` replay them through the
 
 See {doc}`cross-language-codec` and
 [`csrc/README.md`](https://github.com/ckeller42/open-california/blob/main/csrc/README.md) for the
-line protocol, the regenerate commands, and what is still planned (the pairing state machine in C,
-the postcheck port, the ESP-IDF build).
+line protocol, the regenerate commands, and what is still parked (the postcheck port).
+
+## ESP32 firmware: the control path's tiers
+
+The satellite's writes (#154 B) are proven in a ladder, each rung closer to hardware
+({doc}`firmware` has the full tier table and the requirements trace):
+
+1. **Vectors** — `tools/gen_control_vectors.py` asks `calictl.control` (`command_precondition`,
+   `build`, `preface_for`, `commit_for`) over a value grid × state variants and over every
+   app-recorded action, in `device.actuate`'s write order; `tests/test_control_vectors.py` keeps
+   `tests/vectors/control.json` and `csrc/control_consts.h` fresh, every recorded action of the
+   five functions a vector, none refused, the frames the app's byte for byte, the roof absent.
+2. **Pure-C parity** — `tests/firmware/test_control_parity.py` replays every vector through the C
+   twin (`control.c`) and scans the write allow-list exhaustively (exactly `1101`/`1201`/`1501`/
+   `1601`/`1701` at their frame length). Runs on macOS; CI `test` + `codec-parity`.
+3. **Sequencer on a scripted transport** — `tests/firmware/test_session_fake.py` (`test_control_*`):
+   arming (link up + first read-all + `CODEC_ARM_DELAY_MS`), one command at a time, the follow
+   delay after the ACK, an ATT error (no commit after), a link drop mid-command, a late ACK of a
+   timed-out write, interleaved heartbeat/notifications, the roof/wake-up refusals with no write.
+4. **Endpoint on a fake sequencer** — `tests/firmware/test_web_handlers.py` (every status code,
+   the station-mode gate, body validation) and `test_http_core.py` (the deferred answer).
+5. **Host tier, real path** — `tests/firmware/test_control_e2e.py` (Linux, CI `firmware-host-e2e`):
+   `POST /api/command` → sequencer → upstream NimBLE → the Bumble fake unit; every app-recorded
+   action byte-exact at the unit with the commit spacing, console `set`, the transport choke point
+   probed directly, `403`/`409`/`502`, the heartbeat through commands. `test_web_e2e.py` adds the
+   UI: a fridge toggle in Chromium lands at the fake unit; roof + wake-up greyed. `tests/e2e/
+   test_satellite.py` pins the same UI over a stub firmware on every platform (CI `test`).
+6. **CoreS3 bench** — `tools/esplab_control_walk.py` against the fake unit on a dongle, the same
+   walker as rung 5. **Owed** (no BOARD row yet; `docs/business-logic/evidence-ledger.md`).
+7. **The real unit** — never: the satellite has not been paired with it. The bytes are calictl's,
+   so the unit-side evidence is calictl's (cooler `State=3` frames are a van check, #230).
 
 ## Which CI job runs what
 
@@ -294,7 +327,9 @@ the postcheck port, the ESP-IDF build).
 | `ci.yml` `pre-commit` | every PR and push to `main` | `pre-commit run --all-files`: `ruff` + `ruff format`, markdownlint, gitleaks (plus a working-tree scan), whitespace/YAML checks, the vendor/MAC/VIN guard, import-clean, doc-offset, `screens.json` + codec freshness, web-UI `tsc --checkJs` + `node --check` (the calictl web UI and the ESP32 page script) |
 | `ci.yml` `docs` | every PR | the `sphinx -W` site build (both builds) that `docs.yml` deploys from `main` (see {doc}`building-the-docs`) |
 | `ci.yml` `gui-e2e` | every PR and push to `main` | `tests/e2e` in Chromium over the mock daemon |
-| `ci.yml` `codec-parity` | every PR and push to `main` | C header and vector `--check`, the four codec/ports parity test modules with `gcc` |
+| `ci.yml` `codec-parity` | every PR and push to `main` | C header and vector `--check` (codec, control twin), the codec/ports parity test modules and `tests/firmware/test_control_parity.py` with `gcc` |
+| `ci.yml` `firmware-host-e2e` | every PR and push to `main` | `tools/ci.sh firmware`: the NimBLE-Linux host build against the Bumble fake unit — pairing, session, WiFi/web, the control path (`test_control_e2e.py`) and the live UI in Chromium (`test_web_e2e.py`) |
+| `ci.yml` `firmware-build` / `firmware-qemu` | every PR and push to `main` | the release esp32s3 image compile-only (artifact with `flasher_args.json`) / the QEMU variant booted in Espressif's QEMU |
 | `ci.yml` `pairing-real-stack` | every PR and push to `main` | `tests/realstack/vm.sh` (real BlueZ in a VM); not a required check |
 | `ci.yml` `no-vendor-material` | every PR and push to `main` | no APK/decompile/manual/vendor binaries, no real vehicle MAC, no VIN in any tracked file |
 | `ci.yml` `install-script` | every PR and push to `main` | `sh -n` + `shellcheck install.sh` |

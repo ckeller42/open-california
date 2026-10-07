@@ -10,6 +10,7 @@ proves what actually happens.
 | **DECOMPILE** | Grounded in the app's decompiled decode/setter + the enigma mapping, but never seen on the wire | agent cross-checks; `mapping.enigma` (54 verified classes) |
 | **DEVICE** | Physically observed on the van (photons / a human at the hardware), frame not necessarily diffed | owner report, dated |
 | **BOARD** | Firmware behaviour seen on the real ESP32 board (CoreS3) on the bench, against the **mock** unit — proves the firmware, not a unit-protocol fact | console log + remote `screenshot`, dated (section below) |
+| **HOST-E2E** | Firmware behaviour seen on the Linux NimBLE host build (`cali-host`, upstream NimBLE 1.10) against the **Bumble fake unit**, in CI — proves the firmware's C code and its bytes on a real GATT link, not the esp-nimble port, a radio, or a unit-protocol fact | `tests/firmware/test_*_e2e.py` (CI `firmware-host-e2e`), the fake unit's recording (section below) |
 
 Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ catalog),
 `test_doc_offset_consistency.py` (prose/comment `Field@offset` citations ↔ dictionary),
@@ -50,7 +51,12 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   leave-unchanged (it doesn't; the leave-unchanged sentinels are `v()`'s 31/3, and the app re-sends them
   in its 500 ms post-write neutral frame). **A capture only validates the state it was taken in.**
   Since 2026-10-06 (ruling R1) every cooler write but `night_on`/`night_off` sends the app's 31
-  (`fd771e3e1f1f` = power on, APP-RECORDED); those two still carry the current schedule.
+  (`fd771e3e1f1f` = power on, APP-RECORDED); those two still carry the current schedule — and are
+  **refused while no cooler state is known** (ruling R4, `REASON_COOLER_STATE_UNKNOWN`: the carry
+  would otherwise be the default-filled frame that did the clobbering). Same day, ruling R3: an
+  on/off command whose value is not `on`/`off`/`true`/`false`/`1`/`0` (`null`, `""`, `"x"`) is
+  refused (`REASON_NOT_ONOFF`), never built as the OFF frame. Both rulings are in the ESP control
+  vectors as `refused`, so the satellite's C twin answers the same words (tier: CI, below).
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
 - roof InfoPopUp `5` = DRIVING (`_ROOF_ALERT`) + the web move-gate's block set {child_lock, error,
@@ -190,6 +196,26 @@ comment says what to do at the van (see `tools/scenarios/lighting/kitchen-50.yam
 - cooler **cooling-timer decode** — DEVICE (2026-08-30, owner set Startzeit 09:00): live wire
   `timer_active=True, timer_hour=9, timer_min=0` matched the unit screen (was decompile-only). The
   timer can only be armed while the fridge is off — gated.
+
+## ESP32 satellite — the control path (#154 B)
+
+The satellite writes control frames for cooler (`1101`), camping mode (`1201`), lighting (`1501`),
+energy (`1601`) and air heater (`1701`) — never the roof (`1401`), never the wake-up light. The
+bytes are **calictl's**: `tests/vectors/control.json` is generated from `calictl.control` and the C
+twin must reproduce it, so the satellite inherits every tier below from calictl's rows above and
+adds nothing to the unit-protocol evidence. What the satellite's own tiers prove is that *its*
+bytes equal calictl's and that the allow-list holds.
+
+| Fact | Tier | Evidence |
+|---|---|---|
+| ESP control frames = calictl's (= the app's on every recorded action of the five functions, whole frame since R1) — the C twin plans the same gates, frames and lighting commits on 1078 grid vectors + every app-recorded action | **CI** (`tests/test_control_vectors.py` freshness + app coverage, `tests/firmware/test_control_parity.py` byte parity, `--check` on `control_consts.h` / `control.json`) | vectors regenerated from Python; a wording or builder change fails CI until regenerated |
+| The allow-list is exactly `1101`/6, `1201`/1, `1501`/16, `1601`/1, `1701`/6 — `1401` and `1003` never pass `cali_ctl_write_ok` | **CI** (`T_FW_WRITE_ALLOWLIST_PURE`: exhaustive scan 0x0000–0xffff × 0–33 bytes) | `test_control_parity.py` |
+| Every app-recorded cooler/camping/lighting/air-heater/energy action sent through `POST /api/command` reaches the unit **byte-exact**, lighting commits ≥ 300 ms after their frame; the 4 recorded wake-up edits are refused "Only via buspi or the app" with no write | **HOST-E2E** 2026-10-06 (`tools/esplab_control_walk.py` over the fake unit's recording, `test_app_recorded_actions_over_api_command`) | `tests/firmware/test_control_e2e.py`; mutants "commit without delay" and "commit byte off" killed |
+| Roof open/stop, stairs, wake-up, unknown control → refused/400, console `set roof close` refused; a roof `1401`, heartbeat `1003`, 15-byte lighting or empty frame handed straight to the NimBLE transport's `write` is refused at `t_write` (`LOG ble: write …/… refused: not on the control allow-list`), nothing at the unit; an allowed frame through the same hook does arrive | **HOST-E2E** 2026-10-06 (`test_unit_never_sees_a_roof_or_unknown_write`, cali-host's test-only `twrite` line) | `test_control_e2e.py`; mutant "choke point bypassed" killed |
+| `403 setup_mode` over the setup hotspot with an armed link and zero writes; `409 busy` while a command is on the air (the running one still completes); ATT Write-Not-Permitted → `502 write_failed` with no commit after; ACK-and-ignore (empty favourite) → 200 `applied: null`; the `1003` heartbeat keeps its period through 5 back-to-back commands | **HOST-E2E** 2026-10-06 | `test_control_e2e.py` (`test_command_refused_in_setup_mode`, `test_second_command_while_one_is_on_the_air_is_busy`, `test_refused_writes_nack_is_502_ack_and_ignore_is_unconfirmed`, `test_heartbeat_keeps_ticking_through_commands`) |
+| A fridge toggle in the shared UI (Chromium) lands as `control.build("cooler","power",…)` at the unit; roof + wake-up greyed with the hint (EN + DE); a real `409` shows the retry sentence; no offline banner while a 2.5 s command pends | **HOST-E2E** 2026-10-06 (`T_FW_UI_LIVE_CONTROL`, `tests/firmware/test_web_e2e.py`) + stub-level e2e (`tests/e2e/test_satellite.py`, CI `test`) | fake unit's recording = `[("1101", <frame>)]` |
+| The control path on the **real CoreS3** (esp-nimble write-with-response, `py_int` on a 32-bit `long`, the walk, the UI toggle, `403` over the real hotspot) | **BOARD — OWED** (Task 7; thinky offline at the time of writing). No BOARD row exists for any write yet | planned: `esplab_control_walk.py --url http://calictl-esp.local --fifo … --record …` → `"problems": []`; dated rows go below when run |
+| The satellite's frames on the **real camper unit** | **DEVICE — never** (the satellite has not been paired with the real unit). Not needed for the bytes (they are calictl's; cooler `level`/`mode`/`timer_*` with `State=3` is calictl's own van check #230) — but the real esp-nimble link behaviour under a write is a device question too | first owner-watched satellite session at the van |
 
 ## ESP32 satellite — BOARD rows (CoreS3 on the thinky bench, mock unit)
 

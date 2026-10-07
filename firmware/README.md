@@ -38,7 +38,7 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
 | Component | ESP-IDF sources | Host-build-only files (not in the ESP build) |
 |---|---|---|
 | `main` | `app_main.c` — device twin of `host/host_main.c` | — |
-| `cali_core` | `pairing_sm.c runner.c session.c console.c` | `test/` |
+| `cali_core` | `pairing_sm.c runner.c session.c console.c control.c control_run.c` (+ the WiFi/web files, `wifi_sm.c wifi_run.c http_core.c captive_dns.c web.c snapshot.c status.c display_model.c`) | `test/` |
 | `cali_ble_nimble` | `ble_nimble.c ble_store_kv.c` (UNCHANGED from the host build) | `test/` |
 | `platform` | `esp/platform_esp.c` — `cali_kv_*` on NVS namespace `cali`, same CRC record as the host (bad CRC -> -2); `cali_uptime_ms` from `esp_timer`; `cali_log` -> `printf("LOG …")`; `cali_fw_version` = `esp_app_get_description()->version`. `esp/net_esp.c` — `cali_net` on esp_wifi + esp_netif + lwIP sockets + mdns (`include/cali_net_esp.h`) | `host/`, `test/` |
 | `csrc` | `../../../csrc/codec.c` (decode + encode) | — |
@@ -245,11 +245,28 @@ python -m pytest tests/firmware -v
 
 `cali-host --hci-port <tcp-port> [--store <dir>]` speaks the console line protocol on
 stdin/stdout (`components/cali_core/include/cali_console.h`): `pair`, `passkey N`, `forget`,
-`status`, `quit` in; `STATE {json}` (calictl's `/api/pairing` keys), `SNAP {"t":ms,"fn":{...}}`
-(every state function, `codec_decode`d) and `LOG text` out. Without a stored bond it boots `idle`
-and never scans; with one it reconnects by bond. The NimBLE host task (main thread) makes every
-cali_core/transport call; the stdin thread only queues lines and posts one NimBLE event; a 100 ms
-callout drives the runner/session timers.
+`status`, `quit`, `set <function> <what> [value]` in; `STATE {json}` (calictl's `/api/pairing` keys),
+`SNAP {"t":ms,"fn":{...}}` (every state function, `codec_decode`d) and `LOG text` out. Without a
+stored bond it boots `idle` and never scans; with one it reconnects by bond. The NimBLE host task
+(main thread) makes every cali_core/transport call; the stdin thread only queues lines and posts
+one NimBLE event; a 100 ms callout drives the runner/session timers.
+
+**Console `set`** (both builds, `console.c` → `cali_ctl_submit`): a control command in calictl's
+`set` vocabulary — `set cooler power on`, `set lighting kitchen 5`, `set lighting save_profile 3
+amber` (the value is the rest of the line; absent = `""`, which an on/off command refuses as not
+on/off, never reads as OFF). Same gates, frames and allow-list as `POST /api/command`
+(`docs/firmware.md` "Control path"); the console is physical access, so it works in every WiFi
+mode. Answers: `LOG control: <fn>/<what> sending` then `… sent`, or `refused: <reason>`,
+`bad value`, `no such control`, `not ready (no armed link or no state yet)`, `busy`, `failed: …`,
+`timed out`; `set` alone → `LOG control: usage: set <function> <what> [value]`.
+
+**`twrite` — a test-only stdin line of `cali-host`, not a console command.** `host_main.c` (and only
+it — never `console.c`, never the ESP image) also takes `twrite <char hex> <frame hex | ->` and
+hands the bytes straight to the NimBLE transport's `write`, past the sequencer, so
+`tests/firmware/test_control_e2e.py` can prove the `t_write` allow-list choke point refuses a roof
+frame (`1401`), the heartbeat char (`1003`), a wrong-length or an empty frame (`LOG ble: write
+…/… refused: not on the control allow-list`, nonzero rc, nothing at the unit) while an allowed
+frame does go out. It is a probe for that test; do not port it to the console.
 
 `--http <port> [--fake-wifi <script>]` adds the WiFi side on the same tick: `net_host.c`'s
 `cali_net` (POSIX sockets on 127.0.0.1 + the scripted fake WiFi, `cali_net_host.h`), the WiFi runner
@@ -559,17 +576,28 @@ does not collect). `docs/api.rst` pulls the module in via `.. automodule::
 tests.firmware.test_pairing_sm_parity`, so both objects and their `:links:` resolve in the
 `sphinx -b needs` build today.
 
-Two more requirements are authored directly on the rendered doc page rather than in a test
-docstring shim (they describe cross-cutting build properties, not one C module):
-**R_FW_READ_ONLY** (retired with #154 B; superseded by `R_FW_WRITE_ALLOWLIST` — only the five
-control chars at their frame length and the `1003` heartbeat are ever written — and `R_FW_CONTROL_API`)
-and **R_FW_IO_CAP_BEFORE_LINK** (the SM's I/O capability and MITM flag must be set before the host
-syncs, i.e. before any link exists — the exact shape of the 2026-09-26 `calictl` bug where the
-pairing agent arrived after SMP had already started; reproduced on purpose by the
-`make cali-host-jw` regression build). Both are defined, and linked to the tests that verify them
-(`T_FW_SESSION_FAKE`, `T_FW_HOST_E2E`), in **`docs/firmware.md`**'s traceability section — that
-page (added in Task 10) is now the primary human-readable trace for firmware; this file stays the
-build/porting reference.
+Four more requirements are authored directly on the rendered doc page rather than in a test
+docstring shim (they describe cross-cutting properties, not one C module), all in
+**`docs/firmware.md`**'s traceability section — that page is the primary human-readable trace for
+firmware; this file stays the build/porting reference:
+
+- **R_FW_CONTROL_TWIN** — `cali_core/control.c` plans exactly the writes `calictl.control` would
+  (same gate texts, same frames, same lighting commit) on every vector of
+  `tests/vectors/control.json`; verified by `T_CONTROL_VECTORS`, `T_FW_CONTROL_PARITY`,
+  `T_FW_CONTROL_E2E`.
+- **R_FW_WRITE_ALLOWLIST** — only the five control chars at their frame length and the `1003`
+  heartbeat are ever written, decided by `cali_ctl_write_ok` in the sequencer and in the transport's
+  `write`; verified by `T_FW_WRITE_ALLOWLIST_PURE`, `T_FW_SESSION_FAKE`, `T_FW_HOST_E2E`,
+  `T_FW_CONTROL_E2E` (incl. the `twrite` probe above). It supersedes **R_FW_READ_ONLY** (retired
+  with #154 B; kept on the page as history).
+- **R_FW_CONTROL_API** — armed link, one command at a time, station mode only, the deferred
+  `POST /api/command` answer; verified by the `T_FW_CONTROL_*` session-fake tests,
+  `T_FW_COMMAND_API` / `T_FW_COMMAND_STATION_ONLY` / `T_FW_HTTP_PENDING`, `T_FW_CONTROL_E2E`,
+  `T_FW_UI_LIVE_CONTROL` and `T_SAT_UI_LIVE`. Board run owed (Task 7).
+- **R_FW_IO_CAP_BEFORE_LINK** — the SM's I/O capability and MITM flag must be set before the host
+  syncs, i.e. before any link exists — the exact shape of the 2026-09-26 `calictl` bug where the
+  pairing agent arrived after SMP had already started; reproduced on purpose by the
+  `make cali-host-jw` regression build and verified by `T_FW_HOST_E2E`.
 
 **R_FW_WIFI_PROVISION**, **R_FW_HTTP_STATUS**, **R_FW_WIFI_BLE_COEX** (the WiFi/web slice) are
 defined in `docs/firmware.md` too, with their verifying tests (`T_WIFI_SM_REF`,
@@ -614,6 +642,16 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
 6. **Reboot with the bond in place.** Power-cycle the board; it must reconnect by bond (`STATE
    {"state":"idle",...}` then, once the session comes up, a fresh `SNAP`) with no passkey prompt
    and no `LOG store: ERROR` line — closes out **watch item 1**.
+7. **The control path (OWED — #154 B Task 7; against the mock unit first, never the real unit
+   without the owner watching).** With the board on the home WiFi and `curl -s
+   http://calictl-esp.local/api/state | jq .device.control` → `{"writes": true}`:
+   `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo <mock fifo> --record <mock
+   recording>` must report `"problems": []` (every app-recorded cooler/camping/lighting/air-heater/
+   energy action byte-exact at the mock, lighting commits ≥ 300 ms after their frame); a roof
+   POST and `set roof stop` on the console must answer `Only via buspi or the app` with no `1401`
+   in the recording; a POST over the setup hotspot (after `wifi forget`) must be `403 setup_mode`;
+   a fridge toggle from the UI in a browser must land as one `1101` write. Then add dated BOARD rows
+   to `docs/business-logic/evidence-ledger.md` (watch item 7 in `docs/firmware.md`).
 
 Carry the hardware watch items from `docs/firmware.md` into this run explicitly (repeated here so
 this checklist is self-contained):

@@ -1,7 +1,7 @@
 # csrc/ — the C port of the Camper Unit frame codec
 
 C99, no malloc, no platform dependencies: compiles on any host for the parity tests
-and under ESP-IDF for the planned ESP32 satellite (#154). Produced for issue #156 —
+and under ESP-IDF for the ESP32 satellite (#154, `firmware/`). Produced for issue #156 —
 **one dictionary, two consumers**, no divergent protocol twin.
 
 | File | What |
@@ -79,12 +79,15 @@ Done (#156): the dictionary-driven codec plus three decision ports (freshness st
 plausibility anchors, roof SafetyCounter), each with golden vectors proven against the Python
 original and replayed through the C build in CI.
 
-Planned, not in `csrc/` yet:
+Consumed by the firmware (`firmware/`, see `docs/firmware.md`): the ESP-IDF `csrc` component
+compiles `codec.c` for the ESP32-S3 — `codec_decode` for the `SNAP`/`/api/state` path and, since the
+control path (#154 B), `codec_encode` for the **control twin** (`firmware/components/cali_core/control.c`, a C port
+of `calictl.control`'s five builders held to `tests/vectors/control.json` by
+`tests/firmware/test_control_parity.py`; `control_consts.h` above feeds it). The pairing state
+machine lives in `firmware/components/cali_core/pairing_sm.c` (replays `tests/vectors/pairing.json`
+via `pairing_consts.h`), not here.
 
-- the **pairing state machine** in C — `calictl/pairing.py` is written for it (no strings, clock or
-  addresses; pinned enum values), and `tests/vectors/pairing.json` is the language-neutral sequence
-  spec it must replay (today only `tests/test_pairing_sm.py` runs it, against Python);
-- the **postcheck port** — parked until #154 defines its raw decoded-state store (see the
-  "Parked" section of `docs/cross-language-codec.rst`);
-- the **ESP-IDF build** itself: nothing here is compiled for the ESP32 yet; only the host build
-  above runs, in CI.
+Still parked:
+
+- the **postcheck port** — the ESP does no readback check after a write (`applied` is never `true`
+  on the satellite); see the "Parked" section of `docs/cross-language-codec.rst`.

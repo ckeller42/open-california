@@ -8,6 +8,26 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-06 — the ESP satellite gets a control path (#154 B)
+
+The ESP32 satellite sends control frames for cooler, camping mode, lighting, air heater and energy
+— **not the roof** (owner ruling: no roof control on the satellite; its `1401` is asserted absent
+from the generated write allow-list, no roof builder is compiled) and **not the wake-up light**
+(it needs the unit-reported wake-up config, latched from 1502 Mode-20 frames, plus a local wall
+clock — the ESP has neither; a latch + SNTP + timezone for one command was judged not worth it).
+Both answer `Only via buspi or the app`. Python stays the authority: `csrc/control_consts.h` and
+`tests/vectors/control.json` are generated from `calictl.control` (`--check` in CI) and the C twin
+must reproduce every vector. **Writes only in station mode**: `POST /api/command` is `403
+setup_mode` over the setup hotspot / during a setup-flow join / unprovisioned; the USB console `set`
+is physical access and works anywhere. Arming is the session's continuous `1003` heartbeat plus
+`CODEC_ARM_DELAY_MS` once per link (no per-write arm); one command at a time; the HTTP answer waits
+for the write ACKs (never "Sent" for a failed write) and `applied` is never `true` (no readback on
+the ESP — "Sent — the unit didn't confirm it"). The lighting commit follows the previous ACK by
+300–400 ms (tick-quantised, never less). Protocol facts did not change: the satellite's bytes are
+calictl's, which are the app's (R1). The board run of the control path is owed (Task 7); nothing
+has reached the real unit. Trace: `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST`, `R_FW_CONTROL_API` in
+`docs/firmware.md`; `R_FW_READ_ONLY` retired.
+
 ## 2026-10-06 — cooler frames follow the app (ruling R1)
 
 calictl's cooler builder used to re-assert the unit's current State/Mode/Level/timer/schedule in

@@ -130,16 +130,22 @@ reads its state without going through buspi at all. It reuses the *design*, not 
 `calictl/pairing.py`'s state machine is ported to platform-free C (`firmware/components/cali_core`)
 against the same golden vectors, and the frame codec is the same generated C already used for
 codec parity (`csrc/`, issue #156) — so the dictionary stays the single source of truth for both
-consumers. It is **read-only** (only the `1003` heartbeat is ever written) and, as of this writing,
-proven on a Linux host build against a fake unit, in QEMU, and on a real CoreS3 against the Bumble
-mock unit over real BLE — not yet against the real camper unit. It
+consumers. It writes the same control frames as calictl for five functions — cooler, camping mode,
+lighting, air heater, energy — generated from `calictl/control.py` (`csrc/control_consts.h`) and
+held byte-identical by golden vectors (`tests/vectors/control.json`, a C twin in
+`cali_core/control.c`), through one write allow-list that never admits the roof's `1401`; its only
+other write is the `1003` heartbeat. The roof and the wake-up light are refused ("Only via buspi or
+the app"). As of this writing the read side is proven on a Linux host build against a fake unit, in
+QEMU, and on a real CoreS3 against the Bumble mock unit over real BLE; the control path on the host
+build against the fake unit (its board run is owed) — nothing yet against the real camper unit. It
 also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
-then it serves a read-only status page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
+then it serves a status page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)
 on the host tier, where a scripted fake WiFi stands in for the radio, and on the chip. In station mode
-the satellite serves the same calictl web UI at `/` (display only); `calictl/webui/semantics.js`
-twins `semantics.py` in the browser, and golden vectors (`tools/gen_semantics_vectors.py`) keep the
-two equal. It has no control endpoint and nothing talks to buspi; see the
+the satellite serves the same calictl web UI at `/` with its controls live (`POST /api/command` in
+calictl's shape, station mode only — never over the setup hotspot; roof and wake-up greyed);
+`calictl/webui/semantics.js` twins `semantics.py` in the browser, and golden vectors
+(`tools/gen_semantics_vectors.py`) keep the two equal. Nothing talks to buspi; see the
 [WiFi how-to](https://ckeller42.github.io/open-california/howto-esp-wifi-setup.html). See
 [the firmware docs](https://ckeller42.github.io/open-california/firmware.html) for the test tiers
 and what each does and doesn't prove.
