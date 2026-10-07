@@ -5,11 +5,14 @@ on:
     branches: [main]
   pull_request:
 
-# Cancel superseded runs on the same ref (rapid pushes stop paying for old commits). Read-only
-# jobs, so cancelling mid-run is safe.
+# Cancel superseded runs on the same PR ref (rapid pushes stop paying for old commits). Read-only
+# jobs, so cancelling mid-run is safe. Pushes to main are never cancelled: every main commit
+# keeps its own complete CI result.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # PRs share one group per ref (superseded runs are cancelled). Every push gets its own group:
+  # a shared group would still cancel an older *pending* run, leaving a main commit without CI.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Least privilege: read-only by default; only the main-only coverage-badge job (below) writes (the
 # screenshots workflow keeps its own write scope).
@@ -19,6 +22,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -26,6 +30,8 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
@@ -79,10 +85,15 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # persist-credentials stays at its default (true) ON PURPOSE: the last step runs
+        # `git push` with the checkout token.
+        with:
+          persist-credentials: true  # zizmor: ignore[artipacked] -- the final step pushes with this token
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: coverage
@@ -108,8 +119,11 @@ jobs:
   # config, so this job, the local hooks and `tools/ci.sh lint` cannot drift apart.
   pre-commit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
@@ -132,8 +146,11 @@ jobs:
 
   no-vendor-material:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Refuse committed VW/vendor material or vehicle PII
         # Whole tracked tree: vendor paths, the real vehicle BLE MAC (matched by OUI prefix), VINs.
         # Same script as the `vendor-material` pre-commit hook and `tools/ci.sh vendor-check`.
@@ -141,8 +158,11 @@ jobs:
 
   install-script:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Lint install.sh (POSIX syntax + shellcheck)
         run: |
           sh -n install.sh
@@ -153,8 +173,11 @@ jobs:
   docs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -170,8 +193,11 @@ jobs:
   # and the host-compiled csrc/ codec. gcc is preinstalled on ubuntu-latest.
   codec-parity:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -194,8 +220,11 @@ jobs:
 
   gui-e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -225,6 +254,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Pair over real BlueZ in a VM
         run: bash tests/realstack/vm.sh
 
@@ -233,6 +264,8 @@ jobs:
     timeout-minutes: 20   # observed ~4.6 min on the probe runs; a hang must not burn 6 h
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -271,10 +304,12 @@ jobs:
     container: espressif/idf:v6.1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Build esp32s3 image
         working-directory: firmware
         run: |
-          . $IDF_PATH/export.sh
+          . "$IDF_PATH/export.sh"
           idf.py build
           { echo '```'; idf.py size; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -298,13 +333,15 @@ jobs:
     container: espressif/idf:v6.1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Build the QEMU probe variant
         working-directory: firmware
         run: |
-          . $IDF_PATH/export.sh
+          . "$IDF_PATH/export.sh"
           idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build
       - name: Boot in QEMU + NVS persistence
         run: |
-          . $IDF_PATH/export.sh
+          . "$IDF_PATH/export.sh"
           pip install pytest
           CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v

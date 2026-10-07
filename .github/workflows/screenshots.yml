@@ -14,8 +14,7 @@ on:
       - "firmware/web/index_gen.html"   # the ESP page shots (ux_gallery's EspStub serves it)
   workflow_dispatch:
 
-permissions:
-  contents: write
+permissions: {}
 
 # Serialize screenshot runs but NEVER cancel mid-run — this job commits + pushes, and a cancelled
 # push can corrupt the working ref.
@@ -25,9 +24,19 @@ concurrency:
 
 jobs:
   screenshots:
+    # workflow_dispatch can target any branch; this job holds a write token, so main only.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Write scope lives on the job (not the workflow): this is the only job that pushes.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        # persist-credentials stays at its default (true) ON PURPOSE: the last step runs
+        # `git push` with the checkout token.
+        with:
+          persist-credentials: true  # zizmor: ignore[artipacked] -- the final step pushes with this token
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"

@@ -99,9 +99,17 @@ firmware jobs, and — on push to `main` only — `docs.yml` (the same build + P
 `screenshots.yml` (commits `docs/screenshots` to `main` with `[skip ci]`).
 Test layers + harnesses: `docs/simulation-and-testing.md`.
 
+**Required checks (keep stable; verify in repo settings):** `test (3.11)`, `test (3.12)`,
+`test (3.13)`, `pre-commit`, `no-vendor-material`, `install-script`, `docs`, `codec-parity`,
+`gui-e2e`, `firmware-host-e2e`, `firmware-build`, `firmware-qemu`. `pairing-real-stack` runs but is
+not required yet. Never rename a job key in `ci.yml` (or give the matrix job a `name:`); branch
+protection matches these strings. Workflows: every `uses:` is SHA-pinned with a `# vX.Y.Z` comment,
+`persist-credentials: false` on checkout (except `screenshots.yml`, which pushes), a
+`timeout-minutes` on every job, and write scopes only on the job that needs them.
+
 **Git hooks = the pre-commit framework** (`.pre-commit-config.yaml`; the old `.githooks/` is retired —
 `git config --unset core.hooksPath` on an old clone). On **commit**: ruff + ruff format (Python only),
-markdownlint-cli2 (`.markdownlint-cli2.jsonc`), gitleaks, whitespace/YAML checks and the repo guards
+markdownlint-cli2 (`.markdownlint-cli2.jsonc`), gitleaks, actionlint + zizmor (workflow lint, `--offline`), whitespace/YAML checks and the repo guards
 (vendor/MAC/VIN, import-clean, doc-offset, and — when their inputs are staged — web-fresh, codec
 vectors + C headers, the webui `tsc` check). On **push**: the full pytest suite + `audit_signals`
 (skip once with `SKIP=pytest,audit-signals git push`). Tool versions live only in that config (keep

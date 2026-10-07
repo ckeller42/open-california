@@ -49,6 +49,21 @@ repos:
       - id: ruff-format
         types_or: [python, pyi]
 
+  # GitHub Actions workflow lint: actionlint (syntax/expressions, runs shellcheck over `run:`) and
+  # zizmor (security audits: template injection, over-broad permissions, credential persistence).
+  # Both run inside CI's existing `pre-commit` job. zizmor runs --offline so the result never
+  # depends on GitHub API reachability or a token (the online-only audits are skipped).
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.30.1
+    hooks:
+      - id: zizmor
+        args: [--offline]
+
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.23.3
     hooks:
