@@ -21,7 +21,7 @@
 # (re-renders docs/screenshots and commits them to main with [skip ci]).
 #
 #   tools/ci.sh              # run the local gate (see above for what it does NOT cover)
-#   tools/ci.sh test|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|screenshots|import-clean|vendor-check
+#   tools/ci.sh test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|screenshots|import-clean|vendor-check
 #   tools/ci.sh dev          # install dev tooling + the pre-commit/pre-push hooks (pre-commit framework)
 #
 # The single-check subcommands are also the entries of the repo-local hooks in
@@ -52,6 +52,18 @@ test_suite() {   # parallel when pytest-xdist is present (tools/ci.sh dev), else
   else
     "$PY" -m pytest tests/ -q -m "not linux_only"
   fi
+}
+cov() {   # = test_suite under pytest-cov (CI `test`, 3.13 leg). The floor ([tool.coverage.report]
+          # fail_under in pyproject.toml, a ratchet) gates calictl/ ONLY; tools/ is measured in the same
+          # run and printed as an informational number. Writes coverage.xml + htmlcov/ (calictl/).
+          # --cov-fail-under=0: pytest-cov would otherwise apply fail_under to calictl+tools combined.
+  rm -f .coverage .coverage.*
+  "$PY" -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only" \
+    --cov=calictl --cov=tools --cov-report= --cov-fail-under=0
+  echo "tools/ coverage (informational, not gated): $("$PY" -m coverage report --include='tools/*' --format=total --fail-under=0)%"
+  "$PY" -m coverage xml -q --include='calictl/*' --fail-under=0 -o coverage.xml
+  "$PY" -m coverage html -q --include='calictl/*' --fail-under=0 -d htmlcov
+  "$PY" -m coverage report --include='calictl/*'   # exits 2 below the floor
 }
 firmware() {   # CI's firmware-host-e2e job: all of tests/firmware, incl. the linux_only host tier --
                # NimBLE Linux host over TCP HCI to the Bumble fake unit (test_host_e2e.py,
@@ -145,6 +157,7 @@ dev() {
 case "${1:-ci}" in
   ci)            lint; test_suite; audit; echo "local CI: OK";;
   test)          test_suite;;
+  cov)           cov;;
   firmware)      firmware;;
   lint)          lint;;
   webcheck)      webcheck;;
@@ -157,5 +170,5 @@ case "${1:-ci}" in
   import-clean)  import_clean;;
   vendor-check)  vendor_check;;
   dev)           dev;;
-  *) echo "usage: tools/ci.sh [ci|test|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|screenshots|import-clean|vendor-check|dev]"; exit 2;;
+  *) echo "usage: tools/ci.sh [ci|test|cov|firmware|lint|webcheck|typecheck|audit|web-fresh|codec-fresh|doc-offset|screenshots|import-clean|vendor-check|dev]"; exit 2;;
 esac

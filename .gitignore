@@ -43,6 +43,8 @@ strings_resolved*
 scratchpad/
 .coverage
 .coverage.*
+coverage.xml
+htmlcov/
 
 # app-replica web UI: locally-overlaid VW strings/icons are never committed
 ui/strings-local.json

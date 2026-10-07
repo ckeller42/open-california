@@ -74,6 +74,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 tools/ci.sh dev                                      # once per clone: dev deps + pre-commit/pre-push hooks
 python3 -m pytest tests/ -q                          # the suite (keep green)
 tools/ci.sh [ci|webcheck|test|lint|audit|…]          # the local CI gate — NOT all of GitHub CI (below)
+tools/ci.sh cov                                      # suite under coverage; floor gates calictl/ only (pyproject fail_under, a ratchet — raise it, never lower)
 DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + semantic-review
 python3 -m calictl status                            # live read of all functions (needs BLE + free slot)
 python3 -m calictl serve [--dry-run]                 # the unified daemon (read-only unless --enable-writes)
