@@ -72,9 +72,21 @@ Identical on the host build (stdin/stdout) and the device (UART/USB-Serial-JTAG 
 The session's read-all follows `calictl.device.read_all`: subscribe every notifying state char,
 let the 1003 heartbeat run `CODEC_HEARTBEAT_WARMUP_MS` (generated from
 `calictl.device.HEARTBEAT_WARMUP_S`'s default, 2 s) so the liveness registers and sensors refresh,
-then read the functions in order — skipping any the unit pushed since the subscribe, and never
-letting a read completion overwrite a frame pushed while that read was outstanding (a
-notification is fresher than the read latch). The first `SNAP` of a link follows that pass.
+then read every function in order. A read completion and a notification both replace the
+function's frame, so the **last frame to arrive wins** — the app's order (it subscribes, then
+reads, and one decoder takes both; decompile 2026-10-07, calictl `R_READ_LAST_FRAME_WINS`). The
+old "a notification beats the read latch" rule (the session skipped the read of a pushed function)
+is gone: a stale water push on the subscribe no longer hides the correct read. The first `SNAP` of
+a link follows that pass.
+
+While the link stays up, **water (`1302`) is re-read every `CALI_SESSION_WATER_REREAD_MS` (30 s)**
+after the read-all; its completion replaces the frame and prints a `SNAP`. 30 s is calictl's
+`POLL_INTERVAL`, at which calictl reads 1302 on every poll; the ESP has no other periodic re-read
+(it holds one link and otherwise lives on notifications), so this is the one timer. A parked latch
+served at connect is corrected on the same link, no reconnect needed. Only water is re-read here.
+This is a calictl-ism, not the app's: the app has no 1302 re-read timer at all (its only periodic
+re-reads are screen pollers for 1102/1602/1902/1004 while those screens are open); it gets a fresh
+1302 read on every reconnect instead.
 
 ## Network: WiFi setup and the status page
 
@@ -305,7 +317,8 @@ Known gaps (accepted):
 - No roof and no wake-up light from the satellite (above); no `applied: true` — the unit's ACK is
   the only confirmation.
 - No water stale-hold: a parked, latched-low fresh tank shows unflagged on the satellite (calictl
-  holds it via `freshness.implausible_water_drop` + a persisted baseline).
+  holds it via `freshness.implausible_water_drop` + a persisted baseline; whether that guard is still
+  needed now that both read 1302 after subscribing is open until a van trace, #230).
 - No battery history chart; no pairing wizard (ESP pairs via console); no auto-camper.
 - UI changes reach the satellite only with a firmware rebuild + reflash.
 

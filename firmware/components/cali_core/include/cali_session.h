@@ -18,12 +18,13 @@
  * discover(). DISCOVERED -> subscribe() every CODEC_CHARS entry (a char without NOTIFY is refused
  * by the transport and skipped), then — like calictl.device.read_all — let the heartbeat run for
  * CODEC_HEARTBEAT_WARMUP_MS (the first cali_session_tick at or past DISCOVERED + warm-up starts the
- * reads) and read() the functions one at a time in CODEC_CHARS order; each READ (status 0)
- * replaces that function's frame. A function the unit pushed on this link (NOTIFY since the
- * subscribe) is not read, and a read already outstanding when its push arrives does not replace
- * the pushed frame: the notification is fresher than the read latch. After the last read the
- * session prints one SNAP (cali_console_snapshot). A NOTIFY replaces that function's frame at any
- * time; once the link's first read-all completed it also prints a SNAP. The snapshot therefore
+ * reads) and read() every function one at a time in CODEC_CHARS order; each READ (status 0)
+ * replaces that function's frame, and so does a NOTIFY at any time: the LAST frame to arrive wins
+ * (the app subscribes, then reads, one decoder for both — calictl R_READ_LAST_FRAME_WINS). After
+ * the last read the session prints one SNAP (cali_console_snapshot); once the link's first read-all
+ * completed a NOTIFY also prints a SNAP. While the link stays up, water (1302) is re-read every
+ * CALI_SESSION_WATER_REREAD_MS after the read-all (its completion stores + SNAPs), so a stale latch
+ * served at connect is corrected without a reconnect. The snapshot therefore
  * always holds exactly one whole frame per function (never a mix of two).
  *
  * Link loss (DISCONNECTED, CONNECT_FAIL, ENC_FAIL, a failed discovery, a heartbeat that cannot be
@@ -48,6 +49,9 @@ extern "C" {
 #define CALI_SESSION_BACKOFF_MIN_MS 1000u
 #define CALI_SESSION_BACKOFF_MAX_MS 60000u
 #define CALI_SESSION_ENC_TIMEOUT_MS 15000u
+/* Water (1302) re-read period while the link is up: calictl's POLL_INTERVAL (30 s), at which it
+ * reads 1302 on every poll. The app has no periodic water re-read (it reconnects instead). */
+#define CALI_SESSION_WATER_REREAD_MS 30000u
 
 void cali_session_init(const cali_transport_t *t);
 void cali_session_boot(void);

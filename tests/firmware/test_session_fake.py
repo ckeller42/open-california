@@ -6,11 +6,13 @@
    ``firmware/components/cali_core/session.c`` keeps the bonded link: after the runner reaches
    bonded (or a boot with a stored bond reconnects and re-encrypts) it discovers, subscribes every
    notifying state char, lets the heartbeat run ``CODEC_HEARTBEAT_WARMUP_MS`` (calictl's
-   ``HEARTBEAT_WARMUP_S``), reads every ``CODEC_CHARS`` function in order — except one the unit
-   pushed since the subscribe, and a read never overwrites a frame pushed while it was outstanding
-   (as ``calictl.device.read_all``: the notification beats the stale latch) — and prints one
-   ``SNAP`` of the ``codec_decode`` of each stored frame; a notification replaces that function's
-   whole frame (a new ``SNAP`` once the first read-all completed). A 1003 heartbeat runs every
+   ``HEARTBEAT_WARMUP_S``), reads every ``CODEC_CHARS`` function in order, and prints one
+   ``SNAP`` of the ``codec_decode`` of each stored frame. Read completions and notifications both
+   replace that function's whole frame, so the LAST frame to arrive wins (the app's order: it
+   subscribes, then reads; one decoder for both, decompile 2026-10-07 — as ``calictl.device.read_all``,
+   ``R_READ_LAST_FRAME_WINS``). Once the first read-all completed a notification prints a new
+   ``SNAP``, and water (``1302``) is re-read every ``CALI_SESSION_WATER_REREAD_MS`` while the link
+   is up, so a parked latch served at connect is corrected without a reconnect. A 1003 heartbeat runs every
    ``CODEC_HEARTBEAT_PERIOD_MS`` from ``CODEC_HEARTBEAT_START`` while the link is up; a lost link —
    drop, failed connect/encryption/discovery, a heartbeat that cannot be written or fails —
    reconnects by bond after 1 s, doubling to 60 s. ``console.c`` is the line protocol (``pair`` /
@@ -204,7 +206,8 @@ def test_notify_replaces_the_whole_frame_and_snaps_only_after_read_all(fake):
     out = run(fake, *PAIRED, *mid, "NOTIFY 1102 11")
     s = snaps(out)
     assert len(s) == 2  # the mid notify printed none
-    assert s[0]["fn"]["cooler"] == protocol.decode(funcs["cooler"], bytes.fromhex("aabbccdd"))
+    # cooler's read came after the push: the last frame (the read) wins
+    assert s[0]["fn"]["cooler"] == protocol.decode(funcs["cooler"], b"\x01\x02")
     assert s[1]["fn"]["cooler"] == protocol.decode(funcs["cooler"], b"\x11")
     assert {k: v for k, v in s[1]["fn"].items() if k != "cooler"} == {
         k: v for k, v in s[0]["fn"].items() if k != "cooler"
@@ -230,46 +233,94 @@ def test_read_all_waits_the_heartbeat_warm_up(fake):
     assert calls(rest[:first_read], "write_heartbeat") == beats  # beats, then the reads
 
 
-def test_push_before_its_read_skips_the_read(fake):
-    """A function the unit pushed after the subscribe is not read: the notification beats the
-    stale read latch (``calictl.device.read_all``), so its frame is the pushed one.
+STALE_WATER = "03011d010016"  # FreshWaterLevel 1: a parked latch pushed on the subscribe
+LIVE_WATER = "03111d010016"  # FreshWaterLevel 17: what the read that follows returns
+REREAD = int(
+    re.search(
+        r"#define CALI_SESSION_WATER_REREAD_MS (\d+)u", (CORE / "include" / "cali_session.h").read_text()
+    ).group(1)
+)
 
-    .. test:: A pushed frame is not replaced by the read-all's read
+
+def _water(snap):
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    return snap["fn"]["water"], funcs["water"]
+
+
+def test_read_after_the_subscribe_push_wins(fake):
+    """The unit pushes a stale water frame on the subscribe; the read-all still reads water and
+    that read — the last frame — is what the SNAP (and so ``/api/state``) shows. The app subscribes
+    1302 then reads it, and one decoder takes both (decompile 2026-10-07).
+
+    .. test:: A read after the subscribe push wins (last frame wins, app order)
        :id: T_FW_SESSION_PUSH_BEATS_LATCH
        :links: R_FW_SESSION
     """
-    funcs = protocol.load()
-    overrides.apply(funcs)
-    reads = ["READ %x 0" % c for c in CHARS if c != 0x1102]
-    out = run(
-        fake,
-        *PAIRED,
-        "DISCOVERED 0",
-        "NOTIFY 1102 aabbccdd",  # pushed during the warm-up
-        "tick %d" % WARM,
-        *reads,
-    )
+    reads = ["READ %x 0%s" % (c, " " + LIVE_WATER if c == 0x1302 else "") for c in CHARS]
+    out = run(fake, *PAIRED, "DISCOVERED 0", "NOTIFY 1302 " + STALE_WATER, "tick %d" % WARM, *reads)
     rest = after(out, "CALL subscribe %d" % CHARS[-1])
-    assert "CALL read %d" % 0x1102 not in rest
-    assert [line for line in rest if line.startswith("CALL read")] == [
-        "CALL read %d" % c for c in CHARS if c != 0x1102
-    ]
+    assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in CHARS]
     (snap,) = snaps(out)
-    assert snap["fn"]["cooler"] == protocol.decode(funcs["cooler"], bytes.fromhex("aabbccdd"))
+    got, f = _water(snap)
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
 
 
-def test_push_while_its_read_is_outstanding_keeps_the_push(fake):
-    """The cooler read is already on the air when the unit pushes cooler: the read's completion
-    (the older latch) does not overwrite the pushed frame."""
+def test_push_while_its_read_is_outstanding_then_the_read_wins(fake):
+    """The cooler read is on the air when the unit pushes cooler; the read completion arrives
+    last, so it wins (no frame is privileged over another — only arrival order counts)."""
     funcs = protocol.load()
     overrides.apply(funcs)
     reads = ["READ %x 0" % c for c in CHARS]
     i = CHARS.index(0x1102)
     out = run(fake, *PAIRED, *read_all(reads=reads[:i] + ["NOTIFY 1102 aabbccdd"] + reads[i:]))
-    assert "CALL read %d" % 0x1102 in out  # it was requested
     (snap,) = snaps(out)
-    assert snap["fn"]["cooler"] == protocol.decode(funcs["cooler"], bytes.fromhex("aabbccdd"))
-    assert snap["fn"]["energy"] == protocol.decode(funcs["energy"], b"\x01\x02")  # the rest read
+    assert snap["fn"]["cooler"] == protocol.decode(funcs["cooler"], b"\x01\x02")
+
+
+def test_notify_after_the_read_wins(fake):
+    """A water notification after the read-all replaces the read (and SNAPs)."""
+    out = run(fake, *PAIRED, *READ_ALL, "NOTIFY 1302 " + LIVE_WATER)
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
+
+
+def test_water_is_re_read_periodically_while_the_link_is_up(fake):
+    """Water is re-read every ``CALI_SESSION_WATER_REREAD_MS`` after the read-all (calictl reads
+    1302 on every 30 s poll), so a stale latch served at connect is corrected without a reconnect;
+    the re-read's frame SNAPs, and a later notify still overrides it.
+
+    .. test:: The firmware re-reads water periodically while the link is up
+       :id: T_FW_SESSION_WATER_REREAD
+       :links: R_FW_SESSION
+    """
+    stale = ["READ %x 0%s" % (c, " " + STALE_WATER if c == 0x1302 else "") for c in CHARS]
+    early = run(fake, *PAIRED, *read_all(reads=stale), "tick %d" % (T + REREAD - 100))
+    assert calls(after(early, "CALL read %d" % 0x1302), "read") == []  # not before the period
+    out = run(
+        fake,
+        *PAIRED,
+        *read_all(reads=stale),
+        "tick %d" % (T + REREAD - 100),
+        "tick %d" % (T + REREAD),
+        "READ 1302 0 " + LIVE_WATER,
+    )
+    rest = after(out, "CALL read %d" % 0x1302)  # the read-all's own water read
+    assert calls(rest, "read") == ["CALL read %d" % 0x1302]  # the periodic re-read
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
+    out = run(
+        fake,
+        *PAIRED,
+        *read_all(reads=stale),
+        "tick %d" % (T + REREAD),
+        "READ 1302 0 " + LIVE_WATER,
+        "NOTIFY 1302 " + STALE_WATER,
+        "tick %d" % (T + 2 * REREAD),
+    )
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(STALE_WATER))  # the later notify wins
+    assert len(calls(out, "read %d" % 0x1302)) == 3  # read-all + two periodic re-reads
 
 
 def test_heartbeat_every_period_from_the_start_counter(fake):

@@ -279,9 +279,8 @@ async def _drop_on_read(unit, fn):
 
 
 def test_link_drop_mid_read_all_reconnects(host_fw, hci_unit):
-    """The unit hangs up while the first read-all is under way (on the ``general`` read — 1001 has
-    no NOTIFY, so it is the one function the read-all always reads; every notifying char was
-    already pushed on subscribe, and a pushed function is not read): no SNAP of the half-read set,
+    """The unit hangs up while the first read-all is under way (on the ``general`` read — the
+    read-all reads every function, pushed or not, and 1001 is a mid-pass one): no SNAP of the half-read set,
     one backoff reconnect by bond, then a fresh read-all -> SNAP."""
     hci_unit.call(_drop_on_read, hci_unit.unit, "general")  # not read while pairing (1004 is)
     fw = host_fw(hci_unit)
