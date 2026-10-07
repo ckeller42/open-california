@@ -33,7 +33,7 @@ jobs:
       - name: Install test/tooling deps (runtime is stdlib-only)
         run: pip install -r requirements-dev.txt
       - name: Test suite (parallel; conftest isolates state per-test so it's xdist-safe)
-        # Tests marked linux_only (tests/firmware: the NimBLE host e2e + bond store) need a 32-bit
+        # Tests marked linux_only (tests/firmware: the NimBLE host e2e + bond store + the i686 control twin) need a 32-bit
         # toolchain + a NimBLE build: their own job (firmware-host-e2e). The rest of tests/firmware
         # (the pure-C SM parity, runner and session fakes) has no BLE dependency and runs here too.
         run: python -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only"

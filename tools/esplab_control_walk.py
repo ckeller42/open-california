@@ -55,14 +55,45 @@ def unit_writes(path) -> list[tuple[str, str, float]]:
     return out
 
 
+def gate_state(case: dict) -> dict:
+    """``{fn: decoded fields}`` of the case's recorded gate frames — what the firmware's ``/api/state``
+    ``fn`` must hold before the command is sent."""
+    from calictl import overrides, protocol
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    return {
+        fn: protocol.decode(funcs[fn], bytes.fromhex(hx))
+        for fn, hx in case["frames_hex"].items()
+        if fn in GATE_FUNCTIONS
+    }
+
+
+def held_state(get_fn, want: dict, timeout: float = 15.0, every: float = 0.2) -> bool:
+    """Poll ``get_fn()`` (the firmware's ``/api/state`` ``fn``) until it holds every entry of ``want``
+    on two polls in a row (a push still in flight from the previous command cannot land after the
+    check); ``False`` if that does not happen within ``timeout`` seconds."""
+    end, held = time.monotonic() + timeout, 0
+    while True:
+        fn = get_fn()
+        held = held + 1 if all(fn.get(k) == v for k, v in want.items()) else 0
+        if held == 2:
+            return True
+        if time.monotonic() >= end:
+            return False
+        time.sleep(every)
+
+
 def walk(cases, inject, post, writes) -> list[str]:
     """Run ``cases`` in order. ``inject(case)`` puts the fake unit in the case's state and returns
-    once the firmware holds it; ``post(body) -> (status, json)``; ``writes()`` -> the unit's control
+    once the firmware holds it (``False``: it never did — reported, the case is skipped); ``post(body) -> (status, json)``; ``writes()`` -> the unit's control
     writes so far (:func:`unit_writes`). Returns one message per problem (empty = every case
     passed)."""
     problems = []
     for case in cases:
-        inject(case)
+        if inject(case) is False:
+            problems.append("%s: the firmware never held the pushed state" % case["id"])
+            continue
         before = len(writes())
         body = {"function": case["function"], "what": case["what"], "value": case["value"], "confirm": True}
         status, ans = post(body)
@@ -109,12 +140,17 @@ def _post(url):
     return post
 
 
+def _get_fn(url) -> dict:
+    with urllib.request.urlopen(url.rstrip("/") + "/api/state", timeout=15) as r:
+        return json.loads(r.read())["fn"]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="replay the app-recorded control actions against an ESP")
     ap.add_argument("--url", required=True, help="the firmware, e.g. http://calictl-esp.local")
     ap.add_argument("--fifo", required=True, help="the fake unit's scenario FIFO (FAKE_UNIT_FIFO)")
     ap.add_argument("--record", required=True, help="the fake unit's FAKE_UNIT_RECORD file")
-    ap.add_argument("--settle", type=float, default=2.0, help="seconds after a state push")
+    ap.add_argument("--timeout", type=float, default=15.0, help="seconds to wait for the pushed state")
     a = ap.parse_args(argv)
 
     def inject(case):
@@ -122,7 +158,7 @@ def main(argv=None) -> int:
             for fn, hx in case["frames_hex"].items():
                 if fn in GATE_FUNCTIONS:
                     f.write("raw %s %s\n" % (fn, hx))
-        time.sleep(a.settle)
+        return held_state(lambda: _get_fn(a.url), gate_state(case), a.timeout)
 
     cases = app_cases()
     problems = walk(cases, inject, _post(a.url), lambda: unit_writes(a.record))

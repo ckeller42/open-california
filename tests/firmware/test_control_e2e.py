@@ -58,27 +58,13 @@ def _post(fw):
     return post
 
 
-def _wait_state(fw, want, timeout=15.0):
-    """Poll /api/state until its ``fn`` holds every decoded frame of ``want`` on two polls in a row
-    (a push still in flight from the previous command cannot land after the check)."""
-    end, held = time.monotonic() + timeout, 0
-    while True:
-        fn = get_json(fw, "/api/state")["fn"]
-        held = held + 1 if all(fn.get(k) == v for k, v in want.items()) else 0
-        if held == 2:
-            return
-        assert time.monotonic() < end, ({k: fn.get(k) for k in want}, want)
-        time.sleep(0.2)
-
-
 def _inject(fw, hu):
-    funcs = _funcs()
-
     def inject(case):
-        frames = {fn: hx for fn, hx in case["frames_hex"].items() if fn in walker.GATE_FUNCTIONS}
-        for fn, hx in frames.items():
-            hu.call(_serve_raw, hu.unit, fn, bytes.fromhex(hx), True)
-        _wait_state(fw, {fn: protocol.decode(funcs[fn], bytes.fromhex(hx)) for fn, hx in frames.items()})
+        for fn, hx in case["frames_hex"].items():
+            if fn in walker.GATE_FUNCTIONS:
+                hu.call(_serve_raw, hu.unit, fn, bytes.fromhex(hx), True)
+        want = walker.gate_state(case)
+        assert walker.held_state(lambda: get_json(fw, "/api/state")["fn"], want), want
 
     return inject
 
@@ -145,6 +131,28 @@ def test_walker_flags_wrong_missing_and_early_frames():
     assert "came 200 ms" in problem([(c1, h1, 0.0), (c2, h2, 0.2)])  # commit 200 ms after the frame
     assert "ROOF" in problem([(c1, h1, 0.0), (c2, h2, 0.31), ("1401", "00", 0.4)])  # + a roof write
     assert "answer" in problem([(c1, h1, 0.0), (c2, h2, 0.31)], (200, {"ok": True, "applied": True}))
+
+
+def test_held_state_needs_two_matching_polls_and_gives_up():
+    """The bench and the host tier wait for the firmware to HOLD the pushed state (two matching polls
+    in a row), not a fixed sleep; a state that never arrives is ``False`` within the bound."""
+    want = {"cooler": {"Level": 5}}
+    polls = iter([{"cooler": {"Level": 1}}, want, {"cooler": {"Level": 1}}, want, want, want])
+    assert walker.held_state(lambda: next(polls), want, timeout=5, every=0) is True
+    assert next(polls) == want  # it stopped at the second match in a row
+    assert walker.held_state(lambda: {"cooler": {"Level": 1}}, want, timeout=0.3, every=0.05) is False
+    case = _case("lighting-zone.jsonl:143")
+    gate = walker.gate_state(case)
+    assert set(gate) == set(walker.GATE_FUNCTIONS) & set(case["frames_hex"])
+    assert gate["lighting"] == protocol.decode(
+        _funcs()["lighting"], bytes.fromhex(case["frames_hex"]["lighting"])
+    )
+
+
+def test_walk_reports_a_state_that_was_never_held():
+    case = _case("lighting-zone.jsonl:143")
+    problems = walker.walk([case], lambda c: False, lambda b: (200, {}), lambda: [])
+    assert problems == ["%s: the firmware never held the pushed state" % case["id"]]
 
 
 # -- the host tier ---------------------------------------------------------------------------------

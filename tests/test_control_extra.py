@@ -420,19 +420,24 @@ def test_build_input_errors_are_command_errors():
 # --- rulings R3 / R4 (ESP control path, 2026-10-06): unknown -> refuse, never default -----------
 
 
+# one parametrize: docs/conf.py mocks pytest, and a second stacked decorator would turn the test into
+# a Mock that autodoc drops (its need would vanish from needs.json)
 @pytest.mark.parametrize(
-    "fn,what",
+    "fn,what,value",
     [
-        ("cooler", "power"),
-        ("campingmode", "master"),
-        ("campingmode", "lights"),
-        ("campingmode", "usb"),
-        ("airheater", "power"),
-        ("lighting", "power"),
-        ("lighting", "door_contact"),
+        (fn, what, value)
+        for fn, what in (
+            ("cooler", "power"),
+            ("campingmode", "master"),
+            ("campingmode", "lights"),
+            ("campingmode", "usb"),
+            ("airheater", "power"),
+            ("lighting", "power"),
+            ("lighting", "door_contact"),
+        )
+        for value in (None, "", "x", "maybe", "3", " ")
     ],
 )
-@pytest.mark.parametrize("value", [None, "", "x", "maybe", "3", " "])
 def test_a_value_that_is_not_on_or_off_is_refused_not_off(fn, what, value):
     """Ruling R3: `set cooler power null` must refuse, never switch the fridge off.
 

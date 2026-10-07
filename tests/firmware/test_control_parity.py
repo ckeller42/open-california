@@ -1,7 +1,8 @@
 """The ESP's C control twin equals calictl.control on the generated vectors (#154 B).
 
 ``firmware/components/cali_core/control.c`` is compiled with ``csrc/codec.c`` and the line driver
-``test/control_cli.c`` by the host ``cc`` (macOS too, no NimBLE). Every vector of
+``test/control_cli.c`` by the host ``cc`` (macOS too, no NimBLE) and, in the Linux host tier, as a 32-bit (i686) binary —
+the ESP32-S3's ``long`` width. Every vector of
 ``tests/vectors/control.json`` (``tools/gen_control_vectors.py``: calictl's own answers over a value
 grid and every app-recorded action) must come out identical: the refusal text, or every planned
 write (char, delay, bytes), or bad/none.
@@ -16,6 +17,7 @@ write (char, delay, bytes), or bad/none.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import urllib.parse
@@ -31,13 +33,26 @@ CORE = ROOT / "firmware" / "components" / "cali_core"
 V = json.loads(gen_control_vectors.OUT.read_text(encoding="utf-8"))
 
 
-@pytest.fixture(scope="module")
-def cli(tmp_path_factory):
-    cc = shutil.which("cc") or pytest.skip("no C compiler")
-    out = tmp_path_factory.mktemp("control") / "control_cli"
+# The ESP32-S3 is 32-bit (``long`` = 4 bytes): the C twin's ``py_int`` saturates at LONG_MAX there.
+# The "m32" leg builds the same driver as an i686 binary (the host tier's toolchain: gcc-multilib or
+# CROSS_COMPILE=i686-linux-gnu-, run through qemu-i386 on arm64) and replays every vector against it.
+LONG_IS_4 = "typedef char long_is_4_bytes[sizeof(long) == 4 ? 1 : -1];\n"
+
+
+@pytest.fixture(scope="module", params=["native", pytest.param("m32", marks=pytest.mark.linux_only)])
+def cli(request, tmp_path_factory):
+    tmp = tmp_path_factory.mktemp("control")
+    if request.param == "native":
+        cmd = [shutil.which("cc") or pytest.skip("no C compiler")]
+    else:
+        cmd = [os.environ.get("CROSS_COMPILE", "") + "gcc", "-m32"]
+        probe = tmp / "long_is_4.c"
+        probe.write_text(LONG_IS_4)
+        subprocess.run(cmd + ["-c", str(probe), "-o", str(tmp / "probe.o")], check=True)  # really 32-bit
+    out = tmp / "control_cli"
     subprocess.run(
-        [
-            cc,
+        cmd
+        + [
             "-std=c99",
             "-Wall",
             "-Wextra",

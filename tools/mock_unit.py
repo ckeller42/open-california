@@ -19,7 +19,7 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
     unit actuates lighting on an awake unit with a bare SET_BRIGHTNESS + commit and no
     heartbeat (photon-verified 2026-08-16, control-and-actuation.md), so lighting skips it.
   * **Range validation → link drop:** an out-of-range field value raises
-    ``MockDisconnect`` (the unit drops the ATT link with 0x0E; e.g. cooler State=3).
+    ``MockDisconnect`` (the unit drops the ATT link with 0x0E).
     This runs regardless of arming (the firmware's parse layer always validates).
   * **Lighting per-zone SET (cracked 2026-07-08):** SET_PROFILE (Mode 16) and SET_BRIGHTNESS
     (Mode 4, honouring the ``14`` per-zone leave-unchanged sentinel; 0 = set-to-0) only STAGE a
