@@ -80,7 +80,7 @@ suppress_warnings = ["needs.deprecated", "myst.xref_missing", "myst.header"]
 if tags.has("evidence"):  # noqa: F821 — `tags` is injected by Sphinx into conf.py
     root_doc = "business-logic/index"
     exclude_patterns = ["_build", "*.rst", "*.md",
-                        "api/**", "assets/**", "protocol/**", "screenshots/**", "superpowers/**"]
+                        "api/**", "arc42/**", "assets/**", "protocol/**", "screenshots/**", "superpowers/**"]
     html_title = "open-california — RE lab notes (evidence)"
     html_theme_options = {
         "announcement": ("Reverse-engineering <strong>lab notes — evidence, not product "
