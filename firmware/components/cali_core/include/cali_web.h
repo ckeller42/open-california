@@ -40,8 +40,15 @@
  *                     other key = 400 bad_json — plan B decision 5). Station mode only: in every other
  *                     WiFi mode (setup hotspot, setup-flow join = "off", unprovisioned) 403
  *                     {"ok":false,"error":"setup_mode"} before anything reaches the control module.
+ *                     Optional "local_now": the page's wall clock read as UTC (s), the wake-up
+ *                     builder's only clock (calictl accepts and ignores it); null or absent = no clock
+ *                     (the wake-up is refused with the clock reason). A string, a fraction/exponent, a
+ *                     boolean or an integer before 2026-01-01T00:00Z (1767225600) -> 400 bad_value; an
+ *                     integer is read saturated at INT64_MAX, so one past the 32-bit Timestamp is the
+ *                     builder's bad value (400). No skew check (ruling R1).
  *                     Then web.py's checks: 400 missing_function_or_what, 400 confirm_required
- *                     (airheater, roof without "confirm":true). Then cali_ctl_submit (cali_control.h):
+ *                     (airheater, roof without "confirm":true), then 400 bad_value for local_now.
+ *                     Then cali_ctl_submit (cali_control.h):
  *                       accepted  -> CALI_HTTP_PENDING until the sequencer's done callback, then
  *                                    200 {"ok":true,"applied":null,"state":null,"error":null,"function":fn}
  *                                    (applied never true: no readback check), or 502 write_failed /

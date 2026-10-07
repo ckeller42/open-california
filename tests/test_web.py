@@ -70,6 +70,16 @@ def test_command_routes_to_backend(server):
     assert be.commands[-1] == ("cooler", "power", "on", False)
 
 
+@pytest.mark.parametrize("ln", [1791354615, "garbage", None, 1.5])
+def test_command_accepts_and_ignores_local_now(server, ln):
+    """The shared UI sends the page's clock with every wake-up; the daemon keeps its own clock, so the
+    key is accepted (whatever its value) and never reaches the backend (spec 2026-10-07 §1)."""
+    be, base = server
+    body = {"function": "lighting", "what": "wakeup", "value": "07:00", "local_now": ln}
+    status, _ = _post(base + "/api/command", body)
+    assert status == 200 and be.commands == [("lighting", "wakeup", "07:00", False)]
+
+
 def test_lighting_reports_not_applied(server):
     _, base = server
     _, body = _post(base + "/api/command", {"function": "lighting", "what": "brightness", "value": 8})

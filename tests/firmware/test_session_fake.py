@@ -1495,6 +1495,33 @@ def test_wakeup_edit_with_unknown_config_pulls_then_builds_from_the_reply(fake):
     assert "LOG control: lighting/wakeup pulling the lighting config" in out
 
 
+def test_wakeup_replan_after_the_pull_uses_the_clock_then_not_the_submits(fake):
+    """An edit for 08:00 submitted at 07:59:59 whose reply arrives ~1.7 s after the commit's ACK is
+    set for tomorrow: the re-plan runs with local_now + the seconds elapsed since the submit, as
+    serve builds after its pull with its clock at that moment (Task 4 review Minor-1)."""
+    ln = 1791331200 + 7 * 3600 + 59 * 60 + 59  # 2026-10-07 07:59:59
+    t = ARM + 100
+    acked = t + FOLLOW + TICK
+    late = acked + 1700
+    out = run(
+        fake,
+        *armed(),
+        "submit %d lighting wakeup 08:00" % ln,
+        *_pulled(t),
+        *["tick %d" % (acked + d) for d in range(100, 1700, 100)],
+        "NOTIFY 1502 %s" % WAKE_0700_ON,
+        "tick %d" % late,
+        "WRITTEN 1501 0",
+        "tick %d" % (late + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+    )
+    latch = {"WakeupTimestamp": 7 * 3600, "WakeupLightValue": 0x1101}
+    got = writes(out)[len(PULL_WRITES) :]
+    assert got == want_writes("lighting", "wakeup", "08:00", latch=latch, local_now=ln + (late - ARM) // 1000)
+    assert got != want_writes("lighting", "wakeup", "08:00", latch=latch, local_now=ln)  # today 08:00
+    assert out[-1] == "DONE 0 -"
+
+
 def test_wakeup_pull_writes_only_the_allow_listed_request_config_then_commit():
     """The pull's own frames are the vectors' config_pull: 1501 at its 16-byte frame length (the
     write allow-list, W 1501 16 -> OK 1 in test_control_parity), REQUEST_CONFIG then the commit."""
