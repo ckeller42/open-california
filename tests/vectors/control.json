@@ -25871,6 +25871,278 @@
    }
   },
   {
+   "id": "lighting/wakeup/\"07:00 on\"@seed@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "seed",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@empty@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "empty",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_on@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_on",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_off@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_off",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_no_area@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_no_area",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_frame@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_frame",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@seed@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "seed",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@empty@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "empty",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_on@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_on",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_off@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_off",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_no_area@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_no_area",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_frame@u32",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_frame",
+   "local_now": 4294967296,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@seed@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "seed",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@empty@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "empty",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_on@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_on",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_off@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_off",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_no_area@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_no_area",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_frame@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_frame",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@seed@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "seed",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@empty@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "empty",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_on@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_on",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_off@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_off",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_no_area@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_no_area",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_frame@i64max",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_frame",
+   "local_now": 9223372036854775807,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/wakeup/\"07:00 on\"@seed@none",
    "function": "lighting",
    "what": "wakeup",

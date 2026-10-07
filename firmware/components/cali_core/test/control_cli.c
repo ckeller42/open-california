@@ -5,8 +5,8 @@
  *   P <fn> <what> <tok> [t:<local_now>]
  *                         cali_ctl_plan; tok = n (null -> "") | i:<decimal> | s:<percent-encoded>;
  *                         local_now = the page's clock in seconds (absent: none, -1)
- *                         -> OK <char>/<delay_ms>/<hex> ... | REFUSED <reason> | ELSEWHERE <reason>
- *                            | BAD | NONE | ERR parse
+ *                         -> OK <char>/<delay_ms>/<hex> ... | REFUSED[+PULL] <reason> | ELSEWHERE <reason>
+ *                            | BAD | NONE | ERR parse   (+PULL: plan.pull, the config is pulled first)
  *   Q                     -> OK ... cali_ctl_pull_plan (the REQUEST_CONFIG pull)
  *   C                     -> CFG[ <Key>=<v>]... cali_light_cfg: the known latch keys, CALI_LCFG_KEYS order
  *   W <hex char> <len>    -> OK 1|0 (cali_ctl_write_ok)
@@ -78,7 +78,7 @@ static void print_plan(const cali_ctl_plan_t *p) {
         }
         putchar('\n');
         break;
-    case CALI_CTL_REFUSED: printf("REFUSED %s\n", p->reason); break;
+    case CALI_CTL_REFUSED: printf("REFUSED%s %s\n", p->pull ? "+PULL" : "", p->reason); break;
     case CALI_CTL_ELSEWHERE: printf("ELSEWHERE %s\n", p->reason); break;
     case CALI_CTL_BAD_VALUE: puts("BAD"); break;
     default: puts("NONE"); break;

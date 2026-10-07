@@ -99,6 +99,8 @@ def state_lines(states):
 def want(e):
     if e["kind"] == "frames":
         return "OK " + " ".join("%s/%d/%s" % (f["char"], f["delay_ms"], f["hex"]) for f in e["frames"])
+    if e["kind"] == "refused" and e["reason"] == V["config_pull"]["reason"]:
+        return "REFUSED+PULL %s" % e["reason"]  # plan.pull: the sequencer pulls the config first
     if e["kind"] in ("refused", "elsewhere"):
         return "%s %s" % (e["kind"].upper(), e["reason"])
     return e["kind"].upper()

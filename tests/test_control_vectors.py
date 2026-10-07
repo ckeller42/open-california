@@ -101,6 +101,20 @@ def test_wakeup_clock_edges_are_pinned():
     assert by_id['lighting/wakeup/"07:00 on"@empty@y2106'] == {"kind": "bad"}  # past the 32-bit Timestamp
 
 
+def test_a_clock_past_the_32_bit_timestamp_never_builds():
+    """A page clock past 2106-02-07 (UINT32_MAX + 1, INT64_MAX) can only give a Timestamp the frame
+    cannot carry: bad (after the gates, as calictl orders them), never a wrapped made-up time."""
+    huge = [c for c in V["cases"] if c["id"].endswith(("@u32", "@i64max"))]
+    assert {c["local_now"] for c in huge} == {2**32, 2**63 - 1}
+    assert {c["expect"]["kind"] for c in huge} == {"bad", "refused"}
+    by_id = {c["id"]: c["expect"] for c in huge}
+    assert (
+        by_id['lighting/wakeup/"07:00 on"@empty@u32']
+        == by_id['lighting/wakeup/"07:00 on"@empty@i64max']
+        == {"kind": "bad"}
+    )
+
+
 def test_the_app_wakeup_actions_are_all_proven():
     """R2: the four recorded wake-up actions — action 1 (a time edit with no config known) through
     its explicit "07:00 off" form, the other three as recorded."""

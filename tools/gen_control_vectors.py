@@ -172,12 +172,16 @@ WAKEUP_CLOCKS = {
     "yearend": calendar.timegm((2026, 12, 31, 23, 59, 30, 0, 0, 0)),
     # 06:00 on the day the 32-bit Timestamp ends (2106-02-07 06:28:15): 06:20 fits, 07:00 does not
     "y2106": calendar.timegm((2106, 2, 7, 6, 0, 0, 0, 0, 0)),
+    # past the 32-bit Timestamp altogether (Python's fromtimestamp cannot even hold INT64_MAX)
+    "u32": 2**32,
+    "i64max": 2**63 - 1,
     "none": None,
 }
 WAKEUP_CASES = (
     [(v, "t0") for v in WAKEUP_VALUES]
     + [(v, c) for c in ("exact", "yearend") for v in WAKEUP_EDGE_VALUES]
     + [(v, "y2106") for v in ("06:20 on", "07:00 on")]
+    + [(v, c) for c in ("u32", "i64max") for v in ("07:00 on", "07:00")]
     + [(v, "none") for v in ("07:00 on", "08:00")]
 )
 WAKEUP_VARIANTS = ["seed", "empty", "wakeup_on", "wakeup_off", "wakeup_no_area", "wakeup_frame"]
@@ -288,12 +292,20 @@ def expect(funcs, fn: str, what: str, value, states: dict, local_now: int | None
         return {"kind": "elsewhere", "reason": ESP_WAKEUP_CLOCK_REASON}
     saved = control.local_now
     if local_now is not None:
-        pinned = datetime.datetime.fromtimestamp(local_now, datetime.UTC).replace(tzinfo=None)
-        control.local_now = lambda: pinned
+        try:
+            pinned = datetime.datetime.fromtimestamp(local_now, datetime.UTC).replace(tzinfo=None)
+            control.local_now = lambda: pinned
+        except (OverflowError, OSError, ValueError):
+            # no datetime holds it: build raises like any Timestamp past 32 bits (the gates run first)
+            control.local_now = _unrepresentable_clock
     try:
         return _calictl_answer(funcs, fn, what, value, states)
     finally:
         control.local_now = saved
+
+
+def _unrepresentable_clock():
+    raise control.CommandError("local_now is past any representable clock")
 
 
 def _calictl_answer(funcs, fn: str, what: str, value, states: dict) -> dict:

@@ -537,8 +537,11 @@ static int p_wakeup(const char *value, int64_t now, cali_ctl_get_t get, cali_ctl
         p->pull = 1;
         return CALI_CTL_REFUSED;
     }
+    /* protocol.encode: Timestamp is 32-bit, and the next HH:MM is after now — so a clock past it is BAD
+     * before next_wakeup could overflow int64 (a huge local_now must never wrap into a made-up time) */
+    if (now > (int64_t)UINT32_MAX) return CALI_CTL_BAD_VALUE;
     ts = next_wakeup(w.hour, w.minute, now);
-    if (ts > (int64_t)UINT32_MAX) return CALI_CTL_BAD_VALUE;   /* protocol.encode: Timestamp is 32-bit */
+    if (ts > (int64_t)UINT32_MAX) return CALI_CTL_BAD_VALUE;
     reset(v);
     put(v, "ProfileNumber", CALI_LIGHT_UNCHANGED);
     put(v, "Mode", CALI_LIGHT_MODE_WAKEUP_TIME);

@@ -522,7 +522,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 
 .. req:: The satellite sets the wake-up light with the page's clock and the unit's own config
    :id: R_FW_WAKEUP
-   :status: implemented
+   :status: open
    :tags: esp32, control, lighting
 
    ``lighting wakeup`` shall be planned exactly as ``calictl.control`` would with its clock pinned to
