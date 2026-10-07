@@ -108,9 +108,27 @@ the notify-override, because its 1502 pushes include config/ack frames that `ser
 The mock models the case: a stale subscribe-time push (`notify_push`) plus a correct read
 (`tests/test_mock_integration.py`, `T_READ_ALL_LAST_FRAME_WINS`).
 
-**The 2026-08 stale "1 L" may have been calictl's own pinning**, not (only) the unit's latch. In
-the persistent session the subscribe-time value stayed served until the next reconnect. The owner
-saw the app show the correct level while parked, at the same time as calictl showed 1 L.
+**Hypothesis (to confirm with the #230 trace): the long-running parked "1 L" may have been calictl
+preferring the push, not (only) the unit's latch.** The owner states (2026-10-07) that the
+original app shows the right value. That was not a side-by-side comparison with calictl at the
+same moment. Two calictl paths served a push instead of the read:
+
+- **The per-op path (the likely cause).** Before this change, the per-op `read_all` preferred the
+  subscribe-time push over the read for **every** char. buspi's background polls mostly run on
+  this path: the persistent session is released when the web UI goes idle. Suppose the unit's
+  subscribe-time 1302 push carries the parked latch while its read is right. Then every per-op poll
+  showed the latch, for days, whereas the app lets the later read win.
+- **The persistent session (a minor cause).** Its pinning only lasted one UI-active session
+  (minutes), so it cannot explain days of 1 L.
+
+The 2026-07-14 comparison against the van's panel (above) **predates `PersistentSession`**
+(2026-07-17). It ran on the per-op path, so it fits this hypothesis as well as the latch
+explanation.
+
+To confirm or refute: on the next van wake, diff the push bytes against the read bytes for each
+char in `CALICTL_BLE_TRACE`, which records both on every link. If the 1302 push and read are
+identical while parked, the latch explanation stands. In that case the claim in "the settled
+conclusion" below, that the app "sees the same value", also stays true.
 
 **Open question (owner, after a van trace):** is `freshness.implausible_water_drop` still needed?
 It stays unchanged for now (with `water_stale_since`). If a parked trace shows the unit's 1302 read
@@ -132,6 +150,7 @@ the LINK alive during a read — not driving measurement.)
 
 **So there is no BLE-side fix**: buspi reads the char faithfully; the value it holds is the unit's
 last measurement and self-corrects only when the unit next re-measures (water system on). The phone
-app reads the same char and sees the same value; a physical control-panel "0" is that panel's own
+app reads the same char and sees the same value (2026-10-07: unproven — the app takes the READ, while
+calictl's per-op path took the subscribe-time PUSH; see "Read order" above and #230); a physical control-panel "0" is that panel's own
 continuously-sampled sensor, which the BLE char lags. The honest surface is the **stale flag** +
 "last measured" — never a fabricated floor-correction.

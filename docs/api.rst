@@ -104,6 +104,7 @@ Tests
 .. autofunction:: tests.test_mock_integration.test_read_all_heartbeat_refreshes_stale_read
 .. autofunction:: tests.test_mock_integration.test_read_all_read_after_subscribe_wins_over_stale_push
 .. autofunction:: tests.test_mock_integration.test_read_all_later_notify_overrides_the_read
+.. autofunction:: tests.test_mock_integration.test_read_all_lighting_config_push_never_replaces_the_read
 .. autofunction:: tests.test_mock_integration.test_lighting_applies_without_preamble
 .. autofunction:: tests.test_automation.test_no_loop_full_cycle_engine_shed_then_park_then_refused
 .. autofunction:: tests.test_automation.test_autocamper_step_restores_via_injected_actuate
