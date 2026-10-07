@@ -129,8 +129,9 @@ FOLLOW_DELAY_S = float(os.environ.get("CALICTL_FOLLOW_DELAY_S", "0.3"))  # gap b
 # gated (unit's water system powered) and its stale latch is handled by freshness.py. See
 # value-freshness.md.
 HEARTBEAT_WARMUP_S = float(os.environ.get("CALICTL_HEARTBEAT_WARMUP_S", "2.0"))
-# Water is push-only on 00001302 (qg/b never writes, no 1301 control char — traced 2026-08-18); a
-# bare read returns the stale latch. HYPOTHESIS (from 2026-07-14 notes): the 1003 liveness heartbeat
+# Water (00001302) has no control char (qg/b never writes, traced 2026-08-18). It is NOT push-only:
+# the app subscribes then READS 1302 and the last frame wins (decompile 2026-10-07), as read_all
+# now does. HYPOTHESIS (from 2026-07-14 notes): the 1003 liveness heartbeat
 # drives the unit to re-measure + push a fresh 1302 notification, so keeping it ticking and waiting
 # for the push would refresh water. UNVALIDATED — a 2026-08-18 on-van test was inconclusive because
 # both tanks were empty (0), so there was no changing level to fetch (fresh reads the ~1 L
@@ -138,13 +139,32 @@ HEARTBEAT_WARMUP_S = float(os.environ.get("CALICTL_HEARTBEAT_WARMUP_S", "2.0"))
 # changing tank; set CALICTL_WATER_PUSH_WAIT_S>0 to try it. See value-freshness.md.
 WATER_PUSH_WAIT_S = float(os.environ.get("CALICTL_WATER_PUSH_WAIT_S", "0"))
 
-# Functions whose state char is PUSH-ONLY for freshness: a bare read returns a stale latch and
-# the true value arrives only as a notification (water 1302, decompile-confirmed 2026-07-14).
-# For all other chars the persistent session live-reads each poll (a stale sticky push would
-# otherwise pin them). NB: whether water re-pushes under the subscribe-once persistent session
-# (vs per-op which re-subscribes each poll) is UNVERIFIED on-device — if water pins stale in
-# persistent mode, a periodic re-subscribe is the follow-up. See value-freshness.md.
-PUSH_ONLY_FUNCS = frozenset({"water"})
+
+def _later_pushes(out: dict, funcs: dict, notif: dict, seen: dict) -> None:
+    """The app's order: subscribe, then read; one decoder, the LAST frame wins (decompile
+    2026-10-07: ``jb/b`` subscribes then reads every char, ``qg/b.e`` decodes both alike).
+
+    ``seen`` maps each char read this pass to the notification object cached just before its read.
+    A notification that landed after that (a different object) replaces the read in ``out``. Chars
+    not read this pass are left alone, so a sticky subscribe-time push never pins a value.
+    Lighting is excluded: its 1502 pushes include config/ack frames (Mode 12/16/20), which
+    ``serve`` latches itself, not as the state frame.
+
+    .. req:: read_all follows the app's subscribe-then-read order, last frame wins
+       :id: R_READ_LAST_FRAME_WINS
+
+       Every state char (water 1302 included) is read after subscribing; the read replaces the
+       subscribe-time push, and a notification arriving after the read replaces the read. No char
+       is served from a push cache in place of a read.
+    """
+    for name, f in funcs.items():
+        key = str(f.state_char).lower() if f.state_char else None
+        if name == "lighting" or key not in seen:
+            continue
+        cur = notif.get(key)
+        if cur is not None and cur is not seen[key]:
+            out[name] = cur
+
 
 # roof move (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame won't complete travel:
 # the app streams the OPEN/CLOSE move frame continuously until STOP. Decompile of the app engine
@@ -330,7 +350,8 @@ class CamperDevice:
     async def _read_all_on(self, client, funcs: dict) -> dict[str, bytes]:
         out: dict[str, bytes] = {}
         notif: dict[str, bytes] = {}  # pushed values, keyed by lowercased char UUID
-        await self._subscribe_all(client, notif)  # water (1302) is push-only for freshness
+        seen: dict[str, bytes | None] = {}
+        await self._subscribe_all(client, notif)  # app order: subscribe, then read every char
         stop = asyncio.Event()
         beat = asyncio.ensure_future(self._heartbeat(client, stop))
         try:
@@ -338,18 +359,15 @@ class CamperDevice:
             for name, f in funcs.items():
                 if not f.state_char:
                     continue
-                pushed = notif.get(str(f.state_char).lower())
-                if pushed is not None:  # a fresh notification beats the stale latch
-                    out[name] = pushed
-                    continue
+                seen[str(f.state_char).lower()] = notif.get(str(f.state_char).lower())
                 data, up = await _read_char_with_retry(client, name, f.state_char)
                 if data is not None:
                     out[name] = data
                 if not up:
                     break
-            # Push-only freshness: water's true level is delivered as a heartbeat-driven 1302
-            # NOTIFICATION, not the instantaneous read (which returns the stale latch). If water only
-            # yielded a read, keep the heartbeat running and wait for the fresh push to land.
+            _later_pushes(out, funcs, notif, seen)  # a notify after the read wins (last frame)
+            # Opt-in (CALICTL_WATER_PUSH_WAIT_S>0, off by default): keep the heartbeat running and wait
+            # for a NEW 1302 notification — still last-frame-wins, just a longer window.
             await self._await_water_push(client, funcs, out, notif)
         finally:
             stop.set()
@@ -386,9 +404,8 @@ class CamperDevice:
             log.warning("water push-wait aborted: %r" % e)
 
     async def read(self, func) -> bytes:
-        """Read one function's state char under a live 1003 heartbeat (fresh, not the stale
-        latch — see :meth:`read_all`). Prefers a pushed notification when one arrives (water is
-        push-only for freshness — see :meth:`_subscribe_all`)."""
+        """Read one function's state char under a live 1003 heartbeat, after subscribing (the
+        app's order — the read lands after the subscribe-time push, so the read is returned)."""
         client = await self._session()
         notif: dict[str, bytes] = {}
         await self._subscribe_all(client, notif)
@@ -396,8 +413,7 @@ class CamperDevice:
         beat = asyncio.ensure_future(self._heartbeat(client, stop))
         try:
             await asyncio.sleep(HEARTBEAT_WARMUP_S)
-            pushed = notif.get(str(func.state_char).lower())
-            return pushed if pushed is not None else bytes(await client.read_gatt_char(func.state_char))
+            return bytes(await client.read_gatt_char(func.state_char))
         finally:
             stop.set()
             try:
@@ -808,9 +824,10 @@ class CamperDevice:
         count; individual failures are swallowed (best-effort handshake).
 
         When ``sink`` is given, pushed notifications are captured into it keyed by the
-        lowercased char UUID. Some chars are **push-only for freshness** — notably water
-        (``1302``): a bare read returns a stale latch, and the true level arrives only as a
-        notification (decompile-confirmed 2026-07-14). Readers prefer ``sink`` over a bare read.
+        lowercased char UUID. Readers read every char after subscribing and let a notification
+        replace a read only when it arrived after that read (:func:`_later_pushes`, the app's
+        last-frame-wins order). There is no push-only char: the 2026-07-14 "water is push-only"
+        claim is contradicted by the decompile (2026-10-07: the app reads 1302 after subscribing).
 
         When ``on_push(uuid_lower, data)`` is given, it is called for EVERY notification (in
         addition to the sink) — the daemon uses it to log camping/ignition changes the instant
@@ -899,31 +916,29 @@ class PersistentSession:
     async def read_all(self, funcs: dict) -> dict[str, bytes]:
         """Live-read every function's state char over the already-connected client.
 
-        Mirrors :meth:`CamperDevice._read_all_on`'s retry/logging behaviour: a char not
-        satisfied by a push is retried up to 3x (0.8 s backoff) before being skipped, with a
-        failure logged, and the cycle aborts early if the client itself disconnects mid-loop.
+        Mirrors :meth:`CamperDevice._read_all_on`'s retry/logging behaviour: a char is retried
+        up to 3x (0.8 s backoff) before being skipped, with a failure logged, and the cycle aborts
+        early if the client itself disconnects mid-loop.
 
-        Only :data:`PUSH_ONLY_FUNCS` (water) may be served from the persistent notification
-        cache (``self._notif``) indefinitely — it is push-only-for-freshness, so a bare read
-        would return a stale latch. Every other notifiable char is live-read each poll: this
-        cache lives for the lifetime of the session, so trusting it for an ordinary char would
-        pin whatever value was captured at subscribe time forever.
+        Every char — water (1302) included — is live-read each poll, as the app re-reads after
+        subscribing: the notification cache (``self._notif``) lives as long as the session, so
+        serving from it would pin the subscribe-time value forever (the 2026-08 stale "1 L" may
+        have been exactly that). A notification that lands after a char's read in this poll
+        replaces the read (:func:`_later_pushes`, last frame wins).
         """
         out: dict[str, bytes] = {}
+        seen: dict[str, bytes | None] = {}
         client = self._client
         for name, f in funcs.items():
             if not f.state_char:
                 continue
-            if name in PUSH_ONLY_FUNCS:
-                pushed = self._notif.get(str(f.state_char).lower())
-                if pushed is not None:
-                    out[name] = pushed
-                    continue
+            seen[str(f.state_char).lower()] = self._notif.get(str(f.state_char).lower())
             data, up = await _read_char_with_retry(client, name, f.state_char)
             if data is not None:
                 out[name] = data
             if not up:
                 break
+        _later_pushes(out, funcs, self._notif, seen)
         return out
 
     async def read_one(self, func) -> bytes:

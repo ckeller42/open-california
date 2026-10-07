@@ -155,9 +155,6 @@ def test_lighting_applies_without_preamble(mock):
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
 
 
-# --- read_all prefers pushed notifications over a stale latched read ---------
-
-
 def test_connect_timeout_is_tunable_for_a_flaky_link(monkeypatch):
     """The per-attempt connect timeout must be tunable without a code change.
 
@@ -204,22 +201,82 @@ def test_read_all_heartbeat_refreshes_stale_read(mock):
     assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 11
 
 
-def test_read_all_prefers_water_notification_over_stale_read(mock):
-    """Water (1302) is PUSH-ONLY for freshness (decompile-confirmed 2026-07-14: the app's water VM
-    ``qg/b`` reads the level from the 1302 notification, not a bare read). A bare read returns the
-    stale latch; ``read_all`` now subscribes and prefers the pushed value."""
+# --- read_all: subscribe, then read; the last frame wins (app order) ---------
+
+
+def test_read_all_read_after_subscribe_wins_over_stale_push(mock):
+    """App order (decompile 2026-10-07, ``jb/b``): subscribe 1302, THEN read 1302; both land in the
+    one decoder ``qg/b.e`` and the LAST frame wins. The subscribe-time push carries a stale 1 L,
+    the read that follows carries the correct 17 L -> calictl must surface the read.
+
+    .. test:: read_all: a read after the subscribe push wins (app order, last frame wins)
+       :id: T_READ_ALL_LAST_FRAME_WINS
+       :links: R_READ_LAST_FRAME_WINS
+    """
     import asyncio
 
     from calictl import device, protocol
 
-    mock.state["water"]["FreshWaterLevel"] = 1  # bare read = stale latch
-    mock.notify_push["water"] = {"FreshWaterLevel": 11}  # the unit pushes the truth
+    mock.state["water"]["FreshWaterLevel"] = 17  # what a read returns
+    mock.notify_push["water"] = {"FreshWaterLevel": 1}  # the subscribe-time push: stale
     funcs = mock.funcs
-    # a bare read still sees the stale 1...
-    assert protocol.decode(funcs["water"], mock.read(funcs["water"].state_char))["FreshWaterLevel"] == 1
-    # ...but read_all consumes the 1302 notification and surfaces 11
     raw = asyncio.run(device.CamperDevice("11:22:33:44:55:66").read_all(funcs))
-    assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 11
+    assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 17
+
+
+def test_read_all_later_notify_overrides_the_read(mock):
+    """Last frame wins both ways: a 1302 notification arriving AFTER the read replaces it.
+
+    .. test:: read_all: a notify arriving after the read overrides it
+       :id: T_READ_ALL_LATER_NOTIFY_WINS
+       :links: R_READ_LAST_FRAME_WINS
+    """
+    import asyncio
+
+    from calictl import device, protocol
+
+    mock.state["water"]["FreshWaterLevel"] = 17
+    funcs = {"water": mock.funcs["water"], "cooler": mock.funcs["cooler"]}
+    real_read = mock.read
+    cooler_char = str(funcs["cooler"].state_char)
+
+    def read(uuid):  # while the cooler is read (after water), the unit pushes a new water level
+        if str(uuid) == cooler_char:
+            mock.push("water", {"FreshWaterLevel": 9})
+        return real_read(uuid)
+
+    mock.read = read
+    raw = asyncio.run(device.CamperDevice("11:22:33:44:55:66").read_all(funcs))
+    assert protocol.decode(funcs["water"], raw["water"])["FreshWaterLevel"] == 9
+
+
+def test_read_all_lighting_config_push_never_replaces_the_read(mock):
+    """Lighting is excluded from the later-notify override: a 1502 config frame (Mode 20, the
+    wake-up config) that lands after the lighting read must not become the polled lighting state
+    (``serve`` latches config frames itself; decoded as state it would garble the zones).
+
+    .. test:: read_all keeps the lighting read when a later 1502 config push lands
+       :id: T_READ_ALL_LIGHTING_EXCLUDED
+       :links: R_READ_LAST_FRAME_WINS
+    """
+    import asyncio
+
+    from calictl import device, protocol
+
+    funcs = {"lighting": mock.funcs["lighting"], "cooler": mock.funcs["cooler"]}
+    want = mock.read(funcs["lighting"].state_char)
+    real_read = mock.read
+    cooler_char = str(funcs["cooler"].state_char)
+
+    def read(uuid):  # while the cooler is read (after lighting), the unit pushes a Mode-20 frame
+        if str(uuid) == cooler_char:
+            mock.push("lighting", {"Mode": 20, "ProfileNumber": 14})
+        return real_read(uuid)
+
+    mock.read = read
+    raw = asyncio.run(device.CamperDevice("11:22:33:44:55:66").read_all(funcs))
+    assert raw["lighting"] == want
+    assert protocol.decode(funcs["lighting"], raw["lighting"])["Mode"] != 20
 
 
 # --- the 1003 arm-gate, at the unit level -----------------------------------

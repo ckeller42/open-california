@@ -83,6 +83,58 @@ recorded per-poll in `poll_outcomes.jsonl` and classified by `tools.analyze_batt
 - **Daemon down / Pi reboot** — no `poll_outcomes` rows at all for the window.
 - **Influx-write failure** — polls succeed (`outcome: ok`) but nothing is stored: a *false* gap.
 
+## Read order: subscribe, then read, last frame wins (2026-10-07)
+
+**Decompile (APK via jadx, enigma `38a0d6b` in the private RE repo):** at every (re)connect the app
+writes the CCCD of each notifiable char and **then reads it** (`jb/b`, for each descriptor:
+subscribe, then an unconditional READ). The read result and every notification go into **one
+decoder** (`qd/b` read → `i2` tag 26 re-emits it into the same flow as notifies → `qg/b.e`), which
+sets the water StateFlows unconditionally. So the **last frame to arrive wins**, normally the read.
+The app has no water cache, no validity gate, no "last measured" UI, no wake write and no periodic
+1302 re-read.
+
+This **contradicts the 2026-07-14 "water is push-only for freshness" claim**, which calictl had
+built into two places:
+
+- `PersistentSession.read_all` (`PUSH_ONLY_FUNCS = {"water"}`) served water from the
+  **subscribe-time push for the whole session** and never re-read 1302. Its own comment said this
+  was UNVERIFIED on-device.
+- the per-op `read_all`/`read` preferred any push over the read.
+
+**calictl now follows the app** (`R_READ_LAST_FRAME_WINS`, `device._later_pushes`): every poll
+reads every state char, water included, after the subscribe. The read replaces the subscribe-time
+push, and a notification that arrives after the read replaces the read. Lighting is excluded from
+the notify-override, because its 1502 pushes include config/ack frames that `serve` latches itself.
+The mock models the case: a stale subscribe-time push (`notify_push`) plus a correct read
+(`tests/test_mock_integration.py`, `T_READ_ALL_LAST_FRAME_WINS`).
+
+**Hypothesis (to confirm with the #230 trace): the long-running parked "1 L" may have been calictl
+preferring the push, not (only) the unit's latch.** The owner states (2026-10-07) that the
+original app shows the right value. That was not a side-by-side comparison with calictl at the
+same moment. Two calictl paths served a push instead of the read:
+
+- **The per-op path (the likely cause).** Before this change, the per-op `read_all` preferred the
+  subscribe-time push over the read for **every** char. buspi's background polls mostly run on
+  this path: the persistent session is released when the web UI goes idle. Suppose the unit's
+  subscribe-time 1302 push carries the parked latch while its read is right. Then every per-op poll
+  showed the latch, for days, whereas the app lets the later read win.
+- **The persistent session (a minor cause).** Its pinning only lasted one UI-active session
+  (minutes), so it cannot explain days of 1 L.
+
+The 2026-07-14 comparison against the van's panel (above) **predates `PersistentSession`**
+(2026-07-17). It ran on the per-op path, so it fits this hypothesis as well as the latch
+explanation.
+
+To confirm or refute: on the next van wake, diff the push bytes against the read bytes for each
+char in `CALICTL_BLE_TRACE`, which records both on every link. If the 1302 push and read are
+identical while parked, the latch explanation stands. In that case the claim in "the settled
+conclusion" below, that the app "sees the same value", also stays true.
+
+**Open question (owner, after a van trace):** is `freshness.implausible_water_drop` still needed?
+It stays unchanged for now (with `water_stale_since`). If a parked trace shows the unit's 1302 read
+is always right, the guard may be redundant. If the unit really latches while parked, the guard
+remains the only defence; the app has none. The van check is in `remaining-captures.md` §1 (#230).
+
 ## Water freshness — the settled conclusion (2026-08-19)
 
 Traced end-to-end. Water is READ-ONLY on char `1302` (no `1301` control char, `qg/b` never writes),
@@ -98,6 +150,7 @@ the LINK alive during a read — not driving measurement.)
 
 **So there is no BLE-side fix**: buspi reads the char faithfully; the value it holds is the unit's
 last measurement and self-corrects only when the unit next re-measures (water system on). The phone
-app reads the same char and sees the same value; a physical control-panel "0" is that panel's own
+app reads the same char and sees the same value (2026-10-07: unproven — the app takes the READ, while
+calictl's per-op path took the subscribe-time PUSH; see "Read order" above and #230); a physical control-panel "0" is that panel's own
 continuously-sampled sensor, which the BLE char lags. The honest surface is the **stale flag** +
 "last measured" — never a fabricated floor-correction.

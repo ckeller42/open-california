@@ -1,7 +1,7 @@
 import asyncio
 
 from calictl import control, device, overrides, protocol
-from tools.mock_unit import MockBleakClient, MockCamperUnit
+from tools.mock_unit import MockBleakClient, MockCamperUnit, _pack_state
 
 
 def _funcs():
@@ -171,41 +171,49 @@ def test_persistent_read_all_breaks_on_disconnect_mid_loop(monkeypatch):
     assert out == {}  # first read dropped the link -> loop broke, second func never attempted
 
 
-def test_read_all_only_trusts_sticky_push_for_push_only_funcs(monkeypatch):
+def test_read_all_live_reads_every_func_last_frame_wins(monkeypatch):
     """
-    .. test:: read_all scopes the sticky-notification cache to PUSH_ONLY_FUNCS
+    .. test:: persistent read_all live-reads water too; only a LATER notify overrides a read
        :id: T_PERSISTENT_READ_ALL_SCOPED_PUSH
-       :links: R_PERSISTENT_SESSION
+       :links: R_PERSISTENT_SESSION, R_READ_LAST_FRAME_WINS
 
-       Only push-only-for-freshness functions (water/1302) may be served from a cached
-       notification indefinitely. Every other notifiable char must be LIVE-read each poll, so a
-       stale subscribe-time value in ``_notif`` never pins it.
+       Every function, water (1302) included, is LIVE-read each poll: a stale subscribe-time value
+       in ``_notif`` never pins it (the app re-reads 1302 after subscribing; it has no push-only
+       rule, decompile 2026-10-07). A notification that lands AFTER its char was read in this poll
+       replaces the read (the app's one decoder: last frame wins).
     """
     funcs = _funcs()
     unit = MockCamperUnit()
+    unit.state["water"]["FreshWaterLevel"] = 17
     cooler_char = str(funcs["cooler"].state_char).lower()
     water_char = str(funcs["water"].state_char).lower()
-    live_cooler_raw = unit.read(funcs["cooler"].state_char)  # the current (fresh) truth
-    stale_cooler_raw = bytes([0xFF] * len(live_cooler_raw))  # obviously-different stale value
-    water_push_raw = unit.read(funcs["water"].state_char)
+    live_cooler_raw = unit.read(funcs["cooler"].state_char)
+    live_water_raw = unit.read(funcs["water"].state_char)
+    stale_cooler_raw = bytes([0xFF] * len(live_cooler_raw))
+    stale_water_raw = _pack_state(funcs["water"], {**unit.decoded("water"), "FreshWaterLevel": 1})
+    later_water_raw = _pack_state(funcs["water"], {**unit.decoded("water"), "FreshWaterLevel": 9})
+    sess = device.PersistentSession(device.CamperDevice("MO:CK"))
+    push_during_cooler_read = []
 
     class Client:
         is_connected = True
 
         async def read_gatt_char(self, uuid):
+            if str(uuid).lower() == cooler_char and push_during_cooler_read:
+                sess._notif[water_char] = push_during_cooler_read.pop()  # lands after water's read
             return unit.read(str(uuid))
 
-    sess = device.PersistentSession(device.CamperDevice("MO:CK"))
     sess._client = Client()
-    sess._notif = {cooler_char: stale_cooler_raw, water_char: water_push_raw}
+    order = {"water": funcs["water"], "cooler": funcs["cooler"]}
 
-    async def _run():
-        return await sess.read_all({"cooler": funcs["cooler"], "water": funcs["water"]})
+    sess._notif = {cooler_char: stale_cooler_raw, water_char: stale_water_raw}
+    out = asyncio.run(sess.read_all(order))
+    assert out["cooler"] == live_cooler_raw  # the subscribe-time push never pins
+    assert out["water"] == live_water_raw  # water is live-read too (17, not the stale 1)
 
-    out = asyncio.run(_run())
-    assert out["cooler"] == live_cooler_raw  # LIVE read wins for a non-push-only func
-    assert out["cooler"] != stale_cooler_raw
-    assert out["water"] == water_push_raw  # water still uses the sticky push
+    push_during_cooler_read.append(later_water_raw)
+    out = asyncio.run(sess.read_all(order))
+    assert out["water"] == later_water_raw  # a notify after the read wins
 
 
 def test_read_char_retry_reports_disconnect_on_successful_read():

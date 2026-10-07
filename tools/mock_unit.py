@@ -232,9 +232,10 @@ class MockCamperUnit:
         # the heartbeat refreshes. NOT water: the old "1 L latched vs 11 L once the heartbeat runs"
         # story was correlation; water's real gate is `water_powered` (value-freshness.md).
         self.read_latch: dict[str, dict] = {}
-        # Per-function NOTIFICATION push values: what the unit pushes on the state char (vs the
-        # bare-read latch). Models push-only-for-freshness chars like water (1302), where a bare
-        # read returns the stale latch and the true value arrives only as a notification.
+        # Per-function subscribe-time NOTIFICATION overlay: what the unit pushes on the CCCD write,
+        # when it differs from what a read returns. E.g. a stale water push (1 L) followed by a
+        # correct read (17 L): the app reads after subscribing and the last frame wins, so calictl
+        # must surface the read (tests/test_mock_integration.py). Not a "push-only" model.
         self.notify_push: dict[str, dict] = {}
         # Live notification subscriptions: state-char UUID -> [callback]. `MockBleakClient`
         # registers here on start_notify so the unit can PUSH after subscribe time, the way the
@@ -942,8 +943,8 @@ class MockBleakClient:
     async def start_notify(self, uuid, cb):
         # The unit pushes a char's CURRENT value once as soon as a client enables notifications
         # (buspi trace 2026-09-16: one notify per subscribed char right after its CCCD write, then
-        # only on change — it does not stream). A pending `notify_push` (the fresh value of a
-        # push-only char such as water) takes precedence; a function with a stale read-latch armed
+        # only on change — it does not stream). A pending `notify_push` overlay replaces the
+        # subscribe-time value; a function with a stale read-latch armed
         # pushes nothing (its fresh value only arrives once the heartbeat has run).
         fn = self.unit._state_char.get(str(uuid))
         if fn is None:

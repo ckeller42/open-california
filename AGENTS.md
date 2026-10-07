@@ -151,8 +151,11 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
 - **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads (`device.read_all`/
   `read` do) to keep the link up (dropped after ~15 s otherwise) and refresh the re-read chars. It does
   NOT refresh water: water is measurement-gated (the unit measures only while its water system is
-  powered), so a parked read returns a stale latch — `freshness.implausible_water_drop` holds the last
-  plausible reading and flags it stale (the old "1 L vs 11 L" heartbeat story was correlation). Parked, the
+  powered), so a parked read may return a stale latch — `freshness.implausible_water_drop` holds the last
+  plausible reading and flags it stale (the old "1 L vs 11 L" heartbeat story was correlation). Water is
+  **not push-only**: like the app, every poll reads 1302 after subscribing and the last frame wins
+  (`R_READ_LAST_FRAME_WINS`, 2026-10-07); the old persistent-session push pinning may have caused the
+  parked "1 L" — whether the guard is still needed is open until a #230 van trace. Parked, the
   unit deep-sleeps and stops advertising — buspi can't connect for days until physical use wakes it, so
   access is **inherently intermittent**: `serve` persists last-state + an "as of" timestamp, and the
   web UI shows an offline banner. See `value-freshness.md`.
