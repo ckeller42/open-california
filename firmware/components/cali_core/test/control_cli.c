@@ -1,10 +1,11 @@
 /* control_cli.c — line driver for tests/firmware/test_control_parity.py ONLY; not in any firmware
- * build. Links control.c + csrc/codec.c. stdin, one command per line; only P/W/A print, one line each:
+ * build. Links control.c + csrc/codec.c. stdin, one command per line; only P/C/W/A print, one line each:
  *   X                     forget every function's state
  *   S <fn> [Field=v ...]  replace fn's decoded state
  *   P <fn> <what> <tok>   cali_ctl_plan; tok = n (null -> "") | i:<decimal> | s:<percent-encoded>
  *                         -> OK <char>/<delay_ms>/<hex> ... | REFUSED <reason> | ELSEWHERE <reason>
  *                            | BAD | NONE | ERR parse
+ *   C                     -> CFG[ <Key>=<v>]... cali_light_cfg: the known latch keys, CALI_LCFG_KEYS order
  *   W <hex char> <len>    -> OK 1|0 (cali_ctl_write_ok)
  *   A                     -> OK <char>/<len> ... every allowed pair: chars 0..0xffff ascending,
  *                            lengths 0..CODEC_FRAME_MAX+1
@@ -107,6 +108,13 @@ int main(void) {
             set_state(line + 2);
         } else if (strncmp(line, "P ", 2) == 0) {
             plan_line(line + 2);
+        } else if (strcmp(line, "C") == 0) {
+            cali_light_cfg_t cfg;
+            cali_light_cfg(get, &cfg);
+            fputs("CFG", stdout);
+            for (int k = 0; k < CALI_LCFG_N; k++)
+                if (cfg.have >> k & 1u) printf(" %s=%lu", CALI_LCFG_KEYS[k], (unsigned long)cfg.v[k]);
+            putchar('\n');
         } else if (sscanf(line, "W %x %u", &c, &len) == 2) {
             printf("OK %d\n", cali_ctl_write_ok((uint16_t)c, len));
         } else if (strcmp(line, "A") == 0) {

@@ -14,6 +14,10 @@ write (char, delay, bytes), or bad/none.
 .. test:: The write allow-list is exactly the five control chars at their frame length
    :id: T_FW_WRITE_ALLOWLIST_PURE
    :links: R_FW_WRITE_ALLOWLIST
+
+.. test:: The C lighting-config latch equals semantics.lighting_config
+   :id: T_FW_LIGHT_CFG_PARITY
+   :links: R_FW_CONTROL_TWIN
 """
 
 import json
@@ -25,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from calictl import overrides, protocol
+from calictl import overrides, protocol, semantics
 from tools import gen_control_vectors
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -154,3 +158,39 @@ def test_write_allow_list_is_exactly_the_control_chars(cli):
 )
 def test_write_ok_spot_checks(cli, line, out):
     assert drive(cli, [line]) == [out]
+
+
+def _latch_cases():
+    frames = []
+    for mode in (0, 4, 12, 16, 20):
+        for pn in (None, 0, 1, 7, 8, 13, 14):
+            for lv in (None, 0, 1, 0x7F, 0xFF, 0x1101):
+                for ts in (None, 25200):
+                    f = {"Mode": mode}
+                    for k, v in (("ProfileNumber", pn), ("LightValue", lv), ("Timestamp", ts)):
+                        if v is not None:
+                            f[k] = v
+                    frames.append(f)
+    prevs = [
+        {},
+        {"FavouritesStored": 0b101},
+        {"WakeupTimestamp": 23400, "WakeupLightValue": 0x3575, "DoorContact": 1, "FavouritesStored": 0},
+    ]
+    return [(p, f) for p in prevs for f in frames]
+
+
+def test_light_config_latch_equals_semantics(cli):
+    """``cali_light_cfg`` over (previous latch keys + a frame) = ``semantics.lighting_config(prev, frame)``
+    for every Mode x ProfileNumber x LightValue x Timestamp combination, absent fields included."""
+    cases = _latch_cases()
+    lines = []
+    for prev, frame in cases:
+        lines += state_lines({"lighting": {**prev, **frame}})
+        lines.append("C")
+    out = drive(cli, lines)
+    want = []
+    for prev, frame in cases:
+        cfg = semantics.lighting_config(prev, frame)
+        want.append("CFG" + "".join(" %s=%d" % (k, cfg[k]) for k in semantics.LIGHT_CONFIG_KEYS if k in cfg))
+    bad = [(c, g, w) for c, g, w in zip(cases, out, want) if g != w]
+    assert len(out) == len(cases) and not bad, bad[:5]

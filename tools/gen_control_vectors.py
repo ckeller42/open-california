@@ -147,6 +147,7 @@ VARIANTS = {
         "roof_open",
         "fav_3_empty",
         "fav_request_echo",
+        "fav_latched",
         "lighting_levels",
     ],
 }
@@ -196,6 +197,7 @@ def _states(funcs) -> dict[str, dict]:
         "roof_open": v(roof={"Position": 1}),
         "fav_3_empty": v(lighting={"Mode": 12, "ProfileNumber": 0, "LightValue": 0b1111011}),
         "fav_request_echo": v(lighting={"Mode": 12, "ProfileNumber": 13, "LightValue": 0}),
+        "fav_latched": v(lighting={"FavouritesStored": 0b1111011}),  # serve's latch key, current frame Mode 0
         "lighting_levels": v(
             lighting={
                 "BrightnessLOne": 5,

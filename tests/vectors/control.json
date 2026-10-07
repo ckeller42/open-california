@@ -1647,6 +1647,144 @@
     "CarLevelPitch": 35
    }
   },
+  "fav_latched": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13,
+    "FavouritesStored": 123
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
   "lighting_levels": {
    "general": {
     "AmbSwVersion": 808726832,
@@ -7281,6 +7419,28 @@
    }
   },
   {
+   "id": "lighting/power/\"on\"@fav_latched",
+   "function": "lighting",
+   "what": "power",
+   "value": "on",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0c10000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/power/\"on\"@lighting_levels",
    "function": "lighting",
    "what": "power",
@@ -7440,6 +7600,28 @@
    "what": "power",
    "value": "off",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0010000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/power/\"off\"@fav_latched",
+   "function": "lighting",
+   "what": "power",
+   "value": "off",
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7633,6 +7815,28 @@
    }
   },
   {
+   "id": "lighting/all/0@fav_latched",
+   "function": "lighting",
+   "what": "all",
+   "value": 0,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "090400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/all/0@lighting_levels",
    "function": "lighting",
    "what": "all",
@@ -7792,6 +7996,28 @@
    "what": "all",
    "value": 10,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000aaaaaaaaeaaeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/all/10@fav_latched",
+   "function": "lighting",
+   "what": "all",
+   "value": 10,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7985,6 +8211,28 @@
    }
   },
   {
+   "id": "lighting/all/11@fav_latched",
+   "function": "lighting",
+   "what": "all",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000bbbbbbbbebbeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/all/11@lighting_levels",
    "function": "lighting",
    "what": "all",
@@ -8077,6 +8325,16 @@
    }
   },
   {
+   "id": "lighting/all/12@fav_latched",
+   "function": "lighting",
+   "what": "all",
+   "value": 12,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/all/12@lighting_levels",
    "function": "lighting",
    "what": "all",
@@ -8152,6 +8410,16 @@
    "what": "all",
    "value": -1,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/all/-1@fav_latched",
+   "function": "lighting",
+   "what": "all",
+   "value": -1,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -8321,6 +8589,28 @@
    }
   },
   {
+   "id": "lighting/all/\"5\"@fav_latched",
+   "function": "lighting",
+   "what": "all",
+   "value": "5",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "090400000000000055555555e55eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/all/\"5\"@lighting_levels",
    "function": "lighting",
    "what": "all",
@@ -8408,6 +8698,16 @@
    "what": "all",
    "value": null,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/all/null@fav_latched",
+   "function": "lighting",
+   "what": "all",
+   "value": null,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -8560,6 +8860,28 @@
    "what": "profile",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0010000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/profile/0@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -8753,6 +9075,28 @@
    }
   },
   {
+   "id": "lighting/profile/1@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": 1,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0110000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/profile/1@lighting_levels",
    "function": "lighting",
    "what": "profile",
@@ -8915,6 +9259,17 @@
       "hex": "0e00000000000000eeeeeeeeeeeeeeee"
      }
     ]
+   }
+  },
+  {
+   "id": "lighting/profile/3@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": 3,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "refused",
+    "reason": "this favourite is empty on the unit — save it first"
    }
   },
   {
@@ -9094,6 +9449,28 @@
    }
   },
   {
+   "id": "lighting/profile/7@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": 7,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0710000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/profile/7@lighting_levels",
    "function": "lighting",
    "what": "profile",
@@ -9181,6 +9558,16 @@
    "what": "profile",
    "value": 8,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/profile/8@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": 8,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -9350,6 +9737,28 @@
    }
   },
   {
+   "id": "lighting/profile/13@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": 13,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0d10000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/profile/13@lighting_levels",
    "function": "lighting",
    "what": "profile",
@@ -9437,6 +9846,16 @@
    "what": "profile",
    "value": 14,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/profile/14@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": 14,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -9595,6 +10014,17 @@
    }
   },
   {
+   "id": "lighting/profile/\"3\"@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": "3",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "refused",
+    "reason": "this favourite is empty on the unit — save it first"
+   }
+  },
+  {
    "id": "lighting/profile/\"3\"@lighting_levels",
    "function": "lighting",
    "what": "profile",
@@ -9682,6 +10112,16 @@
    "what": "profile",
    "value": null,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/profile/null@fav_latched",
+   "function": "lighting",
+   "what": "profile",
+   "value": null,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -9834,6 +10274,28 @@
    "what": "save_profile",
    "value": "1",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "010400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"1\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "1",
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -10010,6 +10472,28 @@
    "what": "save_profile",
    "value": "7",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "070400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"7\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "7",
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -10246,6 +10730,38 @@
    "what": "save_profile",
    "value": "3 amber",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 amber\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 amber",
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -10529,6 +11045,38 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"3 Dark_Blue\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 Dark_Blue",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000800000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/save_profile/\"3 Dark_Blue\"@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -10631,6 +11179,16 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"3 purple\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 purple",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/save_profile/\"3 purple\"@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -10706,6 +11264,16 @@
    "what": "save_profile",
    "value": "0",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"0\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "0",
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -10791,6 +11359,16 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"8\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "8",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/save_profile/\"8\"@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -10866,6 +11444,16 @@
    "what": "save_profile",
    "value": "1 2 3",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"1 2 3\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "1 2 3",
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -10951,6 +11539,16 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/save_profile/\"\"@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -11026,6 +11624,16 @@
    "what": "save_profile",
    "value": null,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/null@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": null,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -11195,6 +11803,28 @@
    }
   },
   {
+   "id": "lighting/save_profile/5@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "050400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/save_profile/5@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -11282,6 +11912,16 @@
    "what": "save_profile",
    "value": "3 red                                                               extra",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@fav_latched",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -11434,6 +12074,28 @@
    "what": "door_contact",
    "value": "on",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000001eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/door_contact/\"on\"@fav_latched",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "on",
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -11627,6 +12289,28 @@
    }
   },
   {
+   "id": "lighting/door_contact/\"off\"@fav_latched",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "off",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/door_contact/\"off\"@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -11786,6 +12470,28 @@
    "what": "door_contact",
    "value": "1",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000001eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/door_contact/\"1\"@fav_latched",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "1",
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -11979,6 +12685,28 @@
    }
   },
   {
+   "id": "lighting/door_contact/\"0\"@fav_latched",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "0",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/door_contact/\"0\"@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -12138,6 +12866,28 @@
    "what": "door_contact",
    "value": "true",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000001eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/door_contact/\"true\"@fav_latched",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "true",
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -12331,6 +13081,28 @@
    }
   },
   {
+   "id": "lighting/door_contact/\"false\"@fav_latched",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "false",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/door_contact/\"false\"@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -12430,6 +13202,17 @@
    }
   },
   {
+   "id": "lighting/door_contact/\"maybe\"@fav_latched",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "maybe",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "refused",
+    "reason": "the value must be on or off (or true/false, 1/0) — anything else is refused, never read as off"
+   }
+  },
+  {
    "id": "lighting/door_contact/\"maybe\"@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -12518,6 +13301,17 @@
    }
   },
   {
+   "id": "lighting/door_contact/null@fav_latched",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": null,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "refused",
+    "reason": "the value must be on or off (or true/false, 1/0) — anything else is refused, never read as off"
+   }
+  },
+  {
    "id": "lighting/door_contact/null@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -12599,6 +13393,16 @@
    }
   },
   {
+   "id": "lighting/color/\"red\"@fav_latched",
+   "function": "lighting",
+   "what": "color",
+   "value": "red",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/color/\"red\"@lighting_levels",
    "function": "lighting",
    "what": "color",
@@ -12674,6 +13478,16 @@
    "what": "nonexistent",
    "value": 3,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/nonexistent/3@fav_latched",
+   "function": "lighting",
+   "what": "nonexistent",
+   "value": 3,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -12826,6 +13640,28 @@
    "what": "BrightnessLNine",
    "value": 3,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeee3eeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/BrightnessLNine/3@fav_latched",
+   "function": "lighting",
+   "what": "BrightnessLNine",
+   "value": 3,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -13019,6 +13855,28 @@
    }
   },
   {
+   "id": "lighting/BrightnessLOneSix/3@fav_latched",
+   "function": "lighting",
+   "what": "BrightnessLOneSix",
+   "value": 3,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeeeeeeee3e"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/BrightnessLOneSix/3@lighting_levels",
    "function": "lighting",
    "what": "BrightnessLOneSix",
@@ -13195,6 +14053,28 @@
    }
   },
   {
+   "id": "lighting/roof-reading/0@fav_latched",
+   "function": "lighting",
+   "what": "roof-reading",
+   "value": 0,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeee0eeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/roof-reading/0@lighting_levels",
    "function": "lighting",
    "what": "roof-reading",
@@ -13316,6 +14196,17 @@
    }
   },
   {
+   "id": "lighting/roof-reading/5@fav_latched",
+   "function": "lighting",
+   "what": "roof-reading",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "refused",
+    "reason": "the pop-top roof reading light needs the roof raised (roof is closed)"
+   }
+  },
+  {
    "id": "lighting/roof-reading/5@lighting_levels",
    "function": "lighting",
    "what": "roof-reading",
@@ -13392,6 +14283,16 @@
    "what": "roof-reading",
    "value": "x",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/roof-reading/\"x\"@fav_latched",
+   "function": "lighting",
+   "what": "roof-reading",
+   "value": "x",
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -13484,6 +14385,17 @@
    }
   },
   {
+   "id": "lighting/wakeup/\"07:00 on\"@fav_latched",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "fav_latched",
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "Only via buspi or the app"
+   }
+  },
+  {
    "id": "lighting/wakeup/\"07:00 on\"@lighting_levels",
    "function": "lighting",
    "what": "wakeup",
@@ -13566,6 +14478,17 @@
    "what": "wakeup",
    "value": "off",
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "Only via buspi or the app"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"off\"@fav_latched",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "off",
+   "state": "fav_latched",
    "expect": {
     "kind": "elsewhere",
     "reason": "Only via buspi or the app"
@@ -13720,6 +14643,28 @@
    "what": "reading-1",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "09040000000000000eeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/reading-1/0@fav_latched",
+   "function": "lighting",
+   "what": "reading-1",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -13913,6 +14858,28 @@
    }
   },
   {
+   "id": "lighting/reading-1/5@fav_latched",
+   "function": "lighting",
+   "what": "reading-1",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "09040000000000005eeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-1/5@lighting_levels",
    "function": "lighting",
    "what": "reading-1",
@@ -14089,6 +15056,28 @@
    }
   },
   {
+   "id": "lighting/reading-1/11@fav_latched",
+   "function": "lighting",
+   "what": "reading-1",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000beeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-1/11@lighting_levels",
    "function": "lighting",
    "what": "reading-1",
@@ -14176,6 +15165,16 @@
    "what": "reading-1",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/reading-1/12@fav_latched",
+   "function": "lighting",
+   "what": "reading-1",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -14328,6 +15327,28 @@
    "what": "reading-2",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000e0eeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/reading-2/0@fav_latched",
+   "function": "lighting",
+   "what": "reading-2",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -14521,6 +15542,28 @@
    }
   },
   {
+   "id": "lighting/reading-2/5@fav_latched",
+   "function": "lighting",
+   "what": "reading-2",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000e5eeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-2/5@lighting_levels",
    "function": "lighting",
    "what": "reading-2",
@@ -14697,6 +15740,28 @@
    }
   },
   {
+   "id": "lighting/reading-2/11@fav_latched",
+   "function": "lighting",
+   "what": "reading-2",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000ebeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-2/11@lighting_levels",
    "function": "lighting",
    "what": "reading-2",
@@ -14784,6 +15849,16 @@
    "what": "reading-2",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/reading-2/12@fav_latched",
+   "function": "lighting",
+   "what": "reading-2",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -14936,6 +16011,28 @@
    "what": "reading-3",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000ee0eeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/reading-3/0@fav_latched",
+   "function": "lighting",
+   "what": "reading-3",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -15129,6 +16226,28 @@
    }
   },
   {
+   "id": "lighting/reading-3/5@fav_latched",
+   "function": "lighting",
+   "what": "reading-3",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000ee5eeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-3/5@lighting_levels",
    "function": "lighting",
    "what": "reading-3",
@@ -15305,6 +16424,28 @@
    }
   },
   {
+   "id": "lighting/reading-3/11@fav_latched",
+   "function": "lighting",
+   "what": "reading-3",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eebeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-3/11@lighting_levels",
    "function": "lighting",
    "what": "reading-3",
@@ -15392,6 +16533,16 @@
    "what": "reading-3",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/reading-3/12@fav_latched",
+   "function": "lighting",
+   "what": "reading-3",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -15544,6 +16695,28 @@
    "what": "kitchen",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeee0eeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/kitchen/0@fav_latched",
+   "function": "lighting",
+   "what": "kitchen",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -15737,6 +16910,28 @@
    }
   },
   {
+   "id": "lighting/kitchen/5@fav_latched",
+   "function": "lighting",
+   "what": "kitchen",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeee5eeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen/5@lighting_levels",
    "function": "lighting",
    "what": "kitchen",
@@ -15913,6 +17108,28 @@
    }
   },
   {
+   "id": "lighting/kitchen/11@fav_latched",
+   "function": "lighting",
+   "what": "kitchen",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeebeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen/11@lighting_levels",
    "function": "lighting",
    "what": "kitchen",
@@ -16000,6 +17217,16 @@
    "what": "kitchen",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/kitchen/12@fav_latched",
+   "function": "lighting",
+   "what": "kitchen",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -16152,6 +17379,28 @@
    "what": "roof-ambient",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeee0eeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/roof-ambient/0@fav_latched",
+   "function": "lighting",
+   "what": "roof-ambient",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -16345,6 +17594,28 @@
    }
   },
   {
+   "id": "lighting/roof-ambient/5@fav_latched",
+   "function": "lighting",
+   "what": "roof-ambient",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeee5eeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/roof-ambient/5@lighting_levels",
    "function": "lighting",
    "what": "roof-ambient",
@@ -16521,6 +17792,28 @@
    }
   },
   {
+   "id": "lighting/roof-ambient/11@fav_latched",
+   "function": "lighting",
+   "what": "roof-ambient",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeebeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/roof-ambient/11@lighting_levels",
    "function": "lighting",
    "what": "roof-ambient",
@@ -16608,6 +17901,16 @@
    "what": "roof-ambient",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/roof-ambient/12@fav_latched",
+   "function": "lighting",
+   "what": "roof-ambient",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -16760,6 +18063,28 @@
    "what": "outside-rear",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eee0eeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/outside-rear/0@fav_latched",
+   "function": "lighting",
+   "what": "outside-rear",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -16953,6 +18278,28 @@
    }
   },
   {
+   "id": "lighting/outside-rear/5@fav_latched",
+   "function": "lighting",
+   "what": "outside-rear",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eee5eeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/outside-rear/5@lighting_levels",
    "function": "lighting",
    "what": "outside-rear",
@@ -17129,6 +18476,28 @@
    }
   },
   {
+   "id": "lighting/outside-rear/11@fav_latched",
+   "function": "lighting",
+   "what": "outside-rear",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeebeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/outside-rear/11@lighting_levels",
    "function": "lighting",
    "what": "outside-rear",
@@ -17216,6 +18585,16 @@
    "what": "outside-rear",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/outside-rear/12@fav_latched",
+   "function": "lighting",
+   "what": "outside-rear",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -17368,6 +18747,28 @@
    "what": "kitchen-ambient",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeee0eeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/kitchen-ambient/0@fav_latched",
+   "function": "lighting",
+   "what": "kitchen-ambient",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -17561,6 +18962,28 @@
    }
   },
   {
+   "id": "lighting/kitchen-ambient/5@fav_latched",
+   "function": "lighting",
+   "what": "kitchen-ambient",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeee5eeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen-ambient/5@lighting_levels",
    "function": "lighting",
    "what": "kitchen-ambient",
@@ -17737,6 +19160,28 @@
    }
   },
   {
+   "id": "lighting/kitchen-ambient/11@fav_latched",
+   "function": "lighting",
+   "what": "kitchen-ambient",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeebeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen-ambient/11@lighting_levels",
    "function": "lighting",
    "what": "kitchen-ambient",
@@ -17824,6 +19269,16 @@
    "what": "kitchen-ambient",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/kitchen-ambient/12@fav_latched",
+   "function": "lighting",
+   "what": "kitchen-ambient",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -17976,6 +19431,28 @@
    "what": "kitchen-cabinet",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeee0eeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/kitchen-cabinet/0@fav_latched",
+   "function": "lighting",
+   "what": "kitchen-cabinet",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -18169,6 +19646,28 @@
    }
   },
   {
+   "id": "lighting/kitchen-cabinet/5@fav_latched",
+   "function": "lighting",
+   "what": "kitchen-cabinet",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeee5eeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen-cabinet/5@lighting_levels",
    "function": "lighting",
    "what": "kitchen-cabinet",
@@ -18345,6 +19844,28 @@
    }
   },
   {
+   "id": "lighting/kitchen-cabinet/11@fav_latched",
+   "function": "lighting",
+   "what": "kitchen-cabinet",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeebeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen-cabinet/11@lighting_levels",
    "function": "lighting",
    "what": "kitchen-cabinet",
@@ -18432,6 +19953,16 @@
    "what": "kitchen-cabinet",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/kitchen-cabinet/12@fav_latched",
+   "function": "lighting",
+   "what": "kitchen-cabinet",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }
@@ -18584,6 +20115,28 @@
    "what": "entrance",
    "value": 0,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeeee0eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/entrance/0@fav_latched",
+   "function": "lighting",
+   "what": "entrance",
+   "value": 0,
+   "state": "fav_latched",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -18777,6 +20330,28 @@
    }
   },
   {
+   "id": "lighting/entrance/5@fav_latched",
+   "function": "lighting",
+   "what": "entrance",
+   "value": 5,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeeee5eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/entrance/5@lighting_levels",
    "function": "lighting",
    "what": "entrance",
@@ -18953,6 +20528,28 @@
    }
   },
   {
+   "id": "lighting/entrance/11@fav_latched",
+   "function": "lighting",
+   "what": "entrance",
+   "value": 11,
+   "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeeeebeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/entrance/11@lighting_levels",
    "function": "lighting",
    "what": "entrance",
@@ -19040,6 +20637,16 @@
    "what": "entrance",
    "value": 12,
    "state": "fav_request_echo",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/entrance/12@fav_latched",
+   "function": "lighting",
+   "what": "entrance",
+   "value": 12,
+   "state": "fav_latched",
    "expect": {
     "kind": "bad"
    }

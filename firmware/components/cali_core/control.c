@@ -347,6 +347,34 @@ static const char *zone_field(const char *what) {
     return what;
 }
 
+const char *const CALI_LCFG_KEYS[CALI_LCFG_N] = {"WakeupTimestamp", "WakeupLightValue", "DoorContact",
+                                                 "FavouritesStored"};
+
+#define LCFG_SET(c, k, x) ((c)->v[k] = (x), (c)->have |= 1u << (k))
+
+/* semantics.lighting_config(None, state) over get(): the carried keys, then this frame's own config */
+void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out) {
+    uint32_t mode, pn, lv, ts;
+    int p, l;
+    memset(out, 0, sizeof *out);
+    for (int k = 0; k < CALI_LCFG_N; k++)
+        if (get("lighting", CALI_LCFG_KEYS[k], &out->v[k])) out->have |= 1u << k;
+    if (!get("lighting", "Mode", &mode)) return;
+    p = get("lighting", "ProfileNumber", &pn);
+    l = get("lighting", "LightValue", &lv);
+    if (mode == CALI_LIGHT_MODE_WAKEUP_TIME && l && get("lighting", "Timestamp", &ts)) {
+        LCFG_SET(out, CALI_LCFG_WAKE_TS, ts);
+        LCFG_SET(out, CALI_LCFG_WAKE_LV, lv);
+    } else if (mode == CALI_LIGHT_MODE_SET_PROFILE && p && pn == CALI_LIGHT_PROFILE_DOOR_CONTACT && l) {
+        LCFG_SET(out, CALI_LCFG_DOOR, lv);
+    } else if (mode == CALI_LIGHT_MODE_REQUEST_CONFIG && l && !(p && pn == 13)) {   /* 13: the request's echo */
+        LCFG_SET(out, CALI_LCFG_FAVS, lv & 0x7Fu);
+    } else if (mode == CALI_LIGHT_MODE_SET_BRIGHTNESS && p && pn >= 1 && pn <= 7 &&
+               (out->have >> CALI_LCFG_FAVS & 1u)) {
+        out->v[CALI_LCFG_FAVS] |= 1u << (pn - 1);   /* only ADD to known bits: never invent "empty" */
+    }
+}
+
 /* control._lighting (minus wakeup: ELSEWHERE on the ESP) + preface_for + commit_for */
 static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, cali_ctl_plan_t *p) {
     vals_t *v = &s_v;
@@ -417,7 +445,7 @@ static int is_onoff_command(const char *fn, const char *what) {
 }
 
 static const char *gate(const char *fn, const char *what, const char *value, cali_ctl_get_t get) {
-    uint32_t x, mode, pn, lv;
+    uint32_t x;
     long n;
     int cooler = strcmp(fn, "cooler") == 0, lighting = strcmp(fn, "lighting") == 0;
     if (is_onoff_command(fn, what) && onoff(value) < 0) return CALI_REASON_NOT_ONOFF;   /* R3 */
@@ -440,13 +468,14 @@ static const char *gate(const char *fn, const char *what, const char *value, cal
     if (strcmp(fn, "energy") == 0 && strcmp(what, "mode") == 0 && get("energy", "EnergyModeNotSelectable", &x) &&
         x == 1)
         return CALI_REASON_ENERGY_LOCKED;
-    /* semantics.lighting_config(None, frame): the stored bits are known only from a Mode-12 reply
-     * (ProfileNumber 13 = the app's own REQUEST echo); plan decision 4: no latch on the ESP */
-    if (lighting && strcmp(what, "profile") == 0 && get("lighting", "Mode", &mode) &&
-        mode == CALI_LIGHT_MODE_REQUEST_CONFIG && get("lighting", "LightValue", &lv) &&
-        !(get("lighting", "ProfileNumber", &pn) && pn == 13) && py_int(value, &n) && n >= 1 && n <= 7 &&
-        !((lv & 0x7Fu) >> (n - 1) & 1u))
-        return CALI_REASON_FAVOURITE_EMPTY;
+    /* command_precondition's favourite rule over the latch (semantics.lighting_config): refuse only a
+     * slot the unit positively reported empty */
+    if (lighting && strcmp(what, "profile") == 0 && py_int(value, &n) && n >= 1 && n <= 7) {
+        cali_light_cfg_t cfg;
+        cali_light_cfg(get, &cfg);
+        if ((cfg.have >> CALI_LCFG_FAVS & 1u) && !(cfg.v[CALI_LCFG_FAVS] >> (n - 1) & 1u))
+            return CALI_REASON_FAVOURITE_EMPTY;
+    }
     return NULL;
 }
 

@@ -76,6 +76,20 @@ typedef struct {
 typedef int (*cali_ctl_get_t)(const char *fn, const char *field, uint32_t *out);
 typedef void (*cali_ctl_done_t)(int result);
 
+/* The lighting configuration the unit reports in its own 1502 frames — semantics.lighting_config in C:
+ * Mode 20 = wake-up (Timestamp + LightValue), Mode 16 / ProfileNumber 8 = door contact (LightValue),
+ * Mode 12 with ProfileNumber != 13 (13 = the app's own REQUEST echo) = stored favourites (LightValue
+ * & 0x7f), Mode 4 with ProfileNumber 1-7 adds that favourite's bit once the bits are known.
+ * cali_light_cfg(get, out): the keys get() already answers (a latch carried over), then this frame's
+ * own config. Held equal to Python by T_FW_LIGHT_CFG_PARITY. */
+enum { CALI_LCFG_WAKE_TS, CALI_LCFG_WAKE_LV, CALI_LCFG_DOOR, CALI_LCFG_FAVS, CALI_LCFG_N };
+extern const char *const CALI_LCFG_KEYS[CALI_LCFG_N];   /* semantics.LIGHT_CONFIG_KEYS, same order */
+typedef struct {
+    unsigned have;   /* bit k: v[k] known */
+    uint32_t v[CALI_LCFG_N];
+} cali_light_cfg_t;
+void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out);   /* = semantics.lighting_config(None, state) */
+
 void cali_ctl_plan(const char *fn, const char *what, const char *value, cali_ctl_get_t get,
                    cali_ctl_plan_t *out);
 int cali_ctl_write_ok(uint16_t chr, size_t len);
