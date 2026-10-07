@@ -833,7 +833,7 @@ async function processQueue() {
   if (res && res.ok && res.refused) toast(res.refused, "warn");   // physical precondition not met
   else if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
   // The ESP satellite has no readback (applied is always null): confirm from the unit's own state.
-  else if (res && res.ok && res.applied == null && expected) confirmFromState(done.fn, expected);
+  else if (res && res.ok && res.applied == null && expected) confirmFromState(done, expected);
   // applied === null: sent + acknowledged but not verifiable remotely. For lighting the state
   // char is a write-through echo, so only the lamp itself is proof — say so. Other functions
   // that return null (e.g. roof, which has no readback check) keep the neutral phrasing.
@@ -868,13 +868,16 @@ function expectedState(c) {
 const SAT_CONFIRM_MS = 5000;   // a few 2 s polls: the satellite stores each frame the unit pushes
 
 /**
- * Watch the next `/api/state` polls (no extra requests) for `ok(STATE[fn])`, then toast the result.
- * @param {string} fn
+ * Watch the next `/api/state` polls (no extra requests) for `ok(STATE[c.fn])`, then toast the result.
+ * A newer command for the same control supersedes this one silently (it reports its own result).
+ * @param {CommandItem} c
  * @param {(s: FnState) => boolean} ok
  */
-async function confirmFromState(fn, ok) {
+async function confirmFromState(c, ok) {
+  const fn = c.fn;
   const end = Date.now() + SAT_CONFIRM_MS;
   while (Date.now() < end) {
+    if ((inflight && inflight.key === c.key) || queue.some((q) => q.key === c.key)) return;
     const s = STATE[fn];
     if (s && ok(/** @type {FnState} */ (s))) { toast("✓ Applied", "ok"); return; }
     await new Promise((r) => setTimeout(r, 250));
