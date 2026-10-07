@@ -14,8 +14,9 @@ permissions: {}
 
 jobs:
   claude-review:
-    # Skip fork PRs (no secrets there anyway) and Dependabot PRs.
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    # Skip fork PRs (no secrets there anyway) and Dependabot-authored PRs (the PR author, not the
+    # actor: a maintainer pushing to a Dependabot PR must not trigger a review).
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     concurrency:
       group: claude-review-${{ github.event.pull_request.number }}
       cancel-in-progress: true
