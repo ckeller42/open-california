@@ -9,10 +9,15 @@
 
 <p align="center">
   <a href="https://github.com/ckeller42/open-california/actions/workflows/ci.yml"><img src="https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://ckeller42.github.io/open-california/"><img src="https://img.shields.io/badge/docs-github%20pages-blue" alt="Docs"></a>
-  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">
+  <a href="https://ckeller42.github.io/open-california/"><img src="https://github.com/ckeller42/open-california/actions/workflows/docs.yml/badge.svg" alt="Docs"></a>
+  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue" alt="Python 3.11 | 3.12 | 3.13">
   <img src="https://img.shields.io/badge/runtime%20deps-stdlib%20only-brightgreen" alt="Runtime deps">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <br>
+  <a href="docs/raspberry-pi-setup.md"><img src="https://img.shields.io/badge/runs%20on-Raspberry%20Pi-c51a4a" alt="Runs on Raspberry Pi"></a>
+  <a href="docs/firmware.md"><img src="https://img.shields.io/badge/runs%20on-ESP32--S3-e7352c" alt="Runs on ESP32-S3"></a>
+  <a href="calictl/deploy/homeassistant/HOMEASSISTANT.md"><img src="https://img.shields.io/badge/Home%20Assistant-MQTT%20discovery-41bdf5" alt="Home Assistant (MQTT discovery)"></a>
+  <a href="calictl/deploy/GRAFANA.md"><img src="https://img.shields.io/badge/Grafana-InfluxDB-f46800" alt="Grafana (InfluxDB)"></a>
 </p>
 
 <p align="center">
