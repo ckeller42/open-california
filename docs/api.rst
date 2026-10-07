@@ -118,11 +118,14 @@ Tests
 .. automodule:: tests.test_ha
 .. autofunction:: tests.e2e.test_gui.test_wakeup_light_time_and_switch_reach_the_unit
 .. autofunction:: tests.e2e.test_gui.test_door_contact_switch_round_trips
+.. autofunction:: tests.e2e.test_gui.test_all_lights_master_stays_on
 .. autofunction:: tests.e2e.test_gui.test_favourite_save_then_activate
 .. autofunction:: tests.e2e.test_gui.test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7
 .. autofunction:: tests.e2e.test_gui.test_wakeup_areas_use_the_t7_labels_and_ranges
+.. autofunction:: tests.e2e.test_gui.test_wakeup_areas_are_a_vertical_checkbox_list
 .. autofunction:: tests.e2e.test_gui.test_door_contact_row_hidden_on_grand_california
 .. autofunction:: tests.e2e.test_satellite.test_controls_are_live_and_post_calictls_command_shape
+.. autofunction:: tests.e2e.test_satellite.test_a_command_is_confirmed_from_the_units_own_state
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle

@@ -100,6 +100,13 @@ What it models:
   door-contact flag (Mode 16 / PN 8) are stored. Every config change, the save/activate acks and the
   REQUEST_CONFIG reply (Mode 12, favourite bits) go out as **one-off** 1502 frames, never as stored
   state-char content. Whether the real unit echoes them this way is unverified.
+- **All lights (mock-modelled).** The app's master switch is SET_PROFILE PN 12 (`LIGHTS_ON`) / PN 0
+  (`LIGHTS_OFF`) plus the commit. ON lights every equipped zone that is off at
+  `control.LIGHT_ON_BRIGHTNESS` (10); a zone that is already lit keeps its level. OFF sets every
+  equipped zone to 0. NOT_EQUIPPED zones (13) do not change, and the pop-top reading light (L9)
+  stays off while the roof is down. The zones ramp like a brightness set, and the change is acked
+  with a 1502 frame that carries PN 12/0. The real unit's ON level (fixed level, or the last level
+  of each lamp) is **unverified** — a van check (#230).
 - **The roof SafetyCounter.** The counter is valid only while it is monotonic and still advancing.
   A restart invalidates it. A freshly validated counter withholds the motor for about 3 s
   (`ROOF_WITHHOLD_S`, semi-verified). A held move steps `Position`, and releasing it (no frames)

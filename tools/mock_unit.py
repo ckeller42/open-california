@@ -337,6 +337,26 @@ class MockCamperUnit:
         for cb in list(self._subs.get(f.state_char) or ()):
             cb(_Char(f.state_char, ["notify"]), frame)
 
+    def _all_lights(self, func, st: dict, on: bool) -> dict:
+        """Zone targets for the app's All-lights master (SET_PROFILE PN 12 LIGHTS_ON / PN 0 LIGHTS_OFF).
+
+        MOCK-MODELLED, not van-verified (#230): ON lights every equipped zone that is off at
+        ``control.LIGHT_ON_BRIGHTNESS`` (lit zones keep their level), OFF darkens every equipped
+        zone. NOT_EQUIPPED (13) zones are untouched, and so is the pop-top reading light (L9) while
+        the roof is down — it is unpowered then (the same fact as the L9 refusal in ``_refusal``).
+        """
+        roof_down = (self.state.get("roof") or {}).get("Position") in (0, 14)
+        out = {}
+        for sf in func.state_fields:
+            cur = st.get(sf.name, 0)
+            if not sf.name.startswith("BrightnessL") or cur == 13:
+                continue
+            if not on:
+                out[sf.name] = 0
+            elif cur == 0 and not (sf.name == "BrightnessLNine" and roof_down):
+                out[sf.name] = control.LIGHT_ON_BRIGHTNESS
+        return out
+
     def favourite_bits(self) -> int:
         """FavoriteProfileModifiedState as the REQUEST_CONFIG reply carries it (bit 0 = favourite 1)."""
         return sum(1 << (n - 1) for n, v in self.favourites.items() if v)
@@ -745,12 +765,16 @@ class MockCamperUnit:
                 elif p and p[0] == "profile":
                     st["ProfileNumber"] = p[1]
                     fav = self.favourites.get(p[1])
-                    if fav:  # u0 on a stored favourite: apply its levels, ack on 1502
+                    if p[1] in (control.LIGHT_PROFILE_ALL_ON, control.LIGHT_PROFILE_ALL_OFF):
+                        zones = self._all_lights(func, st, p[1] == control.LIGHT_PROFILE_ALL_ON)
+                    else:
+                        zones = fav["zones"] if fav else None
+                    if zones is not None:  # u0 favourite / Q all-lights: apply the levels, ack on 1502
                         if self.light_applies:
-                            for zone in fav["zones"]:
+                            for zone in zones:
                                 self.light_actual.setdefault(zone, st.get(zone, 0))
-                            self._light_ramp.update(fav["zones"])
-                        st.update(fav["zones"])
+                            self._light_ramp.update(zones)
+                        st.update(zones)
                         self.push("lighting", {"Mode": LIGHT_MODE_SET_PROFILE}, event=True)
                 elif p and p[0] == "zones":
                     # Snapshot the PHYSICAL baseline before the echo lands: `st` is about to be

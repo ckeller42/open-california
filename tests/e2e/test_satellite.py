@@ -212,9 +212,40 @@ def test_controls_are_live_and_post_calictls_command_shape(live, stub):
     sw.click()
     _wait_commands(live, stub)
     assert stub.commands[0] == {"function": "cooler", "what": "power", "value": "on", "confirm": True}
-    expect(live.locator(".toast")).to_have_text("Sent — the unit didn't confirm it")
-    live.wait_for_timeout(2500)  # the post-command refresh + one more poll
+    # the stub's state never changes: after the confirm window, the honest "not confirmed"
+    expect(live.locator(".toast")).to_have_text("Sent — the unit didn't confirm it", timeout=9000)
     assert set(stub.requests) <= ALLOWED_LIVE, stub.requests
+
+
+@pytest.mark.parametrize("locale,tile", [("en-US", "Cooler"), ("de-DE", "Kühlbox")])
+def test_a_command_is_confirmed_from_the_units_own_state(stub, error_gated_page, locale, tile):
+    """The ESP answers ``applied: null`` by design (no readback), so every success used to toast the
+    warning. The UI now watches the next polls for the targeted field: the unit's push (here the
+    stub's state flip) -> the normal success toast, no warning.
+
+    .. test:: The satellite UI confirms a command from the unit's reported state
+       :id: T_SAT_UI_CONFIRM_FROM_STATE
+       :links: R_FW_SHARED_UI
+    """
+
+    def unit_applies(body):
+        if (body["function"], body["what"]) == ("cooler", "power"):
+            stub.fixtures["satellite"]["/api/state"]["fn"]["cooler"]["State"] = (
+                1 if body["value"] == "on" else 0
+            )
+
+    stub.on_command = unit_applies
+    with error_gated_page(stub.base, locale=locale) as pg:
+        pg.wait_for_function(LIVE)
+        pg.on("dialog", lambda d: d.accept())
+        _open(pg, tile)
+        pg.get_by_role("switch", name="Refrigerator box").click()
+        _wait_commands(pg, stub)
+        expect(pg.locator(".toast")).to_have_text(
+            "✓ Übernommen" if locale == "de-DE" else "✓ Applied", timeout=6000
+        )
+        pg.wait_for_timeout(5500)  # past the window: no late warning either
+        expect(pg.locator(".toast.warn")).to_have_count(0)
 
 
 def test_roof_and_wakeup_are_greyed_with_the_reason(live, stub):
@@ -226,8 +257,10 @@ def test_roof_and_wakeup_are_greyed_with_the_reason(live, stub):
     expect(live.get_by_text(ELSEWHERE, exact=True).first).to_be_visible()
     _home(live)
     _open(live, "Lighting")
-    expect(live.get_by_role("switch", name="Wake-up light")).to_be_disabled()
-    expect(live.get_by_label("Wake-up time")).to_be_disabled()
+    # the satellite never knows the wake-up config: the reason up front, no (empty) inputs
+    expect(live.get_by_role("switch", name="Wake-up light")).to_have_count(0)
+    expect(live.get_by_label("Wake-up time")).to_have_count(0)
+    expect(live.locator(".arealist")).to_have_count(0)
     expect(live.get_by_text(ELSEWHERE, exact=True).first).to_be_visible()
     # the rest of the lighting screen is live
     expect(live.get_by_role("switch", name="Sliding door lighting")).to_be_enabled()
@@ -243,6 +276,11 @@ def test_german_elsewhere_hint(stub, error_gated_page):
             expect(pg.locator(".btnrow button", has_text=name)).to_have_attribute(
                 "title", "Nur über buspi oder die App"
             )
+        _home(pg)
+        _open(pg, "Beleuchtung")  # the wake-up card: the reason, no empty area checkboxes
+        expect(pg.locator(".arealist")).to_have_count(0)
+        expect(pg.get_by_role("switch", name="Wake-up light")).to_have_count(0)
+        expect(pg.get_by_text("Nur über buspi oder die App", exact=True).first).to_be_visible()
 
 
 def test_api_still_refuses_calictl_only_paths_on_the_live_satellite(live, stub):
@@ -358,7 +396,7 @@ def test_a_pending_command_does_not_trip_the_offline_banner(stub, error_gated_pa
             assert pg.locator(".offline").count() == 0
             pg.wait_for_timeout(250)
         assert "Sending…" in seen and "offline" not in seen, seen
-        expect(pg.locator(".toast")).to_have_text("Sent — the unit didn't confirm it", timeout=4000)
+        expect(pg.locator(".toast")).to_have_text("Sent — the unit didn't confirm it", timeout=9000)
         expect(pg.locator("#status")).to_have_text("live")
     # the UI sends at most one poll at a time: exactly one was waiting on the stalled core
     assert stub.polls_while_pending == 1, (stub.polls_while_pending, stub.requests)

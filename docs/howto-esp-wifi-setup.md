@@ -113,9 +113,10 @@ Things to expect:
   short of using the van).
 - **One command at a time.** Tap twice quickly and the second answers *The satellite is still
   sending the previous command — try again in a moment*.
-- **"Sent — the unit didn't confirm it"** is the normal success toast: the satellite knows the unit
-  accepted the bytes, not that the load switched (the Pi reads the state back; the satellite does
-  not). The tile updates on the next reading. *Command failed: write_failed* means the unit refused
+- **"✓ Applied"** shows when the unit's own reading shows the new value within about 5 s. If it
+  does not, the toast is **"Sent — the unit didn't confirm it"**: the unit accepted the bytes, but
+  the satellite saw no reading with the new value (the satellite does no read-back of its own,
+  unlike the Pi). The tile updates on the next reading. *Command failed: write_failed* means the unit refused
   the write; *write_timeout* that it never answered.
 - The page and its controls have **no login**, like the Pi's (the project owner's stance: every
   device on the local network is trusted).
