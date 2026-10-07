@@ -83,6 +83,40 @@ recorded per-poll in `poll_outcomes.jsonl` and classified by `tools.analyze_batt
 - **Daemon down / Pi reboot** — no `poll_outcomes` rows at all for the window.
 - **Influx-write failure** — polls succeed (`outcome: ok`) but nothing is stored: a *false* gap.
 
+## Read order: subscribe, then read, last frame wins (2026-10-07)
+
+**Decompile (APK via jadx, enigma `38a0d6b` in the private RE repo):** at every (re)connect the app
+writes the CCCD of each notifiable char and **then reads it** (`jb/b`, for each descriptor:
+subscribe, then an unconditional READ). The read result and every notification go into **one
+decoder** (`qd/b` read → `i2` tag 26 re-emits it into the same flow as notifies → `qg/b.e`), which
+sets the water StateFlows unconditionally. So the **last frame to arrive wins**, normally the read.
+The app has no water cache, no validity gate, no "last measured" UI, no wake write and no periodic
+1302 re-read.
+
+This **contradicts the 2026-07-14 "water is push-only for freshness" claim**, which calictl had
+built into two places:
+
+- `PersistentSession.read_all` (`PUSH_ONLY_FUNCS = {"water"}`) served water from the
+  **subscribe-time push for the whole session** and never re-read 1302. Its own comment said this
+  was UNVERIFIED on-device.
+- the per-op `read_all`/`read` preferred any push over the read.
+
+**calictl now follows the app** (`R_READ_LAST_FRAME_WINS`, `device._later_pushes`): every poll
+reads every state char, water included, after the subscribe. The read replaces the subscribe-time
+push, and a notification that arrives after the read replaces the read. Lighting is excluded from
+the notify-override, because its 1502 pushes include config/ack frames that `serve` latches itself.
+The mock models the case: a stale subscribe-time push (`notify_push`) plus a correct read
+(`tests/test_mock_integration.py`, `T_READ_ALL_LAST_FRAME_WINS`).
+
+**The 2026-08 stale "1 L" may have been calictl's own pinning**, not (only) the unit's latch. In
+the persistent session the subscribe-time value stayed served until the next reconnect. The owner
+saw the app show the correct level while parked, at the same time as calictl showed 1 L.
+
+**Open question (owner, after a van trace):** is `freshness.implausible_water_drop` still needed?
+It stays unchanged for now (with `water_stale_since`). If a parked trace shows the unit's 1302 read
+is always right, the guard may be redundant. If the unit really latches while parked, the guard
+remains the only defence; the app has none. The van check is in `remaining-captures.md` §1 (#230).
+
 ## Water freshness — the settled conclusion (2026-08-19)
 
 Traced end-to-end. Water is READ-ONLY on char `1302` (no `1301` control char, `qg/b` never writes),

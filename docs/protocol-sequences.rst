@@ -76,8 +76,8 @@ Vendor UUID ``0000XXXX-6c77-4b7d-bbf6-a5e587701f3d``. Per subsystem, ``NN01`` is
      - Control / state. ``1202`` pushes are logged by the observer.
    * - ``1302``
      - water
-     - State only (no ``1301``). A bare read returns a stale latch. The fresh level arrives as a
-       notification, so this is the one push-only function (``PUSH_ONLY_FUNCS``).
+     - State only (no ``1301``). Read after subscribing, like every char; the last frame wins (the
+       app's order, decompile 2026-10-07). The old "push-only" rule was dropped.
    * - ``1401`` / ``1402``
      - roof
      - 5-byte move frame ``[direction][SafetyCounter]`` / Position, Installed,
@@ -283,16 +283,18 @@ Notifications
 .. spec:: Subscribe, then consume pushed state notifications
    :id: S_SEQ_NOTIFY
    :status: live-verified
-   :links: R_READ_HEARTBEAT_REFRESH, R_CAMPING_OBSERVER, R_VEHICLE_1004
+   :links: R_READ_HEARTBEAT_REFRESH, R_READ_LAST_FRAME_WINS, R_CAMPING_OBSERVER, R_VEHICLE_1004
 
    **Contract.** Subscribing is part of every handshake, and pushes are a real ``calictl`` data
    path. They are never discarded:
 
    * ``_subscribe_all`` sinks every payload, keyed by char UUID. It also calls an ``on_push`` hook
      when one is given.
-   * **Per-op** ``read_all``/``read`` prefer any pushed value over a bare read. The **persistent
-     session** prefers a push only for ``PUSH_ONLY_FUNCS`` (water ``1302``) and live-reads
-     everything else, so a subscribe-time value can never pin a char.
+   * ``read_all`` (per-op and persistent) follows the app: subscribe, then **read every char**,
+     water ``1302`` included. The last frame wins: the read replaces the subscribe-time push, and
+     a push that lands after the read replaces the read (``R_READ_LAST_FRAME_WINS``; lighting is
+     excluded, its config frames are latched by ``serve``). No char is served from the push cache
+     instead of a read, so a subscribe-time value can never pin a char.
    * On the persistent session, the daemon's ``on_push`` is
      :py:meth:`calictl.observer.CampingObserver.on_push`. It decodes ``1202`` camping, ``1004``
      vehicle and ``1102`` cooler pushes and **logs** changes (``camping-push``). It is passive and
@@ -307,9 +309,9 @@ Notifications
         participant U as Camper unit
         C->>U: write CCCD=0100 on each status char (subscribe-all)
         U-->>C: one push per char with its current value, right after its CCCD write
-        Note over C: sink stores it by char UUID, per-op reads prefer it over the bare read
+        Note over C: sink stores it by char UUID, then calictl reads each char and the read wins
         opt water in use (water system powered)
-            U-->>C: notify 1302, fresh level (the only fresh source, PUSH_ONLY_FUNCS)
+            U-->>C: notify 1302 on a measured change, replaces the earlier read
         end
         opt camping, ignition or cooler change (persistent session only)
             U-->>C: notify 1202 / 1004 / 1102
@@ -323,8 +325,9 @@ Notifications
 **Evidence.** The first real-unit trace (buspi, 2026-09-16) showed each of the 12 subscribed chars
 notifying **once, right after its CCCD write**, and no periodic stream in 150 s. That contradicted
 an older "``1602`` ~3×/s" note. Event-driven pushes were observed for ``1502`` (Mode-4 ramp,
-2026-08-16) and ``1302`` (water, during use). The app subscribes ``1202`` and parses the pushed
-water frame (VM ``qg/b``), per the 2026-07-14 decompile. Live ``1202``/``1004`` push *changes* on
+2026-08-16) and ``1302`` (water, during use). The app subscribes ``1202``. For water it subscribes ``1302``
+and then reads it, and the read and any push go to the same decoder (VM ``qg/b``), so the last
+frame wins (decompile 2026-10-07, enigma ``38a0d6b``). Live ``1202``/``1004`` push *changes* on
 this unit are decompile-asserted; the observer's ``camping-push`` log is how they are being
 confirmed (`auto-camper-mode.md
 <https://ckeller42.github.io/open-california/business-logic/auto-camper-mode.html>`_).

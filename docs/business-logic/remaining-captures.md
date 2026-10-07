@@ -19,6 +19,13 @@ We do **not** know if that's stale or the tank is genuinely near-empty (the "tru
   - buspi already matches the tank → **no bug, 1 L was correct**, and the "fix" was for a non-issue.
   - buspi stays wrong even after the pump → real stale bug to reopen.
 
+- [ ] **(#230) calictl vs the app, parked, read order fixed (2026-10-07).** With the daemon running
+  and `CALICTL_BLE_TRACE` set on buspi, note calictl's fresh water (`/api/state`), release the slot,
+  open the app without unlocking or touching the van, and note the app's value. The trace shows the
+  1302 read bytes. Same value = the old "1 L" was calictl serving the subscribe-time push
+  (now fixed); calictl stale but the app right = a per-connection unit effect (reopen). See
+  `value-freshness.md` "Read order".
+
 ### 2. Finish the lamp map (~1 min)
 
 Sweep 2026-07-14 confirmed **L7=Kochen, L8=Ambientelicht, L3=Umgebung hinten**, and **L5 is a real
