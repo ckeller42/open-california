@@ -28,6 +28,11 @@ VECTORS = Path(__file__).resolve().parent.parent / "tests" / "vectors" / "contro
 # The functions whose state the gates read (control.command_precondition on the ESP's five + roof).
 GATE_FUNCTIONS = ("airheater", "campingmode", "cooler", "energy", "lighting", "roof")
 SKIP_CHARS = ("1003", "f000")
+# Fields the unit's own clock moves every tick (the mock recomputes them from its RTC at once, so a
+# pushed value never "holds"); no gate or builder reads them, so the walk does not wait for them.
+CLOCK_FIELDS = frozenset(
+    {"TimerCounterHour", "TimerCounterMin", "RunningTimeinAction", "AgeOneBattValuesMinutes"}
+)
 
 
 def app_cases() -> list[dict]:
@@ -57,26 +62,27 @@ def unit_writes(path) -> list[tuple[str, str, float]]:
 
 def gate_state(case: dict) -> dict:
     """``{fn: decoded fields}`` of the case's recorded gate frames — what the firmware's ``/api/state``
-    ``fn`` must hold before the command is sent."""
+    ``fn`` must hold before the command is sent (less :data:`CLOCK_FIELDS`)."""
     from calictl import overrides, protocol
 
     funcs = protocol.load()
     overrides.apply(funcs)
     return {
-        fn: protocol.decode(funcs[fn], bytes.fromhex(hx))
+        fn: {k: v for k, v in protocol.decode(funcs[fn], bytes.fromhex(hx)).items() if k not in CLOCK_FIELDS}
         for fn, hx in case["frames_hex"].items()
         if fn in GATE_FUNCTIONS
     }
 
 
 def held_state(get_fn, want: dict, timeout: float = 15.0, every: float = 0.2) -> bool:
-    """Poll ``get_fn()`` (the firmware's ``/api/state`` ``fn``) until it holds every entry of ``want``
-    on two polls in a row (a push still in flight from the previous command cannot land after the
+    """Poll ``get_fn()`` (the firmware's ``/api/state`` ``fn``) until it holds every field of ``want``
+    (``{fn: {field: value}}``; fields not in ``want`` are not compared) on two polls in a row (a push still in flight from the previous command cannot land after the
     check); ``False`` if that does not happen within ``timeout`` seconds."""
     end, held = time.monotonic() + timeout, 0
     while True:
         fn = get_fn()
-        held = held + 1 if all(fn.get(k) == v for k, v in want.items()) else 0
+        ok = all(fn.get(f, {}).get(k) == v for f, fields in want.items() for k, v in fields.items())
+        held = held + 1 if ok else 0
         if held == 2:
             return True
         if time.monotonic() >= end:
@@ -167,4 +173,5 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(VECTORS.parents[2]))  # run as a script: sys.path[0] is tools/, not the repo
     sys.exit(main())
