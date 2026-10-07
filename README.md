@@ -8,6 +8,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ckeller42/open-california/actions/workflows/ci.yml"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fckeller42%2Fopen-california%2Fmain%2F.github%2Fbadges%2Fcoverage.json" alt="Coverage"></a>
   <a href="https://github.com/ckeller42/open-california/actions/workflows/ci.yml"><img src="https://github.com/ckeller42/open-california/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://ckeller42.github.io/open-california/"><img src="https://img.shields.io/badge/docs-github%20pages-blue" alt="Docs"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">

@@ -65,6 +65,12 @@ runtime is stdlib-only at import. Some guards in this suite protect repo-wide in
 Tests that need an optional dependency skip cleanly when it is missing: Bumble for the pairing
 harnesses, Playwright for `tests/e2e`, a C compiler for the parity tests.
 
+**Coverage is a floor, not the safety net.** `tools/ci.sh cov` (the CI `test` job on 3.13) runs this
+suite under `pytest-cov` and fails when `calictl/` drops below `fail_under` in `pyproject.toml`, a
+ratchet: raise it when a change lifts the number, never lower it. `tools/` is reported but not gated.
+A line that runs is not a line that is right: the content guards above (signal and command
+coverage, codec vectors, mock fidelity) are what catch a wrong decode or a wrong frame.
+
 ## The mock unit (`tools/mock_unit.py`)
 
 `MockCamperUnit` is the "firmware". It holds per-function decoded state and models the behaviour

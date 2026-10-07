@@ -11,7 +11,8 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege: no CI job writes to the repo (the screenshots workflow keeps its own write scope).
+# Least privilege: read-only by default; only the main-only coverage-badge job (below) writes (the
+# screenshots workflow keeps its own write scope).
 permissions:
   contents: read
 
@@ -36,7 +37,28 @@ jobs:
         # Tests marked linux_only (tests/firmware: the NimBLE host e2e + bond store + the i686 control twin) need a 32-bit
         # toolchain + a NimBLE build: their own job (firmware-host-e2e). The rest of tests/firmware
         # (the pure-C SM parity, runner and session fakes) has no BLE dependency and runs here too.
+        if: matrix.python != '3.13'
         run: python -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only"
+      # 3.13 runs the same suite under coverage instead (tools/ci.sh cov): the floor gates calictl/
+      # only ([tool.coverage.report] fail_under in pyproject.toml, a ratchet); tools/ is informational.
+      - name: Test suite + coverage floor (calictl/)
+        if: matrix.python == '3.13'
+        run: PY=python tools/ci.sh cov
+      - name: Coverage summary + badge data
+        if: matrix.python == '3.13' && !cancelled() && hashFiles('coverage.xml') != ''
+        run: |
+          total=$(python -m coverage report --include='calictl/*' --format=total --fail-under=0)
+          floor=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['tool']['coverage']['report']['fail_under'])")
+          echo "**Coverage (calictl/, line+branch): ${total}%** — floor ${floor}%" >> "$GITHUB_STEP_SUMMARY"
+          color=$(python -c "t=$total; print('brightgreen' if t>=90 else 'green' if t>=80 else 'yellow' if t>=70 else 'orange')")
+          mkdir -p coverage-out && cp -r coverage.xml htmlcov coverage-out/
+          printf '{"schemaVersion": 1, "label": "coverage", "message": "%s%%", "color": "%s"}\n' "$total" "$color" > coverage-out/coverage.json
+      - name: Upload coverage report (XML + HTML + badge JSON)
+        if: matrix.python == '3.13' && !cancelled() && hashFiles('coverage-out/coverage.json') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage-out/
       # The next three checks are Python-version-independent -> run once (on the deploy target 3.13)
       # instead of 3x. The import-cleanliness guard stays on ALL versions (a stdlib layout can differ).
       - name: Signal-coverage + semantic-review audit
@@ -50,6 +72,33 @@ jobs:
             || { echo "::error::screens.json stale — run python -m tools.build_web"; exit 1; }
       - name: Runtime is stdlib-only at import
         run: python -m tools.check_import_clean   # shared with tools/ci.sh + the import-clean pre-commit hook
+
+  # main only: commit the shields.io endpoint JSON the README coverage badge reads (self-generated,
+  # no third-party upload or token). [skip ci] prevents a re-trigger loop, like screenshots.yml.
+  coverage-badge:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage
+          path: /tmp/coverage
+      - name: Commit the badge JSON (if it changed)
+        run: |
+          cp /tmp/coverage/coverage.json .github/badges/coverage.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/coverage.json
+          if git diff --cached --quiet; then
+            echo "coverage badge unchanged"
+          else
+            git commit -m "ci: update coverage badge [skip ci]"
+            git pull --rebase -q origin main && git push origin HEAD:main
+          fi
 
   # Every pre-commit-stage hook in .pre-commit-config.yaml over the whole tree (ruff + ruff format,
   # markdownlint, gitleaks, whitespace/YAML, the vendor/MAC/VIN guard, import-clean, doc-offset,
