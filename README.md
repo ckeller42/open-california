@@ -131,7 +131,7 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   codecs byte-identical in CI (`codec-parity` job) — see [`csrc/README.md`](csrc/README.md).
 - **ESP32 firmware (work in progress)** — a NimBLE satellite that pairs with the camper unit
   independently of the Pi and controls the fridge, camping mode, lights, air heater and energy mode
-  (not the roof, not the wake-up light — "only via buspi or the app") with calictl's own frames,
+  (the wake-up light too, with the web page's clock; not the roof — "only via buspi or the app") with calictl's own frames,
   held byte-identical by golden vectors; proven on a Linux host build + a Bumble fake unit and in
   Espressif's QEMU, and on a CoreS3 against the mock unit (read side and, since 2026-10-07, the
   control path); never yet against the real unit. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.

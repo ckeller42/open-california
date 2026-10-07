@@ -311,25 +311,30 @@ The satellite's writes (#154 B) are proven in a ladder, each rung closer to hard
    `build`, `preface_for`, `commit_for`) over a value grid × state variants and over every
    app-recorded action, in `device.actuate`'s write order; `tests/test_control_vectors.py` keeps
    `tests/vectors/control.json` and `csrc/control_consts.h` fresh, every recorded action of the
-   five functions a vector, none refused, the frames the app's byte for byte, the roof absent.
+   five functions a vector, the frames the app's byte for byte, the roof absent; none refused but
+   the time-only wake-up edit made while no config was known (`WAKEUP_UNKNOWN`, ruling R5), whose
+   explicit `07:00 off` sibling builds the app's frame. The wake-up cases carry the page's clock
+   `local_now` and the unit's latched config.
 2. **Pure-C parity** — `tests/firmware/test_control_parity.py` replays every vector through the C
    twin (`control.c`) and scans the write allow-list exhaustively (exactly `1101`/`1201`/`1501`/
    `1601`/`1701` at their frame length). Runs on macOS; CI `test` + `codec-parity`.
 3. **Sequencer on a scripted transport** — `tests/firmware/test_session_fake.py` (`test_control_*`):
    arming (link up + first read-all + `CODEC_ARM_DELAY_MS`), one command at a time, the follow
    delay after the ACK, an ATT error (no commit after), a link drop mid-command, a late ACK of a
-   timed-out write, interleaved heartbeat/notifications, the roof/wake-up refusals with no write.
+   timed-out write, interleaved heartbeat/notifications, the roof refusal with no write,
+   the wake-up's config latch and REQUEST_CONFIG pull, the console's clock refusal.
 4. **Endpoint on a fake sequencer** — `tests/firmware/test_web_handlers.py` (every status code,
-   the station-mode gate, body validation) and `test_http_core.py` (the deferred answer).
+   the station-mode gate, body validation incl. `local_now`) and `test_http_core.py` (the deferred answer).
 5. **Host tier, real path** — `tests/firmware/test_control_e2e.py` (Linux, CI `firmware-host-e2e`):
    `POST /api/command` → sequencer → upstream NimBLE → the Bumble fake unit; every app-recorded
    action byte-exact at the unit with the commit spacing, console `set`, the transport choke point
    probed directly, `403`/`409`/`502`, the heartbeat through commands. `test_web_e2e.py` adds the
-   UI: a fridge toggle in Chromium lands at the fake unit; roof + wake-up greyed. `tests/e2e/
+   UI: a fridge toggle and a wake-up edit in Chromium land at the fake unit; the roof greyed. `tests/e2e/
    test_satellite.py` pins the same UI over a stub firmware on every platform (CI `test`).
 6. **CoreS3 bench** — `tools/esplab_control_walk.py` against the fake unit on a dongle, the same
    walker as rung 5 — **BOARD 2026-10-07**: 31 cases byte-exact at the mock over three walks, no
-   `1401`, `403` over the real hotspot, the UI toggle from Chromium (`docs/business-logic/evidence-ledger.md`).
+   `1401`, `403` over the real hotspot, the UI toggle from Chromium (`docs/business-logic/evidence-ledger.md`)
+   — a firmware before the wake-up light; its bench walk is owed.
 7. **The real unit** — never: the satellite has not been paired with it. The bytes are calictl's,
    so the unit-side evidence is calictl's (cooler `State=3` frames are a van check, #230).
 

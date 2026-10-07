@@ -1,10 +1,11 @@
 # ESP32 firmware (satellite, #154)
 
 **Status: sub-projects 1 and 2b/3a of #154 + the status display + the control path (#154 B) —
-reads everything and controls the cooler, camping mode, lighting, air heater and energy mode (no
-roof, no wake-up light). The read side and the display are bench-tested on a CoreS3 against the
-mock unit; the control path is proven on the Linux host tier against the fake unit and on the
-CoreS3 bench against the mock unit (2026-10-07); nothing has ever talked to the real unit.** ESP-IDF + NimBLE firmware for an
+reads everything and controls the cooler, camping mode, lighting (since 2026-10-07 the wake-up
+light too, with the web page's clock), air heater and energy mode (no roof). The read side and the
+display are bench-tested on a CoreS3 against the mock unit; the control path is proven on the Linux
+host tier against the fake unit and on the CoreS3 bench against the mock unit (2026-10-07; the
+wake-up light on the host tier only so far); nothing has ever talked to the real unit.** ESP-IDF + NimBLE firmware for an
 ESP32-S3 "satellite" (the M5Stack CoreS3) that pairs with the camper unit and reads its state
 independently of `calictl`/buspi — the explicit target for the pairing state machine
 (`calictl/pairing.py`, `R_PAIRING_SM`) that the web wizard already runs. Its writes are the `1003`
@@ -35,11 +36,11 @@ flowchart LR
 
 | Tier | What it proves | What it cannot prove | Run locally |
 |---|---|---|---|
-| **Host + Bumble** (CI `firmware-host-e2e`) | The firmware's C code — pairing runner, session, console — driving the **real upstream NimBLE host stack** (Linux port) over HCI-over-TCP against a Bumble virtual controller linked to the repo's fake unit (`tools/fake_unit_peripheral.py`). Proves pairing (KEYBOARD_ONLY + MITM + SC), bond persistence/reconnect, the full `SNAP` read-all against `calictl.protocol.decode`, the 1003 heartbeat, notification push, link-drop recovery, that the unit sees no control write while no command is sent — and the control path (`tests/firmware/test_control_e2e.py`): every app-recorded cooler/camping/lighting/air-heater/energy action sent through `POST /api/command` reaches the fake unit byte-exact with the lighting commit ≥ 300 ms after its frame, the console `set` too, roof/wake-up/unknown commands and a roof, `1003`, wrong-length or empty frame handed straight to the transport write nothing (the allow-list choke point), `403` over the setup hotspot, `409` while a command runs, an ATT refusal is `502` with no commit, the heartbeat keeps ticking through commands. | Nothing about the real esp-nimble port or a real radio — this is upstream NimBLE 1.10 on Linux, not the ESP-IDF-vendored esp-nimble 1.6-based stack (gap documented in `firmware/README.md` Pins). | `firmware/host/fetch_nimble.sh && make -C firmware/host cali-host && python -m pytest tests/firmware -v` (Linux only, needs a 32-bit toolchain — see `firmware/README.md` "Host build notes" for the Docker recipe on macOS) |
+| **Host + Bumble** (CI `firmware-host-e2e`) | The firmware's C code — pairing runner, session, console — driving the **real upstream NimBLE host stack** (Linux port) over HCI-over-TCP against a Bumble virtual controller linked to the repo's fake unit (`tools/fake_unit_peripheral.py`). Proves pairing (KEYBOARD_ONLY + MITM + SC), bond persistence/reconnect, the full `SNAP` read-all against `calictl.protocol.decode`, the 1003 heartbeat, notification push, link-drop recovery, that the unit sees no control write while no command is sent — and the control path (`tests/firmware/test_control_e2e.py`): every app-recorded cooler/camping/lighting/air-heater/energy action sent through `POST /api/command` reaches the fake unit byte-exact with the lighting commit ≥ 300 ms after its frame (since 2026-10-07 the app's wake-up edits too, the REQUEST_CONFIG pull included), the console `set` too, roof, stairs, clock-less wake-up and unknown commands and a roof, `1003`, wrong-length or empty frame handed straight to the transport write nothing (the allow-list choke point), `403` over the setup hotspot, `409` while a command runs, an ATT refusal is `502` with no commit, the heartbeat keeps ticking through commands. | Nothing about the real esp-nimble port or a real radio — this is upstream NimBLE 1.10 on Linux, not the ESP-IDF-vendored esp-nimble 1.6-based stack (gap documented in `firmware/README.md` Pins). | `firmware/host/fetch_nimble.sh && make -C firmware/host cali-host && python -m pytest tests/firmware -v` (Linux only, needs a 32-bit toolchain — see `firmware/README.md` "Host build notes" for the Docker recipe on macOS) |
 | **QEMU boot** (CI `firmware-qemu`) | The **real ESP-IDF image** (compiled for the esp32s3) boots in Espressif's QEMU: the console line protocol on the no-controller path, and the NVS-backed bond store (`cali_kv_*`) surviving a reboot, including a CRC-broken record recovering as "unpaired" instead of crashing. | Bluetooth — QEMU's esp32s3 machine has no radio, so BLE stays with the host tier and hardware. | `docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build && cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v'` |
 | **Host web e2e** (CI `firmware-host-e2e`, `tests/firmware/test_web_e2e.py`) | `cali-host --http PORT --fake-wifi SCRIPT`: the WiFi runner, captive DNS and web endpoints on the same 100 ms tick as the BLE session, over `net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi radio) and the Bumble fake unit. Proves the setup flow (fresh boot -> setup mode -> POST credentials -> station), a wrong password falling back to setup with the credentials cleared, saved credentials reconnecting after a restart + `DELETE /api/wifi`, `/api/state` equal to the console's `SNAP` after pairing, a WiFi loss leaving the BLE link and heartbeat alone, the page rendering in Chromium (EN + DE), and the setup flow clicked in Chromium (a wrong password shows the wrong-password text, the right one the `http://calictl-esp.local` link; EN + DE). | The real esp_wifi/lwIP/mdns stack, a real phone's captive-portal detection, radio coexistence — the fake WiFi only replays the script's outcomes. | `tools/ci.sh firmware` (Linux; on a Mac see `firmware/README.md` "Host build" for the Docker recipe) |
 | **QEMU no-WiFi-driver** (CI `firmware-qemu`, `test_qemu_boot.py::test_no_wifi_driver_boots_and_serves_nothing`) | The QEMU image is built with `CONFIG_CALI_WIFI=n` (no esp_wifi call compiled in): it logs `LOG wifi: driver unavailable` once, keeps WiFi off (`status` has no `wifi` member, `wifi status` -> `LOG wifi: not enabled`), listens on nothing, and does not reboot — the same path a board takes when `esp_wifi_init`/`esp_wifi_start` fails. | Anything about a working WiFi driver (QEMU's esp32s3 has no WiFi). | The QEMU command above |
-| **Board** (bench, not CI) | The real CoreS3 on a Linux bench against the mock camper unit (`tools/applab/fake_unit_ble.py` on a USB BLE dongle) and a second WiFi stick: flashing from `flasher_args.json`, the USB-Serial/JTAG console, esp-nimble passkey pairing + reconnect by bond, the setup hotspot -> `POST /api/wifi` -> station join, and the spec's seven status-display states (setup, joining, online, pairing, connected, stale, link lost) + dimming by remote `screenshot` (2026-10-01, `tools/esplab_display_walk.sh`; dated rows in `docs/business-logic/evidence-ledger.md`). **The control path ran on the board 2026-10-07:** `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo … --record …` against the mock unit — every app-recorded action byte-exact at the mock (31 cases, 3 clean walks), roof/wake-up refused with no `1401`, console `set`, `403 setup_mode` over the real setup hotspot, the heartbeat through commands, the 30 s water re-read, and a fridge toggle from the UI in Chromium (BOARD rows in `docs/business-logic/evidence-ledger.md`). | The real camper unit (only the mock so far), a phone's captive portal, the van's radio environment, the control path against a real unit's ACK timing and refusals (the mock ACKs at once), the water *stale push then correct read* ordering (not stageable with the mock's console; session-fake tier only), and the hardware watch items below that need the real unit. | `tools/esplab_display_walk.sh` on the bench (header lists its env); `firmware/README.md` "Status display" |
+| **Board** (bench, not CI) | The real CoreS3 on a Linux bench against the mock camper unit (`tools/applab/fake_unit_ble.py` on a USB BLE dongle) and a second WiFi stick: flashing from `flasher_args.json`, the USB-Serial/JTAG console, esp-nimble passkey pairing + reconnect by bond, the setup hotspot -> `POST /api/wifi` -> station join, and the spec's seven status-display states (setup, joining, online, pairing, connected, stale, link lost) + dimming by remote `screenshot` (2026-10-01, `tools/esplab_display_walk.sh`; dated rows in `docs/business-logic/evidence-ledger.md`). **The control path ran on the board 2026-10-07:** `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo … --record …` against the mock unit — every app-recorded action byte-exact at the mock (31 cases, 3 clean walks — a firmware before the wake-up light), roof/wake-up refused with no `1401`, console `set`, `403 setup_mode` over the real setup hotspot, the heartbeat through commands, the 30 s water re-read, and a fridge toggle from the UI in Chromium (BOARD rows in `docs/business-logic/evidence-ledger.md`). | The real camper unit (only the mock so far), a phone's captive portal, the van's radio environment, the control path against a real unit's ACK timing and refusals (the mock ACKs at once), the water *stale push then correct read* ordering (not stageable with the mock's console; session-fake tier only), and the hardware watch items below that need the real unit. | `tools/esplab_display_walk.sh` on the bench (header lists its env); `firmware/README.md` "Status display" |
 | **Pure-C unit tests** (in the normal `test`/`pytest` job, no BLE) | The pairing state machine (`pairing_sm.c`) replays the same golden vectors as `calictl.pairing`; the runner and the session+console compile and run against scripted fake transports on any host with a C compiler (macOS included). The network pieces too: the WiFi SM replays `tests/vectors/wifi_sm.json` from its Python twin (`tools/wifi_sm_ref.py`), the HTTP core (`http_core.c`), captive DNS (`captive_dns.c`), web handlers (`web.c`, incl. `POST /api/command` against a fake sequencer), JSON writer and the host `cali_net` (`net_host.c`) each run under a small C driver, and the WiFi runner runs next to the BLE session in `test_session_fake.py`. The control twin (`control.c`) replays every vector of `tests/vectors/control.json` byte for byte and its allow-list is scanned exhaustively (`test_control_parity.py`; the Linux host tier repeats both with an i686 `-m32` build, the ESP32-S3's 32-bit `long`); the sequencer (`control_run.c`) runs against the scripted transport in `test_session_fake.py` (arming, one at a time, ATT error, link drop, late ACK, interleaved heartbeat/notify, the follow delay). | Real NimBLE call sequencing (that's the host tier's job); real sockets under load; any radio. | `python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py tests/firmware/test_wifi_sm_parity.py tests/firmware/test_http_core.py tests/firmware/test_captive_dns.py tests/firmware/test_web_handlers.py tests/firmware/test_json.py tests/firmware/test_net_host.py tests/firmware/test_control_parity.py -v` |
 
 CI also builds the release esp32s3 image compile-only (job `firmware-build`, container
@@ -177,7 +178,7 @@ slot keeps its copy until a later line reuses it).
 | `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining) — the setup page turns it into one of three texts; in setup mode it also asks for a fresh scan for the next GET. |
 | `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
 | `DELETE /api/wifi` | Forget the WiFi (-> `SETUP_AP`) -> 200 `{"ok":true}`. |
-| `POST /api/command` | calictl's control request `{"function","what","value","confirm"}` (`value` a string, integer or null — booleans/fractions/nesting 400 `bad_json`). **Station mode only**: anywhere else 403 `setup_mode` (ruling B: never over the setup hotspot). Then web.py's 400 `missing_function_or_what` / `confirm_required` (airheater, roof), then the sequencer (`cali_control.h`): accepted -> the answer waits for the write ACKs (`CALI_HTTP_PENDING`, <= `CALI_CTL_DEADLINE_MS`) -> 200 `{"ok":true,"applied":null,"state":null,"error":null,"function":fn}` (`applied` never true: no readback) or 502 `write_failed` / 504 `write_timeout`; a gate or "Only via buspi or the app" -> 200 `{"ok":true,"applied":false,"refused":<text>,…}`; 400 `bad_value` / `unknown_control`, 409 `busy`, 503 `not_connected`. The core caps a pending answer at `CALI_HTTP_PENDING_MAX_MS` (2 x the deadline; 504 text/plain) so a handler that never answers cannot wedge the single connection. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), `-0` passes as the text `"-0"` (refused as not on/off where calictl reads OFF — the safe direction), a >= 64-byte value is `bad_json` before the gates (the console `set` gates first; both refuse). |
+| `POST /api/command` | calictl's control request `{"function","what","value","confirm"}` plus the optional `local_now` (the page's clock for `lighting wakeup`, see [Control path](#control-path)) (`value` a string, integer or null — booleans/fractions/nesting 400 `bad_json`). **Station mode only**: anywhere else 403 `setup_mode` (ruling B: never over the setup hotspot). Then web.py's 400 `missing_function_or_what` / `confirm_required` (airheater, roof), then the sequencer (`cali_control.h`): accepted -> the answer waits for the write ACKs (`CALI_HTTP_PENDING`, <= `CALI_CTL_DEADLINE_MS`) -> 200 `{"ok":true,"applied":null,"state":null,"error":null,"function":fn}` (`applied` never true: no readback) or 502 `write_failed` / 504 `write_timeout`; a gate or "Only via buspi or the app" -> 200 `{"ok":true,"applied":false,"refused":<text>,…}`; 400 `bad_value` / `unknown_control`, 409 `busy`, 503 `not_connected`. The core caps a pending answer at `CALI_HTTP_PENDING_MAX_MS` (2 x the deadline; 504 text/plain) so a handler that never answers cannot wedge the single connection. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), `-0` passes as the text `"-0"` (refused as not on/off where calictl reads OFF — the safe direction), a >= 64-byte value is `bad_json` before the gates (the console `set` gates first; both refuse). |
 | other method on `/api/state`, `/api/wifi` or `/api/command` | 405 `{"ok":false,"error":"method"}` |
 | an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
 | any other path | setup mode: 302 `Location: /`; station mode: 404 |
@@ -194,14 +195,45 @@ poll waits up to the command's deadline (the UI shows "Sending…", never the of
 ### Control path
 
 The satellite sends control frames for **five functions — cooler (`1101`), camping mode (`1201`),
-lighting (`1501`), energy (`1601`), air heater (`1701`)** — and nothing else. **Not the roof, not
-the wake-up light:** both answer the refusal `Only via buspi or the app` (the UI greys them with
-the same words). The roof is an owner ruling (a motor on a satellite with no ignition gate of its
-own); the wake-up light needs the unit-reported wake-up config (calictl latches it from 1502
-Mode-20 frames, ruling R5) and a local wall clock to pack the next HH:MM as UTC — the ESP has
-neither, and a latch + SNTP + timezone would be built for one command. `lighting wakeup` is the
-only lighting command refused; `door_contact`, `profile`, `save_profile N [colour]` (with the
-SET_COLOR preface), the zones, `power` and `all` are carried.
+lighting (`1501`), energy (`1601`), air heater (`1701`)** — and nothing else. **Not the roof:** it
+answers the refusal `Only via buspi or the app` (the UI greys it with the same words), an owner
+ruling (a motor on a satellite with no ignition gate of its own). Every lighting command is
+carried: `door_contact`, `profile`, `save_profile N [colour]` (with the SET_COLOR preface), the
+zones, `power`, `all` and, since 2026-10-07, `wakeup` (below).
+
+**The wake-up light** (`R_FW_WAKEUP`, spec `2026-10-07-esp-wakeup`). *Decision 3 of the control-path
+plan — "the wake-up light stays with buspi or the app, the ESP has no clock and no latch" — was
+superseded on 2026-10-07 by spec 2026-10-07-esp-wakeup.* The edit needs two things the ESP does not
+have on its own, and gets them like this:
+
+- **The clock is the web page's.** The shared UI adds `local_now` to every `lighting wakeup`
+  request: the browser's wall clock read as UTC, `Math.floor((Date.now() - new
+  Date().getTimezoneOffset() * 60000) / 1000)`, the same "local time packed as UTC" the app uses, so
+  the unit wakes at the HH:MM the user typed in the browser's own time zone. calictl accepts and
+  ignores it; the C twin's wake-up builder uses it as its only clock (no SNTP, no time-zone
+  setting). `local_now` must be a JSON integer ≥ `1767225600` (2026-01-01T00:00Z), else `400
+  bad_value`; missing or `null` → refused with *the wake-up light needs the time from the web page —
+  set it there*. There is no skew check (owner ruling R1): a wrong browser clock gives a wrong
+  wake-up time, as in the app. The console `set lighting wakeup …` has no page, so it is always
+  refused with that clock reason.
+- **The rest of the edit comes from the unit's own config.** The session latches the unit's
+  lighting config (wake-up time + light value, door contact, stored favourites — a C twin of
+  `semantics.lighting_config`, held to it by `T_FW_LIGHT_CFG_PARITY`) from every 1502 frame the unit
+  sends (READ or NOTIFY), never from a write. The latch is **shown across links** (`/api/state`
+  `fn.lighting` carries the four raw latch keys, interpreted by `semantics.js`, so the wake-up card
+  keeps its values over a reconnect) but **gates and fills commands per link**: a previous link's
+  config never fills an edit on the new one. A change of the bonded identity (forget, or a bond to
+  another unit) drops the stored frames and the latch, so another unit's config is never shown. The
+  favourite gate reads the same latch.
+- **The REQUEST_CONFIG pull, inside one command** (calictl's ruling R5). When the edit needs a
+  config field this link has not seen, the sequencer first writes `LIGHT_REQUEST_CONFIG` + the
+  commit (after `CODEC_FOLLOW_DELAY_MS`), waits up to `CODEC_CONFIG_PULL_MS` (2000 ms) for the
+  unit's reply, re-plans with `local_now` + the seconds elapsed, then writes the wake-up frame + its
+  commit — or, still unknown, refuses with `WAKEUP_UNKNOWN` (*wake-up config not known yet (the unit
+  has not reported it): give on|off with the edit*) and writes nothing more. The default-filled
+  frame, which would silently disarm a phone-set alarm, is never written. A pulling command has one
+  deadline of `CALI_CTL_DEADLINE_MS` + `CODEC_CONFIG_PULL_MS` = 6 s, under the HTTP core's 8 s
+  pending cap; the sequencer stays `busy` for all of it.
 
 **Python is the authority** (`R_FW_CONTROL_TWIN`). `tools/gen_c_dict.py` emits every constant,
 table and gate text the C twin needs into `csrc/control_consts.h` (the allow-list `CALI_CTL_CHARS`
@@ -242,7 +274,8 @@ response; a lighting commit (`0e00…`) follows each frame at least `CODEC_FOLLO
 after the previous write's ACK — the sequencer runs on the 100 ms tick and cannot see the ACK's own
 time, so the real gap is 300–400 ms, never less (the app streams at ~500 ms). An ATT error fails the
 command with no further frame (no commit after a refused frame); a link drop mid-command fails it;
-the whole command gives up after `CALI_CTL_DEADLINE_MS` (4 s). Success means every write was ACKed —
+the whole command gives up after `CALI_CTL_DEADLINE_MS` (4 s; 6 s for a wake-up that pulls the
+config first, above). Success means every write was ACKed —
 the ESP does no readback check (`applied: null`). The UI then confirms from the unit's own state:
 it watches the next `/api/state` polls (up to 5 s) for the field the control shows (a toggle, a
 slider, a select, or the All-lights master) to reach the sent value, and says "✓ Applied". When
@@ -263,16 +296,16 @@ write-path hardening (the same stance as the WiFi how-to's "no login" paragraph)
 | Status | Body | When |
 |---|---|---|
 | 200 | `{"ok":true,"applied":null,"state":null,"error":null,"function":fn}` | every write ACKed (`applied` never `true`) |
-| 200 | `{"ok":true,"applied":false,"refused":<reason>,"state":null,"error":null,"function":fn}` | a `command_precondition` gate, or "Only via buspi or the app" (roof, wake-up, any other function) |
+| 200 | `{"ok":true,"applied":false,"refused":<reason>,"state":null,"error":null,"function":fn}` | a `command_precondition` gate; "Only via buspi or the app" (roof, any other function); a wake-up without `local_now` (the clock reason); a wake-up whose config the REQUEST_CONFIG pull did not bring (`WAKEUP_UNKNOWN`) |
 | 400 | `{"ok":false,"error":"bad_json"}` | not the fixed shape; `value` a boolean, fraction, nested, or ≥ 64 bytes; unknown or duplicate key |
 | 400 | `missing_function_or_what` / `confirm_required` | calictl's own codes (`confirm` is required for `airheater` and `roof`) |
-| 400 | `bad_value` / `unknown_control` | `control.build` would raise (`CommandError` or `TypeError`) / would return `None` |
+| 400 | `bad_value` / `unknown_control` | `control.build` would raise (`CommandError` or `TypeError`) / would return `None`; `bad_value` also for a `local_now` that is not a JSON integer ≥ `1767225600` (ESP-only key; calictl ignores it) |
 | 403 | `setup_mode` | not in station mode (ESP-only) |
 | 405 | `method` | anything but POST |
 | 409 | `busy` | a command is running, or a timed-out write still awaits its ACK (ESP-only) |
 | 502 | `write_failed` | the unit refused a write (ATT error) — no commit follows (ESP-only) |
 | 503 | `not_connected` | no armed link, or the function's state not read on this link (ESP-only) |
-| 504 | `write_timeout` | no ACK within `CALI_CTL_DEADLINE_MS` (ESP-only) |
+| 504 | `write_timeout` | no ACK within `CALI_CTL_DEADLINE_MS` (+ `CODEC_CONFIG_PULL_MS` for a wake-up that pulls the config) (ESP-only) |
 
 Deliberate differences from calictl (all in the refusing direction, the UI never sends them):
 Content-Type is not checked (calictl answers 415); an integer `value` is passed as its decimal text
@@ -301,31 +334,40 @@ document, so a stale bundle fails CI. The browser does the interpretation: the f
 link up and snapshot age ≤ 10 s (`SAT_STALE_S`), the same instant the CoreS3 screen goes stale.
 `_meta.read_only` is the inverse of the firmware's `device.control.writes` (`writes` is true in station
 mode; `read_only = !writes`): with `writes` true the controls are **live** — the page POSTs calictl's `/api/command` body and requests nothing but `/`,
-`/api/state` and `/api/command` — except the pop-top roof and the wake-up light, which stay greyed
+`/api/state` and `/api/command` — except the pop-top roof, which stays greyed
 with the hint `Only via buspi or the app`; without it (setup mode, or an older firmware without the
 field) every control is greyed and the "Satellite — display only" banner shows. The firmware's
 own answers get a sentence: `403 setup_mode` → "Controls work only on your home WiFi — not over
 the setup hotspot", `409 busy` → "The satellite is still sending the previous command — try again
 in a moment", `503 not_connected` → "Not connected to the camper unit yet — try again in a few
 seconds"; a success is "✓ Applied" once the unit's state shows the sent value, otherwise
-"Sent — the unit didn't confirm it" (no readback on the ESP — see above). The wake-up card shows
-only the `Only via buspi or the app` note under its title: the satellite never knows the wake-up
-config, so it shows no inputs (empty fields would look like "no area set"). The UI sends
+"Sent — the unit didn't confirm it" (no readback on the ESP — see above). The wake-up card is
+live since 2026-10-07: it shows the config the unit last reported (the latch keys in `fn.lighting`,
+also from a previous link), stays disabled with *Wake-up settings not known yet — the unit has not
+reported them* until the unit has reported one (empty fields would look like "no area set"), sends
+`local_now` with every edit (so does the daemon's page, which ignores it) and confirms from the
+unit's state — time, switch, areas, brightness and lead time all matching — else "Sent — check
+the lamp". The UI sends
 at most one `/api/state` poll at a time (WebKit would otherwise stack one per tick on the
 single-connection core while a command pends). The German texts of these four satellite-only
 strings are **proposals** (the app has none of them; `strings.de.js`): *Nur über buspi oder die
 App*, *Steuerung nur im eigenen WLAN — nicht über den Einrichtungs-Hotspot*, *Der Satellit sendet
 noch den vorherigen Befehl — gleich noch einmal versuchen*, *Noch nicht mit der Camper-Einheit
-verbunden — in ein paar Sekunden noch einmal versuchen*. Device and WiFi details stay on `/device`
+verbunden — in ein paar Sekunden noch einmal versuchen*; so are the two wake-up refusals (2026-10-07):
+*Das Wecklicht braucht die Uhrzeit der Webseite — dort einstellen* (the clock reason) and
+*Wecklicht-Einstellungen noch nicht bekannt (die Einheit hat sie nicht gemeldet): Ein/Aus mit
+angeben* (`WAKEUP_UNKNOWN`, which calictl answers too). Device and WiFi details stay on `/device`
 (⋮ menu "Device & WiFi").
 
 Known gaps (accepted):
 
-- No roof and no wake-up light from the satellite (above); no `applied: true` — the UI confirms
+- No roof from the satellite (above); no `applied: true` — the UI confirms
   from the unit's reported state instead (above).
 - No water stale-hold: a parked, latched-low fresh tank shows unflagged on the satellite (calictl
   holds it via `freshness.implausible_water_drop` + a persisted baseline; whether that guard is still
   needed now that both read 1302 after subscribing is open until a van trace, #230).
+- The wake-up light takes the browser's clock unchecked (ruling R1): a phone or laptop with a wrong
+  clock or time zone sets a wrong wake-up time, as the app would.
 - No battery history chart; no pairing wizard (ESP pairs via console); no auto-camper.
 - UI changes reach the satellite only with a firmware rebuild + reflash.
 
@@ -408,7 +450,8 @@ chip":
    queue, and `py_int`'s saturation at `LONG_MAX` (32-bit `long` on the ESP32, 64-bit on the host;
    every bound is ≤ 255 so no outcome should change). On the board (CI image of `8b1eda0`):
    `tools/esplab_control_walk.py` against the mock unit reported `"problems": []` three times (31
-   cases), roof/wake-up were refused with no `1401` in the mock's recording, a POST over the setup
+   cases), roof/wake-up were refused with no `1401` in the mock's recording (that firmware predates the
+   satellite's wake-up light), a POST over the setup
    hotspot was `403`, and a fridge toggle from the UI landed as one `1101` write. The lighting
    commit followed its frame by 399–550 ms (≥ 300 ms as required; measured write to write at the mock, so the
    tail above 400 ms is likely the ACK lagging the write — ACK times were not measured). Still open: a real unit's ACK timing and refusals.
@@ -635,7 +678,7 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    flow is **active** (runner state not idle, bonded or error — a failed pairing does not block it)
    and started on the first tick after it ends.
 
-.. req:: The satellite serves the calictl web UI from its own BLE data, controls live except roof and wake-up
+.. req:: The satellite serves the calictl web UI from its own BLE data, controls live except the roof
    :id: R_FW_SHARED_UI
    :status: implemented
    :tags: esp32, web
@@ -645,8 +688,9 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    the firmware's raw ``/api/state`` in the browser with ``calictl/webui/semantics.js``, a twin of
    ``calictl/semantics.py`` held equal by golden vectors. The UI shows its controls live when the
    firmware reports ``device.control.writes`` (station mode), posting calictl's ``/api/command``
-   body, except the pop-top roof and the wake-up light, which stay greyed with the firmware's own
-   refusal text ("Only via buspi or the app"); without the flag every control is greyed. The
+   body (with the page's clock ``local_now`` on every wake-up edit), except the pop-top roof, which
+   stays greyed with the firmware's own refusal text ("Only via buspi or the app"); without the
+   flag every control is greyed. The
    firmware status/setup page stays at ``GET /device``, and at ``GET /`` outside station mode.
 ```
 
@@ -663,14 +707,30 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   `R_FW_CONTROL_API`; nothing verifies it any more.
 - **`R_FW_CONTROL_TWIN`** — verified by `T_CONTROL_VECTORS` (`tests/test_control_vectors.py`: the
   vectors and `control_consts.h` are fresh, every recorded app action of the five functions is a
-  vector, none is refused, the frames are the app's byte for byte, the roof never appears),
+  vector, none is refused but the time-only wake-up edit with no config known (`WAKEUP_UNKNOWN`), the frames are the app's byte for byte, the roof never appears),
   `T_FW_CONTROL_PARITY` (`tests/firmware/test_control_parity.py`: every grid and app vector through
   the C twin) and on the wire by `T_FW_CONTROL_E2E` (below); on the CoreS3 bench by the walk
   (BOARD 2026-10-07, evidence ledger).
+- **`R_FW_WAKEUP`** — verified by `T_FW_LIGHT_CFG_PARITY` (`tests/firmware/test_control_parity.py`:
+  the C latch equals `semantics.lighting_config` on every Mode × ProfileNumber × LightValue ×
+  Timestamp case), `T_FW_CONTROL_PARITY` (the wake-up grid × clocks × latch variants and the app's
+  wake-up actions through the C twin), `T_FW_LIGHT_LATCH` (`tests/firmware/test_session_fake.py`:
+  latched from the unit's frames; its neighbours pin that an own write is never latched and a
+  previous link's latch is shown but never gates), `T_FW_WAKEUP_PULL` (same module: the
+  REQUEST_CONFIG pull inside one command; its neighbours pin the `WAKEUP_UNKNOWN` refusal with
+  nothing more written, `busy` meanwhile, the 6 s deadline, a link drop during the pull, a pull
+  again after a reconnect, the console's clock refusal), `T_FW_LOCAL_NOW`
+  (`tests/firmware/test_web_handlers.py`: a missing or implausible page clock never reaches the
+  builder), `T_SAT_UI_WAKEUP` (`tests/e2e/test_satellite.py`: the live card sends the browser's
+  wall clock, Auckland time zone) and `T_FW_UI_LIVE_WAKEUP` (`tests/firmware/test_web_e2e.py`: a
+  card edit in Chromium lands at the fake unit byte-exact); end to end over real NimBLE by
+  `T_FW_CONTROL_E2E` (the app's wake-up edits byte-exact, `lighting-wakeup.jsonl:239` as the pull
+  + refusal and as `07:00 off`). Not yet on the CoreS3 bench (BOARD owed).
 - **`R_FW_WRITE_ALLOWLIST`** — verified by `T_FW_WRITE_ALLOWLIST_PURE` (exhaustive scan),
-  `T_FW_SESSION_FAKE` + `test_control_roof_and_wakeup_are_refused_without_a_write`, and
+  `T_FW_SESSION_FAKE` + `test_control_roof_and_others_are_refused_without_a_write`, and
   `T_FW_HOST_E2E` (no command, no control write at the unit), and `T_FW_CONTROL_E2E`
-  (`tests/firmware/test_control_e2e.py`: roof/wake-up/unknown commands never reach the fake unit,
+  (`tests/firmware/test_control_e2e.py`: roof, stairs, a wake-up without `local_now` and unknown
+  commands never reach the fake unit,
   and a roof, `1003`, wrong-length or empty frame handed straight to the NimBLE transport's
   `write` — cali-host's test-only `twrite` line — is refused at `t_write`).
 - **`R_FW_CONTROL_API`** — verified by `T_FW_CONTROL_READY`, `T_FW_CONTROL_ATT_ERROR`,
@@ -713,12 +773,13 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   `semantics.js` vs the Python golden vectors), `T_FW_APP_BUNDLE` (`tests/test_app_bundle.py`, the
   generated bundle) and `T_FW_SHARED_UI_HOST` (`tests/firmware/test_web_e2e.py`, the host tier's
   `STATE` equals Python's), `T_SAT_UI_LIVE` (`tests/e2e/test_satellite.py`: controls live, calictl's
-  body posted, roof + wake-up greyed with the reason in EN and DE, the firmware's 403/409/503
+  body posted, the roof greyed with the reason in EN and DE, the firmware's 403/409/503
   sentences, no offline banner while a command pends) and `T_FW_UI_LIVE_CONTROL`
   (`tests/firmware/test_web_e2e.py`, the same against the real firmware + fake unit), plus the
   board run of the display-only UI (`tools/esplab_ui_load.py`, see
   [the satellite UI](#the-satellite-ui-r_fw_shared_ui)) and of the live UI (2026-10-07: a fridge
-  toggle lands as one `1101` write, roof + wake-up greyed; evidence ledger).
+  toggle lands as one `1101` write, roof + wake-up greyed — a firmware before the wake-up light;
+  evidence ledger).
 - **`R_FW_STATUS_DISPLAY`** — verified by `T_FW_DISPLAY_MODEL` (`tests/firmware/test_display_model.py`,
   every row state, the 10 s stale rule, the setup footer and the bright/dim timing through a C driver
   over `display_model.c`), `T_FW_DISPLAY_FONT` (`tests/test_display_font.py`, every EN/DE screen

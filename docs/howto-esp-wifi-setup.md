@@ -15,8 +15,8 @@ pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 fir
 > [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
 
 The satellite reads the camper unit and, on your home WiFi, controls the fridge, camping mode,
-lights, air heater and energy mode with the same frames the Pi sends — never the pop-up roof and
-never the wake-up light (those stay with buspi or the app). Its page shows what the unit reports
+lights (the wake-up light included), air heater and energy mode with the same frames the Pi sends
+— never the pop-up roof (that stays with buspi or the app). Its page shows what the unit reports
 and the device's own state (Bluetooth pairing, link, WiFi).
 
 ## What you need
@@ -69,7 +69,7 @@ From now on the satellite joins your network by itself every time it starts.
 
 Open **<http://calictl-esp.local>** from any device on the same network: after setup it shows the
 calictl UI — the same tiles as on the Pi, with working controls for the fridge, camping mode,
-lights, air heater and energy mode; the pop-up roof and the wake-up light stay with buspi or the
+lights (the wake-up light too), air heater and energy mode; the pop-up roof stays with buspi or the
 app (greyed, with the hint *Only via buspi or the app*). Controls work only on your home WiFi,
 never over the setup hotspot (see [Control from the satellite](#control-from-the-satellite)).
 Device and WiFi details are at **<http://calictl-esp.local/device>** (also in the ⋮ menu,
@@ -93,13 +93,12 @@ Then open `http://192.168.x.y` directly.
 ## Control from the satellite
 
 On your home WiFi the tiles work like on the Pi: switch the fridge and set its level and quiet
-mode, camping mode (master, lights, USB), every light zone, favourites and the sliding-door light,
-the air heater (with its confirmation) and the energy mode. The satellite sends exactly the frames
+mode, camping mode (master, lights, USB), every light zone, favourites, the sliding-door light and
+the wake-up light, the air heater (with its confirmation) and the energy mode. The satellite sends exactly the frames
 the Pi — and the vendor app — send for these; what it cannot do:
 
-- **The pop-up roof and the wake-up light** are greyed with *Only via buspi or the app*. The roof is
-  deliberately left to buspi and the app; the wake-up light needs the time of day, which the
-  satellite does not have.
+- **The pop-up roof** is greyed with *Only via buspi or the app*. It is deliberately left to buspi
+  and the app.
 - **Nothing works over the setup hotspot.** While you are on `calictl-esp-setup` every control is
   greyed (a *Satellite — display only* banner says so); a command sent anyway is answered
   *Controls work only on your home WiFi — not over the setup hotspot*.
@@ -118,6 +117,12 @@ Things to expect:
   the satellite saw no reading with the new value (the satellite does no read-back of its own,
   unlike the Pi). The tile updates on the next reading. *Command failed: write_failed* means the unit refused
   the write; *write_timeout* that it never answered.
+- **The wake-up light takes the time from your phone or laptop**, like the app: the page sends its
+  own clock with every wake-up edit, and the light comes on at the time you typed, in your device's
+  time zone. A device with a wrong clock or time zone sets a wrong wake-up time — the satellite has
+  no clock of its own and does not check. The first edit after the satellite connects can take
+  about 2 s longer: the satellite first asks the unit for its current wake-up settings, as the app
+  does.
 - The page and its controls have **no login**, like the Pi's (the project owner's stance: every
   device on the local network is trusted).
 - For bench use, the USB console takes the same commands: `set <function> <what> <value>`, for
@@ -224,4 +229,6 @@ back**. The replies you'll see:
 | *Not connected to the camper unit yet — try again in a few seconds* after tapping a control | The Bluetooth link is not armed yet (give it a few seconds after the unit connects) or the unit is out of reach / asleep. |
 | *Controls work only on your home WiFi — not over the setup hotspot* | You are on `calictl-esp-setup`. Put the satellite on your WiFi (above) and use <http://calictl-esp.local>. |
 | *The satellite is still sending the previous command — try again in a moment* | One command at a time; wait for the toast of the previous one. |
-| *Only via buspi or the app* on the roof or the wake-up light | By design — these two are not controlled from the satellite. Use the Pi's page or the vendor app. |
+| *Only via buspi or the app* on the roof | By design — the roof is not controlled from the satellite. Use the Pi's page or the vendor app. |
+| *the wake-up light needs the time from the web page — set it there* | The request came without the page's clock — an old page still open from before the update, or a script. Reload <http://calictl-esp.local> and set the wake-up light on the page. |
+| *wake-up config not known yet (the unit has not reported it): give on\|off with the edit*, or the wake-up card stays greyed with *Wake-up settings not known yet — the unit has not reported them* | The unit has not told the satellite its wake-up settings (it asks once per edit and waits 2 s). Wait a few seconds after the unit connects and try again; if it keeps happening, set the wake-up light once in the vendor app or on the Pi's page. |

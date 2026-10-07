@@ -655,6 +655,10 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    to `docs/business-logic/evidence-ledger.md` (watch item 7 in `docs/firmware.md`). **Ran
    2026-10-07** on thinky (CI image of `8b1eda0`): 3 clean walks of 31 cases, no `1401`, `403` over
    the hotspot, the UI toggle landed — against the mock unit only; the real unit is still to come.
+   **Owed since the wake-up light (2026-10-07):** the same walk now posts `local_now` and injects
+   the unit's config frames, so it also covers the app's four wake-up edits (`lighting-wakeup.jsonl:239`
+   as the REQUEST_CONFIG pull + `WAKEUP_UNKNOWN` refusal and as `07:00 off`); plus a wake-up card
+   edit from the browser must land as `control.build("lighting","wakeup",…)`'s frame + commit.
 
 Carry the hardware watch items from `docs/firmware.md` into this run explicitly (repeated here so
 this checklist is self-contained):
