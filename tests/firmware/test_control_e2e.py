@@ -18,6 +18,7 @@ commands; a write the unit NACKs is ``502`` with no commit after it, one it ACKs
 """
 
 import json
+import math
 import re
 import time
 
@@ -260,7 +261,9 @@ def test_command_refused_in_setup_mode(host_fw, rec_unit, tmp_path):
 def test_heartbeat_keeps_ticking_through_commands(host_fw, rec_unit, tmp_path):
     """Five commands back to back: the unit's recording shows the ``1003`` heartbeat on its period
     all the way through the command window (no gap over two periods between beats, beats between
-    the commands' writes), and the session never drops."""
+    the commands' writes), and the session never drops. Every bound is derived from the measured
+    command window, never an absolute beat count: how many beats fit depends on how fast the five
+    commands complete (a native runner is quicker than i686 under qemu)."""
     hu, rec = rec_unit
     fw = _online(host_fw, hu, tmp_path)
     mark = len(fw.log)
@@ -277,7 +280,7 @@ def test_heartbeat_keeps_ticking_through_commands(host_fw, rec_unit, tmp_path):
     assert len(beats) >= (ctl[-1] - ctl[0]) / HEARTBEAT_S, (beats, ctl)
     assert max(gaps) <= 2 * HEARTBEAT_S, gaps
     assert sum(1 for t in beats if ctl[0] < t < ctl[-1]) >= 3
-    assert hu.call(_beats_seen, hu.unit) - before >= 8
+    assert hu.call(_beats_seen, hu.unit) - before >= max(1, math.floor((ctl[-1] - ctl[0]) / HEARTBEAT_S) - 1)
     assert not [line for line in fw.log[mark:] if line.startswith("LOG session:")]
 
 
