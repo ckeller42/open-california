@@ -65,7 +65,7 @@ exclude_patterns = ["_build", "api/openapi.yaml", "README.md", "api/README.md", 
 # not fail the -W build over them. Genuine doc-to-doc links still resolve and are checked.
 
 
-# The needs_extra_links config is deprecated in sphinx-needs 5 but its replacement
+# The needs_extra_links config is deprecated since sphinx-needs 5 (still accepted in 8) but its replacement
 # (needs_links) uses a different schema; keep the working config + silence the one warning.
 # - needs.deprecated: needs_extra_links works but its needs_links replacement has a different schema
 # - myst.xref_missing / myst.header: the lab-notebook markdown links to code files/repo paths that are
