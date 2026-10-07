@@ -65,7 +65,7 @@ firmware() {   # CI's firmware-host-e2e job: all of tests/firmware, incl. the li
                # test_suite() above). CALI_REQUIRE_CHROMIUM=1 (as in CI) makes a missing browser a
                # failure of the page test rather than a skip.
   local f
-  for f in tests/firmware/test_host_e2e.py tests/firmware/test_ble_store_kv.py tests/firmware/test_web_e2e.py; do
+  for f in tests/firmware/test_host_e2e.py tests/firmware/test_ble_store_kv.py tests/firmware/test_web_e2e.py tests/firmware/test_control_e2e.py tests/firmware/test_control_parity.py; do
     [ -f "$f" ] || { echo "firmware: expected test file missing: $f" >&2; exit 1; }
   done
   local out status=0
@@ -76,7 +76,7 @@ firmware() {   # CI's firmware-host-e2e job: all of tests/firmware, incl. the li
   # stays a quiet skip here; only the linux_only host-tier files count as "not validated".
   local skip_lines reason
   skip_lines=$(printf '%s\n' "$out" \
-    | grep -E '^SKIPPED \[[0-9]+\] tests/firmware/(test_host_e2e|test_ble_store_kv|test_web_e2e)\.py' || true)
+    | grep -E '^SKIPPED \[[0-9]+\] tests/firmware/(test_host_e2e|test_ble_store_kv|test_web_e2e|test_control_e2e|test_control_parity)\.py' || true)
   # (|| true: no match is the green case -- under set -euo pipefail a bare grep miss would exit 1)
   if [ -n "$skip_lines" ]; then
     reason=$(printf '%s\n' "$skip_lines" | sed -E 's/^SKIPPED \[[0-9]+\] [^:]+(:[0-9]+)?: //' | sort -u | paste -sd '; ' -)
@@ -106,6 +106,8 @@ codec_fresh() {   # golden vectors + generated C headers match protocol/dictiona
     || { echo "WiFi SM golden vectors stale — run: $PY -m tools.gen_wifi_vectors"; exit 1; }
   "$PY" -m tools.gen_semantics_vectors --check \
     || { echo "semantics golden vectors stale — run: $PY -m tools.gen_semantics_vectors"; exit 1; }
+  "$PY" -m tools.gen_control_vectors --check \
+    || { echo "ESP control vectors stale — run: $PY -m tools.gen_control_vectors"; exit 1; }
 }
 screenshots() {   # regenerate docs/screenshots from the live UI over the mock (needs Playwright +
                   # Chromium). Local stand-in for the screenshots.yml workflow while Actions is unused.

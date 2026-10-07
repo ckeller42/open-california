@@ -19,9 +19,9 @@ repos:
     hooks:
       - id: trailing-whitespace
         # generated artifacts: their generators (and --check guards) own their exact bytes
-        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts|net_consts)\.h|firmware/web/(strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/.*\.json|calictl/webui/screens\.json|ui/prototype\.html)$
+        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/.*\.json|calictl/webui/screens\.json|ui/prototype\.html)$
       - id: end-of-file-fixer
-        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts|net_consts)\.h|firmware/web/(strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/.*\.json|calictl/webui/screens\.json|ui/prototype\.html)$
+        exclude: ^(csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/.*\.json|calictl/webui/screens\.json|ui/prototype\.html)$
       - id: check-yaml
       - id: check-merge-conflict
       - id: check-added-large-files
@@ -93,7 +93,7 @@ repos:
         entry: tools/ci.sh codec-fresh
         language: system
         pass_filenames: false
-        files: ^(protocol/dictionary\.yaml|calictl/(overrides|pairing|device|protocol|semantics|anchors|serve)\.py|calictl/webui/(index\.html|app\.css|app\.js|strings\.de\.js|semantics\.js)|csrc/(codec_dict|codec_chars|pairing_consts|net_consts)\.h|firmware/web/(index\.html|page\.js|strings\.json|strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/(camper_codec|wifi_sm|semantics)\.json|tools/(gen_(c_dict|codec_vectors|wifi_vectors|semantics_vectors)|wifi_consts|wifi_sm_ref|mock_unit)\.py)$
+        files: ^(protocol/dictionary\.yaml|calictl/(overrides|pairing|device|protocol|semantics|anchors|serve|control)\.py|calictl/webui/(index\.html|app\.css|app\.js|strings\.de\.js|semantics\.js)|csrc/(codec_dict|codec_chars|pairing_consts|net_consts|control_consts)\.h|firmware/web/(index\.html|page\.js|strings\.json|strings_gen\.h|index_gen\.html|app_bundle_gen\.h)|tests/vectors/(camper_codec|wifi_sm|semantics|control)\.json|tests/vectors/app/.*\.jsonl|tools/(gen_(c_dict|codec_vectors|wifi_vectors|semantics_vectors|control_vectors)|wifi_consts|wifi_sm_ref|mock_unit|capture_diff)\.py)$
       # The un-built web UIs' only static check (calictl/webui + the ESP32 page script): tsc --checkJs
       # (0 errors) + node --check. Needs node.
       - id: webcheck

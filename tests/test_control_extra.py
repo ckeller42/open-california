@@ -227,7 +227,9 @@ def test_command_precondition_mirrors_the_remaining_web_ui_gates():
     for what in ("mode", "night_on", "night_off"):
         assert control.command_precondition("cooler", what, 2, fridge_off)  # fridge off -> refuse
         assert control.command_precondition("cooler", what, 2, fridge_on) is None
-        assert control.command_precondition("cooler", what, 2, {}) is None  # unknown -> allow
+        # unknown State -> allow the quiet gate; but night_* then hit R4 (no schedule to carry)
+        exp = control.REASON_COOLER_STATE_UNKNOWN if what != "mode" else None
+        assert control.command_precondition("cooler", what, 2, {}) == exp
 
     master_on, master_off = {"campingmode": {"State": 1}}, {"campingmode": {"State": 0}}
     for what in ("lights", "usb"):
@@ -413,3 +415,65 @@ def test_build_input_errors_are_command_errors():
     for what, value in (("color", "red"), ("wakeup", "25:00"), ("wakeup", "bogus"), ("kitchen", "x")):
         with pytest.raises(control.CommandError):
             control.build(funcs, "lighting", what, value, {})
+
+
+# --- rulings R3 / R4 (ESP control path, 2026-10-06): unknown -> refuse, never default -----------
+
+
+# one parametrize: docs/conf.py mocks pytest, and a second stacked decorator would turn the test into
+# a Mock that autodoc drops (its need would vanish from needs.json)
+@pytest.mark.parametrize(
+    "fn,what,value",
+    [
+        (fn, what, value)
+        for fn, what in (
+            ("cooler", "power"),
+            ("campingmode", "master"),
+            ("campingmode", "lights"),
+            ("campingmode", "usb"),
+            ("airheater", "power"),
+            ("lighting", "power"),
+            ("lighting", "door_contact"),
+        )
+        for value in (None, "", "x", "maybe", "3", " ")
+    ],
+)
+def test_a_value_that_is_not_on_or_off_is_refused_not_off(fn, what, value):
+    """Ruling R3: `set cooler power null` must refuse, never switch the fridge off.
+
+    .. test:: An on/off command with any other value is refused
+       :id: T_ONOFF_REFUSED
+       :links: R_ONOFF_STRICT
+    """
+    f = _funcs()
+    assert control.command_precondition(fn, what, value, {}) == control.REASON_NOT_ONOFF
+    with pytest.raises(control.CommandError, match="on or off"):
+        control.build(f, fn, what, value, {})
+
+
+@pytest.mark.parametrize("value", ["on", "OFF", " true ", "false", 1, 0, "1", "0"])
+def test_on_off_spellings_still_pass(value):
+    f = _funcs()
+    assert control.command_precondition("cooler", "power", value, {}) is None
+    assert control.build(f, "cooler", "power", value, {}) is not None
+
+
+def test_night_hours_with_no_cooler_state_are_refused():
+    """Ruling R4: a night_on/night_off edit carries the current schedule; with none known it would
+    send the default-filled frame whose literal 0 clobbered a set schedule (2026-08-26, #99).
+
+    .. test:: Cooler night hours need a known cooler state
+       :id: T_COOLER_NIGHT_NEEDS_STATE
+       :links: R_ONOFF_STRICT
+    """
+    f = _funcs()
+    for what in ("night_on", "night_off"):
+        assert control.command_precondition("cooler", what, 22, {}) == control.REASON_COOLER_STATE_UNKNOWN
+        assert (
+            control.command_precondition("cooler", what, 22, {"cooler": {}})
+            == control.REASON_COOLER_STATE_UNKNOWN
+        )
+        with pytest.raises(control.CommandError, match="not known"):
+            control.build(f, "cooler", what, 22, {})
+    known = {"cooler": {"State": 1, "NightTimerHourOn": 22, "NightTimerHourOff": 6}}
+    assert control.command_precondition("cooler", "night_on", 22, known) is None

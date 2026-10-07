@@ -6,7 +6,8 @@ docs screenshots — so a handler shape change that updates one and not the othe
 """
 
 STATE_KEYS = frozenset({"t", "fn", "device"})  # GET /api/state
-DEVICE_KEYS = frozenset({"pairing", "link", "wifi", "uptime_ms", "fw"})  # /api/state device
+DEVICE_KEYS = frozenset({"pairing", "link", "wifi", "control", "uptime_ms", "fw"})  # /api/state device
+CONTROL_KEYS = frozenset({"writes"})  # /api/state device.control: POST /api/command accepted (station mode)
 PAIRING_KEYS = frozenset({"state", "address"})
 LINK_KEYS = frozenset({"up", "last_snap_age_ms"})
 WIFI_KEYS = frozenset({"mode", "ssid", "ip", "rssi"})  # /api/state device.wifi

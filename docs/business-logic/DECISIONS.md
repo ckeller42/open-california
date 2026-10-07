@@ -8,6 +8,50 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-06 — the ESP satellite gets a control path (#154 B)
+
+The ESP32 satellite sends control frames for cooler, camping mode, lighting, air heater and energy
+— **not the roof** (owner ruling: no roof control on the satellite; its `1401` is asserted absent
+from the generated write allow-list, no roof builder is compiled) and **not the wake-up light**
+(it needs the unit-reported wake-up config, latched from 1502 Mode-20 frames, plus a local wall
+clock — the ESP has neither; a latch + SNTP + timezone for one command was judged not worth it).
+Both answer `Only via buspi or the app`. Python stays the authority: `csrc/control_consts.h` and
+`tests/vectors/control.json` are generated from `calictl.control` (`--check` in CI) and the C twin
+must reproduce every vector. **Writes only in station mode**: `POST /api/command` is `403
+setup_mode` over the setup hotspot / during a setup-flow join / unprovisioned; the USB console `set`
+is physical access and works anywhere. Arming is the session's continuous `1003` heartbeat plus
+`CODEC_ARM_DELAY_MS` once per link (no per-write arm); one command at a time; the HTTP answer waits
+for the write ACKs (never "Sent" for a failed write) and `applied` is never `true` (no readback on
+the ESP — "Sent — the unit didn't confirm it"). The lighting commit follows the previous ACK by
+300–400 ms (tick-quantised, never less). Protocol facts did not change: the satellite's bytes are
+calictl's, which are the app's (R1). The control path ran on the CoreS3 bench against the mock unit
+(2026-10-07, evidence ledger: commit 399–550 ms after its frame, measured write to write — above the 300–400 ms ACK-based bound because the ACK lag is included; ACK times not measured); nothing
+has reached the real unit. Trace: `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST`, `R_FW_CONTROL_API` in
+`docs/firmware.md`; `R_FW_READ_ONLY` retired.
+
+## 2026-10-06 — cooler frames follow the app (ruling R1)
+
+calictl's cooler builder used to re-assert the unit's current State/Mode/Level/timer/schedule in
+every untargeted field (`_cooler_values`). The app (5.0.8, `tests/vectors/app/cooler.jsonl`) sends
+each untargeted field at its dictionary default instead — the leave-unchanged value: power on
+`fd771e3e1f1f`, level 5 `ff751e3e1f1f`, quiet `ff271e3e1f1f`, timer start `f7771e3e1f1f`, timer
+cancel `df771e3e1f1f`. Owner rule "calictl follows the app": every cooler command except
+`night_on`/`night_off` now builds the app's frame byte for byte (`control._cooler_neutral`), and
+the recording replay compares whole frames for every function but the roof
+(`capture_diff.TARGETED_ONLY`). `night_on`/`night_off` keep the current-state carry: no app
+recording shows those writes, and that carry is the DEVICE-verified 2026-08-26 frame. The 31
+night hours do not clobber a schedule the way 0 did (31 is outside 0-23; the app sends it in every
+frame). `overrides.CONTROL_RANGES` cooler `State` now allows the sentinel 3 (the app's level/mode
+frames carry it). The 2026-07-05 `State=3` → `0x0E` drop (below) predates the 1003 heartbeat and has
+not been re-tested; the first live cooler level/mode write after this change is the check.
+
+Review follow-ups (rulings R3/R4, same day): an on/off command with any other value (`null`, `""`,
+`"x"`, `"maybe"`) used to build the OFF frame (`_truthy` fell through to `False`); it is now refused
+(`REASON_NOT_ONOFF`, `control.ONOFF_COMMANDS`) and `_truthy` raises `CommandError` for direct callers.
+Cooler `night_on`/`night_off` with no cooler state known are refused (`REASON_COOLER_STATE_UNKNOWN`)
+instead of sending the default-filled frame. Both are in the ESP control vectors as `refused`, so the
+C twin mirrors them. Owner rule: unknown value or unknown state → refuse, never default (R5 precedent).
+
 ## 2026-10-05 — roof follows the app's heartbeat (A1)
 
 The #235 call-stack trace shows the app's `1003` ticker is session-global (`zf/d.java:183` →

@@ -33,7 +33,7 @@ jobs:
       - name: Install test/tooling deps (runtime is stdlib-only)
         run: pip install -r requirements-dev.txt
       - name: Test suite (parallel; conftest isolates state per-test so it's xdist-safe)
-        # Tests marked linux_only (tests/firmware: the NimBLE host e2e + bond store) need a 32-bit
+        # Tests marked linux_only (tests/firmware: the NimBLE host e2e + bond store + the i686 control twin) need a 32-bit
         # toolchain + a NimBLE build: their own job (firmware-host-e2e). The rest of tests/firmware
         # (the pure-C SM parity, runner and session fakes) has no BLE dependency and runs here too.
         run: python -m pytest tests/ -q -n auto --dist loadgroup -m "not linux_only"
@@ -130,7 +130,7 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install deps
         run: pip install -r requirements-dev.txt
-      - name: Generated artifacts are fresh (csrc/ codec_dict.h + codec_chars.h + pairing_consts.h + net_consts.h, firmware/web/ strings_gen.h + index_gen.html + app_bundle_gen.h)
+      - name: Generated artifacts are fresh (csrc/ codec_dict.h + codec_chars.h + pairing_consts.h + net_consts.h + control_consts.h, firmware/web/ strings_gen.h + index_gen.html + app_bundle_gen.h)
         run: python -m tools.gen_c_dict --check
       - name: Golden vectors are fresh
         run: python -m tools.gen_codec_vectors --check
@@ -138,8 +138,10 @@ jobs:
         run: python -m tools.gen_wifi_vectors --check
       - name: Semantics golden vectors are fresh (calictl/semantics.py -> tests/vectors/semantics.json)
         run: python -m tools.gen_semantics_vectors --check
+      - name: ESP control vectors are fresh (calictl/control.py -> tests/vectors/control.json)
+        run: python -m tools.gen_control_vectors --check
       - name: Vectors + differential parity (compiles csrc/)
-        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py tests/test_wifi_sm_ref.py tests/firmware/test_wifi_sm_parity.py tests/test_semantics_js_parity.py tests/test_app_bundle.py -q
+        run: python -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py tests/test_codec_parity.py tests/test_ports_parity.py tests/test_wifi_sm_ref.py tests/firmware/test_wifi_sm_parity.py tests/test_semantics_js_parity.py tests/test_app_bundle.py tests/test_control_vectors.py tests/firmware/test_control_parity.py -q
 
   gui-e2e:
     runs-on: ubuntu-latest
@@ -212,8 +214,8 @@ jobs:
         run: python -m pytest tests/firmware -v -rs
 
   # The esp32s3 (M5Stack CoreS3) image: compile-only (no hardware in CI). Proves cali_core,
-  # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble, with
-  # codec_encode compiled out (the build fails if it reaches the ELF). Pin: firmware/README.md.
+  # cali_ble_nimble (unchanged) and the NVS platform build against ESP-IDF's esp-nimble.
+  # Pin: firmware/README.md.
   firmware-build:
     runs-on: ubuntu-latest
     timeout-minutes: 15   # observed 3.0-4.2 min on the probe runs; a hang must not burn 6 h

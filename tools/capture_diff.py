@@ -22,7 +22,7 @@ list a human extracts from any capture tool (`<uuid-or-handle>: <hex>` per line)
 App recordings (``tests/vectors/app/*.jsonl``, written by ``tools/applab/walk.py``) are a third
 input: ``--frames`` reads their ``write`` events, and :func:`check_recording` replays a whole
 recording — every non-neutral write attributed to the scenario step that caused it and diffed on
-the fields the app targets. ``--recording FILE`` prints that replay.
+the whole frame (roof: the fields the app targets). ``--recording FILE`` prints that replay.
 
 .. req:: Hold calictl to the real app's recorded frames
    :id: R_APP_FIDELITY
@@ -30,10 +30,10 @@ the fields the app targets. ``--recording FILE`` prints that replay.
    :tags: control, evidence, applab
 
    Every control write the real app made in a committed recording (``tests/vectors/app/*.jsonl``)
-   shall decode, on the fields the app targets, to the same values as ``control.build`` for the
-   action its scenario step names; a write calictl cannot attribute or build shall fail the
-   replay; a recording shall start with its header and carry no VIN, VIN hash, passkey or MAC
-   other than the fake unit's test identity.
+   shall equal ``control.build`` for the action its scenario step names byte for byte (the roof,
+   whose SafetyCounter the app generates: on the fields the app targets); a write calictl cannot
+   attribute or build shall fail the replay; a recording shall start with its header and carry no
+   VIN, VIN hash, passkey or MAC other than the fake unit's test identity.
 """
 
 from __future__ import annotations
@@ -297,6 +297,11 @@ APP_ONLY_HEX = {
 # A recorded write for one is reported as a gap; once calictl matches it the replay FAILS until the
 # entry is removed, so this list cannot rot. Empty since the wake-up builder landed (A2).
 GAPS: dict[tuple[str, str], str] = {}
+# Functions whose recorded action is compared on its TARGETED fields only; every other function must
+# match the app's frame BYTE FOR BYTE (untargeted fields at the app's leave-unchanged values, ruling
+# R1 "calictl follows the app"). The roof is exempt: its SafetyCounter is app-generated (seed +
+# elapsed/500 ms), never reproducible from the recording.
+TARGETED_ONLY = frozenset({"roof"})
 TEST_IDENTITY = "C0:FF:EE:CA:11:F0"  # the fake unit's identity — the only MAC a recording may hold
 _MAC_RE = re.compile(r"\b[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}\b")
 _VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
@@ -382,6 +387,8 @@ class WriteCheck:
     kind: str
     step: int | None = None
     problem: str | None = None
+    expect: list | None = None  # the step's [function, what, value] (kind "action" only)
+    frames: dict = field(default_factory=dict)  # function -> last raw state hex before this write
 
 
 def check_recording(
@@ -392,8 +399,9 @@ def check_recording(
     State for ``control.build``'s full-packet carry is the last ``read``/``notify`` of each function's
     state char. A write to ``1003``/``f000`` is skipped; a write for a function without a calictl
     builder fails; the app's neutral frame is a ``flush``; any other write must sit under a ``step``
-    whose ``expect`` names its function, and its targeted fields must equal calictl's. Every step with
-    an ``expect`` must have produced such a write.
+    whose ``expect`` names its function, and it must equal calictl's frame byte for byte (a
+    :data:`TARGETED_ONLY` function: on its targeted fields). Every step with an ``expect`` must
+    have produced such a write.
 
     :param path: the recording.
     :param funcs: the loaded + overridden function table (loaded if omitted).
@@ -406,6 +414,7 @@ def check_recording(
     gaps = GAPS if gaps is None else gaps
     _, events = load_recording(path)
     state: dict[str, dict] = {}
+    raw: dict[str, str] = {}
     step: dict | None = None
     expected: dict[int, tuple[int, dict]] = {}
     hit: set[int] = set()
@@ -420,6 +429,7 @@ def check_recording(
         fn, hx = ev.get("fn"), ev.get("hex")
         if kind in ("read", "notify"):
             if fn in funcs and hx and hx != trace.REDACTED_VIN_HASH:
+                raw[fn] = hx
                 decoded = protocol.decode(funcs[fn], bytes.fromhex(hx))
                 if fn == "lighting":  # carry the config latch across later frames, exactly like serve
                     decoded = {**decoded, **semantics.lighting_config(state.get(fn), decoded)}
@@ -427,7 +437,7 @@ def check_recording(
             continue
         if kind != "write" or ev.get("char") in SKIP_CHARS:
             continue
-        out.append(_check_write(funcs, gaps, state, step, line, ev, hit))
+        out.append(_check_write(funcs, gaps, state, step, line, ev, hit, raw))
     for sn, (line, sev) in sorted(expected.items()):
         fn, what, value = sev["expect"]
         if sn not in hit and (fn, what) not in gaps:
@@ -445,7 +455,7 @@ def check_recording(
     return out
 
 
-def _check_write(funcs, gaps, state, step, line, ev, hit) -> WriteCheck:
+def _check_write(funcs, gaps, state, step, line, ev, hit, raw) -> WriteCheck:
     fn, hx, char = ev.get("fn"), ev["hex"], ev.get("char")
     if fn not in control.BUILDERS:
         return WriteCheck(
@@ -496,7 +506,10 @@ def _check_write(funcs, gaps, state, step, line, ev, hit) -> WriteCheck:
                 name="step %s" % sn, function=fn, what=what, value=value, control_char=str(char), state=st
             )
             rows, leads, _ = diff(funcs, scen, bytes.fromhex(hx))
-            bad = [r for r in rows if r.name in targeted and not r.match]
+            whole = fn not in TARGETED_ONLY
+            bad = [r for r in rows if (whole or r.name in targeted) and not r.match]
+            if whole and not bad and ours.hex() != hx:  # bits outside every placed field
+                bad = [DiffRow("frame", hx, ours.hex(), False)]
     finally:
         control.local_now = saved_now
     if (fn, what) in gaps:
@@ -533,7 +546,7 @@ def _check_write(funcs, gaps, state, step, line, ev, hit) -> WriteCheck:
             sn,
             "step %s %s/%s=%r: app %s vs calictl %s: %s" % (sn, fn, what, value, hx, ours.hex(), detail),
         )
-    return WriteCheck(line, fn, hx, "action", sn)
+    return WriteCheck(line, fn, hx, "action", sn, expect=list(exp), frames=dict(raw))
 
 
 def run_recording(path: str) -> int:

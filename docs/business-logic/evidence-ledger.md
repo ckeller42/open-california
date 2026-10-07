@@ -10,6 +10,7 @@ proves what actually happens.
 | **DECOMPILE** | Grounded in the app's decompiled decode/setter + the enigma mapping, but never seen on the wire | agent cross-checks; `mapping.enigma` (54 verified classes) |
 | **DEVICE** | Physically observed on the van (photons / a human at the hardware), frame not necessarily diffed | owner report, dated |
 | **BOARD** | Firmware behaviour seen on the real ESP32 board (CoreS3) on the bench, against the **mock** unit — proves the firmware, not a unit-protocol fact | console log + remote `screenshot`, dated (section below) |
+| **HOST-E2E** | Firmware behaviour seen on the Linux NimBLE host build (`cali-host`, upstream NimBLE 1.10) against the **Bumble fake unit**, in CI — proves the firmware's C code and its bytes on a real GATT link, not the esp-nimble port, a radio, or a unit-protocol fact | `tests/firmware/test_*_e2e.py` (CI `firmware-host-e2e`), the fake unit's recording (section below) |
 
 Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ catalog),
 `test_doc_offset_consistency.py` (prose/comment `Field@offset` citations ↔ dictionary),
@@ -19,7 +20,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 
 | Fact | Tier now | Capture that would verify it |
 |---|---|---|
-| cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | **APP-RECORDED** 2026-10-05 for `timer_start` `f7771e3e1f1f` / `timer_cancel` `df771e3e1f1f` (`tests/vectors/app/cooler.jsonl`, both match `control.build`; the app absorbs the first tap on the switch after arming, the second cancels). APP-OBSERVED (tools/applab 2026-09-16): timer start `f7771e3e1f1f`, time picker 04:02 `ff7704021f1f` — targeted fields match calictl's (`354309001606` / `3d43091e1606`); untargeted fields differ in convention only (`control-and-actuation.md` §3, `protocol-crosscheck-applab.md`) | unit-side: does the box switch on at TimerHour:TimerMin (the 2026-08-30 DEVICE read confirms the stored time, not the switch-on) |
+| cooler `timer_set`, `timer_start`/`cancel` (start-at cooling timer) | **APP-RECORDED** 2026-10-05 for `timer_start` `f7771e3e1f1f` / `timer_cancel` `df771e3e1f1f` (`tests/vectors/app/cooler.jsonl`, both match `control.build`; the app absorbs the first tap on the switch after arming, the second cancels). APP-OBSERVED (tools/applab 2026-09-16): timer start `f7771e3e1f1f`, time picker 04:02 `ff7704021f1f` — calictl's frames are byte-identical since 2026-10-06 (`f7771e3e1f1f` / `timer_set 04:02` → `ff7704021f1f`; until then only the targeted fields matched, `control-and-actuation.md` §3, `protocol-crosscheck-applab.md`) | unit-side: does the box switch on at TimerHour:TimerMin (the 2026-08-30 DEVICE read confirms the stored time, not the switch-on) |
 | cooler `mode` quiet=2(manual)/4=scheduled — DISPLAY-CONFIRMED 2026-08-26: the unit's Flüstermodus screen shows "Ein/Aus"(manual=Mode2) + "Automatisch"(scheduled=Mode4) toggles; scheduled quiet = Mode 4 (vf/c L0), decompile-cross-checked end to end (yh/e QuietModeViewModel). No physical compressor-audible confirm yet | DEVICE (display) | a human hearing the compressor quieten in the window |
 | cooler `NightTimerSet` bit — meaning UNKNOWN: decoded (1102 bit3) + plumbed into a StateFlow (vf/c D3) but NEVER rendered (dead-end, zero UI consumers) and NEVER written by any cooler path (only air-heater rf/b.H3 stages that shared frame slot). NOT the schedule-arm bit (that's Mode 4); "within-window active flag" hypothesis **REFUTED** DEVICE 2026-08-26 — read 0 with the unit RTC at 22:06 INSIDE the armed 22:00–06:00 window (also 0 outside it). Vestigial on this unit, or asserts only under some unseen condition. Not surfaced | DEVICE (refuted) + **RETIRED by call stack (#154):** `vf/c` J0 → `D3()` → `yg/g.w0` (`yg/g.java:1014,1026`) has no reader outside the facade lambdas and no cooler writer | — |
 | airheater `runtime` (`3f7b003c1f3f`), `timer_start` (`3f3b017f1f3f` = Mode 3 + Combined 1), `timer_cancel` (`3f0b007f1f3f`) | APP-OBSERVED (tools/applab 2026-09-16; frames identical to calictl's) | unit-side: does the heater actually start at TimerHour:TimerMin, and what Mode does 1702 report after it fires (mock assumes 0) |
@@ -37,7 +38,9 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 
 ## Already at CAPTURE / DEVICE (examples, keep as the model)
 
-- cooler power/level frames, airheater on/off — CAPTURE (HCI 2026-07-08/14; `tools/scenarios/`).
+- cooler power/level frames, airheater on/off — CAPTURE (HCI 2026-07-08/14; `tools/scenarios/`). Cooler
+  `level` DEVICE only for the pre-R1 state-carry frame; the app-faithful `State=3` frame calictl sends
+  since 2026-10-06 (APP-RECORDED) is a van check (#230).
 - cooler `night_on`/`night_off` + `mode` timer_quiet(4) — DEVICE (live writes 2026-08-26, PR #112): hours
   + Mode are stored on the unit (survive reconnects) and every change is **broadcast as an unsolicited
   1102 notification**.
@@ -47,7 +50,13 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   van had **no schedule set**, so 0 was simply the current value — the capture never showed that 0 means
   leave-unchanged (it doesn't; the leave-unchanged sentinels are `v()`'s 31/3, and the app re-sends them
   in its 500 ms post-write neutral frame). **A capture only validates the state it was taken in.**
-  `_cooler_values` now carries the current schedule in every write.
+  Since 2026-10-06 (ruling R1) every cooler write but `night_on`/`night_off` sends the app's 31
+  (`fd771e3e1f1f` = power on, APP-RECORDED); those two still carry the current schedule — and are
+  **refused while no cooler state is known** (ruling R4, `REASON_COOLER_STATE_UNKNOWN`: the carry
+  would otherwise be the default-filled frame that did the clobbering). Same day, ruling R3: an
+  on/off command whose value is not `on`/`off`/`true`/`false`/`1`/`0` (`null`, `""`, `"x"`) is
+  refused (`REASON_NOT_ONOFF`), never built as the OFF frame. Both rulings are in the ESP control
+  vectors as `refused`, so the satellite's C twin answers the same words (tier: CI, below).
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
 - roof InfoPopUp `5` = DRIVING (`_ROOF_ALERT`) + the web move-gate's block set {child_lock, error,
@@ -121,7 +130,9 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   slider and shifts the toggle, so those are the reachable writes).
 - **APP-RECORDED (2026-10-05, same harness, after the #234 mock fix):** `cooler.jsonl` — power on
   `fd77…`, level 5 `ff75…`, manual quiet `ff27…` / off `ff07…`, automatic quiet `ff47…` (Mode 2/0/4),
-  power off `fc77…`, timer start `f777…` / cancel `df77…`, all matching `control.build`;
+  power off `fc77…`, timer start `f777…` / cancel `df77…`, all matching `control.build` — **byte for
+  byte since 2026-10-06** (ruling R1: every untargeted field at the app's leave-unchanged value; the
+  replay now compares whole frames for every function but the roof);
   `roof-hold.jsonl` — ignition on, the rocker's upper half held 16 s streams `Up=1` until the mock
   reports open (matches `control.build("roof","open")` on `Up`; the SafetyCounter is not a targeted
   field); `lighting-profile.jsonl` — press-and-hold tile A = `save_profile 1` (matches calictl);
@@ -185,6 +196,45 @@ comment says what to do at the van (see `tools/scenarios/lighting/kitchen-50.yam
 - cooler **cooling-timer decode** — DEVICE (2026-08-30, owner set Startzeit 09:00): live wire
   `timer_active=True, timer_hour=9, timer_min=0` matched the unit screen (was decompile-only). The
   timer can only be armed while the fridge is off — gated.
+
+## ESP32 satellite — the control path (#154 B)
+
+The satellite writes control frames for cooler (`1101`), camping mode (`1201`), lighting (`1501`),
+energy (`1601`) and air heater (`1701`) — never the roof (`1401`), never the wake-up light. The
+bytes are **calictl's**: `tests/vectors/control.json` is generated from `calictl.control` and the C
+twin must reproduce it, so the satellite inherits every tier below from calictl's rows above and
+adds nothing to the unit-protocol evidence. What the satellite's own tiers prove is that *its*
+bytes equal calictl's and that the allow-list holds.
+
+| Fact | Tier | Evidence |
+|---|---|---|
+| ESP control frames = calictl's (= the app's on every recorded action of the five functions, whole frame since R1) — the C twin plans the same gates, frames and lighting commits on 1078 grid vectors + every app-recorded action | **CI** (`tests/test_control_vectors.py` freshness + app coverage, `tests/firmware/test_control_parity.py` byte parity, `--check` on `control_consts.h` / `control.json`) | vectors regenerated from Python; a wording or builder change fails CI until regenerated |
+| The allow-list is exactly `1101`/6, `1201`/1, `1501`/16, `1601`/1, `1701`/6 — `1401` and `1003` never pass `cali_ctl_write_ok` | **CI** (`T_FW_WRITE_ALLOWLIST_PURE`: exhaustive scan 0x0000–0xffff × 0–33 bytes) | `test_control_parity.py` |
+| Every app-recorded cooler/camping/lighting/air-heater/energy action sent through `POST /api/command` reaches the unit **byte-exact**, lighting commits ≥ 300 ms after their frame; the 4 recorded wake-up edits are refused "Only via buspi or the app" with no write | **HOST-E2E** 2026-10-06 (`tools/esplab_control_walk.py` over the fake unit's recording, `test_app_recorded_actions_over_api_command`) | `tests/firmware/test_control_e2e.py`; mutants "commit without delay" and "commit byte off" killed |
+| Roof open/stop, stairs, wake-up, unknown control → refused/400, console `set roof close` refused; a roof `1401`, heartbeat `1003`, 15-byte lighting or empty frame handed straight to the NimBLE transport's `write` is refused at `t_write` (`LOG ble: write …/… refused: not on the control allow-list`), nothing at the unit; an allowed frame through the same hook does arrive | **HOST-E2E** 2026-10-06 (`test_unit_never_sees_a_roof_or_unknown_write`, cali-host's test-only `twrite` line) | `test_control_e2e.py`; mutant "choke point bypassed" killed |
+| `403 setup_mode` over the setup hotspot with an armed link and zero writes; `409 busy` while a command is on the air (the running one still completes); ATT Write-Not-Permitted → `502 write_failed` with no commit after; ACK-and-ignore (empty favourite) → 200 `applied: null`; the `1003` heartbeat keeps its period through 5 back-to-back commands | **HOST-E2E** 2026-10-06 | `test_control_e2e.py` (`test_command_refused_in_setup_mode`, `test_second_command_while_one_is_on_the_air_is_busy`, `test_refused_writes_nack_is_502_ack_and_ignore_is_unconfirmed`, `test_heartbeat_keeps_ticking_through_commands`) |
+| A fridge toggle in the shared UI (Chromium) lands as `control.build("cooler","power",…)` at the unit; roof + wake-up greyed with the hint (EN + DE); a real `409` shows the retry sentence; no offline banner while a 2.5 s command pends | **HOST-E2E** 2026-10-06 (`T_FW_UI_LIVE_CONTROL`, `tests/firmware/test_web_e2e.py`) + stub-level e2e (`tests/e2e/test_satellite.py`, CI `test`) | fake unit's recording = `[("1101", <frame>)]` |
+| The control path on the **real CoreS3** (esp-nimble write-with-response, the 31 app cases' value parsing on the Xtensa build (the 1078-case grid ran only on the host, incl. an `-m32` build), the walk, the UI toggle, `403` over the real hotspot) | **BOARD** 2026-10-07 (thinky CoreS3 vs the mock unit, never the real unit) | dated rows in "ESP32 satellite control path — BOARD rows" below |
+| The satellite's frames on the **real camper unit** | **DEVICE — never** (the satellite has not been paired with the real unit). Not needed for the bytes (they are calictl's; cooler `level`/`mode`/`timer_*` with `State=3` is calictl's own van check #230) — but the real esp-nimble link behaviour under a write is a device question too | first owner-watched satellite session at the van |
+
+## ESP32 satellite control path — BOARD rows (2026-10-07)
+
+CI image `firmware-esp32s3` of PR #245 at `8b1eda0` (built from the PR merge ref, the board reports
+`fw 6831c4f`), flashed with `tools/esplab/flash.sh`; mock unit `tools/applab/fake_unit_ble.py` on
+the thinky UB500 dongle with `FAKE_UNIT_RECORD`, fresh passkey pairing (first attempt), the ESP on a
+2.4 GHz home network. One BLE link for the whole session (≈ 20 min, no disconnect). Never the real
+unit.
+
+| Date | Fact | Evidence |
+|---|---|---|
+| 2026-10-07 | Every app-recorded cooler/camping/lighting/air-heater/energy action through `POST /api/command` → the mock received calictl's frames **byte-exact**, nothing else: 31 cases (27 frame cases = 39 writes on `1101`/`1201`/`1501`/`1601`/`1701`, 4 wake-up edits refused "Only via buspi or the app" with no write), every answer `applied: null`; **3 clean walks** (`"problems": []`). The lighting commit came 399–550 ms after its frame over 48 commits (calictl waits 300; the ESP's tick bound is 300–400 after the ACK, measured write to write, so the tail above 400 ms is likely ACK lag — not measured) | `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo … --record …`; the mock's recording |
+| 2026-10-07 | Roof open/stop, wake-up and stairs over `/api/command` → 200 `refused: "Only via buspi or the app"`; console `set roof stop` / `set roof close` → `LOG control: roof/… refused: Only via buspi or the app`; **zero `1401` writes** in the whole recording | curl answers, console log, `grep -c '"1401"'` = 0 |
+| 2026-10-07 | Console `set cooler power off` → `LOG control: cooler/power sending` / `sent`, one `1101` write `fc771e3e1f1f` = `control.build("cooler","power","off", <the ESP's /api/state>)` | console log + recording + calictl on the same state |
+| 2026-10-07 | `wifi forget` → setup hotspot; bench stick joined it; `POST /api/command` (cooler power on) to `http://192.168.4.1` → **`403 {"ok":false,"error":"setup_mode"}`**, `device.control.writes` false, no control write at the mock; `POST /api/wifi` over the hotspot rejoined the home network | curl answers + recording |
+| 2026-10-07 | The `1003` heartbeat through ≈ 1170 s of commands: median period 0.6 s, longest gap 0.85 s | the mock's recording |
+| 2026-10-07 | Water `1302` re-read every 30 s on the live link (40 reads, 29.9–30.3 s apart); `/api/state` `water` = the mock's frame. The *stale push then correct read* ordering was not staged on the board (the mock's scenario console has no "push a frame the read does not return"); it stays session-fake tier (`T_FW_SESSION_WATER_*`) | the mock's recording + `show water` |
+| 2026-10-07 | The shared UI from Chromium (Playwright on thinky): Cooler → *Refrigerator box* toggle → toast *Sent — the unit didn't confirm it* and one `1101` write `fd771e3e1f1f`; Roof open/close/stop disabled with the hint, *Wake-up light* disabled, *Sliding door lighting* enabled; no page errors. First load (3 cold runs): median `loadEventEnd` 1030 ms, live state 1138 ms (2026-10-02: 960 / 1065 ms over 5 runs) | `tools/esplab_ui_load.py --runs 3` + a Playwright check |
+| 2026-10-07 | Bench finding (tooling, fixed): the walker's documented `python tools/esplab_control_walk.py` failed to import `calictl`, and its "held" check compared whole function dicts, so a field the mock's clock moves (`TimerCounterMin` of `cooler.jsonl:259`) made one case flake on a second walk | `tests/test_esplab_control_walk_cli.py` |
 
 ## ESP32 satellite — BOARD rows (CoreS3 on the thinky bench, mock unit)
 

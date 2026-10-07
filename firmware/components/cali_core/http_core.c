@@ -14,6 +14,8 @@ static struct {
     int fd;       /* -1: no connection */
     uint64_t last_ms; /* accept, last received byte, or last send progress */
     int sending;      /* 1 once a response is queued: no more reading, only sending */
+    int waiting;      /* 1 while the handler holds the request (CALI_HTTP_PENDING): re-asked every poll */
+    cali_http_req_t req; /* the held request's views (into buf, untouched while waiting) */
     size_t len;      /* bytes in buf */
     size_t head_len; /* 0 until "\r\n\r\n" was seen: request line + headers + blank line */
     size_t body_len; /* Content-Length, valid once head_len != 0 */
@@ -28,6 +30,7 @@ static struct {
 static void close_conn(void) {
     S.net->tcp_close(S.fd);
     S.fd = -1;
+    S.waiting = 0;
     memset(S.buf, 0, sizeof S.buf);   /* a POST /api/wifi body holds the passphrase */
     S.len = 0;
 }
@@ -39,12 +42,16 @@ static const char *reason(int status) {
     case 302: return "Found";
     case 303: return "See Other";
     case 400: return "Bad Request";
+    case 403: return "Forbidden";
     case 404: return "Not Found";
     case 405: return "Method Not Allowed";
+    case 409: return "Conflict";
     case 413: return "Content Too Large";
     case 431: return "Request Header Fields Too Large";
     case 500: return "Internal Server Error";
+    case 502: return "Bad Gateway";
     case 503: return "Service Unavailable";
+    case 504: return "Gateway Timeout";
     default: return "Unknown";
     }
 }
@@ -178,6 +185,20 @@ static size_t request_line_end(void) {
     return i;
 }
 
+/* The handler's verdict: an answer, a 404, or (CALI_HTTP_PENDING) hold the request and ask again
+ * next poll. */
+static void answer(const cali_http_req_t *req, int h, const cali_http_resp_t *resp, uint64_t now_ms) {
+    if (h == CALI_HTTP_PENDING) {
+        S.req = *req;
+        S.req.resume = 1;
+        S.waiting = 1;
+        return;
+    }
+    S.waiting = 0;
+    if (h) respond(resp, now_ms);
+    else respond_error(404, now_ms);
+}
+
 static void dispatch(uint64_t now_ms) {
     cali_http_req_t req;
     cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL};
@@ -188,11 +209,8 @@ static void dispatch(uint64_t now_ms) {
     S.buf[S.head_len + S.body_len] = '\0';
     req.body = S.buf + S.head_len;
     req.body_len = S.body_len;
-    if (!S.handler(&req, &resp, S.ctx)) {
-        respond_error(404, now_ms);
-        return;
-    }
-    respond(&resp, now_ms);
+    req.resume = 0;
+    answer(&req, S.handler(&req, &resp, S.ctx), &resp, now_ms);
 }
 
 void cali_http_stop(void) {
@@ -221,10 +239,20 @@ void cali_http_poll(uint64_t now_ms) {
         S.fd = fd;
         S.last_ms = now_ms;
         S.len = S.head_len = S.body_len = 0;
-        S.sending = 0;
+        S.sending = S.waiting = 0;
     }
     if (S.sending) {
         pump(now_ms);
+        return;
+    }
+    if (S.waiting) {   /* a held request: ask the handler again; no idle timeout meanwhile, but a cap */
+        cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL};
+        if (now_ms - S.last_ms > CALI_HTTP_PENDING_MAX_MS) {   /* last_ms = the request's last byte */
+            S.waiting = 0;
+            respond_error(504, now_ms);
+            return;
+        }
+        answer(&S.req, S.handler(&S.req, &resp, S.ctx), &resp, now_ms);
         return;
     }
 

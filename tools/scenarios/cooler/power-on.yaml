@@ -1,7 +1,8 @@
 # Known-good validation scenario: cooler power ON.
 # calictl already actuates the cooler live (issue #2), so the app's frame and calictl's
 # MUST be identical here. Run this first to prove the capture->decode->diff pipeline before
-# trusting any lighting diff. Expected app write to char 1101: 3d4300000000.
+# trusting any lighting diff. Expected app write to char 1101: fd771e3e1f1f (APP-RECORDED,
+# tests/vectors/app/cooler.jsonl; every untargeted field at its leave-unchanged default).
 function: cooler
 what: power
 value: "on"

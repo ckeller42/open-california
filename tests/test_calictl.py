@@ -109,21 +109,25 @@ def test_energy_mode_control_frame():
 def test_cooler_quiet_mode_and_schedule_frames():
     """Cooler quiet Mode + night-schedule/timer branches, decompile-verified from vf/c.java
     (Mode 0=normal 2=manual-quiet 4=timer-quiet; NightTimerHourOn/Off = raw hour; TimerStart=1).
-    Full-packet, carrying State/Level; NOT yet live-verified."""
+    Full-packet: every untargeted field at the app's leave-unchanged value (APP-RECORDED frames,
+    ruling R1); night_on/night_off alone carry the current state (DEVICE 2026-08-26)."""
     from calictl import control
 
     f = _funcs()
     last = {"State": 1, "Mode": 0, "Level": 3}
-    assert control.build(f, "cooler", "mode", "quiet", last).hex() == "3d2300000000"  # Mode=2
-    assert control.build(f, "cooler", "mode", "timer_quiet", last).hex() == "3d4300000000"  # Mode=4
+    assert control.build(f, "cooler", "mode", "quiet", last).hex() == "ff271e3e1f1f"  # Mode=2 (the app's)
+    assert (
+        control.build(f, "cooler", "mode", "timer_quiet", last).hex() == "ff471e3e1f1f"
+    )  # Mode=4 (the app's)
     assert control.build(f, "cooler", "night_on", 22, last).hex() == "3d0300001600"  # byte4=0x16
     assert control.build(f, "cooler", "night_off", 7, last).hex() == "3d0300000007"  # byte5=0x07
     assert (
-        control.build(f, "cooler", "timer_set", "06:45", last).hex() == "3d03062d0000"
-    )  # TimerHour=6 TimerMin=45
+        control.build(f, "cooler", "timer_set", "06:45", last).hex() == "ff77062d1f1f"
+    )  # TimerHour=6 TimerMin=45 alone (the app's picker: ff7704021f1f = 04:02)
     # LIVE-VERIFIED 2026-08-26 (issue #99): the unit takes the night-schedule bytes LITERALLY —
     # hard-coded zeros clobbered a just-set quiet_from (1102 push "quiet_from 22->0"). So with a
-    # schedule in the current state, EVERY cooler write must carry it (change only the target).
+    # schedule in the current state, a night_on/night_off edit carries the rest of it; every other
+    # write sends the app's 31 (out of 0-23 = leave unchanged), never 0.
     armed = {
         "State": 1,
         "Mode": 0,
@@ -133,13 +137,13 @@ def test_cooler_quiet_mode_and_schedule_frames():
         "NightTimerHourOff": 6,
     }
     fr = control.build(f, "cooler", "power", "on", armed)
-    assert fr[4] == 22 and fr[5] == 6 and (fr[0] >> 6) == 1  # power-on carries the schedule
+    assert fr.hex() == "fd771e3e1f1f"  # power-on = the app's frame: schedule at 31/31, untouched
     fr = control.build(f, "cooler", "night_off", 7, armed)
     assert fr[4] == 22 and fr[5] == 7  # editing one hour keeps the other
     # ARM scheduled quiet via Mode=4 (the app's "Automatischer Flüstermodus" path), carrying hours.
     # There is intentionally NO night_set command — the app never writes cooler NightTimerSet.
     assert control.build(f, "cooler", "night_set", "on", armed) is None
-    assert control.build(f, "cooler", "mode", "timer_quiet", armed)[4] == 22  # Mode=4 carries the window
+    assert control.build(f, "cooler", "mode", "timer_quiet", armed)[4] == 31  # Mode=4 leaves the window
     assert control.build(f, "cooler", "timer_start", None, last).hex()[:2] != "3d"  # TimerStart flips byte0
     assert control.build(f, "cooler", "mode", "loud", last) is None  # unknown mode
     for bad in (-1, 24):
@@ -443,9 +447,9 @@ def test_encode_rejects_out_of_width_value():
 
 def test_encode_rejects_curated_invalid_value():
     f = _funcs()
-    # cooler State=3 fits the 2-bit field but is rejected 0x0E on-device; curated {0,1}
+    # cooler State=2 fits the 2-bit field but is no state (curated {0,1} + the sentinel 3)
     base = dict(
-        State=3,
+        State=2,
         Mode=4,
         Level=4,
         TimerStart=3,
@@ -461,7 +465,7 @@ def test_encode_rejects_curated_invalid_value():
     except ValueError as e:
         assert "not an allowed value" in str(e) and "State" in str(e)
     else:
-        raise AssertionError("expected ValueError for curated-invalid cooler State=3")
+        raise AssertionError("expected ValueError for curated-invalid cooler State=2")
     # the camping sentinel 3 is NOT restricted (leave-unchanged), still encodes
     from calictl import control
 
@@ -700,7 +704,7 @@ def test_cooler_power_control_frame():
     on = control.decode_control(f["cooler"], control.build(f, "cooler", "power", "on", cur))
     off = control.decode_control(f["cooler"], control.build(f, "cooler", "power", "off", cur))
     assert on["State"] == 1 and off["State"] == 0
-    assert on["Level"] == 3 and on["Mode"] == 4  # untargeted fields carry current
+    assert on["Level"] == 7 and on["Mode"] == 7  # untargeted = the app's leave-unchanged values (R1)
 
 
 def test_cooler_level_control_frame_and_range():

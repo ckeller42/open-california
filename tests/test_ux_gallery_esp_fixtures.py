@@ -18,6 +18,7 @@ import pytest
 
 from tests.firmware.api_shape import (
     AP_KEYS,
+    CONTROL_KEYS,
     DEVICE_KEYS,
     LINK_KEYS,
     PAIRING_KEYS,
@@ -41,6 +42,7 @@ def test_state_fixture_shape(fixtures, mode):
     assert set(d) == DEVICE_KEYS
     assert set(d["pairing"]) == PAIRING_KEYS
     assert set(d["link"]) == LINK_KEYS
+    assert set(d["control"]) == CONTROL_KEYS and d["control"]["writes"] is (mode != "setup")
     assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == ("station" if mode == "satellite" else mode)
     assert d["uptime_ms"] == state["t"]
 

@@ -22,7 +22,16 @@ import pytest
 from tools import gen_c_dict
 from tools.wifi_consts import CONSTS
 
-from .api_shape import AP_KEYS, DEVICE_KEYS, LINK_KEYS, PAIRING_KEYS, STATE_KEYS, WIFI_GET_KEYS, WIFI_KEYS
+from .api_shape import (
+    AP_KEYS,
+    CONTROL_KEYS,
+    DEVICE_KEYS,
+    LINK_KEYS,
+    PAIRING_KEYS,
+    STATE_KEYS,
+    WIFI_GET_KEYS,
+    WIFI_KEYS,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware" / "components" / "cali_core"
@@ -53,7 +62,6 @@ def _build(tmp_path_factory, name, *defines):
             "-Wall",
             "-Wextra",
             "-Werror",
-            "-DCODEC_NO_ENCODE",
             *defines,
             "-I",
             str(CORE / "include"),
@@ -180,6 +188,7 @@ def test_api_state_shape(web_cli):
     assert set(body["device"]) == DEVICE_KEYS
     assert set(body["device"]["pairing"]) == PAIRING_KEYS and set(body["device"]["link"]) == LINK_KEYS
     assert set(body["device"]["wifi"]) == WIFI_KEYS
+    assert body["device"]["control"] == {"writes": True} and set(body["device"]["control"]) == CONTROL_KEYS
     assert list(body["fn"]) == ["cooler", "roof"]  # CODEC_CHARS order, frames held only
     assert body["fn"]["cooler"]["Level"] == 3
     assert body["fn"]["roof"] == {"Position": 1, "Installed": 1, "SafetyCounterValid": 0, "InfoPopUp": 0}
@@ -202,7 +211,7 @@ _PIN_SETUP = [
 EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
     '"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
-    '"uptime_ms":5010,"fw":"test"}}'
+    '"control":{"writes":true},"uptime_ms":5010,"fw":"test"}}'
 )
 EXPECTED_WIFI_BODY = (
     '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
@@ -272,7 +281,15 @@ def test_api_state_is_atomic(web_cli):
     # the driver flips the cooler's Level after every poll while the response is still being sent
     # (64 bytes a poll), and once more between requests: every body must parse and hold one whole
     # snapshot, the one of its request
-    resps, _ = drive(web_cli, [b"sendmax 64", b"flipping 1"] + [req("GET", "/api/state"), b"flip"] * 20)
+    # (the second half flips only between requests: the first half's flip count per request depends on
+    # the body's length in 64-byte polls, so it alone cannot guarantee both levels are seen)
+    resps, _ = drive(
+        web_cli,
+        [b"sendmax 64", b"flipping 1"]
+        + [req("GET", "/api/state"), b"flip"] * 10
+        + [b"flipping 0"]
+        + [req("GET", "/api/state"), b"flip"] * 10,
+    )
     assert len(resps) == 20
     levels = set()
     for r in resps:
@@ -513,3 +530,255 @@ def test_device_is_the_status_page_in_every_mode(web_cli, state, joined):
 def test_post_root_is_not_served(web_cli):
     r, _ = one(web_cli, "POST", "/", "", setup=["wifi online", "joined 1"])
     assert r.status == 404
+
+
+# ---- POST /api/command -------------------------------------------------------------------------
+# web_cli.c fakes the control module: "ctl <rc> [reason]" = what cali_ctl_submit answers,
+# "ctldone <rc> <polls>" = the done callback fires that many polls into the next request.
+
+STATION = ["wifi online minsel 192.168.1.23 -61"]
+CMD = '{"function":"cooler","what":"power","value":"on","confirm":true}'
+OK = {"ok": True, "applied": None, "state": None, "error": None, "function": "cooler"}
+NOT_STATION = [("setup_ap", 0), ("setup_ap_retrying", 0), ("connecting", 0), ("unprovisioned", 0)]
+
+
+def submits(other):
+    return [line for line in other if line.startswith("CALL submit")]
+
+
+def test_command_pends_until_the_write_completes(web_cli):
+    """POST /api/command answers in calictl's shape (serve.ServeBackend.command) only after the
+    sequencer's done callback: ``applied`` is null (no readback check), never true.
+
+    .. test:: POST /api/command answers in calictl's shape after the write completed
+       :id: T_FW_COMMAND_API
+       :links: R_FW_CONTROL_API
+    """
+    r, other = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl pending", "ctldone ok 3"])
+    assert (r.status, r.json()) == (200, OK) and r.headers["content-type"] == "application/json"
+    # the same request with the write failing 3 polls in: the answer is 502, so it was NOT given early
+    r, _ = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl pending", "ctldone failed 3"])
+    assert (r.status, r.json()) == (502, {"ok": False, "error": "write_failed"})
+    assert submits(other) == [
+        "CALL submit [cooler] [power] [on]"
+    ]  # 200 only after done: PENDING would be 502
+
+
+def test_command_answer_waits_many_polls(web_cli):
+    """A done callback 300 polls (3 s of driver time) in is still waited for — no idle timeout."""
+    r, other = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl pending", "ctldone ok 300"])
+    assert (r.status, r.json()) == (200, OK)
+
+
+def test_command_refusal_is_calictls_refused_shape(web_cli):
+    reason = "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+    r, _ = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl refused " + reason])
+    assert (r.status, r.json()) == (
+        200,
+        {"ok": True, "applied": False, "refused": reason, "state": None, "error": None, "function": "cooler"},
+    )
+
+
+def test_command_elsewhere_is_the_refused_shape_too(web_cli):
+    body = '{"function":"roof","what":"open","confirm":true}'
+    r, other = one(
+        web_cli, "POST", "/api/command", body, setup=[*STATION, "ctl elsewhere Only via buspi or the app"]
+    )
+    assert (r.status, r.json()) == (
+        200,
+        {
+            "ok": True,
+            "applied": False,
+            "refused": "Only via buspi or the app",
+            "state": None,
+            "error": None,
+            "function": "roof",
+        },
+    )
+    assert submits(other) == ["CALL submit [roof] [open] []"]
+
+
+@pytest.mark.parametrize(
+    "rc,status,error",
+    [
+        ("busy", 409, "busy"),
+        ("notready", 503, "not_connected"),
+        ("bad", 400, "bad_value"),
+        ("none", 400, "unknown_control"),
+    ],
+)
+def test_command_immediate_results_map_to_status(web_cli, rc, status, error):
+    r, _ = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl " + rc])
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+@pytest.mark.parametrize(
+    "rc,status,error", [("failed", 502, "write_failed"), ("timeout", 504, "write_timeout")]
+)
+def test_command_done_results_map_to_status(web_cli, rc, status, error):
+    r, _ = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl pending", "ctldone %s 2" % rc])
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+def test_command_after_a_timeout_the_next_command_starts_fresh(web_cli):
+    """A timed-out command (504) leaves nothing behind: the next request is submitted anew and gets
+    its own answer (a late ACK only clears the sequencer's in-flight flag; done fires once)."""
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"ctl pending",
+            b"ctldone timeout 2",
+            req("POST", "/api/command", CMD),
+            b"ctldone ok 1",
+            req("POST", "/api/command", CMD),
+        ],
+    )
+    assert [(r.status, r.json()) for r in resps] == [
+        (504, {"ok": False, "error": "write_timeout"}),
+        (200, OK),
+    ]
+    assert len(submits(other)) == 2
+
+
+def test_command_second_request_while_busy_is_409(web_cli):
+    """The web core is single-connection, so the sequencer's BUSY (a command, or a timed-out write
+    still unacknowledged) is what a second request gets."""
+    resps, _ = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"ctl pending",
+            b"ctldone ok 1",
+            req("POST", "/api/command", CMD),
+            b"ctl busy",
+            req("POST", "/api/command", CMD),
+        ],
+    )
+    assert [(r.status, r.json()) for r in resps] == [(200, OK), (409, {"ok": False, "error": "busy"})]
+
+
+@pytest.mark.parametrize("state,joined", NOT_STATION)
+def test_command_refused_outside_station_mode(web_cli, state, joined):
+    """Ruling B: no control write over the setup hotspot or during a setup-flow join (wifi.mode
+    "setup" or "off") — 403 before anything reaches the control module.
+
+    .. test:: No control write over the setup hotspot or a setup-flow join
+       :id: T_FW_COMMAND_STATION_ONLY
+       :links: R_FW_CONTROL_API
+    """
+    r, other = one(
+        web_cli, "POST", "/api/command", CMD, setup=["wifi " + state, "joined %d" % joined, "ctl pending"]
+    )
+    assert (r.status, r.json()) == (403, {"ok": False, "error": "setup_mode"})
+    assert not submits(other)
+
+
+@pytest.mark.parametrize("state,joined", [("connecting", 1), ("retrying", 1)])
+def test_command_accepted_while_a_station_reconnects(web_cli, state, joined):
+    """mode "station" also covers a joined-before station reconnecting: the gate is the mode."""
+    r, other = one(
+        web_cli,
+        "POST",
+        "/api/command",
+        CMD,
+        setup=["wifi " + state, "joined %d" % joined, "ctl pending", "ctldone ok 1"],
+    )
+    assert r.status == 200 and len(submits(other)) == 1
+
+
+@pytest.mark.parametrize(
+    "body,status,error",
+    [
+        ("", 400, "bad_json"),
+        ("not json", 400, "bad_json"),
+        ("[]", 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":true}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":false}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":1.5}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":1e3}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":01}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":-}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":{}}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":[1]}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","x":1}', 400, "bad_json"),
+        ('{"function":"cooler","function":"cooler","what":"power"}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","confirm":1}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power","confirm":"true"}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power",}', 400, "bad_json"),
+        ('{"function":"cooler","what":"power"}x', 400, "bad_json"),
+        ('{"function":1,"what":"power"}', 400, "bad_json"),
+        ('{"function":"%s","what":"power"}' % ("c" * 30), 400, "bad_json"),
+        ('{"function":"cooler","what":"%s"}' % ("w" * 40), 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":"%s"}' % ("v" * 64), 400, "bad_json"),
+        ('{"function":"cooler","what":"power","value":"a\\nb"}', 400, "bad_json"),
+        ("{}", 400, "missing_function_or_what"),
+        ('{"what":"power"}', 400, "missing_function_or_what"),
+        ('{"function":"cooler"}', 400, "missing_function_or_what"),
+        ('{"function":"cooler","what":""}', 400, "missing_function_or_what"),
+        ('{"function":"airheater","what":"power","value":"on"}', 400, "confirm_required"),
+        ('{"function":"airheater","what":"power","value":"on","confirm":false}', 400, "confirm_required"),
+        ('{"function":"roof","what":"open"}', 400, "confirm_required"),
+    ],
+)
+def test_command_body_validation(web_cli, body, status, error):
+    r, other = one(web_cli, "POST", "/api/command", body, setup=[*STATION, "ctl pending"])
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+    assert not submits(other)
+
+
+@pytest.mark.parametrize(
+    "value,want",
+    [
+        ("5", "[5]"),
+        ("null", "[]"),
+        ('"07:00"', "[07:00]"),
+        ("-1", "[-1]"),
+        ("0", "[0]"),
+        ('"%s"' % ("v" * 63), "[%s]" % ("v" * 63)),
+        ('" 4 "', "[ 4 ]"),
+        ('"3 amber"', "[3 amber]"),
+        ('"a\\"b\\\\c"', '[a"b\\c]'),
+    ],
+)
+def test_command_value_forms(web_cli, value, want):
+    """Strings pass as decoded text, integers as their decimal text, null as "" (plan decision 5)."""
+    body = '{"function":"cooler","what":"level","value":%s}' % value
+    r, other = one(web_cli, "POST", "/api/command", body, setup=[*STATION, "ctl pending", "ctldone ok 1"])
+    assert r.status == 200 and submits(other) == ["CALL submit [cooler] [level] %s" % want]
+
+
+def test_command_value_absent_is_empty(web_cli):
+    """The UI always sends "value" (possibly null); a body without it means the same as null."""
+    _, other = one(
+        web_cli,
+        "POST",
+        "/api/command",
+        '{"what":"timer_start","function":"cooler"}',
+        setup=[*STATION, "ctl pending", "ctldone ok 1"],
+    )
+    assert submits(other) == ["CALL submit [cooler] [timer_start] []"]
+
+
+def test_command_body_whitespace_and_key_order(web_cli):
+    body = ' {\r\n "confirm" : true , "value" : 3 , "what":"level", "function" : "cooler" } '
+    r, other = one(web_cli, "POST", "/api/command", body, setup=[*STATION, "ctl pending", "ctldone ok 1"])
+    assert (r.status, r.json()) == (200, OK) and submits(other) == ["CALL submit [cooler] [level] [3]"]
+
+
+@pytest.mark.parametrize("method", ["GET", "PUT", "DELETE"])
+def test_other_methods_on_command_are_405(web_cli, method):
+    r, other = one(web_cli, method, "/api/command", "" if method == "PUT" else None, setup=STATION)
+    assert (r.status, r.json()) == (405, {"ok": False, "error": "method"}) and not submits(other)
+
+
+def test_command_in_setup_mode_is_403_not_a_captive_redirect(web_cli):
+    """The setup hotspot's catch-all 302 must not swallow the command route."""
+    r, _ = one(web_cli, "POST", "/api/command", CMD, setup=["wifi setup_ap"])
+    assert r.status == 403
+
+
+@pytest.mark.parametrize("state,writes", [("online", True), ("setup_ap", False), ("unprovisioned", False)])
+def test_api_state_reports_whether_writes_are_accepted(web_cli, state, writes):
+    body = json.loads(get(web_cli, "/api/state", setup=["wifi %s minsel 192.168.1.23 -61" % state]))
+    assert body["device"]["control"] == {"writes": writes}

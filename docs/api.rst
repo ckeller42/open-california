@@ -51,6 +51,7 @@ Control frames
 .. automodule:: calictl.postcheck
    :no-members:
 .. autofunction:: calictl.postcheck.set_check
+.. autofunction:: calictl.control.command_precondition
 .. autofunction:: calictl.control.commit_for
 .. autofunction:: calictl.control.preface_for
 .. autofunction:: calictl.control.next_wakeup_epoch
@@ -121,6 +122,7 @@ Tests
 .. autofunction:: tests.e2e.test_gui.test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7
 .. autofunction:: tests.e2e.test_gui.test_wakeup_areas_use_the_t7_labels_and_ranges
 .. autofunction:: tests.e2e.test_gui.test_door_contact_row_hidden_on_grand_california
+.. autofunction:: tests.e2e.test_satellite.test_controls_are_live_and_post_calictls_command_shape
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
@@ -140,6 +142,7 @@ Cross-language codec (issue #156)
 
 .. automodule:: tools.gen_codec_vectors
 .. automodule:: tools.gen_semantics_vectors
+.. automodule:: tools.gen_control_vectors
 .. automodule:: tools.gen_c_dict
 .. automodule:: tools.wifi_consts
 .. automodule:: tests.test_codec_vectors
@@ -148,6 +151,7 @@ Cross-language codec (issue #156)
 .. automodule:: tests.test_gen_c_dict
 .. automodule:: tests.test_finding_artifact_sync
 .. automodule:: tests.test_app_bundle
+.. automodule:: tests.test_control_vectors
 .. automodule:: tests.test_wifi_consts
 .. automodule:: tests.test_ports_parity
 
@@ -192,6 +196,7 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_pairing_sm_parity
 .. automodule:: tests.firmware.test_runner_fake
 .. automodule:: tests.firmware.test_session_fake
+.. automodule:: tests.firmware.test_control_parity
 .. automodule:: tests.firmware.test_host_e2e
 .. automodule:: tests.firmware.test_json
 .. automodule:: tests.firmware.test_wifi_sm_parity
@@ -200,6 +205,7 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_web_handlers
 .. automodule:: tests.firmware.test_net_host
 .. automodule:: tests.firmware.test_web_e2e
+.. automodule:: tests.firmware.test_control_e2e
 .. automodule:: tests.firmware.test_qemu_boot
 .. automodule:: tests.test_wifi_sm_ref
 .. automodule:: tests.test_web_strings

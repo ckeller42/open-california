@@ -69,7 +69,8 @@ def pytest_collection_modifyitems(config, items):
     toolchain. A module-level ``pytest.skip`` in a conftest aborts the whole run when the directory
     is the command-line target, so skip per item; Bumble and the fake unit are imported lazily for
     the same reason. Only the tests needing the NimBLE host build carry the marker (the BLE e2e
-    test_host_e2e.py and the bond-store test test_ble_store_kv.py) — the
+    test_host_e2e.py, test_web_e2e.py and test_control_e2e.py — per test there — and the bond-store
+    test test_ble_store_kv.py) — the
     pure-C pairing-SM parity test (test_pairing_sm_parity.py) has no BLE/NimBLE
     dependency and runs on any host with a C compiler, macOS included."""
     marked = [it for it in items if it.get_closest_marker("linux_only")]
@@ -339,6 +340,16 @@ class HciUnit:
 def hci_unit():
     hu = HciUnit()
     yield hu
+    hu.close()
+
+
+@pytest.fixture
+def rec_unit(tmp_path):
+    """(HciUnit, its FAKE_UNIT_RECORD path): a fake unit that records every write it receives
+    (test_control_e2e.py, test_web_e2e.py)."""
+    rec = tmp_path / "unit.jsonl"
+    hu = HciUnit(record=str(rec))
+    yield hu, rec
     hu.close()
 
 

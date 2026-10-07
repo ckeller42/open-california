@@ -2,7 +2,8 @@
  * build. Links web.c + http_core.c + captive_dns.c (for cali_captive_is_probe) + json.c + snapshot.c
  * + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
  * frames, the runner state, a transport (has_bond/identity), an in-memory kv store, the clock, the
- * log, cali_fw_version ("test") and the WiFi runtime (cali_wifi_run.h).
+ * log, cali_fw_version ("test"), the WiFi runtime (cali_wifi_run.h) and the control sequencer
+ * (cali_ctl_submit).
  *
  * The session holds two frames: cooler (Installed=1, Level=3; "flip" toggles Level 3 <-> 4) and roof
  * (Position=1, Installed=1).
@@ -28,14 +29,20 @@
  *   now <ms>         cali_uptime_ms()
  *   kv <key>         print "KV <value>" or "KV <missing>"
  *   kvfail 0|1       cali_kv_set fails
+ *   ctl <rc> [reason…]   what cali_ctl_submit answers (default pending): pending refused elsewhere bad
+ *                    none busy notready; the rest of the line is *reason (NULL when absent)
+ *   ctldone <rc> <polls>   rc = ok failed timeout: the done callback of the last accepted command
+ *                    fires <polls> polls into the next request
  * Calls into the fake WiFi runtime print "CALL set_creds [<ssid>] [<psk>]", "CALL forget",
- * "CALL scan_auto"; cali_log prints "LOG <text>". cali_web_init's result goes to stderr as "init=<rc>".
+ * "CALL scan_auto"; cali_ctl_submit prints "CALL submit [<fn>] [<what>] [<value>]"; cali_log prints
+ * "LOG <text>". cali_web_init's result goes to stderr as "init=<rc>".
  */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_control.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
@@ -188,6 +195,30 @@ void cali_wifi_run_set_creds(const char *ssid, const char *psk) { printf("CALL s
 void cali_wifi_run_forget(void) { printf("CALL forget\n"); }
 void cali_wifi_run_scan_auto(void) { printf("CALL scan_auto\n"); }
 
+/* ---- the fake control sequencer ---- */
+static int s_ctl_rc = CALI_CTL_PENDING, s_done_rc = CALI_CTL_OK, s_done_after;
+static char s_ctl_reason[160];
+static cali_ctl_done_t s_ctl_done;
+
+int cali_ctl_submit(const char *fn, const char *what, const char *value, cali_ctl_done_t done,
+                    const char **reason) {
+    printf("CALL submit [%s] [%s] [%s]\n", fn, what, value);
+    *reason = s_ctl_reason[0] ? s_ctl_reason : NULL;
+    if (s_ctl_rc == CALI_CTL_PENDING) s_ctl_done = done;
+    return s_ctl_rc;
+}
+
+static int rc_named(const char *s) {
+    static const struct { const char *name; int rc; } T[] = {
+        {"pending", CALI_CTL_PENDING}, {"refused", CALI_CTL_REFUSED}, {"elsewhere", CALI_CTL_ELSEWHERE},
+        {"bad", CALI_CTL_BAD_VALUE}, {"none", CALI_CTL_NONE}, {"busy", CALI_CTL_BUSY},
+        {"notready", CALI_CTL_NOT_READY}, {"ok", CALI_CTL_OK}, {"failed", CALI_CTL_FAILED},
+        {"timeout", CALI_CTL_TIMEOUT}};
+    for (size_t i = 0; i < N_OF(T); i++)
+        if (strcmp(T[i].name, s) == 0) return T[i].rc;
+    return -1;
+}
+
 static const char *const WIFI_NAMES[] = {"unprovisioned", "setup_ap", "connecting", "online", "retrying",
                                          "setup_ap_retrying"};
 
@@ -217,6 +248,11 @@ static void request(const char *text) {
         s_sent_poll = 0;
         s_now += 10;
         cali_web_poll(s_now);
+        if (s_done_after > 0 && --s_done_after == 0 && s_ctl_done) {
+            cali_ctl_done_t d = s_ctl_done;
+            s_ctl_done = NULL;
+            d(s_done_rc);
+        }
         if (!s_pending && !s_open) break;
         if (s_flipping) flip();
     }
@@ -280,6 +316,13 @@ int main(void) {
             for (i = 0; i < N_OF(PAIR_STATE_NAMES) && !(PAIR_STATE_NAMES[i] && strcmp(PAIR_STATE_NAMES[i], a1) == 0); i++) {}
             if (i == N_OF(PAIR_STATE_NAMES)) { printf("UNKNOWN pair %s\n", a1); continue; }
             s_pair.st = (uint8_t)i;
+        } else if (strcmp(w, "ctl") == 0) {
+            const char *rest = strchr(line + 4, ' ');
+            if ((s_ctl_rc = rc_named(a1)) < 0) { printf("UNKNOWN ctl %s\n", a1); continue; }
+            snprintf(s_ctl_reason, sizeof s_ctl_reason, "%s", rest ? rest + 1 : "");
+        } else if (strcmp(w, "ctldone") == 0) {
+            if ((s_done_rc = rc_named(a1)) < 0) { printf("UNKNOWN ctldone %s\n", a1); continue; }
+            s_done_after = (int)strtol(a2, NULL, 10);
         } else if (strcmp(w, "kv") == 0) {
             char buf[128];
             size_t len = sizeof buf;

@@ -440,8 +440,9 @@ function isSatelliteBody(b) {
 
 /**
  * The satellite's raw /api/state -> the interpreted STATE calictl's /api/state carries, with a
- * synthesized `_meta` shaped like serve.py:135 ServeBackend.state(): always read-only, no session,
- * no auto-camper, plus `satellite: true` (app.js gates calictl-only chrome on it).
+ * synthesized `_meta` shaped like serve.py:135 ServeBackend.state(): read-only unless the firmware
+ * reports `device.control.writes` (station mode), no session, no auto-camper, plus
+ * `satellite: true` (app.js gates calictl-only chrome on it).
  * @param {any} body  {t, fn, device}
  * @param {number} nowMs  Date.now(): the ESP has no wall clock, so last_seen = now - age
  * @returns {Record<string, any>}
@@ -460,7 +461,9 @@ function adaptSatellite(body, nowMs) {
     age_s: age,
     last_seen: age === null ? null : nowMs / 1000 - age,
     paired: !!pairing.address,
-    read_only: true,
+    // The firmware accepts POST /api/command only in station mode (device.control.writes); an older
+    // firmware without the field stays display-only.
+    read_only: !(dev.control && dev.control.writes === true),
     session: "off",
     session_mode: "off",
     satellite: true,

@@ -6,11 +6,13 @@
    ``firmware/components/cali_core/session.c`` keeps the bonded link: after the runner reaches
    bonded (or a boot with a stored bond reconnects and re-encrypts) it discovers, subscribes every
    notifying state char, lets the heartbeat run ``CODEC_HEARTBEAT_WARMUP_MS`` (calictl's
-   ``HEARTBEAT_WARMUP_S``), reads every ``CODEC_CHARS`` function in order — except one the unit
-   pushed since the subscribe, and a read never overwrites a frame pushed while it was outstanding
-   (as ``calictl.device.read_all``: the notification beats the stale latch) — and prints one
-   ``SNAP`` of the ``codec_decode`` of each stored frame; a notification replaces that function's
-   whole frame (a new ``SNAP`` once the first read-all completed). A 1003 heartbeat runs every
+   ``HEARTBEAT_WARMUP_S``), reads every ``CODEC_CHARS`` function in order, and prints one
+   ``SNAP`` of the ``codec_decode`` of each stored frame. Read completions and notifications both
+   replace that function's whole frame, so the LAST frame to arrive wins (the app's order: it
+   subscribes, then reads; one decoder for both, decompile 2026-10-07 — as ``calictl.device.read_all``,
+   ``R_READ_LAST_FRAME_WINS``). Once the first read-all completed a notification prints a new
+   ``SNAP``, and water (``1302``) is re-read every ``CALI_SESSION_WATER_REREAD_MS`` while the link
+   is up, so a parked latch served at connect is corrected without a reconnect. A 1003 heartbeat runs every
    ``CODEC_HEARTBEAT_PERIOD_MS`` from ``CODEC_HEARTBEAT_START`` while the link is up; a lost link —
    drop, failed connect/encryption/discovery, a heartbeat that cannot be written or fails —
    reconnects by bond after 1 s, doubling to 60 s. ``console.c`` is the line protocol (``pair`` /
@@ -20,7 +22,7 @@
 
 .. test:: Session and console call/output sequences against a fake transport
    :id: T_FW_SESSION_FAKE
-   :links: R_FW_SESSION, R_FW_PAIRING_RUNNER, R_FW_READ_ONLY
+   :links: R_FW_SESSION, R_FW_PAIRING_RUNNER, R_FW_WRITE_ALLOWLIST, R_FW_CONTROL_API
 
 ``session_fake.c`` compiles console + session + runner + SM + ``csrc/codec.c`` with the host ``cc``
 (macOS too, no NimBLE) and scripts transport events; the end-to-end proof over NimBLE against the
@@ -91,7 +93,6 @@ PERIOD = int(
 def fake(tmp_path_factory):
     cc = shutil.which("cc") or pytest.skip("no C compiler")
     out = tmp_path_factory.mktemp("session") / "session_fake"
-    # -DCODEC_NO_ENCODE: the read-only firmware's codec, so a cali_core use of codec_encode fails here too
     subprocess.run(
         [
             cc,
@@ -99,7 +100,6 @@ def fake(tmp_path_factory):
             "-Wall",
             "-Wextra",
             "-Werror",
-            "-DCODEC_NO_ENCODE",
             "-I",
             str(CORE / "include"),
             "-I",
@@ -110,6 +110,8 @@ def fake(tmp_path_factory):
             str(CORE / "snapshot.c"),
             str(CORE / "json.c"),
             str(CORE / "session.c"),
+            str(CORE / "control.c"),
+            str(CORE / "control_run.c"),
             str(CORE / "runner.c"),
             str(CORE / "pairing_sm.c"),
             str(ROOT / "csrc" / "codec.c"),
@@ -204,7 +206,8 @@ def test_notify_replaces_the_whole_frame_and_snaps_only_after_read_all(fake):
     out = run(fake, *PAIRED, *mid, "NOTIFY 1102 11")
     s = snaps(out)
     assert len(s) == 2  # the mid notify printed none
-    assert s[0]["fn"]["cooler"] == protocol.decode(funcs["cooler"], bytes.fromhex("aabbccdd"))
+    # cooler's read came after the push: the last frame (the read) wins
+    assert s[0]["fn"]["cooler"] == protocol.decode(funcs["cooler"], b"\x01\x02")
     assert s[1]["fn"]["cooler"] == protocol.decode(funcs["cooler"], b"\x11")
     assert {k: v for k, v in s[1]["fn"].items() if k != "cooler"} == {
         k: v for k, v in s[0]["fn"].items() if k != "cooler"
@@ -230,46 +233,94 @@ def test_read_all_waits_the_heartbeat_warm_up(fake):
     assert calls(rest[:first_read], "write_heartbeat") == beats  # beats, then the reads
 
 
-def test_push_before_its_read_skips_the_read(fake):
-    """A function the unit pushed after the subscribe is not read: the notification beats the
-    stale read latch (``calictl.device.read_all``), so its frame is the pushed one.
+STALE_WATER = "03011d010016"  # FreshWaterLevel 1: a parked latch pushed on the subscribe
+LIVE_WATER = "03111d010016"  # FreshWaterLevel 17: what the read that follows returns
+REREAD = int(
+    re.search(
+        r"#define CALI_SESSION_WATER_REREAD_MS (\d+)u", (CORE / "include" / "cali_session.h").read_text()
+    ).group(1)
+)
 
-    .. test:: A pushed frame is not replaced by the read-all's read
+
+def _water(snap):
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    return snap["fn"]["water"], funcs["water"]
+
+
+def test_read_after_the_subscribe_push_wins(fake):
+    """The unit pushes a stale water frame on the subscribe; the read-all still reads water and
+    that read — the last frame — is what the SNAP (and so ``/api/state``) shows. The app subscribes
+    1302 then reads it, and one decoder takes both (decompile 2026-10-07).
+
+    .. test:: A read after the subscribe push wins (last frame wins, app order)
        :id: T_FW_SESSION_PUSH_BEATS_LATCH
        :links: R_FW_SESSION
     """
-    funcs = protocol.load()
-    overrides.apply(funcs)
-    reads = ["READ %x 0" % c for c in CHARS if c != 0x1102]
-    out = run(
-        fake,
-        *PAIRED,
-        "DISCOVERED 0",
-        "NOTIFY 1102 aabbccdd",  # pushed during the warm-up
-        "tick %d" % WARM,
-        *reads,
-    )
+    reads = ["READ %x 0%s" % (c, " " + LIVE_WATER if c == 0x1302 else "") for c in CHARS]
+    out = run(fake, *PAIRED, "DISCOVERED 0", "NOTIFY 1302 " + STALE_WATER, "tick %d" % WARM, *reads)
     rest = after(out, "CALL subscribe %d" % CHARS[-1])
-    assert "CALL read %d" % 0x1102 not in rest
-    assert [line for line in rest if line.startswith("CALL read")] == [
-        "CALL read %d" % c for c in CHARS if c != 0x1102
-    ]
+    assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in CHARS]
     (snap,) = snaps(out)
-    assert snap["fn"]["cooler"] == protocol.decode(funcs["cooler"], bytes.fromhex("aabbccdd"))
+    got, f = _water(snap)
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
 
 
-def test_push_while_its_read_is_outstanding_keeps_the_push(fake):
-    """The cooler read is already on the air when the unit pushes cooler: the read's completion
-    (the older latch) does not overwrite the pushed frame."""
+def test_push_while_its_read_is_outstanding_then_the_read_wins(fake):
+    """The cooler read is on the air when the unit pushes cooler; the read completion arrives
+    last, so it wins (no frame is privileged over another — only arrival order counts)."""
     funcs = protocol.load()
     overrides.apply(funcs)
     reads = ["READ %x 0" % c for c in CHARS]
     i = CHARS.index(0x1102)
     out = run(fake, *PAIRED, *read_all(reads=reads[:i] + ["NOTIFY 1102 aabbccdd"] + reads[i:]))
-    assert "CALL read %d" % 0x1102 in out  # it was requested
     (snap,) = snaps(out)
-    assert snap["fn"]["cooler"] == protocol.decode(funcs["cooler"], bytes.fromhex("aabbccdd"))
-    assert snap["fn"]["energy"] == protocol.decode(funcs["energy"], b"\x01\x02")  # the rest read
+    assert snap["fn"]["cooler"] == protocol.decode(funcs["cooler"], b"\x01\x02")
+
+
+def test_notify_after_the_read_wins(fake):
+    """A water notification after the read-all replaces the read (and SNAPs)."""
+    out = run(fake, *PAIRED, *READ_ALL, "NOTIFY 1302 " + LIVE_WATER)
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
+
+
+def test_water_is_re_read_periodically_while_the_link_is_up(fake):
+    """Water is re-read every ``CALI_SESSION_WATER_REREAD_MS`` after the read-all (calictl reads
+    1302 on every 30 s poll), so a stale latch served at connect is corrected without a reconnect;
+    the re-read's frame SNAPs, and a later notify still overrides it.
+
+    .. test:: The firmware re-reads water periodically while the link is up
+       :id: T_FW_SESSION_WATER_REREAD
+       :links: R_FW_SESSION
+    """
+    stale = ["READ %x 0%s" % (c, " " + STALE_WATER if c == 0x1302 else "") for c in CHARS]
+    early = run(fake, *PAIRED, *read_all(reads=stale), "tick %d" % (T + REREAD - 100))
+    assert calls(after(early, "CALL read %d" % 0x1302), "read") == []  # not before the period
+    out = run(
+        fake,
+        *PAIRED,
+        *read_all(reads=stale),
+        "tick %d" % (T + REREAD - 100),
+        "tick %d" % (T + REREAD),
+        "READ 1302 0 " + LIVE_WATER,
+    )
+    rest = after(out, "CALL read %d" % 0x1302)  # the read-all's own water read
+    assert calls(rest, "read") == ["CALL read %d" % 0x1302]  # the periodic re-read
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
+    out = run(
+        fake,
+        *PAIRED,
+        *read_all(reads=stale),
+        "tick %d" % (T + REREAD),
+        "READ 1302 0 " + LIVE_WATER,
+        "NOTIFY 1302 " + STALE_WATER,
+        "tick %d" % (T + 2 * REREAD),
+    )
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(STALE_WATER))  # the later notify wins
+    assert len(calls(out, "read %d" % 0x1302)) == 3  # read-all + two periodic re-reads
 
 
 def test_heartbeat_every_period_from_the_start_counter(fake):
@@ -921,3 +972,382 @@ def test_wifi_loss_does_not_touch_session(fake):
         "CALL write_heartbeat %d" % n for n in range(HB + 1, HB + 1 + 3000 // PERIOD)
     ]
     assert rest[-1].startswith("SNAP ")
+
+
+# ---- the control path (#154 B) -------------------------------------------------------------------
+
+from tools import gen_control_vectors  # noqa: E402
+from tools.mock_unit import _pack_state  # noqa: E402
+
+_CH = (ROOT / "csrc" / "codec_chars.h").read_text()
+ARM = int(re.search(r"#define CODEC_ARM_DELAY_MS (\d+)", _CH).group(1))
+FOLLOW = int(re.search(r"#define CODEC_FOLLOW_DELAY_MS (\d+)", _CH).group(1))
+TICK = 100  # the session tick (host_main.c / app_main.c TICK_MS)
+DEADLINE = int(
+    re.search(r"#define CALI_CTL_DEADLINE_MS (\d+)", (CORE / "include" / "cali_control.h").read_text()).group(
+        1
+    )
+)
+FUNCS = protocol.load()
+overrides.apply(FUNCS)
+
+
+def pack(fn, **fields):
+    return _pack_state(FUNCS[fn], fields).hex()
+
+
+def armed(frames=None, reads=None):
+    """Bonded, read-all served ``frames`` ({state char: hex}; others the default 0102), and the tick
+    that ends the arm delay (the link came up at session time 0)."""
+    frames = frames or {}
+    reads = reads or ["READ %x 0%s" % (c, " " + frames[c] if c in frames else "") for c in CHARS]
+    return [*PAIRED, *read_all(reads=reads), "tick %d" % ARM]
+
+
+def states_of(frames=None):
+    frames = frames or {}
+    return {fn: protocol.decode(FUNCS[fn], bytes.fromhex(frames.get(c, "0102"))) for c, fn in zip(CHARS, FNS)}
+
+
+def writes(out):
+    return [line for line in out if line.startswith("CALL write ")]
+
+
+def want_writes(fn, what, value, frames=None):
+    e = gen_control_vectors.expect(FUNCS, fn, what, value, states_of(frames))
+    assert e["kind"] == "frames", e
+    return ["CALL write %s %s" % (f["char"], f["hex"]) for f in e["frames"]]
+
+
+def test_control_waits_for_an_armed_link(fake):
+    """A command needs an armed link and the function's state; never a defaults frame.
+
+    .. test:: A command needs an armed link and the function's state; never a defaults frame
+       :id: T_FW_CONTROL_READY
+       :links: R_FW_CONTROL_API
+    """
+    out = run(fake, *PAIRED, *READ_ALL, "> set cooler power on", "tick %d" % (WARM + 100))
+    assert "LOG control: cooler/power not ready (no armed link or no state yet)" in out and not writes(out)
+
+
+def test_control_waits_for_the_first_read_all(fake):
+    reads = ["READ %x 0" % c for c in CHARS[:5]]  # the arm delay passes with the read-all unfinished
+    out = run(
+        fake,
+        *PAIRED,
+        *read_all(reads=reads),
+        "tick %d" % ARM,
+        "> set cooler power on",
+        "tick %d" % (ARM + 100),
+    )
+    assert "LOG control: cooler/power not ready (no armed link or no state yet)" in out and not writes(out)
+
+
+def test_control_needs_the_target_state(fake):
+    reads = ["READ %x %d" % (c, 14 if c == 0x1102 else 0) for c in CHARS]  # the cooler read failed
+    out = run(fake, *armed(reads=reads), "> set cooler power on", "tick %d" % (ARM + 100))
+    assert "LOG control: cooler/power not ready (no armed link or no state yet)" in out and not writes(out)
+
+
+def test_control_sends_calictls_frame_once_armed(fake):
+    frames = {0x1102: pack("cooler", Installed=1, State=0, Mode=4, Level=3)}
+    out = run(fake, *armed(frames), "> set cooler power on", "tick %d" % (ARM + 100), "WRITTEN 1101 0")
+    assert writes(out) == want_writes("cooler", "power", "on", frames)
+    assert "LOG control: cooler/power sending" in out and out[-1] == "LOG control: cooler/power sent"
+
+
+def test_control_lighting_commit_follows_after_the_follow_delay(fake):
+    t = ARM + 100
+    early = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "tick %d" % (t + FOLLOW),  # an ACK just before the next tick: FOLLOW after the tick is too early
+    )
+    assert len(writes(early)) == 1
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "tick %d" % (t + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+    )
+    assert writes(out) == want_writes("lighting", "kitchen", "5")
+    assert out[-1] == "LOG control: lighting/kitchen sent"
+
+
+def test_control_save_profile_colour_is_four_writes_in_actuate_order(fake):
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting save_profile 3 amber",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "tick %d" % (t + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+        "tick %d" % (t + FOLLOW + 2 * TICK),  # the save frame: no delay, the next tick
+        "WRITTEN 1501 0",
+        "tick %d" % (t + 2 * FOLLOW + 3 * TICK),
+        "WRITTEN 1501 0",
+    )
+    assert writes(out) == want_writes("lighting", "save_profile", "3 amber")
+    assert len(writes(out)) == 4 and out[-1] == "LOG control: lighting/save_profile sent"
+
+
+def test_control_att_error_fails_without_commit(fake):
+    """A write the unit refuses fails the command and gets no commit.
+
+    .. test:: A write the unit refuses fails the command and gets no commit
+       :id: T_FW_CONTROL_ATT_ERROR
+       :links: R_FW_CONTROL_API
+    """
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "WRITTEN 1501 3",
+        *["tick %d" % (t + d) for d in range(100, 2000, 100)],
+    )
+    assert len(writes(out)) == 1
+    assert "LOG control: lighting/kitchen failed: the unit refused the write" in out
+
+
+def test_control_write_failing_inside_the_call_fails_the_command(fake):
+    """The NimBLE transport reports a write it cannot start (e.g. its op queue fails the ATT
+    request at once) as a WRITTEN error *inside* ``write()``: that completion must count, not be
+    taken for a stray ACK and leave the sequencer waiting (then busy) for one that never comes."""
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "syncwritten 3",
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        *["tick %d" % (t + d) for d in range(100, 1000, 100)],
+        "> set cooler level 2",
+    )
+    assert len([w for w in writes(out) if w.startswith("CALL write 1501 ")]) == 1  # no commit
+    assert "LOG control: lighting/kitchen failed: the unit refused the write" in out
+    assert "LOG control: cooler/level sending" in out  # not stuck busy
+
+
+def test_control_link_drop_fails_the_command(fake):
+    """A link drop mid-command fails it cleanly.
+
+    .. test:: A link drop mid-command fails it cleanly
+       :id: T_FW_CONTROL_LINK_DROP
+       :links: R_FW_CONTROL_API
+    """
+    t = ARM + 100
+    out = run(fake, *armed(), "> set cooler level 2", "tick %d" % t, "DISCONNECTED", "tick %d" % (t + 100))
+    assert "LOG control: cooler/level failed: link lost" in out
+
+
+def test_control_link_drop_between_frames_sends_no_commit(fake):
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "DISCONNECTED",
+        *["tick %d" % (t + d) for d in range(100, 1000, 100)],
+    )
+    assert len(writes(out)) == 1
+    assert "LOG control: lighting/kitchen failed: link lost" in out
+
+
+def test_control_timeout_then_late_ack_keeps_busy_until_acked(fake):
+    """A timed-out write blocks the next command until its late ACK, which completes nothing.
+
+    .. test:: A timed-out write blocks the next command until its late ACK, which completes nothing
+       :id: T_FW_CONTROL_LATE_ACK
+       :links: R_FW_CONTROL_API
+    """
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set cooler level 2",
+        "tick %d" % t,
+        *["tick %d" % (t + d) for d in range(500, DEADLINE + 500, 500)],
+        "> set cooler level 3",
+        "WRITTEN 1101 0",
+        "> set cooler level 3",
+        "tick %d" % (t + DEADLINE + 600),
+    )
+    w1, w2 = want_writes("cooler", "level", 2)[0], want_writes("cooler", "level", 3)[0]
+    assert [line for line in out if line.startswith(("LOG control:", "CALL write "))] == [
+        "LOG control: cooler/level sending",
+        w1,
+        "LOG control: cooler/level timed out",
+        "LOG control: cooler/level busy",  # the unacknowledged write still blocks
+        "LOG control: cooler/level sending",  # its late ACK freed the link, completing nothing
+        w2,
+    ]
+
+
+def test_control_busy_while_one_is_running(fake):
+    out = run(fake, *armed(), "> set cooler level 2", "> set cooler level 3")
+    assert "LOG control: cooler/level busy" in out
+
+
+def test_control_survives_interleaved_heartbeat_and_notify(fake):
+    """Heartbeat completions and pushes between a write and its ACK change nothing.
+
+    .. test:: Heartbeat completions and pushes between a write and its ACK change nothing
+       :id: T_FW_CONTROL_INTERLEAVE
+       :links: R_FW_CONTROL_API
+    """
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "HEARTBEAT 0",
+        "NOTIFY 1502 %s" % pack("lighting", Mode=4, BrightnessLSeven=3),
+        "HEARTBEAT 0",
+        "WRITTEN 1501 0",
+        "tick %d" % (t + FOLLOW + TICK),
+        "HEARTBEAT 0",
+        "WRITTEN 1501 0",
+    )
+    assert writes(out) == want_writes("lighting", "kitchen", "5")
+    assert out[-1] == "LOG control: lighting/kitchen sent"
+
+
+def test_control_heartbeat_keeps_ticking_through_a_command(fake):
+    t = ARM + 100
+    out = run(fake, *armed(), "> set lighting kitchen 5", *["tick %d" % (t + d) for d in range(0, 1300, 100)])
+    rest = after(out, "LOG control: lighting/kitchen sending")
+    assert len(writes(rest)) == 1  # no ACK: the commit waits
+    assert len(calls(rest, "write_heartbeat")) >= 1200 // PERIOD
+
+
+def test_control_gate_uses_the_latest_notify(fake):
+    from calictl import control
+
+    frames = {0x1102: pack("cooler", Installed=1, State=0)}
+    out = run(
+        fake,
+        *armed(frames),
+        "NOTIFY 1102 %s" % pack("cooler", Installed=1, State=1),
+        "> set cooler timer_set 07:00",
+    )
+    assert "LOG control: cooler/timer_set refused: %s" % control.REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF in out
+    assert not writes(out)
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["> set roof open", "> set roof stop", "> set lighting wakeup 07:00 on", "> set stairs move extend"],
+)
+def test_control_roof_and_wakeup_are_refused_without_a_write(fake, line):
+    fn_what = "/".join(line.split()[2:4])
+    out = run(fake, *armed(), line, "tick %d" % (ARM + 100))
+    assert "LOG control: %s refused: Only via buspi or the app" % fn_what in out and not writes(out)
+
+
+def test_control_transport_refusal_is_a_failed_write(fake):
+    out = run(fake, *armed(), "fail write", "> set cooler level 2", "tick %d" % (ARM + 100))
+    assert "LOG control: cooler/level failed: write not issued" in out
+
+
+@pytest.mark.parametrize("line", ["> set", "> set cooler", "> set  cooler  "])
+def test_control_set_usage(fake, line):
+    out = run(fake, line)
+    assert "LOG control: usage: set <function> <what> [value]" in out
+
+
+def test_control_after_a_link_drop_the_relinked_satellite_is_not_busy(fake):
+    """The transport drops its queue with the link (no WRITTEN ever comes): once a new link is
+    up and armed, the next command goes out instead of answering busy forever."""
+    t = ARM + 100
+    up = t + 1200  # the session reconnects 1 s after the drop
+    out = run(
+        fake,
+        *armed(),
+        "> set cooler level 2",
+        "tick %d" % t,
+        "DISCONNECTED",
+        "tick %d" % (t + 100),
+        "tick %d" % up,
+        "CONNECTED",
+        "ENC_OK",
+        *read_all(at=up),
+        "tick %d" % (up + ARM),
+        "> set cooler level 3",
+        "tick %d" % (up + ARM + 100),
+    )
+    assert "CALL connect_bonded" in out
+    assert "LOG control: cooler/level busy" not in out
+    assert writes(out) == [want_writes("cooler", "level", 2)[0], want_writes("cooler", "level", 3)[0]]
+
+
+def test_control_stray_written_between_frames_skips_nothing(fake):
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "> set lighting kitchen 5",
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "WRITTEN 1501 0",  # a duplicate completion while the commit waits its follow delay
+        "tick %d" % (t + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+    )
+    assert writes(out) == want_writes("lighting", "kitchen", "5")
+    assert out[-1] == "LOG control: lighting/kitchen sent"
+
+
+def test_control_never_gates_on_the_previous_links_frame(fake):
+    """A frame read on an earlier link is not this link's state: when the new link's read of it
+    fails, the command is not ready — never built on the stale frame."""
+    frames = {0x1102: pack("cooler", Installed=1, State=0, Mode=4, Level=3)}
+    reads = ["READ %x %d" % (c, 14 if c == 0x1102 else 0) for c in CHARS]  # link 2: cooler read fails
+    up = ARM + 1200
+    out = run(
+        fake,
+        *armed(frames),
+        "DISCONNECTED",
+        "tick %d" % (ARM + 100),
+        "tick %d" % up,
+        "CONNECTED",
+        "ENC_OK",
+        *read_all(at=up, reads=reads),
+        "tick %d" % (up + ARM),
+        "> set cooler power on",
+        "tick %d" % (up + ARM + 100),
+    )
+    assert "LOG control: cooler/power not ready (no armed link or no state yet)" in out and not writes(out)
+
+
+@pytest.mark.parametrize(
+    "line, answer",
+    [
+        ("> set cooler bogus", "no such control"),  # control.build returns None
+        ("> set energy bogus 1", "no such control"),
+        ("> set lighting bogus 1", "bad value"),  # the lighting builder raises (as calictl's)
+        ("> set cooler level", "bad value"),  # no value
+    ],
+)
+def test_control_unknown_control_or_bad_value_answers_without_an_armed_link(fake, line, answer):
+    fn_what = "/".join(line.split()[2:4])
+    out = run(fake, *PAIRED, line)
+    assert "LOG control: %s %s" % (fn_what, answer) in out and not writes(out)
+
+
+def test_control_gate_on_unknown_state_waits_for_the_link(fake):
+    """A gate that refuses for want of state (night_on with no cooler state, R4) is not answered
+    before the link is armed: it is "not ready", the honest answer while the state is still coming."""
+    out = run(fake, *PAIRED, "> set cooler night_on")
+    assert "LOG control: cooler/night_on not ready (no armed link or no state yet)" in out

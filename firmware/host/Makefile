@@ -13,7 +13,6 @@ CC      := $(CROSS_COMPILE)gcc
 CXX     := $(CROSS_COMPILE)g++
 LD      := $(CROSS_COMPILE)gcc
 AR      := $(CROSS_COMPILE)ar
-NM      := $(CROSS_COMPILE)nm
 
 NIMBLE_ROOT := _deps/nimble
 NIMBLE_CFG_MBEDTLS := 1
@@ -61,10 +60,11 @@ COMPONENTS := ../components
 CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC) ../web
-COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o
-# The rest of cali_core (console + snapshot + json + session + wifi_sm + wifi_run + http_core +
-# captive_dns + web) and the frame codec: only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o json.o session.o codec.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o display_model.o
+# ble_nimble.o calls cali_ctl_write_ok (control.o, which needs the codec), and store-cli links it.
+COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o control.o codec.o
+# The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
+# http_core + captive_dns + web): only cali-host needs them.
+CORE_OBJ := console.o snapshot.o status.o json.o session.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o display_model.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
@@ -102,9 +102,11 @@ store_cli.o: $(COMPONENTS)/cali_ble_nimble/test/store_cli.c $(COMPONENTS)/cali_b
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
+CORE_H := $(COMPONENTS)/cali_core/include
+
 # The NimBLE transport (cali_transport_t) — exercised end to end by cali-host (test_host_e2e.py).
 ble_nimble.o: $(COMPONENTS)/cali_ble_nimble/ble_nimble.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
-		$(COMPONENTS)/cali_core/include/cali_transport.h $(CSRC)/codec_chars.h \
+		$(COMPONENTS)/cali_core/include/cali_transport.h $(CORE_H)/cali_control.h $(CSRC)/codec.h $(CSRC)/codec_chars.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -122,8 +124,18 @@ ble_store_kv.o: $(COMPONENTS)/cali_ble_nimble/ble_store_kv.c $(COMPONENTS)/cali_
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-CORE_H := $(COMPONENTS)/cali_core/include
-console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/cali_session.h \
+# The control twin (#154 B): builders, gates and the write allow-list (tests/firmware/test_control_parity.py).
+control.o: $(COMPONENTS)/cali_core/control.c $(CORE_H)/cali_control.h $(CORE_H)/cali_transport.h \
+		$(CSRC)/codec.h $(CSRC)/codec_chars.h $(CSRC)/control_consts.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The control sequencer (#154 B): one command at a time onto the session's link (test_session_fake.py).
+control_run.o: $(COMPONENTS)/cali_core/control_run.c $(CORE_H)/cali_control.h $(CORE_H)/cali_session.h \
+		$(CORE_H)/cali_transport.h $(CSRC)/codec.h $(CSRC)/codec_chars.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/cali_session.h $(CORE_H)/cali_control.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_pairing_sm.h \
 		$(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CSRC)/pairing_consts.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_net.h $(CSRC)/net_consts.h \
@@ -171,7 +183,7 @@ captive_dns.o: $(COMPONENTS)/cali_core/captive_dns.c $(CORE_H)/cali_captive.h $(
 web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h \
 		$(CORE_H)/cali_captive.h $(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CORE_H)/cali_status.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \
-		$(CORE_H)/cali_runner.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
+		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -181,14 +193,11 @@ display_model.o: $(COMPONENTS)/cali_core/display_model.c $(CORE_H)/cali_display_
 		$(CSRC)/pairing_consts.h ../web/strings_gen.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h \
+session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h $(CORE_H)/cali_control.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CSRC)/codec.h $(CSRC)/codec_chars.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# Read-only firmware (#154): codec_encode is compiled out of the firmware's codec (and its
-# prototype hidden), and the link below fails if the symbol ever reaches cali-host.
-codec.o: CFLAGS += -DCODEC_NO_ENCODE
 codec.o: $(CSRC)/codec.c $(CSRC)/codec.h $(CSRC)/codec_dict.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -202,7 +211,6 @@ host_main.o: host_main.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h
 # The host firmware: console + runner + session on the NimBLE transport, HCI over TCP.
 cali-host: $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(MBEDTLS_LIBS)
 	$(LD) -o $@ $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(LIBS)
-	@if $(NM) $@ | grep -qw codec_encode; then echo "cali-host: codec_encode linked into read-only firmware" >&2; rm -f $@; exit 1; fi
 
 # Just Works regression build (tests/firmware/test_host_e2e.py::test_just_works_build_is_refused):
 # cali-host with the transport compiled -DCALI_TEST_LATE_IO_CAP, which sets the passkey IO capability
@@ -211,7 +219,7 @@ cali-host: $(NIMBLE_ALL_OBJ) host_main.o $(COMPONENT_OBJ) $(CORE_OBJ) $(MBEDTLS_
 JW_OBJ := $(filter-out ble_nimble.o,$(COMPONENT_OBJ)) ble_nimble_jw.o
 ble_nimble_jw.o: CFLAGS += -DCALI_TEST_LATE_IO_CAP
 ble_nimble_jw.o: $(COMPONENTS)/cali_ble_nimble/ble_nimble.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h \
-		$(COMPONENTS)/cali_core/include/cali_transport.h $(CSRC)/codec_chars.h \
+		$(COMPONENTS)/cali_core/include/cali_transport.h $(CORE_H)/cali_control.h $(CSRC)/codec.h $(CSRC)/codec_chars.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 

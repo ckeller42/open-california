@@ -13,7 +13,7 @@
  * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
  * @typedef {{ pairing: { state: string, address: string|null },
  *             link: { up: boolean, last_snap_age_ms: number|null },
- *             wifi: Wifi, uptime_ms: number, fw: string }} Device
+ *             wifi: Wifi, control: { writes: boolean }, uptime_ms: number, fw: string }} Device
  * @typedef {{ t: number, fn: Record<string, Record<string, unknown>>, device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join

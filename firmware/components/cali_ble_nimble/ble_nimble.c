@@ -10,7 +10,8 @@
  * range and builds char_short -> (handles, properties); the short id is bytes 12-13 of the
  * little-endian 128-bit UUID, accepted only when the other 14 bytes equal CODEC_UUID_FMT's base.
  * connect_bonded() re-encrypts by itself once connected (ble_gap_security_initiate with the stored
- * LTK: ENC_OK / ENC_FAIL, never a passkey). Every heartbeat completion is reported (HEARTBEAT).
+ * LTK: ENC_OK / ENC_FAIL, never a passkey). Every heartbeat and control-write completion is reported
+ * (HEARTBEAT / WRITTEN); a control write passes the allow-list (cali_ctl_write_ok) first.
  * A read/heartbeat of a char not yet in the table (e.g. the 1004 verify read right after pairing)
  * first looks it up with ble_gattc_disc_chrs_by_uuid.
  * disconnect() during a connect cancels it; until that cancel's CONNECT event arrives a scan is
@@ -34,8 +35,10 @@
 #include "host/ble_uuid.h"
 
 #include "cali_ble_nimble.h"
+#include "cali_control.h"
 #include "cali_platform.h"
 #include "cali_transport.h"
+#include "codec.h"
 #include "codec_chars.h"
 
 #define MAX_CHRS 40
@@ -46,11 +49,13 @@ struct chr {
     uint8_t props;
 };
 
-enum { OP_DISC, OP_READ, OP_WRITE_HB, OP_SUB };
+enum { OP_DISC, OP_READ, OP_WRITE_HB, OP_SUB, OP_WRITE };
 struct op {
     uint8_t kind;
     uint16_t short_id;
     uint32_t counter;
+    uint8_t len;                            /* OP_WRITE: the control frame */
+    uint8_t data[CODEC_FRAME_MAX];
 };
 #define OPQ 48
 
@@ -188,13 +193,16 @@ static void link_reset(void) {
 
 /* ---- GATT operation queue ------------------------------------------------------------------ */
 
-static int op_push(uint8_t kind, uint16_t short_id, uint32_t counter) {
+static int op_push(uint8_t kind, uint16_t short_id, uint32_t counter, const uint8_t *data, size_t len) {
     if (s_conn == BLE_HS_CONN_HANDLE_NONE || s_dying) return BLE_HS_ENOTCONN;
     if (s_oplen >= OPQ) return BLE_HS_ENOMEM;
+    if (len > CODEC_FRAME_MAX) return BLE_HS_EINVAL;
     struct op *o = &s_ops[(s_ophead + s_oplen) % OPQ];
     o->kind = kind;
     o->short_id = short_id;
     o->counter = counter;
+    o->len = (uint8_t)len;
+    if (len) memcpy(o->data, data, len);
     s_oplen++;
     op_kick();
     return 0;
@@ -230,6 +238,10 @@ static void op_finish(int status, const uint8_t *data, size_t len) {
     case OP_SUB:
         if (status) cali_log("ble: subscribe %04x failed %d", o.short_id, status);
         break;
+    case OP_WRITE:
+        if (status) cali_log("ble: write %04x failed %d", o.short_id, status);
+        emit(CALI_TEV_WRITTEN, status, o.short_id, NULL, 0, NULL);
+        break;
     default: break;
     }
     op_kick();
@@ -258,6 +270,7 @@ static int on_written(uint16_t conn, const struct ble_gatt_error *err, struct bl
 static int op_issue(struct op *o, struct chr *c) {
     void *gen = (void *)s_gen;
     if (o->kind == OP_READ) return ble_gattc_read(s_conn, c->val_handle, on_read, gen);
+    if (o->kind == OP_WRITE) return ble_gattc_write_flat(s_conn, c->val_handle, o->data, o->len, on_written, gen);
     /* OP_WRITE_HB: 4-byte big-endian counter, with response (as calictl.device's heartbeat) */
     uint8_t v[4] = {(uint8_t)(o->counter >> 24), (uint8_t)(o->counter >> 16),
                     (uint8_t)(o->counter >> 8), (uint8_t)o->counter};
@@ -367,6 +380,7 @@ static int op_begin(struct op *o) {
         return ble_gattc_disc_all_chrs(s_conn, 1, 0xffff, on_disc_chr, gen);
     case OP_READ:
     case OP_WRITE_HB:
+    case OP_WRITE:
         c = find_short(o->short_id);
         if (c) return op_issue(o, c);
         if (s_disc_done) return BLE_HS_ENOENT;
@@ -605,18 +619,30 @@ static int t_inject_passkey(uint32_t pk) {
     return ble_sm_inject_io(s_conn, &io);
 }
 
-static int t_discover(void) { return op_push(OP_DISC, 0, 0); }
+static int t_discover(void) { return op_push(OP_DISC, 0, 0, NULL, 0); }
 
-static int t_read(uint16_t short_id) { return op_push(OP_READ, short_id, 0); }
+static int t_read(uint16_t short_id) { return op_push(OP_READ, short_id, 0, NULL, 0); }
 
 static int t_subscribe(uint16_t short_id) {
     struct chr *c = find_short(short_id);
     if (s_disc_done && (!c || !(c->props & (BLE_GATT_CHR_PROP_NOTIFY | BLE_GATT_CHR_PROP_INDICATE))))
         return BLE_HS_ENOTSUP;      /* after discovery: not a char of the unit that notifies */
-    return op_push(OP_SUB, short_id, 0);
+    return op_push(OP_SUB, short_id, 0, NULL, 0);
 }
 
-static int t_write_heartbeat(uint32_t counter) { return op_push(OP_WRITE_HB, CODEC_CHAR_HEARTBEAT, counter); }
+static int t_write_heartbeat(uint32_t counter) {
+    return op_push(OP_WRITE_HB, CODEC_CHAR_HEARTBEAT, counter, NULL, 0);
+}
+
+/* The only control-frame write: the allow-list (cali_ctl_write_ok) is checked here, for every caller
+ * (control_run.c checks it too: defence in depth). */
+static int t_write(uint16_t short_id, const uint8_t *data, size_t len) {
+    if (!cali_ctl_write_ok(short_id, len)) {
+        cali_log("ble: write %04x/%u refused: not on the control allow-list", short_id, (unsigned)len);
+        return BLE_HS_EINVAL;
+    }
+    return op_push(OP_WRITE, short_id, 0, data, len);
+}
 
 static int t_disconnect(void) {
     if (s_connecting) {
@@ -665,7 +691,7 @@ static const char *t_identity(void) {
 static const cali_transport_t TRANSPORT = {
     t_set_sink, t_start_scan, t_stop_scan, t_connect_found, t_connect_bonded, t_pair,
     t_inject_passkey, t_discover, t_read, t_subscribe, t_write_heartbeat, t_disconnect,
-    t_remove_bond, t_has_bond, t_identity,
+    t_remove_bond, t_has_bond, t_identity, t_write,
 };
 
 const cali_transport_t *cali_ble_nimble_transport(void) { return &TRANSPORT; }

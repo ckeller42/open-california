@@ -19,7 +19,6 @@ static uint32_t get_bits(const uint8_t *raw, unsigned offset, unsigned width)
     return v;
 }
 
-#ifndef CODEC_NO_ENCODE
 /* MSB-first field placement (protocol._bits_of + pack; buffer pre-zeroed) */
 static void put_bits(uint8_t *buf, unsigned offset, unsigned width, uint32_t value)
 {
@@ -29,7 +28,6 @@ static void put_bits(uint8_t *buf, unsigned offset, unsigned width, uint32_t val
             buf[i >> 3] |= (uint8_t)(1u << (7 - (i & 7)));
         }
 }
-#endif /* CODEC_NO_ENCODE */
 
 const codec_func_t *codec_func_by_name(const char *name)
 {
@@ -55,7 +53,6 @@ int codec_decode(const codec_func_t *f, const uint8_t *raw, size_t len,
     return n;
 }
 
-#ifndef CODEC_NO_ENCODE
 /* Mirrors protocol.encode's validation order per field: frame bound, value/default
  * presence, width fit, curated valid set — then places the bits. All control-table
  * fields are placed by construction (gen_c_dict refuses half-frame tables). */
@@ -95,4 +92,3 @@ int codec_encode(const codec_func_t *f, const codec_kv_t *vals, size_t nvals,
     *out_len = frame_bytes;
     return CODEC_OK;
 }
-#endif /* CODEC_NO_ENCODE */

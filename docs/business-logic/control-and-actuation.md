@@ -149,16 +149,22 @@ Nuance (APP-OBSERVED 2026-09-16, `tools/applab`): the app's own post-write **neu
 carries every 2-bit field at the sentinel `3` — cooler `ff771e3e1f1f`, heater `3f7b007f1f3f` —
 and its targeted frames carry every untargeted wider field at the model default (cooler Level 7 /
 Mode 7 / TimerHour 30 / TimerMin 62 / NightTimer 31). The unit accepts those from the app, so
-`State=3` *as a leave-unchanged sentinel* is legal; `CONTROL_RANGES` constrains what calictl
-sends as a **command** (never 3), and the 2026-07-05 `0x0E` drop is left as observed. The mock
-(`tools/mock_unit.py`) accepts the sentinel frames like the unit does.
+`State=3` *as a leave-unchanged sentinel* is legal, and since 2026-10-06 (ruling R1) calictl sends
+it too in every cooler frame that does not target `State` (`level`/`mode`/`timer_*` = the app's
+frames); `CONTROL_RANGES` admits `{0, 1, 3}` — a `power` command is always 0/1, 2 is never legal.
+The 2026-07-05 `0x0E` drop of a `State=3` write predates the 1003 heartbeat and has not been
+re-tested since: the first live cooler `level`/`mode` write with the app-faithful frame is the check
+(#230). The mock (`tools/mock_unit.py`) accepts the sentinel frames like the unit does.
 
 **App-vs-calictl frame diff (APP-OBSERVED 2026-09-16, `tools/applab`).** Same fake unit, the
 app's write vs `control.build()` for the same intent. The **targeted** field is identical in every
-row; the two differ only in how untargeted fields ride along — the app at each field's model
-default (= leave-unchanged sentinel), calictl re-asserting the current decoded value. Both are
-accepted by the unit; calictl's choice re-writes what is already there (harmless, but it means a
-stale read would be re-asserted — see the "carry current state" note in `_cooler_values`).
+row. Untargeted fields ride at each field's model default (= leave-unchanged sentinel) in the
+app's frames. Since 2026-10-06 (ruling R1, "calictl follows the app") calictl sends the same, so
+**every row is byte-identical**; the cooler column used to differ because `_cooler_values`
+re-asserted the current decoded value. Only cooler `night_on`/`night_off` still carry the current
+schedule (no app recording of them; the 2026-08-26 DEVICE-verified frame). The app-recording replay
+(`tools/capture_diff.py`, `tests/test_app_recordings.py`) compares whole frames for every function but
+the roof (app-generated SafetyCounter).
 
 | Intent | App frame (then neutral +500 ms) | calictl frame | Targeted field |
 |---|---|---|---|
@@ -172,12 +178,12 @@ stale read would be re-asserted — see the "carry current state" note in `_cool
 | heater **Start timer** | `3f3b017f1f3f` → neutral | `timer_start` → `3f3b017f1f3f` | `OperationModeAirHeater=3` + `OperationModeCombined=1` (AIR_HEATER) — **identical**; the page's toggle `uh/d` → `rf/b` `a2(AIR_HEATER)`. The unit then shows "Timer: On" / status "Inactive • Timer: HH:MM" |
 | heater timer **Stop** | `3f0b007f1f3f` → neutral | `timer_cancel` → `3f0b007f1f3f` | `OperationModeAirHeater=0` (`j4`) — **identical**; status back to "Inactive" |
 | heater timer **"Start heating at" wheel → 09:31** (APP-OBSERVED 2026-09-27, screens 35-37) | `3f7b007f091f` → neutral | `timer 09:31` → `3f7b007f091f` | `TimerHour=9` (byte 4, bit 32 = `0x09`) + `TimerMin=31` (byte 5, bit 40 = `0x1f`), every other field at its sentinel — **identical**. Written on the wheel's **OK** (`rf/b` `B0`), with no confirm dialog and **without arming** (`OperationModeAirHeater` stays the sentinel 7; arming is the separate **Start timer** row above). Wheel driven with `adb shell input draganddrop` (~145 px, 1500 ms = one row) |
-| cooler OFF | `fc771e3e1f1f` → `ff771e3e1f1f` | `3c4309001606` | `State=0` |
-| cooler manual quiet | `ff271e3e1f1f` | `3d2309001606` | `Mode=2` |
-| cooler automatic quiet | `ff471e3e1f1f` | `3d4309001606` | `Mode=4` |
-| cooler timer start (box off) | `f7771e3e1f1f` | `354309001606` | `TimerStart=1` — app leaves `TimerHour/Min` at 30/62 (the time is written separately when the picker changes) |
-| cooler timer time picker → 04:02 | `ff7704021f1f` | `timer_set 09:30` → `3d43091e1606` | `TimerHour/TimerMin` alone; the unit stores them as `TimerHourSet/TimerMinSet` (the app re-reads those to show "cooling starts at") |
-| cooler level slider → 4 | `ff741e3e1f1f` | `3d4409001606` | `Level=4` |
+| cooler OFF | `fc771e3e1f1f` → `ff771e3e1f1f` | `fc771e3e1f1f` | `State=0` — **identical** (was `3c4309001606`, the carried state, until 2026-10-06) |
+| cooler manual quiet | `ff271e3e1f1f` | `ff271e3e1f1f` | `Mode=2` — **identical** |
+| cooler automatic quiet | `ff471e3e1f1f` | `ff471e3e1f1f` | `Mode=4` — **identical** |
+| cooler timer start (box off) | `f7771e3e1f1f` | `f7771e3e1f1f` | `TimerStart=1` — app leaves `TimerHour/Min` at 30/62 (the time is written separately when the picker changes) |
+| cooler timer time picker → 04:02 | `ff7704021f1f` | `timer_set 04:02` → `ff7704021f1f` | `TimerHour/TimerMin` alone; the unit stores them as `TimerHourSet/TimerMinSet` (the app re-reads those to show "cooling starts at") |
+| cooler level slider → 4 | `ff741e3e1f1f` | `ff741e3e1f1f` | `Level=4` |
 
 | lighting All lights ON | `0c10000000000000eeeeeeeeeeeeeeee` → commit `0e00…ee` | same two frames (`power on` + `LIGHT_COMMIT`) | `SET_PROFILE 12` — **byte-identical** |
 | lighting lamp icon tap (e.g. Left) | `0904000000000000beeeeeeeeeeeeeee` → commit | `reading-1 5` → `0904…5eee…` | `ProfileNumber=9, Mode=4`, one zone nibble — app writes **11 = DEFAULT**, calictl's "on" writes 10 (100 %) |
@@ -210,7 +216,7 @@ the owner's 2026-08-27 "roof light moved L5" observation, which the app's map do
 
 | Feature | `set` wired | On-device | Notes |
 |---|---|---|---|
-| **cooler** | `power` on/off, `level` 1-5, `mode` (incl. `timer_quiet`=scheduled), `night_on`/`night_off` 0-23, timers | ✅ actuates (schedule live 2026-08-26) | State 0↔1, Level applied. Scheduled quiet = **Mode 4** (the unit's "Automatischer Flüstermodus" toggle; manual = Mode 2); the window is `NightTimerHourOn/Off`, stored on the unit (survive reconnects) and **broadcast on 1102**. ⚠️ Hour bytes are LITERAL — every write must carry the current schedule (`_cooler_values` does; hard-coded 0s used to clobber it). No `night_set` command: the app never writes cooler `NightTimerSet` (that state bit is read-only/unit-driven; arm via `mode timer_quiet`). |
+| **cooler** | `power` on/off, `level` 1-5, `mode` (incl. `timer_quiet`=scheduled), `night_on`/`night_off` 0-23, timers | ✅ actuates (schedule live 2026-08-26) | State 0↔1, Level applied. Scheduled quiet = **Mode 4** (the unit's "Automatischer Flüstermodus" toggle; manual = Mode 2); the window is `NightTimerHourOn/Off`, stored on the unit (survive reconnects) and **broadcast on 1102**. ⚠️ Hour bytes are LITERAL — 0 is an hour, not "unchanged" (hard-coded 0s used to clobber the schedule); every write but `night_on`/`night_off` sends the app's 31 (leave unchanged), those two carry the current schedule (`_cooler_values`). No `night_set` command: the app never writes cooler `NightTimerSet` (that state bit is read-only/unit-driven; arm via `mode timer_quiet`). |
 | **campingmode** | `master`/`lights`/`usb` on/off | ✅ actuates **when stationary** | usb_charger toggled live; 1-byte inverted/combined model (see `signals.md`). **REFUSED while driving** — see the stationary gate below. |
 | **lighting** | `power`, per-zone `brightness` 0-11, `profile` | ✅ actuates (2026-08-16) | Bare SET + commit is enough once the unit is awake — see below. |
 | **airheater** | `power`, `level` 1-10, `runtime` 0-120, `timer` HH:MM, `timer_start`/`timer_cancel`, `permanent` off | frames identical to the app's (applab 2026-09-16; the `timer` HH:MM wheel frame too, 2026-09-27); not live-verified on the van | Installed; every untargeted field is the app's sentinel (nothing carried from the readback). |
@@ -330,11 +336,12 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 
 | Function | `what` | Effect / field | Source | Status |
 |---|---|---|---|---|
-| cooler | `power` / `level` | State / Level 1-5 | `vf/c` U0 (level = **X1**) | CAPTURE (HCI 07-08/14) + DEVICE (live-verified); **APP-RECORDED** (`cooler.jsonl`) |
-| cooler | `mode` | quiet Mode 0=off/2=manual(K0)/4=scheduled(L0) | `vf/c` T1/x0/k0 | DEVICE 4=scheduled ("Automatisch", live 08-26); **APP-RECORDED** 0/2/4 (`cooler.jsonl`) |
-| cooler | `night_on` / `night_off` | NightTimerHourOn/Off (0-23) | `vf/c` c0/Y2 | DEVICE (live 08-26) — stored + 1102-broadcast; bytes LITERAL (carry current) |
-| cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | APP-OBSERVED (applab 2026-09-16: time picker, targeted fields match) |
-| cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | **APP-RECORDED** (`cooler.jsonl`: `f777…` / `df77…`) |
+| cooler | `power` | State 0/1 | `vf/c` U0 | CAPTURE (HCI 07-08/14) + DEVICE (live-verified) + **APP-RECORDED** (`cooler.jsonl` `fd77…`/`fc77…`, byte-identical) |
+| cooler | `level` | Level 1-5 | `vf/c` **X1** | **APP-RECORDED** (`cooler.jsonl` `ff75…`, byte-identical since 2026-10-06). DEVICE only for the pre-R1 state-carry frame (`State=1`); the app-faithful `State=3` frame has not reached the unit yet — van check #230 |
+| cooler | `mode` | quiet Mode 0=off/2=manual(K0)/4=scheduled(L0) | `vf/c` T1/x0/k0 | **APP-RECORDED** 0/2/4 (`cooler.jsonl`, byte-identical). DEVICE 4=scheduled ("Automatisch", live 08-26) for the pre-R1 state-carry frame only — `State=3` frame = van check #230 |
+| cooler | `night_on` / `night_off` | NightTimerHourOn/Off (0-23) | `vf/c` c0/Y2 | DEVICE (live 08-26) — stored + 1102-broadcast; bytes LITERAL (carry current — the only cooler commands that still do: no app recording of them); refused while no cooler state is known (R4) |
+| cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | APP-OBSERVED (applab 2026-09-16 time picker `ff7704021f1f`; byte-identical since 2026-10-06, not in a committed recording); `State=3` frame = van check #230 |
+| cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | **APP-RECORDED** (`cooler.jsonl`: `f777…` / `df77…`, byte-identical); `State=3` frame = van check #230 |
 | airheater | `power` / `level` | NormalOperationRequest 1/0 / HeatingLevel | `rf/b` C2/q4 | CAPTURE (power, HCI 07-08); **APP-RECORDED** (`airheater.jsonl`: level 8, immediate ON) |
 | airheater | `runtime` | RunningTime (min) | `rf/b` D4 | **APP-RECORDED** (`airheater.jsonl`: `3f7b003c1f3f` identical) |
 | airheater | `timer` | TimerHour:TimerMin (HH:MM) | `rf/b` B0 (fired on the time-wheel OK, no confirm, does not arm) | APP-OBSERVED (2026-09-27): 09:31 → `3f7b007f091f` identical |
@@ -425,7 +432,13 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
   fridge **on**, camping lights/USB need the camping master on, and the energy mode is refused while
   the unit reports `EnergyModeNotSelectable`. Each blocks only when the gating state is *positively*
   wrong — unknown/absent state allows the write. The camping **master** is deliberately not gated
-  (the firmware itself refuses it while driving).
+  (the firmware itself refuses it while driving). Two exceptions where a default would be WRITTEN
+  (2026-10-06, rulings R3/R4, `R_ONOFF_STRICT`): an on/off command whose value is not
+  `on/off`/`true/false`/`1/0` is refused (`REASON_NOT_ONOFF` — `null`/`""`/`"x"` used to build the
+  OFF frame), and cooler `night_on`/`night_off` are refused while no cooler state is known
+  (`REASON_COOLER_STATE_UNKNOWN` — the carry would be the default-filled frame that clobbered a
+  schedule on 2026-08-26). The gate texts are `control.REASON_*`, emitted into
+  `csrc/control_consts.h` so the ESP's C twin refuses with the same words.
 - **Roof moves gate too** (closed 2026-09-17): `open`/`close` are refused under the same alert set
   the GUI greys (`control.ROOF_MOVE_BLOCK`, kept in step with `ROOF_MOVE_BLOCK` in `webui/app.js`)
   and on a `Position` the unit reports as `error`. `sensor_error` deliberately does **not** block

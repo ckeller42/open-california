@@ -200,6 +200,7 @@ def esp_fixtures():
             "pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
             "link": {"up": True, "last_snap_age_ms": 1200},
             "wifi": station_wifi,
+            "control": {"writes": True},
             "uptime_ms": 3912400,
             "fw": "bef07f1",
         },
@@ -213,6 +214,7 @@ def esp_fixtures():
                     "pairing": {"state": "idle", "address": None},
                     "link": {"up": False, "last_snap_age_ms": None},
                     "wifi": setup_wifi,
+                    "control": {"writes": False},
                     "uptime_ms": 41250,
                     "fw": "bef07f1",
                 },
@@ -245,7 +247,12 @@ def esp_fixtures():
 
 class EspStub:
     """A stdlib HTTP stub of the firmware's web endpoints: ``GET /`` = the generated page bytes,
-    ``GET /api/state`` / ``/api/wifi`` = ``esp_fixtures()[mode]``. Switch pages with ``mode``."""
+    ``GET /api/state`` / ``/api/wifi`` = ``esp_fixtures()[mode]``. Switch pages with ``mode``.
+
+    ``POST /api/command`` records the body in ``commands`` and answers ``command_status`` +
+    ``command_reply`` (default: the firmware's success shape, ``applied: null``) after
+    ``command_delay_s``; like the ESP's single-connection core, a ``GET /api/state`` arriving
+    meanwhile waits for the answer (``polls_while_pending`` counts them)."""
 
     def __init__(self, mode="setup"):
         from tools import gen_c_dict
@@ -254,6 +261,12 @@ class EspStub:
         self.fixtures = esp_fixtures()
         self.requests = []  # request paths, in order
         self.fail_state = 0  # the next N GET /api/state answer 503
+        self.commands = []  # POST /api/command bodies, in order
+        self.command_status = 200  # web.c: 200 ok/refused, 400/403/409/502/503/504 {"ok":false,"error":code}
+        self.command_reply = None  # the JSON body; None = the success shape for the posted function
+        self.command_delay_s = 0.0  # the ESP answers after the unit's ACK (<= CALI_CTL_DEADLINE_MS)
+        self.polls_while_pending = 0
+        self._pending = threading.Lock()  # held while a command is being answered
         with open(ESP_PAGE, "rb") as f:
             page = f.read()
         with open(APP_BUNDLE_HEADER, encoding="utf-8") as f:
@@ -261,6 +274,34 @@ class EspStub:
         stub = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
+            def _json(self, status, obj):
+                data = json.dumps(obj).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_POST(self):  # noqa: N802 (http.server API)
+                path = self.path.split("?", 1)[0]
+                stub.requests.append(path)
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n) or b"{}")
+                if path != "/api/command":
+                    self.send_error(404)
+                    return
+                with stub._pending:
+                    stub.commands.append(body)
+                    time.sleep(stub.command_delay_s)
+                    reply = stub.command_reply or {
+                        "ok": True,
+                        "applied": None,
+                        "state": None,
+                        "error": None,
+                        "function": body.get("function"),
+                    }
+                    self._json(stub.command_status, reply)
+
             def do_GET(self):  # noqa: N802 (http.server API)
                 path = self.path.split("?", 1)[0]
                 stub.requests.append(path)
@@ -270,6 +311,10 @@ class EspStub:
                     stub.fail_state -= 1
                     self.send_error(503)
                     return
+                if path == "/api/state" and stub._pending.locked():
+                    stub.polls_while_pending += 1
+                    with stub._pending:  # the core serves nothing while a command pends
+                        pass
                 if path == "/" and stub.mode in APP_MODES:  # web.c: station mode serves the UI bundle
                     body, ctype, enc = bundle, "text/html; charset=utf-8", "gzip"
                 elif path in ("/", "/device"):

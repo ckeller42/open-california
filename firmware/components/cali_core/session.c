@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "cali_console.h"
+#include "cali_control.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "codec.h"
@@ -19,6 +20,7 @@ static int s_active;           /* keep (or re-establish) a link for the stored b
 static int s_link;
 static uint64_t s_now;         /* now_ms of the latest tick */
 static uint64_t s_connected_at;
+static uint64_t s_up_at;       /* now_ms the link came up (encrypted): the arm delay runs from here */
 
 static int s_hb_on;
 static uint32_t s_hb_ctr;
@@ -33,16 +35,20 @@ static uint64_t s_warm_until;
 static int s_reading;          /* read-all in progress: s_read_idx is outstanding */
 static size_t s_read_idx;
 static int s_snapped;          /* this link's first read-all completed */
+static int s_rereading;        /* the periodic water re-read is outstanding */
+static uint64_t s_water_next;  /* now_ms of the next water re-read */
+
+#define WATER_CHAR 0x1302u
 
 static struct {
     uint8_t frame[CODEC_FRAME_MAX];
     size_t len;
     uint8_t have;
+    uint8_t live;              /* stored on the current link (cleared by link_up) */
 } s_fr[CODEC_NCHARS];
-/* Pushed on this link (since its read-all started with the subscribe): the NOTIFY frame is fresher
- * than the unit's read latch, so the read-all neither reads nor overwrites it (calictl.device
- * read_all: "a fresh notification beats the stale latch"). */
-static uint8_t s_pushed[CODEC_NCHARS];
+/* READ completions and NOTIFYs both replace a function's frame: the last frame to arrive wins. The
+ * app subscribes, then reads, and one decoder takes both (decompile 2026-10-07; calictl.device
+ * R_READ_LAST_FRAME_WINS). No push is privileged over a read. */
 /* now_ms (latest tick) of the latest stored frame; 0 = never (a store before the first tick is
  * stamped 1, so "stored" never reads as "never"). */
 static uint64_t s_last_update;
@@ -63,6 +69,7 @@ static void store(size_t i, const uint8_t *data, size_t len) {
     if (len) memcpy(s_fr[i].frame, data, len);
     s_fr[i].len = len;
     s_fr[i].have = 1;
+    s_fr[i].live = 1;
     s_last_update = s_now ? s_now : 1;
 }
 
@@ -72,6 +79,7 @@ static void link_clear(void) {
     s_warming = 0;
     s_reading = 0;
     s_snapped = 0;
+    s_rereading = 0;
 }
 
 static void schedule_reconnect(void) {
@@ -96,6 +104,7 @@ static void link_lost(void) {
 
 static void link_up(void) {
     s_link = LINK_UP;
+    s_up_at = s_now;
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
     s_hb_on = 1;
@@ -104,7 +113,9 @@ static void link_up(void) {
     s_warming = 0;
     s_reading = 0;
     s_snapped = 0;
-    memset(s_pushed, 0, sizeof s_pushed);
+    s_rereading = 0;
+    for (size_t i = 0; i < CODEC_NCHARS; i++) s_fr[i].live = 0;   /* the last link's frames stay shown,
+                                                                     never gated on */
     int rc = s_t->discover();
     if (rc != 0) {
         cali_log("session: discover failed %d", rc);
@@ -114,10 +125,6 @@ static void link_up(void) {
 
 static void read_next(void) {
     while (s_read_idx < CODEC_NCHARS) {
-        if (s_pushed[s_read_idx]) {                   /* a fresh push already holds this function */
-            s_read_idx++;
-            continue;
-        }
         int rc = s_t->read(CODEC_CHARS[s_read_idx].state_short);
         if (rc == 0) return;                          /* READ comes back */
         cali_log("session: read %s failed %d", CODEC_CHARS[s_read_idx].function, rc);
@@ -125,6 +132,7 @@ static void read_next(void) {
     }
     s_reading = 0;
     s_snapped = 1;
+    s_water_next = s_now + CALI_SESSION_WATER_REREAD_MS;
     cali_console_snapshot(s_now);
 }
 
@@ -150,10 +158,19 @@ static void start_reads(void) {
 }
 
 static void on_read(const cali_tevent_t *e) {
+    int w;
+    if (s_rereading && e->char_short == WATER_CHAR && (w = index_of(WATER_CHAR)) >= 0) {
+        s_rereading = 0;
+        if (e->status == 0) {
+            store((size_t)w, e->data, e->len);
+            cali_console_snapshot(s_now);
+        } else {
+            cali_log("session: read water status %d", e->status);
+        }
+        return;
+    }
     if (!s_reading || e->char_short != CODEC_CHARS[s_read_idx].state_short) return;
-    if (s_pushed[s_read_idx]) {
-        /* pushed while this read was outstanding: keep the fresher NOTIFY frame */
-    } else if (e->status == 0) {
+    if (e->status == 0) {
         store(s_read_idx, e->data, e->len);
     } else {
         cali_log("session: read %s status %d", CODEC_CHARS[s_read_idx].function, e->status);
@@ -192,7 +209,6 @@ static void on_event(const cali_tevent_t *e) {
     case CALI_TEV_NOTIFY:
         if (s_link != LINK_UP || (i = index_of(e->char_short)) < 0) break;
         store((size_t)i, e->data, e->len);
-        s_pushed[i] = 1;
         if (s_snapped) cali_console_snapshot(s_now);
         break;
     case CALI_TEV_HEARTBEAT:
@@ -200,6 +216,9 @@ static void on_event(const cali_tevent_t *e) {
             cali_log("session: heartbeat failed %d", e->status);
             link_lost();
         }
+        break;
+    case CALI_TEV_WRITTEN:
+        cali_ctl_on_written(e);
         break;
     default:
         break;
@@ -214,6 +233,7 @@ void cali_session_init(const cali_transport_t *t) {
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
     memset(s_fr, 0, sizeof s_fr);
     s_last_update = 0;
+    cali_ctl_run_init(t);
     cali_runner_on_other = on_event;
 }
 
@@ -248,6 +268,7 @@ void cali_session_stop(void) {
 
 void cali_session_tick(uint64_t now_ms) {
     s_now = now_ms;
+    cali_ctl_tick(now_ms);   /* the control sequencer runs on the session's tick, even with no link */
     if (!s_active) return;
     if (s_link == LINK_UP && s_hb_on && now_ms >= s_hb_next) {
         uint32_t n = s_hb_ctr++;
@@ -261,6 +282,15 @@ void cali_session_tick(uint64_t now_ms) {
         }
     }
     if (s_link == LINK_UP && s_warming && now_ms >= s_warm_until) start_reads();
+    /* Re-read water on calictl's poll cadence: a latch served at connect is corrected on the link. */
+    if (s_link == LINK_UP && s_snapped && !s_reading && !s_rereading && now_ms >= s_water_next) {
+        s_water_next = now_ms + CALI_SESSION_WATER_REREAD_MS;
+        int rc = s_t->read(WATER_CHAR);
+        if (rc == 0)
+            s_rereading = 1;
+        else
+            cali_log("session: read water failed %d", rc);
+    }
     if (s_link == LINK_CONNECTED && now_ms - s_connected_at >= CALI_SESSION_ENC_TIMEOUT_MS) {
         cali_log("session: link not encrypted after %u ms", (unsigned)CALI_SESSION_ENC_TIMEOUT_MS);
         link_lost();
@@ -280,11 +310,20 @@ int cali_session_active(void) { return s_active; }
 
 int cali_session_link_up(void) { return s_link == LINK_UP; }
 
+int cali_session_ready(void) {
+    return s_link == LINK_UP && s_snapped && s_now - s_up_at >= CODEC_ARM_DELAY_MS;
+}
+
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     if (i >= CODEC_NCHARS || !s_fr[i].have) return 0;
     *frame = s_fr[i].frame;
     *len = s_fr[i].len;
     return 1;
+}
+
+int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len) {
+    if (i >= CODEC_NCHARS || !s_fr[i].live) return 0;
+    return cali_session_frame(i, frame, len);
 }
 
 uint64_t cali_session_last_update_ms(void) { return s_last_update; }

@@ -18,8 +18,27 @@ LIGHT_ON, LIGHT_OFF = 0, 1  # camping lights inverted (app K0 writes (!on)?1:0).
 SENTINEL = 3  # 2-bit "leave unchanged" (sg.a default)
 
 
+_ON = ("on", "true", "1")
+_OFF = ("off", "false", "0")
+
+
+def is_onoff(value) -> bool:
+    """Whether ``value`` spells on or off (``on/true/1`` / ``off/false/0``, case- and space-insensitive)."""
+    return str(value).strip().lower() in _ON + _OFF
+
+
 def _truthy(value) -> bool:
-    return str(value).strip().lower() in ("on", "true", "1")
+    """``True`` for on/true/1, ``False`` for off/false/0.
+
+    :raises CommandError: anything else (ruling R3, 2026-10-06: ``null``/``""``/``"x"`` used to read
+        as OFF — a buggy caller could switch the fridge off; unknown now refuses, never defaults).
+    """
+    tok = str(value).strip().lower()
+    if tok in _ON:
+        return True
+    if tok in _OFF:
+        return False
+    raise CommandError("%s, got %r" % (REASON_NOT_ONOFF, value))
 
 
 def _int_range(value, lo, hi, label):
@@ -197,10 +216,21 @@ def _energy(funcs, what, value, last):
     return protocol.encode(funcs["energy"], vals, frame_bytes=overrides.CONTROL_FRAME_BYTES["energy"])
 
 
+def _cooler_neutral(funcs) -> dict:
+    """The app's cooler frame for every field it does not target: each control field at its
+    dictionary default — 2-bit 3, Level/Mode 7, TimerHour/Min 30/62, NightTimerHourOn/Off 31 — i.e.
+    ``ff771e3e1f1f``, the app's neutral frame (APP-RECORDED, ``tests/vectors/app/cooler.jsonl``: power
+    on ``fd771e3e1f1f``, level 5 ``ff751e3e1f1f``, timer start ``f7771e3e1f1f`` …). Ruling R1:
+    calictl follows the app; the unit treats each default as leave-unchanged."""
+    return {cf.name: cf.default for cf in funcs["cooler"].control_fields}
+
+
 def _cooler_values(state: dict, **changes) -> dict:
-    """Full-packet cooler control values: carry current State/Mode/Level and the
-    schedule (writing the current schedule back = no change), timer ACTION fields
-    at no-op, then apply `changes`. (Moved from cli.cmd_set so the daemon shares it.)"""
+    """Full-packet cooler control values that carry the CURRENT state: State/Mode/Level and the
+    schedule (writing the current schedule back = no change), timer ACTION fields at no-op, then
+    apply `changes`. Used only for ``night_on``/``night_off`` — no app recording shows what the app
+    sends in the other schedule bytes there, and this exact carry is what was DEVICE-verified
+    2026-08-26 (every other cooler command sends :func:`_cooler_neutral`, ruling R1)."""
     vals = dict(
         State=state.get("State", 1),
         Mode=state.get("Mode", 4),
@@ -232,8 +262,9 @@ COOLER_MODES = {"normal": 0, "quiet": 2, "timer_quiet": 4}
 def _cooler(funcs, what, value, last):
     # `power` on/off flips State (encode validates State in {0,1}); `level` sets the cooling
     # intensity 1-5; `mode` sets the quiet Mode enum; the timer/night branches arm the cooler's
-    # scheduling (all decompile-verified from vf/c.java, NOT yet live-verified). Everything else
-    # carries current state, so only the targeted field changes.
+    # scheduling (all decompile-verified from vf/c.java, NOT yet live-verified). Every untargeted
+    # field rides at the app's leave-unchanged value (_cooler_neutral, byte-identical to the app's
+    # recorded frames); only night_on/night_off still carry the current state (_cooler_values).
     if what == "power":
         ch = {"State": 1 if _truthy(value) else 0}
     elif what == "level":
@@ -254,6 +285,11 @@ def _cooler(funcs, what, value, last):
     elif what in ("night_on", "night_off"):  # quiet-schedule hours (vf/c.java c0()/Y2()), 0-23
         hr = _int_range(value, 0, 23, "night timer hour")
         ch = {"NightTimerHourOn" if what == "night_on" else "NightTimerHourOff": hr}
+        if not last:  # R4: the daemon/CLI gate (command_precondition) refuses first; keep the builder honest
+            raise CommandError(REASON_COOLER_STATE_UNKNOWN)
+        return protocol.encode(
+            funcs["cooler"], _cooler_values(last, **ch), frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"]
+        )
     # NB: to ARM scheduled ("Automatisch") quiet, use `mode timer_quiet` (Mode=4) — that is the app's
     # own path (the "Automatischer Flüstermodus" toggle stages Mode). There is deliberately NO
     # `night_set` command: the app NEVER writes the cooler NightTimerSet bit (verified 2026-08-26 —
@@ -263,7 +299,7 @@ def _cooler(funcs, what, value, last):
     else:
         return None
     return protocol.encode(
-        funcs["cooler"], _cooler_values(last, **ch), frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"]
+        funcs["cooler"], {**_cooler_neutral(funcs), **ch}, frame_bytes=overrides.CONTROL_FRAME_BYTES["cooler"]
     )
 
 
@@ -405,6 +441,43 @@ def roof_limit_positions(direction):
     return _ROOF_LIMIT_POSITIONS.get(direction)
 
 
+# The gate texts (command_precondition), as constants: tools/gen_c_dict.py emits every REASON_* into
+# csrc/control_consts.h, so the ESP's C twin refuses with the same words (ruling B: same reason texts).
+REASON_NOT_ONOFF = (
+    "the value must be on or off (or true/false, 1/0) — anything else is refused, never read as off"
+)
+REASON_COOLER_STATE_UNKNOWN = (
+    "the cooler's current schedule is not known yet (no cooler state read) — refusing to overwrite it"
+)
+REASON_ROOF_READING = "the pop-top roof reading light needs the roof raised (roof is closed)"
+REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF = (
+    "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+)
+REASON_QUIET_NEEDS_FRIDGE_ON = (
+    "quiet mode can only be set while the fridge is on (switch the cooler on first)"
+)
+REASON_CAMPING_NEEDS_MASTER = "camping lights and USB need camping mode on (turn the camping master on first)"
+REASON_ENERGY_LOCKED = "the unit currently does not allow changing the energy mode"
+REASON_FAVOURITE_EMPTY = "this favourite is empty on the unit — save it first"
+REASON_WAKEUP_NO_AREA = "the wake-up light needs at least one vehicle area"
+# Every (function, what) whose value is an on/off token (ruling R3: anything else is refused up
+# front, with REASON_NOT_ONOFF, before a builder could read it as OFF).
+ONOFF_COMMANDS = frozenset(
+    {
+        ("cooler", "power"),
+        ("campingmode", "master"),
+        ("campingmode", "lights"),
+        ("campingmode", "usb"),
+        ("airheater", "power"),
+        ("lighting", "power"),
+        ("lighting", "door_contact"),
+        ("roofaircondition", "power"),
+        ("livingroomheater", "air"),
+        ("livingroomheater", "water"),
+    }
+)
+
+
 def command_precondition(function, what, value, states):
     """Return a human reason to refuse a control write, or ``None`` to allow it.
 
@@ -414,8 +487,24 @@ def command_precondition(function, what, value, states):
     :param states: mapping function-name -> DECODED state (e.g. ``serve._last`` or a fresh decode).
     :returns: a reason string when the write should be refused, else ``None``. Only blocks when the
         gating state is POSITIVELY wrong; unknown/absent state allows the write (can't prove it's
-        blocked, and the write is otherwise harmless).
+        blocked, and the write is otherwise harmless) — except where a default would be WRITTEN
+        (:data:`REASON_NOT_ONOFF`, :data:`REASON_COOLER_STATE_UNKNOWN`).
+
+    .. req:: An unknown value or unknown state refuses, never defaults
+       :id: R_ONOFF_STRICT
+       :status: implemented
+       :tags: control, safety
+
+       A command whose value is an on/off token shall accept only ``on/off``, ``true/false``,
+       ``1/0`` (case- and space-insensitive) and refuse anything else (``null``, ``""``, ``"x"``)
+       with :data:`REASON_NOT_ONOFF` — never read it as OFF (ruling R3). The cooler ``night_on`` /
+       ``night_off`` edit, which carries the unit's current schedule, shall be refused with
+       :data:`REASON_COOLER_STATE_UNKNOWN` while no cooler state is known — never send the
+       default-filled frame (ruling R4). Both texts are emitted into ``control_consts.h`` for the
+       ESP's C twin.
     """
+    if (function, what) in ONOFF_COMMANDS and not is_onoff(value):
+        return REASON_NOT_ONOFF
     if function == "lighting" and what == "roof-reading":
         try:
             on = int(value) > 0  # brightness 0-11; only an ON write is gated
@@ -423,25 +512,31 @@ def command_precondition(function, what, value, states):
             on = False
         pos = (states.get("roof") or {}).get("Position")
         if on and pos in _ROOF_CLOSED_POSITIONS:
-            return "the pop-top roof reading light needs the roof raised (roof is closed)"
+            return REASON_ROOF_READING
     if function == "cooler" and what in ("timer_set", "timer_start"):
         if (states.get("cooler") or {}).get("State") == 1:  # fridge currently ON
-            return "the cooling timer can only be set while the fridge is off (turn the cooler off first)"
+            return REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF
     # The mirror of the above: the quiet mode and its schedule are only settable while the fridge is
     # ON (the app greys those rows when it is off — APP-OBSERVED, `evidence-ledger.md`). Without this
     # the CLI/API/HA paths could send what the app never sends; the web UI already greys them.
     if function == "cooler" and what in ("mode", "night_on", "night_off"):
         if (states.get("cooler") or {}).get("State") == 0:  # fridge currently OFF
-            return "quiet mode can only be set while the fridge is on (switch the cooler on first)"
+            return REASON_QUIET_NEEDS_FRIDGE_ON
+    # night_on/night_off carry the CURRENT schedule (the hour bytes are literal, 2026-08-26 #99); with
+    # no cooler state known the carry would be the default-filled frame that clobbers it. Ruling R4
+    # (2026-10-06): unknown -> refuse, never default (same rule as the wake-up edit, R5).
+    if function == "cooler" and what in ("night_on", "night_off"):
+        if not states.get("cooler"):
+            return REASON_COOLER_STATE_UNKNOWN
     # Camping lights + rear USB are only actionable while the camping master is ON: the rear USB is
     # physically dead without it (issue #111) and the light bits read back meaningless.
     if function == "campingmode" and what in ("lights", "usb"):
         if (states.get("campingmode") or {}).get("State") == 0:
-            return "camping lights and USB need camping mode on (turn the camping master on first)"
+            return REASON_CAMPING_NEEDS_MASTER
     # The unit can lock the energy-mode selector (EnergyModeNotSelectable); honour it off-UI too.
     if function == "energy" and what == "mode":
         if (states.get("energy") or {}).get("EnergyModeNotSelectable") == 1:
-            return "the unit currently does not allow changing the energy mode"
+            return REASON_ENERGY_LOCKED
     # Roof MOVES (never "stop" — a stop must always get through; it is the safety action and the web
     # UI never greys it either) are refused under the same alert set the GUI blocks on
     # (`ROOF_MOVE_BLOCK` in webui/app.js) plus a Position the unit reports as `error`. The unit
@@ -464,7 +559,7 @@ def command_precondition(function, what, value, states):
         except (TypeError, ValueError):
             n = None
         if stored is not None and n is not None and 1 <= n <= 7 and not stored >> (n - 1) & 1:
-            return "this favourite is empty on the unit — save it first"
+            return REASON_FAVOURITE_EMPTY
     # Wake-up: the app's "no area chosen" dialog — enabling with no vehicle area is refused.
     if function == "lighting" and what == "wakeup":
         try:
@@ -472,7 +567,7 @@ def command_precondition(function, what, value, states):
         except ValueError:
             return None  # malformed: the builder reports it
         if c["enabled"] and not c["areas"]:
-            return "the wake-up light needs at least one vehicle area"
+            return REASON_WAKEUP_NO_AREA
         # Ruling R5: an edit (no on/off) carries the enabled state the UNIT reported; with none
         # reported it would silently disarm, so it is refused. The daemon first pulls the config with
         # REQUEST_CONFIG (serve.on_command); the CLI has no latch, so it needs an explicit on|off.
@@ -636,8 +731,6 @@ def _lighting(funcs, what, value, last):
         }
     elif what == "door_contact":
         # dg/h.n4: SET_PROFILE + ProfileNumber 8 (DOOR_CONTACT) staged, LightValue on?1:0 sent.
-        if str(value).strip().lower() not in ("on", "off", "true", "false", "1", "0"):
-            raise ValueError("door_contact takes on or off, got %r" % value)
         vals = {
             **base,
             "Mode": LIGHT_MODE_SET_PROFILE,

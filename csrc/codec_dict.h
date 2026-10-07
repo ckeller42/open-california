@@ -89,7 +89,7 @@ static const struct codec_field COOLER_STATE[] = {
     {"NightTimerHourOff", 56, 8, 0, 0u, 0x00000000u},
 };
 static const struct codec_field COOLER_CTRL[] = {
-    {"State", 6, 2, CODEC_F_HAS_DEFAULT|CODEC_F_HAS_VALID, 3u, 0x00000003u},
+    {"State", 6, 2, CODEC_F_HAS_DEFAULT|CODEC_F_HAS_VALID, 3u, 0x0000000bu},
     {"TimerStart", 4, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"TimerCancel", 2, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},
     {"NightTimerSet", 0, 2, CODEC_F_HAS_DEFAULT, 3u, 0x00000000u},

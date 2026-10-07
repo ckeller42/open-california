@@ -227,6 +227,7 @@ static int nt_u32(uint32_t v) { (void)v; return -1; }
 static int nt_void(void) { return -1; }
 static int nt_no(void) { return 0; }
 static const char *nt_identity(void) { return NULL; }
+static int nt_write(uint16_t c, const uint8_t *d, size_t n) { (void)c; (void)d; (void)n; return -1; }
 
 static const cali_transport_t s_no_ble = {
     .set_sink = nt_set_sink,
@@ -244,6 +245,7 @@ static const cali_transport_t s_no_ble = {
     .remove_bond = nt_void,
     .has_bond = nt_no,
     .identity = nt_identity,
+    .write = nt_write,
 };
 
 static void core_task(void *param) {

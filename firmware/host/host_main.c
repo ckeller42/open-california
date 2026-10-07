@@ -11,6 +11,7 @@
  *                captive DNS (UDP 53 — only where bindable, e.g. as root in the CI container) and the
  *                web endpoints on 127.0.0.1:<port>. Without it nothing network-related runs.
  *   --fake-wifi  the fake WiFi's script (cali_net_host.h); missing = no networks (ruling R2)
+ * Besides the console's lines, stdin takes one test-only line: "twrite" (see twrite() below).
  *
  * Threads: main runs nimble_port_run() — the NimBLE host task; EVERY cali_core and transport call
  * happens there (the --http setup in main() runs before it, on the same thread). The HCI socket RX
@@ -55,6 +56,24 @@ static struct ble_npl_callout s_tick;
 static volatile int s_synced;   /* written once on the host task; read by the stdin thread */
 static int s_http;              /* --http given: the network side runs on the tick */
 
+/* Test-only line (cali-host, never the ESP console): "twrite <char hex> <frame hex | ->" hands the
+ * frame straight to the NimBLE transport's write, past the sequencer, so the host tier can prove the
+ * allow-list choke point in t_write itself (tests/firmware/test_control_e2e.py). "-" = 0 bytes.
+ * Logs "twrite: <char>/<len> rc=<rc>". */
+static void twrite(const char *args) {
+    unsigned chr;
+    char hex[LINE_MAX_LEN];
+    uint8_t data[LINE_MAX_LEN / 2];
+    size_t n = 0;
+    if (sscanf(args, "%x %127s", &chr, hex) != 2 || chr > 0xffffu) {
+        cali_log("twrite: usage: twrite <char hex> <frame hex | ->");
+        return;
+    }
+    while (hex[2 * n] && hex[2 * n + 1] && sscanf(hex + 2 * n, "%2hhx", &data[n]) == 1) n++;
+    int rc = cali_ble_nimble_transport()->write((uint16_t)chr, data, n);
+    cali_log("twrite: %04x/%u rc=%d", chr, (unsigned)n, rc);
+}
+
 /* Host task: feed every queued line to the console (only once the stack is synced). */
 static void drain(void) {
     for (;;) {
@@ -69,7 +88,8 @@ static void drain(void) {
         s_head = (s_head + 1) % NLINES;
         s_len--;
         pthread_mutex_unlock(&s_mu);
-        cali_console_line(line);
+        if (strncmp(line, "twrite ", 7) == 0) twrite(line + 7);
+        else cali_console_line(line);
         memset(line, 0, sizeof line);   /* a "wifi set" line holds a passphrase */
     }
 }

@@ -2,8 +2,8 @@
 
 Recordings are made by ``tools/applab/walk.py`` in the app lab (the real CaliforniaOnTour app in an
 emulator against the fake unit) and committed by hand per APK version. Each control write the app
-made is attributed to the scenario step that caused it and must equal ``control.build`` on the
-fields the app targets; the app's 500 ms neutral flush and its known app-only frames are skipped.
+made is attributed to the scenario step that caused it and must equal ``control.build`` byte for
+byte (the roof, whose SafetyCounter the app generates: on the fields the app targets); the app's 500 ms neutral flush and its known app-only frames are skipped.
 The second half pins the replay rules on synthetic recordings, so they hold before the first
 recording lands.
 
@@ -136,6 +136,30 @@ def test_a_lead_fails(tmp_path):
     )
     (c,) = capture_diff.check_recording(p)
     assert "LightValue" in c.problem and "LEAD" in c.problem
+
+
+def test_an_untargeted_field_off_the_apps_value_fails(tmp_path, monkeypatch):
+    """Whole-frame rule (ruling R1): calictl re-asserting a state value where the app sends its
+    leave-unchanged value fails the replay, even though the targeted field matches."""
+    f = _funcs()
+    real = control.build
+
+    def carry_level(funcs, fn, what, value, last):
+        vals = dict(control.decode_control(f["cooler"], real(funcs, fn, what, value, last)))
+        vals["Level"] = 3  # e.g. the unit's current level instead of the app's 7
+        return protocol.encode(f["cooler"], vals, frame_bytes=6)
+
+    monkeypatch.setattr(control, "build", carry_level)
+    p = _rec(
+        tmp_path,
+        [
+            _cooler_read(),
+            _step(1.0, 1, ["cooler", "power", "off"]),
+            _ev(1.1, "write", char="1101", fn="cooler", hex="fc771e3e1f1f"),
+        ],
+    )
+    (c,) = capture_diff.check_recording(p)
+    assert c.kind == "error" and "Level app=7 calictl=3" in c.problem
 
 
 def test_an_expected_action_with_no_write_fails(tmp_path):

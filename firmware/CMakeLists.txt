@@ -19,12 +19,6 @@ endif()
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(cali_fw)
 
-# Read-only firmware (#154): codec_encode is compiled out (components/csrc, -DCODEC_NO_ENCODE) and
-# the link must never contain it -- the device twin of firmware/host/Makefile's cali-host guard.
-add_custom_command(TARGET ${CMAKE_PROJECT_NAME}.elf POST_BUILD
-    COMMAND sh -c "if ${CMAKE_NM} \"$<TARGET_FILE:${CMAKE_PROJECT_NAME}.elf>\" | grep -qw codec_encode; then echo 'cali_fw: codec_encode linked into read-only firmware' >&2; exit 1; fi"
-    VERBATIM)
-
 # The QEMU boot tier's probe (main/Kconfig.projbuild CONFIG_CALI_QEMU_PROBE: kvprobe console command,
 # no BT controller init) must never ship: without the option, "kvprobe" must not appear anywhere in
 # the ELF (code, strings or symbols).

@@ -1,7 +1,7 @@
 # csrc/ — the C port of the Camper Unit frame codec
 
 C99, no malloc, no platform dependencies: compiles on any host for the parity tests
-and under ESP-IDF for the planned ESP32 satellite (#154). Produced for issue #156 —
+and under ESP-IDF for the ESP32 satellite (#154, `firmware/`). Produced for issue #156 —
 **one dictionary, two consumers**, no divergent protocol twin.
 
 | File | What |
@@ -9,6 +9,8 @@ and under ESP-IDF for the planned ESP32 satellite (#154). Produced for issue #15
 | `codec_dict.h` | **GENERATED** field tables from `protocol/dictionary.yaml` (+ `calictl/overrides.py`). **Never hand-edit** — regenerate with `python3 -m tools.gen_c_dict` (CI runs `--check`). |
 | `codec_chars.h` | **GENERATED** GATT characteristic short-id map (`calictl.protocol` state chars) + aux/heartbeat constants (`calictl/device.py`), for the ESP32 firmware's BLE layer (#154). Same generator/freshness gate as `codec_dict.h`. |
 | `pairing_consts.h` | **GENERATED** pinned pairing state-machine enums/timeouts/names, mirroring `calictl/pairing.py`, for the ESP32 firmware's pairing wizard (#154). Same generator/freshness gate as `codec_dict.h`. |
+| `net_consts.h` | **GENERATED** WiFi setup constants (`tools/wifi_consts.py`) for the firmware's network layer. Same generator/freshness gate. |
+| `control_consts.h` | **GENERATED** from `calictl/control.py`: the ESP write allow-list (control char + exact frame length of the five functions the satellite may write — never the roof's), the lighting commit frame, zone/colour/mode tables, builder constants and the `command_precondition` gate texts, for the C control twin (spec B). Same generator/freshness gate; its golden vectors are `tests/vectors/control.json` (`python3 -m tools.gen_control_vectors --check`). |
 | `codec.h` / `codec.c` | The dictionary-driven bit slicer — a line-for-line semantic port of `calictl/protocol.py` (`decode`/`encode`, MSB-first `bit i = byte[i/8] >> (7-i%8) & 1`, same validation order and error cases). |
 | `ports.h` / `ports.c` | Portable decision logic shared with `calictl` (freshness stale-latch guard, plausibility anchors, roof SafetyCounter formula). |
 | `codec_cli.c` | Batched line-protocol driver used ONLY by the two parity harnesses (`tests/test_codec_parity.py` for the codec, `tests/test_ports_parity.py` for the ports) — not part of the ESP build. |
@@ -77,12 +79,15 @@ Done (#156): the dictionary-driven codec plus three decision ports (freshness st
 plausibility anchors, roof SafetyCounter), each with golden vectors proven against the Python
 original and replayed through the C build in CI.
 
-Planned, not in `csrc/` yet:
+Consumed by the firmware (`firmware/`, see `docs/firmware.md`): the ESP-IDF `csrc` component
+compiles `codec.c` for the ESP32-S3 — `codec_decode` for the `SNAP`/`/api/state` path and, since the
+control path (#154 B), `codec_encode` for the **control twin** (`firmware/components/cali_core/control.c`, a C port
+of `calictl.control`'s five builders held to `tests/vectors/control.json` by
+`tests/firmware/test_control_parity.py`; `control_consts.h` above feeds it). The pairing state
+machine lives in `firmware/components/cali_core/pairing_sm.c` (replays `tests/vectors/pairing.json`
+via `pairing_consts.h`), not here.
 
-- the **pairing state machine** in C — `calictl/pairing.py` is written for it (no strings, clock or
-  addresses; pinned enum values), and `tests/vectors/pairing.json` is the language-neutral sequence
-  spec it must replay (today only `tests/test_pairing_sm.py` runs it, against Python);
-- the **postcheck port** — parked until #154 defines its raw decoded-state store (see the
-  "Parked" section of `docs/cross-language-codec.rst`);
-- the **ESP-IDF build** itself: nothing here is compiled for the ESP32 yet; only the host build
-  above runs, in CI.
+Still parked:
+
+- the **postcheck port** — the ESP does no readback check after a write (`applied` is never `true`
+  on the satellite); see the "Parked" section of `docs/cross-language-codec.rst`.

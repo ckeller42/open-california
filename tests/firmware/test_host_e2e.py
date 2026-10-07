@@ -8,7 +8,7 @@ on the NimBLE Linux port, talking HCI over TCP to a Bumble controller linked to 
 
 .. test:: Host firmware pairs and reads the fake unit end to end
    :id: T_FW_HOST_E2E
-   :links: R_FW_PAIRING_SM, R_FAKE_UNIT_FIDELITY, R_FW_SESSION, R_FW_READ_ONLY, R_FW_IO_CAP_BEFORE_LINK
+   :links: R_FW_PAIRING_SM, R_FAKE_UNIT_FIDELITY, R_FW_SESSION, R_FW_WRITE_ALLOWLIST, R_FW_IO_CAP_BEFORE_LINK
 """
 
 import time
@@ -73,7 +73,7 @@ def test_heartbeat_keeps_the_link(host_fw, hci_unit):
     """20 s on one link: >= 20 new beats in the window, no session drop/reconnect logged in it,
     and the same link still delivers (a pushed change still produces a SNAP). Over the whole run —
     pairing, read-all, 20 s of heartbeat — the firmware never wrote a control characteristic
-    (R_FW_READ_ONLY, observed at the unit)."""
+    (R_FW_WRITE_ALLOWLIST: no command, no control write)."""
     fn = "cooler"
     fw = host_fw(hci_unit)
     _pair(fw, hci_unit)
@@ -279,9 +279,8 @@ async def _drop_on_read(unit, fn):
 
 
 def test_link_drop_mid_read_all_reconnects(host_fw, hci_unit):
-    """The unit hangs up while the first read-all is under way (on the ``general`` read — 1001 has
-    no NOTIFY, so it is the one function the read-all always reads; every notifying char was
-    already pushed on subscribe, and a pushed function is not read): no SNAP of the half-read set,
+    """The unit hangs up while the first read-all is under way (on the ``general`` read — the
+    read-all reads every function, pushed or not, and 1001 is a mid-pass one): no SNAP of the half-read set,
     one backoff reconnect by bond, then a fresh read-all -> SNAP."""
     hci_unit.call(_drop_on_read, hci_unit.unit, "general")  # not read while pairing (1004 is)
     fw = host_fw(hci_unit)

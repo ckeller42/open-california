@@ -8,11 +8,16 @@ pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 fir
 > radio and on an emulated chip. A real CoreS3 runs it on a test bench (2026-10-01): it joined a
 > 2.4 GHz network through its setup hotspot and the page, and its screen showed every state in
 > [What the screen tells you](#what-the-screen-tells-you) — but against a *simulated* camper unit,
-> with a Linux laptop (not a phone) on the hotspot, and never in the van. The list of things still
-> to confirm is in [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
+> with a Linux laptop (not a phone) on the hotspot, and never in the van. The controls (below) ran
+> on the real board against the simulated unit too (2026-10-07: every recorded app action arrived
+> byte for byte, a fridge toggle from the browser landed, controls refused over the setup hotspot)
+> — but they have never switched anything in a real camper. The list of things still to confirm is in
+> [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
 
-The satellite only **reads** the camper unit. Its page shows what the unit reports and the
-device's own state (Bluetooth pairing, link, WiFi); it has no controls.
+The satellite reads the camper unit and, on your home WiFi, controls the fridge, camping mode,
+lights, air heater and energy mode with the same frames the Pi sends — never the pop-up roof and
+never the wake-up light (those stay with buspi or the app). Its page shows what the unit reports
+and the device's own state (Bluetooth pairing, link, WiFi).
 
 ## What you need
 
@@ -63,9 +68,12 @@ From now on the satellite joins your network by itself every time it starts.
 ## Finding the satellite on your network
 
 Open **<http://calictl-esp.local>** from any device on the same network: after setup it shows the
-calictl UI — the same tiles as on the Pi, display only (every control is greyed out). Device and
-WiFi details are at **<http://calictl-esp.local/device>** (also in the ⋮ menu, "Device & WiFi").
-That page refreshes every 2 seconds:
+calictl UI — the same tiles as on the Pi, with working controls for the fridge, camping mode,
+lights, air heater and energy mode; the pop-up roof and the wake-up light stay with buspi or the
+app (greyed, with the hint *Only via buspi or the app*). Controls work only on your home WiFi,
+never over the setup hotspot (see [Control from the satellite](#control-from-the-satellite)).
+Device and WiFi details are at **<http://calictl-esp.local/device>** (also in the ⋮ menu,
+"Device & WiFi"). That page refreshes every 2 seconds:
 
 ![The satellite's status page on the home network: device state and the camper unit's functions](screenshots/esp-status-page.png)
 
@@ -81,6 +89,39 @@ real page lists every function the unit reports).
 - on the **USB console**, type `wifi status` — the answer contains `ip=192.168.x.y`.
 
 Then open `http://192.168.x.y` directly.
+
+## Control from the satellite
+
+On your home WiFi the tiles work like on the Pi: switch the fridge and set its level and quiet
+mode, camping mode (master, lights, USB), every light zone, favourites and the sliding-door light,
+the air heater (with its confirmation) and the energy mode. The satellite sends exactly the frames
+the Pi — and the vendor app — send for these; what it cannot do:
+
+- **The pop-up roof and the wake-up light** are greyed with *Only via buspi or the app*. The roof is
+  deliberately left to buspi and the app; the wake-up light needs the time of day, which the
+  satellite does not have.
+- **Nothing works over the setup hotspot.** While you are on `calictl-esp-setup` every control is
+  greyed (a *Satellite — display only* banner says so); a command sent anyway is answered
+  *Controls work only on your home WiFi — not over the setup hotspot*.
+
+Things to expect:
+
+- **The first command after the satellite connects to the camper unit waits a few seconds.** The
+  satellite arms the link first (about 3 s after the first full reading); until then a command
+  answers *Not connected to the camper unit yet — try again in a few seconds*. The same message
+  means the camper unit is out of reach or asleep — the satellite cannot wake it (nothing can,
+  short of using the van).
+- **One command at a time.** Tap twice quickly and the second answers *The satellite is still
+  sending the previous command — try again in a moment*.
+- **"Sent — the unit didn't confirm it"** is the normal success toast: the satellite knows the unit
+  accepted the bytes, not that the load switched (the Pi reads the state back; the satellite does
+  not). The tile updates on the next reading. *Command failed: write_failed* means the unit refused
+  the write; *write_timeout* that it never answered.
+- The page and its controls have **no login**, like the Pi's (the project owner's stance: every
+  device on the local network is trusted).
+- For bench use, the USB console takes the same commands: `set <function> <what> <value>`, for
+  example `set cooler power on`, `set lighting kitchen 5`, `set campingmode master off` — it answers
+  `LOG control: cooler/power sending` then `… sent`, or the reason it refused.
 
 ## What the screen tells you
 
@@ -136,6 +177,7 @@ Enter:
 | `wifi forget` | Forget the saved network and reopen the setup hotspot. |
 | `wifi scan` | Look for networks again (the setup page's list). |
 | `status` | The Bluetooth pairing state, plus a `"wifi"` part with mode, network and IP. |
+| `set <function> <what> <value>` | A control command, e.g. `set cooler power on` (see [Control from the satellite](#control-from-the-satellite)); works in every WiFi mode, since the cable is physical access. |
 
 The satellite **echoes nothing you type** — you type blind — and **never prints the password
 back**. The replies you'll see:
@@ -178,3 +220,7 @@ back**. The replies you'll see:
 | <http://calictl-esp.local> doesn't open | Use the IP address from your router's device list or `wifi status` (see [Finding the satellite](#finding-the-satellite-on-your-network)). |
 | The page is slow with several tabs open | The satellite answers one request at a time. Keep one tab open. |
 | *Link to the camper unit: not connected* | That is the Bluetooth side, not WiFi: the satellite is not paired yet, the camper unit is asleep, or another device (the Pi, the app) holds the unit's only Bluetooth connection. Pairing is done on the USB console (`pair`, then `passkey <code>`) — see [ESP32 firmware](firmware.md). |
+| *Not connected to the camper unit yet — try again in a few seconds* after tapping a control | The Bluetooth link is not armed yet (give it a few seconds after the unit connects) or the unit is out of reach / asleep. |
+| *Controls work only on your home WiFi — not over the setup hotspot* | You are on `calictl-esp-setup`. Put the satellite on your WiFi (above) and use <http://calictl-esp.local>. |
+| *The satellite is still sending the previous command — try again in a moment* | One command at a time; wait for the toast of the previous one. |
+| *Only via buspi or the app* on the roof or the wake-up light | By design — these two are not controlled from the satellite. Use the Pi's page or the vendor app. |

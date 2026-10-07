@@ -10,18 +10,21 @@
  *   cali_session_stop()         the runner left bonded or starts a flow (forget, pair): no more
  *                               heartbeat, reads or reconnects until the next on_bonded/boot.
  *   cali_session_tick(now_ms)   every ~100 ms: heartbeat + warm-up + reconnect + encryption timers.
+ *                               It also ticks the control sequencer (cali_ctl_tick), and WRITTEN
+ *                               events go to cali_ctl_on_written (cali_control.h).
  *
  * Link up (on_bonded, or ENC_OK on a reconnect): heartbeat write_heartbeat(counter++) every
  * CODEC_HEARTBEAT_PERIOD_MS starting at CODEC_HEARTBEAT_START (first beat on the next tick), and
  * discover(). DISCOVERED -> subscribe() every CODEC_CHARS entry (a char without NOTIFY is refused
  * by the transport and skipped), then — like calictl.device.read_all — let the heartbeat run for
  * CODEC_HEARTBEAT_WARMUP_MS (the first cali_session_tick at or past DISCOVERED + warm-up starts the
- * reads) and read() the functions one at a time in CODEC_CHARS order; each READ (status 0)
- * replaces that function's frame. A function the unit pushed on this link (NOTIFY since the
- * subscribe) is not read, and a read already outstanding when its push arrives does not replace
- * the pushed frame: the notification is fresher than the read latch. After the last read the
- * session prints one SNAP (cali_console_snapshot). A NOTIFY replaces that function's frame at any
- * time; once the link's first read-all completed it also prints a SNAP. The snapshot therefore
+ * reads) and read() every function one at a time in CODEC_CHARS order; each READ (status 0)
+ * replaces that function's frame, and so does a NOTIFY at any time: the LAST frame to arrive wins
+ * (the app subscribes, then reads, one decoder for both — calictl R_READ_LAST_FRAME_WINS). After
+ * the last read the session prints one SNAP (cali_console_snapshot); once the link's first read-all
+ * completed a NOTIFY also prints a SNAP. While the link stays up, water (1302) is re-read every
+ * CALI_SESSION_WATER_REREAD_MS after the read-all (its completion stores + SNAPs), so a stale latch
+ * served at connect is corrected without a reconnect. The snapshot therefore
  * always holds exactly one whole frame per function (never a mix of two).
  *
  * Link loss (DISCONNECTED, CONNECT_FAIL, ENC_FAIL, a failed discovery, a heartbeat that cannot be
@@ -46,6 +49,9 @@ extern "C" {
 #define CALI_SESSION_BACKOFF_MIN_MS 1000u
 #define CALI_SESSION_BACKOFF_MAX_MS 60000u
 #define CALI_SESSION_ENC_TIMEOUT_MS 15000u
+/* Water (1302) re-read period while the link is up: calictl's POLL_INTERVAL (30 s), at which it
+ * reads 1302 on every poll. The app has no periodic water re-read (it reconnects instead). */
+#define CALI_SESSION_WATER_REREAD_MS 30000u
 
 void cali_session_init(const cali_transport_t *t);
 void cali_session_boot(void);
@@ -63,9 +69,18 @@ int cali_session_active(void);
  * /api/state's device.link.up reports (T_FW_WEB_HANDLERS). */
 int cali_session_link_up(void);
 
+/* 1 when a control write may go out: the link is up, its first read-all finished, and it has been
+ * up (heartbeat ticking) for CODEC_ARM_DELAY_MS — calictl.device's ARM_DELAY_S, here once per link
+ * instead of per write. */
+int cali_session_ready(void);
+
 /* The stored frame of CODEC_CHARS[i] (i < CODEC_NCHARS): 1 and *frame, *len set, or 0 when that
  * function has not been read yet (or its read failed and no notification came). */
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len);
+
+/* As cali_session_frame, but only a frame read or pushed on the CURRENT link (0 for one kept from an
+ * earlier link): what the control gates run on (cali_control.h), never a previous link's state. */
+int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len);
 
 /* The now_ms (of the latest cali_session_tick) at which the session last stored a frame — a READ or
  * a NOTIFY; 0 = no frame stored since cali_session_init. */

@@ -11,12 +11,15 @@
  *     DISCOVERED [status] | HEARTBEAT <status>
  *     READ <hex char> <status> [hex data]    (default data 0102)
  *     NOTIFY <hex char> <hex data>
+ *     WRITTEN <hex char> <status>            (a control write() completed; 0 = ACKed)
  *   harness:
  *     > <console line>     cali_console_line(<console line>)
  *     tick <now_ms>        cali_runner_tick + cali_session_tick
  *     boot                 cali_session_boot + console "status" (what host_main does on sync)
  *     bond 0|1             what has_bond() answers (default 0)
  *     fail <call>          the next call of that transport function returns -1
+ *     syncwritten <status> the next write() delivers its WRITTEN <status> inside the call (as the
+ *                          NimBLE transport does for an ATT request it cannot start)
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
  *                          does with --http); before it the WiFi runtime is off, as without --http
@@ -30,7 +33,8 @@
  *     NET_GOT_IP <a.b.c.d> | NET_LOST | NET_FAILED <reason> | NET_AP_STARTED | NET_AP_STOPPED
  *     NET_SCAN_DONE [ssid ...]   (rssi -40 - 10*i, secure)
  *     NET_SCAN_FAILED      a SCAN_DONE with nscan -1 (the scan was refused, aborted or timed out)
- * stdout: CALL <name> [arg] per transport action (decimal args; queries not printed), NET <op>
+ * stdout: CALL <name> [arg] per transport action (decimal args; queries not printed; a control
+ * write prints "CALL write <hex char> <hex frame>"), NET <op>
  * [args] per cali_net WiFi/UDP call, the console's STATE/SNAP lines, and LOG lines (cali_log).
  */
 #include <stdarg.h>
@@ -43,6 +47,7 @@
 #include "cali_runner.h"
 #include "cali_session.h"
 #include "cali_wifi_run.h"
+#include "codec.h"
 
 #define FAKE_IDENTITY "C0:FF:EE:CA:11:F0"
 
@@ -50,6 +55,7 @@ static cali_tsink_t s_sink;
 static void *s_ctx;
 static char s_fail[32];
 static int s_bond;
+static int s_sync_written = -1;   /* "syncwritten <status>": the next write() completes inside the call */
 
 void cali_log(const char *fmt, ...) {
     va_list ap;
@@ -92,10 +98,25 @@ static int f_remove_bond(void) { s_bond = 0; return call("remove_bond", NULL); }
 static int f_has_bond(void) { return s_bond; }
 static const char *f_identity(void) { return s_bond ? FAKE_IDENTITY : NULL; }
 
+static void deliver(cali_tev_t ev, int status, uint16_t c, const uint8_t *data, size_t len);
+
+static int f_write(uint16_t c, const uint8_t *d, size_t n) {
+    char arg[8 + 2 * CODEC_FRAME_MAX + 1];
+    int k = snprintf(arg, sizeof arg, "%04x ", c), rc;
+    for (size_t i = 0; i < n && i < CODEC_FRAME_MAX; i++) k += snprintf(arg + k, sizeof arg - (size_t)k, "%02x", d[i]);
+    rc = call("write", arg);
+    if (rc == 0 && s_sync_written >= 0) {
+        int st = s_sync_written;
+        s_sync_written = -1;
+        deliver(CALI_TEV_WRITTEN, st, c, NULL, 0);
+    }
+    return rc;
+}
+
 static const cali_transport_t FAKE = {
     f_set_sink, f_start_scan, f_stop_scan, f_connect_found, f_connect_bonded, f_pair,
     f_inject_passkey, f_discover, f_read, f_subscribe, f_write_heartbeat, f_disconnect,
-    f_remove_bond, f_has_bond, f_identity,
+    f_remove_bond, f_has_bond, f_identity, f_write,
 };
 
 static size_t unhex(const char *h, uint8_t *out, size_t max) {
@@ -274,6 +295,10 @@ int main(void) {
             len = unhex(a3[0] ? a3 : "0102", data, sizeof data);
             int st = (int)strtol(a2, NULL, 10);
             deliver(CALI_TEV_READ, st, (uint16_t)strtoul(a1, NULL, 16), st ? NULL : data, st ? 0 : len);
+        } else if (strcmp(word, "WRITTEN") == 0) {
+            deliver(CALI_TEV_WRITTEN, (int)strtol(a2, NULL, 10), (uint16_t)strtoul(a1, NULL, 16), NULL, 0);
+        } else if (strcmp(word, "syncwritten") == 0) {
+            s_sync_written = n1;
         } else if (strcmp(word, "NOTIFY") == 0) {
             len = unhex(a2, data, sizeof data);
             deliver(CALI_TEV_NOTIFY, 0, (uint16_t)strtoul(a1, NULL, 16), data, len);
