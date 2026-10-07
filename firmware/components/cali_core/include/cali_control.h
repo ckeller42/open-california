@@ -19,9 +19,15 @@
  * Run (control_run.c, on the owner task like everything in cali_core): cali_ctl_submit() refuses at
  * once (BUSY, NOT_READY, REFUSED, ELSEWHERE, BAD_VALUE, NONE — each logged "control: <fn>/<what> …")
  * or accepts (PENDING); the frames then go out on cali_ctl_tick(), one write with response at a time
- * (transport write -> CALI_TEV_WRITTEN -> cali_ctl_on_written); done(result) is called exactly once
- * with OK, FAILED (a write not issued, refused with an ATT error, or the link lost) or TIMEOUT
- * (CALI_CTL_DEADLINE_MS after the submit). NOT_READY = cali_session_ready() is 0 (no armed link: the
+ * (transport write -> CALI_TEV_WRITTEN -> cali_ctl_on_written); done(result, reason) is called exactly
+ * once with OK, FAILED (a write not issued, refused with an ATT error, or the link lost), TIMEOUT
+ * (CALI_CTL_DEADLINE_MS after the submit) or REFUSED (a wake-up whose config the pull did not bring,
+ * reason CALI_WAKEUP_UNKNOWN; reason is NULL for every other result). A `plan.pull` refusal on an armed
+ * link becomes PENDING: REQUEST_CONFIG + commit go out, then up to CODEC_CONFIG_PULL_MS after the
+ * commit's ACK the command is planned again every tick over the unit's reply frames (calictl
+ * serve._pull_lighting_config), then written or refused — one deadline, CALI_CTL_DEADLINE_MS +
+ * CODEC_CONFIG_PULL_MS, under the HTTP core's CALI_HTTP_PENDING_MAX_MS. local_now: the page's wall clock
+ * read as UTC (s), < 0 = none (the console). NOT_READY = cali_session_ready() is 0 (no armed link: the
  * link up for CODEC_ARM_DELAY_MS with its first read-all done) or the function's state was not read
  * (or pushed) on this link. ELSEWHERE, NONE and BAD_VALUE answer without waiting for it, armed or not.
  *
@@ -77,7 +83,7 @@ typedef struct {
 /* 1 and *out = the decoded value of fn's state field, or 0 when unknown (no frame, or the frame
  * too short for the field). */
 typedef int (*cali_ctl_get_t)(const char *fn, const char *field, uint32_t *out);
-typedef void (*cali_ctl_done_t)(int result);
+typedef void (*cali_ctl_done_t)(int result, const char *reason);   /* reason: REFUSED's text, else NULL */
 
 /* The lighting configuration the unit reports in its own 1502 frames — semantics.lighting_config in C:
  * Mode 20 = wake-up (Timestamp + LightValue), Mode 16 / ProfileNumber 8 = door contact (LightValue),
@@ -99,8 +105,8 @@ void cali_ctl_pull_plan(cali_ctl_plan_t *out);   /* REQUEST_CONFIG @0, commit @C
 int cali_ctl_write_ok(uint16_t chr, size_t len);
 
 void cali_ctl_run_init(const cali_transport_t *t);
-int cali_ctl_submit(const char *fn, const char *what, const char *value, cali_ctl_done_t done,
-                    const char **reason);
+int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now,
+                    cali_ctl_done_t done, const char **reason);
 void cali_ctl_tick(uint64_t now_ms);
 void cali_ctl_on_written(const cali_tevent_t *e);
 

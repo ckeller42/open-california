@@ -17,6 +17,10 @@
  *     tick <now_ms>        cali_runner_tick + cali_session_tick
  *     boot                 cali_session_boot + console "status" (what host_main does on sync)
  *     bond 0|1             what has_bond() answers (default 0)
+ *     ident <addr>         the bonded identity identity() answers while bonded (default FAKE_IDENTITY)
+ *     submit <local_now|-> <fn> <what> [value…]
+ *                          cali_ctl_submit with that page clock ("-" = none): prints "SUBMIT <rc>
+ *                          <reason|->" and, when the command ends, "DONE <rc> <reason|->"
  *     fail <call>          the next call of that transport function returns -1
  *     syncwritten <status> the next write() delivers its WRITTEN <status> inside the call (as the
  *                          NimBLE transport does for an ATT request it cannot start)
@@ -55,6 +59,7 @@ static cali_tsink_t s_sink;
 static void *s_ctx;
 static char s_fail[32];
 static int s_bond;
+static char s_ident[32] = FAKE_IDENTITY;
 static int s_sync_written = -1;   /* "syncwritten <status>": the next write() completes inside the call */
 
 void cali_log(const char *fmt, ...) {
@@ -96,7 +101,7 @@ static int f_write_heartbeat(uint32_t n) { return call_u("write_heartbeat", n); 
 static int f_disconnect(void) { return call("disconnect", NULL); }
 static int f_remove_bond(void) { s_bond = 0; return call("remove_bond", NULL); }
 static int f_has_bond(void) { return s_bond; }
-static const char *f_identity(void) { return s_bond ? FAKE_IDENTITY : NULL; }
+static const char *f_identity(void) { return s_bond ? s_ident : NULL; }
 
 static void deliver(cali_tev_t ev, int status, uint16_t c, const uint8_t *data, size_t len);
 
@@ -142,6 +147,8 @@ static void deliver(cali_tev_t ev, int status, uint16_t c, const uint8_t *data, 
 }
 
 static void quit(void) { printf("QUIT\n"); }
+
+static void on_done(int rc, const char *reason) { printf("DONE %d %s\n", rc, reason ? reason : "-"); }
 
 /* ---- an in-memory kv store (cali_platform.h's kv calls) ---- */
 
@@ -280,6 +287,16 @@ int main(void) {
             cali_console_line(line + 1);
             continue;
         }
+        if (strncmp(line, "submit ", 7) == 0) {   /* submit <local_now|-> <fn> <what> [value…] */
+            const char *reason = NULL;
+            char *ln = strtok(line + 7, " "), *fn = strtok(NULL, " "), *what = strtok(NULL, " ");
+            char *value = strtok(NULL, "");
+            int rc = cali_ctl_submit(fn ? fn : "", what ? what : "", value ? value : "",
+                                     ln && strcmp(ln, "-") != 0 ? (int64_t)strtoll(ln, NULL, 10) : -1, on_done,
+                                     &reason);
+            printf("SUBMIT %d %s\n", rc, reason ? reason : "-");
+            continue;
+        }
         if (sscanf(line, "%31s %31s %31s %255s", word, a1, a2, a3) < 1) continue;
         int n1 = (int)strtol(a1, NULL, 10);
         if (strcmp(word, "FOUND") == 0) deliver(CALI_TEV_FOUND, 0, 0, NULL, 0);
@@ -348,6 +365,7 @@ int main(void) {
             cali_session_boot();
             cali_console_line("status");
         } else if (strcmp(word, "bond") == 0) s_bond = n1;
+        else if (strcmp(word, "ident") == 0) snprintf(s_ident, sizeof s_ident, "%s", a1);
         else if (strcmp(word, "lastupd") == 0)
             printf("LASTUPD %llu\n", (unsigned long long)cali_session_last_update_ms());
         else if (strcmp(word, "fail") == 0) snprintf(s_fail, sizeof s_fail, "%s", a1);

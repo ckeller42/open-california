@@ -31,10 +31,12 @@
  *   kvfail 0|1       cali_kv_set fails
  *   ctl <rc> [reason…]   what cali_ctl_submit answers (default pending): pending refused elsewhere bad
  *                    none busy notready; the rest of the line is *reason (NULL when absent)
- *   ctldone <rc> <polls>   rc = ok failed timeout: the done callback of the last accepted command
- *                    fires <polls> polls into the next request
+ *   ctldone <rc> <polls> [reason…]   rc = ok failed timeout refused: the done callback of the last
+ *                    accepted command fires <polls> polls into the next request, with the reason
+ *                    (NULL when absent)
  * Calls into the fake WiFi runtime print "CALL set_creds [<ssid>] [<psk>]", "CALL forget",
- * "CALL scan_auto"; cali_ctl_submit prints "CALL submit [<fn>] [<what>] [<value>]"; cali_log prints
+ * "CALL scan_auto"; cali_ctl_submit prints "CALL submit [<fn>] [<what>] [<value>]" (+ " t=<local_now>"
+ * when one is given); cali_log prints
  * "LOG <text>". cali_web_init's result goes to stderr as "init=<rc>".
  */
 #include <stdarg.h>
@@ -198,12 +200,13 @@ void cali_wifi_run_scan_auto(void) { printf("CALL scan_auto\n"); }
 
 /* ---- the fake control sequencer ---- */
 static int s_ctl_rc = CALI_CTL_PENDING, s_done_rc = CALI_CTL_OK, s_done_after;
-static char s_ctl_reason[160];
+static char s_ctl_reason[160], s_done_reason[160];
 static cali_ctl_done_t s_ctl_done;
 
-int cali_ctl_submit(const char *fn, const char *what, const char *value, cali_ctl_done_t done,
-                    const char **reason) {
-    printf("CALL submit [%s] [%s] [%s]\n", fn, what, value);
+int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now,
+                    cali_ctl_done_t done, const char **reason) {
+    if (local_now >= 0) printf("CALL submit [%s] [%s] [%s] t=%lld\n", fn, what, value, (long long)local_now);
+    else printf("CALL submit [%s] [%s] [%s]\n", fn, what, value);
     *reason = s_ctl_reason[0] ? s_ctl_reason : NULL;
     if (s_ctl_rc == CALI_CTL_PENDING) s_ctl_done = done;
     return s_ctl_rc;
@@ -252,7 +255,7 @@ static void request(const char *text) {
         if (s_done_after > 0 && --s_done_after == 0 && s_ctl_done) {
             cali_ctl_done_t d = s_ctl_done;
             s_ctl_done = NULL;
-            d(s_done_rc);
+            d(s_done_rc, s_done_reason[0] ? s_done_reason : NULL);
         }
         if (!s_pending && !s_open) break;
         if (s_flipping) flip();
@@ -324,6 +327,11 @@ int main(void) {
         } else if (strcmp(w, "ctldone") == 0) {
             if ((s_done_rc = rc_named(a1)) < 0) { printf("UNKNOWN ctldone %s\n", a1); continue; }
             s_done_after = (int)strtol(a2, NULL, 10);
+            {   /* ctldone <rc> <polls> [reason…]: the rest of the line after the polls */
+                int off = 0;
+                (void)sscanf(line, "%*s %*s %*s %n", &off);
+                snprintf(s_done_reason, sizeof s_done_reason, "%s", off ? line + off : "");
+            }
         } else if (strcmp(w, "kv") == 0) {
             char buf[128];
             size_t len = sizeof buf;

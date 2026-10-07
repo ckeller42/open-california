@@ -1448,3 +1448,228 @@ def test_control_gate_on_unknown_state_waits_for_the_link(fake):
     before the link is armed: it is "not ready", the honest answer while the state is still coming."""
     out = run(fake, *PAIRED, "> set cooler night_on")
     assert "LOG control: cooler/night_on not ready (no armed link or no state yet)" in out
+
+
+# ---- the wake-up: the page's clock + the REQUEST_CONFIG pull inside one command (R5) ---------------
+
+from calictl import control  # noqa: E402
+
+PULL = int(re.search(r"#define CODEC_CONFIG_PULL_MS (\d+)", _CH).group(1))
+LN = 1791354615  # 2026-10-07 06:30:15: the page's wall clock read as UTC
+WAKE_0700_ON = pack("lighting", Mode=20, ProfileNumber=14, Timestamp=7 * 3600, LightValue=0x1101)
+PULL_WRITES = [
+    "CALL write 1501 %s" % control.LIGHT_REQUEST_CONFIG.hex(),
+    "CALL write 1501 %s" % control.LIGHT_COMMIT.hex(),
+]
+REFUSED, FAILED, BUSY, PENDING = 1, 8, 6, 5  # CALI_CTL_* (cali_control.h)
+
+
+def _pulled(t):
+    """The pull's two writes ACKed: the REQUEST_CONFIG at t, the commit FOLLOW + TICK later."""
+    return ["tick %d" % t, "WRITTEN 1501 0", "tick %d" % (t + FOLLOW + TICK), "WRITTEN 1501 0"]
+
+
+def test_wakeup_edit_with_unknown_config_pulls_then_builds_from_the_reply(fake):
+    """R5 on the ESP: the edit carries the switch the unit reports, learnt by the app's pull.
+
+    .. test:: An unknown wake-up config is pulled with REQUEST_CONFIG before the edit is built
+       :id: T_FW_WAKEUP_PULL
+       :links: R_FW_WAKEUP
+    """
+    t = ARM + 100
+    after_pull = t + FOLLOW + 2 * TICK
+    out = run(
+        fake,
+        *armed(),
+        "submit %d lighting wakeup 08:00" % LN,
+        *_pulled(t),
+        "NOTIFY 1502 %s" % WAKE_0700_ON,  # the unit's reply carries its wake-up (on)
+        "tick %d" % after_pull,
+        "WRITTEN 1501 0",
+        "tick %d" % (after_pull + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+    )
+    latch = {"WakeupTimestamp": 7 * 3600, "WakeupLightValue": 0x1101}
+    assert writes(out) == PULL_WRITES + want_writes("lighting", "wakeup", "08:00", latch=latch, local_now=LN)
+    assert "SUBMIT %d -" % PENDING in out and out[-1] == "DONE 0 -"
+    assert "LOG control: lighting/wakeup pulling the lighting config" in out
+
+
+def test_wakeup_pull_writes_only_the_allow_listed_request_config_then_commit():
+    """The pull's own frames are the vectors' config_pull: 1501 at its 16-byte frame length (the
+    write allow-list, W 1501 16 -> OK 1 in test_control_parity), REQUEST_CONFIG then the commit."""
+    v = json.loads((ROOT / "tests" / "vectors" / "control.json").read_text())["config_pull"]
+    assert v["reason"] == control.WAKEUP_UNKNOWN
+    assert ["CALL write %s %s" % (f["char"], f["hex"]) for f in v["frames"]] == PULL_WRITES
+    assert {(f["char"], len(f["hex"]) // 2) for f in v["frames"]} == {("1501", 16)}
+
+
+def test_wakeup_pull_without_a_wakeup_frame_is_refused_and_writes_nothing_more(fake):
+    """Review focus 2: the reply has no Mode-20 frame -> refused after CODEC_CONFIG_PULL_MS, never the
+    default-filled (disarming) frame, and no stray commit."""
+    t = ARM + 100
+    acked = t + FOLLOW + TICK
+    early = run(
+        fake,
+        *armed(),
+        "submit %d lighting wakeup 08:00" % LN,
+        *_pulled(t),
+        "NOTIFY 1502 %s" % pack("lighting", Mode=12, ProfileNumber=12, LightValue=0),
+        *["tick %d" % (acked + d) for d in range(100, PULL, 100)],
+    )
+    assert not [line for line in early if line.startswith("DONE")]  # still waiting inside the window
+    out = run(
+        fake,
+        *armed(),
+        "submit %d lighting wakeup 08:00" % LN,
+        *_pulled(t),
+        *["tick %d" % (acked + d) for d in range(100, PULL + 1000, 100)],
+    )
+    assert writes(out) == PULL_WRITES
+    assert [line for line in out if line.startswith("DONE")] == [
+        "DONE %d %s" % (REFUSED, control.WAKEUP_UNKNOWN)
+    ]
+    assert "LOG control: lighting/wakeup refused: %s" % control.WAKEUP_UNKNOWN in out
+
+
+def test_wakeup_with_an_explicit_switch_needs_no_pull_and_our_write_is_never_latched(fake):
+    """'07:00 off' builds at once (no config needed); the unit ACKs but reports nothing, so the next
+    time-only edit must pull again — our own frame never became 'unit-reported'."""
+    t = ARM + 100
+    out = run(
+        fake,
+        *armed(),
+        "submit %d lighting wakeup 07:00 off" % LN,
+        "tick %d" % t,
+        "WRITTEN 1501 0",
+        "tick %d" % (t + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+        "submit %d lighting wakeup 08:00" % LN,
+        "tick %d" % (t + FOLLOW + 2 * TICK),
+    )
+    first = want_writes("lighting", "wakeup", "07:00 off", local_now=LN)
+    assert writes(out) == first + PULL_WRITES[:1]
+
+
+def test_wakeup_no_area_is_refused_without_a_pull(fake):
+    t = ARM + 100
+    no_area = pack("lighting", Mode=20, ProfileNumber=14, Timestamp=7 * 3600, LightValue=0x1071)
+    out = run(
+        fake, *armed(), "NOTIFY 1502 %s" % no_area, "submit %d lighting wakeup 07:00" % LN, "tick %d" % t
+    )
+    assert "SUBMIT %d %s" % (REFUSED, control.REASON_WAKEUP_NO_AREA) in out and not writes(out)
+
+
+def test_wakeup_without_a_clock_is_refused_with_the_clock_reason(fake):
+    from tools.gen_c_dict import ESP_WAKEUP_CLOCK_REASON
+
+    out = run(fake, *armed(), "submit - lighting wakeup 08:00", "tick %d" % (ARM + 100))
+    assert "SUBMIT 2 %s" % ESP_WAKEUP_CLOCK_REASON in out and not writes(out)  # 2 = ELSEWHERE
+
+
+def test_wakeup_pull_holds_the_sequencer_busy(fake):
+    """Review focus 4: a second command while the wake-up waits for the reply is busy (the web
+    answers 409), never interleaved: the unit sees only the pull, then the wake-up."""
+    t = ARM + 100
+    after_pull = t + FOLLOW + 2 * TICK
+    out = run(
+        fake,
+        *armed(),
+        "submit %d lighting wakeup 08:00" % LN,
+        *_pulled(t),
+        "> set cooler level 2",
+        "submit - cooler level 3",
+        "NOTIFY 1502 %s" % WAKE_0700_ON,
+        "tick %d" % after_pull,
+        "WRITTEN 1501 0",
+        "tick %d" % (after_pull + FOLLOW + TICK),
+        "WRITTEN 1501 0",
+    )
+    assert "LOG control: cooler/level busy" in out and "SUBMIT %d -" % BUSY in out
+    latch = {"WakeupTimestamp": 7 * 3600, "WakeupLightValue": 0x1101}
+    assert writes(out) == PULL_WRITES + want_writes("lighting", "wakeup", "08:00", latch=latch, local_now=LN)
+
+
+def test_wakeup_pull_deadline_is_deadline_plus_pull(fake):
+    """Review focus 4: one deadline for pull + write, under CALI_HTTP_PENDING_MAX_MS (8 s)."""
+    t = ARM + 100
+    script = [*armed(), "submit %d lighting wakeup 08:00" % LN, "tick %d" % t]
+    alive = run(fake, *script, "tick %d" % (t + DEADLINE + 100))
+    assert "LOG control: lighting/wakeup timed out" not in alive
+    dead = run(fake, *script, "tick %d" % (t + DEADLINE + PULL + 100))
+    assert "LOG control: lighting/wakeup timed out" in dead
+    http = (CORE / "include" / "cali_http.h").read_text()
+    assert DEADLINE + PULL < int(re.search(r"#define CALI_HTTP_PENDING_MAX_MS (\d+)", http).group(1))
+
+
+def test_wakeup_link_drop_during_the_pull_fails_and_writes_nothing_more(fake):
+    """The link drops while the wake-up waits for the reply: FAILED (link lost) at once, no wake-up
+    frame on any later link."""
+    t = ARM + 100
+    acked = t + FOLLOW + TICK
+    out = run(
+        fake,
+        *armed(),
+        "submit %d lighting wakeup 08:00" % LN,
+        *_pulled(t),
+        "DISCONNECTED",
+        "tick %d" % (acked + TICK),
+        *["tick %d" % (acked + d) for d in range(200, PULL + 2000, 100)],
+    )
+    assert writes(out) == PULL_WRITES
+    assert [line for line in out if line.startswith("DONE")] == ["DONE %d -" % FAILED]
+    assert "LOG control: lighting/wakeup failed: link lost" in out
+
+
+def test_wakeup_after_a_reconnect_pulls_again(fake):
+    """Review focus 3: the previous link's wake-up is shown, but the edit on the new link pulls."""
+    up = ARM + 1200
+    t = up + ARM + 100
+    out = run(
+        fake,
+        *armed({0x1502: WAKE_0700_ON}),
+        "DISCONNECTED",
+        "tick %d" % (ARM + 100),
+        "tick %d" % up,
+        "CONNECTED",
+        "ENC_OK",
+        *read_all(at=up),
+        "tick %d" % (up + ARM),
+        "submit %d lighting wakeup 08:00" % LN,
+        "tick %d" % t,
+    )
+    assert snaps(out)[-1]["fn"]["lighting"]["WakeupLightValue"] == 0x1101
+    assert writes(out) == PULL_WRITES[:1]
+
+
+def _relink_lighting_unread(at):
+    """A new link at session time ``at`` whose read-all has no lighting frame (its read fails)."""
+    reads = ["READ %x %d" % (c, 14 if c == 0x1502 else 0) for c in CHARS]
+    return ["CONNECTED", "ENC_OK", *read_all(at=at, reads=reads)]
+
+
+def test_another_units_state_is_never_shown_after_forget_or_a_new_bond(fake):
+    """Task-3 carry-over M1: when the bond's identity changes (forget, or a bond to another unit) the
+    stored frames and the shown config latch are dropped — the old unit's wake-up is never displayed
+    for the new one. The same unit keeps them shown across links (test above)."""
+    up = ARM + 1200
+    old = [*armed({0x1502: WAKE_0700_ON}), "DISCONNECTED", "tick %d" % (ARM + 100), "tick %d" % up]
+    same = run(fake, *old, *_relink_lighting_unread(up))
+    assert snaps(same)[-1]["fn"]["lighting"]["WakeupLightValue"] == 0x1101
+    other = run(fake, *old, "ident AA:BB:CC:DD:EE:FF", *_relink_lighting_unread(up))
+    assert "lighting" not in snaps(other)[-1]["fn"]
+    # the new unit's own lighting frame carries no config: none of the old unit's latch rides along
+    other = run(fake, *old, "ident AA:BB:CC:DD:EE:FF", "CONNECTED", "ENC_OK", *read_all(at=up))
+    assert not set(semantics.LIGHT_CONFIG_KEYS) & set(snaps(other)[-1]["fn"]["lighting"])
+    t = ARM + 100
+    forgot = run(
+        fake,
+        *armed({0x1502: WAKE_0700_ON}),
+        "> forget",
+        "DISCONNECTED",
+        *["tick %d" % (t + d) for d in range(0, 3000, 100)],
+        *PAIRED,
+        *read_all(at=t + 3000, reads=["READ %x %d" % (c, 14 if c == 0x1502 else 0) for c in CHARS]),
+    )
+    assert 'STATE {"state":"idle","attempts":0,"error":null,"address":null}' in forgot
+    assert "lighting" not in snaps(forgot)[-1]["fn"]

@@ -4,6 +4,7 @@
  */
 #include "cali_session.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "cali_console.h"
@@ -107,6 +108,21 @@ static void store(size_t i, const uint8_t *data, size_t len) {
     s_last_update = s_now ? s_now : 1;
 }
 
+/* The unit the stored frames + config latch came from: its bonded identity ("" = none). */
+static char s_unit[32];   /* "AA:BB:CC:DD:EE:FF" with room to spare */
+
+/* The bond's identity changed (forget, or a bond to another unit): drop everything the old unit
+ * reported, so another unit's state or wake-up config is never shown for this one. */
+static void unit_check(void) {
+    const char *id = s_t->identity();
+    if (!id) id = "";
+    if (strncmp(id, s_unit, sizeof s_unit) == 0) return;
+    snprintf(s_unit, sizeof s_unit, "%s", id);
+    memset(s_fr, 0, sizeof s_fr);
+    memset(s_lcfg, 0, sizeof s_lcfg);
+    s_last_update = 0;
+}
+
 static void link_clear(void) {
     s_link = LINK_DOWN;
     s_hb_on = 0;
@@ -148,6 +164,7 @@ static void link_up(void) {
     s_reading = 0;
     s_snapped = 0;
     s_rereading = 0;
+    unit_check();
     for (size_t i = 0; i < CODEC_NCHARS; i++) s_fr[i].live = 0;   /* the last link's frames stay shown,
                                                                      never gated on */
     memset(&s_lcfg[1], 0, sizeof s_lcfg[1]);   /* the last link's config stays shown, never gated on */
@@ -269,6 +286,7 @@ void cali_session_init(const cali_transport_t *t) {
     memset(s_fr, 0, sizeof s_fr);
     memset(s_lcfg, 0, sizeof s_lcfg);
     s_last_update = 0;
+    s_unit[0] = 0;
     cali_ctl_run_init(t);
     cali_runner_on_other = on_event;
 }
@@ -300,6 +318,7 @@ void cali_session_stop(void) {
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
     if (s_link != LINK_DOWN) (void)s_t->disconnect();   /* the unit has one slot: free it */
     link_clear();
+    unit_check();   /* a forget lands here with the bond gone */
 }
 
 void cali_session_tick(uint64_t now_ms) {

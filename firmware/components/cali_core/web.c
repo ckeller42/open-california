@@ -343,8 +343,12 @@ static int parse_command(const char *body, size_t body_len, cmd_t *cmd) {
  * and CALI_CTL_PENDING while the sequencer runs it, then the done callback's result. */
 static char s_cmd_fn[24];
 static int s_cmd = CALI_CTL_OK;
+static const char *s_cmd_reason;   /* the done callback's refusal text (static), else NULL */
 
-static void cmd_done(int result) { s_cmd = result; }
+static void cmd_done(int result, const char *reason) {
+    s_cmd = result;
+    s_cmd_reason = reason;
+}
 
 /* calictl's /api/command answers (serve.ServeBackend.command / web.py), plus the ESP's own codes:
  * applied is never true (no readback check), a refusal is calictl's {"applied":false,"refused":…}. */
@@ -391,7 +395,7 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
     int rc;
     if (req->resume) {   /* the core re-asks while we wait for the sequencer */
         if (s_cmd == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
-        cmd_answer(resp, s_cmd, NULL);
+        cmd_answer(resp, s_cmd, s_cmd_reason);
         return 1;
     }
     if (strcmp(req->method, "POST") != 0) {
@@ -407,7 +411,8 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
     } else {
         snprintf(s_cmd_fn, sizeof s_cmd_fn, "%s", cmd.fn);
         s_cmd = CALI_CTL_PENDING;
-        rc = cali_ctl_submit(cmd.fn, cmd.what, cmd.value, cmd_done, &reason);
+        s_cmd_reason = NULL;
+        rc = cali_ctl_submit(cmd.fn, cmd.what, cmd.value, -1, cmd_done, &reason);   /* local_now: Task 5 */
         if (rc == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
         s_cmd = rc;
         cmd_answer(resp, rc, reason);
