@@ -7,11 +7,12 @@ import pytest
 
 
 @contextlib.contextmanager
-def _error_gated_page(url, **page_kw):
+def _error_gated_page(url, engine="chromium", **page_kw):
+    """``engine``: a Playwright browser type name (``chromium`` default, ``webkit``, ``firefox``)."""
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = getattr(p, engine).launch()
         pg = browser.new_page(**page_kw)
         js_errors = []
         pg.on("pageerror", lambda err: js_errors.append("pageerror: %s" % err))

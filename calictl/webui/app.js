@@ -735,18 +735,29 @@ function toast(msg, kind) {
   setTimeout(() => d.remove(), 4000);
 }
 
+let polling = false;     // a state poll is on the wire
+let forceNext = false;   // a forced refresh arrived while one was: repaint when that one lands
+
 /** @param {boolean} [force] */
 async function refreshState(force) {
   // The satellite answers POST /api/command only after the unit's ACK (<= 4 s) and serves nothing
-  // meanwhile: a poll just waits (no error, so no offline flash), and the browser's HTTP cache lock
-  // holds a second same-URL poll behind it (tests/e2e/test_satellite.py pins "at most one waiting").
+  // meanwhile (its listen backlog is 2): a poll just waits (no error, so no offline flash). Send at
+  // most ONE poll at a time -- Chromium/Firefox hold a second same-URL GET behind the first anyway,
+  // WebKit (Safari, iPhone) does not and would stack a connection per 2 s tick on the stalled core,
+  // then drain them oldest-first (tests/e2e/test_satellite.py pins "at most one waiting", both engines).
+  if (polling) { forceNext = forceNext || !!force; return; }
+  polling = true;
   let next;
   try {
     next = await api("/api/state");
   } catch (e) {
     setStatus("offline", "error");
     return;
+  } finally {
+    polling = false;
   }
+  force = force || forceNext;
+  forceNext = false;
   // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
   STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the

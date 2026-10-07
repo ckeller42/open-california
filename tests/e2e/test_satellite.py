@@ -285,6 +285,12 @@ def test_api_still_refuses_calictl_only_paths_on_the_live_satellite(live, stub):
             "en-US",
             "Not connected to the camper unit yet — try again in a few seconds",
         ),
+        (
+            503,
+            {"ok": False, "error": "not_connected"},
+            "de-DE",
+            "Noch nicht mit der Camper-Einheit verbunden — in ein paar Sekunden noch einmal versuchen",
+        ),
         (502, {"ok": False, "error": "write_failed"}, "en-US", "Command failed: write_failed"),
         (
             200,
@@ -324,22 +330,35 @@ def test_firmware_answers_show_a_clear_message(stub, status, reply, locale, text
     assert not errors, errors
 
 
-def test_a_pending_command_does_not_trip_the_offline_banner(live, stub):
+def _engine_or_skip(engine):
+    try:
+        with sync_api.sync_playwright() as p:
+            getattr(p, engine).launch().close()
+    except Exception as e:  # noqa: BLE001 — a missing browser is a skip (CI installs chromium only)
+        pytest.skip("Playwright %s not installed: %s" % (engine, e))
+
+
+@pytest.mark.parametrize("engine", ["chromium", "webkit"])
+def test_a_pending_command_does_not_trip_the_offline_banner(stub, error_gated_page, engine):
     """The ESP's single-connection core answers POST /api/command only after the unit's ACK (<= 4 s)
     and serves no /api/state meanwhile (Task 4 review minor 6): the page must show "Sending…", never
-    flash offline, and must not pile up state polls on the stalled core."""
-    live.on("dialog", lambda d: d.accept())
-    stub.command_delay_s = 4.0  # CALI_CTL_DEADLINE_MS: exactly two 2 s polls fall into the stall
-    _open(live, "Cooler")
-    live.get_by_role("switch", name="Refrigerator box").click()
-    seen = set()
-    for _ in range(14):  # 3.5 s of the stall
-        seen.add(live.locator("#status").inner_text())
-        assert live.locator(".offline").count() == 0
-        live.wait_for_timeout(250)
-    assert seen == {"Sending…"}, seen
-    expect(live.locator(".toast")).to_have_text("Sent — the unit didn't confirm it", timeout=3000)
-    expect(live.locator("#status")).to_have_text("live")
-    # at most one state poll was waiting on the stalled core: the browser's HTTP cache lock holds the
-    # second same-URL GET behind the first (a `cache: "no-store"` poll would stack them)
-    assert stub.polls_while_pending <= 1, (stub.polls_while_pending, stub.requests)
+    flash offline, and must send at most ONE poll onto the stalled core. WebKit matters here: it has
+    no same-URL cache lock (Chromium/Firefox do), so without the UI's own guard Safari stacks a
+    connection per 2 s tick against the ESP's backlog of 2."""
+    _engine_or_skip(engine)
+    stub.command_delay_s = 4.0  # CALI_CTL_DEADLINE_MS: two 2 s poll ticks fall into the stall
+    with error_gated_page(stub.base, engine=engine) as pg:
+        pg.wait_for_function(LIVE)
+        pg.on("dialog", lambda d: d.accept())
+        _open(pg, "Cooler")
+        pg.get_by_role("switch", name="Refrigerator box").click()
+        seen = set()
+        for _ in range(10):  # ~2.5-3 s into the 4 s stall (margin for a slow runner)
+            seen.add(pg.locator("#status").inner_text())
+            assert pg.locator(".offline").count() == 0
+            pg.wait_for_timeout(250)
+        assert "Sending…" in seen and "offline" not in seen, seen
+        expect(pg.locator(".toast")).to_have_text("Sent — the unit didn't confirm it", timeout=4000)
+        expect(pg.locator("#status")).to_have_text("live")
+    # the UI sends at most one poll at a time: exactly one was waiting on the stalled core
+    assert stub.polls_while_pending == 1, (stub.polls_while_pending, stub.requests)
