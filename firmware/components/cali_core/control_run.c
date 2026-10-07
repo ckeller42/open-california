@@ -76,7 +76,7 @@ int cali_ctl_submit(const char *fn, const char *what, const char *value, cali_ct
         cali_log("control: %s/%s busy", fn, what);
         return CALI_CTL_BUSY;
     }
-    cali_ctl_plan(fn, what, value, get_field, &plan);
+    cali_ctl_plan(fn, what, value, -1, get_field, &plan);   /* the page's clock arrives in Task 4 (cali_ctl_submit's local_now) */
     /* Not on the ESP, no such control, a malformed value: answered without state (the builders'
      * only state-dependent BAD, night_* with no cooler State, is refused by its gate first). A
      * frame or a gate's answer waits for an armed link and this link's frame. */

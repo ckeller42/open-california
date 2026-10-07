@@ -1785,6 +1785,698 @@
     "CarLevelPitch": 35
    }
   },
+  "fav_latched_saved": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 3,
+    "Mode": 4,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13,
+    "FavouritesStored": 123
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
+  "wakeup_on": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13,
+    "WakeupTimestamp": 23400,
+    "WakeupLightValue": 13685
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
+  "wakeup_off": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13,
+    "WakeupTimestamp": 23400,
+    "WakeupLightValue": 13684
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
+  "wakeup_no_area": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13,
+    "WakeupTimestamp": 25200,
+    "WakeupLightValue": 4209
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
+  "wakeup_frame": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 14,
+    "Mode": 20,
+    "Timestamp": 79200,
+    "LightValue": 12087,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
   "lighting_levels": {
    "general": {
     "AmbSwVersion": 808726832,
@@ -7441,6 +8133,28 @@
    }
   },
   {
+   "id": "lighting/power/\"on\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "power",
+   "value": "on",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0c10000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/power/\"on\"@lighting_levels",
    "function": "lighting",
    "what": "power",
@@ -7622,6 +8336,28 @@
    "what": "power",
    "value": "off",
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0010000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/power/\"off\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "power",
+   "value": "off",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7837,6 +8573,28 @@
    }
   },
   {
+   "id": "lighting/all/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "all",
+   "value": 0,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "090400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/all/0@lighting_levels",
    "function": "lighting",
    "what": "all",
@@ -8018,6 +8776,28 @@
    "what": "all",
    "value": 10,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000aaaaaaaaeaaeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/all/10@fav_latched_saved",
+   "function": "lighting",
+   "what": "all",
+   "value": 10,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -8233,6 +9013,28 @@
    }
   },
   {
+   "id": "lighting/all/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "all",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000bbbbbbbbebbeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/all/11@lighting_levels",
    "function": "lighting",
    "what": "all",
@@ -8335,6 +9137,16 @@
    }
   },
   {
+   "id": "lighting/all/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "all",
+   "value": 12,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/all/12@lighting_levels",
    "function": "lighting",
    "what": "all",
@@ -8420,6 +9232,16 @@
    "what": "all",
    "value": -1,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/all/-1@fav_latched_saved",
+   "function": "lighting",
+   "what": "all",
+   "value": -1,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -8611,6 +9433,28 @@
    }
   },
   {
+   "id": "lighting/all/\"5\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "all",
+   "value": "5",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "090400000000000055555555e55eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/all/\"5\"@lighting_levels",
    "function": "lighting",
    "what": "all",
@@ -8708,6 +9552,16 @@
    "what": "all",
    "value": null,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/all/null@fav_latched_saved",
+   "function": "lighting",
+   "what": "all",
+   "value": null,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -8882,6 +9736,28 @@
    "what": "profile",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0010000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/profile/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -9097,6 +9973,28 @@
    }
   },
   {
+   "id": "lighting/profile/1@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": 1,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0110000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/profile/1@lighting_levels",
    "function": "lighting",
    "what": "profile",
@@ -9270,6 +10168,28 @@
    "expect": {
     "kind": "refused",
     "reason": "this favourite is empty on the unit — save it first"
+   }
+  },
+  {
+   "id": "lighting/profile/3@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": 3,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0310000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
    }
   },
   {
@@ -9471,6 +10391,28 @@
    }
   },
   {
+   "id": "lighting/profile/7@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": 7,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0710000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/profile/7@lighting_levels",
    "function": "lighting",
    "what": "profile",
@@ -9568,6 +10510,16 @@
    "what": "profile",
    "value": 8,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/profile/8@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": 8,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -9759,6 +10711,28 @@
    }
   },
   {
+   "id": "lighting/profile/13@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": 13,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0d10000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/profile/13@lighting_levels",
    "function": "lighting",
    "what": "profile",
@@ -9856,6 +10830,16 @@
    "what": "profile",
    "value": 14,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/profile/14@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": 14,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -10025,6 +11009,28 @@
    }
   },
   {
+   "id": "lighting/profile/\"3\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": "3",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0310000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/profile/\"3\"@lighting_levels",
    "function": "lighting",
    "what": "profile",
@@ -10122,6 +11128,16 @@
    "what": "profile",
    "value": null,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/profile/null@fav_latched_saved",
+   "function": "lighting",
+   "what": "profile",
+   "value": null,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -10296,6 +11312,28 @@
    "what": "save_profile",
    "value": "1",
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "010400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"1\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "1",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -10494,6 +11532,28 @@
    "what": "save_profile",
    "value": "7",
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "070400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"7\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "7",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -10762,6 +11822,38 @@
    "what": "save_profile",
    "value": "3 amber",
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000300000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 amber\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 amber",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -11077,6 +12169,38 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"3 Dark_Blue\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 Dark_Blue",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030600000000000800000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "030400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/save_profile/\"3 Dark_Blue\"@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -11189,6 +12313,16 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"3 purple\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 purple",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/save_profile/\"3 purple\"@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -11274,6 +12408,16 @@
    "what": "save_profile",
    "value": "0",
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"0\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "0",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -11369,6 +12513,16 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"8\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "8",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/save_profile/\"8\"@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -11454,6 +12608,16 @@
    "what": "save_profile",
    "value": "1 2 3",
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"1 2 3\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "1 2 3",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -11549,6 +12713,16 @@
    }
   },
   {
+   "id": "lighting/save_profile/\"\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/save_profile/\"\"@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -11634,6 +12808,16 @@
    "what": "save_profile",
    "value": null,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/null@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": null,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -11825,6 +13009,28 @@
    }
   },
   {
+   "id": "lighting/save_profile/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "050400000000000000000000e00eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/save_profile/5@lighting_levels",
    "function": "lighting",
    "what": "save_profile",
@@ -11922,6 +13128,16 @@
    "what": "save_profile",
    "value": "3 red                                                               extra",
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/save_profile/\"3 red                                                               extra\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "save_profile",
+   "value": "3 red                                                               extra",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -12096,6 +13312,28 @@
    "what": "door_contact",
    "value": "on",
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000001eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/door_contact/\"on\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "on",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -12311,6 +13549,28 @@
    }
   },
   {
+   "id": "lighting/door_contact/\"off\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "off",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/door_contact/\"off\"@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -12492,6 +13752,28 @@
    "what": "door_contact",
    "value": "1",
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000001eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/door_contact/\"1\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "1",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -12707,6 +13989,28 @@
    }
   },
   {
+   "id": "lighting/door_contact/\"0\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "0",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/door_contact/\"0\"@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -12888,6 +14192,28 @@
    "what": "door_contact",
    "value": "true",
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000001eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/door_contact/\"true\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "true",
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -13103,6 +14429,28 @@
    }
   },
   {
+   "id": "lighting/door_contact/\"false\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "false",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0810000000000000eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/door_contact/\"false\"@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -13213,6 +14561,17 @@
    }
   },
   {
+   "id": "lighting/door_contact/\"maybe\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": "maybe",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "refused",
+    "reason": "the value must be on or off (or true/false, 1/0) — anything else is refused, never read as off"
+   }
+  },
+  {
    "id": "lighting/door_contact/\"maybe\"@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -13312,6 +14671,17 @@
    }
   },
   {
+   "id": "lighting/door_contact/null@fav_latched_saved",
+   "function": "lighting",
+   "what": "door_contact",
+   "value": null,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "refused",
+    "reason": "the value must be on or off (or true/false, 1/0) — anything else is refused, never read as off"
+   }
+  },
+  {
    "id": "lighting/door_contact/null@lighting_levels",
    "function": "lighting",
    "what": "door_contact",
@@ -13403,6 +14773,16 @@
    }
   },
   {
+   "id": "lighting/color/\"red\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "color",
+   "value": "red",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/color/\"red\"@lighting_levels",
    "function": "lighting",
    "what": "color",
@@ -13488,6 +14868,16 @@
    "what": "nonexistent",
    "value": 3,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/nonexistent/3@fav_latched_saved",
+   "function": "lighting",
+   "what": "nonexistent",
+   "value": 3,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -13662,6 +15052,28 @@
    "what": "BrightnessLNine",
    "value": 3,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeee3eeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/BrightnessLNine/3@fav_latched_saved",
+   "function": "lighting",
+   "what": "BrightnessLNine",
+   "value": 3,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -13877,6 +15289,28 @@
    }
   },
   {
+   "id": "lighting/BrightnessLOneSix/3@fav_latched_saved",
+   "function": "lighting",
+   "what": "BrightnessLOneSix",
+   "value": 3,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeeeeeeee3e"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/BrightnessLOneSix/3@lighting_levels",
    "function": "lighting",
    "what": "BrightnessLOneSix",
@@ -14075,6 +15509,28 @@
    }
   },
   {
+   "id": "lighting/roof-reading/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "roof-reading",
+   "value": 0,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeee0eeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/roof-reading/0@lighting_levels",
    "function": "lighting",
    "what": "roof-reading",
@@ -14207,6 +15663,17 @@
    }
   },
   {
+   "id": "lighting/roof-reading/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "roof-reading",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "refused",
+    "reason": "the pop-top roof reading light needs the roof raised (roof is closed)"
+   }
+  },
+  {
    "id": "lighting/roof-reading/5@lighting_levels",
    "function": "lighting",
    "what": "roof-reading",
@@ -14298,6 +15765,16 @@
    }
   },
   {
+   "id": "lighting/roof-reading/\"x\"@fav_latched_saved",
+   "function": "lighting",
+   "what": "roof-reading",
+   "value": "x",
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/roof-reading/\"x\"@lighting_levels",
    "function": "lighting",
    "what": "roof-reading",
@@ -14305,204 +15782,6 @@
    "state": "lighting_levels",
    "expect": {
     "kind": "bad"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@seed",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "seed",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@empty",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "empty",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@roof_closed",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "roof_closed",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@roof_closed_14",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "roof_closed_14",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@roof_open",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "roof_open",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@fav_3_empty",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "fav_3_empty",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@fav_request_echo",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "fav_request_echo",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@fav_latched",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "fav_latched",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"07:00 on\"@lighting_levels",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "07:00 on",
-   "state": "lighting_levels",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@seed",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "seed",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@empty",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "empty",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@roof_closed",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "roof_closed",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@roof_closed_14",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "roof_closed_14",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@roof_open",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "roof_open",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@fav_3_empty",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "fav_3_empty",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@fav_request_echo",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "fav_request_echo",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@fav_latched",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "fav_latched",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
-   }
-  },
-  {
-   "id": "lighting/wakeup/\"off\"@lighting_levels",
-   "function": "lighting",
-   "what": "wakeup",
-   "value": "off",
-   "state": "lighting_levels",
-   "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
    }
   },
   {
@@ -14665,6 +15944,28 @@
    "what": "reading-1",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "09040000000000000eeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/reading-1/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-1",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -14880,6 +16181,28 @@
    }
   },
   {
+   "id": "lighting/reading-1/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-1",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "09040000000000005eeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-1/5@lighting_levels",
    "function": "lighting",
    "what": "reading-1",
@@ -15078,6 +16401,28 @@
    }
   },
   {
+   "id": "lighting/reading-1/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-1",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000beeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-1/11@lighting_levels",
    "function": "lighting",
    "what": "reading-1",
@@ -15175,6 +16520,16 @@
    "what": "reading-1",
    "value": 12,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/reading-1/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-1",
+   "value": 12,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -15349,6 +16704,28 @@
    "what": "reading-2",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000e0eeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/reading-2/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-2",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -15564,6 +16941,28 @@
    }
   },
   {
+   "id": "lighting/reading-2/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-2",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000e5eeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-2/5@lighting_levels",
    "function": "lighting",
    "what": "reading-2",
@@ -15762,6 +17161,28 @@
    }
   },
   {
+   "id": "lighting/reading-2/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-2",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000ebeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-2/11@lighting_levels",
    "function": "lighting",
    "what": "reading-2",
@@ -15859,6 +17280,16 @@
    "what": "reading-2",
    "value": 12,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/reading-2/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-2",
+   "value": 12,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -16033,6 +17464,28 @@
    "what": "reading-3",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000ee0eeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/reading-3/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-3",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -16248,6 +17701,28 @@
    }
   },
   {
+   "id": "lighting/reading-3/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-3",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000ee5eeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-3/5@lighting_levels",
    "function": "lighting",
    "what": "reading-3",
@@ -16446,6 +17921,28 @@
    }
   },
   {
+   "id": "lighting/reading-3/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-3",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eebeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/reading-3/11@lighting_levels",
    "function": "lighting",
    "what": "reading-3",
@@ -16543,6 +18040,16 @@
    "what": "reading-3",
    "value": 12,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/reading-3/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "reading-3",
+   "value": 12,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -16717,6 +18224,28 @@
    "what": "kitchen",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeee0eeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/kitchen/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -16932,6 +18461,28 @@
    }
   },
   {
+   "id": "lighting/kitchen/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeee5eeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen/5@lighting_levels",
    "function": "lighting",
    "what": "kitchen",
@@ -17130,6 +18681,28 @@
    }
   },
   {
+   "id": "lighting/kitchen/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeebeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen/11@lighting_levels",
    "function": "lighting",
    "what": "kitchen",
@@ -17227,6 +18800,16 @@
    "what": "kitchen",
    "value": 12,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/kitchen/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen",
+   "value": 12,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -17401,6 +18984,28 @@
    "what": "roof-ambient",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeee0eeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/roof-ambient/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "roof-ambient",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -17616,6 +19221,28 @@
    }
   },
   {
+   "id": "lighting/roof-ambient/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "roof-ambient",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeee5eeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/roof-ambient/5@lighting_levels",
    "function": "lighting",
    "what": "roof-ambient",
@@ -17814,6 +19441,28 @@
    }
   },
   {
+   "id": "lighting/roof-ambient/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "roof-ambient",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeebeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/roof-ambient/11@lighting_levels",
    "function": "lighting",
    "what": "roof-ambient",
@@ -17911,6 +19560,16 @@
    "what": "roof-ambient",
    "value": 12,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/roof-ambient/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "roof-ambient",
+   "value": 12,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -18085,6 +19744,28 @@
    "what": "outside-rear",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eee0eeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/outside-rear/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "outside-rear",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -18300,6 +19981,28 @@
    }
   },
   {
+   "id": "lighting/outside-rear/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "outside-rear",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eee5eeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/outside-rear/5@lighting_levels",
    "function": "lighting",
    "what": "outside-rear",
@@ -18498,6 +20201,28 @@
    }
   },
   {
+   "id": "lighting/outside-rear/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "outside-rear",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeebeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/outside-rear/11@lighting_levels",
    "function": "lighting",
    "what": "outside-rear",
@@ -18595,6 +20320,16 @@
    "what": "outside-rear",
    "value": 12,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/outside-rear/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "outside-rear",
+   "value": 12,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -18769,6 +20504,28 @@
    "what": "kitchen-ambient",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeee0eeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/kitchen-ambient/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen-ambient",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -18984,6 +20741,28 @@
    }
   },
   {
+   "id": "lighting/kitchen-ambient/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen-ambient",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeee5eeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen-ambient/5@lighting_levels",
    "function": "lighting",
    "what": "kitchen-ambient",
@@ -19182,6 +20961,28 @@
    }
   },
   {
+   "id": "lighting/kitchen-ambient/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen-ambient",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeebeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen-ambient/11@lighting_levels",
    "function": "lighting",
    "what": "kitchen-ambient",
@@ -19279,6 +21080,16 @@
    "what": "kitchen-ambient",
    "value": 12,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/kitchen-ambient/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen-ambient",
+   "value": 12,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -19453,6 +21264,28 @@
    "what": "kitchen-cabinet",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeee0eeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/kitchen-cabinet/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen-cabinet",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -19668,6 +21501,28 @@
    }
   },
   {
+   "id": "lighting/kitchen-cabinet/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen-cabinet",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeee5eeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen-cabinet/5@lighting_levels",
    "function": "lighting",
    "what": "kitchen-cabinet",
@@ -19866,6 +21721,28 @@
    }
   },
   {
+   "id": "lighting/kitchen-cabinet/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen-cabinet",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeebeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/kitchen-cabinet/11@lighting_levels",
    "function": "lighting",
    "what": "kitchen-cabinet",
@@ -19963,6 +21840,16 @@
    "what": "kitchen-cabinet",
    "value": 12,
    "state": "fav_latched",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/kitchen-cabinet/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "kitchen-cabinet",
+   "value": 12,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "bad"
    }
@@ -20137,6 +22024,28 @@
    "what": "entrance",
    "value": 0,
    "state": "fav_latched",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeeee0eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/entrance/0@fav_latched_saved",
+   "function": "lighting",
+   "what": "entrance",
+   "value": 0,
+   "state": "fav_latched_saved",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -20352,6 +22261,28 @@
    }
   },
   {
+   "id": "lighting/entrance/5@fav_latched_saved",
+   "function": "lighting",
+   "what": "entrance",
+   "value": 5,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeeee5eeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/entrance/5@lighting_levels",
    "function": "lighting",
    "what": "entrance",
@@ -20550,6 +22481,28 @@
    }
   },
   {
+   "id": "lighting/entrance/11@fav_latched_saved",
+   "function": "lighting",
+   "what": "entrance",
+   "value": 11,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0904000000000000eeeeeeeeeebeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
    "id": "lighting/entrance/11@lighting_levels",
    "function": "lighting",
    "what": "entrance",
@@ -20652,6 +22605,16 @@
    }
   },
   {
+   "id": "lighting/entrance/12@fav_latched_saved",
+   "function": "lighting",
+   "what": "entrance",
+   "value": 12,
+   "state": "fav_latched_saved",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "lighting/entrance/12@lighting_levels",
    "function": "lighting",
    "what": "entrance",
@@ -20725,6 +22688,3330 @@
    "expect": {
     "kind": "elsewhere",
     "reason": "Only via buspi or the app"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf02f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"off\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "off",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"off\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "off",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"off\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "off",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac738683574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"off\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "off",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac738683574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"off\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "off",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01070eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"off\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "off",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6c0e02f36eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"on\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "on",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"on\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "on",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"on\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "on",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac738683575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"on\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "on",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac738683575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"on\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "on",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"on\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "on",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6c0e02f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf02f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 off\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 off",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01100eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 off\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 off",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01100eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 off\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 off",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 off\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 off",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 off\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 off",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01070eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 off\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 off",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf02f36eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:15 1,3 5 20 on\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:15 1,3 5 20 on",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff841555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:15 1,3 5 20 on\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:15 1,3 5 20 on",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff841555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:15 1,3 5 20 on\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:15 1,3 5 20 on",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff843555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:15 1,3 5 20 on\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:15 1,3 5 20 on",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff843555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:15 1,3 5 20 on\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:15 1,3 5 20 on",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff841555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:15 1,3 5 20 on\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:15 1,3 5 20 on",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ff842555eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 2,2,1 10 30\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 2,2,1 10 30",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 2,2,1 10 30\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 2,2,1 10 30",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 2,2,1 10 30\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 2,2,1 10 30",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf033a7eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 2,2,1 10 30\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 2,2,1 10 30",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf033a6eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 2,2,1 10 30\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 2,2,1 10 30",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf013a7eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 2,2,1 10 30\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 2,2,1 10 30",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf023a7eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"7:5 4 0 0\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "7:5 4 0 0",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"7:5 4 0 0\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "7:5 4 0 0",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"7:5 4 0 0\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "7:5 4 0 0",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ef1c3801eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"7:5 4 0 0\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "7:5 4 0 0",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ef1c3800eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"7:5 4 0 0\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "7:5 4 0 0",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ef1c1801eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"7:5 4 0 0\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "7:5 4 0 0",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5ef1c2801eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 ON\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 ON",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 ON\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 ON",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 ON\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 ON",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 ON\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 ON",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 ON\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 ON",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 ON\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 ON",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf02f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 0 5 0\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 0 5 0",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 0 5 0\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 0 5 0",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 0 5 0\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 0 5 0",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 0 5 0\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 0 5 0",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 0 5 0\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 0 5 0",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 0 5 0\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 0 5 0",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 5\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 5",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 5\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 5",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 5\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 5",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 5\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 5",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 5\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 5",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 5\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 5",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 11\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 11",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 11\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 11",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 11\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 11",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 11\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 11",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 11\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 11",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 11\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 11",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 15\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 15",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 15\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 15",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 15\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 15",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 15\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 15",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 15\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 15",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 15\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 15",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 x\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 x",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 x\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 x",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 x\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 x",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 x\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 x",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 x\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 x",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 x\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 x",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 10 20\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 10 20",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 10 20\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 10 20",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 10 20\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 10 20",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 10 20\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 10 20",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 10 20\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 10 20",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 5 10 20\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 5 10 20",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"24:00 on\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "24:00 on",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"24:00 on\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "24:00 on",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"24:00 on\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "24:00 on",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"24:00 on\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "24:00 on",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"24:00 on\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "24:00 on",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"24:00 on\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "24:00 on",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1,,2\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1,,2",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1,,2\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1,,2",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1,,2\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1,,2",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1,,2\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1,,2",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1,,2\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1,,2",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1,,2\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1,,2",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 +5 1_0\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 +5 1_0",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 +5 1_0\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 +5 1_0",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 +5 1_0\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 +5 1_0",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03153eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 +5 1_0\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 +5 1_0",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf03152eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 +5 1_0\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 +5 1_0",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01153eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 1 +5 1_0\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 1 +5 1_0",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf02153eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/null@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": null,
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/null@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": null,
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/null@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": null,
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/null@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": null,
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/null@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": null,
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/null@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": null,
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/5@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": 5,
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/5@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": 5,
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/5@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": 5,
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/5@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": 5,
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/5@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": 5,
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/5@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": 5,
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"x\"@seed@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "x",
+   "state": "seed",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"x\"@empty@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "x",
+   "state": "empty",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"x\"@wakeup_on@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "x",
+   "state": "wakeup_on",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"x\"@wakeup_off@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "x",
+   "state": "wakeup_off",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"x\"@wakeup_no_area@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "x",
+   "state": "wakeup_no_area",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"x\"@wakeup_frame@t0",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "x",
+   "state": "wakeup_frame",
+   "local_now": 1791354615,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@seed@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "seed",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac73f701101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@empty@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "empty",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac73f701101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_on@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_on",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac73f703575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_off@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_off",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac73f703575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_no_area@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_no_area",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_frame@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_frame",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac73f702f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@seed@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "seed",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dd001100eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@empty@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "empty",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dd001100eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@wakeup_on@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "wakeup_on",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dd003574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@wakeup_off@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "wakeup_off",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dd003574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@wakeup_no_area@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "wakeup_no_area",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dd001070eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@wakeup_frame@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "wakeup_frame",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dd002f36eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@seed@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "seed",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dcc41101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@empty@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "empty",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dcc41101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@wakeup_on@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "wakeup_on",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dcc43575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@wakeup_off@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "wakeup_off",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dcc43575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@wakeup_no_area@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "wakeup_no_area",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@wakeup_frame@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "wakeup_frame",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac6dcc42f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@seed@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "seed",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@empty@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "empty",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_on@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_on",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac73f703575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_off@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_off",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac73f703574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_no_area@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_no_area",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_frame@exact",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_frame",
+   "local_now": 1791356400,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac73f702f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@seed@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "seed",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b374ef01101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@empty@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "empty",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b374ef01101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_on@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_on",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b374ef03575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_off@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_off",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b374ef03575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_no_area@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_no_area",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_frame@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_frame",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b374ef02f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@seed@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "seed",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b36ec801100eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@empty@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "empty",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b36ec801100eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@wakeup_on@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "wakeup_on",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b36ec803574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@wakeup_off@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "wakeup_off",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b36ec803574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@wakeup_no_area@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "wakeup_no_area",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b36ec801070eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"00:00 off\"@wakeup_frame@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "00:00 off",
+   "state": "wakeup_frame",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b36ec802f36eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@seed@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "seed",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b383dc41101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@empty@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "empty",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b383dc41101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@wakeup_on@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "wakeup_on",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b383dc43575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@wakeup_off@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "wakeup_off",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b383dc43575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@wakeup_no_area@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "wakeup_no_area",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"23:59 on\"@wakeup_frame@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "23:59 on",
+   "state": "wakeup_frame",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b383dc42f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@seed@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "seed",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@empty@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "empty",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_on@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_on",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b374ef03575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_off@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_off",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b374ef03574eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_no_area@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_no_area",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00\"@wakeup_frame@yearend",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00",
+   "state": "wakeup_frame",
+   "local_now": 1798761570,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146b374ef02f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"06:20 on\"@seed@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "06:20 on",
+   "state": "seed",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e14fffffe101101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"06:20 on\"@empty@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "06:20 on",
+   "state": "empty",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e14fffffe101101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"06:20 on\"@wakeup_on@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "06:20 on",
+   "state": "wakeup_on",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e14fffffe103575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"06:20 on\"@wakeup_off@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "06:20 on",
+   "state": "wakeup_off",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e14fffffe103575eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"06:20 on\"@wakeup_no_area@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "06:20 on",
+   "state": "wakeup_no_area",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"06:20 on\"@wakeup_frame@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "06:20 on",
+   "state": "wakeup_frame",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e14fffffe102f37eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@seed@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "seed",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@empty@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "empty",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_on@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_on",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_off@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_off",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_no_area@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_no_area",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "refused",
+    "reason": "the wake-up light needs at least one vehicle area"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_frame@y2106",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_frame",
+   "local_now": 4294965600,
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@seed@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "seed",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@empty@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "empty",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_on@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_on",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_off@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_off",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_no_area@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_no_area",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"07:00 on\"@wakeup_frame@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 on",
+   "state": "wakeup_frame",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:00\"@seed@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:00",
+   "state": "seed",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:00\"@empty@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:00",
+   "state": "empty",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:00\"@wakeup_on@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:00",
+   "state": "wakeup_on",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:00\"@wakeup_off@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:00",
+   "state": "wakeup_off",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:00\"@wakeup_no_area@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:00",
+   "state": "wakeup_no_area",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
+   }
+  },
+  {
+   "id": "lighting/wakeup/\"08:00\"@wakeup_frame@none",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "08:00",
+   "state": "wakeup_frame",
+   "local_now": null,
+   "expect": {
+    "kind": "elsewhere",
+    "reason": "the wake-up light needs the time from the web page — set it there"
    }
   }
  ],
@@ -21180,6 +26467,9 @@
     "water": "030e1d010716"
    },
    "app_hex": "0810000000000001eeeeeeeeeeeeeeee",
+   "latch": {
+    "FavouritesStored": 0
+   },
    "expect": {
     "kind": "frames",
     "frames": [
@@ -21218,6 +26508,10 @@
     "water": "030e1d010716"
    },
    "app_hex": "0810000000000000eeeeeeeeeeeeeeee",
+   "latch": {
+    "DoorContact": 1,
+    "FavouritesStored": 0
+   },
    "expect": {
     "kind": "frames",
     "frames": [
@@ -21322,6 +26616,9 @@
     "water": "030e1d010716"
    },
    "app_hex": "0c10000000000000eeeeeeeeeeeeeeee",
+   "latch": {
+    "FavouritesStored": 0
+   },
    "expect": {
     "kind": "frames",
     "frames": [
@@ -21360,6 +26657,9 @@
     "water": "030e1d010716"
    },
    "app_hex": "0904000000000000eeeeeee5eeeeeeee",
+   "latch": {
+    "FavouritesStored": 0
+   },
    "expect": {
     "kind": "frames",
     "frames": [
@@ -21398,6 +26698,9 @@
     "water": "030e1d010716"
    },
    "app_hex": "010400000000000000000005e00eeeee",
+   "latch": {
+    "FavouritesStored": 0
+   },
    "expect": {
     "kind": "frames",
     "frames": [
@@ -21436,6 +26739,9 @@
     "water": "030e1d010716"
    },
    "app_hex": "0010000000000000eeeeeeeeeeeeeeee",
+   "latch": {
+    "FavouritesStored": 1
+   },
    "expect": {
     "kind": "frames",
     "frames": [
@@ -21474,6 +26780,9 @@
     "water": "030e1d010716"
    },
    "app_hex": "0110000000000000eeeeeeeeeeeeeeee",
+   "latch": {
+    "FavouritesStored": 1
+   },
    "expect": {
     "kind": "frames",
     "frames": [
@@ -21626,9 +26935,55 @@
     "water": "030e1d010716"
    },
    "app_hex": "0e146ac5edf01100eeeeeeeeeeeeeeee",
+   "latch": {
+    "FavouritesStored": 0
+   },
+   "local_now": 1791273764,
    "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
+    "kind": "refused",
+    "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+   }
+  },
+  {
+   "id": "lighting-wakeup.jsonl:239+off",
+   "function": "lighting",
+   "what": "wakeup",
+   "value": "07:00 off",
+   "frames_hex": {
+    "airheater": "1050003c0c0000",
+    "campingmode": "2f",
+    "cooler": "0943000000001606",
+    "energy": "00d0800a0026810000fe0e3a3088ffd9fffe000001ff",
+    "general": "303431303032303702",
+    "generalpurposesignals": "000000000000000000000000000000000000000000",
+    "lighting": "0c1000000000000000000000d00ddddd",
+    "livingroomheater": "000114",
+    "roof": "0200",
+    "roofaircondition": "100000",
+    "satelliteantenna": "000000",
+    "stairs": "00",
+    "vehicle": "047e071c12082f00000000",
+    "water": "030e1d010716"
+   },
+   "app_hex": "0e146ac5edf01100eeeeeeeeeeeeeeee",
+   "latch": {
+    "FavouritesStored": 0
+   },
+   "local_now": 1791273764,
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01100eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
    }
   },
   {
@@ -21653,9 +27008,26 @@
     "water": "030e1d010716"
    },
    "app_hex": "0e146ac5edf01101eeeeeeeeeeeeeeee",
+   "latch": {
+    "WakeupTimestamp": 1791356400,
+    "WakeupLightValue": 4352,
+    "FavouritesStored": 0
+   },
+   "local_now": 1791273769,
    "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5edf01101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
    }
   },
   {
@@ -21680,9 +27052,26 @@
     "water": "030e1d010716"
    },
    "app_hex": "0e146ac5fc001101eeeeeeeeeeeeeeee",
+   "latch": {
+    "WakeupTimestamp": 1791356400,
+    "WakeupLightValue": 4353,
+    "FavouritesStored": 0
+   },
+   "local_now": 1791273797,
    "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5fc001101eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
    }
   },
   {
@@ -21707,9 +27096,26 @@
     "water": "030e1d010716"
    },
    "app_hex": "0e146ac5fc001100eeeeeeeeeeeeeeee",
+   "latch": {
+    "WakeupTimestamp": 1791360000,
+    "WakeupLightValue": 4353,
+    "FavouritesStored": 0
+   },
+   "local_now": 1791273801,
    "expect": {
-    "kind": "elsewhere",
-    "reason": "Only via buspi or the app"
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1501",
+      "delay_ms": 0,
+      "hex": "0e146ac5fc001100eeeeeeeeeeeeeeee"
+     },
+     {
+      "char": "1501",
+      "delay_ms": 300,
+      "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+     }
+    ]
    }
   },
   {
@@ -21788,5 +27194,20 @@
     ]
    }
   }
- ]
+ ],
+ "config_pull": {
+  "reason": "wake-up config not known yet (the unit has not reported it): give on|off with the edit",
+  "frames": [
+   {
+    "char": "1501",
+    "delay_ms": 0,
+    "hex": "0d0c000000000000eeeeeeeeeeeeeeee"
+   },
+   {
+    "char": "1501",
+    "delay_ms": 300,
+    "hex": "0e00000000000000eeeeeeeeeeeeeeee"
+   }
+  ]
+ }
 }

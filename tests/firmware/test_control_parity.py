@@ -9,7 +9,7 @@ write (char, delay, bytes), or bad/none.
 
 .. test:: The C builders and gates reproduce every control vector
    :id: T_FW_CONTROL_PARITY
-   :links: R_FW_CONTROL_TWIN
+   :links: R_FW_CONTROL_TWIN, R_FW_WAKEUP
 
 .. test:: The write allow-list is exactly the five control chars at their frame length
    :id: T_FW_WRITE_ALLOWLIST_PURE
@@ -104,11 +104,16 @@ def want(e):
     return e["kind"].upper()
 
 
+def p_line(c):
+    ln = c.get("local_now")
+    return "P %s %s %s%s" % (c["function"], c["what"], tok(c["value"]), "" if ln is None else " t:%d" % ln)
+
+
 def _check(cli, cases, states_of):
     lines = []
     for c in cases:
         lines += state_lines(states_of(c))
-        lines.append("P %s %s %s" % (c["function"], c["what"], tok(c["value"])))
+        lines.append(p_line(c))
     out = drive(cli, lines)
     assert len(out) == len(cases)
     bad = [(c["id"], got, want(c["expect"])) for c, got in zip(cases, out) if got != want(c["expect"])]
@@ -119,23 +124,30 @@ def test_grid_vectors(cli):
     _check(cli, V["cases"], lambda c: V["states"][c["state"]])
 
 
+def _app_states(c, funcs):
+    st = {f: protocol.decode(funcs[f], bytes.fromhex(h)) for f, h in c["frames_hex"].items()}
+    if c.get("latch"):
+        st["lighting"] = {**st.get("lighting", {}), **c["latch"]}
+    return st
+
+
 def test_app_recorded_vectors(cli):
     funcs = protocol.load()
     overrides.apply(funcs)
-    _check(
-        cli,
-        V["app"],
-        lambda c: {f: protocol.decode(funcs[f], bytes.fromhex(h)) for f, h in c["frames_hex"].items()},
-    )
+    _check(cli, V["app"], lambda c: _app_states(c, funcs))
+
+
+def test_config_pull_plan_is_request_config_then_commit(cli):
+    assert drive(cli, ["Q"]) == [want({"kind": "frames", "frames": V["config_pull"]["frames"]})]
 
 
 def test_vectors_cover_every_outcome():
     """The parity run is only as strong as the vectors: every outcome kind, every REASON text the C
-    header carries (but the wake-up one, which is ELSEWHERE on the ESP), and multi-frame plans."""
+    header carries and the wake-up's WAKEUP_UNKNOWN, and multi-frame plans."""
     kinds = {c["expect"]["kind"] for c in V["cases"]}
     assert kinds == {"frames", "refused", "bad", "none", "elsewhere"}
     reasons = {c["expect"]["reason"] for c in V["cases"] if c["expect"]["kind"] == "refused"}
-    assert len(reasons) == 8, sorted(reasons)
+    assert len(reasons) == 10, sorted(reasons)
     assert {len(c["expect"].get("frames", [])) for c in V["cases"]} >= {1, 2, 4}
     assert V["app"], "no app-recorded action in the vectors"
 

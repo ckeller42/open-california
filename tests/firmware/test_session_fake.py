@@ -1013,8 +1013,11 @@ def writes(out):
     return [line for line in out if line.startswith("CALL write ")]
 
 
-def want_writes(fn, what, value, frames=None):
-    e = gen_control_vectors.expect(FUNCS, fn, what, value, states_of(frames))
+def want_writes(fn, what, value, frames=None, latch=None, local_now=None):
+    states = states_of(frames)
+    if latch:
+        states["lighting"] = {**states["lighting"], **latch}
+    e = gen_control_vectors.expect(FUNCS, fn, what, value, states, local_now)
     assert e["kind"] == "frames", e
     return ["CALL write %s %s" % (f["char"], f["hex"]) for f in e["frames"]]
 
@@ -1249,12 +1252,21 @@ def test_control_gate_uses_the_latest_notify(fake):
 
 @pytest.mark.parametrize(
     "line",
-    ["> set roof open", "> set roof stop", "> set lighting wakeup 07:00 on", "> set stairs move extend"],
+    ["> set roof open", "> set roof stop", "> set stairs move extend"],
 )
-def test_control_roof_and_wakeup_are_refused_without_a_write(fake, line):
+def test_control_roof_and_others_are_refused_without_a_write(fake, line):
     fn_what = "/".join(line.split()[2:4])
     out = run(fake, *armed(), line, "tick %d" % (ARM + 100))
     assert "LOG control: %s refused: Only via buspi or the app" % fn_what in out and not writes(out)
+
+
+def test_console_wakeup_is_refused_for_want_of_a_clock(fake):
+    """The ESP has no clock; the console has no page: refused with the clock reason, armed or not."""
+    from tools.gen_c_dict import ESP_WAKEUP_CLOCK_REASON
+
+    for script in (PAIRED, armed()):
+        out = run(fake, *script, "> set lighting wakeup 07:00 on", "tick %d" % (ARM + 100))
+        assert "LOG control: lighting/wakeup refused: %s" % ESP_WAKEUP_CLOCK_REASON in out and not writes(out)
 
 
 def test_control_transport_refusal_is_a_failed_write(fake):

@@ -5,7 +5,7 @@ fake unit (#154 B).
 carries (``tests/vectors/control.json`` ``app``) goes through ``POST /api/command`` with the fake
 unit in the recorded state, and the unit must receive exactly calictl's writes, follow-up commits
 included and spaced as calictl spaces them (``tools/esplab_control_walk.py``, shared with the
-CoreS3 bench). Roof, wake-up and unknown commands never reach the unit — and a roof, heartbeat,
+CoreS3 bench). Roof, unknown and clock-less wake-up commands never reach the unit — and a roof, heartbeat,
 wrong-length or empty frame handed straight to the NimBLE transport's ``write`` (cali-host's
 test-only ``twrite`` line) is refused at that choke point. The console ``set`` reaches the unit
 too; a POST outside station mode is ``403``; the ``1003`` heartbeat keeps ticking through
@@ -26,6 +26,7 @@ import pytest
 
 from calictl import control, protocol
 from tools import esplab_control_walk as walker
+from tools.gen_c_dict import ESP_WAKEUP_CLOCK_REASON
 
 from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw
 from .test_web_e2e import PSK, _request, _wifi_script, get_json
@@ -174,8 +175,8 @@ def test_app_recorded_actions_over_api_command(host_fw, rec_unit, tmp_path):
 
 @HOST
 def test_unit_never_sees_a_roof_or_unknown_write(host_fw, rec_unit, tmp_path):
-    """Roof, stairs and wake-up are refused before any frame is built (API and console); an unknown
-    control is ``400``. Then the NimBLE transport's own ``write`` (review M3), called directly through
+    """Roof, stairs and a wake-up without ``local_now`` (the clock reason) are refused before any
+    frame is built (API and console); an unknown control is ``400``. Then the NimBLE transport's own ``write`` (review M3), called directly through
     cali-host's ``twrite``: a roof frame, the ``1003`` heartbeat char, a wrong-length and an empty
     frame are all refused at its choke point — none reaches the unit — while an allowed frame does
     (so the refusals are the choke point's, not a dead hook)."""
@@ -186,10 +187,11 @@ def test_unit_never_sees_a_roof_or_unknown_write(host_fw, rec_unit, tmp_path):
         {"function": "roof", "what": "open", "confirm": True},
         {"function": "roof", "what": "stop", "confirm": True},
         {"function": "stairs", "what": "move", "value": "extend"},
-        {"function": "lighting", "what": "wakeup", "value": "07:00 on"},
     ):
         status, ans = post(body)
         assert (status, ans.get("refused"), ans.get("applied")) == (200, ELSEWHERE, False), body
+    status, ans = post({"function": "lighting", "what": "wakeup", "value": "07:00 on"})
+    assert (status, ans.get("refused"), ans.get("applied")) == (200, ESP_WAKEUP_CLOCK_REASON, False)
     assert post({"function": "cooler", "what": "bogus", "value": "1"}) == (
         400,
         {"ok": False, "error": "unknown_control"},

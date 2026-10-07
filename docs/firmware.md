@@ -515,10 +515,21 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    SET_COLOR preface, ``door_contact``), airheater and energy, the firmware shall plan exactly the
    writes ``calictl.control`` would — the same ``command_precondition`` refusal texts, the same
    frames from ``control.build``, the same lighting commit after each frame — on every vector of
-   ``tests/vectors/control.json`` (generated from the Python, ``--check`` in CI). The roof and the
-   wake-up light are answered "Only via buspi or the app". The twin is
+   ``tests/vectors/control.json`` (generated from the Python, ``--check`` in CI). The roof is
+   answered "Only via buspi or the app"; ``lighting wakeup`` follows ``R_FW_WAKEUP``. The twin is
    ``firmware/components/cali_core/control.c`` (``cali_ctl_plan``), pure C99 over the generated
    ``csrc/control_consts.h``.
+
+.. req:: The satellite sets the wake-up light with the page's clock and the unit's own config
+   :id: R_FW_WAKEUP
+   :status: implemented
+   :tags: esp32, control, lighting
+
+   ``lighting wakeup`` shall be planned exactly as ``calictl.control`` would with its clock pinned to
+   the request's ``local_now`` (the page's wall clock read as UTC); without ``local_now`` it shall be
+   refused with the clock reason. The edit's unit-reported fields come only from the unit's own 1502
+   frames on the current link; with none known the firmware shall pull them with REQUEST_CONFIG, wait
+   at most ``CODEC_CONFIG_PULL_MS`` and then build or refuse with ``WAKEUP_UNKNOWN``.
 
 .. req:: The firmware writes only the five control chars at their frame length, and the 1003 heartbeat
    :id: R_FW_WRITE_ALLOWLIST

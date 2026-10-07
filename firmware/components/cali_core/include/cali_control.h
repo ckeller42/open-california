@@ -2,8 +2,9 @@
  * (control.c, pure) and the one-command-at-a-time sequencer onto the session's link (control_run.c).
  *
  * Plan (control.c): cali_ctl_plan() answers what calictl would for "set <fn> <what> <value>" over the
- * decoded state behind get(): ELSEWHERE for anything the ESP does not carry (the roof, the wake-up
- * light, any function but the five in control_consts.h), else REFUSED with command_precondition's
+ * decoded state behind get(): ELSEWHERE for the roof and any function but the five in
+ * control_consts.h; `lighting wakeup` without a `local_now` is ELSEWHERE with CALI_REASON_WAKEUP_CLOCK
+ * (the page is the ESP's clock: its wall clock read as UTC, seconds), else REFUSED with command_precondition's
  * text, else BAD_VALUE / NONE (control.build raised / returned None), else OK with the writes in
  * calictl.device.actuate's order (preface, commit, frame, commit; commits only for lighting, each
  * at least CODEC_FOLLOW_DELAY_MS after the previous write's ACK). value is calictl's string form of the JSON
@@ -67,6 +68,8 @@ typedef struct {
 typedef struct {
     int rc;
     const char *reason;  /* REFUSED / ELSEWHERE: static text, else NULL */
+    int pull;            /* 1 = REFUSED only for want of the unit's lighting config (reason CALI_WAKEUP_UNKNOWN): the
+                          * sequencer pulls it with REQUEST_CONFIG and plans again */
     size_t n;
     cali_ctl_frame_t f[CALI_CTL_MAX_FRAMES];
 } cali_ctl_plan_t;
@@ -90,8 +93,9 @@ typedef struct {
 } cali_light_cfg_t;
 void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out);   /* = semantics.lighting_config(None, state) */
 
-void cali_ctl_plan(const char *fn, const char *what, const char *value, cali_ctl_get_t get,
-                   cali_ctl_plan_t *out);
+void cali_ctl_plan(const char *fn, const char *what, const char *value, int64_t local_now,
+                   cali_ctl_get_t get, cali_ctl_plan_t *out);   /* local_now < 0 = none */
+void cali_ctl_pull_plan(cali_ctl_plan_t *out);   /* REQUEST_CONFIG @0, commit @CODEC_FOLLOW_DELAY_MS */
 int cali_ctl_write_ok(uint16_t chr, size_t len);
 
 void cali_ctl_run_init(const cali_transport_t *t);

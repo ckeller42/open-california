@@ -375,7 +375,7 @@ void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out) {
     }
 }
 
-/* control._lighting (minus wakeup: ELSEWHERE on the ESP) + preface_for + commit_for */
+/* control._lighting (wakeup: p_wakeup) + preface_for + commit_for */
 static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, cali_ctl_plan_t *p) {
     vals_t *v = &s_v;
     long n, colour;
@@ -430,6 +430,136 @@ static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, c
     return CALI_CTL_OK;
 }
 
+/* ---- the wake-up light (control.wakeup_request + _lighting "wakeup", the page's clock) ---- */
+
+typedef struct {
+    long hour, minute;
+    uint32_t colour, areas, brightness, ramp, enabled;   /* areas: bit a-1 = vehicle area a */
+} wake_t;
+
+static int wake_known(const cali_light_cfg_t *c) {
+    return (c->have >> CALI_LCFG_WAKE_TS & 1u) && (c->have >> CALI_LCFG_WAKE_LV & 1u);
+}
+
+/* "1,3" -> bits; each 1-4 (control._int_range), "" or ",," refused like int("") */
+static int wake_areas(char *s, uint32_t *areas) {
+    long a;
+    *areas = 0;
+    for (;;) {
+        char *comma = strchr(s, ',');
+        if (comma) *comma = 0;
+        if (!int_range(s, 1, 4, &a)) return 0;
+        *areas |= 1u << (a - 1);
+        if (!comma) return 1;
+        s = comma + 1;
+    }
+}
+
+/* control.wakeup_request over semantics.wakeup_config(cfg): 1 ok, 0 malformed (ValueError).
+ * *switched: an on/off token was given (command_precondition's R5 test). */
+static int wake_request(const char *value, const cali_light_cfg_t *cfg, wake_t *w, int *switched) {
+    char s[CALI_CTL_VALUE_MAX], k[8], *tok, *pos[3] = {NULL, NULL, NULL};
+    int npos = 0, ntok = 0, timed = 0, known = wake_known(cfg);
+    long b;
+    uint32_t ts = cfg->v[CALI_LCFG_WAKE_TS], lv = cfg->v[CALI_LCFG_WAKE_LV];
+    if (known) {
+        w->hour = (long)(ts / 3600 % 24);
+        w->minute = (long)(ts / 60 % 60);
+        w->colour = lv >> 12 & 0xFu;
+        w->areas = lv >> 8 & 0xFu;
+        w->brightness = lv >> 4 & 0xFu;
+        w->ramp = ((lv & 0xFu) >> 1) * 10;
+        w->enabled = lv & 1u;   /* an edit carries the switch the UNIT reported */
+    } else {
+        w->hour = w->minute = 0;
+        w->colour = CALI_WAKEUP_DEFAULT_COLOUR;
+        w->areas = CALI_WAKEUP_DEFAULT_AREAS;
+        w->brightness = CALI_WAKEUP_DEFAULT_BRIGHTNESS;
+        w->ramp = CALI_WAKEUP_DEFAULT_RAMP;
+        w->enabled = 0;
+    }
+    *switched = 0;
+    snprintf(s, sizeof s, "%s", value);
+    for (tok = strtok(s, WS); tok; tok = strtok(NULL, WS)) {
+        ntok++;
+        norm(tok, k, sizeof k);
+        if (strcmp(k, "on") == 0 || strcmp(k, "off") == 0) {
+            w->enabled = k[1] == 'n';
+            *switched = 1;
+        } else if (strchr(tok, ':')) {
+            if (!hhmm(tok, &w->hour, &w->minute)) return 0;
+            timed = 1;
+        } else {
+            if (npos < 3) pos[npos] = tok;
+            npos++;
+        }
+    }
+    if (!ntok || (!known && !timed) || npos > 3) return 0;
+    if (npos > 0 && !wake_areas(pos[0], &w->areas)) return 0;
+    if (npos > 1) {
+        if (!int_range(pos[1], 0, 10, &b)) return 0;
+        w->brightness = (uint32_t)b;
+    }
+    if (npos > 2) {
+        int ok = 0;
+        if (!py_int(pos[2], &b)) return 0;
+        for (size_t i = 0; i < N_OF(CALI_WAKEUP_RAMPS_MIN); i++) ok |= b == CALI_WAKEUP_RAMPS_MIN[i];
+        if (!ok) return 0;
+        w->ramp = (uint32_t)b;
+    }
+    return 1;
+}
+
+/* control.next_wakeup_epoch: the next HH:MM after now, both local wall clock read as UTC (no zone,
+ * no DST: the page already applied its zone). Today if still ahead, else tomorrow. */
+static int64_t next_wakeup(long h, long m, int64_t now) {
+    int64_t t = now - now % 86400 + (int64_t)h * 3600 + (int64_t)m * 60;
+    return t <= now ? t + 86400 : t;
+}
+
+/* command_precondition's wake-up gates, then the Mode-20 frame (dg/h.m0) + commit */
+static int p_wakeup(const char *value, int64_t now, cali_ctl_get_t get, cali_ctl_plan_t *p) {
+    vals_t *v = &s_v;
+    cali_light_cfg_t cfg;
+    wake_t w;
+    int switched;
+    int64_t ts;
+    /* ponytail: a >= 64-byte value is BAD here even when Python would parse it (web.c caps the value at 63) */
+    if (strlen(value) >= CALI_CTL_VALUE_MAX) return CALI_CTL_BAD_VALUE;
+    cali_light_cfg(get, &cfg);
+    if (!wake_request(value, &cfg, &w, &switched)) return CALI_CTL_BAD_VALUE;
+    if (w.enabled && !w.areas) {
+        p->reason = CALI_REASON_WAKEUP_NO_AREA;
+        return CALI_CTL_REFUSED;
+    }
+    if (!switched && !wake_known(&cfg)) {   /* R5: an edit would silently disarm — pull, then refuse */
+        p->reason = CALI_WAKEUP_UNKNOWN;
+        p->pull = 1;
+        return CALI_CTL_REFUSED;
+    }
+    ts = next_wakeup(w.hour, w.minute, now);
+    if (ts > (int64_t)UINT32_MAX) return CALI_CTL_BAD_VALUE;   /* protocol.encode: Timestamp is 32-bit */
+    reset(v);
+    put(v, "ProfileNumber", CALI_LIGHT_UNCHANGED);
+    put(v, "Mode", CALI_LIGHT_MODE_WAKEUP_TIME);
+    put(v, "Timestamp", (uint32_t)ts);
+    put(v, "LightValue", w.colour << 12 | w.areas << 8 | w.brightness << 4 | (w.ramp / 10) << 1 | w.enabled);
+    zones_all(v, CALI_LIGHT_UNCHANGED);
+    if (add(p, "lighting", v, 0) || add_commit(p)) return CALI_CTL_BAD_VALUE;
+    return CALI_CTL_OK;
+}
+
+void cali_ctl_pull_plan(cali_ctl_plan_t *out) {
+    cali_ctl_frame_t *f = &out->f[0];
+    memset(out, 0, sizeof *out);
+    f->chr = ctl_char("lighting")->control_short;
+    f->len = (uint8_t)sizeof CALI_LIGHT_REQUEST_CONFIG;
+    memcpy(f->data, CALI_LIGHT_REQUEST_CONFIG, sizeof CALI_LIGHT_REQUEST_CONFIG);
+    out->n = 1;
+    (void)add_commit(out);
+    out->rc = CALI_CTL_OK;
+}
+
 /* ---- control.command_precondition (the five functions; roof + wakeup never get here) ---- */
 
 /* control.ONOFF_COMMANDS restricted to the ESP's functions (hand-copied: a new on/off command in
@@ -479,12 +609,22 @@ static const char *gate(const char *fn, const char *what, const char *value, cal
     return NULL;
 }
 
-void cali_ctl_plan(const char *fn, const char *what, const char *value, cali_ctl_get_t get,
-                   cali_ctl_plan_t *out) {
+void cali_ctl_plan(const char *fn, const char *what, const char *value, int64_t local_now,
+                   cali_ctl_get_t get, cali_ctl_plan_t *out) {
     memset(out, 0, sizeof *out);
-    if (!ctl_char(fn) || (strcmp(fn, "lighting") == 0 && strcmp(what, "wakeup") == 0)) {
+    if (!ctl_char(fn)) {
         out->rc = CALI_CTL_ELSEWHERE;
         out->reason = CALI_REASON_ELSEWHERE;
+        return;
+    }
+    if (strcmp(fn, "lighting") == 0 && strcmp(what, "wakeup") == 0) {
+        if (local_now < 0) {
+            out->rc = CALI_CTL_ELSEWHERE;
+            out->reason = CALI_REASON_WAKEUP_CLOCK;
+        } else {
+            out->rc = p_wakeup(value, local_now, get, out);
+        }
+        if (out->rc != CALI_CTL_OK) out->n = 0;
         return;
     }
     out->reason = gate(fn, what, value, get);
