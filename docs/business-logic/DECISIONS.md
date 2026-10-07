@@ -22,7 +22,8 @@ setup_mode` over the setup hotspot / during a setup-flow join / unprovisioned; t
 is physical access and works anywhere. Arming is the session's continuous `1003` heartbeat plus
 `CODEC_ARM_DELAY_MS` once per link (no per-write arm); one command at a time; the HTTP answer waits
 for the write ACKs (never "Sent" for a failed write) and `applied` is never `true` (no readback on
-the ESP — "Sent — the unit didn't confirm it"). The lighting commit follows the previous ACK by
+the ESP; the UI confirms from the unit's state on the next polls, else "Sent — the unit didn't
+confirm it"). The lighting commit follows the previous ACK by
 300–400 ms (tick-quantised, never less). Protocol facts did not change: the satellite's bytes are
 calictl's, which are the app's (R1). The control path ran on the CoreS3 bench against the mock unit
 (2026-10-07, evidence ledger: commit 399–550 ms after its frame, measured write to write — above the 300–400 ms ACK-based bound because the ACK lag is included; ACK times not measured); nothing

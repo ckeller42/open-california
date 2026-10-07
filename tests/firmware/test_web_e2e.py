@@ -313,8 +313,9 @@ def test_live_cooler_toggle_reaches_the_unit_byte_exact(host_fw, rec_unit, tmp_p
     """The satellite UI in Chromium: the fridge switch -> POST /api/command -> the real sequencer ->
     NimBLE -> the fake unit records exactly ``control.build``'s frame. The unit ACKs 2.5 s late, so
     the POST pends and the single-connection core serves no /api/state meanwhile (Task 4 review
-    minor 6): the page shows "Sending…" the whole time, never the offline banner, then the honest
-    "Sent — the unit didn't confirm it" toast (``applied`` is never true on the ESP).
+    minor 6): the page shows "Sending…" the whole time, never the offline banner. ``applied`` is
+    never true on the ESP, so the UI confirms from the unit's own state: the unit's push of the new
+    fridge state reaches the next ``/api/state`` poll -> "✓ Applied", not the warning.
 
     .. test:: A UI control on the live satellite reaches the unit with calictl's bytes
        :id: T_FW_UI_LIVE_CONTROL
@@ -348,7 +349,8 @@ def test_live_cooler_toggle_reaches_the_unit_byte_exact(host_fw, rec_unit, tmp_p
             assert page.locator(".offline").count() == 0
             page.wait_for_timeout(250)
         assert "Sending…" in seen and "offline" not in seen, seen
-        page.locator(".toast").get_by_text("Sent — the unit didn't confirm it").wait_for(timeout=4000)
+        page.locator(".toast").get_by_text("✓ Applied").wait_for(timeout=8000)
+        assert page.locator(".toast.warn").count() == 0
         page.wait_for_function("() => document.getElementById('status').textContent === 'live'", timeout=5000)
         browser.close()
     assert not errors, errors
@@ -364,8 +366,9 @@ def test_live_cooler_toggle_reaches_the_unit_byte_exact(host_fw, rec_unit, tmp_p
     ],
 )
 def test_roof_and_wakeup_stay_with_buspi_or_the_app(host_fw, rec_unit, tmp_path, locale, roof, hint):
-    """On the live satellite the roof buttons and the wake-up light are greyed with the firmware's
-    own refusal text (EN + DE) while the fridge switch next door is live; nothing is written."""
+    """On the live satellite the roof buttons are greyed with the firmware's own refusal text
+    (EN + DE); the wake-up card shows that text under its title and no inputs (the satellite never
+    knows the wake-up config); the fridge switch next door is live; nothing is written."""
     import tools.esplab_control_walk as walker
 
     from .test_control_e2e import _online  # lazily: that module imports this one
@@ -383,9 +386,10 @@ def test_roof_and_wakeup_stay_with_buspi_or_the_app(host_fw, rec_unit, tmp_path,
         assert page.get_by_text(hint, exact=True).count() >= 1
         page.evaluate("document.getElementById('back').click()")
         _open_tile(page, "Beleuchtung" if locale == "de-DE" else "Lighting")
-        assert page.get_by_role("switch", name="Wake-up light").is_disabled()
-        assert page.get_by_label("Wake-up time").is_disabled()
-        assert page.get_by_text(hint, exact=True).count() >= 1
+        page.get_by_text(hint, exact=True).first.wait_for(timeout=5000)
+        assert page.get_by_role("switch", name="Wake-up light").count() == 0
+        assert page.get_by_label("Wake-up time").count() == 0
+        assert page.locator(".arealist").count() == 0
         page.evaluate("document.getElementById('back').click()")
         _open_tile(page, "Kühlbox" if locale == "de-DE" else "Cooler")
         assert page.get_by_role("switch", name="Refrigerator box").is_enabled()
