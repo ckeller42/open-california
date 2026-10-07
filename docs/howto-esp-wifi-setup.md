@@ -8,9 +8,10 @@ pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 fir
 > radio and on an emulated chip. A real CoreS3 runs it on a test bench (2026-10-01): it joined a
 > 2.4 GHz network through its setup hotspot and the page, and its screen showed every state in
 > [What the screen tells you](#what-the-screen-tells-you) — but against a *simulated* camper unit,
-> with a Linux laptop (not a phone) on the hotspot, and never in the van. The controls (below) are
-> proven on the Linux build against the simulated unit only; their run on the real board is still
-> to come. The list of things still to confirm is in
+> with a Linux laptop (not a phone) on the hotspot, and never in the van. The controls (below) ran
+> on the real board against the simulated unit too (2026-10-07: every recorded app action arrived
+> byte for byte, a fridge toggle from the browser landed, controls refused over the setup hotspot)
+> — but they have never switched anything in a real camper. The list of things still to confirm is in
 > [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
 
 The satellite reads the camper unit and, on your home WiFi, controls the fridge, camping mode,

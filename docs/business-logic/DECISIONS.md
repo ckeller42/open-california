@@ -24,7 +24,8 @@ is physical access and works anywhere. Arming is the session's continuous `1003`
 for the write ACKs (never "Sent" for a failed write) and `applied` is never `true` (no readback on
 the ESP — "Sent — the unit didn't confirm it"). The lighting commit follows the previous ACK by
 300–400 ms (tick-quantised, never less). Protocol facts did not change: the satellite's bytes are
-calictl's, which are the app's (R1). The board run of the control path is owed (Task 7); nothing
+calictl's, which are the app's (R1). The control path ran on the CoreS3 bench against the mock unit
+(2026-10-07, evidence ledger: commit 399–550 ms after its frame, write to write); nothing
 has reached the real unit. Trace: `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST`, `R_FW_CONTROL_API` in
 `docs/firmware.md`; `R_FW_READ_ONLY` retired.
 

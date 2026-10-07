@@ -137,7 +137,7 @@ held byte-identical by golden vectors (`tests/vectors/control.json`, a C twin in
 other write is the `1003` heartbeat. The roof and the wake-up light are refused ("Only via buspi or
 the app"). As of this writing the read side is proven on a Linux host build against a fake unit, in
 QEMU, and on a real CoreS3 against the Bumble mock unit over real BLE; the control path on the host
-build against the fake unit (its board run is owed) — nothing yet against the real camper unit. It
+build against the fake unit and on the CoreS3 against the mock unit (2026-10-07) — nothing yet against the real camper unit. It
 also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
 then it serves a status page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)

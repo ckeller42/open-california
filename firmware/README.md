@@ -593,7 +593,8 @@ firmware; this file stays the build/porting reference:
 - **R_FW_CONTROL_API** — armed link, one command at a time, station mode only, the deferred
   `POST /api/command` answer; verified by the `T_FW_CONTROL_*` session-fake tests,
   `T_FW_COMMAND_API` / `T_FW_COMMAND_STATION_ONLY` / `T_FW_HTTP_PENDING`, `T_FW_CONTROL_E2E`,
-  `T_FW_UI_LIVE_CONTROL` and `T_SAT_UI_LIVE`. Board run owed (Task 7).
+  `T_FW_UI_LIVE_CONTROL` and `T_SAT_UI_LIVE`; on the CoreS3 bench against the mock unit 2026-10-07
+  (BOARD rows in `docs/business-logic/evidence-ledger.md`).
 - **R_FW_IO_CAP_BEFORE_LINK** — the SM's I/O capability and MITM flag must be set before the host
   syncs, i.e. before any link exists — the exact shape of the 2026-09-26 `calictl` bug where the
   pairing agent arrived after SMP had already started; reproduced on purpose by the
@@ -642,8 +643,8 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
 6. **Reboot with the bond in place.** Power-cycle the board; it must reconnect by bond (`STATE
    {"state":"idle",...}` then, once the session comes up, a fresh `SNAP`) with no passkey prompt
    and no `LOG store: ERROR` line — closes out **watch item 1**.
-7. **The control path (OWED — #154 B Task 7; against the mock unit first, never the real unit
-   without the owner watching).** With the board on the home WiFi and `curl -s
+7. **The control path (BOARD 2026-10-07 against the mock unit; never the real unit without the
+   owner watching).** With the board on the home WiFi and `curl -s
    http://calictl-esp.local/api/state | jq .device.control` → `{"writes": true}`:
    `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo <mock fifo> --record <mock
    recording>` must report `"problems": []` (every app-recorded cooler/camping/lighting/air-heater/
@@ -651,7 +652,9 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    POST and `set roof stop` on the console must answer `Only via buspi or the app` with no `1401`
    in the recording; a POST over the setup hotspot (after `wifi forget`) must be `403 setup_mode`;
    a fridge toggle from the UI in a browser must land as one `1101` write. Then add dated BOARD rows
-   to `docs/business-logic/evidence-ledger.md` (watch item 7 in `docs/firmware.md`).
+   to `docs/business-logic/evidence-ledger.md` (watch item 7 in `docs/firmware.md`). **Ran
+   2026-10-07** on thinky (CI image of `8b1eda0`): 3 clean walks of 31 cases, no `1401`, `403` over
+   the hotspot, the UI toggle landed — against the mock unit only; the real unit is still to come.
 
 Carry the hardware watch items from `docs/firmware.md` into this run explicitly (repeated here so
 this checklist is self-contained):

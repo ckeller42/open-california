@@ -30,7 +30,7 @@ for how strongly each fact is proven.
 | ESP control twin (`firmware/components/cali_core/control.c`) | `tests/vectors/control.json`, generated from `calictl.control` | the satellite plans the same gates, frames and commits as calictl, byte for byte; the write allow-list is exactly the five control chars | `codec-parity`, `test` |
 | ESP firmware, pure C (`tests/firmware/test_*_fake.py`, `test_http_core.py`, `test_web_handlers.py`, …) | scripted fake transports and sockets | the pairing/WiFi state machines, the session + control sequencer, the HTTP core and endpoints on any host | `test` |
 | ESP firmware, host tier (`tests/firmware/test_*_e2e.py`) | `cali-host` on upstream NimBLE (Linux) + the Bumble fake unit + a scripted fake WiFi | pairing, reads, the heartbeat, the setup flow, the live UI in Chromium, and the control path end to end (every app-recorded action byte-exact at the fake unit) | `firmware-host-e2e` |
-| ESP firmware, QEMU + board | the real esp32s3 image in QEMU; a CoreS3 on the bench against the fake unit on a dongle | boot, console, NVS; the real radio stack and the screen (read side done; the control path's board run is **owed**) | `firmware-qemu`; bench (manual) |
+| ESP firmware, QEMU + board | the real esp32s3 image in QEMU; a CoreS3 on the bench against the fake unit on a dongle | boot, console, NVS; the real radio stack and the screen (read side, and the control path vs the mock 2026-10-07) | `firmware-qemu`; bench (manual) |
 
 `tools/ci.sh` runs most of this locally. It skips `gui-e2e` without Playwright and the C tests
 without a compiler, and it never runs the real-BlueZ VM job. The git hooks (`tools/ci.sh dev`
@@ -315,7 +315,8 @@ The satellite's writes (#154 B) are proven in a ladder, each rung closer to hard
    UI: a fridge toggle in Chromium lands at the fake unit; roof + wake-up greyed. `tests/e2e/
    test_satellite.py` pins the same UI over a stub firmware on every platform (CI `test`).
 6. **CoreS3 bench** — `tools/esplab_control_walk.py` against the fake unit on a dongle, the same
-   walker as rung 5. **Owed** (no BOARD row yet; `docs/business-logic/evidence-ledger.md`).
+   walker as rung 5 — **BOARD 2026-10-07**: 31 cases byte-exact at the mock over three walks, no
+   `1401`, `403` over the real hotspot, the UI toggle from Chromium (`docs/business-logic/evidence-ledger.md`).
 7. **The real unit** — never: the satellite has not been paired with it. The bytes are calictl's,
    so the unit-side evidence is calictl's (cooler `State=3` frames are a van check, #230).
 

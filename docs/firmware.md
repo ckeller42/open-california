@@ -3,8 +3,8 @@
 **Status: sub-projects 1 and 2b/3a of #154 + the status display + the control path (#154 B) —
 reads everything and controls the cooler, camping mode, lighting, air heater and energy mode (no
 roof, no wake-up light). The read side and the display are bench-tested on a CoreS3 against the
-mock unit; the control path is proven on the Linux host tier against the fake unit and its board
-run is still OWED; nothing has ever talked to the real unit.** ESP-IDF + NimBLE firmware for an
+mock unit; the control path is proven on the Linux host tier against the fake unit and on the
+CoreS3 bench against the mock unit (2026-10-07); nothing has ever talked to the real unit.** ESP-IDF + NimBLE firmware for an
 ESP32-S3 "satellite" (the M5Stack CoreS3) that pairs with the camper unit and reads its state
 independently of `calictl`/buspi — the explicit target for the pairing state machine
 (`calictl/pairing.py`, `R_PAIRING_SM`) that the web wizard already runs. Its writes are the `1003`
@@ -30,7 +30,7 @@ in the repository; this page is the traceability + orientation view.
 flowchart LR
   H["Host tier<br/>NimBLE Linux port + Bumble fake unit + scripted fake WiFi"] --> HP(("pairing, session, SNAP decode,<br/>heartbeat, reconnect, control path + write allow-list,<br/>WiFi setup flow, status page, API and live UI"))
   Q["QEMU tier<br/>real esp32s3 image, no radio"] --> QP(("boot, console protocol,<br/>NVS bond store survives reboot,<br/>no-WiFi-driver path"))
-  B["Board tier<br/>CoreS3 on the bench, mock unit"] --> BP(("the real radio stack end to end,<br/>status screen states — control path OWED"))
+  B["Board tier<br/>CoreS3 on the bench, mock unit"] --> BP(("the real radio stack end to end,<br/>status screen states, control path vs the mock"))
 ```
 
 | Tier | What it proves | What it cannot prove | Run locally |
@@ -39,7 +39,7 @@ flowchart LR
 | **QEMU boot** (CI `firmware-qemu`) | The **real ESP-IDF image** (compiled for the esp32s3) boots in Espressif's QEMU: the console line protocol on the no-controller path, and the NVS-backed bond store (`cali_kv_*`) surviving a reboot, including a CRC-broken record recovering as "unpaired" instead of crashing. | Bluetooth — QEMU's esp32s3 machine has no radio, so BLE stays with the host tier and hardware. | `docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build && cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v'` |
 | **Host web e2e** (CI `firmware-host-e2e`, `tests/firmware/test_web_e2e.py`) | `cali-host --http PORT --fake-wifi SCRIPT`: the WiFi runner, captive DNS and web endpoints on the same 100 ms tick as the BLE session, over `net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi radio) and the Bumble fake unit. Proves the setup flow (fresh boot -> setup mode -> POST credentials -> station), a wrong password falling back to setup with the credentials cleared, saved credentials reconnecting after a restart + `DELETE /api/wifi`, `/api/state` equal to the console's `SNAP` after pairing, a WiFi loss leaving the BLE link and heartbeat alone, the page rendering in Chromium (EN + DE), and the setup flow clicked in Chromium (a wrong password shows the wrong-password text, the right one the `http://calictl-esp.local` link; EN + DE). | The real esp_wifi/lwIP/mdns stack, a real phone's captive-portal detection, radio coexistence — the fake WiFi only replays the script's outcomes. | `tools/ci.sh firmware` (Linux; on a Mac see `firmware/README.md` "Host build" for the Docker recipe) |
 | **QEMU no-WiFi-driver** (CI `firmware-qemu`, `test_qemu_boot.py::test_no_wifi_driver_boots_and_serves_nothing`) | The QEMU image is built with `CONFIG_CALI_WIFI=n` (no esp_wifi call compiled in): it logs `LOG wifi: driver unavailable` once, keeps WiFi off (`status` has no `wifi` member, `wifi status` -> `LOG wifi: not enabled`), listens on nothing, and does not reboot — the same path a board takes when `esp_wifi_init`/`esp_wifi_start` fails. | Anything about a working WiFi driver (QEMU's esp32s3 has no WiFi). | The QEMU command above |
-| **Board** (bench, not CI) | The real CoreS3 on a Linux bench against the mock camper unit (`tools/applab/fake_unit_ble.py` on a USB BLE dongle) and a second WiFi stick: flashing from `flasher_args.json`, the USB-Serial/JTAG console, esp-nimble passkey pairing + reconnect by bond, the setup hotspot -> `POST /api/wifi` -> station join, and the spec's seven status-display states (setup, joining, online, pairing, connected, stale, link lost) + dimming by remote `screenshot` (2026-10-01, `tools/esplab_display_walk.sh`; dated rows in `docs/business-logic/evidence-ledger.md`). **The control path has not run on the board yet (OWED):** the planned walk is `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo … --record …` against the mock unit (every app-recorded action, `"problems": []`), the roof/wake-up refusals, a `403` over the setup hotspot and a live fridge toggle from the UI — it adds BOARD rows to the ledger when it has run. | The real camper unit (only the mock so far), a phone's captive portal, the van's radio environment, the control path on real esp-nimble (write-with-response timing; `py_int` with a 32-bit `long` is replayed against every vector by an i686 build in the host tier, not yet on the Xtensa toolchain), and the hardware watch items below that need the real unit. | `tools/esplab_display_walk.sh` on the bench (header lists its env); `firmware/README.md` "Status display" |
+| **Board** (bench, not CI) | The real CoreS3 on a Linux bench against the mock camper unit (`tools/applab/fake_unit_ble.py` on a USB BLE dongle) and a second WiFi stick: flashing from `flasher_args.json`, the USB-Serial/JTAG console, esp-nimble passkey pairing + reconnect by bond, the setup hotspot -> `POST /api/wifi` -> station join, and the spec's seven status-display states (setup, joining, online, pairing, connected, stale, link lost) + dimming by remote `screenshot` (2026-10-01, `tools/esplab_display_walk.sh`; dated rows in `docs/business-logic/evidence-ledger.md`). **The control path ran on the board 2026-10-07:** `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo … --record …` against the mock unit — every app-recorded action byte-exact at the mock (31 cases, 3 clean walks), roof/wake-up refused with no `1401`, console `set`, `403 setup_mode` over the real setup hotspot, the heartbeat through commands, the 30 s water re-read, and a fridge toggle from the UI in Chromium (BOARD rows in `docs/business-logic/evidence-ledger.md`). | The real camper unit (only the mock so far), a phone's captive portal, the van's radio environment, the control path against a real unit's ACK timing and refusals (the mock ACKs at once), the water *stale push then correct read* ordering (not stageable with the mock's console; session-fake tier only), and the hardware watch items below that need the real unit. | `tools/esplab_display_walk.sh` on the bench (header lists its env); `firmware/README.md` "Status display" |
 | **Pure-C unit tests** (in the normal `test`/`pytest` job, no BLE) | The pairing state machine (`pairing_sm.c`) replays the same golden vectors as `calictl.pairing`; the runner and the session+console compile and run against scripted fake transports on any host with a C compiler (macOS included). The network pieces too: the WiFi SM replays `tests/vectors/wifi_sm.json` from its Python twin (`tools/wifi_sm_ref.py`), the HTTP core (`http_core.c`), captive DNS (`captive_dns.c`), web handlers (`web.c`, incl. `POST /api/command` against a fake sequencer), JSON writer and the host `cali_net` (`net_host.c`) each run under a small C driver, and the WiFi runner runs next to the BLE session in `test_session_fake.py`. The control twin (`control.c`) replays every vector of `tests/vectors/control.json` byte for byte and its allow-list is scanned exhaustively (`test_control_parity.py`; the Linux host tier repeats both with an i686 `-m32` build, the ESP32-S3's 32-bit `long`); the sequencer (`control_run.c`) runs against the scripted transport in `test_session_fake.py` (arming, one at a time, ATT error, link drop, late ACK, interleaved heartbeat/notify, the follow delay). | Real NimBLE call sequencing (that's the host tier's job); real sockets under load; any radio. | `python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py tests/firmware/test_wifi_sm_parity.py tests/firmware/test_http_core.py tests/firmware/test_captive_dns.py tests/firmware/test_web_handlers.py tests/firmware/test_json.py tests/firmware/test_net_host.py tests/firmware/test_control_parity.py -v` |
 
 CI also builds the release esp32s3 image compile-only (job `firmware-build`, container
@@ -283,7 +283,7 @@ The UI turns the three codes the owner can act on into sentences (`setup_mode`, 
 the scripted transport (`test_session_fake.py`) → the endpoint on a fake sequencer
 (`test_web_handlers.py`, `test_http_core.py`) → the real HTTP core + NimBLE against the Bumble fake
 unit (`test_control_e2e.py`, `test_web_e2e.py` with the UI in Chromium) → the CoreS3 bench
-(**OWED**) → the real unit (**never**: the satellite has not talked to it; the bytes are calictl's).
+(**BOARD** 2026-10-07, against the mock unit) → the real unit (**never**: the satellite has not talked to it; the bytes are calictl's).
 
 ### The satellite UI (`R_FW_SHARED_UI`)
 
@@ -325,7 +325,8 @@ Known gaps (accepted):
 **Measured first load** (2026-10-02, thinky → CoreS3 over a 2.4 GHz home network, bench mock unit,
 `tools/esplab_ui_load.py`, 5 cold runs, fresh browser context each): median `loadEventEnd`
 **960 ms**, median time to a live state **1065 ms** (curl of the 51,574 B gzip body alone: median
-0.91 s). The bundle is 51,574 B gzipped, 79 % of `WEB_APP_GZ_MAX` (65,536 B).
+0.91 s). The bundle is 51,574 B gzipped, 79 % of `WEB_APP_GZ_MAX` (65,536 B). Re-measured with the live
+controls (2026-10-07, 3 cold runs): median `loadEventEnd` **1030 ms**, live state **1138 ms**.
 
 **Where the credentials live:** the kv store keys `wifi_ssid` / `wifi_psk` — NVS namespace `cali`
 on the device (esp_wifi's own NVS copy is off: `WIFI_STORAGE_RAM`, `CONFIG_ESP_WIFI_NVS_ENABLED=n`),
@@ -393,15 +394,17 @@ chip":
    must show as one `CONNECT_FAIL`-driven retry of the SM/session (no silent second link), the
    unit must be found by the legacy scan, and no NimBLE INFO lines may appear between the console
    lines.
-7. **The control path on real esp-nimble (OWED, #154 B Task 7).** Everything about writes is
-   proven on upstream NimBLE 1.10 on Linux: the write-with-response op, the `WRITTEN` completion
+7. **The control path on real esp-nimble (BOARD 2026-10-07, against the mock unit).** Everything about writes was
+   first proven on upstream NimBLE 1.10 on Linux: the write-with-response op, the `WRITTEN` completion
    (which can fire inside the `write()` call when the op fails at once — the sequencer sets
    in-flight before writing for that reason), the ACK timing behind the heartbeat on the one ATT
    queue, and `py_int`'s saturation at `LONG_MAX` (32-bit `long` on the ESP32, 64-bit on the host;
-   every bound is ≤ 255 so no outcome should change). On the board: `tools/esplab_control_walk.py`
-   against the mock unit must report `"problems": []`, roof/wake-up must be refused with no `1401`
-   in the mock's recording, a POST over the setup hotspot must be `403`, and a fridge toggle from
-   the UI must land as one `1101` write — then BOARD rows go into the evidence ledger.
+   every bound is ≤ 255 so no outcome should change). On the board (CI image of `8b1eda0`):
+   `tools/esplab_control_walk.py` against the mock unit reported `"problems": []` three times (31
+   cases), roof/wake-up were refused with no `1401` in the mock's recording, a POST over the setup
+   hotspot was `403`, and a fridge toggle from the UI landed as one `1101` write. The lighting
+   commit followed its frame by 399–550 ms (≥ 300 ms as required; the tail above 400 ms is the ACK
+   arriving after the write). Still open: a real unit's ACK timing and refusals.
 
 ## Network watch items (board only)
 
@@ -644,7 +647,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   vectors and `control_consts.h` are fresh, every recorded app action of the five functions is a
   vector, none is refused, the frames are the app's byte for byte, the roof never appears),
   `T_FW_CONTROL_PARITY` (`tests/firmware/test_control_parity.py`: every grid and app vector through
-  the C twin) and on the wire by `T_FW_CONTROL_E2E` (below). Board tier **owed** (Task 7).
+  the C twin) and on the wire by `T_FW_CONTROL_E2E` (below); on the CoreS3 bench by the walk
+  (BOARD 2026-10-07, evidence ledger).
 - **`R_FW_WRITE_ALLOWLIST`** — verified by `T_FW_WRITE_ALLOWLIST_PURE` (exhaustive scan),
   `T_FW_SESSION_FAKE` + `test_control_roof_and_wakeup_are_refused_without_a_write`, and
   `T_FW_HOST_E2E` (no command, no control write at the unit), and `T_FW_CONTROL_E2E`
@@ -664,8 +668,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   verifies `R_FW_CONTROL_TWIN` on the wire, and from the browser by `T_FW_UI_LIVE_CONTROL`
   (`tests/firmware/test_web_e2e.py`: a fridge toggle in Chromium lands as calictl's frame at the
   fake unit; the same module shows a real `409 busy` as its sentence) and `T_SAT_UI_LIVE`
-  (`tests/e2e/test_satellite.py`, over a stub firmware). The CoreS3 bench run is **owed** (Task 7;
-  no BOARD row yet).
+  (`tests/e2e/test_satellite.py`, over a stub firmware), and on the CoreS3 bench against the mock
+  unit (BOARD 2026-10-07, evidence ledger).
 - **`R_FW_IO_CAP_BEFORE_LINK`** — verified by `T_FW_HOST_E2E`'s
   `test_just_works_build_is_refused`, which runs the `-DCALI_TEST_LATE_IO_CAP` regression build
   against the fake unit and asserts pairing ends in `error` (the unit refusing Just Works).
@@ -695,8 +699,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   sentences, no offline banner while a command pends) and `T_FW_UI_LIVE_CONTROL`
   (`tests/firmware/test_web_e2e.py`, the same against the real firmware + fake unit), plus the
   board run of the display-only UI (`tools/esplab_ui_load.py`, see
-  [the satellite UI](#the-satellite-ui-r_fw_shared_ui)); the live UI on the board is owed with
-  the control path.
+  [the satellite UI](#the-satellite-ui-r_fw_shared_ui)) and of the live UI (2026-10-07: a fridge
+  toggle lands as one `1101` write, roof + wake-up greyed; evidence ledger).
 - **`R_FW_STATUS_DISPLAY`** — verified by `T_FW_DISPLAY_MODEL` (`tests/firmware/test_display_model.py`,
   every row state, the 10 s stale rule, the setup footer and the bright/dim timing through a C driver
   over `display_model.c`), `T_FW_DISPLAY_FONT` (`tests/test_display_font.py`, every EN/DE screen
