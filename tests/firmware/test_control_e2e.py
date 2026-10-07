@@ -24,7 +24,7 @@ import time
 
 import pytest
 
-from calictl import control, protocol
+from calictl import control, protocol, semantics
 from tools import esplab_control_walk as walker
 from tools.gen_c_dict import ESP_WAKEUP_CLOCK_REASON
 
@@ -62,6 +62,9 @@ def _post(fw):
 
 def _inject(fw, hu):
     def inject(case):
+        if case["function"] == "lighting":
+            for hx in walker.latch_frames(case):
+                hu.call(_serve_raw, hu.unit, "lighting", bytes.fromhex(hx), True)
         for fn, hx in case["frames_hex"].items():
             if fn in walker.GATE_FUNCTIONS:
                 hu.call(_serve_raw, hu.unit, fn, bytes.fromhex(hx), True)
@@ -146,9 +149,10 @@ def test_held_state_needs_two_matching_polls_and_gives_up():
     case = _case("lighting-zone.jsonl:143")
     gate = walker.gate_state(case)
     assert set(gate) == set(walker.GATE_FUNCTIONS) & set(case["frames_hex"])
-    assert gate["lighting"] == protocol.decode(
-        _funcs()["lighting"], bytes.fromhex(case["frames_hex"]["lighting"])
-    )
+    assert gate["lighting"] == {
+        **protocol.decode(_funcs()["lighting"], bytes.fromhex(case["frames_hex"]["lighting"])),
+        "FavouritesStored": 0x7F,  # the latch the pushed config frames set (none in the case: all stored)
+    }
 
 
 def test_walk_reports_a_state_that_was_never_held():
@@ -157,13 +161,37 @@ def test_walk_reports_a_state_that_was_never_held():
     assert problems == ["%s: the firmware never held the pushed state" % case["id"]]
 
 
+def test_walker_expects_the_config_pull_for_an_unknown_wakeup():
+    """A wake-up edit with no config known: the walker expects the REQUEST_CONFIG pull (and only it)
+    at the unit, posts the case's ``local_now``, and pushes the unit's config frames so the firmware
+    latches the case's favourites (all stored, 0x7f, when the case names none)."""
+    case = next(c for c in walker.app_cases() if c["expect"].get("reason") == control.WAKEUP_UNKNOWN)
+    assert walker.expected_writes(case) == [(f["char"], f["hex"]) for f in walker.config_pull()["frames"]]
+    assert case["local_now"] > 1767225600
+    lit = walker.gate_state(case)["lighting"]
+    assert lit["FavouritesStored"] == case.get("latch", {}).get("FavouritesStored", 0x7F)
+    assert walker.gate_state(_case("lighting-zone.jsonl:143"))["lighting"]["FavouritesStored"] == 0x7F
+    funcs = _funcs()
+    for c in walker.app_cases():
+        if c["function"] != "lighting":
+            continue
+        latch = None
+        for hx in walker.latch_frames(c):
+            latch = semantics.lighting_config(latch, protocol.decode(funcs["lighting"], bytes.fromhex(hx)))
+        assert latch == {"FavouritesStored": 0x7F, **(c.get("latch") or {})}, c["id"]
+    sent = []
+    walker.walk([case], lambda c: None, lambda b: (sent.append(b), (200, {}))[1], lambda: [])
+    assert sent[0]["local_now"] == case["local_now"]
+
+
 # -- the host tier ---------------------------------------------------------------------------------
 
 
 @HOST
 def test_app_recorded_actions_over_api_command(host_fw, rec_unit, tmp_path):
-    """Every app case: a frame case produces calictl's frames byte-exact at the unit, a wake-up is refused
-    without a write; every answer has ``applied`` null (or false for a refusal), never true."""
+    """Every app case: a frame case produces calictl's frames byte-exact at the unit; a wake-up edit with
+    no config known pulls REQUEST_CONFIG then is refused; its explicit form and the other wake-up
+    edits arrive byte-exact; every answer has ``applied`` null (or false for a refusal), never true."""
     hu, rec = rec_unit
     fw = _online(host_fw, hu, tmp_path)
     cases = walker.app_cases()
@@ -225,6 +253,21 @@ def test_unit_never_sees_a_roof_or_unknown_write(host_fw, rec_unit, tmp_path):
     while not walker.unit_writes(rec) and time.monotonic() < end:
         time.sleep(0.1)
     assert [(c, h) for c, h, _ in walker.unit_writes(rec)] == [("1601", "00")]
+
+
+@HOST
+def test_wakeup_clock_refusals_reach_no_unit(host_fw, rec_unit, tmp_path):
+    """Review focus 5 over real NimBLE: no ``local_now`` -> the clock reason; a string, a pre-2026
+    one, or one past the 32-bit Timestamp (2**32, 30 digits) -> 400 bad_value; nothing at the unit."""
+    hu, rec = rec_unit
+    fw = _online(host_fw, hu, tmp_path)
+    post = _post(fw)
+    body = {"function": "lighting", "what": "wakeup", "value": "07:00 on"}
+    assert post(body)[1].get("refused") == ESP_WAKEUP_CLOCK_REASON
+    for bad in ("1791354615", 1000, 2**32, 10**29):
+        assert post({**body, "local_now": bad}) == (400, {"ok": False, "error": "bad_value"}), bad
+    time.sleep(1)
+    assert walker.unit_writes(rec) == []
 
 
 @HOST
