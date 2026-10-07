@@ -403,8 +403,8 @@ chip":
    `tools/esplab_control_walk.py` against the mock unit reported `"problems": []` three times (31
    cases), roof/wake-up were refused with no `1401` in the mock's recording, a POST over the setup
    hotspot was `403`, and a fridge toggle from the UI landed as one `1101` write. The lighting
-   commit followed its frame by 399–550 ms (≥ 300 ms as required; the tail above 400 ms is the ACK
-   arriving after the write). Still open: a real unit's ACK timing and refusals.
+   commit followed its frame by 399–550 ms (≥ 300 ms as required; measured write to write at the mock, so the
+   tail above 400 ms is likely the ACK lagging the write — ACK times were not measured). Still open: a real unit's ACK timing and refusals.
 
 ## Network watch items (board only)
 
