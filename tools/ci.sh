@@ -3,7 +3,7 @@
 # may be gated (billing/spending limit), so this is the authoritative LOCAL gate.
 #
 # `tools/ci.sh` (= `ci`) runs: `pre-commit run --all-files` (ci.yml `pre-commit`: ruff + ruff
-# format, markdownlint, gitleaks, whitespace/YAML checks, the vendor/MAC/VIN guard over every
+# format, markdownlint, gitleaks, actionlint + zizmor, whitespace/YAML checks, the vendor/MAC/VIN guard over every
 # tracked file, import-clean, doc-offset, screens.json freshness, codec vector/C-header freshness
 # and the web-UI tsc/node check), then the whole pytest suite on ONE local python (ci.yml `test`
 # runs it on 3.11/3.12/3.13) and the signal audit. The pytest suite also covers `codec-parity` (C

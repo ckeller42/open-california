@@ -5,9 +5,29 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+    groups:
+      actions:
+        patterns: ["*"]
   # Dev/test/doc tooling only — the runtime is stdlib-only. Keep ruff== in step with the
   # ruff-pre-commit rev in .pre-commit-config.yaml (`pre-commit autoupdate` bumps that side).
   - package-ecosystem: pip
     directories: ["/", "/docs"]
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+    # ruff is pinned twice and the two pins must move together (AGENTS.md rule: `ruff==` in
+    # requirements-dev.txt == the ruff-pre-commit rev). Dependabot can only bump one side, so it
+    # is excluded here: bump ruff by hand — `pre-commit autoupdate --repo
+    # https://github.com/astral-sh/ruff-pre-commit` plus the matching `ruff==` pin.
+    ignore:
+      - dependency-name: ruff
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
