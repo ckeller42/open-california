@@ -280,13 +280,13 @@ def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_u
     assert same(got["state"]["_meta"]["firmware"], ServeBackend._firmware_meta(py.get("general")))
     assert same(got["state"]["_meta"]["anchors"], anchors.check(py))
     assert not errors, errors
-    assert set(paths) <= {"/", "/api/state"}, paths
+    assert set(paths) <= {"/", "/api/state", "/api/pairing"}, paths  # + the one-off wizard fetch
 
 
 LIVE_UI = (
     "() => !!(STATE._meta && STATE._meta.satellite && STATE._meta.online && STATE._meta.read_only === false)"
 )
-UI_PATHS = {"/", "/api/state", "/api/command"}
+UI_PATHS = {"/", "/api/state", "/api/command", "/api/pairing"}
 
 
 def _live_ui(p, fw, locale="en-US"):
@@ -388,7 +388,7 @@ def test_roof_stays_with_buspi_or_the_app(host_fw, rec_unit, tmp_path, locale, r
         assert page.get_by_role("switch", name="Refrigerator box").is_enabled()
         browser.close()
     assert not errors, errors
-    assert set(paths) <= {"/", "/api/state"}, paths
+    assert set(paths) <= {"/", "/api/state", "/api/pairing"}, paths  # + the one-off wizard fetch
     assert walker.unit_writes(rec) == []
 
 

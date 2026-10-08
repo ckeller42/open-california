@@ -21,6 +21,7 @@ from tests.firmware.api_shape import (
     CONTROL_KEYS,
     DEVICE_KEYS,
     LINK_KEYS,
+    PAIRING_API_KEYS,
     PAIRING_KEYS,
     STATE_KEYS,
     WIFI_GET_KEYS,
@@ -45,6 +46,9 @@ def test_state_fixture_shape(fixtures, mode):
     assert set(d["control"]) == CONTROL_KEYS and d["control"]["writes"] is (mode != "setup")
     assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == ("station" if mode == "satellite" else mode)
     assert d["uptime_ms"] == state["t"]
+    pairing = fixtures[mode]["/api/pairing"]  # GET /api/pairing: calictl's snapshot, as web.c
+    assert set(pairing) == PAIRING_API_KEYS and pairing["radio_busy"] is False
+    assert {k: pairing[k] for k in PAIRING_KEYS} == d["pairing"]
 
 
 @pytest.mark.parametrize("mode", ["setup", "station", "satellite"])

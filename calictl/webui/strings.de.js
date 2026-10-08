@@ -341,6 +341,27 @@ window.STRINGS_DE = {
     + "Bluetooth integration)."]:
     "Beende während der Kopplung andere Bluetooth-Scanner auf diesem Pi (zum Beispiel die "
     + "Home-Assistant-Bluetooth-Integration).",
+  // the satellite's own variants (R_FW_PAIRING_WIZARD)
+  ["On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows "
+    + "“Passcode: ---” until the satellite connects."]:
+    "Wähle in der Camper-Bedieneinheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht "
+    + "„Passcode: ---“, bis der Satellit sich verbindet.",
+  ["If a Raspberry Pi with calictl runs near the van, stop it during pairing — it would take the "
+    + "unit's only connection."]:
+    "Läuft ein Raspberry Pi mit calictl in der Nähe des Fahrzeugs, stoppe ihn während der "
+    + "Kopplung — er würde die einzige Verbindung der Bedieneinheit belegen.",
+  "Saved on the satellite — survives a restart. No further action needed.":
+    "Auf dem Satelliten gespeichert — übersteht einen Neustart. Keine weitere Aktion nötig.",
+  ["Check that “Gerät verbinden” is open on the unit, that the satellite is in range, and that "
+    + "no phone is connected to the unit."]:
+    "Prüfe, dass „Gerät verbinden“ auf der Bedieneinheit geöffnet ist, dass der Satellit in "
+    + "Reichweite ist und dass kein Handy mit der Bedieneinheit verbunden ist.",
+  ["The unit may be asleep, or a phone or a Raspberry Pi with calictl may still hold its single "
+    + "connection. Wake the unit at its panel, disconnect the phone, then try again. An existing "
+    + "bond is kept."]:
+    "Die Bedieneinheit schläft vielleicht, oder ein Handy oder ein Raspberry Pi mit calictl belegt "
+    + "noch ihre einzige Verbindung. Wecke die Bedieneinheit an ihrem Bildschirm, trenne das Handy "
+    + "und versuche es erneut. Eine bestehende Kopplung bleibt erhalten.",
   "I'm on that screen": "Ich bin auf diesem Bildschirm",
   "Connect now": "Jetzt verbinden",
   "Loading…": "Wird geladen…",

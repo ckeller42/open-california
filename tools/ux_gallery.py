@@ -242,6 +242,15 @@ def esp_fixtures():
             "/api/pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
         },
     }
+    for mode in ("setup", "station", "satellite"):  # GET /api/pairing: calictl's snapshot, as web.c
+        p = fx[mode]["/api/state"]["device"]["pairing"]
+        fx[mode]["/api/pairing"] = {
+            "state": p["state"],
+            "attempts": 0,
+            "error": None,
+            "address": p["address"],
+            "radio_busy": False,
+        }
     return json.loads(json.dumps(fx))  # independent copies: a test mutating one mode never touches another
 
 
@@ -252,7 +261,13 @@ class EspStub:
     ``POST /api/command`` records the body in ``commands`` and answers ``command_status`` +
     ``command_reply`` (default: the firmware's success shape, ``applied: null``) after
     ``command_delay_s``; like the ESP's single-connection core, a ``GET /api/state`` arriving
-    meanwhile waits for the answer (``polls_while_pending`` counts them)."""
+    meanwhile waits for the answer (``polls_while_pending`` counts them).
+
+    ``POST /api/pairing`` records the body in ``pairing_posts`` and walks the fixture's snapshot like
+    the firmware's runner would, compressed: start -> ``waiting_passkey`` (from idle/error), the
+    passkey ``pairing_passkey`` -> ``bonded`` (any other -> ``error`` / ``pairing_failed``), cancel ->
+    ``idle``, reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
+    answers ``{"error": pairing_error}`` instead. ``GET /app`` is the UI bundle in every mode."""
 
     def __init__(self, mode="setup"):
         from tools import gen_c_dict
@@ -267,6 +282,9 @@ class EspStub:
         self.command_delay_s = 0.0  # the ESP answers after the unit's ACK (<= CALI_CTL_DEADLINE_MS)
         self.polls_while_pending = 0
         self.on_command = None  # callable(body): change the fixtures as the unit would (a push)
+        self.pairing_posts = []  # POST /api/pairing bodies, in order
+        self.pairing_passkey = "123456"  # the code the stub "unit" shows
+        self.pairing_status, self.pairing_error = 200, None  # e.g. 409, "busy"
         self._pending = threading.Lock()  # held while a command is being answered
         with open(ESP_PAGE, "rb") as f:
             page = f.read()
@@ -288,6 +306,13 @@ class EspStub:
                 stub.requests.append(path)
                 n = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(n) or b"{}")
+                if path == "/api/pairing":
+                    stub.pairing_posts.append(body)
+                    if stub.pairing_status != 200:
+                        self._json(stub.pairing_status, {"error": stub.pairing_error})
+                        return
+                    self._json(200, stub._pair(body))
+                    return
                 if path != "/api/command":
                     self.send_error(404)
                     return
@@ -318,7 +343,7 @@ class EspStub:
                     stub.polls_while_pending += 1
                     with stub._pending:  # the core serves nothing while a command pends
                         pass
-                if path == "/" and stub.mode in APP_MODES:  # web.c: station mode serves the UI bundle
+                if path == "/app" or (path == "/" and stub.mode in APP_MODES):  # web.c: the UI bundle
                     body, ctype, enc = bundle, "text/html; charset=utf-8", "gzip"
                 elif path in ("/", "/device"):
                     body, ctype = page, "text/html; charset=utf-8"
@@ -342,6 +367,25 @@ class EspStub:
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.base = "http://127.0.0.1:%d" % self.server.server_address[1]
         self._thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    def _pair(self, body):
+        """The compressed runner walk behind ``POST /api/pairing`` (see the class docstring)."""
+        fx = self.fixtures[self.mode]
+        snap, dev = fx["/api/pairing"], fx["/api/state"]["device"]["pairing"]
+        action = body.get("action")
+        if action == "start" and snap["state"] in ("idle", "error"):
+            snap.update(state="waiting_passkey", attempts=0, error=None)
+        elif action == "passkey" and snap["state"] == "waiting_passkey":
+            if body.get("value") == self.pairing_passkey:
+                snap.update(state="bonded", address="C0:FF:EE:CA:11:F0")
+            else:
+                snap.update(state="error", attempts=3, error="pairing_failed")
+        elif action == "cancel":
+            snap.update(state="idle", attempts=0, error=None)
+        elif action == "reset" and body.get("confirm") is True:
+            snap.update(state="idle", attempts=0, error=None, address=None)
+        dev.update(state=snap["state"], address=snap["address"])
+        return dict(snap)
 
     def __enter__(self):
         self._thread.start()

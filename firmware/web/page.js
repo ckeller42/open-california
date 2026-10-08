@@ -131,11 +131,11 @@ function renderDevice(d) {
     [t("uptime"), fmtUptime(d.uptime_ms)],
     [t("firmware"), d.fw],
   ]));
-  if (w.mode === "station") {   // GET / is the calictl web UI in station mode
-    const a = el("a", t("app_link"));
-    a.href = "/";
-    box.appendChild(a);
-  }
+  /* the calictl web UI: GET / in station mode; elsewhere (the setup hotspot) GET /app, where its
+   * pairing wizard pairs the unit without home WiFi */
+  const a = el("a", t(w.mode === "station" || d.pairing.address ? "app_link" : "app_link_pair"));
+  a.href = w.mode === "station" ? "/" : "/app";
+  box.appendChild(a);
 }
 
 /** @param {State["fn"]} fn */
