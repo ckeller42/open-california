@@ -239,13 +239,14 @@ menuEl.onclick = (ev) => {
   menuPop = document.createElement("div");
   menuPop.className = "menupop";
   if (satellite()) {
-    // The satellite pairs over its USB console, not the web; its own device/WiFi page is /device.
+    // The satellite's own device/WiFi page is /device.
     const dev = document.createElement("button");
     dev.type = "button";
     dev.textContent = /** @type {string} */ (t("Device & WiFi"));
     dev.onclick = () => { closeMenu(); location.assign("/device"); };
     menuPop.appendChild(dev);
-  } else if (isCalictl()) {
+  }
+  if (STATE._meta) {   // calictl and the satellite both serve /api/pairing (R_FW_PAIRING_WIZARD)
     const pair = document.createElement("button");
     pair.type = "button";
     pair.textContent = /** @type {string} */ (t("Bluetooth pairing…"));
@@ -681,9 +682,10 @@ const FEATURES = {
  * @returns {Promise<any>}
  */
 async function api(path, opts) {
-  // Defence in depth: the satellite serves /api/state and, when it accepts writes, /api/command --
-  // never let any caller fan out to a calictl-only endpoint there; refuse before any network request.
-  if (satellite() && path !== "/api/state" && !(path === "/api/command" && !readOnly()))
+  // Defence in depth: the satellite serves /api/state, /api/pairing and, when it accepts writes,
+  // /api/command -- never let any caller fan out to a calictl-only endpoint there; refuse before any
+  // network request.
+  if (satellite() && path !== "/api/state" && path !== "/api/pairing" && !(path === "/api/command" && !readOnly()))
     throw new Error("satellite: no " + path);
   const r = await fetch(path, opts);
   return r.json();
@@ -710,9 +712,9 @@ function installed(fn) {
 // read-only = the daemon rejects control writes (the safe default; enable with --enable-writes /
 // CALICTL_ENABLE_WRITES=1). The UI disables every control and shows a banner when true.
 // Unknown runtime (no `_meta` answered yet) is treated restrictively: read-only, and no calictl-only
-// affordance (the same app.js runs on the ESP32 satellite, which must never see /api/pairing|command|...).
+// affordance (the same app.js runs on the ESP32 satellite, which must never see /api/history|session|...).
 const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
-// The ESP32 satellite (semantics.js adaptSatellite): no pairing, history, auto-camper or session API.
+// The ESP32 satellite (semantics.js adaptSatellite): no history, auto-camper or session API.
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
 // A calictl daemon has answered (positively known; not the satellite, not still unknown).
 const isCalictl = () => !!(STATE._meta && !STATE._meta.satellite);
@@ -765,9 +767,9 @@ async function refreshState(force) {
   // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
   STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
-  // menu's "Unpair…". Taken the first time a calictl `_meta` answers -- also when the first poll
-  // failed (daemon restarting) -- and never on the satellite or an unknown runtime.
-  if (isCalictl() && !pairingFetched) { pairingFetched = true; await pairingFetch(); }
+  // menu's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
+  // the first poll failed (daemon restarting) -- and never on an unknown runtime.
+  if (STATE._meta && !pairingFetched) { pairingFetched = true; await pairingFetch(); }
   // Auto-camper give-up/stand-down notice: the daemon stamps a one-time {ts,msg} when it stands
   // down (low battery) or gives up (keeps dropping). Show it as a toast once.
   const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
@@ -1211,10 +1213,16 @@ async function pairingFetch() {
 // fetch loop running even once the user has navigated away.
 const PAIRING_TERMINAL_STATES = new Set(["bonded", "error", "idle"]);
 
+let pairingPolling = false;   // a wizard poll is on the wire (one at a time, like refreshState)
+
 function startPairingPoll() {
   if (pairingTimer) return;
   pairingTimer = setInterval(async () => {
-    await pairingFetch();
+    // The satellite's core serves one connection with a backlog of 2: never stack a 1 s poll
+    // behind a stalled one (WebKit would; Chromium/Firefox hold same-URL GETs themselves).
+    if (pairingPolling) return;
+    pairingPolling = true;
+    try { await pairingFetch(); } finally { pairingPolling = false; }
     const ae = document.activeElement;
     if (!(ae && ae.id === "pairing-passkey")) {      // don't clobber the user mid-type
       if (view === "home") render();                 // the card only shows on the dashboard
@@ -1254,6 +1262,15 @@ const PAIRING_REQUEST_ERROR_MSG = {
   bad_passkey: "Enter the 6-digit passcode shown on the unit.",
   confirm_required: "Confirm the Bluetooth reset first.",
   pairing_failed: "The daemon did not answer the pairing request. Try again.",
+  busy: CMD_ERRORS.busy,   // the satellite: start/reset while a control command holds the link (409)
+};
+
+// The satellite's own advice where the buspi text names the Pi, its daemon or its config: the wizard
+// is the same, only these device-specific hints differ (R_FW_PAIRING_WIZARD).
+/** @type {Record<string, string>} */
+const SAT_PAIRING_ERROR_HINT = {
+  timeout: "Check that “Gerät verbinden” is open on the unit, that the satellite is in range, and that no phone is connected to the unit.",
+  connect_failed: "The unit may be asleep, or a phone or a Raspberry Pi with calictl may still hold its single connection. Wake the unit at its panel, disconnect the phone, then try again. An existing bond is kept.",
 };
 
 /**
@@ -1331,12 +1348,15 @@ function pairingCard() {
     busy.textContent = /** @type {string} */ (t("Another app on this Pi keeps Bluetooth scanning — pairing will likely fail until it stops (for example the Home Assistant Bluetooth integration)."));
     card.appendChild(busy);
   }
+  const sat = satellite();
   if (p.state === "idle") {
     const steps = document.createElement("ol"); steps.className = "note";
     for (const s of [
-      "On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until buspi connects.",
+      sat ? "On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until the satellite connects."
+        : "On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until buspi connects.",
       "Disconnect your phone: close the California On Tour app or turn off the phone's Bluetooth — the unit takes one connection at a time.",
-      "Stop other Bluetooth scanners on this Pi during pairing (for example the Home Assistant Bluetooth integration).",
+      sat ? "If a Raspberry Pi with calictl runs near the van, stop it during pairing — it would take the unit's only connection."
+        : "Stop other Bluetooth scanners on this Pi during pairing (for example the Home Assistant Bluetooth integration).",
     ]) {
       const li = document.createElement("li");
       li.textContent = /** @type {string} */ (t(s));
@@ -1399,7 +1419,11 @@ function pairingCard() {
     const ok = document.createElement("div"); ok.className = "note";
     ok.textContent = p.address ? (t("✓ Paired — ") + p.address) : /** @type {string} */ (t("bonded — address cache unavailable (see logs)"));
     card.appendChild(ok);
-    if (p.address) {
+    if (p.address && sat) {
+      const saved = document.createElement("div"); saved.className = "note";
+      saved.textContent = /** @type {string} */ (t("Saved on the satellite — survives a restart. No further action needed."));
+      card.appendChild(saved);
+    } else if (p.address) {
       const saved = document.createElement("div"); saved.className = "note";
       saved.textContent = /** @type {string} */ (t("Saved to the daemon — survives a reboot. No further action needed."));
       card.appendChild(saved);
@@ -1417,7 +1441,7 @@ function pairingCard() {
     errRow.textContent = /** @type {string} */ (t("Error: "))
       + (/** @type {string} */ (t(PAIRING_ERROR_MSG[perr])) || /** @type {string} */ (t(PAIRING_ERROR_FALLBACK)));
     card.appendChild(errRow);
-    const hint = PAIRING_ERROR_HINT[perr];
+    const hint = (sat && SAT_PAIRING_ERROR_HINT[perr]) || PAIRING_ERROR_HINT[perr];
     if (hint) {
       const hintRow = document.createElement("div"); hintRow.className = "note";
       hintRow.textContent = /** @type {string} */ (t(hint));
@@ -1532,12 +1556,10 @@ function renderDashboard() {
     const msg = document.createElement("span"); msg.className = "lbl";
     msg.textContent = /** @type {string} */ (t("No camper unit is paired yet."));
     b.append(msg);
-    if (isCalictl()) {   // the satellite pairs over its console: no web wizard to open
-      const go = document.createElement("button"); go.type = "button"; go.className = "btn";
-      go.textContent = /** @type {string} */ (t("Set up remote control"));
-      go.onclick = () => openPairingWizard();
-      b.append(go);
-    }
+    const go = document.createElement("button"); go.type = "button"; go.className = "btn";
+    go.textContent = /** @type {string} */ (t("Set up remote control"));
+    go.onclick = () => openPairingWizard();   // calictl and the satellite both run the wizard
+    b.append(go);
     app.appendChild(b);
   }
   const summary = renderSummary();

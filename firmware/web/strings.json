@@ -3,6 +3,7 @@
   "offline": {"en": "Device not reachable", "de": "Gerät nicht erreichbar"},
   "device": {"en": "Device", "de": "Gerät"},
   "app_link": {"en": "Open the camper UI", "de": "Camper-Oberfläche öffnen"},
+  "app_link_pair": {"en": "Open the camper UI to pair the unit", "de": "Camper-Oberfläche öffnen, um die Einheit zu koppeln"},
   "pairing": {"en": "Bluetooth pairing", "de": "Bluetooth-Kopplung"},
   "address": {"en": "Paired unit", "de": "Gekoppelte Einheit"},
   "paired": {"en": "paired", "de": "gekoppelt"},

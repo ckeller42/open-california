@@ -108,6 +108,7 @@ void cali_ctl_run_init(const cali_transport_t *t);
 int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now,
                     cali_ctl_done_t done, const char **reason);
 void cali_ctl_tick(uint64_t now_ms);
+int cali_ctl_busy(void);   /* 1 while a command runs or a write awaits its ACK (submit would say BUSY) */
 void cali_ctl_on_written(const cali_tevent_t *e);
 
 #ifdef __cplusplus

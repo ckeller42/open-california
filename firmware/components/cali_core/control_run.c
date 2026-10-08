@@ -85,12 +85,14 @@ static void finish(int result, const char *why, const char *reason) {
     if (done) done(result, reason);
 }
 
+int cali_ctl_busy(void) { return O.active || O.inflight; }
+
 int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now,
                     cali_ctl_done_t done, const char **reason) {
     static cali_ctl_plan_t plan;   /* static: the 8 KB host-task stack */
     int pulling;
     *reason = NULL;
-    if (O.active || O.inflight) {
+    if (cali_ctl_busy()) {
         cali_log("control: %s/%s busy", fn, what);
         return CALI_CTL_BUSY;
     }

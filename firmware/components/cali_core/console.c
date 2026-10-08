@@ -18,7 +18,6 @@ void (*cali_console_on_quit)(void);
 
 static const cali_transport_t *s_t;
 
-#define N_OF(a) (sizeof (a) / sizeof *(a))
 /* "wifi set <32-byte ssid> <63-byte psk>" is 105 bytes: room for it plus whitespace */
 #define CONSOLE_LINE_MAX 160
 
@@ -76,19 +75,9 @@ static void ip_text(uint32_t ip, char out[16]) {
 
 /* The STATE line; with_wifi adds the "wifi" member (console "status" once the WiFi runtime runs). */
 static void state_line(const cali_pair_state_t *s, const char *address, int with_wifi) {
-    /* bounds = the generated tables' own lengths (pairing_consts.h), never hand-typed counts */
-    const char *st = (size_t)s->st < N_OF(PAIR_STATE_NAMES) ? PAIR_STATE_NAMES[s->st] : "unknown";
-    const char *err = (size_t)s->error < N_OF(PAIR_ERR_NAMES) ? PAIR_ERR_NAMES[s->error] : NULL;
     cali_json_t j;
     begin_line(&j, PREFIX_STATE);
-    cali_json_key(&j, "state");
-    cali_json_str(&j, st);
-    cali_json_key(&j, "attempts");
-    cali_json_int(&j, (long long)(unsigned)s->attempts);
-    cali_json_key(&j, "error");
-    if (err) cali_json_str(&j, err); else cali_json_null(&j);
-    cali_json_key(&j, "address");
-    if (address) cali_json_str(&j, address); else cali_json_null(&j);
+    cali_snapshot_pairing(&j, s, address);
     if (with_wifi) {
         const char *ssid = cali_wifi_run_ssid();
         uint32_t ip = cali_wifi_run_ip();
@@ -207,8 +196,14 @@ static void set_cmd(char *args) {
 
 static void on_state(const cali_pair_state_t *s, const char *address) {
     cali_console_state(s, address);
-    if (s->st == PAIR_BONDED) cali_session_on_bonded();
-    else cali_session_stop();
+    if (s->st == PAIR_BONDED) {
+        cali_session_on_bonded();
+    } else {
+        cali_session_stop();
+        /* the flow ended without a new bond (cancel, error, reset): a kept bond reconnects as at
+         * boot (calictl's poll resumes once the flow is idle/error); no bond -> nothing */
+        if (s->st == PAIR_IDLE || s->st == PAIR_ERROR) cali_session_boot();
+    }
 }
 
 void cali_console_init(const cali_transport_t *t) {

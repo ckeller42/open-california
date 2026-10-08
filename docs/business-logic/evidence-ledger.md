@@ -225,6 +225,70 @@ bytes equal calictl's and that the allow-list holds.
 | The control path on the **real CoreS3** (esp-nimble write-with-response, the 31 app cases' value parsing on the Xtensa build (the 1078-case grid ran only on the host, incl. an `-m32` build), the walk, the UI toggle, `403` over the real hotspot) | **BOARD** 2026-10-07 (thinky CoreS3 vs the mock unit, never the real unit) | dated rows in "ESP32 satellite control path — BOARD rows" below |
 | The satellite's frames on the **real camper unit** | **DEVICE — never** (the satellite has not been paired with the real unit). Not needed for the bytes (they are calictl's; cooler `level`/`mode`/`timer_*` with `State=3` is calictl's own van check #230) — but the real esp-nimble link behaviour under a write is a device question too | first owner-watched satellite session at the van |
 
+## ESP32 satellite pairing wizard — HOST-E2E rows (2026-10-08)
+
+`GET/POST /api/pairing` on the satellite (`R_FW_PAIRING_WIZARD`), over the Linux NimBLE host build
+and the Bumble fake unit (`tests/firmware/test_pairing_web_e2e.py`, Docker `oc-fw-host` /
+`oc-fw-host-pw` on the Mac). Proves the firmware's endpoint and the shared wizard against the
+fake's real SMP passkey pairing — not the esp-nimble port, a radio or the real unit.
+
+| Fact | Tier | Evidence |
+|---|---|---|
+| start → `waiting_passkey` → the fake's code → `bonded` with the identity; `SNAP` flows; a second `start` changes nothing — in station mode and over the setup hotspot (WiFi stays in setup) | **HOST-E2E** 2026-10-08 | `test_wizard_over_http_bonds_then_snap_flows`, `test_wizard_over_the_setup_hotspot` |
+| A wrong passcode: the unit refuses, `attempts` 1, a new code is asked for and bonds | **HOST-E2E** 2026-10-08 | `test_wrong_passkey_retries_then_bonds` |
+| The unit's pairing screen closed (the fake's `pair off`): `error` / `pairing_failed` after 3 attempts; *Try again* from error bonds once it is open | **HOST-E2E** 2026-10-08 | `test_unit_not_in_pairing_mode_is_pairing_failed` |
+| Stale bond (the fake's `forget_bonds` = "Bluetooth zurücksetzen"): reconnects refused, the page still shows the address, start → the probe proves the key stale (`LOG pair: the stored bond is stale …`), the bond is dropped, passkey bonds afresh, `SNAP` again | **HOST-E2E** 2026-10-08 | `test_stale_bond_repairs_over_http` |
+| Probe before replace: Connect now on a bonded satellite with the unit's pairing screen closed (the fake's `pair off`) re-encrypts with the stored key → `bonded` without passkey or SMP, the bond kept, `SNAP` flows; an unreachable unit ends `connect_failed` with the bond kept | **HOST-E2E** 2026-10-08 | `test_connect_now_on_a_working_bond_keeps_it` (`T_FW_PAIRING_PROBE_KEEPS_BOND`), `test_failed_repair_resumes_the_bonded_session` |
+| The probe's stale proof as the unit's disconnect reason: the unit hangs up on the stored key with `0x05` → `LOG pair: the stored bond is stale (link dropped, reason 0x05)`, bond dropped, the retry pairs by passkey; a hang-up with `0x13` keeps the bond and the retry's probe bonds without a passkey | **HOST-E2E** 2026-10-08 | `test_probe_hang_up_with_an_auth_reason_drops_the_bond`, `test_probe_hit_by_a_link_drop_keeps_the_bond` |
+| Connect now while the session's `connect_bonded` is pending (the unit out of reach): the pending connect is cancelled, the scan starts after the cancel, the unit is found when it returns and the flow ends bonded (watch item 10, was `BLE_HS_EBUSY` + `timeout` on the board) | **HOST-E2E** 2026-10-08, **BOARD** 2026-10-08 (`013877a`) | `test_start_while_the_session_reconnects_scans`; "ESP32 satellite probe before replace — BOARD rows" below |
+| The probe on the CoreS3 (esp-nimble + the ESP32-S3 controller's resolving list; PSA `ah()` on Mbed TLS 4): working bond kept with the pairing screen closed, a forgotten bond re-paired by passkey, an absent unit leaves the bond kept | **BOARD** 2026-10-08 | "ESP32 satellite probe before replace — BOARD rows" below |
+| The probe's stale proof on the board (HCI `0x05`/`0x06` as the encryption result → `LOG pair: the stored bond is stale …`), `connect_failed` for a unit found but not connectable | **BOARD — owed** | the mock's forgotten bond went straight into SMP without an auth-class status; a stopped mock is never found (`timeout`), see the rows below |
+| cancel mid-flow → idle; reset without `confirm` → 400 (bond kept), with it → idle, no address; a fresh pair works | **HOST-E2E** 2026-10-08 | `test_cancel_and_reset` |
+| `409 busy` for start/reset while a console `set` holds the link; accepted again once it ended | **HOST-E2E** 2026-10-08 | `test_start_while_a_command_runs_is_busy` |
+| The wizard clicked in Chromium against the host firmware: EN over the hotspot's `/app`, DE at `/` in station mode | **HOST-E2E** 2026-10-08 | `test_wizard_in_browser` (`T_FW_PAIRING_WIZARD_UI`) |
+| A cancelled (before the pair) or failed (no link: `connect_failed`) re-pair on a bonded satellite keeps the bond and the session reconnects by it — `SNAP` flows again; a `cancel` outside a running flow changes nothing (review I1) | **HOST-E2E** 2026-10-08 | `test_cancelled_repair_resumes_the_bonded_session`, `test_failed_repair_resumes_the_bonded_session`; handler `test_cancel_outside_a_flow_is_a_no_op` |
+| The same on the **CoreS3** over a home network and over the setup hotspot | **BOARD** 2026-10-08 | "ESP32 satellite pairing wizard — BOARD rows" below |
+| The wizard on the **real camper unit** (its *Gerät verbinden* screen, its passcode, a phone at the van) | **DEVICE — never** | first owner-watched satellite session at the van |
+
+## ESP32 satellite pairing wizard — BOARD rows (2026-10-08)
+
+CI image `firmware-esp32s3` of PR #261 at `ab47e22` (built from the PR merge ref, the board reports
+`fw aefc95f`), flashed with `tools/esplab/flash.sh` over a bonded board (the bond and WiFi
+credentials survived the flash; the ESP reconnected by bond). Mock unit `tools/applab/fake_unit_ble.py`
+from the same commit on the thinky UB500 dongle with `FAKE_UNIT_RECORD`, the existing keystore and
+a pinned passkey. Chromium driven by Playwright on thinky (EN), `/api/pairing` polled alongside.
+Never the real unit.
+
+| Date | Fact | Evidence |
+|---|---|---|
+| 2026-10-08 | Station mode (home network, `/`): ⋮ → *Unpair…* → the confirm dialog (*Unpair removes the working bond; telemetry stops until re-paired. Continue?*) → `POST {"action":"reset","confirm":true}` → `idle`, `address` null, the unpaired banner. *Set up remote control* → *I'm on that screen* → *Connect now* → `scanning` → `connecting` → `waiting_passkey` (≈ 3 s) → the mock's code → `bonded` (≈ 13 s after the code) → *✓ Paired — …*; `/api/state` `link.up` with a fresh read-all (all 14 functions) within seconds | Playwright run + the polled snapshots; no page errors |
+| 2026-10-08 | Wrong passcode (station mode): the wizard's *Bluetooth reset / re-pair* (confirm dialog) → `idle` without a bond → *Connect now* → `000000` → the mock refused (`bumble.smp: pairing failure (CONFIRM_VALUE_FAILED)`, link dropped), the runner reconnected and asked again: `waiting_passkey`, `attempts` 1 → the right code → `bonded`, `attempts` 1, state flows | Playwright run + the mock's log |
+| 2026-10-08 | Setup hotspot: `wifi forget` → `LOG wifi: setup hotspot up`; the bench stick on the hotspot; `GET /` = the setup page, `GET /app` 200, the device page links to `/app`. At `http://192.168.4.1/app`: *Bluetooth reset / re-pair* (confirm) → *Connect now* → code → `bonded` in ≈ 11 s → *✓ Paired — …*, link up and reading; WiFi stayed `setup` throughout, `device.control.writes` false | Playwright run + `/api/state` |
+| 2026-10-08 | Over the hotspot, `POST /api/command` (cooler power on) → **`403 {"ok":false,"error":"setup_mode"}`**; across the whole session (four pairings, the reset/unpair, the 403) the mock saw writes on **`1003` only** — pairing writes no control characteristic | curl answer + the mock's recording (written chars = `{1003}`) |
+| 2026-10-08 | `POST /api/wifi` over the hotspot (credentials from a file, piped) → 200 → `LOG wifi: station …` (the home network), `setup hotspot closed`; the bond kept: `bonded`, link up, `control.writes` true at `http://calictl-esp.local` | console + `/api/state` |
+| 2026-10-08 | Not run on the board (host tier only): the unit's pairing screen closed (`pairing_failed` after 3 attempts), `cancel` mid-flow, `409 busy` during a command, the stale bond after the unit's Bluetooth reset, the DE wizard | — |
+
+## ESP32 satellite probe before replace — BOARD rows (2026-10-08)
+
+CI image `firmware-esp32s3` of PR #261 at `23e4cd7` (built from the PR merge ref, the board reports
+`fw 9ab53b7`), flashed with `tools/esplab/flash.sh` over the bonded board (bond + WiFi kept). Mock
+unit `tools/applab/fake_unit_ble.py` from `23e4cd7` on the thinky UB500 dongle, the existing
+keystore, FIFO and pinned passkey; it advertises from a resolvable private address. Wizard driven by
+`POST /api/pairing` from thinky (the page's *Connect now* = `start`), console captured with
+`tools/esplab/esp_cmd.py`. Station mode on the home network. Never the real unit.
+
+| Date | Fact | Evidence |
+|---|---|---|
+| 2026-10-08 | **(a) Working bond, pairing screen closed** (the mock's `pair off`): `start` from `idle` with the bond kept → `scanning` → `connecting` → `LOG pair: probing the stored bond` → `pairing` → `LOG pair: the stored bond works, keeping it` → `verifying` → `bonded` with the same identity in ≈ 5 s; no `waiting_passkey`, no SMP; `SNAP` flows, `link.up` | console `STATE`/`LOG` lines + `/api/pairing`, `/api/state` |
+| 2026-10-08 | On the S3 the controller resolves the mock's RPA **in the scan**: the found address carries the identity with the resolved type `BLE_ADDR_PUBLIC_ID` (2) while the bond is stored as `BLE_ADDR_PUBLIC` (0), so `found_is_bonded()` does not match and its `ah()` is not reached (it returns 0 for a non-RPA); the connect to that resolved address lands on the bonded identity and the probe runs. PSA `ah()` on Mbed TLS 4 checked on the board against the Core spec sample (Vol 3 Part H, IRK `ec0234a3…7d9b`, prand `708194`, hash `0dfbaa`): match 1, one hash bit flipped 0 | a diagnostic build of `23e4cd7` with extra `cali_log`s (local IDF v6.1, not committed), same flow as (a) twice; then the CI image re-flashed |
+| 2026-10-08 | **(b) Unit forgot its bonds** (the mock's `forget`, then `pair on`): `start` → probe → `waiting_passkey` → the mock's code → `bonded`, `attempts` 0; the mock showed the code, `SNAP` flows; after a later mock restart the satellite reconnected by the new bond. The mock went straight into SMP — no auth-class encryption status reached the probe, so the stale-proof log did not print, and the probe's ENC event after SMP logged `the stored bond works, keeping it` (misleading: `s_probing` survives the SMP) | console + the mock's log (`bonds forgotten`, `PASSKEY …`) |
+| 2026-10-08 | **(c) Unit gone** (mock stopped): the session logs `link lost` and keeps retrying `connect_bonded`; `start` → `scanning` → `error` / **`timeout`** (an absent unit is never found, so not `connect_failed`), the bond kept (`address` still set); after restarting the mock the satellite reconnected on its own, `SNAP` flows | console + `/api/pairing`, `/api/state` |
+| 2026-10-08 | **Found:** `start` while the session's `connect_bonded` is pending → `E NimBLE: ble_gap_disc_ext_validate rc=15` (`BLE_HS_EBUSY`): the runner's `START_SCAN` runs before `on_state` stops the session, so no scan ever runs; with the mock started ≈ 10 s into the flow it was still never found → `timeout`. 2/2 | console; `docs/firmware.md` hardware watch item 10 (fixed in `013877a`, re-checked below) |
+| 2026-10-08 | Not run on the board: the stale proof via HCI `0x05`/`0x06`, `connect_failed` for a unit found but not connectable, the wizard clicked in Chromium for these cases | — |
+| 2026-10-08 | **Re-check of fix round 3** (CI image of `013877a`, board reports `fw 5a39bf5`; mock from `013877a`): **(1) watch item 10** — mock stopped, the session retrying `connect_bonded` (`LOG ble: connect_bonded started`); `start` → `scanning` with **no `rc=15` / `BLE_HS_EBUSY`** in the console; mock restarted ≈ 10 s later → `LOG pair: the unit found is our bonded peer, connecting by its identity` → probe → `the stored bond works, keeping it` → `bonded`, `attempts` 0, no passkey, `SNAP` flows. 1/1 | console (`rc=15` count 0) + `/api/pairing` |
+| 2026-10-08 | **(2) Connect now on a working bond** (mock `pair off`, satellite reset to `idle` with the bond): `start` → `LOG pair: the unit found is our bonded peer, connecting by its identity` (the type-agnostic match now fires on the S3's resolved `PUBLIC_ID` address) → `probing the stored bond` → `the stored bond works, keeping it` → `bonded` without passkey, `SNAP` flows; the mock showed no code. 1/1 | console + `/api/pairing`, `/api/state`, the mock's log |
+| 2026-10-08 | **(3) Fresh pair after the mock's `forget`** (+ `pair on`): `start` → match → probe → `waiting_passkey` → the code → `verifying` → `bonded`, `attempts` 0, `SNAP` flows; **no `the stored bond works, keeping it`** after the SMP (round 3 clears `s_probing` on SMP start). Two earlier attempts failed only because the code was typed > 30 s after it was shown (SMP timeout, the satellite hangs up `0x13`, then `pairing_failed`); the bond stayed stored through those (no stale proof) | console + `/api/pairing` |
+
 ## ESP32 satellite wake-up — BOARD rows (2026-10-08)
 
 CI image `firmware-esp32s3` of PR #256 at `6ac867c`, flashed with `tools/esplab/flash.sh`; mock unit

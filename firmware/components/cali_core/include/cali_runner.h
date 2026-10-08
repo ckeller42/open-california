@@ -43,6 +43,7 @@ void cali_runner_init(const cali_transport_t *t);  /* registers the runner's sin
 void cali_runner_start(void);                      /* console "pair" */
 void cali_runner_passkey(uint32_t pk);             /* console "passkey N" — ignored unless waiting_passkey */
 void cali_runner_forget(void);                     /* console "forget" -> EV_RESET */
+void cali_runner_cancel(void);                     /* POST /api/pairing "cancel" -> EV_CANCEL */
 void cali_runner_tick(uint64_t now_ms);            /* drives EV_TIMEOUT from PAIR_TIMEOUT_S */
 const cali_pair_state_t *cali_runner_state(void);
 

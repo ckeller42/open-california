@@ -665,6 +665,16 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    `1401`; a card edit from Chromium landed byte-exact with the config latched and, after an ESP
    reboot with the mock holding an unpushed config, as the pull then the frame (*✓ Applied*).
 
+8. **The pairing wizard (BOARD 2026-10-08 against the mock unit).** From a browser at
+   `http://calictl-esp.local`: ⋮ → *Unpair…* (confirm) → the unpaired banner → *Set up remote
+   control* → *I'm on that screen* → *Connect now* → the unit's code → *✓ Paired — …* and the state
+   flows; once more with a wrong code first (`attempts` 1, a new code is asked for). Then `wifi
+   forget`, join the setup hotspot and repeat at `http://192.168.4.1/app` (the wizard's *Bluetooth
+   reset / re-pair* first); a `POST /api/command` there must be `403 setup_mode`; `POST /api/wifi`
+   back to the home network keeps the bond. **Ran 2026-10-08** (CI image of `ab47e22`): every step
+   as above, the mock saw writes on `1003` only. With the real unit this is the first pairing (step 4
+   via the page instead of the console).
+
 Carry the hardware watch items from `docs/firmware.md` into this run explicitly (repeated here so
 this checklist is self-contained):
 

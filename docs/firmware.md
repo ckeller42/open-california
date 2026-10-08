@@ -38,9 +38,9 @@ flowchart LR
 |---|---|---|---|
 | **Host + Bumble** (CI `firmware-host-e2e`) | The firmware's C code — pairing runner, session, console — driving the **real upstream NimBLE host stack** (Linux port) over HCI-over-TCP against a Bumble virtual controller linked to the repo's fake unit (`tools/fake_unit_peripheral.py`). Proves pairing (KEYBOARD_ONLY + MITM + SC), bond persistence/reconnect, the full `SNAP` read-all against `calictl.protocol.decode`, the 1003 heartbeat, notification push, link-drop recovery, that the unit sees no control write while no command is sent — and the control path (`tests/firmware/test_control_e2e.py`): every app-recorded cooler/camping/lighting/air-heater/energy action sent through `POST /api/command` reaches the fake unit byte-exact with the lighting commit ≥ 300 ms after its frame (since 2026-10-07 the app's wake-up edits too, the REQUEST_CONFIG pull included), the console `set` too, roof, stairs, clock-less wake-up and unknown commands and a roof, `1003`, wrong-length or empty frame handed straight to the transport write nothing (the allow-list choke point), `403` over the setup hotspot, `409` while a command runs, an ATT refusal is `502` with no commit, the heartbeat keeps ticking through commands. | Nothing about the real esp-nimble port or a real radio — this is upstream NimBLE 1.10 on Linux, not the ESP-IDF-vendored esp-nimble 1.6-based stack (gap documented in `firmware/README.md` Pins). | `firmware/host/fetch_nimble.sh && make -C firmware/host cali-host && python -m pytest tests/firmware -v` (Linux only, needs a 32-bit toolchain — see `firmware/README.md` "Host build notes" for the Docker recipe on macOS) |
 | **QEMU boot** (CI `firmware-qemu`) | The **real ESP-IDF image** (compiled for the esp32s3) boots in Espressif's QEMU: the console line protocol on the no-controller path, and the NVS-backed bond store (`cali_kv_*`) surviving a reboot, including a CRC-broken record recovering as "unpaired" instead of crashing. | Bluetooth — QEMU's esp32s3 machine has no radio, so BLE stays with the host tier and hardware. | `docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build && cd /project && pip install -q pytest && CALI_QEMU=1 python -m pytest tests/firmware/test_qemu_boot.py -v'` |
-| **Host web e2e** (CI `firmware-host-e2e`, `tests/firmware/test_web_e2e.py`) | `cali-host --http PORT --fake-wifi SCRIPT`: the WiFi runner, captive DNS and web endpoints on the same 100 ms tick as the BLE session, over `net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi radio) and the Bumble fake unit. Proves the setup flow (fresh boot -> setup mode -> POST credentials -> station), a wrong password falling back to setup with the credentials cleared, saved credentials reconnecting after a restart + `DELETE /api/wifi`, `/api/state` equal to the console's `SNAP` after pairing, a WiFi loss leaving the BLE link and heartbeat alone, the page rendering in Chromium (EN + DE), and the setup flow clicked in Chromium (a wrong password shows the wrong-password text, the right one the `http://calictl-esp.local` link; EN + DE). | The real esp_wifi/lwIP/mdns stack, a real phone's captive-portal detection, radio coexistence — the fake WiFi only replays the script's outcomes. | `tools/ci.sh firmware` (Linux; on a Mac see `firmware/README.md` "Host build" for the Docker recipe) |
+| **Host web e2e** (CI `firmware-host-e2e`, `tests/firmware/test_web_e2e.py`) | `cali-host --http PORT --fake-wifi SCRIPT`: the WiFi runner, captive DNS and web endpoints on the same 100 ms tick as the BLE session, over `net_host.c` (POSIX sockets on 127.0.0.1 + a scripted fake WiFi radio) and the Bumble fake unit. Proves the setup flow (fresh boot -> setup mode -> POST credentials -> station), a wrong password falling back to setup with the credentials cleared, saved credentials reconnecting after a restart + `DELETE /api/wifi`, `/api/state` equal to the console's `SNAP` after pairing, a WiFi loss leaving the BLE link and heartbeat alone, the page rendering in Chromium (EN + DE), the setup flow clicked in Chromium (a wrong password shows the wrong-password text, the right one the `http://calictl-esp.local` link; EN + DE), and the pairing wizard over `/api/pairing` in station mode and over the setup hotspot (`test_pairing_web_e2e.py`: wrong passcode, pairing screen closed, stale bond, `409 busy`, clicked in Chromium EN + DE). | The real esp_wifi/lwIP/mdns stack, a real phone's captive-portal detection, radio coexistence — the fake WiFi only replays the script's outcomes. | `tools/ci.sh firmware` (Linux; on a Mac see `firmware/README.md` "Host build" for the Docker recipe) |
 | **QEMU no-WiFi-driver** (CI `firmware-qemu`, `test_qemu_boot.py::test_no_wifi_driver_boots_and_serves_nothing`) | The QEMU image is built with `CONFIG_CALI_WIFI=n` (no esp_wifi call compiled in): it logs `LOG wifi: driver unavailable` once, keeps WiFi off (`status` has no `wifi` member, `wifi status` -> `LOG wifi: not enabled`), listens on nothing, and does not reboot — the same path a board takes when `esp_wifi_init`/`esp_wifi_start` fails. | Anything about a working WiFi driver (QEMU's esp32s3 has no WiFi). | The QEMU command above |
-| **Board** (bench, not CI) | The real CoreS3 on a Linux bench against the mock camper unit (`tools/applab/fake_unit_ble.py` on a USB BLE dongle) and a second WiFi stick: flashing from `flasher_args.json`, the USB-Serial/JTAG console, esp-nimble passkey pairing + reconnect by bond, the setup hotspot -> `POST /api/wifi` -> station join, and the spec's seven status-display states (setup, joining, online, pairing, connected, stale, link lost) + dimming by remote `screenshot` (2026-10-01, `tools/esplab_display_walk.sh`; dated rows in `docs/business-logic/evidence-ledger.md`). **The control path ran on the board 2026-10-07:** `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo … --record …` against the mock unit — every app-recorded action byte-exact at the mock (31 cases, 3 clean walks — a firmware before the wake-up light; 2026-10-08 again with it, 32 cases incl. the app's wake-up edits and a wake-up card edit from Chromium), roof/wake-up refused with no `1401`, console `set`, `403 setup_mode` over the real setup hotspot, the heartbeat through commands, the 30 s water re-read, and a fridge toggle from the UI in Chromium (BOARD rows in `docs/business-logic/evidence-ledger.md`). | The real camper unit (only the mock so far), a phone's captive portal, the van's radio environment, the control path against a real unit's ACK timing and refusals (the mock ACKs at once), the water *stale push then correct read* ordering (not stageable with the mock's console; session-fake tier only), and the hardware watch items below that need the real unit. | `tools/esplab_display_walk.sh` on the bench (header lists its env); `firmware/README.md` "Status display" |
+| **Board** (bench, not CI) | The real CoreS3 on a Linux bench against the mock camper unit (`tools/applab/fake_unit_ble.py` on a USB BLE dongle) and a second WiFi stick: flashing from `flasher_args.json`, the USB-Serial/JTAG console, esp-nimble passkey pairing + reconnect by bond, the setup hotspot -> `POST /api/wifi` -> station join, and the spec's seven status-display states (setup, joining, online, pairing, connected, stale, link lost) + dimming by remote `screenshot` (2026-10-01, `tools/esplab_display_walk.sh`; dated rows in `docs/business-logic/evidence-ledger.md`). **The control path ran on the board 2026-10-07:** `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo … --record …` against the mock unit — every app-recorded action byte-exact at the mock (31 cases, 3 clean walks — a firmware before the wake-up light; 2026-10-08 again with it, 32 cases incl. the app's wake-up edits and a wake-up card edit from Chromium), roof/wake-up refused with no `1401`, console `set`, `403 setup_mode` over the real setup hotspot, the heartbeat through commands, the 30 s water re-read, and a fridge toggle from the UI in Chromium (BOARD rows in `docs/business-logic/evidence-ledger.md`). **The pairing wizard ran on the board 2026-10-08:** unpair/reset, pair in station mode and over the setup hotspot's `/app`, a wrong passcode retried, `403` for a control write over the hotspot. **Probe before replace ran on the board 2026-10-08:** *Connect now* with the unit's pairing screen closed keeps the working bond (no passkey, `SNAP` flows); after the unit forgot its bonds a passkey re-pair bonds afresh; with the unit gone the bond is kept and the satellite reconnects on its own once it is back (hardware watch item 10 found on the way). | The real camper unit (only the mock so far), a phone's captive portal, the van's radio environment, the control path against a real unit's ACK timing and refusals (the mock ACKs at once), the water *stale push then correct read* ordering (not stageable with the mock's console; session-fake tier only), and the hardware watch items below that need the real unit. | `tools/esplab_display_walk.sh` on the bench (header lists its env); `firmware/README.md` "Status display" |
 | **Pure-C unit tests** (in the normal `test`/`pytest` job, no BLE) | The pairing state machine (`pairing_sm.c`) replays the same golden vectors as `calictl.pairing`; the runner and the session+console compile and run against scripted fake transports on any host with a C compiler (macOS included). The network pieces too: the WiFi SM replays `tests/vectors/wifi_sm.json` from its Python twin (`tools/wifi_sm_ref.py`), the HTTP core (`http_core.c`), captive DNS (`captive_dns.c`), web handlers (`web.c`, incl. `POST /api/command` against a fake sequencer), JSON writer and the host `cali_net` (`net_host.c`) each run under a small C driver, and the WiFi runner runs next to the BLE session in `test_session_fake.py`. The control twin (`control.c`) replays every vector of `tests/vectors/control.json` byte for byte and its allow-list is scanned exhaustively (`test_control_parity.py`; the Linux host tier repeats both with an i686 `-m32` build, the ESP32-S3's 32-bit `long`); the sequencer (`control_run.c`) runs against the scripted transport in `test_session_fake.py` (arming, one at a time, ATT error, link drop, late ACK, interleaved heartbeat/notify, the follow delay). | Real NimBLE call sequencing (that's the host tier's job); real sockets under load; any radio. | `python -m pytest tests/firmware/test_pairing_sm_parity.py tests/firmware/test_runner_fake.py tests/firmware/test_session_fake.py tests/firmware/test_wifi_sm_parity.py tests/firmware/test_http_core.py tests/firmware/test_captive_dns.py tests/firmware/test_web_handlers.py tests/firmware/test_json.py tests/firmware/test_net_host.py tests/firmware/test_control_parity.py -v` |
 
 CI also builds the release esp32s3 image compile-only (job `firmware-build`, container
@@ -173,13 +173,16 @@ slot keeps its copy until a later line reuses it).
 | Method + path | Answer |
 |---|---|
 | `GET /` | Station mode: 200 `text/html; charset=utf-8` — the calictl web UI bundle, `app_bundle_gen.h`'s `WEB_APP_HTML_GZ` with `Content-Encoding: gzip` and `Cache-Control: no-cache` (see [the satellite UI](#the-satellite-ui-r_fw_shared_ui)). Setup/off mode: the status/setup page (as `GET /device`). |
-| `GET /device` | 200 `text/html` in every mode — the status/setup page: `strings_gen.h`'s `WEB_INDEX_HTML`, the byte array generated from `firmware/web/index.html` + `page.js` + `strings.json` (EN + DE) by `tools/gen_c_dict.py`; in station mode it links back with "Open the camper UI". One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
+| `GET /device` | 200 `text/html` in every mode — the status/setup page: `strings_gen.h`'s `WEB_INDEX_HTML`, the byte array generated from `firmware/web/index.html` + `page.js` + `strings.json` (EN + DE) by `tools/gen_c_dict.py`; it links to the calictl UI — `/` in station mode ("Open the camper UI"), `/app` elsewhere ("Open the camper UI to pair the unit" while no bond is stored). One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
+| `GET /app` | 200 the calictl web UI bundle (as `GET /` in station mode) in **every** WiFi mode — over the setup hotspot `/` is the setup page, and `/app` is where the pairing wizard is reached (`R_FW_PAIRING_WIZARD`). |
+| `GET /api/pairing` | 200 calictl's `pairing_snapshot()`: `{"state","attempts","error","address","radio_busy":false}` — the console `STATE` members (one emitter, `cali_snapshot_pairing`); `address` = the bonded identity while bonded, or idle/error with a stored bond. |
+| `POST /api/pairing` | calictl's wizard request `{"action":"start"\|"passkey"\|"cancel"\|"reset","value":"<6 digits>","confirm":true}`, in **every** WiFi mode (connection management, not a control write). web.py's checks in its order, calictl's error bodies `{"error":<code>}`: 400 `bad_json` (the fixed-shape parser: unknown keys, a non-string `action`, a non-bool `confirm`), 400 `bad_action`, 400 `confirm_required` (reset without `confirm:true`), 400 `bad_passkey` (not a 6-digit **string**), then 409 `busy` for `start`/`reset` while a control command is pending (the single link is in use). Then the runner — `start` = console `pair` (idempotent: ignored unless idle/error), `passkey` = `passkey N` (ignored unless waiting), `cancel` (only while a flow runs, scanning … verifying; otherwise a no-op, so a stale cancel never drops a bonded link), `reset` = `forget` (drops the bond) — and 200 with the post-action snapshot. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), unknown keys / a non-string `action` / a non-bool `confirm` are `bad_json`, a `cancel` outside a flow changes nothing. |
 | `GET /api/state` | 200 JSON `{"t","fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,last_snap_age_ms}`, `wifi {mode,ssid,ip,rssi}`, `control {writes}` (`POST /api/command` accepted: station mode), `uptime_ms`, `fw`. Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
 | `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining) — the setup page turns it into one of three texts; in setup mode it also asks for a fresh scan for the next GET. |
 | `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
 | `DELETE /api/wifi` | Forget the WiFi (-> `SETUP_AP`) -> 200 `{"ok":true}`. |
 | `POST /api/command` | calictl's control request `{"function","what","value","confirm"}` plus the optional `local_now` (the page's clock for `lighting wakeup`, see [Control path](#control-path)) (`value` a string, integer or null — booleans/fractions/nesting 400 `bad_json`). **Station mode only**: anywhere else 403 `setup_mode` (ruling B: never over the setup hotspot). Then web.py's 400 `missing_function_or_what` / `confirm_required` (airheater, roof), then the sequencer (`cali_control.h`): accepted -> the answer waits for the write ACKs (`CALI_HTTP_PENDING`, <= `CALI_CTL_DEADLINE_MS`) -> 200 `{"ok":true,"applied":null,"state":null,"error":null,"function":fn}` (`applied` never true: no readback) or 502 `write_failed` / 504 `write_timeout`; a gate or "Only via buspi or the app" -> 200 `{"ok":true,"applied":false,"refused":<text>,…}`; 400 `bad_value` / `unknown_control`, 409 `busy`, 503 `not_connected`. The core caps a pending answer at `CALI_HTTP_PENDING_MAX_MS` (2 x the deadline; 504 text/plain) so a handler that never answers cannot wedge the single connection. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), `-0` passes as the text `"-0"` (refused as not on/off where calictl reads OFF — the safe direction), a >= 64-byte value is `bad_json` before the gates (the console `set` gates first; both refuse). |
-| other method on `/api/state`, `/api/wifi` or `/api/command` | 405 `{"ok":false,"error":"method"}` |
+| other method on `/api/state`, `/api/wifi`, `/api/command` or `/api/pairing` | 405 `{"ok":false,"error":"method"}` |
 | an OS captive-portal probe path (setup mode) | 302 `Location: http://192.168.4.1/` — `/generate_204`, `/gen_204` (Android), `/hotspot-detect.html`, `/library/test/success.html` (Apple), `/connecttest.txt`, `/ncsi.txt` (Windows), `/canonical.html`, `/success.txt` (Firefox) |
 | any other path | setup mode: 302 `Location: /`; station mode: 404 |
 
@@ -191,6 +194,55 @@ block" = retry next poll — never blocks, never spins); a connection idle for `
 (5000 ms) is closed, except while a handler's answer is pending (`CALI_HTTP_PENDING`, below). The
 page polls `/api/state` every 2000 ms; while a command pends the single connection is held, so a
 poll waits up to the command's deadline (the UI shows "Sending…", never the offline banner).
+
+### The pairing wizard (`R_FW_PAIRING_WIZARD`)
+
+The satellite pairs from its web page with the **same** wizard calictl serves on buspi (⋮ →
+*Bluetooth pairing…*, or the *No camper unit is paired yet* banner's *Set up remote control*):
+`/api/pairing` answers in calictl's contract, so `calictl/webui/app.js` runs it unchanged. The
+endpoint is a thin mapping onto the runner the console drives — `start` = `pair`, `passkey` =
+`passkey N`, `reset` = `forget`, plus `cancel` — so the console and the page can never disagree
+(both read one emitter). It works over the **setup hotspot** too: there `/` is the setup page, and
+the device page links to `/app` (*Open the camper UI to pair the unit*), the UI in every mode,
+read-only (controls stay station-only). Only the device-specific hints differ from buspi's: no Pi
+scanner, daemon or `CALICTL_ADDR` advice; instead *until the satellite connects*, *stop a
+Raspberry Pi with calictl near the van*, *Saved on the satellite — survives a restart*.
+`radio_busy` is always `false` (no co-resident scanner). When a flow ends without a new bond —
+cancelled, failed (`error`) or reset — the session reconnects by a kept bond as at boot, like
+calictl's poll resuming once the flow is idle/error. `start`/`reset` are `409 busy` while a
+control command holds the link.
+
+**Probe before replace** (calictl's #201, `pairing_bluez.connect` / `_probe_bond`): starting the
+wizard never destroys a working bond. When the unit the scan found is the one the bond is for
+(its resolvable address resolves with the bond's IRK — `ah()`, PSA crypto), the transport
+connects by the bonded identity and `pair()` first re-encrypts with the stored key. A key that
+works is **kept**: `ENC_OK` without SMP, the runner reads `1004` and the flow ends `bonded` — even
+with the unit's "Gerät verbinden" screen closed. Only proof that the key is stale drops it: the
+unit answers the encryption with an authentication-class status (HCI `0x05` / `0x06`) — the bond is
+deleted and a fresh SMP pairing runs on the same link — or hangs up for that reason (NimBLE first
+reports the drop as an encryption result `BLE_HS_ENOTCONN`; the probe waits for the disconnect
+reason), and the runner's retry pairs afresh. Anything else (an unreachable unit =
+`connect_failed`, a link lost for another reason such as `0x13`, a timeout) keeps the bond, and
+the retry probes again; unlike calictl, a link that came up but never encrypted is not taken
+as proof (NimBLE reports a definite status; the user still has *Bluetooth reset / re-pair*). A
+unit no stored bond matches — another camper, issue #255 — is paired as before (#255 itself is
+unchanged). The match runs over **every** stored bond: by identity, compared type-agnostically
+(a controller that resolved the address reports it typed `PUBLIC_ID`/`RANDOM_ID`, the bond is
+stored typed public/random), or by the RPA resolving with that bond's IRK; a PSA failure is logged
+(`LOG pair: psa_… failed`) and the unit treated as unbonded. An SMP pairing that starts (passkey,
+repeat-pairing) ends the probe, so its encryption result is never reported as "the stored bond
+works". Logs show the raw HCI code (`0x06`), not NimBLE's wrapped `0x206`.
+
+On the CoreS3 (BOARD 2026-10-08) the ESP32-S3 controller already resolves the unit's address in
+the scan (the bond's IRK is on its resolving list): the advertising report carries the identity
+with a *resolved* address type (`BLE_ADDR_PUBLIC_ID`/`RANDOM_ID`). In that board run the match
+compared the type too, so it did not fire and `LOG pair: the unit found is our bonded peer …`
+never printed — the connect to that resolved address still reached the same identity and the
+probe ran on it (`pair: probing the stored bond`). Since then identities are compared
+type-agnostically, so the board path logs the match too (board-verified 2026-10-08 on `013877a`). The
+host-side `ah()` path only matters on a controller that does not resolve; PSA `ah()` itself was
+checked on the board against the Core spec sample vector (Mbed TLS 4). Evidence ledger, "ESP32
+satellite probe before replace — BOARD rows".
 
 ### Control path
 
@@ -334,7 +386,7 @@ document, so a stale bundle fails CI. The browser does the interpretation: the f
 link up and snapshot age ≤ 10 s (`SAT_STALE_S`), the same instant the CoreS3 screen goes stale.
 `_meta.read_only` is the inverse of the firmware's `device.control.writes` (`writes` is true in station
 mode; `read_only = !writes`): with `writes` true the controls are **live** — the page POSTs calictl's `/api/command` body and requests nothing but `/`,
-`/api/state` and `/api/command` — except the pop-top roof, which stays greyed
+`/api/state`, `/api/command` and the wizard's `/api/pairing` — except the pop-top roof, which stays greyed
 with the hint `Only via buspi or the app`; without it (setup mode, or an older firmware without the
 field) every control is greyed and the "Satellite — display only" banner shows. The firmware's
 own answers get a sentence: `403 setup_mode` → "Controls work only on your home WiFi — not over
@@ -371,7 +423,7 @@ Known gaps (accepted):
   needed now that both read 1302 after subscribing is open until a van trace, #230).
 - The wake-up light takes the browser's clock unchecked (ruling R1): a phone or laptop with a wrong
   clock or time zone sets a wrong wake-up time, as the app would.
-- No battery history chart; no pairing wizard (ESP pairs via console); no auto-camper.
+- No battery history chart; no auto-camper.
 - UI changes reach the satellite only with a firmware rebuild + reflash.
 
 **Measured first load** (2026-10-02, thinky → CoreS3 over a 2.4 GHz home network, bench mock unit,
@@ -489,6 +541,23 @@ The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait
 8. **Size + heap.** The 1,078,880 B image in the 3 MB partition flashes from the build's own
    flasher args; DIRAM use (160,018 B, 46.8 %) leaves the NimBLE host task and the 8 KB JSON buffer
    room under real traffic.
+9. **Pairing start during a WiFi scan.** The coexistence gate is one-way: a WiFi scan never starts
+   while a pairing flow runs, but `POST /api/pairing {"action":"start"}` is accepted while a scan
+   (the hotspot's own at `AP_START`, or one the setup page asked for) is still running. Over the
+   hotspot this is now the main pairing path: press *Connect now* right after the hotspot comes up
+   and check the flow still reaches `waiting_passkey` (no scan-refused or connect-timeout retries).
+10. **Pairing start during the session's pending reconnect (FOUND on the board 2026-10-08; FIXED,
+   host-proven — `test_start_while_the_session_reconnects_scans`; board-verified 2026-10-08 on `013877a`:
+   no `rc=15`, the unit found after its return, bonded without a passkey).** Since the
+   fix `t_start_scan` cancels a pending connect first and defers the scan to the cancel's
+   completion. The original finding:
+   With a bond kept and the unit out of reach, the session holds a pending `connect_bonded`. *Connect
+   now* then runs the runner's `START_SCAN` action **before** `on_state(scanning)` stops the session
+   (`runner.c` `step()`: actions, then the state callback), so `ble_gap_disc` is refused
+   (`E NimBLE: ble_gap_disc_ext_validate rc=15`, `BLE_HS_EBUSY`; `t_start_scan` defers only after
+   our own connect cancel) and the flow sits in `scanning` until `error` / `timeout` — 2/2 on the
+   board, the second with the unit advertising again ~10 s into the flow (never found). The bond is
+   kept and the session reconnects afterwards.
 
 ## Design rulings worth knowing
 
@@ -666,6 +735,23 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    control endpoint is ``POST /api/command`` (``R_FW_CONTROL_API``), whose answer may stay pending
    across polls (``CALI_HTTP_PENDING``) but never beyond ``CALI_HTTP_PENDING_MAX_MS``.
 
+.. req:: The satellite pairs from its web page with calictl's wizard contract, also over the setup hotspot
+   :id: R_FW_PAIRING_WIZARD
+   :status: implemented
+   :tags: esp32, web, pairing
+
+   The firmware shall answer ``GET /api/pairing`` and ``POST /api/pairing``
+   ``{"action":"start"|"passkey"|"cancel"|"reset"}`` in calictl's request and response shape —
+   the snapshot ``state, attempts, error, address, radio_busy`` (``radio_busy`` always ``false``)
+   with calictl's state and error names, and web.py's ``400 bad_action`` / ``confirm_required`` /
+   ``bad_passkey`` — by driving the same runner calls as the console's ``pair`` / ``passkey N`` /
+   ``forget`` (plus cancel), in every WiFi mode including the setup hotspot. ``start`` is
+   idempotent; ``passkey`` takes only a 6-digit string; ``reset`` needs ``confirm:true`` and drops
+   the bond; ``start`` and ``reset`` answer ``409 busy`` while a control command is pending. The
+   calictl web UI, served at ``GET /app`` in every mode (and at ``/`` in station mode), runs its
+   pairing wizard unchanged on the satellite; only the device-specific hints differ. Pairing writes
+   no control characteristic.
+
 .. req:: The CoreS3 screen shows device, WiFi and camper-unit status
    :id: R_FW_STATUS_DISPLAY
    :status: implemented
@@ -788,6 +874,20 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   [the satellite UI](#the-satellite-ui-r_fw_shared_ui)) and of the live UI (2026-10-07: a fridge
   toggle lands as one `1101` write, roof + wake-up greyed — a firmware before the wake-up light;
   evidence ledger).
+- **`R_FW_PAIRING_WIZARD`** — verified by `T_FW_PAIRING_API`, `T_FW_PAIRING_BUSY`,
+  `T_FW_PAIRING_PROBE_KEEPS_BOND` (`tests/firmware/test_pairing_web_e2e.py`: Connect now on a
+  bonded satellite with the unit's pairing screen closed ends bonded, bond kept, `SNAP` flows),
+  `T_FW_PAIRING_HOTSPOT` (`tests/firmware/test_web_handlers.py`: the shape, every code, busy, every
+  WiFi mode, `/app`), `T_FW_PAIRING_WIZARD_E2E` (`tests/firmware/test_pairing_web_e2e.py`: start →
+  passkey → bonded → `SNAP` over real NimBLE + the fake unit, station and hotspot, a wrong passcode,
+  the unit's pairing screen closed, a stale bond after the unit's Bluetooth reset, cancel/reset,
+  `409 busy`), `T_FW_PAIRING_WIZARD_UI` (same module: the wizard clicked in Chromium against the host
+  firmware, EN over the hotspot's `/app`, DE at `/`), `T_SAT_UI_PAIRING_WIZARD` and
+  `T_SAT_UI_PAIRING_HOTSPOT` (`tests/e2e/test_satellite.py`, over a stub: EN + DE, the satellite's
+  own hints, the busy sentence); on the CoreS3 bench **BOARD 2026-10-08** (CI image of `ab47e22`,
+  against the mock unit, Chromium on thinky): unpair/reset with the confirm dialog, pair from the
+  wizard in station mode and at the setup hotspot's `/app`, a wrong passcode retried, `403` for a
+  control write over the hotspot, writes on `1003` only (evidence ledger). Never the real unit.
 - **`R_FW_STATUS_DISPLAY`** — verified by `T_FW_DISPLAY_MODEL` (`tests/firmware/test_display_model.py`,
   every row state, the 10 s stale rule, the setup footer and the bright/dim timing through a C driver
   over `display_model.c`), `T_FW_DISPLAY_FONT` (`tests/test_display_font.py`, every EN/DE screen

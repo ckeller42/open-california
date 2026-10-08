@@ -38,6 +38,22 @@ void cali_snapshot_fn(cali_json_t *j) {
 const char *cali_snapshot_pair_address(const cali_transport_t *t) {
     const cali_pair_state_t *s = cali_runner_state();
     if (!t) return NULL;
-    if (s->st == PAIR_BONDED || (s->st == PAIR_IDLE && t->has_bond())) return t->identity();
+    if (s->st == PAIR_BONDED || ((s->st == PAIR_IDLE || s->st == PAIR_ERROR) && t->has_bond())) return t->identity();
     return NULL;
+}
+
+#define N_OF(a) (sizeof (a) / sizeof *(a))
+
+void cali_snapshot_pairing(cali_json_t *j, const cali_pair_state_t *s, const char *address) {
+    /* bounds = the generated tables' own lengths (pairing_consts.h), never hand-typed counts */
+    const char *st = (size_t)s->st < N_OF(PAIR_STATE_NAMES) ? PAIR_STATE_NAMES[s->st] : "unknown";
+    const char *err = (size_t)s->error < N_OF(PAIR_ERR_NAMES) ? PAIR_ERR_NAMES[s->error] : NULL;
+    cali_json_key(j, "state");
+    cali_json_str(j, st);
+    cali_json_key(j, "attempts");
+    cali_json_int(j, (long long)(unsigned)s->attempts);
+    cali_json_key(j, "error");
+    if (err) cali_json_str(j, err); else cali_json_null(j);
+    cali_json_key(j, "address");
+    if (address) cali_json_str(j, address); else cali_json_null(j);
 }

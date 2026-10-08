@@ -27,6 +27,7 @@ from .api_shape import (
     CONTROL_KEYS,
     DEVICE_KEYS,
     LINK_KEYS,
+    PAIRING_API_KEYS,
     PAIRING_KEYS,
     STATE_KEYS,
     WIFI_GET_KEYS,
@@ -250,6 +251,8 @@ def test_api_state_link_up_is_the_real_link_not_the_kept_bond(web_cli):
         ("bonded", 1, IDENTITY),
         ("idle", 1, IDENTITY),
         ("idle", 0, None),
+        ("error", 1, IDENTITY),
+        ("error", 0, None),
         ("scanning", 1, None),
         ("waiting_passkey", 1, None),
     ],
@@ -880,3 +883,181 @@ def test_command_in_setup_mode_is_403_not_a_captive_redirect(web_cli):
 def test_api_state_reports_whether_writes_are_accepted(web_cli, state, writes):
     body = json.loads(get(web_cli, "/api/state", setup=["wifi %s minsel 192.168.1.23 -61" % state]))
     assert body["device"]["control"] == {"writes": writes}
+
+
+# ---- /api/pairing (the shared wizard on the satellite) ------------------------------------------
+
+PAIR_KEYS_ORDER = ["state", "attempts", "error", "address", "radio_busy"]  # calictl's snapshot dict order
+IDLE_BONDED = {"state": "idle", "attempts": 0, "error": None, "address": IDENTITY, "radio_busy": False}
+
+
+def pair_calls(other):
+    return [line for line in other if line.startswith("CALL pair_")]
+
+
+def test_pairing_get_is_calictls_snapshot(web_cli):
+    """GET /api/pairing answers calictl's ``pairing_snapshot()`` shape, key for key; ``radio_busy``
+    is always false (no co-resident scanner on the ESP).
+
+    .. test:: GET/POST /api/pairing answer in calictl's shape with calictl's error codes
+       :id: T_FW_PAIRING_API
+       :links: R_FW_PAIRING_WIZARD
+    """
+    r, other = one(web_cli, "GET", "/api/pairing", setup=["bond 1"])
+    assert r.status == 200 and r.headers["content-type"] == "application/json"
+    assert r.json() == IDLE_BONDED and list(r.json()) == PAIR_KEYS_ORDER
+    assert set(r.json()) == PAIRING_API_KEYS
+    assert not pair_calls(other)
+
+
+def test_pairing_get_reports_attempts_and_error(web_cli):
+    r, _ = one(web_cli, "GET", "/api/pairing", setup=["pair error", "attempts 3", "pairerr pairing_failed"])
+    assert r.json() == {
+        "state": "error",
+        "attempts": 3,
+        "error": "pairing_failed",
+        "address": None,
+        "radio_busy": False,
+    }
+
+
+@pytest.mark.parametrize(
+    "body,call",
+    [
+        ({"action": "start"}, "CALL pair_start"),
+        ({"action": "passkey", "value": "012345"}, "CALL pair_passkey 012345"),
+        ({"action": "cancel"}, "CALL pair_cancel"),
+        ({"action": "reset", "confirm": True}, "CALL pair_forget"),
+    ],
+)
+def test_pairing_post_actions_reach_the_runner_and_answer_the_snapshot(web_cli, body, call):
+    """Each action is the console's runner call (pair / passkey N / forget, plus cancel — here
+    mid-flow, where cancel acts); the answer is the post-action snapshot, like calictl's (the wizard
+    renders the next step off it)."""
+    r, other = one(web_cli, "POST", "/api/pairing", json.dumps(body), setup=["bond 1", "pair scanning"])
+    assert r.status == 200 and r.json()["state"] == "scanning"
+    assert pair_calls(other) == [call]
+
+
+@pytest.mark.parametrize(
+    "body,error",
+    [
+        ("not json", "bad_json"),
+        ('{"action":"start"', "bad_json"),
+        ('{"action":"start","extra":1}', "bad_json"),
+        ('{"action":"start","action":"cancel"}', "bad_json"),
+        ('{"action":5}', "bad_json"),
+        ('{"action":"start","confirm":"yes"}', "bad_json"),
+        ("{}", "bad_action"),
+        ('{"action":"pair"}', "bad_action"),
+        ('{"action":"startstartstartstartstart"}', "bad_action"),
+        ('{"action":"reset"}', "confirm_required"),
+        ('{"action":"reset","confirm":false}', "confirm_required"),
+        ('{"action":"passkey"}', "bad_passkey"),
+        ('{"action":"passkey","value":null}', "bad_passkey"),
+        ('{"action":"passkey","value":123456}', "bad_passkey"),
+        ('{"action":"passkey","value":"12345"}', "bad_passkey"),
+        ('{"action":"passkey","value":"1234567"}', "bad_passkey"),
+        ('{"action":"passkey","value":"12a456"}', "bad_passkey"),
+        ('{"action":"passkey","value":" 123456"}', "bad_passkey"),
+    ],
+)
+def test_pairing_post_validation_is_web_pys(web_cli, body, error):
+    """web.py's checks in its order: bad_action, confirm_required, bad_passkey (a 6-digit STRING),
+    plus the ESP's fixed-shape parser (bad_json); nothing reaches the runner."""
+    r, other = one(web_cli, "POST", "/api/pairing", body)
+    assert (r.status, r.json()) == (400, {"error": error})
+    assert not pair_calls(other)
+
+
+@pytest.mark.parametrize(
+    "body,status",
+    [
+        ({"action": "start"}, 409),
+        ({"action": "reset", "confirm": True}, 409),
+        ({"action": "passkey", "value": "123456"}, 200),
+    ],
+)
+def test_pairing_start_or_reset_while_a_command_runs_is_busy(web_cli, body, status):
+    """The single link is in use by a control command: start/reset answer 409 busy and reach no
+    runner call; passkey (no new link; the runner ignores it outside waiting_passkey) goes through.
+    A cancel then is a no-op (no flow runs while a command does), see ``test_cancel_outside_a_flow_is_a_no_op``.
+
+    .. test:: Pairing start/reset are refused while a control command is pending
+       :id: T_FW_PAIRING_BUSY
+       :links: R_FW_PAIRING_WIZARD
+    """
+    r, other = one(web_cli, "POST", "/api/pairing", json.dumps(body), setup=["ctlbusy 1"])
+    assert r.status == status
+    if status == 409:
+        assert r.json() == {"error": "busy"} and not pair_calls(other)
+    else:
+        assert len(pair_calls(other)) == 1
+
+
+@pytest.mark.parametrize(
+    "state,joined",
+    [
+        ("online", 1),
+        ("retrying", 1),
+        ("setup_ap", 0),
+        ("setup_ap_retrying", 1),
+        ("connecting", 0),
+        ("unprovisioned", 0),
+    ],
+)
+def test_pairing_allowed_in_every_wifi_mode(web_cli, state, joined):
+    """Pairing is connection management, not a control write: also over the setup hotspot (first
+    setup from a phone at the van) and during a setup-flow join — never a captive redirect.
+
+    .. test:: The pairing endpoint works over the setup hotspot too
+       :id: T_FW_PAIRING_HOTSPOT
+       :links: R_FW_PAIRING_WIZARD
+    """
+    setup = ["wifi " + state, "joined %d" % joined]
+    r, _ = one(web_cli, "GET", "/api/pairing", setup=setup)
+    assert r.status == 200 and r.json()["state"] == "idle"
+    r, other = one(web_cli, "POST", "/api/pairing", '{"action":"start"}', setup=setup)
+    assert r.status == 200 and pair_calls(other) == ["CALL pair_start"]
+
+
+@pytest.mark.parametrize("method", ["PUT", "DELETE"])
+def test_other_methods_on_pairing_are_405(web_cli, method):
+    r, other = one(web_cli, method, "/api/pairing", setup=["wifi setup_ap"])
+    assert (r.status, r.json()) == (405, {"ok": False, "error": "method"})
+    assert not pair_calls(other)
+
+
+@pytest.mark.parametrize(
+    "state,joined", [("online", 1), ("setup_ap", 0), ("connecting", 0), ("unprovisioned", 0)]
+)
+def test_app_is_the_calictl_ui_in_every_mode(web_cli, state, joined):
+    """GET /app serves the UI bundle in every WiFi mode, so a phone on the setup hotspot reaches the
+    wizard (/ stays the setup page there)."""
+    r, _ = one(web_cli, "GET", "/app", setup=["wifi " + state, "joined %d" % joined])
+    assert r.status == 200 and r.headers["content-encoding"] == "gzip" and r.body == BUNDLE
+
+
+@pytest.mark.parametrize(
+    "state,acts",
+    [
+        ("scanning", True),
+        ("connecting", True),
+        ("pairing", True),
+        ("waiting_passkey", True),
+        ("verifying", True),
+        ("idle", False),
+        ("bonded", False),
+        ("error", False),
+        ("resetting", False),
+    ],
+)
+def test_cancel_outside_a_flow_is_a_no_op(web_cli, state, acts):
+    """cancel ends a running flow only: from bonded/idle/error/resetting it changes nothing (200 with
+    the unchanged snapshot), so a stale cancel from a 1 s-old snapshot can never drop a live bonded
+    link or the control command riding on it (calictl's poll never depends on it either)."""
+    r, other = one(
+        web_cli, "POST", "/api/pairing", '{"action":"cancel"}', setup=["bond 1", "pair " + state, "ctlbusy 1"]
+    )
+    assert r.status == 200 and r.json()["state"] == state
+    assert pair_calls(other) == (["CALL pair_cancel"] if acts else [])
