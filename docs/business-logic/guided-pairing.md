@@ -267,3 +267,20 @@ wizard's `connect_failed` / `pairing_failed` hints and the "Bluetooth reset / re
 are this repo's own UX, not a mirror of the app; the model of the unit they rest on is
 consistent with what the app does. Table in
 [protocol-crosscheck-applab.md](protocol-crosscheck-applab.md) "Pairing".
+
+## The "single connection slot" is not absolute (DEVICE, 2026-10-08)
+
+The slot model above (and across these docs) assumed the unit serves **one** LE central at a
+time — every observed symptom fit it. On 2026-10-08 the real unit accepted the ESP satellite's
+pairing connect **while buspi's persistent session stayed up**, completed SMP + verify, and then
+served state to both links in parallel (buspi polling, the ESP reading and writing — a cooler
+write from the ESP landed and buspi's next poll read the changed state from the unit).
+
+What stays true operationally:
+
+- calictl still treats the link as exclusive on its side (`serve` is the single BLE owner on
+  buspi; the roof contract still reuses the live session rather than opening a second link).
+- The phone app contending for the unit remains a real interference source during *pairing*
+  (its reconnect storm after a unit "Bluetooth zurücksetzen" collides with the wizard's window).
+- How many links the unit serves (2? more?), and whether a third central is refused, is
+  unmeasured — only "two works" is DEVICE-proven.

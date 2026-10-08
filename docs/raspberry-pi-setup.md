@@ -264,3 +264,46 @@ working alongside it. Check it with `sudo tailscale serve status`; remove it wit
 - **Existing hosts** — the reference host `buspi` predates this installer and keeps its config in
   `/etc/buspi/`; that's a legacy location. New installs use `/etc/opencalifornia/`. The unit file
   is rendered per host, so both work — nothing needs migrating.
+
+(known-issue-kernel-6-18-50-breaks-ble-reconnects)=
+
+## Known issue: kernel 6.18.50 breaks BLE reconnects
+
+Raspberry Pi OS kernel **6.18.50** (rolled out 2026-09) breaks reconnecting to a bonded LE peer
+that rotates its address (an RPA — the camper unit does) on controllers without LL privacy, such
+as the Pi 4's CYW43455. The failure is silent and total:
+
+- Pairing **succeeds** (an active scan finds the unit and the first connect goes straight to the
+  discovered address), but **every reconnect fails**: the daemon logs
+  `poll skipped: no BLE session to <addr> after retries (TimeoutError)` on every poll, forever.
+- In `btmon`, each attempt is a passive scan with `Filter policy: Ignore not in accept list`
+  followed ~8 s later by `MGMT Connect Failed` — and **no `LE Create Connection` is ever issued**.
+  The kernel waits for controller-side RPA resolution that this chip cannot do, instead of
+  resolving in the host as older kernels did. Kernel **6.18.34 works** (it connects directly to
+  the resolved RPA).
+
+Diagnosed on `buspi` 2026-10-08. Until a fixed kernel is verified, pin 6.18.34:
+
+```sh
+sudo cp /boot/vmlinuz-6.18.34+rpt-rpi-v8   /boot/firmware/kernel8-634.img
+sudo cp /boot/initrd.img-6.18.34+rpt-rpi-v8 /boot/firmware/initrd8-634.img
+printf 'kernel=kernel8-634.img\ninitramfs initrd8-634.img followkernel\n' | sudo tee -a /boot/firmware/config.txt
+sudo apt-mark hold linux-image-6.18.34+rpt-rpi-v8 linux-image-6.18.34+rpt-rpi-2712
+sudo reboot
+```
+
+The `kernel=` line survives OS updates (newer kernels install but are not booted); remove the two
+lines from `config.txt` to test a new kernel, and re-add them if reconnects fail again.
+
+Related pitfalls seen in the same debugging session:
+
+- **A removed bond can resurrect**: `bluetoothd` re-persists bonds from memory when it shuts down,
+  so a bond deleted shortly before a reboot/restart may be back afterwards (and a stale bond
+  blocks re-pairing). After an unpair, verify with `bluetoothctl info <addr>` and remove again if
+  needed.
+- **Reboots restart BLE scanner services** (Home Assistant integrations, vendor readers). A
+  co-resident client holding discovery kills new LE connections (`radio_busy` in the pairing
+  wizard, HCI 0x3e) — stop those scanners before pairing.
+- **The unit's passkey window is ~30 s** from the moment the wizard shows "waiting for passkey";
+  entering the code later fails the attempt (`Authentication Canceled`), so have eyes on the
+  camper's screen before you start.
