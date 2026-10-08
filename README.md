@@ -99,6 +99,14 @@ every step without changing anything. Full guide: **[Raspberry Pi setup](https:/
 Need to (re-)pair later from the web UI, or after a "Bluetooth zurücksetzen" on the unit? See
 **[How to pair your camper](https://ckeller42.github.io/open-california/howto-pair-your-camper.html)**.
 
+> ⚠️ **Known-broken kernel: Raspberry Pi OS 6.18.50.** On the Pi 4's CYW43455 (no controller-side
+> LL privacy), kernel 6.18.50 never issues the `LE Create Connection` for a bonded peer that
+> rotates its address (RPA): pairing succeeds, but every reconnect fails (`Connect Failed`, and the
+> daemon logs `no BLE session … after retries (TimeoutError)` forever). The camper unit rotates its
+> address, so calictl is dead on that kernel. Kernel **6.18.34 works** — pin it until a fixed
+> kernel is verified. Diagnosis + pin recipe:
+> **[Raspberry Pi setup → Known issue](https://ckeller42.github.io/open-california/raspberry-pi-setup.html#known-issue-kernel-6-18-50-breaks-ble-reconnects)**.
+
 ## Tested on
 
 - **Vehicle:** VW California **T7** camper control unit, over its vendor BLE GATT service.
