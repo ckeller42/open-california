@@ -28,9 +28,12 @@
  * always holds exactly one whole frame per function (never a mix of two).
  *
  * Link loss (DISCONNECTED, CONNECT_FAIL, ENC_FAIL, a failed discovery, a heartbeat that cannot be
- * written or completes with an error, or no encryption within CALI_SESSION_ENC_TIMEOUT_MS of
- * CONNECTED) -> disconnect() and connect_bonded() after 1 s, doubling to a 60 s cap; the delay
- * resets once a link is encrypted again. Without a stored bond the session goes inactive instead.
+ * written or completes with an error, no encryption within CALI_SESSION_ENC_TIMEOUT_MS of
+ * CONNECTED, or no connect verdict at all within CALI_SESSION_CONNECT_TIMEOUT_MS of
+ * connect_bonded() — a terminal event lost, e.g. a connect silently cancelled under a scan; field
+ * night 2026-10-08, #264) -> disconnect() and connect_bonded() after 1 s, doubling to a 60 s cap;
+ * the delay resets once a link is encrypted again. Without a stored bond the session goes
+ * inactive instead.
  *
  * C99, no malloc, no NimBLE/ESP-IDF includes, no clock of its own.
  */
@@ -51,6 +54,9 @@ extern "C" {
 #define CALI_SESSION_BACKOFF_MIN_MS 1000u
 #define CALI_SESSION_BACKOFF_MAX_MS 60000u
 #define CALI_SESSION_ENC_TIMEOUT_MS 15000u
+/* Twice the NimBLE transport's own 10 s connect timeout: this watchdog only fires when the
+ * transport's verdict (CONNECTED / CONNECT_FAIL) got lost, never races it. */
+#define CALI_SESSION_CONNECT_TIMEOUT_MS 20000u
 /* Water (1302) re-read period while the link is up: calictl's POLL_INTERVAL (30 s), at which it
  * reads 1302 on every poll. The app has no periodic water re-read (it reconnects instead). */
 #define CALI_SESSION_WATER_REREAD_MS 30000u
