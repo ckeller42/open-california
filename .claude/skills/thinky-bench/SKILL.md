@@ -48,6 +48,7 @@ then `dhcpcd -G` (no default route) and a manual host route. Never `nmcli` while
 ```bash
 gh run download <run-id> -n firmware-esp32s3 -D ~/calictl-esp     # the CI image + flasher_args.json
 tools/esplab/flash.sh /dev/ttyACM0                                 # offsets from flasher_args.json, never hand-typed
+tools/esplab/flash_ci.sh <branch|run-id>                           # both steps in one (same on buspi)
 tools/esplab/esp_cmd.py /dev/ttyACM0 2 status "wifi status"        # console WITHOUT resetting the chip
 ```
 

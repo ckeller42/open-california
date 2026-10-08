@@ -90,3 +90,17 @@ ssh -t buspi 'sudo sed -i "/^CALICTL_ADDR=/d" /etc/buspi/calictl.env && sudo -n 
   sudo/the box password). **Never `tailscale funnel`** it (that publishes the unauthenticated,
   write-capable UI to the public internet; confirm `AllowFunnel` is None). User-facing setup
   guide: `docs/raspberry-pi-setup.md` → "Remote access over Tailscale".
+
+## Flash the ESP32 satellite from buspi
+
+buspi can flash the CoreS3 when it is plugged into one of its USB ports (it shows up as
+`/dev/ttyACM0`; `pi` is in `dialout`, ModemManager is off). Ready since 2026-10-08:
+`~/esp-venv` with esptool 5.4.0 (the same as thinky), `gh` logged in.
+
+```sh
+ssh buspi 'cd ~/open-california && git pull --ff-only && tools/esplab/flash_ci.sh main'      # or a branch / run id
+ssh buspi '~/open-california/tools/esplab/esp_cmd.py /dev/ttyACM0 2 status'                   # console, no reset
+```
+
+The flash keeps the ESP's NVS (WiFi credentials, bond). Never flash while a control command or a
+pairing runs on the satellite.
