@@ -46,8 +46,10 @@ void cali_ble_nimble_init(void (*on_sync)(void));
  * once connected (ENC_OK / ENC_FAIL). disconnect() is silent: the link it drops (or the
  * connect it cancels) produces no DISCONNECTED/CONNECT_FAIL; only a drop the stack or the peer
  * caused is reported. remove_bond() drops the link, then deletes every bonded peer. pair()
- * replaces a bond already stored for the connected peer, so a fresh SMP pairing runs even when
- * the unit forgot us (it logs "LOG pair: replacing stored bond"). */
+ * probes a bond already stored for the connected peer first (re-encryption): a working bond is kept
+ * (ENC_OK without SMP, "LOG pair: the stored bond works, keeping it"); one the unit proves stale
+ * (HCI 0x05/0x06) is dropped and a fresh SMP pairing runs ("LOG pair: the stored bond is stale …");
+ * any other failure keeps it. */
 const cali_transport_t *cali_ble_nimble_transport(void);
 
 #ifdef __cplusplus

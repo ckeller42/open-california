@@ -147,7 +147,7 @@ def test_unit_not_in_pairing_mode_is_pairing_failed(host_fw, tmp_path):
 def test_stale_bond_repairs_over_http(host_fw, hci_unit, tmp_path):
     """The unit's Bluetooth was reset (it dropped our bond) while the satellite kept it: the session's
     reconnects are refused, the wizard still shows the old address, and start -> passkey bonds
-    afresh (the transport drops the stale bond itself) -> SNAP flows again."""
+    afresh — the transport's probe proves the stored bond stale and drops it -> SNAP flows again."""
     store = tmp_path / "store"
     fw = _station(host_fw, hci_unit, tmp_path)
     assert _http_pair(fw, hci_unit) == BONDED
@@ -156,7 +156,15 @@ def test_stale_bond_repairs_over_http(host_fw, hci_unit, tmp_path):
     fw2 = host_fw(hci_unit, store_dir=store, http=True, fake_wifi=_wifi_script(tmp_path, WIFI))
     fw2.expect("LOG session: reconnect in", timeout=40)  # the stale LTK is refused: no session
     assert get_json(fw2, "/api/pairing") == dict(BONDED, state="idle")  # the (stale) bond is kept
-    assert _http_pair(fw2, hci_unit) == BONDED
+    mark = len(fw2.log)
+    s = _http_pair(fw2, hci_unit)
+    pair_log = [line for line in fw2.log[mark:] if line.startswith("LOG pair:")]
+    # bonded; attempts 1 when the unit hung up on the stale key (the retry then pairs afresh)
+    assert (s["state"], s["address"], s["error"]) == ("bonded", IDENTITY, None) and s["attempts"] <= 1, (
+        s,
+        pair_log,
+    )
+    assert any(line.startswith("LOG pair: the stored bond is stale") for line in pair_log), pair_log
     fw2.expect("SNAP", timeout=40)
 
 
@@ -295,3 +303,26 @@ def test_failed_repair_resumes_the_bonded_session(host_fw, hci_unit, tmp_path):
     hci_unit.call(_hold_connects, hci_unit, False)
     fw.expect("SNAP", timeout=60)
     assert any(line.startswith("SNAP") for line in fw.log[mark:])
+
+
+def test_connect_now_on_a_working_bond_keeps_it(host_fw, hci_unit, tmp_path):
+    """Probe before replace (calictl #201): "Connect now" on a bonded satellite while the unit is NOT
+    on "Gerät verbinden" re-encrypts with the stored bond, which works — the flow ends bonded with no
+    passkey and no SMP pairing, the bond is kept and SNAP flows. (It used to delete the bond before
+    pairing, so the refused pair left the satellite unpaired.)
+
+    .. test:: Starting the wizard never destroys a working bond on the satellite
+       :id: T_FW_PAIRING_PROBE_KEEPS_BOND
+       :links: R_FW_PAIRING_WIZARD
+    """
+    fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
+    hci_unit.call(_pairing_mode, hci_unit.unit, False)
+    mark = len(fw.log)
+    assert _post(fw, {"action": "start"})[0] == 200
+    s = _wait(fw, lambda s: s["state"] in ("bonded", "error"), timeout=60)
+    assert s == BONDED, (s, fw.log[mark:][-30:])
+    assert not any('"waiting_passkey"' in line for line in fw.log[mark:])
+    assert any(line == "LOG pair: the stored bond works, keeping it" for line in fw.log[mark:])
+    mark = len(fw.log)
+    fw.expect("SNAP", timeout=40)
+    assert get_json(fw, "/api/state")["device"]["link"]["up"] is True

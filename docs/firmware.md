@@ -210,9 +210,21 @@ Raspberry Pi with calictl near the van*, *Saved on the satellite — survives a 
 `radio_busy` is always `false` (no co-resident scanner). When a flow ends without a new bond —
 cancelled, failed (`error`) or reset — the session reconnects by a kept bond as at boot, like
 calictl's poll resuming once the flow is idle/error. `start`/`reset` are `409 busy` while a
-control command holds the link; a stale bond (the unit's Bluetooth was reset) needs no reset
-first — the transport's `pair()` drops it before it pairs afresh. Issue #255 (a second unit's
-pair keeps the first bond) is unchanged.
+control command holds the link.
+
+**Probe before replace** (calictl's #201, `pairing_bluez.connect` / `_probe_bond`): starting the
+wizard never destroys a working bond. When the unit the scan found is the one the bond is for
+(its resolvable address resolves with the bond's IRK — `ah()`, PSA crypto), the transport
+connects by the bonded identity and `pair()` first re-encrypts with the stored key. A key that
+works is **kept**: `ENC_OK` without SMP, the runner reads `1004` and the flow ends `bonded` — even
+with the unit's "Gerät verbinden" screen closed. Only proof that the key is stale drops it: the
+unit answers the encryption with an authentication-class status (HCI `0x05` / `0x06`) — the bond is
+deleted and a fresh SMP pairing runs on the same link — or hangs up for that reason, and the
+runner's retry pairs afresh. Anything else (an unreachable unit = `connect_failed`, a lost link,
+a timeout) keeps the bond; unlike calictl, a link that came up but never encrypted is not taken
+as proof (NimBLE reports a definite status; the user still has *Bluetooth reset / re-pair*). A
+unit whose address does not resolve with the bond's IRK — another camper, issue #255 — is paired
+as before (#255 itself is unchanged).
 
 ### Control path
 
@@ -833,6 +845,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   toggle lands as one `1101` write, roof + wake-up greyed — a firmware before the wake-up light;
   evidence ledger).
 - **`R_FW_PAIRING_WIZARD`** — verified by `T_FW_PAIRING_API`, `T_FW_PAIRING_BUSY`,
+  `T_FW_PAIRING_PROBE_KEEPS_BOND` (`tests/firmware/test_pairing_web_e2e.py`: Connect now on a
+  bonded satellite with the unit's pairing screen closed ends bonded, bond kept, `SNAP` flows),
   `T_FW_PAIRING_HOTSPOT` (`tests/firmware/test_web_handlers.py`: the shape, every code, busy, every
   WiFi mode, `/app`), `T_FW_PAIRING_WIZARD_E2E` (`tests/firmware/test_pairing_web_e2e.py`: start →
   passkey → bonded → `SNAP` over real NimBLE + the fake unit, station and hotspot, a wrong passcode,

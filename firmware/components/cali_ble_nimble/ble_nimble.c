@@ -30,6 +30,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "psa/crypto.h"
+
 #include "host/ble_hs.h"
 #include "host/ble_store.h"
 #include "host/ble_uuid.h"
@@ -71,6 +73,8 @@ static ble_addr_t s_found_addr;
 static int s_connecting, s_connect_cancelled;
 static int s_scan_deferred;                 /* start_scan() while our connect cancel is in flight */
 static int s_encrypt_on_connect;            /* connect_bonded(): re-encrypt once the link is up */
+static int s_probing;                       /* pair(): re-encrypting with the stored bond (the probe) */
+static ble_addr_t s_probe_peer;             /* ... whose identity the bond is stored under */
 static uint16_t s_conn = BLE_HS_CONN_HANDLE_NONE;
 static int s_dying;                         /* a GATT op failed ENOTCONN: DISCONNECT is on its way */
 static uintptr_t s_gen;                     /* bumped per link: stale GATT callbacks are dropped */
@@ -183,6 +187,7 @@ static uint16_t om_copy(struct os_mbuf *om) {
 
 static void link_reset(void) {
     s_conn = BLE_HS_CONN_HANDLE_NONE;
+    s_probing = 0;
     s_dying = 0;
     s_gen++;
     s_ophead = s_oplen = 0;
@@ -417,6 +422,11 @@ static int name_matches(const struct ble_gap_disc_desc *d) {
     return f.name != NULL && f.name_len == n && memcmp(f.name, s_name, n) == 0;
 }
 
+/* An authentication-class HCI status/reason: the peer rejected our stored key (proof of a stale bond). */
+static int auth_failure(int status) {
+    return status == BLE_HS_HCI_ERR(BLE_ERR_AUTH_FAIL) || status == BLE_HS_HCI_ERR(BLE_ERR_PINKEY_MISSING);
+}
+
 static int gap_cb(struct ble_gap_event *ev, void *arg) {
     (void)arg;
     switch (ev->type) {
@@ -457,6 +467,11 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         return 0;
     case BLE_GAP_EVENT_DISCONNECT:
         if (ev->disconnect.conn.conn_handle != s_conn) return 0;  /* a link we already dropped */
+        if (s_probing && auth_failure(ev->disconnect.reason)) {
+            cali_log("pair: the stored bond is stale (link dropped, reason 0x%x): dropping it",
+                     (unsigned)ev->disconnect.reason);
+            (void)ble_store_util_delete_peer(&s_probe_peer);   /* the retry pairs afresh */
+        }
         link_reset();
         emit(CALI_TEV_DISCONNECTED, ev->disconnect.reason, 0, NULL, 0, NULL);
         return 0;
@@ -472,6 +487,22 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         return 0;
     case BLE_GAP_EVENT_ENC_CHANGE:
         if (ev->enc_change.conn_handle != s_conn) return 0;
+        if (s_probing) {
+            s_probing = 0;
+            if (ev->enc_change.status == 0) {
+                cali_log("pair: the stored bond works, keeping it");   /* no SMP: VERIFY next */
+            } else if (auth_failure(ev->enc_change.status)) {
+                cali_log("pair: the stored bond is stale (0x%x): dropping it, pairing afresh",
+                         (unsigned)ev->enc_change.status);
+                int rc = ble_store_util_delete_peer(&s_probe_peer);
+                if (rc == 0) rc = ble_gap_security_initiate(s_conn);   /* now a fresh SMP pairing */
+                if (rc != 0) emit(CALI_TEV_ENC_FAIL, rc, 0, NULL, 0, NULL);
+                return 0;
+            } else {
+                cali_log("pair: bond probe failed without proving it stale (0x%x): kept",
+                         (unsigned)ev->enc_change.status);
+            }
+        }
         if (ev->enc_change.status == 0) emit(CALI_TEV_ENC_OK, 0, 0, NULL, 0, NULL);
         else emit(CALI_TEV_ENC_FAIL, ev->enc_change.status, 0, NULL, 0, NULL);
         return 0;
@@ -550,11 +581,6 @@ static int connect_to(const ble_addr_t *addr) {
     return rc;
 }
 
-static int t_connect_found(void) {
-    if (!s_found) return BLE_HS_ENOENT;
-    return connect_to(&s_found_addr);
-}
-
 static int first_bond(ble_addr_t *out) {
     ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
     int n = 0;
@@ -563,6 +589,57 @@ static int first_bond(ble_addr_t *out) {
     if (n == 0) return BLE_HS_ENOENT;
     *out = peers[0];
     return 0;
+}
+
+/* Whether resolvable private address a was made with irk (as stored: LSB first): the Core spec's
+ * ah(k, r) = e(k, 0^104 || prand) mod 2^24 == hash (Vol 3 Part H 2.2.2), e = AES-128 MSB first,
+ * through PSA crypto (Mbed TLS 3.6 on the host, 4.x in ESP-IDF v6). */
+static int rpa_matches(const uint8_t irk[16], const ble_addr_t *a) {
+    psa_key_attributes_t at = PSA_KEY_ATTRIBUTES_INIT;
+    psa_key_id_t id;
+    uint8_t key[16], in[16] = {0}, out[16];
+    size_t olen = 0;
+    psa_status_t st;
+    if (a->type != BLE_ADDR_RANDOM || (a->val[5] & 0xc0) != 0x40) return 0;   /* not an RPA */
+    for (int i = 0; i < 16; i++) key[i] = irk[15 - i];
+    in[13] = a->val[5];
+    in[14] = a->val[4];
+    in[15] = a->val[3];
+    if (psa_crypto_init() != PSA_SUCCESS) return 0;
+    psa_set_key_usage_flags(&at, PSA_KEY_USAGE_ENCRYPT);
+    psa_set_key_algorithm(&at, PSA_ALG_ECB_NO_PADDING);
+    psa_set_key_type(&at, PSA_KEY_TYPE_AES);
+    psa_set_key_bits(&at, 128);
+    if (psa_import_key(&at, key, sizeof key, &id) != PSA_SUCCESS) return 0;
+    st = psa_cipher_encrypt(id, PSA_ALG_ECB_NO_PADDING, in, sizeof in, out, sizeof out, &olen);
+    (void)psa_destroy_key(id);
+    return st == PSA_SUCCESS && olen == 16 && out[13] == a->val[2] && out[14] == a->val[1] &&
+           out[15] == a->val[0];
+}
+
+/* The found unit is the one our bond is for (its RPA resolves with the bond's IRK): its identity in
+ * *id. A different unit (issue #255: a second camper) does not resolve and is paired as before. */
+static int found_is_bonded(ble_addr_t *id) {
+    struct ble_store_key_sec key;
+    struct ble_store_value_sec val;
+    if (first_bond(id) != 0) return 0;
+    if (ble_addr_cmp(id, &s_found_addr) == 0) return 1;              /* found by its identity */
+    memset(&key, 0, sizeof key);
+    key.peer_addr = *id;
+    if (ble_store_read_peer_sec(&key, &val) != 0 || !val.irk_present) return 0;
+    return rpa_matches(val.irk, &s_found_addr);
+}
+
+/* With a bond for the found unit, connect by its identity (the controller resolves the RPA through
+ * the bond's IRK, as for connect_bonded) so pair() can probe the stored bond on that link. */
+static int t_connect_found(void) {
+    ble_addr_t id;
+    if (!s_found) return BLE_HS_ENOENT;
+    if (found_is_bonded(&id)) {
+        cali_log("pair: the unit found is our bonded peer, connecting by its identity");
+        return connect_to(&id);
+    }
+    return connect_to(&s_found_addr);
 }
 
 /* The stored identity address; NimBLE resolves the unit's rotating RPA through the bond's IRK. */
@@ -577,23 +654,31 @@ static int t_connect_bonded(void) {
     return rc;
 }
 
-/* An explicit pair always runs a fresh SMP pairing. With a bond stored for this peer,
- * ble_gap_security_initiate would only re-encrypt with the stored LTK. If the unit forgot us
- * ("Bluetooth zurücksetzen"), that fails on every retry and never heals. So pair() replaces a
- * stored bond for the connected peer first, as calictl does on AlreadyExists (#200). The
+/* Probe before replace (calictl #201, pairing_bluez.connect/_probe_bond). With a bond stored for
+ * the connected peer, pair() first re-encrypts with it (ble_gap_security_initiate uses the stored
+ * LTK): a bond that works is KEPT — ENC_OK, no SMP, the runner verifies the auth char next — so
+ * starting the wizard never destroys a working bond (e.g. the unit not on "Gerät verbinden"). Only
+ * proof of a stale bond drops it: an auth-class failure (HCI 0x05 Authentication Failure / 0x06
+ * PIN or Key Missing) as the encryption result -> delete it and pair afresh on the same link, or
+ * as the reason the unit dropped the link -> delete it, the runner's retry pairs afresh. Any other
+ * failure (a lost link, a timeout) keeps the bond. Without a stored bond: a fresh SMP pairing. The
  * reconnect-by-bond path (connect_bonded + the session) never calls pair(). */
 static int t_pair(void) {
     struct ble_gap_conn_desc desc;
     struct ble_store_key_sec key;
     struct ble_store_value_sec val;
     if (s_conn == BLE_HS_CONN_HANDLE_NONE) return BLE_HS_ENOTCONN;
+    s_probing = 0;
     if (ble_gap_conn_find(s_conn, &desc) == 0) {
         memset(&key, 0, sizeof key);
         key.peer_addr = desc.peer_id_addr;
         if (ble_store_read_peer_sec(&key, &val) == 0) {
-            cali_log("pair: replacing stored bond");
-            int rc = ble_store_util_delete_peer(&desc.peer_id_addr);
-            if (rc != 0) return rc;
+            cali_log("pair: probing the stored bond");
+            s_probing = 1;
+            s_probe_peer = desc.peer_id_addr;
+            int rc = ble_gap_security_initiate(s_conn);   /* re-encrypt: no pairing request */
+            if (rc != 0) s_probing = 0;
+            return rc;
         }
     }
 #ifdef CALI_TEST_LATE_IO_CAP
