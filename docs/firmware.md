@@ -239,7 +239,7 @@ with a *resolved* address type (`BLE_ADDR_PUBLIC_ID`/`RANDOM_ID`). In that board
 compared the type too, so it did not fire and `LOG pair: the unit found is our bonded peer …`
 never printed — the connect to that resolved address still reached the same identity and the
 probe ran on it (`pair: probing the stored bond`). Since then identities are compared
-type-agnostically, so the board path logs the match too (board re-check owed). The
+type-agnostically, so the board path logs the match too (board-verified 2026-10-08 on `013877a`). The
 host-side `ah()` path only matters on a controller that does not resolve; PSA `ah()` itself was
 checked on the board against the Core spec sample vector (Mbed TLS 4). Evidence ledger, "ESP32
 satellite probe before replace — BOARD rows".
@@ -547,7 +547,8 @@ The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait
    hotspot this is now the main pairing path: press *Connect now* right after the hotspot comes up
    and check the flow still reaches `waiting_passkey` (no scan-refused or connect-timeout retries).
 10. **Pairing start during the session's pending reconnect (FOUND on the board 2026-10-08; FIXED,
-   host-proven — `test_start_while_the_session_reconnects_scans`; board re-check owed).** Since the
+   host-proven — `test_start_while_the_session_reconnects_scans`; board-verified 2026-10-08 on `013877a`:
+   no `rc=15`, the unit found after its return, bonded without a passkey).** Since the
    fix `t_start_scan` cancels a pending connect first and defers the scan to the cancel's
    completion. The original finding:
    With a bond kept and the unit out of reach, the session holds a pending `connect_bonded`. *Connect
