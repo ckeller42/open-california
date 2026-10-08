@@ -353,8 +353,8 @@ single-connection core while a command pends). The German texts of these four sa
 strings are **proposals** (the app has none of them; `strings.de.js`): *Nur über buspi oder die
 App*, *Steuerung nur im eigenen WLAN — nicht über den Einrichtungs-Hotspot*, *Der Satellit sendet
 noch den vorherigen Befehl — gleich noch einmal versuchen*, *Noch nicht mit der Camper-Einheit
-verbunden — in ein paar Sekunden noch einmal versuchen*; so are the two wake-up refusals (2026-10-07):
-*Das Wecklicht braucht die Uhrzeit der Webseite — dort einstellen* (the clock reason) and
+verbunden — in ein paar Sekunden noch einmal versuchen*. The two wake-up refusals (no app string
+either) are owner-confirmed (2026-10-08): *Das Wecklicht braucht die Uhrzeit der Webseite — dort einstellen* (the clock reason) and
 *Wecklicht-Einstellungen noch nicht bekannt (die Einheit hat sie nicht gemeldet): Ein/Aus mit
 angeben* (`WAKEUP_UNKNOWN`, which calictl answers too). Device and WiFi details stay on `/device`
 (⋮ menu "Device & WiFi").
