@@ -326,3 +326,73 @@ def test_connect_now_on_a_working_bond_keeps_it(host_fw, hci_unit, tmp_path):
     mark = len(fw.log)
     fw.expect("SNAP", timeout=40)
     assert get_json(fw, "/api/state")["device"]["link"]["up"] is True
+
+
+async def _drop_link(unit):
+    """The unit hangs up on the central (the link lost: the session starts reconnecting)."""
+    if unit.conn:
+        await unit.conn.disconnect()
+
+
+def test_start_while_the_session_reconnects_scans(host_fw, hci_unit, tmp_path):
+    """Watch item 10 (board 2026-10-08): the bond kept, the unit out of reach, the session's
+    connect_bonded pending — Connect now must still scan (the pending connect is cancelled first;
+    NimBLE refuses a scan while a connect is open, BLE_HS_EBUSY), find the unit once it is back and
+    end bonded (the probe keeps the bond)."""
+    fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
+    hci_unit.call(_hold_connects, hci_unit, True)
+    mark = len(fw.log)
+    hci_unit.call(_drop_link, hci_unit.unit)
+    fw.expect("LOG ble: connect_bonded started", timeout=20)
+    assert _post(fw, {"action": "start"})[0] == 200
+    time.sleep(2)  # the unit "comes back"
+    hci_unit.call(_hold_connects, hci_unit, False)
+    s = _wait(fw, lambda s: s["state"] in ("bonded", "error"), timeout=40)
+    assert s["state"] == "bonded" and s["address"] == IDENTITY, (
+        s,
+        [l for l in fw.log[mark:] if l.startswith(("LOG", "STATE"))],
+    )
+    fw.expect("SNAP", timeout=40)
+
+
+async def _unit_hangs_up_on_the_key(unit, reason):
+    """One-shot: the unit answers the next encryption request (the probe's stored key) by hanging up
+    with HCI reason ``reason`` instead of a key reply."""
+    host = unit.device.host
+    orig = host.long_term_key_provider
+
+    async def provider(handle, rand, ediv):
+        host.long_term_key_provider = orig
+        conn = unit.device.lookup_connection(handle)
+        if conn is not None:
+            await conn.disconnect(reason)
+        return None
+
+    host.long_term_key_provider = provider
+
+
+def test_probe_hang_up_with_an_auth_reason_drops_the_bond(host_fw, hci_unit, tmp_path):
+    """The unit hangs up on the probe with Authentication Failure (0x05): proof the key is stale —
+    the bond is dropped, the runner's retry pairs afresh (passkey) and bonds."""
+    fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
+    hci_unit.call(_unit_hangs_up_on_the_key, hci_unit.unit, 0x05)
+    mark = len(fw.log)
+    s = _http_pair(fw, hci_unit)
+    pair_log = [l for l in fw.log[mark:] if l.startswith("LOG pair:")]
+    assert (s["state"], s["address"], s["attempts"]) == ("bonded", IDENTITY, 1), (s, pair_log)
+    assert "LOG pair: the stored bond is stale (link dropped, reason 0x05): dropping it" in pair_log, pair_log
+    fw.expect("SNAP", timeout=40)
+
+
+def test_probe_hit_by_a_link_drop_keeps_the_bond(host_fw, hci_unit, tmp_path):
+    """The probe's link drops for a non-auth reason (Remote User Terminated, 0x13): no proof — the
+    bond is kept, the retry probes again and the flow ends bonded without a passkey."""
+    fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
+    hci_unit.call(_unit_hangs_up_on_the_key, hci_unit.unit, 0x13)
+    mark = len(fw.log)
+    assert _post(fw, {"action": "start"})[0] == 200
+    s = _wait(fw, lambda s: s["state"] in ("bonded", "error", "waiting_passkey"), timeout=60)
+    pair_log = [l for l in fw.log[mark:] if l.startswith("LOG pair:")]
+    assert (s["state"], s["address"], s["attempts"]) == ("bonded", IDENTITY, 1), (s, pair_log)
+    assert not [l for l in pair_log if "the stored bond is stale" in l], pair_log
+    fw.expect("SNAP", timeout=40)

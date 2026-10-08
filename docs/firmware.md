@@ -219,19 +219,27 @@ connects by the bonded identity and `pair()` first re-encrypts with the stored k
 works is **kept**: `ENC_OK` without SMP, the runner reads `1004` and the flow ends `bonded` — even
 with the unit's "Gerät verbinden" screen closed. Only proof that the key is stale drops it: the
 unit answers the encryption with an authentication-class status (HCI `0x05` / `0x06`) — the bond is
-deleted and a fresh SMP pairing runs on the same link — or hangs up for that reason, and the
-runner's retry pairs afresh. Anything else (an unreachable unit = `connect_failed`, a lost link,
-a timeout) keeps the bond; unlike calictl, a link that came up but never encrypted is not taken
+deleted and a fresh SMP pairing runs on the same link — or hangs up for that reason (NimBLE first
+reports the drop as an encryption result `BLE_HS_ENOTCONN`; the probe waits for the disconnect
+reason), and the runner's retry pairs afresh. Anything else (an unreachable unit =
+`connect_failed`, a link lost for another reason such as `0x13`, a timeout) keeps the bond, and
+the retry probes again; unlike calictl, a link that came up but never encrypted is not taken
 as proof (NimBLE reports a definite status; the user still has *Bluetooth reset / re-pair*). A
-unit whose address does not resolve with the bond's IRK — another camper, issue #255 — is paired
-as before (#255 itself is unchanged).
+unit no stored bond matches — another camper, issue #255 — is paired as before (#255 itself is
+unchanged). The match runs over **every** stored bond: by identity, compared type-agnostically
+(a controller that resolved the address reports it typed `PUBLIC_ID`/`RANDOM_ID`, the bond is
+stored typed public/random), or by the RPA resolving with that bond's IRK; a PSA failure is logged
+(`LOG pair: psa_… failed`) and the unit treated as unbonded. An SMP pairing that starts (passkey,
+repeat-pairing) ends the probe, so its encryption result is never reported as "the stored bond
+works". Logs show the raw HCI code (`0x06`), not NimBLE's wrapped `0x206`.
 
 On the CoreS3 (BOARD 2026-10-08) the ESP32-S3 controller already resolves the unit's address in
 the scan (the bond's IRK is on its resolving list): the advertising report carries the identity
-with a *resolved* address type (`BLE_ADDR_PUBLIC_ID`/`RANDOM_ID`), so the host-side match above
-(`ble_addr_cmp` against the stored type, then `ah()` on a non-RPA) does not fire and
-`LOG pair: the unit found is our bonded peer …` never prints — the connect to that resolved
-address reaches the same identity and the probe runs on it (`pair: probing the stored bond`). The
+with a *resolved* address type (`BLE_ADDR_PUBLIC_ID`/`RANDOM_ID`). In that board run the match
+compared the type too, so it did not fire and `LOG pair: the unit found is our bonded peer …`
+never printed — the connect to that resolved address still reached the same identity and the
+probe ran on it (`pair: probing the stored bond`). Since then identities are compared
+type-agnostically, so the board path logs the match too (board re-check owed). The
 host-side `ah()` path only matters on a controller that does not resolve; PSA `ah()` itself was
 checked on the board against the Core spec sample vector (Mbed TLS 4). Evidence ledger, "ESP32
 satellite probe before replace — BOARD rows".
@@ -538,15 +546,17 @@ The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait
    (the hotspot's own at `AP_START`, or one the setup page asked for) is still running. Over the
    hotspot this is now the main pairing path: press *Connect now* right after the hotspot comes up
    and check the flow still reaches `waiting_passkey` (no scan-refused or connect-timeout retries).
-10. **Pairing start during the session's pending reconnect (FOUND on the board 2026-10-08, open).**
+10. **Pairing start during the session's pending reconnect (FOUND on the board 2026-10-08; FIXED,
+   host-proven — `test_start_while_the_session_reconnects_scans`; board re-check owed).** Since the
+   fix `t_start_scan` cancels a pending connect first and defers the scan to the cancel's
+   completion. The original finding:
    With a bond kept and the unit out of reach, the session holds a pending `connect_bonded`. *Connect
    now* then runs the runner's `START_SCAN` action **before** `on_state(scanning)` stops the session
    (`runner.c` `step()`: actions, then the state callback), so `ble_gap_disc` is refused
    (`E NimBLE: ble_gap_disc_ext_validate rc=15`, `BLE_HS_EBUSY`; `t_start_scan` defers only after
    our own connect cancel) and the flow sits in `scanning` until `error` / `timeout` — 2/2 on the
    board, the second with the unit advertising again ~10 s into the flow (never found). The bond is
-   kept and the session reconnects afterwards. Likely fix: cancel a pending connect in
-   `t_start_scan` and defer the scan to its completion.
+   kept and the session reconnects afterwards.
 
 ## Design rulings worth knowing
 

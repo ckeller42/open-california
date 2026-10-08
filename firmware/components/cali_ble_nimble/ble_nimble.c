@@ -422,6 +422,12 @@ static int name_matches(const struct ble_gap_disc_desc *d) {
     return f.name != NULL && f.name_len == n && memcmp(f.name, s_name, n) == 0;
 }
 
+/* A NimBLE status for the log: the raw HCI code (0x06) for an HCI error, else the host code. */
+static unsigned log_code(int status) {
+    return status >= BLE_HS_ERR_HCI_BASE && status < BLE_HS_ERR_HCI_BASE + 0x100
+               ? (unsigned)(status - BLE_HS_ERR_HCI_BASE) : (unsigned)status;
+}
+
 /* An authentication-class HCI status/reason: the peer rejected our stored key (proof of a stale bond). */
 static int auth_failure(int status) {
     return status == BLE_HS_HCI_ERR(BLE_ERR_AUTH_FAIL) || status == BLE_HS_HCI_ERR(BLE_ERR_PINKEY_MISSING);
@@ -468,8 +474,8 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
     case BLE_GAP_EVENT_DISCONNECT:
         if (ev->disconnect.conn.conn_handle != s_conn) return 0;  /* a link we already dropped */
         if (s_probing && auth_failure(ev->disconnect.reason)) {
-            cali_log("pair: the stored bond is stale (link dropped, reason 0x%x): dropping it",
-                     (unsigned)ev->disconnect.reason);
+            cali_log("pair: the stored bond is stale (link dropped, reason 0x%02x): dropping it",
+                     log_code(ev->disconnect.reason));
             (void)ble_store_util_delete_peer(&s_probe_peer);   /* the retry pairs afresh */
         }
         link_reset();
@@ -477,6 +483,7 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         return 0;
     case BLE_GAP_EVENT_PASSKEY_ACTION:
         if (ev->passkey.conn_handle != s_conn) return 0;
+        s_probing = 0;   /* an SMP pairing runs: its ENC_CHANGE is the pairing's, not the probe's */
         if (ev->passkey.params.action == BLE_SM_IOACT_INPUT) {
             emit(CALI_TEV_PASSKEY_REQ, 0, 0, NULL, 0, NULL);
         } else {
@@ -487,20 +494,22 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         return 0;
     case BLE_GAP_EVENT_ENC_CHANGE:
         if (ev->enc_change.conn_handle != s_conn) return 0;
+        if (s_probing && ev->enc_change.status == BLE_HS_ENOTCONN)
+            return 0;   /* the link dropped mid-probe: its DISCONNECT reason decides (stale or not) */
         if (s_probing) {
             s_probing = 0;
             if (ev->enc_change.status == 0) {
                 cali_log("pair: the stored bond works, keeping it");   /* no SMP: VERIFY next */
             } else if (auth_failure(ev->enc_change.status)) {
-                cali_log("pair: the stored bond is stale (0x%x): dropping it, pairing afresh",
-                         (unsigned)ev->enc_change.status);
+                cali_log("pair: the stored bond is stale (0x%02x): dropping it, pairing afresh",
+                         log_code(ev->enc_change.status));
                 int rc = ble_store_util_delete_peer(&s_probe_peer);
                 if (rc == 0) rc = ble_gap_security_initiate(s_conn);   /* now a fresh SMP pairing */
                 if (rc != 0) emit(CALI_TEV_ENC_FAIL, rc, 0, NULL, 0, NULL);
                 return 0;
             } else {
-                cali_log("pair: bond probe failed without proving it stale (0x%x): kept",
-                         (unsigned)ev->enc_change.status);
+                cali_log("pair: bond probe failed (0x%02x), no proof of a stale key: bond kept",
+                         log_code(ev->enc_change.status));
             }
         }
         if (ev->enc_change.status == 0) emit(CALI_TEV_ENC_OK, 0, 0, NULL, 0, NULL);
@@ -517,6 +526,7 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
     case BLE_GAP_EVENT_REPEAT_PAIRING: {
         /* A stale bond on our side (the unit forgot us): drop it and pair afresh. */
         struct ble_gap_conn_desc desc;
+        s_probing = 0;
         if (ble_gap_conn_find(ev->repeat_pairing.conn_handle, &desc) == 0)
             ble_store_util_delete_peer(&desc.peer_id_addr);
         return BLE_GAP_REPEAT_PAIRING_RETRY;
@@ -552,11 +562,20 @@ static void scan_deferred(void) {
     if (rc != 0) cali_log("ble: deferred scan failed %d", rc);
 }
 
+static int t_disconnect(void);
+
 static int t_start_scan(const char *name) {
     snprintf(s_name, sizeof s_name, "%s", name);
     s_found = 0;
-    /* NimBLE refuses a scan (BLE_HS_EBUSY) until the controller confirms a connect cancel, which
-     * is asynchronous: forget during a reconnect, then pair at once, hits that window. */
+    /* NimBLE refuses a scan (BLE_HS_EBUSY) while a connect is open — the session's pending
+     * connect_bonded when the unit is out of reach (the runner starts the scan before its state
+     * callback stops the session; watch item 10, board 2026-10-08): cancel it first. The cancel is
+     * asynchronous, so the scan waits for its completion (also after forget during a reconnect,
+     * then pair at once). */
+    if (s_connecting) {
+        s_encrypt_on_connect = 0;
+        (void)t_disconnect();
+    }
     if (s_connect_cancelled) {
         s_scan_deferred = 1;
         return 0;
@@ -605,29 +624,53 @@ static int rpa_matches(const uint8_t irk[16], const ble_addr_t *a) {
     in[13] = a->val[5];
     in[14] = a->val[4];
     in[15] = a->val[3];
-    if (psa_crypto_init() != PSA_SUCCESS) return 0;
+    if ((st = psa_crypto_init()) != PSA_SUCCESS) {
+        cali_log("pair: psa_crypto_init failed %d: the found unit is treated as unbonded", (int)st);
+        return 0;
+    }
     psa_set_key_usage_flags(&at, PSA_KEY_USAGE_ENCRYPT);
     psa_set_key_algorithm(&at, PSA_ALG_ECB_NO_PADDING);
     psa_set_key_type(&at, PSA_KEY_TYPE_AES);
     psa_set_key_bits(&at, 128);
-    if (psa_import_key(&at, key, sizeof key, &id) != PSA_SUCCESS) return 0;
+    if ((st = psa_import_key(&at, key, sizeof key, &id)) != PSA_SUCCESS) {
+        cali_log("pair: psa_import_key failed %d: the found unit is treated as unbonded", (int)st);
+        return 0;
+    }
     st = psa_cipher_encrypt(id, PSA_ALG_ECB_NO_PADDING, in, sizeof in, out, sizeof out, &olen);
     (void)psa_destroy_key(id);
-    return st == PSA_SUCCESS && olen == 16 && out[13] == a->val[2] && out[14] == a->val[1] &&
-           out[15] == a->val[0];
+    if (st != PSA_SUCCESS || olen != 16) {
+        cali_log("pair: psa_cipher_encrypt failed %d: the found unit is treated as unbonded", (int)st);
+        return 0;
+    }
+    return out[13] == a->val[2] && out[14] == a->val[1] && out[15] == a->val[0];
 }
 
-/* The found unit is the one our bond is for (its RPA resolves with the bond's IRK): its identity in
- * *id. A different unit (issue #255: a second camper) does not resolve and is paired as before. */
+/* The found unit is one a bond is for: its identity in *id. Matched against EVERY stored bond — by
+ * identity (a controller that resolved the RPA in the scan reports the identity typed 2/3 =
+ * PUBLIC_ID/RANDOM_ID, while the bond is stored typed 0/1: compared type-agnostically) or by its RPA
+ * resolving with that bond's IRK. A unit no bond is for (issue #255: a second camper) is paired as
+ * before. */
 static int found_is_bonded(ble_addr_t *id) {
-    struct ble_store_key_sec key;
-    struct ble_store_value_sec val;
-    if (first_bond(id) != 0) return 0;
-    if (ble_addr_cmp(id, &s_found_addr) == 0) return 1;              /* found by its identity */
-    memset(&key, 0, sizeof key);
-    key.peer_addr = *id;
-    if (ble_store_read_peer_sec(&key, &val) != 0 || !val.irk_present) return 0;
-    return rpa_matches(val.irk, &s_found_addr);
+    ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)], found = s_found_addr;
+    int n = 0;
+    if (found.type == BLE_ADDR_PUBLIC_ID) found.type = BLE_ADDR_PUBLIC;
+    else if (found.type == BLE_ADDR_RANDOM_ID) found.type = BLE_ADDR_RANDOM;
+    if (ble_store_util_bonded_peers(peers, &n, MYNEWT_VAL(BLE_STORE_MAX_BONDS)) != 0) return 0;
+    for (int i = 0; i < n; i++) {
+        struct ble_store_key_sec key;
+        struct ble_store_value_sec val;
+        if (ble_addr_cmp(&peers[i], &found) == 0) {
+            *id = peers[i];
+            return 1;
+        }
+        memset(&key, 0, sizeof key);
+        key.peer_addr = peers[i];
+        if (ble_store_read_peer_sec(&key, &val) == 0 && val.irk_present && rpa_matches(val.irk, &s_found_addr)) {
+            *id = peers[i];
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /* With a bond for the found unit, connect by its identity (the controller resolves the RPA through
