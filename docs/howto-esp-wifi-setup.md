@@ -10,7 +10,8 @@ pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 fir
 > [What the screen tells you](#what-the-screen-tells-you) — but against a *simulated* camper unit,
 > with a Linux laptop (not a phone) on the hotspot, and never in the van. The controls (below) ran
 > on the real board against the simulated unit too (2026-10-07: every recorded app action arrived
-> byte for byte, a fridge toggle from the browser landed, controls refused over the setup hotspot)
+> byte for byte, a fridge toggle from the browser landed, controls refused over the setup hotspot;
+> 2026-10-08: the wake-up light too, from the app's recorded edits and from the page)
 > — but they have never switched anything in a real camper. The list of things still to confirm is in
 > [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
 

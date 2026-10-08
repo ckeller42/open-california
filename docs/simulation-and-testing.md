@@ -334,7 +334,9 @@ The satellite's writes (#154 B) are proven in a ladder, each rung closer to hard
 6. **CoreS3 bench** — `tools/esplab_control_walk.py` against the fake unit on a dongle, the same
    walker as rung 5 — **BOARD 2026-10-07**: 31 cases byte-exact at the mock over three walks, no
    `1401`, `403` over the real hotspot, the UI toggle from Chromium (`docs/business-logic/evidence-ledger.md`)
-   — a firmware before the wake-up light; its bench walk is owed.
+   — a firmware before the wake-up light; **BOARD 2026-10-08** with it (`6ac867c`): 32 cases over three
+   walks incl. the app's 4 wake-up edits, and a wake-up card edit from Chromium with and without a
+   latched config (the second as the REQUEST_CONFIG pull, then the frame).
 7. **The real unit** — never: the satellite has not been paired with it. The bytes are calictl's,
    so the unit-side evidence is calictl's (cooler `State=3` frames are a van check, #230).
 

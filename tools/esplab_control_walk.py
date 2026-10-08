@@ -15,6 +15,10 @@ tier) and, as a CLI, on the CoreS3 bench:
 
     FAKE_UNIT_RECORD=~/unit.jsonl FAKE_UNIT_FIFO=~/unit.in python tools/applab/fake_unit_ble.py hci-socket:N &
     python tools/esplab_control_walk.py --url http://calictl-esp.local --fifo ~/unit.in --record ~/unit.jsonl
+
+Restart the fake unit between walks (same keystore, FIFO and passkey; wait for the firmware to
+reconnect by bond): the firmware's wake-up latch and the mock's stored wake-up survive a walk, so a
+second walk against the same mock fails ``lighting-wakeup.jsonl:239`` (it expects no config known).
 """
 
 from __future__ import annotations
@@ -210,7 +214,12 @@ def _get_fn(url) -> dict:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="replay the app-recorded control actions against an ESP")
+    ap = argparse.ArgumentParser(
+        description="replay the app-recorded control actions against an ESP",
+        epilog="Restart the fake unit between walks (same keystore, FIFO, passkey; wait for the ESP's "
+        "link): its stored wake-up and the ESP's latch survive a walk, so a second walk fails "
+        "lighting-wakeup.jsonl:239.",
+    )
     ap.add_argument("--url", required=True, help="the firmware, e.g. http://calictl-esp.local")
     ap.add_argument("--fifo", required=True, help="the fake unit's scenario FIFO (FAKE_UNIT_FIFO)")
     ap.add_argument("--record", required=True, help="the fake unit's FAKE_UNIT_RECORD file")
