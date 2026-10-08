@@ -622,7 +622,7 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    for the CoreS3-specific port-finding and serial-capture mechanics on the bar Mac.
    **From CI on a Linux host (buspi in the van, or thinky):** `tools/esplab/flash_ci.sh [branch|run-id]
    [port]` downloads the `firmware-esp32s3` artifact of the latest successful CI run (default `main`)
-   with `gh` into `~/calictl-esp/ci-<sha>/` and flashes it with `tools/esplab/flash.sh` — the
+   with `gh` into `~/calictl-esp/ci-<sha>-<run>/` and flashes it with `tools/esplab/flash.sh` — the
    offsets still come from that artifact's `flasher_args.json`. Needs `gh` logged in,
    `~/esp-venv/bin/esptool` and the user in `dialout`; console afterwards:
    `tools/esplab/esp_cmd.py /dev/ttyACM0 2 status` (opens the port without resetting the chip).

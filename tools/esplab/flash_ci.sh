@@ -10,7 +10,7 @@ if [[ "$REF" =~ ^[0-9]+$ ]]; then RUN="$REF"; else
 fi
 [ -n "$RUN" ] && [ "$RUN" != null ] || { echo "no successful CI run for '$REF'" >&2; exit 1; }
 sha=$(gh run view "$RUN" -R "$REPO" --json headSha --jq '.headSha[0:7]')
-dir="${ESP_FW_DIR:-$HOME/calictl-esp}/ci-$sha"; mkdir -p "$dir"
+dir="${ESP_FW_DIR:-$HOME/calictl-esp}/ci-$sha-$RUN"; mkdir -p "$dir"   # per run: a re-run of the same commit gets its own artifact
 [ -f "$dir/flasher_args.json" ] || gh run download "$RUN" -R "$REPO" -n firmware-esp32s3 -D "$dir"
 cp "$here/flash.sh" "$dir/flash.sh"
 echo "flashing CI run $RUN ($REF @ $sha) from $dir to $PORT"
