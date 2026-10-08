@@ -80,9 +80,13 @@
  *                     while a control command is pending (cali_ctl_busy: the single link is in use).
  *                     Then the runner: start = console "pair" (ignored by the SM unless idle/error),
  *                     passkey = "passkey N" (ignored unless waiting_passkey), cancel =
- *                     cali_runner_cancel, reset = "forget" (drops the bond) -> 200 the post-action
+ *                     cali_runner_cancel while a flow runs (scanning..verifying; else a no-op, so a
+ *                     stale cancel never drops a bonded link), reset = "forget" (drops the bond) -> 200 the post-action
  *                     snapshot. Known differences from calictl: unknown keys, a non-string action and a
- *                     non-bool confirm are bad_json (calictl ignores / reads truthiness).
+ *                     non-bool confirm are bad_json (calictl ignores / reads truthiness); the
+ *                     Content-Type header is not checked (calictl answers 415 for a non-JSON one; the
+ *                     core does not expose headers, the UI always sends application/json); a cancel
+ *                     outside a running flow is a no-op (calictl steps its SM to idle).
  *   other method on /api/wifi, /api/state or /api/pairing -> 405 {"ok":false,"error":"method"}
  *   anything else     setup mode: an OS captive-portal probe path (cali_captive_is_probe) -> 302
  *                     Location "http://" NET_AP_ADDR "/"; any other path -> 302 Location "/".

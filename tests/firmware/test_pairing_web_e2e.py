@@ -246,3 +246,52 @@ def test_wizard_in_browser(host_fw, hci_unit, tmp_path, locale, hotspot, words):
         browser.close()
     assert not errors, errors
     fw.expect("SNAP", timeout=40)
+
+
+async def _hold_connects(hu, on):
+    """The firmware-side controller keeps every LE connection pending while on (no link completes)."""
+    hu.fw_controller.hold_connects = on
+
+
+def _bonded_and_reading(host_fw, hu, tmp_path):
+    """A satellite bonded in an earlier boot (pairing SM idle, bond stored) whose session reads."""
+    fw = _station(host_fw, hu, tmp_path)
+    assert _http_pair(fw, hu) == BONDED
+    fw.stop()
+    fw2 = host_fw(hu, store_dir=tmp_path / "store", http=True, fake_wifi=_wifi_script(tmp_path, WIFI))
+    fw2.expect("SNAP", timeout=40)
+    assert get_json(fw2, "/api/pairing") == dict(BONDED, state="idle")
+    return fw2
+
+
+def test_cancelled_repair_resumes_the_bonded_session(host_fw, hci_unit, tmp_path):
+    """Connect now on a bonded satellite, then Cancel before the pair (the connect held pending):
+    back to idle with the bond, and the session reconnects by bond — SNAP flows again (review I1:
+    it used to stay offline until a reboot)."""
+    fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
+    hci_unit.call(_hold_connects, hci_unit, True)
+    assert _post(fw, {"action": "start"})[0] == 200
+    _wait(fw, lambda s: s["state"] == "connecting", timeout=20)
+    status, s = _post(fw, {"action": "cancel"})
+    assert status == 200 and s == dict(BONDED, state="idle"), s
+    mark = len(fw.log)
+    hci_unit.call(_hold_connects, hci_unit, False)
+    fw.expect("SNAP", timeout=40)
+    assert any(line.startswith("SNAP") for line in fw.log[mark:])
+    assert get_json(fw, "/api/state")["device"]["link"]["up"] is True
+
+
+def test_failed_repair_resumes_the_bonded_session(host_fw, hci_unit, tmp_path):
+    """Connect now on a bonded satellite that never gets a link (the connect held pending): error
+    (NimBLE's connect timeout -> connect_failed after 3 attempts, or the SM's connecting timeout) before
+    any pair(), so the bond is kept and reported, and the session reconnects by
+    bond once the unit is reachable — SNAP flows again (review I1)."""
+    fw = _bonded_and_reading(host_fw, hci_unit, tmp_path)
+    hci_unit.call(_hold_connects, hci_unit, True)
+    assert _post(fw, {"action": "start"})[0] == 200
+    s = _wait(fw, lambda s: s["state"] == "error", timeout=60)
+    assert s["error"] in ("connect_failed", "timeout") and s["address"] == IDENTITY, s
+    mark = len(fw.log)
+    hci_unit.call(_hold_connects, hci_unit, False)
+    fw.expect("SNAP", timeout=60)
+    assert any(line.startswith("SNAP") for line in fw.log[mark:])

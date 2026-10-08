@@ -196,8 +196,14 @@ static void set_cmd(char *args) {
 
 static void on_state(const cali_pair_state_t *s, const char *address) {
     cali_console_state(s, address);
-    if (s->st == PAIR_BONDED) cali_session_on_bonded();
-    else cali_session_stop();
+    if (s->st == PAIR_BONDED) {
+        cali_session_on_bonded();
+    } else {
+        cali_session_stop();
+        /* the flow ended without a new bond (cancel, error, reset): a kept bond reconnects as at
+         * boot (calictl's poll resumes once the flow is idle/error); no bond -> nothing */
+        if (s->st == PAIR_IDLE || s->st == PAIR_ERROR) cali_session_boot();
+    }
 }
 
 void cali_console_init(const cali_transport_t *t) {

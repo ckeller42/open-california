@@ -595,7 +595,12 @@ static void api_pairing(const cali_http_req_t *req, cali_http_resp_t *resp) {
     } else {
         if (start) cali_runner_start();
         else if (passkey) cali_runner_passkey((uint32_t)strtoul(r.value, NULL, 10));
-        else if (cancel) cali_runner_cancel();
+        else if (cancel) {   /* only a running flow: a stale cancel never drops a bonded link */
+            uint8_t st = cali_runner_state()->st;
+            if (st == PAIR_SCANNING || st == PAIR_CONNECTING || st == PAIR_PAIRING ||
+                st == PAIR_WAITING_PASSKEY || st == PAIR_VERIFYING)
+                cali_runner_cancel();
+        }
         else cali_runner_forget();
         pairing_snapshot(resp);
     }

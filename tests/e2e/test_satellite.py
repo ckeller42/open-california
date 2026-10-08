@@ -703,3 +703,22 @@ def test_wizard_start_while_a_command_runs_says_busy(stub, locale, text):
         expect(pg.locator(".toast")).to_have_text(text)
         browser.close()
     assert not errors, errors
+
+
+@pytest.mark.parametrize("engine", ["chromium", "webkit"])
+def test_wizard_poll_sends_one_request_at_a_time(stub, error_gated_page, engine):
+    """The wizard polls /api/pairing every 1 s; against a stalled single-connection core (3.5 s per
+    answer) it must keep at most ONE poll in flight — WebKit has no same-URL lock and would stack a
+    connection per tick against the ESP's backlog of 2 (review M1, like refreshState's guard)."""
+    _engine_or_skip(engine)
+    _unpaired(stub)
+    with error_gated_page(stub.base, engine=engine) as pg:
+        words = WIZARD_TEXT["en-US"]
+        pg.locator("#unpaired-banner").get_by_role("button", name=words["go"]).click()
+        pg.get_by_label(words["ready"]).check()
+        pg.get_by_role("button", name=words["connect"]).click()
+        expect(pg.locator("#pairing-passkey")).to_be_visible()
+        stub.pairing_get_delay_s = 3.5
+        pg.wait_for_timeout(6000)  # ~6 poll ticks into the stall
+        stub.pairing_get_delay_s = 0.0
+    assert stub.pairing_gets_max == 1, stub.pairing_gets_max

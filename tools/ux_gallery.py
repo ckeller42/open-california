@@ -285,6 +285,10 @@ class EspStub:
         self.pairing_posts = []  # POST /api/pairing bodies, in order
         self.pairing_passkey = "123456"  # the code the stub "unit" shows
         self.pairing_status, self.pairing_error = 200, None  # e.g. 409, "busy"
+        self.pairing_get_delay_s = 0.0  # GET /api/pairing answers this late (a stalled core)
+        self.pairing_gets_max = 0  # the most GET /api/pairing ever in flight at once
+        self._pairing_gets = 0
+        self._count = threading.Lock()
         self._pending = threading.Lock()  # held while a command is being answered
         with open(ESP_PAGE, "rb") as f:
             page = f.read()
@@ -335,6 +339,13 @@ class EspStub:
                 stub.requests.append(path)
                 fx = stub.fixtures[stub.mode]
                 enc = None
+                if path == "/api/pairing" and stub.pairing_get_delay_s:
+                    with stub._count:
+                        stub._pairing_gets += 1
+                        stub.pairing_gets_max = max(stub.pairing_gets_max, stub._pairing_gets)
+                    time.sleep(stub.pairing_get_delay_s)
+                    with stub._count:
+                        stub._pairing_gets -= 1
                 if path == "/api/state" and stub.fail_state > 0:
                     stub.fail_state -= 1
                     self.send_error(503)

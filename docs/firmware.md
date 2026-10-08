@@ -176,7 +176,7 @@ slot keeps its copy until a later line reuses it).
 | `GET /device` | 200 `text/html` in every mode — the status/setup page: `strings_gen.h`'s `WEB_INDEX_HTML`, the byte array generated from `firmware/web/index.html` + `page.js` + `strings.json` (EN + DE) by `tools/gen_c_dict.py`; it links to the calictl UI — `/` in station mode ("Open the camper UI"), `/app` elsewhere ("Open the camper UI to pair the unit" while no bond is stored). One source of bytes on both tiers; no `EMBED_FILES`, no LittleFS. |
 | `GET /app` | 200 the calictl web UI bundle (as `GET /` in station mode) in **every** WiFi mode — over the setup hotspot `/` is the setup page, and `/app` is where the pairing wizard is reached (`R_FW_PAIRING_WIZARD`). |
 | `GET /api/pairing` | 200 calictl's `pairing_snapshot()`: `{"state","attempts","error","address","radio_busy":false}` — the console `STATE` members (one emitter, `cali_snapshot_pairing`); `address` = the bonded identity while bonded, or idle/error with a stored bond. |
-| `POST /api/pairing` | calictl's wizard request `{"action":"start"\|"passkey"\|"cancel"\|"reset","value":"<6 digits>","confirm":true}`, in **every** WiFi mode (connection management, not a control write). web.py's checks in its order, calictl's error bodies `{"error":<code>}`: 400 `bad_json` (the fixed-shape parser: unknown keys, a non-string `action`, a non-bool `confirm`), 400 `bad_action`, 400 `confirm_required` (reset without `confirm:true`), 400 `bad_passkey` (not a 6-digit **string**), then 409 `busy` for `start`/`reset` while a control command is pending (the single link is in use). Then the runner — `start` = console `pair` (idempotent: ignored unless idle/error), `passkey` = `passkey N` (ignored unless waiting), `cancel`, `reset` = `forget` (drops the bond) — and 200 with the post-action snapshot. |
+| `POST /api/pairing` | calictl's wizard request `{"action":"start"\|"passkey"\|"cancel"\|"reset","value":"<6 digits>","confirm":true}`, in **every** WiFi mode (connection management, not a control write). web.py's checks in its order, calictl's error bodies `{"error":<code>}`: 400 `bad_json` (the fixed-shape parser: unknown keys, a non-string `action`, a non-bool `confirm`), 400 `bad_action`, 400 `confirm_required` (reset without `confirm:true`), 400 `bad_passkey` (not a 6-digit **string**), then 409 `busy` for `start`/`reset` while a control command is pending (the single link is in use). Then the runner — `start` = console `pair` (idempotent: ignored unless idle/error), `passkey` = `passkey N` (ignored unless waiting), `cancel` (only while a flow runs, scanning … verifying; otherwise a no-op, so a stale cancel never drops a bonded link), `reset` = `forget` (drops the bond) — and 200 with the post-action snapshot. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), unknown keys / a non-string `action` / a non-bool `confirm` are `bad_json`, a `cancel` outside a flow changes nothing. |
 | `GET /api/state` | 200 JSON `{"t","fn","device"}` — `fn` = the `SNAP` object (every function the session holds a frame for, `codec_decode`d, `CODEC_CHARS` order); `device` = `pairing {state,address}`, `link {up,last_snap_age_ms}`, `wifi {mode,ssid,ip,rssi}`, `control {writes}` (`POST /api/command` accepted: station mode), `uptime_ms`, `fw`. Built whole in one handler call into the `NET_JSON_MAX` (8192 B) buffer (a full 14-function snapshot is ~4.5 KB); overflow -> 500 + `LOG http: overflow`. |
 | `GET /api/wifi` | 200 JSON `{"mode","ssid","ip","rssi","last_error","scan":[{"ssid","rssi","secure"}]}` (the last scan's list, up to 16); `last_error` is why the last join failed (`"not_found"`, `"auth"`, `"other"`) or `null` (none yet, or cleared by new credentials or by joining) — the setup page turns it into one of three texts; in setup mode it also asks for a fresh scan for the next GET. |
 | `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
@@ -207,7 +207,9 @@ the device page links to `/app` (*Open the camper UI to pair the unit*), the UI 
 read-only (controls stay station-only). Only the device-specific hints differ from buspi's: no Pi
 scanner, daemon or `CALICTL_ADDR` advice; instead *until the satellite connects*, *stop a
 Raspberry Pi with calictl near the van*, *Saved on the satellite — survives a restart*.
-`radio_busy` is always `false` (no co-resident scanner). `start`/`reset` are `409 busy` while a
+`radio_busy` is always `false` (no co-resident scanner). When a flow ends without a new bond —
+cancelled, failed (`error`) or reset — the session reconnects by a kept bond as at boot, like
+calictl's poll resuming once the flow is idle/error. `start`/`reset` are `409 busy` while a
 control command holds the link; a stale bond (the unit's Bluetooth was reset) needs no reset
 first — the transport's `pair()` drops it before it pairs afresh. Issue #255 (a second unit's
 pair keeps the first bond) is unchanged.
@@ -509,6 +511,11 @@ The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait
 8. **Size + heap.** The 1,078,880 B image in the 3 MB partition flashes from the build's own
    flasher args; DIRAM use (160,018 B, 46.8 %) leaves the NimBLE host task and the 8 KB JSON buffer
    room under real traffic.
+9. **Pairing start during a WiFi scan.** The coexistence gate is one-way: a WiFi scan never starts
+   while a pairing flow runs, but `POST /api/pairing {"action":"start"}` is accepted while a scan
+   (the hotspot's own at `AP_START`, or one the setup page asked for) is still running. Over the
+   hotspot this is now the main pairing path: press *Connect now* right after the hotspot comes up
+   and check the flow still reaches `waiting_passkey` (no scan-refused or connect-timeout retries).
 
 ## Design rulings worth knowing
 

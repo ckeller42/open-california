@@ -241,6 +241,7 @@ fake's real SMP passkey pairing — not the esp-nimble port, a radio or the real
 | cancel mid-flow → idle; reset without `confirm` → 400 (bond kept), with it → idle, no address; a fresh pair works | **HOST-E2E** 2026-10-08 | `test_cancel_and_reset` |
 | `409 busy` for start/reset while a console `set` holds the link; accepted again once it ended | **HOST-E2E** 2026-10-08 | `test_start_while_a_command_runs_is_busy` |
 | The wizard clicked in Chromium against the host firmware: EN over the hotspot's `/app`, DE at `/` in station mode | **HOST-E2E** 2026-10-08 | `test_wizard_in_browser` (`T_FW_PAIRING_WIZARD_UI`) |
+| A cancelled (before the pair) or failed (no link: `connect_failed`) re-pair on a bonded satellite keeps the bond and the session reconnects by it — `SNAP` flows again; a `cancel` outside a running flow changes nothing (review I1) | **HOST-E2E** 2026-10-08 | `test_cancelled_repair_resumes_the_bonded_session`, `test_failed_repair_resumes_the_bonded_session`; handler `test_cancel_outside_a_flow_is_a_no_op` |
 | The same on the **CoreS3** over a home network and over the setup hotspot | **BOARD** 2026-10-08 | "ESP32 satellite pairing wizard — BOARD rows" below |
 | The wizard on the **real camper unit** (its *Gerät verbinden* screen, its passcode, a phone at the van) | **DEVICE — never** | first owner-watched satellite session at the van |
 

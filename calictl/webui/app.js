@@ -1213,10 +1213,16 @@ async function pairingFetch() {
 // fetch loop running even once the user has navigated away.
 const PAIRING_TERMINAL_STATES = new Set(["bonded", "error", "idle"]);
 
+let pairingPolling = false;   // a wizard poll is on the wire (one at a time, like refreshState)
+
 function startPairingPoll() {
   if (pairingTimer) return;
   pairingTimer = setInterval(async () => {
-    await pairingFetch();
+    // The satellite's core serves one connection with a backlog of 2: never stack a 1 s poll
+    // behind a stalled one (WebKit would; Chromium/Firefox hold same-URL GETs themselves).
+    if (pairingPolling) return;
+    pairingPolling = true;
+    try { await pairingFetch(); } finally { pairingPolling = false; }
     const ae = document.activeElement;
     if (!(ae && ae.id === "pairing-passkey")) {      // don't clobber the user mid-type
       if (view === "home") render();                 // the card only shows on the dashboard

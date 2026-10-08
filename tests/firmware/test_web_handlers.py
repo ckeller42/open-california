@@ -931,10 +931,11 @@ def test_pairing_get_reports_attempts_and_error(web_cli):
     ],
 )
 def test_pairing_post_actions_reach_the_runner_and_answer_the_snapshot(web_cli, body, call):
-    """Each action is the console's runner call (pair / passkey N / forget, plus cancel); the answer
-    is the post-action snapshot, like calictl's (the wizard renders the next step off it)."""
-    r, other = one(web_cli, "POST", "/api/pairing", json.dumps(body), setup=["bond 1"])
-    assert (r.status, r.json()) == (200, IDLE_BONDED)
+    """Each action is the console's runner call (pair / passkey N / forget, plus cancel — here
+    mid-flow, where cancel acts); the answer is the post-action snapshot, like calictl's (the wizard
+    renders the next step off it)."""
+    r, other = one(web_cli, "POST", "/api/pairing", json.dumps(body), setup=["bond 1", "pair scanning"])
+    assert r.status == 200 and r.json()["state"] == "scanning"
     assert pair_calls(other) == [call]
 
 
@@ -974,13 +975,13 @@ def test_pairing_post_validation_is_web_pys(web_cli, body, error):
     [
         ({"action": "start"}, 409),
         ({"action": "reset", "confirm": True}, 409),
-        ({"action": "cancel"}, 200),
         ({"action": "passkey", "value": "123456"}, 200),
     ],
 )
 def test_pairing_start_or_reset_while_a_command_runs_is_busy(web_cli, body, status):
     """The single link is in use by a control command: start/reset answer 409 busy and reach no
-    runner call; cancel and passkey (no new link) still go through.
+    runner call; passkey (no new link; the runner ignores it outside waiting_passkey) goes through.
+    A cancel then is a no-op (no flow runs while a command does), see ``test_cancel_outside_a_flow_is_a_no_op``.
 
     .. test:: Pairing start/reset are refused while a control command is pending
        :id: T_FW_PAIRING_BUSY
@@ -1035,3 +1036,28 @@ def test_app_is_the_calictl_ui_in_every_mode(web_cli, state, joined):
     wizard (/ stays the setup page there)."""
     r, _ = one(web_cli, "GET", "/app", setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.headers["content-encoding"] == "gzip" and r.body == BUNDLE
+
+
+@pytest.mark.parametrize(
+    "state,acts",
+    [
+        ("scanning", True),
+        ("connecting", True),
+        ("pairing", True),
+        ("waiting_passkey", True),
+        ("verifying", True),
+        ("idle", False),
+        ("bonded", False),
+        ("error", False),
+        ("resetting", False),
+    ],
+)
+def test_cancel_outside_a_flow_is_a_no_op(web_cli, state, acts):
+    """cancel ends a running flow only: from bonded/idle/error/resetting it changes nothing (200 with
+    the unchanged snapshot), so a stale cancel from a 1 s-old snapshot can never drop a live bonded
+    link or the control command riding on it (calictl's poll never depends on it either)."""
+    r, other = one(
+        web_cli, "POST", "/api/pairing", '{"action":"cancel"}', setup=["bond 1", "pair " + state, "ctlbusy 1"]
+    )
+    assert r.status == 200 and r.json()["state"] == state
+    assert pair_calls(other) == (["CALL pair_cancel"] if acts else [])
