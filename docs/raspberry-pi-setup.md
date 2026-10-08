@@ -294,7 +294,10 @@ sudo cp /boot/vmlinuz-6.18.34+rpt-rpi-v8 /boot/firmware/kernel8-634.img \
 ```
 
 The `kernel=` line survives OS updates (newer kernels install but are not booted); remove the two
-lines from `config.txt` to test a new kernel, and re-add them if reconnects fail again.
+lines from `config.txt` to test a new kernel, and re-add them if reconnects fail again. To qualify
+a kernel, run `sudo tools/kernel_ble_check.sh` with the unit awake: it watches one poll window in
+`btmon` and tells OK, the regression signature (adverts seen, zero `LE Create Connection`), or
+"unit asleep, inconclusive" apart.
 
 Related pitfalls seen in the same debugging session:
 
