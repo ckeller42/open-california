@@ -12,7 +12,8 @@ open-california — documentation
    and ``DISCLAIMER.md``.
 
 Reverse-engineered control + monitoring for the VW California T7 camper unit over BLE.
-Start with :doc:`architecture` for the five-minute map and :doc:`protocol-sequences` for the
+Start with :doc:`architecture` for the architecture (arc42 sections with C4 context, container,
+component and deployment views) and :doc:`protocol-sequences` for the
 wire-level flows (all diagrams are Mermaid); the requirement traceability at the
 bottom of this page is generated from ``sphinx-needs`` objects authored **inside code
 docstrings** (``.. req::``) and traced to the tests that verify them (``.. test:: … :links:``),

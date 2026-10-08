@@ -21,6 +21,8 @@ Energy history
 .. autofunction:: calictl.history.load
 .. autofunction:: calictl.history.trim
 .. automethod:: calictl.serve.ServeBackend.history
+.. automethod:: calictl.serve.Server._save_last
+.. automethod:: calictl.serve.Server._pull_lighting_config
 
 Device / reads
 --------------
@@ -47,6 +49,7 @@ Control frames
 
 .. autofunction:: calictl.control._airheater
 .. autofunction:: calictl.control._int_range
+.. autofunction:: calictl.control._cooler
 .. autofunction:: calictl.control._lighting
 .. automodule:: calictl.postcheck
    :no-members:
@@ -67,6 +70,7 @@ Sinks (MQTT / Home Assistant)
 -----------------------------
 
 .. autofunction:: calictl.mqtt.command_topics
+.. autofunction:: calictl.mqtt.render_discovery
 
 Automation
 ----------
@@ -102,6 +106,8 @@ Tests
 .. autofunction:: tests.test_calictl.test_roof_position_name_and_infopopup_alert
 .. autofunction:: tests.test_calictl.test_water_stale_latch_guard
 .. autofunction:: tests.test_calictl.test_cli_set_check_all_rows
+.. autofunction:: tests.test_calictl.test_cooler_quiet_mode_and_schedule_frames
+.. autofunction:: tests.test_web_serve.test_serve_state_meta_offline_online_and_persistence
 .. autofunction:: tests.test_mock_integration.test_read_all_heartbeat_refreshes_stale_read
 .. autofunction:: tests.test_mock_integration.test_read_all_read_after_subscribe_wins_over_stale_push
 .. autofunction:: tests.test_mock_integration.test_read_all_later_notify_overrides_the_read

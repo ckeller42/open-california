@@ -253,7 +253,12 @@ def test_supervise_session_loop_backs_off_without_spinning(monkeypatch):
 
 def test_serve_state_meta_offline_online_and_persistence(tmp_path, monkeypatch):
     """The daemon must keep serving the last-known values behind an offline flag when the van's
-    unreachable, and the cache must survive a restart (the unit deep-sleeps for days when parked)."""
+    unreachable, and the cache must survive a restart (the unit deep-sleeps for days when parked).
+
+    .. test:: The last-known state is served offline and survives a restart
+       :id: T_SERVE_STATE_CACHE
+       :links: R_SERVE_STATE_CACHE
+    """
     import time
 
     monkeypatch.setenv("CALICTL_STATE_CACHE", str(tmp_path / "last.json"))
@@ -1843,7 +1848,7 @@ def test_wakeup_edit_pulls_the_config_with_request_config_then_proceeds(monkeypa
 
     .. test:: Daemon pulls the lighting config before refusing a wake-up edit
        :id: T_SERVE_WAKEUP_PULL
-       :links: R_LIGHT_WAKEUP
+       :links: R_LIGHT_WAKEUP, R_LIGHT_CONFIG_PULL
     """
     import datetime
 

@@ -110,7 +110,12 @@ def test_cooler_quiet_mode_and_schedule_frames():
     """Cooler quiet Mode + night-schedule/timer branches, decompile-verified from vf/c.java
     (Mode 0=normal 2=manual-quiet 4=timer-quiet; NightTimerHourOn/Off = raw hour; TimerStart=1).
     Full-packet: every untargeted field at the app's leave-unchanged value (APP-RECORDED frames,
-    ruling R1); night_on/night_off alone carry the current state (DEVICE 2026-08-26)."""
+    ruling R1); night_on/night_off alone carry the current state (DEVICE 2026-08-26).
+
+    .. test:: Cooler frames equal the app's, night hours carry the schedule
+       :id: T_COOLER_APP_FRAMES
+       :links: R_COOLER_APP_FRAMES
+    """
     from calictl import control
 
     f = _funcs()
