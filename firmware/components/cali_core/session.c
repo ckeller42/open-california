@@ -20,6 +20,7 @@ static const cali_transport_t *s_t;
 static int s_active;           /* keep (or re-establish) a link for the stored bond */
 static int s_link;
 static uint64_t s_now;         /* now_ms of the latest tick */
+static uint64_t s_connect_started;   /* now_ms connect_bonded() was accepted (watchdog, #264) */
 static uint64_t s_connected_at;
 static uint64_t s_up_at;       /* now_ms the link came up (encrypted): the arm delay runs from here */
 
@@ -295,6 +296,7 @@ static void connect_now(void) {
     int rc = s_t->connect_bonded();
     if (rc == 0) {
         s_link = LINK_CONNECTING;
+        s_connect_started = s_now;
     } else {
         cali_log("session: connect_bonded failed %d", rc);
         schedule_reconnect();
@@ -345,6 +347,14 @@ void cali_session_tick(uint64_t now_ms) {
             s_rereading = 1;
         else
             cali_log("session: read water failed %d", rc);
+    }
+    /* No verdict on the connect attempt at all — the transport's terminal event got lost (e.g. a
+     * connect silently cancelled under a scan): drop and retry, never wedge in CONNECTING (#264,
+     * field night 2026-10-08: 45 min link-down with the unit awake). */
+    if (s_link == LINK_CONNECTING && now_ms - s_connect_started >= CALI_SESSION_CONNECT_TIMEOUT_MS) {
+        cali_log("session: no connect verdict after %u ms", (unsigned)CALI_SESSION_CONNECT_TIMEOUT_MS);
+        link_lost();
+        return;
     }
     if (s_link == LINK_CONNECTED && now_ms - s_connected_at >= CALI_SESSION_ENC_TIMEOUT_MS) {
         cali_log("session: link not encrypted after %u ms", (unsigned)CALI_SESSION_ENC_TIMEOUT_MS);

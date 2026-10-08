@@ -405,6 +405,18 @@ def test_unencrypted_reconnect_times_out(fake):
     ]
 
 
+def test_connect_attempt_without_any_verdict_times_out(fake):
+    """A connect whose terminal event never arrives (e.g. silently cancelled under a scan, or a
+    transport that lost its verdict) must not wedge the session in CONNECTING — field night
+    2026-10-08 (#264): the satellite sat link-down for 45 minutes with the unit awake."""
+    out = run(fake, "bond 1", "boot", "tick 0", "tick 19900", "tick 20000")
+    assert after(out, "CALL connect_bonded")[1:] == [
+        "LOG session: no connect verdict after 20000 ms",
+        "CALL disconnect",
+        "LOG session: reconnect in 1000 ms",
+    ]
+
+
 def test_forget_stops_the_session(fake):
     out = run(
         fake,
