@@ -343,11 +343,14 @@ in a moment", `503 not_connected` → "Not connected to the camper unit yet — 
 seconds"; a success is "✓ Applied" once the unit's state shows the sent value, otherwise
 "Sent — the unit didn't confirm it" (no readback on the ESP — see above). The wake-up card is
 live since 2026-10-07: it shows the config the unit last reported (the latch keys in `fn.lighting`,
-also from a previous link), stays disabled with *Wake-up settings not known yet — the unit has not
-reported them* until the unit has reported one (empty fields would look like "no area set"), sends
-`local_now` with every edit (so does the daemon's page, which ignores it) and confirms from the
-unit's state — time, switch, areas, brightness and lead time all matching — else "Sent — check
-the lamp". The UI sends
+also from a previous link). Until the unit has reported one it shows *Wake-up settings not known
+yet — the unit has not reported them*: only the time is live (empty, never an invented 00:00) and
+an edit sends the time alone, so the sequencer pulls the config and writes with it, or refuses with
+`WAKEUP_UNKNOWN`, which the page shows; the switch, areas, brightness and lead time stay disabled
+(empty fields would look like "no area set"). The same holds on the daemon's page. Every edit sends
+`local_now` (so does the daemon's page, which ignores it) and is confirmed from the unit's state —
+time, switch, areas, brightness and lead time all matching — else "Sent — the unit didn't confirm
+it". The UI sends
 at most one `/api/state` poll at a time (WebKit would otherwise stack one per tick on the
 single-connection core while a command pends). The German texts of these four satellite-only
 strings are **proposals** (the app has none of them; `strings.de.js`): *Nur über buspi oder die

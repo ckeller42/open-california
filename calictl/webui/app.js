@@ -901,7 +901,7 @@ async function confirmFromState(c, ok) {
     if (s && ok(/** @type {FnState} */ (s))) { toast("✓ Applied", "ok"); return; }
     await new Promise((r) => setTimeout(r, 250));
   }
-  if (fn === "lighting") toast("Sent — check the lamp", "ok");
+  if (fn === "lighting" && c.what !== "wakeup") toast("Sent — check the lamp", "ok");   // a wake-up lights no lamp
   else toast("Sent — the unit didn't confirm it", "warn");
 }
 
@@ -1693,7 +1693,9 @@ function renderLighting(s) {
   const wkOff = readOnly() || !wk;
   /** @param {{time?: string, areas?: number[], brightness?: number, ramp?: number, on?: boolean}} p */
   const wakeCmd = (p) => {
-    if (!wk) return;
+    // Config unknown: only a time edit, sent alone — the server pulls the unit's config (R5) and
+    // fills the rest from what the unit reports, or refuses with the reason. Nothing is invented.
+    if (!wk) { if (p.time && p.on == null) command("lighting", "wakeup", p.time); return; }
     const base = `${p.time || wk.time} ${(p.areas || wk.areas).join(",")} ` +
       `${p.brightness != null ? p.brightness : wk.brightness} ${p.ramp != null ? p.ramp : wk.ramp}`;
     command("lighting", "wakeup", p.on == null ? base : `${base} ${p.on ? "on" : "off"}`);
@@ -1713,8 +1715,9 @@ function renderLighting(s) {
   wrow.appendChild(wsw); wf.appendChild(wrow);
   const trow = document.createElement("div"); trow.className = "row";
   const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
-  const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time : "00:00";
-  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = wkOff;
+  const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time
+    : (typeof wkOpt === "string" && wkOpt.split(/\s+/).find((x) => x.includes(":"))) || "";   // empty, never 00:00
+  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = readOnly();   // live even while unknown (R5 pull)
   tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
   trow.append(tl, tin); wf.appendChild(trow);
   const rrow = document.createElement("div"); rrow.className = "row";

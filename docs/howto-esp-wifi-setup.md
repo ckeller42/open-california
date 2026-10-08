@@ -120,9 +120,11 @@ Things to expect:
 - **The wake-up light takes the time from your phone or laptop**, like the app: the page sends its
   own clock with every wake-up edit, and the light comes on at the time you typed, in your device's
   time zone. A device with a wrong clock or time zone sets a wrong wake-up time — the satellite has
-  no clock of its own and does not check. The first edit after the satellite connects can take
-  about 2 s longer: the satellite first asks the unit for its current wake-up settings, as the app
-  does.
+  no clock of its own and does not check. Until the unit has reported its wake-up settings, only
+  the time can be changed (the rest of the card is greyed with *Wake-up settings not known yet*):
+  change the time and the satellite first asks the unit for its settings, as the app does (about
+  2 s), then sets the new time with them. If the unit does not answer with them, the edit is
+  refused with that reason and nothing else is changed.
 - The page and its controls have **no login**, like the Pi's (the project owner's stance: every
   device on the local network is trusted).
 - For bench use, the USB console takes the same commands: `set <function> <what> <value>`, for
@@ -231,4 +233,4 @@ back**. The replies you'll see:
 | *The satellite is still sending the previous command — try again in a moment* | One command at a time; wait for the toast of the previous one. |
 | *Only via buspi or the app* on the roof | By design — the roof is not controlled from the satellite. Use the Pi's page or the vendor app. |
 | *the wake-up light needs the time from the web page — set it there* | The request came without the page's clock — an old page still open from before the update, or a script. Reload <http://calictl-esp.local> and set the wake-up light on the page. |
-| *wake-up config not known yet (the unit has not reported it): give on\|off with the edit*, or the wake-up card stays greyed with *Wake-up settings not known yet — the unit has not reported them* | The unit has not told the satellite its wake-up settings (it asks once per edit and waits 2 s). Wait a few seconds after the unit connects and try again; if it keeps happening, set the wake-up light once in the vendor app or on the Pi's page. |
+| *wake-up config not known yet (the unit has not reported it): give on\|off with the edit*, or the wake-up card shows *Wake-up settings not known yet — the unit has not reported them* | The unit has not told the satellite its wake-up settings. Change the wake-up time: the satellite then asks the unit for its settings (about 2 s) and sets the new time with them. If the unit does not answer with them, the edit is refused with this reason and nothing is changed; set the wake-up light once in the vendor app or on the Pi's page, then try again. |

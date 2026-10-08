@@ -339,15 +339,84 @@ def test_wakeup_card_is_live_and_sends_the_browsers_wall_clock(stub, error_gated
     assert abs(body["local_now"] - int(datetime.datetime.now(datetime.UTC).timestamp())) >= 11 * 3600
 
 
-def test_wakeup_card_waits_for_the_units_config(live, stub):
-    """No latch yet (the unit has not reported a Mode-20 frame): no invented 00:00, the card says so."""
-    _open(live, "Lighting")
-    expect(live.get_by_label("Wake-up time")).to_be_disabled()
-    expect(live.get_by_role("switch", name="Wake-up light")).to_be_disabled()
-    expect(
-        live.get_by_text("Wake-up settings not known yet — the unit has not reported them", exact=True)
-    ).to_be_visible()
-    assert not stub.commands
+WAKEUP_UNKNOWN = "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+WAKEUP_UNKNOWN_DE = (
+    "Wecklicht-Einstellungen noch nicht bekannt (die Einheit hat sie nicht gemeldet): Ein/Aus mit angeben"
+)
+NOT_CONFIRMED = "Sent — the unit didn't confirm it"
+
+
+def _refused(body):
+    """web.c's refusal shape (``control_run``: the REQUEST_CONFIG pull got no wake-up frame)."""
+    return {
+        "ok": True,
+        "applied": False,
+        "refused": WAKEUP_UNKNOWN,
+        "state": None,
+        "error": None,
+        "function": body.get("function", "lighting"),
+    }
+
+
+@pytest.mark.parametrize(
+    "locale,tile,refusal",
+    [("en-US", "Lighting", WAKEUP_UNKNOWN), ("de-DE", "Beleuchtung", WAKEUP_UNKNOWN_DE)],
+)
+def test_wakeup_time_is_editable_before_the_unit_reported(stub, error_gated_page, locale, tile, refusal):
+    """No latch yet: only the time is live (empty, never an invented 00:00); the rest waits for the unit.
+    A time edit posts the time alone (+ local_now) so the firmware pulls the unit's config (R5); the
+    unit not answering -> the refusal reason is shown."""
+    stub.command_reply = _refused({})
+    with error_gated_page(stub.base, locale=locale) as pg:
+        pg.wait_for_function(LIVE)
+        _open(pg, tile)
+        tm = pg.get_by_label("Wake-up time")
+        expect(tm).to_be_enabled()
+        expect(tm).to_have_value("")
+        expect(pg.get_by_role("switch", name="Wake-up light")).to_be_disabled()
+        expect(pg.get_by_label("Wake-up brightness")).to_be_disabled()
+        expect(pg.locator(".arealist input[type=checkbox]:enabled")).to_have_count(0)
+        expect(pg.locator(".card select:disabled").first).to_be_visible()
+        assert pg.locator(".note", has_text=re.compile("not known yet|noch nicht bekannt")).count() >= 1
+        tm.fill("07:00")
+        _wait_commands(pg, stub)
+        expect(pg.locator(".toast")).to_have_text(refusal, timeout=6000)
+    body = stub.commands[0]
+    assert set(body) == {"function", "what", "value", "confirm", "local_now"}
+    assert (body["function"], body["what"], body["value"]) == ("lighting", "wakeup", "07:00")
+    assert isinstance(body["local_now"], int) and body["local_now"] > 1767225600
+
+
+def test_wakeup_time_edit_lands_once_the_unit_answers_the_pull(stub, error_gated_page):
+    """The unit answers the firmware's REQUEST_CONFIG with its Mode-20 config and the edit is written:
+    the next poll shows the new time in the latch -> "Applied"."""
+
+    def unit_answers_and_applies(body):
+        if body["what"] == "wakeup":
+            stub.fixtures["satellite"]["/api/state"]["fn"]["lighting"].update(LATCH, WakeupTimestamp=7 * 3600)
+
+    stub.on_command = unit_answers_and_applies
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_function(LIVE)
+        _open(pg, "Lighting")
+        pg.get_by_label("Wake-up time").fill("07:00")
+        _wait_commands(pg, stub)
+        expect(pg.locator(".toast")).to_have_text("✓ Applied", timeout=6000)
+        expect(pg.get_by_role("switch", name="Wake-up light")).to_be_enabled()
+    assert stub.commands[0]["value"] == "07:00"
+
+
+def test_wakeup_switch_unconfirmed_when_the_unit_keeps_its_switch(stub, error_gated_page):
+    """The switch's command carries the unchanged time/areas: only the enabled bit tells it applied.
+    The unit still reports "on" -> the honest warning, never "Applied"."""
+    stub.fixtures["satellite"]["/api/state"]["fn"]["lighting"].update(LATCH)
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_function(LIVE)
+        _open(pg, "Lighting")
+        pg.get_by_role("switch", name="Wake-up light").click()
+        _wait_commands(pg, stub)
+        expect(pg.locator(".toast")).to_have_text(NOT_CONFIRMED, timeout=9000)
+    assert stub.commands[0]["value"].endswith(" off")
 
 
 def test_wakeup_is_confirmed_from_the_units_own_state(stub, error_gated_page):
@@ -375,7 +444,8 @@ def test_wakeup_unconfirmed_when_the_unit_reports_another_config(stub, error_gat
         _open(pg, "Lighting")
         pg.get_by_label("Wake-up time").fill("07:00")
         _wait_commands(pg, stub)
-        expect(pg.locator(".toast")).to_have_text("Sent — check the lamp", timeout=9000)
+        # a wake-up edit lights no lamp: the generic warning (review m6)
+        expect(pg.locator(".toast")).to_have_text(NOT_CONFIRMED, timeout=9000)
 
 
 def test_api_still_refuses_calictl_only_paths_on_the_live_satellite(live, stub):

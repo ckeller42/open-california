@@ -17,7 +17,7 @@ write (char, delay, bytes), or bad/none.
 
 .. test:: The C lighting-config latch equals semantics.lighting_config
    :id: T_FW_LIGHT_CFG_PARITY
-   :links: R_FW_CONTROL_TWIN
+   :links: R_FW_CONTROL_TWIN, R_FW_WAKEUP
 """
 
 import json

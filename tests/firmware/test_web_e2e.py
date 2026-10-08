@@ -442,6 +442,60 @@ def test_live_wakeup_edit_reaches_the_unit_with_the_pages_clock(host_fw, rec_uni
     assert [(c, h) for c, h, _ in walker.unit_writes(rec)] == [(f["char"], f["hex"]) for f in e["frames"]]
 
 
+async def _hold_wakeup(unit, wakeup):
+    """The unit holds a wake-up config it has not pushed: it reports it only in a REQUEST_CONFIG reply
+    (``unit`` = the Bumble FakeUnit, ``unit.unit`` its MockCamperUnit model)."""
+    unit.unit.wakeup = wakeup
+
+
+def test_wakeup_time_edit_with_no_config_pulls_then_lands(host_fw, rec_unit, tmp_path):
+    """Review m2 over real NimBLE: the satellite has no config latched, so only the time is live; the
+    edit posts the time alone; the sequencer pulls REQUEST_CONFIG, the unit answers with its Mode-20
+    config, and the wake-up frame calictl builds for that config and the page's clock follows."""
+    import tools.esplab_control_walk as walker
+    from tools import gen_control_vectors
+    from tools.mock_unit import _pack_state
+
+    from .test_control_e2e import _online  # lazily: that module imports this one
+
+    sync_playwright = _require_chromium()
+    hu, rec = rec_unit
+    fw = _online(host_fw, hu, tmp_path)
+    funcs = _funcs()
+    held = {"Timestamp": 6 * 3600, "LightValue": 0x1101}
+    hu.call(_hold_wakeup, hu.unit, dict(held))
+    assert "WakeupTimestamp" not in get_json(fw, "/api/state")["fn"]["lighting"]
+    with sync_playwright() as p:
+        browser, page, errors, _ = _live_ui(p, fw)
+        bodies = []
+        page.on("request", lambda q: bodies.append(q.post_data) if q.url.endswith("/api/command") else None)
+        _open_tile(page, "Lighting")
+        tm = page.get_by_label("Wake-up time")
+        assert tm.is_enabled() and tm.input_value() == ""
+        assert page.get_by_role("switch", name="Wake-up light").is_disabled()
+        tm.fill("08:00")
+        page.locator(".toast").first.wait_for(timeout=12000)
+        toast = page.locator(".toast").first.inner_text()
+        browser.close()
+    assert not errors, errors
+    body = json.loads(bodies[0])
+    assert (body["function"], body["what"], body["value"]) == ("lighting", "wakeup", "08:00")
+    assert toast == "✓ Applied", (toast, walker.unit_writes(rec))
+    frame = _pack_state(funcs["lighting"], {"Mode": 20, **held})
+    states = {
+        "lighting": {
+            **protocol.decode(funcs["lighting"], frame),
+            "WakeupTimestamp": held["Timestamp"],
+            "WakeupLightValue": held["LightValue"],
+        }
+    }
+    e = gen_control_vectors.expect(funcs, "lighting", "wakeup", "08:00", states, body["local_now"])
+    pull = [(f["char"], f["hex"]) for f in walker.config_pull()["frames"]]
+    assert [(c, h) for c, h, _ in walker.unit_writes(rec)] == pull + [
+        (f["char"], f["hex"]) for f in e["frames"]
+    ]
+
+
 def test_busy_satellite_tells_the_user_to_retry(host_fw, rec_unit, tmp_path):
     """A console ``set`` holds the sequencer (slow ACK); the UI's click meanwhile is the firmware's
     ``409 busy``, shown as a sentence the owner can act on, not a bare code."""

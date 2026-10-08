@@ -989,6 +989,53 @@ def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
     assert sent[1].endswith(" off")
 
 
+@pytest.fixture
+def fresh_url(tmp_path):
+    """A dedicated daemon over a fresh mock: the unit has never reported a wake-up config (the shared
+    ``base_url`` daemon's mock is seeded by other tests)."""
+    proc, url = _start_daemon(
+        _free_port(),
+        {
+            "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
+            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
+            "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
+            "CALICTL_CONFIG_PULL_S": "0.5",
+        },
+    )
+    try:
+        yield url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+
+
+def test_wakeup_time_edit_with_no_config_pulls_then_shows_the_refusal(fresh_url, error_gated_page):
+    """Review m2: with no config reported, the card does not dead-end — only the time is live, an edit
+    sends the time alone; the daemon pulls REQUEST_CONFIG (R5), the mock answers with no wake-up frame,
+    and the refusal reason reaches the user. Nothing is invented: the card stays unknown."""
+    with error_gated_page(fresh_url) as pg:
+        pg.get_by_text("Lighting", exact=True).first.click()
+        tm = pg.get_by_label("Wake-up time")
+        expect(tm).to_be_enabled(timeout=15000)
+        expect(tm).to_have_value("")
+        expect(pg.get_by_role("switch", name="Wake-up light")).to_be_disabled()
+        expect(pg.get_by_label("Wake-up brightness")).to_be_disabled()
+        bodies = []
+        pg.on("request", lambda rq: bodies.append(rq.post_data) if rq.url.endswith("/api/command") else None)
+        tm.fill("07:00")
+        expect(pg.locator(".toast").last).to_have_text(
+            "wake-up config not known yet (the unit has not reported it): give on|off with the edit",
+            timeout=15000,
+        )
+        assert _state(fresh_url, pg)["lighting"]["wakeup"] is None
+    body = json.loads(bodies[0])
+    assert (body["function"], body["what"], body["value"]) == ("lighting", "wakeup", "07:00")
+    assert isinstance(body["local_now"], int)
+
+
 def test_door_contact_switch_round_trips(page, base_url):
     """
     .. test:: The web UI toggles the sliding-door light; the state shows the mock's flag
