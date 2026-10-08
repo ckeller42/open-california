@@ -66,7 +66,24 @@
  *                     not on/off where calictl would read OFF — the safe direction; a value of
  *                     CALI_CTL_VALUE_MAX (64) bytes or more is 400 bad_json BEFORE the gates, while
  *                     the console `set` (Task 2 I1) runs the gate first and refuses — both refuse.
- *   other method on /api/wifi or /api/state -> 405 {"ok":false,"error":"method"}
+ *   GET /app          200 the calictl web UI (WEB_APP_HTML_GZ, gzip) in EVERY WiFi mode: over the setup
+ *                     hotspot the shared pairing wizard is reachable here (/ is the setup page there).
+ *   GET /api/pairing  200 calictl's pairing_snapshot(): {"state","attempts","error","address",
+ *                     "radio_busy":false} — the console STATE members (cali_snapshot_pairing).
+ *   POST /api/pairing calictl's wizard request {"action":"start"|"passkey"|"cancel"|"reset",
+ *                     "value":"<6 digits>","confirm":true} (fixed-shape parser: those keys, each at most
+ *                     once, any order; action a string, value a string/integer/null, confirm a bool).
+ *                     In EVERY WiFi mode (connection management, not a control write). Checks in
+ *                     web.py's order, calictl's error bodies {"error":<code>} (no "ok"): 400 bad_json,
+ *                     400 bad_action, 400 confirm_required (reset without confirm:true), 400
+ *                     bad_passkey (passkey value not a 6-digit string), then 409 busy for start/reset
+ *                     while a control command is pending (cali_ctl_busy: the single link is in use).
+ *                     Then the runner: start = console "pair" (ignored by the SM unless idle/error),
+ *                     passkey = "passkey N" (ignored unless waiting_passkey), cancel =
+ *                     cali_runner_cancel, reset = "forget" (drops the bond) -> 200 the post-action
+ *                     snapshot. Known differences from calictl: unknown keys, a non-string action and a
+ *                     non-bool confirm are bad_json (calictl ignores / reads truthiness).
+ *   other method on /api/wifi, /api/state or /api/pairing -> 405 {"ok":false,"error":"method"}
  *   anything else     setup mode: an OS captive-portal probe path (cali_captive_is_probe) -> 302
  *                     Location "http://" NET_AP_ADDR "/"; any other path -> 302 Location "/".
  *                     Otherwise: not handled (the core answers 404).

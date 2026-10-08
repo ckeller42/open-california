@@ -155,6 +155,8 @@ void cali_runner_passkey(uint32_t pk) {
 
 void cali_runner_forget(void) { feed(PAIR_EV_RESET, 0); }
 
+void cali_runner_cancel(void) { feed(PAIR_EV_CANCEL, 0); }
+
 void cali_runner_tick(uint64_t now_ms) {
     s_now_ms = now_ms;
     uint16_t t = PAIR_TIMEOUT_S[s_ps.st];

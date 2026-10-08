@@ -22,6 +22,8 @@
  *   ap <ssid> <rssi> <secure>   append one scan result; "apclear" empties the list
  *   lastfail none|<reason>   what cali_wifi_run_last_fail() answers (NULL for none)
  *   pair <name>      the runner's state, by PAIR_STATE_NAMES name
+ *   attempts <n>     the runner state's attempts; "pairerr <name>" its error (PAIR_ERR_NAMES)
+ *   ctlbusy 0|1      what cali_ctl_busy() answers (a control command is pending)
  *   bond 0|1         has_bond() (identity() = C0:FF:EE:CA:11:F0 while 1)
  *   active 0|1       cali_session_active()
  *   linkup 0|1       cali_session_link_up() (defaults to 0: set both when a test wants "up")
@@ -34,7 +36,8 @@
  *   ctldone <rc> <polls> [reason…]   rc = ok failed timeout refused: the done callback of the last
  *                    accepted command fires <polls> polls into the next request, with the reason
  *                    (NULL when absent)
- * Calls into the fake WiFi runtime print "CALL set_creds [<ssid>] [<psk>]", "CALL forget",
+ * The runner's actions print "CALL pair_start", "CALL pair_passkey <6 digits>", "CALL pair_cancel",
+ * "CALL pair_forget". Calls into the fake WiFi runtime print "CALL set_creds [<ssid>] [<psk>]", "CALL forget",
  * "CALL scan_auto"; cali_ctl_submit prints "CALL submit [<fn>] [<what>] [<value>]" (+ " t=<local_now>"
  * when one is given); cali_log prints
  * "LOG <text>". cali_web_init's result goes to stderr as "init=<rc>".
@@ -129,6 +132,10 @@ int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) { (void)live; 
 /* ---- the fake runner + transport ---- */
 static cali_pair_state_t s_pair;
 const cali_pair_state_t *cali_runner_state(void) { return &s_pair; }
+void cali_runner_start(void) { printf("CALL pair_start\n"); }
+void cali_runner_passkey(uint32_t pk) { printf("CALL pair_passkey %06lu\n", (unsigned long)pk); }
+void cali_runner_cancel(void) { printf("CALL pair_cancel\n"); }
+void cali_runner_forget(void) { printf("CALL pair_forget\n"); }
 
 static int s_bond;
 static int f_has_bond(void) { return s_bond; }
@@ -202,6 +209,8 @@ void cali_wifi_run_scan_auto(void) { printf("CALL scan_auto\n"); }
 static int s_ctl_rc = CALI_CTL_PENDING, s_done_rc = CALI_CTL_OK, s_done_after;
 static char s_ctl_reason[160], s_done_reason[160];
 static cali_ctl_done_t s_ctl_done;
+static int s_ctl_busy;
+int cali_ctl_busy(void) { return s_ctl_busy; }
 
 int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now,
                     cali_ctl_done_t done, const char **reason) {
@@ -296,6 +305,14 @@ int main(void) {
         else if (strcmp(w, "active") == 0) s_active = (int)v;
         else if (strcmp(w, "linkup") == 0) s_linkup = (int)v;
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
+        else if (strcmp(w, "ctlbusy") == 0) s_ctl_busy = (int)v;
+        else if (strcmp(w, "attempts") == 0) s_pair.attempts = (uint8_t)v;
+        else if (strcmp(w, "pairerr") == 0) {
+            size_t i;
+            for (i = 0; i < N_OF(PAIR_ERR_NAMES) && !(PAIR_ERR_NAMES[i] && strcmp(PAIR_ERR_NAMES[i], a1) == 0); i++) {}
+            if (i == N_OF(PAIR_ERR_NAMES)) { printf("UNKNOWN pairerr %s\n", a1); continue; }
+            s_pair.error = (uint8_t)i;
+        }
         else if (strcmp(w, "apclear") == 0) s_naps = 0;
         else if (strcmp(w, "lastfail") == 0)
             snprintf(s_lastfail, sizeof s_lastfail, "%s", strcmp(a1, "none") == 0 ? "" : a1);

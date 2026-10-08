@@ -7,6 +7,7 @@
 #define CALI_SNAPSHOT_H
 
 #include "cali_json.h"
+#include "cali_pairing_sm.h"
 #include "cali_transport.h"
 
 #ifdef __cplusplus
@@ -22,8 +23,14 @@ extern "C" {
 void cali_snapshot_fn(cali_json_t *j);
 
 /* The pairing address calictl's /api/pairing reports: the transport's identity() while the pairing
- * SM is bonded, or idle with a stored bond (has_bond()); NULL otherwise (or when t is NULL). */
+ * SM is bonded, or idle/error with a stored bond (has_bond(): a failed re-pair keeps the old bond
+ * until the transport's pair() drops it); NULL otherwise (or when t is NULL). */
 const char *cali_snapshot_pair_address(const cali_transport_t *t);
+
+/* Writes the MEMBERS "state","attempts","error","address" of calictl's pairing snapshot
+ * (calictl/serve.py pairing_snapshot, names from pairing_consts.h) — the console's STATE line and
+ * GET/POST /api/pairing, so the two can never disagree. address NULL = JSON null. */
+void cali_snapshot_pairing(cali_json_t *j, const cali_pair_state_t *s, const char *address);
 
 #ifdef __cplusplus
 }

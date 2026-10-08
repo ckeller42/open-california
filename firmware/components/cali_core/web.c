@@ -5,6 +5,7 @@
 
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cali_captive.h"
@@ -47,6 +48,12 @@ static const char ERR_CONFIRM[] = "{\"ok\":false,\"error\":\"confirm_required\"}
 static const char ERR_SETUP_MODE[] = "{\"ok\":false,\"error\":\"setup_mode\"}";
 static const char ERR_BAD_VALUE[] = "{\"ok\":false,\"error\":\"bad_value\"}";
 static const char OVERFLOW_BODY[] = "response too large";
+/* /api/pairing errors: calictl's own bodies (web.py), no "ok" member */
+static const char ERR_P_BAD_JSON[] = "{\"error\":\"bad_json\"}";
+static const char ERR_P_BAD_ACTION[] = "{\"error\":\"bad_action\"}";
+static const char ERR_P_CONFIRM[] = "{\"error\":\"confirm_required\"}";
+static const char ERR_P_BAD_PASSKEY[] = "{\"error\":\"bad_passkey\"}";
+static const char ERR_P_BUSY[] = "{\"error\":\"busy\"}";
 
 /* See cali_web.h / cali_wifi_run.h for the mapping and why a setup-flow join reports "off". */
 static int wifi_mode(void) { return cali_wifi_mode(cali_wifi_run_state()); }
@@ -485,6 +492,115 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
     return 1;
 }
 
+/* ---- /api/pairing: calictl's wizard endpoint (web.py + serve.pairing_command) ---- */
+
+typedef struct {
+    char action[12], value[8];
+    size_t action_len, value_len;
+    int value_str, confirm;
+} pair_req_t;
+
+/* 0 ok, -1 not one object of the keys action (string), value (string, integer or null), confirm
+ * (bool), each at most once. */
+static int parse_pairing(const char *body, size_t body_len, pair_req_t *r) {
+    cursor_t c = {body, body + body_len};
+    unsigned seen = 0;
+    memset(r, 0, sizeof *r);
+    if (expect(&c, '{') != 0) return -1;
+    skip_ws(&c);
+    if (c.p < c.end && *c.p == '}') {
+        c.p++;
+    } else {
+        for (;;) {
+            char key[10], other[CALI_CTL_VALUE_MAX];
+            size_t klen;
+            unsigned bit;
+            int bad;
+            if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
+            skip_ws(&c);
+            if (strcmp(key, "action") == 0) {
+                bit = 1;
+                bad = parse_str(&c, r->action, sizeof r->action, &r->action_len) != 0;
+            } else if (strcmp(key, "value") == 0) {
+                bit = 2;
+                r->value_str = c.p < c.end && *c.p == '"';
+                bad = r->value_str ? parse_str(&c, r->value, sizeof r->value, &r->value_len) != 0
+                                   : parse_value(&c, other, sizeof other) != 0;
+            } else if (strcmp(key, "confirm") == 0) {
+                bit = 4;
+                bad = parse_bool(&c, &r->confirm) != 0;
+            } else {
+                return -1;
+            }
+            if (bad || (seen & bit)) return -1;
+            seen |= bit;
+            skip_ws(&c);
+            if (c.p < c.end && *c.p == ',') {
+                c.p++;
+                continue;
+            }
+            if (expect(&c, '}') != 0) return -1;
+            break;
+        }
+    }
+    skip_ws(&c);
+    return c.p == c.end ? 0 : -1;
+}
+
+/* calictl's pairing_snapshot(): the console's STATE members + radio_busy (always false here: no
+ * co-resident BLE scanner on the ESP). */
+static void pairing_snapshot(cali_http_resp_t *resp) {
+    cali_json_t j;
+    cali_json_begin(&j, s_json, sizeof s_json);
+    cali_snapshot_pairing(&j, cali_runner_state(), cali_snapshot_pair_address(s_t));
+    cali_json_key(&j, "radio_busy");
+    cali_json_bool(&j, 0);
+    finish_json(&j, resp);
+}
+
+static int is_action(const pair_req_t *r, const char *name) {
+    return r->action_len < sizeof r->action && strcmp(r->action, name) == 0;
+}
+
+/* In every WiFi mode (connection management, not a control write). web.py's checks in its order;
+ * then the runner call the console's pair / passkey N / forget (and cancel) make, and the
+ * post-action snapshot. start/reset need the single link: 409 busy while a control command runs. */
+static void api_pairing(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static pair_req_t r;
+    int start, passkey, cancel, reset;
+    if (strcmp(req->method, "GET") == 0) {
+        pairing_snapshot(resp);
+        return;
+    }
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    }
+    if (parse_pairing(req->body, req->body_len, &r) != 0) {
+        SET_CONST(resp, 400, ERR_P_BAD_JSON);
+        return;
+    }
+    start = is_action(&r, "start");
+    passkey = is_action(&r, "passkey");
+    cancel = is_action(&r, "cancel");
+    reset = is_action(&r, "reset");
+    if (!start && !passkey && !cancel && !reset) {
+        SET_CONST(resp, 400, ERR_P_BAD_ACTION);
+    } else if (reset && !r.confirm) {
+        SET_CONST(resp, 400, ERR_P_CONFIRM);
+    } else if (passkey && !(r.value_str && r.value_len == 6 && strspn(r.value, "0123456789") == 6)) {
+        SET_CONST(resp, 400, ERR_P_BAD_PASSKEY);
+    } else if ((start || reset) && cali_ctl_busy()) {
+        SET_CONST(resp, 409, ERR_P_BUSY);
+    } else {
+        if (start) cali_runner_start();
+        else if (passkey) cali_runner_passkey((uint32_t)strtoul(r.value, NULL, 10));
+        else if (cancel) cali_runner_cancel();
+        else cali_runner_forget();
+        pairing_snapshot(resp);
+    }
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
@@ -496,6 +612,15 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         } else {                                       /* setup hotspot / setup-flow join: the setup page */
             set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_INDEX_HTML, WEB_INDEX_HTML_LEN);
         }
+        return 1;
+    }
+    if (get && strcmp(req->path, "/app") == 0) {       /* the calictl web UI in every mode: the wizard over the hotspot */
+        set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN);
+        resp->content_encoding = "gzip";
+        return 1;
+    }
+    if (strcmp(req->path, "/api/pairing") == 0) {
+        api_pairing(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */

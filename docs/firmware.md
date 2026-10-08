@@ -666,6 +666,23 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    control endpoint is ``POST /api/command`` (``R_FW_CONTROL_API``), whose answer may stay pending
    across polls (``CALI_HTTP_PENDING``) but never beyond ``CALI_HTTP_PENDING_MAX_MS``.
 
+.. req:: The satellite pairs from its web page with calictl's wizard contract, also over the setup hotspot
+   :id: R_FW_PAIRING_WIZARD
+   :status: implemented
+   :tags: esp32, web, pairing
+
+   The firmware shall answer ``GET /api/pairing`` and ``POST /api/pairing``
+   ``{"action":"start"|"passkey"|"cancel"|"reset"}`` in calictl's request and response shape —
+   the snapshot ``state, attempts, error, address, radio_busy`` (``radio_busy`` always ``false``)
+   with calictl's state and error names, and web.py's ``400 bad_action`` / ``confirm_required`` /
+   ``bad_passkey`` — by driving the same runner calls as the console's ``pair`` / ``passkey N`` /
+   ``forget`` (plus cancel), in every WiFi mode including the setup hotspot. ``start`` is
+   idempotent; ``passkey`` takes only a 6-digit string; ``reset`` needs ``confirm:true`` and drops
+   the bond; ``start`` and ``reset`` answer ``409 busy`` while a control command is pending. The
+   calictl web UI, served at ``GET /app`` in every mode (and at ``/`` in station mode), runs its
+   pairing wizard unchanged on the satellite; only the device-specific hints differ. Pairing writes
+   no control characteristic.
+
 .. req:: The CoreS3 screen shows device, WiFi and camper-unit status
    :id: R_FW_STATUS_DISPLAY
    :status: implemented
