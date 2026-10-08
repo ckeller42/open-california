@@ -620,6 +620,12 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    QEMU) — both read the addresses/sizes out of the build, so a bootloader/partition-table/app
    offset never gets hand-typed and drifts from the build. See the `flashing-cores3-on-bar` skill
    for the CoreS3-specific port-finding and serial-capture mechanics on the bar Mac.
+   **From CI on a Linux host (buspi in the van, or thinky):** `tools/esplab/flash_ci.sh [branch|run-id]
+   [port]` downloads the `firmware-esp32s3` artifact of the latest successful CI run (default `main`)
+   with `gh` into `~/calictl-esp/ci-<sha>-<run>/` and flashes it with `tools/esplab/flash.sh` — the
+   offsets still come from that artifact's `flasher_args.json`. Needs `gh` logged in,
+   `~/esp-venv/bin/esptool` and the user in `dialout`; console afterwards:
+   `tools/esplab/esp_cmd.py /dev/ttyACM0 2 status` (opens the port without resetting the chip).
 2. **Console over USB-Serial/JTAG.** The CoreS3's USB-C enumerates as the S3's native USB (not a
    UART bridge): `/dev/cu.usbmodem*` (macOS) or `/dev/ttyACM*` (Linux) at any baud (the driver
    ignores it) — `idf.py -p <port> monitor`, or a plain serial terminal, speaks the console line
