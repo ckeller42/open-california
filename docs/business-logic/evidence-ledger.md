@@ -241,7 +241,26 @@ fake's real SMP passkey pairing — not the esp-nimble port, a radio or the real
 | cancel mid-flow → idle; reset without `confirm` → 400 (bond kept), with it → idle, no address; a fresh pair works | **HOST-E2E** 2026-10-08 | `test_cancel_and_reset` |
 | `409 busy` for start/reset while a console `set` holds the link; accepted again once it ended | **HOST-E2E** 2026-10-08 | `test_start_while_a_command_runs_is_busy` |
 | The wizard clicked in Chromium against the host firmware: EN over the hotspot's `/app`, DE at `/` in station mode | **HOST-E2E** 2026-10-08 | `test_wizard_in_browser` (`T_FW_PAIRING_WIZARD_UI`) |
-| The same on the **CoreS3** over Insel and over the setup hotspot | **BOARD — owed** (controller schedules it) | — |
+| The same on the **CoreS3** over a home network and over the setup hotspot | **BOARD** 2026-10-08 | "ESP32 satellite pairing wizard — BOARD rows" below |
+| The wizard on the **real camper unit** (its *Gerät verbinden* screen, its passcode, a phone at the van) | **DEVICE — never** | first owner-watched satellite session at the van |
+
+## ESP32 satellite pairing wizard — BOARD rows (2026-10-08)
+
+CI image `firmware-esp32s3` of PR #261 at `ab47e22` (built from the PR merge ref, the board reports
+`fw aefc95f`), flashed with `tools/esplab/flash.sh` over a bonded board (the bond and WiFi
+credentials survived the flash; the ESP reconnected by bond). Mock unit `tools/applab/fake_unit_ble.py`
+from the same commit on the thinky UB500 dongle with `FAKE_UNIT_RECORD`, the existing keystore and
+a pinned passkey. Chromium driven by Playwright on thinky (EN), `/api/pairing` polled alongside.
+Never the real unit.
+
+| Date | Fact | Evidence |
+|---|---|---|
+| 2026-10-08 | Station mode (home network, `/`): ⋮ → *Unpair…* → the confirm dialog (*Unpair removes the working bond; telemetry stops until re-paired. Continue?*) → `POST {"action":"reset","confirm":true}` → `idle`, `address` null, the unpaired banner. *Set up remote control* → *I'm on that screen* → *Connect now* → `scanning` → `connecting` → `waiting_passkey` (≈ 3 s) → the mock's code → `bonded` (≈ 13 s after the code) → *✓ Paired — …*; `/api/state` `link.up` with a fresh read-all (all 14 functions) within seconds | Playwright run + the polled snapshots; no page errors |
+| 2026-10-08 | Wrong passcode (station mode): the wizard's *Bluetooth reset / re-pair* (confirm dialog) → `idle` without a bond → *Connect now* → `000000` → the mock refused (`bumble.smp: pairing failure (CONFIRM_VALUE_FAILED)`, link dropped), the runner reconnected and asked again: `waiting_passkey`, `attempts` 1 → the right code → `bonded`, `attempts` 1, state flows | Playwright run + the mock's log |
+| 2026-10-08 | Setup hotspot: `wifi forget` → `LOG wifi: setup hotspot up`; the bench stick on the hotspot; `GET /` = the setup page, `GET /app` 200, the device page links to `/app`. At `http://192.168.4.1/app`: *Bluetooth reset / re-pair* (confirm) → *Connect now* → code → `bonded` in ≈ 11 s → *✓ Paired — …*, link up and reading; WiFi stayed `setup` throughout, `device.control.writes` false | Playwright run + `/api/state` |
+| 2026-10-08 | Over the hotspot, `POST /api/command` (cooler power on) → **`403 {"ok":false,"error":"setup_mode"}`**; across the whole session (four pairings, the reset/unpair, the 403) the mock saw writes on **`1003` only** — pairing writes no control characteristic | curl answer + the mock's recording (written chars = `{1003}`) |
+| 2026-10-08 | `POST /api/wifi` over the hotspot (credentials from a file, piped) → 200 → `LOG wifi: station …` (the home network), `setup hotspot closed`; the bond kept: `bonded`, link up, `control.writes` true at `http://calictl-esp.local` | console + `/api/state` |
+| 2026-10-08 | Not run on the board (host tier only): the unit's pairing screen closed (`pairing_failed` after 3 attempts), `cancel` mid-flow, `409 busy` during a command, the stale bond after the unit's Bluetooth reset, the DE wizard | — |
 
 ## ESP32 satellite wake-up — BOARD rows (2026-10-08)
 
