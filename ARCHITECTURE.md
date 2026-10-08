@@ -1,10 +1,9 @@
 # Architecture
 
 `open-california` turns the VW California camper's Bluetooth-LE control unit into clean signals and
-real control, from a Raspberry Pi. This is the architecture documentation, structured after
-[arc42](https://arc42.org) and drawn with the [C4 model](https://c4model.com) (context, container,
-component, deployment). Diagrams are Mermaid flowcharts styled as C4, so the site builds without
-Java. For the deep provenance behind any claim, follow the links into
+real control, from a Raspberry Pi. This page shows how the pieces fit: goals and constraints,
+context, building blocks, runtime, deployment and the decisions behind them. For the deep
+provenance behind any claim, follow the links into
 [`docs/business-logic/`](https://ckeller42.github.io/open-california/business-logic/index.html).
 
 ## 1. Introduction and goals
@@ -97,7 +96,7 @@ installed on the reference van, so they are verified statically only.
 
 ## 5. Building block view
 
-### Containers (C4 level 2)
+### Containers
 
 ```mermaid
 flowchart TB
@@ -146,7 +145,7 @@ The sinks (Mosquitto, Home Assistant, InfluxDB, Grafana) are deployed next to th
 off-the-shelf components. They are drawn grey because this repository configures them and does not
 implement them.
 
-### Components of the daemon (C4 level 3)
+### Components of the daemon
 
 ```mermaid
 flowchart LR
@@ -454,7 +453,6 @@ summarised below in ADR form, newest context first. Each links to its provenance
 | **Control frames follow the vendor app byte for byte** (ruling R1, 2026-10-06) | calictl once re-asserted current values in untargeted cooler fields, which differs from the app. | Untargeted fields carry the leave-unchanged value, and the recording replay compares whole frames. |
 | **The ESP satellite is a second implementation, not a port of the runtime** (2026-10-06) | A satellite should work without buspi but must not drift from calictl. | It shares the dictionary, generated constants and golden vectors, writes through one allow-list, never drives the roof, and writes only in station mode. See [firmware](https://ckeller42.github.io/open-california/firmware.html). |
 | **Runtime modules import only the standard library** | Tests must run on a machine with no BLE or MQTT stack. | Heavy dependencies import lazily inside functions, and a guard checks it. |
-| **Diagrams are text-based Mermaid** | The docs site is built without Java and diagrams live next to the prose. | A lint guards the characters that break Mermaid in the browser, because the Sphinx build cannot catch them. |
 
 New decisions go into the decision log first. Add a row here when a decision changes a building
 block or a quality goal.
