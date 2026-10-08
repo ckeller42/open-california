@@ -66,6 +66,25 @@ A satellite with no saved WiFi opens its own setup hotspot as soon as it boots.
 
 From now on the satellite joins your network by itself every time it starts.
 
+## Pair the satellite with your camper unit
+
+The satellite pairs from its own page with the same wizard the Pi uses (step by step, with the
+camper screen's side: [How to pair your camper unit](howto-pair-your-camper.md)):
+
+1. On the camper control unit open **Einstellungen → Bluetooth → Gerät verbinden** and close the
+   California On Tour app on your phone (the unit takes one connection at a time — a Pi running
+   calictl near the van would take it too).
+2. Open the calictl UI — **<http://calictl-esp.local>** on your WiFi, or, still on the setup
+   hotspot, the device page's link *Open the camper UI to pair the unit* (**<http://192.168.4.1/app>**).
+3. Tap **Set up remote control** on the *No camper unit is paired yet* banner (or ⋮ → **Bluetooth
+   pairing…**), tick *I'm on that screen*, tap **Connect now**.
+4. Type the 6-digit passcode the unit now shows and tap **Send**. *✓ Paired — …* — the satellite
+   keeps the bond across restarts and reads the unit from then on.
+
+**No WiFi at the van?** Pairing works over the setup hotspot too, so a phone alone is enough;
+only the controls need your WiFi. **Unit's Bluetooth was reset?** Just pair again (or ⋮ →
+**Unpair…** first); the satellite drops the old bond itself.
+
 ## Finding the satellite on your network
 
 Open **<http://calictl-esp.local>** from any device on the same network: after setup it shows the
@@ -228,7 +247,7 @@ back**. The replies you'll see:
 | "Device not reachable" banner on the page | The page lost contact with the satellite: your phone left its network (e.g. the setup hotspot closed after the satellite joined your WiFi). Rejoin the right network and reload. |
 | <http://calictl-esp.local> doesn't open | Use the IP address from your router's device list or `wifi status` (see [Finding the satellite](#finding-the-satellite-on-your-network)). |
 | The page is slow with several tabs open | The satellite answers one request at a time. Keep one tab open. |
-| *Link to the camper unit: not connected* | That is the Bluetooth side, not WiFi: the satellite is not paired yet, the camper unit is asleep, or another device (the Pi, the app) holds the unit's only Bluetooth connection. Pairing is done on the USB console (`pair`, then `passkey <code>`) — see [ESP32 firmware](firmware.md). |
+| *Link to the camper unit: not connected* | That is the Bluetooth side, not WiFi: the satellite is not paired yet, the camper unit is asleep, or another device (the Pi, the app) holds the unit's only Bluetooth connection. Pair it from the page ([Pair the satellite with your camper unit](#pair-the-satellite-with-your-camper-unit)); the USB console's `pair` / `passkey <code>` does the same. |
 | *Not connected to the camper unit yet — try again in a few seconds* after tapping a control | The Bluetooth link is not armed yet (give it a few seconds after the unit connects) or the unit is out of reach / asleep. |
 | *Controls work only on your home WiFi — not over the setup hotspot* | You are on `calictl-esp-setup`. Put the satellite on your WiFi (above) and use <http://calictl-esp.local>. |
 | *The satellite is still sending the previous command — try again in a moment* | One command at a time; wait for the toast of the previous one. |

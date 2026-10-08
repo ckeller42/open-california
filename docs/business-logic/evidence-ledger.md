@@ -225,6 +225,24 @@ bytes equal calictl's and that the allow-list holds.
 | The control path on the **real CoreS3** (esp-nimble write-with-response, the 31 app cases' value parsing on the Xtensa build (the 1078-case grid ran only on the host, incl. an `-m32` build), the walk, the UI toggle, `403` over the real hotspot) | **BOARD** 2026-10-07 (thinky CoreS3 vs the mock unit, never the real unit) | dated rows in "ESP32 satellite control path — BOARD rows" below |
 | The satellite's frames on the **real camper unit** | **DEVICE — never** (the satellite has not been paired with the real unit). Not needed for the bytes (they are calictl's; cooler `level`/`mode`/`timer_*` with `State=3` is calictl's own van check #230) — but the real esp-nimble link behaviour under a write is a device question too | first owner-watched satellite session at the van |
 
+## ESP32 satellite pairing wizard — HOST-E2E rows (2026-10-08)
+
+`GET/POST /api/pairing` on the satellite (`R_FW_PAIRING_WIZARD`), over the Linux NimBLE host build
+and the Bumble fake unit (`tests/firmware/test_pairing_web_e2e.py`, Docker `oc-fw-host` /
+`oc-fw-host-pw` on the Mac). Proves the firmware's endpoint and the shared wizard against the
+fake's real SMP passkey pairing — not the esp-nimble port, a radio or the real unit.
+
+| Fact | Tier | Evidence |
+|---|---|---|
+| start → `waiting_passkey` → the fake's code → `bonded` with the identity; `SNAP` flows; a second `start` changes nothing — in station mode and over the setup hotspot (WiFi stays in setup) | **HOST-E2E** 2026-10-08 | `test_wizard_over_http_bonds_then_snap_flows`, `test_wizard_over_the_setup_hotspot` |
+| A wrong passcode: the unit refuses, `attempts` 1, a new code is asked for and bonds | **HOST-E2E** 2026-10-08 | `test_wrong_passkey_retries_then_bonds` |
+| The unit's pairing screen closed (the fake's `pair off`): `error` / `pairing_failed` after 3 attempts; *Try again* from error bonds once it is open | **HOST-E2E** 2026-10-08 | `test_unit_not_in_pairing_mode_is_pairing_failed` |
+| Stale bond (the fake's `forget_bonds` = "Bluetooth zurücksetzen"): reconnects refused, the page still shows the address, start → passkey bonds afresh, `SNAP` again | **HOST-E2E** 2026-10-08 | `test_stale_bond_repairs_over_http` |
+| cancel mid-flow → idle; reset without `confirm` → 400 (bond kept), with it → idle, no address; a fresh pair works | **HOST-E2E** 2026-10-08 | `test_cancel_and_reset` |
+| `409 busy` for start/reset while a console `set` holds the link; accepted again once it ended | **HOST-E2E** 2026-10-08 | `test_start_while_a_command_runs_is_busy` |
+| The wizard clicked in Chromium against the host firmware: EN over the hotspot's `/app`, DE at `/` in station mode | **HOST-E2E** 2026-10-08 | `test_wizard_in_browser` (`T_FW_PAIRING_WIZARD_UI`) |
+| The same on the **CoreS3** over Insel and over the setup hotspot | **BOARD — owed** (controller schedules it) | — |
+
 ## ESP32 satellite wake-up — BOARD rows (2026-10-08)
 
 CI image `firmware-esp32s3` of PR #256 at `6ac867c`, flashed with `tools/esplab/flash.sh`; mock unit

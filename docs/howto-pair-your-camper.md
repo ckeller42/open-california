@@ -11,6 +11,12 @@ open-california (see [Raspberry Pi setup](raspberry-pi-setup.md)) and are standi
 > [Raspberry Pi setup](raspberry-pi-setup.md#the-pairing-step); both end up writing the same
 > bond to the same pairing cache, so you only need one of them.
 
+**ESP32 satellite?** It runs this same wizard from its own page — at
+<http://calictl-esp.local>, or over its setup hotspot at <http://192.168.4.1/app> — with its own
+hints instead of the Pi's (no scanner or `CALICTL_ADDR` steps: just keep a Pi running calictl
+from holding the unit's one connection). See
+[Pair the satellite with your camper unit](howto-esp-wifi-setup.md#pair-the-satellite-with-your-camper-unit).
+
 ## What you need
 
 - open-california installed and running as a service (`systemctl status calictl` shows
