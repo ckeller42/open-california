@@ -1,6 +1,8 @@
 /* snapshot.c — the shared "fn" emitter + pairing address (#154). Contract: include/cali_snapshot.h. */
 #include "cali_snapshot.h"
 
+#include <string.h>
+
 #include "cali_runner.h"
 #include "cali_session.h"
 #include "codec.h"
@@ -20,6 +22,14 @@ void cali_snapshot_fn(cali_json_t *j) {
         for (int k = 0; k < n; k++) {
             cali_json_key(j, kv[k].name);
             cali_json_int(j, (long long)(unsigned long)kv[k].value);
+        }
+        if (strcmp(CODEC_CHARS[i].function, "lighting") == 0) {   /* + serve's config latch */
+            codec_kv_t cfg[CALI_LCFG_N];
+            int nc = cali_session_light_cfg(0, cfg);
+            for (int k = 0; k < nc; k++) {
+                cali_json_key(j, cfg[k].name);
+                cali_json_int(j, (long long)(unsigned long)cfg[k].value);
+            }
         }
         cali_json_obj_end(j);
     }

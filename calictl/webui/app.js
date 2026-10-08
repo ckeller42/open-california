@@ -32,7 +32,7 @@
  * @property {{enabled:boolean, armed:boolean, notice:?{ts:number,msg:string}}} [auto_camper] auto-camper toggle + notice
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
- * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except roof + wake-up)
+ * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -296,6 +296,10 @@ let lastAcNotice = 0;    // ts of the last auto-camper notice shown as a toast (
 
 /** @type {(fn: string, what: string) => string} */
 const qKey = (fn, what) => fn + "·" + what;
+// The wake-up builder packs the next local HH:MM as if UTC (dg/h.m0). The ESP satellite has no clock:
+// the page sends its own wall clock read as UTC (whole seconds), like the app uses the phone's.
+// calictl ignores it (buspi keeps its clock).
+const localNow = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 1000);
 const hasWork = () => !!inflight || queue.length > 0;
 // a control has a command queued or in flight -> show a pending badge
 /**
@@ -712,7 +716,7 @@ const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
 // A calictl daemon has answered (positively known; not the satellite, not still unknown).
 const isCalictl = () => !!(STATE._meta && !STATE._meta.satellite);
-// What the satellite cannot do (roof, wake-up light): the firmware answers the same words.
+// What the satellite cannot do (the roof): the firmware answers the same words.
 const ELSEWHERE = "Only via buspi or the app";
 // The firmware's /api/command error codes the owner can act on, as a sentence (the rest stay
 // "Command failed: <code>"): 403 setup_mode, 409 busy, 503 not_connected (web.c).
@@ -818,11 +822,14 @@ async function processQueue() {
   if (!roofHold) render();          // same rule as command(): never rebuild under a held roof button
   /** @type {CommandResponse} */
   let res;
+  /** @type {Record<string, any>} */
+  const body = { function: inflight.fn, what: inflight.what, value: inflight.value, confirm: true };
+  if (inflight.fn === "lighting" && inflight.what === "wakeup") body.local_now = localNow();
   try {
     res = await api("/api/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ function: inflight.fn, what: inflight.what, value: inflight.value, confirm: true }),
+      body: JSON.stringify(body),
     });
   } catch (e) {
     res = { ok: false, error: String(e) };
@@ -856,6 +863,18 @@ async function processQueue() {
  */
 function expectedState(c) {
   if (c.fn === "lighting" && c.what === "power") return (s) => !!s.any_on === (c.value === "on");
+  if (c.fn === "lighting" && c.what === "wakeup" && typeof c.value === "string") {
+    // the unit's Mode-20 report shows the sent time, positionals and (if sent) switch
+    const tk = c.value.split(/\s+/), time = tk.find((x) => x.includes(":"));
+    const pos = tk.filter((x) => x !== "on" && x !== "off" && !x.includes(":"));
+    const sw = tk.includes("on") ? true : tk.includes("off") ? false : null;
+    return (s) => {
+      const w = s.wakeup;
+      return !!w && (!time || w.time === time) && (sw === null || w.enabled === sw)
+        && (pos[0] == null || w.areas.join(",") === pos[0].split(",").map(Number).sort().join(","))
+        && (pos[1] == null || w.brightness === Number(pos[1])) && (pos[2] == null || w.ramp === Number(pos[2]));
+    };
+  }
   const f = FEATURES[c.fn];
   const row = f && f.controls ? f.controls.find((x) => x.what === c.what) : null;
   if (!row) return null;
@@ -882,7 +901,7 @@ async function confirmFromState(c, ok) {
     if (s && ok(/** @type {FnState} */ (s))) { toast("✓ Applied", "ok"); return; }
     await new Promise((r) => setTimeout(r, 250));
   }
-  if (fn === "lighting") toast("Sent — check the lamp", "ok");
+  if (fn === "lighting" && c.what !== "wakeup") toast("Sent — check the lamp", "ok");   // a wake-up lights no lamp
   else toast("Sent — the unit didn't confirm it", "warn");
 }
 
@@ -1669,11 +1688,14 @@ function renderLighting(s) {
       enabled: tk.includes("on") ? true : tk.includes("off") ? false : wkReal.enabled,
     });
   }
-  // The satellite has no wake-up config latch and no wall clock: only via buspi or the app.
-  const wkOff = readOnly() || !wk || satellite();
+  // The satellite latches the unit's config like the daemon (firmware session) and takes the page's
+  // clock (local_now).
+  const wkOff = readOnly() || !wk;
   /** @param {{time?: string, areas?: number[], brightness?: number, ramp?: number, on?: boolean}} p */
   const wakeCmd = (p) => {
-    if (!wk) return;
+    // Config unknown: only a time edit, sent alone — the server pulls the unit's config (R5) and
+    // fills the rest from what the unit reports, or refuses with the reason. Nothing is invented.
+    if (!wk) { if (p.time && p.on == null) command("lighting", "wakeup", p.time); return; }
     const base = `${p.time || wk.time} ${(p.areas || wk.areas).join(",")} ` +
       `${p.brightness != null ? p.brightness : wk.brightness} ${p.ramp != null ? p.ramp : wk.ramp}`;
     command("lighting", "wakeup", p.on == null ? base : `${base} ${p.on ? "on" : "off"}`);
@@ -1693,8 +1715,9 @@ function renderLighting(s) {
   wrow.appendChild(wsw); wf.appendChild(wrow);
   const trow = document.createElement("div"); trow.className = "row";
   const tl = document.createElement("span"); tl.className = "lbl"; tl.textContent = /** @type {string} */ (t("Wake-up time"));
-  const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time : "00:00";
-  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = wkOff;
+  const tin = document.createElement("input"); tin.type = "time"; tin.value = wk ? wk.time
+    : (typeof wkOpt === "string" && wkOpt.split(/\s+/).find((x) => x.includes(":"))) || "";   // empty, never 00:00
+  tin.setAttribute("aria-label", "Wake-up time"); tin.disabled = readOnly();   // live even while unknown (R5 pull)
   tin.onchange = () => { if (tin.value) wakeCmd({ time: tin.value }); };
   trow.append(tl, tin); wf.appendChild(trow);
   const rrow = document.createElement("div"); rrow.className = "row";
@@ -1728,19 +1751,11 @@ function renderLighting(s) {
     alist.appendChild(lab);
   }
   wf.appendChild(arow);
-  if (satellite()) {
-    // Like the roof card: the reason first. No inputs — the satellite never knows the wake-up
-    // config, and empty fields would read as "no area / 00:00 set".
+  wc.appendChild(wf);
+  if (!wk) {
     const nk = document.createElement("div"); nk.className = "note";
-    nk.textContent = /** @type {string} */ (t(ELSEWHERE));
+    nk.textContent = /** @type {string} */ (t("Wake-up settings not known yet — the unit has not reported them"));
     wc.appendChild(nk);
-  } else {
-    wc.appendChild(wf);
-    if (!wk) {
-      const nk = document.createElement("div"); nk.className = "note";
-      nk.textContent = /** @type {string} */ (t("Wake-up settings not known yet — the unit has not reported them"));
-      wc.appendChild(nk);
-    }
   }
   app.appendChild(wc);
 

@@ -41,5 +41,6 @@ static const struct codec_char CODEC_CHARS[] = {
 #define CODEC_HEARTBEAT_WARMUP_MS 2000
 #define CODEC_ARM_DELAY_MS 3000
 #define CODEC_FOLLOW_DELAY_MS 300
+#define CODEC_CONFIG_PULL_MS 2000
 #define CODEC_DEVICE_NAME "VWCAMPER"
 #endif /* CODEC_CHARS_H */

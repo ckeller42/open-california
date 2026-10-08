@@ -15,7 +15,7 @@ import time
 
 import pytest
 
-from calictl import overrides, protocol
+from calictl import overrides, protocol, semantics
 
 # One xdist worker: the host_fw fixture runs `make` in firmware/host (like test_ble_store_kv.py).
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
@@ -66,7 +66,10 @@ def test_read_all_matches_python_decode(host_fw, hci_unit):
     served = hci_unit.call(_served_frames, hci_unit.unit)  # {function: bytes} the fake served
     assert set(snap["fn"]) == set(served)
     for name, frame in served.items():
-        assert snap["fn"][name] == protocol.decode(funcs[name], frame), name
+        want = protocol.decode(funcs[name], frame)
+        if name == "lighting":  # the satellite carries serve's config latch in its lighting object
+            want = {**want, **semantics.lighting_config(None, want)}
+        assert snap["fn"][name] == want, name
 
 
 def test_heartbeat_keeps_the_link(host_fw, hci_unit):

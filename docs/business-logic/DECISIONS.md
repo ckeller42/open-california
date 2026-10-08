@@ -8,11 +8,27 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-07 — the ESP satellite sets the wake-up light (supersedes "not the wake-up light" below)
+
+The satellite now carries `lighting wakeup` (spec `2026-10-07-esp-wakeup`, `R_FW_WAKEUP`). The two
+things it lacked come from elsewhere: **the clock is the web page's** — the shared UI sends
+`local_now` (the browser's wall clock read as UTC, the app's own "local time as UTC") with every
+wake-up edit; calictl ignores it, the ESP's builder uses it as its only clock (no SNTP, no time
+zone setting); a JSON integer ≥ 2026-01-01T00:00Z or `400 bad_value`, missing → refused with the
+clock reason; **no skew check** (owner ruling R1: a wrong browser clock gives a wrong wake-up time,
+as in the app); the console cannot set it. **The config is the unit's own** — a C twin of
+`semantics.lighting_config` latches it from the unit's 1502 frames only, shown across links but
+gating per link; an edit that needs an unknown field runs calictl's REQUEST_CONFIG pull (R5) inside
+the one command (≤ 2 s wait, one 6 s deadline) and is refused with `WAKEUP_UNKNOWN` rather than
+write a default-filled frame. Protocol facts did not change. The roof keeps `Only via buspi or the
+app`. Proven on the host tier (the app's four wake-up edits byte-exact over real NimBLE); the CoreS3
+bench run is owed.
+
 ## 2026-10-06 — the ESP satellite gets a control path (#154 B)
 
 The ESP32 satellite sends control frames for cooler, camping mode, lighting, air heater and energy
 — **not the roof** (owner ruling: no roof control on the satellite; its `1401` is asserted absent
-from the generated write allow-list, no roof builder is compiled) and **not the wake-up light**
+from the generated write allow-list, no roof builder is compiled) and **not the wake-up light** (superseded 2026-10-07, entry above)
 (it needs the unit-reported wake-up config, latched from 1502 Mode-20 frames, plus a local wall
 clock — the ESP has neither; a latch + SNTP + timezone for one command was judged not worth it).
 Both answer `Only via buspi or the app`. Python stays the authority: `csrc/control_consts.h` and

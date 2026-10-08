@@ -3,15 +3,22 @@
 
 For every ``app`` case of ``tests/vectors/control.json`` (one per app-recorded write the ESP
 carries): put the fake unit in the state the app saw (the recorded state frames of the gating
-functions, pushed as notifications), POST the action to the firmware's ``/api/command``, and check
+functions, pushed as notifications; for lighting first the unit's own config frames that make the
+firmware latch the case's wake-up / door-contact / favourite config), POST the action to the
+firmware's ``/api/command`` (a wake-up carries the case's ``local_now``, the page's clock), and check
 that the fake unit received exactly calictl's writes (``expect.frames``: the frame, the lighting
-commit, a save's SET_COLOR preface) byte for byte, each delayed frame at least its ``delay_ms``
+commit, a save's SET_COLOR preface; for a wake-up edit refused for want of its config, the
+REQUEST_CONFIG pull the firmware sends before refusing) byte for byte, each delayed frame at least its ``delay_ms``
 after the previous write — nothing else, never the roof's ``1401`` — and that the answer is
 calictl's shape with ``applied`` never true. Used by ``tests/firmware/test_control_e2e.py`` (host
 tier) and, as a CLI, on the CoreS3 bench:
 
     FAKE_UNIT_RECORD=~/unit.jsonl FAKE_UNIT_FIFO=~/unit.in python tools/applab/fake_unit_ble.py hci-socket:N &
     python tools/esplab_control_walk.py --url http://calictl-esp.local --fifo ~/unit.in --record ~/unit.jsonl
+
+Restart the fake unit between walks (same keystore, FIFO and passkey; wait for the firmware to
+reconnect by bond): the firmware's wake-up latch and the mock's stored wake-up survive a walk, so a
+second walk against the same mock fails ``lighting-wakeup.jsonl:239`` (it expects no config known).
 """
 
 from __future__ import annotations
@@ -35,15 +42,61 @@ CLOCK_FIELDS = frozenset(
 )
 
 
+def _doc() -> dict:
+    return json.loads(VECTORS.read_text(encoding="utf-8"))
+
+
 def app_cases() -> list[dict]:
-    """The ``app`` cases of the control vectors (frames, or a wake-up refused as "elsewhere")."""
-    return json.loads(VECTORS.read_text(encoding="utf-8"))["app"]
+    """The ``app`` cases of the control vectors (frames, or a wake-up edit refused after the config pull)."""
+    return _doc()["app"]
+
+
+def config_pull() -> dict:
+    """``{"reason", "frames"}``: the REQUEST_CONFIG pull sent before a wake-up edit whose config is unknown."""
+    return _doc()["config_pull"]
+
+
+def expected_frames(case: dict) -> list[dict]:
+    """The frame dicts calictl (and the ESP) write for ``case``: its frames, the pull for a refusal
+    for want of the wake-up config, else none."""
+    e = case["expect"]
+    if e["kind"] == "frames":
+        return e["frames"]
+    pull = config_pull()
+    return pull["frames"] if e["kind"] == "refused" and e["reason"] == pull["reason"] else []
 
 
 def expected_writes(case: dict) -> list[tuple[str, str]]:
-    """``[(char, hex)]`` calictl writes for ``case``, in order (empty for a refusal)."""
-    e = case["expect"]
-    return [(f["char"], f["hex"]) for f in e["frames"]] if e["kind"] == "frames" else []
+    """``[(char, hex)]`` written for ``case``, in order."""
+    return [(f["char"], f["hex"]) for f in expected_frames(case)]
+
+
+def latch_frames(case: dict) -> list[str]:
+    """Hex 1502 frames that make a firmware latch the case's ``latch`` — the unit's own config frames
+    (Mode 12 reply, Mode 16 / PN 8, Mode 20). The favourite bits default to all-stored (0x7f): the same
+    answer as "unknown" for every gate and builder, and it overwrites bits a previous case left latched."""
+    from calictl import overrides, protocol
+    from tools.mock_unit import _pack_state
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    f, lat = funcs["lighting"], case.get("latch") or {}
+    out = [_pack_state(f, {"Mode": 12, "ProfileNumber": 0, "LightValue": lat.get("FavouritesStored", 0x7F)})]
+    if "DoorContact" in lat:
+        out.append(_pack_state(f, {"Mode": 16, "ProfileNumber": 8, "LightValue": lat["DoorContact"]}))
+    if "WakeupTimestamp" in lat:
+        out.append(
+            _pack_state(
+                f,
+                {
+                    "Mode": 20,
+                    "ProfileNumber": 14,
+                    "Timestamp": lat["WakeupTimestamp"],
+                    "LightValue": lat["WakeupLightValue"],
+                },
+            )
+        )
+    return [b.hex() for b in out]
 
 
 def unit_writes(path) -> list[tuple[str, str, float]]:
@@ -67,11 +120,14 @@ def gate_state(case: dict) -> dict:
 
     funcs = protocol.load()
     overrides.apply(funcs)
-    return {
+    out = {
         fn: {k: v for k, v in protocol.decode(funcs[fn], bytes.fromhex(hx)).items() if k not in CLOCK_FIELDS}
         for fn, hx in case["frames_hex"].items()
         if fn in GATE_FUNCTIONS
     }
+    if case["function"] == "lighting":  # the latch keys the pushed config frames (latch_frames) set
+        out.setdefault("lighting", {}).update({"FavouritesStored": 0x7F, **(case.get("latch") or {})})
+    return out
 
 
 def held_state(get_fn, want: dict, timeout: float = 15.0, every: float = 0.2) -> bool:
@@ -101,14 +157,20 @@ def walk(cases, inject, post, writes) -> list[str]:
             problems.append("%s: the firmware never held the pushed state" % case["id"])
             continue
         before = len(writes())
-        body = {"function": case["function"], "what": case["what"], "value": case["value"], "confirm": True}
+        body = {
+            "function": case["function"],
+            "what": case["what"],
+            "value": case["value"],
+            "confirm": True,
+            **({"local_now": case["local_now"]} if "local_now" in case else {}),
+        }
         status, ans = post(body)
         got = writes()[before:]
         want = expected_writes(case)
         exp = case["expect"]
         if exp["kind"] == "frames":
             ok = status == 200 and ans.get("ok") is True and ans.get("applied") is None
-        else:  # elsewhere: refused without a write
+        else:  # refused: elsewhere (no write) or for want of the wake-up config (after the pull)
             ok = status == 200 and ans.get("refused") == exp["reason"] and ans.get("applied") is False
         if not ok:
             problems.append("%s: answer %s %s" % (case["id"], status, ans))
@@ -117,7 +179,7 @@ def walk(cases, inject, post, writes) -> list[str]:
                 "%s: unit got %s, calictl sends %s" % (case["id"], [(c, h) for c, h, _ in got], want)
             )
         else:
-            for i, f in enumerate(exp.get("frames", [])):
+            for i, f in enumerate(expected_frames(case)):
                 gap_ms = (got[i][2] - got[i - 1][2]) * 1000 if i else None
                 if i and f["delay_ms"] and gap_ms < f["delay_ms"]:
                     problems.append(
@@ -152,7 +214,12 @@ def _get_fn(url) -> dict:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="replay the app-recorded control actions against an ESP")
+    ap = argparse.ArgumentParser(
+        description="replay the app-recorded control actions against an ESP",
+        epilog="Restart the fake unit between walks (same keystore, FIFO, passkey; wait for the ESP's "
+        "link): its stored wake-up and the ESP's latch survive a walk, so a second walk fails "
+        "lighting-wakeup.jsonl:239.",
+    )
     ap.add_argument("--url", required=True, help="the firmware, e.g. http://calictl-esp.local")
     ap.add_argument("--fifo", required=True, help="the fake unit's scenario FIFO (FAKE_UNIT_FIFO)")
     ap.add_argument("--record", required=True, help="the fake unit's FAKE_UNIT_RECORD file")
@@ -161,6 +228,9 @@ def main(argv=None) -> int:
 
     def inject(case):
         with open(a.fifo, "w", encoding="utf-8") as f:
+            if case["function"] == "lighting":
+                for hx in latch_frames(case):
+                    f.write("raw lighting %s\n" % hx)
             for fn, hx in case["frames_hex"].items():
                 if fn in GATE_FUNCTIONS:
                     f.write("raw %s %s\n" % (fn, hx))

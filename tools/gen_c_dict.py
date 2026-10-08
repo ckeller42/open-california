@@ -77,9 +77,12 @@ CONTROL_OUT = ROOT / "csrc" / "control_consts.h"
 # The functions the ESP satellite may write (spec B). The roof is deliberately absent (owner ruling:
 # no roof control on the ESP); its control char 0x1401 is asserted absent from the allow-list below.
 ESP_CONTROL_FUNCTIONS = ("airheater", "campingmode", "cooler", "energy", "lighting")
-# What the ESP answers for a command it does not carry (the roof, the wake-up light, any other
-# function); the same words become the web UI's greyed-control hint (calictl/webui/app.js, Task 6).
+# What the ESP answers for a command it does not carry (the roof, any other function); the same
+# words become the web UI's greyed-control hint (calictl/webui/app.js, Task 6).
 ESP_ELSEWHERE_REASON = "Only via buspi or the app"
+# What the ESP answers for a wake-up command that carries no `local_now` (the console, an old page):
+# the satellite has no clock of its own, the web page is its clock (spec 2026-10-07 §1).
+ESP_WAKEUP_CLOCK_REASON = "the wake-up light needs the time from the web page — set it there"
 _APP_SCRIPTS = ("strings.de.js", "semantics.js", "app.js")
 
 _HEADER = """\
@@ -199,21 +202,20 @@ struct codec_char {
 """
 
 
-def _env_default(var: str) -> float:
-    """The literal default of ``os.environ.get(var, "<default>")`` in ``calictl/device.py``.
+def _env_default(var: str, src: str = "device") -> float:
+    """The literal default of ``os.environ.get(var, "<default>")`` in ``calictl/<src>.py``.
 
     Read from the source (not the imported module) so an environment override the developer
     has set cannot change a generated header.
 
     :param var: the environment variable name (e.g. ``CALICTL_HEARTBEAT_WARMUP_S``)
+    :param src: the calictl module (file stem) that reads it
     :returns: the default, as a float
     :raises LookupError: no ``os.environ.get(var, "<str literal>")`` call in the module
     """
     import ast
 
-    from calictl import device
-
-    for node in ast.walk(ast.parse(Path(device.__file__).read_text(encoding="utf-8"))):
+    for node in ast.walk(ast.parse((ROOT / "calictl" / (src + ".py")).read_text(encoding="utf-8"))):
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
@@ -226,7 +228,7 @@ def _env_default(var: str) -> float:
             and isinstance(node.args[1].value, str)
         ):
             return float(node.args[1].value)
-    raise LookupError("no os.environ.get(%r, <literal>) in calictl/device.py" % var)
+    raise LookupError("no os.environ.get(%r, <literal>) in calictl/%s.py" % (var, src))
 
 
 def generate_chars() -> str:
@@ -267,6 +269,10 @@ def generate_chars() -> str:
     # previous write's ACK after FOLLOW_DELAY_S (device.actuate) — the ESP's control_run does the same.
     out.append("#define CODEC_ARM_DELAY_MS %d" % round(_env_default("CALICTL_ARM_DELAY_S") * 1000))
     out.append("#define CODEC_FOLLOW_DELAY_MS %d" % round(_env_default("CALICTL_FOLLOW_DELAY_S") * 1000))
+    # serve's REQUEST_CONFIG reply window (the app's 2000 ms); the ESP sequencer waits the same (R5)
+    out.append(
+        "#define CODEC_CONFIG_PULL_MS %d" % round(_env_default("CALICTL_CONFIG_PULL_S", "serve") * 1000)
+    )
     out.append('#define CODEC_DEVICE_NAME "%s"' % device.DEVICE_NAME)
     out.append("#endif /* CODEC_CHARS_H */")
     return "\n".join(out) + "\n"
@@ -630,6 +636,7 @@ _CONTROL_INTS = (
     "LIGHT_MODE_SET_COLOR",
     "LIGHT_MODE_SET_PROFILE",
     "LIGHT_MODE_REQUEST_CONFIG",
+    "LIGHT_MODE_WAKEUP_TIME",
     "LIGHT_PROFILE_DOOR_CONTACT",
     "LIGHT_PROFILE_ALL_ON",
     "LIGHT_PROFILE_ALL_OFF",
@@ -710,9 +717,24 @@ def generate_control() -> str:
         "static const uint8_t CALI_ROOF_CLOSED_POSITIONS[] = {%s};"
         % ", ".join(str(p) for p in control._ROOF_CLOSED_POSITIONS)
     )
+    d = control.WAKEUP_DEFAULT
+    assert d["enabled"] is False  # the C builder carries `enabled` from the unit only
+    out.append("#define CALI_WAKEUP_DEFAULT_COLOUR %d" % d["colour"])
+    out.append("#define CALI_WAKEUP_DEFAULT_AREAS 0x%x" % sum(1 << (a - 1) for a in d["areas"]))
+    out.append("#define CALI_WAKEUP_DEFAULT_BRIGHTNESS %d" % d["brightness"])
+    out.append("#define CALI_WAKEUP_DEFAULT_RAMP %d" % d["ramp"])
+    out.append(
+        "static const uint8_t CALI_WAKEUP_RAMPS_MIN[] = {%s};" % ", ".join(map(str, control.WAKEUP_RAMPS_MIN))
+    )
+    out.append(
+        "static const uint8_t CALI_LIGHT_REQUEST_CONFIG[%d] = {%s};"
+        % (len(control.LIGHT_REQUEST_CONFIG), ", ".join("0x%02x" % b for b in control.LIGHT_REQUEST_CONFIG))
+    )
+    out.append("#define CALI_WAKEUP_UNKNOWN %s" % _c_str(control.WAKEUP_UNKNOWN))
     for name in sorted(n for n in dir(control) if n.startswith("REASON_")):
         out.append("#define CALI_%s %s" % (name, _c_str(getattr(control, name))))
     out.append("#define CALI_REASON_ELSEWHERE %s" % _c_str(ESP_ELSEWHERE_REASON))
+    out.append("#define CALI_REASON_WAKEUP_CLOCK %s" % _c_str(ESP_WAKEUP_CLOCK_REASON))
     out.append("#endif /* CONTROL_CONSTS_H */")
     return "\n".join(out) + "\n"
 

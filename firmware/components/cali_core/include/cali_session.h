@@ -40,7 +40,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "cali_control.h"
 #include "cali_transport.h"
+#include "codec.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -81,6 +83,12 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len);
 /* As cali_session_frame, but only a frame read or pushed on the CURRENT link (0 for one kept from an
  * earlier link): what the control gates run on (cali_control.h), never a previous link's state. */
 int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len);
+
+/* The lighting configuration the unit reported in its own 1502 frames (semantics.lighting_config over
+ * every stored frame — a READ or a NOTIFY, never a write of ours), as name/value pairs: live = 1 only
+ * what this link's frames reported (the gates and the wake-up builder), live = 0 across links (what
+ * SNAP and /api/state show, like the frames themselves). Returns the number of known keys. */
+int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]);
 
 /* The now_ms (of the latest cali_session_tick) at which the session last stored a frame — a READ or
  * a NOTIFY; 0 = no frame stored since cali_session_init. */

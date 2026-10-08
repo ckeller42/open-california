@@ -3,6 +3,7 @@
  */
 #include "cali_web.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -44,6 +45,7 @@ static const char ERR_BAD_JSON[] = "{\"ok\":false,\"error\":\"bad_json\"}";
 static const char ERR_MISSING[] = "{\"ok\":false,\"error\":\"missing_function_or_what\"}";
 static const char ERR_CONFIRM[] = "{\"ok\":false,\"error\":\"confirm_required\"}";
 static const char ERR_SETUP_MODE[] = "{\"ok\":false,\"error\":\"setup_mode\"}";
+static const char ERR_BAD_VALUE[] = "{\"ok\":false,\"error\":\"bad_value\"}";
 static const char OVERFLOW_BODY[] = "response too large";
 
 /* See cali_web.h / cali_wifi_run.h for the mapping and why a setup-flow join reports "off". */
@@ -255,11 +257,13 @@ static void api_wifi_post(const cali_http_req_t *req, cali_http_resp_t *resp) {
     memset(psk, 0, sizeof psk);
 }
 
-/* ---- POST /api/command: {"function","what","value","confirm"} (any order, each at most once) ---- */
+/* ---- POST /api/command: {"function","what","value","confirm","local_now"} (any order, each at most once) ---- */
 
 typedef struct {
     char fn[24], what[32], value[CALI_CTL_VALUE_MAX];
     int confirm;
+    int has_local_now, local_now_bad;   /* given (not null); given but no clock (-> 400 bad_value) */
+    long long local_now;
 } cmd_t;
 
 static int parse_bool(cursor_t *c, int *out) {
@@ -292,7 +296,62 @@ static int parse_value(cursor_t *c, char *out, size_t cap) {
     return 0;
 }
 
-/* 0 ok, -1 not one object of the four known keys (each at most once; an over-long function, what
+#define LOCAL_NOW_MIN 1767225600LL   /* 2026-01-01T00:00Z: an earlier browser clock is wrong */
+
+static int skip_digits(cursor_t *c) {   /* 0 if at least one digit was skipped, else -1 */
+    const char *p0 = c->p;
+    while (c->p < c->end && *c->p >= '0' && *c->p <= '9') c->p++;
+    return c->p > p0 ? 0 : -1;
+}
+
+/* local_now: the page's wall clock read as UTC (s), the wake-up builder's only clock (spec 2026-10-07,
+ * ruling R1: no skew check). null = absent (the builder refuses with the clock reason). An integer
+ * >= LOCAL_NOW_MIN is the clock, read saturated at LLONG_MAX (past the 32-bit Timestamp the builder
+ * answers BAD -> 400 bad_value, never a frame). Any other JSON scalar — a string, a fraction or
+ * exponent, true/false, an earlier integer — sets local_now_bad. -1 malformed. */
+static int parse_local_now(cursor_t *c, cmd_t *cmd) {
+    long long v = 0;
+    int neg = 0, integer = 1, bool_v;
+    skip_ws(c);
+    if (c->end - c->p >= 4 && memcmp(c->p, "null", 4) == 0) {
+        c->p += 4;
+        return 0;
+    }
+    cmd->has_local_now = 1;
+    cmd->local_now_bad = 1;
+    if (c->p < c->end && *c->p == '"') {
+        char s[2];
+        size_t len;
+        return parse_str(c, s, sizeof s, &len);
+    }
+    if (parse_bool(c, &bool_v) == 0) return 0;
+    if (c->p < c->end && *c->p == '-') {
+        neg = 1;
+        c->p++;
+    }
+    if (c->p == c->end || *c->p < '0' || *c->p > '9') return -1;
+    if (*c->p == '0' && c->p + 1 < c->end && c->p[1] >= '0' && c->p[1] <= '9') return -1;
+    while (c->p < c->end && *c->p >= '0' && *c->p <= '9') {
+        int d = *c->p++ - '0';
+        v = v > (LLONG_MAX - d) / 10 ? LLONG_MAX : v * 10 + d;
+    }
+    if (c->p < c->end && *c->p == '.') {
+        c->p++;
+        integer = 0;
+        if (skip_digits(c) != 0) return -1;
+    }
+    if (c->p < c->end && (*c->p == 'e' || *c->p == 'E')) {
+        c->p++;
+        integer = 0;
+        if (c->p < c->end && (*c->p == '+' || *c->p == '-')) c->p++;
+        if (skip_digits(c) != 0) return -1;
+    }
+    cmd->local_now = v;
+    cmd->local_now_bad = !integer || neg || v < LOCAL_NOW_MIN;
+    return 0;
+}
+
+/* 0 ok, -1 not one object of the five known keys (each at most once; an over-long function, what
  * or value is malformed too — calictl would answer "unknown function"/CommandError, both a 4xx). */
 static int parse_command(const char *body, size_t body_len, cmd_t *cmd) {
     cursor_t c = {body, body + body_len};
@@ -321,6 +380,9 @@ static int parse_command(const char *body, size_t body_len, cmd_t *cmd) {
             } else if (strcmp(key, "confirm") == 0) {
                 bit = 8;
                 bad = parse_bool(&c, &cmd->confirm) != 0;
+            } else if (strcmp(key, "local_now") == 0) {
+                bit = 16;
+                bad = parse_local_now(&c, cmd) != 0;
             } else {
                 return -1;
             }
@@ -343,8 +405,12 @@ static int parse_command(const char *body, size_t body_len, cmd_t *cmd) {
  * and CALI_CTL_PENDING while the sequencer runs it, then the done callback's result. */
 static char s_cmd_fn[24];
 static int s_cmd = CALI_CTL_OK;
+static const char *s_cmd_reason;   /* the done callback's refusal text (static), else NULL */
 
-static void cmd_done(int result) { s_cmd = result; }
+static void cmd_done(int result, const char *reason) {
+    s_cmd = result;
+    s_cmd_reason = reason;
+}
 
 /* calictl's /api/command answers (serve.ServeBackend.command / web.py), plus the ESP's own codes:
  * applied is never true (no readback check), a refusal is calictl's {"applied":false,"refused":…}. */
@@ -391,7 +457,7 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
     int rc;
     if (req->resume) {   /* the core re-asks while we wait for the sequencer */
         if (s_cmd == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
-        cmd_answer(resp, s_cmd, NULL);
+        cmd_answer(resp, s_cmd, s_cmd_reason);
         return 1;
     }
     if (strcmp(req->method, "POST") != 0) {
@@ -404,10 +470,14 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
         SET_CONST(resp, 400, ERR_MISSING);
     } else if ((strcmp(cmd.fn, "airheater") == 0 || strcmp(cmd.fn, "roof") == 0) && !cmd.confirm) {
         SET_CONST(resp, 400, ERR_CONFIRM);   /* web.py CONFIRM_REQUIRED */
+    } else if (cmd.local_now_bad) {
+        SET_CONST(resp, 400, ERR_BAD_VALUE);
     } else {
         snprintf(s_cmd_fn, sizeof s_cmd_fn, "%s", cmd.fn);
         s_cmd = CALI_CTL_PENDING;
-        rc = cali_ctl_submit(cmd.fn, cmd.what, cmd.value, cmd_done, &reason);
+        s_cmd_reason = NULL;
+        rc = cali_ctl_submit(cmd.fn, cmd.what, cmd.value, cmd.has_local_now ? (int64_t)cmd.local_now : -1,
+                             cmd_done, &reason);
         if (rc == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
         s_cmd = rc;
         cmd_answer(resp, rc, reason);

@@ -389,6 +389,10 @@ class WriteCheck:
     problem: str | None = None
     expect: list | None = None  # the step's [function, what, value] (kind "action" only)
     frames: dict = field(default_factory=dict)  # function -> last raw state hex before this write
+    t: float | None = None  # the write's recorded time (the phone's local clock read as UTC)
+    state: dict = field(
+        default_factory=dict
+    )  # function -> the replay's decoded state incl. the lighting latch
 
 
 def check_recording(
@@ -546,7 +550,17 @@ def _check_write(funcs, gaps, state, step, line, ev, hit, raw) -> WriteCheck:
             sn,
             "step %s %s/%s=%r: app %s vs calictl %s: %s" % (sn, fn, what, value, hx, ours.hex(), detail),
         )
-    return WriteCheck(line, fn, hx, "action", sn, expect=list(exp), frames=dict(raw))
+    return WriteCheck(
+        line,
+        fn,
+        hx,
+        "action",
+        sn,
+        expect=list(exp),
+        frames=dict(raw),
+        t=ev.get("t"),
+        state={k: dict(v) for k, v in state.items()},
+    )
 
 
 def run_recording(path: str) -> int:

@@ -9,11 +9,15 @@ write (char, delay, bytes), or bad/none.
 
 .. test:: The C builders and gates reproduce every control vector
    :id: T_FW_CONTROL_PARITY
-   :links: R_FW_CONTROL_TWIN
+   :links: R_FW_CONTROL_TWIN, R_FW_WAKEUP
 
 .. test:: The write allow-list is exactly the five control chars at their frame length
    :id: T_FW_WRITE_ALLOWLIST_PURE
    :links: R_FW_WRITE_ALLOWLIST
+
+.. test:: The C lighting-config latch equals semantics.lighting_config
+   :id: T_FW_LIGHT_CFG_PARITY
+   :links: R_FW_CONTROL_TWIN, R_FW_WAKEUP
 """
 
 import json
@@ -25,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from calictl import overrides, protocol
+from calictl import overrides, protocol, semantics
 from tools import gen_control_vectors
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -95,16 +99,23 @@ def state_lines(states):
 def want(e):
     if e["kind"] == "frames":
         return "OK " + " ".join("%s/%d/%s" % (f["char"], f["delay_ms"], f["hex"]) for f in e["frames"])
+    if e["kind"] == "refused" and e["reason"] == V["config_pull"]["reason"]:
+        return "REFUSED+PULL %s" % e["reason"]  # plan.pull: the sequencer pulls the config first
     if e["kind"] in ("refused", "elsewhere"):
         return "%s %s" % (e["kind"].upper(), e["reason"])
     return e["kind"].upper()
+
+
+def p_line(c):
+    ln = c.get("local_now")
+    return "P %s %s %s%s" % (c["function"], c["what"], tok(c["value"]), "" if ln is None else " t:%d" % ln)
 
 
 def _check(cli, cases, states_of):
     lines = []
     for c in cases:
         lines += state_lines(states_of(c))
-        lines.append("P %s %s %s" % (c["function"], c["what"], tok(c["value"])))
+        lines.append(p_line(c))
     out = drive(cli, lines)
     assert len(out) == len(cases)
     bad = [(c["id"], got, want(c["expect"])) for c, got in zip(cases, out) if got != want(c["expect"])]
@@ -115,23 +126,30 @@ def test_grid_vectors(cli):
     _check(cli, V["cases"], lambda c: V["states"][c["state"]])
 
 
+def _app_states(c, funcs):
+    st = {f: protocol.decode(funcs[f], bytes.fromhex(h)) for f, h in c["frames_hex"].items()}
+    if c.get("latch"):
+        st["lighting"] = {**st.get("lighting", {}), **c["latch"]}
+    return st
+
+
 def test_app_recorded_vectors(cli):
     funcs = protocol.load()
     overrides.apply(funcs)
-    _check(
-        cli,
-        V["app"],
-        lambda c: {f: protocol.decode(funcs[f], bytes.fromhex(h)) for f, h in c["frames_hex"].items()},
-    )
+    _check(cli, V["app"], lambda c: _app_states(c, funcs))
+
+
+def test_config_pull_plan_is_request_config_then_commit(cli):
+    assert drive(cli, ["Q"]) == [want({"kind": "frames", "frames": V["config_pull"]["frames"]})]
 
 
 def test_vectors_cover_every_outcome():
     """The parity run is only as strong as the vectors: every outcome kind, every REASON text the C
-    header carries (but the wake-up one, which is ELSEWHERE on the ESP), and multi-frame plans."""
+    header carries and the wake-up's WAKEUP_UNKNOWN, and multi-frame plans."""
     kinds = {c["expect"]["kind"] for c in V["cases"]}
     assert kinds == {"frames", "refused", "bad", "none", "elsewhere"}
     reasons = {c["expect"]["reason"] for c in V["cases"] if c["expect"]["kind"] == "refused"}
-    assert len(reasons) == 8, sorted(reasons)
+    assert len(reasons) == 10, sorted(reasons)
     assert {len(c["expect"].get("frames", [])) for c in V["cases"]} >= {1, 2, 4}
     assert V["app"], "no app-recorded action in the vectors"
 
@@ -154,3 +172,39 @@ def test_write_allow_list_is_exactly_the_control_chars(cli):
 )
 def test_write_ok_spot_checks(cli, line, out):
     assert drive(cli, [line]) == [out]
+
+
+def _latch_cases():
+    frames = []
+    for mode in (0, 4, 12, 16, 20):
+        for pn in (None, 0, 1, 7, 8, 13, 14):
+            for lv in (None, 0, 1, 0x7F, 0xFF, 0x1101):
+                for ts in (None, 25200):
+                    f = {"Mode": mode}
+                    for k, v in (("ProfileNumber", pn), ("LightValue", lv), ("Timestamp", ts)):
+                        if v is not None:
+                            f[k] = v
+                    frames.append(f)
+    prevs = [
+        {},
+        {"FavouritesStored": 0b101},
+        {"WakeupTimestamp": 23400, "WakeupLightValue": 0x3575, "DoorContact": 1, "FavouritesStored": 0},
+    ]
+    return [(p, f) for p in prevs for f in frames]
+
+
+def test_light_config_latch_equals_semantics(cli):
+    """``cali_light_cfg`` over (previous latch keys + a frame) = ``semantics.lighting_config(prev, frame)``
+    for every Mode x ProfileNumber x LightValue x Timestamp combination, absent fields included."""
+    cases = _latch_cases()
+    lines = []
+    for prev, frame in cases:
+        lines += state_lines({"lighting": {**prev, **frame}})
+        lines.append("C")
+    out = drive(cli, lines)
+    want = []
+    for prev, frame in cases:
+        cfg = semantics.lighting_config(prev, frame)
+        want.append("CFG" + "".join(" %s=%d" % (k, cfg[k]) for k in semantics.LIGHT_CONFIG_KEYS if k in cfg))
+    bad = [(c, g, w) for c, g, w in zip(cases, out, want) if g != w]
+    assert len(out) == len(cases) and not bad, bad[:5]

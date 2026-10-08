@@ -4,6 +4,7 @@
  */
 #include "cali_session.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "cali_console.h"
@@ -53,6 +54,39 @@ static struct {
  * stamped 1, so "stored" never reads as "never"). */
 static uint64_t s_last_update;
 
+/* [0] across links (shown), [1] this link only (gated on; cleared by link_up) */
+static cali_light_cfg_t s_lcfg[2];
+static const cali_light_cfg_t *s_lprev;
+static codec_kv_t s_lkv[CODEC_KV_MAX];   /* static: the 8 KB host-task stack */
+static int s_lnkv;
+
+/* cali_ctl_get_t over (the previous latch, then the new frame) = lighting_config(prev, frame) */
+static int lcfg_get(const char *fn, const char *field, uint32_t *out) {
+    (void)fn;
+    for (int k = 0; k < CALI_LCFG_N; k++)
+        if ((s_lprev->have >> k & 1u) && strcmp(field, CALI_LCFG_KEYS[k]) == 0) {
+            *out = s_lprev->v[k];
+            return 1;
+        }
+    for (int k = 0; k < s_lnkv; k++)
+        if (strcmp(s_lkv[k].name, field) == 0) {
+            *out = s_lkv[k].value;
+            return 1;
+        }
+    return 0;
+}
+
+/* Only store() calls this — a READ or a NOTIFY of the unit's own 1502, never a write of ours (R4). */
+static void latch_lighting(const uint8_t *data, size_t len) {
+    s_lnkv = codec_decode(codec_func_by_name("lighting"), data, len, s_lkv);
+    for (int w = 0; w < 2; w++) {
+        cali_light_cfg_t next;
+        s_lprev = &s_lcfg[w];
+        cali_light_cfg(lcfg_get, &next);
+        s_lcfg[w] = next;
+    }
+}
+
 static int index_of(uint16_t short_id) {
     for (size_t i = 0; i < CODEC_NCHARS; i++) {
         if (CODEC_CHARS[i].state_short == short_id) return (int)i;
@@ -70,7 +104,23 @@ static void store(size_t i, const uint8_t *data, size_t len) {
     s_fr[i].len = len;
     s_fr[i].have = 1;
     s_fr[i].live = 1;
+    if (strcmp(CODEC_CHARS[i].function, "lighting") == 0) latch_lighting(s_fr[i].frame, len);
     s_last_update = s_now ? s_now : 1;
+}
+
+/* The unit the stored frames + config latch came from: its bonded identity ("" = none). */
+static char s_unit[32];   /* "AA:BB:CC:DD:EE:FF" with room to spare */
+
+/* The bond's identity changed (forget, or a bond to another unit): drop everything the old unit
+ * reported, so another unit's state or wake-up config is never shown for this one. */
+static void unit_check(void) {
+    const char *id = s_t->identity();
+    if (!id) id = "";
+    if (strncmp(id, s_unit, sizeof s_unit) == 0) return;
+    snprintf(s_unit, sizeof s_unit, "%s", id);
+    memset(s_fr, 0, sizeof s_fr);
+    memset(s_lcfg, 0, sizeof s_lcfg);
+    s_last_update = 0;
 }
 
 static void link_clear(void) {
@@ -114,8 +164,10 @@ static void link_up(void) {
     s_reading = 0;
     s_snapped = 0;
     s_rereading = 0;
+    unit_check();
     for (size_t i = 0; i < CODEC_NCHARS; i++) s_fr[i].live = 0;   /* the last link's frames stay shown,
                                                                      never gated on */
+    memset(&s_lcfg[1], 0, sizeof s_lcfg[1]);   /* the last link's config stays shown, never gated on */
     int rc = s_t->discover();
     if (rc != 0) {
         cali_log("session: discover failed %d", rc);
@@ -232,7 +284,9 @@ void cali_session_init(const cali_transport_t *t) {
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
     memset(s_fr, 0, sizeof s_fr);
+    memset(s_lcfg, 0, sizeof s_lcfg);
     s_last_update = 0;
+    s_unit[0] = 0;
     cali_ctl_run_init(t);
     cali_runner_on_other = on_event;
 }
@@ -264,6 +318,7 @@ void cali_session_stop(void) {
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
     if (s_link != LINK_DOWN) (void)s_t->disconnect();   /* the unit has one slot: free it */
     link_clear();
+    unit_check();   /* a forget lands here with the bond gone */
 }
 
 void cali_session_tick(uint64_t now_ms) {
@@ -324,6 +379,19 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
 int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len) {
     if (i >= CODEC_NCHARS || !s_fr[i].live) return 0;
     return cali_session_frame(i, frame, len);
+}
+
+int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) {
+    const cali_light_cfg_t *c = &s_lcfg[live ? 1 : 0];
+    int n = 0;
+    for (int k = 0; k < CALI_LCFG_N; k++)
+        if (c->have >> k & 1u) {
+            out[n].name = CALI_LCFG_KEYS[k];
+            out[n].value = c->v[k];
+            out[n].supplied = 1;
+            n++;
+        }
+    return n;
 }
 
 uint64_t cali_session_last_update_ms(void) { return s_last_update; }

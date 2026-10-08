@@ -655,6 +655,15 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    to `docs/business-logic/evidence-ledger.md` (watch item 7 in `docs/firmware.md`). **Ran
    2026-10-07** on thinky (CI image of `8b1eda0`): 3 clean walks of 31 cases, no `1401`, `403` over
    the hotspot, the UI toggle landed — against the mock unit only; the real unit is still to come.
+   Since the wake-up light the walk posts `local_now` and injects the unit's config frames, so it
+   also covers the app's four wake-up edits (`lighting-wakeup.jsonl:239` as the REQUEST_CONFIG pull +
+   `WAKEUP_UNKNOWN` refusal and as `07:00 off`); a wake-up card edit from the browser must land as
+   `control.build("lighting","wakeup",…)`'s frame + commit. **Restart the fake unit between walks**
+   (same keystore, FIFO and passkey; the ESP reconnects by bond — wait for its link before walking):
+   the ESP's latch and the mock's stored wake-up survive a walk, so a second walk against the same
+   mock fails `:239`. **Ran 2026-10-08** (CI image of `6ac867c`): 3 clean walks of 32 cases, no
+   `1401`; a card edit from Chromium landed byte-exact with the config latched and, after an ESP
+   reboot with the mock holding an unpushed config, as the pull then the frame (*✓ Applied*).
 
 Carry the hardware watch items from `docs/firmware.md` into this run explicitly (repeated here so
 this checklist is self-contained):

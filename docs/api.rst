@@ -132,6 +132,7 @@ Tests
 .. autofunction:: tests.e2e.test_gui.test_door_contact_row_hidden_on_grand_california
 .. autofunction:: tests.e2e.test_satellite.test_controls_are_live_and_post_calictls_command_shape
 .. autofunction:: tests.e2e.test_satellite.test_a_command_is_confirmed_from_the_units_own_state
+.. autofunction:: tests.e2e.test_satellite.test_wakeup_card_is_live_and_sends_the_browsers_wall_clock
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle

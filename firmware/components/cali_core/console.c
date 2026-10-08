@@ -202,7 +202,7 @@ static void set_cmd(char *args) {
     }
     if (!value) value = "";
     while (*value == ' ' || *value == '\t') value++;
-    (void)cali_ctl_submit(fn, what, value, NULL, &reason);
+    (void)cali_ctl_submit(fn, what, value, -1, NULL, &reason);   /* no page, no clock */
 }
 
 static void on_state(const cali_pair_state_t *s, const char *address) {

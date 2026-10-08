@@ -1,10 +1,14 @@
 /* control_cli.c — line driver for tests/firmware/test_control_parity.py ONLY; not in any firmware
- * build. Links control.c + csrc/codec.c. stdin, one command per line; only P/W/A print, one line each:
+ * build. Links control.c + csrc/codec.c. stdin, one command per line; only P/Q/C/W/A print, one line each:
  *   X                     forget every function's state
  *   S <fn> [Field=v ...]  replace fn's decoded state
- *   P <fn> <what> <tok>   cali_ctl_plan; tok = n (null -> "") | i:<decimal> | s:<percent-encoded>
- *                         -> OK <char>/<delay_ms>/<hex> ... | REFUSED <reason> | ELSEWHERE <reason>
- *                            | BAD | NONE | ERR parse
+ *   P <fn> <what> <tok> [t:<local_now>]
+ *                         cali_ctl_plan; tok = n (null -> "") | i:<decimal> | s:<percent-encoded>;
+ *                         local_now = the page's clock in seconds (absent: none, -1)
+ *                         -> OK <char>/<delay_ms>/<hex> ... | REFUSED[+PULL] <reason> | ELSEWHERE <reason>
+ *                            | BAD | NONE | ERR parse   (+PULL: plan.pull, the config is pulled first)
+ *   Q                     -> OK ... cali_ctl_pull_plan (the REQUEST_CONFIG pull)
+ *   C                     -> CFG[ <Key>=<v>]... cali_light_cfg: the known latch keys, CALI_LCFG_KEYS order
  *   W <hex char> <len>    -> OK 1|0 (cali_ctl_write_ok)
  *   A                     -> OK <char>/<len> ... every allowed pair: chars 0..0xffff ascending,
  *                            lengths 0..CODEC_FRAME_MAX+1
@@ -64,9 +68,27 @@ static void unpercent(const char *s, char *out, size_t cap) {
     out[n] = 0;
 }
 
+static void print_plan(const cali_ctl_plan_t *p) {
+    switch (p->rc) {
+    case CALI_CTL_OK:
+        fputs("OK", stdout);
+        for (size_t i = 0; i < p->n; i++) {
+            printf(" %04x/%u/", p->f[i].chr, (unsigned)p->f[i].delay_ms);
+            for (size_t k = 0; k < p->f[i].len; k++) printf("%02x", p->f[i].data[k]);
+        }
+        putchar('\n');
+        break;
+    case CALI_CTL_REFUSED: printf("REFUSED%s %s\n", p->pull ? "+PULL" : "", p->reason); break;
+    case CALI_CTL_ELSEWHERE: printf("ELSEWHERE %s\n", p->reason); break;
+    case CALI_CTL_BAD_VALUE: puts("BAD"); break;
+    default: puts("NONE"); break;
+    }
+}
+
 static void plan_line(char *rest) {
-    char *fn = strtok(rest, " "), *what = strtok(NULL, " "), *tok = strtok(NULL, " ");
+    char *fn = strtok(rest, " "), *what = strtok(NULL, " "), *tok = strtok(NULL, " "), *t = strtok(NULL, " ");
     char value[1024];   /* wider than CALI_CTL_VALUE_MAX on purpose: over-long vectors must reach the twin intact */
+    int64_t local_now = t && strncmp(t, "t:", 2) == 0 ? (int64_t)strtoll(t + 2, NULL, 10) : -1;
     static cali_ctl_plan_t p;
     if (!fn || !what || !tok) {
         puts("ERR parse");
@@ -79,21 +101,8 @@ static void plan_line(char *rest) {
         puts("ERR parse");
         return;
     }
-    cali_ctl_plan(fn, what, value, get, &p);
-    switch (p.rc) {
-    case CALI_CTL_OK:
-        fputs("OK", stdout);
-        for (size_t i = 0; i < p.n; i++) {
-            printf(" %04x/%u/", p.f[i].chr, (unsigned)p.f[i].delay_ms);
-            for (size_t k = 0; k < p.f[i].len; k++) printf("%02x", p.f[i].data[k]);
-        }
-        putchar('\n');
-        break;
-    case CALI_CTL_REFUSED: printf("REFUSED %s\n", p.reason); break;
-    case CALI_CTL_ELSEWHERE: printf("ELSEWHERE %s\n", p.reason); break;
-    case CALI_CTL_BAD_VALUE: puts("BAD"); break;
-    default: puts("NONE"); break;
-    }
+    cali_ctl_plan(fn, what, value, local_now, get, &p);
+    print_plan(&p);
 }
 
 int main(void) {
@@ -107,6 +116,17 @@ int main(void) {
             set_state(line + 2);
         } else if (strncmp(line, "P ", 2) == 0) {
             plan_line(line + 2);
+        } else if (strcmp(line, "Q") == 0) {
+            static cali_ctl_plan_t q;
+            cali_ctl_pull_plan(&q);
+            print_plan(&q);
+        } else if (strcmp(line, "C") == 0) {
+            cali_light_cfg_t cfg;
+            cali_light_cfg(get, &cfg);
+            fputs("CFG", stdout);
+            for (int k = 0; k < CALI_LCFG_N; k++)
+                if (cfg.have >> k & 1u) printf(" %s=%lu", CALI_LCFG_KEYS[k], (unsigned long)cfg.v[k]);
+            putchar('\n');
         } else if (sscanf(line, "W %x %u", &c, &len) == 2) {
             printf("OK %d\n", cali_ctl_write_ok((uint16_t)c, len));
         } else if (strcmp(line, "A") == 0) {

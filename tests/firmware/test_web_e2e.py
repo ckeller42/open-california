@@ -365,10 +365,9 @@ def test_live_cooler_toggle_reaches_the_unit_byte_exact(host_fw, rec_unit, tmp_p
         ("de-DE", "Aufstelldach", "Nur über buspi oder die App"),
     ],
 )
-def test_roof_and_wakeup_stay_with_buspi_or_the_app(host_fw, rec_unit, tmp_path, locale, roof, hint):
+def test_roof_stays_with_buspi_or_the_app(host_fw, rec_unit, tmp_path, locale, roof, hint):
     """On the live satellite the roof buttons are greyed with the firmware's own refusal text
-    (EN + DE); the wake-up card shows that text under its title and no inputs (the satellite never
-    knows the wake-up config); the fridge switch next door is live; nothing is written."""
+    (EN + DE); the fridge switch next door is live; nothing is written."""
     import tools.esplab_control_walk as walker
 
     from .test_control_e2e import _online  # lazily: that module imports this one
@@ -385,18 +384,116 @@ def test_roof_and_wakeup_stay_with_buspi_or_the_app(host_fw, rec_unit, tmp_path,
             assert btns.nth(i).is_disabled() and btns.nth(i).get_attribute("title") == hint
         assert page.get_by_text(hint, exact=True).count() >= 1
         page.evaluate("document.getElementById('back').click()")
-        _open_tile(page, "Beleuchtung" if locale == "de-DE" else "Lighting")
-        page.get_by_text(hint, exact=True).first.wait_for(timeout=5000)
-        assert page.get_by_role("switch", name="Wake-up light").count() == 0
-        assert page.get_by_label("Wake-up time").count() == 0
-        assert page.locator(".arealist").count() == 0
-        page.evaluate("document.getElementById('back').click()")
         _open_tile(page, "Kühlbox" if locale == "de-DE" else "Cooler")
         assert page.get_by_role("switch", name="Refrigerator box").is_enabled()
         browser.close()
     assert not errors, errors
     assert set(paths) <= {"/", "/api/state"}, paths
     assert walker.unit_writes(rec) == []
+
+
+def test_live_wakeup_edit_reaches_the_unit_with_the_pages_clock(host_fw, rec_unit, tmp_path):
+    """Chromium -> the satellite UI -> POST with local_now -> the sequencer -> NimBLE -> the fake unit
+    records control.build's wake-up frame for that clock and the unit's latched config.
+
+    .. test:: A wake-up edit on the live satellite page reaches the unit byte-exact with the page's clock
+       :id: T_FW_UI_LIVE_WAKEUP
+       :links: R_FW_SHARED_UI, R_FW_WAKEUP
+    """
+    import tools.esplab_control_walk as walker
+    from tools import gen_control_vectors
+    from tools.mock_unit import _pack_state
+
+    from .test_control_e2e import _online  # lazily: that module imports this one
+
+    sync_playwright = _require_chromium()
+    hu, rec = rec_unit
+    fw = _online(host_fw, hu, tmp_path)
+    funcs = _funcs()
+    wake = {"Mode": 20, "ProfileNumber": 14, "Timestamp": 6 * 3600, "LightValue": 0x1101}
+    frame = _pack_state(funcs["lighting"], wake)
+    hu.call(_serve_raw, hu.unit, "lighting", frame, True)  # the unit reports its wake-up config
+    end = time.monotonic() + 10
+    while get_json(fw, "/api/state")["fn"]["lighting"].get("WakeupTimestamp") != 6 * 3600:
+        assert time.monotonic() < end, "the firmware never latched the unit's wake-up config"
+        time.sleep(0.2)
+    with sync_playwright() as p:
+        browser, page, errors, _ = _live_ui(p, fw)
+        bodies = []
+        page.on("request", lambda q: bodies.append(q.post_data) if q.url.endswith("/api/command") else None)
+        _open_tile(page, "Lighting")
+        tm = page.get_by_label("Wake-up time")
+        assert tm.is_enabled() and tm.input_value() == "06:00"
+        tm.fill("08:00")
+        page.locator(".toast").first.wait_for(timeout=10000)
+        browser.close()
+    assert not errors, errors
+    body = json.loads(bodies[0])
+    assert (body["function"], body["what"], body["value"]) == ("lighting", "wakeup", "08:00 1 0 0")
+    states = {
+        "lighting": {
+            **protocol.decode(funcs["lighting"], frame),
+            "WakeupTimestamp": 6 * 3600,
+            "WakeupLightValue": 0x1101,
+        }
+    }
+    e = gen_control_vectors.expect(funcs, "lighting", "wakeup", body["value"], states, body["local_now"])
+    assert e["frames"], e
+    assert [(c, h) for c, h, _ in walker.unit_writes(rec)] == [(f["char"], f["hex"]) for f in e["frames"]]
+
+
+async def _hold_wakeup(unit, wakeup):
+    """The unit holds a wake-up config it has not pushed: it reports it only in a REQUEST_CONFIG reply
+    (``unit`` = the Bumble FakeUnit, ``unit.unit`` its MockCamperUnit model)."""
+    unit.unit.wakeup = wakeup
+
+
+def test_wakeup_time_edit_with_no_config_pulls_then_lands(host_fw, rec_unit, tmp_path):
+    """Review m2 over real NimBLE: the satellite has no config latched, so only the time is live; the
+    edit posts the time alone; the sequencer pulls REQUEST_CONFIG, the unit answers with its Mode-20
+    config, and the wake-up frame calictl builds for that config and the page's clock follows."""
+    import tools.esplab_control_walk as walker
+    from tools import gen_control_vectors
+    from tools.mock_unit import _pack_state
+
+    from .test_control_e2e import _online  # lazily: that module imports this one
+
+    sync_playwright = _require_chromium()
+    hu, rec = rec_unit
+    fw = _online(host_fw, hu, tmp_path)
+    funcs = _funcs()
+    held = {"Timestamp": 6 * 3600, "LightValue": 0x1101}
+    hu.call(_hold_wakeup, hu.unit, dict(held))
+    assert "WakeupTimestamp" not in get_json(fw, "/api/state")["fn"]["lighting"]
+    with sync_playwright() as p:
+        browser, page, errors, _ = _live_ui(p, fw)
+        bodies = []
+        page.on("request", lambda q: bodies.append(q.post_data) if q.url.endswith("/api/command") else None)
+        _open_tile(page, "Lighting")
+        tm = page.get_by_label("Wake-up time")
+        assert tm.is_enabled() and tm.input_value() == ""
+        assert page.get_by_role("switch", name="Wake-up light").is_disabled()
+        tm.fill("08:00")
+        page.locator(".toast").first.wait_for(timeout=12000)
+        toast = page.locator(".toast").first.inner_text()
+        browser.close()
+    assert not errors, errors
+    body = json.loads(bodies[0])
+    assert (body["function"], body["what"], body["value"]) == ("lighting", "wakeup", "08:00")
+    assert toast == "✓ Applied", (toast, walker.unit_writes(rec))
+    frame = _pack_state(funcs["lighting"], {"Mode": 20, **held})
+    states = {
+        "lighting": {
+            **protocol.decode(funcs["lighting"], frame),
+            "WakeupTimestamp": held["Timestamp"],
+            "WakeupLightValue": held["LightValue"],
+        }
+    }
+    e = gen_control_vectors.expect(funcs, "lighting", "wakeup", "08:00", states, body["local_now"])
+    pull = [(f["char"], f["hex"]) for f in walker.config_pull()["frames"]]
+    assert [(c, h) for c, h, _ in walker.unit_writes(rec)] == pull + [
+        (f["char"], f["hex"]) for f in e["frames"]
+    ]
 
 
 def test_busy_satellite_tells_the_user_to_retry(host_fw, rec_unit, tmp_path):

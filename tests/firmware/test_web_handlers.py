@@ -712,6 +712,12 @@ def test_command_accepted_while_a_station_reconnects(web_cli, state, joined):
         ('{"function":"cooler","what":"%s"}' % ("w" * 40), 400, "bad_json"),
         ('{"function":"cooler","what":"power","value":"%s"}' % ("v" * 64), 400, "bad_json"),
         ('{"function":"cooler","what":"power","value":"a\\nb"}', 400, "bad_json"),
+        ('{"function":"lighting","what":"wakeup","local_now":1,"local_now":2}', 400, "bad_json"),
+        ('{"function":"lighting","what":"wakeup","local_now":{}}', 400, "bad_json"),
+        ('{"function":"lighting","what":"wakeup","local_now":[1]}', 400, "bad_json"),
+        ('{"function":"lighting","what":"wakeup","local_now":}', 400, "bad_json"),
+        ('{"function":"lighting","what":"wakeup","local_now":1.}', 400, "bad_json"),
+        ('{"function":"lighting","what":"wakeup","local_now":"x}', 400, "bad_json"),
         ("{}", 400, "missing_function_or_what"),
         ('{"what":"power"}', 400, "missing_function_or_what"),
         ('{"function":"cooler"}', 400, "missing_function_or_what"),
@@ -725,6 +731,98 @@ def test_command_body_validation(web_cli, body, status, error):
     r, other = one(web_cli, "POST", "/api/command", body, setup=[*STATION, "ctl pending"])
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
     assert not submits(other)
+
+
+WAKE = '{"function":"lighting","what":"wakeup","value":"07:00","local_now":%s}'
+LN = 1791354615  # 2026-10-07 06:30:15, the page's wall clock read as UTC
+
+
+def test_local_now_reaches_the_sequencer(web_cli):
+    r, other = one(
+        web_cli, "POST", "/api/command", WAKE % LN, setup=[*STATION, "ctl pending", "ctldone ok 1"]
+    )
+    assert r.status == 200 and submits(other) == ["CALL submit [lighting] [wakeup] [07:00] t=%d" % LN]
+    # the floor itself (2026-01-01T00:00Z) is a clock
+    _, other = one(web_cli, "POST", "/api/command", WAKE % 1767225600, setup=[*STATION, "ctl pending"])
+    assert submits(other) == ["CALL submit [lighting] [wakeup] [07:00] t=1767225600"]
+
+
+def test_local_now_missing_or_null_is_no_clock(web_cli):
+    """No local_now (an old cached page, a script) or null: submitted without a clock, so the
+    builder refuses with the clock reason in calictl's refused shape (200)."""
+    from tools.gen_c_dict import ESP_WAKEUP_CLOCK_REASON
+
+    for body in ('{"function":"lighting","what":"wakeup","value":"07:00"}', WAKE % "null"):
+        r, other = one(
+            web_cli,
+            "POST",
+            "/api/command",
+            body,
+            setup=[*STATION, "ctl elsewhere " + ESP_WAKEUP_CLOCK_REASON],
+        )
+        assert submits(other) == ["CALL submit [lighting] [wakeup] [07:00]"]
+        assert (r.status, r.json()["refused"]) == (200, ESP_WAKEUP_CLOCK_REASON)
+
+
+@pytest.mark.parametrize(
+    "ln",
+    [
+        '"1791354615"',
+        str(1767225599),
+        "-5",
+        "0",
+        "-0",
+        "1791354615.0",
+        "1.791354615e9",
+        "1791354615E0",
+        "true",
+        "false",
+    ],
+)
+def test_local_now_validation(web_cli, ln):
+    """Review focus 5 (ruling R1: no skew check): a string, a fraction/exponent, a bool, or a clock
+    before 2026-01-01 -> 400 bad_value; nothing submitted.
+
+    .. test:: A missing or implausible page clock never reaches the wake-up builder
+       :id: T_FW_LOCAL_NOW
+       :links: R_FW_WAKEUP
+    """
+    r, other = one(web_cli, "POST", "/api/command", WAKE % ln, setup=[*STATION, "ctl pending"])
+    assert (r.status, r.json()) == (400, {"ok": False, "error": "bad_value"}) and not submits(other)
+
+
+@pytest.mark.parametrize("ln,t", [(str(2**32), 2**32), ("9" * 30, 2**63 - 1)])
+def test_local_now_past_the_32_bit_timestamp_reaches_the_builders_bad(web_cli, ln, t):
+    """A huge integer is passed on (saturated at int64), never bad_json: the builder answers BAD for
+    a clock past the 32-bit Timestamp (vectors u32/i64max), which the client gets as 400 bad_value."""
+    r, other = one(web_cli, "POST", "/api/command", WAKE % ln, setup=[*STATION, "ctl bad"])
+    assert submits(other) == ["CALL submit [lighting] [wakeup] [07:00] t=%d" % t]
+    assert (r.status, r.json()) == (400, {"ok": False, "error": "bad_value"})
+
+
+def test_a_refusal_after_the_pull_is_calictls_refused_shape(web_cli):
+    """The sequencer's done(REFUSED, WAKEUP_UNKNOWN) after the REQUEST_CONFIG pull is answered on the
+    resumed request with its reason (Task 4 review Minor-2)."""
+    from calictl import control
+
+    r, _ = one(
+        web_cli,
+        "POST",
+        "/api/command",
+        WAKE % LN,
+        setup=[*STATION, "ctl pending", "ctldone refused 3 " + control.WAKEUP_UNKNOWN],
+    )
+    assert (r.status, r.json()) == (
+        200,
+        {
+            "ok": True,
+            "applied": False,
+            "refused": control.WAKEUP_UNKNOWN,
+            "state": None,
+            "error": None,
+            "function": "lighting",
+        },
+    )
 
 
 @pytest.mark.parametrize(
