@@ -41,6 +41,7 @@ clean and shows an empty "incoming" list).
    cross-language-codec
    firmware
    screenshots
+   glossary
    api
 
 .. toctree::

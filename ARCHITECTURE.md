@@ -571,21 +571,8 @@ what each job proves is in [simulation and testing](https://ckeller42.github.io/
 
 ## 12. Glossary
 
-- **Unit** — The VW California T7 camper control unit that speaks BLE.
-- **buspi** — The Raspberry Pi that runs calictl and the other readers in the van.
-- **Dictionary** — `protocol/dictionary.yaml`, the extracted map of frame fields.
-- **Catalog** — `protocol/signals.yaml`, the surface or omit decision per field.
-- **Function** — One of the unit's 14 feature areas such as cooler, camping mode, lighting, air heater, water, energy or roof. Each has a state and a control characteristic.
-- **`1003` heartbeat** — The liveness counter incremented about every 0.6 seconds that arms control writes.
-- **Full-packet** — A control frame that resends every field, with unchanged fields set to the leave-unchanged sentinel.
-- **Armed, latched** — A write is accepted only while the heartbeat ticks, and the load then holds after it stops.
-- **Readback echo** — The state characteristic returning the value just written. It is not evidence that the load acted.
-- **Mode-4 notification** — The `1502` frame that carries the real ramping lighting brightness, the truthful feedback channel.
-- **SafetyCounter** — The roof's app-generated monotonic counter that the unit must validate before moving the motor.
-- **Evidence tier** — DEVICE (watched on hardware), CAPTURE (seen on the wire), DECOMPILE (read from the app), UNVERIFIED.
-- **Satellite** — The optional ESP32 firmware that talks to the unit without buspi.
-- **Mock unit** — The Bumble-based fake BLE peripheral used by tests and the app lab.
-- **Sofortheizen, Dauerbetrieb, Flüstermodus** — The unit's own German labels (immediate heating, continuous operation, whisper mode). The UI uses them as shown.
+The terms used across these docs, including the camper unit's own vocabulary, are defined in the
+[glossary](docs/glossary.md).
 
 ## Where to read next
 

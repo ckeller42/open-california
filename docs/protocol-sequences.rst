@@ -1,7 +1,7 @@
 Protocol sequence diagrams
 ==========================
 
-The flows ``calictl`` (and the ESP32 satellite) speak to the VW California camper unit, and from
+The flows ``calictl`` (and the ESP32 :term:`satellite`) speak to the VW California camper :term:`unit`, and from
 the daemon to Home Assistant, as sequence diagrams: the BLE wire flows, the daemon's poll cycle and
 MQTT sink, the control commands, and the satellite's pairing, WiFi setup and command path. This page
 is the **single canonical copy**: the lab-notes page ``docs/business-logic/protocol-sequences.md``
@@ -28,7 +28,7 @@ traceability table on the index page):
    ``calictl`` has run this sequence against the real unit and the outcome was observed.
 ``photon-verified``
    Live-verified, and a human watched the *physical* effect (a lamp), because the state-char
-   readback is only a write-through echo and proves nothing.
+   readback is only a write-through :term:`echo <Readback echo>` and proves nothing.
 ``mock-only``
    Exercised end-to-end only against ``tools/mock_unit`` / ``tools/applab`` (for the ESP32 satellite
    also the Bumble fake unit and a CoreS3 on the bench). The frames match the app, but
