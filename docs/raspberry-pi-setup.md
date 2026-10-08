@@ -285,11 +285,12 @@ as the Pi 4's CYW43455. The failure is silent and total:
 Diagnosed on `buspi` 2026-10-08. Until a fixed kernel is verified, pin 6.18.34:
 
 ```sh
-sudo cp /boot/vmlinuz-6.18.34+rpt-rpi-v8   /boot/firmware/kernel8-634.img
-sudo cp /boot/initrd.img-6.18.34+rpt-rpi-v8 /boot/firmware/initrd8-634.img
-printf 'kernel=kernel8-634.img\ninitramfs initrd8-634.img followkernel\n' | sudo tee -a /boot/firmware/config.txt
-sudo apt-mark hold linux-image-6.18.34+rpt-rpi-v8 linux-image-6.18.34+rpt-rpi-2712
-sudo reboot
+# && throughout: a failed copy must not leave config.txt pointing at a missing kernel image
+sudo cp /boot/vmlinuz-6.18.34+rpt-rpi-v8 /boot/firmware/kernel8-634.img \
+  && sudo cp /boot/initrd.img-6.18.34+rpt-rpi-v8 /boot/firmware/initrd8-634.img \
+  && printf 'kernel=kernel8-634.img\ninitramfs initrd8-634.img followkernel\n' | sudo tee -a /boot/firmware/config.txt \
+  && sudo apt-mark hold linux-image-6.18.34+rpt-rpi-v8 linux-image-6.18.34+rpt-rpi-2712 \
+  && sudo reboot
 ```
 
 The `kernel=` line survives OS updates (newer kernels install but are not booted); remove the two
