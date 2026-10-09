@@ -131,6 +131,11 @@ uint64_t cali_session_last_update_ms(void);
  * limit). /api/state reports this as device.water_held; the shared UI flags the tank stale. */
 int cali_session_water_held(void);
 
+/* Seed the last-plausible water (1302) baseline — console `water seed <hex>`, e.g. after a reflash
+ * cold-started on the parked latch: persisted, shown at once, and the next latch is held against it.
+ * 0 = seeded; nonzero = rejected (len is not exactly the water frame length), baseline unchanged. */
+int cali_session_water_seed(const uint8_t *frame, size_t len);
+
 #ifdef __cplusplus
 }
 #endif
