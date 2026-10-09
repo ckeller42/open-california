@@ -1,0 +1,15 @@
+# clangd fallback flags for the firmware C sources (editor only; the real builds are ESP-IDF in
+# Docker and the host Makefile in firmware/host/, neither of which clangd sees). Without this,
+# clangd has no include paths and reports false "file not found" / "unknown type" on every
+# cali_*/codec header. compile_flags.txt resolves its -I paths relative to THIS directory
+# (firmware/), so it works in any checkout, including throwaway clones, with no compile DB.
+#
+# ESP-IDF-only translation units (main/app_main.c and cali_display) still can't resolve sdkconfig.h
+# / esp_*.h here — those need the IDF sysroot and are expected to stay unresolved in the editor.
+-I.
+-Icomponents/cali_core/include
+-Icomponents/cali_ble_nimble/include
+-Icomponents/platform/include
+-Iweb
+-I../csrc
+-std=gnu11
