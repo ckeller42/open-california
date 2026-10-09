@@ -106,15 +106,22 @@ def test_satellite_hides_calictl_only_chrome(sat):
     _home(sat)
     sat.click("#menu")
     menu = sat.locator(".menupop")
-    expect(menu.get_by_text("Device & WiFi")).to_be_visible()
+    expect(menu.get_by_text("Device status")).to_be_visible()
     # the pairing wizard runs on the satellite too (R_FW_PAIRING_WIZARD); the fixture holds a bond
     expect(menu.get_by_text("Bluetooth pairing…")).to_be_visible()
     expect(menu.get_by_text("Unpair…")).to_be_visible()
 
 
-def test_menu_device_entry_opens_the_firmware_page(sat, stub):
+def test_menu_device_status_screen(sat, stub):
+    """The in-app Device-status screen (both flavors; the satellite adds its own rows + the
+    setup link to the firmware's /device page, which keeps the wizard role)."""
     sat.click("#menu")
-    sat.locator(".menupop").get_by_text("Device & WiFi").click()
+    sat.locator(".menupop").get_by_text("Device status").click()
+    expect(sat.locator("#title")).to_have_text("Device status")
+    expect(sat.get_by_text("bef07f1")).to_be_visible()  # satellite firmware (device.fw)
+    expect(sat.get_by_text("HomeNet")).to_be_visible()  # WiFi SSID
+    expect(sat.get_by_text("C0:FF:EE:CA:11:F0")).to_be_visible()  # bonded unit (/api/pairing)
+    sat.get_by_text("Open setup").click()  # satellite-only link
     sat.wait_for_url(stub.base + "/device")
     sat.wait_for_selector("#device h2")
     sat.wait_for_selector('#device a[href="/"]')  # the link back (station mode)
@@ -141,7 +148,7 @@ def test_german_banner_and_menu(stub, error_gated_page):
     with error_gated_page(stub.base, locale="de-DE") as pg:
         expect(pg.get_by_text("Satellit — nur Anzeige")).to_be_visible()
         pg.click("#menu")
-        expect(pg.locator(".menupop").get_by_text("Gerät & WLAN")).to_be_visible()
+        expect(pg.locator(".menupop").get_by_text("Gerätestatus")).to_be_visible()
 
 
 @pytest.mark.parametrize("up,age_ms", [(True, None), (True, 90001), (False, 90001)])

@@ -8,8 +8,25 @@ window.STRINGS_DE = {
   "offline": "offline",
   "Sending…": "Wird gesendet…",
 
-  // --- ⋮ menu --------------------------------------------------------------------------------
-  "Device & WiFi": "Gerät & WLAN",
+  // --- ⋮ menu / Device-status screen ----------------------------------------------------------
+  "Device status": "Gerätestatus",
+  "Camper unit": "Camper-Einheit",
+  "Last update": "Letzte Aktualisierung",
+  "Bonded unit": "Gekoppelte Einheit",
+  "not paired": "nicht gekoppelt",
+  "online": "online",
+  "Unit firmware": "Firmware der Einheit",
+  "amb {amb} · comm {comm}": "amb {amb} · comm {comm}",
+  "Satellite firmware": "Satellit-Firmware",
+  "BLE link": "BLE-Verbindung",
+  "up": "verbunden",
+  "reconnecting…": "verbindet neu…",
+  "Signal": "Signal",
+  "Uptime": "Laufzeit",
+  "{m} min": "{m} Min",
+  "{h} h {m} min": "{h} Std {m} Min",
+  "{d} d {h} h": "{d} Tg {h} Std",
+  "Open setup": "Setup öffnen",
   "Bluetooth pairing…": "Bluetooth-Kopplung…",
   "Unpair…": "Entkoppeln…",
   "Unpair removes the working bond; telemetry stops until re-paired. Continue?":
