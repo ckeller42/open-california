@@ -144,6 +144,8 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_int(&j, (long long)st.uptime_ms);
     cali_json_key(&j, "fw");
     cali_json_str(&j, st.fw);
+    cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
+    cali_json_bool(&j, cali_session_water_held());
     cali_json_obj_end(&j);
     finish_json(&j, resp);
 }

@@ -287,8 +287,10 @@ def test_notify_after_the_read_wins(fake):
 
 def test_water_is_re_read_periodically_while_the_link_is_up(fake):
     """Water is re-read every ``CALI_SESSION_WATER_REREAD_MS`` after the read-all (calictl reads
-    1302 on every 30 s poll), so a stale latch served at connect is corrected without a reconnect;
-    the re-read's frame SNAPs, and a later notify still overrides it.
+    1302 on every 30 s poll), so a stale latch served at connect is corrected the moment a real
+    (higher) reading comes in; the re-read's frame SNAPs. A later LATCH notify (a fresh drop with the
+    grey tank frozen) no longer overrides the plausible reading — the stale-latch guard holds it
+    (``test_water_latch_is_held_vs_a_plausible_baseline``).
 
     .. test:: The firmware re-reads water periodically while the link is up
        :id: T_FW_SESSION_WATER_REREAD
@@ -308,7 +310,7 @@ def test_water_is_re_read_periodically_while_the_link_is_up(fake):
     rest = after(out, "CALL read %d" % 0x1302)  # the read-all's own water read
     assert calls(rest, "read") == ["CALL read %d" % 0x1302]  # the periodic re-read
     got, f = _water(snaps(out)[-1])
-    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))  # the live read wins (a rise)
     out = run(
         fake,
         *PAIRED,
@@ -319,8 +321,76 @@ def test_water_is_re_read_periodically_while_the_link_is_up(fake):
         "tick %d" % (T + 2 * REREAD),
     )
     got, f = _water(snaps(out)[-1])
-    assert got == protocol.decode(f, bytes.fromhex(STALE_WATER))  # the later notify wins
+    # The latch notify (fresh 17->1, grey frozen) is held: the plausible LIVE reading stays shown.
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
     assert len(calls(out, "read %d" % 0x1302)) == 3  # read-all + two periodic re-reads
+
+
+# Water stale-latch guard (calictl.freshness.implausible_water_drop, ported to the ESP session).
+# Fresh drop + grey frozen = the parked latch -> hold; any grey movement (or a rise) = live -> adopt.
+PLAUSIBLE_WATER = LIVE_WATER  # fresh 17, waste 0
+LATCH_WATER = STALE_WATER  # fresh 1,  waste 0 (grey frozen) -> held
+GREY_MOVED_WATER = "03011d010516"  # fresh 1,  waste 5 (grey moved) -> live, adopted
+REFILL_WATER = "03141d010016"  # fresh 20, waste 0 (a rise)      -> adopted
+
+
+def _served_water(fake, *extra):
+    """SNAP the water frame after a read-all whose 1302 read returns PLAUSIBLE_WATER, then ``extra``."""
+    reads = ["READ %x 0%s" % (c, " " + PLAUSIBLE_WATER if c == 0x1302 else "") for c in CHARS]
+    out = run(fake, *PAIRED, *read_all(reads=reads), *extra)
+    got, f = _water(snaps(out)[-1])
+    return got, f, out
+
+
+def test_water_latch_is_held_vs_a_plausible_baseline(fake):
+    """A fresh-water drop while the grey tank is frozen is the parked latch: hold the last plausible
+    reading rather than serve the low (serve.py's stale guard, now on the ESP).
+
+    .. test:: The session holds the last plausible water reading against the parked latch
+       :id: T_FW_SESSION_WATER_LATCH
+       :links: R_FW_SESSION
+    """
+    got, f, _ = _served_water(fake, "NOTIFY 1302 " + LATCH_WATER, "tick %d" % (T + 100))
+    assert got == protocol.decode(f, bytes.fromhex(PLAUSIBLE_WATER))  # held, not the latch
+
+
+def test_water_drop_with_grey_movement_is_adopted(fake):
+    """A fresh drop WITH grey movement proves the unit is live-measuring — adopt it, don't hold."""
+    got, f, _ = _served_water(fake, "NOTIFY 1302 " + GREY_MOVED_WATER, "tick %d" % (T + 100))
+    assert got == protocol.decode(f, bytes.fromhex(GREY_MOVED_WATER))
+
+
+def test_water_refill_is_adopted(fake):
+    """A rising fresh level is never a latch (it is a refill / re-measure) — adopt it."""
+    got, f, _ = _served_water(fake, "NOTIFY 1302 " + REFILL_WATER, "tick %d" % (T + 100))
+    assert got == protocol.decode(f, bytes.fromhex(REFILL_WATER))
+
+
+def test_water_plausible_reading_is_persisted(fake):
+    """A plausible water read is written to NVS (WATER_GOOD_KEY) so a reboot can restore it.
+
+    .. test:: The session persists the plausible water baseline
+       :id: T_FW_SESSION_WATER_PERSIST
+       :links: R_FW_SESSION
+    """
+    reads = ["READ %x 0%s" % (c, " " + PLAUSIBLE_WATER if c == 0x1302 else "") for c in CHARS]
+    out = run(fake, *PAIRED, *read_all(reads=reads), "kvhex water_good")
+    assert ("KV water_good " + PLAUSIBLE_WATER) in out  # persisted, hex-for-hex
+
+
+def test_water_baseline_restored_from_nvs_rejects_a_latch_on_boot(fake):
+    """A fresh boot (new process) pre-seeded with a persisted baseline still rejects the parked
+    latch on the very first read — the reboot-while-parked case serve.py's ``_water_good`` covers."""
+    latch_reads = ["READ %x 0%s" % (c, " " + LATCH_WATER if c == 0x1302 else "") for c in CHARS]
+    out = run(
+        fake,
+        "kvsethex water_good " + PLAUSIBLE_WATER,  # NVS as if written by a previous boot
+        "reinit",  # boot the session with that NVS present
+        *PAIRED,
+        *read_all(reads=latch_reads),
+    )
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(PLAUSIBLE_WATER))  # restored baseline held
 
 
 def test_heartbeat_every_period_from_the_start_counter(fake):

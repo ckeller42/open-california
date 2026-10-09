@@ -27,6 +27,7 @@
  *   bond 0|1         has_bond() (identity() = C0:FF:EE:CA:11:F0 while 1)
  *   active 0|1       cali_session_active()
  *   linkup 0|1       cali_session_link_up() (defaults to 0: set both when a test wants "up")
+ *   waterheld 0|1    cali_session_water_held() (fn.water is the held last-plausible frame)
  *   stamp <ms>       cali_session_last_update_ms()
  *   now <ms>         cali_uptime_ms()
  *   kv <key>         print "KV <value>" or "KV <missing>"
@@ -107,7 +108,7 @@ static const cali_net_t fake_net = {
 /* ---- the fake session ---- */
 static uint8_t s_cooler[6] = {0x08, 0x03, 0, 0, 0, 0};   /* Installed=1 (bit 4), Level=3 (bits 12-15) */
 static const uint8_t s_roof[5] = {0x12, 0, 0, 0, 0};     /* Position=1 (bits 0-3), Installed=1 (bit 6) */
-static int s_nofn, s_active, s_linkup;
+static int s_nofn, s_active, s_linkup, s_water_held;
 static uint64_t s_stamp, s_now = 1000;
 
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
@@ -128,6 +129,7 @@ int cali_session_active(void) { return s_active; }
 int cali_session_link_up(void) { return s_linkup; }
 void cali_session_web_seen(void) {}   /* viewer tracking lives in the real session */
 uint64_t cali_session_last_update_ms(void) { return s_stamp; }
+int cali_session_water_held(void) { return s_water_held; }
 int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) { (void)live; (void)out; return 0; }
 
 /* ---- the fake runner + transport ---- */
@@ -305,6 +307,7 @@ int main(void) {
         else if (strcmp(w, "bond") == 0) s_bond = (int)v;
         else if (strcmp(w, "active") == 0) s_active = (int)v;
         else if (strcmp(w, "linkup") == 0) s_linkup = (int)v;
+        else if (strcmp(w, "waterheld") == 0) s_water_held = (int)v;
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
         else if (strcmp(w, "ctlbusy") == 0) s_ctl_busy = (int)v;
         else if (strcmp(w, "attempts") == 0) s_pair.attempts = (uint8_t)v;

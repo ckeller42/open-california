@@ -43,6 +43,17 @@ static int s_rereading;        /* the periodic water re-read is outstanding */
 static uint64_t s_water_next;  /* now_ms of the next water re-read */
 
 #define WATER_CHAR 0x1302u
+#define WATER_GOOD_KEY "water_good"   /* persisted last-plausible 1302 frame (<=15 chars, NVS) */
+
+/* The last PLAUSIBLE water (1302) frame — the baseline the stale-latch guard holds onto, persisted
+ * so a reboot while parked keeps the real level instead of re-accepting the latch (serve.py's
+ * _water_good). Cleared only when the bond changes to a different unit. */
+static struct {
+    uint8_t frame[CODEC_FRAME_MAX];
+    size_t len;
+    uint8_t have;
+} s_wg;
+static int s_water_held;       /* the served 1302 frame is the held baseline, not the latch read */
 
 static struct {
     uint8_t frame[CODEC_FRAME_MAX];
@@ -97,11 +108,76 @@ static int index_of(uint16_t short_id) {
     return -1;
 }
 
+/* Fresh/waste tank LEVEL from a raw water frame. Returns 1 if FreshWaterLevel is present (sets
+ * *fresh); has_waste/waste report WasteWaterLevel. Comparing the raw Level fields is equivalent to
+ * freshness.py's liters comparison here — the unit is stable and Level maps monotonically to
+ * liters, and the guard only ever asks "did fresh drop?" / "did grey move?". */
+static int water_levels(const uint8_t *frame, size_t len, uint32_t *fresh, int *has_waste,
+                        uint32_t *waste) {
+    static codec_kv_t kv[CODEC_KV_MAX];   /* static: keep the 1 KB off the 8 KB host-task stack */
+    const codec_func_t *wf = codec_func_by_name("water");
+    int gotf = 0;
+    *has_waste = 0;
+    if (!wf) return 0;
+    int n = codec_decode(wf, frame, len, kv);
+    for (int k = 0; k < n; k++) {
+        if (strcmp(kv[k].name, "FreshWaterLevel") == 0) {
+            *fresh = kv[k].value;
+            gotf = 1;
+        } else if (strcmp(kv[k].name, "WasteWaterLevel") == 0) {
+            *waste = kv[k].value;
+            *has_waste = 1;
+        }
+    }
+    return gotf;
+}
+
+/* True when a new water frame is the parked stale-latch vs the plausible baseline s_wg — a fresh
+ * DROP while the GREY tank is EXACTLY frozen (calictl.freshness.implausible_water_drop). Any grey
+ * movement proves the unit is live-measuring (adopt); a fresh drop with grey unknown is treated as
+ * the latch (conservative). No baseline, or no fresh to compare -> not a latch (cold start adopts,
+ * matching serve.py's known cold-start limit). */
+static int water_is_latch(const uint8_t *data, size_t len) {
+    uint32_t fn_, fp_, wn_, wp_;
+    int hwn, hwp;
+    if (!s_wg.have) return 0;
+    if (!water_levels(data, len, &fn_, &hwn, &wn_)) return 0;
+    if (!water_levels(s_wg.frame, s_wg.len, &fp_, &hwp, &wp_)) return 0;
+    if (fn_ >= fp_) return 0;             /* not a drop (refill / same / re-measure) */
+    if (!hwp || !hwn) return 1;           /* fresh dropped, grey unknown -> can't corroborate */
+    return wn_ == wp_;                    /* grey frozen -> latch; any grey movement -> live */
+}
+
+/* Show the persisted last-plausible water frame for char 1302 (nothing if there is no baseline). */
+static void seed_water_frame(void) {
+    int w = index_of(WATER_CHAR);
+    if (w < 0 || !s_wg.have) return;
+    memcpy(s_fr[w].frame, s_wg.frame, s_wg.len);
+    s_fr[w].len = s_wg.len;
+    s_fr[w].have = 1;
+    s_fr[w].live = 0;   /* from an earlier link or NVS, never this link */
+}
+
 static void store(size_t i, const uint8_t *data, size_t len) {
     if (len > CODEC_FRAME_MAX) {
         cali_log("session: %s frame %u bytes, keeping the first %u", CODEC_CHARS[i].function,
                  (unsigned)len, (unsigned)CODEC_FRAME_MAX);
         len = CODEC_FRAME_MAX;
+    }
+    if (CODEC_CHARS[i].state_short == WATER_CHAR) {
+        /* Parked, the unit stops measuring and hands out a latched low (true 17 L read back as 1 L).
+         * Hold the last plausible reading instead of serving the latch (serve.py's stale guard). */
+        if (water_is_latch(data, len)) {
+            s_water_held = 1;
+            data = s_wg.frame;   /* serve the plausible baseline, not the latch */
+            len = s_wg.len;
+        } else {
+            s_water_held = 0;
+            memcpy(s_wg.frame, data, len);   /* a plausible read -> new baseline, persisted */
+            s_wg.len = len;
+            s_wg.have = 1;
+            cali_kv_set(WATER_GOOD_KEY, data, len);
+        }
     }
     if (len) memcpy(s_fr[i].frame, data, len);
     s_fr[i].len = len;
@@ -120,10 +196,17 @@ static void unit_check(void) {
     const char *id = s_t->identity();
     if (!id) id = "";
     if (strncmp(id, s_unit, sizeof s_unit) == 0) return;
+    int had = s_unit[0] != 0;   /* we knew a DIFFERENT unit before (re-pair / forget), not boot */
     snprintf(s_unit, sizeof s_unit, "%s", id);
     memset(s_fr, 0, sizeof s_fr);
     memset(s_lcfg, 0, sizeof s_lcfg);
     s_last_update = 0;
+    if (had) {   /* another unit's water isn't ours; a plain boot ("" -> id) keeps the baseline */
+        memset(&s_wg, 0, sizeof s_wg);
+        s_water_held = 0;
+        cali_kv_erase(WATER_GOOD_KEY);
+    }
+    seed_water_frame();   /* same unit: keep showing its last-known water right away */
 }
 
 static void link_clear(void) {
@@ -312,6 +395,16 @@ void cali_session_init(const cali_transport_t *t) {
     memset(s_lcfg, 0, sizeof s_lcfg);
     s_last_update = 0;
     s_unit[0] = 0;
+    /* Restore the last-plausible water from NVS so a reboot while parked shows the real level, not
+     * the latch, and the guard has a baseline on the first read (serve.py's persisted _water_good). */
+    memset(&s_wg, 0, sizeof s_wg);
+    s_water_held = 0;
+    size_t wl = sizeof s_wg.frame;
+    if (cali_kv_get(WATER_GOOD_KEY, s_wg.frame, &wl) == CALI_KV_OK) {
+        s_wg.len = wl;
+        s_wg.have = 1;
+    }
+    seed_water_frame();
     cali_ctl_run_init(t);
     cali_runner_on_other = on_event;
 }
@@ -401,6 +494,8 @@ void cali_session_connect_now(void) {
 }
 
 void cali_session_web_seen(void) { s_web_seen = s_now ? s_now : 1; }
+
+int cali_session_water_held(void) { return s_water_held; }
 
 int cali_session_active(void) { return s_active; }
 
