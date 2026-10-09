@@ -123,6 +123,14 @@ int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]);
  * a NOTIFY; 0 = no frame stored since cali_session_init. */
 uint64_t cali_session_last_update_ms(void);
 
+/* 1 when the served water (1302) frame is the HELD last-plausible reading, not the live one: the
+ * parked unit stopped measuring and handed back the latched low (true ~17 L read as 1 L), so the
+ * guard keeps the last plausible frame (calictl.freshness.implausible_water_drop — a fresh drop
+ * while the grey tank is exactly frozen). The baseline persists in NVS, so a reboot while parked
+ * shows the real level; cold start with no baseline accepts the first read (serve.py's known
+ * limit). /api/state reports this as device.water_held; the shared UI flags the tank stale. */
+int cali_session_water_held(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -32,6 +32,9 @@
  *                          does with --http); before it the WiFi runtime is off, as without --http
  *     kv <key>             print "KV <key> <value>" or "KV <key> missing" (the in-memory kv store)
  *     kvset <key> <value>  store a kv value (e.g. saved WiFi credentials before wifi_boot)
+ *     kvsethex <key> <hex>  store hex-decoded bytes (e.g. a saved frame: the persisted water_good)
+ *     kvhex <key>          print "KV <key> <hex>" of a binary value (or "KV <key> missing")
+ *     reinit               re-run cali_session_init (re-reads NVS, e.g. the persisted water_good)
  *     kverasefail <n>      the next n cali_kv_erase calls fail (-1, nothing erased)
  *     rssi <dBm>           what the fake net's sta_rssi() answers (default 0)
  *     lastfail             print "LASTFAIL <cali_wifi_run_last_fail() or ->"
@@ -340,8 +343,26 @@ int main(void) {
             } else {
                 printf("KV %s missing\n", a1);
             }
+        } else if (strcmp(word, "kvhex") == 0) {   /* print a binary value as hex (e.g. water_good) */
+            uint8_t v[129];
+            size_t vl = sizeof v;
+            if (cali_kv_get(a1, v, &vl) == CALI_KV_OK) {
+                printf("KV %s ", a1);
+                for (size_t k = 0; k < vl; k++) printf("%02x", v[k]);
+                printf("\n");
+            } else {
+                printf("KV %s missing\n", a1);
+            }
         } else if (strcmp(word, "kvset") == 0) {
             cali_kv_set(a1, a2, strlen(a2));
+        } else if (strcmp(word, "kvsethex") == 0) {   /* store hex-decoded bytes (e.g. a saved frame) */
+            uint8_t b[64];
+            size_t bl = 0;
+            for (const char *p = a2; p[0] && p[1] && bl < sizeof b; p += 2)
+                b[bl++] = (uint8_t)strtol((char[3]){p[0], p[1], 0}, NULL, 16);
+            cali_kv_set(a1, b, bl);
+        } else if (strcmp(word, "reinit") == 0) {   /* re-boot the session: re-reads NVS (water_good) */
+            cali_session_init(&FAKE);
         } else if (strcmp(word, "kverasefail") == 0) {
             s_erase_fail = n1;
         } else if (strcmp(word, "rssi") == 0) {

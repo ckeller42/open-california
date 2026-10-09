@@ -212,7 +212,7 @@ _PIN_SETUP = [
 EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
     '"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
-    '"control":{"writes":true},"uptime_ms":5010,"fw":"test"}}'
+    '"control":{"writes":true},"uptime_ms":5010,"fw":"test","water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
     '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
@@ -228,6 +228,12 @@ def test_api_state_device_block_bytes_are_pinned(web_cli):
 def test_api_wifi_body_bytes_are_pinned(web_cli):
     """/api/wifi shares wifi_members with /api/state; pin its bytes too."""
     assert get(web_cli, "/api/wifi", setup=[_PIN_SETUP[-1], "lastfail auth"]).decode() == EXPECTED_WIFI_BODY
+
+
+def test_api_state_water_held_reflects_the_session(web_cli):
+    """device.water_held mirrors cali_session_water_held() — the shared UI flags the tank stale."""
+    assert json.loads(get(web_cli, "/api/state", setup=["waterheld 1"]))["device"]["water_held"] is True
+    assert json.loads(get(web_cli, "/api/state"))["device"]["water_held"] is False
 
 
 def test_api_state_nulls(web_cli):

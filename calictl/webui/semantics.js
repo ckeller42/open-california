@@ -458,6 +458,13 @@ function adaptSatellite(body, nowMs) {
   const out = {};
   for (const name of Object.keys(fn)) out[name] = interpret(name, fn[name]);
   applySwCorrections(out);
+  // The firmware holds the last-plausible water frame when the parked unit returns the stale latch
+  // (device.water_held) — flag the tanks stale, as serve.state() does on calictl. No wall clock on
+  // the satellite, so no stale_since (the UI's "🕒 last measured" renders without the "(ago)").
+  if (dev.water_held && out.water) {
+    if (out.water.fresh) out.water.fresh = { ...out.water.fresh, stale: true };
+    if (out.water.waste) out.water.waste = { ...out.water.waste, stale: true };
+  }
   const ms = link.last_snap_age_ms;
   const age = typeof ms === "number" ? ms / 1000 : null;
   out._meta = {

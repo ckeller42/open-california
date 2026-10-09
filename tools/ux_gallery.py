@@ -203,6 +203,7 @@ def esp_fixtures():
             "control": {"writes": True},
             "uptime_ms": 3912400,
             "fw": "bef07f1",
+            "water_held": False,
         },
     }
     fx = {
@@ -217,6 +218,7 @@ def esp_fixtures():
                     "control": {"writes": False},
                     "uptime_ms": 41250,
                     "fw": "bef07f1",
+                    "water_held": False,
                 },
             },
             "/api/wifi": dict(

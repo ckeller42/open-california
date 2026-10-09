@@ -67,6 +67,24 @@ values** and **fixes the mid-poll link drops**. Stdlib-only, no new transport. S
 (`tests/test_mock_integration.py`); the mock models "reads are stale until a heartbeat arms the
 session."
 
+## The stale-latch guard on the ESP satellite (2026-10-09)
+
+The ESP32 satellite runs the SAME guard as `freshness.implausible_water_drop`, ported to
+`firmware/components/cali_core/session.c`: when a water (`1302`) frame shows a FreshWaterLevel
+**drop** while WasteWaterLevel is **exactly frozen**, the session keeps serving the last plausible
+frame instead of the latch (any grey movement, or a rising fresh level, is adopted). Comparing the
+raw `Level` fields is equivalent to `freshness.py`'s liters comparison — the unit is stable and the
+guard only asks "did fresh drop / did grey move". The plausible frame is **persisted to NVS**
+(`water_good`, wrapped like every `cali_platform` KV record), so a reboot while parked shows the real
+level rather than re-accepting the `1` latch — the firmware twin of `serve.py`'s persisted
+`_water_good`. `/api/state` reports `device.water_held` when the held frame is being served, and the
+shared UI (`semantics.js::adaptSatellite`) flags both tanks stale (`🕒 last measured`, no
+`stale_since` — the satellite has no wall clock). **Same cold-start limit as buspi:** a fresh ESP
+with no NVS baseline that first reads while parked accepts the latch as its baseline until the van is
+next active. Why this matters: buspi (poll, then release) and the ESP (persistent, re-read every 30 s)
+would otherwise disagree — buspi holding the real ~17 L while the ESP showed a confident `1 L` / 3 %
+(field 2026-10-09: buspi 22 L held/stale vs ESP 1 L raw, the discrepancy that prompted this).
+
 ## Connection failure modes (why buspi shows offline)
 
 A `BleakDeviceNotFoundError` / "no BLE session after retries" means the unit isn't reachable — and
