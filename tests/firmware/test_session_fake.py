@@ -1352,15 +1352,21 @@ def test_control_write_failing_inside_the_call_fails_the_command(fake):
 
 
 def test_control_link_drop_fails_the_command(fake):
-    """A link drop mid-command fails it cleanly.
+    """A link drop mid-command ends it cleanly: FAILED while nothing went out, UNCONFIRMED once a
+    frame left — the unit may have actuated it with the confirming ACK lost to the drop (field
+    2026-10-09, #264: a parked-unit kick between the write and its ACK, the write had landed).
 
-    .. test:: A link drop mid-command fails it cleanly
+    .. test:: A link drop mid-command fails it cleanly, or reports it unconfirmed once a frame left
        :id: T_FW_CONTROL_LINK_DROP
        :links: R_FW_CONTROL_API
     """
     t = ARM + 100
-    out = run(fake, *armed(), "> set cooler level 2", "tick %d" % t, "DISCONNECTED", "tick %d" % (t + 100))
+    out = run(fake, *armed(), "> set cooler level 2", "DISCONNECTED", "tick %d" % t)
+    assert not writes(out)
     assert "LOG control: cooler/level failed: link lost" in out
+    out = run(fake, *armed(), "> set cooler level 2", "tick %d" % t, "DISCONNECTED", "tick %d" % (t + 100))
+    assert len(writes(out)) == 1
+    assert "LOG control: cooler/level unconfirmed: link lost after the write" in out
 
 
 def test_control_link_drop_between_frames_sends_no_commit(fake):
@@ -1375,7 +1381,7 @@ def test_control_link_drop_between_frames_sends_no_commit(fake):
         *["tick %d" % (t + d) for d in range(100, 1000, 100)],
     )
     assert len(writes(out)) == 1
-    assert "LOG control: lighting/kitchen failed: link lost" in out
+    assert "LOG control: lighting/kitchen unconfirmed: link lost after the write" in out
 
 
 def test_control_timeout_then_late_ack_keeps_busy_until_acked(fake):

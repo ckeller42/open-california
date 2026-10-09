@@ -20,7 +20,9 @@
  * once (BUSY, NOT_READY, REFUSED, ELSEWHERE, BAD_VALUE, NONE — each logged "control: <fn>/<what> …")
  * or accepts (PENDING); the frames then go out on cali_ctl_tick(), one write with response at a time
  * (transport write -> CALI_TEV_WRITTEN -> cali_ctl_on_written); done(result, reason) is called exactly
- * once with OK, FAILED (a write not issued, refused with an ATT error, or the link lost), TIMEOUT
+ * once with OK, FAILED (a write not issued, refused with an ATT error, or the link lost before any
+ * command frame went out), UNCONFIRMED (the link lost after one did: the unit may have actuated it
+ * with the ACK lost to the drop — the parked unit's kick, field 2026-10-09, #264), TIMEOUT
  * (CALI_CTL_DEADLINE_MS after the submit) or REFUSED (a wake-up whose config the pull did not bring,
  * reason CALI_WAKEUP_UNKNOWN; reason is NULL for every other result). A `plan.pull` refusal on an armed
  * link becomes PENDING: REQUEST_CONFIG + commit go out, then up to CODEC_CONFIG_PULL_MS after the
@@ -56,7 +58,8 @@ enum {
     CALI_CTL_BUSY,        /* run: a command (or an unacknowledged write) is still in flight */
     CALI_CTL_NOT_READY,   /* run: no armed link yet, or the function's state is unknown */
     CALI_CTL_FAILED,      /* run: a write not issued, refused by the unit, or the link lost */
-    CALI_CTL_TIMEOUT      /* run: not done within CALI_CTL_DEADLINE_MS */
+    CALI_CTL_TIMEOUT,     /* run: not done within CALI_CTL_DEADLINE_MS */
+    CALI_CTL_UNCONFIRMED  /* run: the link dropped after a command frame went out — it may have landed (#264) */
 };
 
 #define CALI_CTL_MAX_FRAMES 4

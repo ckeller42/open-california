@@ -139,7 +139,7 @@
  * `/api/command` success response (serve.py::command()). Error paths (web.py) return `{ error }`
  * only, so every field is optional here. `applied`: true=verified, false=not applied, null=sent
  * but not remotely verifiable.
- * @typedef {{ ok?: boolean, applied?: boolean|null, refused?: string, state?: FnState|null, error?: string|null, function?: string }} CommandResponse
+ * @typedef {{ ok?: boolean, applied?: boolean|null, refused?: string, state?: FnState|null, error?: string|null, function?: string, unconfirmed?: boolean }} CommandResponse
  * @typedef {{ samples: number[][], gap_s: number, now: number, hours: number, error?: string }} BattHistory
  * @typedef {{ idx: number, cls: string, pad: number, lblCls: string, name: string, unit?: string }} SeriesCfg
  */
@@ -850,7 +850,8 @@ async function processQueue() {
   if (res && res.ok && res.refused) toast(res.refused, "warn");   // physical precondition not met
   else if (res && res.ok && res.applied === true) toast("✓ Applied", "ok");
   // The ESP satellite has no readback (applied is always null): confirm from the unit's own state.
-  else if (res && res.ok && res.applied == null && expected) confirmFromState(done, expected);
+  // unconfirmed (#264): the link dropped after the write left — wait out the reconnect + read-all.
+  else if (res && res.ok && res.applied == null && expected) confirmFromState(done, expected, res.unconfirmed ? SAT_RECONNECT_CONFIRM_MS : SAT_CONFIRM_MS);
   // applied === null: sent + acknowledged but not verifiable remotely. For lighting the state
   // char is a write-through echo, so only the lamp itself is proof — say so. Other functions
   // that return null (e.g. roof, which has no readback check) keep the neutral phrasing.
@@ -894,6 +895,7 @@ function expectedState(c) {
   return null;
 }
 
+const SAT_RECONNECT_CONFIRM_MS = 20000;   // a dropped link: reconnect (viewer-paced) + read-all
 const SAT_CONFIRM_MS = 5000;   // a few 2 s polls: the satellite stores each frame the unit pushes
 
 /**
@@ -901,10 +903,11 @@ const SAT_CONFIRM_MS = 5000;   // a few 2 s polls: the satellite stores each fra
  * A newer command for the same control supersedes this one silently (it reports its own result).
  * @param {CommandItem} c
  * @param {(s: FnState) => boolean} ok
+ * @param {number} ms how long to watch
  */
-async function confirmFromState(c, ok) {
+async function confirmFromState(c, ok, ms) {
   const fn = c.fn;
-  const end = Date.now() + SAT_CONFIRM_MS;
+  const end = Date.now() + ms;
   while (Date.now() < end) {
     if ((inflight && inflight.key === c.key) || queue.some((q) => q.key === c.key)) return;
     const s = STATE[fn];

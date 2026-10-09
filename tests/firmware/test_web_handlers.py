@@ -629,6 +629,13 @@ def test_command_done_results_map_to_status(web_cli, rc, status, error):
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
 
 
+def test_command_unconfirmed_answers_ok_flagged(web_cli):
+    """A write that left before the link dropped is not a failure: the unit may have actuated it
+    (#264). 200 with ``applied`` null and ``unconfirmed`` true, so the page confirms from state."""
+    r, _ = one(web_cli, "POST", "/api/command", CMD, setup=[*STATION, "ctl pending", "ctldone unconfirmed 2"])
+    assert (r.status, r.json()) == (200, {**OK, "unconfirmed": True})
+
+
 def test_command_after_a_timeout_the_next_command_starts_fresh(web_cli):
     """A timed-out command (504) leaves nothing behind: the next request is submitted anew and gets
     its own answer (a late ACK only clears the sequencer's in-flight flag; done fires once)."""

@@ -137,7 +137,8 @@ Things to expect:
   does not, the toast is **"Sent — the unit didn't confirm it"**: the unit accepted the bytes, but
   the satellite saw no reading with the new value (the satellite does no read-back of its own,
   unlike the Pi). The tile updates on the next reading. *Command failed: write_failed* means the unit refused
-  the write; *write_timeout* that it never answered.
+  the write (or the link dropped before it went out; one that dropped after is confirmed from the
+  unit's state once the satellite reconnects); *write_timeout* that it never answered.
 - **The wake-up light takes the time from your phone or laptop**, like the app: the page sends its
   own clock with every wake-up edit, and the light comes on at the time you typed, in your device's
   time zone. A device with a wrong clock or time zone sets a wrong wake-up time — the satellite has

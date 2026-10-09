@@ -51,7 +51,8 @@
  *                     Then cali_ctl_submit (cali_control.h):
  *                       accepted  -> CALI_HTTP_PENDING until the sequencer's done callback, then
  *                                    200 {"ok":true,"applied":null,"state":null,"error":null,"function":fn}
- *                                    (applied never true: no readback check), or 502 write_failed /
+ *                                    (applied never true: no readback check; plus "unconfirmed":true
+ *                                    when the link dropped after a frame went out), or 502 write_failed /
  *                                    504 write_timeout — the answer waits for the write ACKs
  *                                    (<= CALI_CTL_DEADLINE_MS)
  *                       refused / elsewhere -> 200 {"ok":true,"applied":false,"refused":<reason>,

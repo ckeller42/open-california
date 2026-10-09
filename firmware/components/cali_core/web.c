@@ -428,7 +428,7 @@ static void cmd_answer(cali_http_resp_t *resp, int rc, const char *reason) {
     const char *err = NULL;
     int status = 200;
     switch (rc) {
-    case CALI_CTL_OK: case CALI_CTL_REFUSED: case CALI_CTL_ELSEWHERE: break;
+    case CALI_CTL_OK: case CALI_CTL_REFUSED: case CALI_CTL_ELSEWHERE: case CALI_CTL_UNCONFIRMED: break;
     case CALI_CTL_BAD_VALUE: status = 400; err = "bad_value"; break;
     case CALI_CTL_NONE: status = 400; err = "unknown_control"; break;
     case CALI_CTL_BUSY: status = 409; err = "busy"; break;
@@ -455,6 +455,10 @@ static void cmd_answer(cali_http_resp_t *resp, int rc, const char *reason) {
         cali_json_null(&j);
         cali_json_key(&j, "function");
         cali_json_str(&j, s_cmd_fn);
+        if (rc == CALI_CTL_UNCONFIRMED) {   /* sent, its ACK lost to a link drop (#264) */
+            cali_json_key(&j, "unconfirmed");
+            cali_json_bool(&j, 1);
+        }
     }
     finish_json(&j, resp);   /* 200, or 500 on overflow */
     if (resp->status == 200) resp->status = status;
