@@ -23,7 +23,6 @@ import pytest
 from calictl import anchors, semantics
 from calictl.serve import ServeBackend
 from tools import gen_semantics_vectors
-from tools.wifi_consts import CONSTS
 
 ROOT = Path(__file__).resolve().parent.parent
 SEM_JS = ROOT / "calictl" / "webui" / "semantics.js"
@@ -111,8 +110,7 @@ def test_sat_offline_s_is_three_kicked_reconnect_periods(js):
     unit terminates the held link ~15-20 s after each connect; a paced reconnect refreshes data
     ~every 45-50 s — field 2026-10-09, #264): three periods of slack before claiming sleep."""
     header = (
-        Path(__file__).resolve().parents[1]
-        / "firmware/components/cali_core/include/cali_session.h"
+        Path(__file__).resolve().parents[1] / "firmware/components/cali_core/include/cali_session.h"
     ).read_text()
     kicked_ms = int(re.search(r"#define CALI_SESSION_KICKED_RECONNECT_MS (\d+)u", header).group(1))
     assert js["SAT_OFFLINE_S"] == 3 * kicked_ms / 1000
