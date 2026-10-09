@@ -144,12 +144,22 @@ def test_german_banner_and_menu(stub, error_gated_page):
         expect(pg.locator(".menupop").get_by_text("Gerät & WLAN")).to_be_visible()
 
 
-@pytest.mark.parametrize("up,age_ms", [(False, 1200), (True, None), (True, 10001)])
-def test_lost_or_stale_link_shows_the_offline_banner(stub, error_gated_page, up, age_ms):
+@pytest.mark.parametrize("up,age_ms", [(True, None), (True, 90001), (False, 90001)])
+def test_stale_data_shows_the_offline_banner(stub, error_gated_page, up, age_ms):
+    """Offline ("van asleep") keys on DATA AGE (> SAT_OFFLINE_S), never on link state."""
     stub.fixtures["satellite"]["/api/state"]["device"]["link"].update(up=up, last_snap_age_ms=age_ms)
     with error_gated_page(stub.base) as pg:
         expect(pg.locator(".offline")).to_be_visible()
         expect(pg.locator("#status")).to_have_text("offline")
+
+
+def test_link_down_with_fresh_data_is_not_offline(stub, error_gated_page):
+    """The parked unit terminates the held link every ~15-20 s while data stays seconds old
+    (the kick/reconnect cycle, field 2026-10-09, #264): the page must not claim the van sleeps."""
+    stub.fixtures["satellite"]["/api/state"]["device"]["link"].update(up=False, last_snap_age_ms=1200)
+    with error_gated_page(stub.base) as pg:
+        expect(pg.locator("#status")).to_have_text("live")
+        expect(pg.locator(".offline")).to_have_count(0)
 
 
 def test_a_failed_first_poll_never_reaches_calictl_only_endpoints(stub):

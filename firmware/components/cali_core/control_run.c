@@ -102,6 +102,7 @@ int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t
      * frame or a gate's answer (a pull refusal too) waits for an armed link and this link's frame. */
     if ((plan.rc == CALI_CTL_OK || plan.rc == CALI_CTL_REFUSED) && (!cali_session_ready() || !have_frame(fn))) {
         cali_log("control: %s/%s not ready (no armed link or no state yet)", fn, what);
+        cali_session_connect_now();   /* don't make the client wait out a reconnect pause (#264) */
         return CALI_CTL_NOT_READY;
     }
     pulling = plan.rc == CALI_CTL_REFUSED && plan.pull;

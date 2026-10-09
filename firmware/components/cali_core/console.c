@@ -73,11 +73,27 @@ static void ip_text(uint32_t ip, char out[16]) {
              (unsigned)(ip >> 8 & 0xffu), (unsigned)(ip & 0xffu));
 }
 
+/* Internal-heap stats for the STATE line (the kws-de voice-satellite feasibility check): the ESP
+ * build overrides this (app_main.c, heap_caps of MALLOC_CAP_INTERNAL); the host/fake tier keeps
+ * the 0s and STATE omits the members, so every pinned STATE string stays as it is. */
+__attribute__((weak)) void cali_heap_stats(unsigned *free_bytes, unsigned *largest) {
+    *free_bytes = 0;
+    *largest = 0;
+}
+
 /* The STATE line; with_wifi adds the "wifi" member (console "status" once the WiFi runtime runs). */
 static void state_line(const cali_pair_state_t *s, const char *address, int with_wifi) {
+    unsigned hfree, hlfb;
     cali_json_t j;
     begin_line(&j, PREFIX_STATE);
     cali_snapshot_pairing(&j, s, address);
+    cali_heap_stats(&hfree, &hlfb);
+    if (hfree || hlfb) {
+        cali_json_key(&j, "heap_int_free");
+        cali_json_int(&j, (long long)hfree);
+        cali_json_key(&j, "heap_int_lfb");
+        cali_json_int(&j, (long long)hlfb);
+    }
     if (with_wifi) {
         const char *ssid = cali_wifi_run_ssid();
         uint32_t ip = cali_wifi_run_ip();

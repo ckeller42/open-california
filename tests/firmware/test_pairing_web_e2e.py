@@ -329,9 +329,12 @@ def test_connect_now_on_a_working_bond_keeps_it(host_fw, hci_unit, tmp_path):
 
 
 async def _drop_link(unit):
-    """The unit hangs up on the central (the link lost: the session starts reconnecting)."""
+    """The unit hangs up on the central (the link lost: the session starts reconnecting).
+    Reason 0x14 (low resources), NOT the default 0x13: a remote-terminate after read-all is the
+    parked kick and reconnects paced (CALI_SESSION_KICKED_RECONNECT_MS) — this test needs the
+    fast backoff's quick connect_bonded."""
     if unit.conn:
-        await unit.conn.disconnect()
+        await unit.conn.disconnect(0x14)
 
 
 def test_start_while_the_session_reconnects_scans(host_fw, hci_unit, tmp_path):

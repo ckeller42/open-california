@@ -47,6 +47,7 @@
 #error "console must be USB-Serial/JTAG (device) or UART (QEMU): see firmware/README.md"
 #endif
 #include "esp_err.h"
+#include "esp_heap_caps.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
@@ -323,6 +324,13 @@ static void wifi_init(const cali_transport_t *t) {
     cali_wifi_run_init(&cali_net_esp);
     if (cali_web_init(&cali_net_esp, t, NET_HTTP_PORT) != 0) cali_log("http: cannot listen on port %d", NET_HTTP_PORT);
     cali_wifi_run_boot();        /* saved creds -> join; none -> setup hotspot (events on the tick) */
+}
+
+/* Overrides console.c's weak 0/0 stub: internal heap for the console STATE line (the kws-de
+ * voice-satellite feasibility check). */
+void cali_heap_stats(unsigned *free_bytes, unsigned *largest) {
+    *free_bytes = (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    *largest = (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
 }
 
 void app_main(void) {

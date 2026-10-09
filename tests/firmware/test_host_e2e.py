@@ -154,9 +154,12 @@ async def _rotate_when_free(unit, timeout=10.0):
 
 
 async def _drop_link(unit):
-    """The unit hangs up on the central (a link lost mid-session)."""
+    """The unit hangs up on the central (a link lost mid-session). Reason 0x14 (low resources),
+    NOT the default 0x13: a remote-terminate after read-all is the parked kick and reconnects
+    paced (CALI_SESSION_KICKED_RECONNECT_MS) — these tests model a generic loss and need the
+    fast backoff."""
     if unit.conn:
-        await unit.conn.disconnect()
+        await unit.conn.disconnect(0x14)
 
 
 def test_restart_reconnects_with_the_bond_after_rotation(host_fw, hci_unit, tmp_path):
