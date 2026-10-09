@@ -7,7 +7,9 @@
  *
  * stdin, one line each:
  *   transport events (through the sink the runner registered; the runner forwards to the session):
- *     FOUND | CONNECTED | CONNECT_FAIL | PASSKEY_REQ | ENC_OK | ENC_FAIL | DISCONNECTED
+ *     FOUND | CONNECTED | CONNECT_FAIL | PASSKEY_REQ | ENC_OK | ENC_FAIL
+ *     DISCONNECTED [reason]                  (default 8, a generic loss; 19 or 531 = the unit's
+ *                                             remote-terminate, the parked kick — cali_session.h)
  *     DISCOVERED [status] | HEARTBEAT <status>
  *     READ <hex char> <status> [hex data]    (default data 0102)
  *     NOTIFY <hex char> <hex data>
@@ -25,6 +27,7 @@
  *     syncwritten <status> the next write() delivers its WRITTEN <status> inside the call (as the
  *                          NimBLE transport does for an ATT request it cannot start)
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
+ *     webseen              cali_session_web_seen() (an /api/state request served: viewer activity)
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
  *                          does with --http); before it the WiFi runtime is off, as without --http
  *     kv <key>             print "KV <key> <value>" or "KV <key> missing" (the in-memory kv store)
@@ -305,7 +308,8 @@ int main(void) {
         else if (strcmp(word, "PASSKEY_REQ") == 0) deliver(CALI_TEV_PASSKEY_REQ, 0, 0, NULL, 0);
         else if (strcmp(word, "ENC_OK") == 0) deliver(CALI_TEV_ENC_OK, 0, 0, NULL, 0);
         else if (strcmp(word, "ENC_FAIL") == 0) deliver(CALI_TEV_ENC_FAIL, 2, 0, NULL, 0);
-        else if (strcmp(word, "DISCONNECTED") == 0) deliver(CALI_TEV_DISCONNECTED, 0x13, 0, NULL, 0);
+        else if (strcmp(word, "DISCONNECTED") == 0)
+            deliver(CALI_TEV_DISCONNECTED, a1[0] ? (int)strtol(a1, NULL, 0) : 8, 0, NULL, 0);
         else if (strcmp(word, "DISCOVERED") == 0) deliver(CALI_TEV_DISCOVERED, n1, 0, NULL, 0);
         else if (strcmp(word, "HEARTBEAT") == 0) deliver(CALI_TEV_HEARTBEAT, n1, 0x1003, NULL, 0);
         else if (strcmp(word, "READ") == 0) {
@@ -361,6 +365,8 @@ int main(void) {
             net_scan_done(line);
         } else if (strcmp(word, "NET_SCAN_FAILED") == 0) {
             net_deliver(CALI_NET_EV_SCAN_DONE, CALI_NET_REASON_NONE, 0, -1, NULL);
+        } else if (strcmp(word, "webseen") == 0) {
+            cali_session_web_seen();   /* an /api/state request was served (viewer activity) */
         } else if (strcmp(word, "boot") == 0) {
             cali_session_boot();
             cali_console_line("status");

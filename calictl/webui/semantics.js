@@ -8,16 +8,20 @@
 // (python3 -m tools.gen_semantics_vectors). Change both together. Only the functions the web UI
 // renders are twinned; any other function gets semGeneric()'s raw view.
 // A classic script loaded before app.js (shared global scope): every top-level name is public
-// (SAT_STALE_S, pyRound, interpret, applySwCorrections, anchorsCheck, firmwareMeta, isSatelliteBody,
+// (SAT_OFFLINE_S, pyRound, interpret, applySwCorrections, anchorsCheck, firmwareMeta, isSatelliteBody,
 // adaptSatellite) or sem*-prefixed, so nothing collides with app.js.
 
 /** @typedef {Record<string, number>} Fields  one function's decoded fields (calictl.protocol.decode) */
 /** @typedef {Record<string, any>} Interp  one function's interpreted leaves */
 
-/** Seconds without a snapshot after which the satellite reads offline. MUST equal
- * DISPLAY_STALE_MS / 1000 (tools/wifi_consts.py): the CoreS3 screen turns red only when
- * snap_age_ms > DISPLAY_STALE_MS (display_model.c), so online is age <= SAT_STALE_S. Tests pin it. */
-const SAT_STALE_S = 10;
+/** Seconds without a snapshot after which the satellite page reads offline ("van asleep"): three
+ * of the session's kicked-reconnect periods (3 * CALI_SESSION_KICKED_RECONNECT_MS / 1000,
+ * cali_session.h — tests pin it). The parked unit terminates the held link ~15-20 s after each
+ * connect and the paced reconnect refreshes data ~every 45-50 s (field 2026-10-09, #264), so
+ * seconds-old data with the link momentarily down is NOT "van asleep" — the banner keys on DATA
+ * AGE, never on link state. (The CoreS3's own screen keeps its 10 s red tint: DISPLAY_STALE_MS in
+ * display_model.c is the device's link-freshness cue, a different thing.) */
+const SAT_OFFLINE_S = 90;
 
 /**
  * Python `d.get(k, dflt)`: the default only when the key is ABSENT (a short frame drops trailing fields).
@@ -457,7 +461,7 @@ function adaptSatellite(body, nowMs) {
   const ms = link.last_snap_age_ms;
   const age = typeof ms === "number" ? ms / 1000 : null;
   out._meta = {
-    online: !!link.up && age !== null && age <= SAT_STALE_S,
+    online: age !== null && age <= SAT_OFFLINE_S,
     age_s: age,
     last_seen: age === null ? null : nowMs / 1000 - age,
     paired: !!pairing.address,

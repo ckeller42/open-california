@@ -284,3 +284,8 @@ What stays true operationally:
   (its reconnect storm after a unit "Bluetooth zurücksetzen" collides with the wizard's window).
 - How many links the unit serves (2? more?), and whether a third central is refused, is
   unmeasured — only "two works" is DEVICE-proven.
+- The tolerance is **state-dependent** (DEVICE, 2026-10-09): the *parked* unit (ignition off)
+  terminates an idle held link with HCI 0x13 ~15–20 s after each connect while continuing to
+  serve buspi's 30 s connect→read-all→release poll; with ignition on the same two persistent
+  links held indefinitely. The ESP session paces its reconnect accordingly
+  (`CALI_SESSION_KICKED_RECONNECT_MS`, `cali_session.h`).

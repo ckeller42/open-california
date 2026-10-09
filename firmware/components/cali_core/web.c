@@ -633,8 +633,12 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         return 1;
     }
     if (strcmp(req->path, "/api/state") == 0) {
-        if (get) api_state(resp);
-        else SET_CONST(resp, 405, ERR_METHOD);
+        if (get) {
+            cali_session_web_seen();   /* a viewer: keep a kicked link on the fast backoff */
+            api_state(resp);
+        } else {
+            SET_CONST(resp, 405, ERR_METHOD);
+        }
         return 1;
     }
     if (strcmp(req->path, "/api/wifi") == 0) {

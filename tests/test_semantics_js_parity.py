@@ -13,6 +13,7 @@ so 12 == 12.0 and -0.0 == 0.0). Skipped only when node is absent (CI runners hav
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,7 +23,6 @@ import pytest
 from calictl import anchors, semantics
 from calictl.serve import ServeBackend
 from tools import gen_semantics_vectors
-from tools.wifi_consts import CONSTS
 
 ROOT = Path(__file__).resolve().parent.parent
 SEM_JS = ROOT / "calictl" / "webui" / "semantics.js"
@@ -72,7 +72,7 @@ _RUN_VECTORS = """({
     return { state: st, anchors: anchorsCheck(st), firmware: firmwareMeta(st.general) };
   }),
   round: __V.round.map((c) => pyRound(c.x, c.nd)),
-  SAT_STALE_S,
+  SAT_OFFLINE_S,
 })"""
 
 
@@ -105,8 +105,15 @@ def test_py_round_matches_python_round(js, vectors):
         assert same(got, case["expect"]), case
 
 
-def test_sat_stale_s_is_the_display_stale_threshold(js):
-    assert js["SAT_STALE_S"] == CONSTS["DISPLAY_STALE_MS"] / 1000
+def test_sat_offline_s_is_three_kicked_reconnect_periods(js):
+    """The page's "van asleep" threshold tracks the session's kicked-reconnect pacing (the parked
+    unit terminates the held link ~15-20 s after each connect; a paced reconnect refreshes data
+    ~every 45-50 s — field 2026-10-09, #264): three periods of slack before claiming sleep."""
+    header = (
+        Path(__file__).resolve().parents[1] / "firmware/components/cali_core/include/cali_session.h"
+    ).read_text()
+    kicked_ms = int(re.search(r"#define CALI_SESSION_KICKED_RECONNECT_MS (\d+)u", header).group(1))
+    assert js["SAT_OFFLINE_S"] == 3 * kicked_ms / 1000
 
 
 _DEVICE = {
@@ -166,10 +173,19 @@ def test_adapter_wires_anchor_violations():
 
 @pytest.mark.parametrize(
     "up,age_ms,online",
-    [(True, 10000, True), (True, 10001, False), (True, None, False), (False, 500, False), (True, 0, True)],
+    [
+        (True, 90000, True),  # exactly the threshold: still live
+        (True, 90001, False),
+        (True, None, False),
+        (False, 500, True),  # link momentarily down (parked kick cycle) with seconds-old data: live
+        (False, 90001, False),
+        (True, 0, True),
+    ],
 )
-def test_online_matches_the_screens_stale_rule(up, age_ms, online):
-    """display_model.c: stale only when snap_age_ms > DISPLAY_STALE_MS -> exactly 10 s is still live."""
+def test_online_is_data_age_not_link_state(up, age_ms, online):
+    """The offline ("van asleep") banner keys on DATA AGE only: during the parked unit's kick/
+    reconnect cycle the link flaps while data stays seconds old (field 2026-10-09, #264) — that
+    must not read as sleep. Only data older than SAT_OFFLINE_S does."""
     meta = _adapt(_body(link={"up": up, "last_snap_age_ms": age_ms}))["_meta"]
     assert meta["online"] is online
     if age_ms is None:
