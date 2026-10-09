@@ -1365,8 +1365,11 @@ confirmed (`howto-esp-wifi-setup.md` status box and :doc:`firmware`, "Network wa
      after its ACK. The ``1003`` heartbeat keeps ticking on its own fixed-target write.
    * **Outcome.** Every write ACKed: ``200`` with ``applied`` null (the satellite does no readback,
      so the UI says "Sent — the unit didn't confirm it"). An ATT error: ``502 write_failed`` and no
-     further frame. No ACK within 4 s (``CALI_CTL_DEADLINE_MS``): ``504 write_timeout``. A lost
-     link fails the command.
+     further frame. No ACK within 4 s (``CALI_CTL_DEADLINE_MS``): ``504 write_timeout``. A link
+     lost before any command frame went out fails the command (``502 write_failed``). A link lost
+     after one went out answers ``200`` with ``applied`` null and ``"unconfirmed": true``: the
+     parked unit kicks idle links, and a frame it applied can lose its ACK to the kick (field
+     2026-10-09, #264), so the page keeps watching the unit's state across the reconnect (20 s).
 
 .. mermaid::
 
@@ -1406,6 +1409,9 @@ confirmed (`howto-esp-wifi-setup.md` status box and :doc:`firmware`, "Network wa
                 W-->>B: 200 ok, applied null (no readback)
                 opt ATT error or no ACK within 4 s
                     W-->>B: 502 write_failed or 504 write_timeout, no further frame
+                end
+                opt link lost after a frame went out
+                    W-->>B: 200 ok, applied null, unconfirmed true
                 end
             end
         end

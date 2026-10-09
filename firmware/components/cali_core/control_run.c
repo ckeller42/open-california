@@ -151,8 +151,13 @@ void cali_ctl_tick(uint64_t now_ms) {
     const cali_ctl_frame_t *f;
     s_now = now_ms;
     if (!cali_session_link_up()) {
+        /* a command frame out (in flight or ACKed; a pull's frames never actuate) may have landed */
+        int sent = !O.pull && (O.inflight || O.i > 0);
         O.inflight = 0;                         /* the transport dropped its queue with the link */
-        if (O.active) finish(CALI_CTL_FAILED, "failed: link lost", NULL);
+        if (O.active) {
+            if (sent) finish(CALI_CTL_UNCONFIRMED, "unconfirmed: link lost after the write", NULL);
+            else finish(CALI_CTL_FAILED, "failed: link lost", NULL);
+        }
         return;
     }
     if (!O.active) return;

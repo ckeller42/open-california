@@ -229,7 +229,7 @@ static int rc_named(const char *s) {
         {"pending", CALI_CTL_PENDING}, {"refused", CALI_CTL_REFUSED}, {"elsewhere", CALI_CTL_ELSEWHERE},
         {"bad", CALI_CTL_BAD_VALUE}, {"none", CALI_CTL_NONE}, {"busy", CALI_CTL_BUSY},
         {"notready", CALI_CTL_NOT_READY}, {"ok", CALI_CTL_OK}, {"failed", CALI_CTL_FAILED},
-        {"timeout", CALI_CTL_TIMEOUT}};
+        {"timeout", CALI_CTL_TIMEOUT}, {"unconfirmed", CALI_CTL_UNCONFIRMED}};
     for (size_t i = 0; i < N_OF(T); i++)
         if (strcmp(T[i].name, s) == 0) return T[i].rc;
     return -1;
