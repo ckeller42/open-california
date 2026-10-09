@@ -393,6 +393,40 @@ def test_water_baseline_restored_from_nvs_rejects_a_latch_on_boot(fake):
     assert got == protocol.decode(f, bytes.fromhex(PLAUSIBLE_WATER))  # restored baseline held
 
 
+SEED_WATER = "03161d010016"  # fresh 22, waste 0: buspi's banked last-plausible reading
+
+
+def test_water_seed_replaces_a_cold_start_latch_baseline(fake):
+    """After a reflash the session cold-starts on the parked latch (it becomes the baseline);
+    ``water seed <hex>`` hands it the last plausible reading — persisted, shown, and the next latch
+    is held against it.
+
+    .. test:: The console seeds the persisted fresh-water baseline
+       :id: T_FW_SESSION_WATER_SEED
+       :links: R_FW_SESSION
+    """
+    latch_reads = ["READ %x 0%s" % (c, " " + LATCH_WATER if c == 0x1302 else "") for c in CHARS]
+    out = run(
+        fake,
+        *PAIRED,
+        *read_all(reads=latch_reads),  # cold start: the latch is the baseline
+        "> water seed " + SEED_WATER,
+        "NOTIFY 1302 " + LATCH_WATER,  # the next parked read
+        "tick %d" % (T + 100),
+        "kvhex water_good",
+    )
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(SEED_WATER))  # seeded value held vs the latch
+    assert ("KV water_good " + SEED_WATER) in out  # persisted
+
+
+def test_water_seed_rejects_a_wrong_length_frame(fake):
+    """A frame that is not exactly the water frame length is refused; the baseline is untouched."""
+    out = run(fake, "> water seed 0316", "> water seed " + SEED_WATER + "00", "kvhex water_good")
+    assert sum(line.startswith("LOG water: seed rejected") for line in out) == 2
+    assert "KV water_good missing" in out
+
+
 def test_heartbeat_every_period_from_the_start_counter(fake):
     out = run(fake, *PAIRED, *READ_ALL, *["tick %d" % t for t in range(T + 100, T + 1300, 100)])
     assert calls(out, "write_heartbeat") == ["CALL write_heartbeat %d" % n for n in (HB, HB + 1, HB + 2)]

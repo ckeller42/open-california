@@ -158,6 +158,28 @@ static void seed_water_frame(void) {
     s_fr[w].live = 0;   /* from an earlier link or NVS, never this link */
 }
 
+static int adopt_water(const uint8_t *data, size_t len) {
+    s_water_held = 0;
+    memcpy(s_wg.frame, data, len);
+    s_wg.len = len;
+    s_wg.have = 1;
+    return cali_kv_set(WATER_GOOD_KEY, data, len);
+}
+
+int cali_session_water_seed(const uint8_t *frame, size_t len) {
+    static const uint8_t zero[CODEC_FRAME_MAX];
+    static codec_kv_t kv[CODEC_KV_MAX];
+    const codec_func_t *wf = codec_func_by_name("water");
+    if (!wf || len == 0 || len > CODEC_FRAME_MAX) return -1;
+    /* Exactly the water frame length, from the codec: every field fits in len, not in len - 1. */
+    int all = codec_decode(wf, zero, CODEC_FRAME_MAX, kv);
+    if (codec_decode(wf, frame, len, kv) != all || codec_decode(wf, frame, len - 1, kv) == all)
+        return -1;
+    int persisted = adopt_water(frame, len);
+    seed_water_frame();
+    return persisted == CALI_KV_OK ? 0 : -2;   /* -2: shown now, but will not survive a reboot */
+}
+
 static void store(size_t i, const uint8_t *data, size_t len) {
     if (len > CODEC_FRAME_MAX) {
         cali_log("session: %s frame %u bytes, keeping the first %u", CODEC_CHARS[i].function,
@@ -172,11 +194,7 @@ static void store(size_t i, const uint8_t *data, size_t len) {
             data = s_wg.frame;   /* serve the plausible baseline, not the latch */
             len = s_wg.len;
         } else {
-            s_water_held = 0;
-            memcpy(s_wg.frame, data, len);   /* a plausible read -> new baseline, persisted */
-            s_wg.len = len;
-            s_wg.have = 1;
-            cali_kv_set(WATER_GOOD_KEY, data, len);
+            adopt_water(data, len);   /* a plausible read -> new baseline, persisted */
         }
     }
     if (len) memcpy(s_fr[i].frame, data, len);
