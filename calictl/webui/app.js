@@ -33,6 +33,7 @@
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?{mode?:string, ssid?:string|null, ip?:string|null, rssi?:number|null}, link_up: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for the Device-status screen
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -238,12 +239,19 @@ menuEl.onclick = (ev) => {
   if (menuPop) { closeMenu(); return; }
   menuPop = document.createElement("div");
   menuPop.className = "menupop";
-  if (satellite()) {
-    // The satellite's own device/WiFi page is /device.
+  if (STATE._meta) {
+    // The in-app Device-status screen, on both flavors (the satellite's raw /device setup page
+    // stays reachable from inside that screen).
     const dev = document.createElement("button");
     dev.type = "button";
-    dev.textContent = /** @type {string} */ (t("Device & WiFi"));
-    dev.onclick = () => { closeMenu(); location.assign("/device"); };
+    dev.textContent = /** @type {string} */ (t("Device status"));
+    dev.onclick = () => {
+      closeMenu();
+      goto("devicestatus");
+      // The load-time /api/pairing fetch may have failed (PAIRING still null): retry on open so
+      // the screen can tell "unknown" from a fetched "not paired" (CodeRabbit, PR #267).
+      if (!PAIRING) pairingFetch().then(() => { if (view === "devicestatus") render(); });
+    };
     menuPop.appendChild(dev);
   }
   if (STATE._meta) {   // calictl and the satellite both serve /api/pairing (R_FW_PAIRING_WIZARD)
@@ -1502,7 +1510,62 @@ function render() {
     app.appendChild(b);
   }
   if (view === "home") renderDashboard();
+  else if (view === "devicestatus") renderDeviceStatus();
   else renderFeature(view);
+}
+
+// --- the in-app Device-status screen (menu, both flavors) -------------------------------------
+// Shared rows from `_meta` + the load-time /api/pairing snapshot; the satellite adds its own
+// transport rows (`_meta.sat`, adaptSatellite passthrough) and the link to its raw /device
+// setup/wizard page. calictl has no /device page, so no link there.
+/** @param {number} ms @returns {string} */
+function uptimeText(ms) {
+  const m = Math.floor(ms / 60000);
+  if (m < 60) return tf("{m} min", { m: m });
+  const h = Math.floor(m / 60);
+  if (h < 48) return tf("{h} h {m} min", { h: h, m: m % 60 });
+  return tf("{d} d {h} h", { d: Math.floor(h / 24), h: h % 24 });
+}
+
+function renderDeviceStatus() {
+  titleEl.textContent = /** @type {string} */ (t("Device status"));
+  const m = STATE._meta || /** @type {Meta} */ ({});
+  const card = document.createElement("div");
+  card.className = "card";
+  card.appendChild(sumRow(/** @type {string} */ (t("Camper unit")),
+    /** @type {string} */ (m.online ? t("online") : t("offline"))));
+  card.appendChild(sumRow(/** @type {string} */ (t("Last update")), agoText(m.age_s)));
+  // "not paired" only from a fetched snapshot that says so; a failed/absent fetch is unknown.
+  card.appendChild(sumRow(/** @type {string} */ (t("Bonded unit")),
+    PAIRING ? (PAIRING.address || /** @type {string} */ (t("not paired"))) : "—"));
+  const fw = m.firmware;
+  if (fw && (fw.amb_sw_version != null || fw.comm_version != null))
+    card.appendChild(sumRow(/** @type {string} */ (t("Unit firmware")),
+      tf("amb {amb} · comm {comm}", { amb: fw.amb_sw_version ?? "?", comm: fw.comm_version ?? "?" })));
+  const sat = m.sat;
+  if (sat) {
+    if (sat.fw) card.appendChild(sumRow(/** @type {string} */ (t("Satellite firmware")), sat.fw));
+    card.appendChild(sumRow(/** @type {string} */ (t("BLE link")),
+      /** @type {string} */ (sat.link_up ? t("up") : t("reconnecting…"))));
+    const w = sat.wifi;
+    if (w && w.ssid) card.appendChild(sumRow("WiFi", w.ssid + (w.ip ? " · " + w.ip : "")));
+    if (w && typeof w.rssi === "number")
+      card.appendChild(sumRow(/** @type {string} */ (t("Signal")), w.rssi + " dBm"));
+    if (sat.uptime_ms != null)
+      card.appendChild(sumRow(/** @type {string} */ (t("Uptime")), uptimeText(sat.uptime_ms)));
+  }
+  app.appendChild(card);
+  if (sat) {
+    const row = document.createElement("div");
+    row.className = "btnrow";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "btn";
+    open.textContent = /** @type {string} */ (t("Open setup"));
+    open.onclick = () => location.assign("/device");
+    row.appendChild(open);
+    app.appendChild(row);
+  }
 }
 
 // The app's "California Status" overview card: fresh/grey water + leisure battery, at a glance.

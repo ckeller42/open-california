@@ -473,6 +473,14 @@ function adaptSatellite(body, nowMs) {
     satellite: true,
     firmware: firmwareMeta(out.general),
     anchors: anchorsCheck(out),
+    // Raw device identity/transport rows for the in-app Device-status screen (only the
+    // satellite has them; calictl's _meta carries its own session fields instead).
+    sat: {
+      fw: dev.fw || null,
+      uptime_ms: typeof dev.uptime_ms === "number" ? dev.uptime_ms : null,
+      wifi: dev.wifi || null,
+      link_up: !!link.up,
+    },
   };
   return out;
 }

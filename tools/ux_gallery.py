@@ -276,6 +276,7 @@ class EspStub:
         self.fixtures = esp_fixtures()
         self.requests = []  # request paths, in order
         self.fail_state = 0  # the next N GET /api/state answer 503
+        self.fail_pairing = 0  # the next N GET /api/pairing answer 503
         self.commands = []  # POST /api/command bodies, in order
         self.command_status = 200  # web.c: 200 ok/refused, 400/403/409/502/503/504 {"ok":false,"error":code}
         self.command_reply = None  # the JSON body; None = the success shape for the posted function
@@ -348,6 +349,10 @@ class EspStub:
                         stub._pairing_gets -= 1
                 if path == "/api/state" and stub.fail_state > 0:
                     stub.fail_state -= 1
+                    self.send_error(503)
+                    return
+                if path == "/api/pairing" and stub.fail_pairing > 0:
+                    stub.fail_pairing -= 1
                     self.send_error(503)
                     return
                 if path == "/api/state" and stub._pending.locked():

@@ -860,7 +860,18 @@ def test_calictl_is_never_satellite(page):
     assert page.evaluate("() => !!(STATE._meta && STATE._meta.satellite)") is False
     page.click("#menu")
     expect(page.locator(".menupop").get_by_text("Bluetooth pairing…")).to_be_visible()
-    assert page.locator(".menupop").get_by_text("Device & WiFi").count() == 0
+
+
+def test_menu_device_status_screen_on_calictl(page):
+    """The Device-status screen on the calictl flavor: daemon/session rows, no satellite rows and
+    no setup link (the /device page exists only on the ESP firmware)."""
+    page.click("#menu")
+    page.locator(".menupop").get_by_text("Device status").click()
+    expect(page.locator("#title")).to_have_text("Device status")
+    expect(page.get_by_text("Camper unit", exact=True)).to_be_visible()
+    expect(page.get_by_text("Last update", exact=True)).to_be_visible()
+    assert page.get_by_text("Open setup").count() == 0
+    assert page.get_by_text("Satellite firmware").count() == 0
 
 
 def test_unknown_runtime_is_restrictive(base_url):
