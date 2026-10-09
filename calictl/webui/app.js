@@ -245,7 +245,13 @@ menuEl.onclick = (ev) => {
     const dev = document.createElement("button");
     dev.type = "button";
     dev.textContent = /** @type {string} */ (t("Device status"));
-    dev.onclick = () => { closeMenu(); goto("devicestatus"); };
+    dev.onclick = () => {
+      closeMenu();
+      goto("devicestatus");
+      // The load-time /api/pairing fetch may have failed (PAIRING still null): retry on open so
+      // the screen can tell "unknown" from a fetched "not paired" (CodeRabbit, PR #267).
+      if (!PAIRING) pairingFetch().then(() => { if (view === "devicestatus") render(); });
+    };
     menuPop.appendChild(dev);
   }
   if (STATE._meta) {   // calictl and the satellite both serve /api/pairing (R_FW_PAIRING_WIZARD)
@@ -1529,8 +1535,9 @@ function renderDeviceStatus() {
   card.appendChild(sumRow(/** @type {string} */ (t("Camper unit")),
     /** @type {string} */ (m.online ? t("online") : t("offline"))));
   card.appendChild(sumRow(/** @type {string} */ (t("Last update")), agoText(m.age_s)));
+  // "not paired" only from a fetched snapshot that says so; a failed/absent fetch is unknown.
   card.appendChild(sumRow(/** @type {string} */ (t("Bonded unit")),
-    (PAIRING && PAIRING.address) || /** @type {string} */ (t("not paired"))));
+    PAIRING ? (PAIRING.address || /** @type {string} */ (t("not paired"))) : "—"));
   const fw = m.firmware;
   if (fw && (fw.amb_sw_version != null || fw.comm_version != null))
     card.appendChild(sumRow(/** @type {string} */ (t("Unit firmware")),

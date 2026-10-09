@@ -127,6 +127,29 @@ def test_menu_device_status_screen(sat, stub):
     sat.wait_for_selector('#device a[href="/"]')  # the link back (station mode)
 
 
+def test_device_status_retries_a_failed_pairing_fetch(stub):
+    """A failed load-time /api/pairing shows "—" (unknown), never "not paired"; opening the
+    screen re-fetches, so a later open recovers the address (CodeRabbit, PR #267).
+    Not error-gated: the 503s themselves are console errors by design."""
+    _display_only(stub)
+    stub.fail_pairing = 2  # the load-time fetch AND the first screen-open retry fail
+    with sync_api.sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        pg.goto(stub.base)
+        expect(pg.get_by_text("Satellite — display only")).to_be_visible(timeout=10000)
+        pg.click("#menu")
+        pg.locator(".menupop").get_by_text("Device status").click()
+        row = pg.locator(".row", has_text="Bonded unit")
+        expect(row).to_contain_text("—")
+        assert pg.get_by_text("not paired").count() == 0
+        pg.click("#back")  # leave and re-open: this retry succeeds
+        pg.click("#menu")
+        pg.locator(".menupop").get_by_text("Device status").click()
+        expect(row).to_contain_text("C0:FF:EE:CA:11:F0")
+        browser.close()
+
+
 def _tile_texts(pg):
     pg.wait_for_selector(".tilegrid .tile")
     return pg.locator(".tile").all_inner_texts(), pg.locator(".summary").inner_text()
