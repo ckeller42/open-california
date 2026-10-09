@@ -222,8 +222,11 @@ static void water_seed_cmd(const char *hex) {
         sscanf(hex, "%2x", &v);
         frame[n++] = (uint8_t)v;
     }
-    if (*hex || n == 0 || cali_session_water_seed(frame, n) != 0)
+    int rc = (*hex || n == 0) ? -1 : cali_session_water_seed(frame, n);
+    if (rc == -1)
         cali_log("water: seed rejected (need the 1302 frame as hex)");
+    else if (rc == -2)
+        cali_log("water: seeded, but NOT persisted (lost on reboot)");
     else
         cali_log("water: seeded");
 }

@@ -133,7 +133,8 @@ int cali_session_water_held(void);
 
 /* Seed the last-plausible water (1302) baseline — console `water seed <hex>`, e.g. after a reflash
  * cold-started on the parked latch: persisted, shown at once, and the next latch is held against it.
- * 0 = seeded; nonzero = rejected (len is not exactly the water frame length), baseline unchanged. */
+ * 0 = seeded; -1 = rejected (len is not exactly the water frame length), baseline unchanged;
+ * -2 = seeded and shown, but the NVS write failed, so it will not survive a reboot. */
 int cali_session_water_seed(const uint8_t *frame, size_t len);
 
 #ifdef __cplusplus

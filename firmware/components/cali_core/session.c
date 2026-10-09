@@ -158,12 +158,12 @@ static void seed_water_frame(void) {
     s_fr[w].live = 0;   /* from an earlier link or NVS, never this link */
 }
 
-static void adopt_water(const uint8_t *data, size_t len) {
+static int adopt_water(const uint8_t *data, size_t len) {
     s_water_held = 0;
     memcpy(s_wg.frame, data, len);
     s_wg.len = len;
     s_wg.have = 1;
-    cali_kv_set(WATER_GOOD_KEY, data, len);
+    return cali_kv_set(WATER_GOOD_KEY, data, len);
 }
 
 int cali_session_water_seed(const uint8_t *frame, size_t len) {
@@ -175,9 +175,9 @@ int cali_session_water_seed(const uint8_t *frame, size_t len) {
     int all = codec_decode(wf, zero, CODEC_FRAME_MAX, kv);
     if (codec_decode(wf, frame, len, kv) != all || codec_decode(wf, frame, len - 1, kv) == all)
         return -1;
-    adopt_water(frame, len);
+    int persisted = adopt_water(frame, len);
     seed_water_frame();
-    return 0;
+    return persisted == CALI_KV_OK ? 0 : -2;   /* -2: shown now, but will not survive a reboot */
 }
 
 static void store(size_t i, const uint8_t *data, size_t len) {
