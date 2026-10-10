@@ -132,6 +132,7 @@ Tests
 .. autofunction:: tests.e2e.test_gui.test_door_contact_row_hidden_on_grand_california
 .. autofunction:: tests.e2e.test_satellite.test_controls_are_live_and_post_calictls_command_shape
 .. autofunction:: tests.e2e.test_satellite.test_a_command_is_confirmed_from_the_units_own_state
+.. autofunction:: tests.e2e.test_satellite.test_an_unconfirmed_write_is_watched_across_the_reconnect
 .. autofunction:: tests.e2e.test_satellite.test_wakeup_card_is_live_and_sends_the_browsers_wall_clock
 .. autofunction:: tests.e2e.test_satellite.test_wizard_pairs_the_satellite
 .. autofunction:: tests.e2e.test_satellite.test_wizard_over_the_setup_hotspot_via_app
