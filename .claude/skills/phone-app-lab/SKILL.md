@@ -31,8 +31,9 @@ the `app-lab` skill. This lab is for what only the real unit can show.
 - **Roof:** ignition ON, owner present and watching, explicit go for each press.
 - Restore every setting you change. Report the end state.
 - **Stamp the app version on every capture:** `adb shell dumpsys package de.volkswagen.CaliforniaOnTour
-  | grep versionName`. The phone and the emulator lab run 5.4.0.3036 (lab since 2026-10-10); the 5.0.8.3028
-  decompile and the committed `tests/vectors/app/` recordings are older.
+  | grep versionName`. The phone and the emulator lab run 5.4.0.3036 (lab since 2026-10-10); the
+  decompile covers 5.4.0.3036 (and 5.0.8.3028); the committed `tests/vectors/app/` recordings are
+  5.0.8.3028.
 
 ## One-time setup (owner, on the phone)
 

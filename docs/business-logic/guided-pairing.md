@@ -79,7 +79,7 @@ injects `EV_TIMEOUT` — absent from the table means no timer for that state.
 | `RESETTING` | 10 s |
 | `IDLE`, `BONDED`, `ERROR` | none |
 
-## ESP mapping (buspi today, #154's NimBLE port — implemented, unverified on hardware)
+## ESP mapping (buspi today, #154's NimBLE port — console pairing verified on the real unit, web wizard not yet)
 
 Agent registration / `io_cap=KEYBOARD_ONLY` (BlueZ) or NimBLE's `ble_hs_cfg.sm_io_cap` are
 **transport init, not an SM action** — they happen once, outside `step()`, before any event is
@@ -92,7 +92,9 @@ This mapping is no longer aspirational: `firmware/components/cali_core/runner.c`
 `firmware/components/cali_ble_nimble/ble_nimble.c` is the NimBLE implementation of that
 transport (Linux host build and ESP-IDF both) — proven against a Bumble fake unit
 (`tests/firmware/test_host_e2e.py`) and compiled against ESP-IDF's real esp-nimble
-(`firmware-build` CI), but not yet run against the real camper unit (no hardware).
+(`firmware-build` CI). Since 2026-10-08 it has also run against the real camper unit: the
+satellite bonded to it from its USB console, passkey off the unit's screen (DEVICE, evidence-ledger
+2026-10-08). The satellite's web wizard has not been run on the real unit yet.
 
 | SM symbol | BlueZ (buspi, `pairing_bluez.py`) | ESP32 (`ble_nimble.c`, via `cali_transport_t`) |
 |---|---|---|
@@ -247,7 +249,8 @@ starving a real LE connect (HCI 0x3e) — the mechanism the 2026-09-25 btmon cap
 [Environment the wizard needs](#environment-the-wizard-needs)) was observed on real buspi
 hardware, but not yet as part of a full pairing run. The one real run so far — a re-pair at the van on 2026-09-18 — failed at `Device1.Pair()` with
 `AlreadyExists`, which is what the stale-bond recovery above was written for; **no successful
-real unbond→re-pair has been recorded yet** — that is a deliberate, human-in-the-loop step (typing a passkey off the
+real unbond→re-pair through the BlueZ wizard has been recorded yet** (the ESP satellite's runner did
+pair with the real unit, from its console, 2026-10-08) — that is a deliberate, human-in-the-loop step (typing a passkey off the
 camper's own screen) tracked as a checkbox on
 [#157](https://github.com/ckeller42/open-california/issues/157). Until that checkbox is
 checked, treat the BlueZ transport's behaviour against a **real camper unit** (as opposed to the
@@ -284,8 +287,10 @@ What stays true operationally:
   (its reconnect storm after a unit "Bluetooth zurücksetzen" collides with the wizard's window).
 - How many links the unit serves (2? more?), and whether a third central is refused, is
   unmeasured — only "two works" is DEVICE-proven.
-- The tolerance is **state-dependent** (DEVICE, 2026-10-09): the *parked* unit (ignition off)
-  terminates an idle held link with HCI 0x13 ~15–20 s after each connect while continuing to
-  serve buspi's 30 s connect→read-all→release poll; with ignition on the same two persistent
-  links held indefinitely. The ESP session paces its reconnect accordingly
-  (`CALI_SESSION_KICKED_RECONNECT_MS`, `cali_session.h`).
+- Right after every connect the unit sends the central an ATT Exchange MTU Request and ends the
+  link (HCI 0x13) when it gets no answer within its 30 s ATT timeout. BlueZ and Android answer it;
+  the ESP's NimBLE, built without a GATT server, did not, so the parked unit dropped the ESP's held
+  link ~30 s after each connect (2026-10-09). That was read at first as a state-dependent unit
+  policy against idle links; it is not (CAPTURE 2026-10-10: the app's and buspi's held links
+  stayed up). Fixed by #279 (`faaf7b0`): the ESP now holds its parked link. Its reconnect pacing
+  (`CALI_SESSION_KICKED_RECONNECT_MS`, `cali_session.h`, #266) stays as the fallback.

@@ -82,9 +82,12 @@ recipes live in
 per-feature status). Two points from it still hold:
 
 - **Never write a whole frame of model defaults** (e.g. `fd770f1e3e1f`). It carries out-of-range
-  and conflicting action values; the unit ignored power and stored stray bytes. A control frame must
-  carry the *current* state in untargeted fields and the leave-unchanged sentinel (`3` for 2-bit)
-  in action fields. `calictl/control.py` builds it that way.
+  and conflicting action values; the unit ignored power and stored stray bytes. A control frame
+  carries the app's leave-unchanged values in every untargeted field (2-bit fields `3`, cooler
+  `Level`/`Mode` 7, timer 30/62, night hours 31; ruling R1), exactly as the app sends them. The real
+  app's frames are byte-identical on the real unit (CAPTURE 2026-10-10). The one exception is the
+  cooler's night hours, which carry the live schedule (the unit takes them literally).
+  `calictl/control.py` builds it that way.
 - Cooler power and level are **live-actuation-verified**, armed by the `1003` heartbeat. For the
   wire sequence, see the
   [protocol sequence diagrams](https://ckeller42.github.io/open-california/protocol-sequences.html#heartbeat-armed-control-write).

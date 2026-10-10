@@ -1,7 +1,7 @@
 # Simulation and testing
 
-The camper unit is usually out of reach. It sits in a parked van, deep-sleeps for days, and has a
-single BLE connection slot. It also drives real loads. So nearly all of `calictl` is tested against
+The camper unit is usually out of reach. It sits in a parked van, deep-sleeps for days, and
+drives real loads. So nearly all of `calictl` is tested against
 **fakes of the unit**, in layers. Each layer is closer to real hardware than the one below it and
 runs less often. This page lists the layers, what each one proves, what it does *not* prove, and
 which CI job runs it. For a usage-first walkthrough — how to actually run the mock and point
@@ -25,6 +25,7 @@ for how strongly each fact is proven.
 | Pairing over a virtual radio (`tests/test_pairing_link.py`) | the fake unit as a Bumble peripheral, Bumble `LocalLink` | the real pairing runner + state machine with real SMP passkey pairing | `test` |
 | Pairing over real BlueZ (`tests/realstack/`) | the same fake unit, real BlueZ + kernel in a VM | calictl's real `BluezTransport` (D-Bus agent, scan, connect, Pair, bond probe) | `pairing-real-stack` (not required yet) |
 | App lab (`tools/applab/`) | the **vendor Android app** in an emulator against the fake unit | that the fake behaves like the unit *as the app sees it*, and app-vs-calictl frame diffs | manual (local only) |
+| Real phone vs real unit (`.claude/skills/phone-app-lab`) | the **vendor app on the owner's phone** driving the **real unit**, Android HCI snoop pulled over adb from buspi | the app's real frames, the unit's replies, pushes and link behaviour (tier CAPTURE); first pass with app 5.4.0.3036 on 2026-10-10 | manual (owner at the van; snoops stay on buspi, not committed) |
 | App recordings (`tests/vectors/app/`) | the real app's recorded GATT steps and writes, per scenario and APK version (12 committed) | that calictl's frames equal the app's — whole frame for every function but the roof | `test` |
 | C codec parity (`csrc/`) | the C port of the codec and three decision ports | Python and C produce identical results | `codec-parity` |
 | ESP control twin (`firmware/components/cali_core/control.c`) | `tests/vectors/control.json`, generated from `calictl.control` | the satellite plans the same gates, frames and commits as calictl, byte for byte; the write allow-list is exactly the five control chars | `codec-parity`, `test` |
@@ -344,8 +345,10 @@ The satellite's writes (#154 B) are proven in a ladder, each rung closer to hard
    — a firmware before the wake-up light; **BOARD 2026-10-08** with it (`6ac867c`): 32 cases over three
    walks incl. the app's 4 wake-up edits, and a wake-up card edit from Chromium with and without a
    latched config (the second as the REQUEST_CONFIG pull, then the frame).
-7. **The real unit** — never: the satellite has not been paired with it. The bytes are calictl's,
-   so the unit-side evidence is calictl's (cooler `State=3` frames are a van check, #230).
+7. **The real unit** — **DEVICE 2026-10-08**: the satellite bonded to the real unit (from its
+   console) and its cooler power, wake-up and door-contact commands landed there (evidence-ledger
+   2026-10-08). The bytes are calictl's, and the real app's identical frames, cooler `State=3`
+   included, were accepted by the real unit (CAPTURE 2026-10-10).
 
 ## Which CI job runs what
 

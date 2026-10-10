@@ -128,10 +128,11 @@ Every action setter does `field.o(value); A()/B(); y(true)`. `m2.a.y(boolean z11
   not gated on any read-back, and **not needed** for cooler/camping (sentinels mean
   "don't change", so it never undoes a persisted setpoint).
 - Roof movement keep-alive: the PRIMARY frame pump is the **~500 ms SafetyCounter timer**
-  (`w8/a`, +1/frame, value `seed + floor(elapsed_ms/500)`, `b1/d.java:352`), NOT the 1000 ms
-  timer. The `ig/c.java:674` / `:764` `jn.a(1000L, …, true, false)` timer also repeats but only
-  **re-affirms direction** — it doesn't touch the counter. Net ~3 frames/s, counter deltas 0/+1,
-  never +2. See §3 (Roof) + `protocol-alignment.md`. Other repeating timers: `dg/d.java:146`
+  (`w8/a`, +1 per 500 ms tick, value `seed + floor(elapsed_ms/500)`, `b1/d.java:352`), NOT the
+  1000 ms timer. The `ig/c.java:674` / `:764` `jn.a(1000L, …, true, false)` timer also repeats but
+  only **re-affirms direction** — it doesn't touch the counter. A direction change (press or
+  release) and the ~1 s re-send both **repeat the current counter**; only the 500 ms tick advances
+  it (CAPTURE 2026-10-10, 26 of 26 direction changes, #283). See §3 (Roof) + `protocol-alignment.md`. Other repeating timers: `dg/d.java:146`
   `jn.a(100L,…,true,true)`, `dg/d.java:164` `jn.a(1000L,…,true,true)`, `pf/k.java:457`
   `jn.a(30000L,…,true,false)`.
 
@@ -152,9 +153,10 @@ Mode 7 / TimerHour 30 / TimerMin 62 / NightTimer 31). The unit accepts those fro
 `State=3` *as a leave-unchanged sentinel* is legal, and since 2026-10-06 (ruling R1) calictl sends
 it too in every cooler frame that does not target `State` (`level`/`mode`/`timer_*` = the app's
 frames); `CONTROL_RANGES` admits `{0, 1, 3}` — a `power` command is always 0/1, 2 is never legal.
-The 2026-07-05 `0x0E` drop of a `State=3` write predates the 1003 heartbeat and has not been
-re-tested since: the first live cooler `level`/`mode` write with the app-faithful frame is the check
-(#230). The mock (`tools/mock_unit.py`) accepts the sentinel frames like the unit does.
+The 2026-07-05 `0x0E` drop of a `State=3` write predates the 1003 heartbeat. CAPTURE 2026-10-10:
+the real app's byte-identical `level` / `mode` / `timer` frames (`State=3`) reached the real unit
+under its heartbeat with no `0x0E`, and the level writes actuated (#230, closed). calictl itself has
+not written that frame to the unit yet. The mock (`tools/mock_unit.py`) accepts the sentinel frames like the unit does.
 
 **App-vs-calictl frame diff (APP-OBSERVED 2026-09-16, `tools/applab`).** Same fake unit, the
 app's write vs `control.build()` for the same intent. The **targeted** field is identical in every
@@ -356,7 +358,7 @@ live-verified on the van** — the web UI guards each with a "not verified" conf
 | cooler | `level` | Level 1-5 | `vf/c` **X1** | **APP-RECORDED** (`cooler.jsonl` `ff75…`, byte-identical since 2026-10-06). **CAPTURE** 2026-10-10 (real app → real unit, HCI snoop, byte-identical to calictl): `ff74…`/`ff73…` (level 4/3) actuated — the app-faithful `State=3` frame works on the unit (closes the R1 part of van check #230) |
 | cooler | `mode` | quiet Mode 0=off/2=manual(K0)/4=scheduled(L0) | `vf/c` T1/x0/k0 | **APP-RECORDED** 0/2/4 (`cooler.jsonl`, byte-identical). DEVICE 4=scheduled ("Automatisch", live 08-26); **CAPTURE** 2026-10-10 (real app → real unit, HCI snoop, byte-identical to calictl): `ff27…` manual, `ff47…` automatic, `ff07…` off |
 | cooler | `night_on` / `night_off` | NightTimerHourOn/Off (0-23) | `vf/c` c0/Y2 | DEVICE (live 08-26) — stored + 1102-broadcast; bytes LITERAL (carry current — the only cooler commands that still do: no app recording of them); refused while no cooler state is known (R4) |
-| cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | APP-OBSERVED (applab 2026-09-16 time picker `ff7704021f1f`; byte-identical since 2026-10-06, not in a committed recording); `State=3` frame = van check #230 |
+| cooler | `timer_set` | TimerHour:TimerMin (HH:MM) | `vf/c` y0 | APP-OBSERVED (applab 2026-09-16 time picker `ff7704021f1f`; byte-identical since 2026-10-06, not in a committed recording); the unit accepts `State=3` in the real app's level / quiet / timer frames (CAPTURE 2026-10-10); a time-picker frame itself is not captured |
 | cooler | `timer_start` / `timer_cancel` | TimerStart / TimerCancel = 1 | `vf/c` D/X0 | **APP-RECORDED** (`cooler.jsonl`: `f777…` / `df77…`, byte-identical); **CAPTURE** 2026-10-10 (real app → real unit, HCI snoop, byte-identical to calictl): `f777…` / `df77…` |
 | airheater | `power` / `level` | NormalOperationRequest 1/0 / HeatingLevel | `rf/b` C2/q4 | CAPTURE (power, HCI 07-08); **APP-RECORDED** (`airheater.jsonl`: level 8, immediate ON) |
 | airheater | `runtime` | RunningTime (min) | `rf/b` D4 | **APP-RECORDED** (`airheater.jsonl`: `3f7b003c1f3f` identical) |
@@ -394,7 +396,8 @@ session, or after the CLI direct path (no latch at all), the edit is refused unl
 explicit `on`/`off`. `on`/`off` without a known time is refused too. After the write the app waits
 ≤ 2000 ms for any 1502 frame, then checks `F0` 3 × 1000 ms; if the unit has not echoed a matching
 Mode-20 frame it reverts and toasts "Something went wrong" — so the **real unit must echo Mode 20 within
-~3 s** (van check). The app recording of a time edit while enabled keeps enabled=1 on the wire
+~3 s**. DEVICE 2026-10-08: it does — the ESP satellite's wake-up edit `07:45 on` was answered by the
+unit's own Mode-20 frame with the new `WakeupTimestamp`, which the satellite latched. The app recording of a time edit while enabled keeps enabled=1 on the wire
 (`lighting-wakeup.jsonl`, 2026-10-06), so R3 is APP-RECORDED.
 
 **Lighting config latch (ruling R4):** the wake-up (Mode 20), door-contact (Mode 16 / PN 8) and
