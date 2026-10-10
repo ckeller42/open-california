@@ -1,7 +1,7 @@
 # Control & actuation — the write gate, the frame model, per-feature status
 
 How `calictl` turns a `set` into an on-device actuation: the arm gate that was blocking
-writes (**SOLVED**), the full-packet frame the app puts on the wire, and which features
+writes (**SOLVED**), the [full-packet](https://ckeller42.github.io/open-california/glossary.html#term-Full-packet) frame the app puts on the wire, and which features
 actuate for real today. Dead-end hypotheses ruled out along the way are in
 [`DECISIONS.md`](DECISIONS.md).
 
@@ -21,9 +21,9 @@ writes** to the normal control chars. Static analysis missed it because `1003` c
 debug log and the write path never references it — it is a generic liveness signal, not a
 per-command repeat.
 
-**Confirmed on-device**, phone app **closed**, buspi the sole controller:
+**Confirmed on-device**, phone app **closed**, [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi) the sole controller:
 
-- With the heartbeat running, `cooler.on` goes **False → True** on a `State=1` write to
+- With the [heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat) running, `cooler.on` goes **False → True** on a `State=1` write to
   `1101` (True → False on `State=0`). Proof: `scratchpad/heartbeat_actuate.py`, then the
   productionized `calictl set cooler power on|off` (frames `3d4300000000` / `3c4300000000`).
 
@@ -33,7 +33,7 @@ per-command repeat.
   for a full 120 s window with the heartbeat **stopped and the client disconnected**.
   Actuation is a bounded operation — the heartbeat only needs to span the write window, not
   run continuously. (This is why `serve` did not need a persistent-connection redesign.)
-- **No release frame needed.** A single `State` write latches both directions; the app's
+- **No release frame needed.** A single `State` write [latches](https://ckeller42.github.io/open-california/glossary.html#term-Latch) both directions; the app's
   assert-then-`State=3`-release pattern is unnecessary (and would collide with the curated
   `CONTROL_RANGES` `State∈{0,1}`, so it is deliberately not used). See §3 for why the app's
   500 ms follow-up is a one-shot release, not a keep-alive.
@@ -96,7 +96,7 @@ classes `qd/{q,l,m,p}.java`.
 
 Every action setter does `field.o(value); A()/B(); y(true)`. `m2.a.y(boolean z11)`
 (`m2/a.java:152-170`, base of every control model) cancels any pending timer, reads the
-**whole** bit array `f()` from all slots, enqueues one write to the control char `n()`, and
+**whole** bit array `f()` from all slots, enqueues one write to the [control char](https://ckeller42.github.io/open-california/glossary.html#term-GATT-characteristic) `n()`, and
 — if `z11` — arms a **one-shot** 500 ms timer. The queued write flows
 `qd.g.b` (`qd/g.java:86-95`) → `h1.n3` case 25 (`h1/n3.java:90-109`, `byte[]` via
 `tt.u8.e`) → `qd.q` (writeType 2, 5 s response timeout via `td/d.java:30`).
@@ -108,7 +108,7 @@ Every action setter does `field.o(value); A()/B(); y(true)`. `m2.a.y(boolean z11
   (`tt/u8.java:88 c()`). Inverse for incoming state = `u8.d` (`tt/u8.java:102-113`).
 - **No wrapper:** no header, length prefix, sequence/counter, CRC, or trailer. On-wire bytes
   == exactly the field bits of `f()`.
-- **Full packet:** resend **every** field. Untouched fields carry a **sentinel
+- **Full packet:** resend **every** field. Untouched fields carry a **[sentinel](https://ckeller42.github.io/open-california/glossary.html#term-Sentinel)
   "leave-unchanged" default**, not 0 — fridge ctor `sf/a.java:275-284`:
   `e0..h0=3, i0=7, j0=7, k0=30, l0=62, m0=31, n0=31`. `v()` (`sf/a.java:242-269`) resets all
   slots to those sentinels. Zeroing sibling fields yields a different frame that can be
@@ -158,7 +158,7 @@ the real app's byte-identical `level` / `mode` / `timer` frames (`State=3`) reac
 under its heartbeat with no `0x0E`, and the level writes actuated (#230, closed). calictl itself has
 not written that frame to the unit yet. The mock (`tools/mock_unit.py`) accepts the sentinel frames like the unit does.
 
-**App-vs-calictl frame diff (APP-OBSERVED 2026-09-16, `tools/applab`).** Same fake unit, the
+**App-vs-calictl frame diff (APP-OBSERVED 2026-09-16, `tools/applab`).** Same [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit), the
 app's write vs `control.build()` for the same intent. The **targeted** field is identical in every
 row. Untargeted fields ride at each field's model default (= leave-unchanged sentinel) in the
 app's frames. Since 2026-10-06 (ruling R1, "calictl follows the app") calictl sends the same, so
@@ -166,7 +166,7 @@ app's frames. Since 2026-10-06 (ruling R1, "calictl follows the app") calictl se
 re-asserted the current decoded value. Only cooler `night_on`/`night_off` still carry the current
 schedule (no app recording of them; the 2026-08-26 DEVICE-verified frame). The app-recording replay
 (`tools/capture_diff.py`, `tests/test_app_recordings.py`) compares whole frames for every function but
-the roof (app-generated SafetyCounter).
+the roof (app-generated [SafetyCounter](https://ckeller42.github.io/open-california/glossary.html#term-SafetyCounter)).
 
 | Intent | App frame (then neutral +500 ms) | calictl frame | Targeted field |
 |---|---|---|---|
@@ -203,7 +203,7 @@ Passenger* 3; Exterior *Rear Surroundings* 4, *Entrance* 11; Kitchen *Background
 *Cooking* 8; Pop-up roof *Background Lighting* 7, *Reading Light* 10 (its icon writes nothing while
 the roof is closed — "Only available when the pop-up roof is open"); position 5 is touched by no
 lamp (calictl's `kitchen-cabinet`, which the app does not expose). Group icons write all their
-lamps at once (Reading 1+2+3, Kitchen 6+8, Roof 7+10, Exterior 4+11). The dictionary places the
+lamps at once (Reading 1+2+3, Kitchen 6+8, Roof 7+10, Exterior 4+11). The [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) places the
 odd-numbered `BrightnessL<n>` in the LOW nibble of each byte (byte 8 = `L2|L1`, byte 9 = `L4|L3`,
 …), so those positions are exactly calictl's DEVICE-verified `control.LIGHT_ZONES`: Left = `LTwo`
 (`reading-1`), Right = `LOne`, Front Passenger = `LFour` (`reading-3`), Rear Surroundings = `LThree`
@@ -237,7 +237,7 @@ enforced **unit-side** (not just an app UI block). Conversely, an engine start *
 `1202` push channel, which is hereby **confirmed on real hardware**: the unit pushes camping state
 on `1202` and ignition on `1004`, exactly as the app subscribes). Implication for the `auto-camper`
 feature: re-enabling camping *during* a drive is impossible; the only viable moment is once the
-vehicle is **stationary again**. The exact "stationary" predicate (Terminal-15 vs road-speed vs
+vehicle is **stationary again**. The exact "stationary" predicate ([Terminal-15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) vs road-speed vs
 parking-brake) is under decompile review; see `auto-camper-mode.md`. NB the BLE link also **drops
 for ~1 min at the engine crank** — buspi cannot reach the unit right at the start edge.
 
@@ -254,13 +254,13 @@ because it is instructive RE:
   `0e00…` neutral follow (`control.LIGHT_COMMIT`) flushes a single write. Readback then
   "confirmed" the change — but **the `1502` state char is a write-through echo** (owner-checked
   2026-07-18: lamps stayed dark). Every readback-based "verified" claim was worthless; the
-  physical load never switched. Ruled out: persistent session, camping-mode/ignition/battery
+  physical load never switched. Ruled out: [persistent session](https://ckeller42.github.io/open-california/glossary.html#term-Persistent-session), camping-mode/ignition/battery
   gates, "profile must be active first" (that was the echo bug too).
 - **2026-08-16 morning — the (over-stated) crack.** An iOS HCI capture (idevicebtlogger on
   the bar Mac) of the app *physically* lighting a lamp, decoded with calictl's own
   `control.decode_control` and diffed against `control.build` (`tools/capture_diff.py`, the
   capture-and-diff flow), showed one thing the app sends that we never did: **on opening its
-  Lighting screen it writes a REQUEST_CONFIG frame** — `0d0c000000000000eeeeeeeeeeeeeeee`
+  Lighting screen it writes a [REQUEST_CONFIG](https://ckeller42.github.io/open-california/glossary.html#term-REQUEST_CONFIG) frame** — `0d0c000000000000eeeeeeeeeeeeeeee`
   (Mode=12, ProfileNumber=13, all zones=14) — followed by the usual `0e00…` commit, to
   control char `1501`. That morning, adding the preamble made SETs actuate where the same
   un-armed path had failed hours earlier, so we concluded the preamble was the required
@@ -306,8 +306,8 @@ because it is instructive RE:
   that config frame, not the lamps. REQUEST_CONFIG's reply was six frames: Mode 12, 6, 8,
   16/PN 8, 20, 24. **Rule since #284:** only a lamp-state frame — Mode 4 with ProfileNumber outside
   1-7 (a zone SET's frames, PN 9), or Mode 16 with ProfileNumber other than 8 (a SET_PROFILE
-  activation: favourite, All-lights 12/0) — sets the served active profile, mode and lamp levels;
-  every other frame (favourite save ack Mode 4 / PN 1-7, door contact Mode 16 / PN 8, Modes 6, 8,
+  activation: [favourite](https://ckeller42.github.io/open-california/glossary.html#term-Favourite), All-lights 12/0) — sets the served active profile, mode and lamp levels;
+  every other frame (favourite save ack Mode 4 / PN 1-7, [door contact](https://ckeller42.github.io/open-california/glossary.html#term-Door-contact) Mode 16 / PN 8, Modes 6, 8,
   12, 20, 24) only feeds the config latch (`semantics.lighting_merge`, mirrored in the ESP's
   `session.c`). And the write confirm (`serve._confirm_lighting`) keeps watching the pushes until one
   shows the requested level (DEFAULT 11: any lamp level 2-10), so the first `1` frame no longer ends
@@ -348,7 +348,7 @@ Extend actuation via `control.BUILDERS`.
 Every command below is a full-packet write on the function's control char. Those marked
 **DV** are decompile-verified (frame byte-checked against the app's own setter) but **not yet
 live-verified on the van** — the web UI guards each with a "not verified" confirm. Every
-`(function, what)` that `control.BUILDERS` accepts must have a row here with an evidence tier
+`(function, what)` that `control.BUILDERS` accepts must have a row here with an [evidence tier](https://ckeller42.github.io/open-california/glossary.html#term-Evidence-tier)
 (CAPTURE / DEVICE / APP-RECORDED / APP-OBSERVED / DECOMPILE / DV, see `evidence-ledger.md`) —
 `tests/test_command_coverage.py` fails otherwise.
 
@@ -435,7 +435,7 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
   blocked). Both DEVICE-confirmed at the van. Only a real timer change counts: the app's power and
   level frames carry `TimerHour`/`TimerMin` at their dictionary default `30`/`62` (the
   leave-unchanged sentinel, e.g. level 5 = `ff751e3e1f1f`), and those apply while the fridge is on
-  (app lab 2026-10-05; the mock wrongly refused them until then).
+  ([app lab](https://ckeller42.github.io/open-california/glossary.html#term-App-lab) 2026-10-05; the mock wrongly refused them until then).
 - **Web GUI roof contract (`webui/app.js`, #176):** open/close are **press-and-hold** — `pointerdown`
   posts the move (the server streams frames + counter until told to stop, `_roof_move`), and the
   release is caught ONCE at **document** level (`pointerup`/`pointercancel`, plus `pointerleave` on

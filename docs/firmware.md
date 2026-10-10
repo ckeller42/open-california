@@ -3,15 +3,15 @@
 **Status: sub-projects 1 and 2b/3a of #154 + the status display + the control path (#154 B) —
 reads everything and controls the cooler, camping mode, lighting (since 2026-10-07 the wake-up
 light too, with the web page's clock), air heater and energy mode (no roof). Bonded to the real
-camper unit since 2026-10-08 (paired while buspi stayed connected — the unit serves several
+{term}`camper unit` since 2026-10-08 (paired while {term}`buspi` stayed connected — the unit serves several
 centrals at once) and controlling it live; before that proven on the Linux host tier against the
-fake unit, in QEMU, and on the CoreS3 bench against the mock unit. It holds its link while the van
+{term}`fake unit <Mock unit>`, in QEMU, and on the {term}`CoreS3 <Satellite>` bench against the mock unit. It holds its link while the van
 is parked (#279), runs the same water guard as calictl, and answers a write whose link dropped
-after the frame went out as *unconfirmed* (#271).** ESP-IDF + NimBLE firmware for an
+after the frame went out as *{term}`unconfirmed`* (#271).** ESP-IDF + NimBLE firmware for an
 ESP32-S3 "satellite" (the M5Stack CoreS3) that pairs with the camper unit and reads its state
 independently of `calictl`/buspi — the explicit target for the pairing state machine
 (`calictl/pairing.py`, `R_PAIRING_SM`) that the web wizard already runs. Its writes are the `1003`
-liveness heartbeat (the same one the Pi build uses to keep reads fresh) and, since #154 B, the
+{term}`liveness heartbeat <Heartbeat>` (the same one the Pi build uses to keep reads fresh) and, since #154 B, the
 control frames of five functions — the same bytes `calictl.control` builds, held identical by
 golden vectors, through one write allow-list that never admits the roof's `1401` (see
 [Control path](#control-path) below). Everything here is proven on Linux (a NimBLE host build
@@ -73,7 +73,7 @@ Identical on the host build (stdin/stdout) and the device (UART/USB-Serial-JTAG 
   for, `codec_decode`d, in `CODEC_CHARS` order), `LOG text` (everything else, including every
   watch item below).
 
-The session's read-all follows `calictl.device.read_all`: subscribe every notifying state char,
+The session's read-all follows `calictl.device.read_all`: subscribe every notifying {term}`state char <GATT characteristic>`,
 let the 1003 heartbeat run `CODEC_HEARTBEAT_WARMUP_MS` (generated from
 `calictl.device.HEARTBEAT_WARMUP_S`'s default, 2 s) so the liveness registers and sensors refresh,
 then read every function in order. A read completion and a notification both replace the
@@ -272,7 +272,7 @@ have on its own, and gets them like this:
   wake-up time, as in the app. The console `set lighting wakeup …` has no page, so it is always
   refused with that clock reason.
 - **The rest of the edit comes from the unit's own config.** The session latches the unit's
-  lighting config (wake-up time + light value, door contact, stored favourites — a C twin of
+  lighting config (wake-up time + light value, {term}`door contact`, stored {term}`favourites <Favourite>` — a C twin of
   `semantics.lighting_config`, held to it by `T_FW_LIGHT_CFG_PARITY`) from every 1502 frame the unit
   sends (READ or NOTIFY), never from a write. The latch is **shown across links** (`/api/state`
   `fn.lighting` carries the four raw latch keys, interpreted by `semantics.js`, so the wake-up card
@@ -422,7 +422,7 @@ Known gaps (accepted):
 - No roof from the satellite (above); no `applied: true` — the UI confirms
   from the unit's reported state instead (above).
 - Water stale-hold is the same rule as calictl's `freshness.implausible_water_drop`: the unit
-  reports 1 L whenever it is not measuring, so a fresh drop to that latch is held (baseline in NVS
+  reports 1 L whenever it is {term}`not measuring <Water latch>`, so a fresh drop to that latch is held (baseline in NVS
   `water_good`; see `value-freshness.md`), and a new level is adopted only after 5 s unchanged — the
   unit's ~4 s ramp from 1 L to the real value once it measures (`freshness.settle_water`). The ESP
   links `csrc/ports.c` — one C water guard, parity-tested against calictl.
@@ -504,7 +504,7 @@ chip":
    failed to init, and *that* path is what QEMU exercises.
 6. **Device-only NimBLE options (final review I1).** esp-nimble has options upstream NimBLE (the
    host tier) lacks or defaults differently; `sdkconfig.defaults` pins them to the host syscfg:
-   `CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n` (else a 0x3e establishment failure — this unit's
+   `CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n` (else a {term}`0x3e <HCI reason code>` establishment failure — this unit's
    known failure — is re-attempted inside the stack and comes up unencrypted),
    `CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1`, `CONFIG_BT_NIMBLE_EXT_ADV=n`/`EXT_SCAN=n` (extended
    discovery events are not handled) and NimBLE log level WARNING. On the board: a failed connect
@@ -524,15 +524,15 @@ chip":
    commit followed its frame by 399–550 ms (≥ 300 ms as required; measured write to write at the mock, so the
    tail above 400 ms is likely the ACK lagging the write — ACK times were not measured). **2026-10-08** (CI
    image of `6ac867c`, the satellite's wake-up light): 3 clean walks of 32 cases incl. the app's 4 wake-up
-   edits (`:239` as the REQUEST_CONFIG pull + refusal), no `1401`, commits 397–550 ms after their frame; a
+   edits (`:239` as the {term}`REQUEST_CONFIG` pull + refusal), no `1401`, commits 397–550 ms after their frame; a
    wake-up card edit from Chromium landed byte-exact with the config latched and, with none, as the pull
    then the frame (*✓ Applied*). Still open: a real unit's ACK timing and refusals.
 
 ## The unit's own ATT requests (GATT server on, #279)
 
-The unit is a GATT client too: right after every connect it sends the central an ATT **Exchange MTU
-Request** (Client RX MTU 247; btmon on buspi's held link 2026-10-10). BlueZ and Android answer it. The
-device build was central-only, which in IDF v6.1 also drops NimBLE's GATT server
+The unit is a GATT client too: right after every connect it sends the {term}`central` an **{term}`ATT Exchange MTU Request`**
+(Client RX MTU 247; btmon on buspi's {term}`held link <Persistent session>` 2026-10-10). BlueZ and Android answer it. The
+device build was central-only, which in IDF v6.1 also drops NimBLE's {term}`GATT server`
 (`BT_NIMBLE_GATT_SERVER` depends on `BT_NIMBLE_ROLE_PERIPHERAL`); esp-nimble then discards the request
 unanswered (`ble_att.c` `ble_att_rx_handle_unknown_request`), the unit's 30 s ATT transaction timeout
 expires and it ends the link with HCI `0x13` — the field "kick" every ~30 s after connect (issue #264) that #266

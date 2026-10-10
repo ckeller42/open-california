@@ -49,16 +49,16 @@ Raspberry Pi.
 
 - **Reads everything** — decodes 14 BLE functions (cooler, air-heater, camping mode, lighting,
   energy, water, roof, vehicle state, …) into meaningful signals, cross-validated by a signal
-  catalog + coverage guardrail so nothing is silently dropped or mislabeled. Values stay **fresh**
-  by holding the unit's `1003` liveness heartbeat during reads ([why, and why water can read a stale
+  [catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog) + coverage guardrail so nothing is silently dropped or mislabeled. Values stay **fresh**
+  by holding the unit's `1003` [liveness heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat) during reads ([why, and why water can read a stale
   1 L](https://ckeller42.github.io/open-california/protocol-sequences.html#fresh-state-read-under-heartbeat)):
-  the unit reports 1 L whenever it is not measuring, so calictl holds the last good water reading.
+  the unit reports 1 L whenever it is [not measuring](https://ckeller42.github.io/open-california/glossary.html#term-Water-latch), so calictl holds the last good water reading.
 - **Actually controls** — `calictl set cooler power on` (camping mode, lighting, roof, …) actuate
   for real, armed by the same `1003` heartbeat that unlocks the firmware's [write gate](https://ckeller42.github.io/open-california/protocol-sequences.html#heartbeat-armed-control-write)
   (lighting, roof, and range-rejection have their own [sequence diagrams](https://ckeller42.github.io/open-california/protocol-sequences.html)).
 - **Fits your stack** — one BLE-owning daemon fans out to **InfluxDB/Grafana** and **Home
   Assistant** (MQTT), and serves the web UI above — same process, one link from the Pi. The unit
-  serves several Bluetooth clients at once, so the phone app and the ESP32 satellite can stay
+  serves several Bluetooth clients at once, so the phone app and the [ESP32 satellite](https://ckeller42.github.io/open-california/glossary.html#term-Satellite) can stay
   connected alongside it.
 - **Guides you through pairing** — a web wizard walks through first-run pairing and re-pair
   (type the passkey shown on the camper's own screen), built on a platform-free pairing state
@@ -80,7 +80,7 @@ No van needed for development: the whole stack runs against a model of the unit 
 BLE fake with real passkey pairing, the vendor app in an emulator) — see
 **[Simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html)**.
 To record the real app against the real unit, set up your Android phone for wireless adb and the
-Bluetooth HCI snoop log: **[How to set up your Android phone for the app lab](https://ckeller42.github.io/open-california/howto-android-phone-lab.html)**.
+Bluetooth [HCI snoop](https://ckeller42.github.io/open-california/glossary.html#term-HCI-snoop) log: **[How to set up your Android phone for the app lab](https://ckeller42.github.io/open-california/howto-android-phone-lab.html)**.
 
 The **daemon is read-only by default** — it will not write to the vehicle until you pass
 `--enable-writes` (or set `CALICTL_ENABLE_WRITES=1`), so a stray deploy never actuates anything by
@@ -107,7 +107,7 @@ Need to (re-)pair later from the web UI, or after a "Bluetooth zurücksetzen" on
 > ⚠️ **Known-broken kernel: Raspberry Pi OS 6.18.50.** On the Pi 4's CYW43455 (no controller-side
 > LL privacy), kernel 6.18.50 never issues the `LE Create Connection` for a bonded peer that
 > rotates its address (RPA): pairing succeeds, but every reconnect fails (`Connect Failed`, and the
-> daemon logs `no BLE session … after retries (TimeoutError)` forever). The camper unit rotates its
+> daemon logs `no BLE session … after retries (TimeoutError)` forever). The [camper unit](https://ckeller42.github.io/open-california/glossary.html#term-Camper-unit) rotates its
 > address, so calictl is dead on that kernel. Kernel **6.18.34 works** — pin it until a fixed
 > kernel is verified. Diagnosis + pin recipe:
 > **[Raspberry Pi setup → Known issue](https://ckeller42.github.io/open-california/raspberry-pi-setup.html#known-issue-kernel-6-18-50-breaks-ble-reconnects)**.
@@ -124,7 +124,7 @@ Need to (re-)pair later from the web UI, or after a "Bluetooth zurücksetzen" on
   heater is installed but not yet verified end-to-end (setters are decompile-verified). The pop-top
   roof is installed but its motor has **never been driven** by this project (its actuation frame is
   decompile-documented). Full per-function verification tiers are in the [hardware reference](https://ckeller42.github.io/open-california/hardware.html).
-- **Host:** a Raspberry Pi ("buspi", Debian 13, aarch64), Python 3.13, BlueZ via `bleak`.
+- **Host:** a Raspberry Pi ("[buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi)", Debian 13, aarch64), Python 3.13, BlueZ via `bleak`.
 
 Full GATT service/characteristic map, software-version fields, the equipment/verification
 tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardware.html)**.
@@ -140,7 +140,7 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
 - **Dictionary-driven** — every field is extracted into [`protocol/dictionary.yaml`](protocol/dictionary.yaml)
   and has a catalog decision in [`protocol/signals.yaml`](protocol/signals.yaml); a dropped or
   unaccounted field **fails CI**. Manual bit offsets live only in [`overrides.py`](calictl/overrides.py).
-- **One dictionary, two languages** — the same dictionary also generates the C codec tables in
+- **One dictionary, two languages** — the same [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) also generates the C codec tables in
   [`csrc/`](csrc/) for the ESP32 satellite (`python3 -m tools.gen_c_dict`; **never hand-edit
   `csrc/codec_dict.h`**). Golden vectors + a seeded differential fuzz harness keep the Python and C
   codecs byte-identical in CI (`codec-parity` job) — see [`csrc/README.md`](csrc/README.md).
@@ -149,15 +149,15 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   and controls the fridge, camping mode, lights, air heater and energy mode (the wake-up light too,
   with the web page's clock; not the roof — "only via buspi or the app") with calictl's own frames,
   held byte-identical by golden vectors (on the real unit device-verified so far: fridge, wake-up
-  light, door contact). It runs the same water guard, serves the same web UI
+  light, [door contact](https://ckeller42.github.io/open-california/glossary.html#term-Door-contact)). It runs the same water guard, serves the same web UI
   (`calictl/webui` is bundled into the firmware), and answers *unconfirmed* when the link drops
-  after a frame went out. Tested on a Linux host build + a Bumble fake unit, in Espressif's QEMU, on
+  after a frame went out. Tested on a Linux host build + a Bumble [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit), in Espressif's QEMU, on
   a CoreS3 against the mock unit, and live on the real unit. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.
   It joins your WiFi through its own setup hotspot and serves a status page and the calictl UI with
   live controls on your home network (never over the setup hotspot) — **[How to put the ESP32 satellite on your WiFi](https://ckeller42.github.io/open-california/howto-esp-wifi-setup.html)**.
 
 - **Evidence from the real app** — the vendor app (CaliforniaOnTour 5.4.0) is a live concurrent
-  central too: its HCI snoop log, pulled over wireless adb from the Pi (skill `phone-app-lab`,
+  [central](https://ckeller42.github.io/open-california/glossary.html#term-Central) too: its HCI snoop log, pulled over wireless adb from the Pi (skill `phone-app-lab`,
   decoders in [`tools/applab/phone/`](tools/applab/phone/)), shows its frames on the real unit. Every
   non-motor control it sent (cooler, lighting, camping mode) is byte-identical to calictl's. Its
   screenshots and the decompile mapping live in a private analysis repository.

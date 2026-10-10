@@ -1,6 +1,6 @@
 # The mock camper unit: setup and usage
 
-The real VW California camper unit is hard to reach. It sits in a parked van, deep-sleeps for days,
+The real VW California {term}`camper unit` is hard to reach. It sits in a parked van, deep-sleeps for days,
 and stops advertising. So nearly all development runs against a
 **mock** of the unit instead — a model you can run on a laptop with no van, no phone and usually no
 radio.
@@ -8,7 +8,7 @@ radio.
 This is the "how do I drive it" guide. For the test-layer reference — what each fake *proves*, what
 it does *not*, and which CI job runs it — see {doc}`simulation-and-testing`. This page points you at
 the mock from the operator's seat: how it is built, how to set it up, and every way the project
-points `calictl`, the vendor app, and the ESP32 satellite at it.
+points `calictl`, the vendor app, and the {term}`ESP32 satellite <Satellite>` at it.
 
 ## What it is, and the two layers
 
@@ -85,11 +85,11 @@ recipes below.
 ### The Bumble peripheral
 
 Needs [Bumble](https://google.github.io/bumble/) (`bumble` is pinned in `requirements-dev.txt`;
-`bumble[android]` for the app lab, which also needs the Android SDK and emulator). How you bridge
+`bumble[android]` for the {term}`app lab`, which also needs the Android SDK and emulator). How you bridge
 its HCI is what changes per use:
 
 - **Virtual radio (CI, no dongle).** calictl's pairing tests link the peripheral to a Bumble
-  central over a `LocalLink` — no BlueZ, no kernel, no radio. This runs on every PR
+  {term}`central` over a `LocalLink` — no BlueZ, no kernel, no radio. This runs on every PR
   (`tests/test_pairing_link.py`).
 - **Real BLE dongle.** For the ESP bench the peripheral runs on a USB BLE adapter (for example the
   UB500 on the "thinky" Linux box) so a real chip can connect to it over the air.

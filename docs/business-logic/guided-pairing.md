@@ -1,7 +1,7 @@
 # Guided BLE pairing — the state-machine contract (#154, #157)
 
 **Status:** SM + BlueZ transport + web wizard shipped; unit-tested against a fake transport and
-CI-verified against real BlueZ (`pairing-real-stack`, a VM + the Bumble fake unit — see
+CI-verified against real BlueZ (`pairing-real-stack`, a VM + the Bumble [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit) — see
 [Live-verification status](#live-verification-status)). **NOT-LIVE-VERIFIED against a real camper unit** — the
 deliberate live unbond→re-pair at the van is tracked as a checkbox on
 [#157](https://github.com/ckeller42/open-california/issues/157), not done yet. The one real run so far (a re-pair at the van on 2026-09-18) failed at
@@ -9,13 +9,13 @@ deliberate live unbond→re-pair at the van is tracked as a checkbox on
 
 ## Purpose
 
-The buspi web GUI needed a CaliforniaOnTour-style guided Bluetooth setup: first-run pairing
+The [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi) web GUI needed a CaliforniaOnTour-style guided Bluetooth setup: first-run pairing
 *and* a `bluetoothReset`-style re-pair, driven by the user typing the 6-digit passkey the
-camper unit displays on its own "Gerät verbinden" screen. Rather than wire that straight into
+[camper unit](https://ckeller42.github.io/open-california/glossary.html#term-Camper-unit) displays on its own "Gerät verbinden" screen. Rather than wire that straight into
 `pairing_bluez.py`, the flow is factored as a **platform-free state machine**
 (`calictl/pairing.py`, `R_PAIRING_SM`) — no strings, no clock, no BLE addresses — so it is
 simultaneously: (a) the executable spec for the web wizard today, and (b) the explicit model
-for the ESP32 satellite's touchscreen pairing flow (#154), which will port `step()` to C almost
+for the [ESP32 satellite](https://ckeller42.github.io/open-california/glossary.html#term-Satellite)'s touchscreen pairing flow (#154), which will port `step()` to C almost
 mechanically. The sequence vectors in `tests/vectors/pairing.json` are written so `#154` can
 replay them against the C port as a golden-vector differential test, the same pattern already
 used for the frame codec (issue #156).
@@ -135,7 +135,7 @@ Bluetooth jobs at once. The how-to for owners is
 "Before you start" checklist.
 
 - **One radio.** `hci0` on buspi is shared with other BLE clients (the Home Assistant Bluetooth
-  integration, BLE readers, calictl's own persistent session). Only one of them can hold the
+  integration, BLE readers, calictl's own [persistent session](https://ckeller42.github.io/open-california/glossary.html#term-Persistent-session)). Only one of them can hold the
   adapter's `Discovering` state or a connection at a time.
 - **Co-resident scanners break new connections.** `BluezTransport.stop_scan` reads
   `Adapter1.Discovering` right after its own scan stops; if another client kept discovery
@@ -147,7 +147,7 @@ Bluetooth jobs at once. The how-to for owners is
   scanner stopped, the same connect attempt succeeded. The owner's phone holding the unit's
   single connection blocks a Pi connect the same way, for a different reason (the unit itself
   refuses a second link, not the local radio).
-- **One connection slot on the unit.** The camper control unit accepts exactly one BLE central
+- **One connection slot on the unit.** The camper control unit accepts exactly one BLE [central](https://ckeller42.github.io/open-california/glossary.html#term-Central)
   at a time; a phone connected via the CaliforniaOnTour app locks the Pi out regardless of the
   local radio's state.
 - **A rotating advertising address.** The unit advertises from a private address that changes
@@ -158,7 +158,7 @@ Bluetooth jobs at once. The how-to for owners is
 - **The unit refuses Just Works; the agent must exist before the link.** The unit only accepts
   passkey pairing (it DISPLAYS, we type — MITM). A **btmon capture on buspi (2026-09-26)** showed
   the wizard's `Pairing Request` going out as `IO capability: NoInputNoOutput`, `No MITM`, and the
-  unit hanging up at once (`Remote User Terminated Connection`, 0x13; calictl saw
+  unit hanging up at once (`Remote User Terminated Connection`, [0x13](https://ckeller42.github.io/open-california/glossary.html#term-HCI-reason-code); calictl saw
   `Authentication Canceled`). BlueZ had switched the adapter to `KeyboardOnly` only when
   `pair()` registered the agent, but the kernel fixes an LE link's IO capability when the link is
   created, and `connect()` had already made it. `start_scan()` now registers the agent before any
@@ -287,9 +287,9 @@ What stays true operationally:
   (its reconnect storm after a unit "Bluetooth zurücksetzen" collides with the wizard's window).
 - How many links the unit serves (2? more?), and whether a third central is refused, is
   unmeasured — only "two works" is DEVICE-proven.
-- Right after every connect the unit sends the central an ATT Exchange MTU Request and ends the
+- Right after every connect the unit sends the central an ATT [Exchange MTU Request](https://ckeller42.github.io/open-california/glossary.html#term-MTU-exchange) and ends the
   link (HCI 0x13) when it gets no answer within its 30 s ATT timeout. BlueZ and Android answer it;
-  the ESP's NimBLE, built without a GATT server, did not, so the parked unit dropped the ESP's held
+  the ESP's NimBLE, built without a [GATT server](https://ckeller42.github.io/open-california/glossary.html#term-GATT-server), did not, so the parked unit dropped the ESP's held
   link ~30 s after each connect (2026-10-09). That was read at first as a state-dependent unit
   policy against idle links; it is not (CAPTURE 2026-10-10: the app's and buspi's held links
   stayed up). Fixed by #279 (`faaf7b0`): the ESP now holds its parked link. Its #266 reconnect pacing

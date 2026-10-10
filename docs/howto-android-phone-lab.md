@@ -1,17 +1,17 @@
 # How to set up your Android phone for the app lab
 
-This sets up your own Android phone so that the Raspberry Pi ("buspi") can watch and drive the
+This sets up your own Android phone for the {term}`phone app lab`, so that the Raspberry Pi ("{term}`buspi`") can watch and drive the
 real CaliforniaOnTour app over WiFi and record the app's Bluetooth traffic with the camper unit.
-The recording is Android's **Bluetooth HCI snoop log**: every frame the app writes to the unit and
+The recording is Android's **Bluetooth {term}`HCI snoop` log**: every frame the app writes to the unit and
 every frame the unit sends back. We decode it and compare it byte for byte with the frames calictl
-builds. A match is evidence tier **CAPTURE** in the
+builds. A match is {term}`evidence tier` **CAPTURE** in the
 [evidence ledger](https://github.com/ckeller42/open-california/blob/main/docs/business-logic/evidence-ledger.md).
 
 - Runbook for the agent that drives the phone (commands, rules, common mistakes):
   [`.claude/skills/phone-app-lab/SKILL.md`](https://github.com/ckeller42/open-california/blob/main/.claude/skills/phone-app-lab/SKILL.md)
 - Decoders: [`tools/applab/phone/`](https://github.com/ckeller42/open-california/tree/main/tools/applab/phone)
   (`snoop_att.py` lists the ATT reads/writes/notifications, `snoop_links.py` the link events).
-- Sibling lab without a van or a phone (the app in an emulator against a fake unit):
+- Sibling {term}`lab <App lab>` without a van or a phone (the app in an emulator against a {term}`fake unit <Mock unit>`):
   [`tools/applab/README.md`](https://github.com/ckeller42/open-california/blob/main/tools/applab/README.md).
 - Captures still owed and app-vs-calictl findings:
   [remaining captures](https://github.com/ckeller42/open-california/blob/main/docs/business-logic/remaining-captures.md),

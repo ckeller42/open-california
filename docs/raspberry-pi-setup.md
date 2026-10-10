@@ -1,7 +1,7 @@
 # Raspberry Pi setup
 
 Take a fresh Raspberry Pi (or any Debian host with a Bluetooth adapter) from nothing to
-`calictl` reading your VW California Camper Unit over BLE and running as a background service.
+`calictl` reading your VW California {term}`Camper Unit` over BLE and running as a background service.
 
 The guided installer does the whole thing — dependencies, virtualenv, **BLE pairing**, the
 config file, and the systemd service. Pairing is interactive by nature (the camper shows a
@@ -9,7 +9,7 @@ passkey you have to type), so the installer walks you through it.
 
 ## Requirements
 
-- Raspberry Pi OS / Debian with Python ≥ 3.11 (Debian 12+ / Raspberry Pi OS Bookworm or newer; buspi runs Debian 13 / Python 3.13).
+- Raspberry Pi OS / Debian with Python ≥ 3.11 (Debian 12+ / Raspberry Pi OS Bookworm or newer; {term}`buspi` runs Debian 13 / Python 3.13).
 - A Bluetooth LE adapter (the Pi's built-in radio is fine).
 - Your own VW California with the Camper Unit, within Bluetooth range.
 - `sudo` rights. ~5 minutes.
@@ -170,7 +170,7 @@ change needs a daemon restart.
 | `CALICTL_AUTO_CAMPER_MIN_SOC`, `…_WINDOW_S`, `…_MAX_FAILS` | `20`, `120`, `3` | auto camper mode guards — see `business-logic/auto-camper-mode.md` |
 | `CALICTL_OBSERVE_BURST_INTERVAL_S`, `CALICTL_OBSERVE_BURST_S` | `3`, `180` | fast-poll burst after an engine start — see `business-logic/auto-camper-mode.md` |
 
-The heartbeat / arm / settle / follow / roof timings are the proven on-device values; the mock and
+The {term}`heartbeat` / arm / settle / follow / roof timings are the proven on-device values; the mock and
 e2e harness shrink them for speed. **Do not lower them for real hardware.**
 
 Add Home Assistant / MQTT / InfluxDB / Grafana: `calictl/deploy/homeassistant/HOMEASSISTANT.md`
@@ -306,7 +306,7 @@ Related pitfalls seen in the same debugging session:
   needed.
 - **Reboots restart BLE scanner services** (Home Assistant integrations, vendor readers). A
   co-resident client holding discovery kills new LE connections (`radio_busy` in the pairing
-  wizard, HCI 0x3e) — stop those scanners before pairing.
+  wizard, HCI {term}`0x3e <HCI reason code>`) — stop those scanners before pairing.
 - **The unit's passkey window is ~30 s** from the moment the wizard shows "waiting for passkey";
   entering the code later fails the attempt (`Authentication Canceled`), so have eyes on the
   camper's screen before you start.

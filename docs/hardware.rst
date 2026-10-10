@@ -95,7 +95,7 @@ table below is the coarse per-function characteristic map for orientation:
      - —
 
 There is also the write-only liveness counter char ``00001003`` (the actuation-arming
-heartbeat — see the control docs), not tied to any one function above.
+:term:`heartbeat` — see the control docs), not tied to any one function above.
 
 Software / version fields
 --------------------------
@@ -126,7 +126,7 @@ Equipment profile
 ------------------
 
 Installed equipment is a **per-van configuration**, not a protocol constant — each function
-carries its own ``Installed`` bit, and ``calictl`` gates a function off when that bit is unset.
+carries its own :term:`Installed bit`, and ``calictl`` gates a function off when that bit is unset.
 The table below is the profile of the specific reference van this project was developed and
 tested against:
 
@@ -250,12 +250,12 @@ Host
 
 - **Hardware:** Raspberry Pi, referred to throughout this project's docs as ``buspi``.
 - **OS:** Debian 13 (aarch64).
-- **Python:** 3.13 (the project floor is 3.11+; ``tools/ci.sh`` prefers 3.13 to match buspi).
+- **Python:** 3.13 (the project floor is 3.11+; ``tools/ci.sh`` prefers 3.13 to match :term:`buspi`).
 - **BLE:** BlueZ via the `bleak <https://github.com/hbldh/bleak>`_ library, imported lazily —
   the runtime package is stdlib-only at import time (see ``AGENTS.md``).
 - **Sinks:** Home Assistant over MQTT, and Grafana over InfluxDB, both fed by the same daemon
   that owns the Pi's BLE link to the unit (the unit itself serves several centrals at once — the
-  phone app and the ESP32 satellite stay connected alongside it).
+  phone app and the :term:`ESP32 satellite <Satellite>` stay connected alongside it).
 
 No real vehicle MAC address or VIN is recorded anywhere in this repository; if you need to
 reference a device address in your own notes, use a placeholder such as

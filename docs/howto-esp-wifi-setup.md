@@ -1,7 +1,7 @@
 # How to put the ESP32 satellite on your WiFi
 
-This walks you through connecting the ESP32 "satellite" — the small M5Stack CoreS3 board that
-pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 firmware](firmware.md))
+This walks you through connecting the ESP32 "satellite" — the small M5Stack {term}`CoreS3 <Satellite>` board that
+pairs with your {term}`camper unit` on its own, without the Raspberry Pi (see [ESP32 firmware](firmware.md))
 — to your WiFi, so you can open the camper UI from a phone or laptop.
 
 > **Status.** The satellite has been paired with a real camper unit since 2026-10-08 (while the Pi
@@ -14,7 +14,7 @@ pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 fir
 
 The satellite reads the camper unit and, on your home WiFi, controls the fridge, camping mode,
 lights (the wake-up light included), air heater and energy mode with the same frames the Pi sends
-— never the pop-up roof (that stays with buspi or the app). Its page shows what the unit reports
+— never the pop-up roof (that stays with {term}`buspi` or the app). Its page shows what the unit reports
 and the device's own state (Bluetooth pairing, link, WiFi).
 
 ## What you need
@@ -107,7 +107,7 @@ Then open `http://192.168.x.y` directly.
 ## Control from the satellite
 
 On your home WiFi the tiles work like on the Pi: switch the fridge and set its level and quiet
-mode, camping mode (master, lights, USB), every light zone, favourites, the sliding-door light and
+mode, camping mode (master, lights, USB), every light zone, {term}`favourites <Favourite>`, the sliding-door light and
 the wake-up light, the air heater (with its confirmation) and the energy mode. The satellite sends exactly the frames
 the Pi — and the vendor app — send for these; what it cannot do:
 

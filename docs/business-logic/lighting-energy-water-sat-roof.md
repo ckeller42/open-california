@@ -200,9 +200,9 @@ with L5 = kitchen: the wake-up area AREA_2 "Kitchen background lighting" maps to
    FAVORITE 1/5/6/7** (`gv/z0` case 26, `hi/f.smali:804-888`); a tile is drawn filled when its
    `FavoriteProfileModifiedState` bit is set — **A/B/C/D = bits 0/4/5/6**. Tap on a filled tile = activate, tap on
    an empty one = the "please press and hold" dialog, long press = save (`l3`). calictl: `profile N` (`control._lighting`, N 0–13, 8 refused → `door_contact`;
-   refused when the latched favourite bits say slot N is empty); frame shape pinned by `T_LIGHT_FAVOURITE_ACTIVATE`,
+   refused when the latched [favourite](https://ckeller42.github.io/open-california/glossary.html#term-Favourite) bits say slot N is empty); frame shape pinned by `T_LIGHT_FAVOURITE_ACTIVATE`,
    **APP-RECORDED** 2026-10-06 (`lighting-favourite.jsonl`: save A, all lights off, tap A → `0110…`, byte-exact).
-   App lab: right after a save the saved tile is the ACTIVE one, and a tap on the active tile writes nothing.
+   [App lab](https://ckeller42.github.io/open-california/glossary.html#term-App-lab): right after a save the saved tile is the ACTIVE one, and a tap on the active tile writes nothing.
 
 8. **Save / edit a profile (`l3(ef.k profile, ...)`, `dg/h.java:564-700`)**. Two steps:
    (a) Only when a colour-capable zone exists and the profile is not `DOOR_CONTACT`/`INTERIOR_LIGHT`: send a
@@ -213,7 +213,7 @@ with L5 = kitchen: the wake-up area AREA_2 "Kitchen background lighting" maps to
    sends `d0()` REQUEST_CONFIG. Ack rules (decompile cross-check 2026-10-06, enigma `46f982d3`): the SET_COLOR step awaits its own ack, but the
    SET_BRIGHTNESS save is **always transmitted** (if the colour ack failed it is just not awaited); the save is acked
    only by an **exact Mode 4 / PN N** 1502 frame within 2000 ms (FALSE → "Something went wrong"); the trailing
-   REQUEST_CONFIG always runs and its result is ignored. Callers: the favourite tiles (`hi/f.k` → `di/a` case 23),
+   [REQUEST_CONFIG](https://ckeller42.github.io/open-california/glossary.html#term-REQUEST_CONFIG) always runs and its result is ignored. Callers: the favourite tiles (`hi/f.k` → `di/a` case 23),
    the door settings (`b1/x0` saves `l3(DOOR_CONTACT)`, page `ii/a`) and the roof-console switch
    (`pi/a` RoofConsoleLightSwitchViewModel saves `l3(INTERIOR_LIGHT)`). **Correction:** the #235 note that
    `ni/a.java:340` is a favourite/profile editor was wrong — it is that roof-console `INTERIOR_LIGHT` save.
@@ -234,7 +234,7 @@ with L5 = kitchen: the wake-up area AREA_2 "Kitchen background lighting" maps to
    when the live BLE `CarVariant` is Grand California (2), the nearest available stand-in for that onboarding
    model (this T7 reads 4, so it is shown). Camping-page row gates (decompile cross-check 2026-10-06, enigma `46f982d3`): shown on
    every variant except Grand California (`wh/c.h0`, `bc/a.java:117-140`), no equipment gate; the whole camping
-   page is blocked by "Only possible when stationary" while 1202 `Enable` (terminal-15 mirror) is set
+   page is blocked by "Only possible when stationary" while 1202 `Enable` ([terminal-15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) mirror) is set
    (`ut/hf.java:68-80`).
 
 10. **Set wake-up light (`m0(ef.m config, ...)`, `dg/h.java:778-874`)**. **Settled from the decompile (#154).**
@@ -282,7 +282,7 @@ with L5 = kitchen: the wake-up area AREA_2 "Kitchen background lighting" maps to
 
 The unit reports its lighting configuration in specific 1502 frames: Mode 20 (wake-up `Timestamp` +
 `LightValue`), Mode 16 / ProfileNumber 8 (door-contact flag in `LightValue`) and Mode 12 (the
-REQUEST_CONFIG reply, favourite bits 0–6 in `LightValue`). The state char holds one frame at a time, so
+REQUEST_CONFIG reply, favourite bits 0–6 in `LightValue`). The [state char](https://ckeller42.github.io/open-california/glossary.html#term-GATT-characteristic) holds one frame at a time, so
 `serve` carries these keys across later frames (`semantics.lighting_config`, `R_LIGHT_CONFIG_LATCH`) and
 surfaces them as `lighting.wakeup` / `door_contact` / `favourites_stored`. The latch takes **only the
 unit's own 1502 frames** (polls + pushes), never calictl's write (ruling R4; if the state char echoes config
@@ -328,7 +328,7 @@ colour UI (`lighting_interiorLighting_SectionLightSubline_adjustLightColour_text
 10 `lighting_lightColor_*_text` names, rendered by `tt/x9.java`), but it is shown only behind a boolean flow
 whose source is unresolved — sibling keys carry the `_gc` suffix, so it is likely Grand-California-only and
 never appears on a T7. So SET_COLOR is a real capability, not N/A — but it recolours a
-stored profile. The old standalone `color` (PN 9 + sentinel zones) was mis-shaped vs the app and is
+stored profile. The old standalone `color` (PN 9 + [sentinel](https://ckeller42.github.io/open-california/glossary.html#term-Sentinel) zones) was mis-shaped vs the app and is
 **retired**; `save_profile N <colour>` now sends SET_COLOR (PN N + the profile's zones) before the save
 (`control.preface_for`, decompile-only). The other `dg.j` use is the wake-up-light `LightValue` packing (`dg/h.java:656`).
 
@@ -392,7 +392,7 @@ Post-processing (`xf/a.java:328-390`, `xf/d.java`) derives UI values from the ra
 - Power fields (`P*Afs`): raw × 10 → watts (`:363-374`).
 - Current fields (`I*Afs`): `ITwoBattBemAfs`, `ILandAfs`, `IPvAfs` raw ÷ 10 → amps (`xf/d.java:159,173,175`;
   holders `M0/O0/P0` bound at `xf/a.java:150-157`); `IDcdcAfs` is **unscaled** (amps as-is) with a `+2`
-  correction when the SW version is 0409/0410 (`xf/d.java:171`). Catalog flipped to verified 2026-09-07.
+  correction when the SW version is 0409/0410 (`xf/d.java:171`). [Catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog) flipped to verified 2026-09-07.
 - Battery/DC-DC/Land/PV state fields (`StateDcdcAfs` etc.) decode through `d.k(int)` (`xf/d.java:203-217`)
   by **wire value**: raw `0`→`INACTIVE`, `1`→`ACTIVE`, `2`→`STANDBY`, `6`→`INIT`, and **every other raw
   value** (incl. `3`/`4`/`5`/`7`)→`ERROR`. The `INACTIVE`(0)/`ACTIVE`(1)/`STANDBY`(2)/`INIT`(3)/`ERROR`(4)
@@ -544,8 +544,8 @@ together in one write, `y(false)` (write-without-response semantics, inferred).
   open/close command (debounce, `in.a.a()` timestamp check). Otherwise: `f(0)` (Down=0), `g(1)` (Up=1, sent),
   set local flags `opening=true/closing=false`, and start a **1000 ms repeating timer** (`ig/b.java` case 0)
   that keeps re-sending `Down=0, Up=1` every second for as long as `opening` stays true — the roof requires a
-  continuous "move" heartbeat, not a single command. (This `ig/c` timer only re-affirms direction; the
-  primary ~500 ms transmitter is the `w8/a` SafetyCounter pump — see the cadence note below.)
+  continuous "move" [heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat), not a single command. (This `ig/c` timer only re-affirms direction; the
+  primary ~500 ms transmitter is the `w8/a` [SafetyCounter](https://ckeller42.github.io/open-california/glossary.html#term-SafetyCounter) pump — see the cadence note below.)
 - **Close (`e1()`, `ig/c.java:239-266`)**: mirror of Open — no-op if already `CLOSED`, same 1000 ms debounce
   ("Blocked roof usage (close) ..."), otherwise `f(1)` (Down=1), `g(0)` (Up=0, sent), flags
   `closing=true/opening=false`, same 1-second repeating heartbeat resending `Down=1, Up=0`.

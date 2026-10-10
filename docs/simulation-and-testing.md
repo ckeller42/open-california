@@ -1,6 +1,6 @@
 # Simulation and testing
 
-The camper unit is usually out of reach. It sits in a parked van, deep-sleeps for days, and
+The {term}`camper unit` is usually out of reach. It sits in a parked van, deep-sleeps for days, and
 drives real loads. So nearly all of `calictl` is tested against
 **fakes of the unit**, in layers. Each layer is closer to real hardware than the one below it and
 runs less often. This page lists the layers, what each one proves, what it does *not* prove, and
@@ -10,7 +10,7 @@ which CI job runs it. For a usage-first walkthrough — how to actually run the 
 The one rule that applies to every layer: **a fake encodes only behaviour that has already been
 reverse-engineered.** It is a regression harness and executable documentation, not an oracle. New
 protocol facts come from the real unit (a trace, a capture, the owner watching the camper's screen)
-or from the vendor app (the app lab, below). See the
+or from the vendor app (the {term}`app lab`, below). See the
 [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)
 for how strongly each fact is proven.
 
@@ -44,9 +44,9 @@ in `AGENTS.md` list exactly what only GitHub runs.
 `python3 -m pytest tests/ -q` runs everywhere with no BLE, MQTT or InfluxDB installed, because the
 runtime is stdlib-only at import. Some guards in this suite protect repo-wide invariants:
 
-- `tests/test_signal_coverage.py`: every dictionary field has a catalog decision.
+- `tests/test_signal_coverage.py`: every {term}`dictionary` field has a {term}`catalog` decision.
 - `tests/test_command_coverage.py`: the write-side twin: every `(function, what)` that
-  `control.BUILDERS` accepts has a row with an evidence tier in `control-and-actuation.md` §5, and a
+  `control.BUILDERS` accepts has a row with an {term}`evidence tier` in `control-and-actuation.md` §5, and a
   retired command (lighting `color`) is refused, not listed.
 - `tests/test_needs_docstrings.py`: every `.. req::`/`.. test::` in a docstring has a prefixed,
   unique `:id:`, its `:links:` resolve, and `docs/api.rst` autodocs it (else it drops out of the trace).
@@ -81,7 +81,7 @@ every tile and screen renders.
 
 What it models:
 
-- **The 1003 arm gate.** A control write is honoured only while the liveness heartbeat is ticking.
+- **The 1003 arm gate.** A control write is honoured only while the {term}`liveness heartbeat <Heartbeat>` is ticking.
   Without it the write is ACKed and ignored. A link with no beat for 15 s is dropped. Lighting is
   exempt, as on the van: an awake unit actuates a bare SET_BRIGHTNESS plus commit with no
   heartbeat (photon-verified).
@@ -91,12 +91,12 @@ What it models:
 - **Device-confirmed silent refusals.** A write is ACKed but not applied for: camping master while
   driving and a cooling-timer change while the fridge is on. The pop-top reading light (L9) stays
   off while the roof is closed; the rest of that lighting frame applies.
-- **Push cadence (CAPTURE 2026-10-10).** Nothing is pushed on subscribe. A state char is pushed
+- **Push cadence (CAPTURE 2026-10-10).** Nothing is pushed on subscribe. A {term}`state char <GATT characteristic>` is pushed
   whenever its frame changes, from a write or from the clock. The app's neutral follow-up frames
   (cooler `ff771e3e1f1f`, camping `ff`) change nothing, so they push nothing. The 1004 clock
   ticking alone is never pushed; the ignition edge is. Water pushes only on a measured change.
 - **Water.** It is measured only while the van's water system is powered. With
-  `set_water_power(False)`, fresh reads the 1 L sleep latch (`WATER_LATCH_L`) and grey stays frozen.
+  `set_water_power(False)`, fresh reads the 1 L sleep {term}`latch <Water latch>` (`WATER_LATCH_L`) and grey stays frozen.
   It is pushed on a measured change and never refreshed by the heartbeat. This is the latch that
   `freshness.implausible_water_drop` detects.
 - **Lighting (CAPTURE 2026-10-10).** SET_PROFILE and SET_BRIGHTNESS apply at once. The `0e00…`
@@ -105,11 +105,11 @@ What it models:
   (`LIGHT_DEFAULT_LEVEL`). A 1502 read returns the last frame the unit sent, config echoes
   included. `light_applies = False` models "ACKed and echoed, but the lamps stay dark": the write
   lands in the readback and nothing is notified.
-- **Lighting configuration (A2).** Seven favourite slots: a save (SET_BRIGHTNESS PN 1-7, with an
+- **Lighting configuration (A2).** Seven {term}`favourite` slots: a save (SET_BRIGHTNESS PN 1-7, with an
   optional SET_COLOR before it) is staged until the commit and makes no live change. An activate
   (SET_PROFILE PN N) applies the stored levels, and an empty slot is ACKed and ignored. The wake-up
   config (Mode 20) and the door-contact flag (Mode 16 / PN 8) are stored and echoed on 1502.
-  REQUEST_CONFIG gets the real unit's six frames: Mode 12 (favourite bits), Mode 6 (colour), Mode
+  {term}`REQUEST_CONFIG` gets the real unit's six frames: Mode 12 (favourite bits), Mode 6 (colour), Mode
   8 (SET_DOUBLE), the door frame, the wake-up frame and Mode 24 (SYSTEM_TIME, the unit clock).
 - **All lights (mock-modelled).** The app's master switch is SET_PROFILE PN 12 (`LIGHTS_ON`) / PN 0
   (`LIGHTS_OFF`) plus the commit. ON lights every equipped zone that is off at
@@ -203,14 +203,14 @@ Pairing can't use the mock: it happens below GATT, in SMP and in BlueZ. So
 - pairs with LE Secure Connections passkey entry, and **displays a fresh passkey per attempt**;
 - refuses new bonds while its "Gerät verbinden" screen is closed;
 - serves several centrals at once and notifies every subscriber (CAPTURE 2026-10-10: the phone
-  app, buspi and the ESP32 were connected together); `one_slot` brings back the one-link model.
+  app, {term}`buspi` and the ESP32 were connected together); `one_slot` brings back the one-link model.
 
 The same fake is used in three places.
 
 ### 1. A virtual radio, on every PR (`tests/test_pairing_link.py`)
 
 calictl's real `PairingRunner` and state machine pair with the fake over a Bumble `LocalLink`,
-through a Bumble central (`BumbleTransport` in `tests/_bumble_link.py`). This runs in the normal
+through a Bumble {term}`central` (`BumbleTransport` in `tests/_bumble_link.py`). This runs in the normal
 `test` job (Bumble is pinned in `requirements-dev.txt`). It takes no BlueZ and no radio.
 `tests/test_fake_unit_peripheral.py` pins the fake's own contract. **What it does not cover:**
 `BluezTransport` itself, because `BumbleTransport` stands in for it here.
@@ -257,7 +257,7 @@ transport, a heartbeat link watchdog and address rotation). The app then shows e
 state you inject through the scenario console. Its real control frames land in the fake's log, so
 they can be diffed against `control.build()`.
 
-The lab is how the mock learned the app's leave-unchanged defaults and the roof SafetyCounter
+The lab is how the mock learned the app's leave-unchanged defaults and the roof {term}`SafetyCounter`
 stream. It is also how the fake's pairing behaviour was checked against the app on 2026-09-27.
 It is local-only tooling: nothing from the APK or the emulator is committed. Setup and usage are in
 [`tools/applab/README.md`](https://github.com/ckeller42/open-california/blob/main/tools/applab/README.md).
@@ -269,7 +269,7 @@ skill).
 ## App recordings (`tests/vectors/app/`)
 
 The app lab can **record** what the real app does. `tools/applab/walk.py <scenario>` starts the
-fake unit with `FAKE_UNIT_RECORD`, walks the app through the steps in `tools/applab/scenarios.py`,
+{term}`fake unit <Mock unit>` with `FAKE_UNIT_RECORD`, walks the app through the steps in `tools/applab/scenarios.py`,
 and writes `tests/vectors/app/<scenario>.jsonl`: a header line naming the app version, then every
 connect, read, subscribe, write (the `1003` heartbeat included), notification and disconnect the
 unit saw, in calictl's trace schema, merged with the runner's `step` events. `1002` is stored as
@@ -298,7 +298,7 @@ the evidence-ledger rows it flips to APP-RECORDED; the A2 session added `door-co
 
 ## C codec parity (`csrc/`)
 
-The planned ESP32 satellite (#154) reuses the protocol through a C port generated from the same
+The planned {term}`ESP32 satellite <Satellite>` (#154) reuses the protocol through a C port generated from the same
 dictionary. The C side has the codec plus the water freshness ports (stale-latch guard and ramp debounce). Golden vectors are generated by an independent
 bit slicer and proven against Python. Then `tests/test_codec_parity.py` (vectors plus a seeded
 differential fuzz pass) and `tests/test_ports_parity.py` replay them through the host-compiled

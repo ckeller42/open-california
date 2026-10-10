@@ -49,15 +49,15 @@ Proven directly from the `f()` frame builders:
   Uninstalled here → not live-verifiable.
 - **energy `1601` — applied (decompile-derived, wire-capture pending).** The app's real energy write is
   **`EnergyModeSet 2/2` + `DisplayRefresh 7/1`** (`Lpg/a;` default / `Lxf/d;` d4). These fields are now
-  **placed** in the dictionary (no longer `MERGED_AMBIGUOUS`) — the old `OperationMode/Movement` stairs
+  **placed** in the [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) (no longer `MERGED_AMBIGUOUS`) — the old `OperationMode/Movement` stairs
   mis-map is gone — and `set energy mode` **is wired**: `control.py` `_energy` builds the frame and it is
   registered in `control.BUILDERS`. Decompile-verified vs the app; not yet confirmed by a live wire capture.
 
 ## Lighting modes — FULLY DECODED 2026-07-12
 
 All modes share one builder (`eg/a`, full 128-bit packet); a mode = which slots `dg/h` writes.
-Frame: `ProfileNumber@4/4, Mode@8/8, Timestamp@16/32 (control-side MERGED_AMBIGUOUS → 16/32,
-confirmed), LightValue@48/16, Brightness×16 @64 (4-bit each, sentinel 14 = leave-unchanged)`.
+Frame: `ProfileNumber@4/4, Mode@8/8, Timestamp@16/32 (control-side [MERGED_AMBIGUOUS](https://ckeller42.github.io/open-california/glossary.html#term-MERGED_AMBIGUOUS) → 16/32,
+confirmed), LightValue@48/16, Brightness×16 @64 (4-bit each, [sentinel](https://ckeller42.github.io/open-california/glossary.html#term-Sentinel) 14 = leave-unchanged)`.
 
 | Mode | value | what it writes |
 |---|---|---|
@@ -106,7 +106,7 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
 ## Enums / extras (add when the extractor emits them)
 
 - **Lighting `Mode` wire values** (`Ldg/n;`): `NO_MODE=0, SET_BRIGHTNESS=4, SET_COLOR=6,
-  SET_DOUBLE=8, REQUEST_CONFIG=12, SET_PROFILE=16, WAKEUP_TIME=20, SYSTEM_TIME=24, PREVIEW=28`.
+  SET_DOUBLE=8, [REQUEST_CONFIG](https://ckeller42.github.io/open-california/glossary.html#term-REQUEST_CONFIG)=12, SET_PROFILE=16, WAKEUP_TIME=20, SYSTEM_TIME=24, PREVIEW=28`.
   `command_enums.dg_n` currently lists names only — a consumer can't build a frame without these.
   (`SET_DOUBLE` has no calictl support; `SET_COLOR` only as the `save_profile` preface.)
 - **Characteristics**: no unread char — only `1000/1001/1002/1004` are literal; all per-function
@@ -114,11 +114,11 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
   **vehicle-identity check**: right after service discovery + MTU it reads `1002` and compares it with
   the hash of the VIN the user entered (`ny/c.java` case 8); a mismatch disconnects with "Wrong
   vehicle found" before any other read (APP-OBSERVED 2026-09-16, `tools/applab`). calictl never reads
-  it (the bond is our identity), but a faithful fake unit must serve it.
-- **Exlap `VWN_Camper_*`**: separate WiFi/TCP transport (see `value-freshness.md`), doc-only.
+  it (the bond is our identity), but a faithful [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit) must serve it.
+- **[Exlap](https://ckeller42.github.io/open-california/glossary.html#term-EXLAP) `VWN_Camper_*`**: separate WiFi/TCP transport (see `value-freshness.md`), doc-only.
   Objects with no BLE counterpart: `Outside_Temperature`, `CarOptions`, `Connection_Active`.
 - **Alerts / fault codes**: already complete in `alert-states.md`.
-- **Wake / liveness**: only the `1003` heartbeat on BLE (Exlap "Alive" tokens belong to the WiFi
+- **Wake / liveness**: only the `1003` [heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat) on BLE (Exlap "Alive" tokens belong to the WiFi
   transport). No door/terminal signal is *written*; ignition/leveling are *read* from `1004`.
   **Who ticks `1003` in the app (#154, 2026-10-05, call stack):** the ticker is session-global. `zf/d.java:183`
   wires it, `d2/s.java:795-802` runs it while the link is Connected and the control state is ACTIVE
@@ -185,7 +185,7 @@ the wire captures. Corrections applied:
   repeats the last move value — 26 of 26 changes); while held a second frame repeats the current value
   about once a second. That is exactly the two-timer model above (deltas 0/+1, never +2). **calictl
   follows it** (owner decision 2026-10-10, `R_ROOF_VIEW_STREAM`): while the web UI's roof page is open
-  (`POST /api/roof` `view`, refreshed; lapses after 15 s) the persistent session runs a
+  (`POST /api/roof` `view`, refreshed; lapses after 15 s) the [persistent session](https://ckeller42.github.io/open-california/glossary.html#term-Persistent-session) runs a
   `device.RoofStream` of STOP frames; a press switches that same stream to the move byte with the
   current counter, a release back to STOP. The counter is therefore validated before the press and the
   unit has no ~3 s withhold left (the app's motor started ~1.2 s after the press). A press without a
@@ -205,7 +205,7 @@ Tier: **DECOMPILE 5.4.0** (`evidence-ledger.md`).
 
 ### The T7 / CommunicationVersion 2 protocol is unchanged
 
-For this van (California 7, CommunicationVersion 2) no frame, field, sentinel, scale or timing
+For this van (California 7, [CommunicationVersion](https://ckeller42.github.io/open-california/glossary.html#term-CommunicationVersion) 2) no frame, field, sentinel, scale or timing
 changed. Every 5.0.8 control write site has a 1:1 counterpart:
 
 | Item | 5.4.0 |
@@ -227,7 +227,7 @@ and persisted last-known values (`value-freshness.md`).
 ### Not on this van / not used for V2 (documented, not implemented)
 
 calictl decodes none of these and must not write any of them to this unit. None is in
-`protocol/dictionary.yaml` (no catalog decision needed).
+`protocol/dictionary.yaml` (no [catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog) decision needed).
 
 | Item | What 5.4.0 does | Applies to |
 |---|---|---|

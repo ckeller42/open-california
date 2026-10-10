@@ -1,7 +1,7 @@
 # Hidden / unexposed API surface (decompile audit, 2026-08-20)
 
 A three-angle sweep of the decompiled app for **hidden or debug API commands** — every BLE
-characteristic + opcode vs our catalog, every control-frame field the UI never sets, and any
+characteristic + opcode vs our [catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog), every control-frame field the UI never sets, and any
 debug/service/engineering gate. Summary: **there is no debug backdoor**, but a handful of commands
 are *declared in the frame schema and never sent by the app*. This is the reference for that.
 
@@ -36,7 +36,7 @@ one at a time with a human watching the unit (writes are actuations).
    the "activate night timer" latch, but the app **never stages this bit on the cooler** — the only
    writer of that shared `1101` @bit0-1 slot is the AIR-HEATER VM (`rf/b.H3`); on the cooler it's a
    read-only, unrendered dead-end bit (`vf/c` decodes it to a flow with zero UI consumers). The
-   schedule is armed by **`Mode==4`** ("Automatischer Flüstermodus"), not this bit — verified DEVICE
+   schedule is armed by **`Mode==4`** ("Automatischer [Flüstermodus](https://ckeller42.github.io/open-california/glossary.html#term-Flustermodus)"), not this bit — verified DEVICE
    (unit screen + call-stack) and the within-window hypothesis was REFUTED live (bit read 0 with the
    unit RTC inside the armed window). The `night_set` command was retracted; the old `vf/c.X1` cite
    is actually `setCoolingLevel`. See `evidence-ledger.md` + `control-and-actuation.md` §5.
@@ -53,7 +53,7 @@ one at a time with a human watching the unit (writes are actuations).
 Corrected opcode note: of the four opcodes the first pass flagged as "unused", only **`SYSTEM_TIME`
 (24)** is truly never sent. `SET_DOUBLE(8)`, `WAKEUP_TIME(20)` and `PREVIEW(28, raw v(28) at
 `b1/d.java:209`)` **are** exercised. Full `dg/n` ordinals: NO_MODE 0, SET_BRIGHTNESS 4, SET_COLOR 6,
-SET_DOUBLE 8, REQUEST_CONFIG 12, SET_PROFILE 16, WAKEUP_TIME 20, **SYSTEM_TIME 24**, PREVIEW 28.
+SET_DOUBLE 8, [REQUEST_CONFIG](https://ckeller42.github.io/open-california/glossary.html#term-REQUEST_CONFIG) 12, SET_PROFILE 16, WAKEUP_TIME 20, **SYSTEM_TIME 24**, PREVIEW 28.
 
 ## Hidden READ surface — the `F000/F001` general-purpose register
 

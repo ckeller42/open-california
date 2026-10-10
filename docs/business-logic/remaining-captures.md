@@ -6,8 +6,8 @@ Only these need you physically at the van. Everything else is done or is a desk 
 
 ### 1. Water — DONE 2026-10-10 (was PRIORITY)
 
-Settled without the tap test. `1` is the unit's own "not measuring" value (FreshWaterLevel `1` in
-6 098 of 10 726 `1302` frames of buspi's trace); a measurement ramps the level `1` → real in ~4 s,
+Settled without the tap test. `1` is the unit's own "[not measuring](https://ckeller42.github.io/open-california/glossary.html#term-Water-latch)" value (FreshWaterLevel `1` in
+6 098 of 10 726 `1302` frames of [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi)'s trace); a measurement ramps the level `1` → real in ~4 s,
 holds it ~1–2 min and falls back to `1`. The unit sends no subscribe-time push, so calictl and the
 app read the same frame (this answers the old (#230) "calictl vs the app, parked" check; the app
 read 20 L). calictl holds the last plausible reading on the ≤ 1 L latch (#274), a
@@ -41,7 +41,7 @@ The only thing left is proving **calictl itself** can drive it:
 
 > **STATUS 2026-07-13 (captures done, lighting claim later corrected):** ~~P1 lighting-apply
 > CRACKED + FIXED (commit frame `0e00…`; live-verified via readback)~~ — **that "verification"
-> was readback-only and WRONG** (the `1502` state char is a write-through echo; the lamps stayed
+> was readback-only and WRONG** (the `1502` [state char](https://ckeller42.github.io/open-california/glossary.html#term-GATT-characteristic) is a write-through echo; the lamps stayed
 > dark, owner-confirmed 2026-07-18). **P1 was cracked for real 2026-08-16**, photon-verified on
 > Kochen L7 (0→dark, 8→80 %, 0→dark): with the unit **awake**, a bare SET + `0e00…` commit
 > actuates — the real gate is the unit's wake/active state. (The same morning's
@@ -50,7 +50,7 @@ The only thing left is proving **calictl itself** can drive it:
 > `control-and-actuation.md` §4.
 > **Roof sequence SETTLED from the decompiled roof class**
 > (open `0x01`/stop `0x00`/close `0x04`; **press-and-hold** move stream, **app-generated monotonic
-> SafetyCounter ~+1/500 ms**, unit self-gates the first **~3 s** via `SafetyCounterValid` (`1402`
+> [SafetyCounter](https://ckeller42.github.io/open-california/glossary.html#term-SafetyCounter) ~+1/500 ms**, unit self-gates the first **~3 s** via `SafetyCounterValid` (`1402`
 > bit 7) — NO 4 s countdown, NO STOP-hold phase — see [protocol sequences — Roof](https://ckeller42.github.io/open-california/protocol-sequences.html#roof-actuation-press-and-hold-safetycounter-gated)). SET_COLOR is
 > **not exposed** in the app (skip). Cooler `Error` = **fridge door** (now surfaced in the GUI).
 >
@@ -113,7 +113,7 @@ ssh buspi 'curl -s http://localhost:8088/api/state' | python3 -c 'import sys,jso
 at once (CAPTURE 2026-10-10, `protocol-crosscheck-applab.md`).
 
 **1. Capture → diff.** Per action: mark it, do ONE thing in the app, then pull and diff. Capture
-SOP: `.claude/skills/phone-app-lab/SKILL.md` (real phone, HCI snoop over adb from buspi); landing
+SOP: `.claude/skills/phone-app-lab/SKILL.md` (real phone, [HCI snoop](https://ckeller42.github.io/open-california/glossary.html#term-HCI-snoop) over adb from buspi); landing
 the result: `.claude/skills/real-unit-evidence/SKILL.md`.
 
 ```
@@ -177,7 +177,7 @@ feature on this vehicle — unlike the uninstalled gear below.)
 
 ~~Our lighting frames ACK but the zones don't visibly change (`re-gap A1`).~~ **Resolved**: with
 the unit **awake**, a **bare SET_BRIGHTNESS + `0e00…` commit drives the real lamps, both
-directions** — no preamble, no heartbeat, no arm delay (2026-08-16 evening: 6× photon-confirmed
+directions** — no preamble, no [heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat), no arm delay (2026-08-16 evening: 6× photon-confirmed
 incl. controlled fresh-connection trials; owner-watched on Kochen L7: 0→dark, 8→80 %, 0→dark).
 The morning-2026-08-16 capture-and-diff run had fingered the app's **REQUEST_CONFIG preamble**
 (`0d0c000000000000eeeeeeeeeeeeeeee`, Mode=12, PN=13) + `0e00…` commit on `1501` as the required
@@ -195,7 +195,7 @@ screen-open config pull, decompile-confirmed: `dg/h.java:174 E()` writes DIRECT,
 - **SET_COLOR apply** — the app exposes no colour control (possibly N/A); a colour frame has
   never been captured.
 - **`1502` Mode-4 ramp-notification — real applied-verification** (NOT a decode gap). The layout is
-  already known: a Mode-4 notification is a normal `1502` STATE frame, so `protocol.decode` reads it
+  already known: a [Mode-4 notification](https://ckeller42.github.io/open-california/glossary.html#term-Mode-4-notification) is a normal `1502` STATE frame, so `protocol.decode` reads it
   (cross-checked 2026-08-16 against the captured frames — `090400…0508…` → `Mode=4,
   BrightnessLSeven=8`, the exact target). In every observed case so far (armed and un-armed sessions
   alike, 2026-08-16) the ramp tracked REAL actuation — but it is not yet *certified* as a gate: the
@@ -239,7 +239,7 @@ Questions the static trace (enigma `46f982d3`) could not settle; each is an app-
   edit latched the unit's own Mode-20 frame).
 - **Level Indicator:** `CarLevelPopUp=0` with roll/pitch set should show the gauges; 1 = ignition card,
   2 = "Please slow down".
-- ~~**Roof overlay:**~~ RESOLVED 2026-10-10 (#276): InfoPopUp 2 = the app's pre-open safety checklist
+- ~~**Roof overlay:**~~ RESOLVED 2026-10-10 (#276): [InfoPopUp](https://ckeller42.github.io/open-california/glossary.html#term-InfoPopUp) 2 = the app's pre-open safety checklist
   dialog, 3 = stopped mid-travel (a progress code, no text); the real app on the real unit.
 - **Sliding-door row:** whether `tf/a.R2` (show-rear-USB flag) is the row's divider or its enabled state.
 - **Wake brightness 0:** the slider reaches 0; what the unit does with it is unknown (van).

@@ -2,9 +2,9 @@
 
 **Status:** SOLVED + live-verified on-device 2026-07-09.
 
-> **CORRECTION 2026-07-14 (ground-truth at the van): the heartbeat keeps the *link* fresh, but
+> **CORRECTION 2026-07-14 (ground-truth at the van): the [heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat) keeps the *link* fresh, but
 > fresh-*water* measurement is gated on the van's WATER SYSTEM being powered — not the heartbeat.**
-> Verified against the van's own panel: parked/locked, buspi read fresh-water **1 L** (stale) while
+> Verified against the van's own panel: parked/locked, [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi) read fresh-water **1 L** (stale) while
 > the tank truly held **17–19 L**; after unlocking the van (water system on) + running a tap, buspi
 > tracked the true level **live** (19→18→17 L, grey 0→1 L, matching the panel within the poll lag).
 > So the 2026-07-09 "heartbeat → 1→11 L" was **correlation** (the van was active then), not cause.
@@ -33,21 +33,21 @@
 
 ## Symptom
 
-A bare poll of the fresh-water state char (`00001302`) returned **1 L** while the vehicle truly
+A bare poll of the fresh-water [state char](https://ckeller42.github.io/open-california/glossary.html#term-GATT-characteristic) (`00001302`) returned **1 L** while the vehicle truly
 held **11 L** (shown by the app). The decode was correct (capacities 29/22 and the waste level
 all cross-matched the app); only the live *level* was a **stale latched value** — not a decode
 bug, a drain, or a sensor fault (`FreshWaterInfoPopUp = 0` = valid).
 
 ## What it is NOT (ruled out along the way)
 
-- **Not Exlap / WiFi.** The app *does* ship an Exlap client (`de.exlap.*`, XML over a
+- **Not Exlap / WiFi.** The app *does* ship an [Exlap](https://ckeller42.github.io/open-california/glossary.html#term-EXLAP) client (`de.exlap.*`, XML over a
   `socket://`<camper-AP-ip>` TCP transport to the camper's WiFi AP), but that is a **separate path**,
   code-disjoint from the camper BLE stack, and is **not** how the app reads the vehicle tab here.
   The van's WiFi AP wasn't even broadcasting. (Earlier notes that guessed an Exlap/WiFi fix were
   wrong.)
 - **Not BLE GATT notifications.** Enabling notifications (CCCD `01 00`) yields no fresh push on
   its own; a persistent bare subscription stayed stale. (The link drops seen then — "every ~15 s" —
-  were not a heartbeat timeout: a held link with NO heartbeat stayed up >2 min on 2026-10-10. Drops of
+  were not a heartbeat timeout: a [held link](https://ckeller42.github.io/open-california/glossary.html#term-Persistent-session) with NO heartbeat stayed up >2 min on 2026-10-10. Drops of
   that kind came from an unanswered ATT MTU request, see firmware.md #279.)
 
 ## Root cause (live-verified)
@@ -83,7 +83,7 @@ session."
 
 ## The stale-latch guard on the ESP satellite (2026-10-09)
 
-The ESP32 satellite runs the SAME guard as `freshness.implausible_water_drop` — the C port
+The [ESP32 satellite](https://ckeller42.github.io/open-california/glossary.html#term-Satellite) runs the SAME guard as `freshness.implausible_water_drop` — the C port
 `csrc/ports.c`, which `firmware/components/cali_core/session.c` links and calls: when a water (`1302`) frame shows a FreshWaterLevel
 **drop to ≤ `FRESH_LATCH_MAX_L`** (1 L, the observed latch; mirrors
 `freshness.WATER_LATCH_MAX_L`) while WasteWaterLevel is **exactly frozen**, the session keeps
@@ -158,7 +158,7 @@ same moment. Two calictl paths served a push instead of the read:
   (minutes), so it cannot explain days of 1 L.
 
 **Settled 2026-10-10 (CAPTURE): the unit sends no subscribe-time push at all** — no notification
-follows a CCCD write in the phone's HCI snoop or in btmon on buspi's link. The "push" calictl's
+follows a CCCD write in the phone's [HCI snoop](https://ckeller42.github.io/open-california/glossary.html#term-HCI-snoop) or in btmon on buspi's link. The "push" calictl's
 trace logged before each read is BlueZ re-delivering that read, so it always carried the read's
 value. The 1 L was the unit's own latch: buspi's reads flip FreshWaterLevel 20 ↔ 1 across
 wake/sleep with grey 0 throughout (`ble.jsonl` 2026-10-09). The mock serves that latch
@@ -173,8 +173,8 @@ explanation stands, and the claim in "the settled conclusion" below, that the ap
 value", stays true.
 
 **Answered 2026-10-10: `freshness.implausible_water_drop` is still needed.** The unit's `1` is its
-"not measuring" value, served on any read while no measurement runs, and the app has no guard. The
-guard was narrowed to that latch (≤ 1 L, #274), and a debounce for the measurement ramp is in
+"[not measuring](https://ckeller42.github.io/open-california/glossary.html#term-Water-latch)" value, served on any read while no measurement runs, and the app has no guard. The
+guard was narrowed to that latch (≤ 1 L, #274), and a debounce for the [measurement ramp](https://ckeller42.github.io/open-california/glossary.html#term-Settle-window) is in
 flight (#290). Still open: what starts a measurement.
 
 ## App 5.4.0: no filter, but last-known values (decompile 2026-10-10)
@@ -213,7 +213,7 @@ calictl's BLE trace of the real unit (buspi `~/ble.jsonl`, 10 726 water `1302` f
   notify every ~0.1–0.5 s (2026-10-09: `2` at 08:54:38.328 … `19` at 08:54:42.228, then `20` from
   08:55:22; levels 2–19 each seen ~3 times in the whole trace), **holds** the real value ~1–2 min,
   then drops back to `1`. Grey (`WasteWaterLevel`) reads `0` throughout on this van.
-- Ramps start 1–5 s after a central connects, but most 30 s polls just read `1`. **Open question:
+- Ramps start 1–5 s after a [central](https://ckeller42.github.io/open-california/glossary.html#term-Central) connects, but most 30 s polls just read `1`. **Open question:
   what triggers a measurement is unknown.**
 
 A poll landing mid-ramp is not a measurement either: buspi read **16 L** at 08:54:40 on 2026-10-09

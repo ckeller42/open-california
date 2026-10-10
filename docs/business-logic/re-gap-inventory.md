@@ -15,10 +15,10 @@
 > tracks the **fridge door** (door open→true, verified live).
 >
 > **UPDATE (2026-08-16):** the 2026-07-13 "resolved" claim above was **readback-based and wrong**
-> (the `1502` state char is a write-through echo; owner-confirmed 2026-07-18 the lamps stayed
+> (the `1502` [state char](https://ckeller42.github.io/open-california/glossary.html#term-GATT-characteristic) is a write-through echo; owner-confirmed 2026-07-18 the lamps stayed
 > dark). `A1` is now **RESOLVED for real, photon-verified 2026-08-16** — with the unit **awake**,
 > a bare SET_BRIGHTNESS + `0e00…` commit physically actuates; the real gate is the unit's
-> wake/active state. (The same morning's "REQUEST_CONFIG preamble required" theory was falsified
+> wake/active state. (The same morning's "[REQUEST_CONFIG](https://ckeller42.github.io/open-california/glossary.html#term-REQUEST_CONFIG) preamble required" theory was falsified
 > that evening — a wake-state confound.) See §A1.
 
 Compiled 2026-07-07 from a three-way decompile audit (BLE protocol, feature/domain
@@ -50,7 +50,7 @@ places those bits; `tt/u8.java:88 c()` = little-endian bytes, MSB-first within a
 | 9 | VW **OIDC/IDK** auth + backend request signing | infra | static + capture |
 | 10 | UI label *text* — 1882 string KEYS recovered, VALUES in `.cvr` assets (light zone names done) | feature | needs the APK's `.cvr` |
 
-Resolved gaps (chars 1004/1002/sat, airheater offsets, energy scales, EXLAP URLs) and the dated
+Resolved gaps (chars 1004/1002/sat, airheater offsets, energy scales, [EXLAP](https://ckeller42.github.io/open-california/glossary.html#term-EXLAP) URLs) and the dated
 changelog are in **[DECISIONS.md](DECISIONS.md)**. (Lighting SET: twice thought fixed on readback
 evidence, finally photon-verified 2026-08-16 — §A1.)
 
@@ -62,7 +62,7 @@ evidence, finally photon-verified 2026-08-16 — §A1.)
 
 **The physical-actuation gap is closed.** With the unit **awake/active**, a **bare
 SET_BRIGHTNESS + `0e00…` commit physically drives the lamps, both directions** — no
-REQUEST_CONFIG preamble, no 1003 heartbeat, no arm delay (settled 2026-08-16 evening: 6×
+REQUEST_CONFIG preamble, no [1003 heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat), no arm delay (settled 2026-08-16 evening: 6×
 photon-confirmed, incl. three controlled fresh-connection trials varying only the arming;
 Trial 1 = immediate cold-connection SET+commit, lamp switched, owner-watched). The morning's
 "REQUEST_CONFIG preamble is the required arming step" theory (from an iOS HCI capture of the
@@ -72,7 +72,7 @@ sleepy. Decompile agrees: the app's set-one-zone `dg/h.java:174 E()` writes DIRE
 calls the config request `d0()` (`dg/h.java:471`). **REQUEST_CONFIG's real role is a
 screen-open config pull**: `0d0c000000000000eeeeeeeeeeeeeeee` (Mode=12, ProfileNumber=13, all
 zones=14) triggers the unit's Mode-tagged config dump + Mode-4 brightness-ramp
-**notifications on `1502`** — the truthful feedback channel (a Mode-4 notification is a
+**notifications on `1502`** — the truthful feedback channel (a [Mode-4 notification](https://ckeller42.github.io/open-california/glossary.html#term-Mode-4-notification) is a
 normal state frame, `protocol.decode` reads it; the state-char readback remains a
 write-through echo). Brightness is the `dg/i.java` enum (0=OFF, 1-10=10–100 %, 11=DEFAULT,
 13=NOT_EQUIPPED, 14=unchanged), not a raw 0-13 scale. The optional REQUEST_CONFIG preamble was
@@ -110,7 +110,7 @@ in `DECISIONS.md`. **Open leads:**
 airheater (1701) is resolved + wired and the satelliteantenna "wrong width" claim was a false
 alarm (both in `DECISIONS.md`). **Open:** roof (1401 `jg/a.java`), roofAC (2001 `lg/a.java`),
 stairs (1801 `pg/a.java`), LR-heater (2101 `gg/a.java`) — transcribe offsets from each `f()`
-when needed; roof's ~500 ms SafetyCounter move loop (`ig/c.java` + `w8/a`) is implemented in
+when needed; roof's ~500 ms [SafetyCounter](https://ckeller42.github.io/open-california/glossary.html#term-SafetyCounter) move loop (`ig/c.java` + `w8/a`) is implemented in
 `device.actuate_roof` (press-and-hold, auto-stop at the limit) — protocol-correct but the motor has
 never been driven by calictl. Field *value semantics* (enum meanings) still need a live pass.
 
@@ -119,7 +119,7 @@ never been driven by calictl. Field *value semantics* (enum meanings) still need
 Char 1003 (`ag/b.java`, 32-bit, `v()` resets to 0) is written app-side via `t0/c.java:264`
 (`o(num); y(false)` = write-with-response, no-init). Unknown statically: the **source/
 increment rule** of `num` (trace the producer feeding `t0/c.java:264`) and the **unit-side
-disarm timeout** if writes stop (our test proved actuation *latches* one-shot, but the
+disarm timeout** if writes stop (our test proved actuation *[latches](https://ckeller42.github.io/open-california/glossary.html#term-Latch)* one-shot, but the
 liveness window before the unit refuses a *new* write is unmeasured). The clock-sync flow is
 **separate** (`zf/d.java:230–246`: reads car RTC from 1004, `abs(diff) > 5` → correction +
 `CLOCK_OUT_OF_SYNC` alert) — not tied to 1003. **To resolve:** idle HCI capture to measure
@@ -131,7 +131,7 @@ the app's 1003 interval + a stop-and-probe for the timeout.
 from LightValue; SET_COLOR(6)→profile enum `dg/k.java`→color `ef.b` + color-temp `dg/j.java`
 
 + 4 flags `dg/m.java` (LightValue bits 4–7) + Timestamp→UTC wake time; WAKEUP_TIME(20)/
-SYSTEM_TIME(24) alarm/clock round-trips. Our dictionary treats 1500/1502 as a flat
+SYSTEM_TIME(24) alarm/clock round-trips. Our [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) treats 1500/1502 as a flat
 brightness array and misses this profile/color/timer overlay. Decode the `dg/*` + `ef/*`
 enums (static; one capture confirms bit assignments).
 
@@ -139,7 +139,7 @@ enums (static; one capture confirms bit assignments).
 
 ### A6 — Live device fingerprint (2026-07-07) — firmware-acquisition recon
 
-Full GATT + identity read from buspi (app closed). Bearing on "can we get the firmware":
+Full GATT + identity read from [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi) (app closed). Bearing on "can we get the firmware":
 
 - **No Device Information Service (0x180A)** and **no DFU service** — the unit exposes only
   the custom `1000–2100`+`F000` family plus standard GAP `1800` (`2a00` name "VWCAMPER",
@@ -268,7 +268,7 @@ login/subscribe handshake — entirely outside our BLE model. Decode `AbstractIn
   travel router (`<router-LAN>/24`, gw `<router-gw>` nginx). WiFi scan shows no camper AP (only the
   home SSID); a full `<router-LAN>/24` sweep found no host with **tcp/28500**; a 12 s passive
   **udp/28500** listen got 0 beacons. So EXLAP is the MIB **infotainment** subsystem (distinct
-  from the BLE camper unit) and its WiFi is down while the vehicle is off. Pursuing it needs
+  from the BLE [camper unit](https://ckeller42.github.io/open-california/glossary.html#term-Camper-unit)) and its WiFi is down while the vehicle is off. Pursuing it needs
   (a) vehicle infotainment WiFi up (ignition on) + buspi joined to *that* SSID, and (b) the UDP
   discovery-probe payload decoded (the app *sends* the probe; passive listen won't do).
 - **Protocol decoded 2026-07-07 (full read of `de/exlap/`).** EXLAP is a standard **XML

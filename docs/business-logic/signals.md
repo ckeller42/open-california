@@ -2,7 +2,7 @@
 
 Two things a decoded BLE signal must never do again: go silently **missing/mislabeled**, or
 be published with a **fake unit** on an unverified scale. This doc covers both — the
-four-source catalog + coverage guardrail (§1–3), and which scales are verified vs
+four-source [catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog) + coverage guardrail (§1–3), and which scales are verified vs
 `UNVERIFIED` (§4–6). The machine-readable catalog is
 [`protocol/signals.yaml`](../../protocol/signals.yaml).
 
@@ -58,7 +58,7 @@ resolved them and prevents recurrence.
 - `python3 -m tools.audit_signals --seed` — add a stub entry for any new field.
 - `tools/triage.py` — documents every surface/omit decision (re-runnable, deterministic).
 - `tests/test_signal_coverage.py` — **the guardrail**, three invariants:
-  1. **Coverage** — every dictionary field has a catalog decision (new field ⇒ CI fails).
+  1. **Coverage** — every [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) field has a catalog decision (new field ⇒ CI fails).
   2. **Surfaced ⇒ emitted** — every `surface` state field's canonical name is actually
      emitted by `semantics.interpret` (the check that would have caught `batt2_current`).
   3. **Control-placed** — surfaced control fields have a resolved bit offset.
@@ -148,7 +148,7 @@ while the vehicle is driven.
 
 **App 5.4.0 agrees for this van (DECOMPILE 2026-10-10).** The app's rear-USB row follows
 `T7 && !IsRearUsbInTSevenAlwaysOn`. That flag is F001 bit 6, and app 5.4.0 decodes it **only for a
-unit reporting CommunicationVersion ≥ 3** (5.0.8 read it for every unit). On this van
+unit reporting [CommunicationVersion](https://ckeller42.github.io/open-california/glossary.html#term-CommunicationVersion) ≥ 3** (5.0.8 read it for every unit). On this van
 (CommunicationVersion 2) it is therefore always false: the master gate always applies, which is
 exactly `usb_powered = master_on and usb_charger`. A future V3 T7 unit that sets the flag would keep
 its rear USB powered without camping mode; calictl does not model that (it would show up as
@@ -181,7 +181,7 @@ confirmed against a live reference. Treat those as *trends*, not calibrated read
 ### Sentinels in the telemetry (raw fields carry "no-data" markers)
 
 Confirmed from 14 d of `calictl serve` history — a raw field is only meaningful when its
-subsystem is **installed and awake**, otherwise it reports a sentinel:
+subsystem is **installed and awake**, otherwise it reports a [sentinel](https://ckeller42.github.io/open-california/glossary.html#term-Sentinel):
 
 | sentinel | fields | meaning |
 |---|---|---|

@@ -5,13 +5,13 @@
 > mode while the vehicle is driven** (write returns `applied:false`, no `1202` push, and the unit's
 > console shows *"nicht während der Fahrt verfügbar"* — a firmware **stationary gate**,
 > `control-and-actuation.md` §4). The decompile confirms the app has **no** speed/brake/gear signal —
-> only Terminal-15 — and the gate is enforced **unit-side**; the camping `enable` bit mirrors ignition
+> only [Terminal-15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) — and the gate is enforced **unit-side**; the camping `enable` bit mirrors ignition
 > (reads 1 while driving = blocked). So the feature now **restores camping once you park** (ignition
 > **falling** edge). **Not yet live-verified:** that the unit accepts the camping-on write *immediately*
 > after ignition-off (a brief post-park lock is possible) — the retry window covers it, but a
 > park-then-write test is still owed. Feature stays **off by default** until that is confirmed.
 
-A calictl-only feature (**not in the VW app**): the camper unit **drops camper mode when the engine
+A calictl-only feature (**not in the VW app**): the [camper unit](https://ckeller42.github.io/open-california/glossary.html#term-Camper-unit) **drops camper mode when the engine
 starts** (ignition / terminal-15 goes on) and **will not let it back on until the vehicle is
 stationary again.** "Auto camper mode" restores camper mode + the rear USB ports **once you park** —
 so you don't have to re-toggle it after every drive — while **respecting a manual off** and,
@@ -37,7 +37,7 @@ the config the engine took away:
 
 **Survives a restart.** The restore *debt* (`owe_restore` + the remembered `pre_drive` + a
 **wall-clock** retry deadline + the ignition-edge state) is persisted to the state cache each poll,
-so a daemon restart or buspi reboot **between engine-start and park** does not silently drop a
+so a daemon restart or [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi) reboot **between engine-start and park** does not silently drop a
 pending restore — it resumes on load (a deadline that already elapsed is correctly judged expired).
 
 **Known limit — manual-off *while driving*.** Manual-off is only recognised while the ignition is
@@ -88,7 +88,7 @@ Each notable step is **logged** (`auto-camper[<event>]: …`, events `armed_engi
 - **Never fights battery protection** — Guard 1 stands down on any known low-battery signal.
 - **Respects read-only mode** — if writes are disabled, it logs intent and does not actuate.
 - **Actuation is app-faithful** — the same `campingmode` master/USB frames the manual controls use
-  (verified on-device), one-shot latch, under the single `serve` BLE lock (after the poll read).
+  (verified on-device), one-shot [latch](https://ckeller42.github.io/open-california/glossary.html#term-Latch), under the single `serve` BLE lock (after the poll read).
 
 ## Observing before enabling (the camping/ignition watcher)
 
@@ -128,7 +128,7 @@ around the edge and **flags a flip-flop** (≥2 `master_on` transitions within `
   notification**; ignition (`1004`) is pushed too. calictl already reads `1202`. **This is now
   wired:** `observer.CampingObserver.on_push` (via `device._subscribe_all(..., on_push=)` on the persistent
   session) logs `camping-push[...]` the instant a `1202`/`1004` notification changes camping or
-  ignition — full resolution, no poll wait. **Caveat:** the persistent session is only held while the
+  ignition — full resolution, no poll wait. **Caveat:** the [persistent session](https://ckeller42.github.io/open-california/glossary.html#term-Persistent-session) is only held while the
   **web UI is active** (otherwise the BLE slot is released for the phone), so the push overlay fires
   only then; the 30 s poll observer + fast-poll burst remain the always-on baseline. The push lines
   also **confirm the unit's push channel on this specific unit** (decompile-asserted, not yet observed

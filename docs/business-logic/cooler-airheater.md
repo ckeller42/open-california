@@ -51,7 +51,7 @@ Cooler code (`vf/c.java`) always calls `aVar.B()`; AirHeater code (`rf/b.java`) 
    `jn.a`'s 3rd ctor arg is `false` for cooler/camping (`repeat=false`); only the roof uses
    `true`/repeating (its move-heartbeat). See `remote-control-write-mechanics.md`. The actual
    on-device precondition for actuation is the **1003 liveness heartbeat** (issue #2, SOLVED),
-   not this timer. So: send the full frame once under a running 1003 heartbeat; no per-command
+   not this timer. So: send the full frame once under a running [1003 heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat); no per-command
    resend is needed for cooler/camping.
 
 **Implication for own-vehicle commands:** you must maintain shadow state for *all* fields of a
@@ -62,7 +62,7 @@ zeroed will likely stomp Level/Mode/timers.
 Momentary "trigger" fields (TimerStart, TimerCancel, PermanentOperationRequest=0) are set to a
 value and **never explicitly reset to 0/idle** by the action methods themselves. The app relies
 on `v()` (`sf/a.java:242-269`) — called elsewhere (presumably device init/reconnect) — to restore
-sentinel defaults. Don't worry about explicitly clearing them after firing; the real app doesn't
+[sentinel](https://ckeller42.github.io/open-california/glossary.html#term-Sentinel) defaults. Don't worry about explicitly clearing them after firing; the real app doesn't
 either.
 
 ---
@@ -110,7 +110,7 @@ transmits whatever Level/Mode/timer values are currently held in the model.
   own UI: `0` (via `T1`), `2` (via `x0`), `4` (via `k0`). Two derived booleans:
   - `J0()` → `Mode == 2` (`vf/c.java:167, 218-221`)
   - `P1()` → `Mode == 4` (`vf/c.java:168, 223-226`)
-  **DISPLAY-CONFIRMED 2026-08-26** (the unit's Flüstermodus screen: two toggles "Ein/Aus" +
+  **DISPLAY-CONFIRMED 2026-08-26** (the unit's [Flüstermodus](https://ckeller42.github.io/open-california/glossary.html#term-Flustermodus) screen: two toggles "Ein/Aus" +
   "Automatisch") + call-stack (`vf/c` K0/L0 → QuietModeViewModel `yh/e`):
   **Mode 0 = off, Mode 2 = manual Quiet ("Ein/Aus"), Mode 4 = scheduled Quiet ("Automatischer
   Flüstermodus").** `quiet_scheduled` is derived from Mode 4, NOT `NightTimerSet` (a dead-end bit).
@@ -249,7 +249,7 @@ and without arming:
 
 So `TimerHour` sits at byte 4 (bit 32, width 8) and `TimerMin` at byte 5 (bit 40, width 8) —
 capture-grade confirmation of `overrides.CONTROL_OFFSETS["airheater"]` (the extractor still marks
-these fields MERGED_AMBIGUOUS). calictl's `set airheater timer 09:31` builds the same six bytes
+these fields [MERGED_AMBIGUOUS](https://ckeller42.github.io/open-california/glossary.html#term-MERGED_AMBIGUOUS)). calictl's `set airheater timer 09:31` builds the same six bytes
 (`T_AIRHEATER_TIMER_TIME`, scenario `tools/scenarios/airheater/timer-time.yaml`). Unit side is
 still owed: that the unit stores the time and reads it back on 1702.
 
@@ -285,9 +285,9 @@ then reads "Timer: On").
   `semantics.airheater().timer_armed`. Values `1`/`2` are referenced in the field's bit layout
   but no setter writes them — likely firmware-reported running states. UNVERIFIED. What the
   unit reports after the timer fires is also UNVERIFIED (the mock assumes Mode back to 0).
-- **ErrorCode dialogs — APP-OBSERVED 2026-09-16** (fake unit `set airheater ErrorCode=N`, the
+- **ErrorCode dialogs — APP-OBSERVED 2026-09-16** ([fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit) `set airheater ErrorCode=N`, the
   app pops a toast the moment the readback changes; text verbatim):
-  `1` **Battery voltage too low** — "Your second battery looks low. Please connect to an
+  `1` **Battery voltage too low** — "Your [second battery](https://ckeller42.github.io/open-california/glossary.html#term-Zweitbatterie) looks low. Please connect to an
   external power source or charge your second battery." · `2` **Low fuel** — "The auxiliary air
   heater was switched off because the fuel level is low. It can only be activated again when
   there is sufficient fuel. Please refuel." · `3` **Auxiliary air heater** — "There seems to be a
