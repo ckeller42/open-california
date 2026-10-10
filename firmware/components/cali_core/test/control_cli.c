@@ -127,6 +127,8 @@ int main(void) {
             for (int k = 0; k < CALI_LCFG_N; k++)
                 if (cfg.have >> k & 1u) printf(" %s=%lu", CALI_LCFG_KEYS[k], (unsigned long)cfg.v[k]);
             putchar('\n');
+        } else if (strcmp(line, "L") == 0) {
+            printf("STATE %d\n", cali_light_reports_state(get));
         } else if (sscanf(line, "W %x %u", &c, &len) == 2) {
             printf("OK %d\n", cali_ctl_write_ok((uint16_t)c, len));
         } else if (strcmp(line, "A") == 0) {

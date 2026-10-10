@@ -101,6 +101,9 @@ typedef struct {
     uint32_t v[CALI_LCFG_N];
 } cali_light_cfg_t;
 void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out);   /* = semantics.lighting_config(None, state) */
+/* 1 when the 1502 frame get() answers reports the lamps + active profile (Mode 4 outside PN 1-7, Mode 16
+ * outside PN 8), 0 for a config/ack frame = semantics.lighting_reports_state (#284). */
+int cali_light_reports_state(cali_ctl_get_t get);
 
 void cali_ctl_plan(const char *fn, const char *what, const char *value, int64_t local_now,
                    cali_ctl_get_t get, cali_ctl_plan_t *out);   /* local_now < 0 = none */

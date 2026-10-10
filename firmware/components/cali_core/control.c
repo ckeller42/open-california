@@ -375,6 +375,15 @@ void cali_light_cfg(cali_ctl_get_t get, cali_light_cfg_t *out) {
     }
 }
 
+int cali_light_reports_state(cali_ctl_get_t get) {
+    uint32_t mode, pn;
+    int p;
+    if (!get("lighting", "Mode", &mode)) return 0;
+    p = get("lighting", "ProfileNumber", &pn);
+    if (mode == CALI_LIGHT_MODE_SET_BRIGHTNESS) return !(p && pn >= 1 && pn <= 7);
+    return mode == CALI_LIGHT_MODE_SET_PROFILE && !(p && pn == CALI_LIGHT_PROFILE_DOOR_CONTACT);
+}
+
 /* control._lighting (wakeup: p_wakeup) + preface_for + commit_for */
 static int b_lighting(const char *what, const char *value, cali_ctl_get_t get, cali_ctl_plan_t *p) {
     vals_t *v = &s_v;

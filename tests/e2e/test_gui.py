@@ -1109,12 +1109,14 @@ def test_favourite_save_then_activate(page, base_url):
     assert r.status == 400 and "retired" in r.json()["error"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#284: the unit's 1502 read returns its last frame (the save ack, Mode 4 / PN 1) and the "
-    "poll takes it for the active profile (CAPTURE 2026-10-10: buspi read back config echoes)",
-)
 def test_favourite_save_is_not_an_activation(page, base_url):
+    """#284: the unit's 1502 read returns its last frame (here the save ack, Mode 4 / PN 5); a poll
+    must not take it for the active profile (CAPTURE 2026-10-10: buspi read back config echoes).
+
+    .. test:: Saving a favourite does not change the served active profile
+       :id: T_E2E_LIGHT_SAVE_NOT_ACTIVE
+       :links: R_LIGHT_ACTIVE_PROFILE
+    """
     page.get_by_text("Lighting", exact=True).first.click()
     before = _state(base_url, page)["lighting"]["profile"]
     page.once("dialog", lambda d: d.accept())
