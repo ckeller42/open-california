@@ -216,7 +216,7 @@ function semCampingmode(d) {
 const SEM_ROOF_POS = { 0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error" }; // :271, else "other"
 const SEM_ROOF_ALERT = { // :276
   1: "child_lock", 4: "error", 5: "driving", 6: "sensor_error", 7: "emergency_locked", 10: "not_possible",
-  11: "low_battery", 2: "in_use", 3: "in_use", 12: "in_use", 9: "not_stationary",
+  11: "low_battery", 2: "open_checklist", 9: "not_stationary", // 3/8/12 = motion progress, no alert
 };
 
 /** semantics.py:297 roof(). @param {Fields} d @returns {Interp} */

@@ -257,14 +257,19 @@ def test_command_precondition_roof_move_blocked_but_stop_never_is():
     def state(popup, pos=0, installed=1):
         return {"roof": {"Installed": installed, "InfoPopUp": popup, "Position": pos}}
 
-    # InfoPopUp -> alert (semantics._ROOF_ALERT): 1 child_lock, 2/3/12 in_use, 4 error, 5 driving,
+    # InfoPopUp -> alert (semantics._ROOF_ALERT): 1 child_lock, 4 error, 5 driving,
     # 7 emergency_locked, 9 not_stationary, 10 not_possible, 11 low_battery
-    for popup in (1, 2, 3, 4, 5, 7, 9, 10, 11, 12):
+    for popup in (1, 4, 5, 7, 9, 10, 11):
         for what in ("open", "close"):
             assert control.command_precondition("roof", what, None, state(popup)), popup
         assert control.command_precondition("roof", "stop", None, state(popup)) is None, popup
     # 6 = sensor_error is deliberately NOT in the block set (the app still allows the move)
     assert control.command_precondition("roof", "open", None, state(6)) is None
+    # CAPTURE 2026-10-10 (real app, real unit): 2 = pre-open checklist prompt (press -> checklist ->
+    # press again), 12 moving, 8 end of travel, 3 stopped mid-travel — none of them blocks anything
+    for popup in (2, 3, 8, 12):
+        for what in ("open", "close", "stop"):
+            assert control.command_precondition("roof", what, None, state(popup, pos=2)) is None, popup
     assert control.command_precondition("roof", "open", None, state(0)) is None  # no alert
     # Position 15 = error blocks a move even with no alert
     assert control.command_precondition("roof", "open", None, state(0, pos=15))

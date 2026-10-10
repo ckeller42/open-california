@@ -65,6 +65,10 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   Position 15 or InfoPopUp in {1,4,5,7,10,11} → not movable; `k()` `:720-723` warns on {2,3,12}) runs in the
   ctor and on every 1402 notification `e()` (smali `ig/c.smali:494,1549`). Not yet seen live: the van has
   never reported 5 while calictl was polling. Owed: one drive with the roof screen open.
+- roof InfoPopUp 2 = pre-open safety-checklist prompt (`open_checklist`, no move block), 12 moving,
+  8 end of travel, 3 stopped mid-travel (progress codes, no alert) — CAPTURE 2026-10-10 (real app,
+  real unit, HCI snoop of a full open + close: `0302` → checklist → `030c`/`230c` → `2308` →
+  `1300`/`0300`; release mid-travel `2303` → `2300`). Supersedes the 2026-09-16 fake-unit `in_use`.
 - roof InfoPopUp → dialog texts (1 over-use cooldown, 5 roof-open-while-driving, 6 jammed/blocked,
   7 secure manually, 10 unavailable, 11 low battery/run engine) — DECOMPILE (2026-09-16, `ig/c.java`
   switch → `ea/j`/`ea/n` string accessors → `.cvr` EN/DE tables).
@@ -80,7 +84,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   (mismatch → "Wrong vehicle found"); heater ON `3d7b007f1f3f` + neutral `3f7b007f1f3f` @ +500 ms,
   continuous-heating OFF `0f7b007f1f3f`, untargeted fields at their defaults; roof page streams
   `Up=0 Down=0 SafetyCounter+1` every ~500 ms and requires `SafetyCounterValid`; roof `InfoPopUp`
-  1–15 → dialog/tile texts (2/3/12 in use, 9 not stationary, 8/13/14 nothing); heater sliders 1–9+HI
+  1–15 → dialog/tile texts (2/3/12 "in use" tile — fake unit only, see CAPTURE 2026-10-10 above; 9 not stationary, 8/13/14 nothing); heater sliders 1–9+HI
   and 10–120; `1003` heartbeat cadence ~750 ms while the app is connected; lighting All-lights
   frames byte-identical to calictl's, lamp taps write nibble value 11 (DEFAULT), and the app's lamp →
   nibble positions confirm calictl's DEVICE-verified `LIGHT_ZONES` for all nine app lamps (the

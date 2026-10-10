@@ -923,10 +923,13 @@
          "text": "Driving"
         },
         "8": {
-         "text": "In use"
+         "text": "In use (retired)"
         },
         "9": {
          "text": "Not stationary"
+        },
+        "10": {
+         "text": "Open checklist"
         }
        }
       }
