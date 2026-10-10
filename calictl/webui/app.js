@@ -403,11 +403,12 @@ const ENERGY_FAULT_MSG = {
   WarningLevelTwo: "⚠ Second battery warning level 2",   // no dialog of its own in the app
 };
 
-// The unit's own dialog titles + gist for ErrorCode 1–5 (app-observed 2026-09-16, tools/applab):
+// The unit's own dialog titles + gist for ErrorCode 1–7 (1–5 app-observed 2026-09-16, tools/applab):
 // 1 "Battery voltage too low — your second battery looks low; connect external power or charge",
 // 2 "Low fuel — switched off, activates again with sufficient fuel", 3 "fault, contact workshop",
 // 4 "Emission limit exceeded — switched off automatically; on again at ≥ 5 km/h",
-// 5 "deactivated — not while the engine runs or the auxiliary water heater is active".
+// 5 "deactivated — not while the engine runs or the auxiliary water heater is active";
+// 6/7 (app 5.4.0, decompile only) split 5 into "engine running" / "auxiliary heater active".
 /** @type {Record<string, string>} */
 const AIRHEATER_ERROR_MSG = {
   low_battery: "⚠ Battery voltage too low — charge the second battery or connect external power",
@@ -415,6 +416,9 @@ const AIRHEATER_ERROR_MSG = {
   system_error: "⚠ Auxiliary air heater fault — please contact your workshop",
   heating_time_exceeded: "⚠ Emission limit exceeded — the heater switched off, drive ≥ 5 km/h to re-enable",
   not_possible: "⚠ Heater deactivated — not while the engine or the auxiliary water heater is running",
+  // 6/7 new in app 5.4.0 (ig/b.java:606-700) — the app's own dialog texts
+  engine_running: "⚠ Auxiliary air heater deactivated due to engine running.",
+  aux_heater_active: "⚠ Auxiliary air heater deactivated due to activation of the auxiliary heater.",
   unknown: "⚠ Heater error",
 };
 

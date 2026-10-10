@@ -111,6 +111,16 @@ widgets:
       - wifiReset_headline_theWifiResetWasSucessful_text
       - wifiReset_primaryButton_continueWithRemoteControl_button
 
+  - id: powerSaveDisconnectCard
+    type: dialog
+    label_key: dialog_info_powerReduction_activateCamperFunction_headline
+    label_text: "Disconnected to save energy"   # DE 'Verbindung getrennt, um Energie zu sparen'
+    range: null
+    controls: null
+    elements: [dialog_info_powerReduction_activateCamperFunction_text, localNotification_connectionStatus_reducedPower_text]
+    constraints: "NEW in app 5.4.0 (DECOMPILE gg/k.java:44-95, card CAR_DISCONNECTED_FOR_POWER_SAVE_ID): when the unit drops the link and the app's stay-connected rule does not hold (shore power = StateLand ACTIVE or, new, STANDBY; else camping mode), the app shows this card — 'enable camping mode to stay connected'. The local notification text changed from 'Reduced power consumption active' to the same message. The unit-side behaviour it explains is the deep-sleep in docs/business-logic/value-freshness.md."
+    evidence: DECOMPILE 5.4.0 (2026-10-10)
+
   - id: connectionStateReadout
     type: readout
     label_key: null

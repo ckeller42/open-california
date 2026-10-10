@@ -110,7 +110,7 @@ dashboard. Flagged UNVERIFIED.
 ## 3. AirHeater (parking heater)
 
 Trigger field: **`ErrorCode`**, dictionary `airheater.state_fields[ErrorCode]` — `offset: 12,
-width: 4` (raw range 0-15, only 0-5 used). Decoded at `rf/b.java:441` (`aVar19` =
+width: 4` (raw range 0-15; 0-5 used by app 5.0.8, 0-7 since app 5.4.0). Decoded at `rf/b.java:441` (`aVar19` =
 `f23031i0`), dispatch at `rf/b.java:446-711`.
 
 | Value | Alert ID | Meaning | Severity | Confirmable |
@@ -121,8 +121,13 @@ width: 4` (raw range 0-15, only 0-5 used). Decoded at `rf/b.java:441` (`aVar19` 
 | 3 | `AIR_HEATER_SYSTEM_ERROR_ID` | Generic heater system fault | HIGH / ERROR (`rf/b.java:571`) | `AIR_HEATER_SYSTEM_ERROR_NOTIFICATION_ID` |
 | 4 | `AIR_HEATER_HEATING_TIME_EXCEEDED_ID` | Continuous-run time limit exceeded (plausibly EU emissions/runtime cap — see `cooler-airheater.md`) | HIGH / ERROR (`rf/b.java:620`) | `AIR_HEATER_HEATING_TIME_EXCEEDED_NOTIFICATION_ID` |
 | 5 | `AIR_HEATER_OPERATION_NOT_POSSIBLE_ID` | Heater cannot start (precondition not met) | HIGH / ERROR (`rf/b.java:671`) | `AIR_HEATER_OPERATION_NOT_POSSIBLE_NOTIFICATION_ID` |
+| 6 | `AIR_HEATER_ENGINE_ON` | **NEW in app 5.4.0.** Deactivated because the engine is running. Dialog "Auxiliary air heater deactivated due to engine running." / DE "Luftstandheizung durch Motorlauf deaktiviert." → calictl `engine_running` | (`ig/b.java:606-700`, 5.4.0) | DECOMPILE only |
+| 7 | `AIR_HEATER_PARK_HEATER_ON` | **NEW in app 5.4.0.** Deactivated because the auxiliary (water) heater was switched on. Dialog "Auxiliary air heater deactivated due to activation of the auxiliary heater." / DE "Luftstandheizung deaktiviert durch Aktivierung der Standheizung." → calictl `aux_heater_active` | (`ig/b.java:606-700`, 5.4.0) | DECOMPILE only |
 
-All five share `ym.g.X` = **HIGH** in-app severity, uniformly. `h()` (`rf/b.java:718-722`) derives
+All five share `ym.g.X` = **HIGH** in-app severity, uniformly. Codes 6/7 split the old catch-all 5
+("not while the engine or the auxiliary water heater runs") into its two causes; 5.4.0 also exposes a
+flow that is true while the code is 6 or 7 (`ig/b.java:153`). Whether this van's unit firmware ever
+reports 6/7 (rather than 5) is not known — never seen live; the web UI shows the app's texts for both. `h()` (`rf/b.java:718-722`) derives
 a general "problem" boolean: `ErrorCode == 5 || (everSeenDeactivated && 1 ≤ ErrorCode < 5)`.
 
 ---

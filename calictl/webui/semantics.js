@@ -176,7 +176,7 @@ function semCooler(d) {
 }
 
 // --- airheater (semantics.py:216) ------------------------------------------------------------
-const SEM_AIRHEATER_ERROR = { 1: "low_battery", 2: "low_fuel", 3: "system_error", 4: "heating_time_exceeded", 5: "not_possible" }; // :207
+const SEM_AIRHEATER_ERROR = { 1: "low_battery", 2: "low_fuel", 3: "system_error", 4: "heating_time_exceeded", 5: "not_possible", 6: "engine_running", 7: "aux_heater_active" }; // :207
 
 /** semantics.py:216 airheater(). @param {Fields} d @returns {Interp} */
 function semAirheater(d) {

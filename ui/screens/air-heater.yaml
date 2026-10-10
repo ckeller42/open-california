@@ -156,8 +156,23 @@ widgets:
     range: null
     controls: null
     elements: []
-    constraints: "Pops the moment 1702 ErrorCode changes, on any page. 1 Battery voltage too low; 2 'Low fuel' — 'The auxiliary air heater was switched off because the fuel level is low. It can only be activated again when there is sufficient fuel. Please refuel.' [OK] (APP-OBSERVED 2026-09-16, re-seen 2026-09-27 screen 34); 3 system fault; 4 Emission limit exceeded; 5 deactivated. Full texts: docs/business-logic/cooler-airheater.md, alert-states.md §3."
-    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16
+    constraints: "Pops the moment 1702 ErrorCode changes, on any page. 1 Battery voltage too low; 2 'Low fuel' — 'The auxiliary air heater was switched off because the fuel level is low. It can only be activated again when there is sufficient fuel. Please refuel.' [OK] (APP-OBSERVED 2026-09-16, re-seen 2026-09-27 screen 34); 3 system fault; 4 Emission limit exceeded; 5 deactivated. VERSION DRIFT app 5.4.0 (DECOMPILE ig/b.java:606-700, not app-observed): 6 'Auxiliary air heater deactivated due to engine running.' / DE 'Luftstandheizung durch Motorlauf deaktiviert.'; 7 'Auxiliary air heater deactivated due to activation of the auxiliary heater.' / DE 'Luftstandheizung deaktiviert durch Aktivierung der Standheizung.' (keys dialog_error_airHeater_deactivated_engine_text / _waterHeater_text). Full texts: docs/business-logic/cooler-airheater.md, alert-states.md §3."
+    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE 5.4.0 (codes 6/7)
+
+  - id: nightReduction
+    type: section
+    label_key: airHeaterPage_continuousHeating_nightReduction_Title
+    label_text: "Night reduction"   # DE 'Nachtabsenkung'
+    range: null
+    controls: null
+    elements:
+      - airHeaterPage_continuousHeating_nightReductionTemperatureSlider_text
+      - airHeaterPage_continuousHeating_nightReduction_timerWidget_title_text
+      - airHeaterPage_continuousHeating_nightReduction_timerWidget_title2_text
+      - airHeaterPage_permanentHeatingDialog_nightReductionNo_title
+      - infoPage_heating_nightReduction_headline
+    constraints: "NEW in app 5.4.0, NOT on this van: shown only for a unit reporting CommunicationVersion >= 3 (or a California Next). Reads the V3 F001 night-reduction fields and writes char F002 (sg/b.java:56-70, tg/b.java:408-583): heating level + start/end time + Activated 2=on/1=off; the UI requires continuous heating on ('Cannot turn on Night reduction.'). A V2 unit (this van) never gets an F002 write; calictl must never send one. See docs/business-logic/protocol-alignment.md 'App 5.4.0'."
+    evidence: DECOMPILE 5.4.0 (2026-10-10)
 
 icons:
   - air_heater             # drawable/air_heater

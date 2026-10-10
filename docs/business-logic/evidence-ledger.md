@@ -25,7 +25,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
 | cooler `NightTimerSet` bit — meaning UNKNOWN: decoded (1102 bit3) + plumbed into a StateFlow (vf/c D3) but NEVER rendered (dead-end, zero UI consumers) and NEVER written by any cooler path (only air-heater rf/b.H3 stages that shared frame slot). NOT the schedule-arm bit (that's Mode 4); "within-window active flag" hypothesis **REFUTED** DEVICE 2026-08-26 — read 0 with the unit RTC at 22:06 INSIDE the armed 22:00–06:00 window (also 0 outside it). Vestigial on this unit, or asserts only under some unseen condition. Not surfaced | DEVICE (refuted) + **RETIRED by call stack (#154):** `vf/c` J0 → `D3()` → `yg/g.w0` (`yg/g.java:1014,1026`) has no reader outside the facade lambdas and no cooler writer | — |
 | airheater `runtime` (`3f7b003c1f3f`), `timer_start` (`3f3b017f1f3f` = Mode 3 + Combined 1), `timer_cancel` (`3f0b007f1f3f`) | APP-OBSERVED (tools/applab 2026-09-16; frames identical to calictl's) | unit-side: does the heater actually start at TimerHour:TimerMin, and what Mode does 1702 report after it fires (mock assumes 0) |
 | airheater `timer` HH:MM (`B0`, TimerHour/TimerMin) | APP-OBSERVED (2026-09-27, inventory screens 35-37): the "Start heating at" wheel set to 09:31 + OK → `3f7b007f091f` (`TimerHour` byte 4 = `0x09`, `TimerMin` byte 5 = `0x1f`), **identical** to calictl's `timer 09:31`; written on OK, no confirm, does not arm. Pinned by `T_AIRHEATER_TIMER_TIME` + `tools/scenarios/airheater/timer-time.yaml` | unit-side: does the unit store TimerHour/TimerMin, and does 1702 read them back (mock assumes yes) |
-| fault dialogs: heater ErrorCode 1–5, cooler Error 1–3, 11 energy flags, water InfoPopUps (fresh 1–5/7, waste 1–3) → the app's exact dialog texts | APP-OBSERVED (fake unit injection 2026-09-16; `alert-states.md`, `cooler-airheater.md`) | unit-side: which real conditions raise each code (only cooler door-open and heater codes have ever been seen live) |
+| fault dialogs: heater ErrorCode 1–5 (6/7 new in app 5.4.0, DECOMPILE only — section below), cooler Error 1–3, 11 energy flags, water InfoPopUps (fresh 1–5/7, waste 1–3) → the app's exact dialog texts | APP-OBSERVED (fake unit injection 2026-09-16; `alert-states.md`, `cooler-airheater.md`) | unit-side: which real conditions raise each code (only cooler door-open and heater codes have ever been seen live) |
 | `Installed` bit gates a function's tile; stairs / LR-heater / satellite / roof-A/C screens + vocabulary | APP-OBSERVED (Installed flipped on the fake unit) | — (not fitted on this van) |
 | airheater **permanent-ON** | **APP-RECORDED** 2026-10-05 (`tests/vectors/app/airheater-permanent-on.jsonl`): the Permanent-Heating switch is **inert** when continuous heating is off — greyed "can be activated only in the vehicle", and tapping it sends **no frame** **Call stack (#154):** the app's only `PermanentOperationRequest` write is `rf/b.E3` → 0 (`rf/b.java:210-214`, callers `ni/a.java:419,466`). There is no ON write site anywhere | in-vehicle only: the ON value is not reachable from the app, so it cannot be learned here |
 | energy `mode` — Normal `00` / Max `10` (EnergyModeSet 0/1; +neutral `30`) | **APP-RECORDED** 2026-10-05 (`tests/vectors/app/energy-mode.jsonl`): both match `control.build` on the targeted field | — (ECO not offered on this profile / not BLE-reachable, §ECO) |
@@ -234,6 +234,26 @@ Caveat seen on the way: the first dump right after opening *Vehicle Information*
 (`12.2 V • -7.0 A` starter, `13.1 V • 1.0 A` second battery) that calictl's raw frame did not
 contain; every later dump (4 over 70 s) matched calictl. The app renders what it last held before
 the fresh frame arrives — never use the first render of an app screen as evidence.
+
+## DECOMPILE 5.4.0 rows — app 5.0.8 → 5.4.0 re-decompile (2026-10-10)
+
+Tier **DECOMPILE 5.4.0**: a static diff of the app 5.4.0.3036 decompile against 5.0.8.3028 (private
+RE repo `notes/2026-10-10-diff-5.0.8-to-5.4.0.md`; class cites are 5.4.0 names). It shows what the
+current app *intends*; nothing below is wire-captured unless the row says so. Details:
+`protocol-alignment.md` "App 5.4.0".
+
+| Fact | Tier | What would raise it |
+|---|---|---|
+| T7 / CommunicationVersion 2 protocol unchanged: every 5.0.8 write site 1:1; `1003` heartbeat random 750–850 ms, seed 1..1e6; 500 ms neutral re-write; roof SafetyCounter 450–550 ms; frames, sentinels, scales identical (energy 1602 V2 slices `og/e.java:1396-1441`) | DECOMPILE 5.4.0; handshake + heartbeat also CAPTURE 2026-10-10 (5.4.0 on the real unit, `protocol-sequences` "Session foundation") | — |
+| heater `ErrorCode` 6 = engine running, 7 = auxiliary heater active (`ig/b.java:606-700`) → calictl `engine_running` / `aux_heater_active` + the app's EN/DE dialog texts | DECOMPILE 5.4.0 | fake-unit injection with 5.4.0 (dialog text), and whether the real unit ever reports 6/7 instead of 5 |
+| Protocol-version layer: CommunicationVersion → UNKNOWN / V2 / V3 / V4, max accepted 2 → 3; only energy, F001/F002 and VirtualBattery branch on it. calictl flags `comm_version != 2` as `firmware_untested` | DECOMPILE 5.4.0 | a unit reporting 3 (none known) |
+| `1603` energy measurements, V3 64-bit `1602`, named V3 `F001` fields — **not on this van** | DECOMPILE 5.4.0 | mock reporting CommunicationVersion 3 in the app lab |
+| `F002` general-purpose write (heater night reduction) — **not on this van; never write it to a V2 unit** | DECOMPILE 5.4.0 | app-lab recording with the mock at CommunicationVersion 3 |
+| `2200`/`2201`/`2202` VirtualBattery — California Next + V4 only, unreachable in this build | DECOMPILE 5.4.0 | — |
+| CarVariant 2 = CALIFORNIA_NEXT; lighting zones 29–36 → existing 1501 fields (29→L7, 30→L4, 31→L1, 32→L2, 33→L9, 34→L8, 35→L3, 36→L5) | DECOMPILE 5.4.0 | — (other vehicle) |
+| Per-variant subscribe gate: a T7 app does not subscribe stairs / satellite / roof A/C / LR heater | DECOMPILE 5.4.0 + CAPTURE 2026-10-10 (8 subscriptions) | — |
+| rear USB: F001 bit 6 `IsRearUsbInTSevenAlwaysOn` decoded only for V3+, so always false on V2 → the master gate always applies (calictl `usb_powered`) | DECOMPILE 5.4.0 | app lab 5.4.0: the camping rear-USB row with master off |
+| water: no stale/plausibility filter, one read at connect, no periodic 1302 re-read (5.0.8 and 5.4.0); 5.4.0 clamps the level math and persists last-known values ("Updated: x ago") | DECOMPILE 5.4.0 | — |
 
 ## ESP32 satellite — the control path (#154 B)
 

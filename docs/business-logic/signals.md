@@ -146,6 +146,14 @@ since camping mode itself is **refused while
 driving** (the stationary gate, `control-and-actuation.md` §4), rear USB **cannot** be kept powered
 while the vehicle is driven.
 
+**App 5.4.0 agrees for this van (DECOMPILE 2026-10-10).** The app's rear-USB row follows
+`T7 && !IsRearUsbInTSevenAlwaysOn`. That flag is F001 bit 6, and app 5.4.0 decodes it **only for a
+unit reporting CommunicationVersion ≥ 3** (5.0.8 read it for every unit). On this van
+(CommunicationVersion 2) it is therefore always false: the master gate always applies, which is
+exactly `usb_powered = master_on and usb_charger`. A future V3 T7 unit that sets the flag would keep
+its rear USB powered without camping mode; calictl does not model that (it would show up as
+`firmware_untested`, see `protocol-alignment.md` "App 5.4.0").
+
 **Guardrail hardening (done).** `tools/app_setters.py` now flags any field whose app setter is
 inverted/combined as **`SEMANTIC-REVIEW-NEEDED`** (the side branch in §1's diagram) — so a
 naive `bool(field)` interpreter can't silently disagree with the app. Presence + scale are

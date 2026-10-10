@@ -174,6 +174,31 @@ It stays unchanged for now (with `water_stale_since`). If a parked trace shows t
 is always right, the guard may be redundant. If the unit really latches while parked, the guard
 remains the only defence; the app has none. The van check is in `remaining-captures.md` §1 (#230).
 
+## App 5.4.0: no filter, but last-known values (decompile 2026-10-10)
+
+The re-decompile of app 5.4.0.3036 (diff against 5.0.8, private RE repo) changes nothing on the
+wire for water:
+
+- **Same decode, same read pattern.** 1302 is decoded into the same 9 fields, and every frame (the
+  connect read or a notify) overwrites them unconditionally (`jh/b.java:400-466`). The app reads
+  1302 **once at connect** (subscribe, then read, `a5/t`) and never re-reads it periodically; the
+  poll loop covers 1102 / 1602 / 1603 / 1902 / 1004 / 2202 / F001 only (`c1/c`).
+- **Still no stale or plausibility filter**, in 5.0.8 or 5.4.0: no latch check, no frame age, no
+  `InfoPopUp` gate on the level. A parked latch would reach the app's screen as is.
+- **New: clamped display math.** Litres are clamped to 0..Volume and the percentage to 0..100 with
+  `Volume ≤ 0 → 0` (`jh/b.java:469-494`, waste likewise). 5.0.8 divided by Volume unguarded.
+- **New: persisted last-known values.** About 130 facade values (fresh/grey litres, %, capacity,
+  energy, cooler, roof, …) are stored in a Room table (`metric_latest`: metric, vehicle, value,
+  `updated_at_ms`) and restored at app start (`ni/b.java:566-592`). While disconnected the app shows
+  them with **"Updated: x minutes / hours / days ago"** (DE "Aktualisiert: vor …"). This is the
+  same idea as calictl's `last_state` cache with its "as of" timestamp and the offline banner. The
+  restored value is whatever the last frame said; the app adds no plausibility check.
+
+**calictl deviates on purpose.** `freshness.implausible_water_drop` (narrowed in #274 to a drop to
+≤ 1 L with grey exactly frozen) holds the last plausible reading and flags it stale; the app has no
+such guard and would show the latched value. Whether to keep the guard is an open owner decision
+(above, "Open question"); this section only records that the app gives no precedent for it.
+
 ## Water freshness — the settled conclusion (2026-08-19)
 
 Traced end-to-end. Water is READ-ONLY on char `1302` (no `1301` control char, `qg/b` never writes),

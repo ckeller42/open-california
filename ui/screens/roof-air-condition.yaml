@@ -90,3 +90,11 @@ notes: >
   GUI layout. HeatingAndCoolingTimerScreen (a separate nav destination,
   shared with airheater/cooler timers) is documented in vehicle-info.yaml as
   a cross-feature shared component, not duplicated here.
+  VERSION DRIFT app 5.4.0 (DECOMPILE 2026-10-10): the page now HAS static
+  copy — roofAirConditioning_* (page title 'Roof Air Conditioning' / DE
+  'Dachklima'; mode Auto / Cooling / Heating / Ventilation = DE Auto / Kühlen /
+  Heizen / Lüften; 'Fan speed: %1$s' / 'Gebläsestufe'; 'Temperature: %1$s')
+  and infoPage_roofAirConditioning_* info pages. Error==2 notification renamed
+  ERROR_AC -> WARNING_AC; the Error==1 'no power supply' notification became a
+  dialog ('Vehicle not connected to the shore power.'). Subscribed on Grand
+  California only — a T7 app no longer subscribes 2001/2002 (per-variant gate).
