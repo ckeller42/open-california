@@ -133,9 +133,9 @@ static int water_levels(const uint8_t *frame, size_t len, uint32_t *fresh, int *
 }
 
 /* True when a new water frame is the parked stale-latch vs the plausible baseline s_wg — a fresh
- * DROP while the GREY tank is EXACTLY frozen (calictl.freshness.implausible_water_drop). Any grey
- * movement proves the unit is live-measuring (adopt); a fresh drop with grey unknown is treated as
- * the latch (conservative). No baseline, or no fresh to compare -> not a latch (cold start adopts,
+ * DROP to <= CALI_SESSION_WATER_LATCH_MAX_L while the GREY tank is EXACTLY frozen
+ * (calictl.freshness.implausible_water_drop). A drop that stays above it, or any grey movement, is a
+ * live measurement (adopt); a drop to the latch with grey unknown is the latch (conservative). No baseline, or no fresh to compare -> not a latch (cold start adopts,
  * matching serve.py's known cold-start limit). */
 static int water_is_latch(const uint8_t *data, size_t len) {
     uint32_t fn_, fp_, wn_, wp_;
@@ -143,7 +143,7 @@ static int water_is_latch(const uint8_t *data, size_t len) {
     if (!s_wg.have) return 0;
     if (!water_levels(data, len, &fn_, &hwn, &wn_)) return 0;
     if (!water_levels(s_wg.frame, s_wg.len, &fp_, &hwp, &wp_)) return 0;
-    if (fn_ >= fp_) return 0;             /* not a drop (refill / same / re-measure) */
+    if (fn_ >= fp_ || fn_ > CALI_SESSION_WATER_LATCH_MAX_L) return 0;   /* no drop to the latch */
     if (!hwp || !hwn) return 1;           /* fresh dropped, grey unknown -> can't corroborate */
     return wn_ == wp_;                    /* grey frozen -> latch; any grey movement -> live */
 }

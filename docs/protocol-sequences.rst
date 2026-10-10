@@ -1014,8 +1014,8 @@ Daemon poll cycle
    * **Guards** on the interpreted states. A change of firmware identity dumps a raw-frame snapshot
      (``R_FIRMWARE_DRIFT_CAPTURE``). Plausibility anchors flag a decode drift in ``_meta``
      (``R_PLAUSIBILITY_ANCHORS``). The **water stale-latch guard** compares fresh water with the
-     last plausible reading (``_water_good``). A fresh drop while the grey tank is exactly frozen is
-     the parked latch, so the last plausible reading is published instead and flagged stale
+     last plausible reading (``_water_good``). A fresh drop to at most 1 L (``WATER_LATCH_MAX_L``,
+     the observed latch value) while the grey tank is exactly frozen is the parked latch, so the last plausible reading is published instead and flagged stale
      (``R_WATER_STALE_GUARD``).
    * **Cache** (only if a read produced states): rebind ``_last`` whole (the web thread reads it
      unlocked), stamp ``_last_ok_ts``, append the leisure-battery history sample, run the camping

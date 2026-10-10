@@ -10,12 +10,14 @@
 #include <stdint.h>
 
 /* Water stale-latch guard — port of calictl/freshness.py:implausible_water_drop.
- * Parked, the unit freezes both tanks and decays fresh toward a ~1 L latch; a
- * fresh DROP while grey is EXACTLY frozen is the latch signature (hold the last
- * plausible value). Any grey movement proves live measurement. Inputs are liters
+ * Parked, the unit freezes both tanks and hands out a 1 L fresh latch; a fresh
+ * DROP to <= FRESH_LATCH_MAX_L while grey is EXACTLY frozen is the latch signature
+ * (hold the last plausible value). A drop that stays above it, or any grey
+ * movement, is a live measurement. Inputs are liters
  * (the raw water Level field IS liters — linear scale — so the ESP feeds raw
  * decoded fields directly). `have` presence bits: 1=new-fresh, 2=prev-fresh,
  * 4=new-grey, 8=prev-grey. Returns 1 = stale latch, 0 = plausible. */
+#define FRESH_LATCH_MAX_L 1   /* freshness.WATER_LATCH_MAX_L: the observed latch value */
 #define FRESH_HAVE_NF 0x1u
 #define FRESH_HAVE_PF 0x2u
 #define FRESH_HAVE_NG 0x4u

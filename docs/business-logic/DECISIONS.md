@@ -354,6 +354,9 @@ stand.
   measurement. The old `<=` comparison wedged the hold for a month after a real grey dump (every
   post-dump reading re-latched because grey sat below the pre-dump baseline) — fixed to `==`,
   and a held value now flags **both** tanks stale. See `value-freshness.md`.
+  *Narrowed 2026-10-10:* only a drop to ≤ 1 L (`WATER_LATCH_MAX_L`, the observed latch) is a
+  latch candidate — grey reads 0 on every frame on this van, so the grey-frozen rule alone held
+  every real drop (22 L served vs a true 20 L).
 
 ## 2026-07-08 — HCI capture (owner's phone ↔ van): lighting CRACKED + live-verified
 

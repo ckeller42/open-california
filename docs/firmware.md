@@ -418,9 +418,9 @@ Known gaps (accepted):
 
 - No roof from the satellite (above); no `applied: true` — the UI confirms
   from the unit's reported state instead (above).
-- No water stale-hold: a parked, latched-low fresh tank shows unflagged on the satellite (calictl
-  holds it via `freshness.implausible_water_drop` + a persisted baseline; whether that guard is still
-  needed now that both read 1302 after subscribing is open until a van trace, #230).
+- Water stale-hold is the same rule as calictl's `freshness.implausible_water_drop` (a fresh drop to
+  ≤ 1 L with grey frozen is held, baseline in NVS `water_good`; see `value-freshness.md`); whether
+  that guard is still needed now that both read 1302 after subscribing is open until a van trace, #230.
 - The wake-up light takes the browser's clock unchecked (ruling R1): a phone or laptop with a wrong
   clock or time zone sets a wrong wake-up time, as the app would.
 - No battery history chart; no auto-camper.
