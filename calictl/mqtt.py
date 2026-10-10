@@ -178,7 +178,7 @@ COMMAND_SPECS: dict[str, list] = {
     "lighting": [
         CommandSpec("switch", "power", "Interior Lights", {}, "any_on"),
         CommandSpec(
-            "number", "brightness", "Interior Brightness", _range((0, control.LIGHT_ON_BRIGHTNESS)), None
+            "number", "brightness", "All Lights Brightness", _range((0, control.LIGHT_ON_BRIGHTNESS)), None
         ),
     ],
     "airheater": [
