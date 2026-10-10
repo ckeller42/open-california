@@ -14,7 +14,7 @@ GLOSSARY = ROOT / "docs" / "glossary.md"
 _HEADING = re.compile(r"^(#+\s.*|[^\s].*\n[-=~^\"]{3,})$", re.M)
 # A hand-written definition ("**term** — ...", "**term**: ...") and a second glossary directive.
 _DEFINITION = re.compile(r"\*\*[^*]+\*\*\s*(—|:|-)\s")
-_DIRECTIVE = re.compile(r"```\{glossary\}|^\.\. glossary::", re.M)
+_DIRECTIVE = re.compile(r"^```\{glossary\}|^\.\. glossary::", re.M)
 
 
 def _doc_files():
