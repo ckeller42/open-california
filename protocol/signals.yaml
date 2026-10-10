@@ -2146,23 +2146,23 @@ vehicle:
       decision: surface
       kind: state
       name: level_roll
-      scale: "signed16 (raw; angle units UNVERIFIED)"
+      scale: "signed16 /100 = degrees (0.01 deg per LSB, HCI 2026-07-08; sign vs the app display unconfirmed)"
       sources:
         app: "ag/a.java f1078j (signed 16); zf/d.java CarLevelRoll"
         gui: null
         vwdoc: null
-      unit: null
+      unit: "°"
     CarLevelPitch:
       confidence: medium
       decision: surface
       kind: state
       name: level_pitch
-      scale: "signed16 (raw; angle units UNVERIFIED)"
+      scale: "signed16 /100 = degrees (0.01 deg per LSB, HCI 2026-07-08; sign vs the app display unconfirmed)"
       sources:
         app: "ag/a.java f1079k (signed 16); zf/d.java CarLevelPitch"
         gui: null
         vwdoc: null
-      unit: null
+      unit: "°"
     CarTimeYear:
       decision: omit
       reason: "car-clock component (year+1900) — combined into the car_clock output by semantics.vehicle"

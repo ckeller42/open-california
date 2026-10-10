@@ -4,34 +4,23 @@
 
 Only these need you physically at the van. Everything else is done or is a desk task.
 
-### 1. Water — settle "is 1 L stale or real?" (PRIORITY, unresolved)
+### 1. Water — DONE 2026-10-10 (was PRIORITY)
 
-buspi reads **fresh water = 1 L** while polling fine every ~45 s with the heartbeat running.
-We do **not** know if that's stale or the tank is genuinely near-empty (the "true 11 L" was a single
-2026-07-09 reading that isn't reproducing). Do this to settle it:
-
-- [ ] **Before touching anything**, note the **actual** fresh-tank level (gauge / how full you know it is).
-- [ ] **Close the phone app** so buspi owns the single BLE slot.
-- [ ] Read buspi now: `ssh buspi 'curl -s localhost:8088/api/state | python3 -c "import sys,json;print(json.load(sys.stdin)[\"water\"][\"fresh\"])"'`
-- [ ] **Run a tap for ~20–30 s** (pump active), wait ~1 min, read buspi again.
-- [ ] Tell me three numbers: **actual level**, **buspi before**, **buspi after the pump ran**.
-  - buspi jumps toward the real level → the sensor needs *pump flow* to re-measure (real finding).
-  - buspi already matches the tank → **no bug, 1 L was correct**, and the "fix" was for a non-issue.
-  - buspi stays wrong even after the pump → real stale bug to reopen.
-
-- [ ] **(#230) calictl vs the app, parked, read order fixed (2026-10-07).** With the daemon running
-  and `CALICTL_BLE_TRACE` set on buspi, note calictl's fresh water (`/api/state`), release the slot,
-  open the app without unlocking or touching the van, and note the app's value. The trace shows the
-  1302 read bytes. Same value = the old "1 L" was calictl serving the subscribe-time push
-  (now fixed); calictl stale but the app right = a per-connection unit effect (reopen). See
-  `value-freshness.md` "Read order".
+Settled without the tap test. `1` is the unit's own "not measuring" value (FreshWaterLevel `1` in
+6 098 of 10 726 `1302` frames of buspi's trace); a measurement ramps the level `1` → real in ~4 s,
+holds it ~1–2 min and falls back to `1`. The unit sends no subscribe-time push, so calictl and the
+app read the same frame (this answers the old (#230) "calictl vs the app, parked" check; the app
+read 20 L). calictl holds the last plausible reading on the ≤ 1 L latch (#274), a
+debounce for the ramp is in flight (#290), and the mock serves the latch (#285). Still open: what
+starts a measurement. See `value-freshness.md`.
 
 ### 2. Finish the lamp map (~1 min)
 
 Sweep 2026-07-14 confirmed **L7=Kochen, L8=Ambientelicht, L3=Umgebung hinten**, and **L5 is a real
-lamp**. Two gaps:
+lamp**; **L5 = Küche → Ambientelicht** is settled on the unit's own screen (2026-10-08). Still open: L6
+and L9.
 
-- [ ] **Screenshot the TOP of the Beleuchtung list** (or just name the top 4 lamps) — pins L2, L1, L4, **L5**.
+- [ ] **Screenshot the TOP of the Beleuchtung list** (or just name the top 4 lamps) — pins L2, L1, L4 (L5 settled 2026-10-08).
 - [ ] **Capture L6** (the one zone never seen — it's a conditional lamp): **open the pop-roof** so
   *Leselicht* unlocks and set it, **and/or activate camping mode** so *Eingang* unlocks and set it.
   Ping me to start the logger first.
@@ -246,10 +235,12 @@ Questions the static trace (enigma `46f982d3`) could not settle; each is an app-
 - ~~**ECO selector (#230)**~~ DONE 2026-10-06: ECO appears on the second visit with `PvInstalled=1`
   (stale first read confirmed).
 - **Wake-up echo:** DONE in the lab 2026-10-06 — with the mock's Mode-20 echo the app keeps every wake-up
-  write (no revert, no toast). Still owed on the van: does the real unit echo it?
+  write (no revert, no toast). DEVICE 2026-10-08: the real unit echoes it (the ESP satellite's wake-up
+  edit latched the unit's own Mode-20 frame).
 - **Level Indicator:** `CarLevelPopUp=0` with roll/pitch set should show the gauges; 1 = ignition card,
   2 = "Please slow down".
-- **Roof overlay:** the roof-page warning text for InfoPopUp 2 vs 3 (`hj/c.p0`/`k0`, unresolved).
+- ~~**Roof overlay:**~~ RESOLVED 2026-10-10 (#276): InfoPopUp 2 = the app's pre-open safety checklist
+  dialog, 3 = stopped mid-travel (a progress code, no text); the real app on the real unit.
 - **Sliding-door row:** whether `tf/a.R2` (show-rear-USB flag) is the row's divider or its enabled state.
 - **Wake brightness 0:** the slider reaches 0; what the unit does with it is unknown (van).
 
