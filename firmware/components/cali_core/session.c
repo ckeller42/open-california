@@ -13,6 +13,7 @@
 #include "cali_runner.h"
 #include "codec.h"
 #include "codec_chars.h"
+#include "ports.h"
 
 enum { LINK_DOWN, LINK_CONNECTING, LINK_CONNECTED, LINK_UP };
 
@@ -152,51 +153,22 @@ static int water_levels(const uint8_t *frame, size_t len, uint32_t *fresh, int *
     return gotf;
 }
 
-/* The ramp-debounce candidate: a NEW level first seen at since_ms (calictl.freshness.settle_water). */
-static struct {
-    uint32_t fresh, waste;
-    int has_waste, have;
-    uint64_t since_ms;
-} s_wpend;
+/* The ramp-debounce candidate (csrc/ports.h freshness_settle; cleared on a unit change). */
+static fresh_pending_t s_wpend;
 
-/* calictl.freshness.settle_water, on the session clock: 1 = adopt the new water frame as the
- * baseline, 0 = hold (serve the baseline s_wg, or nothing on a cold start). The unit reports fresh
- * 1 L whenever it is NOT measuring and ramps 1 -> real value in ~4 s when it starts (BLE trace
- * 2026-10-09), so:
- *  - no fresh level -> adopt (can't judge);
- *  - no baseline: <= CALI_SESSION_WATER_LATCH_MAX_L is held (show nothing, not a fake 1 L);
- *  - baseline: a fresh DROP to <= the latch with the grey tank EXACTLY frozen (or grey unknown) is
- *    held (freshness.implausible_water_drop); the baseline's own (fresh, grey) is adopted at once;
- *  - any other (fresh, grey) is adopted only once seen unchanged for CALI_SESSION_WATER_SETTLE_MS. */
+/* 1 = adopt the new water frame as the baseline, 0 = hold (serve s_wg, or nothing on a cold start).
+ * The decision is csrc/ports.c freshness_settle — the one C port of calictl.freshness.settle_water
+ * (the <= 1 L not-measuring latch + the 5 s measurement-ramp debounce), on the session clock. */
 static int water_settle(const uint8_t *data, size_t len) {
-    uint32_t fn_, fp_ = 0, wn_, wp_ = 0;
-    int hwn, hwp = 0, hp;
-    if (!water_levels(data, len, &fn_, &hwn, &wn_)) return 1;
-    hp = s_wg.have && water_levels(s_wg.frame, s_wg.len, &fp_, &hwp, &wp_);
-    if (!hp) {
-        if (fn_ <= CALI_SESSION_WATER_LATCH_MAX_L) goto hold;
-    } else if (fn_ < fp_ && fn_ <= CALI_SESSION_WATER_LATCH_MAX_L && (!hwp || !hwn || wn_ == wp_)) {
-        goto hold;   /* the not-measuring latch; any grey movement is live */
-    } else if (fn_ == fp_ && hwn == hwp && (!hwn || wn_ == wp_)) {
-        s_wpend.have = 0;
-        return 1;
-    }
-    if (!s_wpend.have || s_wpend.fresh != fn_ || s_wpend.has_waste != hwn ||
-        (hwn && s_wpend.waste != wn_)) {
-        s_wpend.fresh = fn_;
-        s_wpend.waste = hwn ? wn_ : 0;
-        s_wpend.has_waste = hwn;
-        s_wpend.have = 1;
-        s_wpend.since_ms = s_now;
-    }
-    if (s_now - s_wpend.since_ms >= CALI_SESSION_WATER_SETTLE_MS) {
-        s_wpend.have = 0;
-        return 1;
-    }
-    return 0;
-hold:
-    s_wpend.have = 0;
-    return 0;
+    uint32_t nf = 0, ng = 0, gf = 0, gg = 0;
+    int hng = 0, hgg = 0;
+    uint8_t have = 0;
+    if (water_levels(data, len, &nf, &hng, &ng)) have |= FRESH_HAVE_NF;
+    if (s_wg.have && water_levels(s_wg.frame, s_wg.len, &gf, &hgg, &gg)) have |= FRESH_HAVE_PF;
+    if (hng) have |= FRESH_HAVE_NG;
+    if (hgg) have |= FRESH_HAVE_PG;
+    return freshness_settle((int32_t)nf, (int32_t)gf, (int32_t)ng, (int32_t)gg, have, s_now,
+                            FRESH_SETTLE_MS, &s_wpend);
 }
 
 /* Show the persisted last-plausible water frame for char 1302 (nothing if there is no baseline). */

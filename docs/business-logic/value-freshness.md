@@ -78,9 +78,9 @@ session."
 
 ## The stale-latch guard on the ESP satellite (2026-10-09)
 
-The ESP32 satellite runs the SAME guard as `freshness.implausible_water_drop`, ported to
-`firmware/components/cali_core/session.c`: when a water (`1302`) frame shows a FreshWaterLevel
-**drop to ≤ `CALI_SESSION_WATER_LATCH_MAX_L`** (1 L, the observed latch; mirrors
+The ESP32 satellite runs the SAME guard as `freshness.implausible_water_drop` — the C port
+`csrc/ports.c`, which `firmware/components/cali_core/session.c` links and calls: when a water (`1302`) frame shows a FreshWaterLevel
+**drop to ≤ `FRESH_LATCH_MAX_L`** (1 L, the observed latch; mirrors
 `freshness.WATER_LATCH_MAX_L`) while WasteWaterLevel is **exactly frozen**, the session keeps
 serving the last plausible frame instead of the latch (any other reading — a drop that stays above
 1 L, any grey movement, or a rising fresh level — is adopted and persisted as the new baseline). Comparing the
@@ -216,13 +216,13 @@ calictl's BLE trace of the real unit (buspi `~/ble.jsonl`, 10 726 water `1302` f
 A poll landing mid-ramp is not a measurement either: buspi read **16 L** at 08:54:40 on 2026-10-09
 (real: 20 L), adopted it as the baseline and held the wrong value afterwards. So the guard gained a
 **ramp debounce** (`freshness.settle_water`, `R_WATER_RAMP_DEBOUNCE`; same rule in `csrc/ports.c`
-`freshness_settle` and the ESP `session.c` `water_settle`, pinned by the `sequences` in
+`freshness_settle`, which the ESP `session.c` links and calls, pinned by the `sequences` in
 `tests/vectors/freshness.json`):
 
 - level ≤ 1 L with grey unchanged vs the baseline → not measured → hold the baseline (unchanged);
 - a reading equal to the baseline → adopted at once;
 - any other (fresh, grey) → adopted only once the **same** reading has been seen for
-  `WATER_SETTLE_S` = 5 s (ESP `CALI_SESSION_WATER_SETTLE_MS`), on the caller's clock (serve:
+  `WATER_SETTLE_S` = 5 s (C/ESP `FRESH_SETTLE_MS`), on the caller's clock (serve:
   `time.monotonic()`, ESP: the session tick). Until then the baseline is served, flagged stale
   (`water.stale_since` / `device.water_held`). 5 s: the ramp steps change every ≤ 0.5 s, the real
   value holds ≥ 30 s.

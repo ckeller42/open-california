@@ -24,7 +24,7 @@
    :id: T_FW_SESSION_FAKE
    :links: R_FW_SESSION, R_FW_PAIRING_RUNNER, R_FW_WRITE_ALLOWLIST, R_FW_CONTROL_API
 
-``session_fake.c`` compiles console + session + runner + SM + ``csrc/codec.c`` with the host ``cc``
+``session_fake.c`` compiles console + session + runner + SM + ``csrc/codec.c`` + ``csrc/ports.c`` with the host ``cc``
 (macOS too, no NimBLE) and scripts transport events; the end-to-end proof over NimBLE against the
 Bumble fake unit is ``test_host_e2e.py`` (``T_FW_HOST_E2E``).
 """
@@ -115,6 +115,7 @@ def fake(tmp_path_factory):
             str(CORE / "runner.c"),
             str(CORE / "pairing_sm.c"),
             str(ROOT / "csrc" / "codec.c"),
+            str(ROOT / "csrc" / "ports.c"),
             str(CORE / "wifi_run.c"),
             str(CORE / "wifi_sm.c"),
             str(CORE / "captive_dns.c"),
@@ -241,11 +242,7 @@ REREAD = int(
         r"#define CALI_SESSION_WATER_REREAD_MS (\d+)u", (CORE / "include" / "cali_session.h").read_text()
     ).group(1)
 )
-SETTLE = int(
-    re.search(
-        r"#define CALI_SESSION_WATER_SETTLE_MS (\d+)u", (CORE / "include" / "cali_session.h").read_text()
-    ).group(1)
-)
+SETTLE = int(re.search(r"#define FRESH_SETTLE_MS (\d+)u", (ROOT / "csrc" / "ports.h").read_text()).group(1))
 
 
 def _water(snap):
@@ -313,7 +310,7 @@ def test_notify_after_the_read_wins(fake):
 def test_water_is_re_read_periodically_while_the_link_is_up(fake):
     """Water is re-read every ``CALI_SESSION_WATER_REREAD_MS`` after the read-all (calictl reads
     1302 on every 30 s poll), so a stale latch served at connect is corrected once a real reading
-    has settled — two re-reads of the same level ``CALI_SESSION_WATER_SETTLE_MS`` or more apart; each
+    has settled — two re-reads of the same level ``FRESH_SETTLE_MS`` or more apart; each
     re-read's frame SNAPs. A later LATCH notify (a fresh drop with the grey tank frozen) no longer
     overrides the plausible reading — the stale-latch guard holds it
     (``test_water_latch_is_held_vs_a_plausible_baseline``).
@@ -466,7 +463,7 @@ APP_CAPTURE_WATER = "03141d010016"  # fresh 20, waste 0: the real unit's 1302 re
 def test_water_real_drop_with_grey_zero_is_served_and_becomes_the_baseline(fake):
     """Regression 2026-10-10: grey reads 0 on every frame on this van, so the old "any fresh drop
     with grey frozen" rule held the real 22 -> 20 L drop forever. Only a drop to <=
-    ``CALI_SESSION_WATER_LATCH_MAX_L`` (the observed 1 L latch) is held; 20 L is live — served,
+    ``FRESH_LATCH_MAX_L`` (the observed 1 L latch) is held; 20 L is live — served,
     persisted as the new baseline once it has settled — and a following 1 L latch is held against it.
 
     .. test:: The session serves a real fresh-water drop and holds only the 1 L latch
