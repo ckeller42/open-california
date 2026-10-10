@@ -75,6 +75,13 @@ CONFIG_ESP_WIFI_NVS_ENABLED=n
 # Socket budget: the HTTP listener + one connection (+ one being torn down) + the captive DNS UDP
 # socket = 4; 6 leaves room (the mdns component uses lwIP PCBs, not sockets, by default).
 CONFIG_LWIP_MAX_SOCKETS=6
+# Web page speed (owner 2026-10-10: "why is the ESP website loading so slowly"): http_core's pump()
+# writes until the socket buffer is full and resumes on the next 100 ms tick, so throughput is
+# send-buffer / 100 ms. lwIP's default 5760 B (4 x MSS) gave ~57 KB/s: the 57.6 KB gzipped UI
+# bundle took ~1.2 s. 16 x MSS takes it in ~3 ticks (~0.3 s). Only the one HTTP connection uses it,
+# and lwIP allocates send pbufs only while data is queued. (WiFi modem sleep stays: with BT + WiFi
+# coexistence IDF requires it, which is the ~65-120 ms ping.)
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040
 
 # Status display (#154). CoreS3 has 8 MB quad PSRAM.
 # - PSRAM: malloc() may use it (SPIRAM_USE_MALLOC default); allocations < 16 KB stay internal
