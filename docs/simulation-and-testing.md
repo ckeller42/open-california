@@ -136,8 +136,7 @@ mock run on these points:
 - **Roof motion is a model, not a measurement.** calictl has never driven the real motor. The
   withhold time, step timing and limit behaviour are parameters.
 - **"Driving" is an explicit flag**, not derived: the real "vehicle is stationary" predicate is
-  still unknown. **The single connection slot is opt-in** (off by default), although the real unit
-  always has one.
+  still unknown.
 - **No link-layer behaviour**: no encryption, bonding, MTU or advertising. That lives in the fake
   peripheral below.
 - Alert codes (`InfoPopUp`, `ErrorCode` and the like) change only when a test or the app-lab console

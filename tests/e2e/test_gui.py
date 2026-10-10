@@ -1142,8 +1142,9 @@ def test_favourite_save_is_not_an_activation(page, base_url):
     before = _state(base_url, page)["lighting"]["profile"]
     page.once("dialog", lambda d: d.accept())
     page.locator("select").nth(1).select_option("5")  # "Save current as" -> Profile B (= favourite 5)
+    toasts = page.locator("#toasts")
     expect(
-        page.locator("#toasts").get_by_text("Sent — check the lamp").or_(page.get_by_text("✓ Applied")).first
+        toasts.get_by_text("Sent — check the lamp").or_(toasts.get_by_text("✓ Applied")).first
     ).to_be_visible(timeout=15000)
     time.sleep(3)  # a poll after the save
     assert _state(base_url, page)["lighting"]["profile"] == before

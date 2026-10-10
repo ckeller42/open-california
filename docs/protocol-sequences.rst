@@ -211,7 +211,7 @@ Session foundation — connect, handshake, subscribe
         Note over A: app only, an empty 1004 read means reconnect
         loop every notifiable / indicatable char (12 on this unit)
             C->>U: write CCCD (0100 notify / 0200 indicate)
-            U-->>C: one notification with the current value
+            U-->>C: write response only, no notification (CAPTURE 2026-10-10)
         end
         Note over C,U: session ready, state reads are fresh, writes can be armed
 
@@ -376,10 +376,11 @@ Notifications
    * ``_subscribe_all`` sinks every payload, keyed by char UUID. It also calls an ``on_push`` hook
      when one is given.
    * ``read_all`` (per-op and persistent) follows the app: subscribe, then **read every char**,
-     water ``1302`` included. The last frame wins: the read replaces the subscribe-time push, and
-     a push that lands after the read replaces the read (``R_READ_LAST_FRAME_WINS``; lighting is
-     excluded, its config frames are latched by ``serve``). No char is served from the push cache
-     instead of a read, so a subscribe-time value can never pin a char.
+     water ``1302`` included. The last frame wins: the read replaces any earlier push, and a push
+     that lands after the read replaces the read (``R_READ_LAST_FRAME_WINS``; lighting is excluded,
+     its config frames are latched by ``serve``). No char is served from the push cache instead of
+     a read, so an early push can never pin a char (the unit sends none on subscribe, CAPTURE
+     2026-10-10).
    * On the persistent session, the daemon's ``on_push`` is
      :py:meth:`calictl.serve.Server._on_push`. It hands every push to
      :py:meth:`calictl.observer.CampingObserver.on_push`, which decodes ``1202`` camping, ``1004``

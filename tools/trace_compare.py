@@ -60,19 +60,28 @@ def round_trip(events, funcs) -> dict:
     return out
 
 
-READ_ECHO_S = 0.05  # a notify this close before a read of the same char + value = BlueZ's echo
+# BlueZ's echo signature: the notify is logged ~1 ms BEFORE the read it re-delivers (buspi trace
+# 2026-10-10: ~1 ms apart, tail 9 ms of 1270 pairs), as the very next event, same char + value.
+READ_ECHO_S = 0.015
 
 
 def _read_echo(events, i) -> bool:
-    """True when notify ``events[i]`` is BlueZ re-delivering the read that follows it (no btmon
-    Handle Value Notification exists for these — buspi btmon 2026-10-10)."""
+    """True when notify ``events[i]`` is BlueZ re-delivering the client read logged right after it
+    (no btmon Handle Value Notification exists for these — buspi btmon 2026-10-10): the very next
+    event is a read of the same char and value within ``READ_ECHO_S``. Anything looser (a later
+    read, another event in between) stays a notification.
+
+    ponytail: timing heuristic; a real push landing <15 ms before a read of the same value would be
+    miscounted — a trace field marking read-callback deliveries would make it exact."""
     e = events[i]
-    for nxt in events[i + 1 : i + 4]:
-        if nxt["t"] - e["t"] > READ_ECHO_S:
-            break
-        if nxt.get("ev") == "read" and nxt.get("char") == e["char"] and nxt.get("hex") == e.get("hex"):
-            return True
-    return False
+    nxt = events[i + 1] if i + 1 < len(events) else None
+    return (
+        nxt is not None
+        and nxt.get("ev") == "read"
+        and nxt.get("char") == e.get("char")
+        and nxt.get("hex") == e.get("hex")
+        and 0 <= nxt["t"] - e["t"] <= READ_ECHO_S
+    )
 
 
 def cadence(events) -> dict:

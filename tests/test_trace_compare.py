@@ -66,12 +66,13 @@ def test_bluez_read_echoes_are_not_counted_as_notifications(tmp_path):
     evs = [
         _ev(100.000, "notify", "1202", "campingmode", "23"),  # echo of the read below
         _ev(100.001, "read", "1202", "campingmode", "23"),
-        _ev(105.000, "notify", "1202", "campingmode", "21"),  # a real push (USB off)
+        _ev(105.000, "notify", "1202", "campingmode", "21"),  # a real push (USB off) ...
+        _ev(105.030, "read", "1202", "campingmode", "21"),  # ... then a read of the same value: still a push
         _ev(140.000, "notify", "1802", "stairs", "00"),
         _ev(140.001, "read", "1802", "stairs", "00"),
     ]
     p = tmp_path / "ble.jsonl"
     p.write_text("\n".join(json.dumps(e) for e in evs) + "\n")
     c = trace_compare.report(str(p))["cadence"]
-    assert (c["1202"]["n"], c["1202"]["read_echoes"]) == (1, 1)
+    assert (c["1202"]["n"], c["1202"]["read_echoes"]) == (1, 1)  # the 105.0 push is not an echo
     assert (c["1802"]["n"], c["1802"]["read_echoes"]) == (0, 1)
