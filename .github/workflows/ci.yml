@@ -205,7 +205,7 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install deps
         run: pip install -r requirements-dev.txt
-      - name: Generated artifacts are fresh (csrc/ codec_dict.h + codec_chars.h + pairing_consts.h + net_consts.h + control_consts.h, firmware/web/ strings_gen.h + index_gen.html + app_bundle_gen.h)
+      - name: Generated artifacts are fresh (csrc/ codec_dict.h + codec_chars.h + pairing_consts.h + net_consts.h + control_consts.h, firmware/web/ strings_gen.h + index_gen.html + app_bundle_gen.h, calictl/webui/semantics_tables.js)
         run: python -m tools.gen_c_dict --check
       - name: Golden vectors are fresh
         run: python -m tools.gen_codec_vectors --check

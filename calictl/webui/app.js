@@ -440,9 +440,8 @@ const ROOF_ALERT_MSG = {
 // The subset of roof alerts on which the app refuses a MOVE (ig/c.java j(), plus the not-stationary
 // tile state observed on the real app 2026-09-16). sensor_error is deliberately absent: the app shows
 // it but still allows open/close. open_checklist (InfoPopUp 2) is absent too: the app's flow is
-// press -> checklist -> press again (CAPTURE 2026-10-10, real app, real unit).
-const ROOF_MOVE_BLOCK = new Set(["child_lock", "error", "driving", "emergency_locked", "not_possible", "low_battery",
-                                 "not_stationary"]);
+// press -> checklist -> press again (CAPTURE 2026-10-10, real app, real unit). ROOF_MOVE_BLOCK itself is
+// generated from control.ROOF_MOVE_BLOCK into semantics_tables.js.
 
 /**
  * Terminal-15 (ignition) — the vehicle char (1004 `TerminalOneFive`, bit 7) is the authoritative
@@ -463,14 +462,14 @@ const FEATURES = {
     title: "Cooler", icon: "❄️",
     controls: [
       { what: "power", kind: "toggle", label: "Refrigerator box", state: "on" },
-      { what: "level", kind: "slider", label: "Cooling level", state: "level", min: 1, max: 5 },
+      { what: "level", kind: "slider", label: "Cooling level", state: "level", min: CTL_COOLER_LEVEL_RANGE[0], max: CTL_COOLER_LEVEL_RANGE[1] },
       // Mode 0 = quiet mode off, 2 = manual quiet mode, 4 = automatic (timer-based) quiet mode.
       // Quiet mode is only settable while the box is ON; the start timer only while it is OFF
       // (the server refuses the latter too — control.command_precondition). Both gate on the
       // OPTIMISTIC power value so the rows follow the switch the moment it is tapped.
       { what: "mode", kind: "select", label: "Quiet mode",
         options: [{ value: "normal", label: "Off" }, { value: "quiet", label: "Manual" }, { value: "timer_quiet", label: "Automatic" }],
-        current: (s) => (s.mode === 2 ? "quiet" : s.mode === 4 ? "timer_quiet" : "normal"),
+        current: (s) => Object.keys(CTL_COOLER_MODES).find((k) => CTL_COOLER_MODES[k] === s.mode) || "normal",
         disabled: (s) => !optOn("cooler", "power", !!s.on) && "Switch the refrigerator box on first",
         confirm: () => t("Set the refrigerator box's quiet mode? Not yet verified on the van. Continue?") },
       { what: "night_on", kind: "hour", label: "Quiet mode starts at", current: (s) => s.quiet_from ?? 0,
@@ -548,7 +547,7 @@ const FEATURES = {
         confirm: (v) => (v === "off" ? t("Turn off continuous heating? It can only be turned back on from inside the vehicle. Continue?") : null) },
       // The app's temperature scale is 1–9 + "HI" (level 10); its run-time slider spans 10–120 min
       // (both observed on the app's heater page, tools/applab 2026-09-16).
-      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: 1, max: 10 },
+      { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: CTL_AIRHEATER_LEVEL_RANGE[0], max: CTL_AIRHEATER_LEVEL_RANGE[1] },
       { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 10, max: 120, unit: "min" },
       { what: "timer", kind: "time", label: "Start heating at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
@@ -621,7 +620,7 @@ const FEATURES = {
     controls: [
       { what: "mode", kind: "select", label: "Energy mode",
         options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max" }, { value: "eco", label: "ECO" }],
-        current: (s) => (/** @type {Record<number, string>} */ ({ 0: "normal", 1: "max_charge", 2: "eco" }))[/** @type {number} */ (s.energy_mode)],
+        current: (s) => Object.keys(CTL_ENERGY_MODES).find((k) => CTL_ENERGY_MODES[k] === s.energy_mode),
         disabled: (s) => !!s.energy_mode_locked,
         confirm: () => t("Set the energy management mode? This control is derived from the app and not yet verified on the van. Continue?") },
     ],
