@@ -200,6 +200,37 @@ comment says what to do at the van (see `tools/scenarios/lighting/kitchen-50.yam
   `timer_active=True, timer_hour=9, timer_min=0` matched the unit screen (was decompile-only). The
   timer can only be armed while the fridge is off — gated.
 
+## APP-DISPLAY rows — real app 5.4.0 on the real unit (2026-10-10)
+
+Tier **APP-DISPLAY 2026-10-10 (real app 5.4.0 on the real unit)**: every number/state the real
+CaliforniaOnTour app (5.4.0.3036, Fairphone 6, connected to the unit) shows, read as screen text
+(`uiautomator dump`, navigation only — no control touched), compared with buspi's `/api/state` and
+the raw fields in `last_state.json` pulled right before and right after each dump (10:39–10:46 UTC).
+Van parked, ignition off, camping mode on. Proves calictl's decode + scale against what the app
+shows for the same frame — not against a physical meter.
+
+| App screen · label | App shows | calictl raw → decoded | Verdict |
+|---|---|---|---|
+| Vehicle · Fresh water | `20 / 29 l` | `FreshWaterLevel` 20, `FreshWaterVolume` 29 → `fresh.liters` 20, `capacity_l` 29 | MATCH (Level = litres, Volume = capacity) |
+| Vehicle · Waste water | `0 / 22 l` | `WasteWaterLevel` 0, `WasteWaterVolume` 22 → 0 / 22 | MATCH |
+| Vehicle · Second battery | `40% • 23 h` | `SocTwoBattAfs` 4 → `soc2_pct` 40; `tTwoBattRemainingh` 23 → `batt2_remaining_h` 23 | MATCH (% = level×10; h = raw hours, minutes not shown) |
+| Vehicle Information · Second battery | `13.2 V • 2.0 A` (later `1.9 A`) | `UTwoBattBemAfs` 132 → 13.2 V; `ITwoBattBemAfs` 18–20 → 1.8–2.0 A | MATCH (×0.1 V, ×0.1 A; the 0.1 A steps tracked calictl's polls) |
+| Vehicle Information · Vehicle Battery | `40%` and `-- V • -- A` | `SocOneBattAfs` 4 → `soc1_pct` 40; `UOneBattBemAfs` 48, `IOneBattBemAfs` 129 (0x81), `AgeOneBattValuesMinutes` 25–28 → `batt1_v`/`batt1_current` None | MATCH — the app also blanks the starter V/A with ignition off but keeps its SoC |
+| Vehicle Information · Charging · Energy Mode | `Normal` | `EnergyMode` 0 → `energy_mode` 0 | MATCH |
+| Vehicle Information · Shore power | `0.0 W • 0.0 A` · `Inactive` | `PLandAfs` 0, `ILandAfs` 0, `StateLandAfs` 0 → 0 W, 0.0 A, inactive | MATCH (zero only — scale not exercised) |
+| Vehicle Information · Vehicle Power | `0.0 W • 0.0 A` · `Inactive` | `PDcdcAfs` 0, `IDcdcAfs` 65534 (−2), `StateDcdcAfs` 0 → 0 W, `dcdc_current` 0 (−2 + 2 on amb 0410), inactive | MATCH — the app applies the same +2 SW-0410 correction |
+| Refrigerator box | switch off, `Off • Level 3/5`, big `3`, `Timer: Off`, `Quiet mode: Off` | `State` 0, `Level` 3, `TimerState` 0, `Mode` 0 → `on` false, `level` 3, `timer_active` false, `quiet_mode` off | MATCH |
+| Auxiliary air heater (overview + Heating page) | `Off • Level 6/10`; page `Inactive`, level scale `1…9, HI`, `Run Time: 60 min` (slider 10–120), `Immediate heating` switch off, `Timer: Off` | `HeatingLevel` 6, `RunningTime` 60, `NormalOperation`/`PermanentOperation` 0 → `level` 6, `running_time` 60, `running` false, `timer_armed` false | MATCH (RunningTime = minutes; level 10 is shown as `HI`) |
+| Camping mode | `On`; master switch on; front-door lights `Enabled`; sliding-door rear lights `Enabled`; `Rear USB ports are Enabled` | `State` 1, `InteriorLight` 0, `OutsideLight` 0, `UsbCharger` 1; lighting door contact 1 → `master_on`, `lights_on` (inverted: 0/0 = lit), `usb_powered`, `door_contact` all true | MATCH (front-door row = the inverted combined light pair; sliding-door row = the lighting door-contact flag) |
+| Lighting | `All lights` off; tile A filled, B/C/D show `+`; every zone `0%` (Reading Left/Right/Front Passenger, Kitchen Background/Cooking, Pop-up roof Background, Exterior Rear Surroundings); Pop-up roof Reading Light `Only available when the pop-up roof is open.` | all equipped `Brightness…` 0, 13 on the not-fitted zones; favourites bit 0 → `any_on` false, `favourites_stored` [1]; roof `Position` 0 | MATCH (0 % only — the 1–10 → 10–100 % scale not exercised here) |
+| Pop-up roof (overview) | `Closed` | `Position` 0 → `position_name` closed | MATCH |
+| Level Indicator | `-.-°` / `-.-°`, `Signal unavailable. Ignition is off.` | `TerminalOneFive` 0, `CarLevelRoll`/`CarLevelPitch` 0 → `level_roll`/`level_pitch` **0.0** | DIFF — the app shows no value with ignition off; calictl reports 0.0. Angle units still unverified (needs ignition on) |
+
+Caveat seen on the way: the first dump right after opening *Vehicle Information* showed old numbers
+(`12.2 V • -7.0 A` starter, `13.1 V • 1.0 A` second battery) that calictl's raw frame did not
+contain; every later dump (4 over 70 s) matched calictl. The app renders what it last held before
+the fresh frame arrives — never use the first render of an app screen as evidence.
+
 ## ESP32 satellite — the control path (#154 B)
 
 The satellite writes control frames for cooler (`1101`), camping mode (`1201`), lighting (`1501`),

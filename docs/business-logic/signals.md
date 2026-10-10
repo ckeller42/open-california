@@ -163,12 +163,12 @@ confirmed against a live reference. Treat those as *trends*, not calibrated read
 
 | signal(s) | scale | unit | basis |
 |---|---|---|---|
-| `batt1_v`, `batt2_v` | ×0.1 | V | app getter + live read; **confirmed over 14 d telemetry**: batt1 12.2–14.8 V (mean 13.08), batt2 ~13.5 V nominal — realistic AGM/lead-acid band |
+| `batt1_v`, `batt2_v` | ×0.1 | V | app getter + live read; **confirmed over 14 d telemetry**: batt1 12.2–14.8 V (mean 13.08), batt2 ~13.5 V nominal — realistic AGM/lead-acid band. **APP-DISPLAY 2026-10-10**: the real app showed the second battery `13.2 V` for raw `UTwoBattBemAfs` 132 (`evidence-ledger.md`) |
 | `soc1_level`, `soc2_level` | raw | **0–15 level (NOT %)** | **confirmed over 14 d / 2472 samples**: soc1 ranged 6–14, soc2 10–14, mean ~9–10; **never approached 100 and capped at 14** (the 4-bit max). A percentage would show 60–100 on a parked-van drain; instead it behaves as a coarse level. Grafana shows a 0–15 bar gauge. |
 | water `fresh/waste_percent` | derived (`Level×100/Volume`) | % | live-verified (11 L / 29 L = 38 %) |
-| `batt2_current`, `shore_current`, `solar_current` | ×0.1 | A | **RESOLVED 2026-09-07** against the app view-model: `xf/d.java:159/173/175` divide the raw `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` by `10.0d` and the readout shows amps; binding raw bits→holder `xf/a.java:150-157,239,307`. Signedness unchanged (`batt2` signed, shore/solar unsigned). 511 stays the not-fitted sentinel (§4 below). |
-| `dcdc_current` | raw | A | **RESOLVED 2026-09-07**: `xf/d.java:171` applies **no** divisor (amps as-is), only the `+2` SW-0409/0410 correction (`semantics.apply_sw_corrections`, live-verified −2→0). |
-| `soc1_pct`, `soc2_pct` (derived) | `level×10` for 0–10, else `None` | % | mirrors the app's display math (`xf/a.java:333-337`) — **app-derived, not a sensor %**: the unit does emit levels 11–15 (seen over 14 d), for which the app's overview shows **"0 %"** (observed in the app lab 2026-09-16: levels 0–10 → 0–100 %, 11/12/15 → "0 %") and calictl emits `None` (more honest than a fake 0 %). `soc*_level` stays the truthful value. |
+| `batt2_current`, `shore_current`, `solar_current` | ×0.1 | A | **RESOLVED 2026-09-07** against the app view-model: `xf/d.java:159/173/175` divide the raw `ITwoBattBemAfs`/`ILandAfs`/`IPvAfs` by `10.0d` and the readout shows amps (**APP-DISPLAY 2026-10-10**: the real app showed `2.0 A` / `1.9 A` for raw 20 / 19 on the second battery; shore only at 0); binding raw bits→holder `xf/a.java:150-157,239,307`. Signedness unchanged (`batt2` signed, shore/solar unsigned). 511 stays the not-fitted sentinel (§4 below). |
+| `dcdc_current` | raw | A | **RESOLVED 2026-09-07**: `xf/d.java:171` applies **no** divisor (amps as-is), only the `+2` SW-0409/0410 correction (`semantics.apply_sw_corrections`, live-verified −2→0; **APP-DISPLAY 2026-10-10**: raw −2 on amb 0410 shown by the real app as Vehicle Power `0.0 A`). |
+| `soc1_pct`, `soc2_pct` (derived) | `level×10` for 0–10, else `None` | % | mirrors the app's display math (`xf/a.java:333-337`) — **app-derived, not a sensor %**: the unit does emit levels 11–15 (seen over 14 d), for which the app's overview shows **"0 %"** (observed in the app lab 2026-09-16: levels 0–10 → 0–100 %, 11/12/15 → "0 %") and calictl emits `None` (more honest than a fake 0 %). `soc*_level` stays the truthful value. **APP-DISPLAY 2026-10-10** on the real unit: level 4 → `40%` for both the vehicle and the second battery. |
 
 ### Sentinels in the telemetry (raw fields carry "no-data" markers)
 
@@ -177,7 +177,7 @@ subsystem is **installed and awake**, otherwise it reports a sentinel:
 
 | sentinel | fields | meaning |
 |---|---|---|
-| `0x81` (129) | `IOneBattBemAfs` (starter current) | engine-off / no measurement (handled in `semantics.energy`) |
+| `0x81` (129) | `IOneBattBemAfs` (starter current) | engine-off / no measurement (handled in `semantics.energy`). **APP-DISPLAY 2026-10-10**: with this sentinel (and `UOneBattBemAfs` 48) the real app shows the vehicle battery as `-- V • -- A` but keeps its SoC `40%` — calictl's `None`/`soc1_pct` match |
 | `511` (0x1FF) | `solar_current` (constant 511, solar **not fitted**), `shore_current` (tops out at 511) | not-installed / no-data marker for the source-current fields |
 | constant default | `air_temp`≡20, `water_temp`≡0 (LR-heater **not fitted**) | uninstalled-function placeholder, **not a reading** — scale unlearnable here |
 
