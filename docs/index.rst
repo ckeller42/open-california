@@ -44,6 +44,8 @@ clean and shows an empty "incoming" list).
    glossary
    api
 
+* :ref:`genindex` — every glossary term and API object
+
 .. toctree::
    :maxdepth: 1
    :caption: Appendix
