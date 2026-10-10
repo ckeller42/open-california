@@ -1360,7 +1360,8 @@ folded into them. Details:
      the whole link. Discover, subscribe to every state char, warm up
      ``CODEC_HEARTBEAT_WARMUP_MS`` (2 s), then read every function in order. A read and a push both
      replace a function's frame, so the last frame wins. The first ``SNAP`` line follows. Water
-     ``1302`` is re-read every 30 s. A lost link reconnects by bond after 1 s, doubling to 60 s.
+     ``1302`` is re-read every 30 s. A lost link reconnects by bond after 1 s, doubling to 60 s
+     — a unit hang-up (HCI ``0x13``) too: the #266 paced 30 s reconnect was removed after #279.
 
 .. mermaid::
 
@@ -1512,7 +1513,7 @@ confirmed (`howto-esp-wifi-setup.md` status box and :doc:`firmware`, "Network wa
      2026-10-09, #264), so the page keeps watching the unit's state across the reconnect (20 s).
      The kick is seen on the satellite's link only; the parked unit keeps the app's and buspi's
      held links (CAPTURE 2026-10-10): the satellite left the unit's ATT Exchange MTU Request
-     unanswered, so the unit's ATT timeout ended its link. Root cause found, fix in PR
+     unanswered, so the unit's ATT timeout ended its link. Fixed by #279
      (:need:`S_SEQ_SLEEP`).
 
 .. mermaid::

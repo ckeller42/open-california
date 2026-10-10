@@ -32,8 +32,6 @@ static uint64_t s_hb_next;
 static int s_reconnect_pending;
 static uint64_t s_reconnect_at;
 static uint32_t s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
-static int s_kicked;           /* this loss: the unit hung up (0x13) on a read-all-complete link */
-static uint64_t s_web_seen;    /* last /api/state served (cali_session_web_seen); 0 = never */
 
 static int s_warming;          /* discovered + subscribed, heartbeat running: reads start at s_warm_until */
 static uint64_t s_warm_until;
@@ -181,26 +179,12 @@ static void seed_water_frame(void) {
     s_fr[w].live = 0;   /* from an earlier link or NVS, never this link */
 }
 
-static int adopt_water(const uint8_t *data, size_t len) {
+static void adopt_water(const uint8_t *data, size_t len) {
     s_water_held = 0;
     memcpy(s_wg.frame, data, len);
     s_wg.len = len;
     s_wg.have = 1;
-    return cali_kv_set(WATER_GOOD_KEY, data, len);
-}
-
-int cali_session_water_seed(const uint8_t *frame, size_t len) {
-    static const uint8_t zero[CODEC_FRAME_MAX];
-    static codec_kv_t kv[CODEC_KV_MAX];
-    const codec_func_t *wf = codec_func_by_name("water");
-    if (!wf || len == 0 || len > CODEC_FRAME_MAX) return -1;
-    /* Exactly the water frame length, from the codec: every field fits in len, not in len - 1. */
-    int all = codec_decode(wf, zero, CODEC_FRAME_MAX, kv);
-    if (codec_decode(wf, frame, len, kv) != all || codec_decode(wf, frame, len - 1, kv) == all)
-        return -1;
-    int persisted = adopt_water(frame, len);
-    seed_water_frame();
-    return persisted == CALI_KV_OK ? 0 : -2;   /* -2: shown now, but will not survive a reboot */
+    (void)cali_kv_set(WATER_GOOD_KEY, data, len);
 }
 
 static void store(size_t i, const uint8_t *data, size_t len) {
@@ -267,32 +251,13 @@ static void link_clear(void) {
     s_rereading = 0;
 }
 
-/* HCI 0x13 "remote user terminated connection": raw (the fake, btmon) or NimBLE host-encoded
- * (0x200 + 0x13 = 531, what ble_nimble.c forwards from disconnect.reason). */
-static int remote_terminated(int status) { return status == 0x13 || status == 0x213; }
-
-/* Somebody is watching the page: /api/state was served within the window (the shared UI polls it
- * while open). Then a kicked link reconnects on the fast backoff, keeping the page ~live. */
-static int viewer_active(void) {
-    return s_web_seen && s_now - s_web_seen < CALI_SESSION_VIEWER_ACTIVE_MS;
-}
-
 static void schedule_reconnect(void) {
-    int kicked = s_kicked;
-    s_kicked = 0;
     if (!s_active) return;
     if (!s_t->has_bond()) {                           /* bond gone (forget): nothing to reconnect to */
         s_active = 0;
         return;
     }
     s_reconnect_pending = 1;
-    if (kicked && !viewer_active()) {
-        /* The parked unit shed an idle held guest (#264, field 2026-10-09): reconnect on calictl's
-         * poll cadence — a unit-approved duty cycle — and leave the backoff state untouched. */
-        s_reconnect_at = s_now + CALI_SESSION_KICKED_RECONNECT_MS;
-        cali_log("session: reconnect in %u ms", (unsigned)CALI_SESSION_KICKED_RECONNECT_MS);
-        return;
-    }
     s_reconnect_at = s_now + s_backoff;
     cali_log("session: reconnect in %u ms", (unsigned)s_backoff);
     s_backoff = s_backoff * 2 > CALI_SESSION_BACKOFF_MAX_MS ? CALI_SESSION_BACKOFF_MAX_MS : s_backoff * 2;
@@ -403,7 +368,6 @@ static void on_event(const cali_tevent_t *e) {
     case CALI_TEV_DISCONNECTED:
         if (s_link == LINK_DOWN) break;
         cali_log("session: link lost (event %d, status %d)", (int)e->ev, e->status);
-        if (e->ev == CALI_TEV_DISCONNECTED && s_snapped && remote_terminated(e->status)) s_kicked = 1;
         if (e->ev == CALI_TEV_DISCONNECTED || e->ev == CALI_TEV_CONNECT_FAIL) link_clear();
         link_lost();
         break;
@@ -438,8 +402,6 @@ void cali_session_init(const cali_transport_t *t) {
     link_clear();
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
-    s_kicked = 0;
-    s_web_seen = 0;
     memset(s_fr, 0, sizeof s_fr);
     memset(s_lcfg, 0, sizeof s_lcfg);
     s_last_update = 0;
@@ -485,8 +447,7 @@ void cali_session_stop(void) {
     s_active = 0;
     s_reconnect_pending = 0;
     s_backoff = CALI_SESSION_BACKOFF_MIN_MS;
-    s_kicked = 0;
-    if (s_link != LINK_DOWN) (void)s_t->disconnect();   /* the unit has one slot: free it */
+    if (s_link != LINK_DOWN) (void)s_t->disconnect();   /* drop our link: the ESP holds at most one */
     link_clear();
     unit_check();   /* a forget lands here with the bond gone */
 }
@@ -542,8 +503,6 @@ void cali_session_tick(uint64_t now_ms) {
 void cali_session_connect_now(void) {
     if (s_active && s_link == LINK_DOWN && s_reconnect_pending) s_reconnect_at = s_now;
 }
-
-void cali_session_web_seen(void) { s_web_seen = s_now ? s_now : 1; }
 
 int cali_session_water_held(void) { return s_water_held; }
 

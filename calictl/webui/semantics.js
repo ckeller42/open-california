@@ -15,11 +15,9 @@
 /** @typedef {Record<string, any>} Interp  one function's interpreted leaves */
 
 /** Seconds without a snapshot after which the satellite page reads offline ("van asleep"): three
- * of the session's kicked-reconnect periods (3 * CALI_SESSION_KICKED_RECONNECT_MS / 1000,
- * cali_session.h — tests pin it). The parked unit terminates the held link ~15-20 s after each
- * connect and the paced reconnect refreshes data ~every 45-50 s (field 2026-10-09, #264), so
- * seconds-old data with the link momentarily down is NOT "van asleep" — the banner keys on DATA
- * AGE, never on link state. (The CoreS3's own screen keeps its 10 s red tint: DISPLAY_STALE_MS in
+ * of the session's held-link water re-read periods (3 * CALI_SESSION_WATER_REREAD_MS / 1000,
+ * cali_session.h — tests pin it), so a link momentarily down with seconds-old data is NOT "van
+ * asleep" — the banner keys on DATA AGE, never on link state. (The CoreS3's own screen keeps its 10 s red tint: DISPLAY_STALE_MS in
  * display_model.c is the device's link-freshness cue, a different thing.) */
 const SAT_OFFLINE_S = 90;
 

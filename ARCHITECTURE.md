@@ -281,9 +281,9 @@ camping mode, lighting, air heater and energy mode (device-verified on the real 
 wake-up light and door contact), runs the same water guard as calictl, and answers a
 write whose link dropped after the frame went out as *unconfirmed* (#271). It holds its link while
 the van is parked: the unit's ATT MTU request is answered since NimBLE keeps its GATT server
-(#279); the paced reconnect after a dropped link (#266) stays as a fallback. It
+(#279), so #266's paced reconnect was removed: a dropped link takes the 1 s→60 s backoff. It
 also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
-then it serves a status page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
+then it serves the calictl UI (with a Device status screen), a WiFi setup page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
 from `http://calictl-esp.local` — the same platform-free C (`wifi_sm`/`wifi_run`/`http_core`/`web`)
 on the host tier, where a scripted fake WiFi stands in for the radio, and on the chip. In station mode
 the satellite serves the same calictl web UI at `/` with its controls live (`POST /api/command` in

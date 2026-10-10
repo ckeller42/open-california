@@ -12,7 +12,7 @@ and under ESP-IDF for the ESP32 satellite (#154, `firmware/`). Produced for issu
 | `net_consts.h` | **GENERATED** WiFi setup constants (`tools/wifi_consts.py`) for the firmware's network layer. Same generator/freshness gate. |
 | `control_consts.h` | **GENERATED** from `calictl/control.py`: the ESP write allow-list (control char + exact frame length of the five functions the satellite may write — never the roof's), the lighting commit frame, zone/colour/mode tables, builder constants and the `command_precondition` gate texts, for the C control twin (spec B). Same generator/freshness gate; its golden vectors are `tests/vectors/control.json` (`python3 -m tools.gen_control_vectors --check`). |
 | `codec.h` / `codec.c` | The dictionary-driven bit slicer — a line-for-line semantic port of `calictl/protocol.py` (`decode`/`encode`, MSB-first `bit i = byte[i/8] >> (7-i%8) & 1`, same validation order and error cases). |
-| `ports.h` / `ports.c` | Portable decision logic shared with `calictl` (freshness stale-latch guard, plausibility anchors, roof SafetyCounter formula). |
+| `ports.h` / `ports.c` | Portable decision logic shared with `calictl` (the water freshness stale-latch guard and ramp debounce; the ESP has no roof and no anchors). |
 | `codec_cli.c` | Batched line-protocol driver used ONLY by the two parity harnesses (`tests/test_codec_parity.py` for the codec, `tests/test_ports_parity.py` for the ports) — not part of the ESP build. |
 
 ## Build (host)
@@ -58,8 +58,6 @@ D <func> <hex|->                        → OK Name=1 ...  | ERR nofunc|parse
 E <func> <frame_bytes> [Name=val ...]   → OK <hex>       | ERR width|range|nodefault|frame|nofunc|parse
 F <nf|-> <pf|-> <ng|-> <pg|->           → OK 0|1         | ERR parse
 W reset | W <now_ms> <nf|-> <pf|-> <ng|-> <pg|-> → OK [0|1] | ERR parse
-A [key=value ...]                       → OK <bitmask>   | ERR parse
-C <seed> <tick_ms> <elapsed_ms>         → OK <ctr> <hex4> | ERR parse
 ```
 
 - `D`/`E` — the frame codec (`codec_decode` / `codec_encode`), driven by `tests/test_codec_parity.py`.
@@ -68,20 +66,14 @@ C <seed> <tick_ms> <elapsed_ms>         → OK <ctr> <hex4> | ERR parse
 - `W` — `freshness_settle` (port of `calictl/freshness.py:settle_water`, the ramp debounce): the new
   reading and the baseline (`pf`/`pg`, `-` = no baseline) at `now_ms`; `1` = adopt. The candidate
   persists across `W` lines until `W reset`. Vectors: `sequences` in `tests/vectors/freshness.json`.
-- `A` — `anchors_check` (port of `calictl/anchors.py:check`): keys `batt2_v soc2_level cooler_installed
-  cooler_level quiet_from quiet_to roof_installed roof_position level_roll level_pitch`; answers the
-  violation bitmask (`ANCHOR_*` in `ports.h`, `0` = clean).
-- `C` — `roof_safety_counter` + `roof_beat_bytes` (port of `calictl/device.py`'s `_roof_safety_counter` /
-  `_beat_bytes`): the counter and its 4-byte big-endian encoding. Vectors: `tests/vectors/safety_counter.json`.
-
-`F`/`A`/`C` are driven by `tests/test_ports_parity.py`. Malformed input answers `ERR parse` (or
+`F`/`W` are driven by `tests/test_ports_parity.py`. Malformed input answers `ERR parse` (or
 `ERR width` for an `E` value above 32 bits) and never crashes (the fuzz pass feeds it garbage on purpose).
 
 ## #154 status
 
-Done (#156): the dictionary-driven codec plus three decision ports (freshness stale-latch,
-plausibility anchors, roof SafetyCounter), each with golden vectors proven against the Python
-original and replayed through the C build in CI.
+Done (#156): the dictionary-driven codec plus the water freshness ports, each with golden vectors
+proven against the Python original and replayed through the C build in CI. (The anchors and roof
+SafetyCounter ports were removed again: the ESP has neither; the Python originals stay.)
 
 Consumed by the firmware (`firmware/`, see `docs/firmware.md`): the ESP-IDF `csrc` component
 compiles `codec.c` for the ESP32-S3 — `codec_decode` for the `SNAP`/`/api/state` path and, since the

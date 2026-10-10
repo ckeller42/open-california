@@ -95,9 +95,8 @@ with no NVS baseline shows no water on the `1` latch until a level ≥ 2 has set
 debounce, below). Why this matters: buspi (poll, then release) and the ESP (persistent, re-read every 30 s)
 would otherwise disagree — buspi holding the real ~17 L while the ESP showed a confident `1 L` / 3 %
 (field 2026-10-09: buspi 22 L held/stale vs ESP 1 L raw, the discrepancy that prompted this).
-After a reflash the ESP baseline can be seeded from buspi's last plausible reading with the
-console command `water seed <hex>` (the raw 6-byte `1302` frame; anything else is rejected and the
-baseline is untouched); otherwise it self-establishes on the next active-van read.
+After a reflash the ESP baseline self-establishes on the next measurement (adopted ~5 s after it
+settles), as calictl's does — there is no seed command.
 
 ## Connection failure modes (why buspi shows offline)
 

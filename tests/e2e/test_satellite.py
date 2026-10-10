@@ -124,7 +124,6 @@ def test_menu_device_status_screen(sat, stub):
     expect(sat.get_by_text("C0:FF:EE:CA:11:F0")).to_be_visible()  # bonded unit (/api/pairing)
     sat.get_by_text("Open setup").click()  # satellite-only link
     sat.wait_for_url(stub.base + "/device")
-    sat.wait_for_selector("#device h2")
     sat.wait_for_selector('#device a[href="/"]')  # the link back (station mode)
 
 
@@ -224,11 +223,9 @@ def test_device_page_links_to_the_ui_in_every_mode(stub, error_gated_page):
     """Station mode: back to / (the UI). Setup hotspot: to /app — the UI with the pairing wizard,
     since / is the setup page there."""
     with error_gated_page(stub.base + "/device") as pg:
-        pg.wait_for_selector("#device h2")
         pg.wait_for_selector('#device a[href="/"]')
     stub.mode = "setup"
     with error_gated_page(stub.base + "/device") as pg:
-        pg.wait_for_selector("#device h2")
         expect(pg.locator('#device a[href="/app"]')).to_have_text("Open the camper UI to pair the unit")
         assert pg.locator('#device a[href="/"]').count() == 0
 

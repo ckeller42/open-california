@@ -46,11 +46,11 @@ CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192
 # - Connection re-attempt (IDF default y on the S3): on an establishment failure with reason 0x3e —
 #   exactly this unit's known failure (guided-pairing.md) — esp-nimble would re-run the connect
 #   inside the stack. The re-attempted link comes up with s_encrypt_on_connect already cleared
-#   (ble_nimble.c gap_cb, BLE_GAP_EVENT_CONNECT), i.e. UNENCRYPTED, and can hold the unit's single
-#   slot; the pairing SM / session own the retry policy instead. Upstream NimBLE has no such path.
+#   (ble_nimble.c gap_cb, BLE_GAP_EVENT_CONNECT), i.e. UNENCRYPTED, and can hold the ESP's one
+#   link; the pairing SM / session own the retry policy instead. Upstream NimBLE has no such path.
 CONFIG_BT_NIMBLE_ENABLE_CONN_REATTEMPT=n
-# - One connection (host syscfg BLE_MAX_CONNECTIONS 1; IDF default 3). The unit has one slot, and
-#   the retry/cancel paths were proven with ble_gap_connect failing ENOMEM while a link terminates.
+# - One connection (host syscfg BLE_MAX_CONNECTIONS 1; IDF default 3). The ESP holds one link to
+#   the unit (its own rule — the unit serves several centrals), and the retry/cancel paths were proven with ble_gap_connect failing ENOMEM while a link terminates.
 CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
 # - Legacy advertising/scanning only (host syscfg BLE_EXT_ADV 0). With extended scanning on,
 #   ble_gap_disc reports BLE_GAP_EVENT_EXT_DISC, which gap_cb ignores: discovery would never find

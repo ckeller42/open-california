@@ -50,14 +50,11 @@ Every screen also renders in dark mode (``docs/screenshots/dark_*.png``).
 ESP32 satellite page
 --------------------
 
-The status/setup page the ESP32 firmware serves (#154) — setup-hotspot mode and station mode. Rendered
+The WiFi setup page the ESP32 firmware serves (#154), in setup-hotspot mode (its status rows live
+in the calictl UI's Device status screen since #267). Rendered
 by ``python -m tools.ux_gallery --esp`` from the generated page bytes plus canned API responses (no
 firmware or radio involved); see :doc:`howto-esp-wifi-setup`.
 
 .. image:: screenshots/esp-setup-page.png
    :width: 300
    :alt: ESP32 setup page — network list, password, Connect
-
-.. image:: screenshots/esp-status-page.png
-   :width: 300
-   :alt: ESP32 status page — device state and camper-unit functions

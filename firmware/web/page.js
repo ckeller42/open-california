@@ -1,4 +1,5 @@
-/* page.js — the ESP32 firmware's status/setup page script (#154). SOURCE: tools/gen_c_dict.py inlines
+/* page.js — the ESP32 firmware's WiFi setup page script (#154): the provisioning form + a link to the
+ * calictl UI, whose Device status screen shows the satellite's status (#267). SOURCE: tools/gen_c_dict.py inlines
  * it into index_gen.html (index.html's PAGE_JS placeholder), right after the script that defines
  * CFG (generated constants) and STR (the strings.json table) — their types: globals.d.ts.
  * Un-built JS: `tools/ci.sh webcheck` type-checks it (tsc --checkJs, jsconfig.json, 0 errors) and
@@ -11,10 +12,8 @@
  * @typedef {{ mode: string, ssid: string|null, ip: string|null, rssi: number|null }} Wifi
  * @typedef {{ ssid: string, rssi: number, secure: boolean }} Ap
  * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
- * @typedef {{ pairing: { state: string, address: string|null },
- *             link: { up: boolean, last_snap_age_ms: number|null },
- *             wifi: Wifi, control: { writes: boolean }, uptime_ms: number, fw: string }} Device
- * @typedef {{ t: number, fn: Record<string, Record<string, unknown>>, device: Device }} State
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi }} Device  the /api/state fields this page reads
+ * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
  */
@@ -30,12 +29,6 @@ function t(key, vars) {
   for (const k in vars || {}) s = s.split("{" + k + "}").join(String((vars || {})[k]));
   return s;
 }
-/* the unit's own function titles (calictl web UI vocabulary); other functions show their raw name */
-/** @type {Record<string, string>} */
-const FN = {vehicle: "fn_vehicle", cooler: "fn_cooler", campingmode: "fn_campingmode", lighting: "fn_lighting",
-            airheater: "fn_airheater", water: "fn_water", energy: "fn_energy", roof: "fn_roof"};
-/** @type {Record<string, string>} */
-const MODE = {setup: "mode_setup", station: "mode_station", off: "mode_off"};
 /* /api/wifi last_error -> the text that says why a join failed */
 /** @type {Record<string, string>} */
 const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
@@ -68,12 +61,6 @@ function el(tag, text, cls) {
   if (cls) e.className = cls;
   return e;
 }
-/** @param {[string, string][]} rows @returns {HTMLDListElement} */
-function list(rows) {
-  const dl = el("dl");
-  for (const [k, v] of rows) { dl.appendChild(el("dt", k)); dl.appendChild(el("dd", v)); }
-  return dl;
-}
 /**
  * @template T
  * @param {string} url
@@ -96,60 +83,20 @@ $("ssid-label").textContent = t("network");
 $("psk-label").textContent = t("password");
 $("connect").textContent = t("connect");
 $("rescan").textContent = t("rescan");
-$("functions-title").textContent = t("functions");
 document.documentElement.lang = LANG;
 
 /** @type {Join|null} a submitted join being watched */
 let joining = null;
 
-/* uptime like the device's own screen (display_model.c): "45 s", "N min", "H h M min", "D d H h" */
-/** @param {number} ms @returns {string} */
-function fmtUptime(ms) {
-  const s = Math.floor(ms / 1000), min = Math.floor(s / 60), h = Math.floor(min / 60), d = Math.floor(h / 24);
-  if (!min) return s + " s";
-  if (!h) return min + " min";
-  return d ? d + " d " + (h % 24) + " h" : h + " h " + (min % 60) + " min";
-}
-
 /** @param {Device} d */
-function renderDevice(d) {
-  const box = $("device");
-  box.textContent = "";
-  box.appendChild(el("h2", t("device")));
-  const w = d.wifi, age = d.link.last_snap_age_ms;
-  box.appendChild(list([
-    /* a bonded address with a live link is paired: "idle" (reconnected by the stored bond, the
-     * pairing flow never ran) or "bonded" (fresh from a pair) would show a raw, untranslated word */
-    [t("pairing"), d.pairing.address && d.link.up && (d.pairing.state === "idle" || d.pairing.state === "bonded")
-      ? t("paired") : d.pairing.state],
-    [t("address"), d.pairing.address || t("none")],
-    [t("link"), t(d.link.up ? "link_up" : "link_down")],
-    [t("last_update"), age === null ? t("none") : t("seconds_ago", {n: Math.round(age / 1000)})],
-    [t("wifi"), t(MODE[w.mode] || "mode_off") + (w.ssid ? " · " + w.ssid : "")],
-    [t("ip"), w.ip || t("none")],
-    [t("signal"), w.rssi === null ? t("none") : w.rssi + " dBm"],
-    [t("uptime"), fmtUptime(d.uptime_ms)],
-    [t("firmware"), d.fw],
-  ]));
+function renderLink(d) {
   /* the calictl web UI: GET / in station mode; elsewhere (the setup hotspot) GET /app, where its
    * pairing wizard pairs the unit without home WiFi */
-  const a = el("a", t(w.mode === "station" || d.pairing.address ? "app_link" : "app_link_pair"));
-  a.href = w.mode === "station" ? "/" : "/app";
-  box.appendChild(a);
-}
-
-/** @param {State["fn"]} fn */
-function renderFunctions(fn) {
-  const box = $("functions");
+  const box = $("device"), station = d.wifi.mode === "station";
   box.textContent = "";
-  const names = Object.keys(fn);
-  if (!names.length) { box.appendChild(el("p", t("no_data"), "muted")); return; }
-  for (const name of names) {
-    const card = el("div", undefined, "box");
-    card.appendChild(el("h2", FN[name] ? t(FN[name]) : name));
-    card.appendChild(list(Object.keys(fn[name]).map((k) => /** @type {[string, string]} */ ([k, String(fn[name][k])]))));
-    box.appendChild(card);
-  }
+  const a = el("a", t(station || d.pairing.address ? "app_link" : "app_link_pair"));
+  a.href = station ? "/" : "/app";
+  box.appendChild(a);
 }
 
 /** @param {Ap[]} scan */
@@ -254,8 +201,7 @@ async function poll() {
     if (joining) await watchJoin(joining);
     const s = (/** @type {{body: State}} */ (await fetchJson("/api/state"))).body;
     $("banner").style.display = "none";
-    renderDevice(s.device);
-    renderFunctions(s.fn);
+    renderLink(s.device);
     const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
     $("setup").hidden = !setup;
     if (setup && !setupShown && !joining) scan();

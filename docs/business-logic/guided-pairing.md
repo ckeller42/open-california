@@ -287,5 +287,5 @@ What stays true operationally:
 - The tolerance is **state-dependent** (DEVICE, 2026-10-09): the *parked* unit (ignition off)
   terminates an idle held link with HCI 0x13 ~15–20 s after each connect while continuing to
   serve buspi's 30 s connect→read-all→release poll; with ignition on the same two persistent
-  links held indefinitely. The ESP session paces its reconnect accordingly
-  (`CALI_SESSION_KICKED_RECONNECT_MS`, `cali_session.h`).
+  links held indefinitely. Root cause (#279): the ESP left the unit's ATT MTU request unanswered;
+  answered, the parked unit holds its link too, so the ESP's #266 paced reconnect was removed.
