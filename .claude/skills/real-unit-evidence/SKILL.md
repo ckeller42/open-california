@@ -66,11 +66,12 @@ Every claim you write (ledger row, doc sentence, PR body, commit) has these part
 4. **Source + version + date** — `buspi:~/applog/<file>`, app `versionName`, unit AmbSw, date.
 5. **Tier** — the tier the *source* supports (table above), not a stronger one.
 
-Example: "CAPTURE 2026-10-10 (app 5.4.0.3036, unit 0410, parked, camping on;
-`buspi:~/applog/att-5.txt`): cooler `power` on/off and `level` 3→4 byte-identical to `control.build`;
+Example (illustrative): "CAPTURE 2026-10-10 (app 5.4.0.3036, unit 0410, parked, camping on;
+`buspi:~/applog/att-N.txt`): cooler `power` on/off and `level` 3→4 byte-identical to `control.build`;
 camping USB `f3`/`f7` identical. Not compared: roof (no move), air heater."
 
 Rules that keep the claim honest:
+
 - A **decompile name is a hypothesis** until a caller, a string, or a recording confirms it.
 - **The fake unit is not the real unit.** A behaviour seen only against the mock stays APP-OBSERVED /
   mock-tested; never label a unit code from it (roof InfoPopUp 2 was called "in use" from the fake —
