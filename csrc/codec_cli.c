@@ -155,53 +155,6 @@ static void op_settle(void)
     printf("OK %d\n", freshness_settle(v[0], v[1], v[2], v[3], have, now, FRESH_SETTLE_MS, &pend));
 }
 
-/* A [key=value ...]  keys: batt2_v soc2_level cooler_installed cooler_level
- * quiet_from quiet_to roof_installed roof_position level_roll level_pitch */
-static void op_anchors(void)
-{
-    anchors_in_t in;
-    memset(&in, 0, sizeof in);
-    for (char *tok = strtok(NULL, " "); tok; tok = strtok(NULL, " ")) {
-        char *eq = strchr(tok, '=');
-        if (!eq) { puts("ERR parse"); return; }
-        *eq = '\0';
-        char *end;
-        float fv = strtof(eq + 1, &end);
-        long iv = (long)fv;
-        if (*end) { puts("ERR parse"); return; }
-        if (strcmp(tok, "batt2_v") == 0)            { in.batt2_v = fv; in.have |= ANCHOR_BATT2_V; }
-        else if (strcmp(tok, "soc2_level") == 0)    { in.soc2_level = (int32_t)iv; in.have |= ANCHOR_SOC2_LEVEL; }
-        else if (strcmp(tok, "cooler_installed") == 0) in.cooler_installed = iv != 0;
-        else if (strcmp(tok, "cooler_level") == 0)  { in.cooler_level = (int32_t)iv; in.have |= ANCHOR_COOLER_LEVEL; }
-        else if (strcmp(tok, "quiet_from") == 0)    { in.quiet_from = (int32_t)iv; in.have |= ANCHOR_QUIET_FROM; }
-        else if (strcmp(tok, "quiet_to") == 0)      { in.quiet_to = (int32_t)iv; in.have |= ANCHOR_QUIET_TO; }
-        else if (strcmp(tok, "roof_installed") == 0) in.roof_installed = iv != 0;
-        else if (strcmp(tok, "roof_position") == 0) { in.roof_position = (int32_t)iv; in.have |= ANCHOR_ROOF_POSITION; }
-        else if (strcmp(tok, "level_roll") == 0)    { in.level_roll = fv; in.have |= ANCHOR_LEVEL_ROLL; }
-        else if (strcmp(tok, "level_pitch") == 0)   { in.level_pitch = fv; in.have |= ANCHOR_LEVEL_PITCH; }
-        else { puts("ERR parse"); return; }
-    }
-    printf("OK %" PRIu32 "\n", anchors_check(&in));
-}
-
-/* C <seed> <tick_ms> <elapsed_ms>  (integers; elapsed is uint64) */
-static void op_counter(void)
-{
-    const char *a = strtok(NULL, " "), *b = strtok(NULL, " "), *c = strtok(NULL, " ");
-    if (!a || !b || !c) { puts("ERR parse"); return; }
-    char *end;
-    unsigned long long seed = strtoull(a, &end, 10);
-    if (*end || seed > 0xFFFFFFFFull) { puts("ERR parse"); return; }
-    unsigned long long tick = strtoull(b, &end, 10);
-    if (*end || tick == 0 || tick > 0xFFFFFFFFull) { puts("ERR parse"); return; }
-    unsigned long long ms = strtoull(c, &end, 10);
-    if (*end) { puts("ERR parse"); return; }
-    uint32_t ctr = roof_safety_counter((uint32_t)seed, ms, (uint32_t)tick);
-    uint8_t beat[4];
-    roof_beat_bytes(ctr, beat);
-    printf("OK %" PRIu32 " %02x%02x%02x%02x\n", ctr, beat[0], beat[1], beat[2], beat[3]);
-}
-
 int main(void)
 {
     char line[4096];
@@ -218,10 +171,6 @@ int main(void)
             op_freshness();
         else if (strcmp(op, "W") == 0)
             op_settle();
-        else if (strcmp(op, "A") == 0)
-            op_anchors();
-        else if (strcmp(op, "C") == 0)
-            op_counter();
         else
             puts("ERR parse");
     }
