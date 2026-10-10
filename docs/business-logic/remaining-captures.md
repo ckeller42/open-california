@@ -120,15 +120,16 @@ calictl frame — verified offline). The capture is the only manual seam; everyt
 ssh buspi 'curl -s http://localhost:8088/api/state' | python3 -c 'import sys,json;m=json.load(sys.stdin)["_meta"];print("online:",m["online"],"age_s:",m["age_s"])'
 ```
 
-`online: True` → buspi has the slot. If the phone app is open it may hold the single slot — close it.
+`online: True` → buspi is connected. The phone app can stay open: the unit accepts several centrals
+at once (CAPTURE 2026-10-10, `protocol-crosscheck-applab.md`).
 
-**1. Capture (bar Mac) → diff (repo host).** Per action: start the logger, do ONE thing in the app,
-stop, then diff. Capture SOP + iPhone UDID: `.claude/skills/capture-and-diff/SKILL.md`.
+**1. Capture → diff.** Per action: mark it, do ONE thing in the app, then pull and diff. Capture
+SOP: `.claude/skills/phone-app-lab/SKILL.md` (real phone, HCI snoop over adb from buspi); landing
+the result: `.claude/skills/real-unit-evidence/SKILL.md`.
 
 ```
-# on the bar: idevicebtlogger -u <UDID> -f pcap /tmp/<label>.pcap   (Ctrl-C to stop)
-# then, where the repo + tshark live:
-python3 -m tools.capture_diff /tmp/<label>.pcap <scenario>
+# on buspi: pull the bugreport's btsnoop_hci.log (phone-app-lab), then where the repo + tshark live:
+python3 -m tools.capture_diff <btsnoop_hci.log> <scenario>
 ```
 
 Run the **known-good validators FIRST** (must diff to zero — proves the pipeline):

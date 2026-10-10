@@ -220,7 +220,8 @@ never open a 2nd BLE connection from buspi. Warm the fast session first with `PO
   5.4.0 and 5.0.8.3028 (private repo `ckeller42/californiaontour-re`, skill `decompile-app`). For this
   van (CommunicationVersion 2) 5.4.0's protocol is unchanged; 5.4.0 adds a V3 layer (chars `1603`,
   `F002`, V3 1602/F001 layouts) calictl must never write to a V2 unit. Real-phone data collection:
-  skill `phone-app-lab` (wireless adb from buspi, HCI snoop, never actuate without the owner's request).
+  skill `phone-app-lab` (wireless adb from buspi, HCI snoop, never actuate without the owner's request). Turning a
+  recording into a documented fact (tier, scoped claim, docs, mock): skill `real-unit-evidence`.
 - **Pairing needs a quiet radio:** any BlueZ client holding discovery (calictl unpaired polls —
   now guarded, readers, HA Bluetooth) kills a new LE link with 0x3e; the unit advertises a
   rotating address, only the bonded identity is stable. See `guided-pairing.md`.
