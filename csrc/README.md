@@ -57,6 +57,7 @@ One output line per input line, in order. `-` denotes an empty frame.
 D <func> <hex|->                        → OK Name=1 ...  | ERR nofunc|parse
 E <func> <frame_bytes> [Name=val ...]   → OK <hex>       | ERR width|range|nodefault|frame|nofunc|parse
 F <nf|-> <pf|-> <ng|-> <pg|->           → OK 0|1         | ERR parse
+W reset | W <now_ms> <nf|-> <pf|-> <ng|-> <pg|-> → OK [0|1] | ERR parse
 A [key=value ...]                       → OK <bitmask>   | ERR parse
 C <seed> <tick_ms> <elapsed_ms>         → OK <ctr> <hex4> | ERR parse
 ```
@@ -64,6 +65,9 @@ C <seed> <tick_ms> <elapsed_ms>         → OK <ctr> <hex4> | ERR parse
 - `D`/`E` — the frame codec (`codec_decode` / `codec_encode`), driven by `tests/test_codec_parity.py`.
 - `F` — `freshness_implausible_drop` (port of `calictl/freshness.py:implausible_water_drop`): new/previous
   fresh and grey liters, `-` for a missing value; `1` = stale latch. Vectors: `tests/vectors/freshness.json`.
+- `W` — `freshness_settle` (port of `calictl/freshness.py:settle_water`, the ramp debounce): the new
+  reading and the baseline (`pf`/`pg`, `-` = no baseline) at `now_ms`; `1` = adopt. The candidate
+  persists across `W` lines until `W reset`. Vectors: `sequences` in `tests/vectors/freshness.json`.
 - `A` — `anchors_check` (port of `calictl/anchors.py:check`): keys `batt2_v soc2_level cooler_installed
   cooler_level quiet_from quiet_to roof_installed roof_position level_roll level_pitch`; answers the
   violation bitmask (`ANCHOR_*` in `ports.h`, `0` = clean).

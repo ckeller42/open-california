@@ -93,6 +93,7 @@ def _start_daemon(port, extra_env, expect_installed=True):
         CALICTL_HEARTBEAT_WARMUP_S="0",
         CALICTL_ENABLE_WRITES="1",  # e2e exercises control writes -> not read-only
         CALICTL_PERSISTENT_SESSION="1",
+        CALICTL_WATER_SETTLE_S="0",  # the mock doesn't ramp: show its water on the first poll
     )  # default, explicit for the session-pill test's intent
     env.update(extra_env)
     proc = subprocess.Popen(

@@ -347,6 +347,7 @@ def test_poll_writes_only_installed_functions_to_influx(mock, monkeypatch):
 
     s = serve.Server("11:22:33:44:55:66", influx_enabled=True)
     s._iw = _Rec()
+    s._water_settle_s = 0  # one poll: adopt the mock's water at once (no ramp debounce)
 
     async def _run():
         s._ble = asyncio.Lock()

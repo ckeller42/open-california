@@ -961,6 +961,64 @@ def test_water_stale_latch_guard():
     assert freshness.implausible_water_drop({"fresh": {"liters": None}}, w(17, 1)) is False
 
 
+def _settle_run(good, steps, settle=5.0):
+    """Feed (t, fresh) readings (grey 0, like this van) through settle_water; return the shown
+    fresh level after each (None = nothing shown)."""
+    from calictl import freshness
+
+    pending, shown = None, []
+    for t, fresh in steps:
+        new = {"fresh": {"liters": fresh}, "waste": {"liters": 0}}
+        adopt, pending = freshness.settle_water(new, good, pending, t, settle)
+        if adopt:
+            good = new
+        shown.append(good["fresh"]["liters"] if good else None)
+    return shown
+
+
+def test_water_ramp_debounce():
+    """The unit ramps 1 -> real value in ~4 s when it starts measuring (BLE trace 2026-10-09:
+    2 at 08:54:38.3 ... 19 at 08:54:42.2, 20 from 08:55:22). Only a level that stays unchanged for
+    ``WATER_SETTLE_S`` is adopted; a single mid-ramp read (buspi's 16) never is.
+
+    .. test:: adopt a new water level only once it has settled
+       :id: T_WATER_RAMP_DEBOUNCE
+       :links: R_WATER_RAMP_DEBOUNCE
+       :status: passing
+    """
+    from calictl import freshness
+
+    assert freshness.WATER_SETTLE_S == 5.0
+    g20 = {"fresh": {"liters": 20}, "waste": {"liters": 0}}
+    # the ramp, a step every 0.25 s, then 20 held: only 20 is ever adopted, 5 s after it first showed
+    ramp = [(0.25 * i, lv) for i, lv in enumerate(range(1, 21))]  # 1..20 at t=0..4.75
+    held = [(4.75 + dt, 20) for dt in (1, 4.9, 5.0, 30)]
+    shown = _settle_run(None, ramp + held)
+    assert shown[:-2] == [None] * (len(shown) - 2)  # cold start: nothing, not 1 L, not a ramp step
+    assert shown[-2:] == [20, 20]  # adopted exactly at 5 s of 20
+    # same ramp against a 22 L baseline: 22 held throughout, then 20 adopted
+    shown = _settle_run({"fresh": {"liters": 22}, "waste": {"liters": 0}}, ramp + held)
+    assert set(shown[:-2]) == {22} and shown[-2:] == [20, 20]
+    # buspi's 30 s polls: a single mid-ramp read (16) is not adopted; the next poll's 20 is a NEW
+    # candidate, adopted by the poll after that (the real value holds ~1-2 min)
+    assert _settle_run(g20 | {"fresh": {"liters": 22}}, [(0, 16), (30, 20), (60, 20)]) == [22, 22, 20]
+    # two reads of the same value >= 5 s apart are adopted; < 5 s apart are not (yet)
+    assert _settle_run(g20, [(0, 18), (5, 18)]) == [20, 18]
+    assert _settle_run(g20, [(0, 18), (4.9, 18)]) == [20, 20]
+    # level 1 after a baseline: held (the not-measuring latch), and it resets a pending candidate
+    assert _settle_run(g20, [(0, 1), (30, 1)]) == [20, 20]
+    assert _settle_run(g20, [(0, 18), (3, 1), (6, 18), (10, 18)]) == [20, 20, 20, 20]
+    # refill (higher settled value) and real usage (20 -> 18 settled) are adopted
+    assert _settle_run(g20, [(0, 29), (30, 29)]) == [20, 29]
+    assert _settle_run(g20, [(0, 18), (30, 18)]) == [20, 18]
+    # the baseline value itself is adopted at once (keeps the stale flag off)
+    assert _settle_run(g20, [(0, 20)]) == [20]
+    # settle=0 turns the debounce off (the mock e2e daemon)
+    assert _settle_run(g20, [(0, 16)], settle=0) == [16]
+    # no fresh level -> pass through, as before
+    assert freshness.settle_water({"fresh": {"liters": None}}, g20, None, 0) == (True, None)
+
+
 def test_cooler_quiet_scheduled_follows_mode_not_nighttimerset():
     """DISPLAY-CONFIRMED 2026-08-26 on the unit's own Flüstermodus (Kühlbox) screen: TWO sub-toggles
     "Ein/Aus" (manual) and "Automatisch" (scheduled, "Geplant von 22:00 bis 06:00"). With Mode=4 the

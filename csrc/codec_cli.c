@@ -126,6 +126,35 @@ static void op_freshness(void)
     printf("OK %d\n", freshness_implausible_drop(v[0], v[1], v[2], v[3], have));
 }
 
+/* W reset | W <now_ms> <nf|-> <pf|-> <ng|-> <pg|->  (freshness_settle, FRESH_SETTLE_MS;
+ * the candidate persists across W lines until "W reset") */
+static void op_settle(void)
+{
+    static fresh_pending_t pend;
+    const char *tok = strtok(NULL, " ");
+    if (tok && strcmp(tok, "reset") == 0) {
+        memset(&pend, 0, sizeof pend);
+        puts("OK");
+        return;
+    }
+    char *end;
+    unsigned long long now = tok ? strtoull(tok, &end, 10) : 0;
+    if (!tok || *end) { puts("ERR parse"); return; }
+    int32_t v[4] = {0, 0, 0, 0};
+    uint8_t have = 0;
+    for (int i = 0; i < 4; i++) {
+        tok = strtok(NULL, " ");
+        if (!tok) { puts("ERR parse"); return; }
+        if (strcmp(tok, "-") == 0)
+            continue;
+        long x = strtol(tok, &end, 10);
+        if (*end) { puts("ERR parse"); return; }
+        v[i] = (int32_t)x;
+        have |= (uint8_t)(1u << i);
+    }
+    printf("OK %d\n", freshness_settle(v[0], v[1], v[2], v[3], have, now, FRESH_SETTLE_MS, &pend));
+}
+
 /* A [key=value ...]  keys: batt2_v soc2_level cooler_installed cooler_level
  * quiet_from quiet_to roof_installed roof_position level_roll level_pitch */
 static void op_anchors(void)
@@ -187,6 +216,8 @@ int main(void)
             op_encode();
         else if (strcmp(op, "F") == 0)
             op_freshness();
+        else if (strcmp(op, "W") == 0)
+            op_settle();
         else if (strcmp(op, "A") == 0)
             op_anchors();
         else if (strcmp(op, "C") == 0)

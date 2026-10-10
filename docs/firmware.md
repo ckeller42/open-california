@@ -423,8 +423,8 @@ Known gaps (accepted):
   from the unit's reported state instead (above).
 - Water stale-hold is the same rule as calictl's `freshness.implausible_water_drop`: the unit
   reports 1 L whenever it is not measuring, so a fresh drop to that latch is held (baseline in NVS
-  `water_good`; see `value-freshness.md`). Guard narrowed to the 1 L latch (#274); a debounce for the
-  ~4 s ramp from 1 L to the real value once the unit measures is in progress.
+  `water_good`; see `value-freshness.md`), and a new level is adopted only after 5 s unchanged — the
+  unit's ~4 s ramp from 1 L to the real value once it measures (`freshness.settle_water`).
 - The wake-up light takes the browser's clock unchecked (ruling R1): a phone or laptop with a wrong
   clock or time zone sets a wrong wake-up time, as the app would.
 - No auto-camper.

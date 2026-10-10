@@ -120,7 +120,9 @@ class ServeBackend:
         if isinstance(water, dict) and isinstance(water.get("fresh"), dict):
             stale_since = self._s._water_stale_since
             good = self._s._water_good
-            if stale_since and isinstance(good, dict) and isinstance(good.get("fresh"), dict):
+            if stale_since and good is None:
+                out.pop("water")  # cold start, nothing measured yet: no fake 1 L / mid-ramp level
+            elif stale_since and isinstance(good, dict) and isinstance(good.get("fresh"), dict):
                 # the hold substitutes the WHOLE dict, so flag BOTH tanks — waste is just as held
                 # as fresh (it was served frozen-but-unflagged for a month before 2026-08-16)
                 out["water"] = {**good, "fresh": {**good["fresh"], "stale": True}, "stale_since": stale_since}
@@ -298,6 +300,8 @@ class Server:
         )
         self._water_stale_since = None  # ts the fresh-water read went physically-impossible (stale latch)
         self._water_good = None  # last PLAUSIBLE interpreted water (baseline for the stale guard)
+        self._water_pending = None  # freshness.settle_water's not-yet-settled candidate
+        self._water_settle_s = float(os.environ.get("CALICTL_WATER_SETTLE_S", freshness.WATER_SETTLE_S))
         # Durable per-poll OUTCOME log so telemetry gaps can be classified after the fact (van
         # deep-sleep vs our-side BLE/daemon failure vs Influx-write failure). One tiny JSONL line
         # per poll cycle; a poll gap with matching "asleep" rows = deep sleep, "ble_error" rows =
@@ -669,24 +673,26 @@ class Server:
         self._anchors = anchors.check(states)
         if self._anchors:
             log.warning("plausibility anchors tripped: %s" % "; ".join(self._anchors))
-        # Stale-latch guard: when the van is parked/locked the unit stops measuring fresh water and
-        # returns a bogus low (true 17 L read back as 1 L). A fresh drop to that latch value (<= 1 L)
-        # with the grey tank frozen -> serve/publish the last plausible reading, flagged stale. The baseline is the persisted `_water_good` (survives
-        # restarts, NO Influx dependency). KNOWN LIMIT (cold start): a brand-new install with no
-        # cached baseline that first reads while parked will accept the latched low as the baseline
-        # and show it unflagged. This is inherent — with no history and no "water-system-on" signal,
-        # a latched 1 L is indistinguishable from a genuinely near-empty tank, and any flag would
-        # clear on the next (identical) parked read; a real level self-establishes once the van is
-        # next active. Persistence covers the common restart-while-parked case.
+        # Water guard (freshness.settle_water): the unit reports fresh 1 L whenever it is NOT
+        # measuring, and ramps 1 -> real value in ~4 s when it starts. Hold the last adopted reading
+        # (persisted `_water_good`, survives restarts, NO Influx dependency) flagged stale against
+        # the 1 L latch AND while a new level hasn't settled (a 30 s poll can land mid-ramp: buspi
+        # read 16 on the way to 20). Cold start: nothing is shown until a level >= 2 settles.
         new_water = states.get("water")
         if new_water is not None and (new_water.get("fresh") or {}).get("liters") is not None:
             base = self._water_good
-            if base is not None and freshness.implausible_water_drop(new_water, base):
-                states["water"] = base  # MQTT/Influx get the plausible level, not the latch
-                self._water_stale_since = self._water_stale_since or self._last_ok_ts or time.time()
-            else:
-                self._water_good = new_water  # a plausible read -> new baseline
+            adopt, self._water_pending = freshness.settle_water(
+                new_water, base, self._water_pending, time.monotonic(), self._water_settle_s
+            )
+            if adopt:
+                self._water_good = new_water
                 self._water_stale_since = None
+            else:
+                if base is not None:
+                    states["water"] = base  # MQTT/Influx get the held level, not the latch/ramp
+                else:
+                    states.pop("water")  # nothing measured yet: publish nothing, not a fake 1 L
+                self._water_stale_since = self._water_stale_since or self._last_ok_ts or time.time()
         if states:  # a real read happened -> mark fresh + persist
             # Rebind (never mutate in place): the web thread reads `_last` unlocked in
             # ServeBackend.state(), so it must only ever see a complete dict, not one

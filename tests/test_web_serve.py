@@ -356,6 +356,38 @@ def test_water_good_baseline_needs_no_influx(monkeypatch):
     assert freshness.implausible_water_drop(latch, good) is True  # flagged purely from the baseline
 
 
+def test_poll_holds_mid_ramp_water_until_it_settles(monkeypatch):
+    """serve end to end: cold start shows NO water (not the 1 L latch), a mid-ramp poll keeps the
+    baseline (stale) and the next poll >= WATER_SETTLE_S later with the same level adopts it."""
+    s = serve.Server(influx_enabled=False)
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(serve.time, "monotonic", lambda: clock["t"])
+    frames = iter(["03011d010016", "03101d010016", "03141d010016", "03141d010016", "03011d010016"])
+
+    async def fake_read_all(fns):
+        return {"water": bytes.fromhex(next(frames))}
+
+    monkeypatch.setattr(s.dev, "read_all", fake_read_all)
+    be = serve.ServeBackend(s, loop=None)
+
+    async def poll_at(t):
+        clock["t"] = t
+        await s.poll()
+        return be.state().get("water")
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        assert await poll_at(0) is None  # cold start on the 1 L latch: nothing shown
+        assert await poll_at(30) is None  # 16 L mid-ramp: not adopted
+        assert await poll_at(31) is None  # 20 L first seen
+        w = await poll_at(61)  # 20 L again 30 s later: adopted
+        assert w["fresh"]["liters"] == 20 and "stale" not in w["fresh"]
+        w = await poll_at(91)  # back to the 1 L latch: 20 held, stale
+        assert w["fresh"]["liters"] == 20 and w["fresh"]["stale"] is True
+
+    asyncio.run(_run())
+
+
 def test_serve_backend_state_interprets_cache():
     s = serve.Server(influx_enabled=False)
     funcs = protocol.load()

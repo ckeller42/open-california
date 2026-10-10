@@ -183,8 +183,9 @@ def test_snap_is_codec_decode_of_every_stored_frame(fake):
     funcs = protocol.load()
     overrides.apply(funcs)
     snap = snaps(run(fake, *PAIRED, *READ_ALL))[0]
-    assert list(snap["fn"]) == FNS
-    for fn in FNS:
+    stored = [fn for fn in FNS if fn != "water"]  # a lone 0102 water frame (fresh 2 L) hasn't settled
+    assert list(snap["fn"]) == stored
+    for fn in stored:
         assert snap["fn"][fn] == protocol.decode(funcs[fn], b"\x01\x02"), fn
 
 
@@ -240,6 +241,11 @@ REREAD = int(
         r"#define CALI_SESSION_WATER_REREAD_MS (\d+)u", (CORE / "include" / "cali_session.h").read_text()
     ).group(1)
 )
+SETTLE = int(
+    re.search(
+        r"#define CALI_SESSION_WATER_SETTLE_MS (\d+)u", (CORE / "include" / "cali_session.h").read_text()
+    ).group(1)
+)
 
 
 def _water(snap):
@@ -258,11 +264,22 @@ def test_read_after_the_subscribe_push_wins(fake):
        :links: R_FW_SESSION
     """
     reads = ["READ %x 0%s" % (c, " " + LIVE_WATER if c == 0x1302 else "") for c in CHARS]
-    out = run(fake, *PAIRED, "DISCOVERED 0", "NOTIFY 1302 " + STALE_WATER, "tick %d" % WARM, *reads)
+    out = run(
+        fake,
+        *PAIRED,
+        "DISCOVERED 0",
+        "NOTIFY 1302 " + STALE_WATER,
+        "tick %d" % WARM,
+        *reads,
+        "tick %d" % (WARM + SETTLE),
+        "NOTIFY 1302 " + LIVE_WATER,
+    )
     rest = after(out, "CALL subscribe %d" % CHARS[-1])
     assert [line for line in rest if line.startswith("CALL read")] == ["CALL read %d" % c for c in CHARS]
-    (snap,) = snaps(out)
-    got, f = _water(snap)
+    first, last = snaps(out)
+    assert "water" not in first["fn"]  # cold start: the read's 17 L is a candidate, not yet shown
+    got, f = _water(last)
+    # 17 L adopted SETTLE after the READ: the read (not the earlier push) set the candidate
     assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
 
 
@@ -279,17 +296,26 @@ def test_push_while_its_read_is_outstanding_then_the_read_wins(fake):
 
 
 def test_notify_after_the_read_wins(fake):
-    """A water notification after the read-all replaces the read (and SNAPs)."""
-    out = run(fake, *PAIRED, *READ_ALL, "NOTIFY 1302 " + LIVE_WATER)
+    """A water notification after the read-all replaces the read (and SNAPs): it is the candidate
+    the ramp debounce adopts SETTLE later (the read's 0102 = 2 L candidate is replaced)."""
+    out = run(
+        fake,
+        *PAIRED,
+        *READ_ALL,
+        "NOTIFY 1302 " + LIVE_WATER,
+        "tick %d" % (T + SETTLE),
+        "NOTIFY 1302 " + LIVE_WATER,
+    )
     got, f = _water(snaps(out)[-1])
     assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
 
 
 def test_water_is_re_read_periodically_while_the_link_is_up(fake):
     """Water is re-read every ``CALI_SESSION_WATER_REREAD_MS`` after the read-all (calictl reads
-    1302 on every 30 s poll), so a stale latch served at connect is corrected the moment a real
-    (higher) reading comes in; the re-read's frame SNAPs. A later LATCH notify (a fresh drop with the
-    grey tank frozen) no longer overrides the plausible reading — the stale-latch guard holds it
+    1302 on every 30 s poll), so a stale latch served at connect is corrected once a real reading
+    has settled — two re-reads of the same level ``CALI_SESSION_WATER_SETTLE_MS`` or more apart; each
+    re-read's frame SNAPs. A later LATCH notify (a fresh drop with the grey tank frozen) no longer
+    overrides the plausible reading — the stale-latch guard holds it
     (``test_water_latch_is_held_vs_a_plausible_baseline``).
 
     .. test:: The firmware re-reads water periodically while the link is up
@@ -309,21 +335,22 @@ def test_water_is_re_read_periodically_while_the_link_is_up(fake):
     )
     rest = after(out, "CALL read %d" % 0x1302)  # the read-all's own water read
     assert calls(rest, "read") == ["CALL read %d" % 0x1302]  # the periodic re-read
-    got, f = _water(snaps(out)[-1])
-    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))  # the live read wins (a rise)
-    out = run(
-        fake,
+    assert "water" not in snaps(out)[-1]["fn"]  # one read of a new level: not adopted yet
+    confirmed = [
         *PAIRED,
         *read_all(reads=stale),
         "tick %d" % (T + REREAD),
         "READ 1302 0 " + LIVE_WATER,
-        "NOTIFY 1302 " + STALE_WATER,
         "tick %d" % (T + 2 * REREAD),
-    )
+        "READ 1302 0 " + LIVE_WATER,
+    ]
+    got, f = _water(snaps(run(fake, *confirmed))[-1])
+    assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))  # the same level 30 s later: adopted
+    out = run(fake, *confirmed, "NOTIFY 1302 " + STALE_WATER, "tick %d" % (T + 3 * REREAD))
     got, f = _water(snaps(out)[-1])
     # The latch notify (fresh 17->1, grey frozen) is held: the plausible LIVE reading stays shown.
     assert got == protocol.decode(f, bytes.fromhex(LIVE_WATER))
-    assert len(calls(out, "read %d" % 0x1302)) == 3  # read-all + two periodic re-reads
+    assert len(calls(out, "read %d" % 0x1302)) == 4  # read-all + three periodic re-reads
 
 
 # Water stale-latch guard (calictl.freshness.implausible_water_drop, ported to the ESP session).
@@ -335,9 +362,12 @@ REFILL_WATER = "03141d010016"  # fresh 20, waste 0 (a rise)      -> adopted
 
 
 def _served_water(fake, *extra):
-    """SNAP the water frame after a read-all whose 1302 read returns PLAUSIBLE_WATER, then ``extra``."""
+    """SNAP the water frame after a read-all whose 1302 read returns PLAUSIBLE_WATER (the persisted
+    baseline, so adopted at once), then ``extra``."""
     reads = ["READ %x 0%s" % (c, " " + PLAUSIBLE_WATER if c == 0x1302 else "") for c in CHARS]
-    out = run(fake, *PAIRED, *read_all(reads=reads), *extra)
+    out = run(
+        fake, "kvsethex water_good " + PLAUSIBLE_WATER, "reinit", *PAIRED, *read_all(reads=reads), *extra
+    )
     got, f = _water(snaps(out)[-1])
     return got, f, out
 
@@ -355,15 +385,24 @@ def test_water_latch_is_held_vs_a_plausible_baseline(fake):
 
 
 def test_water_drop_with_grey_movement_is_adopted(fake):
-    """A fresh drop WITH grey movement proves the unit is live-measuring — adopt it, don't hold."""
-    got, f, _ = _served_water(fake, "NOTIFY 1302 " + GREY_MOVED_WATER, "tick %d" % (T + 100))
+    """A fresh drop WITH grey movement proves the unit is live-measuring — adopt it once settled."""
+    got, f, out = _served_water(
+        fake,
+        "NOTIFY 1302 " + GREY_MOVED_WATER,
+        "tick %d" % (T + SETTLE),
+        "NOTIFY 1302 " + GREY_MOVED_WATER,
+    )
     assert got == protocol.decode(f, bytes.fromhex(GREY_MOVED_WATER))
+    assert _water(snaps(out)[-2])[0] == protocol.decode(f, bytes.fromhex(PLAUSIBLE_WATER))  # not at once
 
 
 def test_water_refill_is_adopted(fake):
-    """A rising fresh level is never a latch (it is a refill / re-measure) — adopt it."""
-    got, f, _ = _served_water(fake, "NOTIFY 1302 " + REFILL_WATER, "tick %d" % (T + 100))
+    """A rising fresh level is never a latch (it is a refill / re-measure) — adopt it once settled."""
+    got, f, out = _served_water(
+        fake, "NOTIFY 1302 " + REFILL_WATER, "tick %d" % (T + SETTLE), "NOTIFY 1302 " + REFILL_WATER
+    )
     assert got == protocol.decode(f, bytes.fromhex(REFILL_WATER))
+    assert _water(snaps(out)[-2])[0] == protocol.decode(f, bytes.fromhex(PLAUSIBLE_WATER))  # not at once
 
 
 def test_water_plausible_reading_is_persisted(fake):
@@ -374,7 +413,8 @@ def test_water_plausible_reading_is_persisted(fake):
        :links: R_FW_SESSION
     """
     reads = ["READ %x 0%s" % (c, " " + PLAUSIBLE_WATER if c == 0x1302 else "") for c in CHARS]
-    out = run(fake, *PAIRED, *read_all(reads=reads), "kvhex water_good")
+    settled = ["tick %d" % (T + SETTLE), "NOTIFY 1302 " + PLAUSIBLE_WATER]
+    out = run(fake, *PAIRED, *read_all(reads=reads), *settled, "kvhex water_good")
     assert ("KV water_good " + PLAUSIBLE_WATER) in out  # persisted, hex-for-hex
 
 
@@ -397,7 +437,7 @@ SEED_WATER = "03161d010016"  # fresh 22, waste 0: buspi's banked last-plausible 
 
 
 def test_water_seed_replaces_a_cold_start_latch_baseline(fake):
-    """After a reflash the session cold-starts on the parked latch (it becomes the baseline);
+    """After a reflash the session cold-starts on the parked latch (nothing shown, no baseline);
     ``water seed <hex>`` hands it the last plausible reading — persisted, shown, and the next latch
     is held against it.
 
@@ -409,7 +449,7 @@ def test_water_seed_replaces_a_cold_start_latch_baseline(fake):
     out = run(
         fake,
         *PAIRED,
-        *read_all(reads=latch_reads),  # cold start: the latch is the baseline
+        *read_all(reads=latch_reads),  # cold start on the latch: nothing shown
         "> water seed " + SEED_WATER,
         "NOTIFY 1302 " + LATCH_WATER,  # the next parked read
         "tick %d" % (T + 100),
@@ -427,7 +467,7 @@ def test_water_real_drop_with_grey_zero_is_served_and_becomes_the_baseline(fake)
     """Regression 2026-10-10: grey reads 0 on every frame on this van, so the old "any fresh drop
     with grey frozen" rule held the real 22 -> 20 L drop forever. Only a drop to <=
     ``CALI_SESSION_WATER_LATCH_MAX_L`` (the observed 1 L latch) is held; 20 L is live — served,
-    persisted as the new baseline — and a following 1 L latch is held against it.
+    persisted as the new baseline once it has settled — and a following 1 L latch is held against it.
 
     .. test:: The session serves a real fresh-water drop and holds only the 1 L latch
        :id: T_FW_SESSION_WATER_LATCH_FLOOR
@@ -440,6 +480,8 @@ def test_water_real_drop_with_grey_zero_is_served_and_becomes_the_baseline(fake)
         "reinit",
         *PAIRED,
         *read_all(reads=reads),
+        "tick %d" % (T + SETTLE),
+        "NOTIFY 1302 " + APP_CAPTURE_WATER,
         "kvhex water_good",
     )
     got, f = _water(snaps(out)[-1])
@@ -451,11 +493,49 @@ def test_water_real_drop_with_grey_zero_is_served_and_becomes_the_baseline(fake)
         "reinit",
         *PAIRED,
         *read_all(reads=reads),
+        "tick %d" % (T + SETTLE),
+        "NOTIFY 1302 " + APP_CAPTURE_WATER,
         "NOTIFY 1302 " + LATCH_WATER,  # the parked 1 L latch
-        "tick %d" % (T + 100),
+        "tick %d" % (T + SETTLE + 100),
     )
     got, f = _water(snaps(out)[-1])
     assert got == protocol.decode(f, bytes.fromhex(APP_CAPTURE_WATER))  # latch held vs 20 L
+
+
+def _water_frame(w):
+    """A 1302 frame for vector levels: 03 <fresh> 1d 01 <waste> 16 (waste None -> cut before it)."""
+    return "03%02x1d01" % w["fresh"] + ("" if w["waste"] is None else "%02x16" % w["waste"])
+
+
+def test_water_ramp_debounce_matches_the_parity_vectors(fake):
+    """The session replays ``tests/vectors/freshness.json`` ``sequences`` (the ramp debounce,
+    ``calictl.freshness.settle_water``) step for step: each step a 1302 NOTIFY at session time
+    ``t``, the SNAP shows the new reading when the vector says adopt, else the baseline (or no water
+    on a cold start).
+
+    .. test:: The session's water ramp debounce matches calictl's
+       :id: T_FW_SESSION_WATER_RAMP
+       :links: R_FW_SESSION, R_WATER_RAMP_DEBOUNCE
+    """
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    vectors = json.loads((ROOT / "tests" / "vectors" / "freshness.json").read_text())["sequences"]
+    reads = ["READ %x %d" % (c, 1 if c == 0x1302 else 0) for c in CHARS]  # water read fails: no frame
+    for seq in vectors:
+        good = seq["good"]
+        boot = ["kvsethex water_good " + _water_frame(good), "reinit"] if good else []
+        steps = []
+        for t, fresh, waste, _ in seq["steps"]:
+            steps += ["tick %d" % (T + t), "NOTIFY 1302 " + _water_frame({"fresh": fresh, "waste": waste})]
+        shown = [
+            sn["fn"].get("water") for sn in snaps(run(fake, *boot, *PAIRED, *read_all(reads=reads), *steps))
+        ]
+        want = []
+        for _t, fresh, waste, adopt in seq["steps"]:
+            if adopt:
+                good = {"fresh": fresh, "waste": waste}
+            want.append(protocol.decode(funcs["water"], bytes.fromhex(_water_frame(good))) if good else None)
+        assert shown[1:] == want, seq["id"]  # shown[0] = the read-all's SNAP
 
 
 def test_water_seed_rejects_a_wrong_length_frame(fake):

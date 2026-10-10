@@ -56,6 +56,54 @@ def test_freshness_c_port_parity(codec_cli):
         assert out == "OK %d" % int(c["expect"]), (c["id"], out)
 
 
+def _seq_cases():
+    return json.loads((VDIR / "freshness.json").read_text())["sequences"]
+
+
+def test_settle_vectors_pass_python_oracle():
+    """The ramp-debounce sequences as ``freshness.settle_water`` decides them (ms clock, 5000 ms).
+
+    .. test:: Freshness ramp-debounce sequences pass the Python original
+       :id: T_PORT_FRESHNESS_SETTLE_PARITY
+       :links: R_PORT_FRESHNESS, R_WATER_RAMP_DEBOUNCE
+    """
+    for seq in _seq_cases():
+        good, pend, got = seq["good"], None, []
+        for t, fresh, waste, _ in seq["steps"]:
+            new = {"fresh": fresh, "waste": waste}
+            adopt, pend = freshness.settle_water(
+                _water(new), _water(good) if good else None, pend, t, freshness.WATER_SETTLE_S * 1000
+            )
+            good = new if adopt else good  # the baseline follows every adopt, as serve/ESP do
+            got.append(int(adopt))
+        assert got == [st[3] for st in seq["steps"]], seq["id"]
+
+
+def test_settle_c_port_parity(codec_cli):
+    def s(v):
+        return "-" if v is None else str(v)
+
+    for seq in _seq_cases():
+        out = codec_cli(
+            ["W reset"]
+            + [
+                "W %d %s %s %s %s" % (t, s(f), s(g["fresh"]) if g else "-", s(w), s(g["waste"]) if g else "-")
+                for (t, f, w, _), g in zip(seq["steps"], _goods(seq))
+            ]
+        )
+        assert out == ["OK"] + ["OK %d" % st[3] for st in seq["steps"]], seq["id"]
+
+
+def _goods(seq):
+    """The baseline in force at each step, given the vector's own adopt expectations."""
+    good, goods = seq["good"], []
+    for _, fresh, waste, expect in seq["steps"]:
+        goods.append(good)
+        if expect:
+            good = {"fresh": fresh, "waste": waste}
+    return goods
+
+
 # --- anchors ---------------------------------------------------------------------
 
 # Python violation-message prefix -> the C port's stable bitmask ID (csrc/ports.h)

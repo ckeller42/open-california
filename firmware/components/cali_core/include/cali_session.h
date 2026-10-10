@@ -78,6 +78,9 @@ extern "C" {
 /* The parked unit's stale fresh-water latch, in liters (raw FreshWaterLevel): observed as 1 on this
  * van. Only a fresh drop to <= this, with grey frozen, is held (calictl.freshness.WATER_LATCH_MAX_L). */
 #define CALI_SESSION_WATER_LATCH_MAX_L 1u
+/* A new water level is adopted only once seen unchanged this long (calictl.freshness.WATER_SETTLE_S):
+ * starting a measurement the unit ramps 1 -> real value in ~4 s, a step every <= 0.5 s. */
+#define CALI_SESSION_WATER_SETTLE_MS 5000u
 
 void cali_session_init(const cali_transport_t *t);
 void cali_session_boot(void);
@@ -129,10 +132,11 @@ uint64_t cali_session_last_update_ms(void);
 /* 1 when the served water (1302) frame is the HELD last-plausible reading, not the live one: the
  * parked unit stopped measuring and handed back the latched low (true ~17 L read as 1 L), so the
  * guard keeps the last plausible frame (calictl.freshness.implausible_water_drop — a fresh drop to
- * <= CALI_SESSION_WATER_LATCH_MAX_L while the grey tank is exactly frozen; any other reading is live
- * and becomes the baseline). The baseline persists in NVS, so a reboot while parked
- * shows the real level; cold start with no baseline accepts the first read (serve.py's known
- * limit). /api/state reports this as device.water_held; the shared UI flags the tank stale. */
+ * <= CALI_SESSION_WATER_LATCH_MAX_L while the grey tank is exactly frozen), or a NEW level that has
+ * not yet stayed unchanged for CALI_SESSION_WATER_SETTLE_MS (the unit's 1 -> real-value measurement
+ * ramp; calictl.freshness.settle_water). The baseline persists in NVS, so a reboot while parked
+ * shows the real level; with no baseline nothing is shown until a level >= 2 settles.
+ * /api/state reports this as device.water_held; the shared UI flags the tank stale. */
 int cali_session_water_held(void);
 
 /* Seed the last-plausible water (1302) baseline — console `water seed <hex>`, e.g. after a reflash

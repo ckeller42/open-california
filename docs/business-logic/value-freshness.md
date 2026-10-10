@@ -90,9 +90,9 @@ guard only asks "did fresh drop / did grey move". The plausible frame is **persi
 level rather than re-accepting the `1` latch — the firmware twin of `serve.py`'s persisted
 `_water_good`. `/api/state` reports `device.water_held` when the held frame is being served, and the
 shared UI (`semantics.js::adaptSatellite`) flags both tanks stale (`🕒 last measured`, no
-`stale_since` — the satellite has no wall clock). **Same cold-start limit as buspi:** a fresh ESP
-with no NVS baseline that first reads while parked accepts the latch as its baseline until the van is
-next active. Why this matters: buspi (poll, then release) and the ESP (persistent, re-read every 30 s)
+`stale_since` — the satellite has no wall clock). **Cold start** (since 2026-10-10, as buspi): a fresh ESP
+with no NVS baseline shows no water on the `1` latch until a level ≥ 2 has settled (the ramp
+debounce, below). Why this matters: buspi (poll, then release) and the ESP (persistent, re-read every 30 s)
 would otherwise disagree — buspi holding the real ~17 L while the ESP showed a confident `1 L` / 3 %
 (field 2026-10-09: buspi 22 L held/stale vs ESP 1 L raw, the discrepancy that prompted this).
 After a reflash the ESP baseline can be seeded from buspi's last plausible reading with the
@@ -198,6 +198,44 @@ wire for water:
 ≤ 1 L with grey exactly frozen) holds the last plausible reading and flags it stale; the app has no
 such guard and would show the latched value. Whether to keep the guard is an open owner decision
 (above, "Open question"); this section only records that the app gives no precedent for it.
+
+## 2026-10-10: `1` = not measuring; the measurement ramp
+
+calictl's BLE trace of the real unit (buspi `~/ble.jsonl`, 10 726 water `1302` frames,
+2026-09 … 2026-10-10) changes the picture of the "latch":
+
+- `FreshWaterLevel = 1` in 6 098 frames: the unit reports `1` whenever it is **not measuring** — the
+  normal idle value, not a rare stale latch.
+- When a measurement starts the unit **ramps** the level `1 → 2 → 3 → … → real value` in ~4 s, one
+  notify every ~0.1–0.5 s (2026-10-09: `2` at 08:54:38.328 … `19` at 08:54:42.228, then `20` from
+  08:55:22; levels 2–19 each seen ~3 times in the whole trace), **holds** the real value ~1–2 min,
+  then drops back to `1`. Grey (`WasteWaterLevel`) reads `0` throughout on this van.
+- Ramps start 1–5 s after a central connects, but most 30 s polls just read `1`. **Open question:
+  what triggers a measurement is unknown.**
+
+A poll landing mid-ramp is not a measurement either: buspi read **16 L** at 08:54:40 on 2026-10-09
+(real: 20 L), adopted it as the baseline and held the wrong value afterwards. So the guard gained a
+**ramp debounce** (`freshness.settle_water`, `R_WATER_RAMP_DEBOUNCE`; same rule in `csrc/ports.c`
+`freshness_settle` and the ESP `session.c` `water_settle`, pinned by the `sequences` in
+`tests/vectors/freshness.json`):
+
+- level ≤ 1 L with grey unchanged vs the baseline → not measured → hold the baseline (unchanged);
+- a reading equal to the baseline → adopted at once;
+- any other (fresh, grey) → adopted only once the **same** reading has been seen for
+  `WATER_SETTLE_S` = 5 s (ESP `CALI_SESSION_WATER_SETTLE_MS`), on the caller's clock (serve:
+  `time.monotonic()`, ESP: the session tick). Until then the baseline is served, flagged stale
+  (`water.stale_since` / `device.water_held`). 5 s: the ramp steps change every ≤ 0.5 s, the real
+  value holds ≥ 30 s.
+- **A single read of a new value is never adopted.** buspi polls every 30 s, so a new level is
+  adopted on the second consecutive poll that reads it (the real value holds ~1–2 min, usually
+  long enough for two polls). The ESP also gets the ramp's notifies, so it adopts ~5 s after the
+  ramp ends.
+- **Cold start** (no baseline): a level ≤ 1 shows **no water at all** rather than a fake 1 L, and
+  the first settled level ≥ 2 becomes the baseline.
+- `CALICTL_WATER_SETTLE_S` overrides the window (`0` = off; the mock e2e daemon uses it).
+
+Whether to keep a guard at all, or show the raw value like the app does, is still the owner's call;
+this keeps the guard and makes it correct for the ramp.
 
 ## Water freshness — the settled conclusion (2026-08-19)
 

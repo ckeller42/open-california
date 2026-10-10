@@ -152,20 +152,51 @@ static int water_levels(const uint8_t *frame, size_t len, uint32_t *fresh, int *
     return gotf;
 }
 
-/* True when a new water frame is the parked stale-latch vs the plausible baseline s_wg — a fresh
- * DROP to <= CALI_SESSION_WATER_LATCH_MAX_L while the GREY tank is EXACTLY frozen
- * (calictl.freshness.implausible_water_drop). A drop that stays above it, or any grey movement, is a
- * live measurement (adopt); a drop to the latch with grey unknown is the latch (conservative). No baseline, or no fresh to compare -> not a latch (cold start adopts,
- * matching serve.py's known cold-start limit). */
-static int water_is_latch(const uint8_t *data, size_t len) {
-    uint32_t fn_, fp_, wn_, wp_;
-    int hwn, hwp;
-    if (!s_wg.have) return 0;
-    if (!water_levels(data, len, &fn_, &hwn, &wn_)) return 0;
-    if (!water_levels(s_wg.frame, s_wg.len, &fp_, &hwp, &wp_)) return 0;
-    if (fn_ >= fp_ || fn_ > CALI_SESSION_WATER_LATCH_MAX_L) return 0;   /* no drop to the latch */
-    if (!hwp || !hwn) return 1;           /* fresh dropped, grey unknown -> can't corroborate */
-    return wn_ == wp_;                    /* grey frozen -> latch; any grey movement -> live */
+/* The ramp-debounce candidate: a NEW level first seen at since_ms (calictl.freshness.settle_water). */
+static struct {
+    uint32_t fresh, waste;
+    int has_waste, have;
+    uint64_t since_ms;
+} s_wpend;
+
+/* calictl.freshness.settle_water, on the session clock: 1 = adopt the new water frame as the
+ * baseline, 0 = hold (serve the baseline s_wg, or nothing on a cold start). The unit reports fresh
+ * 1 L whenever it is NOT measuring and ramps 1 -> real value in ~4 s when it starts (BLE trace
+ * 2026-10-09), so:
+ *  - no fresh level -> adopt (can't judge);
+ *  - no baseline: <= CALI_SESSION_WATER_LATCH_MAX_L is held (show nothing, not a fake 1 L);
+ *  - baseline: a fresh DROP to <= the latch with the grey tank EXACTLY frozen (or grey unknown) is
+ *    held (freshness.implausible_water_drop); the baseline's own (fresh, grey) is adopted at once;
+ *  - any other (fresh, grey) is adopted only once seen unchanged for CALI_SESSION_WATER_SETTLE_MS. */
+static int water_settle(const uint8_t *data, size_t len) {
+    uint32_t fn_, fp_ = 0, wn_, wp_ = 0;
+    int hwn, hwp = 0, hp;
+    if (!water_levels(data, len, &fn_, &hwn, &wn_)) return 1;
+    hp = s_wg.have && water_levels(s_wg.frame, s_wg.len, &fp_, &hwp, &wp_);
+    if (!hp) {
+        if (fn_ <= CALI_SESSION_WATER_LATCH_MAX_L) goto hold;
+    } else if (fn_ < fp_ && fn_ <= CALI_SESSION_WATER_LATCH_MAX_L && (!hwp || !hwn || wn_ == wp_)) {
+        goto hold;   /* the not-measuring latch; any grey movement is live */
+    } else if (fn_ == fp_ && hwn == hwp && (!hwn || wn_ == wp_)) {
+        s_wpend.have = 0;
+        return 1;
+    }
+    if (!s_wpend.have || s_wpend.fresh != fn_ || s_wpend.has_waste != hwn ||
+        (hwn && s_wpend.waste != wn_)) {
+        s_wpend.fresh = fn_;
+        s_wpend.waste = hwn ? wn_ : 0;
+        s_wpend.has_waste = hwn;
+        s_wpend.have = 1;
+        s_wpend.since_ms = s_now;
+    }
+    if (s_now - s_wpend.since_ms >= CALI_SESSION_WATER_SETTLE_MS) {
+        s_wpend.have = 0;
+        return 1;
+    }
+    return 0;
+hold:
+    s_wpend.have = 0;
+    return 0;
 }
 
 /* Show the persisted last-plausible water frame for char 1302 (nothing if there is no baseline). */
@@ -207,11 +238,12 @@ static void store(size_t i, const uint8_t *data, size_t len) {
         len = CODEC_FRAME_MAX;
     }
     if (CODEC_CHARS[i].state_short == WATER_CHAR) {
-        /* Parked, the unit stops measuring and hands out a latched low (true 17 L read back as 1 L).
-         * Hold the last plausible reading instead of serving the latch (serve.py's stale guard). */
-        if (water_is_latch(data, len)) {
+        /* Not measuring (the 1 L latch) or mid-ramp: hold the last plausible reading instead of
+         * serving it (serve.py's guard); with no baseline yet, store nothing (no fake 1 L). */
+        if (!water_settle(data, len)) {
             s_water_held = 1;
-            data = s_wg.frame;   /* serve the plausible baseline, not the latch */
+            if (!s_wg.have) return;
+            data = s_wg.frame;
             len = s_wg.len;
         } else {
             adopt_water(data, len);   /* a plausible read -> new baseline, persisted */
@@ -247,6 +279,7 @@ static void unit_check(void) {
     s_last_update = 0;
     if (had) {   /* another unit's water isn't ours; a plain boot ("" -> id) keeps the baseline */
         memset(&s_wg, 0, sizeof s_wg);
+        memset(&s_wpend, 0, sizeof s_wpend);
         s_water_held = 0;
         cali_kv_erase(WATER_GOOD_KEY);
     }
@@ -442,6 +475,7 @@ void cali_session_init(const cali_transport_t *t) {
     /* Restore the last-plausible water from NVS so a reboot while parked shows the real level, not
      * the latch, and the guard has a baseline on the first read (serve.py's persisted _water_good). */
     memset(&s_wg, 0, sizeof s_wg);
+    memset(&s_wpend, 0, sizeof s_wpend);
     s_water_held = 0;
     size_t wl = sizeof s_wg.frame;
     if (cali_kv_get(WATER_GOOD_KEY, s_wg.frame, &wl) == CALI_KV_OK) {

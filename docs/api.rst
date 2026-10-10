@@ -11,6 +11,7 @@ Semantics
 .. autofunction:: calictl.semantics.vehicle
 .. autofunction:: calictl.semantics.roof
 .. autofunction:: calictl.freshness.implausible_water_drop
+.. autofunction:: calictl.freshness.settle_water
 
 Daemon state
 ------------
@@ -105,6 +106,7 @@ Tests
 .. autofunction:: tests.test_calictl.test_airheater_timer_start_and_cancel_match_app_frames
 .. autofunction:: tests.test_calictl.test_roof_position_name_and_infopopup_alert
 .. autofunction:: tests.test_calictl.test_water_stale_latch_guard
+.. autofunction:: tests.test_calictl.test_water_ramp_debounce
 .. autofunction:: tests.test_calictl.test_cli_set_check_all_rows
 .. autofunction:: tests.test_calictl.test_cooler_quiet_mode_and_schedule_frames
 .. autofunction:: tests.test_web_serve.test_serve_state_meta_offline_online_and_persistence
