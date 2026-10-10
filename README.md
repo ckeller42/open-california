@@ -50,16 +50,19 @@ Raspberry Pi.
 - **Reads everything** — decodes 14 BLE functions (cooler, air-heater, camping mode, lighting,
   energy, water, roof, vehicle state, …) into meaningful signals, cross-validated by a signal
   catalog + coverage guardrail so nothing is silently dropped or mislabeled. Values stay **fresh**
-  by holding the unit's `1003` liveness heartbeat during reads (a bare read goes stale — [why, and
-  the water push-caveat](https://ckeller42.github.io/open-california/protocol-sequences.html#fresh-state-read-under-heartbeat)).
+  by holding the unit's `1003` liveness heartbeat during reads ([why, and why water can read a stale
+  1 L](https://ckeller42.github.io/open-california/protocol-sequences.html#fresh-state-read-under-heartbeat)):
+  the unit reports 1 L whenever it is not measuring, so calictl holds the last good water reading.
 - **Actually controls** — `calictl set cooler power on` (camping mode, lighting, roof, …) actuate
   for real, armed by the same `1003` heartbeat that unlocks the firmware's [write gate](https://ckeller42.github.io/open-california/protocol-sequences.html#heartbeat-armed-control-write)
   (lighting, roof, and range-rejection have their own [sequence diagrams](https://ckeller42.github.io/open-california/protocol-sequences.html)).
 - **Fits your stack** — one BLE-owning daemon fans out to **InfluxDB/Grafana** and **Home
-  Assistant** (MQTT), and serves the web UI above — same process, one connection.
+  Assistant** (MQTT), and serves the web UI above — same process, one link from the Pi. The unit
+  serves several Bluetooth clients at once, so the phone app and the ESP32 satellite can stay
+  connected alongside it.
 - **Guides you through pairing** — a web wizard walks through first-run pairing and re-pair
   (type the passkey shown on the camper's own screen), built on a platform-free pairing state
-  machine that doubles as the model for a future ESP32 touchscreen flow.
+  machine that the ESP32 satellite runs too (its own page has the same wizard).
 - **English or German** — switch the web UI language from the ⋮ menu; it follows the browser
   language on first load and remembers your choice per browser.
 
@@ -67,7 +70,7 @@ Raspberry Pi.
 
 ```sh
 python3 -m pytest tests/ -q            # test suite — stdlib-only, no BLE/MQTT needed
-python3 -m calictl status              # live read of every function (needs BLE + a free slot)
+python3 -m calictl status              # live read of every function (needs BLE; with the daemon up use its /api/state)
 python3 -m calictl set cooler power on # actuate (heartbeat-armed); reads back + reports
 python3 -m calictl serve --web 8080    # the daemon → InfluxDB + MQTT + web UI at :8080 (read-only)
 python3 -m calictl serve --web 8080 --enable-writes   # ...allow control writes to the vehicle
@@ -128,8 +131,10 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
 
 - **Stdlib-only at import** — the runtime pulls no third-party packages until it actually needs a
   BLE/MQTT/InfluxDB connection, so tests run anywhere.
-- **One BLE owner** — a single daemon holds the vehicle's single connection slot, serialized by an
-  `asyncio.Lock`; control writes never race a poll.
+- **One BLE owner on the Pi** — a single daemon owns the Pi's shared `hci0` and holds one link to
+  the unit, serialized by an `asyncio.Lock`; control writes never race a poll. (The unit itself
+  serves several centrals at once — the phone app, the Pi and the ESP32 satellite were connected
+  together.)
 - **Dictionary-driven** — every field is extracted into [`protocol/dictionary.yaml`](protocol/dictionary.yaml)
   and has a catalog decision in [`protocol/signals.yaml`](protocol/signals.yaml); a dropped or
   unaccounted field **fails CI**. Manual bit offsets live only in [`overrides.py`](calictl/overrides.py).
@@ -137,14 +142,22 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   [`csrc/`](csrc/) for the ESP32 satellite (`python3 -m tools.gen_c_dict`; **never hand-edit
   `csrc/codec_dict.h`**). Golden vectors + a seeded differential fuzz harness keep the Python and C
   codecs byte-identical in CI (`codec-parity` job) — see [`csrc/README.md`](csrc/README.md).
-- **ESP32 firmware (work in progress)** — a NimBLE satellite that pairs with the camper unit
-  independently of the Pi and controls the fridge, camping mode, lights, air heater and energy mode
-  (the wake-up light too, with the web page's clock; not the roof — "only via buspi or the app") with calictl's own frames,
-  held byte-identical by golden vectors; proven on a Linux host build + a Bumble fake unit and in
-  Espressif's QEMU, and on a CoreS3 against the mock unit (read side and, since 2026-10-07, the
-  control path); never yet against the real unit. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.
+- **ESP32 satellite** — a NimBLE firmware on an M5Stack CoreS3 that pairs with the camper unit
+  independently of the Pi (bonded to the real unit since 2026-10-08, while the Pi stayed connected)
+  and controls the fridge, camping mode, lights, air heater and energy mode (the wake-up light too,
+  with the web page's clock; not the roof — "only via buspi or the app") with calictl's own frames,
+  held byte-identical by golden vectors. It runs the same water guard, serves the same web UI
+  (`calictl/webui` is bundled into the firmware), and answers *unconfirmed* when the link drops
+  after a frame went out. Tested on a Linux host build + a Bumble fake unit, in Espressif's QEMU, on
+  a CoreS3 against the mock unit, and live on the real unit. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.
   It joins your WiFi through its own setup hotspot and serves a status page and the calictl UI with
   live controls on your home network (never over the setup hotspot) — **[How to put the ESP32 satellite on your WiFi](https://ckeller42.github.io/open-california/howto-esp-wifi-setup.html)**.
+
+- **Evidence from the real app** — the vendor app (CaliforniaOnTour 5.4.0) is a live concurrent
+  central too: its HCI snoop log, pulled over wireless adb from the Pi (skill `phone-app-lab`,
+  decoders in [`tools/applab/phone/`](tools/applab/phone/)), shows its frames on the real unit. Every
+  non-motor control it sent (cooler, lighting, camping mode) is byte-identical to calictl's. Its
+  screenshots and the decompile mapping live in a private analysis repository.
 
 New here? Start with **[the architecture map](https://ckeller42.github.io/open-california/architecture.html)** — the five-minute map of the data flow and
 where each concern lives. Contributor rules and hard invariants: **[AGENTS.md](AGENTS.md)**.
