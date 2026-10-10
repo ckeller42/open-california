@@ -63,7 +63,7 @@ def test_rendered_page_is_small_and_self_contained():
     rendered = gen_c_dict.render_web_page().encode()
     assert len(rendered) <= CONSTS["NET_HTTP_BODY_MAX"]
     assert not re.search(rb"""(src|href)\s*=\s*["']?(https?:)?//""", rendered)
-    assert b"@import" not in rendered and b'id="setup"' in rendered and b'id="functions"' in rendered
+    assert b"@import" not in rendered and b'id="setup"' in rendered and b'id="device"' in rendered
 
 
 def test_display_keys_stay_out_of_the_page():

@@ -13,15 +13,14 @@ Review the PNGs (or send them on) after any GUI change — layout, label, and da
 issues show up here that a headless assertion can't judge. The hard-assertion counterpart is
 `tests/e2e/test_gui.py::test_no_red_flag_text`.
 
-It also renders the ESP32 satellite's status/setup page (#154) for the docs
-(``docs/howto-esp-wifi-setup.md``): ``esp-setup-page.png`` (setup hotspot mode) and
-``esp-status-page.png`` (station mode). No firmware, BLE or radio is involved: a small stdlib HTTP
+It also renders the ESP32 satellite's WiFi setup page (#154) for the docs
+(``docs/howto-esp-wifi-setup.md``): ``esp-setup-page.png`` (setup hotspot mode). No firmware, BLE or radio is involved: a small stdlib HTTP
 stub (``EspStub``) serves the generated page bytes the firmware serves (``firmware/web/index_gen.html``)
 plus canned ``/api/state`` / ``/api/wifi`` JSON (``esp_fixtures``) whose key sets
 ``tests/test_ux_gallery_esp_fixtures.py`` pins to what ``tests/firmware/test_web_handlers.py``
 asserts of the real handlers, so the pictures cannot drift from the firmware's API shape.
 
-    python -m tools.ux_gallery --esp --out docs/screenshots   # only the two ESP page shots
+    python -m tools.ux_gallery --esp --out docs/screenshots   # only the ESP setup page shot
 
 Station-like stub modes serve the gzipped calictl UI bundle at ``/`` (as ``web.c``) and the page at
 ``/device``; the ``satellite`` / ``calictl`` modes back ``tests/e2e/test_satellite.py``.
@@ -415,9 +414,9 @@ class EspStub:
 
 
 def capture_esp(out_dir):
-    """Screenshot the firmware page in setup and station mode (light, English) into out_dir.
+    """Screenshot the firmware setup page in setup-hotspot mode (light, English) into out_dir.
 
-    :returns: the two PNG paths (``esp-setup-page.png``, ``esp-status-page.png``)
+    :returns: the PNG paths (``esp-setup-page.png``)
     """
     from playwright.sync_api import sync_playwright  # tool dep; imported lazily
 
@@ -431,17 +430,13 @@ def capture_esp(out_dir):
             viewport={"width": 420, "height": 900},
             device_scale_factor=2,
         )
-        for mode, name in (("setup", "esp-setup-page.png"), ("station", "esp-status-page.png")):
+        for mode, name in (("setup", "esp-setup-page.png"),):
             stub.mode = mode
             pg = ctx.new_page()
-            pg.goto(stub.base + ("/device" if mode == "station" else "/"))
-            if mode == "setup":
-                pg.wait_for_selector("#ssid option", state="attached")
-                pg.fill("#psk", "example-passphrase")
-                pg.wait_for_timeout(4500)  # the page's follow-up re-scan read clears "Searching…"
-            else:
-                pg.wait_for_selector("#functions .box")
-                pg.wait_for_timeout(500)
+            pg.goto(stub.base + "/")
+            pg.wait_for_selector("#ssid option", state="attached")
+            pg.fill("#psk", "example-passphrase")
+            pg.wait_for_timeout(4500)  # the page's follow-up re-scan read clears "Searching…"
             p = os.path.join(out_dir, name)
             pg.screenshot(path=p, full_page=True)
             paths.append(p)

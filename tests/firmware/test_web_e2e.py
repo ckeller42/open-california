@@ -230,7 +230,7 @@ def _require_chromium():
 
 
 def test_station_root_is_the_calictl_ui_equal_to_python_semantics(host_fw, hci_unit, tmp_path):
-    """Station mode: GET / is the gzipped calictl UI (no-cache), /device the status page; in Chromium
+    """Station mode: GET / is the gzipped calictl UI (no-cache), /device the setup page; in Chromium
     the bundle's semantics.js turns the firmware's real /api/state into exactly what Python semantics
     makes of the same fn; the UI is live (``device.control.writes`` -> ``_meta.read_only`` false);
     no JS error; nothing requested but / and /api/state."""
@@ -519,11 +519,9 @@ def test_busy_satellite_tells_the_user_to_retry(host_fw, rec_unit, tmp_path):
     assert not [e for e in errors if "409" not in e], errors
 
 
-@pytest.mark.parametrize(
-    "locale,device,functions", [("en-US", "Device", "Camper unit"), ("de-DE", "Gerät", "Camper-Einheit")]
-)
-def test_page_renders(host_fw, hci_unit, tmp_path, locale, device, functions):
-    """GET / renders the device box and a function block within 3 s, in the browser's language;
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_page_renders(host_fw, hci_unit, tmp_path, locale, lang):
+    """GET / renders the title and the link to the calictl UI within 3 s, in the browser's language;
     any uncaught page error fails the test."""
     sync_playwright = _require_chromium()
     fw = host_fw(hci_unit, http=True)
@@ -535,10 +533,9 @@ def test_page_renders(host_fw, hci_unit, tmp_path, locale, device, functions):
         page = browser.new_context(locale=locale).new_page()
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto("http://127.0.0.1:%d/" % fw.http_port)
-        page.wait_for_selector("#device h2", timeout=3000)
-        page.wait_for_selector("#functions .box h2", timeout=3000)
-        assert page.inner_text("#device h2") == device
-        assert page.inner_text("#functions-title") == functions
+        page.wait_for_selector("#device a", timeout=3000)
+        assert page.inner_text("#title") == STRINGS["title"][lang]
+        assert page.inner_text("#device a") == STRINGS["app_link"][lang]  # paired
         browser.close()
     assert not errors, errors
 
