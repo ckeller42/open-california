@@ -25,7 +25,8 @@ Every ``S_SEQ_*`` spec carries a ``:status:`` saying how far the flow is proven 
 traceability table on the index page):
 
 ``live-verified``
-   ``calictl`` has run this sequence against the real unit and the outcome was observed.
+   ``calictl`` (or the ESP32 satellite, whose frames are ``calictl``'s) has run this sequence against
+   the real unit and the outcome was observed. The evidence says which of the two.
 ``photon-verified``
    Live-verified, and a human watched the *physical* effect (a lamp), because the state-char
    readback is only a write-through :term:`echo <Readback echo>` and proves nothing.
@@ -575,12 +576,13 @@ Heartbeat-armed control write
         C->>U: disconnect (heartbeat stops, the load stays latched)
 
 **Evidence.** Live-verified on-device 2026-07-07 (issue #2) for the cooler (power/level) and
-campingmode (master/lights/USB). The jadx decompile (2026-07-14) matches: ``d2/s`` driver and
-``ag/b`` builder, a 4-byte BE uint32 with ``+1`` per tick (``b1/d``), a **500 ms** timer (``zf/d``
-``J0=500L``) and **seed 0**. ``calictl``'s 0.6 s cadence and arbitrary start value satisfy the
-same liveness/monotonicity check; the value itself does not matter. **APP-OBSERVED 2026-09-16**
-(``tools/applab``): the connected app beats ``1003`` continuously at ~750 ms (its 500 ms timer plus
-GATT round-trips). Its writes are full-packet with untargeted fields at the model defaults (2-bit
+campingmode (master/lights/USB). The jadx decompile matches: ``d2/s`` driver and
+``ag/b`` builder, a 4-byte BE uint32 with ``+1`` per tick (``b1/d``). The ticker's period is a
+**random 750–850 ms** and its seed a **random 1–1 000 000, drawn per connection** (``c/i.java:349-367``,
+call-stack reading; the 2026-07-14 reading of a 500 ms timer, ``zf/d`` ``J0=500L``, and seed 0 was
+wrong). ``calictl``'s 0.6 s cadence and fixed start value satisfy the same liveness/monotonicity
+check; the value itself does not matter. **APP-OBSERVED 2026-09-16** (``tools/applab``, app 5.0.8):
+the connected app beats ``1003`` continuously at ~750 ms. Its writes are full-packet with untargeted fields at the model defaults (2-bit
 ``3``; heater ``HeatingLevel 11 / RunningTime 127``, cooler ``Level 7 / Mode 7``, timer hours
 ``30/62/31``). 500 ms later it sends a neutral frame with **every** field at its sentinel
 (cooler ``ff771e3e1f1f``, heater ``3f7b007f1f3f``, camping ``ff``, energy ``30``, lighting
@@ -590,11 +592,12 @@ GATT round-trips). Its writes are full-packet with untargeted fields at the mode
 **CAPTURE 2026-10-10** (real app on the real unit, HCI snoop, evidence-ledger 2026-10-10). The app
 writes ``1003`` with write-request, a 4-byte BE counter ``+1`` per write, every **0.76–0.79 s**, for
 as long as it is in the foreground. The value is **not 0 at connect**: values such as
-``0x00049363…`` and, later, ``0x00061b62`` were seen. This contradicts the "seed 0" decompile
-reading above and agrees with the later call-stack reading of a random seed in 1–1 000 000 and a
+``0x00049363…`` and, later, ``0x00061b62`` were seen. This contradicts the old "seed 0" reading
+and agrees with the call-stack reading of a random seed in 1–1 000 000 and a
 750–850 ms period (`protocol-alignment.md
 <https://ckeller42.github.io/open-california/business-logic/protocol-alignment.html>`_). The two
-values alone do not show whether the counter continues across links or is reseeded per link.
+values come from two links 47 min apart: a carried counter would have moved ~3 600 ticks, not
+~100 000, so the app reseeds per connection.
 When the app goes to the background, the phone disconnects (HCI ``0x13`` from the phone). In the
 foreground, with the van parked and locked, the unit did **not** drop the app's link: it was held
 46 min, and 93 s of that while locked. Every non-motor app write was byte-identical to
@@ -669,7 +672,7 @@ schedule in every untargeted field. **That older state-carry frame is the one li
 unit** (2026-07-07 power, and the schedule write of 2026-08-26 that showed the hour bytes are
 taken literally). Until 2026-10-10 the app-faithful frames, ``State=3`` in the level, mode and
 timer frames, had only run against the mock. The 2026-07-05 ``0x0E`` drop of ``State=3`` predates the heartbeat
-(:need:`S_SEQ_REJECT`), so the first live level or mode write is the check (van check #230).
+(:need:`S_SEQ_REJECT`). The capture below answered that check (#230, closed).
 **CAPTURE 2026-10-10:** the real app wrote these app-faithful frames to the real unit (level
 ``ff74…`` / ``ff73…``, quiet ``ff27…`` / ``ff47…`` / ``ff07…``, timer ``f777…`` / ``df77…``, power
 ``fd77…`` / ``fc77…``), byte-identical to ``control.build``. The unit accepted every one (no
@@ -767,7 +770,7 @@ Wake-up light and door contact — config edit
 
 .. spec:: Wake-up and door-contact edit over the unit's own config
    :id: S_SEQ_WAKEUP
-   :status: mock-only
+   :status: live-verified
    :links: R_LIGHT_WAKEUP, R_LIGHT_DOOR_CONTACT, R_LIGHT_CONFIG_LATCH, R_LIGHT_CONFIG_PULL, R_LIGHT_COMMIT
 
    **Contract.** The wake-up light, the sliding-door light and the stored favourites are
@@ -840,8 +843,12 @@ unknown-config edit (R5) were settled from the 2026-10-06 decompile cross-check 
 takes each field from the edit, else from the config only the Mode-20 decode writes). The app
 waits up to 2000 ms for the reply, which is where ``CALICTL_CONFIG_PULL_S`` comes from. The daemon
 side (the pull, the latch, the refusal when the config stays unknown) is covered by
-``tests/test_web_serve.py`` against a faked session. No wake-up edit has been run against the real
-unit, and the real unit's Mode-20 echo within ~3 s is still to be confirmed at the van. See
+``tests/test_web_serve.py`` against a faked session. **DEVICE 2026-10-08** (the ESP satellite,
+same frames): a wake-up edit ``07:45 on`` reached the real unit, and the unit's own Mode-20 frame
+latched ``WakeupTimestamp`` = the next 07:45 local (restored afterwards). A ``door_contact`` off / on
+was owner-watched at the entrance light. The real app's wake-up switch and door-contact frames
+were captured on the real unit on 2026-10-10. buspi's daemon has not run a wake-up edit on the real
+unit yet, and whether the lights ramp at the set time is unobserved. See
 `evidence-ledger.md
 <https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html>`_ and
 `lighting-energy-water-sat-roof.md
@@ -1040,10 +1047,10 @@ Range validation and the 0x0E link drop
 ``State=3``; lighting ``ProfileNumber=14`` with ``Mode=4``). It does not come from the app code.
 The cooler observation dates from 2026-07-05, **before** the ``1003`` heartbeat existed, and has not
 been re-tested: since ruling R1 (2026-10-06) ``State=3`` is the app's own leave-unchanged value in
-the cooler level, mode and timer frames, ``CONTROL_RANGES`` admits ``{0, 1, 3}``, and the first live
-cooler write of that frame is the open van check (#230). On 2026-10-10 the real app sent that
+the cooler level, mode and timer frames, ``CONTROL_RANGES`` admits ``{0, 1, 3}``, and ``calictl`` has
+not yet written that frame to the real unit. On 2026-10-10 the real app sent that
 frame (cooler level, quiet mode and timer, ``State=3``) to the real unit under its heartbeat and
-the unit accepted it (CAPTURE, evidence-ledger 2026-10-10). A ``power`` command is always 0 or 1.
+the unit accepted it (CAPTURE, evidence-ledger 2026-10-10), which closed the van check (#230). A ``power`` command is always 0 or 1.
 The app's state fields carry the same bounds (``sg.a(default, max)`` wrappers), so the app never
 emits out-of-range values. Status ``live-verified`` refers to the on-device rejections. See
 `DECISIONS.md <https://ckeller42.github.io/open-california/business-logic/DECISIONS.html>`_
@@ -1099,15 +1106,18 @@ Fresh state read under heartbeat
         end
         C->>U: disconnect
 
-**Evidence.** Without a heartbeat the unit drops a link after ~15 s. With one, the link held 64 s
-on-device (2026-07-09). Water is **measurement-gated**: the unit measures only while its water
+**Evidence.** On 2026-07-09 the unit dropped a link with no heartbeat after ~15 s, and with one the
+link held 64 s. On 2026-10-10 a buspi link held more than 2 min with no heartbeat, so that drop is
+not reproduced. Water is **measurement-gated**: the unit measures only while its water
 system is powered. While parked, it pushed zero ``1302`` frames in 40 s, and a bare read returns
 the stale latch. The 2026-07-09 "1 L → 11 L after a heartbeat" was correlation, not cause. The
 earlier "water is push-only" rule (decompile 2026-07-14) was **dropped on 2026-10-07**: the app
 subscribes ``1302`` and then *reads* it, and a read and a push go to the same decoder (VM ``qg/b``),
-so the last frame wins. A persistent session used to serve the subscribe-time push forever, which
-may have caused the parked "1 L". Whether the stale guard is still needed is open until a van trace
-(#230). See `value-freshness.md
+so the last frame wins. The parked "1 L" was not a stale push: the unit sends no
+subscribe-time push (CAPTURE 2026-10-10), and ``1`` is the unit's own "not measuring" value. A
+measurement ramps the level from ``1`` to the real value in ~4 s. The guard stays, narrowed to the
+≤ 1 L latch (#274), and a debounce for the ramp is in flight (#290). What starts a measurement is
+still open. See `value-freshness.md
 <https://ckeller42.github.io/open-california/business-logic/value-freshness.html>`_.
 
 Daemon poll cycle
@@ -1236,14 +1246,15 @@ that will not resolve by itself.
 **Several centrals at once (CAPTURE 2026-10-10).** The unit served three centrals at the same
 time: the phone app holding a link, buspi polling (99 clean connect / read / release cycles in an
 hour, no errors) and the ESP32 satellite. While parked, the unit dropped the satellite's held link
-(HCI ``0x13`` ~15–20 s after each connect) but **not** the app's held link (46 min) and **not**
-buspi's held persistent session (3 min with a viewer, 11:45). **Root cause found, fix in PR:**
-right after connect the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247).
+(HCI ``0x13`` ~30 s after each connect: 30.0 s and 31.3 s measured) but **not** the app's held link (46 min) and **not**
+buspi's held persistent session (3 min with a viewer, 11:45). **Root cause found and fixed (#279,
+``faaf7b0``):** right after connect the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247).
 BlueZ and Android answer it. The satellite's NimBLE was built without a GATT server (in IDF v6.1
 ``BT_NIMBLE_GATT_SERVER`` depends on ``BT_NIMBLE_ROLE_PERIPHERAL``, which was off), so esp-nimble
 silently drops the request, and the unit's ATT transaction timeout then ends the link (``0x13``).
 The fix enables both options in the satellite's ``sdkconfig``. It is a missing ATT response, not
-a parked-unit policy against idle links.
+a parked-unit policy against idle links. With the fix (flashed 2026-10-10) the satellite's parked
+link holds; the reconnect pacing of #266 stays as the fallback for a drop.
 
 The connection failure modes are in `value-freshness.md
 <https://ckeller42.github.io/open-california/business-logic/value-freshness.html>`_ ("Connection
@@ -1326,17 +1337,21 @@ NimBLE stack, its own WiFi and HTTP server, no connection to buspi. Its flows ar
 because they reuse the same protocol and the same frames. The firmware is proven on a Linux host
 build against the Bumble fake unit, in QEMU, and on a CoreS3 on a bench against the mock unit.
 Since 2026-10-08 it has also bonded to the real camper unit and run commands on it (evidence-ledger
-2026-10-08 to 2026-10-10); the three flows keep the ``mock-only`` status until that evidence is
-folded into them. Details:
+2026-10-08 to 2026-10-10): the console pairing and the command flows below are ``live-verified``
+on that evidence. The web-wizard pairing path has not run on the real unit. The WiFi setup flow
+stays ``mock-only``. Details:
 :doc:`firmware` and the owner guide :doc:`howto-esp-wifi-setup`.
 
 .. spec:: Satellite pairing from the USB console, then the bonded session
    :id: S_SEQ_ESP_PAIRING
-   :status: mock-only
-   :links: R_FW_PAIRING_SM, R_FW_PAIRING_RUNNER, R_FW_IO_CAP_BEFORE_LINK, R_FW_SESSION
+   :status: live-verified
+      :links: R_FW_PAIRING_SM, R_FW_PAIRING_RUNNER, R_FW_IO_CAP_BEFORE_LINK, R_FW_SESSION
+
+   The ``live-verified`` status covers the USB-console path only; the web-wizard path has not run on
+   the real unit.
 
    **Contract.** Pairing on the satellite is driven from the console (USB-Serial/JTAG on the
-   CoreS3), by the platform-free C twin of the guided-pairing state machine
+   CoreS3) or from the web wizard (``/api/pairing``, #261), by the platform-free C twin of the guided-pairing state machine
    (:need:`S_SEQ_PAIRING` is the Pi's version).
 
    * **I/O capability first.** ``cali_ble_nimble_init`` sets keyboard-only I/O capability and MITM
@@ -1344,8 +1359,10 @@ folded into them. Details:
      (``R_FW_IO_CAP_BEFORE_LINK``). Setting them inside the pairing call negotiates Just Works and
      the unit refuses it.
    * **Boot never scans.** With a stored bond the session reconnects by bond, with none it stays
-     idle. Only the console ``pair`` starts a flow. There is no bond probe: ``forget`` is the only
-     way to drop a bond.
+     idle. A flow starts only from the console ``pair`` or the wizard's *Connect now*. On a
+     bonded satellite the flow first probes the stored bond (probe before replace): a working bond
+     is kept without a passkey, a stale one (the unit hangs up with an auth reason) is dropped and
+     paired afresh. ``forget`` drops a bond outright.
    * ``pair`` starts SCANNING (30 s) for the name ``VWCAMPER``. Found: stop the scan and CONNECTING
      (20 s). Connected: PAIRING (15 s), NimBLE starts SMP. The unit shows a 6-digit code and the
      stack asks for it: WAITING_PASSKEY (60 s). The user types ``passkey N`` (1 to 6 digits). Link
@@ -1397,10 +1414,12 @@ folded into them. Details:
 session is tested on a scripted transport (``test_session_fake.py``) and, over real NimBLE, against
 the Bumble fake unit (``test_host_e2e.py``). ``make cali-host-jw`` rebuilds the late-I/O-capability
 bug on purpose and the fake unit refuses it. The CoreS3 bench ran the read side against the mock
-unit over real BLE. On the real unit (2026-10-10) the parked unit drops the satellite's held link
-~15–20 s after each connect while it keeps the app's and buspi's links: the satellite did not
-answer the unit's ATT Exchange MTU Request (no GATT server built in); root cause found, fix in PR
-(:need:`S_SEQ_SLEEP`). See :doc:`firmware`
+unit over real BLE. **DEVICE 2026-10-08:** the satellite bonded to the real unit
+from the console (passkey off the unit's screen) while buspi's session stayed up, then read state;
+the web wizard has not been run on the real unit. Until #279 (``faaf7b0``) the parked unit dropped
+the satellite's held link ~30 s after each connect, because the satellite left the unit's ATT
+Exchange MTU Request unanswered (no GATT server built in). Since the fix (2026-10-10) the parked
+link holds (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
 ("Console line protocol", "Design rulings worth knowing").
 
 .. spec:: Satellite WiFi setup through the hotspot and captive portal
@@ -1478,7 +1497,7 @@ confirmed (`howto-esp-wifi-setup.md` status box and :doc:`firmware`, "Network wa
 
 .. spec:: Satellite station-mode control command through the write allow-list
    :id: S_SEQ_ESP_COMMAND
-   :status: mock-only
+   :status: live-verified
    :links: R_FW_CONTROL_API, R_FW_CONTROL_TWIN, R_FW_WRITE_ALLOWLIST, R_FW_SHARED_UI
 
    **Contract.** On the home network the satellite serves calictl's own web UI and accepts
@@ -1507,12 +1526,11 @@ confirmed (`howto-esp-wifi-setup.md` status box and :doc:`firmware`, "Network wa
      so the UI says "Sent — the unit didn't confirm it"). An ATT error: ``502 write_failed`` and no
      further frame. No ACK within 4 s (``CALI_CTL_DEADLINE_MS``): ``504 write_timeout``. A link
      lost before any command frame went out fails the command (``502 write_failed``). A link lost
-     after one went out answers ``200`` with ``applied`` null and ``"unconfirmed": true``: the
-     parked unit kicks idle links, and a frame it applied can lose its ACK to the kick (field
-     2026-10-09, #264), so the page keeps watching the unit's state across the reconnect (20 s).
-     The kick is seen on the satellite's link only; the parked unit keeps the app's and buspi's
-     held links (CAPTURE 2026-10-10): the satellite left the unit's ATT Exchange MTU Request
-     unanswered, so the unit's ATT timeout ended its link. Root cause found, fix in PR
+     after one went out answers ``200`` with ``applied`` null and ``"unconfirmed": true``: a link
+     drop for any reason can come after the unit applied a frame and before its ACK arrives
+     (field 2026-10-09, #264), so the page keeps watching the unit's state across the reconnect
+     (20 s). The drops seen in the field were the satellite's own bug, fixed by #279: it left the
+     unit's ATT Exchange MTU Request unanswered, so the unit's ATT timeout ended its link
      (:need:`S_SEQ_SLEEP`).
 
 .. mermaid::
@@ -1568,10 +1586,12 @@ never sees a roof or unknown write). The sequencer is tested on a scripted trans
 (``test_session_fake.py``), the endpoint on a fake sequencer (``test_web_handlers.py``), and every
 app-recorded cooler, camping, lighting, heater and energy action went through ``POST /api/command``
 to the mock unit **byte-exact** on a CoreS3 bench on 2026-10-07, with the roof, the wake-up edits
-and stairs refused and zero ``1401`` writes. On the real unit, a satellite write actuated
-(kitchen ambient → 0, 2026-10-09), and on 2026-10-10, with the van parked and locked, the
+and stairs refused and zero ``1401`` writes. On the real unit (DEVICE 2026-10-08), the
+satellite's cooler power on / off actuated (the unit's Kühlbox screen, and buspi's own poll read the
+change), and its wake-up and door-contact edits landed (:need:`S_SEQ_WAKEUP`). A satellite write
+actuated (kitchen ambient → 0, 2026-10-09), and on 2026-10-10, with the van parked and locked, the
 ``"unconfirmed": true`` answer (#271) fired: the 5th of a series of no-op lighting writes lost its
-ACK to the parked unit's kick and was answered ``200`` with ``applied`` null and
+ACK to the parked unit's drop (pre-#279 firmware) and was answered ``200`` with ``applied`` null and
 ``"unconfirmed": true`` (evidence-ledger 2026-10-10). The cooler ``State=3`` frames are the ones
 the real app sent to the real unit on 2026-10-10 (:need:`S_SEQ_COOLER`).
 See :doc:`firmware` ("Control path") and `evidence-ledger.md

@@ -1,7 +1,7 @@
 # The mock camper unit: setup and usage
 
 The real VW California camper unit is hard to reach. It sits in a parked van, deep-sleeps for days,
-stops advertising, and has a single BLE connection slot. So nearly all development runs against a
+and stops advertising. So nearly all development runs against a
 **mock** of the unit instead — a model you can run on a laptop with no van, no phone and usually no
 radio.
 

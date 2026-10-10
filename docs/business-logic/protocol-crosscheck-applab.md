@@ -10,6 +10,8 @@ with what the app does), **CONTRADICTED** (doc fixed in the same change), **NOT 
 App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit seeded from
 `tests/scenarios/firmware/baseline-0410.json`. Owner rule: re-run when the app version changes —
 the lab moved to **5.4.0.3036** on 2026-10-10 (first re-run: section "App 5.4.0.3036 in the lab" below).
+The real-phone pass ("Real app on the real unit" below) is app **5.4.0.3036** on the owner's phone
+against the real unit (2026-10-10).
 
 ## Session (`docs/protocol-sequences.rst` S_SEQ_CONNECT / S_SEQ_NOTIFY)
 
@@ -30,7 +32,7 @@ the lab moved to **5.4.0.3036** on 2026-10-10 (first re-run: section "App 5.4.0.
 | Claim | Observation | Verdict |
 |---|---|---|
 | `1003` = 4-byte BE +1 counter, seed 0 | writes to 0x0016 start at `00000000` and increment by 1 | OBSERVED in the lab; **real unit 2026-10-10: seed 0 CONTRADICTED** (see the real-unit section below) |
-| cadence 500 ms (`zf/d J0=500L`) | wire cadence **0.75–0.77 s** (timer + GATT round-trip; write-with-response serialised) | OBSERVED — doc notes observed cadence |
+| cadence 500 ms (`zf/d J0=500L`; later read as a random 750–850 ms period, `c/i.java:349-367`) | wire cadence **0.75–0.77 s** | OBSERVED — CONSISTENT with the random 750–850 ms period, not with a 500 ms timer |
 | the unit drops a link with no heartbeat ~15 s | unit-side; the fake unit implements it (needed: Android kept a stale bonded link that blocked advertising → "No vehicle found") | NOT TESTABLE (modelled) |
 | a control write is a full-packet frame | every write is the full frame length (6 / 1 / 16 / 1 / 5 bytes) | OBSERVED |
 | untargeted fields = leave-unchanged sentinels | 2-bit fields at 3, wider fields at the model default (`7b 00 7f 1f 3f`, `77 1e 3e 1f 1f`) | OBSERVED — mock fixed to honour them |
@@ -237,7 +239,7 @@ The phone's version (split APKs, arm64 code via the x86_64 image's ARM translati
 
 ## Real app on the real unit (CAPTURE 2026-10-10)
 
-The lab claims above, checked against the **real** CaliforniaOnTour app on a Fairphone 6 talking
+The lab claims above, checked against the **real** CaliforniaOnTour app (5.4.0.3036) on a Fairphone 6 talking
 to the van's unit (AmbSw `0410`, CommunicationVersion 2), Android HCI snoop pulled over adb from
 buspi (decoded ATT kept on buspi, not committed; evidence-ledger 2026-10-10). Verdicts as above:
 **OBSERVED** (the same on the real unit), **CONSISTENT**, **CONTRADICTED** (by the real unit).
@@ -248,11 +250,11 @@ buspi (decoded ATT kept on buspi, not committed; evidence-ledger 2026-10-10). Ve
 | subscribe-all = 12 CCCDs | **8** CCCD `0100` writes: `1702`, `1502`, `1102`, `1602`, `1004`, `1302`, `1402`, `1202` (that order) — the fitted functions + `1004` | CONTRADICTED for this van (12 in the lab = a fake with every function fitted); calictl's 12 are accepted |
 | every state char read once after subscribing | reads `1702`, `1102`, `1001`, `1602`, `1302`, `1004`, `f001`, `1402`, `1502`, `1202` | OBSERVED (fitted functions only) |
 | `1003` cadence ~0.75–0.77 s | 0.76–0.79 s, write-request, for as long as the app is in the foreground | OBSERVED |
-| `1003` seed 0 | large values (`0x00049363…`, later `0x00061b62`), not 0 at connect | **CONTRADICTED** (lab + "seed 0" decompile note); CONSISTENT with the call-stack reading (random seed 1–1 000 000). Whether it continues across links is not settled by two values |
-| the unit drops a link with no heartbeat ~15 s | not tested (the app always beats). With the beat, parked + locked, the unit held the app's link 46 min (93 s of it locked). Backgrounding the app → the **phone** disconnects (HCI `0x13`) | NOT TESTED (drop); the held link is new |
+| `1003` seed 0 | large values (`0x00049363…`, later `0x00061b62`), not 0 at connect | **CONTRADICTED** (lab + "seed 0" decompile note); CONSISTENT with the call-stack reading (random seed 1–1 000 000). The two values come from links 47 min apart (~100 000 apart, not the ~3 600 a carried counter would add): reseeded per connection |
+| the unit drops a link with no heartbeat ~15 s | not tested with the app (it always beats). With the beat, parked + locked, the unit held the app's link 46 min (93 s of it locked). Backgrounding the app → the **phone** disconnects (HCI `0x13`). A buspi link with no heartbeat held > 2 min (2026-10-10) | NOT REPRODUCED (no drop without a heartbeat); the held link is new |
 | neutral flush after every write | cooler `ff771e3e1f1f`, camping `ff` ~500 ms after each write; lighting commit `0e00…` | OBSERVED |
 | per-function frames (cooler, camping, lighting) = `control.build` | every non-motor action byte-identical (frame list: `control-and-actuation.md` recipes table, evidence-ledger 2026-10-10) | OBSERVED |
-| cooler `State=3` level / mode / timer frames (van check #230) | the app's frames reached the real unit, no `0x0E`, level actuated | OBSERVED (the frame works on the unit; calictl itself has not sent it yet) |
+| cooler `State=3` level / mode / timer frames | the app's frames reached the real unit, no `0x0E`, level actuated | OBSERVED (the frame works on the unit; calictl itself has not sent it yet) |
 | lamp on = one nibble at 11 DEFAULT | group switches (Reading / Kitchen / Pop-up roof / Exterior) = **one** `0904…` SET_BRIGHTNESS frame, the group's zones at 11 on / 0 off | OBSERVED |
 | Lighting screen open → REQUEST_CONFIG | `0d0c…` + commit on opening the screen | OBSERVED |
 | sliding-door row = lighting DOOR_CONTACT | the camping screen's sliding-door toggle wrote `1501` `0810…01` / `…00` | OBSERVED |
@@ -263,8 +265,8 @@ buspi (decoded ATT kept on buspi, not committed; evidence-ledger 2026-10-10). Ve
 | roof `InfoPopUp` 2 → "Function currently in use" tile | first open press → `1402` `0302` → the app's **pre-open safety checklist dialog**, no motion; after OK a fresh press moved the roof | CONTRADICTED in part on the roof page (naming is owned by `alert-states.md`) |
 | roof `InfoPopUp` 8 / 12 | moving `030c` → `230c` (Position 2, InfoPopUp 12); end of travel `2308` (InfoPopUp 8) → `1300` open / `0300` closed; release mid-travel `2303` → `2300`. Open ~28 s, close ~23 s | OBSERVED (wire codes; first real travel times) |
 | one central at a time ("the phone app holds the single slot") | the app's link, buspi's polling (99 clean cycles in an hour) and the ESP32 satellite coexisted | **CONTRADICTED** |
-| the parked unit kicks idle held links (ESP, 2026-10-09) | parked: the ESP's link dropped (HCI `0x13`, ~15–20 s after connect), the app's link and buspi's held session (3 min, 11:45) were **not** dropped. Root cause: the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247) after connect; BlueZ and Android answer, the ESP's NimBLE (built without a GATT server: IDF v6.1 `BT_NIMBLE_GATT_SERVER` needs `BT_NIMBLE_ROLE_PERIPHERAL`, which was off) silently drops it, and the unit's ATT timeout ends the link (`0x13`) | **CONTRADICTED** as a unit policy: an ESP-side bug. Root cause found, fix in PR (`sdkconfig` ROLE_PERIPHERAL + GATT_SERVER) |
-| ESP `"unconfirmed": true` (#271) | fired on the real parked unit: a no-op lighting write lost its ACK to the kick → `200 {"applied":null,"unconfirmed":true}` | OBSERVED |
+| the parked unit kicks idle held links (ESP, 2026-10-09) | parked: the ESP's link dropped (HCI `0x13`, ~30 s after connect: 30.0 s / 31.3 s), the app's link and buspi's held session (3 min, 11:45) were **not** dropped. Root cause: the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247) after connect; BlueZ and Android answer, the ESP's NimBLE (built without a GATT server: IDF v6.1 `BT_NIMBLE_GATT_SERVER` needs `BT_NIMBLE_ROLE_PERIPHERAL`, which was off) silently drops it, and the unit's ATT timeout ends the link (`0x13`) | **CONTRADICTED** as a unit policy: an ESP-side bug, fixed by #279 (`faaf7b0`, `sdkconfig` ROLE_PERIPHERAL + GATT_SERVER); the ESP's parked link holds since (2026-10-10) |
+| ESP `"unconfirmed": true` (#271) | fired on the real parked unit: a no-op lighting write lost its ACK to the drop (pre-#279 firmware) → `200 {"applied":null,"unconfirmed":true}` | OBSERVED |
 | the unit pushes each char once on subscribe (buspi trace 2026-09-16) | no Handle Value Notification after any CCCD write: the app's 8 (phone HCI snoop) and buspi's 13 (`btmon-hold.snoop`, 0 notifications on that link in 3 min); calictl's trace logs a `notify` ~1 ms before every read with the same value — BlueZ re-delivering the read | **CONTRADICTED** |
 | the unit pushes only `1202` and `1004` on change (`CHANGE_PUSH_FNS`) | pushes on every frame change: `1102` ~130–220 ms after a cooler write (a power change ~2 s later: `fd77…` → `0803…` at +0.2 s, `0903…` at +1.9 s), `1202` ~120–210 ms after a camping write, `1502` after each lighting write, `1602` every ~40–70 s as the battery values moved; `1004` once in 46 min — at the ignition-off edge (`017e…0090` → `047e…0000`: roll/pitch 0, `CarLevelPopUp` 1), never for the clock ticking | **CONTRADICTED** |
 | the app's neutral frames are no-ops | `ff771e3e1f1f` / `ff` never drew a notification and changed no later read | OBSERVED |

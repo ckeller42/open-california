@@ -8,6 +8,43 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-10 — the unit serves several centrals at once
+
+CAPTURE 2026-10-10: the phone app holding a link, buspi polling (99 clean cycles in an hour) and the
+ESP satellite were all served at the same time; DEVICE 2026-10-08 had already shown two links. The
+"single connection slot" model is retired from the docs. calictl still treats the link as exclusive
+on its own side (`serve` is buspi's single BLE owner).
+
+## 2026-10-10 — ESP keeps NimBLE's GATT server: the parked "kick" was an unanswered MTU request (#279)
+
+Right after every connect the unit sends the central an ATT Exchange MTU Request and ends the link
+(HCI `0x13`) when no answer comes within its 30 s ATT timeout. BlueZ and Android answer; the ESP's
+central-only build had no GATT server, so the request went unanswered and the parked unit dropped
+the ESP ~30 s after every connect. That was read as a parked-unit policy against idle links
+(2026-10-09); it is not. Fix `faaf7b0`: the peripheral role is on for its GATT server only (no
+advertising, no service). The ESP's parked link holds since. The #266 reconnect pacing stays as a
+fallback.
+
+## 2026-10-10 — water: hold only the ≤ 1 L latch (#274); debounce the measurement ramp (#290)
+
+The app's read showed 20 L while buspi and the ESP held 22 L for weeks: grey reads 0 on every frame
+on this van, so "fresh dropped, grey frozen" held every real drop. The guard now holds only a drop
+to ≤ 1 L (`WATER_LATCH_MAX_L`), the unit's "not measuring" value. A measurement ramps `1` → real in
+~4 s, so a poll mid-ramp can adopt a wrong level: a debounce (adopt a new level only once settled)
+is in flight (#290).
+
+## 2026-10-10 — leveling roll/pitch unavailable while the ignition is off (#282)
+
+The app shows `-.-°` with ignition off; calictl reported 0.0 from the unit's zeroed fields. calictl
+now reports `None` for `level_roll` / `level_pitch` while terminal 15 is off. The 0.01° per LSB scale
+is verified (HCI 2026-07-08); the sign against the app's display is still to confirm with ignition on.
+
+## 2026-10-10 — the battery 24 h chart is removed (owner, #287)
+
+Owner request: drop the second-battery 24 h plots from the web UI, and hide power sources the van
+does not have. The daemon's `/api/history` recorder stays for now, with no UI consumer (separate
+decision).
+
 ## 2026-10-10 — roof follows the app's STOP stream (owner)
 
 Owner decision "align to original app", from the real app on the real unit (CAPTURE 2026-10-10,
@@ -32,7 +69,7 @@ press unless one was raised within 30 s, `030c`→`230c`, `2308`→`1300`/`0300`
 ~23 s travel, motor start ~0.25 s after a press, ~3 s withhold only for a freshly validated counter.
 With the checklist no longer a move block (entry below), the press after it is allowed.
 **calictl's own roof move is still never driven on the real unit** — an owner-watched van test is owed
-(#230).
+(#157).
 
 ## 2026-10-10 — roof InfoPopUp 2/3/8/12 are a checklist prompt and progress codes, not "in use"
 
@@ -175,7 +212,8 @@ heartbeats on `1003` every ~750 ms and renders our baseline frames exactly as ca
   `Position` per valid move frame. The page hides its controls without terminal 15.
 - **Roof `InfoPopUp` 2/3/12 = "Function currently in use", 9 = "Only possible when stationary"**
   (tile texts, no dialog); 8/13/14 show nothing. Added as `in_use` / `not_stationary` (Influx codes
-  8/9, web block set, dashboard mapping).
+  8/9, web block set, dashboard mapping). **Superseded 2026-10-10 (#276):** on the real unit 2 is
+  the pre-open checklist prompt and 3/8/12 are progress codes; `in_use` is retired (entry above).
 - **Heater page facts**: slider 1–9 + **HI** (so "HI" is the app's own label for level 10 — restored
   in the web readout), run time **10–120** (min was UNRESOLVED), no confirmation on immediate ON, the
   Permanent-Heating switch is always present and inert-greyed when off (#182 matches).
