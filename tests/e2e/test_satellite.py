@@ -11,6 +11,7 @@ OPT-IN like test_gui.py: skipped without Playwright + Chromium.
 import calendar
 import datetime
 import re
+import threading
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -285,6 +286,42 @@ def test_a_command_is_confirmed_from_the_units_own_state(stub, error_gated_page,
         )
         pg.wait_for_timeout(5500)  # past the window: no late warning either
         expect(pg.locator(".toast.warn")).to_have_count(0)
+
+
+@pytest.mark.parametrize("unconfirmed", [True, False])
+def test_an_unconfirmed_write_is_watched_across_the_reconnect(stub, error_gated_page, unconfirmed):
+    """``unconfirmed: true`` (#264): the link dropped after the write left, so the unit's state shows
+    up only after the reconnect + read-all — the page watches 20 s, not 5 s. The state flips 8 s in:
+    flagged -> ✓ Applied; unflagged -> the 5 s window already gave up.
+
+    .. test:: The satellite UI waits out the reconnect for an unconfirmed write
+       :id: T_SAT_UI_UNCONFIRMED_WRITE
+       :links: R_FW_SHARED_UI
+    """
+    stub.command_reply = {"ok": True, "applied": None, "state": None, "error": None, "function": "cooler"}
+    if unconfirmed:
+        stub.command_reply["unconfirmed"] = True
+
+    def unit_applies_after_reconnect(body):
+        def flip():
+            stub.fixtures["satellite"]["/api/state"]["fn"]["cooler"]["State"] = (
+                1 if body["value"] == "on" else 0
+            )
+
+        threading.Timer(8.0, flip).start()
+
+    stub.on_command = unit_applies_after_reconnect
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_function(LIVE)
+        pg.on("dialog", lambda d: d.accept())
+        _open(pg, "Cooler")
+        pg.get_by_role("switch", name="Refrigerator box").click()
+        _wait_commands(pg, stub)
+        if unconfirmed:
+            expect(pg.locator(".toast")).to_have_text("✓ Applied", timeout=14000)
+            expect(pg.locator(".toast.warn")).to_have_count(0)
+        else:
+            expect(pg.locator(".toast")).to_have_text(NOT_CONFIRMED, timeout=7000)
 
 
 def test_roof_is_greyed_with_the_reason(live, stub):
