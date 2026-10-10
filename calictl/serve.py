@@ -1008,6 +1008,8 @@ class Server:
         finally:
             for s_ in {sess, self._live_session()} - {None}:
                 await s_.roof_leave()
+        if time.monotonic() < self._roof_view_until:  # re-viewed while this one was ending
+            self._roof_view_task = asyncio.ensure_future(self._roof_view_loop())
 
     async def _roof_move(self, what, stop_event):
         """SAFETY-SENSITIVE: a single roof frame won't complete travel and has no guaranteed STOP,
