@@ -95,7 +95,7 @@ widgets:
     controls: {field: PermanentOperationRequest, action: E3}
     elements:
       - canOnlyBeActivated_text
-    constraints: "OFF-only switch from the app: E3 writes PermanentOperationRequest=0; NO ON write site exists in rf/b.java (re-confirmed 2026-09-16). ON is started from the in-vehicle controls; the app's ON tap raises permanentHeatingOnDialog ('can only be activated in the vehicle' — infoPage_heating_permanent_description says the same). Whether the Compose Switch is disabled or just opens that dialog on ON: UNRESOLVED (Compose layer). calictl mirrors OFF-only (control._airheater 'permanent', web switch greyed while off)."
+    constraints: "OFF-only switch from the app: E3 writes PermanentOperationRequest=0; NO ON write site exists in rf/b.java (re-confirmed 2026-09-16). ON is started from the in-vehicle controls; the app's ON tap raises permanentHeatingOnDialog ('can only be activated in the vehicle' — infoPage_heating_permanent_description says the same). Whether the Compose Switch is disabled or just opens that dialog on ON: UNRESOLVED (Compose layer). calictl mirrors OFF-only (control._airheater 'permanent', web switch greyed while off). REAL-PHONE 2026-10-10 (app 5.4.0.3036, ignition off, heater off): the card reads 'Permanent Heating' with the subline 'Can only be started in the vehicle.' next to a light-grey (disabled-looking) switch; not tapped, so disabled-vs-dialog stays open."
 
   - id: permanentHeatingOnDialog
     type: drawer

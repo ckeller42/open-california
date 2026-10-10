@@ -57,7 +57,7 @@ widgets:
       - notificationSettings_listItem_nonUrgentBut_text
       - notificationSettings_listItem_stayInformedAbout_text
       - notificationSettings_listItem_warnings_text
-    constraints: "Per-severity toggle list (critical/errors/warnings/infos); feeds notifications.yaml's NotificationCenterScreen feed"
+    constraints: "Per-severity toggle list (critical/errors/warnings/infos); feeds notifications.yaml's NotificationCenterScreen feed. REAL-PHONE 2026-10-10 (app 5.4.0.3036, real unit, ignition off): headline 'Vehicle alerts and information' with three toggles — 'Errors' (Critical issues requiring immediate attention.), 'Warnings' (Important issues that should be addressed soon.), 'Information' (Non-urgent but helpful information.)."
 
   - id: connectivitySettingsDescription
     type: label
