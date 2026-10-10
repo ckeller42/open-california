@@ -90,8 +90,20 @@ static int lcfg_get(const char *fn, const char *field, uint32_t *out) {
     return 0;
 }
 
-/* Only store() calls this — a READ or a NOTIFY of the unit's own 1502, never a write of ours (R4). */
-static void latch_lighting(const uint8_t *data, size_t len) {
+/* cali_ctl_get_t over the new frame alone */
+static int lkv_get(const char *fn, const char *field, uint32_t *out) {
+    (void)fn;
+    for (int k = 0; k < s_lnkv; k++)
+        if (strcmp(s_lkv[k].name, field) == 0) {
+            *out = s_lkv[k].value;
+            return 1;
+        }
+    return 0;
+}
+
+/* Only store() calls this — a READ or a NOTIFY of the unit's own 1502, never a write of ours (R4).
+ * Returns 1 when the frame reports the lamps + active profile (semantics.lighting_reports_state). */
+static int latch_lighting(const uint8_t *data, size_t len) {
     s_lnkv = codec_decode(codec_func_by_name("lighting"), data, len, s_lkv);
     for (int w = 0; w < 2; w++) {
         cali_light_cfg_t next;
@@ -99,6 +111,14 @@ static void latch_lighting(const uint8_t *data, size_t len) {
         cali_light_cfg(lcfg_get, &next);
         s_lcfg[w] = next;
     }
+    return cali_light_reports_state(lkv_get);
+}
+
+/* 1 when the stored lighting frame i is a lamp-state 1502 frame. Reuses s_lkv as scratch: only
+ * latch_lighting reads it, and it re-decodes first. */
+static int stored_reports_state(size_t i) {
+    s_lnkv = codec_decode(codec_func_by_name("lighting"), s_fr[i].frame, s_fr[i].len, s_lkv);
+    return cali_light_reports_state(lkv_get);
 }
 
 static int index_of(uint16_t short_id) {
@@ -197,11 +217,17 @@ static void store(size_t i, const uint8_t *data, size_t len) {
             adopt_water(data, len);   /* a plausible read -> new baseline, persisted */
         }
     }
-    if (len) memcpy(s_fr[i].frame, data, len);
-    s_fr[i].len = len;
-    s_fr[i].have = 1;
+    /* A 1502 read returns the unit's LAST frame of any kind: a config/ack frame (door echo, save ack,
+     * REQUEST_CONFIG reply, wake-up) only feeds the latch and keeps the stored lamps (#284 =
+     * semantics.lighting_merge; with no lamp-state frame stored it is stored as it is). */
+    int keep = strcmp(CODEC_CHARS[i].function, "lighting") == 0 && !latch_lighting(data, len) && s_fr[i].have &&
+               stored_reports_state(i);
+    if (!keep) {
+        if (len) memcpy(s_fr[i].frame, data, len);
+        s_fr[i].len = len;
+        s_fr[i].have = 1;
+    }
     s_fr[i].live = 1;
-    if (strcmp(CODEC_CHARS[i].function, "lighting") == 0) latch_lighting(s_fr[i].frame, len);
     s_last_update = s_now ? s_now : 1;
 }
 

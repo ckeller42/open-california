@@ -389,9 +389,16 @@ Notifications
      Mode 20, door contact Mode 16 / PN 8, stored favourites Mode 12) into the cached lighting
      state, so a REQUEST_CONFIG reply of several frames in a row is not reduced to the last one.
      It does so only once a lighting decode is cached.
-   * After a lighting write, a newer ``1502`` push is the confirmation. It updates the served
-     lighting state. A ``1502`` read returns the last frame the unit sent, config echoes included
-     (CAPTURE 2026-10-10, #284).
+   * After a lighting write, the newer ``1502`` pushes are the confirmation. Each updates the served
+     lighting state; the daemon keeps watching until one shows the requested level (a rising zone
+     arrives as ``1`` first, the level ~100 ms later) or the window ends.
+   * A ``1502`` read returns the last frame the unit sent, config echoes included (CAPTURE
+     2026-10-10, #284). Only a **lamp-state frame** sets the active profile, mode and lamp levels:
+     Mode 4 with ProfileNumber outside 1-7, or Mode 16 with ProfileNumber other than 8
+     (:py:func:`calictl.semantics.lighting_reports_state`). A config or ack frame — Mode 4 / PN 1-7
+     (favourite save ack), Mode 16 / PN 8 (door contact), Modes 6, 8, 12, 20, 24 — only feeds the
+     config latch; the served lamps stay (:py:func:`calictl.semantics.lighting_merge`, the ESP's
+     ``session.c`` the same).
 
 .. mermaid::
 
@@ -703,7 +710,7 @@ Lighting SET and neutral flush
         C->>U: 0.3 s later flush 0e00 (NO_MODE neutral default frame)
         U--)C: 1502 Mode-4 frames, a rising zone at 1 then at N, before the flush lands
         Note right of U: lamp PHYSICALLY changes (photon-verified 2026-08-16, bare SET included)
-        Note over C: daemon confirms from the newer 1502 push within 1.2 s, never from the readback echo
+        Note over C: daemon confirms from the first newer 1502 push at level N within 1.2 s, never from the readback echo
 
 **Evidence.** For over a month a byte-identical ``calictl`` SET was ACKed and echoed while the lamp
 stayed dark. This was settled on **2026-08-16**: six evening trials were photon-confirmed,

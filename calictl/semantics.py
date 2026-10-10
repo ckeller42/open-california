@@ -404,6 +404,48 @@ def lighting_config(prev, frame):
     return out
 
 
+def lighting_reports_state(frame):
+    """True when a decoded 1502 frame reports the lamps and the active profile.
+
+    A 1502 read returns the LAST frame the unit sent, of any kind (CAPTURE 2026-10-10). Only the
+    frames of a live change carry the lamps: SET_BRIGHTNESS (Mode 4) at the working profile and
+    SET_PROFILE (Mode 16) activations. Config and ack frames do not: Mode 4 / PN 1-7 (favourite
+    save ack), Mode 16 / PN 8 (door contact), and Modes 6, 8, 12, 20, 24 (the REQUEST_CONFIG reply,
+    wake-up, clock).
+
+    :param frame: a decoded 1502 state frame.
+    :returns: ``True`` for a lamp-state frame, ``False`` for a config/ack frame.
+    """
+    mode, pn = frame.get("Mode"), frame.get("ProfileNumber")
+    if mode == 4:
+        return not (pn is not None and 1 <= pn <= 7)
+    return mode == 16 and pn != 8
+
+
+def lighting_merge(prev, frame):
+    """The served lighting decode after the unit sent ``frame``.
+
+    :param prev: the previous served decode (or ``None``).
+    :param frame: the new decoded 1502 frame.
+    :returns: ``prev`` when ``frame`` is a config/ack frame and ``prev`` reports the lamps
+        (:func:`lighting_reports_state`), else ``frame``; either way with the config latch of
+        :func:`lighting_config`.
+
+    .. req:: Take the active profile and the lamps only from lamp-state 1502 frames
+       :id: R_LIGHT_ACTIVE_PROFILE
+       :status: implemented
+       :tags: lighting, semantics
+
+       A 1502 frame that is a config or ack frame (door contact, favourite save ack, REQUEST_CONFIG
+       reply, wake-up, clock) shall not change the served active profile, mode or lamp levels; only
+       its configuration is latched. With no previous lamp-state decode the frame is served as it is.
+    """
+    # ponytail: no earlier lamp-state frame -> a config frame is served as is (cold start; the cache persists)
+    keep = prev and lighting_reports_state(prev) and not lighting_reports_state(frame)
+    base = prev if keep else frame
+    return {**base, **lighting_config(prev, frame)}
+
+
 def wakeup_config(cfg):
     """Unpack the latched wake-up config (inverse of ``dg/h.m0``, decode ``dg/a.java:311-415``).
 

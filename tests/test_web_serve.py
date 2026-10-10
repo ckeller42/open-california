@@ -1917,3 +1917,118 @@ def test_a_door_echo_does_not_become_the_active_profile(monkeypatch):
 
     asyncio.run(_run())
     assert s._last["lighting"]["ProfileNumber"] == 9 and s._last["lighting"]["DoorContact"] == 1
+
+
+# --- #284: a 1502 read returns the unit's LAST frame of any kind (CAPTURE 2026-10-10) ---
+
+_ZONES_9 = "090400000000000000050000d07ddddd"  # the last ramp frame of a zone SET (PN 9, Mode 4), real
+
+
+def _light_hex(**vals):
+    from tools import mock_unit
+
+    return mock_unit._pack_state(protocol.load()["lighting"], vals).hex()
+
+
+def _poll_frames(monkeypatch, *frames):
+    """Poll once per frame (each read returns that frame); the served lighting state after the last."""
+    s = serve.Server(influx_enabled=False)
+    reads = [bytes.fromhex(h) for h in frames]
+
+    async def fake_read_all(fns):
+        return {"lighting": reads.pop(0)}
+
+    monkeypatch.setattr(s.dev, "read_all", fake_read_all)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        for _ in frames:
+            await s.poll()
+
+    asyncio.run(_run())
+    return serve.ServeBackend(s, None).state()["lighting"]
+
+
+def test_poll_door_contact_echo_keeps_the_active_profile(monkeypatch):
+    """
+    .. test:: A door-contact echo read on 1502 is not an active profile
+       :id: T_SERVE_LIGHT_ACTIVE_DOOR
+       :links: R_LIGHT_ACTIVE_PROFILE
+    """
+    st = _poll_frames(
+        monkeypatch, _ZONES_9, "081000000000000100000000d00ddddd"
+    )  # real door echo (Mode 16 / PN 8)
+    assert st["profile"] == 9 and st["mode"] == 4
+    assert st["brightness_zone_3"] == 5 and st["brightness_zone_12"] == 7  # the lamps, not the echo's zeros
+    assert st["door_contact"] is True  # the echo's config is still latched
+
+
+def test_poll_request_config_reply_frames_keep_the_active_profile(monkeypatch):
+    """The six reply frames (Mode 12, 6, 8, 16/PN 8, 20, 24), and a favourite save ack (Mode 4 / PN 5)."""
+    reply = [
+        _light_hex(ProfileNumber=0, Mode=12, LightValue=0b1010001),
+        _light_hex(ProfileNumber=9, Mode=6, LightValue=1),
+        _light_hex(ProfileNumber=0, Mode=8, LightValue=4),
+        _light_hex(ProfileNumber=8, Mode=16, LightValue=0),
+        _light_hex(ProfileNumber=0, Mode=20, Timestamp=25200, LightValue=0x1311),
+        _light_hex(ProfileNumber=0, Mode=24, Timestamp=1791000000),
+        _light_hex(ProfileNumber=5, Mode=4),
+    ]
+    for frame in reply:
+        st = _poll_frames(monkeypatch, _ZONES_9, frame)
+        assert (st["profile"], st["mode"], st["brightness_zone_12"]) == (9, 4, 7), frame
+    st = _poll_frames(monkeypatch, _ZONES_9, *reply)
+    assert st["profile"] == 9 and st["favourites_stored"] == [1, 5, 7] and st["wakeup"]["time"] == "07:00"
+
+
+def test_poll_favourite_activation_changes_the_active_profile(monkeypatch):
+    activated = _light_hex(ProfileNumber=1, Mode=16, BrightnessLTwo=3)  # SET_PROFILE favourite 1 applied
+    st = _poll_frames(monkeypatch, _ZONES_9, activated)
+    assert st["profile"] == 1 and st["brightness_zone_2"] == 3 and st["brightness_zone_12"] == 0
+    assert _poll_frames(monkeypatch, activated, _ZONES_9)["profile"] == 9  # a zone SET is live state too
+
+
+def test_confirm_waits_past_the_rising_zones_first_frame(monkeypatch):
+    """The real unit pushes a rising zone as 1, then its level ~100 ms later (CAPTURE 2026-10-10).
+
+    .. test:: Lighting confirm waits for the frame with the requested level
+       :id: T_SERVE_LIGHT_TWO_FRAME_CONFIRM
+       :links: R_LIGHT_ACTIVE_PROFILE
+    """
+    monkeypatch.setattr(serve, "_FAST_CONFIRM_S", 1.0)
+    s, _ = _light_server(monkeypatch, [])
+    key = str(s.funcs["lighting"].state_char).lower()
+    sess = s._sessions._session
+    first, level = (
+        _light_hex(ProfileNumber=9, Mode=4, BrightnessLSeven=1),
+        _light_hex(ProfileNumber=9, Mode=4, BrightnessLSeven=8),
+    )
+
+    async def actuate(func, frame, *, follow=None, verify=True, preface=None):
+        async def push():
+            await asyncio.sleep(0.02)
+            sess._notif[key] = bytes.fromhex(first)
+            await asyncio.sleep(0.1)
+            sess._notif[key] = bytes.fromhex(level)
+
+        asyncio.ensure_future(push())
+
+    sess.actuate = actuate
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "kitchen", 8)
+
+    assert asyncio.run(_run()) is True
+    assert s._last["lighting"]["BrightnessLSeven"] == 8
+
+
+def test_default_brightness_confirms_on_the_lamps_own_level():
+    from calictl.postcheck import set_check
+
+    def check(level):
+        _, got, want = set_check("lighting", "kitchen", 11, {"brightness_zone_7": level}, {})
+        return got == want
+
+    assert check(5) and check(10)  # DEFAULT reports the lamp's own level
+    assert not check(1) and not check(0)  # the transient first frame, or still dark

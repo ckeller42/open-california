@@ -301,8 +301,15 @@ because it is instructive RE:
   5 + 10, Pop-up roof 5, Exterior 5 + 7); the pop-top light (L9) flashed 1 and fell back to 0 with
   the roof closed while the rest of the frame applied. A `1502` **read returns the last frame the
   unit sent** (buspi read back the wake-up and door echoes), so a read after a config write shows
-  that config frame, not the lamps (#284). REQUEST_CONFIG's reply was six frames: Mode 12, 6, 8,
-  16/PN 8, 20, 24.
+  that config frame, not the lamps. REQUEST_CONFIG's reply was six frames: Mode 12, 6, 8,
+  16/PN 8, 20, 24. **Rule since #284:** only a lamp-state frame — Mode 4 with ProfileNumber outside
+  1-7 (a zone SET's frames, PN 9), or Mode 16 with ProfileNumber other than 8 (a SET_PROFILE
+  activation: favourite, All-lights 12/0) — sets the served active profile, mode and lamp levels;
+  every other frame (favourite save ack Mode 4 / PN 1-7, door contact Mode 16 / PN 8, Modes 6, 8,
+  12, 20, 24) only feeds the config latch (`semantics.lighting_merge`, mirrored in the ESP's
+  `session.c`). And the write confirm (`serve._confirm_lighting`) keeps watching the pushes until one
+  shows the requested level (DEFAULT 11: any lamp level 2-10), so the first `1` frame no longer ends
+  it as "not confirmed".
 - **Brightness enum fix (same capture):** values are the `dg/i.java` enum, NOT a raw 0-13
   scale — 0=OFF, 1-10 = 10 %…100 % in 10 % steps, 11=DEFAULT, 12 unused, 13=NOT_EQUIPPED
   (read-only marker for absent zones), 14=leave-unchanged sentinel. Our old code wrote 13 as

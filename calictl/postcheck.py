@@ -91,6 +91,13 @@ def _lighting_check(what, value, interp, on):
     if what == "profile":
         return ("profile", interp.get("profile"), int(value))
     znum = _LIGHT_ZONE_NUM.get(what)
-    if znum is not None:
-        return ("zone_%d" % znum, interp.get("brightness_zone_%d" % znum), int(value))
-    return ("max_zone", _max_zone(interp), int(value))  # "all" or a raw field: check the peak
+    label, got = (
+        ("zone_%d" % znum, interp.get("brightness_zone_%d" % znum))
+        if znum
+        else ("max_zone", _max_zone(interp))
+    )
+    if (
+        int(value) == 11
+    ):  # DEFAULT: the unit reports the lamp's own level, past the transient 1 (CAPTURE 2026-10-10)
+        return (label, got is not None and 1 < got <= 10, True)
+    return (label, got, int(value))  # "all" or a raw field: check the peak

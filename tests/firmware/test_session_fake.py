@@ -1954,3 +1954,32 @@ def test_another_units_state_is_never_shown_after_forget_or_a_new_bond(fake):
     )
     assert 'STATE {"state":"idle","attempts":0,"error":null,"address":null}' in forgot
     assert "lighting" not in snaps(forgot)[-1]["fn"]
+
+
+def test_a_lighting_config_frame_keeps_the_stored_lamps(fake):
+    """#284: a 1502 read/notify returns the unit's LAST frame of any kind. A config/ack frame (here the
+    real door-contact echo) feeds the latch but keeps the stored lamps + active profile; a live
+    SET_PROFILE frame replaces them (``semantics.lighting_merge``).
+
+    .. test:: The firmware keeps the lamps across a lighting config frame
+       :id: T_FW_LIGHT_KEEPS_LAMPS
+       :links: R_LIGHT_ACTIVE_PROFILE, R_FW_SESSION
+    """
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    zones = "090400000000000000050000d07ddddd"  # a zone SET's last ramp frame (PN 9, Mode 4)
+    reads = ["READ %x 0%s" % (c, " " + zones if c == 0x1502 else "") for c in CHARS]
+    activated = "011000000000000000030000d00ddd"  # SET_PROFILE favourite 1 (15 bytes: the fake's %31s)
+    out = run(
+        fake,
+        *PAIRED,
+        *read_all(reads=reads),
+        "NOTIFY 1502 081000000000000100000000d00ddddd",
+        "NOTIFY 1502 " + activated,
+    )
+    first, door, act = (s["fn"]["lighting"] for s in snaps(out))
+    assert {k: v for k, v in door.items() if k != "DoorContact"} == first
+    assert door["DoorContact"] == 1
+    assert {k: v for k, v in act.items() if k != "DoorContact"} == protocol.decode(
+        funcs["lighting"], bytes.fromhex(activated)
+    )

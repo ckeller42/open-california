@@ -208,3 +208,22 @@ def test_light_config_latch_equals_semantics(cli):
         want.append("CFG" + "".join(" %s=%d" % (k, cfg[k]) for k in semantics.LIGHT_CONFIG_KEYS if k in cfg))
     bad = [(c, g, w) for c, g, w in zip(cases, out, want) if g != w]
     assert len(out) == len(cases) and not bad, bad[:5]
+
+
+def test_light_reports_state_equals_semantics(cli):
+    """``cali_light_reports_state`` = ``semantics.lighting_reports_state`` (#284) over every Mode x
+    ProfileNumber of the latch cases plus the REQUEST_CONFIG reply modes (6, 8, 24) and Mode 28.
+
+    .. test:: The C twin picks the same lamp-state 1502 frames as Python
+       :id: T_FW_LIGHT_STATE_PARITY
+       :links: R_LIGHT_ACTIVE_PROFILE
+    """
+    frames = [f for _, f in _latch_cases()] + [
+        {"Mode": m, "ProfileNumber": pn} for m in (6, 8, 24, 28) for pn in (0, 8, 9)
+    ]
+    lines = []
+    for f in frames:
+        lines += state_lines({"lighting": f})
+        lines.append("L")
+    want = ["STATE %d" % semantics.lighting_reports_state(f) for f in frames]
+    assert drive(cli, lines) == want

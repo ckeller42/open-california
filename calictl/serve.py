@@ -624,8 +624,8 @@ class Server:
         new_last = dict(self._last)  # build a fresh copy, then publish atomically
         for fn, data in raw.items():
             decoded = protocol.decode(self.funcs[fn], data)
-            if fn == "lighting":  # carry the wake-up / door / favourite config across frames
-                decoded = {**decoded, **semantics.lighting_config(self._last.get("lighting"), decoded)}
+            if fn == "lighting":  # a config/ack frame keeps the lamps; the config carries across (#284)
+                decoded = semantics.lighting_merge(self._last.get("lighting"), decoded)
             new_last[fn] = decoded
             states[fn] = semantics.interpret(fn, decoded)
         semantics.apply_sw_corrections(states)  # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
@@ -1058,12 +1058,13 @@ class Server:
         """Confirm a fast lighting write from the unit's real 1502 Mode-4 notification.
 
         The SET + commit already went out (bare frame, no arm, no preamble); the lamp reacts in
-        ~0.3 s. Wait briefly (``CALICTL_FAST_CONFIRM_S``) for a state-char push newer than
-        ``before`` (snapshotted before the write) — the Mode-4 ramp notification carries the REAL
-        brightness, unlike the write-through echo readback — update the served cache from it and
-        report applied-ness. Returns ``True`` on a matching notification, else ``None`` (optimistic
-        "sent"); never a false negative for lighting. No live session or no push -> ``None`` (the
-        cold path can't cheaply confirm; the next poll reconciles).
+        ~0.3 s. Watch the state-char pushes newer than ``before`` (snapshotted before the write) for
+        ``CALICTL_FAST_CONFIRM_S`` — the unit's own frames carry the REAL brightness, unlike the
+        write-through echo readback — update the served cache from each and report applied-ness. A
+        rising zone is pushed as ``1`` first and at its level ~100 ms later (CAPTURE 2026-10-10), so
+        a non-matching push does not end the wait. Returns ``True`` on a matching push, else ``None``
+        (optimistic "sent"); never a false negative for lighting. No live session or no push ->
+        ``None`` (the cold path can't cheaply confirm; the next poll reconciles).
         """
         from .postcheck import set_check  # lazy
 
@@ -1073,20 +1074,20 @@ class Server:
             return None
         key = str(f.state_char).lower()
         deadline = time.monotonic() + _FAST_CONFIRM_S
+        seen = before
         while time.monotonic() < deadline:
             cur = notif.get(key)
-            if cur is not None and cur is not before:  # a fresh push arrived
-                decoded = protocol.decode(f, cur)
-                prev = self._last.get(function) or {}
-                decoded = {**decoded, **semantics.lighting_config(prev, decoded)}
-                if what in ("save_profile", "wakeup", "door_contact"):
-                    # these only ack/echo CONFIG frames (Mode 4/PN N, Mode 20/PN 14, Mode 16/PN 8): the
-                    # active profile and mode are unchanged — only an ACTIVATE sets them
-                    decoded = {**decoded, **{k: prev[k] for k in ("ProfileNumber", "Mode") if k in prev}}
+            if cur is not None and cur is not seen:  # a fresh push arrived
+                seen = cur
+                # a config/ack push (save ack, wake-up / door echo) keeps the active profile (#284)
+                decoded = semantics.lighting_merge(self._last.get(function), protocol.decode(f, cur))
                 self._last = {**self._last, function: decoded}  # atomic rebind (web thread reads unlocked)
                 interp = semantics.interpret(function, decoded)
                 _, got, want = set_check(function, what, value, interp, decoded)
-                return True if (got is not None and got == want) else None
+                if want is None:  # no applied-check for this command (wake-up, save): nothing to wait for
+                    return None
+                if got == want:
+                    return True
             await asyncio.sleep(0.05)
         return None
 

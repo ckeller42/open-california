@@ -55,11 +55,16 @@ Control frames
 .. autofunction:: calictl.control.next_wakeup_epoch
 .. autofunction:: calictl.control.wakeup_request
 .. autofunction:: calictl.semantics.lighting_config
+.. autofunction:: calictl.semantics.lighting_reports_state
+.. autofunction:: calictl.semantics.lighting_merge
 .. autofunction:: calictl.semantics.wakeup_config
 .. automodule:: tests.test_lighting_commands
 .. autofunction:: tests.test_web_serve.test_wakeup_write_is_not_latched_only_the_units_own_frames_are
 .. autofunction:: tests.test_web_serve.test_a_pushed_unit_frame_latches_the_lighting_config
 .. autofunction:: tests.test_web_serve.test_wakeup_edit_pulls_the_config_with_request_config_then_proceeds
+.. autofunction:: tests.test_web_serve.test_poll_door_contact_echo_keeps_the_active_profile
+.. autofunction:: tests.test_web_serve.test_confirm_waits_past_the_rising_zones_first_frame
+.. autofunction:: tests.e2e.test_gui.test_favourite_save_is_not_an_activation
 
 Sinks (MQTT / Home Assistant)
 -----------------------------
