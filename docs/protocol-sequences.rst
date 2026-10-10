@@ -194,7 +194,7 @@ Session foundation — connect, handshake, subscribe
      skips these two reads.
    * Subscribe every notify/indicate char (:py:meth:`~calictl.device.CamperDevice._subscribe_all`).
      There are 12 on this unit. The session is then ready.
-   * The app's ``1002`` VIN check, its version-above-2 abort and its empty-``1004`` reconnect are
+   * The app's ``1002`` VIN check, its version-above-maximum abort (2 in app 5.0.8, 3 since 5.4.0) and its empty-``1004`` reconnect are
      app-only. ``calictl`` does none of them.
 
 .. mermaid::
@@ -214,7 +214,7 @@ Session foundation — connect, handshake, subscribe
         Note over A,U: app only, a mismatch disconnects about 20 ms later (Wrong vehicle found)
         Note over A,U: real app 2026-10-10 subscribes only the 8 chars of the fitted functions, then reads each state char
         C->>U: read 1001 (VERSION)
-        Note over A: app only, aborts if VERSION is empty or above 2
+        Note over A: app only, aborts if VERSION is empty or above its max (2, or 3 since app 5.4.0)
         C->>U: read 1004 (vehicle, handshake read, forces encryption)
         Note over A: app only, an empty 1004 read means reconnect
         loop every notifiable / indicatable char (12 on this unit)
