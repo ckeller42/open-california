@@ -195,8 +195,8 @@ wire for water:
 
 **calictl deviates on purpose.** `freshness.implausible_water_drop` (narrowed in #274 to a drop to
 ≤ 1 L with grey exactly frozen) holds the last plausible reading and flags it stale; the app has no
-such guard and would show the latched value. The guard stays (above, "Open question", answered
-2026-10-10); this section only records that the app gives no precedent for it.
+such guard and would show the latched value. The guard stays (the "Answered 2026-10-10" paragraph
+above); this section only records that the app gives no precedent for it.
 
 ## Water freshness — the settled conclusion (2026-08-19)
 

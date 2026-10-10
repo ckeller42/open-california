@@ -1337,14 +1337,18 @@ NimBLE stack, its own WiFi and HTTP server, no connection to buspi. Its flows ar
 because they reuse the same protocol and the same frames. The firmware is proven on a Linux host
 build against the Bumble fake unit, in QEMU, and on a CoreS3 on a bench against the mock unit.
 Since 2026-10-08 it has also bonded to the real camper unit and run commands on it (evidence-ledger
-2026-10-08 to 2026-10-10): the pairing and command flows below are ``live-verified`` on that
-evidence. The WiFi setup flow stays ``mock-only``. Details:
+2026-10-08 to 2026-10-10): the console pairing and the command flows below are ``live-verified``
+on that evidence. The web-wizard pairing path has not run on the real unit. The WiFi setup flow
+stays ``mock-only``. Details:
 :doc:`firmware` and the owner guide :doc:`howto-esp-wifi-setup`.
 
 .. spec:: Satellite pairing from the USB console, then the bonded session
    :id: S_SEQ_ESP_PAIRING
    :status: live-verified
-   :links: R_FW_PAIRING_SM, R_FW_PAIRING_RUNNER, R_FW_IO_CAP_BEFORE_LINK, R_FW_SESSION
+      :links: R_FW_PAIRING_SM, R_FW_PAIRING_RUNNER, R_FW_IO_CAP_BEFORE_LINK, R_FW_SESSION
+
+   The ``live-verified`` status covers the USB-console path only; the web-wizard path has not run on
+   the real unit.
 
    **Contract.** Pairing on the satellite is driven from the console (USB-Serial/JTAG on the
    CoreS3) or from the web wizard (``/api/pairing``, #261), by the platform-free C twin of the guided-pairing state machine

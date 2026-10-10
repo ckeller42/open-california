@@ -79,7 +79,7 @@ injects `EV_TIMEOUT` — absent from the table means no timer for that state.
 | `RESETTING` | 10 s |
 | `IDLE`, `BONDED`, `ERROR` | none |
 
-## ESP mapping (buspi today, #154's NimBLE port — implemented, unverified on hardware)
+## ESP mapping (buspi today, #154's NimBLE port — console pairing verified on the real unit, web wizard not yet)
 
 Agent registration / `io_cap=KEYBOARD_ONLY` (BlueZ) or NimBLE's `ble_hs_cfg.sm_io_cap` are
 **transport init, not an SM action** — they happen once, outside `step()`, before any event is
