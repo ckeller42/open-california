@@ -16,12 +16,20 @@ the `app-lab` skill. This lab is for what only the real unit can show.
 - **Never commit** a bugreport, `btsnoop_hci.log`, screenshot, VIN, unit MAC (write `20:81:9A…`),
   passkey or pairing code. A bugreport holds the phone's pairing keys and identity. Everything stays
   under buspi `~/applog/`.
-- **Never open the Account → Vehicle screen** (VIN, account data). Use the bottom tab **Vehicle**.
+- **Screenshots** (real phone or emulator) go ONLY to the private repo `ckeller42/californiaontour-re`
+  (`screens/`). open-california gets text and links only: no image or video files.
+- **Never open the VIN screens:** Account → Vehicle, and (app 5.4.0.3036) Vehicle tab → Help →
+  "Vehicle Settings" — the same page moved. Use the bottom tab **Vehicle** quick actions.
+- **Actuation needs the owner's explicit request in the conversation**, per actuation session. A tap
+  that writes to the unit without it is refused by the auto-mode permission classifier ("Unrequested
+  Commit in a Connected App"). Navigation and screenshots need no request.
 - Locked phone → **ask the owner**. Never try to unlock it.
 - **Heater:** do not touch it (diesel; short cycles harm it). **"Save light setting", double-tap a
   favourite, factory reset:** do not touch (overwrites owner presets). Each needs explicit owner OK.
 - **Roof:** ignition ON, owner present and watching, explicit go for each press.
 - Restore every setting you change. Report the end state.
+- **Stamp the app version on every capture:** `adb shell dumpsys package de.volkswagen.CaliforniaOnTour
+  | grep versionName`. The phone runs 5.4.0.3036; the decompile and the emulator lab are 5.0.8.3028.
 
 ## One-time setup (owner, on the phone)
 
@@ -41,7 +49,8 @@ USB cable is bad?", undervoltage): use wireless adb. `sudo apt-get install -y ad
 | launch app | `adb shell monkey -p de.volkswagen.CaliforniaOnTour -c android.intent.category.LAUNCHER 1` |
 | screen map | `adb shell uiautomator dump /sdcard/ui.xml; adb exec-out cat /sdcard/ui.xml` → nodes: `text`, `content-desc`, `bounds`, `clickable`, `checked` |
 | tap / slider | `adb shell input tap X Y` / `adb shell input swipe X1 Y X2 Y 450` (sliders need a swipe 400–500 ms, a tap does nothing) |
-| screenshot | `adb exec-out screencap -p > ~/applog/shot-N.png` (VW app footage: never commit) |
+| screenshot | `adb exec-out screencap -p > ~/applog/shot-N.png` (VW app footage: private RE repo `screens/` only) |
+| app version | `adb shell dumpsys package de.volkswagen.CaliforniaOnTour \| grep versionName` — record it with the capture |
 | mark an action | `echo "T_LABEL $(adb shell date +%H:%M:%S.%N)" >> ~/applog/marks.txt` right BEFORE the tap |
 | pull the capture | `cd ~/applog; adb bugreport br-N.zip` (~1–2 min, ~8 MB), then `unzip -o -q br-N.zip FS/data/misc/bluetooth/logs/btsnoop_hci.log -d brN` |
 | GATT handle map | `sudo -n sh -c "grep -h 2803 /var/lib/bluetooth/*/cache/<UNIT MAC>" > ~/applog/gatt.txt` |
@@ -95,4 +104,8 @@ lands in the protocol docs in the same PR (see the `app-lab` skill's "Recording"
 | slider does not move | `input swipe` 400–500 ms, not `tap` |
 | `snoop_att` prints only `hXXXX` | pass `gatt.txt` (cached GATT DB, no discovery in the capture) |
 | roof moved a little, then STOP | remote hold — the owner must hold it |
+| Help → "Vehicle Settings" opened | it shows the VIN (5.4.0.3036): back out at once, never screenshot it |
+| tap on a control refused: "Unrequested Commit in a Connected App" | ask the owner to request that actuation; do not work around the classifier |
+| a screenshot staged in open-california | unstage it; screenshots go to `californiaontour-re` `screens/` |
+| a 5.4 capture differs from the 5.0.8 decompile | version drift is possible: note both versions before calling it a calictl bug |
 | a frame "matches" the wrong action | the time offset — re-align on a mark |
