@@ -61,10 +61,10 @@ confirmed), LightValue@48/16, Brightness×16 @64 (4-bit each, sentinel 14 = leav
 
 | Mode | value | what it writes |
 |---|---|---|
-| SET_BRIGHTNESS | 4 | per-zone Brightness (supported) |
+| SET_BRIGHTNESS | 4 | per-zone Brightness (supported). CAPTURE 2026-10-10: a group switch = one frame, the group's zones at 11 on / 0 off |
 | **SET_COLOR** | 6 | `LightValue` = **colour palette INDEX 1–10** (`dg/j`: WARM_WHITE=1…SALMON=10 — *not RGB*), `ProfileNumber` = target profile |
 | **SET_DOUBLE** | 8 | `LightValue` = an int (dual/split config; value meaning INFERRED) |
-| REQUEST_CONFIG | 12 | Mode only + `ProfileNumber=13`; a config-pull trigger, no payload |
+| REQUEST_CONFIG | 12 | Mode only + `ProfileNumber=13`; a config-pull trigger, no payload. CAPTURE 2026-10-10: sent on Lighting-screen open (`0d0c…` + commit) |
 | SET_PROFILE | 16 | `ProfileNumber` = `dg/l` profile (supported); variants set PN 0/8/12 |
 | **WAKEUP_TIME** | 20 | `Timestamp@16/32` = **epoch seconds** (next hh:mm), + packed `LightValue` (colour+areas+wake-profile) |
 | SYSTEM_TIME | 24 | **defined but the app NEVER sends it** (unit likely self-syncs its RTC) |
@@ -127,8 +127,11 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
   also runs during roof moves. The roof's own frames never touch 1003. **calictl follows the app** (owner
   decision 2026-10-05, A1): a roof move runs with the 1003 heartbeat ticking — inside the live persistent
   session, or a fresh connection that starts it — and still streams the counter with no `ARM_DELAY_S`
-  pre-arm. The app's `roof-hold` recording agrees: 11 beats during a 9.1 s hold. Not yet device-verified
-  (first owner-watched drive, #157/#230). calictl keeps its own fixed 0.6 s period and fixed seed (device-verified)
+  pre-arm. The app's `roof-hold` recording agrees: 11 beats during a 9.1 s hold. **CAPTURE 2026-10-10**
+  (real app on the real unit, evidence-ledger 2026-10-10): the app's heartbeat ran through a full roof open
+  and close, every 0.76–0.79 s, starting from large counter values (`0x00049363…`, later `0x00061b62`), not 0 —
+  CONSISTENT with the random seed and the 750–850 ms period. calictl's own roof path is still not
+  device-verified (#157/#230). calictl keeps its own fixed 0.6 s period and fixed seed (device-verified)
   rather than the app's random 750–850 ms.
 
 ## Full call-stack cross-check (2026-08-17)
@@ -175,5 +178,11 @@ the wire captures. Corrections applied:
   same wall-clock counter trajectory the unit validates (`SafetyCounterValid`, 1402 bit 7). The old
   `control.py`/`overrides.py` "unit echo / send 0" comments were corrected to app-generated. (The
   roof-counter decision history is in `DECISIONS.md`.)
+  **CAPTURE 2026-10-10** (real app, real unit, full open + close): with the roof screen open and nothing
+  pressed the app streams STOP `00 <counter>` every ~0.45 s; a press continues the **same** counter with
+  `01`/`04` (the first move frame repeats the last STOP value), then **+1 on every frame**, ~0.33–0.45 s —
+  no repeated values were seen apart from that switch. The two-timer "deltas 0/+1" reading is therefore not
+  what the wire showed. Divergence: calictl seeds a fresh counter at the press instead of continuing the
+  screen's stream (owner decision pending, no code change).
 
 - **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).

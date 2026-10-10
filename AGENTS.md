@@ -145,19 +145,21 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   frames, never from calictl's write. Extend via `control.BUILDERS`. See `control-and-actuation.md`.
 - **Roof** (needs ignition ON): press-and-hold — stream move frames while held, STOP/cease on release
   (no confirmation phase). Direction bytes match the app (open `0x01`/stop `0x00`/close `0x04`). The
-  **SafetyCounter is app-generated** (monotonic BE-uint32, ~+1 per 500 ms), NOT echoed; the unit
+  **SafetyCounter is app-generated** (monotonic BE-uint32, ~+1 per 500 ms; the real app +1 per frame every
+  ~0.33–0.45 s and continues the roof screen's STOP-stream counter, CAPTURE 2026-10-10), NOT echoed; the unit
   withholds the motor ~3 s until it validates (`1402` bit 7). `actuate_roof` is protocol-correct but
   **has NEVER driven a real motor**. App-faithful arm: the **1003 heartbeat ticks during the move**
   (the app's is session-global, decompile + `roof-hold` recording, #235) and the counter streams
   IMMEDIATELY — NO `ARM_DELAY_S` pre-arm (#150: a gap would make the unit see a fresh counter and
-  withhold the motor another ~3 s). Not yet device-verified (first owner-watched drive, #157/#230).
+  withhold the motor another ~3 s). The real app's heartbeat-through-the-move is CAPTURE-confirmed on the
+  unit (2026-10-10); calictl's own roof path is not yet device-verified (#157/#230).
   GUI is press-and-hold (release → STOP via lock-free `_roof_stop`, a fresh token per press made
   before the `_ble` wait, so an early release cancels a queued press); a re-press within 1000 ms is
   debounced (would restart the counter → another ~3 s withhold). `actuate_roof` polls `Position`
   (`1402`) ~1 Hz and auto-stops at the limit (open `1` / closed `0`/`14`; `control.roof_limit_positions`)
   — best-effort over the unit's own limit switches. **A roof move/STOP runs inside a live persistent
-  session** (`PersistentSession.actuate_roof`, its heartbeat ticking — no second connection on the
-  single slot); with none up it opens its own connection, heartbeat on. A roof command never warms
+  session** (`PersistentSession.actuate_roof`, its heartbeat ticking — no second connection; the unit
+  does accept several centrals, 2026-10-10); with none up it opens its own connection, heartbeat on. A roof command never warms
   the session first (no keep-warm nudge, no `CALICTL_SESSION_WAIT_S` wait). See
   `protocol-alignment.md` + `protocol-sequences`.
 - **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads (`device.read_all`/
