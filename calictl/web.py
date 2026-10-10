@@ -129,7 +129,7 @@ def make_handler(backend, webui_dir):
 
         def do_POST(self):
             path = self.path.split("?", 1)[0]
-            if path not in ("/api/command", "/api/session", "/api/auto_camper", "/api/pairing"):
+            if path not in ("/api/command", "/api/session", "/api/roof", "/api/auto_camper", "/api/pairing"):
                 return self._send_json({"error": "not_found"}, 404)
             ctype = self.headers.get("Content-Type", "")
             if ctype.split(";", 1)[0].strip().lower() != "application/json":
@@ -156,6 +156,20 @@ def make_handler(backend, webui_dir):
                 except Exception as e:
                     log.warning("web: set_session failed: %r" % (e,))
                     return self._send_json({"error": "session_failed"}, 500)
+            if path == "/api/roof":
+                # the roof page is open / was left: the daemon streams the roof SafetyCounter
+                # (STOP frames) while viewing, like the app's roof screen — a vehicle write, so
+                # refused in read-only mode
+                action = req.get("action")
+                if action not in ("view", "leave"):
+                    return self._send_json({"error": "bad_action"}, 400)
+                if backend.read_only:
+                    return self._send_json({"error": "read_only"}, 405)
+                try:
+                    return self._send_json(backend.roof_view(action))
+                except Exception as e:
+                    log.warning("web: roof view failed: %r" % (e,))
+                    return self._send_json({"error": "roof_view_failed"}, 500)
             if path == "/api/auto_camper":
                 # a SETTING toggle (persisted), not a vehicle write — allowed even in read-only;
                 # the feature's own actuation still checks read-only before it acts.

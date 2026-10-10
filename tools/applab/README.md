@@ -375,7 +375,10 @@ ghost, and the reboot does not help the DHKEY roll. `lighting-zone` and `airheat
   confirmation dialog. Continuous heating OFF (only after the "Turn off continuous heating?"
   dialog) → `0f7b007f1f3f` + neutral. Untargeted fields ride at their leave-unchanged defaults.
 - Roof page open → `Up=0 Down=0 SafetyCounter=n` every ~500 ms; needs `SafetyCounterValid` back;
-  refuses to open its controls without terminal 15 ("Switch on the ignition").
+  refuses to open its controls without terminal 15 ("Switch on the ignition"). Since 2026-10-10 the
+  fake unit's roof answers like the real one (CAPTURE 2026-10-10): the first open press raises the
+  pre-open checklist (`0302`, no motion) — OK the app's dialog and press again — and a full open
+  takes ~28 s of hold (`tools/mock_unit.py` `ROOF_*`). The `roof-hold` recording predates that.
 - Roof `InfoPopUp` → tile/dialog: 1 moved too often, 2/3/12 "Function currently in use" (fake unit only — on the real unit 2 = pre-open
   safety checklist, 3/8/12 = motion progress, CAPTURE 2026-10-10),
   4 unknown error/workshop, 5 roof open while driving (Warning), 6 jammed or locked,

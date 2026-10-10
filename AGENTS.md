@@ -145,9 +145,13 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   frames, never from calictl's write. Extend via `control.BUILDERS`. See `control-and-actuation.md`.
 - **Roof** (needs ignition ON): press-and-hold — stream move frames while held, STOP/cease on release
   (no confirmation phase). Direction bytes match the app (open `0x01`/stop `0x00`/close `0x04`). The
-  **SafetyCounter is app-generated** (monotonic BE-uint32, ~+1 per 500 ms; the real app +1 per frame every
-  ~0.33–0.45 s and continues the roof screen's STOP-stream counter, CAPTURE 2026-10-10), NOT echoed; the unit
-  withholds the motor ~3 s until it validates (`1402` bit 7). `actuate_roof` is protocol-correct but
+  **SafetyCounter is app-generated** (monotonic BE-uint32, +1 per 500 ms tick), NOT echoed; the unit
+  withholds the motor ~3 s after a FRESH counter validates (`1402` bit 7). **Roof view = the app's roof
+  screen** (owner 2026-10-10, CAPTURE 2026-10-10, `R_ROOF_VIEW_STREAM`): while the web UI's roof page is
+  open (`POST /api/roof` `view`, refreshed ~5 s, lapses after 15 s, `leave` ends a held move) the
+  persistent session streams STOP frames (`device.RoofStream`); a press switches the SAME stream to the
+  move byte, repeating the current counter, so no withhold; release → STOP. A press without a view
+  (API/CLI/HA) starts its own stream (fresh counter, ~3 s withhold). `actuate_roof` is protocol-correct but
   **has NEVER driven a real motor**. App-faithful arm: the **1003 heartbeat ticks during the move**
   (the app's is session-global, decompile + `roof-hold` recording, #235) and the counter streams
   IMMEDIATELY — NO `ARM_DELAY_S` pre-arm (#150: a gap would make the unit see a fresh counter and
@@ -155,8 +159,9 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   unit (2026-10-10); calictl's own roof path is not yet device-verified (#157/#230).
   GUI is press-and-hold (release → STOP via lock-free `_roof_stop`, a fresh token per press made
   before the `_ble` wait, so an early release cancels a queued press); a re-press within 1000 ms is
-  debounced (would restart the counter → another ~3 s withhold). `actuate_roof` polls `Position`
-  (`1402`) ~1 Hz and auto-stops at the limit (open `1` / closed `0`/`14`; `control.roof_limit_positions`)
+  debounced (without a view it would restart the counter → another ~3 s withhold). `actuate_roof` polls
+  `1402` ~1 Hz and auto-stops at end of travel (`InfoPopUp` 8, `2308`, as the app) or the limit Position
+  (open `1` / closed `0`/`14`; `control.roof_limit_positions`)
   — best-effort over the unit's own limit switches. **A roof move/STOP runs inside a live persistent
   session** (`PersistentSession.actuate_roof`, its heartbeat ticking — no second connection; the unit
   does accept several centrals, 2026-10-10); with none up it opens its own connection, heartbeat on. A roof command never warms

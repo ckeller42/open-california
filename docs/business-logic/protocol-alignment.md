@@ -178,10 +178,19 @@ the wire captures. Corrections applied:
   same wall-clock counter trajectory the unit validates (`SafetyCounterValid`, 1402 bit 7). The old
   `control.py`/`overrides.py` "unit echo / send 0" comments were corrected to app-generated. (The
   roof-counter decision history is in `DECISIONS.md`.)
-  **CAPTURE 2026-10-10** (real app, real unit, full open + close): with the roof screen open and nothing
-  pressed the app streams STOP `00 <counter>` every ~0.45 s; a press continues the **same** counter with
-  `01`/`04` (the first move frame repeats the last STOP value), then **+1 on every frame**, ~0.33–0.45 s.
-  The two-timer "deltas 0/+1" reading (duplicate re-sends) does not match that wire. Divergence: calictl seeds a fresh counter at the press instead of continuing the
-  screen's stream (owner decision pending, no code change).
+  **CAPTURE 2026-10-10** (real app, real unit, full open + close; re-analysed frame by frame): with the
+  roof screen open and nothing pressed the app streams STOP `00 <counter>`, one frame per ~500 ms tick,
+  +1 each (0.4997 s per increment over the capture); a press switches to `01`/`04` **at once** with the
+  **same** counter (the first move frame repeats the last STOP value; the first STOP after a release
+  repeats the last move value — 26 of 26 changes); while held a second frame repeats the current value
+  about once a second. That is exactly the two-timer model above (deltas 0/+1, never +2). **calictl
+  follows it** (owner decision 2026-10-10, `R_ROOF_VIEW_STREAM`): while the web UI's roof page is open
+  (`POST /api/roof` `view`, refreshed; lapses after 15 s) the persistent session runs a
+  `device.RoofStream` of STOP frames; a press switches that same stream to the move byte with the
+  current counter, a release back to STOP. The counter is therefore validated before the press and the
+  unit has no ~3 s withhold left (the app's motor started ~1.2 s after the press). A press without a
+  view (API/CLI/HA) still starts its own stream (fresh counter, ~3 s withhold). calictl omits the 1000 ms
+  re-send, and auto-stops at end of travel on `InfoPopUp` 8 (`2308`) as the app does. Its own move is
+  still never driven on the real unit (#230).
 
 - **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).

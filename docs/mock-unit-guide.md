@@ -175,8 +175,11 @@ python3 -m tools.trace_compare ~/ble.jsonl                  # replay through the
 A green mock run is not proof against the real van. The mock is **wrong or coarser** than the
 hardware on these points (the full list is in {doc}`simulation-and-testing`):
 
-- **Roof motion is a model, not a measurement.** calictl has never driven the real motor, so the
-  withhold time (`ROOF_WITHHOLD_S`), step timing and limit behaviour are parameters, not facts.
+- **Roof motion is modelled on the real app's capture, not on calictl's own drive.** The 1402
+  sequence and timings (pre-open checklist `0302`, `030c`→`230c`, `2308`→`1300`/`0300`, `2303`→`2300`,
+  ~28 s open / ~23 s close, `ROOF_*` constants) follow the real unit under the real app (CAPTURE
+  2026-10-10); the ~3 s withhold of a freshly validated counter (`ROOF_WITHHOLD_S`) is still
+  semi-verified, and calictl has never driven the real motor.
 - **"Driving" is an explicit flag** (`driving`), not a derived predicate — the real "vehicle is
   stationary" condition is still unknown.
 - **The single connection slot is opt-in** (`one_slot`, off by default), although the real unit

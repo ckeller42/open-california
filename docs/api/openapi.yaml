@@ -177,6 +177,51 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example: { error: session_failed }
+  /api/roof:
+    post:
+      summary: The roof page is open (view) or was left (leave)
+      description: |
+        While viewing, the daemon streams roof STOP frames with the SafetyCounter on the persistent
+        BLE session, as the real app does while its roof screen is open (CAPTURE 2026-10-10), so a
+        press moves on an already-validated counter. Refresh `view` every few seconds: with no
+        refresh for `CALICTL_ROOF_VIEW_LAPSE_S` (15 s) the stream ends. `leave` ends it at once and
+        also ends a held move with STOP. A vehicle write: refused in read-only mode.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoofViewRequest" }
+            example: { action: view }
+      responses:
+        "200":
+          description: Whether the daemon now streams the roof view.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoofViewResult" }
+        "400":
+          description: action not in {view, leave}.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: bad_action }
+        "405":
+          description: The daemon is read-only.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: read_only }
+        "415":
+          description: Content-Type is not application/json.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: unsupported_media_type }
+        "500":
+          description: The view change failed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: roof_view_failed }
   /api/auto_camper:
     post:
       summary: Toggle the auto-camper (restore-camping-after-park) setting
@@ -285,7 +330,7 @@ components:
           enum: [state_failed, history_failed, not_found, unsupported_media_type, bad_request,
                  bad_json, read_only, missing_function_or_what, confirm_required, command_failed,
                  bad_action, session_failed, bad_enabled, auto_camper_failed, bad_passkey,
-                 pairing_failed]
+                 pairing_failed, roof_view_failed]
     State:
       type: object
       description: |
@@ -418,6 +463,17 @@ components:
         ok: { type: boolean }
         mode: { type: string, enum: [auto, release] }
         session: { type: string, enum: [off, connecting, up, degraded, asleep] }
+    RoofViewRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [view, leave] }
+    RoofViewResult:
+      type: object
+      required: [ok, viewing]
+      properties:
+        ok: { type: boolean }
+        viewing: { type: boolean }
     AutoCamperRequest:
       type: object
       required: [enabled]

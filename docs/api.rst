@@ -38,6 +38,7 @@ Device / reads
 .. automethod:: calictl.device.CamperDevice._actuate_on
 .. autoclass:: calictl.device.PersistentSession
    :members:
+.. autoclass:: calictl.device.RoofStream
 
 Protocol codec
 --------------
@@ -146,6 +147,9 @@ Tests
 .. autofunction:: tests.test_mock_integration.test_roof_release_while_the_press_waits_on_the_lock_never_moves
 .. autofunction:: tests.test_mock_integration.test_standalone_roof_stop_without_a_session_has_no_arm_delay
 .. autofunction:: tests.test_mock_integration.test_roof_auto_stops_at_the_limit_inside_the_live_session
+.. autofunction:: tests.test_mock_integration.test_roof_view_streams_stop_frames_and_a_press_continues_the_counter
+.. autofunction:: tests.test_mock_integration.test_roof_view_lapses_without_a_refresh
+.. autofunction:: tests.test_mock_integration.test_roof_view_leave_ends_a_held_move_with_stop
 .. autofunction:: tests.test_firmware_anchors.test_firmware_snapshot_captures_raw_frames
 .. autofunction:: tests.test_firmware_anchors.test_anchors_flag_implausible_decode
 .. autofunction:: tests.test_web_serve.test_web_server_binds_without_reverse_dns

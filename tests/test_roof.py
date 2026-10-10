@@ -366,3 +366,55 @@ def test_actuate_roof_sends_stop_when_cancelled_mid_move(roof):
     asyncio.run(_run())
     ctrl = _ctrl_writes(_RoofClient.instances[-1], roof)
     assert ctrl[-1][0] == 0x00, "a cancelled move must still attempt STOP"
+
+
+def test_roof_stream_ticks_plus_one_and_a_direction_change_repeats_the_counter(roof):
+    """The app's roof-screen stream (CAPTURE 2026-10-10): one frame per tick, counter +1 per tick; a
+    direction change goes out AT ONCE with the CURRENT counter — the first move frame repeats the
+    last STOP frame's counter and the first STOP after it the last move frame's (26 of 26 changes on
+    the wire). ``set`` with an unchanged direction writes nothing; ``close`` stops the ticker.
+
+    .. test:: Roof stream: +1 per tick, a direction change repeats the current counter
+       :id: T_ROOF_STREAM_COUNTER
+       :links: R_ROOF_VIEW_STREAM
+    """
+    client = _RoofClient("11:22:33:44:55:66")
+    client.is_connected = True
+    stop = control.roof_frame(roof, "stop")
+    move = control.roof_frame(roof, "open")
+
+    async def _wait(s):
+        try:
+            await asyncio.wait_for(asyncio.Event().wait(), s)
+        except TimeoutError:
+            pass
+
+    async def _run():
+        st = device.RoofStream(client, roof["roof"], stop, seed=500, period_s=0.02)
+        await st.set(stop)
+        await _wait(0.07)
+        await st.set(move)
+        await st.set(move)  # unchanged: no extra frame
+        await _wait(0.05)
+        await st.set(stop)
+        await _wait(0.05)
+        await st.close()
+        n = len(client.writes)
+        await _wait(0.05)
+        return n
+
+    n_closed = asyncio.run(_run())
+    ctrl = _ctrl_writes(client, roof)
+    assert len(client.writes) == n_closed, "no frame after close"
+    dirs, ctrs = [d[0] for d in ctrl], _counters(ctrl)
+    assert ctrs[0] == 500 and dirs[0] == 0x00
+    for i in range(1, len(ctrl)):
+        if dirs[i] != dirs[i - 1]:
+            assert ctrs[i] == ctrs[i - 1], "a direction change repeats the current counter"
+        else:
+            assert ctrs[i] == ctrs[i - 1] + 1, "a tick is +1"
+    assert dirs.count(0x01) >= 2 and dirs[-1] == 0x00
+    assert [k for k in range(1, len(dirs)) if dirs[k] != dirs[k - 1]] == [
+        dirs.index(0x01),
+        len(dirs) - 1 - dirs[::-1].index(0x01) + 1,
+    ], "exactly one switch to the move byte and one back"

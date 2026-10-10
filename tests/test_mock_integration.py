@@ -517,6 +517,24 @@ def test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking(mock)
     assert beats == list(range(beats[0], beats[0] + len(beats))), "1003 must be strictly +1"
 
 
+def _fast_roof(monkeypatch, unit):
+    """Scale the mock roof's real-unit timings (CAPTURE 2026-10-10) down to a fraction of a second
+    and skip the pre-open checklist (its own tests cover it), so a full travel fits in a test."""
+    from tools import mock_unit
+
+    for name, val in (
+        ("ROOF_WITHHOLD_S", 0.2),
+        ("ROOF_OPEN_S", 0.6),
+        ("ROOF_CLOSE_S", 0.6),
+        ("ROOF_START_S", 0.05),
+        ("ROOF_LEAVE_S", 0.1),
+        ("ROOF_SETTLE_S", 0.1),
+    ):
+        monkeypatch.setattr(mock_unit, name, val)
+    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.05)
+    unit.roof_checklist = False
+
+
 def _session_server(mock):
     from calictl import serve
 
@@ -626,11 +644,7 @@ def test_roof_auto_stops_at_the_limit_inside_the_live_session(mock, monkeypatch)
     """
     import time
 
-    from tools import mock_unit
-
-    monkeypatch.setattr(mock_unit, "ROOF_WITHHOLD_S", 0.2)
-    monkeypatch.setattr(mock_unit, "ROOF_STEP_S", 0.3)
-    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.05)
+    _fast_roof(monkeypatch, mock)
     s = _session_server(mock)
     events = _log_unit_writes(mock)
 
@@ -648,6 +662,7 @@ def test_roof_auto_stops_at_the_limit_inside_the_live_session(mock, monkeypatch)
         tick = asyncio.ensure_future(_ticker(done))
         try:
             await asyncio.wait_for(s.on_command("roof", "open", None), timeout=10.0)
+            await _real_wait(0.4)  # end of travel (InfoPopUp 8) -> the final Position settles
         finally:
             done.set()
             await tick
@@ -670,7 +685,7 @@ def test_roof_opens_and_closes_on_the_mock_with_the_heartbeat_ticking(mock, monk
     honours a roof frame only while the heartbeat has armed the unit, so a heartbeat-less drive
     (the pre-#235 contract) leaves the roof where it was.
 
-    The unit's clock follows real time here; the withhold and per-step travel are shortened so the
+    The unit's clock follows real time here; the withhold and the travel are shortened so the
     full open + close takes a few seconds.
 
     .. test:: calictl opens and closes the mock roof with the heartbeat ticking
@@ -679,11 +694,7 @@ def test_roof_opens_and_closes_on_the_mock_with_the_heartbeat_ticking(mock, monk
     """
     import time
 
-    from tools import mock_unit
-
-    monkeypatch.setattr(mock_unit, "ROOF_WITHHOLD_S", 0.2)
-    monkeypatch.setattr(mock_unit, "ROOF_STEP_S", 0.3)
-    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.05)
+    _fast_roof(monkeypatch, mock)
     funcs = _funcs()
     f = funcs["roof"]
     stop = control.roof_frame(funcs, "stop")
@@ -710,6 +721,7 @@ def test_roof_opens_and_closes_on_the_mock_with_the_heartbeat_ticking(mock, monk
                 limit_positions=control.roof_limit_positions(direction),
                 verify=False,
             )
+            await _real_wait(0.4)  # end of travel (InfoPopUp 8) -> the final Position settles
         finally:
             done.set()
             await tick
@@ -717,6 +729,172 @@ def test_roof_opens_and_closes_on_the_mock_with_the_heartbeat_ticking(mock, monk
 
     assert asyncio.run(_drive("open")) == 1  # closed -> middle -> open
     assert asyncio.run(_drive("close")) == 0  # open -> middle -> closed
+
+
+def _log_roof_frames(unit):
+    """Every roof frame reaching the unit as ``(monotonic time, direction byte, counter)``."""
+    import time
+
+    frames = []
+    real_write = unit.write
+
+    def _write(uuid, data):
+        if uuid == unit.funcs["roof"].control_char:
+            d = bytes(data)
+            frames.append((time.monotonic(), d[0], int.from_bytes(d[1:5], "big")))
+        return real_write(uuid, data)
+
+    unit.write = _write
+    return frames
+
+
+async def _unit_clock(unit, done):
+    """Advance the mock's clock in real time until ``done`` is set."""
+    import time
+
+    last = time.monotonic()
+    while not done.is_set():
+        await _real_wait(0.05)
+        now = time.monotonic()
+        unit.tick(now - last)
+        last = now
+
+
+def test_roof_view_streams_stop_frames_and_a_press_continues_the_counter(mock, monkeypatch):
+    """The app's roof screen, CAPTURE 2026-10-10: while the roof page is open (``roof_view``) the live
+    session streams STOP frames ``00 <counter>`` every ~500 ms with the counter advancing; a press
+    switches the SAME stream to the move byte — its first move frame carries the last STOP frame's
+    counter — and a release goes back to STOP frames, the counter never restarting. The mock unit
+    therefore has the counter validated before the press and starts the motor without the fresh-
+    counter withhold.
+
+    .. test:: Roof view: STOP stream, press continues the counter, release back to STOP
+       :id: T_ROOF_VIEW_STREAM
+       :links: R_ROOF_VIEW_STREAM, R_ROOF_ACTUATE
+    """
+    from tools import mock_unit
+
+    monkeypatch.setattr(device, "ROOF_LIMIT_POLL_S", 0.05)
+    mock.roof_checklist = False  # the checklist has its own mock tests
+    s = _session_server(mock)
+    frames = _log_roof_frames(mock)
+    seen = []
+    mock._subs.setdefault(mock.funcs["roof"].state_char, []).append(
+        lambda _c, d: seen.append((mock.now, bytes(d).hex()))
+    )
+    out = {}
+
+    async def _run():
+        await _bring_up_session(s)
+        done = asyncio.Event()
+        clock = asyncio.ensure_future(_unit_clock(mock, done))
+        try:
+            await s.roof_view("view")
+            await _real_wait(mock_unit.ROOF_WITHHOLD_S + 1.5)  # the page is open: validated + withhold paid
+            out["n_view"] = len(frames)
+            out["t_press"] = mock.now
+            press = asyncio.ensure_future(s.on_command("roof", "open", None))
+            await _real_wait(1.0)
+            await s.on_command("roof", "stop", None)  # release
+            await asyncio.wait_for(press, 5.0)
+            await _real_wait(1.0)
+            out["streaming"] = s._live_session().roof_streaming
+            await s.roof_view("leave")
+            await asyncio.wait_for(s._roof_view_task, 5.0)
+            out["after_leave"] = s._live_session().roof_streaming
+        finally:
+            done.set()
+            await clock
+
+    asyncio.run(_run())
+    view = frames[: out["n_view"]]
+    assert {d for _t, d, _c in view} == {0x00}, "the open page streams STOP frames only"
+    gaps = [b[0] - a[0] for a, b in zip(view, view[1:])]
+    assert len(view) >= 8 and max(gaps) < 0.7 and 0.3 < sum(gaps) / len(gaps) < 0.6, gaps
+    ctrs = [c for _t, _d, c in frames]
+    assert ctrs == sorted(ctrs) and ctrs[-1] > ctrs[0], "one counter, never restarting"
+    first_move = next(i for i, (_t, d, _c) in enumerate(frames) if d == 0x01)
+    assert frames[first_move][2] == frames[first_move - 1][2], (
+        "first move frame repeats the last STOP counter"
+    )
+    last_move = max(i for i, (_t, d, _c) in enumerate(frames) if d == 0x01)
+    assert frames[last_move + 1][1] == 0x00 and len(frames) > last_move + 2, (
+        "release -> the STOP stream goes on"
+    )
+    moving = [t for t, h in seen if h.endswith("0c") and t >= out["t_press"]]
+    assert moving and moving[0] - out["t_press"] < 1.0, "a pre-validated counter: no ~3 s withhold"
+    assert out["streaming"] is True and out["after_leave"] is False
+
+
+def test_roof_view_lapses_without_a_refresh(mock, monkeypatch):
+    """A view that is not refreshed ends: the STOP stream stops after ``CALICTL_ROOF_VIEW_LAPSE_S`` —
+    it never streams forever (a closed browser tab sends no ``leave``).
+
+    .. test:: Roof view lapses without a refresh
+       :id: T_ROOF_VIEW_LAPSE
+       :links: R_ROOF_VIEW_STREAM
+    """
+    import time
+
+    from calictl import serve
+
+    monkeypatch.setattr(serve, "_ROOF_VIEW_LAPSE_S", 0.6)
+    s = _session_server(mock)
+    frames = _log_roof_frames(mock)
+    out = {}
+
+    async def _run():
+        await _bring_up_session(s)
+        await s.roof_view("view")
+        await asyncio.wait_for(s._roof_view_task, 5.0)  # lapses by itself
+        out["t_end"] = time.monotonic()
+        out["streaming"] = s._live_session().roof_streaming
+        await _real_wait(1.0)
+
+    asyncio.run(_run())
+    assert frames, "the view streamed"
+    assert out["streaming"] is False
+    assert all(t <= out["t_end"] + 0.05 for t, _d, _c in frames), "no frame after the lapse"
+
+
+def test_roof_view_leave_ends_a_held_move_with_stop(mock):
+    """Leaving the roof page while a move is held ends the move: STOP, then the stream ends.
+
+    .. test:: Leaving the roof view ends a held move with STOP
+       :id: T_ROOF_VIEW_LEAVE_STOPS
+       :links: R_ROOF_VIEW_STREAM
+    """
+    s = _session_server(mock)
+    frames = _log_roof_frames(mock)
+
+    async def _run():
+        await _bring_up_session(s)
+        await s.roof_view("view")
+        await _real_wait(0.6)
+        press = asyncio.ensure_future(s.on_command("roof", "close", None))
+        await _real_wait(0.6)
+        await s.roof_view("leave")
+        await asyncio.wait_for(press, 5.0)
+        await asyncio.wait_for(s._roof_view_task, 5.0)
+        return s._live_session().roof_streaming
+
+    assert asyncio.run(_run()) is False
+    assert frames[-1][1] == 0x00 and any(d == 0x04 for _t, d, _c in frames)
+
+
+def test_roof_view_is_refused_read_only(mock):
+    """A read-only daemon writes nothing for a roof view."""
+    from calictl import serve
+
+    s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
+    frames = _log_roof_frames(mock)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.roof_view("view")
+
+    assert asyncio.run(_run()) == {"ok": False, "viewing": False}
+    assert frames == []
 
 
 def test_read_only_is_default_and_refuses_writes(mock):

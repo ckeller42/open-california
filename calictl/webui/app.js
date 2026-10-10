@@ -1516,6 +1516,7 @@ function render() {
   if (view === "home") renderDashboard();
   else if (view === "devicestatus") renderDeviceStatus();
   else renderFeature(view);
+  roofViewSync();
 }
 
 // --- the in-app Device-status screen (menu, both flavors) -------------------------------------
@@ -2196,9 +2197,9 @@ function autoCamperCard() {
   return card;
 }
 
-// Re-press debounce (app-faithful, cross-check #2 2026-08-30). A move-start restarts the app's
-// SafetyCounter from a fresh random seed; if a release is followed by an immediate re-press the unit
-// sees a brand-new counter and withholds the motor another ~3 s. The app ignores a roof press within
+// Re-press debounce (app-faithful, cross-check #2 2026-08-30). Without a roof view a move-start
+// starts a fresh SafetyCounter; if a release is followed by an immediate re-press the unit
+// sees a brand-new counter and withholds the motor another ~3 s (with the view the counter runs on). The app ignores a roof press within
 // ~1 s of the last one, so button jitter can't stutter the drive. Module-level (not per-render): the
 // state view re-renders every 2 s and would otherwise reset a closure-scoped timestamp. STOP is never
 // debounced — a release must always cease the move.
@@ -2231,6 +2232,33 @@ function roofRelease() {
 // Any release anywhere ends the move — the vehicle's own hold-to-move contract.
 document.addEventListener("pointerup", roofRelease);
 document.addEventListener("pointercancel", roofRelease);
+
+// The roof VIEW (CAPTURE 2026-10-10): while the real app's roof screen is open it streams STOP frames
+// with its SafetyCounter, so a press moves on an already-validated counter (no ~3 s withhold). The
+// roof page tells the daemon the same: `view` on open, refreshed by the 2 s re-render (throttled to
+// ROOF_VIEW_REFRESH_MS; the daemon lets it lapse after ~15 s without one), `leave` when the page is
+// left or the tab is hidden. A held move keeps the view open server-side (render() is paused then).
+const ROOF_VIEW_REFRESH_MS = 5000;
+let roofViewAt = 0;
+/** @param {string} action "view" | "leave" */
+function roofViewPost(action) {
+  api("/api/roof", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
+  }).catch(() => {});             // best-effort: the daemon's lapse ends a view we failed to leave
+}
+function roofViewSync() {
+  const on = view === "roof" && isCalictl() && !readOnly() && document.visibilityState === "visible";
+  if (on && Date.now() - roofViewAt >= ROOF_VIEW_REFRESH_MS) {
+    roofViewAt = Date.now();
+    roofViewPost("view");
+  } else if (!on && roofViewAt) {
+    roofViewAt = 0;
+    roofViewPost("leave");
+  }
+}
+document.addEventListener("visibilitychange", roofViewSync);
 
 /** @param {FnState} s the decoded roof state (caller passes `STATE[fn] || {}`) */
 function roofControls(s) {

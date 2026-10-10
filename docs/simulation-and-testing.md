@@ -115,8 +115,11 @@ What it models:
   of each lamp) is **unverified** — a van check (#230).
 - **The roof SafetyCounter.** The counter is valid only while it is monotonic and still advancing.
   A restart invalidates it. A freshly validated counter withholds the motor for about 3 s
-  (`ROOF_WITHHOLD_S`, semi-verified). A held move steps `Position`, and releasing it (no frames)
-  stops the motion.
+  (`ROOF_WITHHOLD_S`, semi-verified); a counter the roof page already streams has paid it before
+  the press. Motion and its 1402 pushes follow the real unit (CAPTURE 2026-10-10): an open press
+  first raises the pre-open checklist (`0302`, no motion, cleared after 4 s; a fresh press within
+  30 s moves), then `030c` → `230c` → `2308` → `1300` / `0300` over ~28 s open / ~23 s close of
+  held travel; a release mid-travel gives `2303` → `2300`.
 - **Clock-driven dynamics.** Heater and cooler countdowns and timers. Ignition sheds camping mode.
   The link drops for about a minute at engine crank. Deep sleep (`drop()`/`wake()`) and an opt-in
   single connection slot (`one_slot`).
