@@ -46,17 +46,22 @@ bug, a drain, or a sensor fault (`FreshWaterInfoPopUp = 0` = valid).
   The van's WiFi AP wasn't even broadcasting. (Earlier notes that guessed an Exlap/WiFi fix were
   wrong.)
 - **Not BLE GATT notifications.** Enabling notifications (CCCD `01 00`) yields no fresh push on
-  its own; a persistent bare subscription stayed stale and the van dropped the link every ~15 s.
+  its own; a persistent bare subscription stayed stale. (The link drops seen then — "every ~15 s" —
+  were not a heartbeat timeout: a held link with NO heartbeat stayed up >2 min on 2026-10-10. Drops of
+  that kind came from an unanswered ATT MTU request, see firmware.md #279.)
 
 ## Root cause (live-verified)
 
-The **`00001003` liveness heartbeat** — a +1 4-byte-BE counter — **keeps the link alive** so a
-read returns a fresh value instead of a stale latch. (It does NOT itself drive every subsystem's
+The **`00001003` liveness heartbeat** — a +1 4-byte-BE counter — **arms writes and refreshes the
+re-read characteristics**, so a read returns a fresh value instead of a stale latch. (CORRECTED
+2026-10-10: it does NOT keep the link alive — buspi held a session >2 min with the heartbeat off, van
+parked, and was not dropped.) (It does NOT itself drive every subsystem's
 measurement — see the water note below, where the heartbeat was DISPROVEN as a water refresh; a
 subsystem re-measures only while it's powered/awake.) It is not only for actuation: the app ticks
 it **continuously (~0.7 s) the entire time it is connected**. A characteristic read returns the
-last latched value; without the heartbeat running, that value decays to a stale reading and, after
-~15 s with no heartbeat, the van drops the connection.
+last latched value; without the heartbeat running, that value decays to a stale reading. (The
+earlier "after ~15 s with no heartbeat the van drops the connection" was never measured cleanly and
+did not reproduce on 2026-10-10.)
 
 **Capture evidence** (PacketLogger via `idevicebtlogger`, app opening the vehicle screen): the app
 writes a monotonic +1 counter to handle `0x001a` (= char `1003`) every ~0.76 s; the water value
