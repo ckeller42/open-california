@@ -430,6 +430,16 @@ def test_water_baseline_restored_from_nvs_rejects_a_latch_on_boot(fake):
     assert got == protocol.decode(f, bytes.fromhex(PLAUSIBLE_WATER))  # restored baseline held
 
 
+def test_water_baseline_time_is_this_boot_only(fake):
+    """``cali_session_water_good_ms`` (``/api/state`` ``device.water_held_age_ms``) is the session
+    time a real read adopted/confirmed the baseline; an NVS-restored baseline has none (0)."""
+    latch_reads = ["READ %x 0%s" % (c, " " + LATCH_WATER if c == 0x1302 else "") for c in CHARS]
+    boot = ["kvsethex water_good " + PLAUSIBLE_WATER, "reinit", *PAIRED]
+    assert "WATERGOOD 1 0" in run(fake, *boot, *read_all(reads=latch_reads), "watergood")  # held, no time
+    _, _, out = _served_water(fake, "NOTIFY 1302 " + LATCH_WATER, "tick %d" % (T + 100), "watergood")
+    assert ("WATERGOOD 1 %d" % T) in out  # confirmed by the read at T, then held against the latch
+
+
 SEED_WATER = "03161d010016"  # fresh 22, waste 0: a persisted last-plausible reading
 
 

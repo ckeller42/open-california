@@ -314,6 +314,7 @@ def test_state_flags_stale_water():
     # the substitution holds the WHOLE dict, so waste is a held value too — it must carry the
     # same stale flag (regression: waste was served frozen-but-unflagged for a month, 2026-08-16)
     assert held["waste"]["stale"] is True
+    assert "measured_at" not in held  # an old cache without the adopt time: the UI keeps the plain marker
 
 
 def test_water_baseline_persists_across_restart(monkeypatch, tmp_path):
@@ -328,9 +329,12 @@ def test_water_baseline_persists_across_restart(monkeypatch, tmp_path):
         "waste": {"liters": 1, "capacity_l": 22, "percent": 5},
     }
     s._water_stale_since = 1_700_000_000.0
+    s._water_measured_at = 1_699_990_000.0
     s._save_last()
     s2 = serve.Server(influx_enabled=False)  # "restart" — same cache path
     assert s2._water_good == s._water_good and s2._water_stale_since == 1_700_000_000.0
+    assert s2._water_measured_at == 1_699_990_000.0
+    assert serve.ServeBackend(s2, loop=None).state()["water"]["measured_at"] == 1_699_990_000.0
 
 
 def test_water_good_baseline_needs_no_influx(monkeypatch):
@@ -362,6 +366,7 @@ def test_poll_holds_mid_ramp_water_until_it_settles(monkeypatch):
     s = serve.Server(influx_enabled=False)
     clock = {"t": 1000.0}
     monkeypatch.setattr(serve.time, "monotonic", lambda: clock["t"])
+    monkeypatch.setattr(serve.time, "time", lambda: 1_700_000_000 + clock["t"])
     frames = iter(["03011d010016", "03101d010016", "03141d010016", "03141d010016", "03011d010016"])
 
     async def fake_read_all(fns):
@@ -382,8 +387,10 @@ def test_poll_holds_mid_ramp_water_until_it_settles(monkeypatch):
         assert await poll_at(31) is None  # 20 L first seen
         w = await poll_at(61)  # 20 L again 30 s later: adopted
         assert w["fresh"]["liters"] == 20 and "stale" not in w["fresh"]
+        assert "measured_at" not in w  # live: no age shown
         w = await poll_at(91)  # back to the 1 L latch: 20 held, stale
         assert w["fresh"]["liters"] == 20 and w["fresh"]["stale"] is True
+        assert w["measured_at"] == 1_700_000_061  # when the held 20 L was adopted (UI: "measured … ago")
 
     asyncio.run(_run())
 

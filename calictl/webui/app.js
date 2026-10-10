@@ -80,6 +80,7 @@
  * @property {string|null} [fresh_alert]
  * @property {string|null} [waste_alert]
  * @property {number|null} [stale_since]
+ * @property {number} [measured_at]   // epoch s of the HELD reading's measurement (absent = unknown)
  * // energy (semantics.energy)
  * @property {boolean} [stale]
  * @property {number|null} [age_min]
@@ -594,9 +595,9 @@ const FEATURES = {
     title: "Water", icon: "💧",
     readouts: [
       // Composed values: translate the suffix here (renderReadout's t() can't match a concatenation).
-      { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  " + t("🕒 last measured") : ""),
+      { label: "Fresh water", get: (s) => tank(s.fresh) + (s.fresh && s.fresh.stale ? "  " + measuredText(s, /** @type {string} */ (t("🕒 last measured"))) : ""),
         bar: (s) => s.fresh && s.fresh.percent },
-      { label: "Waste water", get: (s) => tank(s.waste) + (s.waste && s.waste.stale ? "  " + t("🕒 last measured") : ""),
+      { label: "Waste water", get: (s) => tank(s.waste) + (s.waste && s.waste.stale ? "  " + measuredText(s, /** @type {string} */ (t("🕒 last measured"))) : ""),
         bar: (s) => s.waste && s.waste.percent },
     ],
     // The unit's own water fault dialogs (fresh first, then waste), see alert-states.md §5.
@@ -618,7 +619,7 @@ const FEATURES = {
         + "the van's water system is running, so it lags until the pump next runs. It's read correctly, "
         + "just not live.", { ago: ago });
     },
-    summary: (s) => (s.fresh ? `${t("Fresh")} ${s.fresh.percent}%${s.fresh.stale ? " " + t("(last meas.)") : ""}` : ""),
+    summary: (s) => (s.fresh ? `${t("Fresh")} ${s.fresh.percent}%${s.fresh.stale ? " " + measuredText(s, /** @type {string} */ (t("(last meas.)"))) : ""}` : ""),
   },
   energy: {
     title: "Energy", icon: "🔋",
@@ -944,6 +945,18 @@ function goto(v) {
   lastRender = "";
   render();
   titleEl.focus();   // move focus to the new screen's heading so keyboard/SR users follow the nav
+}
+
+/**
+ * Age of a HELD water reading, like the app's "Updated: x ago": "🕒 measured 2 h ago". `measured_at`
+ * is epoch s (calictl serve.state(); semantics.js maps the ESP's device.water_held_age_ms onto it).
+ * @param {FnState} s  the water state
+ * @param {string} unknown  shown (already translated) when the age is not known
+ * @returns {string}
+ */
+function measuredText(s, unknown) {
+  if (typeof s.measured_at !== "number") return unknown;
+  return tf("🕒 measured {ago}", { ago: agoText(Math.max(0, Math.round(Date.now() / 1000 - s.measured_at))) });
 }
 
 /**

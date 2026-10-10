@@ -219,6 +219,7 @@ window.STRINGS_DE = {
   "Fresh water": "Frischwasser",
   "Waste water": "Grauwasser",
   "🕒 last measured": "🕒 zuletzt gemessen",
+  "🕒 measured {ago}": "🕒 {ago} gemessen",
   "🕒 Showing the LAST MEASURED water level": "🕒 Es wird der ZULETZT GEMESSENE Wasserstand angezeigt",
   "🕒 Showing the LAST MEASURED water level{ago} — the BLE level only refreshes while the van's water system is running, so it lags until the pump next runs. It's read correctly, just not live.":
     "🕒 Es wird der ZULETZT GEMESSENE Wasserstand angezeigt{ago} — der BLE-Wert aktualisiert sich nur, während die Wasseranlage des Fahrzeugs läuft, und hinkt daher hinterher, bis die Pumpe das nächste Mal läuft. Er wird korrekt gelesen, nur nicht live.",

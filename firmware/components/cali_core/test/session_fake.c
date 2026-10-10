@@ -27,6 +27,7 @@
  *     syncwritten <status> the next write() delivers its WRITTEN <status> inside the call (as the
  *                          NimBLE transport does for an ATT request it cannot start)
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
+ *     watergood            print "WATERGOOD <cali_session_water_held()> <cali_session_water_good_ms()>"
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
  *                          does with --http); before it the WiFi runtime is off, as without --http
  *     kv <key>             print "KV <key> <value>" or "KV <key> missing" (the in-memory kv store)
@@ -392,6 +393,9 @@ int main(void) {
         else if (strcmp(word, "ident") == 0) snprintf(s_ident, sizeof s_ident, "%s", a1);
         else if (strcmp(word, "lastupd") == 0)
             printf("LASTUPD %llu\n", (unsigned long long)cali_session_last_update_ms());
+        else if (strcmp(word, "watergood") == 0)
+            printf("WATERGOOD %d %llu\n", cali_session_water_held(),
+                   (unsigned long long)cali_session_water_good_ms());
         else if (strcmp(word, "fail") == 0) snprintf(s_fail, sizeof s_fail, "%s", a1);
         else printf("UNKNOWN %s\n", word);
     }

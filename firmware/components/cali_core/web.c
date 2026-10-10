@@ -147,6 +147,11 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_str(&j, st.fw);
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
+    uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */
+    if (cali_session_water_held() && wg) {
+        cali_json_key(&j, "water_held_age_ms");   /* age of the held measurement (UI: "measured 2 h ago") */
+        cali_json_int(&j, (long long)(st.uptime_ms >= wg ? st.uptime_ms - wg : 0));
+    }
     cali_json_obj_end(&j);
     finish_json(&j, resp);
 }

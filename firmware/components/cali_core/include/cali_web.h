@@ -16,7 +16,10 @@
  *                                  "wifi":{"mode":"setup"|"station"|"off","ssid":"…"|null,
  *                                          "ip":"a.b.c.d"|null,"rssi":<int>|null},
  *                                  "control":{"writes":<bool>},   -- POST /api/command accepted (station mode)
- *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>"}}
+ *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>",
+ *                                  "water_held":<bool>,
+ *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
+ *                                                                   was measured on this boot
  *                     built whole in one handler call (one consistent snapshot) into a
  *                     NET_JSON_MAX buffer; overflow -> 500 + LOG "http: overflow".
  *   GET /api/wifi     200 {"mode","ssid","ip","rssi","last_error":"not_found"|"auth"|"other"|null,

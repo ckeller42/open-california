@@ -126,6 +126,10 @@ class ServeBackend:
                 # the hold substitutes the WHOLE dict, so flag BOTH tanks — waste is just as held
                 # as fresh (it was served frozen-but-unflagged for a month before 2026-08-16)
                 out["water"] = {**good, "fresh": {**good["fresh"], "stale": True}, "stale_since": stale_since}
+                if (
+                    self._s._water_measured_at
+                ):  # the UI shows "🕒 measured 2 h ago" (web only, not MQTT/Influx)
+                    out["water"]["measured_at"] = self._s._water_measured_at
                 if isinstance(good.get("waste"), dict):
                     out["water"]["waste"] = {**good["waste"], "stale": True}
         ts = self._s._last_ok_ts
@@ -302,6 +306,7 @@ class Server:
         )
         self._water_stale_since = None  # ts the fresh-water read went physically-impossible (stale latch)
         self._water_good = None  # last PLAUSIBLE interpreted water (baseline for the stale guard)
+        self._water_measured_at = None  # epoch s a real read last adopted/confirmed _water_good
         self._water_pending = None  # freshness.settle_water's not-yet-settled candidate
         self._water_settle_s = float(os.environ.get("CALICTL_WATER_SETTLE_S", freshness.WATER_SETTLE_S))
         # Durable per-poll OUTCOME log so telemetry gaps can be classified after the fact (van
@@ -365,6 +370,7 @@ class Server:
             self._last_ok_ts = blob.get("ts")
             self._water_good = blob.get("water_good")  # last plausible water survives restarts
             self._water_stale_since = blob.get("water_stale_since")
+            self._water_measured_at = blob.get("water_measured_at")
             self._autocamper.load(blob.get("auto_camper"), blob.get("auto_camper_state"))
             fw = blob.get("fw_seen")
             self._fw_seen = tuple(fw) if isinstance(fw, list) else fw
@@ -399,6 +405,7 @@ class Server:
                         "last": self._last,
                         "water_good": self._water_good,
                         "water_stale_since": self._water_stale_since,
+                        "water_measured_at": self._water_measured_at,
                         "auto_camper": self._autocamper.enabled,
                         "auto_camper_state": self._autocamper.to_state_dict(),
                         "fw_seen": list(self._fw_seen) if self._fw_seen else None,
@@ -688,6 +695,7 @@ class Server:
             )
             if adopt:
                 self._water_good = new_water
+                self._water_measured_at = time.time()
                 self._water_stale_since = None
             else:
                 if base is not None:

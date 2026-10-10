@@ -28,6 +28,7 @@
  *   active 0|1       cali_session_active()
  *   linkup 0|1       cali_session_link_up() (defaults to 0: set both when a test wants "up")
  *   waterheld 0|1    cali_session_water_held() (fn.water is the held last-plausible frame)
+ *   watergood <ms>   cali_session_water_good_ms() (baseline adopted at; 0 = not this boot)
  *   stamp <ms>       cali_session_last_update_ms()
  *   now <ms>         cali_uptime_ms()
  *   kv <key>         print "KV <value>" or "KV <missing>"
@@ -109,7 +110,7 @@ static const cali_net_t fake_net = {
 static uint8_t s_cooler[6] = {0x08, 0x03, 0, 0, 0, 0};   /* Installed=1 (bit 4), Level=3 (bits 12-15) */
 static const uint8_t s_roof[5] = {0x12, 0, 0, 0, 0};     /* Position=1 (bits 0-3), Installed=1 (bit 6) */
 static int s_nofn, s_active, s_linkup, s_water_held;
-static uint64_t s_stamp, s_now = 1000;
+static uint64_t s_stamp, s_now = 1000, s_water_good;
 
 int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
     if (s_nofn || i >= CODEC_NCHARS) return 0;
@@ -129,6 +130,7 @@ int cali_session_active(void) { return s_active; }
 int cali_session_link_up(void) { return s_linkup; }
 uint64_t cali_session_last_update_ms(void) { return s_stamp; }
 int cali_session_water_held(void) { return s_water_held; }
+uint64_t cali_session_water_good_ms(void) { return s_water_good; }
 int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) { (void)live; (void)out; return 0; }
 
 /* ---- the fake runner + transport ---- */
@@ -321,6 +323,7 @@ int main(void) {
             snprintf(s_lastfail, sizeof s_lastfail, "%s", strcmp(a1, "none") == 0 ? "" : a1);
         else if (strcmp(w, "stamp") == 0 && sscanf(a1, "%llu", &ms) == 1) s_stamp = ms;
         else if (strcmp(w, "now") == 0 && sscanf(a1, "%llu", &ms) == 1) s_now = ms;
+        else if (strcmp(w, "watergood") == 0 && sscanf(a1, "%llu", &ms) == 1) s_water_good = ms;
         else if (strcmp(w, "ap") == 0 && s_naps < NET_SCAN_MAX) {
             snprintf(s_aps[s_naps].ssid, sizeof s_aps[s_naps].ssid, "%.*s", NET_SSID_MAX, a1);
             s_aps[s_naps].rssi = (int)strtol(a2, NULL, 10);
