@@ -84,7 +84,7 @@ python3 -m pytest tests/ -q                          # the suite (keep green)
 tools/ci.sh [ci|webcheck|test|lint|audit|…]          # the local CI gate — NOT all of GitHub CI (below)
 tools/ci.sh cov                                      # suite under coverage; floor gates calictl/ only (pyproject fail_under, a ratchet — raise it, never lower)
 DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + semantic-review
-python3 -m calictl status                            # live read of all functions (needs BLE + free slot)
+python3 -m calictl status                            # live read of all functions (needs BLE; on buspi stop `serve` first — it owns hci0)
 python3 -m calictl serve [--dry-run]                 # the unified daemon (read-only unless --enable-writes)
 curl -s localhost:8088/api/state                     # buspi: live decoded state via the RUNNING daemon
 CALICTL_LOG_LEVEL=DEBUG python3 -m calictl serve …         # daemon logs via `logging` (calictl/log.py): level, name, timestamp (dropped under journald)
@@ -133,7 +133,8 @@ vectors + C headers, the webui `tsc` check). On **push**: the full pytest suite 
 When the daemon is up it OWNS buspi's BLE adapter — read live state via its web API `/api/state`
 (**buspi runs `--web 8088`** via a systemd drop-in override — the committed unit template has no
 `--web`; the CLI default is 8080) or the cache `~/.cache/calictl/last_state.json`;
-never open a 2nd BLE connection from buspi. Warm the fast session first with `POST /api/session {"action":"connect"}`
+never open a 2nd BLE connection from buspi (the unit itself serves several centrals; the rule is
+buspi's own adapter). Warm the fast session first with `POST /api/session {"action":"connect"}`
 (auto-releases after ~25 s idle).
 
 ## Known state (operational takeaways — full provenance in `docs/business-logic/` + `evidence-ledger.md`)
