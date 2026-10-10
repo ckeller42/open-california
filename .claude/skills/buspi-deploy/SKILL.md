@@ -100,6 +100,7 @@ buspi can flash the CoreS3 when it is plugged into one of its USB ports (it show
 ```sh
 ssh buspi '~/open-california/tools/esplab/flash_ci.sh <ci-run-id> /dev/ttyACM0'              # run id, never `main`
 ssh buspi '~/open-california/tools/esplab/esp_cmd.py /dev/ttyACM0 2 status'                   # console, no reset
+ssh buspi '~/open-california/tools/esplab/esp_cmd.py /dev/ttyACM0 --tail 120'               # timestamped log, no reset
 ```
 
 After a merge, pick the run id and verify as in the `ship-a-change` skill (`flash_ci.sh main` can

@@ -48,7 +48,7 @@ ssh pi@buspi "~/open-california/tools/esplab/flash_ci.sh $RUN /dev/ttyACM0"
 curl -s http://<esp-ip>/api/state          # IP: esp_cmd.py … "wifi status"; device.fw == merge sha, device.link.up, a value (water)
 ```
 
-The ESP hangs off buspi's USB (`/dev/ttyACM0`). Link timing: `tools/esplab/esp_tail.py /dev/ttyACM0 120`
+The ESP hangs off buspi's USB (`/dev/ttyACM0`). Link timing: `tools/esplab/esp_cmd.py /dev/ttyACM0 --tail 120`
 (timestamped, no reset).
 
 ## Common mistakes
