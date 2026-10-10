@@ -146,7 +146,8 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   independently of the Pi (bonded to the real unit since 2026-10-08, while the Pi stayed connected)
   and controls the fridge, camping mode, lights, air heater and energy mode (the wake-up light too,
   with the web page's clock; not the roof — "only via buspi or the app") with calictl's own frames,
-  held byte-identical by golden vectors. It runs the same water guard, serves the same web UI
+  held byte-identical by golden vectors (on the real unit device-verified so far: fridge, wake-up
+  light, door contact). It runs the same water guard, serves the same web UI
   (`calictl/webui` is bundled into the firmware), and answers *unconfirmed* when the link drops
   after a frame went out. Tested on a Linux host build + a Bumble fake unit, in Espressif's QEMU, on
   a CoreS3 against the mock unit, and live on the real unit. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.

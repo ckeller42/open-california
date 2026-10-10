@@ -276,8 +276,9 @@ other write is the `1003` heartbeat. The roof is refused ("Only via buspi or the
 light is set with the web page's clock (`local_now`) and the unit's own latched config. The read
 side and the control path are proven on a Linux host build against a fake unit, in QEMU, and on a
 real CoreS3 against the Bumble mock unit, and the satellite has been bonded to the real camper unit
-since 2026-10-08 (paired while buspi stayed connected): it controls the cooler, camping mode,
-lighting, air heater and energy mode live, runs the same water guard as calictl, and answers a
+since 2026-10-08 (paired while buspi stayed connected): it sends calictl's frames for the cooler,
+camping mode, lighting, air heater and energy mode (device-verified on the real unit so far: cooler,
+wake-up light and door contact), runs the same water guard as calictl, and answers a
 write whose link dropped after the frame went out as *unconfirmed* (#271). It holds its link while
 the van is parked: the unit's ATT MTU request is answered since NimBLE keeps its GATT server
 (#279); the paced reconnect after a dropped link (#266) stays as a fallback. It
