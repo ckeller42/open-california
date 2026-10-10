@@ -129,7 +129,7 @@ Genuinely still need a **live measurement** (not code): power magnitudes' absolu
   session, or a fresh connection that starts it — and still streams the counter with no `ARM_DELAY_S`
   pre-arm. The app's `roof-hold` recording agrees: 11 beats during a 9.1 s hold. **CAPTURE 2026-10-10**
   (real app on the real unit, evidence-ledger 2026-10-10): the app's heartbeat ran through a full roof open
-  and close, every 0.76–0.79 s, starting from large counter values (`0x00049363…`, later `0x00061b62`), not 0 —
+  and close, every 0.76–0.79 s, with large counter values (`0x00049363…`, later `0x00061b62`), not 0 —
   CONSISTENT with the random seed and the 750–850 ms period. calictl's own roof path is still not
   device-verified (#157/#230). calictl keeps its own fixed 0.6 s period and fixed seed (device-verified)
   rather than the app's random 750–850 ms.
@@ -180,9 +180,8 @@ the wire captures. Corrections applied:
   roof-counter decision history is in `DECISIONS.md`.)
   **CAPTURE 2026-10-10** (real app, real unit, full open + close): with the roof screen open and nothing
   pressed the app streams STOP `00 <counter>` every ~0.45 s; a press continues the **same** counter with
-  `01`/`04` (the first move frame repeats the last STOP value), then **+1 on every frame**, ~0.33–0.45 s —
-  no repeated values were seen apart from that switch. The two-timer "deltas 0/+1" reading is therefore not
-  what the wire showed. Divergence: calictl seeds a fresh counter at the press instead of continuing the
+  `01`/`04` (the first move frame repeats the last STOP value), then **+1 on every frame**, ~0.33–0.45 s.
+  The two-timer "deltas 0/+1" reading (duplicate re-sends) does not match that wire. Divergence: calictl seeds a fresh counter at the press instead of continuing the
   screen's stream (owner decision pending, no code change).
 
 - **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).
