@@ -299,6 +299,11 @@ let inflight = null;     // {fn, what, value, key} currently POSTing (NOT prunab
 /** @type {Record<string, string|number|null>} */
 const optimistic = {};   // key -> intended value, shown until the real state catches up
 let lastRender = "";     // signature of the last paint, to skip idle re-renders
+// Lighting's "Functions & settings" section open/closed, per viewer (survives the poll re-render;
+// storage is optional — blocked storage just means "collapsed" on the next load)
+const LFUNCS_KEY = "calictl.lightingFunctionsOpen";
+let lightFuncsOpen = false;
+try { lightFuncsOpen = localStorage.getItem(LFUNCS_KEY) === "1"; } catch (e) { /* storage blocked */ }
 let lastAcNotice = 0;    // ts of the last auto-camper notice shown as a toast (dedupe)
 
 /** @type {(fn: string, what: string) => string} */
@@ -1561,55 +1566,77 @@ function renderLighting(s) {
   msw.onclick = () => command("lighting", "power", allOn ? "off" : "on");
   mrow.appendChild(msw); mc.appendChild(mrow);
 
-  // Profile activator (the app's profileSelector -> SET_PROFILE / ProfileNumber). Profiles 1-7 are
-  // user-saved scenes on the unit (content unknown to us; we can only activate by number) + the
-  // wake-up light. LIGHTS_ON/OFF (12/0) are the master toggle above, so they're not listed here.
-  const prow = document.createElement("div"); prow.className = "row";
-  const plbl = document.createElement("span"); plbl.className = "lbl"; plbl.textContent = /** @type {string} */ (t("Profile"));
-  prow.appendChild(plbl);
-  if (pending_is("lighting", "profile")) prow.appendChild(spinner());
-  const psel = document.createElement("select");
-  psel.disabled = readOnly();
-  const opt0 = document.createElement("option");
-  opt0.value = ""; opt0.textContent = /** @type {string} */ (t("Choose…")); opt0.selected = true; psel.appendChild(opt0);
-  // The app's four favourite tiles A/B/C/D are FAVORITE 1/5/6/7 (gv/z0, hi/f); CLI/API take 1-7.
+  // The app's four favourite tiles A/B/C/D (FAVORITE 1/5/6/7, gv/z0, hi/f; CLI/API take 1-7): one
+  // tap activates (SET_PROFILE PN n, dg/h.u0). Filled = the unit reports the slot stored
+  // (FavoriteProfileModifiedState); a reported-empty "+" tile can't be activated (the server refuses
+  // it too); bits not reported yet (null) -> plain letter, tappable (the server allows unknown).
+  // Saving lives under "Functions & settings" below (the app saves by long-press).
+  // The app's main page offers only A-D: wake-up (10) has its own card below; interior light (11)
+  // is not on any app page we render, so it stays CLI/API-only (`set lighting profile 11`).
   const FAV_TILES = /** @type {[number, string][]} */ ([[1, "A"], [5, "B"], [6, "C"], [7, "D"]]);
-  /** @type {[number, string][]} */
-  const PROFILES = [...FAV_TILES.map(([n, l]) => /** @type {[number, string]} */ ([n, "Profile " + l])),
-                    [11, "Interior lighting"], [10, "Wake-up light"]];
-  for (const [n, lab] of PROFILES) {
-    // "Profile X" -> translate the word, keep the tile letter; named profiles have their own keys.
-    const labT = /^Profile \w$/.test(lab) ? t("Profile") + " " + lab.split(" ")[1] : t(lab);
-    const filled = !!s.favourites_stored && s.favourites_stored.includes(n);   // saved on the unit
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = labT + (filled ? " ✓" : ""); psel.appendChild(o);
-  }
-  psel.onchange = () => {
-    if (psel.value === "") return;
-    command("lighting", "profile", Number(psel.value));
-    psel.value = "";   // it's a momentary action, not a persistent selection
-  };
-  prow.appendChild(psel); mc.appendChild(prow);
-
-  // Save the CURRENT lamp levels into a favorite slot (the app's l3 applyProfileBrightness).
-  const srow = document.createElement("div"); srow.className = "row";
-  const slbl = document.createElement("span"); slbl.className = "lbl"; slbl.textContent = /** @type {string} */ (t("Save current as"));
-  srow.appendChild(slbl);
-  if (pending_is("lighting", "save_profile")) srow.appendChild(spinner());
-  const ssel = document.createElement("select");
-  ssel.disabled = readOnly();
-  const s0 = document.createElement("option"); s0.value = ""; s0.textContent = /** @type {string} */ (t("Profile…")); s0.selected = true; ssel.appendChild(s0);
+  const favs = document.createElement("div"); favs.className = "favs";
+  const favSent = pending_is("lighting", "profile") ? optimistic[qKey("lighting", "profile")] : null;
   for (const [n, l] of FAV_TILES) {
-    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Profile") + " " + l; ssel.appendChild(o);
+    const known = Array.isArray(s.favourites_stored);
+    const filled = known && /** @type {number[]} */ (s.favourites_stored).includes(n);   // saved on the unit
+    const empty = known && !filled;
+    const b = document.createElement("button"); b.className = "fav" + (filled ? " filled" : empty ? "" : " unknown");
+    b.textContent = empty ? "+" : l;
+    b.setAttribute("aria-label", "Favourite " + l);
+    if (empty) b.title = /** @type {string} */ (t("Empty — save it under Functions & settings"));
+    b.disabled = readOnly() || empty;
+    if (favSent === n) { b.classList.add("pending"); b.appendChild(spinner()); }
+    b.onclick = () => command("lighting", "profile", n);
+    favs.appendChild(b);
   }
-  ssel.onchange = () => {
-    if (ssel.value === "") return;
-    const n = Number(ssel.value);
-    ssel.value = "";
-    if (!confirm(tf("Overwrite profile {n} with the current lamp levels? This writes to the unit and is not yet verified on the van. Continue?", { n: n }))) return;
-    command("lighting", "save_profile", n);
-  };
-  srow.appendChild(ssel); mc.appendChild(srow);
+  mc.appendChild(favs);
   app.appendChild(mc);
+
+  // lamp sliders, grouped like the app (always controllable)
+  for (const grp of LIGHT_LAMPS) {
+    const card = document.createElement("div"); card.className = "card";
+    const h = document.createElement("div"); h.className = "note"; h.style.padding = ".6rem 0 0";
+    h.textContent = /** @type {string} */ (t(grp.group)); card.appendChild(h);
+    for (const lamp of grp.lamps) {
+      const row = document.createElement("div"); row.className = "row";
+      const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = /** @type {string} */ (t(lamp.label));
+      // roof reading light (L9) is physically unpowered while the pop-top is down — reflect the
+      // server-side precondition (control.command_precondition) so the slider isn't a silent no-op.
+      const roofPos = (STATE.roof || {}).position_name;
+      const roofBlocked = lamp.what === "roof-reading"
+        && !(roofPos === "open" || roofPos === "middle" || roofPos == null);
+      const hintText = roofBlocked ? "only when the pop-up roof is open" : lamp.hint;
+      if (hintText) {
+        const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = /** @type {string} */ (t(hintText));
+        lbl.appendChild(hh);
+      }
+      // brightness_zone_1..16 are read by dynamic key (see FnState note); cast the state to an
+      // index map so the computed-key read type-checks (the leaf itself is a nullable number).
+      const real = (/** @type {Record<string, number|null|undefined>} */ (s))["brightness_zone_" + lamp.zone];
+      const val = optNum("lighting", lamp.what, real != null ? real : 0);
+      const isPending = pending_is("lighting", lamp.what);
+      row.appendChild(lbl);
+      if (isPending) row.appendChild(spinner());
+      const inp = document.createElement("input"); inp.type = "range"; inp.min = /** @type {any} */ (0); inp.max = /** @type {any} */ (LIGHT_MAX);
+      // readback can carry enum values past the settable range (11=default, 13/14 markers):
+      // clamp the thumb (11 ≈ full) but zero it for the no-reading markers; label shows the truth
+      inp.value = /** @type {any} */ (val >= 13 ? 0 : Math.min(val, LIGHT_MAX));
+      inp.disabled = readOnly() || roofBlocked;
+      inp.setAttribute("aria-label", grp.group + " " + lamp.label + " brightness");
+      const out = document.createElement("span"); out.className = "sval";
+      out.textContent = brightnessText(val);
+      inp.oninput = () => (out.textContent = inp.value);
+      inp.onchange = () => command("lighting", lamp.what, Number(inp.value));
+      row.appendChild(inp); row.appendChild(out);
+      card.appendChild(row);
+    }
+    app.appendChild(card);
+  }
+
+  // "Functions & settings" (the app's section at the bottom of its Lighting page): the wake-up
+  // light, the sliding-door light and saving favourites — rarely needed, so collapsed by default,
+  // its open state remembered per viewer (and across the 2 s poll re-render).
+  const fbody = document.createElement("div"); fbody.className = "lfbody";
 
   // Wake-up light (the app's Lighting > Functions & Settings > Wake-up light; dg/h.m0, Mode 20).
   // The unit reports its config only in a Mode-20 frame (latched by the daemon). Every change
@@ -1668,6 +1695,7 @@ function renderLighting(s) {
   const rrow = document.createElement("div"); rrow.className = "row";
   const rl = document.createElement("span"); rl.className = "lbl"; rl.textContent = /** @type {string} */ (t("Lead time"));
   const rsel = document.createElement("select"); rsel.disabled = wkOff;
+  rsel.setAttribute("aria-label", "Lead time");
   for (const m of [0, 10, 20, 30]) {
     const o = document.createElement("option"); o.value = /** @type {any} */ (m); o.textContent = tf("{n} min", { n: m });
     o.selected = (wk ? wk.ramp : 0) === m; rsel.appendChild(o);
@@ -1702,7 +1730,7 @@ function renderLighting(s) {
     nk.textContent = /** @type {string} */ (t("Wake-up settings not known yet — the unit has not reported them"));
     wc.appendChild(nk);
   }
-  app.appendChild(wc);
+  fbody.appendChild(wc);
 
   // Lighting & sliding door (dg/h.n4: SET_PROFILE PN 8, LightValue 1/0). Not variant-gated (see
   // control.command_precondition): the app's T7 page shows it, and this T7 reads CarVariant=4.
@@ -1722,48 +1750,48 @@ function renderLighting(s) {
   dsw.setAttribute("aria-checked", dOn ? "true" : "false"); dsw.disabled = readOnly();
   dsw.onclick = () => command("lighting", "door_contact", dOn ? "off" : "on");
   drow.appendChild(dsw); dc.appendChild(drow);
-  if (!gc) app.appendChild(dc);
+  if (!gc) fbody.appendChild(dc);
 
-  // lamp sliders, grouped like the app (always controllable)
-  for (const grp of LIGHT_LAMPS) {
-    const card = document.createElement("div"); card.className = "card";
-    const h = document.createElement("div"); h.className = "note"; h.style.padding = ".6rem 0 0";
-    h.textContent = /** @type {string} */ (t(grp.group)); card.appendChild(h);
-    for (const lamp of grp.lamps) {
-      const row = document.createElement("div"); row.className = "row";
-      const lbl = document.createElement("span"); lbl.className = "lbl"; lbl.textContent = /** @type {string} */ (t(lamp.label));
-      // roof reading light (L9) is physically unpowered while the pop-top is down — reflect the
-      // server-side precondition (control.command_precondition) so the slider isn't a silent no-op.
-      const roofPos = (STATE.roof || {}).position_name;
-      const roofBlocked = lamp.what === "roof-reading"
-        && !(roofPos === "open" || roofPos === "middle" || roofPos == null);
-      const hintText = roofBlocked ? "only when the pop-up roof is open" : lamp.hint;
-      if (hintText) {
-        const hh = document.createElement("span"); hh.className = "lamp-hint"; hh.textContent = /** @type {string} */ (t(hintText));
-        lbl.appendChild(hh);
-      }
-      // brightness_zone_1..16 are read by dynamic key (see FnState note); cast the state to an
-      // index map so the computed-key read type-checks (the leaf itself is a nullable number).
-      const real = (/** @type {Record<string, number|null|undefined>} */ (s))["brightness_zone_" + lamp.zone];
-      const val = optNum("lighting", lamp.what, real != null ? real : 0);
-      const isPending = pending_is("lighting", lamp.what);
-      row.appendChild(lbl);
-      if (isPending) row.appendChild(spinner());
-      const inp = document.createElement("input"); inp.type = "range"; inp.min = /** @type {any} */ (0); inp.max = /** @type {any} */ (LIGHT_MAX);
-      // readback can carry enum values past the settable range (11=default, 13/14 markers):
-      // clamp the thumb (11 ≈ full) but zero it for the no-reading markers; label shows the truth
-      inp.value = /** @type {any} */ (val >= 13 ? 0 : Math.min(val, LIGHT_MAX));
-      inp.disabled = readOnly() || roofBlocked;
-      inp.setAttribute("aria-label", grp.group + " " + lamp.label + " brightness");
-      const out = document.createElement("span"); out.className = "sval";
-      out.textContent = brightnessText(val);
-      inp.oninput = () => (out.textContent = inp.value);
-      inp.onchange = () => command("lighting", lamp.what, Number(inp.value));
-      row.appendChild(inp); row.appendChild(out);
-      card.appendChild(row);
-    }
-    app.appendChild(card);
+
+  // Save the CURRENT lamp levels into a favourite slot (the app's l3 applyProfileBrightness).
+  const sc = document.createElement("div"); sc.className = "card";
+  const srow = document.createElement("div"); srow.className = "row";
+  const slbl = document.createElement("span"); slbl.className = "lbl"; slbl.textContent = /** @type {string} */ (t("Save current as"));
+  srow.appendChild(slbl);
+  if (pending_is("lighting", "save_profile")) srow.appendChild(spinner());
+  const ssel = document.createElement("select");
+  ssel.disabled = readOnly();
+  ssel.setAttribute("aria-label", "Save current as");
+  const s0 = document.createElement("option"); s0.value = ""; s0.textContent = /** @type {string} */ (t("Profile…")); s0.selected = true; ssel.appendChild(s0);
+  for (const [n, l] of FAV_TILES) {
+    const o = document.createElement("option"); o.value = /** @type {any} */ (n); o.textContent = t("Profile") + " " + l; ssel.appendChild(o);
   }
+  ssel.onchange = () => {
+    if (ssel.value === "") return;
+    const n = Number(ssel.value);
+    ssel.value = "";
+    if (!confirm(tf("Overwrite profile {n} with the current lamp levels? This writes to the unit and is not yet verified on the van. Continue?", { n: n }))) return;
+    command("lighting", "save_profile", n);
+  };
+  srow.appendChild(ssel); sc.appendChild(srow);
+  fbody.appendChild(sc);
+
+  const det = document.createElement("details"); det.className = "lfuncs";
+  det.open = lightFuncsOpen;
+  det.ontoggle = () => {
+    lightFuncsOpen = det.open;
+    try { localStorage.setItem(LFUNCS_KEY, det.open ? "1" : "0"); } catch (e) { /* storage blocked */ }
+  };
+  const sum = document.createElement("summary");
+  const stl = document.createElement("span"); stl.textContent = /** @type {string} */ (t("Functions & settings"));
+  // one-line state while collapsed: the unit-reported wake-up + door light (nothing if unknown)
+  const bits = [];
+  if (wk) bits.push(wk.enabled ? tf("Wake-up light {time}", { time: wk.time }) : t("Wake-up light off"));
+  if (!gc && s.door_contact != null) bits.push(t(dOn ? "Sliding door light on" : "Sliding door light off"));
+  const ssum = document.createElement("span"); ssum.className = "lfsum"; ssum.textContent = bits.join(" · ");
+  sum.append(stl, ssum);
+  det.append(sum, fbody);
+  app.appendChild(det);
 }
 
 /** @param {string} fn */

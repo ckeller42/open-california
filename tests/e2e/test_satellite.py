@@ -79,6 +79,13 @@ def _open(pg, name):
     expect(pg.locator("#title")).to_have_text(name)
 
 
+def _lighting_settings(pg):
+    """Expand the Lighting page's collapsed "Functions & settings" (wake-up, door, save)."""
+    if pg.locator("details.lfuncs").get_attribute("open") is None:  # the open state is remembered
+        pg.locator("details.lfuncs > summary").click()
+    expect(pg.locator("details.lfuncs")).to_have_attribute("open", "")
+
+
 def _home(pg):
     pg.evaluate("document.getElementById('back').click()")
     expect(pg.locator(".tilegrid")).to_be_visible()
@@ -333,6 +340,7 @@ def test_roof_is_greyed_with_the_reason(live, stub):
     expect(live.get_by_text(ELSEWHERE, exact=True).first).to_be_visible()
     _home(live)
     _open(live, "Lighting")
+    _lighting_settings(live)
     # the rest of the lighting screen is live; the roof's reason is not repeated on the wake-up card
     expect(live.get_by_role("switch", name="Sliding door lighting")).to_be_enabled()
     expect(live.get_by_text(ELSEWHERE, exact=True)).to_have_count(0)
@@ -374,6 +382,7 @@ def test_wakeup_card_is_live_and_sends_the_browsers_wall_clock(stub, error_gated
     with error_gated_page(stub.base, locale=locale, timezone_id="Pacific/Auckland") as pg:
         pg.wait_for_function(LIVE)
         _open(pg, tile)
+        _lighting_settings(pg)
         # the card heading (a profile <option> carries the same words)
         expect(pg.locator("div.note", has_text=re.compile("^%s$" % head)).first).to_be_visible()
         tm = pg.get_by_label("Wake-up time")
@@ -441,6 +450,7 @@ def test_wakeup_time_is_editable_before_the_unit_reported(stub, error_gated_page
     with error_gated_page(stub.base, locale=locale) as pg:
         pg.wait_for_function(LIVE)
         _open(pg, tile)
+        _lighting_settings(pg)
         tm = pg.get_by_label("Wake-up time")
         expect(tm).to_be_enabled()
         expect(tm).to_have_value("")
@@ -470,6 +480,7 @@ def test_wakeup_time_edit_lands_once_the_unit_answers_the_pull(stub, error_gated
     with error_gated_page(stub.base) as pg:
         pg.wait_for_function(LIVE)
         _open(pg, "Lighting")
+        _lighting_settings(pg)
         pg.get_by_label("Wake-up time").fill("07:00")
         _wait_commands(pg, stub)
         expect(pg.locator(".toast")).to_have_text("✓ Applied", timeout=6000)
@@ -484,6 +495,7 @@ def test_wakeup_switch_unconfirmed_when_the_unit_keeps_its_switch(stub, error_ga
     with error_gated_page(stub.base) as pg:
         pg.wait_for_function(LIVE)
         _open(pg, "Lighting")
+        _lighting_settings(pg)
         pg.get_by_role("switch", name="Wake-up light").click()
         _wait_commands(pg, stub)
         expect(pg.locator(".toast")).to_have_text(NOT_CONFIRMED, timeout=9000)
@@ -502,6 +514,7 @@ def test_wakeup_is_confirmed_from_the_units_own_state(stub, error_gated_page):
     with error_gated_page(stub.base) as pg:
         pg.wait_for_function(LIVE)
         _open(pg, "Lighting")
+        _lighting_settings(pg)
         pg.get_by_label("Wake-up time").fill("07:00")
         _wait_commands(pg, stub)
         expect(pg.locator(".toast")).to_have_text("✓ Applied", timeout=6000)
@@ -513,6 +526,7 @@ def test_wakeup_unconfirmed_when_the_unit_reports_another_config(stub, error_gat
     with error_gated_page(stub.base) as pg:
         pg.wait_for_function(LIVE)
         _open(pg, "Lighting")
+        _lighting_settings(pg)
         pg.get_by_label("Wake-up time").fill("07:00")
         _wait_commands(pg, stub)
         # a wake-up edit lights no lamp: the generic warning (review m6)
