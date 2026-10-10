@@ -72,6 +72,23 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .arealist { display: flex; flex-direction: column; gap: .5rem; }
 .arealist label { display: flex; align-items: center; gap: .6rem; cursor: pointer; }
 .arealist input { flex: none; margin: 0; }
+/* lighting: favourite tiles A-D under "All lights" (filled = stored on the unit, "+" = empty) */
+.favs { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; padding: .2rem 0 .9rem; }
+.fav { aspect-ratio: 1; max-height: 4.5rem; width: 100%; border-radius: 12px; font: inherit; font-size: 1.3rem;
+  font-weight: 650; cursor: pointer; color: var(--muted); background: transparent;
+  border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center; gap: .3rem; }
+.fav.unknown { color: var(--fg); border-style: solid; }   /* the unit has not reported its stored slots yet */
+.fav.filled { color: var(--accent-fg); background: var(--accent); border: 2px solid var(--accent); }
+.fav.filled:active { transform: scale(.97); }
+.fav:disabled { cursor: not-allowed; }
+.fav.filled:disabled { opacity: .5; }
+.fav.pending { opacity: .7; cursor: progress; }
+/* lighting: the collapsible "Functions & settings" section (native <details>) */
+.lfuncs > summary { background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow); padding: .8rem 1rem; cursor: pointer; font-weight: 600; }
+.lfuncs .lfsum { display: block; font-weight: 400; font-size: .85rem; color: var(--muted); }
+.lfuncs .lfsum:empty { display: none; }
+.lfbody { display: grid; gap: .8rem; margin-top: .8rem; }
 /* a control row the current state forbids: grey the label to match the disabled control,
    so the whole row reads as unavailable (set by renderControl when read-only or c.disabled). */
 .row.ctl-off .lbl, .row.ctl-off .sval { opacity: .5; }

@@ -422,6 +422,9 @@ def test_live_wakeup_edit_reaches_the_unit_with_the_pages_clock(host_fw, rec_uni
         bodies = []
         page.on("request", lambda q: bodies.append(q.post_data) if q.url.endswith("/api/command") else None)
         _open_tile(page, "Lighting")
+        page.evaluate(
+            "document.querySelector('details.lfuncs').open = true"
+        )  # wake-up: "Functions & settings"
         tm = page.get_by_label("Wake-up time")
         assert tm.is_enabled() and tm.input_value() == "06:00"
         tm.fill("08:00")
@@ -470,6 +473,9 @@ def test_wakeup_time_edit_with_no_config_pulls_then_lands(host_fw, rec_unit, tmp
         bodies = []
         page.on("request", lambda q: bodies.append(q.post_data) if q.url.endswith("/api/command") else None)
         _open_tile(page, "Lighting")
+        page.evaluate(
+            "document.querySelector('details.lfuncs').open = true"
+        )  # wake-up: "Functions & settings"
         tm = page.get_by_label("Wake-up time")
         assert tm.is_enabled() and tm.input_value() == ""
         assert page.get_by_role("switch", name="Wake-up light").is_disabled()
