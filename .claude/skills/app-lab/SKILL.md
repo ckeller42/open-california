@@ -5,7 +5,8 @@ description: Use when you need the real CaliforniaOnTour app running against the
 
 # The California app lab (emulator + netsim + Bumble fake unit)
 
-The real app (5.0.8) runs in an Android emulator whose virtual radio (netsim) is bridged to
+The real app (**5.4.0.3036** on thinky since 2026-10-10, the phone's version; the committed
+`tests/vectors/app/` recordings are still 5.0.8.3028) runs in an Android emulator whose virtual radio (netsim) is bridged to
 `tools/applab/fake_unit_ble.py`, a Bumble peripheral serving `tools/mock_unit.py` over the unit's real
 GATT. Every app screen, dialog and write frame is protocol evidence (tier **APP-OBSERVED**). Generic
 recipe and pitfalls: **REQUIRED BACKGROUND:** `android-ble-app-lab`. This skill is the runbook for
@@ -57,6 +58,35 @@ transport; `pip install --user grpcio protobuf` if missing); `$TMPDIR/netsim.ini
 owner's shell (same user); the fake's keystore is `tools/applab/.fake_unit_keys.json` (internal disk,
 gitignored) so the app's bond survives restarts; `BUMBLE_LOGLEVEL=DEBUG` on the fake prints every
 ATT/SMP PDU (needed for pairing questions, noisy otherwise); macOS has no `timeout` command.
+
+## Updating the app (from the phone's split APKs)
+
+The phone's APKs are pulled to `buspi:~/apks/<version>/` (`base.apk` + `split_config.*.apk` +
+`version.txt`). Install them as an **update** so app data (onboarding, the VIN) survives:
+
+```bash
+scp -3 'buspi:~/apks/5.4.0.3036/*.apk' thinky:android-lab/apks/5.4.0.3036/   # via your Mac: buspi→thinky has no host key
+cd ~/android-lab/apks/5.4.0.3036 && adb install-multiple -r base.apk split_config.arm64_v8a.apk \
+  split_config.en.apk split_config.de.apk split_config.xxhdpi.apk split_config.mdpi.apk
+adb shell dumpsys package de.volkswagen.CaliforniaOnTour | grep -E 'versionName|primaryCpuAbi'
+```
+
+The phone's splits are **arm64-only** (5.0.8 from apk-pure was universal). The `lab34` image
+(API 34 `google_apis` x86_64) runs them through its ARM translation (`ro.dalvik.vm.native.bridge=
+libndk_translation.so`, `abilist=x86_64,arm64-v8a`): `primaryCpuAbi=arm64-v8a`, and the app runs.
+Never fetch APKs from third-party mirrors for this. Re-record `tests/vectors/app/` per version.
+
+What 5.4.0.3036 does differently in the lab (2026-10-10):
+
+- After the first connect on shore power, a one-time **"California Experience"** sheet (background
+  Bluetooth connection, "Activate app notifications" / **Cancel**) covers the Vehicle tab.
+- It **reconnects by itself** over the stored bond after a background→foreground (5.0.8 waited for a
+  `Connect` tap), and may start connecting on a cold start: the `session` scenario's second
+  `wait('^Connect$')` times out on 5.4 — the app already shows `Disconnect`.
+- The cooler tile reads **"Refrigerator box"** (was "Refrigerator Box").
+- Unchanged: the roof page still asks "Switch on the ignition" with terminal 15 off; the cooler XY
+  points; the cooler level-5 frame (`ff751e3e1f1f` + neutral `ff771e3e1f1f`, byte-identical to
+  `control.build`). The fake's `InfoPopUp=2` raises the pre-open safety checklist dialog.
 
 ## Controlling the unit state (the fake's FIFO console)
 

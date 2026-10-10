@@ -61,7 +61,9 @@ start_fake() {
   [ -x "$BUMBLE_PY" ] || { echo "no bumble python at $BUMBLE_PY (set BUMBLE_PY)" >&2; exit 1; }
   echo "fake: starting (keys persist; stable address = bond survives restarts)…"
   # The fake makes its own scenario FIFO ($FAKE_FIFO) and reads it in a thread, so no stdin wiring.
-  ( cd "$REPO" && FAKE_UNIT_VIN="$FAKE_UNIT_VIN" FAKE_UNIT_FIFO="$FAKE_FIFO" \
+  # `cd ... ;` not `cd ... &&`: with `&&` the `&` backgrounds the whole list as a subshell, $! is that
+  # subshell, and stop_fake/walk.py SIGTERM it while the python fake lives on as a netsim twin.
+  ( cd "$REPO" || exit 1; FAKE_UNIT_VIN="$FAKE_UNIT_VIN" FAKE_UNIT_FIFO="$FAKE_FIFO" \
       nohup "$BUMBLE_PY" tools/applab/fake_unit_ble.py android-netsim >>"$FAKE_LOG" 2>&1 & echo $! >"$FAKE_PID" )
   sleep 6
   fake_up && tail -1 "$FAKE_LOG" || { echo "fake failed to start — see $FAKE_LOG" >&2; exit 1; }
