@@ -27,7 +27,6 @@
  *     syncwritten <status> the next write() delivers its WRITTEN <status> inside the call (as the
  *                          NimBLE transport does for an ATT request it cannot start)
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
- *     webseen              cali_session_web_seen() (an /api/state request served: viewer activity)
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
  *                          does with --http); before it the WiFi runtime is off, as without --http
  *     kv <key>             print "KV <key> <value>" or "KV <key> missing" (the in-memory kv store)
@@ -386,8 +385,6 @@ int main(void) {
             net_scan_done(line);
         } else if (strcmp(word, "NET_SCAN_FAILED") == 0) {
             net_deliver(CALI_NET_EV_SCAN_DONE, CALI_NET_REASON_NONE, 0, -1, NULL);
-        } else if (strcmp(word, "webseen") == 0) {
-            cali_session_web_seen();   /* an /api/state request was served (viewer activity) */
         } else if (strcmp(word, "boot") == 0) {
             cali_session_boot();
             cali_console_line("status");

@@ -161,10 +161,8 @@ async def _rotate_when_free(unit, timeout=10.0):
 
 
 async def _drop_link(unit):
-    """The unit hangs up on the central (a link lost mid-session). Reason 0x14 (low resources),
-    NOT the default 0x13: a remote-terminate after read-all is the parked kick and reconnects
-    paced (CALI_SESSION_KICKED_RECONNECT_MS) — these tests model a generic loss and need the
-    fast backoff."""
+    """The unit hangs up on the central (a link lost mid-session). Reason 0x14 (low resources): a generic loss;
+    since #279 a 0x13 takes the same 1 s backoff, so the reason no longer matters."""
     if unit.conn:
         await unit.conn.disconnect(0x14)
 
@@ -235,7 +233,7 @@ def test_unit_forgot_us_repairs(host_fw, hci_unit, tmp_path, race):
     fw2.expect("STATE", lambda s: s["state"] == "waiting_passkey", timeout=40)
     fw2.send("passkey %06d" % hci_unit.call(hci_unit.unit.next_passkey))
     assert fw2.expect("STATE", lambda s: s["state"] in ("bonded", "error"), timeout=40)["state"] == "bonded"
-    # the pair connected, so the unit's one slot was free: no stale link survived the forget
+    # the pair connected (the ESP holds one link at a time): no stale link survived the forget
     assert not any("deferred scan failed" in line for line in fw2.log)
     if race == "connected_before_cancel":  # the unwanted link was ended by us
         assert any("GAP procedure initiated: terminate connection" in line for line in fw2.log[mark:])

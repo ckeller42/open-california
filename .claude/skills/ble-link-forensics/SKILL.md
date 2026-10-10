@@ -16,7 +16,7 @@ with btmon. Facts: `docs/firmware.md` "The unit's own ATT requests (GATT server 
 ## Method
 
 1. **Timestamp every side.** Never reason from a log that has no own clock.
-   - ESP console (no timestamps of its own): `python3 tools/esplab/esp_tail.py /dev/ttyACM0 120` on
+   - ESP console (no timestamps of its own): `python3 tools/esplab/esp_cmd.py /dev/ttyACM0 --tail 120` on
      the host the board is plugged into (no reset; `-hupcl`). Commands: `tools/esplab/esp_cmd.py`.
    - buspi: `CALICTL_BLE_TRACE=~/ble.jsonl` (connect/read/notify/write/disconnect, JSONL) +
      `journalctl -u calictl -o short-precise`.
@@ -79,7 +79,7 @@ with btmon. Facts: `docs/firmware.md` "The unit's own ATT requests (GATT server 
 | "Unit policy" / "state-dependent tolerance" theory with no timing measurement | Measure drop-minus-connect over 3+ cycles first |
 | Trusting a doc claim never measured ("dropped ~15 s without heartbeat" — false) | Re-measure; heartbeat off held >2 min |
 | Assuming host-test build = device build | Diff device sdkconfig vs host syscfg for every flag on the path |
-| Reading the ESP log without timestamps | `esp_tail.py`; correlate with `ble.jsonl` and journal |
+| Reading the ESP log without timestamps | `esp_cmd.py --tail`; correlate with `ble.jsonl` and journal |
 | Changing two variables at once | One knob per run; revert before the next |
 | Looking only at what you send | btmon the peer's `> ACL` requests; unanswered request = 30 s timeout |
 | Guessing Kconfig semantics | Read source at the exact tag/submodule sha CI builds |

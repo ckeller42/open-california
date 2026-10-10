@@ -1254,7 +1254,7 @@ BlueZ and Android answer it. The satellite's NimBLE was built without a GATT ser
 silently drops the request, and the unit's ATT transaction timeout then ends the link (``0x13``).
 The fix enables both options in the satellite's ``sdkconfig``. It is a missing ATT response, not
 a parked-unit policy against idle links. With the fix (flashed 2026-10-10) the satellite's parked
-link holds; the reconnect pacing of #266 stays as the fallback for a drop.
+link holds, and the #266 reconnect pacing was removed: a drop takes the ordinary 1 s→60 s backoff.
 
 The connection failure modes are in `value-freshness.md
 <https://ckeller42.github.io/open-california/business-logic/value-freshness.html>`_ ("Connection
@@ -1377,7 +1377,8 @@ stays ``mock-only``. Details:
      the whole link. Discover, subscribe to every state char, warm up
      ``CODEC_HEARTBEAT_WARMUP_MS`` (2 s), then read every function in order. A read and a push both
      replace a function's frame, so the last frame wins. The first ``SNAP`` line follows. Water
-     ``1302`` is re-read every 30 s. A lost link reconnects by bond after 1 s, doubling to 60 s.
+     ``1302`` is re-read every 30 s. A lost link reconnects by bond after 1 s, doubling to 60 s
+     — a unit hang-up (HCI ``0x13``) too: the #266 paced 30 s reconnect was removed after #279.
 
 .. mermaid::
 

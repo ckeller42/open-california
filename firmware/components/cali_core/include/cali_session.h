@@ -33,13 +33,10 @@
  * connect_bonded() — a terminal event lost, e.g. a connect silently cancelled under a scan; field
  * night 2026-10-08, #264) -> disconnect() and connect_bonded() after 1 s, doubling to a 60 s cap;
  * the delay resets once a link is encrypted again. Without a stored bond the session goes
- * inactive instead. One loss is paced differently: the unit itself hanging up (DISCONNECTED with
- * HCI reason 0x13, raw or NimBLE host-encoded 531) on a link whose first read-all completed is the
- * parked unit shedding an idle held guest (field morning 2026-10-09, #264) — that reconnect waits
- * CALI_SESSION_KICKED_RECONNECT_MS, outside the backoff state, UNLESS a viewer is active (an
- * /api/state served within CALI_SESSION_VIEWER_ACTIVE_MS, cali_session_web_seen): then the fast
- * backoff keeps the page live. A control command meanwhile (cali_session_connect_now) makes a
- * waiting reconnect due at once.
+ * inactive instead. A unit-side hang-up (HCI 0x13) takes the same backoff, like calictl's
+ * supervisor (the #266 "kicked" 30 s pacing was removed after #279 fixed its root cause: the
+ * unit's ATT MTU request went unanswered). A control command meanwhile (cali_session_connect_now)
+ * makes a waiting reconnect due at once.
  *
  * C99, no malloc, no NimBLE/ESP-IDF includes, no clock of its own.
  */
@@ -63,15 +60,6 @@ extern "C" {
 /* Twice the NimBLE transport's own 10 s connect timeout: this watchdog only fires when the
  * transport's verdict (CONNECTED / CONNECT_FAIL) got lost, never races it. */
 #define CALI_SESSION_CONNECT_TIMEOUT_MS 20000u
-/* Reconnect delay after the unit itself hung up (HCI 0x13) on a link whose read-all completed:
- * calictl's POLL_INTERVAL. The parked unit terminates idle held links ~15-20 s after each connect
- * while tolerating calictl's 30 s connect-read-release poll (field 2026-10-09, #264), so this
- * turns the kick loop into a unit-approved ~45 s duty cycle instead of a 1 s hammer. Never feeds
- * the exponential backoff state. */
-#define CALI_SESSION_KICKED_RECONNECT_MS 30000u
-/* An /api/state request this recent means somebody is watching the page (the shared UI polls it
- * while open): a kicked link then keeps the fast backoff so the page stays ~live. */
-#define CALI_SESSION_VIEWER_ACTIVE_MS 30000u
 /* Water (1302) re-read period while the link is up: calictl's POLL_INTERVAL (30 s), at which it
  * reads 1302 on every poll. The app has no periodic water re-read (it reconnects instead). */
 #define CALI_SESSION_WATER_REREAD_MS 30000u
@@ -85,12 +73,8 @@ void cali_session_stop(void);
 void cali_session_tick(uint64_t now_ms);  /* heartbeat every CODEC_HEARTBEAT_PERIOD_MS, reconnect backoff */
 
 /* A control command found no armed link (control_run.c's NOT_READY): a reconnect waiting out its
- * delay — the kicked pause above, or the backoff — becomes due on the next tick. No-op otherwise. */
+ * backoff delay becomes due on the next tick. No-op otherwise. */
 void cali_session_connect_now(void);
-
-/* web.c serves /api/state: note the viewer (the kicked-reconnect pacing above stays fast while
- * somebody watches). Same task as every other session call. */
-void cali_session_web_seen(void);
 
 /* 1 while the session holds a bond it keeps (or re-establishes) a link for — true through
  * reconnect backoff too, while no link exists. For the actual encrypted BLE link, see
@@ -134,12 +118,6 @@ uint64_t cali_session_last_update_ms(void);
  * shows the real level; with no baseline nothing is shown until a level >= 2 settles.
  * /api/state reports this as device.water_held; the shared UI flags the tank stale. */
 int cali_session_water_held(void);
-
-/* Seed the last-plausible water (1302) baseline — console `water seed <hex>`, e.g. after a reflash
- * cold-started on the parked latch: persisted, shown at once, and the next latch is held against it.
- * 0 = seeded; -1 = rejected (len is not exactly the water frame length), baseline unchanged;
- * -2 = seeded and shown, but the NVS write failed, so it will not survive a reboot. */
-int cali_session_water_seed(const uint8_t *frame, size_t len);
 
 #ifdef __cplusplus
 }

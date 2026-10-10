@@ -21,9 +21,8 @@ fuzz pass (``tests/test_codec_parity.py``; the ``codec-parity`` CI job). See
 Portable decision-logic ports
 -----------------------------
 
-Beyond the stateless codec, three pure calictl decisions are shared as C in
-``csrc/ports.c`` — the safety/correctness-critical parts an ESP read/write path
-needs, pinned to the Python originals by ``tests/test_ports_parity.py``:
+Beyond the stateless codec, the water freshness decisions are shared as C in
+``csrc/ports.c`` — the correctness-critical part the ESP read path needs, pinned to the Python originals by ``tests/test_ports_parity.py``:
 
 .. req:: The C freshness stale-latch decision matches calictl
    :id: R_PORT_FRESHNESS
@@ -38,28 +37,9 @@ needs, pinned to the Python originals by ``tests/test_ports_parity.py``:
    over the ``sequences`` vectors. The ESP links ``csrc/ports.c`` — one C water guard
    (``session.c`` calls it). Cross-sample state stays platform-native.
 
-.. req:: The C plausibility anchors match calictl
-   :id: R_PORT_ANCHORS
-   :status: implemented
-   :tags: codec, esp32, diagnostics
-
-   The C port of the plausibility anchors (``calictl/anchors.py``) shall apply
-   the same physical-range constants and installed gates over plain numbers,
-   reporting violations as a stable-ID bitmask, so a decode drift is caught on
-   the ESP exactly as on the Pi. Raw→interpreted scaling is the ESP
-   application's concern (no semantics port).
-
-.. req:: The C SafetyCounter formula matches calictl
-   :id: R_PORT_SAFETY_COUNTER
-   :status: implemented
-   :tags: codec, esp32, roof, safety
-
-   The C port of the roof SafetyCounter shall compute
-   ``(seed + elapsed_ms // tick_ms) & 0xFFFFFFFF`` and its 4-byte big-endian beat
-   identically to ``calictl.device`` for integer-millisecond timelines including
-   the 2^32 wrap — the write-gate liveness proof must be byte-identical or the
-   unit withholds the roof motor. The 500 ms pump orchestration stays
-   platform-native.
+The plausibility anchors and the roof SafetyCounter were ported too (#156) and removed
+again: the ESP has no roof and runs no anchors, so they stay Python-only
+(``calictl/anchors.py``, ``calictl.device``).
 
 Parked: the postcheck port (re-evaluation gate)
 -----------------------------------------------

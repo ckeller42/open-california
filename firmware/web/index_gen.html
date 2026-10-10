@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>calictl-esp</title>
-<!-- The ESP32 firmware's status/setup page (#154). SOURCE: tools/gen_c_dict.py renders it into
+<!-- The ESP32 firmware's WiFi setup page (#154; the status rows moved to the shared UI's Device
+     status screen, #267). SOURCE: tools/gen_c_dict.py renders it into
      index_gen.html (the double-brace placeholders: generated constants, the strings.json table and
      the page script from page.js) and strings_gen.h; never edit those. Self-contained: no external
      assets. -->
@@ -17,10 +18,6 @@ main{max-width:720px;margin:0 auto;padding:16px}
 h1{font-size:20px;margin:0 0 12px}
 h2{font-size:16px;margin:0 0 8px}
 .box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 12px}
-dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0}
-dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}
-#functions{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-#functions .box{margin:0}
 .muted{color:var(--muted)}.bad{color:var(--bad)}
 #banner{display:none;background:var(--bad);color:#fff;border-radius:8px;padding:8px 12px;margin:0 0 12px}
 label{display:block;margin:10px 0 4px;color:var(--muted)}
@@ -45,16 +42,15 @@ a{color:var(--accent)}
   <button id="rescan" class="secondary" type="button"></button>
   <p id="setup-msg"></p>
 </section>
-<section id="device" class="box"></section>
-<h2 id="functions-title"></h2>
-<section id="functions"></section>
+<p id="device"></p>
 </main>
 <script>
 const CFG = {pollMs: 2000, connectTimeoutMs: 8000, connectRetryMs: 3000, host: "calictl-esp", ssidMax: 32, pskMin: 8, pskMax: 63};
-const STR = {"address":{"de":"Gekoppelte Einheit","en":"Paired unit"},"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"app_link_pair":{"de":"Camper-Oberfläche öffnen, um die Einheit zu koppeln","en":"Open the camper UI to pair the unit"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"firmware":{"de":"Firmware","en":"Firmware"},"fn_airheater":{"de":"Luftstandheizung","en":"Air heater"},"fn_campingmode":{"de":"Campingmodus","en":"Camping mode"},"fn_cooler":{"de":"Kühlbox","en":"Cooler"},"fn_energy":{"de":"Energie","en":"Energy"},"fn_lighting":{"de":"Beleuchtung","en":"Lighting"},"fn_roof":{"de":"Aufstelldach","en":"Roof"},"fn_vehicle":{"de":"Fahrzeug","en":"Vehicle"},"fn_water":{"de":"Wasser","en":"Water"},"functions":{"de":"Camper-Einheit","en":"Camper unit"},"ip":{"de":"IP-Adresse","en":"IP address"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"last_update":{"de":"Letzte Aktualisierung","en":"Last update"},"link":{"de":"Verbindung zur Camper-Einheit","en":"Link to the camper unit"},"link_down":{"de":"nicht verbunden","en":"not connected"},"link_up":{"de":"verbunden","en":"connected"},"mode_off":{"de":"aus","en":"off"},"mode_setup":{"de":"Einrichtungs-Hotspot","en":"setup hotspot"},"mode_station":{"de":"verbunden","en":"connected"},"network":{"de":"Netzwerk","en":"Network"},"no_data":{"de":"Noch keine Daten von der Camper-Einheit.","en":"No data from the camper unit yet."},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"none":{"de":"keine","en":"none"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"paired":{"de":"gekoppelt","en":"paired"},"pairing":{"de":"Bluetooth-Kopplung","en":"Bluetooth pairing"},"password":{"de":"Passwort","en":"Password"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"seconds_ago":{"de":"vor {n} s","en":"{n} s ago"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"signal":{"de":"Signal","en":"Signal"},"title":{"de":"Camper-Status","en":"Camper status"},"uptime":{"de":"Laufzeit","en":"Uptime"},"wifi":{"de":"WLAN","en":"WiFi"}};
+const STR = {"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"app_link_pair":{"de":"Camper-Oberfläche öffnen, um die Einheit zu koppeln","en":"Open the camper UI to pair the unit"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"password":{"de":"Passwort","en":"Password"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"title":{"de":"Camper-Einrichtung","en":"Camper setup"}};
 </script>
 <script>
-/* page.js — the ESP32 firmware's status/setup page script (#154). SOURCE: tools/gen_c_dict.py inlines
+/* page.js — the ESP32 firmware's WiFi setup page script (#154): the provisioning form + a link to the
+ * calictl UI, whose Device status screen shows the satellite's status (#267). SOURCE: tools/gen_c_dict.py inlines
  * it into index_gen.html (index.html's PAGE_JS placeholder), right after the script that defines
  * CFG (generated constants) and STR (the strings.json table) — their types: globals.d.ts.
  * Un-built JS: `tools/ci.sh webcheck` type-checks it (tsc --checkJs, jsconfig.json, 0 errors) and
@@ -67,10 +63,8 @@ const STR = {"address":{"de":"Gekoppelte Einheit","en":"Paired unit"},"app_link"
  * @typedef {{ mode: string, ssid: string|null, ip: string|null, rssi: number|null }} Wifi
  * @typedef {{ ssid: string, rssi: number, secure: boolean }} Ap
  * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
- * @typedef {{ pairing: { state: string, address: string|null },
- *             link: { up: boolean, last_snap_age_ms: number|null },
- *             wifi: Wifi, control: { writes: boolean }, uptime_ms: number, fw: string }} Device
- * @typedef {{ t: number, fn: Record<string, Record<string, unknown>>, device: Device }} State
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi }} Device  the /api/state fields this page reads
+ * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
  */
@@ -86,12 +80,6 @@ function t(key, vars) {
   for (const k in vars || {}) s = s.split("{" + k + "}").join(String((vars || {})[k]));
   return s;
 }
-/* the unit's own function titles (calictl web UI vocabulary); other functions show their raw name */
-/** @type {Record<string, string>} */
-const FN = {vehicle: "fn_vehicle", cooler: "fn_cooler", campingmode: "fn_campingmode", lighting: "fn_lighting",
-            airheater: "fn_airheater", water: "fn_water", energy: "fn_energy", roof: "fn_roof"};
-/** @type {Record<string, string>} */
-const MODE = {setup: "mode_setup", station: "mode_station", off: "mode_off"};
 /* /api/wifi last_error -> the text that says why a join failed */
 /** @type {Record<string, string>} */
 const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
@@ -124,12 +112,6 @@ function el(tag, text, cls) {
   if (cls) e.className = cls;
   return e;
 }
-/** @param {[string, string][]} rows @returns {HTMLDListElement} */
-function list(rows) {
-  const dl = el("dl");
-  for (const [k, v] of rows) { dl.appendChild(el("dt", k)); dl.appendChild(el("dd", v)); }
-  return dl;
-}
 /**
  * @template T
  * @param {string} url
@@ -152,60 +134,20 @@ $("ssid-label").textContent = t("network");
 $("psk-label").textContent = t("password");
 $("connect").textContent = t("connect");
 $("rescan").textContent = t("rescan");
-$("functions-title").textContent = t("functions");
 document.documentElement.lang = LANG;
 
 /** @type {Join|null} a submitted join being watched */
 let joining = null;
 
-/* uptime like the device's own screen (display_model.c): "45 s", "N min", "H h M min", "D d H h" */
-/** @param {number} ms @returns {string} */
-function fmtUptime(ms) {
-  const s = Math.floor(ms / 1000), min = Math.floor(s / 60), h = Math.floor(min / 60), d = Math.floor(h / 24);
-  if (!min) return s + " s";
-  if (!h) return min + " min";
-  return d ? d + " d " + (h % 24) + " h" : h + " h " + (min % 60) + " min";
-}
-
 /** @param {Device} d */
-function renderDevice(d) {
-  const box = $("device");
-  box.textContent = "";
-  box.appendChild(el("h2", t("device")));
-  const w = d.wifi, age = d.link.last_snap_age_ms;
-  box.appendChild(list([
-    /* a bonded address with a live link is paired: "idle" (reconnected by the stored bond, the
-     * pairing flow never ran) or "bonded" (fresh from a pair) would show a raw, untranslated word */
-    [t("pairing"), d.pairing.address && d.link.up && (d.pairing.state === "idle" || d.pairing.state === "bonded")
-      ? t("paired") : d.pairing.state],
-    [t("address"), d.pairing.address || t("none")],
-    [t("link"), t(d.link.up ? "link_up" : "link_down")],
-    [t("last_update"), age === null ? t("none") : t("seconds_ago", {n: Math.round(age / 1000)})],
-    [t("wifi"), t(MODE[w.mode] || "mode_off") + (w.ssid ? " · " + w.ssid : "")],
-    [t("ip"), w.ip || t("none")],
-    [t("signal"), w.rssi === null ? t("none") : w.rssi + " dBm"],
-    [t("uptime"), fmtUptime(d.uptime_ms)],
-    [t("firmware"), d.fw],
-  ]));
+function renderLink(d) {
   /* the calictl web UI: GET / in station mode; elsewhere (the setup hotspot) GET /app, where its
    * pairing wizard pairs the unit without home WiFi */
-  const a = el("a", t(w.mode === "station" || d.pairing.address ? "app_link" : "app_link_pair"));
-  a.href = w.mode === "station" ? "/" : "/app";
-  box.appendChild(a);
-}
-
-/** @param {State["fn"]} fn */
-function renderFunctions(fn) {
-  const box = $("functions");
+  const box = $("device"), station = d.wifi.mode === "station";
   box.textContent = "";
-  const names = Object.keys(fn);
-  if (!names.length) { box.appendChild(el("p", t("no_data"), "muted")); return; }
-  for (const name of names) {
-    const card = el("div", undefined, "box");
-    card.appendChild(el("h2", FN[name] ? t(FN[name]) : name));
-    card.appendChild(list(Object.keys(fn[name]).map((k) => /** @type {[string, string]} */ ([k, String(fn[name][k])]))));
-    box.appendChild(card);
-  }
+  const a = el("a", t(station || d.pairing.address ? "app_link" : "app_link_pair"));
+  a.href = station ? "/" : "/app";
+  box.appendChild(a);
 }
 
 /** @param {Ap[]} scan */
@@ -310,8 +252,7 @@ async function poll() {
     if (joining) await watchJoin(joining);
     const s = (/** @type {{body: State}} */ (await fetchJson("/api/state"))).body;
     $("banner").style.display = "none";
-    renderDevice(s.device);
-    renderFunctions(s.fn);
+    renderLink(s.device);
     const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
     $("setup").hidden = !setup;
     if (setup && !setupShown && !joining) scan();

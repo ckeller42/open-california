@@ -105,15 +105,14 @@ def test_py_round_matches_python_round(js, vectors):
         assert same(got, case["expect"]), case
 
 
-def test_sat_offline_s_is_three_kicked_reconnect_periods(js):
-    """The page's "van asleep" threshold tracks the session's kicked-reconnect pacing (the parked
-    unit terminates the held link ~15-20 s after each connect; a paced reconnect refreshes data
-    ~every 45-50 s — field 2026-10-09, #264): three periods of slack before claiming sleep."""
+def test_sat_offline_s_is_three_water_reread_periods(js):
+    """The page's "van asleep" threshold tracks the held link's refresh cadence (water is re-read
+    every CALI_SESSION_WATER_REREAD_MS): three periods of slack before claiming sleep."""
     header = (
         Path(__file__).resolve().parents[1] / "firmware/components/cali_core/include/cali_session.h"
     ).read_text()
-    kicked_ms = int(re.search(r"#define CALI_SESSION_KICKED_RECONNECT_MS (\d+)u", header).group(1))
-    assert js["SAT_OFFLINE_S"] == 3 * kicked_ms / 1000
+    period_ms = int(re.search(r"#define CALI_SESSION_WATER_REREAD_MS (\d+)u", header).group(1))
+    assert js["SAT_OFFLINE_S"] == 3 * period_ms / 1000
 
 
 _DEVICE = {
