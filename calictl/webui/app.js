@@ -164,12 +164,13 @@
  */
 /**
  * A live readout row. `get` formats the value; `bar` (0-100) draws a fill; `widget` returns a
- * richer node (the leveling bubble); `tick` live-advances the value (vehicle clock).
- * @typedef {{ label: string, get: (s: FnState) => (string|number|null|undefined), bar?: (s: FnState) => (number|null|undefined), widget?: (s: FnState) => (Node|null), tick?: boolean }} Readout
+ * richer node (the leveling bubble); `tick` live-advances the value (vehicle clock); `show` false
+ * drops the row (equipment the unit reports as not installed: no "not installed" rows).
+ * @typedef {{ label: string, get: (s: FnState) => (string|number|null|undefined), bar?: (s: FnState) => (number|null|undefined), widget?: (s: FnState) => (Node|null), tick?: boolean, show?: (s: FnState) => boolean }} Readout
  */
 /**
- * A curated feature card. `lighting`/`roof` swap in a custom renderer; `chart` appends the battery
- * chart; `warn`/`note` are dynamic banners; `confirm` is a feature-level actuation gate.
+ * A curated feature card. `lighting`/`roof` swap in a custom renderer; `warn`/`note` are dynamic
+ * banners; `confirm` is a feature-level actuation gate.
  * @typedef {Object} Feature
  * @property {string} title
  * @property {string} [icon]
@@ -181,7 +182,6 @@
  * @property {(w: string, v?: string|number|null) => (string|null|undefined)} [confirm]   // null = no prompt for this control
  * @property {boolean} [lighting]
  * @property {boolean} [roof]
- * @property {boolean} [chart]
  */
 
 const app = /** @type {HTMLElement} */ (document.getElementById("app"));
@@ -615,7 +615,7 @@ const FEATURES = {
     summary: (s) => (s.fresh ? `${t("Fresh")} ${s.fresh.percent}%${s.fresh.stale ? " " + t("(last meas.)") : ""}` : ""),
   },
   energy: {
-    title: "Energy", icon: "🔋", chart: true,
+    title: "Energy", icon: "🔋",
     controls: [
       { what: "mode", kind: "select", label: "Energy mode",
         options: [{ value: "normal", label: "Normal" }, { value: "max_charge", label: "Max" }, { value: "eco", label: "ECO" }],
@@ -632,9 +632,9 @@ const FEATURES = {
       { label: "Starter voltage", get: (s) => withUnit(s.batt1_v, "V") },
       { label: "Starter current", get: (s) => withUnit(s.batt1_current, "A") },
       // "Vehicle power" = the DC-DC charger fed from the alternator while the engine runs.
-      { label: "Vehicle power", get: (s) => (s.dcdc_installed ? `${t(s.dcdc_state)} (${s.dcdc_power} W · ${s.dcdc_current} A)` : "—") },
-      { label: "Shore power", get: (s) => (s.shore_installed ? `${t(s.shore_state)} (${s.shore_power} W · ${s.shore_current} A)` : "—") },
-      { label: "Solar power", get: (s) => (s.solar_installed ? `${t(s.solar_state)} (${s.solar_power} W · ${s.solar_current} A)` : "not installed") },
+      { label: "Vehicle power", show: (s) => !!s.dcdc_installed, get: (s) => `${t(s.dcdc_state)} (${s.dcdc_power} W · ${s.dcdc_current} A)` },
+      { label: "Shore power", show: (s) => !!s.shore_installed, get: (s) => `${t(s.shore_state)} (${s.shore_power} W · ${s.shore_current} A)` },
+      { label: "Solar power", show: (s) => !!s.solar_installed, get: (s) => `${t(s.solar_state)} (${s.solar_power} W · ${s.solar_current} A)` },
       // The unit's own dialog texts (ENERGY_FAULT_MSG), never the raw flag names.
       { label: "Issues", get: (s) => (s.faults && s.faults.length
         ? s.faults.map((f) => t(ENERGY_FAULT_MSG[/** @type {string} */ (f)] || f)).join(" · ") : t("none")) },
@@ -1048,153 +1048,6 @@ function bubbleLevel(roll, pitch) {
     `<circle cx="${bx}" cy="${by}" r="${br}" class="bl-bubble"/></svg>` +
     `<div class="bl-nums">${t("roll")} ${fmtDeg(roll)} · ${t("pitch")} ${fmtDeg(pitch)}${level ? " · " + t("level ✓") : ""}</div>`;
   return wrap;
-}
-
-// --- 24 h leisure-battery chart ------------------------------------------------------------
-// The series comes from the daemon's own append-only history (/api/history), NOT from InfluxDB:
-// the GUI is Influx-free by design, so the chart must still draw with Influx/Grafana down.
-// History is cached client-side because renderState runs every 2 s and the window is ~2880
-// samples -- refetching that on every tick would be pointless traffic.
-const CHART = { w: 320, h: 132, l: 34, r: 34, t: 10, b: 18 };
-const HISTORY_TTL_MS = 60000;
-/** @type {BattHistory|null} */
-let HISTORY = null, HISTORY_TS = 0;
-
-async function loadHistory() {
-  if (HISTORY && Date.now() - HISTORY_TS < HISTORY_TTL_MS) return HISTORY;
-  HISTORY = await api("/api/history?h=24");
-  HISTORY_TS = Date.now();
-  return HISTORY;
-}
-
-// Split samples into runs that are contiguous in time. A jump longer than `gapS` means the van
-// was asleep (or the daemon was down), so the line BREAKS there. Joining across it would draw a
-// voltage the battery never actually held -- the chart would be inventing data.
-/**
- * @param {number[][]} samples
- * @param {number} gapS
- * @returns {number[][][]}
- */
-function contiguousRuns(samples, gapS) {
-  const runs = [];
-  let cur = [];
-  for (const s of samples) {
-    if (cur.length && s[0] - cur[cur.length - 1][0] > gapS) { runs.push(cur); cur = []; }
-    cur.push(s);
-  }
-  if (cur.length) runs.push(cur);
-  return runs;
-}
-
-// Min/max of column `i`, widened to at least `pad` so a dead-flat line renders mid-plot
-// instead of dividing by a zero range.
-/**
- * @param {number[][]} samples
- * @param {number} i
- * @param {number} pad
- * @returns {number[]|null}
- */
-function extent(samples, i, pad) {
-  let lo = Infinity, hi = -Infinity;
-  for (const s of samples) {
-    const v = s[i];
-    if (typeof v === "number" && isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-  }
-  if (!isFinite(lo)) return null;
-  if (hi - lo < pad) { const mid = (hi + lo) / 2; lo = mid - pad / 2; hi = mid + pad / 2; }
-  return [lo, hi];
-}
-
-// One series (voltage OR current) on its own axis — the two are split into separate diagrams
-// because they live on very different scales (V ~13-14, A can swing -2..+8), so overlaying them
-// squashes the voltage line flat. cfg: {idx, cls, pad, lblCls, name, unit}.
-/**
- * @param {BattHistory} h
- * @param {SeriesCfg} cfg
- * @returns {SVGSVGElement|null}
- */
-function seriesSvg(h, cfg) {
-  const samples = (h && h.samples) || [];
-  const e = extent(samples, cfg.idx, cfg.pad);
-  if (!samples.length || !e) return null;
-  const C = CHART, hours = h.hours || 24;
-  const t1 = h.now, t0 = t1 - hours * 3600;          // a TRUE 24 h axis: gaps stay gaps
-  const plotW = C.w - C.l - C.r, plotH = C.h - C.t - C.b;
-  /** @type {(ts: number) => number} */
-  const x = (ts) => C.l + ((ts - t0) / (t1 - t0)) * plotW;
-  /** @type {(val: number) => number} */
-  const y = (val) => C.t + plotH - ((val - e[0]) / (e[1] - e[0])) * plotH;
-  const line = contiguousRuns(samples, h.gap_s || 120).map((run) => {
-    const pts = run.filter((s) => typeof s[cfg.idx] === "number" && isFinite(s[cfg.idx]));
-    if (!pts.length) return "";
-    if (pts.length === 1)                            // a lone sample has no line -- show the point
-      return `<circle class="${cfg.cls}-dot" cx="${x(pts[0][0]).toFixed(1)}" cy="${y(pts[0][cfg.idx]).toFixed(1)}" r="1.6"/>`;
-    return `<polyline class="${cfg.cls}" points="${
-      pts.map((s) => `${x(s[0]).toFixed(1)},${y(s[cfg.idx]).toFixed(1)}`).join(" ")}"/>`;
-  }).join("");
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", `0 0 ${C.w} ${C.h}`);
-  svg.setAttribute("class", "echart");
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", tf("Second battery {name}, last {hours} hours", { name: t(cfg.name), hours: hours }));
-  svg.innerHTML =
-    `<line class="ec-axis" x1="${C.l}" y1="${C.t + plotH}" x2="${C.l + plotW}" y2="${C.t + plotH}"/>` +
-    line +
-    `<text class="ec-lbl ${cfg.lblCls}" x="${C.l - 4}" y="${C.t + 4}" text-anchor="end">${e[1].toFixed(1)}</text>` +
-    `<text class="ec-lbl ${cfg.lblCls}" x="${C.l - 4}" y="${C.t + plotH}" text-anchor="end">${e[0].toFixed(1)}</text>` +
-    `<text class="ec-lbl" x="${C.l}" y="${C.h - 4}">−${hours} h</text>` +
-    `<text class="ec-lbl" x="${C.l + plotW}" y="${C.h - 4}" text-anchor="end">${t("now")}</text>`;
-  return svg;
-}
-
-// Returns the card synchronously (render() is sync); the series fills in when the fetch lands.
-function energyChart() {
-  const card = document.createElement("div");
-  card.className = "card echart-card";
-  const head = document.createElement("div");
-  head.className = "echart-head";
-  head.innerHTML = `<span class="echart-title">${t("Second battery — last 24 h")}</span>`;
-  const body = document.createElement("div");
-  body.className = "echart-body";
-  card.append(head, body);
-  /** @param {BattHistory|null|undefined} h */
-  const paint = (h) => {
-    body.innerHTML = "";
-    const empty = document.createElement("div");
-    empty.className = "echart-empty";
-    // api() resolves the body even on a 500, so an error must be told apart from an empty
-    // window -- otherwise a broken endpoint reports itself as "van asleep", blaming the van
-    // for a bug on our side.
-    if (!h || h.error) {
-      empty.textContent = /** @type {string} */ (t("History unavailable."));
-      return body.appendChild(empty);
-    }
-    // two separate diagrams: voltage and current live on very different scales
-    const vSvg = seriesSvg(h, { idx: 1, cls: "ec-v", pad: 0.4, lblCls: "ec-v-lbl", name: "voltage" });
-    const aSvg = seriesSvg(h, { idx: 2, cls: "ec-a", pad: 2, lblCls: "ec-a-lbl", name: "current" });
-    if (vSvg || aSvg) {
-      /** @param {string} title @param {SVGSVGElement|null} svg */
-      const sub = (title, svg) => {
-        const w = document.createElement("div"); w.className = "echart-sub";
-        const t = document.createElement("div"); t.className = "echart-subtitle"; t.textContent = title;
-        w.append(t); if (svg) w.append(svg);
-        return w;
-      };
-      body.append(sub(/** @type {string} */ (t("Voltage (V)")), vSvg), sub(/** @type {string} */ (t("Current (A)")), aSvg));
-      return;
-    }
-    const seen = STATE._meta && STATE._meta.last_seen;
-    empty.textContent = seen
-      ? tf("No data in the last 24 h — van asleep since {clock}.", { clock: clockText(seen) })
-      : /** @type {string} */ (t("No data yet — history builds while the van is awake."));
-    body.appendChild(empty);
-  };
-  if (HISTORY && Date.now() - HISTORY_TS < HISTORY_TTL_MS) paint(HISTORY);
-  else {
-    body.textContent = /** @type {string} */ (t("Loading…"));
-    loadHistory().then(paint).catch(() => { body.textContent = /** @type {string} */ (t("History unavailable.")); });
-  }
-  return card;
 }
 
 // --- Guided BLE pairing wizard --------------------------------------------------------------
@@ -1949,10 +1802,9 @@ function renderFeature(fn) {
   if (f.readouts && f.readouts.length) {
     const card = document.createElement("div");
     card.className = "card";
-    for (const r of f.readouts) card.appendChild(renderReadout(r, s));
+    for (const r of f.readouts) if (!r.show || r.show(s)) card.appendChild(renderReadout(r, s));
     app.appendChild(card);
   }
-  if (f.chart && isCalictl()) app.appendChild(energyChart());   // no /api/history on the satellite
 }
 
 /**

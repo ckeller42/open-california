@@ -520,20 +520,6 @@ def test_command_latency_is_subsecond(page, base_url):
     assert time.time() - t0 < 3.0, "command took too long -- persistent fast path not engaged"
 
 
-def test_energy_chart_draws_from_daemon_history_not_influx(page, base_url):
-    """The 24 h chart must render from the daemon's own append-only history.
-
-    The e2e daemon runs with --no-influx, so if this draws a line at all, it proves the chart
-    has no InfluxDB dependency -- the property the user explicitly required.
-    """
-    page.goto(base_url)
-    page.locator(".tile", has_text="Energy").first.click()
-    page.wait_for_selector("svg.echart", timeout=20000)  # polls every 1s -> samples accrue
-    drawn = page.locator("svg.echart polyline.ec-v, svg.echart circle.ec-v-dot").count()
-    assert drawn >= 1, "no voltage series rendered"
-    assert "History unavailable" not in page.locator("#app").inner_text()
-
-
 def test_open_control_survives_a_state_poll(page):
     """Regression: a live state poll must NOT re-render and destroy a control the user is
     interacting with. The 2s poll rebuilds #app (app.innerHTML=""), which used to slam an open
@@ -1216,3 +1202,16 @@ def test_door_contact_row_hidden_on_grand_california(page, base_url):
     page.get_by_text("Lighting", exact=True).first.click()
     expect(page.get_by_label("Wake-up time")).to_be_visible()
     assert page.get_by_role("switch", name="Sliding door lighting").count() == 0
+
+
+def test_energy_card_hides_power_sources_the_van_does_not_have(page, base_url):
+    """A source the unit reports as not installed (the mock's solar, like this van) gets no row
+    at all — owner 2026-10-10: "Why do you show stuff that is not available and installed in the
+    car" (was "Solar power — not installed"). Installed sources keep their row."""
+    page.goto(base_url)
+    page.locator(".tile", has_text="Energy").first.click()
+    card = page.locator("#app")
+    expect(card.get_by_text("Shore power", exact=True)).to_be_visible()
+    expect(card.get_by_text("Vehicle power", exact=True)).to_be_visible()
+    expect(card.get_by_text("Solar power", exact=True)).to_have_count(0)
+    assert "not installed" not in card.inner_text()
