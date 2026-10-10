@@ -271,4 +271,4 @@ buspi (decoded ATT kept on buspi, not committed; evidence-ledger 2026-10-10). Ve
 `T_TRACE_COMPARE_READ_ECHO`). Left as they were: the roof (another change owns it); the no-heartbeat
 drop after 15 s (not exercised — the app always beats); the cooler's ~2 s `State` lag and the
 ~100 ms between the two lighting frames (collapsed to "at once"); the 8-byte Mode-6 frame (full
-length in the mock); the mock's parked tilt seed (roll -1.09°, kept so the UI renders the gauges).
+length in the mock); the mock's parked tilt seed (roll -1.09°; the generated vectors build on it, and since #282 the semantics report no tilt with the ignition off anyway).
