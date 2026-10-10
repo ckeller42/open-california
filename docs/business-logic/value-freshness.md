@@ -95,7 +95,11 @@ guard only asks "did fresh drop / did grey move". The plausible frame is **persi
 level rather than re-accepting the `1` latch — the firmware twin of `serve.py`'s persisted
 `_water_good`. `/api/state` reports `device.water_held` when the held frame is being served, and the
 shared UI (`semantics.js::adaptSatellite`) flags both tanks stale (`🕒 last measured`, no
-`stale_since` — the satellite has no wall clock). **Cold start** (since 2026-10-10, as buspi): a fresh ESP
+`stale_since` — the satellite has no wall clock). **Age of the held reading** (2026-10-11, like the
+app 5.4.0's "Updated: x ago"): buspi serves `water.measured_at` (epoch s a real read last
+adopted/confirmed `_water_good`, persisted as `water_measured_at`; web only, not MQTT/Influx), the ESP
+`device.water_held_age_ms` (session clock, only when measured on this boot); the UI shows
+`🕒 measured 2 h ago` / `🕒 vor 2 Std gemessen`, and `🕒 last measured` when the age is unknown. **Cold start** (since 2026-10-10, as buspi): a fresh ESP
 with no NVS baseline shows no water on the `1` latch until a level ≥ 2 has settled (the ramp
 debounce, below). Why this matters: buspi (poll, then release) and the ESP (persistent, re-read every 30 s)
 would otherwise disagree — buspi holding the real ~17 L while the ESP showed a confident `1 L` / 3 %

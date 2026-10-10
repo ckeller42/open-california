@@ -811,3 +811,40 @@ def test_wizard_poll_sends_one_request_at_a_time(stub, error_gated_page, engine)
         pg.wait_for_timeout(6000)  # ~6 poll ticks into the stall
         stub.pairing_get_delay_s = 0.0
     assert stub.pairing_gets_max == 1, stub.pairing_gets_max
+
+
+def _hold_water(stub, age_s):
+    """Serve the water as the HELD reading in both modes; ``age_s`` None = age unknown."""
+    import time
+
+    dev = stub.fixtures["satellite"]["/api/state"]["device"]
+    dev["water_held"] = True
+    water = stub.fixtures["calictl"]["/api/state"]["water"]
+    water["fresh"]["stale"] = water["waste"]["stale"] = True
+    water["stale_since"] = time.time() - 60
+    if age_s is not None:
+        dev["water_held_age_ms"] = age_s * 1000
+        water["measured_at"] = time.time() - age_s
+
+
+@pytest.mark.parametrize("mode", ["satellite", "calictl"])
+@pytest.mark.parametrize(
+    "locale,age_s,text",
+    [
+        ("en-US", 2 * 3600, "🕒 measured 2 h ago"),
+        ("de-DE", 2 * 3600, "🕒 vor 2 Std gemessen"),
+        ("en-US", 30, "🕒 measured just now"),
+        ("en-US", None, "🕒 last measured"),
+        ("de-DE", None, "🕒 zuletzt gemessen"),
+    ],
+)
+def test_held_water_shows_its_age(stub, error_gated_page, mode, locale, age_s, text):
+    """The held water reading shows how old it is (like the app's "Updated: x ago"): calictl's
+    ``water.measured_at`` and the ESP's ``device.water_held_age_ms`` render the same text; with no
+    known age the plain marker stays."""
+    _display_only(stub)
+    _hold_water(stub, age_s)
+    stub.mode = mode
+    with error_gated_page(stub.base, locale=locale) as pg:
+        _open(pg, "Wasser" if locale == "de-DE" else "Water")
+        expect(pg.locator("#app").get_by_text(text)).to_have_count(2)  # fresh + waste readouts

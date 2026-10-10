@@ -53,6 +53,7 @@ static struct {
     uint8_t have;
 } s_wg;
 static int s_water_held;       /* the served 1302 frame is the held baseline, not the latch read */
+static uint64_t s_wg_at;       /* now_ms the baseline was last adopted/confirmed on THIS boot; 0 = not */
 
 static struct {
     uint8_t frame[CODEC_FRAME_MAX];
@@ -184,6 +185,7 @@ static void adopt_water(const uint8_t *data, size_t len) {
     memcpy(s_wg.frame, data, len);
     s_wg.len = len;
     s_wg.have = 1;
+    s_wg_at = s_now ? s_now : 1;
     (void)cali_kv_set(WATER_GOOD_KEY, data, len);
 }
 
@@ -237,6 +239,7 @@ static void unit_check(void) {
         memset(&s_wg, 0, sizeof s_wg);
         memset(&s_wpend, 0, sizeof s_wpend);
         s_water_held = 0;
+        s_wg_at = 0;
         cali_kv_erase(WATER_GOOD_KEY);
     }
     seed_water_frame();   /* same unit: keep showing its last-known water right away */
@@ -411,6 +414,7 @@ void cali_session_init(const cali_transport_t *t) {
     memset(&s_wg, 0, sizeof s_wg);
     memset(&s_wpend, 0, sizeof s_wpend);
     s_water_held = 0;
+    s_wg_at = 0;   /* the NVS baseline carries no time: no age until a read confirms it */
     size_t wl = sizeof s_wg.frame;
     if (cali_kv_get(WATER_GOOD_KEY, s_wg.frame, &wl) == CALI_KV_OK) {
         s_wg.len = wl;
@@ -505,6 +509,8 @@ void cali_session_connect_now(void) {
 }
 
 int cali_session_water_held(void) { return s_water_held; }
+
+uint64_t cali_session_water_good_ms(void) { return s_wg_at; }
 
 int cali_session_active(void) { return s_active; }
 

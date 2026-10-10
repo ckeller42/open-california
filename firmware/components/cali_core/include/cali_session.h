@@ -119,6 +119,11 @@ uint64_t cali_session_last_update_ms(void);
  * /api/state reports this as device.water_held; the shared UI flags the tank stale. */
 int cali_session_water_held(void);
 
+/* The now_ms (session tick clock) at which the water baseline was last adopted or confirmed by a
+ * real measurement on THIS boot; 0 = not this boot (an NVS-restored baseline carries no time).
+ * /api/state reports now - this as device.water_held_age_ms while the water is held. */
+uint64_t cali_session_water_good_ms(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -236,6 +236,18 @@ def test_api_state_water_held_reflects_the_session(web_cli):
     assert json.loads(get(web_cli, "/api/state"))["device"]["water_held"] is False
 
 
+def test_api_state_water_held_age_only_when_held_and_adopted_this_boot(web_cli):
+    """device.water_held_age_ms = uptime - the baseline's adopt time, only while the water is held
+    AND the baseline was adopted on this boot (an NVS-restored baseline has no time: omitted)."""
+    dev = json.loads(get(web_cli, "/api/state", setup=["now 5000", "waterheld 1", "watergood 4000"]))[
+        "device"
+    ]
+    assert dev["water_held_age_ms"] == 1010  # uptime 5010 (the poll ticks +10) - 4000
+    assert "water_held_age_ms" not in json.loads(get(web_cli, "/api/state", setup=["waterheld 1"]))["device"]
+    live = json.loads(get(web_cli, "/api/state", setup=["watergood 4000"]))["device"]
+    assert "water_held_age_ms" not in live
+
+
 def test_api_state_nulls(web_cli):
     body = json.loads(get(web_cli, "/api/state", setup=["nofn", "wifi setup_ap"]))
     assert body["fn"] == {}
