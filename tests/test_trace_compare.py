@@ -52,3 +52,27 @@ def test_cli_prints_a_human_report(tmp_path, capsys):
     assert trace_compare.main([str(p)]) == 0
     out = capsys.readouterr().out
     assert "round-trip" in out and "water" in out and "OK" in out
+
+
+def test_bluez_read_echoes_are_not_counted_as_notifications(tmp_path):
+    """CAPTURE 2026-10-10: buspi's trace shows a ``notify`` ~1 ms before every ``read`` of a subscribed
+    char with the same value, but btmon on the same link shows no Handle Value Notification — BlueZ
+    re-delivers the read. Those echoes are reported apart; a real push still counts.
+
+    .. test:: trace_compare separates BlueZ read echoes from real notifications
+       :id: T_TRACE_COMPARE_READ_ECHO
+       :links: R_BLE_TRACE
+    """
+    evs = [
+        _ev(100.000, "notify", "1202", "campingmode", "23"),  # echo of the read below
+        _ev(100.001, "read", "1202", "campingmode", "23"),
+        _ev(105.000, "notify", "1202", "campingmode", "21"),  # a real push (USB off) ...
+        _ev(105.030, "read", "1202", "campingmode", "21"),  # ... then a read of the same value: still a push
+        _ev(140.000, "notify", "1802", "stairs", "00"),
+        _ev(140.001, "read", "1802", "stairs", "00"),
+    ]
+    p = tmp_path / "ble.jsonl"
+    p.write_text("\n".join(json.dumps(e) for e in evs) + "\n")
+    c = trace_compare.report(str(p))["cadence"]
+    assert (c["1202"]["n"], c["1202"]["read_echoes"]) == (1, 1)  # the 105.0 push is not an echo
+    assert (c["1802"]["n"], c["1802"]["read_echoes"]) == (0, 1)

@@ -182,8 +182,9 @@ hardware on these points (the full list is in {doc}`simulation-and-testing`):
   semi-verified, and calictl has never driven the real motor.
 - **"Driving" is an explicit flag** (`driving`), not a derived predicate — the real "vehicle is
   stationary" condition is still unknown.
-- **The single connection slot is opt-in** (`one_slot`, off by default), although the real unit
-  always has exactly one.
+- **Timing is collapsed.** The lighting `1` and level frames go out together (the real unit sends
+  them ~100 ms apart), and a cooler power change is pushed at once (the real unit pushed the new
+  `State` ~2 s after the write).
 - **No link-layer behaviour in `mock_unit.py`** — no encryption, bonding, MTU or advertising. That
   all lives in the Bumble peripheral layer.
 - **Alert codes** (`InfoPopUp`, `ErrorCode` and the like) change only when a test or the FIFO

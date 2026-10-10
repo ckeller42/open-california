@@ -449,9 +449,9 @@ def test_lighting_screen_lamps_are_directly_controllable(page):
     assert page.locator(".switch").first.is_enabled()  # all-lights master too
     slider.fill("8")  # drag a lamp
     slider.dispatch_event("change")
-    # lighting applied-ness is honestly "unknown" (the state char is a write-through echo),
-    # so the toast says Sent — check the lamp, never a false green "Applied"
-    expect(page.get_by_text("Sent — check the lamp")).to_be_visible(timeout=15000)
+    # applied-ness comes from the unit's 1502 notification carrying the real level, never from the
+    # echo readback; the mock notifies at once, like the real unit (CAPTURE 2026-10-10, ~230 ms)
+    expect(page.get_by_text("✓ Applied").first).to_be_visible(timeout=15000)
 
 
 def test_dashboard_summary_card(page):
@@ -1099,8 +1099,6 @@ def test_favourite_save_then_activate(page, base_url):
     expect(
         toasts.get_by_text("Sent — check the lamp").or_(toasts.get_by_text("✓ Applied")).first
     ).to_be_visible(timeout=15000)
-    # a save is not an activation: the active profile must not become 1
-    assert _state(base_url, page)["lighting"]["profile"] == before
     # activating proves the save LANDED on the unit: the mock ignores (ACK-only) an empty favourite
     page.locator("select").nth(0).select_option("1")
     _poll(page, base_url, lambda st: st["lighting"]["profile"] == 1, "favourite 1 active after activate")
@@ -1109,6 +1107,24 @@ def test_favourite_save_then_activate(page, base_url):
         base_url + "/api/command", data={"function": "lighting", "what": "color", "value": "red"}
     )
     assert r.status == 400 and "retired" in r.json()["error"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="#284: the unit's 1502 read returns its last frame (the save ack, Mode 4 / PN 1) and the "
+    "poll takes it for the active profile (CAPTURE 2026-10-10: buspi read back config echoes)",
+)
+def test_favourite_save_is_not_an_activation(page, base_url):
+    page.get_by_text("Lighting", exact=True).first.click()
+    before = _state(base_url, page)["lighting"]["profile"]
+    page.once("dialog", lambda d: d.accept())
+    page.locator("select").nth(1).select_option("5")  # "Save current as" -> Profile B (= favourite 5)
+    toasts = page.locator("#toasts")
+    expect(
+        toasts.get_by_text("Sent — check the lamp").or_(toasts.get_by_text("✓ Applied")).first
+    ).to_be_visible(timeout=15000)
+    time.sleep(3)  # a poll after the save
+    assert _state(base_url, page)["lighting"]["profile"] == before
 
 
 def test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7(page):

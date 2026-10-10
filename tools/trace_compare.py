@@ -11,9 +11,10 @@ Checks (each a section of the report):
   dictionary decode (otherwise the dictionary misses bits the unit uses, and the mock would serve
   a different frame than the van);
 * **cadence** — per state char: notifications per minute + median interval, against the mock's
-  push model: one push per char right after subscribe, then change-driven pushes only for
-  ``mock_unit.CHANGE_PUSH_FNS`` (campingmode, vehicle), lighting Mode-4 ramp frames, and water
-  on a measured change while its system is powered — energy is NOT pushed on its own;
+  push model (CAPTURE 2026-10-10): nothing on subscribe, then a push whenever a char's frame
+  changes (the 1004 clock alone never). BlueZ re-delivers every READ of a subscribed char as a
+  notification (same value, ~1 ms before the read event); those **read echoes** are not wire
+  notifications and are counted apart (``read_echoes``), never as cadence;
 * **dynamics** — rates the mock's clock model assumes vs what the unit did: heater
   ``RunningTimeinAction`` per minute while ``NormalOperation``, energy ``AgeOneBattValuesMinutes``
   per minute while the ignition is off, roof ``Position`` transitions, the ignition→camping
@@ -59,13 +60,44 @@ def round_trip(events, funcs) -> dict:
     return out
 
 
+# BlueZ's echo signature: the notify is logged ~1 ms BEFORE the read it re-delivers (buspi trace
+# 2026-10-10: ~1 ms apart, tail 9 ms of 1270 pairs), as the very next event, same char + value.
+READ_ECHO_S = 0.015
+
+
+def _read_echo(events, i) -> bool:
+    """True when notify ``events[i]`` is BlueZ re-delivering the client read logged right after it
+    (no btmon Handle Value Notification exists for these — buspi btmon 2026-10-10): the very next
+    event is a read of the same char and value within ``READ_ECHO_S``. Anything looser (a later
+    read, another event in between) stays a notification.
+
+    ponytail: timing heuristic; a real push landing <15 ms before a read of the same value would be
+    miscounted — a trace field marking read-callback deliveries would make it exact."""
+    e = events[i]
+    nxt = events[i + 1] if i + 1 < len(events) else None
+    return (
+        nxt is not None
+        and nxt.get("ev") == "read"
+        and nxt.get("char") == e.get("char")
+        and nxt.get("hex") == e.get("hex")
+        and 0 <= nxt["t"] - e["t"] <= READ_ECHO_S
+    )
+
+
 def cadence(events) -> dict:
-    """{char: {"n": notifications, "per_min": …, "median_s": …}} over the trace's span."""
+    """{char: {"n": notifications, "per_min": …, "median_s": …, "read_echoes": …}} over the
+    trace's span; BlueZ read echoes (:func:`_read_echo`) are counted apart, not as notifications."""
     times: dict[str, list[float]] = defaultdict(list)
-    for e in events:
+    echoes: dict[str, int] = defaultdict(int)
+    for i, e in enumerate(events):
         if e.get("ev") == "notify":
-            times[e["char"]].append(e["t"])
+            if _read_echo(events, i):
+                echoes[e["char"]] += 1
+            else:
+                times[e["char"]].append(e["t"])
     out = {}
+    for ch in echoes.keys() - times.keys():
+        out[ch] = {"n": 0, "per_min": None, "median_s": None, "read_echoes": echoes[ch]}
     for ch, ts in times.items():
         ts.sort()
         span = (ts[-1] - ts[0]) if len(ts) > 1 else 0.0
@@ -74,6 +106,7 @@ def cadence(events) -> dict:
             "n": len(ts),
             "per_min": round(60 * (len(ts) - 1) / span, 2) if span else None,
             "median_s": round(statistics.median(gaps), 3) if gaps else None,
+            "read_echoes": echoes.get(ch, 0),
         }
     return out
 
@@ -176,7 +209,10 @@ def main(argv=None) -> int:
         )
     print("\nnotification cadence:")
     for ch, c in sorted(r["cadence"].items()):
-        print(f"  {ch}  n={c['n']:5d}  per_min={c['per_min']}  median_gap={c['median_s']} s")
+        print(
+            f"  {ch}  n={c['n']:5d}  per_min={c['per_min']}  median_gap={c['median_s']} s"
+            f"  read_echoes={c['read_echoes']}"
+        )
     print("\ndynamics (observed vs mock model):")
     for k, v in r["dynamics"].items():
         print(f"  {k}: {v}")

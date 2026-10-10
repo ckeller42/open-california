@@ -214,11 +214,13 @@ know. If you run the fake with a log elsewhere, point `FAKE_UNIT_LOG` at it.
 
 The bond persists on both sides (Android's bond store + the fake's `JsonKeyStore` at
 `tools/applab/.fake_unit_keys.json`, gitignored), so later sessions reconnect without the dance.
-The peripheral drops a link that carries no `1003` heartbeat for 15 s once the link has carried a
-beat (`FAKE_UNIT_HEARTBEAT_TIMEOUT_S`) — like the real unit, and because a connected peripheral
-cannot advertise (a stale link makes the app report *"No vehicle found"*). Before the first beat
-it allows `FAKE_UNIT_PAIRING_GRACE_S` (90 s) so a slow passkey entry doesn't get the link dropped
-mid-pairing.
+The peripheral drops a link that carries no `1003` heartbeat for 15 s once that link has carried a
+beat (`FAKE_UNIT_HEARTBEAT_TIMEOUT_S`, judged per link). Before the first beat it allows
+`FAKE_UNIT_PAIRING_GRACE_S` (90 s) so a slow passkey entry doesn't get the link dropped
+mid-pairing. Like the real unit (CAPTURE 2026-10-10), the fake keeps advertising while connected,
+so the app, calictl and the ESP32 can all be connected at once, and every subscriber gets each
+push. It pushes a state char only when its frame changes — nothing on subscribe, nothing for the
+app's neutral follow-up frames. `build_unit(one_slot=True)` brings back the old one-link model.
 
 ## Surviving a restart (labctl)
 

@@ -434,9 +434,15 @@ def test_roof_reversal_mid_travel_keeps_the_moving_code():
     assert u.decoded("roof")["InfoPopUp"] == 12
 
 
-def test_subscribe_pushes_the_current_value_once():
-    """Real unit (buspi trace 2026-09-16): enabling notifications on a state char yields one
-    notification with the current frame; nothing streams afterwards without a change."""
+def test_subscribe_pushes_nothing():
+    """CAPTURE 2026-10-10: the real unit sends no notification when a central enables one — the
+    phone app's 8 CCCD writes and buspi's 13 (btmon) were each answered by a Write Response only.
+    The 2026-09-16 "one push per subscribe" was BlueZ re-delivering every read as a notification.
+
+    .. test:: Subscribing to a state char pushes nothing
+       :id: T_MOCK_NO_SUBSCRIBE_PUSH
+       :links: R_FAKE_UNIT_FIDELITY
+    """
     import asyncio
 
     from tools.mock_unit import MockBleakClient
@@ -445,7 +451,7 @@ def test_subscribe_pushes_the_current_value_once():
     client = MockBleakClient.bind(u)("MO:CK")
     got = []
     asyncio.run(client.start_notify(u.funcs["cooler"].state_char, lambda ch, data: got.append(bytes(data))))
-    assert len(got) == 1 and got[0] == u.read(u.funcs["cooler"].state_char)
+    assert got == []
 
 
 def _subscribe(unit, fn, sink):
@@ -479,34 +485,30 @@ def _commit_brightness(unit, zone_field, value):
     )
 
 
-def test_lighting_readback_is_an_echo_while_the_lamps_ramp():
-    """The unit's lighting state char is a write-through ECHO: it reports the WRITTEN value at
-    once, whether or not the lamps moved. The truthful channel is the 1502 Mode-4 ramp
-    notification, which carries the REAL brightness stepping toward the target
-    (control-and-actuation.md; owner-checked 2026-07 when a "confirmed" readback hid dark lamps).
+def test_lighting_set_notifies_the_real_levels_before_the_commit():
+    """CAPTURE 2026-10-10 (the real app on the real unit): a SET_BRIGHTNESS is applied and notified
+    ~230 ms after it lands — before the app's ``0e00…`` commit. A zone rising from 0 reports 1 first,
+    then its level; DEFAULT (11) reports the lamp's own level (Kitchen ``…eeebeb…`` -> ``0101`` ->
+    ``050a``); a zone already lit reports its new level in one frame. The frames are Mode 4 / PN 9,
+    and a 1502 read returns the last of them.
 
-    .. test:: Lighting readback echoes immediately while the real brightness ramps in pushes
+    .. test:: Lighting SET notifies 1 then the real level, before any commit
        :id: T_MOCK_LIGHT_ECHO_VS_RAMP
+       :links: R_FAKE_UNIT_FIDELITY
     """
+    f = _funcs()["lighting"]
     u = _armed_unit(lighting={"Installed": 1, "ProfileNumber": 9, "BrightnessLOne": 1})
     pushes = []
     _subscribe(u, "lighting", pushes)
-    pushes.clear()  # drop the one-shot push at subscribe time
-
-    _commit_brightness(u, "BrightnessLOne", 4)
-    # the ECHO is instant — this is exactly what must NOT be treated as proof of actuation
-    assert u.decoded("lighting")["BrightnessLOne"] == 4
-    assert u.light_actual["BrightnessLOne"] == 1  # the lamp is still where it was
-    assert pushes == []  # and nothing was notified yet
-
-    seen = []
-    for _ in range(4):  # ramp 1 -> 2 -> 3 -> 4, one step per tick
-        u.tick(0.5)
-        seen.append(protocol.decode(_funcs()["lighting"], pushes[-1])["BrightnessLOne"])
-    assert seen == [2, 3, 4, 4]  # steps, then holds at the target
+    _w(u, "0904000000000000eeeeebebeeeeeeee")  # the app's Kitchen ON: L5 + L7 at DEFAULT, no commit
+    frames = [protocol.decode(f, p) for p in pushes]
+    assert [(g["BrightnessLFive"], g["BrightnessLSeven"]) for g in frames] == [(1, 1), (5, 10)]
+    assert {(g["Mode"], g["ProfileNumber"]) for g in frames} == {(4, 9)}
+    assert u.decoded("lighting")["BrightnessLSeven"] == 10  # the read = the last frame sent
+    pushes.clear()
+    _commit_brightness(u, "BrightnessLOne", 4)  # already lit: one frame, and the commit adds none
+    assert [protocol.decode(f, p)["BrightnessLOne"] for p in pushes] == [4]
     assert u.light_actual["BrightnessLOne"] == 4
-    # the ramp frames are Mode 4 — the SET_BRIGHTNESS notification the app confirms on
-    assert protocol.decode(_funcs()["lighting"], pushes[-1])["Mode"] == 4
 
 
 def test_lighting_echo_still_confirms_when_the_lamps_never_move():
@@ -554,9 +556,8 @@ def test_lighting_actuates_on_an_awake_unit_without_the_heartbeat():
     pushes.clear()
 
     _commit_brightness(u, "BrightnessLOne", 3)
-    assert u.decoded("lighting")["BrightnessLOne"] == 3  # applied (echo) ...
-    u.tick(0.5)
-    assert pushes and u.light_actual["BrightnessLOne"] == 2  # ... and the lamp really ramps
+    assert u.decoded("lighting")["BrightnessLOne"] == 3  # applied ...
+    assert pushes and u.light_actual["BrightnessLOne"] == 3  # ... and the lamp really moved
 
     # the lighting gates themselves are untouched: a PN=0 brightness frame is still ignored
     frame_bytes = overrides.CONTROL_FRAME_BYTES["lighting"]
@@ -582,25 +583,29 @@ def test_lighting_actuates_on_an_awake_unit_without_the_heartbeat():
     assert u.decoded("cooler")["State"] == 0
 
 
-def test_change_pushes_only_for_the_chars_the_unit_really_pushes():
-    """campingmode (1202) and ignition (1004) are confirmed change-push channels on real hardware;
-    the 2026-09-16 buspi trace saw NO change-driven push on the other subscribed chars in 150 s.
-    So a state change must notify for those two and stay silent elsewhere.
+def test_change_pushes_follow_every_frame_change_but_not_the_clock():
+    """CAPTURE 2026-10-10: the real unit notified 1102 / 1202 / 1502 / 1602 whenever the frame
+    changed (1602 every ~40-70 s as the battery readings moved), and 1004 exactly once in 46 min —
+    when the ignition went off (``017e…0090`` -> ``047e…0000``: roll/pitch 0, CarLevelPopUp 1). The
+    RTC ticking every second is never pushed. (Replaces the 2026-09-16 "only 1202 and 1004 push",
+    a 150 s window in which nothing else changed.)
 
-    .. test:: Change-driven pushes are modelled only for the confirmed channels
+    .. test:: Every changed frame is pushed; the 1004 clock alone is not
        :id: T_MOCK_CHANGE_PUSH_SCOPE
+       :links: R_FAKE_UNIT_FIDELITY
     """
     u = _armed_unit(
         vehicle={
-            "TerminalOneFive": 0,
+            "TerminalOneFive": 1,
             "CarTimeYear": 126,
             "CarTimeMonth": 8,
             "CarTimeDay": 16,
             "CarTimeHour": 12,
             "CarTimeMinute": 0,
             "CarTimeSecond": 0,
+            "CarLevelPitch": 144,
         },
-        campingmode={"Installed": 1, "State": 1, "Enable": 0},
+        campingmode={"Installed": 1, "State": 1, "Enable": 1},
         airheater={
             "Installed": 1,
             "NormalOperation": 1,
@@ -609,21 +614,21 @@ def test_change_pushes_only_for_the_chars_the_unit_really_pushes():
             "HeatingLevel": 5,
         },
     )
-    camping, heater = [], []
-    _subscribe(u, "campingmode", camping)
+    vehicle, heater = [], []
+    _subscribe(u, "vehicle", vehicle)
     _subscribe(u, "airheater", heater)
     u.tick(1.0)  # establish the ignition-edge baseline
-    camping.clear()
-    heater.clear()
+    u.tick(5.0)
+    assert vehicle == [] and heater == []  # the clock moved, nothing else did
 
-    u.state["vehicle"]["TerminalOneFive"] = 1  # key turned -> camping couples + pushes
-    changed = u.tick(1.0)
-    assert "campingmode" in changed and camping, "camping must push on the confirmed 1202 channel"
+    u.tick(60)  # the heater countdown changes its frame -> pushed
+    assert heater and protocol.decode(_funcs()["airheater"], heater[-1])["RunningTimeinAction"] == 1
 
-    # the heater DOES change on the clock (its countdown) but must not push: not a confirmed channel
-    u.tick(120)
-    assert u.decoded("airheater")["RunningTimeinAction"] < 2  # it really did change
-    assert heater == []
+    u.state["vehicle"]["TerminalOneFive"] = 0  # ignition off
+    u.tick(1.0)
+    assert len(vehicle) == 1
+    v = protocol.decode(_funcs()["vehicle"], vehicle[0])
+    assert (v["TerminalOneFive"], v["CarLevelPopUp"], v["CarLevelRoll"], v["CarLevelPitch"]) == (0, 1, 0, 0)
 
 
 def test_water_freezes_both_tanks_while_the_system_is_unpowered():
@@ -651,7 +656,8 @@ def test_water_freezes_both_tanks_while_the_system_is_unpowered():
     # the true levels move on (someone drains grey at a dump station) but the unit isn't measuring
     u.state["water"].update(FreshWaterLevel=11, WasteWaterLevel=0)
     w = u.decoded("water")
-    assert (w["FreshWaterLevel"], w["WasteWaterLevel"]) == (19, 3)  # BOTH frozen at the latch
+    # fresh reads the 1 L sleep latch, grey stays frozen (buspi trace 2026-10-09: 20 L <-> 1 L flips)
+    assert (w["FreshWaterLevel"], w["WasteWaterLevel"]) == (1, 3)
     u.set_water_power(True)  # water system on -> it measures again
     w = u.decoded("water")
     assert (w["FreshWaterLevel"], w["WasteWaterLevel"]) == (11, 0)
@@ -684,8 +690,6 @@ def test_unpowered_water_latch_is_exactly_what_the_stale_guard_rejects():
     # Parked: the unit latches. A later poll sees a LOWER fresh level with grey exactly frozen —
     # the guard must reject it and the daemon keeps showing the last plausible reading.
     u.set_water_power(False)
-    u.state["water"]["FreshWaterLevel"] = 1  # the classic parked-decay reading
-    u._water_latch["FreshWaterLevel"] = 1  # unit re-latches lower (the ratchet)
     parked = semantics.water(u.decoded("water"))
     assert parked["waste"]["liters"] == plausible["waste"]["liters"]  # grey exactly frozen
     assert freshness.implausible_water_drop(parked, plausible) is True
@@ -1074,7 +1078,9 @@ def test_wakeup_is_stored_and_echoed_on_1502_through_the_commit():
     assert u.wakeup == {"Timestamp": 0x6AC49C70, "LightValue": 0x1100}
     assert protocol.decode(_funcs()["lighting"], pushes[-1])["Mode"] == 20
     _w(u, control.LIGHT_COMMIT.hex())
-    assert u.decoded("lighting")["Mode"] == 16  # the echo is a one-off frame, never stored state
+    # CAPTURE 2026-10-10: the 1502 READ returns the last frame sent — buspi read back `00146acb…`
+    d = u.decoded("lighting")
+    assert (d["Mode"], d["ProfileNumber"], d["Timestamp"]) == (20, 0, 0x6AC49C70)
     # builder -> mock -> semantics round trip: the 1502 echo decodes to the wake-up the CLI asked for
     pushes.clear()
     u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "wakeup", "07:00 on", {}))
@@ -1097,8 +1103,8 @@ def test_door_contact_flag_is_reported_on_1502_and_never_becomes_the_active_prof
     pushes.clear()
     _w(u, "0810000000000001eeeeeeeeeeeeeeee")
     _w(u, control.LIGHT_COMMIT.hex())
-    d = u.decoded("lighting")
-    assert u.door_contact == 1 and (d["Mode"], d["ProfileNumber"]) == (16, 12)  # real state untouched
+    d = u.decoded("lighting")  # sticky: the read returns the echo (CAPTURE 2026-10-10, `0810…01`)
+    assert u.door_contact == 1 and (d["Mode"], d["ProfileNumber"], d["LightValue"]) == (16, 8, 1)
     echo = protocol.decode(_funcs()["lighting"], pushes[0])
     assert (echo["Mode"], echo["ProfileNumber"], echo["LightValue"]) == (16, 8, 1)
     _w(u, "0810000000000000eeeeeeeeeeeeeeee")
@@ -1138,7 +1144,7 @@ def test_save_then_activate_restores_the_saved_levels():
     _w(u, SAVE_A)
     _w(u, control.LIGHT_COMMIT.hex())
     assert u.favourites[1]["zones"]["BrightnessLSeven"] == 5 and u.favourites[1]["colour"] == 9
-    assert u.decoded("lighting")["ProfileNumber"] == 9  # a save is not an activation
+    assert u.light_actual == {}  # a save is not an activation: no lamp moved
     _commit_brightness(u, "BrightnessLSeven", 0)  # lamp off
     _w(u, "0110000000000000eeeeeeeeeeeeeeee")
     _w(u, control.LIGHT_COMMIT.hex())
@@ -1176,8 +1182,8 @@ def test_all_lights_master_switches_every_equipped_zone_and_acks_on_1502():
     assert semantics.lighting(d)["any_on"] is True
     ack = protocol.decode(f, pushes[0])  # the app awaits a 1502 frame with PN == 12
     assert (ack["Mode"], ack["ProfileNumber"]) == (16, control.LIGHT_PROFILE_ALL_ON)
-    for _ in range(12):  # the lamps ramp to the target and the Mode-4 pushes carry it
-        u.tick(0.5)
+    # CAPTURE 2026-10-10 `0c10…11111111…` then `0c10…aaaaaaaa…`: 1, then the level
+    assert [protocol.decode(f, p)["BrightnessLOne"] for p in pushes] == [1, control.LIGHT_ON_BRIGHTNESS]
     assert u.light_actual["BrightnessLOne"] == control.LIGHT_ON_BRIGHTNESS
 
     u.write(f.control_char, control.build(_funcs(), "lighting", "power", "off", u.decoded("lighting")))
@@ -1205,18 +1211,18 @@ def test_request_config_reply_comes_after_the_save_ack():
     _w(u, control.LIGHT_COMMIT.hex())
     _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")  # the app's REQUEST_CONFIG
     modes = [protocol.decode(_funcs()["lighting"], p)["Mode"] for p in pushes]
-    assert modes == [4, 12]
+    assert modes == [4, 12, 6, 8, 16, 24]  # the save ack, then the unit's six-frame reply
     ack = protocol.decode(_funcs()["lighting"], pushes[0])
     assert ack["ProfileNumber"] == 1  # the save ack names the saved favourite
-    assert protocol.decode(_funcs()["lighting"], pushes[-1])["LightValue"] & 1 == 1
-    d = u.decoded("lighting")  # nothing sticky: reads still return the real lighting state
-    assert d["ProfileNumber"] == 9 and d["Mode"] not in (4, 12, 20)
+    assert protocol.decode(_funcs()["lighting"], pushes[1])["LightValue"] & 1 == 1
+    assert u.decoded("lighting")["Mode"] == 24  # sticky: a read returns the reply's last frame
 
 
 def test_request_config_reply_also_reports_the_wakeup_and_door_frames():
     """The app awaits 6 frames after REQUEST_CONFIG and fills its wake-up/door state from them
-    (decompile d0 / F0): after the Mode-12 favourites frame the mock re-reports the stored Mode-20
-    wake-up and the Mode-16/PN-8 door frame (only when set).
+    (decompile d0 / F0). CAPTURE 2026-10-10, the real unit's reply in order: Mode 12 PN 0 +
+    favourite bits (``000c…01``), Mode 6 PN 9 colour (``0906…01``), Mode 8 LightValue 4, the door
+    frame Mode 16 PN 8, the wake-up Mode 20, and a Mode-24 frame carrying the unit clock.
 
     .. test:: REQUEST_CONFIG reply re-reports wake-up and door
        :id: T_MOCK_LIGHT_REQUEST_CONFIG_FULL
@@ -1227,15 +1233,23 @@ def test_request_config_reply_also_reports_the_wakeup_and_door_frames():
     _subscribe(u, "lighting", pushes)
     pushes.clear()
     _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")
-    assert [protocol.decode(_funcs()["lighting"], p)["Mode"] for p in pushes] == [12]  # nothing stored yet
+    # nothing stored yet: no wake-up frame, the door frame reports 0
+    assert [protocol.decode(_funcs()["lighting"], p)["Mode"] for p in pushes] == [12, 6, 8, 16, 24]
     u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "wakeup", "07:00 on", {}))
     u.write(_funcs()["lighting"].control_char, control.build(_funcs(), "lighting", "door_contact", "on", {}))
     pushes.clear()
     _w(u, "0d0c000000000000eeeeeeeeeeeeeeee")
     got = [protocol.decode(_funcs()["lighting"], p) for p in pushes]
-    assert [(g["Mode"], g.get("ProfileNumber")) for g in got][:1] == [(12, 9)]
-    assert [g["Mode"] for g in got] == [12, 20, 16]
-    assert got[1]["LightValue"] & 1 == 1 and got[2]["ProfileNumber"] == 8 and got[2]["LightValue"] == 1
+    assert [(g["Mode"], g["ProfileNumber"]) for g in got] == [
+        (12, 0),
+        (6, 9),
+        (8, 0),
+        (16, 8),
+        (20, 0),
+        (24, 0),
+    ]
+    assert got[2]["LightValue"] == 4 and got[3]["LightValue"] == 1  # Mode 8 verbatim; door on
+    assert got[4]["LightValue"] & 1 == 1  # the wake-up, enabled
 
 
 def test_set_color_is_acked_on_1502():
@@ -1248,3 +1262,74 @@ def test_set_color_is_acked_on_1502():
     _w(u, control.LIGHT_COMMIT.hex())
     got = [protocol.decode(_funcs()["lighting"], p) for p in pushes]
     assert [(g["Mode"], g["ProfileNumber"]) for g in got] == [(6, 1)]
+
+
+# --- CAPTURE 2026-10-10: the real app on the real unit -----------------------------------------
+
+
+def test_a_change_pushes_once_and_the_apps_neutral_frames_push_nothing():
+    """CAPTURE 2026-10-10: every app write is followed ~500 ms later by a neutral frame (cooler
+    ``ff771e3e1f1f``, camping ``ff``) that the unit ACKs and ignores. Level 4 ``ff74…`` -> one 1102
+    ``0904…`` ~130 ms later; the neutral frame -> nothing; camping lights ``5f`` -> 1202 ``2f``,
+    then ``ff`` -> nothing.
+
+    .. test:: A changing write pushes once; the neutral follow-up frames are silent no-ops
+       :id: T_MOCK_NEUTRAL_FRAMES_SILENT
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+    f = _funcs()
+    u = _armed_unit(
+        cooler={
+            "Installed": 1,
+            "State": 1,
+            "Mode": 0,
+            "Level": 3,
+            "NightTimerHourOn": 22,
+            "NightTimerHourOff": 6,
+        },
+        campingmode={"Installed": 1, "State": 1, "UsbCharger": 1},
+    )
+    cooler, camping = [], []
+    _subscribe(u, "cooler", cooler)
+    _subscribe(u, "campingmode", camping)
+    u.write(f["cooler"].control_char, bytes.fromhex("ff741e3e1f1f"))
+    u.write(f["cooler"].control_char, bytes.fromhex("ff771e3e1f1f"))
+    assert [protocol.decode(f["cooler"], p)["Level"] for p in cooler] == [4]
+    u.write(f["campingmode"].control_char, bytes.fromhex("5f"))
+    u.write(f["campingmode"].control_char, bytes.fromhex("ff"))
+    assert [p.hex() for p in camping] == ["2f"]
+    before = {fn: u.read(u.funcs[fn].state_char) for fn in ("cooler", "campingmode")}
+    u.write(f["cooler"].control_char, bytes.fromhex("ff771e3e1f1f"))
+    u.write(f["campingmode"].control_char, bytes.fromhex("ff"))
+    assert {fn: u.read(u.funcs[fn].state_char) for fn in before} == before
+
+
+def test_any_heartbeat_seed_arms_the_unit():
+    """CAPTURE 2026-10-10: the app's 1003 counter starts at a large random value (``0x00049363``,
+    later ``0x00061b62``), +1 per ~0.79 s — not at 0. Any start value arms.
+
+    .. test:: The 1003 heartbeat arms from any start value
+       :id: T_MOCK_HEARTBEAT_ANY_SEED
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+    from calictl import device
+
+    u = MockCamperUnit()
+    u.write(device.HEARTBEAT_CHAR, (0x00049363).to_bytes(4, "big"))
+    assert u.armed and u.last_beat == 0x00049363
+
+
+def test_pop_top_light_stays_off_but_the_rest_of_the_group_applies():
+    """CAPTURE 2026-10-10, roof closed: the app's Pop-up-roof group ON (L8 + L9 at DEFAULT,
+    ``…eebeeb…``) -> ``…10 d1…`` (both 1) then ``…50 d0…``: L8 lit at 5, L9 back to 0. The rest of
+    the frame applies; only L9 stays dark.
+
+    .. test:: L9 stays off with the roof closed while the rest of the frame applies
+       :id: T_MOCK_L9_PER_ZONE
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+    u = _armed_unit(lighting={"Installed": 1}, roof={"Installed": 1, "Position": 0})
+    _w(u, "0904000000000000eeeeeebeebeeeeee")
+    d = u.decoded("lighting")
+    assert (d["BrightnessLEight"], d["BrightnessLNine"]) == (5, 0)
+    assert ("lighting", "the pop-top reading light needs the roof raised") in u.refusals
