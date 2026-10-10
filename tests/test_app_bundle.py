@@ -24,7 +24,7 @@ from tools.wifi_consts import CONSTS
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "firmware" / "web" / "app_bundle_gen.h"
 WEBUI = ROOT / "calictl" / "webui"
-SOURCES = ("index.html", "app.css", "strings.de.js", "semantics.js", "app.js")
+SOURCES = ("index.html", "app.css", "strings.de.js", "semantics_tables.js", "semantics.js", "app.js")
 
 
 def _gz():
@@ -71,11 +71,11 @@ def _webui_copy(tmp_path):
     return d
 
 
-def test_script_order_is_strings_semantics_app():
+def test_script_order_is_strings_tables_semantics_app():
     html = gen_c_dict.render_app_bundle()
     at = [
         html.index((WEBUI / n).read_text(encoding="utf-8"))
-        for n in ("strings.de.js", "semantics.js", "app.js")
+        for n in ("strings.de.js", "semantics_tables.js", "semantics.js", "app.js")
     ]
     assert at == sorted(at)
 

@@ -1313,10 +1313,10 @@ Home Assistant over MQTT
 with their ranges, installed gating, ``expire_after`` on read-only sensors only) and the round trip
 from a topic back to a ``(function, what)``. ``tests/test_web_serve.py`` covers the broker-less
 start. The broker, the retained configs and Home Assistant itself are not part of any test, and this
-page records no end-to-end run, hence the status. **Known gap:** the lighting ``brightness`` number
-(0 to 15) and the heater ``level`` number (0 to 15) are advertised, but ``control.build`` has no
-``lighting brightness`` control (``CommandError: unknown lighting control``) and rejects a heater
-level outside 1 to 10. Such a command is logged as failed and never reaches the unit.
+page records no end-to-end run, hence the status. The number entities take their ranges from the
+builders (``control.COOLER_LEVEL_RANGE``, ``control.AIRHEATER_LEVEL_RANGE``, lighting 0 to
+``control.LIGHT_ON_BRIGHTNESS``); ``lighting brightness`` sets every real lamp, like ``all``.
+``tests/test_ha.py`` builds every advertised number at its min and max (#258).
 
 ESP32 satellite
 ---------------

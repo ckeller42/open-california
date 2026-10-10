@@ -25,15 +25,17 @@ from calictl.serve import ServeBackend
 from tools import gen_semantics_vectors
 
 ROOT = Path(__file__).resolve().parent.parent
+SEM_TABLES_JS = ROOT / "calictl" / "webui" / "semantics_tables.js"
 SEM_JS = ROOT / "calictl" / "webui" / "semantics.js"
 VECTORS = ROOT / "tests" / "vectors" / "semantics.json"
 
-# argv: semantics.js, a JS expression evaluated in its context, optional JSON file bound to __V
+# argv: semantics_tables.js, semantics.js (run in that order, like index.html), a JS expression
+# evaluated in their context, optional JSON file bound to __V
 _HARNESS = (
     'const fs=require("fs"),vm=require("vm");const ctx=vm.createContext({});'
-    'vm.runInContext(fs.readFileSync(process.argv[1],"utf8"),ctx,{filename:"semantics.js"});'
-    'if(process.argv[3])ctx.__V=JSON.parse(fs.readFileSync(process.argv[3],"utf8"));'
-    "process.stdout.write(JSON.stringify(vm.runInContext(process.argv[2],ctx)));"
+    'for(const f of [process.argv[1],process.argv[2]])vm.runInContext(fs.readFileSync(f,"utf8"),ctx,{filename:f});'
+    'if(process.argv[4])ctx.__V=JSON.parse(fs.readFileSync(process.argv[4],"utf8"));'
+    "process.stdout.write(JSON.stringify(vm.runInContext(process.argv[3],ctx)));"
 )
 
 
@@ -54,11 +56,14 @@ def test_same_distinguishes_bool_from_number():
 
 
 def node_eval(expr, data_path=None):
-    """Evaluate ``expr`` in a fresh context holding semantics.js; returns the JSON-decoded result."""
+    """Evaluate ``expr`` in a fresh context holding semantics_tables.js + semantics.js; returns the
+    JSON-decoded result."""
     node = shutil.which("node")
     if not node:  # a missing node must not silently skip the gate in CI
         (pytest.fail if os.environ.get("CI") else pytest.skip)("node not available")
-    args = [node, "-e", _HARNESS, str(SEM_JS), expr] + ([str(data_path)] if data_path else [])
+    args = [node, "-e", _HARNESS, str(SEM_TABLES_JS), str(SEM_JS), expr] + (
+        [str(data_path)] if data_path else []
+    )
     out = subprocess.run(args, capture_output=True, text=True, check=True, timeout=60)
     return json.loads(out.stdout)
 
@@ -228,3 +233,25 @@ def test_adapter_with_no_functions():
 )
 def test_is_satellite_body(body, want):
     assert node_eval("isSatelliteBody(%s)" % json.dumps(body)) is want
+
+
+def test_generated_tables_equal_python():
+    """Every table tools.gen_c_dict emits into semantics_tables.js equals its Python source, as the
+    loaded JS sees it (a Set compares as its sorted members; JSON object keys are strings)."""
+    from tools import gen_c_dict
+
+    names = [js for js, _, _ in gen_c_dict._JS_TABLES]
+    got = node_eval(
+        "({%s})" % ", ".join("%s: %s instanceof Set ? [...%s] : %s" % (n, n, n, n) for n in names)
+    )
+    import importlib
+
+    for js, mod, attr in gen_c_dict._JS_TABLES:
+        py = getattr(importlib.import_module("calictl." + mod), attr)
+        if isinstance(py, frozenset):
+            py = sorted(py)
+        elif isinstance(py, tuple):
+            py = list(py)
+        elif isinstance(py, dict):
+            py = {str(k): v for k, v in py.items()}
+        assert got[js] == py, js

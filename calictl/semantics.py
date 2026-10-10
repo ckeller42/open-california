@@ -63,6 +63,25 @@ _FRESH_WATER_ALERT = {
 _WASTE_WATER_ALERT = {1: "full", 2: "sensor_error", 3: "error"}
 
 
+# Energy source state (xf/d.java:203 k()): raw 0=inactive 1=active 2=standby 6=init, else=error.
+_SRC_STATE = {0: "inactive", 1: "active", 2: "standby", 6: "init"}
+# The energy flags reported as `faults`, in this order.
+_ENERGY_FAULTS = (
+    "SystemError",
+    "DcdcDefect",
+    "PvDefect",
+    "LandDefect",
+    "LandNotAvailable",
+    "TwoBattNotCharged",
+    "TwoBattSwitchAtCharging",
+    "TwoBattSwitchAtWorkshop",
+    "WarningLevelTwo",
+    "WarningLevelActive",
+    "SleepWarning",
+    "CurrentDeratingTemperature",
+)
+
+
 def energy(d: dict) -> dict:
     stale = d.get("AgeOneBattValuesMinutes", 255) >= 255
     # battery-1 = STARTER ("default car"/vehicle) battery: only measured with
@@ -93,7 +112,7 @@ def energy(d: dict) -> dict:
 
     def src_state(v):  # xf/d.java:203 k(): raw 0=inactive 1=active 2=standby 6=init, else=error
         #   (bf/a.java holds the enum; its ordinals differ from these wire values)
-        return None if v is None else {0: "inactive", 1: "active", 2: "standby", 6: "init"}.get(v, "error")
+        return None if v is None else _SRC_STATE.get(v, "error")
 
     soc1, soc2 = d.get("SocOneBattAfs"), d.get("SocTwoBattAfs")
     return {
@@ -137,24 +156,7 @@ def energy(d: dict) -> dict:
         "warning_active": bool(d.get("WarningLevelActive")),
         "derating_temp_active": bool(d.get("CurrentDeratingTemperature")),
         "sleep_warning": bool(d.get("SleepWarning")),
-        "faults": [
-            k
-            for k in (
-                "SystemError",
-                "DcdcDefect",
-                "PvDefect",
-                "LandDefect",
-                "LandNotAvailable",
-                "TwoBattNotCharged",
-                "TwoBattSwitchAtCharging",
-                "TwoBattSwitchAtWorkshop",
-                "WarningLevelTwo",
-                "WarningLevelActive",
-                "SleepWarning",
-                "CurrentDeratingTemperature",
-            )
-            if d.get(k)
-        ],
+        "faults": [k for k in _ENERGY_FAULTS if d.get(k)],
     }
 
 

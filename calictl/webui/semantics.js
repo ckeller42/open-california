@@ -7,7 +7,8 @@
 // comment, and tests/test_semantics_js_parity.py holds them equal over tests/vectors/semantics.json
 // (python3 -m tools.gen_semantics_vectors). Change both together. Only the functions the web UI
 // renders are twinned; any other function gets semGeneric()'s raw view.
-// A classic script loaded before app.js (shared global scope): every top-level name is public
+// The lookup tables (SEM_*) are GENERATED from semantics.py into semantics_tables.js (tools/gen_c_dict.py),
+// loaded just before this file. A classic script loaded before app.js (shared global scope): every top-level name is public
 // (SAT_OFFLINE_S, pyRound, interpret, applySwCorrections, anchorsCheck, firmwareMeta, isSatelliteBody,
 // adaptSatellite) or sem*-prefixed, so nothing collides with app.js.
 
@@ -74,9 +75,6 @@ function semFloatStr(v) {
 }
 
 // --- water (semantics.py:30) -----------------------------------------------------------------
-const SEM_FRESH_WATER_ALERT = { 1: "pump_protection", 2: "sensor_error", 3: "error", 7: "error", 4: "pump_error", 5: "empty" }; // :55
-const SEM_WASTE_WATER_ALERT = { 1: "full", 2: "sensor_error", 3: "error" }; // :63
-
 /** semantics.py:31 water.tank(). @param {number|null} unit @param {number|null} level @param {number|null} volume @returns {Interp} */
 function semTank(unit, level, volume) {
   if (level === null || volume === null) return { liters: null, capacity_l: volume, percent: null };
@@ -96,13 +94,6 @@ function semWater(d) {
 }
 
 // --- energy (semantics.py:66) ----------------------------------------------------------------
-const SEM_SRC_STATE = { 0: "inactive", 1: "active", 2: "standby", 6: "init" }; // :96, else "error"
-const SEM_ENERGY_FAULTS = [ // :140-155, in order
-  "SystemError", "DcdcDefect", "PvDefect", "LandDefect", "LandNotAvailable", "TwoBattNotCharged",
-  "TwoBattSwitchAtCharging", "TwoBattSwitchAtWorkshop", "WarningLevelTwo", "WarningLevelActive",
-  "SleepWarning", "CurrentDeratingTemperature",
-];
-
 /** semantics.py:66 energy(). @param {Fields} d @returns {Interp} */
 function semEnergy(d) {
   const b1 = semGet(d, "IOneBattBemAfs");
@@ -151,9 +142,6 @@ function semEnergy(d) {
 }
 
 // --- cooler (semantics.py:172) ---------------------------------------------------------------
-const SEM_COOLER_FAULT = { 1: "error", 2: "emergency", 3: "door_open" }; // :166
-const SEM_COOLER_QUIET = { 0: "off", 2: "manual", 4: "scheduled" };       // :169
-
 /** semantics.py:172 cooler(). @param {Fields} d @returns {Interp} */
 function semCooler(d) {
   const fault = semGet(d, "Installed") ? semLookup(SEM_COOLER_FAULT, semGet(d, "Error")) : null;
@@ -176,8 +164,6 @@ function semCooler(d) {
 }
 
 // --- airheater (semantics.py:216) ------------------------------------------------------------
-const SEM_AIRHEATER_ERROR = { 1: "low_battery", 2: "low_fuel", 3: "system_error", 4: "heating_time_exceeded", 5: "not_possible", 6: "engine_running", 7: "aux_heater_active" }; // :207
-
 /** semantics.py:216 airheater(). @param {Fields} d @returns {Interp} */
 function semAirheater(d) {
   const err = semGet(d, "ErrorCode");
@@ -213,12 +199,6 @@ function semCampingmode(d) {
 }
 
 // --- roof (semantics.py:297) -----------------------------------------------------------------
-const SEM_ROOF_POS = { 0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error" }; // :271, else "other"
-const SEM_ROOF_ALERT = { // :276
-  1: "child_lock", 4: "error", 5: "driving", 6: "sensor_error", 7: "emergency_locked", 10: "not_possible",
-  11: "low_battery", 2: "open_checklist", 9: "not_stationary", // 3/8/12 = motion progress, no alert
-};
-
 /** semantics.py:297 roof(). @param {Fields} d @returns {Interp} */
 function semRoof(d) {
   const installed = !!semGet(d, "Installed");
@@ -233,14 +213,6 @@ function semRoof(d) {
 }
 
 // --- lighting (semantics.py:365) -------------------------------------------------------------
-const SEM_LZONES = /** @type {[string, number][]} */ ([ // :335 _LZONES, in order
-  ["One", 1], ["Two", 2], ["Three", 3], ["Four", 4], ["Five", 5], ["Six", 6], ["Seven", 7], ["Eight", 8],
-  ["Nine", 9], ["OneZero", 10], ["OneOne", 11], ["OneTwo", 12], ["OneThree", 13], ["OneFour", 14],
-  ["OneFive", 15], ["OneSix", 16],
-]);
-
-const SEM_LIGHT_CONFIG_KEYS = ["WakeupTimestamp", "WakeupLightValue", "DoorContact", "FavouritesStored"]; // LIGHT_CONFIG_KEYS
-
 /** semantics.py lighting_config(None, d). @param {Fields} d @returns {Record<string, number>} */
 function semLightingConfig(d) {
   /** @type {Record<string, number>} */
@@ -274,7 +246,7 @@ function semLighting(d) {
   /** @type {Interp} */
   const out = { installed: true, profile: semGet(d, "ProfileNumber"), mode: semGet(d, "Mode") };
   let anyOn = false;
-  for (const [suf, num] of SEM_LZONES) {
+  for (const [suf, num] of Object.entries(SEM_LZONES)) {
     const v = semGet(d, "BrightnessL" + suf);
     out["brightness_zone_" + num] = v;
     if (v && v !== 13 && v !== 14) anyOn = true;
@@ -292,10 +264,6 @@ function semLighting(d) {
 }
 
 // --- general (semantics.py:390) --------------------------------------------------------------
-const SEM_DCDC_PLUS2_SW = ["0409", "0410"]; // :556
-const SEM_TESTED_AMB_SW = ["0409", "0410"]; // :561
-const SEM_TESTED_COMM = 2;                  // :562
-
 /**
  * semantics.py:380 _sw_ascii(): 4 ASCII bytes in a u32 -> "0410"; bytes >= 0x80 decode to U+FFFD
  * (bytes.decode("ascii", "replace"), which str.isprintable() accepts); a control byte -> null.
@@ -316,7 +284,7 @@ function semSwAscii(v) {
 /** semantics.py:565 _firmware_untested(). @param {string|null} amb @param {number|null} comm @returns {boolean} */
 function semFirmwareUntested(amb, comm) {
   if (amb === null && comm === null) return false;
-  const ambBad = amb !== null && !SEM_TESTED_AMB_SW.includes(amb);
+  const ambBad = amb !== null && !SEM_TESTED_AMB_SW.has(amb);
   const commBad = comm !== null && comm !== SEM_TESTED_COMM;
   return ambBad || commBad;
 }
@@ -383,7 +351,7 @@ function interpret(fn, d) {
 function applySwCorrections(states) {
   const en = states.energy, gen = states.general;
   if (en && typeof en === "object" && gen && typeof gen === "object" && en.dcdc_current != null
-      && SEM_DCDC_PLUS2_SW.includes(gen.amb_sw_version)) {
+      && SEM_DCDC_PLUS2_SW.has(gen.amb_sw_version)) {
     en.dcdc_current = en.dcdc_current + 2;
   }
   return states;
@@ -430,7 +398,7 @@ function firmwareMeta(general) {
     cm_sw_version: g.cm_sw_version ?? null,
     comm_version: g.comm_version ?? null,
     untested: !!g.firmware_untested,
-    tested: "amb 0409/0410 · comm 2",
+    tested: "amb " + [...SEM_TESTED_AMB_SW].join("/") + " · comm " + SEM_TESTED_COMM,
   };
 }
 

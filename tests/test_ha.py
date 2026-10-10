@@ -81,6 +81,28 @@ def test_number_entity_carries_min_max():
     assert c["min"] == 1 and c["max"] == 5
 
 
+def test_number_ranges_are_what_the_builder_accepts():
+    """#258: every advertised HA number builds at its min and max and is refused just outside."""
+    import pytest
+
+    from calictl import control, overrides, protocol
+
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    last = {"cooler": {"State": 1}}  # the fridge on, so a level write is not gated
+    for fn, specs in mqtt.COMMAND_SPECS.items():
+        for spec in specs:
+            if spec.component != "number":
+                continue
+            lo, hi = spec.config["min"], spec.config["max"]
+            for v in (lo, hi):
+                assert control.build(funcs, fn, spec.what, str(v), last), (fn, spec.what, v)
+            # lighting also accepts 11 (DEFAULT) above the 0-10 slider
+            for v in (lo - 1, hi + (2 if fn == "lighting" else 1)):
+                with pytest.raises(control.CommandError):
+                    control.build(funcs, fn, spec.what, str(v), last)
+
+
 def test_read_only_sensors_have_no_command_topic():
     # existing read-only entities are unchanged: no command_topic leaks onto them
     cfgs = mqtt.render_discovery(installed={"water", "energy", "roof"})
