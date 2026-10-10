@@ -4,6 +4,7 @@ A hand-written "Glossary" section elsewhere drifts from it, and a duplicate term
 directive is ambiguous for ``{term}`` / ``:term:`` links. ``sphinx -W`` already fails on a link
 to a term that does not exist. Pure Python, no Sphinx import.
 """
+
 import re
 from pathlib import Path
 
@@ -17,7 +18,9 @@ _DIRECTIVE = re.compile(r"```\{glossary\}|^\.\. glossary::", re.M)
 
 
 def _doc_files():
-    files = list(ROOT.glob("*.md")) + list((ROOT / "docs").rglob("*.md")) + list((ROOT / "docs").rglob("*.rst"))
+    files = (
+        list(ROOT.glob("*.md")) + list((ROOT / "docs").rglob("*.md")) + list((ROOT / "docs").rglob("*.rst"))
+    )
     return [f for f in files if "_build" not in f.parts and f != GLOSSARY]
 
 
@@ -27,7 +30,7 @@ def _glossary_sections(text):
     for i, m in enumerate(heads):
         if "glossary" in m.group(0).lower():
             end = heads[i + 1].start() if i + 1 < len(heads) else len(text)
-            yield text[m.end():end]
+            yield text[m.end() : end]
 
 
 def glossary_terms(text):
@@ -37,8 +40,11 @@ def glossary_terms(text):
     :returns: every term, in source order (several per definition for synonyms).
     """
     body = text.split("```{glossary}", 1)[1].split("```", 1)[0]
-    return [ln.strip() for ln in body.splitlines()
-            if ln.strip() and not ln[0].isspace() and not ln.startswith(":")]
+    return [
+        ln.strip()
+        for ln in body.splitlines()
+        if ln.strip() and not ln[0].isspace() and not ln.startswith(":")
+    ]
 
 
 def test_one_glossary_only():
