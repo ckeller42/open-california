@@ -132,7 +132,7 @@ def _fw_controller_class():
       never ends and every later GAP procedure is refused.
     * **Losing the host ends the links.** A rebooting ESP32 takes its controller with it and the
       unit sees a supervision timeout; Bumble's controller outlives the TCP host and keeps the link
-      up, so the unit (one connection slot) would never advertise again. ``host_gone()`` drops
+      up, so the fake unit would never advertise again. ``host_gone()`` drops
       every link (Connection Timeout to the peer) and forgets the pending connection and the list.
     """
     import asyncio

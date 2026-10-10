@@ -845,9 +845,9 @@ def test_the_arm_lapses_when_the_heartbeat_stops():
 
 
 def test_only_one_client_holds_the_connection_slot():
-    """The unit has ONE connection slot — while the phone app holds it the unit stops advertising
-    and a second connect fails. calictl's failure taxonomy distinguishes that from a sleeping van
-    (value-freshness.md); with a mock that let everyone in, the two were indistinguishable and a
+    """The mock's OPT-IN one-connection model (a test knob — the real unit serves several centrals
+    at once): while another client holds the link a second connect fails, distinct from a sleeping
+    van (value-freshness.md); with a mock that let everyone in, the two were indistinguishable and a
     mis-classification was invisible.
 
     .. test:: A second client is refused while the slot is held

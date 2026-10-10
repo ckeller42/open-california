@@ -655,14 +655,14 @@ def test_ui_active_window():
     s._note_ui_activity()
     assert s._sessions._ui_active() is True  # just now
     s._sessions._last_ui_activity = time.time() - (serve._UI_IDLE_S + 5)
-    assert s._sessions._ui_active() is False  # gone idle -> release the slot
+    assert s._sessions._ui_active() is False  # gone idle -> release the session
 
 
 def test_supervise_releases_session_when_ui_idle(monkeypatch):
-    """App-friendliness: when the web UI is idle, the supervisor RELEASES the held session so the
-    phone app can use the single BLE slot.
+    """When the web UI is idle, the supervisor RELEASES the held session (brief cold polls
+    instead of a link nobody is watching).
 
-    .. test:: SessionSupervisor releases the BLE slot when the web UI goes idle
+    .. test:: SessionSupervisor releases the BLE session when the web UI goes idle
        :id: T_SESSION_SUPERVISOR
        :links: R_SESSION_SUPERVISOR
 
