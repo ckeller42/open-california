@@ -347,13 +347,14 @@ function semVehicle(d) {
   if (![y, mo, da, h, mi, se].includes(null) && da) {
     clock = `${pad(y + 1900, 4)}-${pad(mo + 1, 2)}-${pad(da, 2)} ${pad(h, 2)}:${pad(mi, 2)}:${pad(se, 2)}`;
   }
+  const ign = !!semGet(d, "TerminalOneFive");
   return {
     installed: true,
-    ignition_on: !!semGet(d, "TerminalOneFive"),
+    ignition_on: ign,
     car_variant: semGet(d, "CarVariant"),
     level_popup: semGet(d, "CarLevelPopUp"),
-    level_roll: deg(semGet(d, "CarLevelRoll")),
-    level_pitch: deg(semGet(d, "CarLevelPitch")),
+    level_roll: ign ? deg(semGet(d, "CarLevelRoll")) : null,  // ignition off: no level signal (app "-.-°")
+    level_pitch: ign ? deg(semGet(d, "CarLevelPitch")) : null,
     car_clock: clock,
   };
 }

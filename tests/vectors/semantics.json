@@ -260,9 +260,9 @@
     "car_variant": 4,
     "ignition_on": false,
     "installed": true,
-    "level_pitch": 0.35,
+    "level_pitch": null,
     "level_popup": 0,
-    "level_roll": -1.09
+    "level_roll": null
    },
    "fields": {
     "CarLevelPitch": 35,
@@ -5132,7 +5132,7 @@
     "installed": true,
     "level_pitch": null,
     "level_popup": 0,
-    "level_roll": -0.01
+    "level_roll": null
    },
    "fields": {
     "CarLevelPopUp": 0,
@@ -5155,9 +5155,9 @@
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
-    "level_pitch": -0.01,
+    "level_pitch": null,
     "level_popup": 0,
-    "level_roll": 0.0
+    "level_roll": null
    },
    "fields": {
     "CarLevelPitch": 65535,
@@ -5209,7 +5209,7 @@
     "installed": true,
     "level_pitch": null,
     "level_popup": 0,
-    "level_roll": 0.0
+    "level_roll": null
    },
    "fields": {
     "CarLevelPopUp": 0,
@@ -10436,9 +10436,9 @@
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
-    "level_pitch": 0.35,
+    "level_pitch": null,
     "level_popup": null,
-    "level_roll": -1.09
+    "level_roll": null
    },
    "fields": {
     "CarLevelPitch": 35,
@@ -10453,9 +10453,9 @@
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
-    "level_pitch": 327.67,
+    "level_pitch": null,
     "level_popup": null,
-    "level_roll": -327.68
+    "level_roll": null
    },
    "fields": {
     "CarLevelPitch": 32767,
@@ -10470,9 +10470,9 @@
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
-    "level_pitch": 0.05,
+    "level_pitch": null,
     "level_popup": null,
-    "level_roll": -0.05
+    "level_roll": null
    },
    "fields": {
     "CarLevelPitch": 5,
@@ -10487,9 +10487,9 @@
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
-    "level_pitch": -90.5,
+    "level_pitch": null,
     "level_popup": null,
-    "level_roll": 90.01
+    "level_roll": null
    },
    "fields": {
     "CarLevelPitch": 56486,
@@ -10504,9 +10504,9 @@
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
-    "level_pitch": 0.0,
+    "level_pitch": null,
     "level_popup": null,
-    "level_roll": 0.0
+    "level_roll": null
    },
    "fields": {
     "CarLevelPitch": 0,
@@ -20491,9 +20491,9 @@
       "car_variant": 4,
       "ignition_on": false,
       "installed": true,
-      "level_pitch": 0.35,
+      "level_pitch": null,
       "level_popup": 0,
-      "level_roll": -1.09
+      "level_roll": null
      },
      "water": {
       "fresh": {
@@ -20781,9 +20781,9 @@
       "car_variant": 4,
       "ignition_on": false,
       "installed": true,
-      "level_pitch": 0.35,
+      "level_pitch": null,
       "level_popup": 0,
-      "level_roll": -1.09
+      "level_roll": null
      },
      "water": {
       "fresh": {
@@ -21071,9 +21071,9 @@
       "car_variant": 4,
       "ignition_on": false,
       "installed": true,
-      "level_pitch": 0.35,
+      "level_pitch": null,
       "level_popup": 0,
-      "level_roll": -1.09
+      "level_roll": null
      },
      "water": {
       "fresh": {
@@ -21354,9 +21354,9 @@
       "car_variant": 4,
       "ignition_on": false,
       "installed": true,
-      "level_pitch": 0.35,
+      "level_pitch": null,
       "level_popup": 0,
-      "level_roll": -1.09
+      "level_roll": null
      },
      "water": {
       "fresh": {
@@ -21515,9 +21515,7 @@
      "leisure battery 5.0 V outside 8-16 V",
      "cooler level 7 outside 1-5",
      "cooler quiet_from 25 outside 0-23 h",
-     "cooler quiet_to 24 outside 0-23 h",
-     "vehicle level_roll 91.0\u00b0 outside \u00b190\u00b0",
-     "vehicle level_pitch -90.5\u00b0 outside \u00b190\u00b0"
+     "cooler quiet_to 24 outside 0-23 h"
     ],
     "firmware": {
      "amb_sw_version": "0410",
@@ -21646,9 +21644,9 @@
       "car_variant": 4,
       "ignition_on": false,
       "installed": true,
-      "level_pitch": -90.5,
+      "level_pitch": null,
       "level_popup": 0,
-      "level_roll": 91.0
+      "level_roll": null
      },
      "water": {
       "fresh": {

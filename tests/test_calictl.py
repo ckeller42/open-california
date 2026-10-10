@@ -828,9 +828,12 @@ def test_vehicle_decode_char_1004():
     # old CarVariant@3/4 spuriously read a CarLevelPopUp bit as "2". See test_capture_verified.
     assert v["car_variant"] == 0
     assert v["car_clock"] == "2026-07-07 23:20:42"  # year+1900, month+1
-    assert v["level_roll"] == 0 and v["level_pitch"] == 0
-    # signed axes scaled to degrees (0.01°): a 0xFFFF roll = -1 raw = -0.01°, not 655.35
-    raw_neg = bytes.fromhex("047e060717142affff0000")
+    # ignition off: the unit sends 0/0 but has no level signal — the app shows "-.-°, Signal
+    # unavailable. Ignition is off." (APP-DISPLAY 2026-10-10), so the axes are unavailable, not 0.0
+    assert v["level_roll"] is None and v["level_pitch"] is None
+    # signed axes scaled to degrees (0.01°), ignition on (TerminalOneFive = 0x01 of byte 0, MSB-first bit 7):
+    # a 0xFFFF roll = -1 raw = -0.01°, not 655.35
+    raw_neg = bytes.fromhex("057e060717142affff0000")
     assert semantics.vehicle(P.decode(f["vehicle"], raw_neg))["level_roll"] == -0.01
 
 

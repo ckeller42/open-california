@@ -580,13 +580,16 @@ def vehicle(d: dict) -> dict:
     if None not in (y, mo, da, h, mi, se) and da:
         # app applies +1900 to the year field and +1 to the month field
         clock = "%04d-%02d-%02d %02d:%02d:%02d" % (y + 1900, mo + 1, da, h, mi, se)  # type: ignore[operator, str-format]
+    ign = bool(d.get("TerminalOneFive"))  # terminal-15 line
+    # Ignition off: the unit sends 0/0 but has no level signal — the app shows "-.-°, Signal
+    # unavailable. Ignition is off." (APP-DISPLAY 2026-10-10), so the axes are unavailable, not 0.0.
     return {
         "installed": True,
-        "ignition_on": bool(d.get("TerminalOneFive")),  # terminal-15 line
+        "ignition_on": ign,
         "car_variant": d.get("CarVariant"),
         "level_popup": d.get("CarLevelPopUp"),
-        "level_roll": deg(d.get("CarLevelRoll")),  # degrees (signed, 0.01° resolution)
-        "level_pitch": deg(d.get("CarLevelPitch")),
+        "level_roll": deg(d.get("CarLevelRoll")) if ign else None,  # degrees (signed, 0.01° resolution)
+        "level_pitch": deg(d.get("CarLevelPitch")) if ign else None,
         "car_clock": clock,
     }
 
