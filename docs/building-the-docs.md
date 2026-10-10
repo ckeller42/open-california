@@ -47,6 +47,19 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   `calictl/semantics.py`, `tools/ux_gallery.py` or `tools/mock_unit.py`, and commits them
   back to `main` with `[skip ci]` (locally: `tools/ci.sh screenshots`).
 
+## Glossary
+
+`docs/glossary.md` is the only glossary: a MyST ```` ```{glossary} ```` fence with `:sorted:`.
+
+- **Add a term:** a line with the term at column 0, then the definition indented two spaces
+  (≤3 lines, link the page that defines it). Synonyms (German unit labels, short forms) are extra
+  term lines directly above the same definition.
+- **Link it:** `` {term}`Latch` `` in Markdown, ``:term:`Latch` `` in rst (case-insensitive;
+  `` {term}`text <Latch>` `` for other link text). `sphinx -W` fails on an unknown term.
+- **Index:** every term lands in the general index (`genindex`, linked from the start page).
+- `tests/test_glossary.py` fails on a second glossary (a hand-written "Glossary" definition
+  list or another `glossary` directive) and on duplicate terms.
+
 ## Conventions
 
 - **Requirement:** `.. req::` with `:id: R_<NAME>` in the docstring of the code

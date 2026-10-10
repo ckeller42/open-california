@@ -24,12 +24,6 @@ docstrings via the Sphinx build in this directory (`conf.py`, `api.rst`; how-to 
 | vehicle (char 1004), general (1001) | [re-gap-inventory.md §A2/§A6](business-logic/re-gap-inventory.md), [DECISIONS.md](business-logic/DECISIONS.md) |
 | control frames / actuation (all) | [control-and-actuation.md](business-logic/control-and-actuation.md) |
 
-## Glossary (quick)
+## Glossary
 
-**GATT char** — a BLE attribute (State char = telemetry read/notify; Control char = write).
-**arm / heartbeat** — the +1 counter on char 1003 that unlocks actuation; **latch** — the load
-stays on after the heartbeat stops (one-shot arm). **leave-unchanged sentinel** — the value a
-full-packet frame writes for fields it isn't changing (2-bit: `3`). **terminal-15** — ignition.
-**EXLAP** — VW's XML pub/sub protocol, an alternative WiFi/TCP transport. **MERGED_AMBIGUOUS** —
-a dictionary field whose offset the extractor couldn't place (resolved in `overrides.py`).
-**Installed bit** — per-function flag; only installed functions publish.
+Terms are defined once, in [glossary.md](glossary.md) (the Sphinx `glossary`).

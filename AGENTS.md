@@ -246,6 +246,8 @@ never open a 2nd BLE connection from buspi. Warm the fast session first with `PO
 - `tests/test_needs_docstrings.py` fails on a need with no/unprefixed/duplicate `:id:` (e.g. options
   pushed out by a directive on the docstring's first line), a dangling `:links:`, or one `docs/api.rst`
   never autodocs. tests/e2e needs are autodoc'd per function (pytest is mocked, Playwright never imported).
+- New jargon → an entry in `docs/glossary.md` (Sphinx `glossary`); link its first use per page with
+  `{term}` (MyST) / `:term:` (rst). `tests/test_glossary.py` keeps it the only glossary, terms unique.
 
 ## Working style
 
