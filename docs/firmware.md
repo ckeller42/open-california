@@ -535,8 +535,8 @@ host tier never showed it). Guarded by `tests/firmware/test_sdkconfig_gatt_serve
 can send the same request and hang up unanswered after 30 s (`tools/fake_unit_peripheral.py`
 `mtu_request` knob, off by default, `T_FAKE_UNIT_MTU_REQUEST`). **Fixed by #279 (`faaf7b0`):** on the
 real unit, parked and locked (2026-10-10), the satellite held its link with no `link lost` and kept
-re-reading water every 30 s. #266's paced reconnect stays only as a fallback for a link that drops
-for another reason. A held link without heartbeats is not dropped either (buspi held one > 2 min
+re-reading water every 30 s. #266's paced 30 s reconnect was then removed: a unit hang-up now takes
+the ordinary 1 s→60 s backoff, like calictl's supervisor. A held link without heartbeats is not dropped either (buspi held one > 2 min
 with the heartbeat off, 2026-10-10) — the `1003` heartbeat arms writes, it does not keep the link
 alive.
 
