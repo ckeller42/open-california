@@ -26,6 +26,12 @@ async def _served_frames(unit):
     return {fn: unit.read_state(fn) for fn in unit.funcs if unit.funcs[fn].state_char}
 
 
+def _first_snap_fns(hci_unit):
+    """The functions a link's FIRST SNAP shows: every served one except water — its one read is a
+    ramp-debounce candidate (calictl.freshness.settle_water), shown only once it has settled."""
+    return set(hci_unit.call(_served_frames, hci_unit.unit)) - {"water"}
+
+
 async def _beats_seen(unit):
     return unit.beats
 
@@ -64,11 +70,9 @@ def test_read_all_matches_python_decode(host_fw, hci_unit):
     snap = fw.expect("SNAP", timeout=40)
     funcs = _funcs()
     served = hci_unit.call(_served_frames, hci_unit.unit)  # {function: bytes} the fake served
-    # cold start: the one water read is a ramp-debounce candidate, shown only once it has settled
-    # (calictl.freshness.settle_water; the session-fake tests cover that)
-    served.pop("water", None)
-    assert set(snap["fn"]) == set(served)
-    for name, frame in served.items():
+    assert set(snap["fn"]) == _first_snap_fns(hci_unit)
+    for name in _first_snap_fns(hci_unit):
+        frame = served[name]
         want = protocol.decode(funcs[name], frame)
         if name == "lighting":  # the satellite carries serve's config latch in its lighting object
             want = {**want, **semantics.lighting_config(None, want)}
@@ -299,6 +303,6 @@ def test_link_drop_mid_read_all_reconnects(host_fw, hci_unit):
     assert not any("subscribe" in line and "failed" in line for line in fw.log)  # dropped in the reads
     snap = fw.expect("SNAP", timeout=60)  # backoff reconnect + fresh read_all
     assert hci_unit.unit.drop_on_read is None  # the knob fired (one-shot)
-    assert set(snap["fn"]) == set(hci_unit.call(_served_frames, hci_unit.unit))
+    assert set(snap["fn"]) == _first_snap_fns(hci_unit)
     lost = [line for line in fw.log if line.startswith("LOG session: reconnect in")]
     assert lost == ["LOG session: reconnect in 1000 ms"], lost  # one drop, one reconnect
