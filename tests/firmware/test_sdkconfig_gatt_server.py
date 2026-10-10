@@ -18,3 +18,10 @@ def test_device_build_keeps_a_gatt_server_to_answer_the_units_mtu_request():
     assert "CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y" in lines
     assert "CONFIG_BT_NIMBLE_GATT_SERVER=y" in lines
     assert "CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n" not in lines
+
+
+def test_device_build_sends_the_web_ui_in_a_few_ticks():
+    """http_core sends at most one socket send-buffer per 100 ms tick; lwIP's 5760 B default made
+    the ~58 KB UI bundle take ~1.2 s (measured 2026-10-10). Keep the larger buffer."""
+    lines = set(SDKCONFIG.read_text().splitlines())
+    assert "CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040" in lines
