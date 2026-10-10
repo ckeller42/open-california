@@ -1,13 +1,13 @@
 ---
 name: buspi-deploy
-description: Sync calictl changes to the buspi Raspberry Pi (the BLE owner), restart the daemon, and live-verify over BLE. Use when testing a semantics/control/device change on the real vehicle, or reading live status that needs the free BLE slot.
+description: Sync calictl changes to the buspi Raspberry Pi (the BLE owner), restart the daemon, and live-verify over BLE. Use when testing a semantics/control/device change on the real vehicle, or reading live status with a direct calictl run (stop the daemon first: it owns buspi's link).
 ---
 
 # Deploy + live-verify on buspi
 
 buspi (`ssh buspi`, also Tailscale (LAN address redacted)) is the **single BLE owner**. It runs
-`calictl serve` as a systemd unit under `~/solix-env`; the van allows buspi + the phone app
-connected at once, but only ONE controller writes reliably.
+`calictl serve` as a systemd unit under `~/solix-env`; it owns buspi's `hci0` link to the unit
+(one link from buspi). The unit serves several centrals at once (buspi, the ESP, the phone app).
 
 ## Deploy (git pull + restart)
 
@@ -23,13 +23,13 @@ The restart/stop/start of `calictl.service` are the ONLY passwordless sudo verbs
 `deploy/calictl-restart.sudoers`); every other `sudo` (editing `/etc/buspi/*.env`, installing
 files) still prompts for the box password.
 
-## Live read / actuate loop (needs the BLE slot)
+## Live read / actuate loop (direct calictl run on buspi)
 
 ```sh
-# 1) a live read/set needs the single BLE slot — stop the daemon first
+# 1) serve owns buspi's link to the unit — stop the daemon first
 ssh buspi 'sudo -n systemctl stop calictl.service && sleep 1'
 
-# 2) read or actuate (phone app CLOSED so buspi is sole controller)
+# 2) read or actuate (the phone app may stay connected; close it only while pairing)
 ssh buspi 'cd ~/open-california && ~/solix-env/bin/python -m calictl get energy'
 ssh buspi 'cd ~/open-california && ~/solix-env/bin/python -m calictl set cooler power on'
 
@@ -76,7 +76,7 @@ ssh -t buspi 'sudo sed -i "/^CALICTL_ADDR=/d" /etc/buspi/calictl.env && sudo -n 
 ## Notes
 
 - Long BLE ops (`get`, `set`, actuate) take ~10-60 s; run detached with a log + poll, or use
-  `timeout 70`. `set` competes with the daemon for the slot — stop the daemon for clean reads.
+  `timeout 70`. `set` competes with the daemon for buspi's link — stop the daemon for clean reads.
 - buspi can drop off the network (travel router); if `ssh buspi` times out, try the Tailscale
   IP, and if still down, report and wait rather than retrying forever.
 - The APK lives at `buspi:~/apks/de.volkswagen.CaliforniaOnTour.apk` (gitignored source).

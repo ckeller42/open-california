@@ -13,7 +13,7 @@ WHAT IT VERIFIES
 
 HOW IT TALKS TO THE VAN
   Only over the running daemon's web API (GET /api/state, POST /api/command, POST /api/session).
-  It NEVER opens its own BLE connection — `serve` owns the single slot (project hard rule). Run it
+  It NEVER opens its own BLE connection — `serve` owns buspi's BLE link (project hard rule). Run it
   ON buspi against the local daemon (default http://localhost:8088) so the test survives a flaky
   tailnet mid-move.
 
