@@ -140,8 +140,6 @@
  * only, so every field is optional here. `applied`: true=verified, false=not applied, null=sent
  * but not remotely verifiable.
  * @typedef {{ ok?: boolean, applied?: boolean|null, refused?: string, state?: FnState|null, error?: string|null, function?: string, unconfirmed?: boolean }} CommandResponse
- * @typedef {{ samples: number[][], gap_s: number, now: number, hours: number, error?: string }} BattHistory
- * @typedef {{ idx: number, cls: string, pad: number, lblCls: string, name: string, unit?: string }} SeriesCfg
  */
 //
 // --- FEATURES config shapes -------------------------------------------------------------------
@@ -721,9 +719,9 @@ function installed(fn) {
 // read-only = the daemon rejects control writes (the safe default; enable with --enable-writes /
 // CALICTL_ENABLE_WRITES=1). The UI disables every control and shows a banner when true.
 // Unknown runtime (no `_meta` answered yet) is treated restrictively: read-only, and no calictl-only
-// affordance (the same app.js runs on the ESP32 satellite, which must never see /api/history|session|...).
+// affordance (the same app.js runs on the ESP32 satellite, which must never see /api/session|auto_camper|...).
 const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
-// The ESP32 satellite (semantics.js adaptSatellite): no history, auto-camper or session API.
+// The ESP32 satellite (semantics.js adaptSatellite): no auto-camper or session API.
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
 // A calictl daemon has answered (positively known; not the satellite, not still unknown).
 const isCalictl = () => !!(STATE._meta && !STATE._meta.satellite);

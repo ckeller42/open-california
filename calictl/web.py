@@ -11,7 +11,6 @@ import json
 import os
 import posixpath
 import socketserver
-import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
@@ -97,13 +96,6 @@ def make_handler(backend, webui_dir):
                 except Exception as e:  # log server-side only; never leak exception text to client
                     log.warning("web: state failed: %r" % (e,))
                     return self._send_json({"error": "state_failed"}, 500)
-            if path == "/api/history":
-                q = urllib.parse.parse_qs(self.path.partition("?")[2])
-                try:
-                    return self._send_json(backend.history(q.get("h", ["24"])[0]))
-                except Exception as e:  # log server-side only; never leak exception text to client
-                    log.warning("web: history failed: %r" % (e,))
-                    return self._send_json({"error": "history_failed"}, 500)
             if path == "/api/screens":
                 return self._send_bytes(backend.screens_bytes(), "application/json")
             if path == "/api/pairing":

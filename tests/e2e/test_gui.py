@@ -134,7 +134,7 @@ def _start_daemon(port, extra_env, expect_installed=True):
 @pytest.fixture(scope="module")
 def base_url():
     port = _free_port()
-    for stale in (_cache("history.jsonl"), _cache("state.json"), _cache("pairing.json")):
+    for stale in (_cache("state.json"), _cache("pairing.json")):
         try:  # a previous run's samples must not make this one pass
             os.unlink(stale)
         except OSError:
@@ -147,7 +147,6 @@ def base_url():
         port,
         {
             "CALICTL_STATE_CACHE": _cache("state.json"),
-            "CALICTL_HISTORY_CACHE": _cache("history.jsonl"),
             "CALICTL_PAIRING_CACHE": _cache("pairing.json"),
         },
     )
@@ -185,7 +184,6 @@ def pairing_url(tmp_path):
         port,
         {
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
         },
     )
@@ -221,7 +219,6 @@ def unconfigured_pairing_page(tmp_path):
         {
             "CALICTL_ADDR": "",
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
         },
         expect_installed=False,
@@ -590,7 +587,6 @@ def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
             "CALICTL_FAKE_PAIRING": "connect_failed",
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
         },
     )
     try:
@@ -623,7 +619,6 @@ def test_connect_failed_shows_its_own_guidance(tmp_path):
             "CALICTL_FAKE_PAIRING": "connect_failed",
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
         },
     )
     try:
@@ -648,7 +643,6 @@ def test_radio_busy_banner(tmp_path):
             "CALICTL_FAKE_PAIRING": "radio_busy",
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
         },
     )
     try:
@@ -672,7 +666,6 @@ def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
     env = {
         "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
         "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-        "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
     }
     port = _free_port()
     proc, url = _start_daemon(port, env)
@@ -707,7 +700,6 @@ def test_pairing_wizard_never_flashes_a_stale_step_after_daemon_restart(tmp_path
     env = {
         "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
         "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-        "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
     }
     port = _free_port()
     proc, url = _start_daemon(port, env)
@@ -875,7 +867,7 @@ def test_menu_device_status_screen_on_calictl(page):
 def test_unknown_runtime_is_restrictive(base_url):
     # The ESP32 satellite runs this same app.js. Until a `_meta` answers we cannot tell it from calictl, so
     # the page must stay restrictive: controls read-only, no pairing menu, and no request beyond
-    # "/" + static assets + /api/state (never /api/pairing|command|history|...).
+    # "/" + static assets + /api/state (never /api/pairing|command|session|...).
     seen = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -1006,7 +998,6 @@ def fresh_url(tmp_path):
         _free_port(),
         {
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
             "CALICTL_CONFIG_PULL_S": "0.5",
         },

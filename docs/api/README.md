@@ -19,7 +19,6 @@ Per-function state fields (cooler/energy/water/…) live in the signal catalog
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/state` | Full interpreted state of every function + `_meta` |
-| GET | `/api/history?h=24` | Leisure-battery samples for the last `h` hours (1–48) |
 | GET | `/api/screens` | UI screen specs |
 | POST | `/api/command` | Actuate a control (the only writing endpoint) |
 | POST | `/api/session` | Connect/disconnect the BLE session |

@@ -197,31 +197,6 @@ class ServeBackend:
         fut = asyncio.run_coroutine_threadsafe(self._s.pairing_command(action, value), self._loop)
         return fut.result(timeout=30)
 
-    def history(self, hours=24):
-        """Leisure-battery samples for the last ``hours``, oldest first — read from the daemon's
-        own append-only file, NOT from InfluxDB (the GUI stays Influx-free by design).
-
-        ``gap_s`` is the caller's cue for where to BREAK the plotted line: the unit deep-sleeps for
-        days when parked, so an absent stretch means "no data", never "held flat". It reuses the
-        same threshold as ``_meta.online`` so "we lost the van" means one thing everywhere.
-
-        :param hours: window size, clamped to 1..48 (48 h is the retention ceiling).
-        :returns: ``{"samples": [[ts, volts, amps], ...], "gap_s": float, "now": float,
-            "hours": int}``.
-        """
-        try:
-            hours = int(hours)
-        except (TypeError, ValueError):
-            hours = 24
-        hours = max(1, min(48, hours))
-        now = time.time()
-        return {
-            "samples": history.load(self._s._history_cache, since=now - hours * 3600),
-            "gap_s": self._s.interval * 3 + 30,
-            "now": now,
-            "hours": hours,
-        }
-
     def screens_bytes(self):
         """Raw bytes of the authored `webui/screens.json` GUI spec."""
         with open(os.path.join(_WEBUI_DIR, "screens.json"), "rb") as f:
@@ -323,12 +298,6 @@ class Server:
         )
         self._water_stale_since = None  # ts the fresh-water read went physically-impossible (stale latch)
         self._water_good = None  # last PLAUSIBLE interpreted water (baseline for the stale guard)
-        # Leisure-battery history for the web UI's 24 h chart. Its own append-only file (NOT the
-        # state blob: that gets rewritten every poll, and 24 h of samples would mean ~330 MB/day
-        # of SD-card writes). The GUI reads this instead of Influx -- see calictl/history.py.
-        self._history_cache = os.environ.get(
-            "CALICTL_HISTORY_CACHE", os.path.expanduser("~/.cache/calictl/history.jsonl")
-        )
         # Durable per-poll OUTCOME log so telemetry gaps can be classified after the fact (van
         # deep-sleep vs our-side BLE/daemon failure vs Influx-write failure). One tiny JSONL line
         # per poll cycle; a poll gap with matching "asleep" rows = deep sleep, "ble_error" rows =
@@ -336,7 +305,6 @@ class Server:
         self._outcomes_cache = os.environ.get(
             "CALICTL_OUTCOMES_CACHE", os.path.expanduser("~/.cache/calictl/poll_outcomes.jsonl")
         )
-        self._appends = 0  # appends since the last trim rewrite
         self._mqtt = None
         self._iw = None  # influx write_api
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -450,29 +418,6 @@ class Server:
         if detail:
             rec["detail"] = str(detail)[:120]
         history.append_jsonl(self._outcomes_cache, rec)
-
-    def _record_history(self, energy):
-        """Record one leisure-battery sample for the web UI's 24 h chart. Never raises.
-
-        Only the leisure (second) battery is recorded: it is always measured, and its scales are
-        the verified ones (``semantics.energy``), so the chart can carry real V/A units. The
-        starter battery is measured only with terminal-15 on and reads sentinels otherwise, which
-        would be a permanently empty series.
-
-        :param energy: the interpreted ``energy`` state of this poll, or None if it wasn't read.
-        """
-        if not energy:
-            return
-        if history.append(
-            self._history_cache,
-            self._last_ok_ts,  # type: ignore[arg-type]
-            energy.get("batt2_v"),
-            energy.get("batt2_current"),
-        ):
-            self._appends += 1
-            if self._appends >= history.TRIM_EVERY:  # amortised: ~1 rewrite per 4 h of polling
-                self._appends = 0
-                history.trim(self._history_cache)
 
     # --- persistent-session delegates -> calictl/session.py::SessionSupervisor ---------------------
     # These stay on Server as thin pass-throughs so the many callers (poll/on_command/ServeBackend)
@@ -748,7 +693,6 @@ class Server:
             # growing mid-iteration (RuntimeError). Reference assignment is atomic (GIL).
             self._last = new_last
             self._last_ok_ts = time.time()
-            self._record_history(states.get("energy"))
             try:
                 self._observer.observe(states)  # PASSIVE: log camping/ignition changes + burst
             except Exception:
