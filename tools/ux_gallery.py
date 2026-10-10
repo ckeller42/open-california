@@ -268,7 +268,8 @@ class EspStub:
     the firmware's runner would, compressed: start -> ``waiting_passkey`` (from idle/error), the
     passkey ``pairing_passkey`` -> ``bonded`` (any other -> ``error`` / ``pairing_failed``), cancel ->
     ``idle``, reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
-    answers ``{"error": pairing_error}`` instead. ``GET /app`` is the UI bundle in every mode."""
+    answers ``{"error": pairing_error}`` instead. ``GET /app`` is the UI bundle in every mode, and the
+    manifest + icons (``gen_c_dict.pwa_assets``) are served in every mode too."""
 
     def __init__(self, mode="setup"):
         from tools import gen_c_dict
@@ -296,6 +297,7 @@ class EspStub:
             page = f.read()
         with open(APP_BUNDLE_HEADER, encoding="utf-8") as f:
             bundle = gen_c_dict.header_array_bytes(f.read())
+        pwa = {path: (ctype, data) for path, ctype, data in gen_c_dict.pwa_assets()}
         stub = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -366,6 +368,8 @@ class EspStub:
                     body, ctype = page, "text/html; charset=utf-8"
                 elif path in fx:
                     body, ctype = json.dumps(fx[path]).encode(), "application/json"
+                elif path in pwa:  # web.c: the manifest + icons, every mode
+                    ctype, body = pwa[path]
                 else:
                     self.send_error(404)
                     return
@@ -375,6 +379,8 @@ class EspStub:
                 if enc:
                     self.send_header("Content-Encoding", enc)
                     self.send_header("Cache-Control", "no-cache")
+                elif path in pwa:
+                    self.send_header("Cache-Control", "max-age=86400")  # web.c's PWA assets
                 self.end_headers()
                 self.wfile.write(body)
 

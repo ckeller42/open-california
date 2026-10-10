@@ -104,6 +104,22 @@ setup hotspot, and a link back to the calictl UI).
 
 Then open `http://192.168.x.y` directly.
 
+## Add it to your home screen
+
+The {term}`satellite <Satellite>` serves the same app icon and web-app manifest as {term}`buspi`, so the UI can sit on your
+home screen like an app:
+
+- **iPhone / iPad (Safari):** open <http://calictl-esp.local>, tap *Share* → *Add to Home Screen*.
+  It opens full-screen, without the browser bar — over plain HTTP too.
+- **Android (Chrome):** *⋮* → *Add to Home screen* gives a shortcut with the icon, but over
+  `http://` it opens in a browser tab: Chrome offers the real *Install app* only over HTTPS (a
+  browser rule, not the satellite). The Pi's UI over Tailscale HTTPS
+  (`https://buspi.<tailnet>.ts.net`) installs as a full app.
+
+The shortcut opens `/app`, the camper UI in every WiFi mode. It is tied to the address you added it
+from: one added from `http://calictl-esp.local` does not work over the setup hotspot
+(`192.168.4.1`), and vice versa.
+
 ## Control from the satellite
 
 On your home WiFi the tiles work like on the Pi: switch the fridge and set its level and quiet

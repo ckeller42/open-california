@@ -536,6 +536,51 @@ def test_device_is_the_setup_page_in_every_mode(web_cli, state, joined):
     assert r.status == 200 and r.body == PAGE.read_bytes() and "content-encoding" not in r.headers
 
 
+# ---- "Add to Home Screen": the manifest + icons the bundle links (pwa_assets_gen.h) ---------------
+PWA = gen_c_dict.pwa_assets()
+MODES = [("online", 1), ("setup_ap", 0), ("unprovisioned", 0), ("connecting", 0)]
+
+
+@pytest.mark.parametrize("state,joined", MODES)
+@pytest.mark.parametrize("path,ctype,data", PWA, ids=[p for p, _, _ in PWA])
+def test_pwa_assets_served_in_every_mode(web_cli, state, joined, path, ctype, data):
+    r, _ = one(web_cli, "GET", path, setup=["wifi " + state, "joined %d" % joined])
+    assert r.status == 200 and r.headers["content-type"] == ctype
+    assert r.headers["cache-control"] == "max-age=86400" and "content-encoding" not in r.headers
+    assert r.body == data
+
+
+def test_pwa_icons_are_the_calictl_webui_files():
+    webui = ROOT / "calictl" / "webui"
+    for path, _, data in PWA[1:]:
+        assert data == (webui / path.lstrip("/")).read_bytes(), path
+
+
+def test_pwa_manifest_lists_only_served_icons_and_opens_the_ui():
+    src = json.loads((ROOT / "calictl" / "webui" / "manifest.webmanifest").read_text(encoding="utf-8"))
+    man = json.loads(PWA[0][2])
+    served = {p for p, _, _ in PWA}
+    assert man["icons"] and all(i["src"] in served for i in man["icons"])
+    assert {i["purpose"] for i in man["icons"]} == {"any", "maskable"}
+    assert man["start_url"] == "/app" and man["scope"] == "/"  # /app = the UI in every WiFi mode
+    assert {k: v for k, v in man.items() if k not in ("icons", "start_url")} == {
+        k: v for k, v in src.items() if k not in ("icons", "start_url")
+    }
+
+
+def test_served_assets_are_exactly_the_bundle_links_plus_the_manifest_icons():
+    import re
+
+    links = set(re.findall(r'<link\b[^>]*\bhref="([^"]+)"', gen_c_dict.render_app_bundle()))
+    icons = {i["src"] for i in json.loads(PWA[0][2])["icons"]}
+    assert links | icons == {p for p, _, _ in PWA}
+
+
+def test_pwa_post_is_not_served(web_cli):
+    r, _ = one(web_cli, "POST", "/manifest.webmanifest", "", setup=["wifi online", "joined 1"])
+    assert r.status == 404
+
+
 def test_post_root_is_not_served(web_cli):
     r, _ = one(web_cli, "POST", "/", "", setup=["wifi online", "joined 1"])
     assert r.status == 404
