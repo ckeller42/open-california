@@ -1189,8 +1189,15 @@ that will not resolve by itself.
 time: the phone app holding a link, buspi polling (99 clean connect / read / release cycles in an
 hour, no errors) and the ESP32 satellite. While parked, the unit dropped the satellite's held link
 (HCI ``0x13`` ~15–20 s after each connect) but **not** the app's held link (46 min) and **not**
-buspi's held persistent session (3 min with a viewer, 11:45). The root cause of the satellite drop
-is under investigation. See `value-freshness.md
+buspi's held persistent session (3 min with a viewer, 11:45). **Root cause found, fix in PR:**
+right after connect the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247).
+BlueZ and Android answer it. The satellite's NimBLE was built without a GATT server (in IDF v6.1
+``BT_NIMBLE_GATT_SERVER`` depends on ``BT_NIMBLE_ROLE_PERIPHERAL``, which was off), so esp-nimble
+silently drops the request, and the unit's ATT transaction timeout then ends the link (``0x13``).
+The fix enables both options in the satellite's ``sdkconfig``. It is a missing ATT response, not
+a parked-unit policy against idle links.
+
+The connection failure modes are in `value-freshness.md
 <https://ckeller42.github.io/open-california/business-logic/value-freshness.html>`_ ("Connection
 failure modes").
 
@@ -1343,7 +1350,8 @@ session is tested on a scripted transport (``test_session_fake.py``) and, over r
 the Bumble fake unit (``test_host_e2e.py``). ``make cali-host-jw`` rebuilds the late-I/O-capability
 bug on purpose and the fake unit refuses it. The CoreS3 bench ran the read side against the mock
 unit over real BLE. On the real unit (2026-10-10) the parked unit drops the satellite's held link
-~15–20 s after each connect while it keeps the app's and buspi's links; under investigation
+~15–20 s after each connect while it keeps the app's and buspi's links: the satellite did not
+answer the unit's ATT Exchange MTU Request (no GATT server built in); root cause found, fix in PR
 (:need:`S_SEQ_SLEEP`). See :doc:`firmware`
 ("Console line protocol", "Design rulings worth knowing").
 
@@ -1455,7 +1463,9 @@ confirmed (`howto-esp-wifi-setup.md` status box and :doc:`firmware`, "Network wa
      parked unit kicks idle links, and a frame it applied can lose its ACK to the kick (field
      2026-10-09, #264), so the page keeps watching the unit's state across the reconnect (20 s).
      The kick is seen on the satellite's link only; the parked unit keeps the app's and buspi's
-     held links (CAPTURE 2026-10-10, under investigation).
+     held links (CAPTURE 2026-10-10): the satellite left the unit's ATT Exchange MTU Request
+     unanswered, so the unit's ATT timeout ended its link. Root cause found, fix in PR
+     (:need:`S_SEQ_SLEEP`).
 
 .. mermaid::
 
