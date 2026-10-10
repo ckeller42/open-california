@@ -1,6 +1,6 @@
 {
- "version": 2,
- "comment": "Sequence vectors for the water stale-latch guard (calictl/freshness.py). Values are liters; null = missing. expect: true = the parked latch (a fresh drop to <= WATER_LATCH_MAX_L = 1 L with grey exactly frozen or unknown; hold last plausible), false = live reading.",
+ "version": 3,
+ "comment": "Sequence vectors for the water stale-latch guard (calictl/freshness.py). Values are liters; null = missing. expect: true = the parked latch (a fresh drop to <= WATER_LATCH_MAX_L = 1 L with grey exactly frozen or unknown; hold last plausible), false = live reading. sequences: the ramp debounce (calictl/freshness.py:settle_water, WATER_SETTLE_S = 5 s) — steps [t_ms, fresh, waste] from a starting baseline (null = cold start); expect 1 = adopt (the reading becomes the baseline), 0 = hold. The real unit ramps 1 -> real value in ~4 s when it starts measuring (BLE trace 2026-10-09).",
  "cases": [
   {"id": "drop-to-latch-grey-frozen", "new": {"fresh": 1, "waste": 3}, "prev": {"fresh": 17, "waste": 3}, "expect": true},
   {"id": "drop-to-zero-grey-frozen", "new": {"fresh": 0, "waste": 0}, "prev": {"fresh": 22, "waste": 0}, "expect": true},
@@ -20,5 +20,33 @@
   {"id": "no-drop-grey-moving", "new": {"fresh": 17, "waste": 4}, "prev": {"fresh": 17, "waste": 3}, "expect": false},
   {"id": "rise-grey-missing", "new": {"fresh": 11, "waste": null}, "prev": {"fresh": 1, "waste": null}, "expect": false},
   {"id": "zero-tanks-plausible", "new": {"fresh": 0, "waste": 0}, "prev": {"fresh": 0, "waste": 0}, "expect": false}
+ ],
+ "sequences": [
+  {"id": "ramp-cold-start-only-real-value-adopted", "good": null,
+   "steps": [[0, 1, 0, 0], [250, 2, 0, 0], [500, 3, 0, 0], [750, 4, 0, 0], [1000, 5, 0, 0], [1250, 6, 0, 0], [1500, 7, 0, 0], [1750, 8, 0, 0], [2000, 9, 0, 0], [2250, 10, 0, 0], [2500, 11, 0, 0], [2750, 12, 0, 0], [3000, 13, 0, 0], [3250, 14, 0, 0], [3500, 15, 0, 0], [3750, 16, 0, 0], [4000, 17, 0, 0], [4250, 18, 0, 0], [4500, 19, 0, 0], [4750, 20, 0, 0], [5750, 20, 0, 0], [9700, 20, 0, 0], [9750, 20, 0, 1], [39750, 20, 0, 1]]},
+  {"id": "ramp-vs-baseline-only-real-value-adopted", "good": {"fresh": 22, "waste": 0},
+   "steps": [[0, 1, 0, 0], [250, 2, 0, 0], [500, 3, 0, 0], [750, 4, 0, 0], [1000, 5, 0, 0], [1250, 6, 0, 0], [1500, 7, 0, 0], [1750, 8, 0, 0], [2000, 9, 0, 0], [2250, 10, 0, 0], [2500, 11, 0, 0], [2750, 12, 0, 0], [3000, 13, 0, 0], [3250, 14, 0, 0], [3500, 15, 0, 0], [3750, 16, 0, 0], [4000, 17, 0, 0], [4250, 18, 0, 0], [4500, 19, 0, 0], [4750, 20, 0, 0], [5750, 20, 0, 0], [9750, 20, 0, 1], [9800, 20, 0, 1]]},
+  {"id": "poll-mid-ramp-single-read-not-adopted", "good": {"fresh": 22, "waste": 0},
+   "steps": [[0, 16, 0, 0], [30000, 20, 0, 0], [60000, 20, 0, 1]]},
+  {"id": "same-value-5s-apart-adopted", "good": {"fresh": 20, "waste": 0},
+   "steps": [[0, 18, 0, 0], [5000, 18, 0, 1]]},
+  {"id": "same-value-under-5s-not-yet", "good": {"fresh": 20, "waste": 0},
+   "steps": [[0, 18, 0, 0], [4999, 18, 0, 0], [5000, 18, 0, 1]]},
+  {"id": "latch-after-baseline-held", "good": {"fresh": 20, "waste": 0},
+   "steps": [[0, 1, 0, 0], [30000, 1, 0, 0]]},
+  {"id": "latch-resets-candidate", "good": {"fresh": 20, "waste": 0},
+   "steps": [[0, 18, 0, 0], [3000, 1, 0, 0], [6000, 18, 0, 0], [10000, 18, 0, 0], [11000, 18, 0, 1]]},
+  {"id": "refill-settled-adopted", "good": {"fresh": 20, "waste": 0},
+   "steps": [[0, 29, 0, 0], [30000, 29, 0, 1]]},
+  {"id": "usage-drop-settled-adopted", "good": {"fresh": 20, "waste": 0},
+   "steps": [[0, 18, 0, 0], [30000, 18, 0, 1]]},
+  {"id": "baseline-value-adopted-at-once", "good": {"fresh": 20, "waste": 0},
+   "steps": [[0, 20, 0, 1]]},
+  {"id": "grey-change-is-a-new-candidate", "good": {"fresh": 20, "waste": 0},
+   "steps": [[0, 18, 0, 0], [3000, 18, 2, 0], [7000, 18, 2, 0], [8000, 18, 2, 1]]},
+  {"id": "cold-start-latch-then-settle", "good": null,
+   "steps": [[0, 1, 0, 0], [30000, 17, 0, 0], [60000, 17, 0, 1], [90000, 1, 0, 0]]},
+  {"id": "grey-unknown", "good": {"fresh": 20, "waste": null},
+   "steps": [[0, 1, null, 0], [1000, 18, null, 0], [6000, 18, null, 1], [7000, 18, 0, 0]]}
  ]
 }

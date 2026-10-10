@@ -75,9 +75,8 @@ extern "C" {
 /* Water (1302) re-read period while the link is up: calictl's POLL_INTERVAL (30 s), at which it
  * reads 1302 on every poll. The app has no periodic water re-read (it reconnects instead). */
 #define CALI_SESSION_WATER_REREAD_MS 30000u
-/* The parked unit's stale fresh-water latch, in liters (raw FreshWaterLevel): observed as 1 on this
- * van. Only a fresh drop to <= this, with grey frozen, is held (calictl.freshness.WATER_LATCH_MAX_L). */
-#define CALI_SESSION_WATER_LATCH_MAX_L 1u
+/* The water guard's constants (the 1 L latch, the 5 s ramp debounce) live with its one C
+ * implementation: csrc/ports.h FRESH_LATCH_MAX_L / FRESH_SETTLE_MS. */
 
 void cali_session_init(const cali_transport_t *t);
 void cali_session_boot(void);
@@ -129,10 +128,11 @@ uint64_t cali_session_last_update_ms(void);
 /* 1 when the served water (1302) frame is the HELD last-plausible reading, not the live one: the
  * parked unit stopped measuring and handed back the latched low (true ~17 L read as 1 L), so the
  * guard keeps the last plausible frame (calictl.freshness.implausible_water_drop — a fresh drop to
- * <= CALI_SESSION_WATER_LATCH_MAX_L while the grey tank is exactly frozen; any other reading is live
- * and becomes the baseline). The baseline persists in NVS, so a reboot while parked
- * shows the real level; cold start with no baseline accepts the first read (serve.py's known
- * limit). /api/state reports this as device.water_held; the shared UI flags the tank stale. */
+ * <= FRESH_LATCH_MAX_L while the grey tank is exactly frozen), or a NEW level that has not yet
+ * stayed unchanged for FRESH_SETTLE_MS (the unit's 1 -> real-value measurement ramp;
+ * calictl.freshness.settle_water, run by csrc/ports.c freshness_settle). The baseline persists in NVS, so a reboot while parked
+ * shows the real level; with no baseline nothing is shown until a level >= 2 settles.
+ * /api/state reports this as device.water_held; the shared UI flags the tank stale. */
 int cali_session_water_held(void);
 
 /* Seed the last-plausible water (1302) baseline — console `water seed <hex>`, e.g. after a reflash

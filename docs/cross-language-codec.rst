@@ -33,7 +33,10 @@ needs, pinned to the Python originals by ``tests/test_ports_parity.py``:
    The C port of the water stale-latch guard
    (:func:`calictl.freshness.implausible_water_drop`) shall reproduce the Python
    ladder exactly over plain integer liters + presence flags, so the ESP never
-   publishes the parked latch as truth. Cross-sample state stays platform-native.
+   publishes the parked latch as truth. Its ramp debounce
+   (:func:`calictl.freshness.settle_water`, C ``freshness_settle``) shall match too, step for step
+   over the ``sequences`` vectors. The ESP links ``csrc/ports.c`` — one C water guard
+   (``session.c`` calls it). Cross-sample state stays platform-native.
 
 .. req:: The C plausibility anchors match calictl
    :id: R_PORT_ANCHORS

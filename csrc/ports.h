@@ -25,6 +25,22 @@
 int freshness_implausible_drop(int32_t nf, int32_t pf, int32_t ng, int32_t pg,
                                uint8_t have);
 
+/* Water ramp debounce — port of calictl/freshness.py:settle_water. Starting a
+ * measurement the unit ramps the level 1 -> real value in ~4 s, so a NEW level
+ * (!= the baseline) is adopted only once the same (fresh, grey) has been seen for
+ * settle_ms. The baseline is (pf, pg) with the same `have` bits (no FRESH_HAVE_PF =
+ * cold start: a level <= FRESH_LATCH_MAX_L is held, nothing shown). `*p` is the
+ * caller's candidate, updated in place (zero-init). Returns 1 = adopt nf/ng as the
+ * new baseline, 0 = hold (show the baseline, or nothing). */
+#define FRESH_SETTLE_MS 5000u  /* freshness.WATER_SETTLE_S */
+typedef struct {
+    int32_t fresh, waste;
+    uint8_t have;              /* bit0: a candidate is pending, bit1: its grey is known */
+    uint64_t since_ms;
+} fresh_pending_t;
+int freshness_settle(int32_t nf, int32_t pf, int32_t ng, int32_t pg, uint8_t have,
+                     uint64_t now_ms, uint32_t settle_ms, fresh_pending_t *p);
+
 /* Plausibility anchors — port of calictl/anchors.py:check (the decode-drift
  * alarm). Same hard-coded physical constants as the Python original (they are
  * physics, not protocol facts); inputs are the INTERPRETED values (scaling

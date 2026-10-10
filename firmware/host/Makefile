@@ -64,7 +64,7 @@ OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include 
 COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o control.o codec.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o json.o session.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o display_model.o
+CORE_OBJ := console.o snapshot.o status.o json.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o display_model.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
@@ -195,7 +195,11 @@ display_model.o: $(COMPONENTS)/cali_core/display_model.c $(CORE_H)/cali_display_
 
 session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h $(CORE_H)/cali_control.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CSRC)/codec.h $(CSRC)/codec_chars.h \
-		$(COMPONENTS)/platform/include/cali_platform.h
+		$(CSRC)/ports.h $(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The one C water guard (session.c), parity-tested against calictl.freshness (test_ports_parity.py).
+ports.o: $(CSRC)/ports.c $(CSRC)/ports.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 codec.o: $(CSRC)/codec.c $(CSRC)/codec.h $(CSRC)/codec_dict.h

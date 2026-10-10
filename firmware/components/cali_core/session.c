@@ -13,6 +13,7 @@
 #include "cali_runner.h"
 #include "codec.h"
 #include "codec_chars.h"
+#include "ports.h"
 
 enum { LINK_DOWN, LINK_CONNECTING, LINK_CONNECTED, LINK_UP };
 
@@ -152,20 +153,22 @@ static int water_levels(const uint8_t *frame, size_t len, uint32_t *fresh, int *
     return gotf;
 }
 
-/* True when a new water frame is the parked stale-latch vs the plausible baseline s_wg — a fresh
- * DROP to <= CALI_SESSION_WATER_LATCH_MAX_L while the GREY tank is EXACTLY frozen
- * (calictl.freshness.implausible_water_drop). A drop that stays above it, or any grey movement, is a
- * live measurement (adopt); a drop to the latch with grey unknown is the latch (conservative). No baseline, or no fresh to compare -> not a latch (cold start adopts,
- * matching serve.py's known cold-start limit). */
-static int water_is_latch(const uint8_t *data, size_t len) {
-    uint32_t fn_, fp_, wn_, wp_;
-    int hwn, hwp;
-    if (!s_wg.have) return 0;
-    if (!water_levels(data, len, &fn_, &hwn, &wn_)) return 0;
-    if (!water_levels(s_wg.frame, s_wg.len, &fp_, &hwp, &wp_)) return 0;
-    if (fn_ >= fp_ || fn_ > CALI_SESSION_WATER_LATCH_MAX_L) return 0;   /* no drop to the latch */
-    if (!hwp || !hwn) return 1;           /* fresh dropped, grey unknown -> can't corroborate */
-    return wn_ == wp_;                    /* grey frozen -> latch; any grey movement -> live */
+/* The ramp-debounce candidate (csrc/ports.h freshness_settle; cleared on a unit change). */
+static fresh_pending_t s_wpend;
+
+/* 1 = adopt the new water frame as the baseline, 0 = hold (serve s_wg, or nothing on a cold start).
+ * The decision is csrc/ports.c freshness_settle — the one C port of calictl.freshness.settle_water
+ * (the <= 1 L not-measuring latch + the 5 s measurement-ramp debounce), on the session clock. */
+static int water_settle(const uint8_t *data, size_t len) {
+    uint32_t nf = 0, ng = 0, gf = 0, gg = 0;
+    int hng = 0, hgg = 0;
+    uint8_t have = 0;
+    if (water_levels(data, len, &nf, &hng, &ng)) have |= FRESH_HAVE_NF;
+    if (s_wg.have && water_levels(s_wg.frame, s_wg.len, &gf, &hgg, &gg)) have |= FRESH_HAVE_PF;
+    if (hng) have |= FRESH_HAVE_NG;
+    if (hgg) have |= FRESH_HAVE_PG;
+    return freshness_settle((int32_t)nf, (int32_t)gf, (int32_t)ng, (int32_t)gg, have, s_now,
+                            FRESH_SETTLE_MS, &s_wpend);
 }
 
 /* Show the persisted last-plausible water frame for char 1302 (nothing if there is no baseline). */
@@ -207,11 +210,12 @@ static void store(size_t i, const uint8_t *data, size_t len) {
         len = CODEC_FRAME_MAX;
     }
     if (CODEC_CHARS[i].state_short == WATER_CHAR) {
-        /* Parked, the unit stops measuring and hands out a latched low (true 17 L read back as 1 L).
-         * Hold the last plausible reading instead of serving the latch (serve.py's stale guard). */
-        if (water_is_latch(data, len)) {
+        /* Not measuring (the 1 L latch) or mid-ramp: hold the last plausible reading instead of
+         * serving it (serve.py's guard); with no baseline yet, store nothing (no fake 1 L). */
+        if (!water_settle(data, len)) {
             s_water_held = 1;
-            data = s_wg.frame;   /* serve the plausible baseline, not the latch */
+            if (!s_wg.have) return;
+            data = s_wg.frame;
             len = s_wg.len;
         } else {
             adopt_water(data, len);   /* a plausible read -> new baseline, persisted */
@@ -247,6 +251,7 @@ static void unit_check(void) {
     s_last_update = 0;
     if (had) {   /* another unit's water isn't ours; a plain boot ("" -> id) keeps the baseline */
         memset(&s_wg, 0, sizeof s_wg);
+        memset(&s_wpend, 0, sizeof s_wpend);
         s_water_held = 0;
         cali_kv_erase(WATER_GOOD_KEY);
     }
@@ -442,6 +447,7 @@ void cali_session_init(const cali_transport_t *t) {
     /* Restore the last-plausible water from NVS so a reboot while parked shows the real level, not
      * the latch, and the guard has a baseline on the first read (serve.py's persisted _water_good). */
     memset(&s_wg, 0, sizeof s_wg);
+    memset(&s_wpend, 0, sizeof s_wpend);
     s_water_held = 0;
     size_t wl = sizeof s_wg.frame;
     if (cali_kv_get(WATER_GOOD_KEY, s_wg.frame, &wl) == CALI_KV_OK) {
