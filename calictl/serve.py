@@ -1,9 +1,9 @@
 """Unified calictl daemon: one BLE owner -> InfluxDB + MQTT + commands.
 
-A single process owns the van's single BLE connection slot. Each poll fans out
+A single process owns buspi's shared ``hci0`` and its (at most one) link to the unit. Each poll fans out
 to both InfluxDB (Grafana stack) and MQTT (Home Assistant discovery/state).
 MQTT command messages are serviced by BLE writes under the same lock, so a
-control write can never race a poll for the one connection slot.
+control write can never race a poll for that link.
 
 `paho.mqtt.client` is imported lazily in `run()` and `control` lazily in
 `on_command` (both may be absent on a dev box / not-yet-built), so
@@ -44,14 +44,14 @@ _FAST_CONFIRM_S = float(os.environ.get("CALICTL_FAST_CONFIRM_S", "1.2"))
 _CONFIG_PULL_S = float(os.environ.get("CALICTL_CONFIG_PULL_S", "2.0"))
 
 # Hold the fast-path persistent BLE session only while the web UI is ACTIVE (a browser polling
-# /api/state every ~2 s, or a recent command). The van allows ONE connection at a time, so a
-# permanently-held session blocks the phone app; after this many seconds without UI activity the
-# daemon RELEASES the session (dropping to brief cold polls) so the app can use the slot.
+# /api/state every ~2 s, or a recent command). After this many seconds without UI activity
+# the daemon RELEASES the session (dropping to brief cold polls) rather than hold a link nobody is
+# watching. (The unit itself serves several centrals at once; nothing is "freed" for the app.)
 _UI_IDLE_S = float(os.environ.get("CALICTL_UI_IDLE_S", "25"))
 
 # When a command arrives and no session is up yet, wait up to this long for the supervisor to bring
 # one up (it's connecting due to the keep-warm nudge) and ride it — rather than racing it with a
-# redundant cold connect that fights over the single BLE slot. Falls back to the cold path on timeout.
+# redundant second cold connect from buspi's single hci0 owner. Falls back to the cold path on timeout.
 _SESSION_WAIT_S = float(os.environ.get("CALICTL_SESSION_WAIT_S", "6"))
 
 # The roof view (POST /api/roof): the web UI's roof page refreshes it every ~5 s; with no refresh for
@@ -819,7 +819,7 @@ class Server:
         await self._sessions.set_mode("connect")
         # Prefer the fast persistent session over a redundant cold connect: the nudge just told the
         # supervisor to connect, so wait briefly (OUTSIDE the _ble lock, so the supervisor can take
-        # it) for the session to come up rather than racing it cold over the single slot.
+        # it) for the session to come up rather than racing it with a second cold link.
         if self._persistent and self._live_session() is None:
             deadline = time.monotonic() + _SESSION_WAIT_S
             while time.monotonic() < deadline and self._live_session() is None:
@@ -891,7 +891,7 @@ class Server:
             except ValueError:
                 return None
             # The roof path with a zero-length move: over the live session when one is up (heartbeat
-            # already ticking, no second connection on the single slot), else an own connection with
+            # already ticking, no second link from buspi), else an own connection with
             # the heartbeat on — never the arm delay. One STOP with a live counter, then a 1402 read.
             target = self._live_session() or self.dev
             await target.actuate_roof(
@@ -971,7 +971,7 @@ class Server:
             stop_frame = control.roof_frame(self.funcs, "stop")
         except ValueError:
             return None
-        # The unit has a single slot: a live persistent session carries the move (its 1003 heartbeat
+        # serve opens at most one link to the unit: a live persistent session carries the move (its 1003 heartbeat
         # keeps ticking, as the app's does during roof moves, #235) — never a second connection.
         # With no session up, `dev.actuate_roof` opens its own, heartbeat on, no pre-arm delay.
         target = self._live_session() or self.dev
@@ -1176,7 +1176,7 @@ class Server:
         loop = asyncio.new_event_loop()
         self._loop = loop
         asyncio.set_event_loop(loop)
-        self._ble = asyncio.Lock()  # the van allows ONE connection; created on this loop
+        self._ble = asyncio.Lock()  # serve is hci0's single BLE owner; created on this loop
         # Hand the loop-created shared lock to the session supervisor (which also creates its own
         # loop-bound wake event in attach()). Both must be born on THIS loop, hence not in __init__.
         self._sessions.attach(self._ble)

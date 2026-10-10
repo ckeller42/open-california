@@ -984,9 +984,9 @@ function offlineBanner() {
   return b;
 }
 
-// Connection toggle for the persistent BLE session. The van has ONE BLE slot shared with the
-// phone app, so this both SHOWS the state and lets you Disconnect (hand the slot back to the app
-// immediately, instead of waiting out the idle release) or reconnect after you have.
+// Connection toggle for buspi's persistent BLE session. It SHOWS the state and lets you release
+// the session now (instead of waiting out the idle auto-release) or reconnect after you have. The
+// unit serves several centrals at once, so releasing is not needed for the phone app to connect.
 // It is shown ONLY when a session is actually held/connecting, the van is asleep, or you chose to
 // disconnect. When the session is merely idle in auto mode the daemon is still polling normally —
 // showing a "Connect" button there falsely reads as "no connection", so we hide it (the fast path
@@ -1007,7 +1007,7 @@ function sessionToggle() {
   el.textContent = /** @type {string} */ (t(spec.text));
   el.title = /** @type {string} */ (t(action === "connect"
     ? "Connect the fast BLE session (warm it before controlling)"
-    : "Disconnect — free the BLE slot for the phone app"));
+    : "Disconnect — release this session now (it also auto-releases when idle)"));
   el.setAttribute("aria-label", el.title);
   el.onclick = async () => {
     el.disabled = true;
@@ -1221,8 +1221,8 @@ function pairingCard() {
     for (const s of [
       sat ? "On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until the satellite connects."
         : "On the camper control unit open Einstellungen → Bluetooth → Gerät verbinden. It shows “Passcode: ---” until buspi connects.",
-      "Disconnect your phone: close the California On Tour app or turn off the phone's Bluetooth — the unit takes one connection at a time.",
-      sat ? "If a Raspberry Pi with calictl runs near the van, stop it during pairing — it would take the unit's only connection."
+      "Close the California On Tour app while pairing — its reconnects can collide with the passkey window.",
+      sat ? "If a Raspberry Pi with calictl runs near the van, stop it during pairing — its Bluetooth activity can collide with the passkey window."
         : "Stop other Bluetooth scanners on this Pi during pairing (for example the Home Assistant Bluetooth integration).",
     ]) {
       const li = document.createElement("li");

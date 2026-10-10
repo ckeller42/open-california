@@ -294,8 +294,8 @@ window.STRINGS_DE = {
   "Loading…": "Wird geladen…",
   "Connect the fast BLE session (warm it before controlling)":
     "Schnelle BLE-Sitzung verbinden (vor dem Steuern vorwärmen)",
-  "Disconnect — free the BLE slot for the phone app":
-    "Trennen — den BLE-Platz für die Telefon-App freigeben",
+  "Disconnect — release this session now (it also auto-releases when idle)":
+    "Trennen — diese Sitzung jetzt freigeben (im Leerlauf geschieht das automatisch)",
 
   // --- toasts / status / command feedback ----------------------------------------------------
   "✓ Applied": "✓ Übernommen",
@@ -340,10 +340,10 @@ window.STRINGS_DE = {
     + "“Passcode: ---” until buspi connects."]:
     "Wähle in der Camper-Bedieneinheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht "
     + "„Passcode: ---“, bis buspi sich verbindet.",
-  ["Disconnect your phone: close the California On Tour app or turn off the phone's Bluetooth "
-    + "— the unit takes one connection at a time."]:
-    "Trenne dein Handy: schließe die California-On-Tour-App oder schalte Bluetooth am Handy aus "
-    + "— die Bedieneinheit erlaubt jeweils nur eine Verbindung.",
+  ["Close the California On Tour app while pairing — its reconnects can collide with the "
+    + "passkey window."]:
+    "Schließe während der Kopplung die California-On-Tour-App — ihre Verbindungsversuche können "
+    + "das Passcode-Fenster stören.",
   ["Stop other Bluetooth scanners on this Pi during pairing (for example the Home Assistant "
     + "Bluetooth integration)."]:
     "Beende während der Kopplung andere Bluetooth-Scanner auf diesem Pi (zum Beispiel die "
@@ -353,10 +353,10 @@ window.STRINGS_DE = {
     + "“Passcode: ---” until the satellite connects."]:
     "Wähle in der Camper-Bedieneinheit Einstellungen → Bluetooth → Gerät verbinden. Dort steht "
     + "„Passcode: ---“, bis der Satellit sich verbindet.",
-  ["If a Raspberry Pi with calictl runs near the van, stop it during pairing — it would take the "
-    + "unit's only connection."]:
+  ["If a Raspberry Pi with calictl runs near the van, stop it during pairing — its Bluetooth "
+    + "activity can collide with the passkey window."]:
     "Läuft ein Raspberry Pi mit calictl in der Nähe des Fahrzeugs, stoppe ihn während der "
-    + "Kopplung — er würde die einzige Verbindung der Bedieneinheit belegen.",
+    + "Kopplung — seine Bluetooth-Aktivität kann das Passcode-Fenster stören.",
   "Saved on the satellite — survives a restart. No further action needed.":
     "Auf dem Satelliten gespeichert — übersteht einen Neustart. Keine weitere Aktion nötig.",
   ["Check that “Gerät verbinden” is open on the unit, that the satellite is in range, and that "

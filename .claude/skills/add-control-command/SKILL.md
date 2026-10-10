@@ -62,4 +62,4 @@ python3.13 -m tools.gen_semantics_vectors --check && python3.13 -m tools.gen_c_d
 | App shows "Something went wrong" after a write against the mock | mock treated a leave-unchanged sentinel as a value, or never echoed what the app verifies (wake-up: echo within ~3 s) |
 | Replay `gap` / wrong frame for a recorded write | replay state lost between frames, or clock not pinned |
 | UI shows a value the unit never reported | latch fed from our own write, or the UI invented a default when state was null |
-| Two BLE connections for one command | preface and write in separate `actuate` calls — the unit has one slot |
+| Two BLE connections for one command | preface and write in separate `actuate` calls — `serve` is buspi's single `hci0` owner and opens at most one link to the unit |

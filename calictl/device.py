@@ -6,9 +6,10 @@ Hard-won connection lessons baked in:
   aborts a new connect while a prior one is still tearing down).
 - On the abort/EOFError cascade, recover by power-cycling the adapter and
   re-scanning (BlueZ must re-acquire the device's rotating address).
-- The unit allows ONE connection: if the phone app is connected (e.g. ignition
-  on), the Pi is locked out — surfaced as ConnectionUnavailable, not retried
-  forever.
+- An unreachable unit (deep sleep, Bluetooth disabled) is surfaced as
+  ConnectionUnavailable, not retried forever. The unit itself serves several
+  centrals at once (phone app + buspi + ESP); the single-owner rule is about
+  buspi's shared ``hci0`` — ``serve`` opens at most one link to the unit.
 
 `bleak` is imported lazily so protocol/semantics stay importable without it.
 """
@@ -303,7 +304,7 @@ class RoofStream:
 
 
 class ConnectionUnavailable(RuntimeError):
-    """Could not establish a BLE session (device unreachable or slot held)."""
+    """Could not establish a BLE session (device unreachable)."""
 
 
 def _adapter_reset(adapter: str = "hci0") -> None:
@@ -420,8 +421,7 @@ class CamperDevice:
                 await asyncio.sleep(4)
         raise ConnectionUnavailable(
             "no BLE session to %s after retries (%s). Causes: the unit deep-slept (parked/idle — "
-            "wakes on door/ignition), the phone app holds the single connection slot, or the unit's "
-            "Bluetooth is DISABLED in its settings (persistent DeviceNotFound that won't self-resolve "
+            "wakes on door/ignition), or the unit's Bluetooth is DISABLED in its settings (persistent DeviceNotFound that won't self-resolve "
             "until re-enabled)." % (self.addr, type(last).__name__)
         )
 

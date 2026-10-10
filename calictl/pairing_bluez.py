@@ -546,7 +546,7 @@ class BluezTransport:
         """True once the flow that started an operation has moved on: :meth:`start_scan` (a new
         attempt) or :meth:`aclose` (flow end) bumped the generation while that operation awaited.
         The runner's state timer can fire mid-``connect()``/``pair()``; a late result must then
-        neither emit an event nor keep a link (the unit has ONE connection slot, and ``serve``'s
+        neither emit an event nor keep a link (``serve`` is the single owner of buspi's ``hci0``, and its
         poll resumes as soon as the wizard ends)."""
         return gen != self._gen
 
@@ -972,7 +972,7 @@ class BluezTransport:
         """Flow end: release the wizard's own link, unregister the D-Bus agent, drop the bus.
 
         The link :meth:`connect`/:meth:`verify` kept open is disconnected here (bounded by
-        :data:`CLOSE_DISCONNECT_S`, best-effort): the unit has ONE connection slot, and ``serve``'s
+        :data:`CLOSE_DISCONNECT_S`, best-effort): ``serve`` is the single owner of buspi's ``hci0``, and its
         poll must be able to read right after the wizard reaches ``BONDED``. A still-looking
         known-device lookup is cancelled.
         """
