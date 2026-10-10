@@ -514,7 +514,7 @@ def render_app_bundle() -> str:
     """Inline the calictl web UI into ONE HTML document for the satellite (``GET /``, station mode).
 
     ``calictl/webui/index.html`` with ``/app.css`` as an inline ``<style>`` and ``/strings.de.js``,
-    ``/semantics.js``, ``/app.js`` as inline ``<script>``s (verbatim). The manifest / apple-touch-icon
+    ``/semantics.js``, ``/app.js`` as inline ``<script>`` tags (verbatim). The manifest / apple-touch-icon
     / icon links stay: the satellite serves exactly those files (:data:`_PWA_FILES`, cached a day), so
     the page is home-screen-installable like buspi's.
 
