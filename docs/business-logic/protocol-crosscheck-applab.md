@@ -8,7 +8,8 @@ the *unit* does (those rows say NOT TESTABLE and keep their DEVICE/CAPTURE tier)
 with what the app does), **CONTRADICTED** (doc fixed in the same change), **NOT TESTABLE**.
 
 App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit seeded from
-`tests/scenarios/firmware/baseline-0410.json`. Owner rule: re-run when the app version changes.
+`tests/scenarios/firmware/baseline-0410.json`. Owner rule: re-run when the app version changes —
+the lab moved to **5.4.0.3036** on 2026-10-10 (first re-run: section "App 5.4.0.3036 in the lab" below).
 
 ## Session (`docs/protocol-sequences.rst` S_SEQ_CONNECT / S_SEQ_NOTIFY)
 
@@ -219,6 +220,20 @@ Other observations of that session (CONSISTENT unless noted):
 | the app reads its lighting config from the REQUEST_CONFIG reply | cold app restart + re-pair against a mock holding favourite 1, door on, wake-up 07:00 on: tile A filled, door row Enabled (lighting + camping page), wake-up page 07:00 with the switch on | OBSERVED (Mode 12 / Mode 20 / Mode 16 PN 8 all read) |
 | (new) wake-up switch clock check | every switch tap shows "Different time settings." — App: phone date/time, Vehicle: the 1004 RTC, "Please check the time in the vehicle and on your smartphone to make sure that all the functions operate correctly." [OK]; the write is sent regardless | OBSERVED (the fake's RTC is the baseline's 2026-08-28) |
 | ECO follows `PvInstalled` | first visit Normal / Max, second visit ECO / Normal / Max | OBSERVED, CONSISTENT (stale first read) |
+
+## App 5.4.0.3036 in the lab (2026-10-10)
+
+The phone's version (split APKs, arm64 code via the x86_64 image's ARM translation) installed over
+5.0.8 on thinky's `lab34`, against the fake unit. First smoke only; the recordings are not redone yet.
+
+| Claim (5.0.8 lab) | 5.4.0.3036 against the fake unit | Verdict |
+|---|---|---|
+| read `1002` → `1001` → `1004` → passkey pairing, then read-all | the same; pairing via `pair_wizard.py`, then every state char read | OBSERVED |
+| the app does not reconnect on foreground; the user taps Connect | after background (fake logs `DISCONNECTED`) → foreground, the app **reconnects by itself** over the stored bond (identity address, no pairing) and shows `Disconnect` | **CHANGED in 5.4** (`walk.py session` step 16 now times out) |
+| cooler level 5 → `ff751e3e1f1f` + neutral `ff771e3e1f1f` = `control.build` | the same two frames | OBSERVED |
+| roof page with terminal 15 off → "Switch on the ignition" | the same toast; the `00 00 <counter>` stream runs behind it | OBSERVED |
+| fake `InfoPopUp=2` → pre-open safety checklist dialog | first open press (`0100…`, one frame) → `InfoPopUp 2` → "We take your safety and security seriously! … Sufficient space … Access board open? … Window or vehicle door open?" + OK | OBSERVED (matches the real-unit capture below) |
+| — | new one-time "California Experience" sheet after the first connect on shore power (background connection, Activate app notifications / Cancel) | NEW in 5.4 (UI only) |
 
 ## Real app on the real unit (CAPTURE 2026-10-10)
 

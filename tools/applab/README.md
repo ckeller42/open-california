@@ -59,8 +59,11 @@ on the internal disk.
 
 ## One-time setup (Linux x86_64 with KVM — thinky)
 
-The APK ships x86_64 native libraries, so on an x86_64 Linux host the emulator runs the
-`google_apis;x86_64` image natively under KVM, headless. `tools/applab/setup_linux.sh` installs
+On an x86_64 Linux host the emulator runs the `google_apis;x86_64` image natively under KVM,
+headless. The apk-pure 5.0.8 APK was universal (x86_64 libraries included); the phone's split APKs
+(5.4.0.3036, installed on thinky since 2026-10-10) carry **arm64 libraries only**, which the API 34
+image runs through its ARM translation (`ro.dalvik.vm.native.bridge=libndk_translation.so`) — see
+"Updating the app" below. `tools/applab/setup_linux.sh` installs
 everything idempotently under `~/android-lab` (SDK + emulator + image, AVD `lab34` on a `pixel_6`
 profile, `grpcio`/`protobuf` into the Bumble venv, the APK by `scp` from `pi@buspi:~/apks/`). It
 stops with the exact command when a prerequisite is missing: group `kvm`, Java 17, `unzip`, and
@@ -131,6 +134,25 @@ the snapshot per scenario: bond intact *and* fresh netsim) is the untried candid
 `$LAB_DIR/vin` (mode 600) holds the test VIN the app was set up with — never print it, never
 commit it. **If buspi is offline when you run setup**, the APK copy is skipped with a note; copy it
 by hand once buspi is back (`scp pi@buspi:~/apks/*.apk ~/android-lab/apks/`), then `adb install -r`.
+
+### Updating the app (from the phone's split APKs)
+
+The phone's APKs land in `buspi:~/apks/<version>/` (`base.apk`, `split_config.{arm64_v8a,de,en,mdpi,xxhdpi}.apk`,
+`version.txt`). Copy them over (buspi cannot ssh to thinky; relay through a machine that reaches both:
+`scp -3 'buspi:~/apks/5.4.0.3036/*.apk' thinky:android-lab/apks/5.4.0.3036/`) and install them as an
+**update**, so the app keeps its data (onboarding, the VIN):
+
+```sh
+cd ~/android-lab/apks/5.4.0.3036
+adb install-multiple -r base.apk split_config.arm64_v8a.apk split_config.en.apk \
+  split_config.de.apk split_config.xxhdpi.apk split_config.mdpi.apk
+adb shell dumpsys package de.volkswagen.CaliforniaOnTour | grep -E 'versionName|primaryCpuAbi'
+```
+
+Expect `versionName=5.4.0.3036` and `primaryCpuAbi=arm64-v8a` (ARM translation, see above). The
+fake unit needs no change; the Android bond may need a re-pair (`walk.py` re-pairs on every
+scenario anyway). Recordings in `tests/vectors/app/` stay at the version that made them until
+re-recorded. What 5.4 changes in the lab: `.claude/skills/app-lab/SKILL.md`, "Updating the app".
 
 **Radio separation.** On thinky a second fake unit serves the ESP satellite over the UB500 radio
 (find it by USB id `2357:0604` → `hci-socket:<N>`, the index moves across reboots); it runs the same

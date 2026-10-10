@@ -106,7 +106,7 @@ XY: dict[str, tuple[int, ...] | None] = {
 }
 
 TILE = {
-    "cooler": r"^Refrigerator Box$",
+    "cooler": r"^Refrigerator [Bb]ox$",  # "Box" on 5.0.8.3028, "box" on 5.4.0.3036
     "airheater": r"[Aa]ir heater",  # the tile reads "Auxiliary air heater" on app 5.0.8.3028
     "lighting": r"^Lighting$",
     "campingmode": r"^Camping mode$",
