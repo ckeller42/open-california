@@ -915,12 +915,13 @@ def test_water_alert_codes_follow_the_apps_dialogs():
 
 
 def test_water_stale_latch_guard():
-    """ANY fresh-water drop with no matching grey-water rise is physically impossible (the
-    parked/asleep stale latch, confirmed at the van 2026-07-14). Crucially the latch DECAYS
-    gradually (~1 L/poll), so even a 1 L unaccounted drop must be flagged — else it ratchets the
-    baseline down. Real usage (fresh down, grey up together) and refills (fresh up) stay plausible.
+    """The parked unit hands back a stale fresh-water LATCH of 1 L (observed on this van). Only a
+    fresh DROP to <= ``WATER_LATCH_MAX_L`` with the grey tank EXACTLY frozen is that latch; any
+    other reading is a live measurement and is shown. Regression 2026-10-10: grey reads 0 on every
+    frame on this van, so the old "any drop with grey frozen" rule held every real drop (buspi
+    served 22 L for weeks while the unit — and the app — reported 20 L).
 
-    .. test:: reject physically impossible fresh-water drops
+    .. test:: reject the parked stale-latch fresh-water reading
        :id: T_WATER_STALE_GUARD
        :links: R_WATER_STALE_GUARD
        :status: passing
@@ -930,33 +931,26 @@ def test_water_stale_latch_guard():
     def w(fresh, waste):
         return {"fresh": {"liters": fresh}, "waste": {"liters": waste}}
 
-    # sharp latch: 17 -> 1 with grey flat -> impossible
+    assert freshness.WATER_LATCH_MAX_L == 1  # the observed latch value
+    # field case 2026-10-10: real 22 -> 20 L drop, grey 0 on every frame -> live, shown
+    assert freshness.implausible_water_drop(w(20, 0), w(22, 0)) is False
+    # drop to the latch value with grey frozen -> held
+    assert freshness.implausible_water_drop(w(1, 0), w(22, 0)) is True
     assert freshness.implausible_water_drop(w(1, 1), w(17, 1)) is True
-    # GRADUAL decay: even a 1 L drop with grey flat -> impossible (the ratchet bug this prevents)
-    assert freshness.implausible_water_drop(w(16, 1), w(17, 1)) is True
-    # real usage: fresh down 2, grey up 2 -> plausible
-    assert freshness.implausible_water_drop(w(15, 3), w(17, 1)) is False
-    # real usage, exact 1 L: fresh down 1, grey up 1 -> plausible
-    assert freshness.implausible_water_drop(w(16, 2), w(17, 1)) is False
-    # real usage where fresh leaves faster than grey fills (drink/cook/external drain): grey STILL
-    # rose, which proves the unit is live-measuring -> the drop is real, NOT the parked latch.
-    # Regression: conservation-of-mass here false-positived and suppressed a true 22 L reading as a
-    # stale 29 L on an online, in-use van (2026-07-17, live at the van).
-    assert freshness.implausible_water_drop(w(22, 2), w(29, 0)) is False
-    # grey FROZEN while fresh drops -> the unpowered-latch signature -> stale, at any drop size
-    assert freshness.implausible_water_drop(w(10, 0), w(29, 0)) is True
-    # refill / active re-measure: fresh up or equal -> plausible
-    assert freshness.implausible_water_drop(w(25, 1), w(17, 1)) is False
+    # drop to 0 with grey frozen -> held (<= the latch value)
+    assert freshness.implausible_water_drop(w(0, 0), w(22, 0)) is True
+    # drop to 1 L but grey moved (rise OR fall) -> the unit is live-measuring -> shown
+    assert freshness.implausible_water_drop(w(1, 3), w(22, 0)) is False
+    assert freshness.implausible_water_drop(w(0, 2), w(10, 9)) is False
+    # drop to 1 L, grey unknown -> can't corroborate -> held (conservative)
+    assert freshness.implausible_water_drop({"fresh": {"liters": 1}}, w(17, 1)) is True
+    # drop above the latch value, grey unknown -> live, shown
+    assert freshness.implausible_water_drop({"fresh": {"liters": 15}}, w(17, 1)) is False
+    # refill / same -> shown
+    assert freshness.implausible_water_drop(w(25, 0), w(17, 0)) is False
     assert freshness.implausible_water_drop(w(17, 1), w(17, 1)) is False
     # missing levels -> can't judge -> not flagged
     assert freshness.implausible_water_drop({"fresh": {"liters": None}}, w(17, 1)) is False
-    # grey FELL (tank emptied at a dump station) -> the unit is live-measuring -> the fresh drop is
-    # real, NOT the latch. Regression: `ng <= pg` classified any grey fall as "frozen", so after a
-    # real grey dump every subsequent genuine reading re-latched and the hold WEDGED for a month
-    # (live evidence 2026-08-16: unit fresh 0 L/waste 2 L vs a held July-18 baseline 10 L/9 L).
-    assert freshness.implausible_water_drop(w(0, 2), w(10, 9)) is False
-    # grey fall alone (fresh flat) was never a latch candidate; still plausible
-    assert freshness.implausible_water_drop(w(10, 2), w(10, 9)) is False
 
 
 def test_cooler_quiet_scheduled_follows_mode_not_nighttimerset():

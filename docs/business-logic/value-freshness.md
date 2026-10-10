@@ -10,8 +10,8 @@
 > So the 2026-07-09 "heartbeat → 1→11 L" was **correlation** (the van was active then), not cause.
 > buspi is a faithful mirror; the unit simply stops measuring water when parked. We can't force a
 > measurement, so `calictl/freshness.py::implausible_water_drop` rejects the latched drop — the
-> latch signature is a fresh ↓ while grey is **EXACTLY frozen** (the unit freezes both tanks when
-> unpowered); **any** grey movement (rise *or* fall) proves a live measurement — and the daemon
+> latch signature is a fresh ↓ **to ≤ 1 L** while grey is **EXACTLY frozen** (the unit freezes both
+> tanks when unpowered; narrowed 2026-10-10, below); **any** grey movement (rise *or* fall) proves a live measurement — and the daemon
 > holds the last plausible reading, flagged **stale** (forecast suppressed). See
 > `[[value-freshness-heartbeat]]` memory + `R_WATER_STALE_GUARD`.
 >
@@ -21,6 +21,15 @@
 > exact-freeze rule (`==`): only a grey tank that has not moved at all corroborates the latch.
 > Same day: when the guard holds a value, **both tanks** are now flagged stale (grey is frozen by
 > the same unpowered unit, not just fresh).
+>
+> **FIX 2026-10-10 (the grey-always-0 wedge):** on this van grey (`WasteWaterLevel`) reads **0 on
+> every frame**, so "any fresh drop with grey frozen" held **every** real drop: buspi served 22 L
+> from ~2026-09-18 while the unit really reported 20 L (app capture: *20 / 29 l*, 1302
+> `03141d010016`). Only refills passed. The guard is now narrowed to the observed latch value:
+> **latch iff fresh dropped AND new fresh ≤ `WATER_LATCH_MAX_L` (1 L) AND grey exactly frozen**
+> (grey unknown → latch, conservative, still only for the ≤ 1 L case). Any other reading is a live
+> measurement — shown, and the new baseline. Known trade-off: a real drop to ≤ 1 L with grey
+> frozen is held until fresh or grey moves again.
 
 ## Symptom
 
@@ -71,8 +80,10 @@ session."
 
 The ESP32 satellite runs the SAME guard as `freshness.implausible_water_drop`, ported to
 `firmware/components/cali_core/session.c`: when a water (`1302`) frame shows a FreshWaterLevel
-**drop** while WasteWaterLevel is **exactly frozen**, the session keeps serving the last plausible
-frame instead of the latch (any grey movement, or a rising fresh level, is adopted). Comparing the
+**drop to ≤ `CALI_SESSION_WATER_LATCH_MAX_L`** (1 L, the observed latch; mirrors
+`freshness.WATER_LATCH_MAX_L`) while WasteWaterLevel is **exactly frozen**, the session keeps
+serving the last plausible frame instead of the latch (any other reading — a drop that stays above
+1 L, any grey movement, or a rising fresh level — is adopted and persisted as the new baseline). Comparing the
 raw `Level` fields is equivalent to `freshness.py`'s liters comparison — the unit is stable and the
 guard only asks "did fresh drop / did grey move". The plausible frame is **persisted to NVS**
 (`water_good`, wrapped like every `cali_platform` KV record), so a reboot while parked shows the real

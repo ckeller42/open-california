@@ -713,9 +713,8 @@ class Server:
         if self._anchors:
             log.warning("plausibility anchors tripped: %s" % "; ".join(self._anchors))
         # Stale-latch guard: when the van is parked/locked the unit stops measuring fresh water and
-        # returns a bogus low (true 17 L read back as 1 L). A fresh drop from the last PLAUSIBLE
-        # reading with no matching grey rise is physically impossible -> serve/publish that last
-        # plausible reading, flagged stale. The baseline is the persisted `_water_good` (survives
+        # returns a bogus low (true 17 L read back as 1 L). A fresh drop to that latch value (<= 1 L)
+        # with the grey tank frozen -> serve/publish the last plausible reading, flagged stale. The baseline is the persisted `_water_good` (survives
         # restarts, NO Influx dependency). KNOWN LIMIT (cold start): a brand-new install with no
         # cached baseline that first reads while parked will accept the latched low as the baseline
         # and show it unflagged. This is inherent — with no history and no "water-system-on" signal,

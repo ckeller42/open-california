@@ -420,6 +420,44 @@ def test_water_seed_replaces_a_cold_start_latch_baseline(fake):
     assert ("KV water_good " + SEED_WATER) in out  # persisted
 
 
+APP_CAPTURE_WATER = "03141d010016"  # fresh 20, waste 0: the real unit's 1302 read, 2026-10-10 app capture
+
+
+def test_water_real_drop_with_grey_zero_is_served_and_becomes_the_baseline(fake):
+    """Regression 2026-10-10: grey reads 0 on every frame on this van, so the old "any fresh drop
+    with grey frozen" rule held the real 22 -> 20 L drop forever. Only a drop to <=
+    ``CALI_SESSION_WATER_LATCH_MAX_L`` (the observed 1 L latch) is held; 20 L is live — served,
+    persisted as the new baseline — and a following 1 L latch is held against it.
+
+    .. test:: The session serves a real fresh-water drop and holds only the 1 L latch
+       :id: T_FW_SESSION_WATER_LATCH_FLOOR
+       :links: R_FW_SESSION
+    """
+    reads = ["READ %x 0%s" % (c, " " + APP_CAPTURE_WATER if c == 0x1302 else "") for c in CHARS]
+    out = run(
+        fake,
+        "kvsethex water_good " + SEED_WATER,  # 22 L baseline from an earlier boot
+        "reinit",
+        *PAIRED,
+        *read_all(reads=reads),
+        "kvhex water_good",
+    )
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(APP_CAPTURE_WATER))  # 20 L served live
+    assert ("KV water_good " + APP_CAPTURE_WATER) in out  # and is the new baseline
+    out = run(
+        fake,
+        "kvsethex water_good " + SEED_WATER,
+        "reinit",
+        *PAIRED,
+        *read_all(reads=reads),
+        "NOTIFY 1302 " + LATCH_WATER,  # the parked 1 L latch
+        "tick %d" % (T + 100),
+    )
+    got, f = _water(snaps(out)[-1])
+    assert got == protocol.decode(f, bytes.fromhex(APP_CAPTURE_WATER))  # latch held vs 20 L
+
+
 def test_water_seed_rejects_a_wrong_length_frame(fake):
     """A frame that is not exactly the water frame length is refused; the baseline is untouched."""
     out = run(fake, "> water seed 0316", "> water seed " + SEED_WATER + "00", "kvhex water_good")

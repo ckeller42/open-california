@@ -256,8 +256,8 @@ class MockCamperUnit:
         # WATER is measurement-gated on the van's own WATER SYSTEM being powered — NOT on the 1003
         # heartbeat (that was correlation; disproven at the van 2026-07-14, value-freshness.md).
         # Unpowered, the unit stops measuring and FREEZES BOTH tanks at their last reading, which is
-        # what `freshness.implausible_water_drop` detects: a fresh-water drop while grey is exactly
-        # frozen. Powered, it measures and pushes 1302 on an actual measured CHANGE.
+        # what `freshness.implausible_water_drop` detects: a fresh-water drop to the 1 L latch while
+        # grey is exactly frozen. Powered, it measures and pushes 1302 on an actual measured CHANGE.
         # The firmware ACKs some writes and then silently IGNORES them — the nastiest class for a
         # client, because nothing errors and only a readback reveals it. `driving` is an explicit
         # mock flag, NOT a derived predicate: the real "is the vehicle stationary" condition
