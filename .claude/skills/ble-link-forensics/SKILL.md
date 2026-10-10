@@ -28,12 +28,14 @@ with btmon. Facts: `docs/firmware.md` "The unit's own ATT requests (GATT server 
 3. **Compare holders: who is NOT dropped?** App vs buspi vs ESP on the same van, same state. Change
    **one** variable per run, on the van:
    - buspi heartbeat pace / off via a RUNTIME drop-in (gone on reboot):
-     ```
-     sudo mkdir -p /run/systemd/system/calictl.service.d
-     printf '[Service]\nEnvironment=CALICTL_HEARTBEAT_PERIOD_S=0.5\n' | sudo tee /run/systemd/system/calictl.service.d/exp.conf
+
+     ```sh
+     D=/run/systemd/system/calictl.service.d; sudo mkdir -p $D
+     printf '[Service]\nEnvironment=CALICTL_HEARTBEAT_PERIOD_S=0.5\n' | sudo tee $D/exp.conf
      sudo systemctl daemon-reload && sudo systemctl restart calictl
-     # revert: sudo rm .../exp.conf && sudo systemctl daemon-reload && sudo systemctl restart calictl
+     # revert: sudo rm $D/exp.conf && sudo systemctl daemon-reload && sudo systemctl restart calictl
      ```
+
      `=600` = heartbeat effectively off. Measured: link NOT dropped in >2 min — the heartbeat arms
      writes, it does not keep links.
    - also: counter start value, reads on/off, other centrals' connects (correlate timestamps).
