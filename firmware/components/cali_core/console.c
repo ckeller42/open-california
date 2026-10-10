@@ -210,27 +210,6 @@ static void set_cmd(char *args) {
     (void)cali_ctl_submit(fn, what, value, -1, NULL, &reason);   /* no page, no clock */
 }
 
-/* "water seed <hex>": hand the session the last plausible water (1302) frame (e.g. buspi's), after a
- * reflash cold-started on the parked latch. Touches only the water baseline. */
-static void water_seed_cmd(const char *hex) {
-    uint8_t frame[CODEC_FRAME_MAX];
-    size_t n = 0;
-    while (*hex == ' ' || *hex == '\t') hex++;
-    for (; isxdigit((unsigned char)hex[0]) && isxdigit((unsigned char)hex[1]); hex += 2) {
-        if (n == sizeof frame) break;
-        unsigned v;
-        sscanf(hex, "%2x", &v);
-        frame[n++] = (uint8_t)v;
-    }
-    int rc = (*hex || n == 0) ? -1 : cali_session_water_seed(frame, n);
-    if (rc == -1)
-        cali_log("water: seed rejected (need the 1302 frame as hex)");
-    else if (rc == -2)
-        cali_log("water: seeded, but NOT persisted (lost on reboot)");
-    else
-        cali_log("water: seeded");
-}
-
 static void on_state(const cali_pair_state_t *s, const char *address) {
     cali_console_state(s, address);
     if (s->st == PAIR_BONDED) {
@@ -300,8 +279,6 @@ void cali_console_line(const char *line) {
         wifi_cmd(cmd + 4);
     } else if (strncmp(cmd, "set", 3) == 0 && (cmd[3] == ' ' || cmd[3] == '\t' || cmd[3] == 0)) {
         set_cmd(cmd + 3);
-    } else if (strncmp(cmd, "water seed ", 11) == 0) {
-        water_seed_cmd(cmd + 11);
     } else {
         cali_log("unknown command: %.*s", word_len(cmd), cmd);
     }

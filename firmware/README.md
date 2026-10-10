@@ -245,8 +245,7 @@ python -m pytest tests/firmware -v
 
 `cali-host --hci-port <tcp-port> [--store <dir>]` speaks the console line protocol on
 stdin/stdout (`components/cali_core/include/cali_console.h`): `pair`, `passkey N`, `forget`,
-`status`, `quit`, `set <function> <what> [value]`, `water seed <hex>` (seed the fresh-water
-baseline after a reflash — `docs/business-logic/value-freshness.md`) in; `STATE {json}` (calictl's `/api/pairing` keys),
+`status`, `quit`, `set <function> <what> [value]` in; `STATE {json}` (calictl's `/api/pairing` keys),
 `SNAP {"t":ms,"fn":{...}}` (every state function, `codec_decode`d) and `LOG text` out. Without a
 stored bond it boots `idle` and never scans; with one it reconnects by bond. The NimBLE host task
 (main thread) makes every cali_core/transport call; the stdin thread only queues lines and posts
