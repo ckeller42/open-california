@@ -64,6 +64,9 @@ def test_read_all_matches_python_decode(host_fw, hci_unit):
     snap = fw.expect("SNAP", timeout=40)
     funcs = _funcs()
     served = hci_unit.call(_served_frames, hci_unit.unit)  # {function: bytes} the fake served
+    # cold start: the one water read is a ramp-debounce candidate, shown only once it has settled
+    # (calictl.freshness.settle_water; the session-fake tests cover that)
+    served.pop("water", None)
     assert set(snap["fn"]) == set(served)
     for name, frame in served.items():
         want = protocol.decode(funcs[name], frame)
