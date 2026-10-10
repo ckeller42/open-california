@@ -10,6 +10,8 @@ The real app (5.0.8) runs in an Android emulator whose virtual radio (netsim) is
 GATT. Every app screen, dialog and write frame is protocol evidence (tier **APP-OBSERVED**). Generic
 recipe and pitfalls: **REQUIRED BACKGROUND:** `android-ble-app-lab`. This skill is the runbook for
 THIS repo and THIS machine.
+Real phone + real unit instead (frames, link drops and timing only the van shows): the
+`phone-app-lab` skill.
 
 ## Who launches what (the disk-permission split)
 
