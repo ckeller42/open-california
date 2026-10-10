@@ -127,6 +127,8 @@ Tests
 .. autofunction:: tests.e2e.test_gui.test_all_lights_master_stays_on
 .. autofunction:: tests.e2e.test_gui.test_favourite_save_then_activate
 .. autofunction:: tests.e2e.test_gui.test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7
+.. autofunction:: tests.e2e.test_gui.test_favourite_tile_tap_activates_and_empty_tiles_are_disabled
+.. autofunction:: tests.e2e.test_gui.test_lighting_functions_and_settings_are_collapsed_with_a_summary
 .. autofunction:: tests.e2e.test_gui.test_wakeup_areas_use_the_t7_labels_and_ranges
 .. autofunction:: tests.e2e.test_gui.test_wakeup_areas_are_a_vertical_checkbox_list
 .. autofunction:: tests.e2e.test_gui.test_door_contact_row_hidden_on_grand_california

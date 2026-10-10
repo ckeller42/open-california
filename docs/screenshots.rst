@@ -36,7 +36,11 @@ Lighting
 
 .. image:: screenshots/light_03_Lighting.png
    :width: 300
-   :alt: Lighting screen — profile + per-lamp control
+   :alt: Lighting screen — All lights, favourite tiles A-D, per-lamp control
+
+Like the app: *All lights* and the favourite tiles A–D on top (one tap activates a stored
+favourite; an empty slot shows "+"), the lamp groups below, and the rarely needed wake-up light,
+sliding-door light and "save current as" collapsed under *Functions & settings* at the bottom.
 
 Vehicle
 -------
