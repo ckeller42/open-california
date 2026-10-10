@@ -17,6 +17,12 @@ enums, setter methods, full-packet-resend rules, and the per-feature
 traceability lives here in the RE spec, not in the distributed end-user
 prototype.
 
+Evidence tags in the YAMLs: `DECOMPILE` (app 5.0.8.3028), `APP-OBSERVED` (the emulator lab
+against the fake unit, 5.0.8), `REAL-PHONE` (the owner's phone against the real unit; 5.4.0.3036
+from 2026-10-10). Screenshots are VW copyright and are **not** in this repo: they are indexed per
+screen in the private RE repo (`screens/README.md` in `californiaontour-re`), together with the
+5.0.8 → 5.4.0 differences.
+
 Decompiled source root used throughout:
 `the decompiled sources (local)` (see individual YAML file headers for
 exact file:line citations).

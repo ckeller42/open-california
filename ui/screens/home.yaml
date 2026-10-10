@@ -138,6 +138,7 @@ widgets:
     controls: null
     elements: [vehiclePage_helpWidget_onlineManual_text, vehiclePage_helpWidget_technicalInformation_text]
     target: vehicle-info
+    constraints: "REAL-PHONE 2026-10-10 (app 5.4.0.3036, real unit, ignition off): section 'Help' lists Vehicle Settings, How-to & Info, Online operating manual, Service and repair, Find EV Chargers. 'Vehicle Settings' is the 5.0.8 Account > Vehicle page (shows the VIN; see account.yaml). Above it, section 'Self-check' with 'See all checklists'; the Remote Control card header shows 'Updated: N minutes ago'."
 
   - id: errorWarningLabels
     type: label

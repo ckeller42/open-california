@@ -28,8 +28,8 @@ widgets:
       - {label: account_mainNavigation_dataPrivacy_text, target: settings}
       - {label: account_mainNavigation_unitOfDistance_text, target: settings}
       - {label: account_mainNavigation_helpAndContact_text, target: account}
-    constraints: "9 entries in the key list. APP-OBSERVED 2026-09-27 (screen 51, not logged in) visual order: Log in, Vehicle, Connectivity Settings, Notification Settings, Distance Unit, Data Privacy, Help & Contact, then a 'California App' section (Site Notice, Terms of Use, Privacy Policy, Third-Party License Information) and 'App Version: 5.0.8.3028'."
-    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
+    constraints: "9 entries in the key list. APP-OBSERVED 2026-09-27 (screen 51, not logged in) visual order: Log in, Vehicle, Connectivity Settings, Notification Settings, Distance Unit, Data Privacy, Help & Contact, then a 'California App' section (Site Notice, Terms of Use, Privacy Policy, Third-Party License Information) and 'App Version: 5.0.8.3028'. REAL-PHONE 2026-10-10 (app 5.4.0.3036, real unit, ignition off), logged in: My Account, Connectivity Settings, Notification Settings, Distance Unit, Data Privacy, Help & Contact, then the 'California App' section and 'App Version: 5.4.0.3036' — NO 'Vehicle' entry: the vehicle page (VIN, Equipment, Setup remote control, Bluetooth Reset) moved to Vehicle tab > Help > 'Vehicle Settings'."
+    evidence: APP-OBSERVED 2026-09-27 | REAL-PHONE 2026-10-10 | DECOMPILE
 
   - id: loginBanner
     type: section

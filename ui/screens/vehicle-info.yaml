@@ -95,8 +95,10 @@ widgets:
       DECOMPILE-SETTLED (decompile cross-check 2026-10-06, enigma 46f982d3): the gate is 1004 CarLevelPopUp
       (bits 4-5, zf/d.java:328) — 1 = the "No data / ignition" card with
       blank gauges, 2 = the debounced "Please slow down" dialog.
+      REAL-PHONE 2026-10-10 (app 5.4.0.3036, real unit, ignition off): the card reads 'Signal unavailable.' / 'Ignition is off.' with
+      '-.-°' gauges (5.0.8 lab text above differs — version drift).
     label_text: "Level Indicator"
-    evidence: APP-OBSERVED 2026-09-27 (gate text) | DECOMPILE (data source)
+    evidence: APP-OBSERVED 2026-09-27 (gate text) | REAL-PHONE 2026-10-10 (5.4.0 text) | DECOMPILE (data source)
 
   - id: vehicleHandshakeSection
     type: section
