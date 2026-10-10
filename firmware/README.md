@@ -1,10 +1,10 @@
 # firmware — ESP32 satellite (#154)
 
-ESP-IDF + NimBLE firmware for the camper-unit satellite. Work in progress: the host build
+ESP-IDF + NimBLE firmware for the camper-unit satellite: the host build
 (`host/host_main.c` -> `cali-host`: console, pairing runner and session on the NimBLE Linux port),
 the platform-free component `components/cali_core` (below), and the ESP-IDF project for the
-esp32s3 / M5Stack CoreS3 (`main/app_main.c`; runs on a bench CoreS3 against the mock unit, not yet
-against the real camper unit).
+esp32s3 / M5Stack CoreS3 (`main/app_main.c`; runs on a bench CoreS3 against the mock unit, and
+bonded to the real camper unit since 2026-10-08, alongside buspi).
 
 ## ESP-IDF build (`firmware/`, esp32s3)
 
@@ -528,7 +528,7 @@ alone all the same — the mock unit kept being read about once a second, `/api/
    Identifier), per Vol 4 Part E 7.8.13; Bumble answered success and kept it pending, so NimBLE's
    connect procedure never ended. (c) *A lost host ends its links:* when `cali-host` exits (the
    ESP32 reboots) the unit sees a supervision timeout; Bumble's controller outlived the TCP host
-   and held the unit's only connection slot. Test knobs on the same controller make the
+   and held the fake's link. Test knobs on the same controller make the
    connect-cancel races deterministic (`hold_connects`, `cancel_delay_s`, `connect_on_cancel`,
    used by `test_unit_forgot_us_repairs`), and the fake unit's `drop_on_read` hangs up on one GATT
    read so a link is lost mid read-all (`test_link_drop_mid_read_all_reconnects`).
@@ -610,8 +610,9 @@ modules' docstrings.
 
 ## On-board verification
 
-The bring-up plan for a real M5Stack CoreS3 on the bench, in order (run 2026-10-01 against the
-mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record what has been proven):
+The bring-up plan for a real M5Stack CoreS3, in order (run 2026-10-01 against the mock unit on the
+bench, and 2026-10-08 against the real unit in the van: the Board tier in `docs/firmware.md` and the
+BOARD/DEVICE rows of the evidence ledger record what has been proven):
 
 1. **Flash from the build's own flasher args — never hand-type offsets.** `idf.py build` (the
    release variant, table above) writes `firmware/build/flasher_args.json` alongside the images;
@@ -631,10 +632,10 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    UART bridge): `/dev/cu.usbmodem*` (macOS) or `/dev/ttyACM*` (Linux) at any baud (the driver
    ignores it) — `idf.py -p <port> monitor`, or a plain serial terminal, speaks the console line
    protocol above directly. **Watch item 4**: this exact path has never been tried.
-3. **Pause `calictl` on buspi first — the unit has a single BLE connection slot.** `sudo systemctl
-   stop calictl` on buspi (or unplug it) before pairing the firmware — a live buspi daemon holds
-   the only slot the unit will grant, and the firmware's `pair` would simply never connect.
-   `sudo systemctl start calictl` (or `--now` re-enable) afterwards.
+3. **Keep the radio quiet while pairing — calictl can stay up.** The unit serves several centrals
+   at once (the 2026-10-08 real-unit bond was made while buspi's session stayed up), so there is no
+   need to stop `calictl`. The passkey is valid for only ~30 s, though: close the phone app for the
+   pairing (its reconnect storm right after a unit Bluetooth reset can collide with the window).
 4. **Pair with the real unit via the console passkey.** Send `pair` on the console, type the
    6-digit passkey the unit's own screen displays with `passkey N`, watch for `STATE
    {"state":"bonded",...}`. This is also the first real test of **watch items 1 and 2** (the bond
@@ -650,7 +651,7 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
 6. **Reboot with the bond in place.** Power-cycle the board; it must reconnect by bond (`STATE
    {"state":"idle",...}` then, once the session comes up, a fresh `SNAP`) with no passkey prompt
    and no `LOG store: ERROR` line — closes out **watch item 1**.
-7. **The control path (BOARD 2026-10-07 against the mock unit; never the real unit without the
+7. **The control path (BOARD 2026-10-07 against the mock unit; DEVICE 2026-10-08 on the real unit,
    owner watching).** With the board on the home WiFi and `curl -s
    http://calictl-esp.local/api/state | jq .device.control` → `{"writes": true}`:
    `tools/esplab_control_walk.py --url http://calictl-esp.local --fifo <mock fifo> --record <mock
@@ -661,7 +662,8 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    a fridge toggle from the UI in a browser must land as one `1101` write. Then add dated BOARD rows
    to `docs/business-logic/evidence-ledger.md` (watch item 7 in `docs/firmware.md`). **Ran
    2026-10-07** on thinky (CI image of `8b1eda0`): 3 clean walks of 31 cases, no `1401`, `403` over
-   the hotspot, the UI toggle landed — against the mock unit only; the real unit is still to come.
+   the hotspot, the UI toggle landed — against the mock unit. On the real unit (2026-10-08, owner
+   watching) cooler power, the wake-up light and the door contact actuated (DEVICE rows).
    Since the wake-up light the walk posts `local_now` and injects the unit's config frames, so it
    also covers the app's four wake-up edits (`lighting-wakeup.jsonl:239` as the REQUEST_CONFIG pull +
    `WAKEUP_UNKNOWN` refusal and as `07:00 off`); a wake-up card edit from the browser must land as
@@ -679,8 +681,8 @@ mock unit: the Board tier in `docs/firmware.md` and the evidence ledger record w
    forget`, join the setup hotspot and repeat at `http://192.168.4.1/app` (the wizard's *Bluetooth
    reset / re-pair* first); a `POST /api/command` there must be `403 setup_mode`; `POST /api/wifi`
    back to the home network keeps the bond. **Ran 2026-10-08** (CI image of `ab47e22`): every step
-   as above, the mock saw writes on `1003` only. With the real unit this is the first pairing (step 4
-   via the page instead of the console).
+   as above, the mock saw writes on `1003` only. On the real unit the satellite bonded on
+   2026-10-08 while buspi stayed connected (DEVICE rows in the evidence ledger).
 
 Carry the hardware watch items from `docs/firmware.md` into this run explicitly (repeated here so
 this checklist is self-contained):

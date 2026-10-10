@@ -4,17 +4,13 @@ This walks you through connecting the ESP32 "satellite" — the small M5Stack Co
 pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 firmware](firmware.md))
 — to your WiFi, so you can see its status page from a phone or laptop.
 
-> **Status — read this first.** The firmware is proven on a Linux build with a simulated WiFi
-> radio and on an emulated chip. A real CoreS3 runs it on a test bench (2026-10-01): it joined a
-> 2.4 GHz network through its setup hotspot and the page, and its screen showed every state in
-> [What the screen tells you](#what-the-screen-tells-you) — but against a *simulated* camper unit,
-> with a Linux laptop (not a phone) on the hotspot, and never in the van. The controls (below) ran
-> on the real board against the simulated unit too (2026-10-07: every recorded app action arrived
-> byte for byte, a fridge toggle from the browser landed, controls refused over the setup hotspot;
-> 2026-10-08: the wake-up light too, from the app's recorded edits and from the page), and the
-> pairing wizard below paired it on a home network and over the setup hotspot (2026-10-08, simulated unit)
-> — but it has never paired with or switched anything in a real camper. The list of things still to confirm is in
-> [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
+> **Status.** The satellite has been paired with a real camper unit since 2026-10-08 (while the Pi
+> stayed connected to the same unit) and switches the fridge, camping mode, lights, air heater and
+> energy mode there; it keeps its link while the van is parked. Before that it was proven on a
+> Linux build with a simulated WiFi radio, on an emulated chip, and on a real CoreS3 against a
+> simulated camper unit (setup hotspot, every screen state, every recorded app action byte for
+> byte, the pairing wizard on a home network and over the setup hotspot). What is still to confirm
+> is listed in [ESP32 firmware → Network watch items](firmware.md#network-watch-items-board-only).
 
 The satellite reads the camper unit and, on your home WiFi, controls the fridge, camping mode,
 lights (the wake-up light included), air heater and energy mode with the same frames the Pi sends
@@ -72,9 +68,11 @@ From now on the satellite joins your network by itself every time it starts.
 The satellite pairs from its own page with the same wizard the Pi uses (step by step, with the
 camper screen's side: [How to pair your camper unit](howto-pair-your-camper.md)):
 
-1. On the camper control unit open **Einstellungen → Bluetooth → Gerät verbinden** and close the
-   California On Tour app on your phone (the unit takes one connection at a time — a Pi running
-   calictl near the van would take it too).
+1. On the camper control unit open **Einstellungen → Bluetooth → Gerät verbinden**, and close the
+   California On Tour app on your phone for the few minutes pairing takes: the passcode is valid
+   for only about 30 seconds, and the app's reconnect attempts (right after a Bluetooth reset on
+   the unit) can collide with it. A Pi running calictl can stay up — the unit serves several
+   Bluetooth clients at once, so the satellite pairs alongside it.
 2. Open the calictl UI — **<http://calictl-esp.local>** on your WiFi, or, still on the setup
    hotspot, the device page's link *Open the camper UI to pair the unit* (**<http://192.168.4.1/app>**).
 3. Tap **Set up remote control** on the *No camper unit is paired yet* banner (or ⋮ → **Bluetooth

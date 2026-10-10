@@ -13,8 +13,8 @@ open-california (see [Raspberry Pi setup](raspberry-pi-setup.md)) and are standi
 
 **ESP32 satellite?** It runs this same wizard from its own page — at
 <http://calictl-esp.local>, or over its setup hotspot at <http://192.168.4.1/app> — with its own
-hints instead of the Pi's (no scanner or `CALICTL_ADDR` steps: just keep a Pi running calictl
-from holding the unit's one connection). See
+hints instead of the Pi's (no scanner or `CALICTL_ADDR` steps). A Pi running calictl can stay
+connected while the satellite pairs — the unit serves several Bluetooth clients at once. See
 [Pair the satellite with your camper unit](howto-esp-wifi-setup.md#pair-the-satellite-with-your-camper-unit).
 
 ## What you need
@@ -28,12 +28,15 @@ from holding the unit's one connection). See
 
 ## Before you start
 
-The camper control unit accepts exactly **one** Bluetooth connection at a time, and pairing
-needs the Pi's radio to be free to scan and connect without another Bluetooth client
-interfering. Before you open the wizard:
+The camper control unit serves several Bluetooth clients at once — the phone app, the Pi and an
+ESP32 satellite can all stay connected. Pairing is the one exception that needs a **quiet radio**:
+the unit's passcode is valid for only about 30 seconds, and other Bluetooth traffic around the Pi
+can make that window run out. Before you open the wizard:
 
-- **Close the California On Tour app, or turn off your phone's Bluetooth.** If the phone is
-  connected to the unit, the Pi cannot connect to it at all.
+- **Close the California On Tour app on your phone for the few minutes pairing takes.** Right
+  after a Bluetooth reset on the unit, the app keeps trying to reconnect, and that burst of traffic
+  can collide with the passcode window. You can reopen it once the wizard shows *✓ Paired*; you do
+  not need to close it for normal use, and you do not need to stop calictl.
 - **Pause any other Bluetooth software on the Pi for the few minutes pairing takes** — for
   example the Home Assistant Bluetooth integration, or any other BLE reader you have running
   (Anker, Victron, Govee, …). A client that keeps discovery running on the Pi's adapter after
@@ -62,8 +65,8 @@ next:
 
 | Wizard message | What it means | What to do |
 |---|---|---|
-| **"No vehicle found."** | The Pi never saw the unit advertising within the scan window. | Check that "Gerät verbinden" is open on the unit, that buspi is in range, and that no phone is connected to the unit. |
-| **"Could not connect to the unit."** | The unit was found, but the Bluetooth connection itself failed. | The unit may be asleep, a phone may still hold its single connection, or another app on this Pi keeps Bluetooth scanning. Wake the unit at its panel, disconnect the phone, pause other Bluetooth apps, then try again. An existing bond is kept. |
+| **"No vehicle found."** | The Pi never saw the unit advertising within the scan window. | Check that "Gerät verbinden" is open on the unit and that buspi is in range. |
+| **"Could not connect to the unit."** | The unit was found, but the Bluetooth connection itself failed. | The unit may be asleep, another app on this Pi may keep Bluetooth scanning, or the phone app may be reconnecting after a Bluetooth reset. Wake the unit at its panel, close the phone app and pause other Bluetooth apps for the pairing, then try again. An existing bond is kept. |
 | **"Pairing was refused."** | The unit rejected the passcode or the pairing request. | Wrong passcode, or the unit left pairing mode. Reopen "Gerät verbinden" on the unit and try again. |
 | **"Could not verify the bond."** | Bluetooth-level pairing succeeded, but the unit didn't answer calictl's own follow-up reads. | The bond was made but the unit did not answer. Try again; if it repeats, use Bluetooth reset / re-pair. |
 | **"Something went wrong. Try again."** | A fallback for an error code this build doesn't have specific wording for. | Try again; if it repeats, use Bluetooth reset / re-pair. |

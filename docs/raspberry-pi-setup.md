@@ -150,8 +150,8 @@ change needs a daemon restart.
 | `CALICTL_CONNECT_TIMEOUT_S` | `30` | per-attempt BLE connect timeout (above) |
 | `CALICTL_ADAPTER_RESET` | off | `1` = power-cycle the adapter to recover from a failed connect. Off because `hci0` is shared with the other buspi BLE readers |
 | `CALICTL_PERSISTENT_SESSION` | `1` | `0` = no persistent armed session; connect per operation |
-| `CALICTL_UI_IDLE_S` | `25` | release the persistent session after this long without web-UI activity, so the phone app can use the single slot |
-| `CALICTL_SESSION_WAIT_S` | `6` | how long a command waits for the supervisor's session before falling back to a cold connect (a roof move never waits: it takes the slot for its own connection) |
+| `CALICTL_UI_IDLE_S` | `25` | release the persistent session after this long without web-UI activity — nobody is watching, so the held link and its heartbeat stop, sparing the unit and the shared radio |
+| `CALICTL_SESSION_WAIT_S` | `6` | how long a command waits for the supervisor's session before falling back to a cold connect (a roof move never waits: it runs inside a live session, or opens its own connection at once) |
 | `CALICTL_FAST_CONFIRM_S` | `1.2` | how long a lighting command waits for the `1502` notification before returning an optimistic "sent" |
 | `CALICTL_STATE_CACHE` | `~/.cache/calictl/last_state.json` | persisted last-known state (shown while the van is asleep) |
 | `CALICTL_OUTCOMES_CACHE` | `~/.cache/calictl/poll_outcomes.jsonl` | per-poll outcome log (classifies telemetry gaps: deep sleep vs BLE error vs daemon down) |
@@ -256,10 +256,10 @@ working alongside it. Check it with `sudo tailscale serve status`; remove it wit
 ## Troubleshooting
 
 - **`VWCAMPER` not found** — make sure the camper is on its "Connect device" screen (it only
-  advertises pairable there), the Pi's adapter is up (`bluetoothctl power on`), and nothing else
-  already holds the single BLE slot.
-- **`calictl status` fails after pairing** — the bond didn't complete; re-run pairing. Only one
-  controller reads reliably at a time; close the phone app while testing.
+  advertises pairable there), the Pi's adapter is up (`bluetoothctl power on`), and no other
+  scanner on the Pi keeps discovery running.
+- **`calictl status` fails after pairing** — the bond didn't complete; re-run pairing. With the
+  daemon running, read its `/api/state` instead — the CLI would open a second link from the Pi.
 - **Existing hosts** — the reference host `buspi` predates this installer and keeps its config in
   `/etc/buspi/`; that's a legacy location. New installs use `/etc/opencalifornia/`. The unit file
   is rendered per host, so both work — nothing needs migrating.
