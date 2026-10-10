@@ -358,12 +358,13 @@ def test_roof_position_name_and_infopopup_alert():
         (7, "emergency_locked"),
         (10, "not_possible"),
         (11, "low_battery"),
-        # observed on the real app (tools/applab, 2026-09-16): tile texts, no dialog
-        (2, "in_use"),
-        (3, "in_use"),
-        (12, "in_use"),
-        (9, "not_stationary"),
+        # CAPTURE 2026-10-10 (real app, real unit): 2 = the app's pre-open safety-checklist prompt;
+        # 12 moving / 8 end of travel / 3 stopped mid-travel are normal progress codes, not alerts
+        (2, "open_checklist"),
+        (3, None),
+        (12, None),
         (8, None),
+        (9, "not_stationary"),
         (13, None),
         (14, None),
     ]:
@@ -645,7 +646,8 @@ def test_numeric_fields_alert_enums_become_codes():
     assert influx.numeric_fields({"fault": None})["fault_code"] == 0.0
     assert influx.numeric_fields({"alert": "child_lock"})["alert_code"] == 1.0
     assert influx.numeric_fields({"alert": "low_battery"})["alert_code"] == 6.0
-    assert influx.numeric_fields({"alert": "in_use"})["alert_code"] == 8.0  # appended 2026-09-16
+    assert influx.numeric_fields({"alert": "not_stationary"})["alert_code"] == 9.0  # appended 2026-09-16
+    assert influx.numeric_fields({"alert": "open_checklist"})["alert_code"] == 10.0  # 8 (in_use) retired
     # water fault codes (semantics.water fresh_alert / waste_alert, app dialogs observed 2026-09-16)
     assert influx.numeric_fields({"fresh_alert": "empty"})["fresh_alert_code"] == 5.0
     assert influx.numeric_fields({"waste_alert": "full"})["waste_alert_code"] == 1.0

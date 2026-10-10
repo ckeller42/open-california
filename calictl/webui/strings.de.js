@@ -272,7 +272,8 @@ window.STRINGS_DE = {
     "⚠ Aufstelldach manuell sichern (siehe Bedienungsanleitung)",
   "⚠ Function currently unavailable": "⚠ Funktion zurzeit nicht möglich",
   "⚠ Battery low — run the engine": "⚠ Batterie schwach — Motorlauf durchführen",
-  "Function currently in use": "Funktion wird gerade verwendet",
+  "Please check before opening the pop-up roof: sufficient space above? Access board open? Window or vehicle door open?":
+    "Bitte vor dem Öffnen des Aufstelldachs prüfen: Ausreichend Platz über dem Aufstelldach? Durchstiegsboard schon offen? Fenster oder Fahrzeugtür schon offen?",
   "Roof control is safety-sensitive and not live-verified.":
     "Die Dachsteuerung ist sicherheitskritisch und nicht live-verifiziert.",
   "open": "öffnen",

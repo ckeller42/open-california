@@ -8,6 +8,17 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-10 — roof InfoPopUp 2/3/8/12 are a checklist prompt and progress codes, not "in use"
+
+HCI snoop of the real app on the real unit (owner, full open + close): **2** = the unit asks the
+app for its pre-open safety checklist (`dialog_info_popUpRoof_safetyCheck`), **12** moving, **8** end
+of travel, **3** stopped mid-travel. The 2026-09-16 `in_use` name (fake unit, tile text) is retired:
+2 → `open_checklist` (Influx code 10, shown, never a move block — the app's flow is press →
+checklist → press again), 3/8/12 → no alert. `in_use` left `ROOF_MOVE_BLOCK` (server + web) so a
+normal move no longer refuses its own follow-up press. Table in `alert-states.md`.
+
+---
+
 ## 2026-10-07 — the ESP satellite sets the wake-up light (supersedes "not the wake-up light" below)
 
 The satellite now carries `lighting wakeup` (spec `2026-10-07-esp-wakeup`, `R_FW_WAKEUP`). The two

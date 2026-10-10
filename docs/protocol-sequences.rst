@@ -915,7 +915,12 @@ app's 3000 ms dead-man only reports "SafetyCounter is invalid after 3 seconds"
 (``0``/``14`` closed, ``1`` open, ``2`` middle, ``15`` error), then ``Installed@6`` and
 ``SafetyCounterValid@7`` in byte 0's low bits. So ``03xx`` means closed + installed + counter
 valid, and ``23xx`` means middle. ``InfoPopUp@12`` is byte 1's low nibble (the alert enum,
-``R_ROOF_ALERT``). **APP-OBSERVED 2026-09-16** (``tools/applab``): the roof page pre-streams
+``R_ROOF_ALERT``). **CAPTURE 2026-10-10 (real app, real unit)**, a full open + close: the first
+open press after the page opened answers ``0302`` (InfoPopUp 2, the app shows its pre-open safety
+checklist, no motion; after OK a fresh press moves), then ``030c`` → ``230c`` while moving
+(InfoPopUp 12), ``2308`` at end of travel (8), then ``1300`` (open) or ``0300`` (closed); a release
+mid-travel gives ``2303`` (3) then ``2300``. These are prompt/progress codes, not alerts: none of
+them blocks a move or STOP. **APP-OBSERVED 2026-09-16** (``tools/applab``): the roof page pre-streams
 ``[0x00][counter]`` from the moment it opens. While a button is held the rate rises to ~8 frames/s,
 with four consecutive frames carrying the same counter. Without terminal 15 the page hides its
 controls ("Switch on the ignition"). The no-pre-arm stream is from the 2026-08-30 decompile

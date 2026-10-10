@@ -432,14 +432,15 @@ const ROOF_ALERT_MSG = {
   emergency_locked: "⚠ Secure the pop-up roof manually (see operating manual)",
   not_possible: "⚠ Function currently unavailable",
   low_battery: "⚠ Battery low — run the engine",
-  in_use: "Function currently in use",
+  open_checklist: "Please check before opening the pop-up roof: sufficient space above? Access board open? Window or vehicle door open?",
   not_stationary: "Only possible when stationary",
 };
-// The subset of roof alerts on which the app refuses a MOVE (ig/c.java j(), plus the in-use /
-// not-stationary tile states observed on the real app 2026-09-16). sensor_error is deliberately
-// absent: the app shows it but still allows open/close.
+// The subset of roof alerts on which the app refuses a MOVE (ig/c.java j(), plus the not-stationary
+// tile state observed on the real app 2026-09-16). sensor_error is deliberately absent: the app shows
+// it but still allows open/close. open_checklist (InfoPopUp 2) is absent too: the app's flow is
+// press -> checklist -> press again (CAPTURE 2026-10-10, real app, real unit).
 const ROOF_MOVE_BLOCK = new Set(["child_lock", "error", "driving", "emergency_locked", "not_possible", "low_battery",
-                                 "in_use", "not_stationary"]);
+                                 "not_stationary"]);
 
 /**
  * Terminal-15 (ignition) — the vehicle char (1004 `TerminalOneFive`, bit 7) is the authoritative

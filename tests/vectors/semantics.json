@@ -9380,7 +9380,7 @@
   },
   {
    "expect": {
-    "alert": "in_use",
+    "alert": "open_checklist",
     "installed": true,
     "position": 2,
     "position_name": "middle",
@@ -9397,7 +9397,7 @@
   },
   {
    "expect": {
-    "alert": "in_use",
+    "alert": null,
     "installed": true,
     "position": 3,
     "position_name": "other",
@@ -9550,7 +9550,7 @@
   },
   {
    "expect": {
-    "alert": "in_use",
+    "alert": null,
     "installed": true,
     "position": 12,
     "position_name": "other",

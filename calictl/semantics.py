@@ -281,12 +281,12 @@ _ROOF_ALERT = {
     7: "emergency_locked",
     10: "not_possible",
     11: "low_battery",
-    # Observed 2026-09-16 with the real app against the fake unit (tools/applab):
-    # 2/3/12 -> roof tile "Function currently in use" (app's k() set), 9 -> "Only
-    # possible when stationary" (E0 flow). No dialog, just a refused move + tile text.
-    2: "in_use",
-    3: "in_use",
-    12: "in_use",
+    # CAPTURE 2026-10-10 (real app, real unit): 2 = the unit asks the app to show its pre-open
+    # safety checklist (the app shows it, the move waits for a fresh press; not an error). 12 moving,
+    # 8 end of travel, 3 stopped mid-travel are normal progress codes -> no alert (deliberately
+    # absent). The 2026-09-16 fake-unit reading of 2/3/12 as "in use" was the app's tile text only.
+    2: "open_checklist",
+    # Observed 2026-09-16 (tools/applab): 9 -> "Only possible when stationary" (E0 flow).
     9: "not_stationary",
 }
 # InfoPopUp 5 = ROOF_OP_DRIVING (docs/business-logic/alert-states.md): the unit refuses to move the
@@ -300,7 +300,8 @@ def roof(d: dict) -> dict:
     Adds the app's human-facing readouts on top of the raw ``Position``: a
     ``position_name`` (``closed``/``open``/``middle``/``error``/``other``) and the
     ``InfoPopUp`` alert enum (child-lock, error, driving, sensor error, emergency-locked,
-    not-possible, low battery), the alert surfaced only while the roof is installed. The
+    not-possible, low battery, not-stationary, the pre-open checklist prompt), the alert
+    surfaced only while the roof is installed. Motion progress codes (3/8/12) are not alerts. The
     app refuses a MOVE on every alert except ``sensor_error`` (which it only shows) — that
     block set lives in the web UI (``ROOF_MOVE_BLOCK``). Mapping taken from the decompiled roof
     view-model ``ig/c.java`` (``l()`` + the ``InfoPopUp`` branch) and ``hf/b.java``.

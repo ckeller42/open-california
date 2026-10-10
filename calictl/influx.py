@@ -41,8 +41,9 @@ _ENUM_CODES: dict[str, dict[str, int]] = {
         "not_possible": 5,
         "low_battery": 6,
         "driving": 7,
-        "in_use": 8,
+        # 8 retired: was "in_use" (InfoPopUp 2/3/12, re-read 2026-10-10 as checklist/progress codes)
         "not_stationary": 9,
+        "open_checklist": 10,
     },
     # water fault codes (semantics.water fresh_alert / waste_alert, app dialogs observed 2026-09-16)
     "fresh_alert": {"pump_protection": 1, "sensor_error": 2, "error": 3, "pump_error": 4, "empty": 5},

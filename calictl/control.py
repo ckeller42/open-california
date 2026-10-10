@@ -442,7 +442,6 @@ ROOF_MOVE_BLOCK = frozenset(
         "emergency_locked",
         "not_possible",
         "low_battery",
-        "in_use",
         "not_stationary",
     }
 )

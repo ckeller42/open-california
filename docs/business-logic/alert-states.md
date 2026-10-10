@@ -354,9 +354,10 @@ bits 12-15** (`ig/c.java:241-246`). Dispatch `switch(InfoPopUp)` (`:311-638`):
 | 7 | ROOF_EMERGENCY_LOCKED (`emergency_locked`) | HIGH | **yes** | "Please secure the pop-up roof manually and follow the instructions from the operating manual." / "Bitte Aufstelldach manuell sichern…" (`dialog_error_popUpRoof_secureManually_text`) |
 | 10 | ROOF_NOT_POSSIBLE_TEMPORARILY (`not_possible`) | HIGH | **yes** | "The function is currently unavailable." / "Die Funktion ist zurzeit nicht möglich." (`dialog_error_popUpRoof_temporarilyOutOfFunction_text`) |
 | 11 | ROOF_LOW_BATTERY (`low_battery`) | HIGH | **yes** | "Battery low. Run engine." / "Batterie ist schwach. Motorlauf durchführen." (`dialog_warning_popUpRoof_lowBattery_text`) |
-| 2, 3, 12 | (`k()` set → `in_use`) | — | **yes** (tile state) | dashboard roof tile reads "Function currently in use" (also when `SafetyCounterValid=1` alone); tapping it opens "Function in use / Another user is already using this function". On the roof page 2/3 stop the move with a 300 ms haptic and a warning overlay (`ij/e`; its text not resolved) |
+| 2 | `open_checklist` | — | **no** | **CAPTURE 2026-10-10 (real app, real unit)**: the unit's answer to the first open press after the roof page opened (`0302`). The app shows its pre-open safety checklist — "We take your safety and security seriously!" + "Please check the following before opening the pop-up roof: Sufficient space available above the pop-up roof? Access board open? Window or vehicle door open?" / "Deine Sicherheit ist uns wichtig!" … "Ausreichend Platz über Aufstelldach verfügbar? Durchstiegsboard schon offen? Fenster oder Fahrzeugtür schon offen?" (`dialog_info_popUpRoof_safetyCheck_headline` / `_beforeOpening_text`) + OK. No motion; after OK a fresh press moves the roof. Not an error, so not a move block. (A `_beforeClosing_text` variant exists; whether 2 also precedes a close is not captured.) |
+| 12, 8, 3 | — (no alert) | — | **no** | **CAPTURE 2026-10-10 (real app, real unit)**: normal motion progress. **12** while moving (`030c` → `230c`, Position 2 = between), **8** at end of travel (`2308`, then `1300` open / `0300` closed), **3** after a release mid-travel (`2303`, then `2300`). |
 | 9 | (`E0` flow → `not_stationary`) | — | **yes** (tile state) | dashboard roof tile reads "Only possible when stationary"; the roof page shows `ROOF_SPEEDLOCK_ID` "Only possible when stationary" + [Not now] |
-| 8, 13, 14 | — | — | no | nothing shown (tile stays "Closed") |
+| 13, 14 | — | — | no | nothing shown (tile stays "Closed") |
 | — | `Position == 15` | — | **yes** | (position error; no dialog of its own) |
 
 Move-gate = `ig/c.java j()` movable-check (blocks {1,4,5,7,10,11} or `Position==15`); `i()` is the
@@ -364,8 +365,12 @@ warning-only set {6,1,11} shown alongside. Texts resolved 2026-09-16 (`ig/c.java
 / `ea/n` string accessors → `.cvr` tables) and **every code 1–15 OBSERVED on the running app**
 the same day (`tools/applab`: the fake unit pushed each `InfoPopUp` value; the app's dialogs and
 roof-tile texts are as tabled). The web UI's banners (`webui/app.js ROOF_ALERT_MSG`) and its
-`ROOF_MOVE_BLOCK` set mirror this table; calictl names 2/3/12 `in_use` and 9 `not_stationary`
-(Influx `alert_code` 8 / 9, appended). The roof page itself also refuses to show its controls
+`ROOF_MOVE_BLOCK` set mirror this table; calictl names 2 `open_checklist` and 9 `not_stationary`
+(Influx `alert_code` 10 / 9, appended; code 8 = the retired `in_use`). **Correction 2026-10-10:**
+against the *fake* unit the app's dashboard tile read "Function currently in use" for 2/3/12
+(its `k()` set), so calictl had named all three `in_use` and blocked moves on them. The HCI snoop
+of the real app on the real unit (owner, full open + close) shows they are the checklist prompt
+(2) and motion progress (12/8/3); they no longer block, and 3/8/12 surface no alert. The roof page itself also refuses to show its controls
 without terminal 15 ("Switch on the ignition — Please switch on the ignition to operate the
 pop-up roof.", `dialog_info_popUpRoof_activateIgnition_*`). Dashboard tile + roof-page meanings of 2/3/9/12
 traced decompile cross-check 2026-10-06, enigma `46f982d3` (`defpackage/i1.java:1652-1673`, `tj/f.java:601-606`, roof page `hj/c`).
