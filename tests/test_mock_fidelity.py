@@ -262,42 +262,176 @@ def test_roof_validity_expires_when_the_stream_stops():
     assert u.decoded("roof")["SafetyCounterValid"] == 0
 
 
-def test_roof_travels_on_the_clock_while_a_valid_move_is_held():
-    """Motion is time-based (real unit: ~3 s counter validation, then ~10 s per half travel):
-    with Up held and the counter valid, Position steps closed -> middle -> open every
-    ROOF_STEP_S of tick(); releasing (no frames for >1.5 s) stops it; Down reverses."""
+class _RoofApp:
+    """Drives the mock like the app's roof page (CAPTURE 2026-10-10): one frame per ``period`` (500 ms) with
+    the counter +1 per frame, and a direction change sent at once with the CURRENT counter. Records
+    every distinct 1402 frame (hex) with the unit's time, so tests compare against the wire."""
+
+    def __init__(self, u, f, period=0.5, ctr=805000):
+        self.u, self.f, self.period, self.ctr = u, f, period, ctr
+        self.seen: list[tuple[float, str]] = []
+        self.dir = (0, 0)
+        u._subs.setdefault(f["roof"].state_char, []).append(self._on_push)
+
+    def _on_push(self, _char, data):
+        h = bytes(data).hex()
+        if not self.seen or self.seen[-1][1] != h:
+            self.seen.append((round(self.u.now, 2), h))
+
+    def _send(self):
+        up, down = self.dir
+        self.u.write(self.f["roof"].control_char, _roof_frame(self.f, up, down, self.ctr))
+
+    def hold(self, up, down, seconds):
+        if (up, down) != self.dir:
+            self.dir = (up, down)
+            self._send()  # the change goes out at once, repeating the counter
+        for _ in range(round(seconds / self.period)):
+            self.u.tick(self.period)
+            self.ctr += 1
+            self._send()
+
+    def codes(self):
+        return [h for _t, h in self.seen]
+
+
+def _roof_unit(position=0):
+    return _armed_unit(roof={"Installed": 1, "Position": position, "InfoPopUp": 0, "SafetyCounterValid": 0})
+
+
+def test_roof_open_press_raises_the_checklist_then_a_fresh_press_moves():
+    """CAPTURE 2026-10-10 (att-3/att-5): an OPEN press on the roof page gets ``0302`` (InfoPopUp 2 =
+    the pre-open checklist, no motion), cleared to ``0300`` after ~4 s; a fresh press within ~30 s
+    moves (`030c` -> `230c`). Holding the first press longer never moves it.
+
+    .. test:: Mock roof: open press -> checklist 0302, fresh press moves
+       :id: T_MOCK_ROOF_CHECKLIST
+       :links: R_ROOF_VIEW_STREAM
+    """
     f = _funcs()
-    u = _armed_unit(roof={"Installed": 1, "Position": 0, "InfoPopUp": 0, "SafetyCounterValid": 0})
-    c = 100
+    u = _roof_unit()
+    app = _RoofApp(u, f)
+    app.hold(0, 0, 5.0)  # the page streams STOP frames: counter validated, withhold paid
+    app.hold(1, 0, 6.0)  # first open press: the checklist, no motion even if held
+    assert "0302" in app.codes() and u.decoded("roof")["Position"] == 0
+    assert app.codes()[-1] == "0300", "the checklist clears to 0300 after ~4 s"
+    t2 = [t for t, h in app.seen if h == "0302"][0]
+    t0 = [t for t, h in app.seen if h == "0300" and t > t2][0]
+    assert 3.5 <= t0 - t2 <= 4.5
+    app.hold(0, 0, 1.0)  # release (the app sends STOP and shows the dialog), then OK
+    app.hold(1, 0, 3.0)  # a fresh press moves
+    assert app.codes()[-2:] == ["030c", "230c"]
 
-    def hold(up, down, seconds):
-        nonlocal c
-        for _ in range(int(seconds * 2)):  # a frame every 500 ms, like the app
-            u.write(f["roof"].control_char, _roof_frame(f, up, down, c))
-            c += 1
-            u.tick(0.5)
 
-    hold(0, 0, 1.5)  # counter validates (stop frames)
-    assert u.decoded("roof")["SafetyCounterValid"] == 1
-    # A valid counter is NOT enough: the unit withholds the motor ROOF_WITHHOLD_S (~3 s) while it
-    # satisfies itself the stream is live, and only then does travel start.
-    hold(1, 0, 3.0)
-    assert u.decoded("roof")["Position"] == 0  # still inside the motor withhold
-    hold(1, 0, 5.0)  # withhold over + ROOF_STEP_S of travel
+def test_roof_checklist_is_raised_again_after_the_window_and_never_before_a_close():
+    """CAPTURE 2026-10-10: presses 26 s after a ``0302`` moved, 40 s after got ``0302`` again; a close
+    press from open moved at once (``130c``), with no checklist.
+
+    .. test:: Mock roof: the checklist window and no checklist before a close
+       :id: T_MOCK_ROOF_CHECKLIST_WINDOW
+       :links: R_ROOF_VIEW_STREAM
+    """
+    f = _funcs()
+    u = _roof_unit()
+    app = _RoofApp(u, f)
+    app.hold(0, 0, 5.0)
+    app.hold(1, 0, 0.9)  # 0302
+    app.hold(0, 0, 40.0)  # past the window
+    n = len(app.seen)
+    app.hold(1, 0, 0.9)
+    assert app.codes()[n:][:1] == ["0302"], "outside the window the checklist comes again"
+    u2 = _roof_unit(position=1)
+    app2 = _RoofApp(u2, f)
+    app2.hold(0, 0, 5.0)
+    app2.hold(0, 1, 2.0)
+    assert app2.codes()[-2:] == ["130c", "230c"], "a close never raises the checklist"
+
+
+def test_roof_full_open_and_close_follow_the_captured_1402_sequence():
+    """CAPTURE 2026-10-10 (att-5 13:32-13:34): open ``0300 -> 030c -> 230c -> 2308 -> 1300`` in ~28 s of
+    hold; a mid-travel release ``2303 -> 2300`` (4 s); close ``... 230c -> 2308 -> 0300`` in ~23 s of
+    total hold. The motor starts ~0.25 s after a press (InfoPopUp 12) and leaves the end position
+    ~1.2 s after it (Position 2), with a counter already streamed (no withhold).
+
+    .. test:: Mock roof: open / release / close follow the captured 1402 frames and timings
+       :id: T_MOCK_ROOF_CAPTURE_SEQUENCE
+       :links: R_ROOF_VIEW_STREAM
+    """
+    f = _funcs()
+    u = _roof_unit()
+    u.roof_checklist = False  # covered above
+    app = _RoofApp(u, f)
+    app.hold(0, 0, 5.0)
+    t_press = u.now
+    n = len(app.seen)
+    app.hold(1, 0, 31.0)  # held past the end of travel
+    opened = app.seen[n:]
+    assert [h for _t, h in opened] == ["030c", "230c", "2308", "1300"]
+    times = {h: t - t_press for t, h in opened}
+    assert times["030c"] <= 0.5 and 0.9 <= times["230c"] <= 1.6
+    assert 27.0 <= times["2308"] <= 29.5 and 0.8 <= times["1300"] - times["2308"] <= 1.5
+    app.hold(0, 0, 2.0)  # release at the limit: no 2303
+    n = len(app.seen)
+    app.hold(0, 1, 4.5)  # close, released mid-travel
+    app.hold(0, 0, 5.0)
+    assert [h for _t, h in app.seen[n:]] == ["130c", "230c", "2303", "2300"]
+    n = len(app.seen)
+    app.hold(0, 1, 22.0)  # the rest of the close
+    assert [h for _t, h in app.seen[n:]] == ["230c", "2308", "0300"]
+
+
+def test_roof_fresh_counter_pays_the_withhold_a_streamed_one_does_not():
+    """The motor withhold is keyed on counter VALIDATION: a counter the roof page streamed for a few
+    seconds before the press starts the motor ~0.25 s after it (the real app, CAPTURE 2026-10-10),
+    while a counter started AT the press validates first and then waits ``ROOF_WITHHOLD_S`` (~3 s).
+
+    .. test:: Mock roof: a pre-streamed counter moves at once, a fresh one is withheld ~3 s
+       :id: T_MOCK_ROOF_WITHHOLD
+       :links: R_ROOF_VIEW_STREAM
+    """
+    f = _funcs()
+
+    def first_motion(prestream_s):
+        u = _roof_unit()
+        u.roof_checklist = False
+        app = _RoofApp(u, f)
+        if prestream_s:
+            app.hold(0, 0, prestream_s)
+        t0 = u.now
+        app.hold(1, 0, 8.0)
+        return [t for t, h in app.seen if h == "030c"][0] - t0
+
+    assert first_motion(4.5) <= 0.5
+    assert first_motion(0) >= 3.0
+
+
+def test_roof_stops_when_the_frames_stop():
+    """No frame for ``ROOF_RELEASE_S`` = released (a dropped link): the motor stops mid-travel and the
+    counter validity lapses."""
+    f = _funcs()
+    u = _roof_unit()
+    u.roof_checklist = False
+    app = _RoofApp(u, f)
+    app.hold(0, 0, 5.0)
+    app.hold(1, 0, 3.0)
     assert u.decoded("roof")["Position"] == 2
-    u.tick(3.0)  # released: no frames -> motion stops,
-    assert u.decoded("roof")["Position"] == 2  # and the counter validity expires
-    assert u.decoded("roof")["SafetyCounterValid"] == 0
-    # Re-press: the counter restarts, so the withhold is paid AGAIN (~1 s re-validate + 3 s
-    # withhold + 5 s travel) — this is why the GUI debounces a re-press within 1000 ms.
-    hold(1, 0, 9.5)
-    assert u.decoded("roof")["Position"] == 1  # middle -> open
-    hold(1, 0, 5.0)
-    assert u.decoded("roof")["Position"] == 1  # open: stays
-    hold(0, 1, 5.0)
-    assert u.decoded("roof")["Position"] == 2  # open -> middle
-    hold(0, 1, 5.0)
-    assert u.decoded("roof")["Position"] == 0
+    u.tick(3.0)
+    assert u.decoded("roof")["InfoPopUp"] == 3 and u.decoded("roof")["SafetyCounterValid"] == 0
+    u.tick(10.0)
+    assert u.decoded("roof")["Position"] == 2
+
+
+def test_roof_reversal_mid_travel_keeps_the_moving_code():
+    """Open, then close at once mid-travel: the release's ``2303`` (cleared 4 s later) must not
+    overwrite the reversed move's ``InfoPopUp`` 12."""
+    f = _funcs()
+    u = _roof_unit()
+    u.roof_checklist = False
+    app = _RoofApp(u, f)
+    app.hold(0, 0, 5.0)
+    app.hold(1, 0, 10.0)
+    app.hold(0, 1, 6.0)  # reversed while moving: 2303, then the close starts (past its 4 s clear)
+    assert u.decoded("roof")["InfoPopUp"] == 12
 
 
 def test_subscribe_pushes_the_current_value_once():

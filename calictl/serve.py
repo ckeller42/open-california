@@ -54,6 +54,10 @@ _UI_IDLE_S = float(os.environ.get("CALICTL_UI_IDLE_S", "25"))
 # redundant cold connect that fights over the single BLE slot. Falls back to the cold path on timeout.
 _SESSION_WAIT_S = float(os.environ.get("CALICTL_SESSION_WAIT_S", "6"))
 
+# The roof view (POST /api/roof): the web UI's roof page refreshes it every ~5 s; with no refresh for
+# this long the STOP stream ends — it never outlives the screen. A move in flight holds it open.
+_ROOF_VIEW_LAPSE_S = float(os.environ.get("CALICTL_ROOF_VIEW_LAPSE_S", "15"))
+
 # How long POST /api/pairing {"action":"start"} waits for the wizard to actually start before it
 # answers with a "scanning" snapshot anyway (the start then completes once the radio is free).
 # Far below ServeBackend.pairing_command's 30 s bridge timeout.
@@ -171,6 +175,11 @@ class ServeBackend:
     def set_session(self, action):
         """Bridge the web-UI connection toggle onto the daemon loop (like `command`)."""
         fut = asyncio.run_coroutine_threadsafe(self._s.set_session_mode(action), self._loop)
+        return fut.result(timeout=15)
+
+    def roof_view(self, action):
+        """Bridge the web UI's roof-page view/leave onto the daemon loop (like `set_session`)."""
+        fut = asyncio.run_coroutine_threadsafe(self._s.roof_view(action), self._loop)
         return fut.result(timeout=15)
 
     def set_auto_camper(self, on):
@@ -297,6 +306,9 @@ class Server:
         self._published = set()  # functions whose discovery is sent
         self._last = {}  # function -> last DECODED state (for commands)
         self._roof_stop: asyncio.Event | None = None  # lazy, loop-bound: interrupts an in-flight roof move
+        self._roof_view_until = 0.0  # monotonic deadline of the roof view (0 = not viewing)
+        self._roof_view_task: asyncio.Future | None = None  # the view loop (_roof_view_loop)
+        self._roof_view_wake: asyncio.Event | None = None  # lazy, loop-bound: wakes it on leave
         self._pairing = None  # PairingRunner (lazy: created on first /api/pairing use)
         self._poll_skipped_for_pairing = False  # edge-detect so the skip/resume log prints once per flow
         self._pairing_pending = False  # "start" accepted, waiting for the _ble lock (poll skips)
@@ -942,6 +954,62 @@ class Server:
                 self.funcs["roof"], stop_frame, stop_frame, max_duration_s=0.0, validate_s=None, verify=True
             )
         return None
+
+    async def roof_view(self, action):
+        """The web UI's roof page is open (``view``, refreshed every few seconds) or was left
+        (``leave``) — ``POST /api/roof``. While viewing, the live persistent session streams STOP
+        frames with the SafetyCounter (:class:`device.RoofStream`), as the real app does on its roof
+        screen, so a press moves without the unit's ~3 s withhold of a fresh counter. A view claims
+        the session (it must be up to stream) and lapses after ``CALICTL_ROOF_VIEW_LAPSE_S`` without
+        a refresh. ``leave`` also ends a held move (STOP). Read-only: refused, nothing is written.
+
+        :param action: ``"view"`` or ``"leave"``.
+        :returns: ``{"ok": bool, "viewing": bool}``.
+        """
+        if self._read_only or "roof" not in self.funcs:
+            return {"ok": False, "viewing": False}
+        if self._roof_view_wake is None:
+            self._roof_view_wake = asyncio.Event()
+        if action == "view":
+            self._roof_view_until = time.monotonic() + _ROOF_VIEW_LAPSE_S
+            self._sessions.claim_intent()
+            self._sessions.nudge()
+            if self._roof_view_task is None or self._roof_view_task.done():
+                self._roof_view_task = asyncio.ensure_future(self._roof_view_loop())
+        else:
+            self._roof_view_until = 0.0
+            if self._roof_stop is not None:
+                self._roof_stop.set()  # leaving the screen ends a held move
+            self._roof_view_wake.set()
+        return {"ok": True, "viewing": action == "view"}
+
+    async def _roof_view_loop(self):
+        """Keep the roof view's stream running on whichever persistent session is live, until the
+        view is left or lapses (a move in flight holds it open), then end it. Never writes when no
+        session is up — a press then starts its own stream (today's path)."""
+        from . import control  # lazy
+
+        assert self._roof_view_wake is not None
+        stop_frame = control.roof_frame(self.funcs, "stop")
+        sess = None
+        try:
+            while time.monotonic() < self._roof_view_until or (
+                self._roof_stop is not None and not self._roof_stop.is_set()
+            ):
+                cur = self._live_session()
+                if cur is not None and not cur.roof_streaming:
+                    sess = cur
+                    await cur.roof_view(self.funcs["roof"], stop_frame)
+                self._roof_view_wake.clear()
+                try:
+                    await asyncio.wait_for(self._roof_view_wake.wait(), 0.2)
+                except TimeoutError:
+                    pass
+        finally:
+            for s_ in {sess, self._live_session()} - {None}:
+                await s_.roof_leave()
+        if time.monotonic() < self._roof_view_until:  # re-viewed while this one was ending
+            self._roof_view_task = asyncio.ensure_future(self._roof_view_loop())
 
     async def _roof_move(self, what, stop_event):
         """SAFETY-SENSITIVE: a single roof frame won't complete travel and has no guaranteed STOP,

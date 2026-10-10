@@ -427,6 +427,18 @@ def test_roof_hold_release_sends_stop(page):
         )
 
 
+def test_roof_page_opens_and_leaves_the_roof_view(page):
+    # The app's roof screen streams its SafetyCounter while open (CAPTURE 2026-10-10); the web UI
+    # tells the daemon the same: opening the Roof page posts {"action":"view"}, leaving it "leave".
+    def is_roof(req, action):
+        return "/api/roof" in req.url and req.method == "POST" and ('"%s"' % action) in (req.post_data or "")
+
+    with page.expect_request(lambda r: is_roof(r, "view"), timeout=10000):
+        page.get_by_text("Roof", exact=True).first.click()
+    with page.expect_request(lambda r: is_roof(r, "leave"), timeout=10000):
+        page.evaluate("document.getElementById('back').click()")
+
+
 def test_lighting_screen_lamps_are_directly_controllable(page):
     # like the app: lamps are always controllable (no "activate a profile first" gate). Dragging
     # a lamp from the lights-off state applies directly — the SET_BRIGHTNESS self-carries profile 9.

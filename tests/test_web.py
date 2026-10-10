@@ -22,6 +22,10 @@ class FakeBackend:
     def screens_bytes(self):
         return b'{"screens": {}, "order": []}'
 
+    def roof_view(self, action):
+        self.commands.append(("roof_view", action))
+        return {"ok": True, "viewing": action == "view"}
+
     def command(self, function, what, value, confirm=False):
         self.commands.append((function, what, value, confirm))
         if function == "cooler" and what == "power":
@@ -84,6 +88,17 @@ def test_lighting_reports_not_applied(server):
     _, base = server
     _, body = _post(base + "/api/command", {"function": "lighting", "what": "brightness", "value": 8})
     assert body["ok"] is True and body["applied"] is False
+
+
+def test_roof_view_routes_to_backend_and_is_refused_read_only(server):
+    """``POST /api/roof`` (the roof page's view/leave) reaches the backend; a bad action is a 400 and
+    a read-only daemon refuses it (the view streams vehicle writes)."""
+    be, base = server
+    assert _post(base + "/api/roof", {"action": "view"}) == (200, {"ok": True, "viewing": True})
+    assert be.commands[-1] == ("roof_view", "view")
+    assert _post(base + "/api/roof", {"action": "open"})[0] == 400
+    be.read_only = True
+    assert _post(base + "/api/roof", {"action": "view"})[0] == 405
 
 
 def test_roof_requires_confirm(server):

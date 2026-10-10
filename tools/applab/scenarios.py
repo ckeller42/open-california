@@ -90,9 +90,10 @@ XY: dict[str, tuple[int, ...] | None] = {
         1450,
     ),  # Kitchen > "Background Lighting" slider at 50 % = BrightnessLFive (L5)
     "lighting_profile_a_hold": (148, 640, 2500),  # press-and-hold profile tile A = save the current lighting
-    # The roof rocker ("roof switch", bounds [376,1397][704,2132]): its upper half held 16 s. The mock
-    # withholds the motor ROOF_WITHHOLD_S (3 s), then steps closed->middle->open every ROOF_STEP_S (5 s),
-    # so open is first reached at ~13 s (12 s stopped at middle).
+    # The roof rocker ("roof switch", bounds [376,1397][704,2132]): its upper half held 16 s. Recorded
+    # against the old stepped mock roof; the mock now follows the real unit (CAPTURE 2026-10-10): the
+    # first open press raises the pre-open checklist (0302, no motion) and full travel takes ~28 s
+    # (tools/mock_unit.py ROOF_*), so a re-recording needs the dialog's OK + a longer hold.
     "roof_open_hold": (540, 1580, 16000),
     "wakeup_hour_wheel": (469, 1666, 469, 1521),  # the wake-up sheet's hour wheel: one row up = +1 h
     "wakeup_switch": (958, 381),  # Wake-up Light page, unscrolled: the "Wake-up light" enable switch

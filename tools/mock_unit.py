@@ -36,10 +36,15 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
     re-readable state); SET_COLOR is acked (Mode 6 / PN N). REQUEST_CONFIG (Mode 12) answers with
     the favourite bits in LightValue, then re-reports the stored wake-up and door frames.
   * **Roof (1401/1402):** the app-style SafetyCounter stream is modelled — validity needs a
-    monotonic, still-advancing counter (two increments), a restart drops it, a validated counter
-    withholds the motor ``ROOF_WITHHOLD_S`` (~3 s, SEMI-VERIFIED), a held move steps ``Position``
-    every ``ROOF_STEP_S`` and releasing (no frames for ``ROOF_RELEASE_S``) stops it. Coarse and
-    unverified against a real motor (calictl has never driven it).
+    monotonic, still-advancing counter (two increments), a restart drops it, and a counter that
+    just validated withholds the motor ``ROOF_WITHHOLD_S`` (~3 s, SEMI-VERIFIED) — a counter
+    already streamed by the roof page has paid it before the press. The motion and its 1402
+    pushes follow the real unit (CAPTURE 2026-10-10): an open press first raises the pre-open
+    checklist ``InfoPopUp`` 2 (no motion, cleared after 4 s; a fresh press within
+    ``ROOF_CHECKLIST_WINDOW_S`` moves), the motor starts ``ROOF_START_S`` after a press
+    (``InfoPopUp`` 12), leaves the end position after ``ROOF_LEAVE_S`` (Position 2), takes
+    ``ROOF_OPEN_S`` / ``ROOF_CLOSE_S`` of held travel, reports ``InfoPopUp`` 8 at the end of
+    travel and then the final Position; a release mid-travel reports ``InfoPopUp`` 3 for 4 s.
   * Also modelled: cooler/heater timers (control TimerHour/TimerMin → state ``*Set``, heater
     departure timer), per-minute countdowns, the ignition→camping shed + crank link drop, the
     15 s no-heartbeat link drop, device-confirmed ACK-and-ignore refusals, the one-slot option,
@@ -76,9 +81,20 @@ _AUTH_SHORT = "1004"
 _HEARTBEAT_SHORT = "1003"
 
 LEAVE_UNCHANGED_2BIT = 3  # the sg.a 2-bit "leave unchanged" sentinel (see control.SENTINEL)
-ROOF_STEP_S = 5.0  # seconds of a held valid move per Position step (closed→middle→open)
 ROOF_RELEASE_S = 1.5  # no roof frame for this long = the button was released (app streams @500 ms)
 ROOF_COUNTER_STALE_S = 1.5
+# Roof motion on the real unit — CAPTURE 2026-10-10 (real app 5.4.0 on the real unit, owner's finger;
+# buspi:~/applog/att-5.txt 13:32–13:34 full open + close, att-3.txt 13:20–13:28 refused presses).
+# Module constants so tests can scale them down.
+ROOF_OPEN_S = 28.0  # continuous motor time closed -> open (press 13:32:10.8, 2308 at 13:32:39.5)
+ROOF_CLOSE_S = 23.0  # continuous motor time open -> closed (4.2 s + 18.7 s of hold)
+ROOF_START_S = 0.25  # press -> motor start, 1402 `InfoPopUp` 12 at the old Position (`030c` / `130c`)
+ROOF_LEAVE_S = 0.9  # motor start -> Position 2 between (`230c`; ~1.2 s after the press)
+ROOF_SETTLE_S = 1.0  # end of travel `2308` -> the final Position (`1300` open / `0300` closed)
+ROOF_INFO_CLEAR_S = 4.0  # `0302` -> `0300` and `2303` -> `2300` (each exactly ~4.0 s on the wire)
+# InfoPopUp 2 = the pre-open checklist: every OPEN press got `0302` (no motion) unless an earlier `0302`
+# was raised within this window (26 s later: moved; 40 s later: `0302` again). Never before a close.
+ROOF_CHECKLIST_WINDOW_S = 30.0
 # The unit drops a link that carries no 1003 beat for this long (on-device 2026-07-09).
 HEARTBEAT_TIMEOUT_S = 15.0
 # The BLE link drops for ~1 min at the engine crank (observed at the van). 0 disables the model.
@@ -222,7 +238,14 @@ class MockCamperUnit:
         self._roof_withhold_until = 0.0  # motor withheld until then (see ROOF_WITHHOLD_S)
         self._roof_dir: str | None = None  # "up" / "down" while a move frame is held
         self._roof_last_frame = 0.0  # self.now when the last roof frame arrived
-        self._roof_travel = 0.0  # seconds of valid travel since the last step
+        self._roof_press_t: float | None = None  # an honoured press (not eaten by the checklist)
+        self._roof_motor: str | None = None  # "up" / "down" while the motor runs
+        self._roof_run = 0.0  # seconds the motor has run in this move
+        pos = (self.state.get("roof") or {}).get("Position")
+        self._roof_p = 1.0 if pos == 1 else 0.5 if pos == 2 else 0.0  # travel: 0 closed .. 1 open
+        self._roof_checklist_t: float | None = None  # when InfoPopUp 2 was last raised
+        self._roof_timers: list[tuple[float, dict]] = []  # (due, roof fields) delayed 1402 changes
+        self.roof_checklist = True  # False = no InfoPopUp 2 before an open (tests that skip it)
         self.now = 0.0  # the unit's own clock, advanced by tick()
         self._acc_minute = 0.0  # sub-minute remainder for per-minute counters
         self._last_t15: int | None = None  # ignition edge detector (tick)
@@ -400,8 +423,7 @@ class MockCamperUnit:
         starter-battery age (`AgeOneBattValuesMinutes` +1/min while the ignition is off, 0 while
         on, 255 cap), the ignition edge (terminal 15 rising sheds camping master and raises
         `campingmode.Enable`; falling clears `Enable` — the coupling seen live 2026-09-16), and
-        roof travel (a held valid move steps `Position` every ``ROOF_STEP_S``; no frames for
-        ``ROOF_RELEASE_S`` = released).
+        roof travel (:meth:`_roof_tick`; no frames for ``ROOF_RELEASE_S`` = released).
         """
         import datetime as _dt
 
@@ -518,23 +540,9 @@ class MockCamperUnit:
         ):
             r["SafetyCounterValid"] = 0
             self._roof_streak = 0
-            self._roof_dir = None
             changed.add("roof")
-        # roof travel
-        if r is not None and self._roof_dir is not None:
-            if self.now - self._roof_last_frame > ROOF_RELEASE_S:
-                self._roof_dir = None  # released: frames stopped
-                self._roof_travel = 0.0
-            else:
-                self._roof_travel += dt
-                if self._roof_travel >= ROOF_STEP_S:
-                    self._roof_travel -= ROOF_STEP_S
-                    pos = r.get("Position", 0)
-                    if self._roof_dir == "up":
-                        r["Position"] = 1 if pos == 2 else (2 if pos in (0, 14) else pos)
-                    else:
-                        r["Position"] = 0 if pos == 2 else (2 if pos == 1 else pos)
-                    changed.add("roof")
+        if r is not None and self._roof_tick(r, dt):
+            changed.add("roof")
 
         # Lighting ramp: the lamps step toward the committed target (observed 01->03->04->05) and
         # the unit notifies 1502 Mode-4 frames carrying the REAL brightness. Each step pushes one
@@ -581,7 +589,8 @@ class MockCamperUnit:
         # hardware: campingmode (1202) and ignition/vehicle (1004) — control-and-actuation.md. The
         # heartbeat-traced buspi run of 2026-09-16 saw NO change-push on the other 12 subscribed
         # chars in 150 s, so pushing everything here would be fiction (protocol-crosscheck-applab).
-        for fn in changed & CHANGE_PUSH_FNS:
+        # The roof's 1402 pushes on every change too (CAPTURE 2026-10-10: `0302`, `030c`, `230c`, ...).
+        for fn in changed & (CHANGE_PUSH_FNS | {"roof"}):
             self.push(fn)
 
         if getattr(self, "_crank_drop", False):  # engine crank: notify first, then lose the link
@@ -589,6 +598,83 @@ class MockCamperUnit:
             self.drop()
             self._wake_at = self.now + CRANK_DROP_S
         return changed
+
+    # --- roof motion (CAPTURE 2026-10-10, see the ROOF_* constants) --------------
+    def _roof_later(self, delay: float, **fields) -> None:
+        """Schedule a delayed 1402 change (``0302`` -> ``0300`` 4 s later, ``2308`` -> ``1300`` ...)."""
+        self._roof_timers.append((self.now + delay, fields))
+
+    def _roof_halt(self, r: dict) -> None:
+        """A release (or a STOP frame) while the motor runs: mid-travel the unit reports
+        ``InfoPopUp`` 3 (`2303`), cleared to 0 after ``ROOF_INFO_CLEAR_S`` (`2300`)."""
+        self._roof_press_t = None
+        if self._roof_motor is None:
+            return
+        self._roof_motor = None
+        if 0.0 < self._roof_p < 1.0:
+            r["InfoPopUp"] = 3
+            self._roof_later(ROOF_INFO_CLEAR_S, InfoPopUp=0)
+        else:
+            r["InfoPopUp"] = 0
+
+    def _roof_edge(self, r: dict, new_dir: str | None) -> None:
+        """A press, release or reversal (the frame's direction changed). An OPEN press first raises
+        the pre-open checklist (`0302`, no motion, cleared after ``ROOF_INFO_CLEAR_S``) unless one
+        was raised within ``ROOF_CHECKLIST_WINDOW_S``; a press after that is honoured. The capture
+        only ever shows it before an open — a close press moved at once (`130c`)."""
+        self._roof_halt(r)
+        if new_dir is None:
+            return
+        if (new_dir, r.get("Position")) in (("up", 1), ("down", 0), ("down", 14)):
+            return  # already at that limit: nothing to do
+        recent = self._roof_checklist_t is not None and (
+            self.now - self._roof_checklist_t <= ROOF_CHECKLIST_WINDOW_S
+        )
+        if new_dir == "up" and self.roof_checklist and not recent:
+            self._roof_checklist_t = self.now
+            r["InfoPopUp"] = 2
+            self._roof_later(ROOF_INFO_CLEAR_S, InfoPopUp=0)
+            return  # this press is spent: a FRESH press moves
+        self._roof_press_t = self.now
+
+    def _roof_tick(self, r: dict, dt: float) -> bool:
+        """Advance the roof on the unit's clock. Returns True when 1402 changed."""
+        before = dict(r)
+        due = [t for t in self._roof_timers if t[0] <= self.now]
+        self._roof_timers = [t for t in self._roof_timers if t[0] > self.now]
+        for _t, fields in due:
+            r.update(fields)
+        if self._roof_dir is not None and self.now - self._roof_last_frame > ROOF_RELEASE_S:
+            self._roof_dir = None  # frames stopped: released
+            self._roof_halt(r)
+        if self._roof_motor is not None and not r.get("SafetyCounterValid"):
+            self._roof_halt(r)  # the counter lapsed under a running motor
+        # Motor start: an honoured press, a valid counter, the press-to-start delay and the fresh-counter
+        # withhold both over (a counter already streamed — the app's roof page — costs no withhold).
+        start_at = max((self._roof_press_t or 0.0) + ROOF_START_S, self._roof_withhold_until)
+        if (
+            self._roof_motor is None
+            and self._roof_press_t is not None
+            and self._roof_dir is not None
+            and r.get("SafetyCounterValid")
+            and self.now >= start_at
+        ):
+            self._roof_motor, self._roof_run = self._roof_dir, 0.0
+            self._roof_timers = []  # a pending 4 s clear must not overwrite the moving code
+            r["InfoPopUp"] = 12  # moving (`030c` / `130c` at the old Position)
+        elif self._roof_motor is not None:  # travel counts from the tick after the start
+            self._roof_run += dt
+            if self._roof_run >= ROOF_LEAVE_S:
+                r["Position"] = 2  # between (`230c`)
+            if self._roof_motor == "up":
+                self._roof_p = min(1.0, self._roof_p + dt / ROOF_OPEN_S)
+            else:
+                self._roof_p = max(0.0, self._roof_p - dt / ROOF_CLOSE_S)
+            if self._roof_p in (0.0, 1.0):  # end of travel: `2308`, then the final Position
+                self._roof_motor = self._roof_press_t = None
+                r.update(Position=2, InfoPopUp=8)
+                self._roof_later(ROOF_SETTLE_S, Position=1 if self._roof_p else 0, InfoPopUp=0)
+        return r != before
 
     # --- control writes ----------------------------------------------------
     def _refusal(self, fn: str, ctrl: dict) -> str | None:
@@ -815,18 +901,23 @@ class MockCamperUnit:
                 self._roof_streak = 0
             if self._roof_streak >= 2 and not st.get("SafetyCounterValid"):
                 # Counter just validated: the unit WITHHOLDS the motor for ROOF_WITHHOLD_S while it
-                # satisfies itself the stream is live. A restarted counter costs the withhold again,
-                # which is why the GUI debounces a re-press.
+                # satisfies itself the stream is live. The withhold runs from VALIDATION, so a counter
+                # the roof page already streams (the app, calictl's roof view) has paid it before the
+                # press — the real app's press moved ~1.2 s later (CAPTURE 2026-10-10) — while a
+                # counter started at the press pays it on top.
                 self._roof_withhold_until = self.now + ROOF_WITHHOLD_S
+            before = dict(st)
             st["SafetyCounterValid"] = 1 if self._roof_streak >= 2 else 0
+            if not st["SafetyCounterValid"] and self._roof_motor is not None:
+                self._roof_halt(st)  # an invalid counter never drives the motor
             up, down = ctrl.get("Up") == 1, ctrl.get("Down") == 1
             new_dir = "up" if up and not down else "down" if down and not up else None
             if new_dir != self._roof_dir:
-                self._roof_travel = 0.0
-            # Valid counter alone does not move the motor — the withhold must also have expired.
-            moving = st["SafetyCounterValid"] and self.now >= self._roof_withhold_until
-            self._roof_dir = new_dir if moving else None
+                self._roof_edge(st, new_dir)  # press / release / reversal
+            self._roof_dir = new_dir
             self._roof_last_frame = self.now
+            if st != before:
+                self.push("roof")  # 1402 notifies on change (CAPTURE 2026-10-10)
             return  # motion itself happens on the clock: tick()
 
         for cf in func.control_fields:

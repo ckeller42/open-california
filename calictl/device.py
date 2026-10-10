@@ -169,9 +169,10 @@ def _later_pushes(out: dict, funcs: dict, notif: dict, seen: dict) -> None:
 # roof move (SAFETY-SENSITIVE, NOT-LIVE-VERIFIED). A single roof frame won't complete travel:
 # the app streams the OPEN/CLOSE move frame continuously until STOP. Decompile of the app engine
 # (`w8/a`, 2026-07-13) settled the model: motion is driven IMMEDIATELY — there is NO STOP-hold /
-# confirmation-frame phase. The STOP frames seen in one capture were just the press-and-hold
-# dead-man (the on-screen button wasn't held while the user read the safety dialog), not protocol.
-ROOF_MOVE_PERIOD_S = float(os.environ.get("CALICTL_ROOF_PERIOD_S", "0.5"))  # ~500 ms counter cadence
+# confirmation-frame phase. The real app on the real unit (CAPTURE 2026-10-10) streams STOP frames
+# with its counter for as long as the roof SCREEN is open, and a press switches that same stream to
+# the move byte — calictl's roof view (:class:`RoofStream`) does the same.
+ROOF_MOVE_PERIOD_S = float(os.environ.get("CALICTL_ROOF_PERIOD_S", "0.5"))  # the app's 500 ms frame tick
 ROOF_MAX_TRAVEL_S = float(os.environ.get("CALICTL_ROOF_MAX_TRAVEL_S", "30.0"))  # hard cap on travel
 # SafetyCounter (frame bytes 1-4, 32-bit BE) is APP-GENERATED and purely time-derived — it does
 # NOT echo the unit's counter. The app engine seeds a random int in [1, 1_000_000] and sets
@@ -186,6 +187,9 @@ ROOF_SAFETY_SEED_MAX = 1_000_000  # app seeds a random SafetyCounter in [1, this
 # stream when it reaches the direction's terminal Position (app-faithful; the unit's own limit
 # switches remain the real safety). Throttled so the poll-reads don't crowd out the counter frames.
 ROOF_LIMIT_POLL_S = float(os.environ.get("CALICTL_ROOF_LIMIT_POLL_S", "1.0"))
+# 1402 InfoPopUp 8 = end of travel: the unit reports it ~1 s BEFORE the final Position (`2308` ->
+# `1300` / `0300`), and the app stops streaming the move byte on it (CAPTURE 2026-10-10).
+ROOF_END_OF_TRAVEL = 8
 
 
 def _roof_safety_counter(seed: int, elapsed_ms: float, tick_ms: int = ROOF_SAFETY_TICK_MS) -> int:
@@ -197,6 +201,105 @@ def _roof_safety_counter(seed: int, elapsed_ms: float, tick_ms: int = ROOF_SAFET
 def _beat_bytes(ctr: int) -> bytes:
     """The 4-byte big-endian liveness value written to HEARTBEAT_CHAR each tick."""
     return (ctr & 0xFFFFFFFF).to_bytes(4, "big")
+
+
+class RoofStream:
+    """The roof SCREEN's SafetyCounter stream over one connected client, as the real app runs it.
+
+    A ticker writes one 1401 frame — the current direction byte + the SafetyCounter, +1 per tick —
+    every ``period_s`` (the app's 500 ms, so the counter is the decompiled ``seed + elapsed/500 ms``,
+    :func:`_roof_safety_counter`). :meth:`set` switches the direction and writes AT ONCE, between
+    ticks, REPEATING the current counter: the real app's first move frame carries the last STOP
+    frame's counter and its first STOP frame the last move frame's (26 of 26 direction changes,
+    CAPTURE 2026-10-10). A move started on a stream that has been running finds the counter
+    validated, so the unit does not withhold the motor another ~3 s.
+
+    Writes run on the client lock-free, like the 1003 heartbeat beside them; the serve ``_ble`` lock
+    still owns the connection. :attr:`alive` turns False once closed or once a write finds the
+    link gone (the move loop then ends in a STOP attempt).
+
+    :param client: a connected BleakClient.
+    :param func: the roof Function (``control_char``).
+    :param frame: the initial frame (its byte 0 is the direction; usually the STOP frame).
+    :param seed: SafetyCounter seed (else a random app-style seed in ``[1, ROOF_SAFETY_SEED_MAX]``).
+    :param period_s: frame tick (``ROOF_MOVE_PERIOD_S``, the app's 500 ms).
+
+    .. req:: Stream the roof SafetyCounter while the roof screen is open
+       :id: R_ROOF_VIEW_STREAM
+       :status: implemented
+       :tags: ble, control, roof, safety
+
+       While a client has the roof screen open (``POST /api/roof`` ``view``, refreshed), ``calictl``
+       shall write STOP frames with a SafetyCounter +1 per ~500 ms tick on the persistent session,
+       with the 1003 heartbeat running, as the real app does (CAPTURE 2026-10-10). A press shall
+       switch the SAME stream to the move byte at once, its first frame repeating the current
+       counter (the last STOP's), and a release shall switch it back to STOP the same way. The
+       stream shall stop when the view is left or lapses (no refresh for
+       ``CALICTL_ROOF_VIEW_LAPSE_S``), never outliving the screen; a move in flight is ended with a
+       STOP first.
+    """
+
+    def __init__(
+        self, client, func, frame: bytes, *, seed: int | None = None, period_s: float = ROOF_MOVE_PERIOD_S
+    ):
+        import random
+
+        self._client, self._func, self.period_s = client, func, period_s
+        self._dir = bytes(frame[:1])
+        self._ctr = (seed if seed is not None else random.randint(1, ROOF_SAFETY_SEED_MAX)) & 0xFFFFFFFF
+        self._sent = False
+        self._lock = asyncio.Lock()
+        self._closed = asyncio.Event()
+        self._task: asyncio.Future | None = None
+        self.alive = True
+
+    async def _write(self) -> None:
+        frame = self._dir + self._ctr.to_bytes(4, "big")
+        self._sent = True
+        try:
+            await self._client.write_gatt_char(self._func.control_char, frame, response=True)
+            trace.get().write(self._func.control_char, frame)
+        except Exception:
+            if not self._client.is_connected:
+                self.alive = False  # link gone; a transient error on a live link keeps streaming
+
+    async def set(self, frame: bytes) -> None:
+        """Switch the stream to ``frame``'s direction byte and write it NOW with the current counter
+        (a no-op when that direction already went out). Starts the ticker on first use. Always
+        attempts the write, even on a dead stream — a STOP must never be skipped."""
+        async with self._lock:
+            if self._sent and bytes(frame[:1]) == self._dir:
+                return
+            self._dir = bytes(frame[:1])
+            await self._write()
+        if self._task is None and self.alive:
+            self._task = asyncio.ensure_future(self._run())
+
+    async def _run(self) -> None:
+        import time
+
+        nxt = time.monotonic()
+        while self.alive:
+            nxt += self.period_s  # a fixed tick: a set() between ticks does not shift it
+            try:
+                await asyncio.wait_for(self._closed.wait(), max(0.0, nxt - time.monotonic()))
+                return
+            except TimeoutError:
+                pass
+            async with self._lock:
+                if self.alive:
+                    self._ctr = (self._ctr + 1) & 0xFFFFFFFF
+                    await self._write()
+
+    async def close(self) -> None:
+        """Stop the ticker (no more frames). The last frame written stays the last one."""
+        self.alive = False
+        self._closed.set()
+        if self._task is not None:
+            try:
+                await self._task
+            except Exception:
+                pass
 
 
 class ConnectionUnavailable(RuntimeError):
@@ -584,7 +687,9 @@ class CamperDevice:
         ``stop_frame``. The unit self-gates the first ~3 s via counter validation, so early frames
         may not move the roof. The daemon runs the same stream inside its live
         :class:`PersistentSession` instead (:meth:`PersistentSession.actuate_roof`), whose
-        heartbeat is already ticking.
+        heartbeat is already ticking — and, while the web UI has the roof page open, on the roof
+        view's already-running :class:`RoofStream` (the counter is validated before the press, so
+        no withhold: the real app's behaviour, CAPTURE 2026-10-10).
 
         The final STOP is **best-effort**: on a clean end it is written and confirmed,
         but on a mid-move link drop the STOP write itself fails and is swallowed. The real
@@ -598,7 +703,7 @@ class CamperDevice:
             direction, bytes 1-4 are overwritten with the live time-derived SafetyCounter.
         :param stop_frame: the STOP frame (byte 0 == 0), sent to end travel unconditionally.
         :param max_duration_s: hard cap on the move duration (safety bound).
-        :param period_s: frame cadence (~500 ms, ``ROOF_MOVE_PERIOD_S``).
+        :param period_s: frame tick (500 ms, ``ROOF_MOVE_PERIOD_S``), the counter +1 per tick.
         :param validate_s: dead-man window — if ``SafetyCounterValid`` is still false after this
             many seconds the move is aborted (STOP) as the app does. ``None`` disables the check.
         :param counter_seed: optional explicit SafetyCounter seed (else a random app-style seed);
@@ -607,8 +712,9 @@ class CamperDevice:
             interrupt travel — checked each frame; set lock-free by another coroutine. ``None`` = no
             interrupt.
         :param limit_positions: terminal roof ``Position`` values for this direction
-            (``control.roof_limit_positions``). While moving, the roof ``Position`` is polled every
-            ``ROOF_LIMIT_POLL_S`` and the stream ceases (-> STOP) once it lands in this set — an
+            (``control.roof_limit_positions``). While moving, the roof state is polled every
+            ``ROOF_LIMIT_POLL_S`` and the move ceases (-> STOP) once ``Position`` lands in this set
+            or the unit reports end of travel (``InfoPopUp`` 8, ``ROOF_END_OF_TRAVEL``) — an
             app-faithful auto-stop at the open/closed limit. ``None`` disables the poll; a flaky
             read never stops the move on its own (the bounded cap + STOP stay the real safety net).
         :param verify: read the state char back after STOP.
@@ -662,14 +768,19 @@ class CamperDevice:
         limit_positions=None,
         verify: bool = True,
         arm: bool = True,
+        stream: RoofStream | None = None,
     ) -> dict | None:
         """The roof move stream over an ALREADY-CONNECTED client (see :meth:`actuate_roof`).
         Never connects/disconnects.
 
         ``arm=True`` (own connection): replay the handshake and start the 1003 heartbeat, with NO
         ``ARM_DELAY_S`` — the stream starts at once. ``arm=False`` (persistent session): the
-        session's heartbeat is already ticking, so stream immediately."""
-        import random
+        session's heartbeat is already ticking, so stream immediately.
+
+        ``stream``: the roof view's running :class:`RoofStream` — the move switches it to the move
+        byte and back to STOP and leaves it running (the app's roof screen). ``None``: a stream of
+        its own, started at the press (a fresh counter — the unit withholds the motor ~3 s) and
+        closed after the final STOP."""
         import time
 
         from . import protocol  # lazy
@@ -677,24 +788,9 @@ class CamperDevice:
         stop = asyncio.Event()
         beat = None
         stopped = False  # the final STOP went out (else the finally sends one, e.g. on cancel)
-        seed = counter_seed if counter_seed is not None else random.randint(1, ROOF_SAFETY_SEED_MAX)
-        start = None  # set once the move stream begins (arms the counter clock)
-
-        async def _send(direction_byte: bytes) -> bool:
-            """Write one 5-byte roof frame (direction + the live time-derived SafetyCounter).
-            Returns False only on a genuine link drop (so the caller breaks to the final STOP)."""
-            elapsed_ms = 0.0 if start is None else (time.monotonic() - start) * 1000.0
-            ctr = _roof_safety_counter(seed, elapsed_ms)
-            frame = direction_byte[:1] + ctr.to_bytes(4, "big")
-            try:
-                await client.write_gatt_char(func.control_char, frame, response=True)
-                trace.get().write(func.control_char, frame)
-                return True
-            except Exception:
-                if not client.is_connected:
-                    return False
-                return True  # transient write error on a live link: keep driving
-
+        own = stream is None
+        if stream is None:
+            stream = RoofStream(client, func, move_frame, seed=counter_seed, period_s=period_s)
         try:
             # App-faithful roof arm: the 1003 heartbeat ticks during the move (the app's is
             # session-global, #235), but there is NO ARM_DELAY_S pre-arm sleep — the app streams the
@@ -704,18 +800,20 @@ class CamperDevice:
                 await self._handshake(client, "actuate_roof", "move")
                 beat = asyncio.create_task(self._heartbeat(client, stop))
 
-            # Stream the move frame with the live time-derived counter until the safety cap. The
-            # unit self-gates motion for the first ~validate_s until the counter validates; we
-            # abort (-> STOP) if it never does, mirroring the app's 3 s dead-man error.
+            # The stream writes the frames; this loop watches the move until the safety cap. The
+            # unit self-gates motion until the counter validates; we abort (-> STOP) if it never
+            # does, mirroring the app's 3 s dead-man error.
             start = time.monotonic()
             deadline = start + max_duration_s
             validate_checked = False
             last_limit_poll = start
+            if not (stop_event is not None and stop_event.is_set()):  # released before it started
+                await stream.set(move_frame)
             # stop_event lets a hold-to-move UI (or a 'stop' command) interrupt travel:
-            # set lock-free by another coroutine, checked each frame -> break -> STOP.
+            # set lock-free by another coroutine, checked each period -> break -> STOP.
             while time.monotonic() < deadline and not (stop_event is not None and stop_event.is_set()):
-                if not await _send(move_frame):
-                    log.warning("actuate_roof: link dropped mid-move — sending STOP")
+                if not stream.alive:
+                    log.warning("actuate_roof: link dropped or roof view closed mid-move — sending STOP")
                     break
                 if (
                     validate_s is not None
@@ -730,18 +828,23 @@ class CamperDevice:
                             "(STOP)" % validate_s
                         )
                         break
-                # Auto-stop at the limit: once the roof reaches this direction's terminal Position,
-                # cease the stream (-> STOP) instead of running to the travel cap. Best-effort — a
-                # None read (flaky) just keeps driving until the cap.
+                # Auto-stop at the limit: once the unit reports end of travel (InfoPopUp 8) or this
+                # direction's terminal Position, cease the move (-> STOP) as the app does, instead of
+                # running to the travel cap. Best-effort — a None read (flaky) keeps driving.
                 if (
                     limit_positions
                     and func.state_char
                     and (time.monotonic() - last_limit_poll) >= ROOF_LIMIT_POLL_S
                 ):
                     last_limit_poll = time.monotonic()
-                    pos = await self._roof_position(client, func)
-                    if pos is not None and pos in limit_positions:
-                        log.info("actuate_roof: roof reached limit position %s — ceasing (STOP)" % pos)
+                    st = await self._roof_state(client, func)
+                    if st is not None and (
+                        st.get("Position") in limit_positions or st.get("InfoPopUp") == ROOF_END_OF_TRAVEL
+                    ):
+                        log.info(
+                            "actuate_roof: roof at the limit (Position %s, InfoPopUp %s) — ceasing (STOP)"
+                            % (st.get("Position"), st.get("InfoPopUp"))
+                        )
                         break
                 if stop_event is not None:
                     # interruptible: a release sends STOP at once, not after the rest of the period
@@ -753,7 +856,7 @@ class CamperDevice:
                     await asyncio.sleep(period_s)
             # ALWAYS force a STOP (best-effort even if the link is flaky), with the live counter.
             stopped = True
-            await _send(stop_frame)
+            await stream.set(stop_frame)
             if not verify or not func.state_char:
                 return None
             await asyncio.sleep(SETTLE_S)  # let the state settle after STOP
@@ -764,9 +867,11 @@ class CamperDevice:
                 # cancelled (daemon shutdown) or raised mid-move: best-effort STOP rather than
                 # relying on the unit's unverified dead-man
                 try:
-                    await _send(stop_frame)
+                    await stream.set(stop_frame)
                 except Exception:
                     pass
+            if own:
+                await stream.close()
             stop.set()
             if beat is not None:
                 try:
@@ -789,15 +894,14 @@ class CamperDevice:
             return True
 
     @staticmethod
-    async def _roof_position(client, func):
-        """Read the roof state char and return the raw ``Position`` (0-15), or ``None`` on any
+    async def _roof_state(client, func):
+        """Read and decode the roof state char (``Position``, ``InfoPopUp`` ...), or ``None`` on any
         read/decode failure — so a flaky read never spuriously stops a move (the caller keeps
         driving to the bounded cap instead). Cheap: the unit is awake while the counter streams."""
         from . import protocol  # lazy
 
         try:
-            raw = bytes(await client.read_gatt_char(func.state_char))
-            return protocol.decode(func, raw).get("Position")
+            return protocol.decode(func, bytes(await client.read_gatt_char(func.state_char)))
         except Exception:
             return None
 
@@ -889,6 +993,7 @@ class PersistentSession:
         self._on_push = on_push  # optional sync callback(uuid_lower, data) fired on each push
         self._stop: asyncio.Event | None = None
         self._beat: asyncio.Task[None] | None = None
+        self._roof: RoofStream | None = None  # the roof view's STOP stream (serve's roof view)
 
     @property
     def is_up(self) -> bool:
@@ -958,15 +1063,39 @@ class PersistentSession:
             self._client, func, frame, follow=follow, verify=verify, arm=False, preface=preface
         )
 
+    @property
+    def roof_streaming(self) -> bool:
+        """True while this session runs the roof view's stream."""
+        return self._roof is not None and self._roof.alive
+
+    async def roof_view(self, func, stop_frame: bytes) -> None:
+        """Start the roof view's STOP stream on this link (no-op while it runs) — the app's roof
+        screen, :class:`RoofStream`, ``R_ROOF_VIEW_STREAM``."""
+        if not self.roof_streaming:
+            self._roof = RoofStream(self._client, func, stop_frame)
+            await self._roof.set(stop_frame)
+
+    async def roof_leave(self) -> None:
+        """End the roof view's stream (a move riding it sees the stream gone and sends STOP)."""
+        if self._roof is not None:
+            await self._roof.close()
+            self._roof = None
+
     async def actuate_roof(self, func, move_frame: bytes, stop_frame: bytes, **kw) -> dict | None:
         """Stream a roof move over the live link, inside this session's ticking 1003 heartbeat — no
         handover, no second connection (the app's heartbeat ticks during roof moves too, #235).
-        Keyword arguments as :meth:`CamperDevice.actuate_roof`."""
+        With the roof view's stream running the move rides it (counter already validated, no
+        ~3 s withhold); else it starts a stream of its own. Keyword arguments as
+        :meth:`CamperDevice.actuate_roof`."""
         if not func.control_char:
             raise ValueError("%s has no control characteristic" % func.name)
-        return await self._dev._actuate_roof_on(self._client, func, move_frame, stop_frame, arm=False, **kw)
+        stream = self._roof if self.roof_streaming else None
+        return await self._dev._actuate_roof_on(
+            self._client, func, move_frame, stop_frame, arm=False, stream=stream, **kw
+        )
 
     async def aclose(self) -> None:
+        await self.roof_leave()
         if self._stop is not None:
             self._stop.set()
         if self._beat is not None:

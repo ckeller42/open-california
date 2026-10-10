@@ -8,6 +8,32 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-10 — roof follows the app's STOP stream (owner)
+
+Owner decision "align to original app", from the real app on the real unit (CAPTURE 2026-10-10,
+`buspi:~/applog/att-5.txt` 13:32–13:34 full open + close, `att-3.txt` 13:20–13:28 refused presses):
+while its roof **screen** is open the app streams `1401` STOP frames `00 <counter>`, +1 per ~500 ms
+tick, with the `1003` heartbeat running; a press switches the same stream to `01`/`04` at once with
+the **same** counter (26 of 26 direction changes repeat it, both ways), so the unit has validated the
+counter before the press and the motor starts ~1.2 s later instead of after a ~3 s withhold.
+
+calictl now does the same (`R_ROOF_VIEW_STREAM`, `device.RoofStream`): the web UI's roof page posts
+`POST /api/roof {"action":"view"}` (refreshed every ~5 s; `leave` on leaving or hiding the page); the
+daemon claims the persistent session and runs the STOP stream on it; a press rides that stream, a
+release switches it back to STOP. Kept on purpose: no view → the press starts its own stream (today's
+behaviour, API/CLI/HA); the view lapses after `CALICTL_ROOF_VIEW_LAPSE_S` (15 s) without a refresh and
+never streams forever (a move in flight holds it open; `leave` ends a held move with STOP); STOP is
+never gated and stays lock-free; the limit auto-stop now also fires on `InfoPopUp` 8 (end of travel,
+`2308`, ~1 s before the final Position — where the app stops); the 1000 ms re-press debounce stays (it
+only matters without a view); the app's extra 1 s re-send of the current frame while held is omitted;
+the frame tick is the app's 500 ms (the "~0.45 s, +1 per frame" first reading of the capture was the
+re-send interleaving). The mock follows the capture too: InfoPopUp 2 (pre-open checklist) on an open
+press unless one was raised within 30 s, `030c`→`230c`, `2308`→`1300`/`0300`, `2303`→`2300`, ~28 s /
+~23 s travel, motor start ~0.25 s after a press, ~3 s withhold only for a freshly validated counter.
+With the checklist no longer a move block (entry below), the press after it is allowed.
+**calictl's own roof move is still never driven on the real unit** — an owner-watched van test is owed
+(#230).
+
 ## 2026-10-10 — roof InfoPopUp 2/3/8/12 are a checklist prompt and progress codes, not "in use"
 
 HCI snoop of the real app on the real unit (owner, full open + close): **2** = the unit asks the

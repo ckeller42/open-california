@@ -90,7 +90,7 @@ Diagram index
      - A config edit, the REQUEST_CONFIG pull (R5), config latched from the unit's frames.
    * - :need:`S_SEQ_ROOF`
      - Roof actuation
-     - Press-and-hold stream, SafetyCounter, the unit's ~3 s self-gate, STOP.
+     - The roof view's STOP stream, press-and-hold on the same counter, STOP.
    * - :need:`S_SEQ_REJECT`
      - Range validation
      - Out-of-range values refused build-side and by the unit (``0x0E``).
@@ -824,79 +824,92 @@ unit, and the real unit's Mode-20 echo within ~3 s is still to be confirmed at t
 Roof actuation — press-and-hold, SafetyCounter-gated
 ----------------------------------------------------
 
-.. spec:: Roof press-and-hold move stream, unit self-gated ~3 s by the SafetyCounter
+.. spec:: Roof press-and-hold move stream on the roof screen's SafetyCounter stream
    :id: S_SEQ_ROOF
    :status: mock-only
-   :links: R_ROOF_ACTUATE, R_SESSION_SUPERVISOR, R_ROOF_ALERT
+   :links: R_ROOF_ACTUATE, R_ROOF_VIEW_STREAM, R_SESSION_SUPERVISOR, R_ROOF_ALERT
 
    **Contract.** SAFETY-SENSITIVE. The unit itself requires ignition ON. The daemon refuses a
    move up front when ``control.command_precondition`` blocks it (a blocking ``InfoPopUp`` alert,
-   or ``Position`` 15 = error). STOP is never gated. For a move,
-   :py:meth:`calictl.device.CamperDevice.actuate_roof` does the following:
+   or ``Position`` 15 = error). STOP is never gated. ``calictl`` follows the real app's roof
+   screen (owner decision 2026-10-10, CAPTURE 2026-10-10):
 
-   * **Connection**: the daemon does **not** warm the persistent session for a roof command (no
-     keep-warm nudge, no ``CALICTL_SESSION_WAIT_S`` wait). Under the ``_ble`` lock, a live session
-     carries the move (:py:meth:`calictl.device.PersistentSession.actuate_roof`): no second
-     connection. With no session up, ``actuate_roof`` opens its own.
+   * **Roof view** (``R_ROOF_VIEW_STREAM``): while the web UI's roof page is open it posts
+     ``POST /api/roof {"action":"view"}`` (refreshed every ~5 s; ``leave`` when the page is left
+     or the tab hidden). The daemon claims the persistent session and, on it, runs a
+     :py:class:`calictl.device.RoofStream`: STOP frames ``[0x00][SafetyCounter]`` to ``1401``
+     every ``CALICTL_ROOF_PERIOD_S`` (0.5 s), the counter +1 per frame from a random seed in
+     1..1 000 000 (big-endian uint32), with the session's ``1003`` heartbeat ticking. With no
+     refresh for ``CALICTL_ROOF_VIEW_LAPSE_S`` (15 s) the stream ends; a move in flight holds the
+     view open, and ``leave`` ends a held move with STOP. Read-only: refused.
+   * **Press**: the move switches the SAME stream to the direction byte (open ``0x01`` / close
+     ``0x04``) at once, the first move frame **repeating the current counter** (the last STOP's),
+     then +1 per tick. The unit has already validated that counter, so it does not withhold the
+     motor (the real app's motor started ~1.2 s after the press). **Without a view** (API, CLI,
+     HA, or a press before the session is up) the move starts a stream of its own at the press —
+     a fresh counter, so the unit withholds the motor ~3 s — and closes it after the final STOP.
+   * **Connection**: a roof command does **not** warm the persistent session (no keep-warm
+     nudge, no ``CALICTL_SESSION_WAIT_S`` wait); the view does. Under the ``_ble`` lock, a live
+     session carries the move (:py:meth:`calictl.device.PersistentSession.actuate_roof`): no
+     second connection. With no session up, ``actuate_roof`` opens its own.
    * **Arm = the app's**: the ``1003`` heartbeat **ticks during the move**, as the app's
      session-global heartbeat does (decompile ``zf/d:183``, ``d2/s:795-802``, ``mj/d:247``,
      ``c/i:349-367``, #235; **CAPTURE 2026-10-10**: the real app's heartbeat ran through a full
      open and close on the real unit). A live session's heartbeat is already running; an own connection
      replays the handshake (``1001`` + ``1004`` reads, subscribe-all) and starts it. There is
-     **no** ``ARM_DELAY_S`` **pre-arm**, so the counter streams immediately (#150). A gap would
-     make the unit see a fresh counter and withhold the motor for another ~3 s.
-   * Stream ``[direction][SafetyCounter]`` to ``1401`` every ``CALICTL_ROOF_PERIOD_S`` (0.5 s).
-     The direction is open ``0x01`` / close ``0x04``. The counter is app-style: a random seed in
-     1..1 000 000 plus 1 per 500 ms of wall-clock, big-endian uint32. **Known divergence from the
-     app** (CAPTURE 2026-10-10): the app's counter already runs in a STOP stream from the moment
-     the roof screen opens, and a press continues that counter; ``calictl`` seeds a new counter at
-     the press. No code change yet (owner decision pending, #230).
+     **no** ``ARM_DELAY_S`` **pre-arm**, so the counter streams immediately (#150).
    * At 3 s, read ``1402`` once. If ``SafetyCounterValid`` (bit 7) is still clear, abort (the app's
-     dead-man). Poll ``Position`` every ``CALICTL_ROOF_LIMIT_POLL_S`` (1 s) and cease at the
-     direction's limit (open ``1``, closed ``0``/``14``). Also cease on release (``stop_event``)
-     or at ``CALICTL_ROOF_MAX_TRAVEL_S`` (30 s).
-   * **Always** write STOP ``[0x00][counter]``, which is best-effort on a dropped link. Then wait
-     ``CALICTL_SETTLE_S`` (2.5 s) and read ``1402``. An own connection disconnects. A live session
-     stays up.
+     dead-man). Poll ``1402`` every ``CALICTL_ROOF_LIMIT_POLL_S`` (1 s) and cease at the end of
+     travel: ``InfoPopUp`` 8 (the unit's ``2308``, about 1 s before the final Position, where the
+     app stops too) or the direction's limit ``Position`` (open ``1``, closed ``0``/``14``). Also
+     cease on release (``stop_event``) or at ``CALICTL_ROOF_MAX_TRAVEL_S`` (30 s; the real
+     travel is ~28 s open / ~23 s close).
+   * **Always** switch to STOP ``[0x00][counter]`` (again repeating the current counter), which is
+     best-effort on a dropped link. Then wait ``CALICTL_SETTLE_S`` (2.5 s) and read ``1402``. On
+     the view's stream the STOP frames go on; an own stream ends, and an own connection
+     disconnects. A live session stays up.
    * **Release** is lock-free: it sets ``stop_event``. Each press gets a fresh stop token
      **before** it waits for the ``_ble`` lock, so a release that arrives while the press still
      queues behind a poll or another write cancels the move before it starts. A new press stops an
      earlier one. The interval wait is interruptible, so STOP follows a release at once. A
      cancelled move (shutdown) still attempts STOP.
-   * A **standalone STOP** (nothing in flight) is a zero-length roof move: over the live session,
-     or else an own connection with the heartbeat on, one STOP with a live counter. It never
-     waits ``ARM_DELAY_S``. The web UI ignores a move press within **1000 ms** of the previous move start (``ROOF_REPRESS_MS``).
-     STOP is never debounced.
+   * A **standalone STOP** (nothing in flight) is a zero-length roof move: on the view's stream
+     (already STOP), or over the live session, or else an own connection with the heartbeat on,
+     one STOP with a live counter. It never waits ``ARM_DELAY_S``. The web UI ignores a move press
+     within **1000 ms** of the previous move start (``ROOF_REPRESS_MS``; it only matters without a
+     view). STOP is never debounced.
 
 .. mermaid::
 
     sequenceDiagram
+        participant W as web UI (roof page)
         participant S as serve
-        participant C as calictl (actuate_roof)
+        participant C as calictl (RoofStream, actuate_roof)
         participant U as Roof (1401 / state 1402)
-        participant A as App (reference only)
-        Note over C,U: ignition ON, no blocking InfoPopUp, roof path clear
-        S->>S: no session warm-up, a live session carries the move (no second connection)
-        C->>U: no live session only - connect, read 1001 and 1004, subscribe-all
-        loop the whole move, calictl ~0.6 s (the app ticks it too)
-            C-)U: write 1003 = N, N+1 (heartbeat, no pre-arm delay)
+        W->>S: POST /api/roof view (every 5 s while open)
+        S->>S: claim and nudge the persistent session
+        loop the whole view, calictl ~0.6 s (the app ticks it too)
+            C-)U: write 1003 = N, N+1 (session heartbeat)
         end
-        loop app only, while the roof page is open and nothing is pressed
-            A->>U: STOP frame [0x00] plus SafetyCounter every ~0.45 s, +1 per frame
+        loop while the page is open and nothing is pressed
+            C->>U: STOP frame [0x00] plus SafetyCounter every 0.5 s, +1 per frame
         end
-        Note over A,U: app press continues the SAME counter, the first move frame repeats the last STOP value
-        Note over C,U: user presses and HOLDS open or close (web UI debounces a re-press within 1000 ms)
-        loop calictl every 0.5 s while held (real app every 0.33 to 0.45 s, +1 per frame)
-            C->>U: move frame [0x01 open / 0x04 close] plus SafetyCounter (seed + elapsed/500 ms)
-            C->>U: every 1 s read Position (1402), cease at the limit (open 1, closed 0 or 14)
+        Note right of U: counter validated, 1402 bit 7 set, no motor withhold left
+        W->>S: press and HOLD open or close (path-clear confirm)
+        C->>U: move frame [0x01 open / 0x04 close] at once, SAME counter as the last STOP
+        loop every 0.5 s while held, +1 per frame
+            C->>U: move frame plus SafetyCounter
+            C->>U: every 1 s read 1402, cease at InfoPopUp 8 or the limit Position
         end
-        Note right of U: motor withheld about 3 s until the counter validates, then 1402 bit 7 is set
-        U--)A: real unit 1402 pushes, moving 030c then 230c, at the limit 2308 then 1300 open or 0300 closed
-        C->>U: at 3 s read 1402, SafetyCounterValid still clear means abort to STOP
-        Note over C,U: after about 3 s the pop-top travels while frames continue
-        C->>U: STOP frame [0x00] on release, limit, abort or the 30 s cap (always sent)
-        Note right of U: halts (frames ceasing is the hardware dead-man, unverified here)
-        C->>U: after SETTLE_S read 1402, an own connection disconnects (a live session stays up)
+        U--)C: 1402 pushes, 030c then 230c, at the end 2308 then 1300 open or 0300 closed
+        W->>S: release (lock-free STOP)
+        C->>U: STOP frame [0x00] at once, SAME counter as the last move frame
+        Note right of U: halts, a mid-travel release reports 2303 then 2300
+        loop the STOP stream goes on while the page stays open
+            C->>U: STOP frame plus SafetyCounter every 0.5 s
+        end
+        W->>S: POST /api/roof leave (or no refresh for 15 s)
+        S->>C: the stream ends, the session stays up
 
 **Evidence.** Settled 2026-07-13 from the **decompiled roof class** (``w8/a``), reconciled against
 an at-the-van capture of a full open and close. Control char ``1401`` is ATT handle ``0x0037``;
@@ -934,11 +947,15 @@ on, stationary, a full open and a full close; evidence-ledger 2026-10-10 roof ro
 * **Heartbeat.** The app's ``1003`` heartbeat ticks through the whole move. This **confirms** the
   #235 contract above (``calictl``'s roof path ticks it too).
 * **Stream.** With the roof screen open and nothing pressed, the app streams STOP frames
-  ``00 <counter>`` every ~0.45 s. A press switches the direction byte to ``01`` (open) or ``04``
-  (close) and continues the **same** counter: the first move frame repeats the last STOP's value,
-  then ``+1`` per frame every ~0.33–0.45 s. Release returns to the STOP stream. This
-  **contradicts** the 2026-09-16 lab reading above (about 8 frames/s while held, four frames per
-  counter value): on the real unit every frame advances the counter.
+  ``00 <counter>``, one per ~500 ms tick, +1 each (0.4997 s per increment over the whole
+  capture). A press switches the direction byte to ``01`` (open) or ``04`` (close) at once and
+  continues the **same** counter: the first move frame repeats the last STOP's value, and the
+  first STOP after a release repeats the last move frame's (26 of 26 direction changes). While
+  held, a second frame repeats the current value about once a second, so frames arrive every
+  ~0.1–0.5 s — exactly the decompiled two-timer model (the 500 ms counter timer plus the 1000 ms
+  ``ig/c`` re-send). This **contradicts** the 2026-09-16 lab reading above (about 8 frames/s
+  while held, four frames per counter value). ``calictl``'s roof view follows the stream and the
+  repeat-on-change (``R_ROOF_VIEW_STREAM``); it omits the 1000 ms re-send.
 * **First press.** The first open press after the screen opened got ``1402`` = ``0302``
   (closed, counter valid, InfoPopUp 2). The app showed its pre-open safety checklist dialog and the
   roof did not move. After OK, a fresh press moved it. (The InfoPopUp names are owned by
