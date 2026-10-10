@@ -1,9 +1,9 @@
 """Persistent-BLE-session supervisor — the daemon's fast-path connection lifecycle.
 
-Extracted from :class:`serve.Server` (which held ~6 session fields + 4 methods for it). The van
-allows ONE BLE connection at a time, shared with the phone app, so this holds a persistent armed
-session only while the web UI is ACTIVE and RELEASES the slot when it goes idle, backing off while
-the van is unreachable. The trickiest concurrency in the daemon — hence its own named home.
+Extracted from :class:`serve.Server` (which held ~6 session fields + 4 methods for it). ``serve`` is
+the single owner of buspi's shared ``hci0`` (and opens at most one link to the unit), so this holds
+a persistent armed session only while the web UI is ACTIVE and RELEASES it when the UI goes idle
+(dropping to brief cold polls), backing off while the van is unreachable. The trickiest concurrency in the daemon — hence its own named home.
 
 Ownership / injection: the supervisor owns the session STATE (the live session, its state string,
 the backoff counter, the manual-release mode, the last-UI-activity stamp) and the wake event. The
@@ -16,7 +16,7 @@ lock + this supervisor's wake event are loop-created — they cannot exist at ``
    :status: implemented
    :tags: ble, session, concurrency
 
-   Holding/releasing the single BLE slot (UI-active → hold; idle → release for the phone app),
+   Holding/releasing buspi's persistent BLE session (UI-active → hold; idle → release),
    the reconnect backoff, and the keep-warm nudge shall live in one unit that shares the daemon's
    ``_ble`` lock but owns the session state.
 """
@@ -32,14 +32,14 @@ log = _log.get(__name__)
 
 
 class SessionSupervisor:
-    """Holds the persistent session while the web UI is active; releases the slot when idle; backs
+    """Holds the persistent session while the web UI is active; releases it when idle; backs
     off while unreachable. Actuation/poll code asks :meth:`live_session` for the fast path.
 
     :param dev: the :class:`device.CamperDevice`.
     :param interval: the poll interval (seconds) — also the supervisor's idle re-check cadence.
     :param persistent: whether the persistent fast path is enabled (else always cold per-op).
     :param on_push: the notification callback handed to each :class:`device.PersistentSession`.
-    :param ui_idle_s: seconds of UI inactivity after which the slot is released.
+    :param ui_idle_s: seconds of UI inactivity after which the session is released.
     """
 
     SESSION_BACKOFF = (5, 10, 30, 60)  # reconnect backoff seconds, capped
@@ -83,7 +83,7 @@ class SessionSupervisor:
 
     def _ui_active(self):
         """True while the UI has been used within ``ui_idle_s``. A manual "release" forces inactive
-        regardless of polling, so the slot goes to the phone app until Connect / a command."""
+        regardless of polling, so the session stays released until Connect / a command."""
         if self._session_mode == "release":
             return False
         a = self._last_ui_activity
@@ -151,15 +151,15 @@ class SessionSupervisor:
         return True
 
     async def supervise(self):
-        """Hold the persistent session while the web UI is ACTIVE; release the BLE slot when idle (so
-        the phone app can connect); back off while the van is unreachable. Runs forever on the loop."""
+        """Hold the persistent session while the web UI is ACTIVE; release it when idle (brief cold
+        polls instead); back off while the van is unreachable. Runs forever on the loop."""
         # attach() must be called before supervise() - _ble and _wake are required
         assert self._wake is not None
         assert self._ble is not None
         while True:
             if not self._ui_active():
-                # web UI idle -> release the slot for the phone app; the daemon falls back to brief
-                # cold polls, which coexist with the app far better than a permanently-held link.
+                # web UI idle -> release the session; the daemon falls back to brief cold polls
+                # (each one holds hci0 only for its own read, not permanently).
                 if self._session is not None:
                     async with self._ble:
                         await self._session.aclose()

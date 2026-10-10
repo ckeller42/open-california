@@ -444,7 +444,7 @@ def test_connect_leaves_an_unbonded_device_alone(monkeypatch):
 
 def test_a_connect_past_the_deadline_leaves_no_link(monkeypatch):
     """A connect that outlives the CONNECTING budget must fail (-> EV_CONNECT_FAIL) BEFORE the SM
-    timer, and release its half-open client: the unit has one connection slot and serve's poll
+    timer, and release its half-open client: ``serve`` is buspi's single ``hci0`` owner and its poll
     resumes as soon as the wizard ends.
 
     .. test:: connect() is bounded by the CONNECTING budget
@@ -899,7 +899,7 @@ def test_remove_bond_can_keep_the_cache(monkeypatch, tmp_path):
 
 def test_aclose_releases_the_wizards_link(monkeypatch):
     """After BONDED the wizard's own link (connect()/verify() reuse it) must be dropped at flow
-    end: the unit has ONE connection slot and serve's poll reads right after the wizard.
+    end: ``serve`` is buspi's single ``hci0`` owner and its poll reads right after the wizard.
 
     .. test:: the wizard releases its link at flow end
        :id: T_PAIRING_RELEASES_LINK

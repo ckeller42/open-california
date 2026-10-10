@@ -443,15 +443,15 @@ def _log_unit_writes(unit):
 
 def test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking(mock):
     """A roof move with a live persistent session runs INSIDE it: the 1003 heartbeat keeps ticking
-    between the move frames, the single slot is never released or re-taken (the mock's ``one_slot``
-    stays happy), and a release STOP still interrupts the move at once, lock-free.
+    between the move frames, the link is never released or re-taken (the mock's opt-in ``one_slot``
+    model stays happy), and a release STOP still interrupts the move at once, lock-free.
 
     Replaces the #198 handover test. That handover existed only because the roof contract was read
     as "no 1003 heartbeat during a roof move"; the decompile shows the app keeps its session-global
     heartbeat ticking during roof moves (#235), so calictl now follows the app and reuses the
     session instead of dropping it.
 
-    .. test:: Roof move inside the live session: heartbeat interleaved, one slot, immediate STOP
+    .. test:: Roof move inside the live session: heartbeat interleaved, one link, immediate STOP
        :id: T_ROOF_IN_SESSION_MOCK
        :links: R_ROOF_ACTUATE, R_PERSISTENT_SESSION
     """
@@ -459,7 +459,7 @@ def test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking(mock)
 
     from calictl import serve
 
-    mock.one_slot = True  # model the unit's single slot
+    mock.one_slot = True  # opt-in model: fail any second link calictl opens
     s = serve.Server("11:22:33:44:55:66", influx_enabled=False)
     s._read_only = False
     s._last["roof"] = {"Installed": 1, "InfoPopUp": 0, "Position": 0}
@@ -503,7 +503,7 @@ def test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking(mock)
     beats_in_move = [i for i, e in enumerate(move) if e[0] == "beat" and roof_idx[0] < i < roof_idx[-1]]
     assert beats_in_move, "the 1003 heartbeat must tick between the roof frames"
     assert move[roof_idx[-1]] == ("roof", 0x00), "the move ends in a STOP"
-    assert mock.holder is holder, "the single slot was released/re-taken (handover) instead of reused"
+    assert mock.holder is holder, "the link was released/re-taken (handover) instead of reused"
     assert survived, "the persistent session must survive the roof move"
     assert stop_latency and stop_latency[0] < 0.5, "release STOP must be immediate (lock-free)"
     # the STOP frame itself reaches the unit promptly after the release (not a whole frame period)

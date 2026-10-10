@@ -8,19 +8,19 @@ component needed: calictl publishes MQTT discovery, HA's `default_config`
 auto-adds the entities, and `homekit:` re-exposes them.
 
 **Ownership rule: HA never touches BLE.** `calictl serve` is the sole owner
-of the Pi's one Bluetooth adapter (hci0) and the one BLE connection the
-camper unit accepts. Home Assistant only ever talks MQTT (to the broker) and
+of the Pi's one Bluetooth adapter (hci0) and opens at most one BLE link from
+the Pi to the camper unit. Home Assistant only ever talks MQTT (to the broker) and
 HomeKit (to Apple Home) — it has no BLE role and should never be given one.
 If you're tempted to add an HA Bluetooth integration for the same van,
-don't: two BLE clients will fight over the single slot.
+don't: two BLE clients on the Pi would fight over hci0 (the unit itself
+serves several centrals — the single-owner rule is the Pi's adapter).
 
-**Phone-app contention caveat:** the camper unit's BLE stack accepts exactly
-one central connection. If the official VW app is connected on a phone at
-the same time, calictl's connection attempts, polls, and commands will fail
-(timeout/retry) until the app disconnects. This is expected, not a bug —
-calictl retries and republishes state as soon as the slot frees up. Sensors
-in HA will simply stop updating for that window rather than showing wrong
-data.
+**Phone app alongside:** the camper unit serves several centrals at once
+(phone app + buspi + ESP connected simultaneously, captured 2026-10-10), so
+the official VW app being connected does not lock calictl out. If the unit is
+unreachable (deep sleep while parked), calictl retries and republishes state
+once it is back; sensors in HA simply stop updating for that window rather
+than showing wrong data.
 
 ## 0. Prerequisites
 

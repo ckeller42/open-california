@@ -16,7 +16,7 @@ sinks).
 | `overrides.py` | the 4 cooler/heater timer offsets resolved from `sf/a.java` `f()` (extractor left `MERGED_AMBIGUOUS`) |
 | `semantics.py` | live-verified transforms (water `Level`=current/`Volume`=capacity, energy ×0.1 V + stale-age + signed currents, per-function `Installed` gating, camping independent outputs) |
 | `freshness.py` | physical-plausibility guards for latched/stale reads (the fresh-water stale latch) |
-| `device.py` | robust BLE (single `async with` connect, retries with opt-in adapter reset, `1003` heartbeat, roof streaming, `ConnectionUnavailable` when the phone app holds the one slot) |
+| `device.py` | robust BLE (single `async with` connect, retries with opt-in adapter reset, `1003` heartbeat, roof streaming, `ConnectionUnavailable` when the unit is unreachable) |
 | `session.py` | persistent-BLE-session supervisor (holds the slot while the web UI is active, releases it when idle, hands it over for roof moves) |
 | `control.py` | per-function full-packet control-frame builders (`BUILDERS`), shared by `set` and the daemon |
 | `postcheck.py` | post-write applied-check: did a control write land in the resulting state? |

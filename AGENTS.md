@@ -12,7 +12,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 
 | Path | What |
 |---|---|
-| `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `freshness` (stale-read guards), `history` (battery history for the UI), `postcheck` (post-write applied-check), `pairing`/`pairing_bluez` (guided-pairing SM + BlueZ transport), `log`, `trace` (BLE trace recorder), `cli` |
+| `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `freshness` (stale-read guards), `history` (JSONL helpers for the per-poll outcome log), `postcheck` (post-write applied-check), `pairing`/`pairing_bluez` (guided-pairing SM + BlueZ transport), `log`, `trace` (BLE trace recorder), `cli` |
 | `protocol/dictionary.yaml` | extracted field map (14 functions, state+control); source of truth for bit layout |
 | `protocol/signals.yaml` | the **signal catalog** — surface/omit decision + provenance per field |
 | `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `run_against_mock` (real CLI/`serve` over the mock), `trace_compare` (real-unit trace vs the mock), `fake_unit_peripheral` (the mock as a **Bumble BLE peripheral** with real SMP passkey pairing — shared by `applab`, `tests/test_pairing_link.py` and the `tests/realstack/` VM rig), `applab/` (the **real app** in an emulator against that peripheral — screens in any state + app-vs-calictl frame diffs; see its README; `applab/phone/` = HCI-snoop decoders for the owner's REAL phone, skill `phone-app-lab`), `esplab/` (CoreS3 bench helpers: `flash.sh` from `flasher_args.json`, `esp_cmd.py` no-reset console; `thinky-bench` skill), `gen_c_dict` + `gen_codec_vectors` (C codec header + golden vectors, `--check` in CI), `check_vendor_material` + `check_import_clean` (guards shared by the pre-commit hooks + CI), `hooks/` (Claude Code hook scripts) |
@@ -84,7 +84,7 @@ python3 -m pytest tests/ -q                          # the suite (keep green)
 tools/ci.sh [ci|webcheck|test|lint|audit|…]          # the local CI gate — NOT all of GitHub CI (below)
 tools/ci.sh cov                                      # suite under coverage; floor gates calictl/ only (pyproject fail_under, a ratchet — raise it, never lower)
 DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + semantic-review
-python3 -m calictl status                            # live read of all functions (needs BLE + free slot)
+python3 -m calictl status                            # live read of all functions (needs BLE; on buspi stop `serve` first — it owns hci0)
 python3 -m calictl serve [--dry-run]                 # the unified daemon (read-only unless --enable-writes)
 curl -s localhost:8088/api/state                     # buspi: live decoded state via the RUNNING daemon
 CALICTL_LOG_LEVEL=DEBUG python3 -m calictl serve …         # daemon logs via `logging` (calictl/log.py): level, name, timestamp (dropped under journald)
@@ -133,7 +133,8 @@ vectors + C headers, the webui `tsc` check). On **push**: the full pytest suite 
 When the daemon is up it OWNS buspi's BLE adapter — read live state via its web API `/api/state`
 (**buspi runs `--web 8088`** via a systemd drop-in override — the committed unit template has no
 `--web`; the CLI default is 8080) or the cache `~/.cache/calictl/last_state.json`;
-never open a 2nd BLE connection from buspi. Warm the fast session first with `POST /api/session {"action":"connect"}`
+never open a 2nd BLE connection from buspi (the unit itself serves several centrals; the rule is
+buspi's own adapter). Warm the fast session first with `POST /api/session {"action":"connect"}`
 (auto-releases after ~25 s idle).
 
 ## Known state (operational takeaways — full provenance in `docs/business-logic/` + `evidence-ledger.md`)
@@ -183,8 +184,9 @@ never open a 2nd BLE connection from buspi. Warm the fast session first with `PO
   does accept several centrals, 2026-10-10); with none up it opens its own connection, heartbeat on. A roof command never warms
   the session first (no keep-warm nudge, no `CALICTL_SESSION_WAIT_S` wait). See
   `protocol-alignment.md` + `protocol-sequences`.
-- **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads (`device.read_all`/
-  `read` do) to keep the link up (dropped after ~15 s otherwise) and refresh the re-read chars. It does
+- **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads/writes (`device.read_all`/
+  `read` do) to arm writes and refresh the re-read chars — it is NOT what keeps the link up (a held
+  link without heartbeats stayed up >2 min, 2026-10-10). It does
   NOT refresh water: water is measurement-gated (the unit measures only while its water system is
   powered), so a parked read may return the stale latch **FreshWaterLevel = 1**. `freshness.implausible_water_drop`
   (and its C twins in `csrc/ports.c` + the ESP's `session.c`) holds the last good reading ONLY for a drop to

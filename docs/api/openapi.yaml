@@ -67,7 +67,9 @@ paths:
         (`x-confirm-required`: currently `roof`, `airheater`) require `confirm: true`. Rejected with
         `405 read_only` when the daemon runs read-only. `applied` is the daemon's own verify-read of
         the resulting state: `true` = the state char actually changed, `false` = the unit did not
-        take the write (e.g. the camping stationary gate), `null` = not verifiable.
+        take the write (e.g. the camping stationary gate), `null` = not verifiable. The ESP32
+        satellite may add `unconfirmed: true` (with `applied: null`): the link dropped after the
+        frame left, so the outcome is unknown — clients confirm it from the next `/api/state`.
       requestBody:
         required: true
         content:
@@ -120,8 +122,9 @@ paths:
     post:
       summary: Connect or disconnect the BLE session (not a vehicle write)
       description: |
-        Manage the persistent BLE session. `connect` warms the fast path; `disconnect` hands the
-        single BLE slot back to the phone app. Allowed even in read-only mode (it never actuates).
+        Manage the persistent BLE session. `connect` warms the fast path; `disconnect` releases
+        the held session now instead of waiting for the idle auto-release (the unit serves several
+        centrals at once, so this is not needed for the phone app to connect). Allowed even in read-only mode (it never actuates).
       requestBody:
         required: true
         content:
@@ -426,6 +429,11 @@ components:
           type: [string, "null"]
           description: Per-command error detail, or null on success.
         function: { type: string }
+        unconfirmed:
+          type: boolean
+          description: >
+            ESP32 satellite only, optional — the link was lost after the frame left (applied is
+            null); confirm the outcome from the next /api/state.
     SessionRequest:
       type: object
       required: [action]

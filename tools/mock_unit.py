@@ -317,10 +317,11 @@ class MockCamperUnit:
         # actually SEEN a beat can lapse — `_beat_t` stays None when a test arms the unit directly,
         # so hand-armed fixtures never expire underneath themselves.
         self._beat_t: float | None = None
-        # ONE connection slot (the phone holding it is why buspi can't connect). OPT-IN: the tests
-        # that model the single slot turn it on (e.g. the roof move inside the live session).
+        # OPT-IN one-connection MODEL — a test knob, NOT the real unit (which serves several
+        # centrals at once: phone app + buspi + ESP, captured 2026-10-10). Tests turn it on to prove
+        # calictl never opens a second link of its own (e.g. the roof move inside the live session).
         self.one_slot = False
-        self.holder: object | None = None  # the one connection slot (phone or daemon)
+        self.holder: object | None = None  # the current link holder under the opt-in one_slot model
         self._wake_at: float | None = None  # scheduled re-wake (engine-crank drop)
         self._crank_drop = False  # drop the link at the end of this tick
         self.water_powered = True  # False = parked/locked: both tanks freeze
@@ -504,7 +505,7 @@ class MockCamperUnit:
         """Van parks -> deep sleep: the link dies and the unit stops advertising."""
         self.online = False
         self.armed = False
-        self.holder = None  # the link is gone, so the single slot is free again
+        self.holder = None  # the link is gone, so the (opt-in) one_slot model is free again
         self._beat_t = None
 
     def wake(self) -> None:
@@ -1044,10 +1045,9 @@ class MockBleakClient:
     async def connect(self):
         if self.unit is not None and not self.unit.online:
             raise MockDisconnect("van asleep (not advertising)")
-        # ONE connection slot: while the phone app (or another client) holds it the unit stops
-        # advertising and a second connect fails. calictl's own taxonomy distinguishes this from a
-        # sleeping van (value-freshness.md) — with a mock that let everyone in, "phone holds the
-        # slot" and "van asleep" were the same behaviour and a mis-classification was invisible.
+        # Opt-in one_slot MODEL (not the real unit, which serves several centrals): while another
+        # client holds the link a second connect fails, distinct from a sleeping van — lets a test
+        # catch calictl opening a second link of its own, or mis-classifying "busy" as "asleep".
         if self.unit is not None and self.unit.one_slot and self.unit.holder not in (None, self):
             raise MockDisconnect("connection slot busy (another client is connected)")
         if self.unit is not None:
@@ -1057,7 +1057,7 @@ class MockBleakClient:
     async def disconnect(self):
         self.is_connected = False
         if self.unit is not None and self.unit.holder is self:
-            self.unit.holder = None  # release the single slot
+            self.unit.holder = None  # release the opt-in one_slot model
         self._unsubscribe_all()  # a dropped link takes its subscriptions with it
 
     def _unsubscribe_all(self):

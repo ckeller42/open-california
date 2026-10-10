@@ -573,7 +573,7 @@ def test_pairing_checklist_before_connect(pairing_page):
     text = page.locator("#app").inner_text()
     assert "Gerät verbinden" in text  # the unit's own screen name
     assert "Passcode: ---" in text  # what the unit shows before we connect
-    assert "phone" in text.lower()  # disconnect the CaliforniaOnTour app
+    assert "California On Tour app" in text  # close the phone app while pairing
     assert "Home Assistant" in text  # other scanners on the Pi
 
 
