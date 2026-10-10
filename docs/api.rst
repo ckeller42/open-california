@@ -148,6 +148,7 @@ Tests
 .. autofunction:: tests.test_mock_integration.test_standalone_roof_stop_without_a_session_has_no_arm_delay
 .. autofunction:: tests.test_mock_integration.test_roof_auto_stops_at_the_limit_inside_the_live_session
 .. autofunction:: tests.test_mock_integration.test_roof_view_streams_stop_frames_and_a_press_continues_the_counter
+.. autofunction:: tests.test_mock_integration.test_roof_checklist_then_a_fresh_press_moves_through_serve
 .. autofunction:: tests.test_mock_integration.test_roof_view_lapses_without_a_refresh
 .. autofunction:: tests.test_mock_integration.test_roof_view_leave_ends_a_held_move_with_stop
 .. autofunction:: tests.test_firmware_anchors.test_firmware_snapshot_captures_raw_frames

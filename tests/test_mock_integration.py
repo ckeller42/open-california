@@ -826,6 +826,50 @@ def test_roof_view_streams_stop_frames_and_a_press_continues_the_counter(mock, m
     assert out["streaming"] is True and out["after_leave"] is False
 
 
+def test_roof_checklist_then_a_fresh_press_moves_through_serve(mock, monkeypatch):
+    """The real unit's open flow end to end (CAPTURE 2026-10-10): with the roof view streaming, the
+    first open press gets ``0302`` (the pre-open checklist, no motion); after the release a fresh
+    press is NOT refused (InfoPopUp 2 is no move block, #276) and the roof moves.
+
+    .. test:: Roof view: the checklist press, then a fresh press moves (serve on the mock)
+       :id: T_ROOF_VIEW_CHECKLIST_FLOW
+       :links: R_ROOF_VIEW_STREAM, R_ROOF_ALERT
+    """
+    _fast_roof(monkeypatch, mock)
+    mock.roof_checklist = True
+    s = _session_server(mock)
+    seen = []
+    mock._subs.setdefault(mock.funcs["roof"].state_char, []).append(lambda _c, d: seen.append(bytes(d).hex()))
+
+    async def _hold(what, seconds):
+        press = asyncio.ensure_future(s.on_command("roof", what, None))
+        await _real_wait(seconds)
+        await s.on_command("roof", "stop", None)
+        await asyncio.wait_for(press, 5.0)
+
+    async def _run():
+        await _bring_up_session(s)
+        done = asyncio.Event()
+        clock = asyncio.ensure_future(_unit_clock(mock, done))
+        try:
+            await s.roof_view("view")
+            await _real_wait(1.5)
+            await _hold("open", 0.5)  # the checklist press
+            first = list(seen)
+            await _real_wait(0.3)
+            s._last["roof"] = mock.decoded("roof")  # the poll would have cached 0302 by now
+            await _hold("open", 0.5)  # a fresh press within the window
+            await s.roof_view("leave")
+            return first
+        finally:
+            done.set()
+            await clock
+
+    first = asyncio.run(_run())
+    assert "0302" in first and not any(h.endswith("0c") for h in first), "checklist, no motion"
+    assert any(h.endswith("0c") for h in seen[len(first) :]), "the fresh press moves"
+
+
 def test_roof_view_lapses_without_a_refresh(mock, monkeypatch):
     """A view that is not refreshed ends: the STOP stream stops after ``CALICTL_ROOF_VIEW_LAPSE_S`` —
     it never streams forever (a closed browser tab sends no ``leave``).
