@@ -27,7 +27,8 @@ APK, the decompile, screenshots and the SDK all live outside the repo (see the h
 
 **Real phone, real unit:** the sibling lab drives the app on the owner's phone over wireless adb
 from buspi and decodes Android's HCI snoop log with `tools/applab/phone/snoop_att.py` +
-`snoop_links.py` (tier CAPTURE). Runbook: `.claude/skills/phone-app-lab/SKILL.md`.
+`snoop_links.py` (tier CAPTURE). Runbook: `.claude/skills/phone-app-lab/SKILL.md`. Phone setup
+(what to install, which settings, with screenshots): [docs/howto-android-phone-lab.md](../../docs/howto-android-phone-lab.md).
 
 ## One-time setup (macOS, Apple Silicon)
 

@@ -51,6 +51,7 @@ clean and shows an empty "incoming" list).
    UI-DESIGN-RATIONALE
    simulation-and-testing
    mock-unit-guide
+   howto-android-phone-lab
    building-the-docs
 
 Reverse-engineering lab notes
