@@ -171,7 +171,9 @@ class ServeBackend:
             "cm_sw_version": g.get("cm_sw_version"),
             "comm_version": g.get("comm_version"),
             "untested": bool(g.get("firmware_untested")),
-            "tested": "amb 0409/0410 · comm 2",  # what this project was validated against
+            # what this project was validated against, e.g. "amb 0409/0410 · comm 2"
+            "tested": "amb %s · comm %d"
+            % ("/".join(sorted(semantics._TESTED_AMB_SW)), semantics._TESTED_COMM),
         }
 
     def set_session(self, action):
