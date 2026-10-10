@@ -437,6 +437,14 @@ Known gaps (accepted):
 0.91 s). The bundle is 51,574 B gzipped, 79 % of `WEB_APP_GZ_MAX` (65,536 B). Re-measured with the live
 controls (2026-10-07, 3 cold runs): median `loadEventEnd` **1030 ms**, live state **1138 ms**.
 
+**Why it took ~1 s, and the fix (2026-10-10):** the transfer is send-buffer-bound, not CPU- or
+radio-bound. `http_core`'s `pump()` writes until the socket buffer is full and resumes on the next
+100 ms tick, so throughput = send buffer / 100 ms: lwIP's default 5760 B gave ~57 KB/s (buspi → ESP,
+van WiFi: 57,659 B in 1.18 s, first byte 0.17 s; `/api/state` 0.16 s). `CONFIG_LWIP_TCP_SND_BUF_DEFAULT`
+is now 23040 B (16 x MSS) → ~3 ticks. WiFi modem sleep stays on (IDF requires it with BT + WiFi
+coexistence), which is the 65-120 ms ping; it costs each request one round trip, not throughput.
+The bundle is now ~57.6 KB, **88 % of `WEB_APP_GZ_MAX`** — watch it.
+
 **Where the credentials live:** the kv store keys `wifi_ssid` / `wifi_psk` — NVS namespace `cali`
 on the device (esp_wifi's own NVS copy is off: `WIFI_STORAGE_RAM`, `CONFIG_ESP_WIFI_NVS_ENABLED=n`),
 `<store>/wifi_ssid.kv` / `wifi_psk.kv` on the host — in plain text (CRC-framed, not encrypted), per
