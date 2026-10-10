@@ -1,6 +1,6 @@
 """The ESP page fixtures behind the docs screenshots keep the firmware handlers' JSON shape.
 
-``tools.ux_gallery --esp`` renders ``docs/screenshots/esp-setup-page.png`` / ``esp-status-page.png``
+``tools.ux_gallery --esp`` renders ``docs/screenshots/esp-setup-page.png``
 from a stdlib stub serving canned ``/api/state`` + ``/api/wifi`` JSON. These tests pin the canned key
 sets to the ones ``tests/firmware/test_web_handlers.py`` asserts of the real C handlers (``web.c``)
 — one shared copy, ``tests/firmware/api_shape.py`` — and check the stub serves the exact generated page bytes the firmware embeds — so the figures in

@@ -527,11 +527,11 @@ def test_root_outside_station_mode_is_the_setup_page(web_cli, state, joined):
     assert r.status == 200 and r.headers["content-type"].startswith("text/html")
     assert r.body == PAGE.read_bytes()
     assert "content-encoding" not in r.headers and "cache-control" not in r.headers
-    assert b'id="setup"' in r.body and b'id="functions"' in r.body
+    assert b'id="setup"' in r.body and b'id="device"' in r.body
 
 
 @pytest.mark.parametrize("state,joined", [("online", 1), ("setup_ap", 0), ("unprovisioned", 0)])
-def test_device_is_the_status_page_in_every_mode(web_cli, state, joined):
+def test_device_is_the_setup_page_in_every_mode(web_cli, state, joined):
     r, _ = one(web_cli, "GET", "/device", setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.body == PAGE.read_bytes() and "content-encoding" not in r.headers
 

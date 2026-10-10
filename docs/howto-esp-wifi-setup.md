@@ -2,7 +2,7 @@
 
 This walks you through connecting the ESP32 "satellite" — the small M5Stack CoreS3 board that
 pairs with your camper unit on its own, without the Raspberry Pi (see [ESP32 firmware](firmware.md))
-— to your WiFi, so you can see its status page from a phone or laptop.
+— to your WiFi, so you can open the camper UI from a phone or laptop.
 
 > **Status.** The satellite has been paired with a real camper unit since 2026-10-08 (while the Pi
 > stayed connected to the same unit) and switches the fridge, camping mode, lights, air heater and
@@ -91,15 +91,10 @@ calictl UI — the same tiles as on the Pi, with working controls for the fridge
 lights (the wake-up light too), air heater and energy mode; the pop-up roof stays with buspi or the
 app (greyed, with the hint *Only via buspi or the app*). Controls work only on your home WiFi,
 never over the setup hotspot (see [Control from the satellite](#control-from-the-satellite)).
-Device and WiFi details are at **<http://calictl-esp.local/device>** (also in the ⋮ menu,
-"Device & WiFi"). That page refreshes every 2 seconds:
-
-![The satellite's status page on the home network: device state and the camper unit's functions](screenshots/esp-status-page.png)
-
-*Device* shows the Bluetooth pairing, whether the link to the camper unit is up and how old the
-last reading is, the WiFi network, IP address and signal, uptime and firmware version. *Camper
-unit* lists each function the unit reports, with the raw field values (the figure shows two; the
-real page lists every function the unit reports).
+Device and WiFi details are in the ⋮ menu, **Device status**: firmware, the link to the camper
+unit, WiFi network and signal, uptime and the bonded unit. Its *Open setup* link goes to
+**<http://calictl-esp.local/device>**, the satellite's own setup page (the WiFi form over the
+setup hotspot, and a link back to the calictl UI).
 
 **The name doesn't resolve?** Some devices (older Android phones in particular) can't open
 `.local` names. Find the satellite's address instead:
