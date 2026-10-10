@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from tools import ux_gallery
+from tools import gen_c_dict, ux_gallery
 
 sync_api = pytest.importorskip("playwright.sync_api")
 expect = sync_api.expect
@@ -27,7 +27,8 @@ except Exception as _e:  # noqa: BLE001 — any launch failure (missing executab
     pytest.skip("Playwright chromium browser not installed: %s" % _e, allow_module_level=True)
 
 TILES = ("Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Roof", "Vehicle")
-ALLOWED = {"/", "/api/state", "/api/pairing"}  # + the wizard endpoint (R_FW_PAIRING_WIZARD)
+# + the wizard endpoint (R_FW_PAIRING_WIZARD) + the home-screen manifest/icons a browser may fetch
+ALLOWED = {"/", "/api/state", "/api/pairing"} | {p for p, _, _ in gen_c_dict.pwa_assets()}
 ALLOWED_LIVE = ALLOWED | {"/api/command"}
 ELSEWHERE = "Only via buspi or the app"
 LIVE = "() => !!(STATE._meta && STATE._meta.satellite && STATE._meta.read_only === false)"

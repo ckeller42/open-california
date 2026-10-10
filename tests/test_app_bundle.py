@@ -1,8 +1,8 @@
 """The satellite UI bundle: firmware/web/app_bundle_gen.h is the calictl web UI inlined + gzipped.
 
 ``tools.gen_c_dict.render_app_bundle`` inlines calictl/webui's index.html + app.css + strings.de.js
-+ semantics.js + app.js into one document (no external request: favicon ``data:,``, no manifest or
-icons) and ``generate_app_bundle`` gzips it (mtime=0) into a C byte array the firmware serves at
++ semantics.js + app.js into one document (no external request but the manifest + icons, which the
+satellite serves from firmware/web/pwa_assets_gen.h) and ``generate_app_bundle`` gzips it (mtime=0) into a C byte array the firmware serves at
 ``GET /`` in station mode. Fresh = the array decompresses to today's render (zlib builds may differ
 in bytes); it fits ``WEB_APP_GZ_MAX``; an inlined ``</script`` is refused.
 
@@ -47,9 +47,9 @@ def test_gzip_fits_the_budget():
 
 def test_bundle_requests_nothing_itself():
     html = gen_c_dict.render_app_bundle()
-    assert not re.search(r'<(?:script|link)\b[^>]*\b(?:src|href)="/', html)
-    assert not re.search(r'<link rel="(?:manifest|apple-touch-icon|stylesheet)"', html)
-    assert html.count('<link rel="icon"') == 1 and '<link rel="icon" href="data:,">' in html
+    served = {p for p, _, _ in gen_c_dict.pwa_assets()}
+    assert not re.search(r"<script\b[^>]*\bsrc=", html) and '<link rel="stylesheet"' not in html
+    assert set(re.findall(r'<link\b[^>]*\bhref="([^"]*)"', html)) <= served
     for name in SOURCES[1:]:
         assert html.count((WEBUI / name).read_text(encoding="utf-8")) == 1, name
 
@@ -59,7 +59,7 @@ def test_no_external_reference_left_in_the_markup():
     markup = re.sub(r"<(script|style)>.*?</\1>", "", gen_c_dict.render_app_bundle(), flags=re.S)
     markup = re.sub(r"<!--.*?-->", "", markup, flags=re.S)
     for m in re.finditer(r'<[^>]+\b(?:src|href|action|data|poster)="([^"]*)"', markup):
-        assert m.group(1) == "data:,", m.group(0)
+        assert m.group(1) in {p for p, _, _ in gen_c_dict.pwa_assets()}, m.group(0)
     assert "@import" not in gen_c_dict.render_app_bundle()
 
 

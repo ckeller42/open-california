@@ -21,6 +21,7 @@
 #include "pairing_consts.h"
 #include "strings_gen.h"   /* WEB_INDEX_HTML: firmware/web/index_gen.html, generated */
 #include "app_bundle_gen.h"   /* WEB_APP_HTML_GZ: the calictl web UI bundle (satellite UI), generated */
+#include "pwa_assets_gen.h"   /* PWA_ASSETS: the manifest + icons the bundle links (home screen), generated */
 
 /* The JSON response buffer; a test build may shrink it (-DCALI_WEB_JSON_MAX=64) to force overflow. */
 #ifndef CALI_WEB_JSON_MAX
@@ -629,6 +630,13 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN);
         resp->content_encoding = "gzip";
         return 1;
+    }
+    for (size_t i = 0; get && i < N_OF(PWA_ASSETS); i++) {   /* "Add to Home Screen", in every mode */
+        if (strcmp(req->path, PWA_ASSETS[i].path) == 0) {
+            set_body(resp, 200, PWA_ASSETS[i].type, (const char *)PWA_ASSETS[i].body, PWA_ASSETS[i].len);
+            resp->cache_control = "max-age=86400";   /* a day: a reflash shows by tomorrow */
+            return 1;
+        }
     }
     if (strcmp(req->path, "/api/pairing") == 0) {
         api_pairing(req, resp);
