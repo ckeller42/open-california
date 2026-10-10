@@ -15,6 +15,8 @@ import json
 import os
 from collections import namedtuple
 
+from . import control
+
 DISCOVERY_PREFIX = "homeassistant"
 BASE = "calivan"
 
@@ -157,10 +159,16 @@ ENTITY_SPECS: dict[str, list] = {
 # control target has no direct read-back field.
 CommandSpec = namedtuple("CommandSpec", "component what name config state_key")
 
+
+def _range(lo_hi):
+    """A number entity's ``{min, max}`` from the builder's own range (``calictl.control``)."""
+    return {"min": lo_hi[0], "max": lo_hi[1]}
+
+
 COMMAND_SPECS: dict[str, list] = {
     "cooler": [
         CommandSpec("switch", "power", "Fridge Power", {}, "on"),
-        CommandSpec("number", "level", "Fridge Set Level", {"min": 1, "max": 5}, "level"),
+        CommandSpec("number", "level", "Fridge Set Level", _range(control.COOLER_LEVEL_RANGE), "level"),
     ],
     "campingmode": [
         CommandSpec("switch", "master", "Camping Mode", {}, "master_on"),
@@ -169,11 +177,15 @@ COMMAND_SPECS: dict[str, list] = {
     ],
     "lighting": [
         CommandSpec("switch", "power", "Interior Lights", {}, "any_on"),
-        CommandSpec("number", "brightness", "Interior Brightness", {"min": 0, "max": 15}, None),
+        CommandSpec(
+            "number", "brightness", "All Lights Brightness", _range((0, control.LIGHT_ON_BRIGHTNESS)), None
+        ),
     ],
     "airheater": [
         CommandSpec("switch", "power", "Air Heater Power", {}, "running"),
-        CommandSpec("number", "level", "Air Heater Set Level", {"min": 0, "max": 15}, "level"),
+        CommandSpec(
+            "number", "level", "Air Heater Set Level", _range(control.AIRHEATER_LEVEL_RANGE), "level"
+        ),
     ],
 }
 

@@ -139,7 +139,7 @@ webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only s
   # typescript is pinned (bump deliberately; the 0-error baseline is per compiler version).
   npx --yes -p typescript@7.0.2 tsc --noEmit -p calictl/webui/jsconfig.json
   npx --yes -p typescript@7.0.2 tsc --noEmit -p firmware/web/jsconfig.json
-  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/semantics.js
+  node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/semantics_tables.js && node --check calictl/webui/semantics.js
   node --check firmware/web/page.js
   echo "web UI typecheck: OK"
 }

@@ -257,6 +257,7 @@ def _cooler_values(state: dict, **changes) -> dict:
 # Cooler Mode enum (vf/c.java: readback J0()=Mode==2, P1()=Mode==4): 0=normal (quiet off),
 # 2=manual quiet, 4=timer-based quiet. Staged by vf/c.f(this, <n>) via T1(0)/x0(2)/k0(4).
 COOLER_MODES = {"normal": 0, "quiet": 2, "timer_quiet": 4}
+COOLER_LEVEL_RANGE = (1, 5)  # settable cooling levels (inclusive); HA + the web UI slider read it
 
 
 def _cooler(funcs, what, value, last):
@@ -281,7 +282,7 @@ def _cooler(funcs, what, value, last):
     if what == "power":
         ch = {"State": 1 if _truthy(value) else 0}
     elif what == "level":
-        lvl = _int_range(value, 1, 5, "cooler level")
+        lvl = _int_range(value, *COOLER_LEVEL_RANGE, "cooler level")
         ch = {"Level": lvl}
     elif what == "mode":  # quiet mode (vf/c.java T1/x0/k0 -> Mode 0/2/4)
         key = str(value).strip().lower()
@@ -413,6 +414,7 @@ LIGHT_ZONES = {
 # down; the cooler cooling-timer can only be set while the fridge is OFF.
 _ROOF_CLOSED_POSITIONS = (0, 14)  # matches semantics._ROOF_POS closed values
 AIRHEATER_MAX_RUNTIME_MIN = 120  # the app's cap on immediate heating (its heating info page)
+AIRHEATER_LEVEL_RANGE = (1, 10)  # app-settable HeatingLevel (10 = HI); HA + the web UI slider read it
 # OperationModeAirHeater is the departure-timer arm (app-observed 2026-09-16, tools/applab):
 # 7 = the app's leave-unchanged sentinel in every frame that doesn't target it, 3 = timer armed
 # (rf/b.java a2()), 0 = cancelled (j4()). OperationModeCombined names the device the timer drives
@@ -773,7 +775,7 @@ def _lighting(funcs, what, value, last):
             "ProfileNumber": pn,
             **{z: LIGHT_UNCHANGED for z in zone_fields},
         }
-    elif what == "all":
+    elif what in ("all", "brightness"):  # "brightness" = the Home Assistant number entity (mqtt)
         # not an app action (the app is per-zone) — our convenience: every REAL lamp to one level
         vals = {**base, **_all_real_zones(zone_fields, _b(value))}
     else:  # a single zone (friendly key or BrightnessL field)
@@ -858,7 +860,7 @@ def _airheater(funcs, what, value, last):
     elif what == "level":
         # App-settable range is 1-10 (rf/b.java:783 q4 stages HeatingLevel only if 0<i<=10; 11 is
         # the leave-unchanged/commit sentinel). 0-15 is the raw field WIDTH, not the exposed range.
-        lvl = _int_range(value, 1, 10, "airheater HeatingLevel (10=HI)")
+        lvl = _int_range(value, *AIRHEATER_LEVEL_RANGE, "airheater HeatingLevel (10=HI)")
         ch = {"HeatingLevel": lvl}
     elif what == "runtime":
         # RunningTime, minutes (rf/b.java:199 D4() writes the raw int). The app caps the run time at
