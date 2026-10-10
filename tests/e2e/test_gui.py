@@ -520,13 +520,14 @@ def test_command_latency_is_subsecond(page, base_url):
 def test_open_control_survives_a_state_poll(page):
     """Regression: a live state poll must NOT re-render and destroy a control the user is
     interacting with. The 2s poll rebuilds #app (app.innerHTML=""), which used to slam an open
-    <select> (Profile / Save current as) shut mid-selection. refreshState() skips the
+    <select> (Lead time / Save current as) shut mid-selection. refreshState() skips the
     repaint while a <select>/time/range control is focused. We mark the focused <select>, wait
     through 2+ poll cycles (the mock's telemetry changes each poll, so a repaint WOULD otherwise
     fire), and assert the SAME element is still there — a repaint would have replaced it, losing
     the marker (and, in a browser, closing the dropdown)."""
     page.get_by_text("Lighting", exact=True).first.click()
-    sel = page.locator("select").first  # the 'Profile' dropdown
+    _lighting_settings(page)
+    sel = page.get_by_label("Save current as")
     expect(sel).to_be_visible()
     sel.evaluate("el => { el.dataset.probe = 'keep'; el.focus(); }")
     assert page.evaluate("document.activeElement && document.activeElement.tagName") == "SELECT"
@@ -946,6 +947,14 @@ def _poll(page, base_url, pred, what, timeout=15.0):
     raise AssertionError("state never reached: " + what)
 
 
+def _lighting_settings(page):
+    """Expand the Lighting page's "Functions & settings" (wake-up, sliding door, save favourite),
+    collapsed by default so the quick controls come first."""
+    if page.locator("details.lfuncs").get_attribute("open") is None:
+        page.locator("details.lfuncs > summary").click()
+    expect(page.locator("details.lfuncs")).to_have_attribute("open", "")
+
+
 def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
     """
     .. test:: The web UI edits the wake-up time and switch; an edit keeps the unit-reported switch
@@ -959,6 +968,7 @@ def test_wakeup_light_time_and_switch_reach_the_unit(page, base_url):
     assert r.ok
     _poll(page, base_url, lambda st: st["lighting"]["wakeup"]["time"] == "06:00", "seeded wake-up 06:00")
     page.get_by_text("Lighting", exact=True).first.click()
+    _lighting_settings(page)
     tm = page.get_by_label("Wake-up time")
     sw = page.get_by_role("switch", name="Wake-up light")
     expect(tm).to_have_value("06:00", timeout=15000)
@@ -1018,6 +1028,7 @@ def test_wakeup_time_edit_with_no_config_pulls_then_shows_the_refusal(fresh_url,
     and the refusal reason reaches the user. Nothing is invented: the card stays unknown."""
     with error_gated_page(fresh_url) as pg:
         pg.get_by_text("Lighting", exact=True).first.click()
+        _lighting_settings(pg)
         tm = pg.get_by_label("Wake-up time")
         expect(tm).to_be_enabled(timeout=15000)
         expect(tm).to_have_value("")
@@ -1043,6 +1054,7 @@ def test_door_contact_switch_round_trips(page, base_url):
        :links: R_LIGHT_DOOR_CONTACT
     """
     page.get_by_text("Lighting", exact=True).first.click()
+    _lighting_settings(page)
     sw = page.get_by_role("switch", name="Sliding door lighting")
     was = sw.get_attribute("aria-checked") == "true"
     sw.click()
@@ -1094,13 +1106,16 @@ def test_favourite_save_then_activate(page, base_url):
     before = _state(base_url, page)["lighting"]["profile"]
     assert before != 1  # else activating favourite 1 could not prove anything
     toasts = page.locator("#toasts")
+    _lighting_settings(page)
     page.once("dialog", lambda d: d.accept())
-    page.locator("select").nth(1).select_option("1")  # "Save current as" -> Profile A (= favourite 1)
+    page.get_by_label("Save current as").select_option("1")  # Profile A (= favourite 1)
     expect(
         toasts.get_by_text("Sent — check the lamp").or_(toasts.get_by_text("✓ Applied")).first
     ).to_be_visible(timeout=15000)
     # activating proves the save LANDED on the unit: the mock ignores (ACK-only) an empty favourite
-    page.locator("select").nth(0).select_option("1")
+    tile = page.get_by_role("button", name="Favourite A")
+    expect(tile).to_be_enabled(timeout=15000)  # filled once the unit reports the slot stored
+    tile.click()
     _poll(page, base_url, lambda st: st["lighting"]["profile"] == 1, "favourite 1 active after activate")
     expect(page.get_by_text("this favourite is empty on the unit — save it first")).to_have_count(0)
     r = page.request.post(
@@ -1117,8 +1132,9 @@ def test_favourite_save_then_activate(page, base_url):
 def test_favourite_save_is_not_an_activation(page, base_url):
     page.get_by_text("Lighting", exact=True).first.click()
     before = _state(base_url, page)["lighting"]["profile"]
+    _lighting_settings(page)
     page.once("dialog", lambda d: d.accept())
-    page.locator("select").nth(1).select_option("5")  # "Save current as" -> Profile B (= favourite 5)
+    page.get_by_label("Save current as").select_option("5")  # Profile B (= favourite 5)
     toasts = page.locator("#toasts")
     expect(
         toasts.get_by_text("Sent — check the lamp").or_(toasts.get_by_text("✓ Applied")).first
@@ -1129,20 +1145,94 @@ def test_favourite_save_is_not_an_activation(page, base_url):
 
 def test_favourite_tiles_are_a_b_c_d_mapped_to_1_5_6_7(page):
     """
-    .. test:: The profile selectors offer the app's four tiles A-D = favourites 1/5/6/7
+    .. test:: The quick tiles and the save selector are the app's four tiles A-D = favourites 1/5/6/7
        :id: T_E2E_LIGHT_TILES
        :links: R_LIGHT_FAVOURITE
     """
     page.get_by_text("Lighting", exact=True).first.click()
-    for sel in (page.locator("select").nth(0), page.locator("select").nth(1)):
-        opts = {
-            o.get_attribute("value"): o.inner_text()
-            for o in sel.locator("option").all()
-            if o.get_attribute("value")
-        }
-        letters = {v: t.replace(" ✓", "") for v, t in opts.items() if v in ("1", "5", "6", "7")}
-        assert letters == {"1": "Profile A", "5": "Profile B", "6": "Profile C", "7": "Profile D"}
-        assert "2" not in opts and "3" not in opts and "4" not in opts
+    tiles = page.locator(".favs .fav")
+    expect(tiles).to_have_count(4)
+    assert [tiles.nth(i).get_attribute("aria-label") for i in range(4)] == [
+        "Favourite A",
+        "Favourite B",
+        "Favourite C",
+        "Favourite D",
+    ]
+    _lighting_settings(page)
+    sel = page.get_by_label("Save current as")
+    opts = {
+        o.get_attribute("value"): o.inner_text()
+        for o in sel.locator("option").all()
+        if o.get_attribute("value")
+    }
+    assert opts == {"1": "Profile A", "5": "Profile B", "6": "Profile C", "7": "Profile D"}
+
+
+def _with_lighting(page, base_url, **fields):
+    """Serve the mock daemon's state with these lighting fields overridden (the unit's report)."""
+
+    def patch(route):
+        r = route.fetch()
+        body = r.json()
+        body.setdefault("lighting", {}).update(fields)
+        route.fulfill(response=r, json=body)
+
+    page.route("**/api/state", patch)
+    page.goto(base_url)
+    page.get_by_text("Lighting", exact=True).first.click()
+
+
+def test_favourite_tile_tap_activates_and_empty_tiles_are_disabled(page, base_url):
+    """Owner 2026-10-10: lights must be quick to change — one tap on a stored favourite activates it;
+    an empty slot shows "+" and can't be tapped (activating it would be refused anyway).
+
+    .. test:: A stored favourite tile posts profile n in one tap; an empty tile is disabled
+       :id: T_E2E_LIGHT_TILE_TAP
+       :links: R_LIGHT_FAVOURITE
+    """
+    _with_lighting(page, base_url, favourites_stored=[1, 6])
+    want = {"A": ("A", True), "B": ("+", False), "C": ("C", True), "D": ("+", False)}
+    for letter, (text, live) in want.items():
+        tile = page.get_by_role("button", name="Favourite " + letter)
+        expect(tile).to_have_text(text)
+        expect(tile).to_be_enabled() if live else expect(tile).to_be_disabled()
+    with page.expect_request(lambda r: r.url.endswith("/api/command")) as rq:
+        page.get_by_role("button", name="Favourite C").click()
+    body = json.loads(rq.value.post_data)
+    assert (body["function"], body["what"], body["value"]) == ("lighting", "profile", 6)
+
+
+def test_lighting_functions_and_settings_are_collapsed_with_a_summary(page, base_url):
+    """Owner 2026-10-10: the wake-up light is rarely needed — it sits in a collapsed "Functions &
+    settings" section below the lamps, whose summary line still tells its state; expanding shows the
+    controls, and the section stays open across the 2 s poll re-render and a reload.
+
+    .. test:: Wake-up / door / save sit collapsed under "Functions & settings" with a state summary
+       :id: T_E2E_LIGHT_FUNCTIONS_SECTION
+       :links: R_LIGHT_WAKEUP
+    """
+    wake = {"time": "07:40", "enabled": True, "ramp": 0, "brightness": 5, "areas": [1], "colour": 0}
+    _with_lighting(page, base_url, wakeup=wake, door_contact=False)
+    det = page.locator("details.lfuncs")
+    assert det.get_attribute("open") is None  # collapsed by default
+    expect(page.get_by_label("Wake-up time")).to_be_hidden()
+    expect(page.get_by_role("switch", name="Sliding door lighting")).to_be_hidden()
+    expect(det.locator(".lfsum")).to_have_text("Wake-up light 07:40 · Sliding door light off")
+    # the lamps come before the section (quick access without scrolling past settings)
+    lamp = page.locator("input[type=range]").first.bounding_box()
+    assert lamp and lamp["y"] < det.bounding_box()["y"]
+    _lighting_settings(page)
+    expect(page.get_by_label("Wake-up time")).to_have_value("07:40")
+    page.evaluate("render()")  # what the 2 s poll does on a state change
+    expect(det).to_have_attribute("open", "")
+    page.reload()
+    page.get_by_text("Lighting", exact=True).first.click()
+    expect(page.locator("details.lfuncs")).to_have_attribute("open", "")  # remembered per viewer
+    with page.expect_request(lambda r: r.url.endswith("/api/command")) as rq:
+        page.get_by_role("switch", name="Wake-up light").click()
+    body = json.loads(rq.value.post_data)
+    assert (body["what"], body["value"]) == ("wakeup", "07:40 1 5 0 off")
+    assert isinstance(body["local_now"], int)
 
 
 def test_wakeup_areas_use_the_t7_labels_and_ranges(page):
@@ -1152,6 +1242,7 @@ def test_wakeup_areas_use_the_t7_labels_and_ranges(page):
        :links: R_LIGHT_WAKEUP
     """
     page.get_by_text("Lighting", exact=True).first.click()
+    _lighting_settings(page)
     for label in (
         "Living area reading lights",
         "Kitchen background lighting",
@@ -1161,7 +1252,7 @@ def test_wakeup_areas_use_the_t7_labels_and_ranges(page):
         expect(page.get_by_text(label, exact=False).first).to_be_visible()
     bright = page.get_by_label("Wake-up brightness")
     assert (bright.get_attribute("min"), bright.get_attribute("max")) == ("0", "10")
-    ramps = [o.get_attribute("value") for o in page.locator("select").nth(2).locator("option").all()]
+    ramps = [o.get_attribute("value") for o in page.get_by_label("Lead time").locator("option").all()]
     assert ramps == ["0", "10", "20", "30"]
 
 
@@ -1176,6 +1267,7 @@ def test_wakeup_areas_are_a_vertical_checkbox_list(base_url, error_gated_page, l
     """
     with error_gated_page(base_url, locale=locale, viewport={"width": 360, "height": 800}) as pg:
         pg.get_by_text(tile, exact=True).first.click()
+        _lighting_settings(pg)
         items = pg.locator(".arealist label")
         expect(items).to_have_count(4)
         tops = []
@@ -1207,6 +1299,7 @@ def test_door_contact_row_hidden_on_grand_california(page, base_url):
     page.route("**/api/state", patch)
     page.goto(base_url)
     page.get_by_text("Lighting", exact=True).first.click()
+    _lighting_settings(page)
     expect(page.get_by_label("Wake-up time")).to_be_visible()
     assert page.get_by_role("switch", name="Sliding door lighting").count() == 0
 

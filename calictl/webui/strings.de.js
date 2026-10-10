@@ -118,7 +118,6 @@ window.STRINGS_DE = {
   // --- lighting ------------------------------------------------------------------------------
   "All lights": "Alle Lichter",
   "Profile": "Profil",
-  "Choose…": "Auswählen…",
   "Save current as": "Aktuelles speichern als",
   "Profile…": "Profil…",
   "Interior lighting": "Innenlicht",
@@ -135,6 +134,12 @@ window.STRINGS_DE = {
   "Pop-up roof reading lights": "Leselichter Aufstelldach",
   "Pop-up roof background lighting": "Ambientelicht Aufstelldach",
   "Lighting & sliding door": "Licht & Schiebetür",
+  "Functions & settings": "Funktionen & Einstellungen",
+  "Empty — save it under Functions & settings": "Leer — unter Funktionen & Einstellungen speichern",
+  "Wake-up light {time}": "Wecklicht {time}",
+  "Wake-up light off": "Wecklicht aus",
+  "Sliding door light on": "Schiebetür-Licht an",
+  "Sliding door light off": "Schiebetür-Licht aus",
   "Opening sliding door activates the rear interior lights.":
     "Beim Öffnen der Schiebetür wird die hintere Innenbeleuchtung eingeschaltet.",
   "this favourite is empty on the unit — save it first":
