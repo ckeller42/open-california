@@ -25,6 +25,10 @@ APK, the decompile, screenshots and the SDK all live outside the repo (see the h
 `AGENTS.md`), and so does the VIN you type into the app (the pre-commit hook refuses any
 17-character VIN in a tracked file). Own-account, own-vehicle interoperability research only.
 
+**Real phone, real unit:** the sibling lab drives the app on the owner's phone over wireless adb
+from buspi and decodes Android's HCI snoop log with `tools/applab/phone/snoop_att.py` +
+`snoop_links.py` (tier CAPTURE). Runbook: `.claude/skills/phone-app-lab/SKILL.md`.
+
 ## One-time setup (macOS, Apple Silicon)
 
 Put the big pieces on an external disk — the SDK + one system image is ~5 GB:
