@@ -106,7 +106,9 @@ def test_number_ranges_are_what_the_builder_accepts():
 def test_lighting_brightness_entity_names_what_it_sets():
     """It sets every real lamp (exterior too), so it is not "Interior"; the unique_id stays stable."""
     cfgs = mqtt.render_discovery(installed={"lighting"})
-    c = next(c for c in cfgs.values() if c.get("command_topic") == mqtt.command_topic("lighting", "brightness"))
+    c = next(
+        c for c in cfgs.values() if c.get("command_topic") == mqtt.command_topic("lighting", "brightness")
+    )
     assert c["name"] == "All Lights Brightness"
     assert c["unique_id"] == "vwcamper_lighting_brightness_set"
 
