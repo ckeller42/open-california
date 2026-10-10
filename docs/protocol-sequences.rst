@@ -121,8 +121,10 @@ Vendor UUID ``0000XXXX-6c77-4b7d-bbf6-a5e587701f3d``. Per subsystem, ``NN01`` is
      - Role in the sequences
    * - ``1001``
      - VERSION (``general``)
-     - Read once in the handshake. The app aborts if it is empty or the version is above 2.
-       ``calictl`` reads it and does not check the value.
+     - Read once in the handshake. The app aborts if it is empty or ``CommunicationVersion`` is
+       above its maximum: 2 in app 5.0.8, **3 since app 5.4.0**, which also branches the energy
+       and general-purpose decode on it (V2 / V3 / V4). This van reports 2. ``calictl`` does not
+       refuse other values; it flags anything but 2 as ``firmware_untested``.
    * - ``1002``
      - VIN check
      - 16 opaque bytes = ``SHA-256(VIN)[16:32]``. The **app** compares them with the VIN the user
@@ -160,6 +162,12 @@ Vendor UUID ``0000XXXX-6c77-4b7d-bbf6-a5e587701f3d``. Per subsystem, ``NN01`` is
    * - ``1701``–``2102``, ``f000``
      - air heater, stairs, satellite, roof A/C, living-room heater, generic
      - Same ``NN01``/``NN02`` pattern. No special sequence.
+   * - ``1603``, ``f002``, ``2200``–``2202``
+     - energy measurements, general-purpose write, VirtualBattery
+     - **Not on this van, not used.** New in app 5.4.0 for units reporting CommunicationVersion
+       3 (``1603``, ``f002`` heater night reduction) or 4 + California Next (``2200``–``2202``).
+       ``calictl`` neither reads nor writes them and must never write ``f002`` to a V2 unit.
+       Layouts: ``business-logic/protocol-alignment.md`` "App 5.4.0".
 
 Session foundation — connect, handshake, subscribe
 --------------------------------------------------
@@ -238,7 +246,10 @@ GATT table cached the phone runs **no service discovery**. It reads ``1002`` (id
 ``1004``, ``f001``, ``1402``, ``1502``, ``1202``; then the ``1003`` heartbeat starts. That is 8
 subscriptions, the chars of the functions fitted on this van plus ``1004``, not the 12 the app lab
 saw against a fake unit with every function fitted. ``calictl`` still subscribes all 12; the unit
-accepts both.
+accepts both. The 8 match app 5.4.0's per-variant subscribe gate (decompile 2026-10-10, ``gg/o``):
+on a T7 it no longer subscribes stairs, satellite, roof A/C and living-room heater, whatever their
+``Installed`` bit. App 5.4.0 keeps this handshake order and the ``1003`` timing (random
+750–850 ms, seed 1..1e6) unchanged from 5.0.8.
 
 Guided pairing — passkey entry and stale-bond recovery
 ------------------------------------------------------

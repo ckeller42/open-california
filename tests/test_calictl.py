@@ -318,8 +318,9 @@ def test_airheater_timer_start_and_cancel_match_app_frames():
 
 
 def test_airheater_error_code_names():
-    """ErrorCode (1702) -> the app's fault IDs (rf/b.java:461-671); 0 = no fault, unknown codes
-    are still surfaced (as "unknown") rather than hidden."""
+    """ErrorCode (1702) -> the app's fault IDs (rf/b.java:461-671; 6/7 new in app 5.4.0,
+    ig/b.java:606-700); 0 = no fault, unknown codes are still surfaced (as "unknown") rather
+    than hidden."""
     from calictl import semantics
 
     base = {"Installed": 1, "NormalOperation": 0, "PermanentOperation": 0, "HeatingLevel": 5}
@@ -330,6 +331,8 @@ def test_airheater_error_code_names():
         3: "system_error",
         4: "heating_time_exceeded",
         5: "not_possible",
+        6: "engine_running",
+        7: "aux_heater_active",
     }.items():
         s = semantics.airheater({**base, "ErrorCode": raw})
         assert s["error"] == name and s["error_code"] == raw

@@ -546,6 +546,13 @@
           "label": null,
           "range": null,
           "controls": null
+        },
+        {
+          "id": "nightReduction",
+          "type": "section",
+          "label": "Night reduction",
+          "range": null,
+          "controls": null
         }
       ]
     },

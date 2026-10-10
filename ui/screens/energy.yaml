@@ -121,7 +121,7 @@ widgets:
       - energy_secondBattery_text
       - energy_secondBatteryAlmostEmpty_headline
       - energy_secondBatteryAlmostEmpty_text
-    constraints: "Battery-fault banners/dialogs. Field mapping (UNVERIFIED but plausible by name match): batteryNotCharging/secondBattery* -> TwoBattNotCharged (offset 7) / WarningLevelActive (offset 4) / WarningLevelTwo state bits."
+    constraints: "Battery-fault banners/dialogs. Field mapping (UNVERIFIED but plausible by name match): batteryNotCharging/secondBattery* -> TwoBattNotCharged (offset 7) / WarningLevelActive (offset 4) / WarningLevelTwo state bits. VERSION DRIFT app 5.4.0 (DE only): the deep-discharge and charging-required texts say 'Zweitbatterie' (was 'Zusatzbatterie'); calictl's DE strings follow the current wording."
 
   - id: chargingWarningDialogs
     type: label

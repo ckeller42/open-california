@@ -202,14 +202,17 @@ def cooler(d: dict) -> dict:
 
 
 # Air-heater ErrorCode (char 1702) -> the app's fault IDs (rf/b.java:461-671: 1 AIR_HEATER_LOW_BATTERY,
-# 2 FUEL_LOW, 3 SYSTEM_ERROR, 4 HEATING_TIME_EXCEEDED, 5 OPERATION_NOT_POSSIBLE; 0 clears). Each
-# maps to a dialog the app shows AFTER a refused write — the heater is never greyed pre-emptively.
+# 2 FUEL_LOW, 3 SYSTEM_ERROR, 4 HEATING_TIME_EXCEEDED, 5 OPERATION_NOT_POSSIBLE; 0 clears; app 5.4.0
+# adds 6 AIR_HEATER_ENGINE_ON + 7 AIR_HEATER_PARK_HEATER_ON, ig/b.java:606-700). Each maps to a
+# dialog the app shows AFTER a refused write — the heater is never greyed pre-emptively.
 _AIRHEATER_ERROR = {
     1: "low_battery",
     2: "low_fuel",
     3: "system_error",
     4: "heating_time_exceeded",
     5: "not_possible",
+    6: "engine_running",  # "deactivated due to engine running" (5.4.0)
+    7: "aux_heater_active",  # "deactivated due to activation of the auxiliary heater" (5.4.0)
 }
 
 
@@ -636,6 +639,8 @@ _DCDC_PLUS2_SW = frozenset({"0409", "0410"})
 # decode/semantics may have drifted, and it arms the fw-drift raw-frame capture (see serve.poll).
 _TESTED_AMB_SW = frozenset({"0409", "0410"})  # camper-unit ("Ambiente") firmware builds seen here
 _TESTED_COMM = 2  # CommunicationVersion = the protocol structure version
+# A unit reporting 3 is not just unvalidated: app 5.4.0 then uses a 64-bit 1602 + a new 1603 energy
+# char, so energy() would decode garbage (docs/business-logic/protocol-alignment.md "App 5.4.0").
 
 
 def _firmware_untested(amb_sw_version, comm_version) -> bool:

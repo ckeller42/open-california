@@ -8493,7 +8493,7 @@
   {
    "expect": {
     "air_distribution": null,
-    "error": "unknown",
+    "error": "engine_running",
     "error_code": 6,
     "installed": true,
     "level": null,
@@ -8516,7 +8516,7 @@
   {
    "expect": {
     "air_distribution": null,
-    "error": "unknown",
+    "error": "aux_heater_active",
     "error_code": 7,
     "installed": true,
     "level": null,

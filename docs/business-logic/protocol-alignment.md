@@ -194,3 +194,55 @@ the wire captures. Corrections applied:
   still never driven on the real unit (#230).
 
 - **`lighting.Timestamp` de-flagged** to `@16/w32` (offset read from the `dg/h.java` builder).
+
+## App 5.4.0 — re-decompile against 5.0.8 (2026-10-10)
+
+CaliforniaOnTour **5.4.0.3036** (the owner's phone, installed 2026-10-09) re-decompiled and diffed
+against **5.0.8.3028** (the build every earlier citation in this file refers to). R8 renamed every
+class; the full diff + rename table is in the private RE repo
+(`notes/2026-10-10-diff-5.0.8-to-5.4.0.md`, `mapping.enigma`). Citations below are 5.4.0 classes.
+Tier: **DECOMPILE 5.4.0** (`evidence-ledger.md`).
+
+### The T7 / CommunicationVersion 2 protocol is unchanged
+
+For this van (California 7, CommunicationVersion 2) no frame, field, sentinel, scale or timing
+changed. Every 5.0.8 control write site has a 1:1 counterpart:
+
+| Item | 5.4.0 |
+|---|---|
+| Handshake | read 1001 CommunicationVersion, then the authenticated 1004 read, then subscribe (`gg/h`), same order |
+| `1003` heartbeat | +1 BE uint32, random **750–850 ms** period, seed **1..1e6**, session-global (`cj/e.java:313-326` → `rg/a`) |
+| Neutral re-write | **500 ms** after a direct control write (`f40/v`, `c1/c` case 5) |
+| Roof SafetyCounter | seed 1..1e6, **450–550 ms** tick (`a9/b`); roof dialogs/gates identical (`jk/c.java:86-123`) |
+| Cooler / air heater / camping / lighting / energy 1601 / roof frames | same fields, enums and leave-unchanged sentinels (cooler 30/62/31/31, energy `EnergyModeSet` 3, lighting 14) |
+| Energy 1602 on V2 | 176-bit layout identical (`og/e.java:1396-1441`); same scales (I, U /10, P ×10, `IDcdc` raw +2 on AmbSw 0409/0410, `og/e.java:844`; SoC level ×10) |
+| Water 1302 | same 9 fields, same unconditional decode (see `value-freshness.md` "App 5.4.0") |
+| 1004 vehicle | same layout; roll/pitch /100 |
+
+New on this van's code path (no wire change): heater **ErrorCode 6/7** (`ig/b.java:606-700`,
+`alert-states.md` §3), the rear-USB rule (`signals.md`), the "Disconnected to save energy" card
+(`gg/k.java:44-95`; StateLand STANDBY now also counts as shore power for the stay-connected rule),
+and persisted last-known values (`value-freshness.md`).
+
+### Not on this van / not used for V2 (documented, not implemented)
+
+calictl decodes none of these and must not write any of them to this unit. None is in
+`protocol/dictionary.yaml` (no catalog decision needed).
+
+| Item | What 5.4.0 does | Applies to |
+|---|---|---|
+| **Protocol-version layer** | 1001 CommunicationVersion → `UNKNOWN / VERSION_2 / VERSION_3 / VERSION_4` (`mh/a`), handed to every function (`gg/l.java:99-127`). Max accepted version **2 → 3** (`gf/a.java:39`; 5.0.8 hard `<= 2`). An unknown value → UNKNOWN → energy and general-purpose signals are not decoded | every unit; only energy, F001/F002 and VirtualBattery branch on it |
+| Char **`1603`** energy measurements | 128-bit: `PLand 0-8, PPv 8-16, UOne 16-24, UTwo 24-32, IOneBattBem 32-48, ITwo 48-64, IDcdc 64-80, ILand 80-96, IPv 96-112, PDcdc 112-128`, same scales; polled every 4.8 s (`og/e.java:1150-1215`, `pg/a.java:37`) | V3+ |
+| **1602 on V3** | 64-bit: flags + SoC bits 0-32 unchanged, then `StateDcdc 24-28, StatePv 32-36, StateLand 36-40, Age 40-48`, remaining hours 48-56 / minutes 56-64 (`og/e.java:986-1018`); the measurements move to 1603 | V3+ — calictl's 176-bit decode would be **wrong** here |
+| **F001 on V3** | named fields: b7 `TimerForNoSleepDuringCampingModeActive`, b6 `IsRearUsbInTSevenAlwaysOn`, b5 `NightReductionActive`, b4 `NightReductionInstalled`, 8-40 night-reduction start/end h:m, 40-48 `HeatingLevel`, 48-56 `NightReductionActivated` (2 = on) (`sg/e.java:404-526`). On V2 the app keeps the generic placeholders (`sg/e.java:342-399`), as calictl does | V3+ |
+| Char **`F002`** general-purpose write | 168-bit: b7 `NightReductionChangeTrigger`, 8-40 times, 40-48 `HeatingLevel` (sentinel 255), 48-56 `Activated` (2/1, sentinel 0) (`tg/b.java:408-583`) — the **heater night reduction** (UI requires continuous heating on). **calictl must never write F002 to a V2 unit** (behaviour unknown) | V3+ |
+| Chars **`2200` / `2201` / `2202`** VirtualBattery (function 22) | 2202 state (`Installed`, SoC/current/voltage of the high-voltage battery, `VirtualBatteryMode` 0 AUTOMATIC / 1 PERMANENT / 6 DISABLED, warnings), 2201 control (24-bit, sentinels 3 / 127) (`hh/g`, `ih/a`, `ih/b`) | California Next + VERSION_4 only — **unreachable in this build** (max accepted is 3) |
+| **CarVariant 2 = CALIFORNIA_NEXT** | 1004 CarVariant 0 T7, 1 Grand California, **2 California Next** (ID. Buzz based), else T7 (`qg/e.java:357-363`, `lf/a.java:25-31`) | other vehicles; this van reports 0 |
+| **Lighting zones 29–36** | Next-only zone IDs mapped onto existing 1501 brightness fields: 29→L7, 30→L4, 31→L1, 32→L2, 33→L9, 34→L8, 35→L3, 36→L5 (`ug/h` `:467-519`); light groups per variant (`ug/h` `:565-590`). No new wire field. L6 and L14–L16 stay unaddressed | California Next |
+| **Per-variant subscribe gate** | `isSupportedForVariant` (`gg/o`): roof T7 only; satellite, stairs, living-room heater, roof A/C **Grand California only**; VirtualBattery Next only; energy, water, heater, cooler T7 + GC; the rest all three. So a T7 app **no longer subscribes** 18xx / 19xx / 20xx / 21xx — matching the 8 subscriptions of the 2026-10-10 capture (`protocol-sequences` "Session foundation"). calictl still subscribes all 12; their `Installed` bit is 0 here | all |
+
+**calictl's guard.** `semantics._firmware_untested` already flags any `comm_version != 2`
+(`firmware_untested`, the web UI's "tested: amb 0409/0410 · comm 2" banner, and the raw-frame drift
+capture). A unit that ever reports 3 would get that warning — and per the table its energy decode
+(1602 layout, missing 1603) would be wrong, not just unvalidated. Check CommunicationVersion
+(1001 byte 8) after any unit firmware update.

@@ -301,7 +301,10 @@ then reads "Timer: On").
   `AIRHEATER_ERROR_MSG` mirrors these titles (so `heating_time_exceeded` reads "Emission limit
   exceeded", `not_possible` "deactivated — engine / water heater running").
 - **ErrorCode** (read-back only): `0` = none/cleared, `1` = low battery, `2` = low fuel,
-  `3` = system error, `4` = heating time exceeded, `5` = operation not possible
+  `3` = system error, `4` = heating time exceeded, `5` = operation not possible; app 5.4.0
+  adds `6` = engine running (`AIR_HEATER_ENGINE_ON`) and `7` = auxiliary heater active
+  (`AIR_HEATER_PARK_HEATER_ON`), `ig/b.java:606-700`, DECOMPILE-only — calictl names them
+  `engine_running` / `aux_heater_active` with the app's dialog texts
   (`rf/b.java:461-711`, dispatches to `AIR_HEATER_LOW_BATTERY_ID` / `AIR_HEATER_FUEL_LOW_ID` /
   `AIR_HEATER_SYSTEM_ERROR_ID` / `AIR_HEATER_HEATING_TIME_EXCEEDED_ID` /
   `AIR_HEATER_OPERATION_NOT_POSSIBLE_ID` respectively). `ErrorCode == 0` additionally sets a
