@@ -15,13 +15,13 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `calictl/` | the runtime package — `protocol` (decode/encode), `semantics` (interpret), `device` (BLE), `serve` (the daemon), `web`/`mqtt`/`influx` (sinks), `control`/`overrides` (frames), `session`/`observer`/`automation`/`firmware`/`anchors`, `freshness` (stale-read guards), `history` (battery history for the UI), `postcheck` (post-write applied-check), `pairing`/`pairing_bluez` (guided-pairing SM + BlueZ transport), `log`, `trace` (BLE trace recorder), `cli` |
 | `protocol/dictionary.yaml` | extracted field map (14 functions, state+control); source of truth for bit layout |
 | `protocol/signals.yaml` | the **signal catalog** — surface/omit decision + provenance per field |
-| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `run_against_mock` (real CLI/`serve` over the mock), `trace_compare` (real-unit trace vs the mock), `fake_unit_peripheral` (the mock as a **Bumble BLE peripheral** with real SMP passkey pairing — shared by `applab`, `tests/test_pairing_link.py` and the `tests/realstack/` VM rig), `applab/` (the **real app** in an emulator against that peripheral — screens in any state + app-vs-calictl frame diffs; see its README), `esplab/` (CoreS3 bench helpers: `flash.sh` from `flasher_args.json`, `esp_cmd.py` no-reset console; `thinky-bench` skill), `gen_c_dict` + `gen_codec_vectors` (C codec header + golden vectors, `--check` in CI), `check_vendor_material` + `check_import_clean` (guards shared by the pre-commit hooks + CI), `hooks/` (Claude Code hook scripts) |
+| `tools/` | `ci.sh` (the LOCAL CI gate), `extract_protocol` (regenerates the dictionary), `audit_signals` + `app_scales` + `app_setters` + `app_ranges` + `catalog` (the auditor), `triage` (catalog decisions), `build_web`, `mock_unit` (the e2e fake — seeds every fitted function), `run_against_mock` (real CLI/`serve` over the mock), `trace_compare` (real-unit trace vs the mock), `fake_unit_peripheral` (the mock as a **Bumble BLE peripheral** with real SMP passkey pairing — shared by `applab`, `tests/test_pairing_link.py` and the `tests/realstack/` VM rig), `applab/` (the **real app** in an emulator against that peripheral — screens in any state + app-vs-calictl frame diffs; see its README; `applab/phone/` = HCI-snoop decoders for the owner's REAL phone, skill `phone-app-lab`), `esplab/` (CoreS3 bench helpers: `flash.sh` from `flasher_args.json`, `esp_cmd.py` no-reset console; `thinky-bench` skill), `gen_c_dict` + `gen_codec_vectors` (C codec header + golden vectors, `--check` in CI), `check_vendor_material` + `check_import_clean` (guards shared by the pre-commit hooks + CI), `hooks/` (Claude Code hook scripts) |
 | `tests/` | pytest; **must stay green**. `tests/e2e/` = Playwright over the mock daemon; every test fails on an uncaught JS error. `tests/realstack/` = the real-BlueZ pairing rig (CI VM only, not collected by pytest) |
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) — the full provenance behind the terse "Known state" below |
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
 | `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); they are regenerated locally from the APK with a `vd2svg.py` converter that is itself **not in the repo** (`ui/assets/` is untracked); `build_prototype.py` falls back to neutral placeholders without them. |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
-| `firmware/` | ESP32-S3 satellite (#154, WIP; controls cooler/camping/lighting/air heater/energy — no roof; the wake-up light with the page's clock `local_now` + the unit's latched config (`R_FW_WAKEUP`), writes only in station mode, one write allow-list `R_FW_WRITE_ALLOWLIST`; bench CoreS3 + mock unit for the read side and the control path (2026-10-07); not yet the real unit): `cali_core` (pairing SM/runner/session/console + `control` = C twin of `calictl.control` held to `tests/vectors/control.json` + `control_run` sequencer, WiFi SM/runner, HTTP core, captive DNS, web endpoints incl. `POST /api/command` and calictl's pairing wizard `GET/POST /api/pairing` (`R_FW_PAIRING_WIZARD`, also over the setup hotspot via `GET /app`) — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`page.js`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (3 MB app partition); see `docs/firmware.md`, owner how-to `docs/howto-esp-wifi-setup.md` |
+| `firmware/` | ESP32-S3 satellite (#154, WIP; controls cooler/camping/lighting/air heater/energy — no roof; the wake-up light with the page's clock `local_now` + the unit's latched config (`R_FW_WAKEUP`), writes only in station mode, one write allow-list `R_FW_WRITE_ALLOWLIST`; bench CoreS3 + mock unit (2026-10-07); **bonded to and running against the real unit since 2026-10-08**, holds its link while parked since #279): `cali_core` (pairing SM/runner/session/console + `control` = C twin of `calictl.control` held to `tests/vectors/control.json` + `control_run` sequencer, WiFi SM/runner, HTTP core, captive DNS, web endpoints incl. `POST /api/command` and calictl's pairing wizard `GET/POST /api/pairing` (`R_FW_PAIRING_WIZARD`, also over the setup hotspot via `GET /app`) — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`page.js`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (3 MB app partition); see `docs/firmware.md`, owner how-to `docs/howto-esp-wifi-setup.md` |
 
 ## Hard rules (don't break these)
 
@@ -63,7 +63,15 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
   raw levels (`UNVERIFIED`). Currents ARE verified amps since 2026-09-07 (`batt2/shore/solar`
   ×0.1, `dcdc` raw, per the app view-model). See `docs/business-logic/signals.md` §4/§5.
 - **Never commit** the APK, decompiled sources (`decompile/`), VW manuals (`manuals/`), or
-  secrets/tokens (`*.env`) — all gitignored. VW material: citations only.
+  secrets/tokens (`*.env`) — all gitignored. VW material: citations only. **App screenshots (real phone or
+  emulator) go ONLY to the owner's private repo `ckeller42/californiaontour-re` (`screens/`)** — never here
+  (owner 2026-10-10); open-california gets text + links. Never open/capture the app's VIN pages
+  (Account → Vehicle, and in app 5.4.0 Vehicle → Help → Vehicle Settings).
+- **One web UI for buspi and the ESP.** `calictl/webui/` is served by buspi and bundled into the
+  firmware (`firmware/web/app_bundle_gen.h`; the ESP decodes raw frames in the browser with the
+  `semantics.js` twin). Any webui/semantics change: `python3 -m tools.gen_c_dict` (+
+  `tools.gen_semantics_vectors`) in the same PR, then deploy buspi AND flash the ESP. Show only what the
+  van has: no "not installed" rows/tiles (owner 2026-10-10).
 - **Mermaid diagrams render in the browser, not at build** — `sphinx -W` won't catch a broken
   one. Keep `;`, `&`, bare `<`/`>`, and label-`:` out of `.. mermaid::` blocks AND ```mermaid
   fences (root `*.md` + `docs/**/*.md`); the guard `tests/test_mermaid_syntax.py` lints both.
@@ -87,7 +95,14 @@ python3 -m tools.gen_control_vectors --check && python3 -m tools.gen_c_dict --ch
 make -C firmware/host cali-host && python -m pytest tests/firmware -v   # firmware host+NimBLE tier (Linux only; tools/ci.sh firmware)
 docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build'   # firmware QEMU tier build
 python -m tools.ux_gallery --esp --out docs/screenshots   # ESP page shots for the docs (stub + fixtures, no firmware)
+ssh pi@buspi 'cd ~/open-california && git pull && sudo systemctl restart calictl'   # deploy main to buspi
+ssh pi@buspi '~/open-california/tools/esplab/flash_ci.sh <ci-run-id> /dev/ttyACM0'   # flash the ESP from THAT merge's ci.yml run
 ```
+
+**Flash the ESP by explicit CI run id**, never `flash_ci.sh main`: it picks the latest *successful*
+run, and the `[skip ci]` screenshot commit that lands right after a merge cancels the merge commit's
+run, so `main` silently flashes the previous build (`gh run rerun <id>` first). Verify with
+`curl http://<esp>/api/state` → `device.fw`.
 
 `tools/ci.sh` covers ci.yml's `pre-commit` (via `pre-commit run --all-files`, incl. the whole-tree
 vendor/MAC/VIN guard) + `test` (one python, not the 3.11–3.13 matrix); its pytest run also covers
@@ -115,20 +130,21 @@ vectors + C headers, the webui `tsc` check). On **push**: the full pytest suite 
 (skip once with `SKIP=pytest,audit-signals git push`). Tool versions live only in that config (keep
 `ruff==` in `requirements-dev.txt` in step).
 
-When the daemon is up it OWNS the single BLE slot — read live state via its web API `/api/state`
+When the daemon is up it OWNS buspi's BLE adapter — read live state via its web API `/api/state`
 (**buspi runs `--web 8088`** via a systemd drop-in override — the committed unit template has no
 `--web`; the CLI default is 8080) or the cache `~/.cache/calictl/last_state.json`;
-never open a 2nd BLE connection. Warm the fast session first with `POST /api/session {"action":"connect"}`
+never open a 2nd BLE connection from buspi. Warm the fast session first with `POST /api/session {"action":"connect"}`
 (auto-releases after ~25 s idle).
 
 ## Known state (operational takeaways — full provenance in `docs/business-logic/` + `evidence-ledger.md`)
 
 - **Control writes WORK** (issue #2, 2026-07-07): armed by a **+1 4-byte-BE liveness heartbeat on
   char `1003`** (~0.6 s). One-shot arm — the load latches, so the heartbeat only spans the write
-  window (`device.actuate`, under the `serve` lock). Live-verified on-device: **cooler** (power; level
-  only with the pre-R1 state-carry frame — the app-faithful `State=3` frames calictl sends since
-  2026-10-06 are a van check, #230), **campingmode** (master/lights/usb), **lighting** (per-zone
-  brightness).
+  window (`device.actuate`, under the `serve` lock). Live-verified on-device: **cooler**, **campingmode** (master/lights/usb), **lighting** (per-zone
+  brightness). **CAPTURE 2026-10-10:** the real app's frames on the real unit are byte-identical to
+  `control.build` for every non-motor control exercised (cooler power/level/quiet/timer incl. the
+  `State=3` frames, lighting, camping) — the app adds a neutral re-write (`ff771e3e1f1f` / `ff`) 500 ms
+  later, which the unit ignores; calictl doesn't send it.
 - **Lighting** actuates on an **awake** unit with a bare `SET_BRIGHTNESS` + `0e00…` commit — no
   REQUEST_CONFIG preamble, no 1003 heartbeat, no delay (the wake state is the gate, not any arming
   frame; the app's screen-open REQUEST_CONFIG pull is NOT required for actuation — calictl sends it only to
@@ -170,17 +186,19 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
 - **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads (`device.read_all`/
   `read` do) to keep the link up (dropped after ~15 s otherwise) and refresh the re-read chars. It does
   NOT refresh water: water is measurement-gated (the unit measures only while its water system is
-  powered), so a parked read may return a stale latch — `freshness.implausible_water_drop` holds the last
-  plausible reading and flags it stale (the old "1 L vs 11 L" heartbeat story was correlation). Water is
-  **not push-only**: like the app, every poll reads 1302 after subscribing and the last frame wins
-  (`R_READ_LAST_FRAME_WINS`, 2026-10-07); the old persistent-session push pinning may have caused the
-  parked "1 L" — whether the guard is still needed is open until a #230 van trace. Parked, the
+  powered), so a parked read may return the stale latch **FreshWaterLevel = 1**. `freshness.implausible_water_drop`
+  (and its C twins in `csrc/ports.c` + the ESP's `session.c`) holds the last good reading ONLY for a drop to
+  ≤ 1 L with grey exactly unchanged (#274; grey reads 0 on every frame on this van, so the old
+  "any drop with grey frozen" rule held real readings for weeks). The real app has NO water filter (5.0.8 +
+  5.4.0: shows every 1302 frame literally, reads once at connect); our guard is a deliberate deviation.
+  Every poll reads 1302 after subscribing and the last frame wins (`R_READ_LAST_FRAME_WINS`). Parked, the
   unit deep-sleeps and stops advertising — buspi can't connect for days until physical use wakes it, so
   access is **inherently intermittent**: `serve` persists last-state + an "as of" timestamp, and the
   web UI shows an offline banner. See `value-freshness.md`.
 - **`vehicle` (char 1004):** ignition (terminal-15 is **bit 7**, not 0 — was a decode bug), car
   variant, unit RTC, 2-axis roll/pitch leveling. **Hand-added to `dictionary.yaml` — NOT emitted by
-  `extract_protocol`, so preserve it on regen.** Leveling/RTC read only while ignition is on. (`general`
+  `extract_protocol`, so preserve it on regen.** Leveling/RTC read only while ignition is on: with ignition off `level_roll`/`level_pitch` are `None`
+  (the unit sends 0/0; the app shows "-.-°", #282). (`general`
   is char 1001.)
 - **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar (semantics
   static-verified against the app's getters — no live check possible here). The pop-top **roof IS
@@ -191,6 +209,18 @@ never open a 2nd BLE connection. Warm the fast session first with `POST /api/ses
   optionally be fronted by HTTPS on the tailnet via `tailscale serve` (tailnet-only, never
   `funnel`) — see the `buspi-deploy` skill + `docs/raspberry-pi-setup.md` "Remote access over
   Tailscale".
+- **The unit accepts several centrals at once** (CAPTURE 2026-10-10: the phone app, buspi and the ESP
+  connected simultaneously; the app held an idle heartbeat-only link 46 min while parked). On every
+  connect **the unit sends the central an ATT Exchange MTU Request** (Client RX MTU 247) and terminates
+  the link (HCI `0x13`) if it is unanswered for 30 s — BlueZ/Android answer it; the ESP needs NimBLE's
+  GATT server (`CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y` + `GATT_SERVER=y`, #279, guarded by
+  `test_sdkconfig_gatt_server.py`) or it is "kicked" every ~30 s. "`serve` is the single BLE owner"
+  is about buspi's own `hci0`, not a unit slot.
+- **App versions:** the owner's phone runs CaliforniaOnTour **5.4.0.3036**; decompile + mapping exist for
+  5.4.0 and 5.0.8.3028 (private repo `ckeller42/californiaontour-re`, skill `decompile-app`). For this
+  van (CommunicationVersion 2) 5.4.0's protocol is unchanged; 5.4.0 adds a V3 layer (chars `1603`,
+  `F002`, V3 1602/F001 layouts) calictl must never write to a V2 unit. Real-phone data collection:
+  skill `phone-app-lab` (wireless adb from buspi, HCI snoop, never actuate without the owner's request).
 - **Pairing needs a quiet radio:** any BlueZ client holding discovery (calictl unpaired polls —
   now guarded, readers, HA Bluetooth) kills a new LE link with 0x3e; the unit advertises a
   rotating address, only the bonded identity is stable. See `guided-pairing.md`.
