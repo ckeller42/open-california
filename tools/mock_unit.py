@@ -21,20 +21,22 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
   * **Range validation → link drop:** an out-of-range field value raises
     ``MockDisconnect`` (the unit drops the ATT link with 0x0E).
     This runs regardless of arming (the firmware's parse layer always validates).
-  * **Lighting per-zone SET (cracked 2026-07-08):** SET_PROFILE (Mode 16) and SET_BRIGHTNESS
-    (Mode 4, honouring the ``14`` per-zone leave-unchanged sentinel; 0 = set-to-0) only STAGE a
-    change; the ``0e00…`` commit frame (Mode 0) applies it. A brightness frame applies only when
-    it carries a non-zero ProfileNumber (the app hardcodes 9) — the frame's own PN, not a
-    separately-active profile. The state char is a write-through ECHO; the physical lamps
-    (``light_actual``) ramp on ``tick()`` and push 1502 Mode-4 frames, and ``light_applies=False``
-    models "ACKed + echoed, lamps dark". Zone 9 (pop-top reading light) is refused while the roof
-    is closed. NOT gated on the 1003 heartbeat (see the arm-gate above): the only wake gate is
+  * **Lighting live SET (CAPTURE 2026-10-10, the real app on the real unit):** SET_PROFILE
+    (Mode 16) and SET_BRIGHTNESS (Mode 4, honouring the ``14`` per-zone leave-unchanged sentinel;
+    0 = set-to-0) apply AT ONCE — the unit's 1502 frames arrived before the app's ``0e00…`` commit,
+    which is accepted as a no-op. A rising zone reports ``1`` first, then its level (~100 ms
+    apart); a zone set to DEFAULT (11) reports its lamp's own level (``LIGHT_DEFAULT_LEVEL``). A
+    brightness frame applies only with a non-zero ProfileNumber (the app hardcodes 9). The 1502
+    READ returns the LAST frame the unit sent (sticky — config echoes included);
+    ``light_applies=False`` models "ACKed + echoed, lamps dark" (the 2026-07 trap: the write lands in
+    the readback, nothing is notified). The pop-top reading light (L9) stays 0 while the roof is
+    closed (the rest of the frame applies). NOT gated on the 1003 heartbeat: the only wake gate is
     that the mock is connectable at all (``drop()`` = deep sleep refuses the link).
-  * **Lighting configuration:** favourites 1-7 (save = store without a live change, activate =
-    apply + 1502 ack, empty = ACK-and-ignore), the wake-up config (Mode 20) and the door-contact
-    flag (Mode 16 / PN 8) are stored, and each write is ECHOED as a one-off 1502 frame (never
-    re-readable state); SET_COLOR is acked (Mode 6 / PN N). REQUEST_CONFIG (Mode 12) answers with
-    the favourite bits in LightValue, then re-reports the stored wake-up and door frames.
+  * **Lighting configuration:** favourites 1-7 (save = staged until the commit, activate = live
+    SET_PROFILE, empty = ACK-and-ignore), the wake-up config (Mode 20) and the door-contact flag
+    (Mode 16 / PN 8) are stored and ECHOED on 1502; SET_COLOR is acked (Mode 6 / PN N).
+    REQUEST_CONFIG (Mode 12) answers with the real unit's six frames in its order (favourite bits,
+    colour, Mode 8 SET_DOUBLE, door, wake-up, Mode 24 SYSTEM_TIME).
   * **Roof (1401/1402):** the app-style SafetyCounter stream is modelled — validity needs a
     monotonic, still-advancing counter (two increments), a restart drops it, and a counter that
     just validated withholds the motor ``ROOF_WITHHOLD_S`` (~3 s, SEMI-VERIFIED) — a counter
@@ -48,7 +50,9 @@ Fidelity — the mock encodes only what is *known*, and stays honest about what 
   * Also modelled: cooler/heater timers (control TimerHour/TimerMin → state ``*Set``, heater
     departure timer), per-minute countdowns, the ignition→camping shed + crank link drop, the
     15 s no-heartbeat link drop, device-confirmed ACK-and-ignore refusals, the one-slot option,
-    water freeze while its system is unpowered, and change-pushes only for ``CHANGE_PUSH_FNS``.
+    water reading the 1 L sleep latch while its system is unpowered, and a push of a state char
+    whenever its frame changes (never on subscribe, never for a neutral frame, never for the 1004
+    clock ticking — CAPTURE 2026-10-10).
     Not modelled: anything undecoded (e.g. roof/heater ``InfoPopUp``/``ErrorCode`` causes — they
     change only when a test or the app-lab console sets them).
 
@@ -105,11 +109,32 @@ CRANK_DROP_S = 60.0
 ROOF_WITHHOLD_S = 3.0  # SafetyCounter not incremented for this long = no longer valid
 LIGHT_ZONE_UNCHANGED = 14  # lighting per-zone 4-bit "leave unchanged" sentinel (HCI capture 2026-07-08)
 LIGHT_MODE_SET_BRIGHTNESS = 4
-# Functions the real unit was CONFIRMED to push on change (control-and-actuation.md: the genuine
-# 1202 camping push + 1004 ignition, "confirmed on real hardware"). Everything else is subscribe-
-# push-once only: the 2026-09-16 buspi trace saw no change-driven push on the other 12 chars.
-CHANGE_PUSH_FNS = frozenset({"campingmode", "vehicle"})
+# Push model (CAPTURE 2026-10-10, phone HCI snoop + buspi btmon): the unit notifies a subscribed
+# state char whenever its frame CHANGES — cooler 1102, camping 1202, lighting 1502, energy 1602,
+# ignition 1004 — and NOTHING on subscribe (the "one push per CCCD write" of the 2026-09-16 buspi
+# trace was BlueZ re-delivering each read as a notification: btmon shows no Handle Value
+# Notification after a CCCD write). The 1004 clock ticking alone is never pushed.
 LIGHT_MODE_SET_PROFILE = 16
+LIGHT_DEFAULT = 11  # SET_BRIGHTNESS "DEFAULT": the lamp's own level
+# The level a zone set to DEFAULT reports on this van (CAPTURE 2026-10-10: Reading 3, Kitchen 5 + 10,
+# Pop-up roof 5, Exterior 5 + 7). Zones not seen fall back to control.LIGHT_ON_BRIGHTNESS.
+LIGHT_DEFAULT_LEVEL = {
+    "BrightnessLOne": 3,
+    "BrightnessLTwo": 3,
+    "BrightnessLFour": 3,
+    "BrightnessLThree": 5,
+    "BrightnessLFive": 5,
+    "BrightnessLSeven": 10,
+    "BrightnessLEight": 5,
+    "BrightnessLOneTwo": 7,
+}
+LIGHT_MODE_SET_DOUBLE = (
+    8  # dg/n SET_DOUBLE: REQUEST_CONFIG reply frame 3 (LightValue 4 on the van, meaning open)
+)
+LIGHT_MODE_SYSTEM_TIME = 24  # dg/n SYSTEM_TIME: the unit clock (local time packed as UTC)
+# Parked, the water system is unpowered and the unit serves FreshWaterLevel 1 — the sleep latch
+# (buspi trace 2026-10-09: 20 L <-> 1 L flips, grey 0 throughout; evidence-ledger 2026-10-09/10).
+WATER_LATCH_L = 1
 LIGHT_MODE_COMMIT = 0  # the 0e00… commit/apply frame (HCI-verified 2026-07-13): a
 # SET_BRIGHTNESS/SET_PROFILE is only APPLIED once this lands
 
@@ -255,27 +280,26 @@ class MockCamperUnit:
         # the heartbeat refreshes. NOT water: the old "1 L latched vs 11 L once the heartbeat runs"
         # story was correlation; water's real gate is `water_powered` (value-freshness.md).
         self.read_latch: dict[str, dict] = {}
-        # Per-function subscribe-time NOTIFICATION overlay: what the unit pushes on the CCCD write,
-        # when it differs from what a read returns. E.g. a stale water push (1 L) followed by a
-        # correct read (17 L): the app reads after subscribing and the last frame wins, so calictl
-        # must surface the read (tests/test_mock_integration.py). Not a "push-only" model.
+        # Per-function subscribe-time NOTIFICATION scenario (opt-in; the real unit pushes nothing on
+        # subscribe): a frame pushed on the CCCD write that differs from what a read returns. E.g.
+        # a stale water push (1 L) then a correct read (17 L): the app reads after subscribing and
+        # the last frame wins, so calictl must surface the read (tests/test_mock_integration.py).
         self.notify_push: dict[str, dict] = {}
         # Live notification subscriptions: state-char UUID -> [callback]. `MockBleakClient`
         # registers here on start_notify so the unit can PUSH after subscribe time, the way the
         # real unit does. Without this the offline harness only ever saw the one-shot push at
         # subscribe and `serve._confirm_lighting` / `device`'s on_push were unreachable in CI.
         self._subs: dict[str, list] = {}
-        # One-off frame sink for hosts that are not in-process subscribers (the BLE fake peripheral
-        # sets it): called as ``event_sink(function, frame)`` for every ``push(..., event=True)``.
+        # Frame sink for hosts that are not in-process subscribers (the BLE fake peripheral sets it):
+        # called as ``event_sink(function, frame)`` for every :meth:`push`.
         self.event_sink = None
         # LIGHTING, the unit's most treacherous behaviour (control-and-actuation.md): the state
         # char is a write-through ECHO — it reports what you WROTE, not what the lamps did (an
         # owner check in 2026-07 saw a "confirmed" readback while the lamps stayed dark). The only
         # truthful channel is the 1502 Mode-4 ramp notification carrying the REAL brightness.
         # So `state["lighting"]` is the echo, and these model the physical side:
-        self.light_actual: dict[str, int] = {}  # what the lamps are really at (ramped)
+        self.light_actual: dict[str, int] = {}  # what the lamps are really at
         self.light_applies = True  # False = unit ACKs + echoes but lamps DON'T move
-        self._light_ramp: dict[str, int] = {}  # zone -> target, stepped by tick()
         # WATER is measurement-gated on the van's own WATER SYSTEM being powered — NOT on the 1003
         # heartbeat (that was correlation; disproven at the van 2026-07-14, value-freshness.md).
         # Unpowered, the unit stops measuring and FREEZES BOTH tanks at their last reading, which is
@@ -343,19 +367,23 @@ class MockCamperUnit:
         self._beat_t = self.now
 
     # --- notifications ---------------------------------------------------------
-    def push(self, function: str, values: dict | None = None, event: bool = False) -> None:
+    def push(self, function: str, values: dict | None = None) -> None:
         """Push a state-char notification to every subscribed client, as the real unit does.
 
-        ``values`` overlays the stored state for this one frame (the lighting ramp uses it to send
-        the REAL brightness while the stored state still holds the write-through echo). A no-op
-        when nobody is subscribed or the unit is asleep. ``event=True`` marks a one-off ack/echo frame
-        (never stored): it is also handed to :attr:`event_sink`.
+        ``values`` overlays the stored state for this frame. For lighting the frame also becomes the
+        stored state: the real 1502 READ returns the last frame the unit sent, config echoes included
+        (CAPTURE 2026-10-10: buspi read back the wake-up echo, the door echo and the last ramp frame).
+        A no-op when the unit is asleep; every frame is also handed to :attr:`event_sink`.
         """
         f = self.funcs.get(function)
-        if f is None or not f.state_char or not self.online:
+        if f is None or not f.state_char:
+            return
+        if function == "lighting" and values:
+            self.state.setdefault("lighting", {}).update(values)
+        if not self.online:
             return
         frame = _pack_state(f, {**self.state.get(function, {}), **(values or {})})
-        if event and self.event_sink:
+        if self.event_sink:
             self.event_sink(function, frame)
         for cb in list(self._subs.get(f.state_char) or ()):
             cb(_Char(f.state_char, ["notify"]), frame)
@@ -384,17 +412,90 @@ class MockCamperUnit:
         """FavoriteProfileModifiedState as the REQUEST_CONFIG reply carries it (bit 0 = favourite 1)."""
         return sum(1 << (n - 1) for n, v in self.favourites.items() if v)
 
+    @staticmethod
+    def _light_header(pn: int, mode: int, light_value: int = 0, timestamp: int = 0) -> dict:
+        """The non-zone fields of a 1502 frame the unit sends (zones come from the stored state)."""
+        return {"ProfileNumber": pn, "Mode": mode, "Timestamp": timestamp, "LightValue": light_value}
+
+    def _apply_light(self, st: dict, zones: dict, pn: int, mode: int) -> None:
+        """Apply a live lighting change and notify it the way the real unit did (CAPTURE 2026-10-10).
+
+        Frames carry the written ``pn``/``mode``. A zone rising from 0 reports ``1`` in a first frame,
+        then every zone reports its level in a second (~100 ms later on the van); a pure decrease is
+        one frame. DEFAULT (11) resolves to the lamp's own level (``LIGHT_DEFAULT_LEVEL``). L9 (the
+        pop-top reading light) stays 0 while the roof is closed — on the van it flashed 1 and fell
+        back to 0 while the rest of the frame applied. With ``light_applies`` off the write only lands
+        in the readback (the echo trap) and nothing is notified.
+        """
+        if (self.state.get("roof") or {}).get("Position") in (0, 14) and zones.get("BrightnessLNine"):
+            zones = {**zones, "BrightnessLNine": 0}
+            self.refusals.append(("lighting", "the pop-top reading light needs the roof raised"))
+        header = self._light_header(pn, mode)
+        if not self.light_applies:
+            st.update(zones, **header)
+            return
+        target = {
+            z: (LIGHT_DEFAULT_LEVEL.get(z, control.LIGHT_ON_BRIGHTNESS) if v == LIGHT_DEFAULT else v)
+            for z, v in zones.items()
+        }
+        rising = {z: 1 for z, v in target.items() if v > 0 and self.light_actual.get(z, st.get(z, 0)) == 0}
+        if rising:
+            self.push("lighting", {**header, **rising})
+        self.light_actual.update(target)
+        st.update(target, **header)  # the frame below is also the stored (sticky) state
+        self.push("lighting", {**header, **target})
+
+    def _config_reply(self) -> None:
+        """REQUEST_CONFIG reply: the six 1502 frames the real unit sent, in its order (CAPTURE
+        2026-10-10): Mode 12 + favourite bits, Mode 6 PN 9 + colour, Mode 8 (SET_DOUBLE) LightValue 4
+        (meaning open), Mode 16 PN 8 + the door flag, Mode 20 wake-up (skipped while none is stored),
+        Mode 24 (SYSTEM_TIME) + the unit clock. (The real Mode-6 frame is 8 bytes; this one is full.)"""
+        self.push("lighting", self._light_header(0, control.LIGHT_MODE_REQUEST_CONFIG, self.favourite_bits()))
+        self.push(
+            "lighting", self._light_header(9, control.LIGHT_MODE_SET_COLOR, self.favourite_colour.get(9, 1))
+        )
+        self.push("lighting", self._light_header(0, LIGHT_MODE_SET_DOUBLE, 4))
+        self.push(
+            "lighting",
+            self._light_header(control.LIGHT_PROFILE_DOOR_CONTACT, LIGHT_MODE_SET_PROFILE, self.door_contact),
+        )
+        if self.wakeup is not None:
+            self.push("lighting", {"ProfileNumber": 0, "Mode": control.LIGHT_MODE_WAKEUP_TIME, **self.wakeup})
+        self.push("lighting", self._light_header(0, LIGHT_MODE_SYSTEM_TIME, 0, self._clock_stamp()))
+
+    def _clock_stamp(self) -> int:
+        """The unit clock (1004 RTC) as epoch seconds, local time packed as UTC (0 if unset)."""
+        import calendar
+
+        v = self.state.get("vehicle") or {}
+        try:
+            return calendar.timegm(
+                (
+                    1900 + int(v["CarTimeYear"]),
+                    int(v["CarTimeMonth"]) + 1,
+                    int(v["CarTimeDay"]),
+                    int(v["CarTimeHour"]),
+                    int(v["CarTimeMinute"]),
+                    int(v["CarTimeSecond"]),
+                )
+            )
+        except (KeyError, ValueError, TypeError):
+            return 0
+
     def set_water_power(self, on: bool) -> None:
         """Power the van's water system on/off — the real gate on water measurement.
 
-        Switching it OFF freezes both tanks at their current reading (the unit stops measuring, so
-        every later read returns that latch no matter how the true level changes). Switching it ON
-        resumes measurement, and the next :meth:`tick` notifies 1302 if a value actually moved.
+        Switching it OFF stops measuring: fresh reads the ``WATER_LATCH_L`` (1 L) sleep latch and grey
+        freezes at its current reading, whatever the true levels do (buspi trace 2026-10-09: fresh
+        flipped 20 L <-> 1 L across wake/sleep, grey 0 on every frame). Switching it ON resumes
+        measurement, and the next :meth:`tick` notifies 1302 if a value actually moved.
         """
         on = bool(on)
         if not on and self.water_powered:
             w = self.state.get("water", {})
-            self._water_latch = {k: w[k] for k in ("FreshWaterLevel", "WasteWaterLevel") if k in w}
+            self._water_latch = {k: w[k] for k in ("WasteWaterLevel",) if k in w}
+            if "FreshWaterLevel" in w:
+                self._water_latch["FreshWaterLevel"] = WATER_LATCH_L
         elif on:
             self._water_latch = {}
         self.water_powered = on
@@ -429,6 +530,8 @@ class MockCamperUnit:
 
         self.now += dt
         changed: set[str] = set()
+        before = {fn: _pack_state(self.funcs[fn], st) for fn, st in self.state.items() if fn in self.funcs}
+        ign_edge = False
         v = self.state.get("vehicle")
         ign = bool(v.get("TerminalOneFive")) if v else False
 
@@ -467,8 +570,17 @@ class MockCamperUnit:
             except ValueError:
                 pass  # garbage clock fields: leave them alone
 
-        # ignition edge -> camping + starter-battery freshness
+        # ignition edge -> camping + starter-battery freshness + the leveling data
         if v is not None and self._last_t15 is not None and int(ign) != self._last_t15:
+            ign_edge = True
+            changed.add("vehicle")
+            # The unit measures roll/pitch only with terminal 15: ignition off -> 0/0 and
+            # CarLevelPopUp=1 (the app's "turn the ignition on" card); on -> PopUp 0 (CAPTURE
+            # 2026-10-10: 1004 `017e…0090` -> pushed `047e…0000` when the ignition went off).
+            if ign:
+                v["CarLevelPopUp"] = 0
+            else:
+                v.update(CarLevelPopUp=1, CarLevelRoll=0, CarLevelPitch=0)
             cm = self.state.get("campingmode")
             if cm is not None:
                 cm["Enable"] = int(ign)
@@ -544,22 +656,6 @@ class MockCamperUnit:
         if r is not None and self._roof_tick(r, dt):
             changed.add("roof")
 
-        # Lighting ramp: the lamps step toward the committed target (observed 01->03->04->05) and
-        # the unit notifies 1502 Mode-4 frames carrying the REAL brightness. Each step pushes one
-        # frame — that notification, NOT the echo readback, is what proves actuation.
-        if self._light_ramp:
-            done = []
-            for zone, target in self._light_ramp.items():
-                cur = self.light_actual.get(zone, self.state.get("lighting", {}).get(zone, 0))
-                cur = cur + 1 if cur < target else (cur - 1 if cur > target else cur)
-                self.light_actual[zone] = cur
-                if cur == target:
-                    done.append(zone)
-            for zone in done:
-                del self._light_ramp[zone]
-            # Mode 4 = the SET_BRIGHTNESS/ramp notification the app confirms on.
-            self.push("lighting", {**self.light_actual, "Mode": LIGHT_MODE_SET_BRIGHTNESS})
-
         # Water: only a POWERED system measures, and the unit notifies 1302 on a measured change
         # (value-freshness.md; `device._await_water_push` waits for exactly this). Parked, nothing
         # changes and nothing is pushed — which is why the buspi trace saw no water push at all.
@@ -585,13 +681,16 @@ class MockCamperUnit:
             self._wake_at = None
             self.wake()
 
-        # Change-driven pushes, modelled ONLY for the chars the unit was CONFIRMED to push on real
-        # hardware: campingmode (1202) and ignition/vehicle (1004) — control-and-actuation.md. The
-        # heartbeat-traced buspi run of 2026-09-16 saw NO change-push on the other 12 subscribed
-        # chars in 150 s, so pushing everything here would be fiction (protocol-crosscheck-applab).
-        # The roof's 1402 pushes on every change too (CAPTURE 2026-10-10: `0302`, `030c`, `230c`, ...).
-        for fn in changed & (CHANGE_PUSH_FNS | {"roof"}):
-            self.push(fn)
+        # Change-driven pushes (CAPTURE 2026-10-10): every char whose frame actually changed, except
+        # the 1004 clock ticking alone (only the ignition edge pushed 1004 in 46 min of capture).
+        # The roof's 1402 pushes on every change (`0302`, `030c`, `230c`, ...; the roof model's own).
+        for fn in sorted(changed - {"roof", "vehicle", "water"}):  # water pushed above
+            if _pack_state(self.funcs[fn], self.state.get(fn, {})) != before.get(fn):
+                self.push(fn)
+        if "roof" in changed:
+            self.push("roof")
+        if ign_edge:
+            self.push("vehicle")
 
         if getattr(self, "_crank_drop", False):  # engine crank: notify first, then lose the link
             self._crank_drop = False
@@ -689,13 +788,6 @@ class MockCamperUnit:
         # predicate is still under decompile review.
         if fn == "campingmode" and self.driving and ctrl.get("State") == 1:
             return "camping master is refused while driving"
-        # The pop-top reading light (L9) needs the roof raised — the lamp is unpowered when the
-        # roof is down, so the write lands and nothing lights.
-        if fn == "lighting" and ctrl.get("Mode") == LIGHT_MODE_SET_BRIGHTNESS:
-            pos = (self.state.get("roof") or {}).get("Position")
-            zone = ctrl.get("BrightnessLNine")
-            if pos in (0, 14) and zone not in (None, LIGHT_ZONE_UNCHANGED) and zone > 0:
-                return "the pop-top reading light needs the roof raised"
         # The cooling timer can only be set while the fridge is OFF. Only an actual CHANGE counts:
         # a full-packet write carries the timer fields on every unrelated command (power, level) —
         # the app sends them at their dictionary default (30/62, the leave-unchanged sentinel the
@@ -762,119 +854,65 @@ class MockCamperUnit:
             self.refusals.append((fn, refusal))
             return  # ACK, no state change — the silent kind
         st = self.state.setdefault(fn, {})
+        before = _pack_state(func, st)
 
-        # Lighting is COMMIT-GATED (HCI-verified 2026-07-13). A SET_PROFILE (Mode 16) or
-        # SET_BRIGHTNESS (Mode 4) only STAGES the change; the unit APPLIES it when the commit
-        # frame (Mode 0, control.LIGHT_COMMIT) lands right after. With no commit, the write is
-        # ACKed but never applied. The apply gate for SET_BRIGHTNESS is the FRAME's ProfileNumber
-        # (the app hardcodes 9), NOT a separately-active profile: a brightness frame carrying PN=0
-        # is ignored, PN=9 applies (and makes profile 9 the active one).
-        # NOTE: there is NO REQUEST_CONFIG-preamble apply-gate. A bare SET+commit actuates on an
-        # awake unit — photon-verified on-device 2026-08-16 (the earlier "preamble required" gate
-        # was a wake-state confound; the app's E() writes DIRECT and never sends the preamble).
+        # Lighting (CAPTURE 2026-10-10, the real app on the real unit): a live SET_PROFILE /
+        # SET_BRIGHTNESS applies AT ONCE — the unit's 1502 frames came ~230 ms after the SET, before
+        # the app's ``0e00…`` commit, which is ACKed as a no-op (the 2026-07-13 "commit applies" gate
+        # rested on the readback echo). The favourite SAVE (SET_BRIGHTNESS PN 1-7) stays staged until
+        # the commit (not exercised on the real unit). A brightness frame carrying PN=0 is ignored.
         if fn == "lighting":
             mode = ctrl.get("Mode")
             pn = ctrl.get("ProfileNumber")
             lv = ctrl.get("LightValue", 0)
-            # Configuration frames are ECHOED as one-off 1502 frames (never stored state) (the app reads
-            # its wake-up page / door row / favourite tiles from these 1502 frames).
-            if mode == control.LIGHT_MODE_WAKEUP_TIME:  # m0
+            if mode == control.LIGHT_MODE_WAKEUP_TIME:  # m0: echoed as PN 0 / Mode 20
                 self.wakeup = {"Timestamp": ctrl.get("Timestamp", 0), "LightValue": lv}
-                self.push("lighting", {"Mode": mode, **self.wakeup}, event=True)
+                self.push("lighting", {"ProfileNumber": 0, "Mode": mode, **self.wakeup})
                 return
             if mode == LIGHT_MODE_SET_PROFILE and pn == control.LIGHT_PROFILE_DOOR_CONTACT:  # n4
                 self.door_contact = 1 if lv == 1 else 0
-                self.push(
-                    "lighting",
-                    {"Mode": mode, "ProfileNumber": pn, "LightValue": self.door_contact},
-                    event=True,
-                )
+                self.push("lighting", self._light_header(pn, mode, self.door_contact))
                 return
-            if mode == control.LIGHT_MODE_REQUEST_CONFIG:  # d0: reply = Mode 12 + favourite bits, then
-                # the stored wake-up (Mode 20) and door-contact (Mode 16/PN 8) frames — the app awaits
-                # 6 frames and fills its wake-up/door state (F0) from them. The exact 6-frame
-                # composition of the real unit is not captured; these are the ones the app decodes.
-                self.push("lighting", {"Mode": mode, "LightValue": self.favourite_bits()}, event=True)
-                if self.wakeup is not None:
-                    self.push("lighting", {"Mode": control.LIGHT_MODE_WAKEUP_TIME, **self.wakeup}, event=True)
-                if self.door_contact:
-                    self.push(
-                        "lighting",
-                        {
-                            "Mode": LIGHT_MODE_SET_PROFILE,
-                            "ProfileNumber": control.LIGHT_PROFILE_DOOR_CONTACT,
-                            "LightValue": self.door_contact,
-                        },
-                        event=True,
-                    )
+            if mode == control.LIGHT_MODE_REQUEST_CONFIG:  # d0
+                self._config_reply()
                 return
             if mode == control.LIGHT_MODE_SET_COLOR and pn in self.favourites:  # l3 step a
                 self.favourite_colour[pn] = lv
-                self.push("lighting", {"Mode": mode, "ProfileNumber": pn}, event=True)  # its own ack
+                self.push("lighting", self._light_header(pn, mode, 0))  # its own ack
                 return
+            zones = {
+                cf.name: ctrl[cf.name]
+                for cf in func.control_fields
+                if cf.placed
+                and cf.name.startswith("BrightnessL")
+                and cf.name in ctrl
+                and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED
+                and func.state_field(cf.name)
+            }
             if mode == LIGHT_MODE_SET_BRIGHTNESS and pn in self.favourites:  # l3 step b: SAVE, not live
-                zones = {
-                    cf.name: ctrl[cf.name]
-                    for cf in func.control_fields
-                    if cf.placed
-                    and cf.name.startswith("BrightnessL")
-                    and cf.name in ctrl
-                    and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED
-                    and func.state_field(cf.name)
-                }
                 self._pending_light = ("save", pn, zones)
                 return
             if mode == LIGHT_MODE_SET_PROFILE:
-                self._pending_light = ("profile", ctrl.get("ProfileNumber", st.get("ProfileNumber", 0)))
+                if pn in (control.LIGHT_PROFILE_ALL_ON, control.LIGHT_PROFILE_ALL_OFF):
+                    target = self._all_lights(func, st, pn == control.LIGHT_PROFILE_ALL_ON)
+                else:
+                    fav = self.favourites.get(pn)
+                    target = dict(fav["zones"]) if fav else None
+                if target is None:
+                    st["ProfileNumber"] = pn
+                else:
+                    self._apply_light(st, target, pn, mode)
                 return
             if mode == LIGHT_MODE_SET_BRIGHTNESS:
-                if not ctrl.get("ProfileNumber"):  # frame carries no working profile (PN=0) -> ignored
-                    self._pending_light = None
-                    return
-                zones = {
-                    cf.name: ctrl[cf.name]
-                    for cf in func.control_fields
-                    if cf.placed
-                    and cf.name.startswith("BrightnessL")
-                    and cf.name in ctrl
-                    and ctrl[cf.name] != LIGHT_ZONE_UNCHANGED
-                    and func.state_field(cf.name)
-                }
-                self._pending_light = ("zones", zones, ctrl.get("ProfileNumber"))
+                if pn:  # the frame's own working profile (the app hardcodes 9); PN=0 -> ignored
+                    self._apply_light(st, zones, pn, mode)
                 return
-            if mode == LIGHT_MODE_COMMIT:  # apply the staged change
-                p = getattr(self, "_pending_light", None)
+            if mode == LIGHT_MODE_COMMIT:
+                p = self._pending_light
                 if p and p[0] == "save":
-                    _, n, zones = p
-                    self.favourites[n] = {"zones": zones, "colour": self.favourite_colour.get(n, 1)}
-                    self.push("lighting", {"Mode": LIGHT_MODE_SET_BRIGHTNESS, "ProfileNumber": n}, event=True)
-                elif p and p[0] == "profile":
-                    st["ProfileNumber"] = p[1]
-                    fav = self.favourites.get(p[1])
-                    if p[1] in (control.LIGHT_PROFILE_ALL_ON, control.LIGHT_PROFILE_ALL_OFF):
-                        zones = self._all_lights(func, st, p[1] == control.LIGHT_PROFILE_ALL_ON)
-                    else:
-                        zones = fav["zones"] if fav else None
-                    if zones is not None:  # u0 favourite / Q all-lights: apply the levels, ack on 1502
-                        if self.light_applies:
-                            for zone in zones:
-                                self.light_actual.setdefault(zone, st.get(zone, 0))
-                            self._light_ramp.update(zones)
-                        st.update(zones)
-                        self.push("lighting", {"Mode": LIGHT_MODE_SET_PROFILE}, event=True)
-                elif p and p[0] == "zones":
-                    # Snapshot the PHYSICAL baseline before the echo lands: `st` is about to be
-                    # overwritten with the written value, so reading the ramp's starting point
-                    # from it afterwards would start every ramp already at its target.
-                    if self.light_applies:
-                        for zone in p[1]:
-                            self.light_actual.setdefault(zone, st.get(zone, 0))
-                        self._light_ramp.update(p[1])
-                    # The ECHO updates unconditionally — that is the trap: the state char reports
-                    # the written value whether or not the lamps moved. The physical side only
-                    # follows when the unit actually actuates, and then it RAMPS (tick()).
-                    st.update(p[1])
-                    st["ProfileNumber"] = p[2]  # a brightness set makes its profile the active one
+                    _, n, saved = p
+                    self.favourites[n] = {"zones": saved, "colour": self.favourite_colour.get(n, 1)}
+                    self.push("lighting", self._light_header(n, LIGHT_MODE_SET_BRIGHTNESS, 0))
                 self._pending_light = None
             return
 
@@ -966,6 +1004,11 @@ class MockCamperUnit:
         # bar shows "Active • N min remaining" from it — with 0 it says "0 min remaining").
         if fn == "airheater" and func.state_field("RunningTimeinAction") is not None:
             st["RunningTimeinAction"] = st.get("RunningTime", 0) if st.get("NormalOperation") else 0
+        # The unit notifies the state char when the write CHANGED it (CAPTURE 2026-10-10: 1102 /
+        # 1202 ~100-250 ms after each write) — and nothing for the app's neutral follow-up frames
+        # (cooler ``ff771e3e1f1f``, camping ``ff``), which change nothing.
+        if _pack_state(func, st) != before:
+            self.push(fn)
 
 
 class _Char:
@@ -1056,11 +1099,10 @@ class MockBleakClient:
             raise
 
     async def start_notify(self, uuid, cb):
-        # The unit pushes a char's CURRENT value once as soon as a client enables notifications
-        # (buspi trace 2026-09-16: one notify per subscribed char right after its CCCD write, then
-        # only on change — it does not stream). A pending `notify_push` overlay replaces the
-        # subscribe-time value; a function with a stale read-latch armed
-        # pushes nothing (its fresh value only arrives once the heartbeat has run).
+        # The unit sends NOTHING when a client enables notifications — only on a change later
+        # (CAPTURE 2026-10-10: no Handle Value Notification after any CCCD write, phone HCI snoop
+        # and buspi btmon; the 2026-09-16 "one push per subscribe" was BlueZ re-delivering each read).
+        # A `notify_push` overlay is an explicit test scenario: a frame pushed at subscribe time.
         fn = self.unit._state_char.get(str(uuid))
         if fn is None:
             return None
@@ -1072,8 +1114,6 @@ class MockBleakClient:
                 self.unit.funcs[fn], {**self.unit.state.get(fn, {}), **self.unit.notify_push[fn]}
             )
             cb(_Char(str(uuid), ["notify"]), frame)
-        elif fn not in self.unit.read_latch:
-            cb(_Char(str(uuid), ["notify"]), self.unit.read(str(uuid)))
         return None
 
     async def stop_notify(self, uuid):

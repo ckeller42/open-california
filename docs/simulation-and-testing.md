@@ -88,31 +88,34 @@ What it models:
   The 2-bit `3` and the wider fields' defaults are treated as "leave unchanged", as the app sends
   them.
 - **Device-confirmed silent refusals.** A write is ACKed but not applied for: camping master while
-  driving, the pop-top reading light while the roof is closed, and a cooling-timer change while the
-  fridge is on.
-- **Push cadence.** Each subscribed char is pushed once right after subscribe (as the real unit was
-  traced doing). After that, only `CHANGE_PUSH_FNS` (camping mode and vehicle/ignition) push on
-  change. On top of that, the lighting ramp pushes and water pushes on a measured change.
-- **Water.** It is measured only while the van's water system is powered
-  (`set_water_power(False)` freezes both tanks). It is pushed on a measured change and never
-  refreshed by the heartbeat. This is the latch that `freshness.implausible_water_drop` detects.
-- **Lighting.** SET_PROFILE and SET_BRIGHTNESS only stage a change, and the `0e00…` commit frame
-  applies it. A brightness frame must carry a non-zero ProfileNumber. The state char is a
-  write-through **echo**, while the physical lamps ramp on the clock and push 1502 Mode-4 frames.
-  `light_applies = False` models "ACKed and echoed, but the lamps stay dark".
+  driving and a cooling-timer change while the fridge is on. The pop-top reading light (L9) stays
+  off while the roof is closed; the rest of that lighting frame applies.
+- **Push cadence (CAPTURE 2026-10-10).** Nothing is pushed on subscribe. A state char is pushed
+  whenever its frame changes, from a write or from the clock. The app's neutral follow-up frames
+  (cooler `ff771e3e1f1f`, camping `ff`) change nothing, so they push nothing. The 1004 clock
+  ticking alone is never pushed; the ignition edge is. Water pushes only on a measured change.
+- **Water.** It is measured only while the van's water system is powered. With
+  `set_water_power(False)`, fresh reads the 1 L sleep latch (`WATER_LATCH_L`) and grey stays frozen.
+  It is pushed on a measured change and never refreshed by the heartbeat. This is the latch that
+  `freshness.implausible_water_drop` detects.
+- **Lighting (CAPTURE 2026-10-10).** SET_PROFILE and SET_BRIGHTNESS apply at once. The `0e00…`
+  commit is ACKed as a no-op. A brightness frame must carry a non-zero ProfileNumber. A zone rising
+  from 0 is notified as `1` and then at its level. DEFAULT (11) reports the lamp's own level
+  (`LIGHT_DEFAULT_LEVEL`). A 1502 read returns the last frame the unit sent, config echoes
+  included. `light_applies = False` models "ACKed and echoed, but the lamps stay dark": the write
+  lands in the readback and nothing is notified.
 - **Lighting configuration (A2).** Seven favourite slots: a save (SET_BRIGHTNESS PN 1-7, with an
-  optional SET_COLOR before it) stores without a live change, an activate (SET_PROFILE PN N) applies
-  the stored levels, and an empty slot is ACKed and ignored. The wake-up config (Mode 20) and the
-  door-contact flag (Mode 16 / PN 8) are stored. Every config change, the save/activate acks and the
-  REQUEST_CONFIG reply (Mode 12, favourite bits) go out as **one-off** 1502 frames, never as stored
-  state-char content. Whether the real unit echoes them this way is unverified.
+  optional SET_COLOR before it) is staged until the commit and makes no live change. An activate
+  (SET_PROFILE PN N) applies the stored levels, and an empty slot is ACKed and ignored. The wake-up
+  config (Mode 20) and the door-contact flag (Mode 16 / PN 8) are stored and echoed on 1502.
+  REQUEST_CONFIG gets the real unit's six frames: Mode 12 (favourite bits), Mode 6 (colour), Mode
+  8 (SET_DOUBLE), the door frame, the wake-up frame and Mode 24 (SYSTEM_TIME, the unit clock).
 - **All lights (mock-modelled).** The app's master switch is SET_PROFILE PN 12 (`LIGHTS_ON`) / PN 0
   (`LIGHTS_OFF`) plus the commit. ON lights every equipped zone that is off at
   `control.LIGHT_ON_BRIGHTNESS` (10); a zone that is already lit keeps its level. OFF sets every
   equipped zone to 0. NOT_EQUIPPED zones (13) do not change, and the pop-top reading light (L9)
-  stays off while the roof is down. The zones ramp like a brightness set, and the change is acked
-  with a 1502 frame that carries PN 12/0. The real unit's ON level (fixed level, or the last level
-  of each lamp) is **unverified** — a van check (#230).
+  stays off while the roof is down. The frames carry PN 12/0. The real unit lit every zone at 10
+  (CAPTURE 2026-10-10, `0c10…aaaaaaaa…`); whether a lit zone keeps its level is unverified.
 - **The roof SafetyCounter.** The counter is valid only while it is monotonic and still advancing.
   A restart invalidates it. A freshly validated counter withholds the motor for about 3 s
   (`ROOF_WITHHOLD_S`, semi-verified); a counter the roof page already streams has paid it before
@@ -121,8 +124,9 @@ What it models:
   30 s moves), then `030c` → `230c` → `2308` → `1300` / `0300` over ~28 s open / ~23 s close of
   held travel; a release mid-travel gives `2303` → `2300`.
 - **Clock-driven dynamics.** Heater and cooler countdowns and timers. Ignition sheds camping mode.
-  The link drops for about a minute at engine crank. Deep sleep (`drop()`/`wake()`) and an opt-in
-  single connection slot (`one_slot`).
+  Ignition off zeroes roll/pitch and sets `CarLevelPopUp` 1. The link drops for about a minute at
+  engine crank. Deep sleep (`drop()`/`wake()`). Several clients connect at once, as on the real
+  unit; `one_slot` is an opt-in single-slot model.
 - **Pairing.** `FakePairingTransport` scripts the guided-pairing wizard's happy path and
   wrong-passkey path for the web e2e. It stands in for BlueZ, so it does no radio work.
 
@@ -198,7 +202,8 @@ Pairing can't use the mock: it happens below GATT, in SMP and in BlueZ. So
 - advertises `VWCAMPER` from a rotating private address over a fixed identity;
 - pairs with LE Secure Connections passkey entry, and **displays a fresh passkey per attempt**;
 - refuses new bonds while its "Gerät verbinden" screen is closed;
-- holds one connection at a time.
+- serves several centrals at once and notifies every subscriber (CAPTURE 2026-10-10: the phone
+  app, buspi and the ESP32 were connected together); `one_slot` brings back the one-link model.
 
 The same fake is used in three places.
 

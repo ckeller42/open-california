@@ -4,7 +4,7 @@
 Thin CLI wrapper over ``tools.fake_unit_peripheral.build_unit`` — the GATT surface, scenario
 console, mock state model and pairing delegate live there (shared with the CI pairing tests over
 a Bumble ``LocalLink``). This module adds only what is specific to the app lab: the netsim
-transport, the link watchdog (drop a link with no 1003 heartbeat), and periodic address rotation.
+transport, the per-link watchdog (drop a link with no 1003 heartbeat), and periodic address rotation.
 Pairing = LE passkey, the unit DISPLAYS a passkey (fresh per attempt unless ``FAKE_UNIT_PASSKEY``
 pins one); the phone types it. See ``tools/applab/README.md``.
 
@@ -62,16 +62,18 @@ RPA_S = float(os.environ.get("FAKE_UNIT_RPA_S", "600"))  # the real unit rotated
 
 
 async def link_watchdog(unit, conn) -> None:
-    """The real unit drops a link that carries no 1003 heartbeat for ~15 s — armed only after the
-    first beat, with PAIRING_GRACE_S before it (a human answers the passkey in 20–40 s)."""
+    """The unit drops a link that carries no 1003 heartbeat for ~15 s (on-device 2026-07-09; not
+    re-tested 2026-10-10, the app always beats) — per link, so one central's beat never keeps another
+    alive. Armed only after that link's first beat, with PAIRING_GRACE_S before it (a human answers
+    the passkey in 20–40 s)."""
     import time
 
-    unit.last_beat_t = time.monotonic()
-    unit.seen_beat = False
-    while unit.conn is conn:
+    start = time.monotonic()
+    while conn in unit.conns:
         await asyncio.sleep(1.0)
-        limit = HEARTBEAT_TIMEOUT_S if unit.seen_beat else PAIRING_GRACE_S
-        if time.monotonic() - unit.last_beat_t > limit:
+        beat = unit.beat_at.get(conn)
+        limit = HEARTBEAT_TIMEOUT_S if beat is not None else PAIRING_GRACE_S
+        if time.monotonic() - (beat if beat is not None else start) > limit:
             print(f"### no 1003 heartbeat for {limit:.0f}s — dropping link", flush=True)
             try:
                 await conn.disconnect()

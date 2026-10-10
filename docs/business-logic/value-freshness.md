@@ -153,6 +153,13 @@ same moment. Two calictl paths served a push instead of the read:
 - **The persistent session (a minor cause).** Its pinning only lasted one UI-active session
   (minutes), so it cannot explain days of 1 L.
 
+**Settled 2026-10-10 (CAPTURE): the unit sends no subscribe-time push at all** — no notification
+follows a CCCD write in the phone's HCI snoop or in btmon on buspi's link. The "push" calictl's
+trace logged before each read is BlueZ re-delivering that read, so it always carried the read's
+value. The 1 L was the unit's own latch: buspi's reads flip FreshWaterLevel 20 ↔ 1 across
+wake/sleep with grey 0 throughout (`ble.jsonl` 2026-10-09). The mock serves that latch
+(`WATER_LATCH_L`) while the water system is unpowered; `notify_push` stays an opt-in test scenario.
+
 The 2026-07-14 comparison against the van's panel (above) **predates `PersistentSession`**
 (2026-07-17). It ran on the per-op path, so it fits this hypothesis as well as the latch
 explanation.

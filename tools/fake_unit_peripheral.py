@@ -8,8 +8,11 @@ app, so "the app accepts it" carries over to "calictl passes against it".
 
    Advertises ``VWCAMPER`` from a rotating resolvable private address over a fixed identity + IRK;
    pairs with LE Secure Connections passkey entry where the unit DISPLAYS a fresh code per attempt;
-   refuses new bonds while its pairing screen is closed; holds one connection at a time. Evidence per
-   behaviour: docs/business-logic/protocol-crosscheck-applab.md ("Pairing").
+   refuses new bonds while its pairing screen is closed; serves several centrals at once (keeps
+   advertising while connected, notifies every subscribed central — CAPTURE 2026-10-10: the phone
+   app, buspi and the ESP32 held links together), with ``one_slot`` restoring the old single link.
+   Pushes a state char only when its frame changes, never on subscribe. Evidence per behaviour:
+   docs/business-logic/protocol-crosscheck-applab.md ("Pairing", "Real app on the real unit").
 """
 
 from __future__ import annotations
@@ -148,18 +151,26 @@ class FakeUnit:
             if fn in self.funcs:
                 seed[fn] = protocol.decode(self.funcs[fn], frame)
         self.unit = MockCamperUnit(seed=seed)
-        self.unit.event_sink = lambda fn, frame: self.schedule_notify(fn, frame)  # acks/echoes, one-off
+        self.unit.event_sink = self._unit_pushed  # every frame the mock pushes (changes, acks, echoes)
         self.unit.armed = True  # the emulator app keeps its own heartbeat; don't gate
+        # This van stores favourite A (its REQUEST_CONFIG reply carried bit 0, and the app's tile A
+        # lit L4/L5/L8 at 5 — CAPTURE 2026-10-10 `0110…00500550…`).
+        self.unit.favourites[1] = {
+            "zones": {"BrightnessLFour": 5, "BrightnessLFive": 5, "BrightnessLEight": 5},
+            "colour": 1,
+        }
         self.dirty: set[str] = set()
         self.by_state: dict[str, str] = {}  # state char uuid -> fn
         self.chars: dict[str, Characteristic] = {}
         self.device: Device | None = None
         self.tasks: list = []  # keep task refs (else GC kills them)
-        self.last_beat_t: float = 0.0  # monotonic time of the last 1003 write
-        self.seen_beat = False  # a beat arrived on the current link (watchdog arms)
+        self.beat_at: dict = {}  # connection -> monotonic time of its last 1003 write (watchdog)
         self.beats = 0  # 1003 writes seen since start (test hook)
         self.control_writes = 0  # control-char writes seen since start (test hook)
-        self.conn = None  # current Bumble connection (single-link unit)
+        self.conns: list = []  # live Bumble connections, oldest first
+        # The real unit serves several centrals at once (CAPTURE 2026-10-10). True = the old model:
+        # stop advertising while one central holds the link.
+        self.one_slot = False
         self.pairing_mode = True  # the unit's "Gerät verbinden" screen is open
         self.refuse_connections = False  # test knob: drop every link at once
         # Knob: send the unit's own ATT Exchange MTU Request on every link and hang up (0x13) when it
@@ -173,7 +184,7 @@ class FakeUnit:
         self.last_passkey: int | None = None
         self.passkey_shown = asyncio.Event()
         self.rec = Recorder(None)  # build_unit(record=...) replaces it; off by default
-        self.subscribed: set[str] = set()  # fns whose state char the current central subscribed
+        self._subs: dict = {}  # connection -> fns whose state char that central subscribed
         for fn, f in self.funcs.items():
             if f.state_char:
                 self.by_state[f.state_char.lower()] = fn
@@ -188,6 +199,16 @@ class FakeUnit:
                         self.raw[fn].hex(),
                     )
 
+    @property
+    def conn(self):
+        """The most recent live connection (``None`` when no central is connected)."""
+        return self.conns[-1] if self.conns else None
+
+    @property
+    def subscribed(self) -> set[str]:
+        """Functions any connected central subscribed."""
+        return set().union(*self._subs.values())
+
     # --- reads / writes -------------------------------------------------------------
     def read_state(self, fn: str) -> bytes:
         if fn in self.dirty or fn not in self.raw:
@@ -197,17 +218,17 @@ class FakeUnit:
         log.info("READ %s -> %s", fn, v.hex())
         return v
 
-    def gatt_read(self, fn: str):
+    def gatt_read(self, fn: str, conn=None):
         """A central's GATT read of ``fn``'s state char (notifications do not come through here).
-        With ``drop_on_read == fn`` (one-shot) the unit hangs up instead of answering: the read
-        never completes — a link lost mid read-all.
+        With ``drop_on_read == fn`` (one-shot) the unit hangs up on that central instead of
+        answering: the read never completes — a link lost mid read-all.
         (Bumble awaits an awaitable read value; this one returns only after the link is gone.)"""
-        if self.drop_on_read != fn or self.conn is None:
+        conn = conn or self.conn
+        if self.drop_on_read != fn or conn is None:
             v = self.read_state(fn)
             self.rec.read(self.funcs[fn].state_char, v)
             return v
         self.drop_on_read = None
-        conn = self.conn
 
         async def hang_up() -> bytes:
             log.info("READ %s -> dropping the link", fn)
@@ -232,13 +253,19 @@ class FakeUnit:
             return
         self.dirty.add(fn)
         log.info("WRITE %s %s -> state %s", fn, bytes(data).hex(), self.unit.decoded(fn))
-        self.schedule_notify(fn)
+        # No unconditional notify: the mock pushes (via _unit_pushed) only what the write changed —
+        # the app's neutral follow-up frames change nothing and are not notified (CAPTURE 2026-10-10).
 
-    def on_beat(self, data: bytes) -> None:
+    def _unit_pushed(self, fn: str, frame: bytes) -> None:
+        """The mock pushed ``frame``: serve it from now on and notify it."""
+        self.dirty.add(fn)
+        self.schedule_notify(fn, frame)
+
+    def on_beat(self, data: bytes, conn=None) -> None:
         self.rec.write(cu("1003"), data)
         self.unit.beat(data)
-        self.last_beat_t = time.monotonic()
-        self.seen_beat = True
+        if conn is not None:
+            self.beat_at[conn] = time.monotonic()
         self.beats += 1
 
     def on_f000(self, data: bytes) -> None:
@@ -246,21 +273,20 @@ class FakeUnit:
         self.rec.write(cu("f000"), data)
         log.info("f000 write %s", data.hex())
 
-    def on_subscription(self, fn: str, notify: bool, indicate: bool) -> None:
-        """A CCCD write on ``fn``'s state char. The unit pushes the current value once as soon as
-        notifications are enabled (buspi 2026-09-16: one notify per char right after its CCCD write)."""
+    def on_subscription(self, fn: str, notify: bool, indicate: bool, conn=None) -> None:
+        """A CCCD write on ``fn``'s state char. The unit sends nothing in reply (CAPTURE 2026-10-10: no
+        notification after any CCCD write, phone HCI snoop and buspi btmon) — only later changes."""
         self.rec.event(
             "subscribe",
             char=char_short(self.funcs[fn].state_char),
             fn=fn,
             hex="0100" if notify else "0200" if indicate else "0000",
         )
+        subs = self._subs.setdefault(conn, set())
         if notify or indicate:
-            self.subscribed.add(fn)
+            subs.add(fn)
         else:
-            self.subscribed.discard(fn)
-        if notify:
-            self.schedule_notify(fn)
+            subs.discard(fn)
 
     def set_raw(self, fn: str, frame: bytes, notify: bool = True) -> None:
         """Serve ``frame`` verbatim for ``fn`` from now on (reads and notifications), e.g. a frame
@@ -273,16 +299,11 @@ class FakeUnit:
 
     async def clock(self) -> None:
         """Drive the mock's clock once a second (RTC, countdowns, roof travel, ignition coupling —
-        see ``MockCamperUnit.tick``) and notify what changed. The real unit does NOT stream: a
-        buspi trace (2026-09-16) showed each subscribed char notified exactly once right after its
-        CCCD write and then only on change, so pushes here are change-driven too (plus the
-        on-subscribe push wired in build_services)."""
+        see ``MockCamperUnit.tick``). The mock pushes what changed itself (through
+        :meth:`_unit_pushed`)."""
         while True:
             await asyncio.sleep(1.0)
-            changed = self.unit.tick(1.0)
-            self.dirty.update(changed)
-            for fn in changed:
-                self.schedule_notify(fn)
+            self.dirty.update(self.unit.tick(1.0))
 
     def schedule_notify(self, fn: str, value: bytes | None = None) -> None:
         """Notify ``fn``'s state char: the stored state, or an explicit one-off ``value`` (an ack/echo)."""
@@ -291,7 +312,7 @@ class FakeUnit:
             # the value explicitly: Bumble would otherwise fetch it through the char's GATT read
             # callback, which is the central-read path (gatt_read, drop_on_read)
             value = self.read_state(fn) if value is None else value
-            if self.conn is not None and fn in self.subscribed:
+            if fn in self.subscribed:
                 self.rec.notify(self.funcs[fn].state_char, value)
             self.tasks.append(asyncio.get_event_loop().create_task(self.device.notify_subscribers(ch, value)))
             self.tasks = [t for t in self.tasks if not t.done()]
@@ -314,7 +335,7 @@ class FakeUnit:
                         cu("1001"),
                         Characteristic.Properties.READ,
                         Attribute.READABLE,
-                        AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn)),
+                        AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn, c)),
                         [desc("Info")],
                     )
                 )
@@ -327,14 +348,12 @@ class FakeUnit:
                 f.state_char,
                 props,
                 perms,
-                AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn)),
+                AttributeValue(read=lambda c, fn=fn: self.gatt_read(fn, c)),
                 [desc("State")],
             )
-            # The unit pushes the current value once as soon as a client enables notifications
-            # (observed on buspi 2026-09-16: one notify per char right after each CCCD write).
             st.on(
                 Characteristic.EVENT_SUBSCRIPTION,
-                lambda conn, notify, indicate, fn=fn: self.on_subscription(fn, notify, indicate),
+                lambda conn, notify, indicate, fn=fn: self.on_subscription(fn, notify, indicate, conn),
             )
             self.chars[fn] = st
             lst = groups.setdefault(svc, [])
@@ -363,7 +382,7 @@ class FakeUnit:
                     cu("1003"),
                     Characteristic.Properties.WRITE | Characteristic.Properties.WRITE_WITHOUT_RESPONSE,
                     Attribute.WRITEABLE,
-                    AttributeValue(write=lambda c, v: self.on_beat(bytes(v))),
+                    AttributeValue(write=lambda c, v: self.on_beat(bytes(v), c)),
                     [desc("Counter")],
                 ),
             ]
@@ -482,13 +501,15 @@ class FakeUnit:
 
     # --- link-level behaviour ----------------------------------------------------------
     def _on_connection(self, conn) -> None:
+        if not self.one_slot:  # keep advertising: the next central can connect too
+            self.tasks.append(asyncio.get_event_loop().create_task(self._advertise()))
         if self.refuse_connections:
             # Keep the task reference (as schedule_notify does) — an orphaned task can be
             # garbage-collected before it runs, silently dropping the refusal.
             self.tasks.append(asyncio.get_event_loop().create_task(conn.disconnect()))
             self.tasks = [t for t in self.tasks if not t.done()]
             return
-        self.conn = conn
+        self.conns.append(conn)
         # A central reached us, so the unit is awake: undo the mock's own heartbeat-lapse drop()
         # (online=False), which this peripheral never models as "not advertising". Without this every
         # one-off ack/echo is swallowed on a re-paired link (app lab 2026-10-06).
@@ -500,7 +521,7 @@ class FakeUnit:
         conn.on("pairing_failure", lambda reason: self.rec.event("pair", state="failed", reason=int(reason)))
         if self.mtu_request:
             self.tasks.append(asyncio.get_event_loop().create_task(self._unit_mtu_exchange(conn)))
-            self.tasks = [t for t in self.tasks if not t.done()]
+        self.tasks = [t for t in self.tasks if not t.done()]
 
     async def _unit_mtu_exchange(self, conn) -> None:
         """The real unit is also a GATT client: on every link it sends the central an ATT Exchange MTU
@@ -510,7 +531,7 @@ class FakeUnit:
         try:
             await Peer(conn).request_mtu(UNIT_MTU_REQUEST)
         except core.TimeoutError:  # Bumble's GATT_REQUEST_TIMEOUT, 30 s like the unit's ATT timeout
-            if self.conn is conn:
+            if conn in self.conns:
                 self.rec.event("mtu", timeout=True)
                 await conn.disconnect()  # Bumble's default reason = 0x13 REMOTE USER TERMINATED
         except Exception:  # noqa: BLE001 - an error response or a dropped link: the real unit's reaction is unknown
@@ -518,9 +539,10 @@ class FakeUnit:
 
     def _on_disconnection(self, conn, reason=None) -> None:
         self.rec.event("disconnect", reason=None if reason is None else int(reason))
-        if self.conn is conn:
-            self.conn = None
-            self.subscribed.clear()
+        if conn in self.conns:
+            self.conns.remove(conn)
+        self._subs.pop(conn, None)
+        self.beat_at.pop(conn, None)
 
     async def _advertise(self) -> None:
         adv = bytes(
@@ -541,10 +563,11 @@ class FakeUnit:
                 ]
             )
         )
-        # Legacy connectable advertising stops by itself when a central connects and auto_restart
-        # resumes it on disconnect -> exactly one connection slot, like the real unit.
+        # Legacy connectable advertising stops by itself when a central connects. With ``one_slot``
+        # auto_restart resumes it on disconnect (one link at a time); otherwise _on_connection
+        # re-advertises at once, as the real unit kept serving new centrals (CAPTURE 2026-10-10).
         await self.device.start_advertising(
-            auto_restart=True,
+            auto_restart=self.one_slot,
             advertising_data=adv,
             scan_response_data=scan_rsp,
             own_address_type=OwnAddressType.RESOLVABLE_OR_RANDOM,
@@ -557,7 +580,8 @@ class FakeUnit:
     async def rotate_address(self) -> None:
         """Advertise from a fresh resolvable private address. Bumble keeps the advertising address
         until advertising restarts, so rotation is explicit (the lab CLI calls this on a timer).
-        A no-op while connected — the unit is not advertising then.
+        A no-op while any central is connected (the simulated link stamps every packet of a live
+        connection with the controller's address, so it must not move under one).
 
         Bumble-only workaround: ``HCI_LE_Set_Advertising_Set_Random_Address_Command`` (extended
         advertising, what ``_advertise()`` uses) only updates that advertising SET's address;
@@ -604,6 +628,7 @@ def build_unit(
     pairing_mode: bool = True,
     rpa_timeout_s: int = 900,
     record: str | None = None,
+    one_slot: bool = False,
 ) -> FakeUnit:
     """Build (not start) the fake unit on any Bumble HCI pair: an ``open_transport`` source/sink
     (netsim, vhci) or a ``Controller`` passed as both (``LocalLink`` tests).
@@ -612,12 +637,15 @@ def build_unit(
         keeps them in memory (tests — nothing is written to disk).
     :param record: append every GATT/link event to this JSONL file (:class:`Recorder`); ``None``
         (default) records nothing. The lab CLI passes ``FAKE_UNIT_RECORD``; nothing here reads it.
+    :param one_slot: hold one central at a time (stop advertising while connected) — the old model;
+        the real unit serves several at once (CAPTURE 2026-10-10).
     :returns: the :class:`FakeUnit`; call ``await unit.start()`` to power on and advertise.
     """
     unit = FakeUnit(vin=vin)
     unit.rec = Recorder(record)
     unit.fixed_passkey = fixed_passkey
     unit.pairing_mode = pairing_mode
+    unit.one_slot = one_slot
     cfg = DeviceConfiguration(
         name=NAME,
         address=Address(identity),

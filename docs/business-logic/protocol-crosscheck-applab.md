@@ -119,10 +119,10 @@ daemon with `CALICTL_BLE_TRACE=~/ble.jsonl` (`calictl/trace.py` — one JSON lin
 read / write / link event; `CALICTL_BLE_TRACE_HEARTBEAT=1` to include the 1003 beats), let it
 run through a drive / a heater cycle / a roof move, then `python3 -m tools.trace_compare
 ~/ble.jsonl`. The report lists: state frames that do **not** round-trip through the dictionary
-(bits the unit uses that we don't model), per-char notification cadence (the mock pushes each char once on
-subscribe and afterwards only `CHANGE_PUSH_FNS` — campingmode + vehicle — on change, plus the
-lighting ramp and water on a measured change; the 2026-07 "energy ~3 Hz" note was contradicted by
-the first trace below), `RunningTimeinAction` and
+(bits the unit uses that we don't model), per-char notification cadence (the mock pushes nothing on
+subscribe and afterwards every char whose frame changes, except the 1004 clock alone; BlueZ's
+re-delivery of each read as a notification is counted apart as `read_echoes`; the 2026-07 "energy
+~3 Hz" note was contradicted by the first trace below), `RunningTimeinAction` and
 `AgeOneBattValuesMinutes` rates vs the mock's ±1/min, roof `Position` transitions with timings,
 and the terminal-15 → `campingmode.Enable`/master-shed coupling delay. A difference is a mock bug
 or a new protocol fact — never a reason to touch the trace. Results land in this file's tables.
@@ -132,7 +132,7 @@ or a new protocol fact — never a reason to touch the trace. Results land in th
 | Claim | Observation | Verdict |
 |---|---|---|
 | every state frame round-trips through the dictionary | 14/14 functions, 88 frames: repack == raw for every frame | OBSERVED (dictionary covers every bit the unit sent) |
-| `1602` energy streams ~3×/s while connected | **not observed**: with the persistent session up and the heartbeat ticking, each of the 12 subscribed chars notified **exactly once, right after its CCCD write**, then nothing for the rest of the link (no change-driven push in 150 s; energy values did change between links) | **CONTRADICTED** (the 2026-07 "3×/s" note) → mock/fake now push once on subscribe, not 1 Hz |
+| `1602` energy streams ~3×/s while connected | **not observed**: with the persistent session up and the heartbeat ticking, each of the 12 subscribed chars notified **exactly once, right after its CCCD write**, then nothing for the rest of the link (no change-driven push in 150 s; energy values did change between links) | **CONTRADICTED** (the 2026-07 "3×/s" note). The "once after its CCCD write" part is itself **CONTRADICTED 2026-10-10**: btmon on buspi's link shows no notification after a CCCD write — the trace's `notify` lines are BlueZ re-delivering each read (`trace_compare` now counts them as `read_echoes`) |
 | `1003` heartbeat keeps the link up indefinitely | **no unit-side drop found.** The heartbeat-traced run (524 s, 11 links) shows every link is one calictl **poll cycle**: connect → 12 on-subscribe pushes → 14 reads → 5–7 beats (median gap 0.73 s, max 1.32 s) → calictl's own disconnect 0–0.9 s after the last beat; links are 5–6 s long and start every ~39 s (`POLL_INTERVAL=30` + the cycle). The "up twice within 40 s" was the web-driven persistent session being **released for web-UI idleness** (`persistent session released (web UI idle)` ~3 s to 2 min after each `up`) and re-armed by the next `/api/session` nudge. One genuine `read_all: link dropped at airheater` occurred right after the service restart (hci0 contention on start-up), none afterwards | OBSERVED (resolved; the 30–40 s pattern is calictl's cadence, not the unit) |
 
 ## Pairing (guided-pairing.md, `calictl/pairing.py` / `pairing_bluez.py`)
@@ -250,3 +250,25 @@ buspi (decoded ATT kept on buspi, not committed; evidence-ledger 2026-10-10). Ve
 | one central at a time ("the phone app holds the single slot") | the app's link, buspi's polling (99 clean cycles in an hour) and the ESP32 satellite coexisted | **CONTRADICTED** |
 | the parked unit kicks idle held links (ESP, 2026-10-09) | parked: the ESP's link dropped (HCI `0x13`, ~15–20 s after connect), the app's link and buspi's held session (3 min, 11:45) were **not** dropped. Root cause: the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247) after connect; BlueZ and Android answer, the ESP's NimBLE (built without a GATT server: IDF v6.1 `BT_NIMBLE_GATT_SERVER` needs `BT_NIMBLE_ROLE_PERIPHERAL`, which was off) silently drops it, and the unit's ATT timeout ends the link (`0x13`) | **CONTRADICTED** as a unit policy: an ESP-side bug. Root cause found, fix in PR (`sdkconfig` ROLE_PERIPHERAL + GATT_SERVER) |
 | ESP `"unconfirmed": true` (#271) | fired on the real parked unit: a no-op lighting write lost its ACK to the kick → `200 {"applied":null,"unconfirmed":true}` | OBSERVED |
+| the unit pushes each char once on subscribe (buspi trace 2026-09-16) | no Handle Value Notification after any CCCD write: the app's 8 (phone HCI snoop) and buspi's 13 (`btmon-hold.snoop`, 0 notifications on that link in 3 min); calictl's trace logs a `notify` ~1 ms before every read with the same value — BlueZ re-delivering the read | **CONTRADICTED** |
+| the unit pushes only `1202` and `1004` on change (`CHANGE_PUSH_FNS`) | pushes on every frame change: `1102` ~130–220 ms after a cooler write (a power change ~2 s later: `fd77…` → `0803…` at +0.2 s, `0903…` at +1.9 s), `1202` ~120–210 ms after a camping write, `1502` after each lighting write, `1602` every ~40–70 s as the battery values moved; `1004` once in 46 min — at the ignition-off edge (`017e…0090` → `047e…0000`: roll/pitch 0, `CarLevelPopUp` 1), never for the clock ticking | **CONTRADICTED** |
+| the app's neutral frames are no-ops | `ff771e3e1f1f` / `ff` never drew a notification and changed no later read | OBSERVED |
+| lighting: SET only stages, the `0e00…` commit applies (2026-07-13, readback-based) | the unit's `1502` frames for a SET arrived ~230 ms after it, **before** the commit (e.g. all-lights `0c10…` at 12:52:25.975, frames at .209/.330, commit at .477) | **CONTRADICTED**: the SET applies; the commit is a no-op as far as the wire shows |
+| lighting ramp steps +1 per ~second (`01→03→04→05`) | a zone rising from 0 → one frame at `1`, then one at its level ~90–120 ms later (`11111111` → `aaaaaaaa`); a decrease → one frame. DEFAULT (11) reports the lamp's level: Reading 3, Kitchen 5 + 10, Pop-up roof 5, Exterior 5 + 7 | **CONTRADICTED** (two frames, not a ramp) |
+| `1502` readback = the write-through echo, config echoes are one-off frames | buspi's own reads returned the last frame the unit sent: the wake-up echo `00146acb3d501f52…`, the door echo `0810…01`, the last ramp frame, the Mode-24 frame; at rest `00186aca16bc…` (Mode 24 SYSTEM_TIME) | **CONTRADICTED** (sticky last frame); calictl's poll shows such a frame's PN/Mode as the active profile (#284) |
+| pop-top reading light refused while the roof is down (whole write) | Pop-up-roof group ON (L8 + L9 DEFAULT, roof closed) → `…10 d1…` then `…50 d0…`: L8 lit at 5, L9 flashed 1 and fell back to 0 | **CONTRADICTED** in part: L9 alone stays off, the rest applies |
+| REQUEST_CONFIG reply = Mode 12 + favourite bits | six frames: `000c…01` (Mode 12, PN 0), `0906…01` (Mode 6, PN 9, colour 1; an 8-byte frame), `0008…04` (Mode 8 SET_DOUBLE, LightValue 4), `0810…01` (door), `0014…` (wake-up), `0018…` (Mode 24 SYSTEM_TIME, the unit clock) | OBSERVED (the Mode-8 LightValue meaning is open) |
+| parked water latch | FreshWaterLevel flips 20 L ↔ 1 L across wake/sleep, grey 0 on every frame (buspi `ble.jsonl` 2026-10-09) | OBSERVED: the latch value is 1 L, not the last reading |
+| unfitted functions read zeros | `1802` `00`, `1902` `000000`, `2002` `100000`, `2102` `000114` (the fake's baseline serves the same frames) | OBSERVED |
+
+### The simulation, aligned to this capture
+
+`tools/mock_unit.py` and `tools/fake_unit_peripheral.py` model every row above (tests cite
+"CAPTURE 2026-10-10": `T_MOCK_NO_SUBSCRIBE_PUSH`, `T_MOCK_CHANGE_PUSH_SCOPE`,
+`T_MOCK_NEUTRAL_FRAMES_SILENT`, `T_MOCK_LIGHT_ECHO_VS_RAMP`, `T_MOCK_L9_PER_ZONE`,
+`T_MOCK_LIGHT_REQUEST_CONFIG_FULL`, `T_MOCK_WATER_MEASUREMENT_GATE`, `T_MOCK_HEARTBEAT_ANY_SEED`,
+`T_FAKE_UNIT_MULTI_CENTRAL`, `T_FAKE_UNIT_PUSH_ON_CHANGE_ONLY`, `T_FAKE_UNIT_WATCHDOG_PER_LINK`,
+`T_TRACE_COMPARE_READ_ECHO`). Left as they were: the roof (another change owns it); the no-heartbeat
+drop after 15 s (not exercised — the app always beats); the cooler's ~2 s `State` lag and the
+~100 ms between the two lighting frames (collapsed to "at once"); the 8-byte Mode-6 frame (full
+length in the mock); the mock's parked tilt seed (roll -1.09°, kept so the UI renders the gauges).

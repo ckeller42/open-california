@@ -122,18 +122,16 @@ def test_set_lighting_applies_directly_no_activate_step(mock):
     assert mock.decoded("lighting")["ProfileNumber"] == 9  # the set made profile 9 active
 
 
-def test_lighting_requires_the_commit_frame_to_apply(mock):
-    """The APPLY gap crack (HCI-verified on-device 2026-07-13): the unit applies a SET_BRIGHTNESS
-    only after the 0e00… commit frame lands. The SET alone is ACKed but never applied — which is
-    exactly why lighting looked broken for so long. `device.actuate(..., follow=control.LIGHT_COMMIT)`
-    sends it; `control.commit_for('lighting')` returns it."""
+def test_lighting_set_applies_and_the_commit_is_harmless(mock):
+    """CAPTURE 2026-10-10 (the real app on the real unit): the unit notified the new levels ~230 ms
+    after each SET, BEFORE the app's 0e00… commit — so the SET applies and the commit (which calictl
+    still sends, as the app does: `device.actuate(..., follow=control.LIGHT_COMMIT)`) is ACKed as a
+    no-op. The 2026-07-13 "commit applies" gate rested on the readback echo."""
     funcs = _funcs()
     dev = device.CamperDevice("11:22:33:44:55:66")
     setf = control.build(funcs, "lighting", "kitchen", 8, {})  # self-carries ProfileNumber=9
-    # SET alone (armed session, no commit) -> ACKed, NOT applied
     asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False))
-    assert mock.decoded("lighting")["BrightnessLSeven"] == 0
-    # SET + commit -> applied
+    assert mock.decoded("lighting")["BrightnessLSeven"] == 8
     asyncio.run(dev.actuate(funcs["lighting"], setf, verify=False, follow=control.LIGHT_COMMIT))
     assert mock.decoded("lighting")["BrightnessLSeven"] == 8
     assert control.commit_for("lighting") == control.LIGHT_COMMIT

@@ -95,9 +95,11 @@ def test_just_works_pairing_is_refused():
     assert asyncio.run(run()) is False
 
 
-def test_one_connection_slot_hides_the_unit_while_a_central_holds_it():
+def test_one_slot_knob_hides_the_unit_while_a_central_holds_it():
+    """``one_slot=True`` keeps the old single-link model (the real unit has no such limit)."""
+
     async def run():
-        link, unit, first = await _unit_and_central()
+        link, unit, first = await _unit_and_central(one_slot=True)
         await first.connect(await scan_for(first))
         second = central_device(link, name="phone", address="F0:F1:F2:F3:F4:F6")
         await second.power_on()
@@ -105,6 +107,71 @@ def test_one_connection_slot_hides_the_unit_while_a_central_holds_it():
             await scan_for(second, timeout=1.0)
 
     asyncio.run(run())
+
+
+def test_several_centrals_connect_at_once_and_each_gets_the_pushes():
+    """CAPTURE 2026-10-10: the phone app held its link 46 min while buspi ran 99 connect/read/release
+    cycles and the ESP32 connected — the unit kept advertising and served them together, and a
+    change made by one central (the app's lighting writes) was notified to buspi's subscription too.
+
+    .. test:: The fake serves several centrals at once and notifies every subscriber
+       :id: T_FAKE_UNIT_MULTI_CENTRAL
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+    from bumble.device import Peer
+
+    async def peer_of(central):
+        conn = await central.connect(await scan_for(central))
+        peer = Peer(conn)
+        await peer.discover_services()
+        await peer.discover_characteristics()
+        return peer
+
+    async def run():
+        link, unit, app = await _unit_and_central()
+        app_peer = await peer_of(app)
+        buspi = central_device(link, name="buspi", address="F0:F1:F2:F3:F4:F6")
+        await buspi.power_on()
+        buspi_peer = await peer_of(buspi)  # the unit is still advertising while the app holds a link
+        got: asyncio.Queue = asyncio.Queue()
+        await _char(buspi_peer, "1202").subscribe(lambda v: got.put_nowait(bytes(v)))
+        await _char(app_peer, "1003").write_value((0x00049363).to_bytes(4, "big"), with_response=True)
+        await _char(app_peer, "1201").write_value(bytes.fromhex("f3"), with_response=True)  # USB off
+        pushed = await asyncio.wait_for(got.get(), 2.0)
+        return len(unit.conns), pushed
+
+    n, pushed = asyncio.run(run())
+    assert n == 2
+    from calictl import overrides, protocol
+
+    f = protocol.load()
+    overrides.apply(f)
+    assert protocol.decode(f["campingmode"], pushed)["UsbCharger"] == 0
+
+
+def test_subscribe_and_neutral_frames_push_nothing():
+    """CAPTURE 2026-10-10: no notification follows a CCCD write, nor the app's neutral cooler frame
+    ``ff771e3e1f1f``; a real change (cooler OFF ``fc77…``) is notified.
+
+    .. test:: The fake pushes on change only — never on subscribe or for a neutral frame
+       :id: T_FAKE_UNIT_PUSH_ON_CHANGE_ONLY
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+
+    async def run():
+        unit, peer = await _connected_peer()
+        got: asyncio.Queue = asyncio.Queue()
+        await _char(peer, "1102").subscribe(lambda v: got.put_nowait(bytes(v)))
+        await _char(peer, "1003").write_value((0x00049363).to_bytes(4, "big"), with_response=True)
+        await _char(peer, "1101").write_value(bytes.fromhex("ff771e3e1f1f"), with_response=True)
+        await asyncio.sleep(0.3)
+        quiet = got.empty()
+        await _char(peer, "1101").write_value(bytes.fromhex("fc771e3e1f1f"), with_response=True)
+        return quiet, await asyncio.wait_for(got.get(), 2.0)
+
+    quiet, pushed = asyncio.run(run())
+    assert quiet
+    assert pushed[0] & 0x01 == 0  # State bit cleared: the fridge is off
 
 
 def test_refuse_connections_drops_the_link():
@@ -224,7 +291,6 @@ def test_set_raw_serves_the_frame_and_notifies_a_subscriber():
         ch = _char(peer, "1102")  # cooler
         got: asyncio.Queue = asyncio.Queue()
         await ch.subscribe(lambda v: got.put_nowait(bytes(v)))
-        await asyncio.wait_for(got.get(), 2.0)  # the on-subscribe push of the current value
         short = unit.raw["cooler"][:1]
         unit.set_raw("cooler", short, notify=False)
         read_back = bytes(await ch.read_value())
@@ -298,14 +364,14 @@ def test_recording_taps_every_event_kind(tmp_path):
         await peer.discover_characteristics()
         got: asyncio.Queue = asyncio.Queue()
         await _char(peer, "1102").subscribe(lambda v: got.put_nowait(bytes(v)))
-        await asyncio.wait_for(got.get(), 2.0)  # the on-subscribe push
         await _char(peer, "1602").read_value()
         await _char(peer, "1002").read_value()
         await _char(peer, "1003").write_value((0x100000).to_bytes(4, "big"), with_response=True)
         await _char(peer, "f000").write_value(b"\x01", with_response=True)
-        # cooler ON with every other field at the app's leave-unchanged default
-        await _char(peer, "1101").write_value(bytes.fromhex("fd771e3e1f1f"), with_response=True)
-        await asyncio.sleep(0.1)  # (the on-subscribe push above is already a recorded notify)
+        # cooler OFF (the baseline has it on) with every other field at the app's leave-unchanged
+        # default: a change, so the unit notifies it
+        await _char(peer, "1101").write_value(bytes.fromhex("fc771e3e1f1f"), with_response=True)
+        await asyncio.wait_for(got.get(), 2.0)
         await conn.disconnect()
         await asyncio.sleep(0.2)
         return unit
@@ -329,7 +395,7 @@ def test_recording_taps_every_event_kind(tmp_path):
     writes = {e["char"]: e for e in evs if e["ev"] == "write"}
     assert (writes["1003"]["fn"], writes["1003"]["hex"]) == ("heartbeat", "00100000")
     assert writes["f000"]["fn"] is None
-    assert (writes["1101"]["fn"], writes["1101"]["hex"]) == ("cooler", "fd771e3e1f1f")
+    assert (writes["1101"]["fn"], writes["1101"]["hex"]) == ("cooler", "fc771e3e1f1f")
     assert isinstance(next(e for e in evs if e["ev"] == "disconnect")["reason"], int)
     assert all(e["conn"] == 1 for e in evs)
     t_ms = [e["t_ms"] for e in evs]
@@ -390,7 +456,6 @@ def test_lighting_config_frames_are_notified_to_a_subscribed_central():
         unit, peer = await _connected_peer()
         got: asyncio.Queue = asyncio.Queue()
         await _char(peer, "1502").subscribe(lambda v: got.put_nowait(bytes(v)))
-        await asyncio.wait_for(got.get(), 2.0)  # on-subscribe push
         ctl = _char(peer, "1501")
 
         async def drain():  # every notify of one write; the ack is the first, the stored state last
@@ -415,7 +480,7 @@ def test_lighting_config_frames_are_notified_to_a_subscribed_central():
     assert (wake["Mode"], wake["Timestamp"]) == (20, 0x6AC49C70)
     assert (save["Mode"], save["ProfileNumber"]) == (4, 1)  # the save ack names favourite 1
     assert cfg["Mode"] == 12 and cfg["LightValue"] & 1 == 1
-    assert real["Mode"] not in (4, 12, 20)  # a read returns the real state, no sticky ack
+    assert real["Mode"] == 24  # sticky: a read returns the reply's last frame (CAPTURE 2026-10-10)
 
 
 def test_a_new_connection_wakes_the_mock_after_a_heartbeat_lapse():
@@ -444,7 +509,6 @@ def test_a_new_connection_wakes_the_mock_after_a_heartbeat_lapse():
         await peer.discover_characteristics()
         got: asyncio.Queue = asyncio.Queue()
         await _char(peer, "1502").subscribe(lambda v: got.put_nowait(bytes(v)))
-        await asyncio.wait_for(got.get(), 2.0)  # on-subscribe push
         await _char(peer, "1501").write_value(
             bytes.fromhex("0d0c000000000000eeeeeeeeeeeeeeee"), with_response=True
         )
@@ -482,3 +546,41 @@ def test_the_unit_hangs_up_on_a_central_that_never_answers_its_mtu_request(monke
             assert await asyncio.wait_for(dropped, 3.0) == 0x13
 
     asyncio.run(run())
+
+
+def test_link_watchdog_is_per_link(monkeypatch):
+    """With several centrals connected, one central's 1003 beat must not keep a silent one alive.
+
+    .. test:: The app lab's heartbeat watchdog judges each link by its own beats
+       :id: T_FAKE_UNIT_WATCHDOG_PER_LINK
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+    import time
+    from types import SimpleNamespace
+
+    from tools.applab import fake_unit_ble
+
+    monkeypatch.setattr(fake_unit_ble, "HEARTBEAT_TIMEOUT_S", 0.5)
+    dropped = []
+
+    class Conn:
+        async def disconnect(self):
+            dropped.append(self)
+            unit.conns.remove(self)
+
+    beating, silent = Conn(), Conn()
+    unit = SimpleNamespace(conns=[beating, silent], beat_at={silent: time.monotonic() - 5})
+
+    async def run():
+        async def beat():
+            while beating in unit.conns and not dropped:
+                unit.beat_at[beating] = time.monotonic()
+                await asyncio.sleep(0.2)
+
+        await asyncio.gather(
+            fake_unit_ble.link_watchdog(unit, silent),
+            asyncio.wait_for(beat(), 3.0),
+        )
+
+    asyncio.run(run())
+    assert dropped == [silent]

@@ -388,8 +388,9 @@ Notifications
      Mode 20, door contact Mode 16 / PN 8, stored favourites Mode 12) into the cached lighting
      state, so a REQUEST_CONFIG reply of several frames in a row is not reduced to the last one.
      It does so only once a lighting decode is cached.
-   * After a lighting write, a newer ``1502`` push (Mode-4 ramp) is the confirmation. It updates the
-     served lighting state. The ``1502`` readback is only an echo.
+   * After a lighting write, a newer ``1502`` push is the confirmation. It updates the served
+     lighting state. A ``1502`` read returns the last frame the unit sent, config echoes included
+     (CAPTURE 2026-10-10, #284).
 
 .. mermaid::
 
@@ -397,13 +398,13 @@ Notifications
         participant C as calictl
         participant U as Camper unit
         C->>U: write CCCD=0100 on each status char (subscribe-all)
-        U-->>C: one push per char with its current value, right after its CCCD write
-        Note over C: sink stores it by char UUID, then calictl reads each char and the read wins
+        U-->>C: write response only, no notification
+        Note over C: calictl reads each char, a later push replaces the read
         opt water in use (water system powered)
             U-->>C: notify 1302 on a measured change, replaces the earlier read
         end
-        opt camping, ignition or cooler change (persistent session only)
-            U-->>C: notify 1202 / 1004 / 1102
+        opt camping, ignition, cooler or energy change (persistent session only)
+            U-->>C: notify 1202 / 1004 / 1102 / 1602 when the frame changes
             Note over C: observer on_push decodes and logs camping-push, passive
         end
         opt unit reports its lighting config (after a REQUEST_CONFIG, or on its own)
@@ -411,13 +412,16 @@ Notifications
             Note over C: Server on_push latches favourites, wake-up and door contact into the cached lighting state
         end
         opt after an applied lighting SET
-            U-->>C: notify 1502 Mode-4 ramp frames (real brightness stepping to target)
+            U-->>C: notify 1502, rising zones at 1 first, then the real levels
             Note over C: lighting confirm, served lighting state updated from the push
         end
 
-**Evidence.** The first real-unit trace (buspi, 2026-09-16) showed each of the 12 subscribed chars
-notifying **once, right after its CCCD write**, and no periodic stream in 150 s. That contradicted
-an older "``1602`` ~3×/s" note. Event-driven pushes were observed for ``1502`` (Mode-4 ramp,
+**Evidence.** The first real-unit trace (buspi, 2026-09-16) showed no periodic stream in 150 s,
+which contradicted an older "``1602`` ~3×/s" note. Its "one notify per char right after the CCCD
+write" was BlueZ re-delivering each read: btmon on buspi's link and the phone's HCI snoop
+(CAPTURE 2026-10-10) show **no** notification after a CCCD write. The same capture shows a push
+whenever a frame changes (``1102``, ``1202``, ``1502``, ``1602``) and ``1004`` only at the
+ignition edge, never for the clock. Event-driven pushes were observed for ``1502`` (Mode-4 ramp,
 2026-08-16) and ``1302`` (water, during use). The app subscribes ``1202``. For water it subscribes ``1302``
 and then reads it, and the read and any push go to the same decoder (VM ``qg/b``), so the last
 frame wins (decompile 2026-10-07, enigma ``38a0d6b``). Live ``1202``/``1004`` push *changes* on
@@ -696,7 +700,7 @@ Lighting SET and neutral flush
         Note over C: calictl needs none of that to actuate (it pulls the config only for a wake-up edit)
         C->>U: SET_BRIGHTNESS (Mode 4, PN 9, zone N, others 14)
         C->>U: 0.3 s later flush 0e00 (NO_MODE neutral default frame)
-        U--)C: 1502 Mode-4 ramp notifications (real brightness stepping to N)
+        U--)C: 1502 Mode-4 frames, a rising zone at 1 then at N, before the flush lands
         Note right of U: lamp PHYSICALLY changes (photon-verified 2026-08-16, bare SET included)
         Note over C: daemon confirms from the newer 1502 push within 1.2 s, never from the readback echo
 
@@ -719,8 +723,11 @@ the echo.
 The config dump that REQUEST_CONFIG triggers arrives as ``1502`` notifications, tagged by Mode:
 ``0x0c`` config echo, ``0x06`` colour state, ``0x08`` SET_DOUBLE, ``0x10`` profile state
 (profile 8), ``0x14`` wake time, ``0x18`` system time (ticking unix seconds). After an *applied*
-SET_BRIGHTNESS the unit pushes Mode-4 ramp frames showing the real brightness stepping to the
-target (e.g. 01 → 03 → 04 → 05). These are normal ``1502`` state frames, decodable with
+SET_BRIGHTNESS the unit pushes Mode-4 frames with the real brightness. The real app on the real unit
+(CAPTURE 2026-10-10) showed a zone rising from 0 as ``1`` first and at its level ~100 ms later, a
+decrease as one frame, DEFAULT (11) as the lamp's own level, and both frames ~230 ms after the SET
+— **before** the ``0e00…`` flush, so the flush is not what applies it. A ``1502`` read returns the
+last frame sent. These are normal ``1502`` state frames, decodable with
 :py:func:`calictl.protocol.decode`. They tracked real actuation in every observed case, armed or
 not. Still open: whether a *deep-asleep* unit needs any arming. Full history:
 `control-and-actuation.md §4
@@ -1058,7 +1065,7 @@ Fresh state read under heartbeat
         participant C as calictl
         participant U as Camper unit
         C->>U: connect, subscribe-all (real handler into the sink)
-        U-->>C: one push per subscribed char (current values)
+        Note over U: no push on subscribe (CAPTURE 2026-10-10), only on a later change
         loop calictl ~0.6 s, warm-up 2 s then across the reads (app 500 ms, continuous)
             C-)U: write 1003 heartbeat
         end
@@ -1066,7 +1073,7 @@ Fresh state read under heartbeat
         loop every state char in function order, water included
             Note over C: remember the sink value for this char
             C->>U: read the state char (3 tries, 0.8 s backoff)
-            U-->>C: value, replaces the subscribe-time push
+            U-->>C: value, replaces any earlier push
         end
         opt a push landed after a char was read (for example water 1302 in use)
             U-->>C: notify, the newer frame wins over the read

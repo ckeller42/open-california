@@ -294,6 +294,15 @@ because it is instructive RE:
   tracked real actuation in every observed case (armed and un-armed sessions alike): the
   app's genuine actuation-feedback channel. The state-char **readback remains a
   write-through echo and is still not proof of actuation.**
+- **2026-10-10 — the real app on the real unit (CAPTURE, phone HCI snoop).** The unit's `1502`
+  frames for a SET arrived ~230 ms after it and **before** the app's `0e00…` flush, so the SET
+  applies and the flush is no gate. A zone rising from 0 is notified as `1` and then at its level
+  ~100 ms later (not a +1 ramp); DEFAULT (11) reports the lamp's own level (Reading 3, Kitchen
+  5 + 10, Pop-up roof 5, Exterior 5 + 7); the pop-top light (L9) flashed 1 and fell back to 0 with
+  the roof closed while the rest of the frame applied. A `1502` **read returns the last frame the
+  unit sent** (buspi read back the wake-up and door echoes), so a read after a config write shows
+  that config frame, not the lamps (#284). REQUEST_CONFIG's reply was six frames: Mode 12, 6, 8,
+  16/PN 8, 20, 24.
 - **Brightness enum fix (same capture):** values are the `dg/i.java` enum, NOT a raw 0-13
   scale — 0=OFF, 1-10 = 10 %…100 % in 10 % steps, 11=DEFAULT, 12 unused, 13=NOT_EQUIPPED
   (read-only marker for absent zones), 14=leave-unchanged sentinel. Our old code wrote 13 as

@@ -109,13 +109,16 @@ def test_pairing_mode_off_ends_pairing_failed():
 
 
 def test_unit_held_by_another_central_is_not_found(monkeypatch):
+    """A unit that stops advertising while a central holds it is never found: the scan times out.
+    The real unit keeps advertising (CAPTURE 2026-10-10: the app, buspi and the ESP32 connected
+    together), so this runs the fake's ``one_slot`` knob — the wizard's not-found path stays covered."""
     monkeypatch.setitem(pairing.TIMEOUT_S, pairing.SCANNING, 1.5)
 
     async def run():
-        link, unit, _, _, runner = await _setup()
+        link, unit, _, _, runner = await _setup(one_slot=True)
         phone = central_device(link, name="phone", address="F0:F1:F2:F3:F4:F6")
         await phone.power_on()
-        await phone.connect(await scan_for(phone))  # the phone app holds the only slot
+        await phone.connect(await scan_for(phone))  # the phone holds the (knob's) only slot
         await runner.start()
         return await _until(runner, {"error"})
 
