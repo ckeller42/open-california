@@ -379,6 +379,8 @@ class EspStub:
                 if enc:
                     self.send_header("Content-Encoding", enc)
                     self.send_header("Cache-Control", "no-cache")
+                elif path in pwa:
+                    self.send_header("Cache-Control", "max-age=86400")  # web.c's PWA assets
                 self.end_headers()
                 self.wfile.write(body)
 

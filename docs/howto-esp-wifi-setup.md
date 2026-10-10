@@ -106,7 +106,7 @@ Then open `http://192.168.x.y` directly.
 
 ## Add it to your home screen
 
-The satellite serves the same app icon and web-app manifest as the Pi, so the UI can sit on your
+The {term}`satellite <Satellite>` serves the same app icon and web-app manifest as {term}`buspi`, so the UI can sit on your
 home screen like an app:
 
 - **iPhone / iPad (Safari):** open <http://calictl-esp.local>, tap *Share* → *Add to Home Screen*.
