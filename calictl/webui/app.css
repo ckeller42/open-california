@@ -158,29 +158,6 @@ label.row { cursor: pointer; }
   background: color-mix(in srgb, var(--warn) 14%, var(--card)); color: var(--warn);
   border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); }
 
-/* --- 24 h leisure-battery chart -------------------------------------------- */
-.echart-card { padding: .8rem 1rem 1rem; }
-.echart-head { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .4rem; }
-.echart-title { font-size: .82rem; color: var(--muted); }
-.echart-key { margin-left: auto; font-size: .7rem; color: var(--muted); display: flex;
-  align-items: center; gap: .25rem; }
-.echart-key i { display: inline-block; width: .7rem; height: 2px; border-radius: 2px; }
-.echart-key .ec-key-v { background: var(--accent); }
-.echart-key .ec-key-a { background: var(--ok); margin-left: .4rem; }
-.echart { width: 100%; height: auto; display: block; overflow: visible; }
-.ec-axis { stroke: var(--border); stroke-width: 1; }
-.ec-v, .ec-a { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
-.ec-v { stroke: var(--accent); }
-.ec-a { stroke: var(--ok); }
-.ec-v-dot { fill: var(--accent); }
-.ec-a-dot { fill: var(--ok); }
-.ec-lbl { font-size: 7px; fill: var(--muted); }
-.ec-v-lbl { fill: var(--accent); }
-.ec-a-lbl { fill: var(--ok); }
-.echart-empty { color: var(--muted); font-size: .82rem; padding: 1.4rem .2rem; text-align: center; }
-.echart-sub + .echart-sub { margin-top: .5rem; }
-.echart-subtitle { font-size: .72rem; color: var(--muted); margin-bottom: .1rem; }
-
 /* inferred/unverified lamp identity marker on the Lighting screen */
 .lamp-hint { margin-left: .5rem; font-size: .68rem; font-weight: 400; color: var(--muted);
   border: 1px solid var(--border); border-radius: 6px; padding: 0 .3rem; vertical-align: middle; }

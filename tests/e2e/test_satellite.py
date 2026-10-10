@@ -214,7 +214,7 @@ def test_a_failed_first_poll_never_reaches_calictl_only_endpoints(stub):
 def test_api_refuses_every_path_but_state_on_the_satellite(sat, stub):
     # Defence in depth for any future caller: api() throws before fetch() for a non-/api/state path.
     # A display-only satellite (no device.control) still refuses /api/command.
-    for path in ("/api/command", "/api/history", "/api/session", "/api/auto_camper"):
+    for path in ("/api/command", "/api/session", "/api/auto_camper"):
         got = sat.evaluate("p => api(p).then(() => 'fetched', e => e.message)", path)
         assert got == "satellite: no " + path
     assert set(stub.requests) <= ALLOWED, stub.requests
@@ -520,7 +520,7 @@ def test_wakeup_unconfirmed_when_the_unit_reports_another_config(stub, error_gat
 
 
 def test_api_still_refuses_calictl_only_paths_on_the_live_satellite(live, stub):
-    for path in ("/api/history", "/api/session", "/api/auto_camper"):
+    for path in ("/api/session", "/api/auto_camper"):
         got = live.evaluate("p => api(p).then(() => 'fetched', e => e.message)", path)
         assert got == "satellite: no " + path
     assert set(stub.requests) <= ALLOWED_LIVE

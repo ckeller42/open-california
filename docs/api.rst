@@ -12,15 +12,9 @@ Semantics
 .. autofunction:: calictl.semantics.roof
 .. autofunction:: calictl.freshness.implausible_water_drop
 
-Energy history
---------------
+Daemon state
+------------
 
-.. automodule:: calictl.history
-   :no-members:
-.. autofunction:: calictl.history.append
-.. autofunction:: calictl.history.load
-.. autofunction:: calictl.history.trim
-.. automethod:: calictl.serve.ServeBackend.history
 .. automethod:: calictl.serve.Server._save_last
 .. automethod:: calictl.serve.Server._pull_lighting_config
 

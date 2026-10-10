@@ -1113,7 +1113,7 @@ Daemon poll cycle
      the observed latch value) while the grey tank is exactly frozen is the parked latch, so the last plausible reading is published instead and flagged stale
      (``R_WATER_STALE_GUARD``).
    * **Cache** (only if a read produced states): rebind ``_last`` whole (the web thread reads it
-     unlocked), stamp ``_last_ok_ts``, append the leisure-battery history sample, run the camping
+     unlocked), stamp ``_last_ok_ts``, run the camping
      observer (passive), run the auto-camper step (which may command through ``on_command``), then
      persist the state file atomically (``R_SERVE_STATE_CACHE``).
    * **Fan out** the interpreted states: MQTT discovery once per newly installed function, then one

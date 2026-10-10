@@ -24,7 +24,7 @@ sinks).
 | `web.py` | stdlib HTTP server for the web UI + JSON API (never opens BLE) |
 | `mqtt.py` | Home Assistant MQTT-discovery entity configs |
 | `influx.py` | InfluxDB writes for the Grafana stack |
-| `history.py` | bounded on-disk leisure-battery history for the web UI (Influx-free) |
+| `history.py` | append-only JSONL helpers for the daemon's per-poll outcome log |
 | `observer.py` | passive camping/ignition observer (logs transitions, fast-poll burst; never actuates) |
 | `automation.py` | auto camper mode — restore camping after you park |
 | `firmware.py` / `anchors.py` | firmware-drift raw-frame capture / plausibility anchors for a silently-wrong decode |

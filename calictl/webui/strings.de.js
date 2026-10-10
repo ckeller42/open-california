@@ -241,18 +241,6 @@ window.STRINGS_DE = {
   "🕒 stale (starter asleep)": "🕒 veraltet (Starter im Ruhezustand)",
   "🕒 Starter-battery values are stale — that subsystem only measures with the engine on, so it holds the last reading while parked. The leisure battery stays live.":
     "🕒 Die Werte der Starterbatterie sind veraltet — dieses Subsystem misst nur bei laufendem Motor und hält daher im geparkten Zustand den letzten Messwert. Die Zweitbatterie bleibt live.",
-  // energy chart
-  "Second battery — last 24 h": "Zweitbatterie — letzte 24 h",
-  "Second battery {name}, last {hours} hours": "Zweitbatterie {name}, letzte {hours} Stunden",
-  "voltage": "Spannung",
-  "current": "Strom",
-  "Voltage (V)": "Spannung (V)",
-  "Current (A)": "Strom (A)",
-  "now": "jetzt",
-  "No data in the last 24 h — van asleep since {clock}.":
-    "Keine Daten in den letzten 24 h — Fahrzeug seit {clock} im Ruhezustand.",
-  "No data yet — history builds while the van is awake.":
-    "Noch keine Daten — der Verlauf entsteht, während das Fahrzeug wach ist.",
   ["Set the energy management mode? This control is derived from the app and not yet verified on "
     + "the van. Continue?"]:
     "Energiemanagement-Modus setzen? Diese Funktion ist abgeleitet und am Fahrzeug noch nicht "
@@ -294,14 +282,13 @@ window.STRINGS_DE = {
   "  ⚠ untested": "  ⚠ ungetestet",
   "  ✓ tested": "  ✓ getestet",
 
-  // --- banners (firmware / anchors) + energy chart -------------------------------------------
+  // --- banners (firmware / anchors) ---------------------------------------------------------
   ["⚠ Untested firmware — unit reports amb {amb} · comm {comm} (this project was validated on {tested}). "
     + "Decode/semantics may have drifted; treat readings with care."]:
     "⚠ Ungetestete Firmware — Einheit meldet Umg. {amb} · Komm {comm} (dieses Projekt wurde auf {tested} "
     + "validiert). Dekodierung/Semantik könnte abweichen; Werte mit Vorsicht behandeln.",
   "⚠ Implausible reading(s): {list} — possible decode drift.":
     "⚠ Unplausible Messwerte: {list} — mögliche Dekodierungsabweichung.",
-  "History unavailable.": "Verlauf nicht verfügbar.",
   "Loading…": "Wird geladen…",
   "Connect the fast BLE session (warm it before controlling)":
     "Schnelle BLE-Sitzung verbinden (vor dem Steuern vorwärmen)",

@@ -49,31 +49,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example: { error: state_failed }
-  /api/history:
-    get:
-      summary: Leisure-battery samples for a recent window (for the 24 h chart)
-      description: |
-        Voltage/current samples from the daemon's own append-only history file (NOT InfluxDB — the
-        UI is Influx-free by design), oldest first. `gap_s` tells the client where to break the
-        plotted line (the van deep-sleeps for days when parked; an absent stretch means "no data").
-      parameters:
-        - name: h
-          in: query
-          required: false
-          description: Window size in hours, clamped server-side to 1..48 (default 24).
-          schema: { type: integer, minimum: 1, maximum: 48, default: 24 }
-      responses:
-        "200":
-          description: Samples in the window.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/History" }
-        "500":
-          description: Failed to read history.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
-              example: { error: history_failed }
   /api/screens:
     get:
       summary: Machine-usable UI screen specs
@@ -327,7 +302,7 @@ components:
       properties:
         error:
           type: string
-          enum: [state_failed, history_failed, not_found, unsupported_media_type, bad_request,
+          enum: [state_failed, not_found, unsupported_media_type, bad_request,
                  bad_json, read_only, missing_function_or_what, confirm_required, command_failed,
                  bad_action, session_failed, bad_enabled, auto_camper_failed, bad_passkey,
                  pairing_failed, roof_view_failed]

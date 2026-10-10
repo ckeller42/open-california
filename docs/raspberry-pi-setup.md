@@ -154,7 +154,6 @@ change needs a daemon restart.
 | `CALICTL_SESSION_WAIT_S` | `6` | how long a command waits for the supervisor's session before falling back to a cold connect (a roof move never waits: it takes the slot for its own connection) |
 | `CALICTL_FAST_CONFIRM_S` | `1.2` | how long a lighting command waits for the `1502` notification before returning an optimistic "sent" |
 | `CALICTL_STATE_CACHE` | `~/.cache/calictl/last_state.json` | persisted last-known state (shown while the van is asleep) |
-| `CALICTL_HISTORY_CACHE` | `~/.cache/calictl/history.jsonl` | leisure-battery history for the web UI's 24 h chart |
 | `CALICTL_OUTCOMES_CACHE` | `~/.cache/calictl/poll_outcomes.jsonl` | per-poll outcome log (classifies telemetry gaps: deep sleep vs BLE error vs daemon down) |
 | `CALICTL_FW_SNAPSHOT_DIR` | `~/.cache/calictl/fw-snapshots` | where a firmware change's raw-frame capture is written |
 | `CALICTL_STORE_GENERALPURPOSE` | off | `1`/`true`/`yes` = log the raw F000/F001 diagnostic register to InfluxDB (RE probe) |

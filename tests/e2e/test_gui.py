@@ -134,7 +134,7 @@ def _start_daemon(port, extra_env, expect_installed=True):
 @pytest.fixture(scope="module")
 def base_url():
     port = _free_port()
-    for stale in (_cache("history.jsonl"), _cache("state.json"), _cache("pairing.json")):
+    for stale in (_cache("state.json"), _cache("pairing.json")):
         try:  # a previous run's samples must not make this one pass
             os.unlink(stale)
         except OSError:
@@ -147,7 +147,6 @@ def base_url():
         port,
         {
             "CALICTL_STATE_CACHE": _cache("state.json"),
-            "CALICTL_HISTORY_CACHE": _cache("history.jsonl"),
             "CALICTL_PAIRING_CACHE": _cache("pairing.json"),
         },
     )
@@ -185,7 +184,6 @@ def pairing_url(tmp_path):
         port,
         {
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
         },
     )
@@ -221,7 +219,6 @@ def unconfigured_pairing_page(tmp_path):
         {
             "CALICTL_ADDR": "",
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
         },
         expect_installed=False,
@@ -520,20 +517,6 @@ def test_command_latency_is_subsecond(page, base_url):
     assert time.time() - t0 < 3.0, "command took too long -- persistent fast path not engaged"
 
 
-def test_energy_chart_draws_from_daemon_history_not_influx(page, base_url):
-    """The 24 h chart must render from the daemon's own append-only history.
-
-    The e2e daemon runs with --no-influx, so if this draws a line at all, it proves the chart
-    has no InfluxDB dependency -- the property the user explicitly required.
-    """
-    page.goto(base_url)
-    page.locator(".tile", has_text="Energy").first.click()
-    page.wait_for_selector("svg.echart", timeout=20000)  # polls every 1s -> samples accrue
-    drawn = page.locator("svg.echart polyline.ec-v, svg.echart circle.ec-v-dot").count()
-    assert drawn >= 1, "no voltage series rendered"
-    assert "History unavailable" not in page.locator("#app").inner_text()
-
-
 def test_open_control_survives_a_state_poll(page):
     """Regression: a live state poll must NOT re-render and destroy a control the user is
     interacting with. The 2s poll rebuilds #app (app.innerHTML=""), which used to slam an open
@@ -604,7 +587,6 @@ def test_a_failed_pairing_request_toasts_translated_text_not_an_enum(tmp_path):
             "CALICTL_FAKE_PAIRING": "connect_failed",
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
         },
     )
     try:
@@ -637,7 +619,6 @@ def test_connect_failed_shows_its_own_guidance(tmp_path):
             "CALICTL_FAKE_PAIRING": "connect_failed",
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
         },
     )
     try:
@@ -662,7 +643,6 @@ def test_radio_busy_banner(tmp_path):
             "CALICTL_FAKE_PAIRING": "radio_busy",
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
         },
     )
     try:
@@ -686,7 +666,6 @@ def test_pairing_wizard_restarts_cleanly_after_daemon_restart(tmp_path):
     env = {
         "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
         "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-        "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
     }
     port = _free_port()
     proc, url = _start_daemon(port, env)
@@ -721,7 +700,6 @@ def test_pairing_wizard_never_flashes_a_stale_step_after_daemon_restart(tmp_path
     env = {
         "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
         "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-        "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
     }
     port = _free_port()
     proc, url = _start_daemon(port, env)
@@ -889,7 +867,7 @@ def test_menu_device_status_screen_on_calictl(page):
 def test_unknown_runtime_is_restrictive(base_url):
     # The ESP32 satellite runs this same app.js. Until a `_meta` answers we cannot tell it from calictl, so
     # the page must stay restrictive: controls read-only, no pairing menu, and no request beyond
-    # "/" + static assets + /api/state (never /api/pairing|command|history|...).
+    # "/" + static assets + /api/state (never /api/pairing|command|session|...).
     seen = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -1020,7 +998,6 @@ def fresh_url(tmp_path):
         _free_port(),
         {
             "CALICTL_STATE_CACHE": str(tmp_path / "state.json"),
-            "CALICTL_HISTORY_CACHE": str(tmp_path / "history.jsonl"),
             "CALICTL_PAIRING_CACHE": str(tmp_path / "pairing.json"),
             "CALICTL_CONFIG_PULL_S": "0.5",
         },
@@ -1216,3 +1193,16 @@ def test_door_contact_row_hidden_on_grand_california(page, base_url):
     page.get_by_text("Lighting", exact=True).first.click()
     expect(page.get_by_label("Wake-up time")).to_be_visible()
     assert page.get_by_role("switch", name="Sliding door lighting").count() == 0
+
+
+def test_energy_card_hides_power_sources_the_van_does_not_have(page, base_url):
+    """A source the unit reports as not installed (the mock's solar, like this van) gets no row
+    at all — owner 2026-10-10: "Why do you show stuff that is not available and installed in the
+    car" (was "Solar power — not installed"). Installed sources keep their row."""
+    page.goto(base_url)
+    page.locator(".tile", has_text="Energy").first.click()
+    card = page.locator("#app")
+    expect(card.get_by_text("Shore power", exact=True)).to_be_visible()
+    expect(card.get_by_text("Vehicle power", exact=True)).to_be_visible()
+    expect(card.get_by_text("Solar power", exact=True)).to_have_count(0)
+    assert "not installed" not in card.inner_text()
