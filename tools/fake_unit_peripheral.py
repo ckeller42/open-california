@@ -162,6 +162,12 @@ class FakeUnit:
         self.conn = None  # current Bumble connection (single-link unit)
         self.pairing_mode = True  # the unit's "Gerät verbinden" screen is open
         self.refuse_connections = False  # test knob: drop every link at once
+        # Knob: send the unit's own ATT Exchange MTU Request on every link and hang up (0x13) when it
+        # goes unanswered for 30 s (the real unit does; btmon 2026-10-10). Off by default: in the
+        # real-BlueZ VM's stale-bond scenario the extra request reorders the failure calictl's
+        # self-heal keys on (pairing-real-stack, #279) — a Bumble-vs-BlueZ artefact, the self-heal
+        # works against the real unit.
+        self.mtu_request = False
         self.drop_on_read: str | None = None  # test knob: hang up on the next GATT read of this fn
         self.fixed_passkey: int | None = None
         self.last_passkey: int | None = None
@@ -492,8 +498,9 @@ class FakeUnit:
         conn.on("connection_att_mtu_update", lambda c=conn: self.rec.event("mtu", mtu=c.att_mtu))
         conn.on("pairing", lambda keys: self.rec.event("pair", state="bonded"))
         conn.on("pairing_failure", lambda reason: self.rec.event("pair", state="failed", reason=int(reason)))
-        self.tasks.append(asyncio.get_event_loop().create_task(self._unit_mtu_exchange(conn)))
-        self.tasks = [t for t in self.tasks if not t.done()]
+        if self.mtu_request:
+            self.tasks.append(asyncio.get_event_loop().create_task(self._unit_mtu_exchange(conn)))
+            self.tasks = [t for t in self.tasks if not t.done()]
 
     async def _unit_mtu_exchange(self, conn) -> None:
         """The real unit is also a GATT client: on every link it sends the central an ATT Exchange MTU

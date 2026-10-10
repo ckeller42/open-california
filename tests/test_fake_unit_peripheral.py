@@ -469,6 +469,7 @@ def test_the_unit_hangs_up_on_a_central_that_never_answers_its_mtu_request(monke
 
     async def run():
         _, unit, central = await _unit_and_central()
+        unit.mtu_request = True
         if not answers:  # a central without a GATT server: the request goes unanswered
             monkeypatch.setattr(central.gatt_server, "on_att_exchange_mtu_request", lambda *a: None)
         conn = await central.connect(await scan_for(central))

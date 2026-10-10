@@ -527,8 +527,8 @@ paced around (drops measured 30.0 s / 31.3 s after `connect_bonded`, ~23 s after
 `sdkconfig.defaults` now enables the peripheral role for its GATT server only (no advertising, no
 service registered), matching the host syscfg the host tier proves (`BLE_ROLE_PERIPHERAL 1` — why the
 host tier never showed it). Guarded by `tests/firmware/test_sdkconfig_gatt_server.py`; the fake unit
-sends the same request and hangs up unanswered after 30 s (`tools/fake_unit_peripheral.py`
-`_unit_mtu_exchange`, `T_FAKE_UNIT_MTU_REQUEST`).
+can send the same request and hang up unanswered after 30 s (`tools/fake_unit_peripheral.py`
+`mtu_request` knob, off by default, `T_FAKE_UNIT_MTU_REQUEST`).
 
 ## Network watch items (board only)
 
