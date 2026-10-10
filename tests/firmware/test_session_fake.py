@@ -601,83 +601,26 @@ def test_backoff_doubles_to_60s_and_resets_once_encrypted(fake):
     assert "CALL discover" in after(out, "CALL connect_bonded")
 
 
-KICKED = int(
-    re.search(
-        r"#define CALI_SESSION_KICKED_RECONNECT_MS (\d+)u",
-        (CORE / "include" / "cali_session.h").read_text(),
-    ).group(1)
-)
+def test_unit_hangup_after_read_all_takes_the_backoff(fake):
+    """A unit-side hang-up (HCI 0x13, raw or NimBLE host-encoded 531) after read-all reconnects on
+    the ordinary 1 s backoff, like calictl's supervisor: the #266 30 s "kicked" pacing was removed
+    once #279 fixed the root cause (the unit's ATT MTU request is answered; parked links hold).
 
-
-def test_unit_kick_after_read_all_paces_the_reconnect(fake):
-    """The parked unit terminates an idle held link (HCI 0x13, remote user terminated) ~15-20 s
-    after each connect while tolerating calictl's 30 s connect-read-release poll (field morning
-    2026-10-09, #264): a remote-terminated drop AFTER this link's read-all reconnects on that poll
-    cadence instead of hammering the 1 s backoff — the kick loop becomes a unit-approved duty
-    cycle. The paced delay never feeds the exponential backoff state.
-
-    .. test:: A unit-initiated kick after read-all paces the reconnect to the poll cadence
-       :id: T_FW_SESSION_KICK_PACED
+    .. test:: A unit hang-up after read-all takes the ordinary backoff
+       :id: T_FW_SESSION_HANGUP_BACKOFF
        :links: R_FW_SESSION
     """
-    out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED 19", "tick %d" % (T + KICKED - 100))
-    assert "LOG session: reconnect in %d ms" % KICKED in out
-    assert not calls(after(out, "LOG session: link lost (event 6, status 19)"), "connect_bonded")
-    out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED 19", "tick %d" % (T + KICKED))
-    assert calls(after(out, "LOG session: reconnect in %d ms" % KICKED), "connect_bonded")
-    # the pace is not backoff state: the next non-kick loss starts at the 1 s minimum again
-    out = run(
-        fake,
-        *PAIRED,
-        *READ_ALL,
-        "DISCONNECTED 19",
-        "tick %d" % (T + KICKED),
-        "CONNECT_FAIL",
-    )
-    assert out[-1] == "LOG session: reconnect in 1000 ms"
+    for status in (19, 531, 8):
+        out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED %d" % status)
+        assert out[-1] == "LOG session: reconnect in 1000 ms", status
 
 
-def test_nimble_encoded_kick_is_recognised(fake):
-    """ble_nimble.c forwards disconnect.reason NimBLE host-encoded (0x200 + HCI): the field log's
-    status 531 is the same kick."""
-    out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED 531", "tick %d" % (T + 100))
-    assert "LOG session: reconnect in %d ms" % KICKED in out
-
-
-def test_kick_before_read_all_keeps_the_backoff(fake):
-    """A remote-terminate before this link's read-all completed is not the parked kick (the unit
-    drops half-set-up links for other reasons): normal backoff."""
-    out = run(fake, *PAIRED, "DISCONNECTED 19")
-    assert out[-1] == "LOG session: reconnect in 1000 ms"
-
-
-def test_other_drop_after_read_all_keeps_the_backoff(fake):
-    out = run(fake, *PAIRED, *READ_ALL, "DISCONNECTED 8")
-    assert out[-1] == "LOG session: reconnect in 1000 ms"
-
-
-def test_kick_with_an_active_viewer_keeps_the_backoff(fake):
-    """Somebody is watching the page (/api/state served within CALI_SESSION_VIEWER_ACTIVE_MS): a
-    kicked link reconnects on the fast backoff so the page stays ~live while the parked unit keeps
-    kicking; once the viewer goes stale the 30 s pacing applies again.
-
-    .. test:: A kicked link keeps the fast backoff while a viewer is active
-       :id: T_FW_SESSION_KICK_VIEWER
-       :links: R_FW_SESSION
-    """
-    out = run(fake, *PAIRED, *READ_ALL, "webseen", "DISCONNECTED 19")
-    assert out[-1] == "LOG session: reconnect in 1000 ms"
-    stale = T + KICKED  # the webseen at T is exactly the window old: no longer a viewer
-    out = run(fake, *PAIRED, *READ_ALL, "webseen", "tick %d" % stale, "DISCONNECTED 19")
-    assert out[-1] == "LOG session: reconnect in %d ms" % KICKED
-
-
-def test_command_during_the_kick_pause_connects_now(fake):
-    """A control command must not wait out the 30 s pause (#264): the submit still answers
+def test_command_during_the_backoff_connects_now(fake):
+    """A control command must not wait out a reconnect delay (#264): the submit still answers
     NOT_READY (there is no link), but the pending reconnect is made due at once, so the client's
     retry lands in seconds.
 
-    .. test:: A control command during the kick pause reconnects at once
+    .. test:: A control command during a reconnect delay reconnects at once
        :id: T_FW_SESSION_KICK_NUDGE
        :links: R_FW_SESSION
     """

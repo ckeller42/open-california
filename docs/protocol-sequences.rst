@@ -1377,7 +1377,8 @@ stays ``mock-only``. Details:
      the whole link. Discover, subscribe to every state char, warm up
      ``CODEC_HEARTBEAT_WARMUP_MS`` (2 s), then read every function in order. A read and a push both
      replace a function's frame, so the last frame wins. The first ``SNAP`` line follows. Water
-     ``1302`` is re-read every 30 s. A lost link reconnects by bond after 1 s, doubling to 60 s.
+     ``1302`` is re-read every 30 s. A lost link reconnects by bond after 1 s, doubling to 60 s
+     — a unit hang-up (HCI ``0x13``) too: the #266 paced 30 s reconnect was removed after #279.
 
 .. mermaid::
 

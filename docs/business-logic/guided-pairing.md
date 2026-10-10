@@ -292,5 +292,5 @@ What stays true operationally:
   the ESP's NimBLE, built without a GATT server, did not, so the parked unit dropped the ESP's held
   link ~30 s after each connect (2026-10-09). That was read at first as a state-dependent unit
   policy against idle links; it is not (CAPTURE 2026-10-10: the app's and buspi's held links
-  stayed up). Fixed by #279 (`faaf7b0`): the ESP now holds its parked link. Its reconnect pacing
-  (`CALI_SESSION_KICKED_RECONNECT_MS`, `cali_session.h`, #266) stays as the fallback.
+  stayed up). Fixed by #279 (`faaf7b0`): the ESP now holds its parked link. Its #266 reconnect pacing
+  was then removed: a dropped link takes the ordinary 1 s→60 s backoff.
