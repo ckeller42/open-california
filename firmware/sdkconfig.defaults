@@ -4,7 +4,15 @@ CONFIG_IDF_TARGET="esp32s3"
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_NIMBLE_ROLE_CENTRAL=y
-CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=n
+# Peripheral role ON only for its GATT server (IDF v6.1: BT_NIMBLE_GATT_SERVER depends on it; = host
+# syscfg BLE_ROLE_PERIPHERAL 1). The unit, as a GATT client, sends the central an ATT Exchange MTU
+# Request (Client RX MTU 247) on every link; without a GATT server esp-nimble DROPS that request
+# unanswered (ble_att.c ble_att_rx_handle_unknown_request), the unit's 30 s ATT transaction timeout
+# expires and it terminates the link with HCI 0x13 — the ESP's "kicked ~30 s after connect" loop
+# (field 2026-10-09/10, #264; btmon on buspi's held link shows the request, BlueZ/Android answer it).
+# Nothing advertises (BROADCASTER stays off) and no service is registered.
+CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
+CONFIG_BT_NIMBLE_GATT_SERVER=y
 CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
 CONFIG_BT_NIMBLE_SM_SC=y
 CONFIG_BT_NIMBLE_NVS_PERSIST=n

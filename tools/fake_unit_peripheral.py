@@ -22,9 +22,10 @@ import os
 import secrets
 import time
 
+from bumble import core
 from bumble.att import Attribute, AttributeValue
 from bumble.core import UUID, AdvertisingData
-from bumble.device import Device, DeviceConfiguration
+from bumble.device import Device, DeviceConfiguration, Peer
 from bumble.gatt import (
     GATT_CHARACTERISTIC_USER_DESCRIPTION_DESCRIPTOR,
     Characteristic,
@@ -37,6 +38,8 @@ from bumble.pairing import PairingConfig, PairingDelegate
 from calictl import overrides, protocol
 from calictl.trace import REDACTED_VIN_HASH, Tracer, char_short
 from tools.mock_unit import MockCamperUnit, MockDisconnect, _pack_state
+
+UNIT_MTU_REQUEST = 247  # Client RX MTU in the unit's own Exchange MTU Request (btmon 2026-10-10)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = "-6c77-4b7d-bbf6-a5e587701f3d"
@@ -489,6 +492,22 @@ class FakeUnit:
         conn.on("connection_att_mtu_update", lambda c=conn: self.rec.event("mtu", mtu=c.att_mtu))
         conn.on("pairing", lambda keys: self.rec.event("pair", state="bonded"))
         conn.on("pairing_failure", lambda reason: self.rec.event("pair", state="failed", reason=int(reason)))
+        self.tasks.append(asyncio.get_event_loop().create_task(self._unit_mtu_exchange(conn)))
+        self.tasks = [t for t in self.tasks if not t.done()]
+
+    async def _unit_mtu_exchange(self, conn) -> None:
+        """The real unit is also a GATT client: on every link it sends the central an ATT Exchange MTU
+        Request (Client RX MTU 247, btmon 2026-10-10) and hangs up with HCI 0x13 when its 30 s ATT
+        transaction timeout expires unanswered — what a central without a GATT server (the ESP before
+        its NimBLE GATT server was enabled) suffered every ~30 s. BlueZ and Android answer it."""
+        try:
+            await Peer(conn).request_mtu(UNIT_MTU_REQUEST)
+        except core.TimeoutError:  # Bumble's GATT_REQUEST_TIMEOUT, 30 s like the unit's ATT timeout
+            if self.conn is conn:
+                self.rec.event("mtu", timeout=True)
+                await conn.disconnect()  # Bumble's default reason = 0x13 REMOTE USER TERMINATED
+        except Exception:  # noqa: BLE001 - an error response or a dropped link: the real unit's reaction is unknown
+            return
 
     def _on_disconnection(self, conn, reason=None) -> None:
         self.rec.event("disconnect", reason=None if reason is None else int(reason))

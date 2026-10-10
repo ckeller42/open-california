@@ -515,6 +515,21 @@ chip":
    wake-up card edit from Chromium landed byte-exact with the config latched and, with none, as the pull
    then the frame (*✓ Applied*). Still open: a real unit's ACK timing and refusals.
 
+## The unit's own ATT requests (GATT server on, #264)
+
+The unit is a GATT client too: right after every connect it sends the central an ATT **Exchange MTU
+Request** (Client RX MTU 247; btmon on buspi's held link 2026-10-10). BlueZ and Android answer it. The
+device build was central-only, which in IDF v6.1 also drops NimBLE's GATT server
+(`BT_NIMBLE_GATT_SERVER` depends on `BT_NIMBLE_ROLE_PERIPHERAL`); esp-nimble then discards the request
+unanswered (`ble_att.c` `ble_att_rx_handle_unknown_request`), the unit's 30 s ATT transaction timeout
+expires and it ends the link with HCI `0x13` — the field "kick" every ~30 s after connect that #266
+paced around (drops measured 30.0 s / 31.3 s after `connect_bonded`, ~23 s after the read-all SNAP).
+`sdkconfig.defaults` now enables the peripheral role for its GATT server only (no advertising, no
+service registered), matching the host syscfg the host tier proves (`BLE_ROLE_PERIPHERAL 1` — why the
+host tier never showed it). Guarded by `tests/firmware/test_sdkconfig_gatt_server.py`; the fake unit
+sends the same request and hangs up unanswered after 30 s (`tools/fake_unit_peripheral.py`
+`_unit_mtu_exchange`, `T_FAKE_UNIT_MTU_REQUEST`).
+
 ## Network watch items (board only)
 
 The host tier replays scripted WiFi outcomes and QEMU has no WiFi, so these wait for the CoreS3:

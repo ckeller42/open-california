@@ -451,3 +451,33 @@ def test_a_new_connection_wakes_the_mock_after_a_heartbeat_lapse():
         return protocol.decode(f["lighting"], await asyncio.wait_for(got.get(), 2.0))
 
     assert asyncio.run(run())["Mode"] == 12  # the REQUEST_CONFIG reply, not just the state echo
+
+
+@pytest.mark.parametrize("answers", [True, False])
+def test_the_unit_hangs_up_on_a_central_that_never_answers_its_mtu_request(monkeypatch, answers):
+    """The real unit sends every central an ATT Exchange MTU Request and terminates the link (HCI
+    0x13) when its 30 s ATT timeout expires unanswered (btmon 2026-10-10) — the ESP's kick loop
+    while its NimBLE had no GATT server. A central that answers (BlueZ, Android) keeps the link.
+
+    .. test:: The fake unit drops a central that never answers its MTU request
+       :id: T_FAKE_UNIT_MTU_REQUEST
+       :links: R_FAKE_UNIT_FIDELITY
+    """
+    import bumble.gatt_client
+
+    monkeypatch.setattr(bumble.gatt_client, "GATT_REQUEST_TIMEOUT", 0.3)
+
+    async def run():
+        _, unit, central = await _unit_and_central()
+        if not answers:  # a central without a GATT server: the request goes unanswered
+            monkeypatch.setattr(central.gatt_server, "on_att_exchange_mtu_request", lambda *a: None)
+        conn = await central.connect(await scan_for(central))
+        dropped: asyncio.Future = asyncio.get_running_loop().create_future()
+        conn.on("disconnection", lambda reason: not dropped.done() and dropped.set_result(reason))
+        if answers:
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(asyncio.shield(dropped), 1.5)
+        else:
+            assert await asyncio.wait_for(dropped, 3.0) == 0x13
+
+    asyncio.run(run())
