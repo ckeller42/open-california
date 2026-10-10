@@ -76,6 +76,8 @@ python3 -m calictl serve --web 8080 --enable-writes   # ...allow control writes 
 No van needed for development: the whole stack runs against a model of the unit (the mock, a Bumble
 BLE fake with real passkey pairing, the vendor app in an emulator) — see
 **[Simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html)**.
+To record the real app against the real unit, set up your Android phone for wireless adb and the
+Bluetooth HCI snoop log: **[How to set up your Android phone for the app lab](https://ckeller42.github.io/open-california/howto-android-phone-lab.html)**.
 
 The **daemon is read-only by default** — it will not write to the vehicle until you pass
 `--enable-writes` (or set `CALICTL_ENABLE_WRITES=1`), so a stray deploy never actuates anything by

@@ -17,7 +17,9 @@ the `app-lab` skill. This lab is for what only the real unit can show.
   passkey or pairing code. A bugreport holds the phone's pairing keys and identity. Everything stays
   under buspi `~/applog/`.
 - **Screenshots** (real phone or emulator) go ONLY to the private repo `ckeller42/californiaontour-re`
-  (`screens/`). open-california gets text and links only: no image or video files.
+  (`screens/`). open-california gets text and links only: no VW-app image or video files. The one
+  exception: redacted Android **system Settings** screenshots for the owner setup guide
+  (`docs/screenshots/phone-setup/`, IP/port/MAC/codes blacked out, status bar cropped).
 - **Never open the VIN screens:** Account → Vehicle, and (app 5.4.0.3036) Vehicle tab → Help →
   "Vehicle Settings" — the same page moved. Use the bottom tab **Vehicle** quick actions.
 - **Actuation needs the owner's explicit request in the conversation**, per actuation session. A tap
@@ -33,6 +35,7 @@ the `app-lab` skill. This lab is for what only the real unit can show.
 
 ## One-time setup (owner, on the phone)
 
+Owner guide with screenshots: [docs/howto-android-phone-lab.md](../../../docs/howto-android-phone-lab.md).
 Developer options: **Wireless debugging** ON; **Enable Bluetooth HCI snoop log = Enabled** ("Filtered"
 blanks the payloads); **Stay awake** ON and the phone on a charger (else adb sees the lock screen).
 `setprop persist.bluetooth.btsnooplogmode full` is refused for the shell user on a user build, so
