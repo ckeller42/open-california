@@ -660,6 +660,7 @@ class MockCamperUnit:
             and self.now >= start_at
         ):
             self._roof_motor, self._roof_run = self._roof_dir, 0.0
+            self._roof_timers = []  # a pending 4 s clear must not overwrite the moving code
             r["InfoPopUp"] = 12  # moving (`030c` / `130c` at the old Position)
         elif self._roof_motor is not None:  # travel counts from the tick after the start
             self._roof_run += dt

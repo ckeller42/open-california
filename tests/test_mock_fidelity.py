@@ -421,6 +421,19 @@ def test_roof_stops_when_the_frames_stop():
     assert u.decoded("roof")["Position"] == 2
 
 
+def test_roof_reversal_mid_travel_keeps_the_moving_code():
+    """Open, then close at once mid-travel: the release's ``2303`` (cleared 4 s later) must not
+    overwrite the reversed move's ``InfoPopUp`` 12."""
+    f = _funcs()
+    u = _roof_unit()
+    u.roof_checklist = False
+    app = _RoofApp(u, f)
+    app.hold(0, 0, 5.0)
+    app.hold(1, 0, 10.0)
+    app.hold(0, 1, 6.0)  # reversed while moving: 2303, then the close starts (past its 4 s clear)
+    assert u.decoded("roof")["InfoPopUp"] == 12
+
+
 def test_subscribe_pushes_the_current_value_once():
     """Real unit (buspi trace 2026-09-16): enabling notifications on a state char yields one
     notification with the current frame; nothing streams afterwards without a change."""
