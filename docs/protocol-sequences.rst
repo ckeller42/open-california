@@ -178,8 +178,9 @@ Session foundation — connect, handshake, subscribe
    * Connect with a per-attempt timeout of ``CALICTL_CONNECT_TIMEOUT_S`` (default 30 s), at most
      3 attempts, 4 s apart. With ``CALICTL_ADAPTER_RESET=1`` the adapter is power-cycled once
      after the first failure (default off, because ``hci0`` is shared). After the third failure,
-     raise ``ConnectionUnavailable``. The unit is asleep, the phone app holds the single slot, or
-     Bluetooth is disabled on the unit.
+     raise ``ConnectionUnavailable``. The unit is asleep, or Bluetooth is disabled on the unit. (A
+     phone app that holds a link does not block ``calictl``: the unit served the app, buspi and the
+     ESP32 satellite at the same time on 2026-10-10.)
    * Paths that write, and the persistent session, then read ``1001`` VERSION and ``1004``
      vehicle (read failures are swallowed and logged as a weak handshake). The per-op read path
      skips these two reads.
@@ -201,8 +202,9 @@ Session foundation — connect, handshake, subscribe
         end
         Note over C: still failing after 3 attempts, so raise ConnectionUnavailable
         U-->>C: connected, services discovered by bleak
-        A->>U: requestMtu(26) then read 1002, compare with SHA-256(VIN) bytes 16..32
+        A->>U: requestMtu(26) then read 1002, compare with SHA-256(VIN) bytes 16..32 (real phone with cached GATT, no discovery)
         Note over A,U: app only, a mismatch disconnects about 20 ms later (Wrong vehicle found)
+        Note over A,U: real app 2026-10-10 subscribes only the 8 chars of the fitted functions, then reads each state char
         C->>U: read 1001 (VERSION)
         Note over A: app only, aborts if VERSION is empty or above 2
         C->>U: read 1004 (vehicle, handshake read, forces encryption)
@@ -227,6 +229,16 @@ connectable windows more often. See `control-and-actuation.md §2
 <https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html>`_ and
 `protocol-crosscheck-applab.md
 <https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html>`_.
+
+**CAPTURE 2026-10-10** (the real CaliforniaOnTour app on a Fairphone 6 against the van's unit,
+AmbSw ``0410`` / CommunicationVersion 2, Android HCI snoop; evidence-ledger 2026-10-10). With the
+GATT table cached the phone runs **no service discovery**. It reads ``1002`` (identity), ``1001``,
+``1004``; writes CCCD ``0100`` for ``1702``, ``1502``, ``1102``, ``1602``, ``1004``, ``1302``,
+``1402``, ``1202`` (in that order); then reads ``1702``, ``1102``, ``1001``, ``1602``, ``1302``,
+``1004``, ``f001``, ``1402``, ``1502``, ``1202``; then the ``1003`` heartbeat starts. That is 8
+subscriptions, the chars of the functions fitted on this van plus ``1004``, not the 12 the app lab
+saw against a fake unit with every function fitted. ``calictl`` still subscribes all 12; the unit
+accepts both.
 
 Guided pairing — passkey entry and stale-bond recovery
 ------------------------------------------------------
@@ -437,7 +449,9 @@ Persistent session supervisor
      (``arm=False``), so they land in well under a second. A command first waits up to
      ``CALICTL_SESSION_WAIT_S`` (6 s) for the session to come up instead of racing it cold. A roof
      move is the exception: it neither nudges nor waits (see Roof).
-   * **Idle**: close the session under the ``_ble`` lock, so the phone app gets the single slot.
+   * **Idle**: close the session under the ``_ble`` lock. (The old reason, "so the phone app gets
+     the single slot", is disproven: the unit served the phone app, buspi and the satellite at once,
+     CAPTURE 2026-10-10.)
      Polls fall back to brief cold per-op reads. While the supervisor is mid-connect the poll loop
      naps 2 s instead of racing it with a cold connect.
    * **Unreachable**: back off 5 / 10 / 30 / 60 s (capped). After 4 consecutive failures the state
@@ -457,7 +471,7 @@ Persistent session supervisor
         participant U as Camper unit
         W->>S: GET /api/state every ~2 s (marks UI active)
         S->>U: connect, read 1001 and 1004, subscribe-all with the daemon on_push
-        loop while held, calictl ~0.6 s (app 500 ms)
+        loop while held, calictl ~0.6 s (real app about 0.78 s)
             S-)U: write 1003 = N, N+1, N+2 (monotonic +1)
         end
         W->>S: POST /api/command
@@ -466,14 +480,16 @@ Persistent session supervisor
             S->>U: roof frames over the live session, the 1003 heartbeat keeps ticking
         end
         Note over W,S: no UI activity for CALICTL_UI_IDLE_S (25 s) or a manual Disconnect
-        S->>U: close the session under the _ble lock (slot free for the phone app)
+        S->>U: close the session under the _ble lock
         Note over S,U: idle polls fall back to cold per-op read_all
         Note over S,U: connect failures back off 5, 10, 30, 60 s, asleep after 4, a command nudges now
 
 **Evidence.** On buspi (2026-09-16 trace) the session repeatedly came up on a web nudge and was
 released for UI idleness (``persistent session released (web UI idle)``). No unit-side drop was
 found while the heartbeat ticked. The 2026-07-13 stability spike held the link 180 s with 100 %
-uptime and 0 drops. The roof running inside the live session (#235, replacing the #198 handover),
+uptime and 0 drops. On 2026-10-10 the parked, locked unit held buspi's persistent session for
+3 min (a viewer open, 11:45) while the phone app held its own link and the satellite cycled.
+The roof running inside the live session (#235, replacing the #198 handover),
 and the roof command skipping the session warm-up, are covered by tests only; the roof itself has
 never
 moved under ``calictl`` (see :need:`S_SEQ_ROOF`). Design notes:
@@ -525,13 +541,13 @@ Heartbeat-armed control write
         participant U as Camper unit
         participant A as App (reference only)
         C->>U: connect, read 1001 and 1004, subscribe-all (see S_SEQ_CONNECT)
-        loop calictl ~0.6 s across the write window only (app 500 ms, continuous while connected)
+        loop calictl ~0.6 s across the write window only (real app about 0.78 s, continuous while in the foreground)
             C-)U: write 1003 = N, N+1, N+2 (monotonic +1)
         end
         Note over C,U: calictl waits ARM_DELAY_S (3.0 s) after the first beat before writing
         Note over U: armed, control writes are honoured
         C->>U: write control char = SET frame (full-packet, untargeted fields at leave-unchanged, write with response)
-        A->>U: 500 ms later a neutral all-sentinel frame (cooler ff771e3e1f1f, heater 3f7b007f1f3f)
+        A->>U: 500 ms later a neutral all-sentinel frame (cooler ff771e3e1f1f, heater 3f7b007f1f3f, camping ff)
         C->>U: after SETTLE_S (2.5 s) read the state char (verify, daemon runs set_check on it)
         C->>U: disconnect (heartbeat stops, the load stays latched)
 
@@ -547,6 +563,20 @@ GATT round-trips). Its writes are full-packet with untargeted fields at the mode
 (cooler ``ff771e3e1f1f``, heater ``3f7b007f1f3f``, camping ``ff``, energy ``30``, lighting
 ``0e00…``). The unit accepts both styles. See `control-and-actuation.md §1
 <https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html>`_.
+
+**CAPTURE 2026-10-10** (real app on the real unit, HCI snoop, evidence-ledger 2026-10-10). The app
+writes ``1003`` with write-request, a 4-byte BE counter ``+1`` per write, every **0.76–0.79 s**, for
+as long as it is in the foreground. The value is **not 0 at connect**: values such as
+``0x00049363…`` and, later, ``0x00061b62`` were seen. This contradicts the "seed 0" decompile
+reading above and agrees with the later call-stack reading of a random seed in 1–1 000 000 and a
+750–850 ms period (`protocol-alignment.md
+<https://ckeller42.github.io/open-california/business-logic/protocol-alignment.html>`_). The two
+values alone do not show whether the counter continues across links or is reseeded per link.
+When the app goes to the background, the phone disconnects (HCI ``0x13`` from the phone). In the
+foreground, with the van parked and locked, the unit did **not** drop the app's link: it was held
+46 min, and 93 s of that while locked. Every non-motor app write was byte-identical to
+``control.build``. Each cooler write was followed ~500 ms later by ``ff771e3e1f1f``, each
+camping-mode write by ``ff``, each lighting write by the commit ``0e00…``.
 
 Cooler command — the app's frame
 --------------------------------
@@ -614,9 +644,14 @@ byte for byte by ``tests/test_app_recordings.py``) and held by ``tests/test_cali
 ruling R1 (2026-10-06) calictl re-asserted the unit's current ``State``/``Mode``/``Level`` and
 schedule in every untargeted field. **That older state-carry frame is the one live-verified on the
 unit** (2026-07-07 power, and the schedule write of 2026-08-26 that showed the hour bytes are
-taken literally). The app-faithful frames, ``State=3`` in the level, mode and timer frames, have
-only run against the mock. The 2026-07-05 ``0x0E`` drop of ``State=3`` predates the heartbeat
-(:need:`S_SEQ_REJECT`), so the first live level or mode write is the check (van check #230). See
+taken literally). Until 2026-10-10 the app-faithful frames, ``State=3`` in the level, mode and
+timer frames, had only run against the mock. The 2026-07-05 ``0x0E`` drop of ``State=3`` predates the heartbeat
+(:need:`S_SEQ_REJECT`), so the first live level or mode write is the check (van check #230).
+**CAPTURE 2026-10-10:** the real app wrote these app-faithful frames to the real unit (level
+``ff74…`` / ``ff73…``, quiet ``ff27…`` / ``ff47…`` / ``ff07…``, timer ``f777…`` / ``df77…``, power
+``fd77…`` / ``fc77…``), byte-identical to ``control.build``. The unit accepted every one (no
+``0x0E``) and the level writes actuated. So the ``State=3`` frame works on the unit; ``calictl`` itself has still not sent it
+(status stays ``mock-only``, evidence-ledger 2026-10-10). See
 `DECISIONS.md <https://ckeller42.github.io/open-california/business-logic/DECISIONS.html>`_ (ruling
 R1, R3, R4) and `control-and-actuation.md §5
 <https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html>`_.
@@ -692,6 +727,14 @@ not. Still open: whether a *deep-asleep* unit needs any arming. Full history:
 <https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html>`_ and
 `lighting-energy-water-sat-roof.md
 <https://ckeller42.github.io/open-california/business-logic/lighting-energy-water-sat-roof.html>`_.
+
+**CAPTURE 2026-10-10** (real app on the real unit, evidence-ledger 2026-10-10). Opening the
+Lighting screen writes REQUEST_CONFIG ``0d0c…`` and the commit, as drawn above. The app's group
+switches (Reading, Kitchen, Pop-up roof, Exterior) each write **one** ``SET_BRIGHTNESS`` frame
+``0904…`` (Mode 4, ProfileNumber 9) with every zone of the group at ``11`` (DEFAULT) for on or
+``0`` for off, then the commit. The camping screen's "sliding door" toggle writes the lighting
+door-contact frame (``1501``, ProfileNumber 8, ``0810…01`` / ``…00``), not ``1201``. All frames
+byte-identical to ``control.build`` where ``calictl`` has a builder.
 
 Wake-up light and door contact — config edit
 --------------------------------------------
@@ -794,16 +837,20 @@ Roof actuation — press-and-hold, SafetyCounter-gated
    * **Connection**: the daemon does **not** warm the persistent session for a roof command (no
      keep-warm nudge, no ``CALICTL_SESSION_WAIT_S`` wait). Under the ``_ble`` lock, a live session
      carries the move (:py:meth:`calictl.device.PersistentSession.actuate_roof`): no second
-     connection on the single slot. With no session up, ``actuate_roof`` opens its own.
+     connection. With no session up, ``actuate_roof`` opens its own.
    * **Arm = the app's**: the ``1003`` heartbeat **ticks during the move**, as the app's
      session-global heartbeat does (decompile ``zf/d:183``, ``d2/s:795-802``, ``mj/d:247``,
-     ``c/i:349-367``, #235). A live session's heartbeat is already running; an own connection
+     ``c/i:349-367``, #235; **CAPTURE 2026-10-10**: the real app's heartbeat ran through a full
+     open and close on the real unit). A live session's heartbeat is already running; an own connection
      replays the handshake (``1001`` + ``1004`` reads, subscribe-all) and starts it. There is
      **no** ``ARM_DELAY_S`` **pre-arm**, so the counter streams immediately (#150). A gap would
      make the unit see a fresh counter and withhold the motor for another ~3 s.
    * Stream ``[direction][SafetyCounter]`` to ``1401`` every ``CALICTL_ROOF_PERIOD_S`` (0.5 s).
      The direction is open ``0x01`` / close ``0x04``. The counter is app-style: a random seed in
-     1..1 000 000 plus 1 per 500 ms of wall-clock, big-endian uint32.
+     1..1 000 000 plus 1 per 500 ms of wall-clock, big-endian uint32. **Known divergence from the
+     app** (CAPTURE 2026-10-10): the app's counter already runs in a STOP stream from the moment
+     the roof screen opens, and a press continues that counter; ``calictl`` seeds a new counter at
+     the press. No code change yet (owner decision pending, #230).
    * At 3 s, read ``1402`` once. If ``SafetyCounterValid`` (bit 7) is still clear, abort (the app's
      dead-man). Poll ``Position`` every ``CALICTL_ROOF_LIMIT_POLL_S`` (1 s) and cease at the
      direction's limit (open ``1``, closed ``0``/``14``). Also cease on release (``stop_event``)
@@ -829,20 +876,22 @@ Roof actuation — press-and-hold, SafetyCounter-gated
         participant U as Roof (1401 / state 1402)
         participant A as App (reference only)
         Note over C,U: ignition ON, no blocking InfoPopUp, roof path clear
-        S->>S: no session warm-up, a live session carries the move (one slot, no second connection)
+        S->>S: no session warm-up, a live session carries the move (no second connection)
         C->>U: no live session only - connect, read 1001 and 1004, subscribe-all
         loop the whole move, calictl ~0.6 s (the app ticks it too)
             C-)U: write 1003 = N, N+1 (heartbeat, no pre-arm delay)
         end
-        loop app only, while the roof page is open and before any press
-            A->>U: frame [0x00 stop] plus SafetyCounter every ~500 ms (pre-validates the counter)
+        loop app only, while the roof page is open and nothing is pressed
+            A->>U: STOP frame [0x00] plus SafetyCounter every ~0.45 s, +1 per frame
         end
+        Note over A,U: app press continues the SAME counter, the first move frame repeats the last STOP value
         Note over C,U: user presses and HOLDS open or close (web UI debounces a re-press within 1000 ms)
-        loop calictl every 0.5 s while held (app about 8 frames per second, counter still +1 per 500 ms)
+        loop calictl every 0.5 s while held (real app every 0.33 to 0.45 s, +1 per frame)
             C->>U: move frame [0x01 open / 0x04 close] plus SafetyCounter (seed + elapsed/500 ms)
             C->>U: every 1 s read Position (1402), cease at the limit (open 1, closed 0 or 14)
         end
         Note right of U: motor withheld about 3 s until the counter validates, then 1402 bit 7 is set
+        U--)A: real unit 1402 pushes, moving 030c then 230c, at the limit 2308 then 1300 open or 0300 closed
         C->>U: at 3 s read 1402, SafetyCounterValid still clear means abort to STOP
         Note over C,U: after about 3 s the pop-top travels while frames continue
         C->>U: STOP frame [0x00] on release, limit, abort or the 30 s cap (always sent)
@@ -872,7 +921,29 @@ with four consecutive frames carrying the same counter. Without terminal 15 the 
 controls ("Switch on the ignition"). The no-pre-arm stream is from the 2026-08-30 decompile
 cross-check (#150). The heartbeat during the move follows the app (decompile + the ``roof-hold``
 recording, #235); it replaced the #198 no-heartbeat handover. **Mock-tested only**: ``calictl`` has never driven
-the real motor. See `lighting-energy-water-sat-roof.md (Roof)
+the real motor.
+
+**CAPTURE 2026-10-10** (the real app on the real unit, the owner's finger on the button, ignition
+on, stationary, a full open and a full close; evidence-ledger 2026-10-10 roof row):
+
+* **Heartbeat.** The app's ``1003`` heartbeat ticks through the whole move. This **confirms** the
+  #235 contract above (``calictl``'s roof path ticks it too).
+* **Stream.** With the roof screen open and nothing pressed, the app streams STOP frames
+  ``00 <counter>`` every ~0.45 s. A press switches the direction byte to ``01`` (open) or ``04``
+  (close) and continues the **same** counter: the first move frame repeats the last STOP's value,
+  then ``+1`` per frame every ~0.33–0.45 s. Release returns to the STOP stream. This
+  **contradicts** the 2026-09-16 lab reading above (about 8 frames/s while held, four frames per
+  counter value): on the real unit every frame advances the counter.
+* **First press.** The first open press after the screen opened got ``1402`` = ``0302``
+  (closed, counter valid, InfoPopUp 2). The app showed its pre-open safety checklist dialog and the
+  roof did not move. After OK, a fresh press moved it. (The InfoPopUp names are owned by
+  ``alert-states.md``; only the wire codes are recorded here.)
+* **Travel.** ``1402`` while moving: ``030c`` → ``230c`` (Position 2 = between, InfoPopUp 12). At
+  the end of travel ``2308`` (InfoPopUp 8), then ``1300`` (Position 1, open) or ``0300``
+  (Position 0, closed). A release mid-travel gave ``2303`` → ``2300``. Opening took ~28 s of hold,
+  closing ~23 s.
+
+See `lighting-energy-water-sat-roof.md (Roof)
 <https://ckeller42.github.io/open-california/business-logic/lighting-energy-water-sat-roof.html>`_
 and `alert-states.md
 <https://ckeller42.github.io/open-california/business-logic/alert-states.html>`_.
@@ -922,7 +993,9 @@ Range validation and the 0x0E link drop
 The cooler observation dates from 2026-07-05, **before** the ``1003`` heartbeat existed, and has not
 been re-tested: since ruling R1 (2026-10-06) ``State=3`` is the app's own leave-unchanged value in
 the cooler level, mode and timer frames, ``CONTROL_RANGES`` admits ``{0, 1, 3}``, and the first live
-cooler write of that frame is the open van check (#230). A ``power`` command is always 0 or 1.
+cooler write of that frame is the open van check (#230). On 2026-10-10 the real app sent that
+frame (cooler level, quiet mode and timer, ``State=3``) to the real unit under its heartbeat and
+the unit accepted it (CAPTURE, evidence-ledger 2026-10-10). A ``power`` command is always 0 or 1.
 The app's state fields carry the same bounds (``sg.a(default, max)`` wrappers), so the app never
 emits out-of-range values. Status ``live-verified`` refers to the on-device rejections. See
 `DECISIONS.md <https://ckeller42.github.io/open-california/business-logic/DECISIONS.html>`_
@@ -1110,7 +1183,21 @@ stable. A 180 s spike (2026-07-13) held 100 % uptime with 0 drops, and locking t
 drop it. A one-off 2026-07-13 outage had a different root cause: **Bluetooth had been disabled on
 the unit itself**, so it stayed unreachable for days even though the van was in use. That is why
 ``ConnectionUnavailable``'s message lists "Bluetooth disabled in the unit's settings" as a cause
-that will not resolve by itself. See `value-freshness.md
+that will not resolve by itself.
+
+**Several centrals at once (CAPTURE 2026-10-10).** The unit served three centrals at the same
+time: the phone app holding a link, buspi polling (99 clean connect / read / release cycles in an
+hour, no errors) and the ESP32 satellite. While parked, the unit dropped the satellite's held link
+(HCI ``0x13`` ~15–20 s after each connect) but **not** the app's held link (46 min) and **not**
+buspi's held persistent session (3 min with a viewer, 11:45). **Root cause found, fix in PR:**
+right after connect the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247).
+BlueZ and Android answer it. The satellite's NimBLE was built without a GATT server (in IDF v6.1
+``BT_NIMBLE_GATT_SERVER`` depends on ``BT_NIMBLE_ROLE_PERIPHERAL``, which was off), so esp-nimble
+silently drops the request, and the unit's ATT transaction timeout then ends the link (``0x13``).
+The fix enables both options in the satellite's ``sdkconfig``. It is a missing ATT response, not
+a parked-unit policy against idle links.
+
+The connection failure modes are in `value-freshness.md
 <https://ckeller42.github.io/open-california/business-logic/value-freshness.html>`_ ("Connection
 failure modes").
 
@@ -1189,8 +1276,10 @@ ESP32 satellite
 The satellite (``firmware/``, the M5Stack CoreS3) is a second, independent implementation: its own
 NimBLE stack, its own WiFi and HTTP server, no connection to buspi. Its flows are drawn here
 because they reuse the same protocol and the same frames. The firmware is proven on a Linux host
-build against the Bumble fake unit, in QEMU, and on a CoreS3 on a bench against the mock unit. It
-has **never talked to the real camper unit**, so all three flows are ``mock-only``. Details:
+build against the Bumble fake unit, in QEMU, and on a CoreS3 on a bench against the mock unit.
+Since 2026-10-08 it has also bonded to the real camper unit and run commands on it (evidence-ledger
+2026-10-08 to 2026-10-10); the three flows keep the ``mock-only`` status until that evidence is
+folded into them. Details:
 :doc:`firmware` and the owner guide :doc:`howto-esp-wifi-setup`.
 
 .. spec:: Satellite pairing from the USB console, then the bonded session
@@ -1260,7 +1349,10 @@ has **never talked to the real camper unit**, so all three flows are ``mock-only
 session is tested on a scripted transport (``test_session_fake.py``) and, over real NimBLE, against
 the Bumble fake unit (``test_host_e2e.py``). ``make cali-host-jw`` rebuilds the late-I/O-capability
 bug on purpose and the fake unit refuses it. The CoreS3 bench ran the read side against the mock
-unit over real BLE. Never run against the real unit (#157 is the van session). See :doc:`firmware`
+unit over real BLE. On the real unit (2026-10-10) the parked unit drops the satellite's held link
+~15–20 s after each connect while it keeps the app's and buspi's links: the satellite did not
+answer the unit's ATT Exchange MTU Request (no GATT server built in); root cause found, fix in PR
+(:need:`S_SEQ_SLEEP`). See :doc:`firmware`
 ("Console line protocol", "Design rulings worth knowing").
 
 .. spec:: Satellite WiFi setup through the hotspot and captive portal
@@ -1370,6 +1462,10 @@ confirmed (`howto-esp-wifi-setup.md` status box and :doc:`firmware`, "Network wa
      after one went out answers ``200`` with ``applied`` null and ``"unconfirmed": true``: the
      parked unit kicks idle links, and a frame it applied can lose its ACK to the kick (field
      2026-10-09, #264), so the page keeps watching the unit's state across the reconnect (20 s).
+     The kick is seen on the satellite's link only; the parked unit keeps the app's and buspi's
+     held links (CAPTURE 2026-10-10): the satellite left the unit's ATT Exchange MTU Request
+     unanswered, so the unit's ATT timeout ended its link. Root cause found, fix in PR
+     (:need:`S_SEQ_SLEEP`).
 
 .. mermaid::
 
@@ -1424,7 +1520,11 @@ never sees a roof or unknown write). The sequencer is tested on a scripted trans
 (``test_session_fake.py``), the endpoint on a fake sequencer (``test_web_handlers.py``), and every
 app-recorded cooler, camping, lighting, heater and energy action went through ``POST /api/command``
 to the mock unit **byte-exact** on a CoreS3 bench on 2026-10-07, with the roof, the wake-up edits
-and stairs refused and zero ``1401`` writes. It has never switched anything in a real camper, and the
-cooler level, mode and timer frames carry the same open ``State=3`` van check as calictl's (#230).
+and stairs refused and zero ``1401`` writes. On the real unit, a satellite write actuated
+(kitchen ambient → 0, 2026-10-09), and on 2026-10-10, with the van parked and locked, the
+``"unconfirmed": true`` answer (#271) fired: the 5th of a series of no-op lighting writes lost its
+ACK to the parked unit's kick and was answered ``200`` with ``applied`` null and
+``"unconfirmed": true`` (evidence-ledger 2026-10-10). The cooler ``State=3`` frames are the ones
+the real app sent to the real unit on 2026-10-10 (:need:`S_SEQ_COOLER`).
 See :doc:`firmware` ("Control path") and `evidence-ledger.md
 <https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html>`_.

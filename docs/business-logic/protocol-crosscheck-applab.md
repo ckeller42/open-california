@@ -28,7 +28,7 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 
 | Claim | Observation | Verdict |
 |---|---|---|
-| `1003` = 4-byte BE +1 counter, seed 0 | writes to 0x0016 start at `00000000` and increment by 1 | OBSERVED |
+| `1003` = 4-byte BE +1 counter, seed 0 | writes to 0x0016 start at `00000000` and increment by 1 | OBSERVED in the lab; **real unit 2026-10-10: seed 0 CONTRADICTED** (see the real-unit section below) |
 | cadence 500 ms (`zf/d J0=500L`) | wire cadence **0.75–0.77 s** (timer + GATT round-trip; write-with-response serialised) | OBSERVED — doc notes observed cadence |
 | the unit drops a link with no heartbeat ~15 s | unit-side; the fake unit implements it (needed: Android kept a stale bonded link that blocked advertising → "No vehicle found") | NOT TESTABLE (modelled) |
 | a control write is a full-packet frame | every write is the full frame length (6 / 1 / 16 / 1 / 5 bytes) | OBSERVED |
@@ -60,13 +60,13 @@ App version 5.0.8.3028 (`apkeep`, apk-pure), emulator API 34 arm64, fake unit se
 |---|---|---|
 | needs ignition ON | page shows "Switch on the ignition …" and no controls while `TerminalOneFive=0`; 2026-09-27 (screen 41) the full dialog: "Switch on the ignition — Please switch on the ignition to operate the pop-up roof." [Not now] | OBSERVED |
 | (new 2026-09-27) screen entry writes a probe frame | opening the roof page (ignition on, `Position=1`, no button pressed) → `WRITE roof 0000097b00` (Up=0 / Down=0 + a SafetyCounter); the counter then streams while the page stays open (S_SEQ_ROOF). Not investigated further; calictl starts its counter on the press instead (hence its ~3 s withhold after the press) | OBSERVED (APP-OBSERVED 2026-09-27) |
-| app streams `[dir][counter]` @ ~500 ms while held | page open (no press) streams `[00][counter]` every ~500 ms; **while held the rate is ~8 frames/s** with the counter still +1 per ~500 ms (same value on 4 consecutive frames) | **CONTRADICTED on cadence → S_SEQ_ROOF updated**; the mock's per-frame +1 validity rule was wrong and made the app abort after 2 `01` frames — fixed to monotonic-and-advancing |
+| app streams `[dir][counter]` @ ~500 ms while held | page open (no press) streams `[00][counter]` every ~500 ms; **while held the rate is ~8 frames/s** with the counter still +1 per ~500 ms (same value on 4 consecutive frames) | **CONTRADICTED on cadence → S_SEQ_ROOF updated**; the mock's per-frame +1 validity rule was wrong and made the app abort after 2 `01` frames — fixed to monotonic-and-advancing. **Real unit 2026-10-10: the lab cadence is itself CONTRADICTED** — +1 on every frame, ~0.33–0.45 s (see below) |
 | direction bytes open `01` / stop `00` / close `04` | all three seen: `00` idle/pre-validation, `01` while OPEN held, `04` while CLOSE held (the app fell back to `00` once `Position` reached 0) | OBSERVED |
 | press-and-hold OPEN moves the roof; app stops at the limit | held 12 s: `01` frames at ~8/s until the fake unit reported `Position=1` (open), then the app itself fell back to `00` frames while still held; page text "The roof is closed" → "The roof is open" | OBSERVED (app-side auto-stop at the limit confirmed) |
 | stale `SafetyCounterValid=1` with no stream | app reports "Function in use — another user is already using this function" when the unit still says valid=1 while the app has not validated its own counter | OBSERVED → mock now expires validity 1.5 s after the last frame |
 | unit reports `SafetyCounterValid` (1402 bit 7) | unit-side; the app refuses to move until the fake unit raises it | NOT TESTABLE (modelled) |
 | InfoPopUp 1/4/5/6/7/10/11 dialogs | all seven dialogs with the tabled texts | OBSERVED |
-| InfoPopUp 2/3/9/12 | 2/3/12 → tile "Function currently in use", 9 → "Only possible when stationary" | OBSERVED → added; **DECOMPILE (decompile cross-check 2026-10-06, enigma `46f982d3`)**: dashboard tile `defpackage/i1.java:1652-1673` — "in use" = CALIFORNIA_7 && (InfoPopUp ∈ {2,3,12} or `SafetyCounterValid`), so a stale valid=1 alone also shows it |
+| InfoPopUp 2/3/9/12 | (real unit 2026-10-10: on the roof page, `InfoPopUp` 2 on the first open press opened the pre-open safety checklist dialog, see below) 2/3/12 → tile "Function currently in use", 9 → "Only possible when stationary" | OBSERVED → added; **DECOMPILE (decompile cross-check 2026-10-06, enigma `46f982d3`)**: dashboard tile `defpackage/i1.java:1652-1673` — "in use" = CALIFORNIA_7 && (InfoPopUp ∈ {2,3,12} or `SafetyCounterValid`), so a stale valid=1 alone also shows it |
 | 8/13/14 | nothing shown | OBSERVED |
 
 ## Fault dialogs and equipment gating (fake unit `set <fn> <Field>=<v>` while the app watches)
@@ -219,3 +219,34 @@ Other observations of that session (CONSISTENT unless noted):
 | the app reads its lighting config from the REQUEST_CONFIG reply | cold app restart + re-pair against a mock holding favourite 1, door on, wake-up 07:00 on: tile A filled, door row Enabled (lighting + camping page), wake-up page 07:00 with the switch on | OBSERVED (Mode 12 / Mode 20 / Mode 16 PN 8 all read) |
 | (new) wake-up switch clock check | every switch tap shows "Different time settings." — App: phone date/time, Vehicle: the 1004 RTC, "Please check the time in the vehicle and on your smartphone to make sure that all the functions operate correctly." [OK]; the write is sent regardless | OBSERVED (the fake's RTC is the baseline's 2026-08-28) |
 | ECO follows `PvInstalled` | first visit Normal / Max, second visit ECO / Normal / Max | OBSERVED, CONSISTENT (stale first read) |
+
+## Real app on the real unit (CAPTURE 2026-10-10)
+
+The lab claims above, checked against the **real** CaliforniaOnTour app on a Fairphone 6 talking
+to the van's unit (AmbSw `0410`, CommunicationVersion 2), Android HCI snoop pulled over adb from
+buspi (decoded ATT kept on buspi, not committed; evidence-ledger 2026-10-10). Verdicts as above:
+**OBSERVED** (the same on the real unit), **CONSISTENT**, **CONTRADICTED** (by the real unit).
+
+| Lab / doc claim | Real app on the real unit | Verdict |
+|---|---|---|
+| connect → discoverServices → MTU, then read `1002` | GATT cached: **no discovery**; reads `1002`, `1001`, `1004` | OBSERVED (read order); discovery is skipped with a cached table |
+| subscribe-all = 12 CCCDs | **8** CCCD `0100` writes: `1702`, `1502`, `1102`, `1602`, `1004`, `1302`, `1402`, `1202` (that order) — the fitted functions + `1004` | CONTRADICTED for this van (12 in the lab = a fake with every function fitted); calictl's 12 are accepted |
+| every state char read once after subscribing | reads `1702`, `1102`, `1001`, `1602`, `1302`, `1004`, `f001`, `1402`, `1502`, `1202` | OBSERVED (fitted functions only) |
+| `1003` cadence ~0.75–0.77 s | 0.76–0.79 s, write-request, for as long as the app is in the foreground | OBSERVED |
+| `1003` seed 0 | large values (`0x00049363…`, later `0x00061b62`), not 0 at connect | **CONTRADICTED** (lab + "seed 0" decompile note); CONSISTENT with the call-stack reading (random seed 1–1 000 000). Whether it continues across links is not settled by two values |
+| the unit drops a link with no heartbeat ~15 s | not tested (the app always beats). With the beat, parked + locked, the unit held the app's link 46 min (93 s of it locked). Backgrounding the app → the **phone** disconnects (HCI `0x13`) | NOT TESTED (drop); the held link is new |
+| neutral flush after every write | cooler `ff771e3e1f1f`, camping `ff` ~500 ms after each write; lighting commit `0e00…` | OBSERVED |
+| per-function frames (cooler, camping, lighting) = `control.build` | every non-motor action byte-identical (frame list: `control-and-actuation.md` recipes table, evidence-ledger 2026-10-10) | OBSERVED |
+| cooler `State=3` level / mode / timer frames (van check #230) | the app's frames reached the real unit, no `0x0E`, level actuated | OBSERVED (the frame works on the unit; calictl itself has not sent it yet) |
+| lamp on = one nibble at 11 DEFAULT | group switches (Reading / Kitchen / Pop-up roof / Exterior) = **one** `0904…` SET_BRIGHTNESS frame, the group's zones at 11 on / 0 off | OBSERVED |
+| Lighting screen open → REQUEST_CONFIG | `0d0c…` + commit on opening the screen | OBSERVED |
+| sliding-door row = lighting DOOR_CONTACT | the camping screen's sliding-door toggle wrote `1501` `0810…01` / `…00` | OBSERVED |
+| camping lights / USB rows write nothing (open item) | USB `f3` / `f7`, front-door lights `5f` / `0f` written from the camping screen | OBSERVED: the rows do write |
+| roof page pre-streams `[00][counter]` | STOP frames `00 00 <counter>` every ~0.45 s with nothing pressed | OBSERVED |
+| roof: while held ~8 frames/s, 4 frames per counter value | a press switches to `01` / `04` with the **same** counter (the first move frame repeats the last STOP value), then **+1 per frame**, ~0.33–0.45 s; release → STOP stream | **CONTRADICTED** (lab cadence); calictl seeds a fresh counter at the press, the app continues the screen's counter (divergence, owner decision pending) |
+| roof: the app's heartbeat ticks during the move (decompile + `roof-hold`, #235) | the `1003` heartbeat ran through the full open and the full close | OBSERVED — CONSISTENT with calictl's roof path (heartbeat on) |
+| roof `InfoPopUp` 2 → "Function currently in use" tile | first open press → `1402` `0302` → the app's **pre-open safety checklist dialog**, no motion; after OK a fresh press moved the roof | CONTRADICTED in part on the roof page (naming is owned by `alert-states.md`) |
+| roof `InfoPopUp` 8 / 12 | moving `030c` → `230c` (Position 2, InfoPopUp 12); end of travel `2308` (InfoPopUp 8) → `1300` open / `0300` closed; release mid-travel `2303` → `2300`. Open ~28 s, close ~23 s | OBSERVED (wire codes; first real travel times) |
+| one central at a time ("the phone app holds the single slot") | the app's link, buspi's polling (99 clean cycles in an hour) and the ESP32 satellite coexisted | **CONTRADICTED** |
+| the parked unit kicks idle held links (ESP, 2026-10-09) | parked: the ESP's link dropped (HCI `0x13`, ~15–20 s after connect), the app's link and buspi's held session (3 min, 11:45) were **not** dropped. Root cause: the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247) after connect; BlueZ and Android answer, the ESP's NimBLE (built without a GATT server: IDF v6.1 `BT_NIMBLE_GATT_SERVER` needs `BT_NIMBLE_ROLE_PERIPHERAL`, which was off) silently drops it, and the unit's ATT timeout ends the link (`0x13`) | **CONTRADICTED** as a unit policy: an ESP-side bug. Root cause found, fix in PR (`sdkconfig` ROLE_PERIPHERAL + GATT_SERVER) |
+| ESP `"unconfirmed": true` (#271) | fired on the real parked unit: a no-op lighting write lost its ACK to the kick → `200 {"applied":null,"unconfirmed":true}` | OBSERVED |
