@@ -28,7 +28,7 @@ Now [Heartbeat-armed control write](https://ckeller42.github.io/open-california/
 ## 2. Lighting SET
 
 Now [Lighting SET and neutral flush](https://ckeller42.github.io/open-california/protocol-sequences.html#lighting-set-and-neutral-flush)
-(`S_SEQ_LIGHT_COMMIT`). That section also keeps the REQUEST_CONFIG frame
+(`S_SEQ_LIGHT_COMMIT`). That section also keeps the [REQUEST_CONFIG](https://ckeller42.github.io/open-california/glossary.html#term-REQUEST_CONFIG) frame
 `0d0c000000000000eeeeeeeeeeeeeeee` as the RE record: retired as a write preamble, and sent today
 only by the daemon to read the wake-up config before an edit (ruling R5). The full lighting history is in
 [control-and-actuation.md](control-and-actuation.md) §4.
@@ -37,7 +37,7 @@ only by the daemon to read the wake-up config before an edit (ruling R5). The fu
 
 Now [Roof actuation](https://ckeller42.github.io/open-california/protocol-sequences.html#roof-actuation-press-and-hold-safetycounter-gated)
 (`S_SEQ_ROOF`, status mock-only). It covers the press-and-hold stream, the app-generated
-SafetyCounter, the ~3 s unit self-gate, the app-faithful arm (1003 heartbeat ticking, no pre-arm
+[SafetyCounter](https://ckeller42.github.io/open-california/glossary.html#term-SafetyCounter), the ~3 s unit self-gate, the app-faithful arm ([1003 heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat) ticking, no pre-arm
 delay, #150/#235, not yet device-verified), the move running inside the live session, the
 per-press stop token (a release before the press gets the lock cancels it) and the 1000 ms
 re-press debounce.

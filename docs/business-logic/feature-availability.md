@@ -15,7 +15,7 @@ repeated here except where directly relevant to the availability question.
 
 ## TL;DR
 
-There is **no central "capabilities" blob, no capabilities-request command (the lighting
+There is **no [central](https://ckeller42.github.io/open-california/glossary.html#term-Central) "capabilities" blob, no capabilities-request command (the lighting
 `REQUEST_CONFIG`, Mode 12, only pulls the lighting screen's own config dump), and no static
 VIN/model → feature table** anywhere in the app. Instead:
 
@@ -182,7 +182,7 @@ unconditionally available on any unit that answers BLE at all:
   `zf/d.java:160-161,363-366`). Since it rides on the always-true General handshake, treat
   LevelIndicator as always available too. **Caveat (APP-OBSERVED 2026-09-27):** the app's
   *dedicated* Level Indicator screen showed only "No data available. The ignition needs to be
-  turned on for data." even with 1004 `TerminalOneFive=1` and roll/pitch set on the fake unit —
+  turned on for data." even with 1004 `TerminalOneFive=1` and roll/pitch set on the [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit) —
   its ignition gate is not 1004 terminal-15. **DECOMPILE-SETTLED (decompile cross-check 2026-10-06, enigma `46f982d3`):** the gate is 1004
   `CarLevelPopUp` (1 = "No data / ignition" card, 2 = "Please slow down" dialog; `zf/d.java:328`). The data
   itself (1004) stays always readable.

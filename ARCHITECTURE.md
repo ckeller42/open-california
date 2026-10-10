@@ -8,7 +8,7 @@ provenance behind any claim, follow the links into
 
 ## 1. Introduction and goals
 
-`open-california` reads all telemetry of the VW California T7 camper unit over Bluetooth LE and
+`open-california` reads all telemetry of the VW California T7 {term}`camper unit` over Bluetooth LE and
 sends control writes to it, from a Raspberry Pi (`buspi`). It feeds Home Assistant (MQTT) and
 Grafana (InfluxDB). It is an independent reverse-engineering project for the owner's own vehicle,
 not affiliated with Volkswagen.
@@ -27,11 +27,11 @@ map, and the downstream consumers Home Assistant and Grafana.
 ## 2. Constraints
 
 - **`hci0` on the Pi is shared with other readers** — `serve` is the single BLE owner on the Pi, holds one link to the unit, and an `asyncio.Lock` serialises all access. The unit itself accepts several centrals at once
-- **The unit expects every central to answer its ATT Exchange MTU Request** — it sends one on connect and drops the link (HCI `0x13`) when it is unanswered for 30 s. A held link without heartbeats is not dropped
+- **The unit expects every central to answer its ATT Exchange MTU Request** — it sends one on connect and drops the link (HCI `0x13`) when it is unanswered for 30 s. A {term}`held link <Persistent session>` without heartbeats is not dropped
 - **Runtime `calictl/*` imports only the standard library at import time** — The suite runs with no BLE or MQTT installed. `bleak`, `paho`, `influxdb_client` and `yaml` import lazily
-- **The BLE codec is MSB-first and control frames are full-packet** — That is how the unit and the vendor app behave. Every field is resent, and unchanged fields carry the leave-unchanged sentinel
+- **The BLE codec is MSB-first and control frames are full-packet** — That is how the unit and the vendor app behave. Every field is resent, and unchanged fields carry the {term}`leave-unchanged sentinel <Sentinel>`
 - **No vendor material in the repository** — The APK, decompiled sources and manuals are never committed. VW material appears as citations only
-- **The unit deep-sleeps when parked** — Buspi cannot connect for days until physical use wakes it
+- **The unit deep-sleeps when parked** — {term}`Buspi` cannot connect for days until physical use wakes it
 - **The web UI is un-built JavaScript** — `tsc --checkJs` is its hard gate, since no build step would catch an undeclared identifier
 - **Runs on a Raspberry Pi with Python 3.11 to 3.13** — The deployment target is buspi
 
@@ -74,7 +74,7 @@ flowchart TB
 ```
 
 - **Camper unit**
-  - *Interface:* BLE GATT characteristics, `1003` liveness heartbeat for writes
+  - *Interface:* BLE GATT characteristics, `1003` {term}`liveness heartbeat <Heartbeat>` for writes
   - *Direction:* read and write
 - **Home Assistant**
   - *Interface:* MQTT discovery, state topics and command topics via Mosquitto
@@ -83,7 +83,7 @@ flowchart TB
   - *Interface:* `influx.numeric_fields` written to a bucket, queried by dashboards
   - *Direction:* write only from here
 - **Vendor app**
-  - *Interface:* a live concurrent BLE central on the owner's phone (CaliforniaOnTour 5.4.0). No interface to calictl: it is the reference the protocol was reverse-engineered from, the emulator lab replays its frames against calictl, and its HCI snoop log from the real phone is captured over wireless adb (skill `phone-app-lab`)
+  - *Interface:* a live concurrent BLE {term}`central` on the owner's phone (CaliforniaOnTour 5.4.0). No interface to calictl: it is the reference the protocol was reverse-engineered from, the emulator lab replays its frames against calictl, and its {term}`HCI snoop` log from the real phone is captured over wireless adb (skill `phone-app-lab`)
   - *Direction:* evidence only
 - **ESP32 satellite**
   - *Interface:* its own BLE bond to the unit, its own web UI and API over WiFi
@@ -99,7 +99,7 @@ installed on the reference van, so they are verified statically only.
 ## 4. Solution strategy
 
 - **Truthful values** — A dictionary-driven codec: `protocol/dictionary.yaml` is the source of truth for bit layout, and manual offsets live only in `overrides.py`. A separate `semantics` layer gives fields meaning, so decode never guesses.
-- **Drift is caught** — A signal catalog (`protocol/signals.yaml`) records a `surface` or `omit` decision for every field, enforced by `tests/test_signal_coverage.py` and `tools.audit_signals`.
+- **Drift is caught** — A {term}`signal catalog <Catalog>` (`protocol/signals.yaml`) records a `surface` or `omit` decision for every field, enforced by `tests/test_signal_coverage.py` and `tools.audit_signals`.
 - **Safe actuation** — Control frames are built by `control.BUILDERS`, validated by `protocol.encode` against bit widths and curated ranges, and written under the single BLE lock while the `1003` heartbeat ticks. Readback is a write-through echo, so it is never reported as proof.
 - **One BLE owner** — One daemon (`serve`) owns the connection. The web UI, MQTT and InfluxDB are sinks inside that process.
 - **Absent unit** — `serve` persists the last state with an "as of" timestamp, and the UI shows an offline banner. `freshness` holds the last plausible value for measurement-gated fields such as water.
@@ -158,7 +158,7 @@ flowchart TB
   - *Responsibility:* Independent implementation of pairing, read and a restricted write path, tied to calictl by generated headers and golden vectors. Bonded to the real unit next to buspi; it never talks to buspi.
 - **Tooling and mocks**
   - *Technology:* Python, Bumble
-  - *Responsibility:* The mock unit (a BLE peripheral with real SMP pairing), the real app in an emulator, and a trace comparer. They make the unit reproducible.
+  - *Responsibility:* The {term}`mock unit` (a BLE peripheral with real SMP pairing), the real app in an emulator, and a trace comparer. They make the unit reproducible.
 
 The sinks (Mosquitto, Home Assistant, InfluxDB, Grafana) are deployed next to the daemon but are
 off-the-shelf components. They are drawn grey because this repository configures them and does not
@@ -240,7 +240,7 @@ One daemon (`serve.py`) owns buspi's BLE link to the unit and drives that pipeli
 1. **`device.py` — the BLE owner.** Holds buspi's one link to the unit (an `asyncio.Lock`), reads
    each characteristic's raw frame, and ticks the `1003` liveness heartbeat, which arms control
    writes (a held link without it is not dropped). Water is measurement-gated, not heartbeat-driven:
-   the unit reports 1 L whenever it is not measuring, and `freshness.py` holds the last good
+   the unit reports 1 L whenever it is {term}`not measuring <Water latch>`, and `freshness.py` holds the last good
    reading. Nothing else on buspi opens a second BLE connection.
 2. **`protocol.py` — the codec.** Decodes a raw frame into a field dict using the bit layout in
    `protocol/dictionary.yaml` (MSB-first), and encodes control frames the same way. `overrides.py`
@@ -263,11 +263,11 @@ connection; not yet device-verified), `observer.py` / `automation.py` (passive c
 ### The ESP32 satellite
 
 `firmware/` is a second, independent implementation of the pairing half of this picture: an
-ESP32-S3 (M5Stack CoreS3) satellite that pairs with the camper unit over its own NimBLE stack and
+ESP32-S3 (M5Stack {term}`CoreS3 <Satellite>`) satellite that pairs with the camper unit over its own NimBLE stack and
 reads its state without going through buspi at all. It reuses the *design*, not the Python code —
 `calictl/pairing.py`'s state machine is ported to platform-free C (`firmware/components/cali_core`)
 against the same golden vectors, and the frame codec is the same generated C already used for
-codec parity (`csrc/`, issue #156) — so the dictionary stays the single source of truth for both
+codec parity (`csrc/`, issue #156) — so the {term}`dictionary` stays the single source of truth for both
 consumers. It writes the same control frames as calictl for five functions — cooler, camping mode,
 lighting, air heater, energy — generated from `calictl/control.py` (`csrc/control_consts.h`) and
 held byte-identical by golden vectors (`tests/vectors/control.json`, a C twin in
@@ -278,9 +278,9 @@ side and the control path are proven on a Linux host build against a fake unit, 
 real CoreS3 against the Bumble mock unit, and the satellite has been bonded to the real camper unit
 since 2026-10-08 (paired while buspi stayed connected): it sends calictl's frames for the cooler,
 camping mode, lighting, air heater and energy mode (device-verified on the real unit so far: cooler,
-wake-up light and door contact), runs the same water guard as calictl, and answers a
+wake-up light and {term}`door contact`), runs the same water guard as calictl, and answers a
 write whose link dropped after the frame went out as *unconfirmed* (#271). It holds its link while
-the van is parked: the unit's ATT MTU request is answered since NimBLE keeps its GATT server
+the van is parked: the unit's ATT MTU request is answered since NimBLE keeps its {term}`GATT server`
 (#279), so #266's paced reconnect was removed: a dropped link takes the 1 s→60 s backoff. It
 also joins WiFi on its own: a setup hotspot + captive portal takes the home network's credentials,
 then it serves the calictl UI (with a Device status screen), a WiFi setup page (`/device`) and `/api/state` (the decoded `SNAP` plus pairing/link/WiFi)
@@ -310,8 +310,8 @@ depicts, so they are not repeated here. Read them in [Protocol sequences](https:
 - **Heartbeat-armed write** (`S_SEQ_ACTUATE`): the `1003` heartbeat spanning one control write, cold and persistent paths
 - **Cooler command** (`S_SEQ_COOLER`): the app-faithful frame (untargeted fields at leave-unchanged), the applied-check
 - **Lighting** (`S_SEQ_LIGHT_COMMIT`): the bare brightness write and its commit frame on an awake unit
-- **Wake-up light** (`S_SEQ_WAKEUP`): a config edit, the REQUEST_CONFIG pull when the config is unknown, config latched from the unit's frames
-- **Roof** (`S_SEQ_ROOF`): press-and-hold streaming with a live heartbeat, the SafetyCounter gate, the release stop
+- **Wake-up light** (`S_SEQ_WAKEUP`): a config edit, the {term}`REQUEST_CONFIG` pull when the config is unknown, config latched from the unit's frames
+- **Roof** (`S_SEQ_ROOF`): press-and-hold streaming with a live heartbeat, the {term}`SafetyCounter` gate, the release stop
 - **Range rejection** (`S_SEQ_REJECT`): a value refused by `protocol.encode` before anything is written
 - **Satellite pairing** (`S_SEQ_ESP_PAIRING`): the ESP32 pairs from its USB console, then holds the bonded session
 - **Satellite WiFi** (`S_SEQ_ESP_WIFI`): setup hotspot, captive portal, station join and retry
@@ -345,7 +345,7 @@ it, with one exception: the cooler's night-schedule hours, which the unit takes 
 *unrelated* defaults once sent a garbage command; the leave-unchanged value is what the unit
 ignores.) `protocol.encode` validates each value against its bit-width and a curated semantic range
 before anything is written. `device.actuate` then writes the frame while the `1003` heartbeat ticks —
-the firmware's arm gate (issue #2). Actuation is **one-shot arm**: the load latches, so the heartbeat
+the firmware's arm gate (issue #2). Actuation is **one-shot arm**: the load {term}`latches <Latch>`, so the heartbeat
 only needs to span the write window:
 
 ```mermaid
@@ -441,7 +441,7 @@ only the camper-unit part.
   - *How it works:* Each claim is tagged DEVICE, CAPTURE, DECOMPILE or UNVERIFIED. A buildable command without a tier row fails CI, and so does an uncited app recording.
   - *Where:* [evidence ledger](https://ckeller42.github.io/open-california/business-logic/evidence-ledger.html)
 - **Control safety**
-  - *How it works:* Full-packet frames, width and range validation in `protocol.encode`, preconditions per command, a single lock, and an applied-check that treats readback as an echo.
+  - *How it works:* {term}`Full-packet` frames, width and range validation in `protocol.encode`, preconditions per command, a single lock, and an applied-check that treats readback as an echo.
   - *Where:* `control`, `protocol`, `postcheck`
 - **Freshness**
   - *How it works:* Reads go stale and the unit deep-sleeps. The last state is persisted with an "as of" time, and implausible drops (water) are held and flagged stale.
@@ -483,7 +483,7 @@ the unit's on-screen display, not a guess. See [`signals.md`](https://ckeller42.
    `push_dashboard.py`) and Home Assistant.
 4. **Audit** — `python3 -m tools.audit_signals --report`.
 5. **Keep the suite green** — `python3 -m pytest tests/ -q`. What each test layer (mock unit, GUI
-   e2e, real-unit trace replay, the pairing harnesses, the app lab, C parity) proves and which CI job
+   e2e, real-unit trace replay, the pairing harnesses, the {term}`app lab`, C parity) proves and which CI job
    runs it: [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html).
 
 ### Invariants (do not break these)

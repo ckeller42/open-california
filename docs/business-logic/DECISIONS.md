@@ -10,16 +10,16 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ## 2026-10-10 — the unit serves several centrals at once
 
-CAPTURE 2026-10-10: the phone app holding a link, buspi polling (99 clean cycles in an hour) and the
+CAPTURE 2026-10-10: the phone app holding a link, [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi) polling (99 clean cycles in an hour) and the
 ESP satellite were all served at the same time; DEVICE 2026-10-08 had already shown two links. The
 "single connection slot" model is retired from the docs. calictl still treats the link as exclusive
 on its own side (`serve` is buspi's single BLE owner).
 
 ## 2026-10-10 — ESP keeps NimBLE's GATT server: the parked "kick" was an unanswered MTU request (#279)
 
-Right after every connect the unit sends the central an ATT Exchange MTU Request and ends the link
+Right after every connect the unit sends the [central](https://ckeller42.github.io/open-california/glossary.html#term-Central) an ATT [Exchange MTU Request](https://ckeller42.github.io/open-california/glossary.html#term-MTU-exchange) and ends the link
 (HCI `0x13`) when no answer comes within its 30 s ATT timeout. BlueZ and Android answer; the ESP's
-central-only build had no GATT server, so the request went unanswered and the parked unit dropped
+central-only build had no [GATT server](https://ckeller42.github.io/open-california/glossary.html#term-GATT-server), so the request went unanswered and the parked unit dropped
 the ESP ~30 s after every connect. That was read as a parked-unit policy against idle links
 (2026-10-09); it is not. Fix `faaf7b0`: the peripheral role is on for its GATT server only (no
 advertising, no service). The ESP's parked link holds since. The #266 reconnect pacing stays as a
@@ -29,14 +29,14 @@ fallback.
 
 The app's read showed 20 L while buspi and the ESP held 22 L for weeks: grey reads 0 on every frame
 on this van, so "fresh dropped, grey frozen" held every real drop. The guard now holds only a drop
-to ≤ 1 L (`WATER_LATCH_MAX_L`), the unit's "not measuring" value. A measurement ramps `1` → real in
+to ≤ 1 L (`WATER_LATCH_MAX_L`), the unit's "[not measuring](https://ckeller42.github.io/open-california/glossary.html#term-Water-latch)" value. A measurement ramps `1` → real in
 ~4 s, so a poll mid-ramp can adopt a wrong level: a debounce (adopt a new level only once settled)
 is in flight (#290).
 
 ## 2026-10-10 — leveling roll/pitch unavailable while the ignition is off (#282)
 
 The app shows `-.-°` with ignition off; calictl reported 0.0 from the unit's zeroed fields. calictl
-now reports `None` for `level_roll` / `level_pitch` while terminal 15 is off. The 0.01° per LSB scale
+now reports `None` for `level_roll` / `level_pitch` while [terminal 15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) is off. The 0.01° per LSB scale
 is verified (HCI 2026-07-08); the sign against the app's display is still to confirm with ignition on.
 
 ## 2026-10-10 — the battery 24 h chart is removed (owner, #287)
@@ -50,13 +50,13 @@ decision).
 Owner decision "align to original app", from the real app on the real unit (CAPTURE 2026-10-10,
 `buspi:~/applog/att-5.txt` 13:32–13:34 full open + close, `att-3.txt` 13:20–13:28 refused presses):
 while its roof **screen** is open the app streams `1401` STOP frames `00 <counter>`, +1 per ~500 ms
-tick, with the `1003` heartbeat running; a press switches the same stream to `01`/`04` at once with
+tick, with the `1003` [heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat) running; a press switches the same stream to `01`/`04` at once with
 the **same** counter (26 of 26 direction changes repeat it, both ways), so the unit has validated the
 counter before the press and the motor starts ~1.2 s later instead of after a ~3 s withhold.
 
 calictl now does the same (`R_ROOF_VIEW_STREAM`, `device.RoofStream`): the web UI's roof page posts
 `POST /api/roof {"action":"view"}` (refreshed every ~5 s; `leave` on leaving or hiding the page); the
-daemon claims the persistent session and runs the STOP stream on it; a press rides that stream, a
+daemon claims the [persistent session](https://ckeller42.github.io/open-california/glossary.html#term-Persistent-session) and runs the [STOP stream](https://ckeller42.github.io/open-california/glossary.html#term-STOP-stream) on it; a press rides that stream, a
 release switches it back to STOP. Kept on purpose: no view → the press starts its own stream (today's
 behaviour, API/CLI/HA); the view lapses after `CALICTL_ROOF_VIEW_LAPSE_S` (15 s) without a refresh and
 never streams forever (a move in flight holds it open; `leave` ends a held move with STOP); STOP is
@@ -64,7 +64,7 @@ never gated and stays lock-free; the limit auto-stop now also fires on `InfoPopU
 `2308`, ~1 s before the final Position — where the app stops); the 1000 ms re-press debounce stays (it
 only matters without a view); the app's extra 1 s re-send of the current frame while held is omitted;
 the frame tick is the app's 500 ms (the "~0.45 s, +1 per frame" first reading of the capture was the
-re-send interleaving). The mock follows the capture too: InfoPopUp 2 (pre-open checklist) on an open
+re-send interleaving). The mock follows the capture too: [InfoPopUp](https://ckeller42.github.io/open-california/glossary.html#term-InfoPopUp) 2 (pre-open checklist) on an open
 press unless one was raised within 30 s, `030c`→`230c`, `2308`→`1300`/`0300`, `2303`→`2300`, ~28 s /
 ~23 s travel, motor start ~0.25 s after a press, ~3 s withhold only for a freshly validated counter.
 With the checklist no longer a move block (entry below), the press after it is allowed.
@@ -73,9 +73,9 @@ With the checklist no longer a move block (entry below), the press after it is a
 
 ## 2026-10-10 — roof InfoPopUp 2/3/8/12 are a checklist prompt and progress codes, not "in use"
 
-HCI snoop of the real app on the real unit (owner, full open + close): **2** = the unit asks the
+[HCI snoop](https://ckeller42.github.io/open-california/glossary.html#term-HCI-snoop) of the real app on the real unit (owner, full open + close): **2** = the unit asks the
 app for its pre-open safety checklist (`dialog_info_popUpRoof_safetyCheck`), **12** moving, **8** end
-of travel, **3** stopped mid-travel. The 2026-09-16 `in_use` name (fake unit, tile text) is retired:
+of travel, **3** stopped mid-travel. The 2026-09-16 `in_use` name ([fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit), tile text) is retired:
 2 → `open_checklist` (Influx code 10, shown, never a move block — the app's flow is press →
 checklist → press again), 3/8/12 → no alert. `in_use` left `ROOF_MOVE_BLOCK` (server + web) so a
 normal move no longer refuses its own follow-up press. Table in `alert-states.md`.
@@ -92,10 +92,10 @@ zone setting); a JSON integer ≥ 2026-01-01T00:00Z or `400 bad_value`, missing 
 clock reason; **no skew check** (owner ruling R1: a wrong browser clock gives a wrong wake-up time,
 as in the app); the console cannot set it. **The config is the unit's own** — a C twin of
 `semantics.lighting_config` latches it from the unit's 1502 frames only, shown across links but
-gating per link; an edit that needs an unknown field runs calictl's REQUEST_CONFIG pull (R5) inside
+gating per link; an edit that needs an unknown field runs calictl's [REQUEST_CONFIG](https://ckeller42.github.io/open-california/glossary.html#term-REQUEST_CONFIG) pull (R5) inside
 the one command (≤ 2 s wait, one 6 s deadline) and is refused with `WAKEUP_UNKNOWN` rather than
 write a default-filled frame. Protocol facts did not change. The roof keeps `Only via buspi or the
-app`. Proven on the host tier (the app's four wake-up edits byte-exact over real NimBLE); the CoreS3
+app`. Proven on the host tier (the app's four wake-up edits byte-exact over real NimBLE); the [CoreS3](https://ckeller42.github.io/open-california/glossary.html#term-Satellite)
 bench run is owed.
 
 ## 2026-10-06 — the ESP satellite gets a control path (#154 B)
@@ -124,7 +124,7 @@ has reached the real unit. Trace: `R_FW_CONTROL_TWIN`, `R_FW_WRITE_ALLOWLIST`, `
 
 calictl's cooler builder used to re-assert the unit's current State/Mode/Level/timer/schedule in
 every untargeted field (`_cooler_values`). The app (5.0.8, `tests/vectors/app/cooler.jsonl`) sends
-each untargeted field at its dictionary default instead — the leave-unchanged value: power on
+each untargeted field at its [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) default instead — the leave-unchanged value: power on
 `fd771e3e1f1f`, level 5 `ff751e3e1f1f`, quiet `ff271e3e1f1f`, timer start `f7771e3e1f1f`, timer
 cancel `df771e3e1f1f`. Owner rule "calictl follows the app": every cooler command except
 `night_on`/`night_off` now builds the app's frame byte for byte (`control._cooler_neutral`), and
@@ -132,7 +132,7 @@ the recording replay compares whole frames for every function but the roof
 (`capture_diff.TARGETED_ONLY`). `night_on`/`night_off` keep the current-state carry: no app
 recording shows those writes, and that carry is the DEVICE-verified 2026-08-26 frame. The 31
 night hours do not clobber a schedule the way 0 did (31 is outside 0-23; the app sends it in every
-frame). `overrides.CONTROL_RANGES` cooler `State` now allows the sentinel 3 (the app's level/mode
+frame). `overrides.CONTROL_RANGES` cooler `State` now allows the [sentinel](https://ckeller42.github.io/open-california/glossary.html#term-Sentinel) 3 (the app's level/mode
 frames carry it). The 2026-07-05 `State=3` → `0x0E` drop (below) predates the 1003 heartbeat and has
 not been re-tested; the first live cooler level/mode write after this change is the check.
 
@@ -233,7 +233,7 @@ heartbeats on `1003` every ~750 ms and renders our baseline frames exactly as ca
 
 ## 2026-09-16 — continuous heating is an OFF-only switch (no general heater master exists)
 
-Owner asked whether the app has a general heater on/off besides "Sofortheizen". Re-trace of the
+Owner asked whether the app has a general heater on/off besides "[Sofortheizen](https://ckeller42.github.io/open-california/glossary.html#term-Sofortheizen)". Re-trace of the
 heater page (string keys + `rf/b.java`): the page has exactly **two switches** — Immediate heating
 (`C2` → `NormalOperationRequest` 1/0) and **Continuous heating / Dauerbetrieb** (`E3` →
 `PermanentOperationRequest = 0`, OFF only; no ON write site exists anywhere in the app, which
@@ -249,7 +249,7 @@ selection logic, remain UNRESOLVED (Compose layer; buspi was offline for the tra
 A full pass of the web UI's labels against the unit's own EN/DE terms (#178): the heater toggle is
 **Immediate heating / Sofortheizen** (was "Parking heater"), **Continuous heating / Dauerbetrieb**
 and the remaining minutes are shown (both were decoded but never rendered), quiet mode is
-Off / Manual / Automatic, energy rows are Second battery / Vehicle power / Solar power, camping's
+Off / Manual / Automatic, energy rows are [Second battery](https://ckeller42.github.io/open-california/glossary.html#term-Zweitbatterie) / Vehicle power / Solar power, camping's
 refusal reason is "Only possible when stationary". Roof alert banners no longer print the internal
 IDs: InfoPopUp 1 `child_lock` is an **over-use cooldown** ("moved too often — available again in a
 few minutes"), 5 `driving` means **"the pop-up roof is open — close it before moving the
@@ -335,7 +335,7 @@ bits 112–128/144–160/160–176 land in holders `M0/O0/P0` (`xf/a.java:150-15
 published as `/ 10.0d` (`xf/d.java:159,173,175`; re-published on every notification
 `xf/a.java:345`); the readout string is a `V • A` pair. `IDcdcAfs` (`N0`) is the exception:
 `xf/d.java:171` applies **no** divisor, only the `+2` correction for SW 0409/0410 (already wired in
-`semantics.apply_sw_corrections`, DEVICE-verified 2026-08-17). Catalog now `'0.1'`/`raw` with
+`semantics.apply_sw_corrections`, DEVICE-verified 2026-08-17). [Catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog) now `'0.1'`/`raw` with
 `confidence: high` and the citations in `sources.app`; `tools/triage.py` table updated so a re-triage
 keeps it; the "Source currents (raw, unverified scale)" Grafana panel is now "(A)" `unit: amp`.
 `tools/app_scales.py` cannot harvest this (its regex wants `Name * N`; the app writes
@@ -354,7 +354,7 @@ The frame stays documented in [protocol sequences — Lighting](https://ckeller4
 ## 2026-08-17 — roof SafetyCounter model re-verified (and an intraday mis-edit reverted)
 
 - **`actuate_roof`'s 500 ms / +1-per-frame stream confirmed protocol-correct** against fresh
-  source (`w8/a` + `b1/d` + `ig/c`): the app pumps move frames from a ~500 ms SafetyCounter
+  source (`w8/a` + `b1/d` + `ig/c`): the app pumps move frames from a ~500 ms [SafetyCounter](https://ckeller42.github.io/open-california/glossary.html#term-SafetyCounter)
   timer (the primary transmitter, +1/frame) plus a **secondary 1000 ms timer that only
   re-affirms direction** (~3 frames/s net, consecutive counter deltas 0/+1, never +2). Our
   single 500 ms/+1 stream reproduces the counter-timer sub-stream with the same wall-clock
@@ -403,7 +403,7 @@ stand.
 > session where that preamble landed…" causal claim was a wake-state confound.
 
 - **Lighting SET — RESOLVED FOR REAL, photon-verified** (finally closes `re-gap` §A1; supersedes
-  every earlier readback-based "verified" claim — the `1502` state char is a **write-through
+  every earlier readback-based "verified" claim — the `1502` [state char](https://ckeller42.github.io/open-california/glossary.html#term-GATT-characteristic) is a **write-through
   echo**, owner-confirmed 2026-07-18 that the lamps had stayed dark). An iOS HCI capture of the
   app *physically* lighting a lamp, diffed via `tools/capture_diff.py`, found the one frame the
   app sends that we never did: a **REQUEST_CONFIG preamble** `0d0c000000000000eeeeeeeeeeeeeeee`

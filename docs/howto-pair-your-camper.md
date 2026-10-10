@@ -1,7 +1,7 @@
 # How to pair your camper unit
 
 This walks you — another T7 owner running open-california — through bonding your Raspberry Pi
-("buspi" in the rest of the docs; call yours whatever you like) to your camper control unit over
+("{term}`buspi`" in the rest of the docs; call yours whatever you like) to your camper control unit over
 Bluetooth LE, using the web UI's guided pairing wizard. It assumes you already installed
 open-california (see [Raspberry Pi setup](raspberry-pi-setup.md)) and are standing at the van.
 
@@ -29,7 +29,7 @@ connected while the satellite pairs — the unit serves several Bluetooth client
 ## Before you start
 
 The camper control unit serves several Bluetooth clients at once — the phone app, the Pi and an
-ESP32 satellite can all stay connected. Pairing is the one exception that needs a **quiet radio**:
+{term}`ESP32 satellite <Satellite>` can all stay connected. Pairing is the one exception that needs a **quiet radio**:
 the unit's passcode is valid for only about 30 seconds, and other Bluetooth traffic around the Pi
 can make that window run out. Before you open the wizard:
 
@@ -87,7 +87,7 @@ anything manually first.
 
 ## Why the address changes
 
-The camper unit doesn't advertise from a fixed Bluetooth address — like most modern BLE
+The {term}`camper unit` doesn't advertise from a fixed Bluetooth address — like most modern BLE
 devices, it rotates to a private, changing address every so often for privacy. Only once
 you've bonded does the unit expose its stable **identity** address, which is what calictl
 learns and stores during pairing (in the pairing cache, shown in the wizard's "✓ Paired — "

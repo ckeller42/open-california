@@ -10,7 +10,7 @@ reconstruction; verify against the live `State` characteristic before trusting.
 - Advertises as **`VWCAMPER`**, rotating random address (RPA). Resolve **by name**
   until bonded; after bonding the identity address is stable.
 - Pairing: **LE passkey entry** — the unit displays a 6-digit passkey on its
-  Bluetooth screen; the central types it. No legacy PIN.
+  Bluetooth screen; the {term}`central` types it. No legacy PIN.
 - Vendor UUID base: `0000XXXX-6c77-4b7d-bbf6-a5e587701f3d` (`6c77` = ASCII "lw").
 
 ## Service / characteristic layout
@@ -37,7 +37,7 @@ unit's own `0x2901` descriptors label every pair "Control"/"State".
 ## Machine-readable dictionary
 
 The full per-function field map is auto-extracted from the app by
-**`tools/extract_protocol.py`** into **`protocol/dictionary.yaml`** (14 functions).
+**`tools/extract_protocol.py`** into **`protocol/dictionary.yaml`** (14 {term}`functions <Function>`).
 Extraction is **object-keyed** (`f23982e0`…) so name/width/default/offset stay
 aligned even for the shared fridge/heater control model; the right name-set is
 chosen by state-field overlap.
@@ -52,7 +52,7 @@ everything else stays `value_semantics: UNVERIFIED`.
 
 **Reproduce**: the decompile pipeline (apkeep → dex → jadx) + the enigma name-map are kept in a
 private own-vehicle-RE repo (they analyse the VW-copyrighted app locally); this repo ships the
-RESULT (`protocol/dictionary.yaml`). Regenerate the dictionary from local decompiled sources with
+RESULT (`protocol/dictionary.yaml`). Regenerate the {term}`dictionary` from local decompiled sources with
 `python3 tools/extract_protocol.py <sources> protocol/dictionary.yaml`. The
 dictionary-driven frame builder is `calictl.protocol.encode` + `calictl/control.py`
 (they refuse to build when a required field is `MERGED_AMBIGUOUS`/`UNKNOWN`).

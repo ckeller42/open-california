@@ -9,9 +9,9 @@ their full history on purpose. For the polished documentation, go back to the
 
 Start here:
 
-- [control-and-actuation.md](control-and-actuation.md) — the write gate (1003 heartbeat), the
-  full-packet frame model, per-feature actuation status
-- [signals.md](signals.md) — the signal catalog guardrail + scales (several `UNVERIFIED`)
+- [control-and-actuation.md](control-and-actuation.md) — the write gate ([1003 heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat)), the
+  [full-packet](https://ckeller42.github.io/open-california/glossary.html#term-Full-packet) frame model, per-feature actuation status
+- [signals.md](signals.md) — the [signal catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog) guardrail + scales (several `UNVERIFIED`)
 - [evidence-ledger.md](evidence-ledger.md) — every claim's verification tier (DEVICE / CAPTURE /
   DECOMPILE)
 - [DECISIONS.md](DECISIONS.md) — the dated RE changelog (resolved questions + dead ends, newest

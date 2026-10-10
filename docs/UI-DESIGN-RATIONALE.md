@@ -28,7 +28,7 @@ It serves two purposes at once:
 | layout / composition / navigation shell | value ranges + units (from the protocol field width/scale) |
 | — | safety confirmations imposed by the firmware (roof, heater) |
 | — | controls greyed (with the reason) in states the unit refuses: camping master while terminal 15 is on, camping lights/USB while master is off, roof open/close under a blocking InfoPopUp (`tf/a.java n0()`, `ig/c.java j()`), quiet mode while the refrigerator box is off, its timer while on |
-| — | the vocabulary itself (Immediate heating / Continuous heating, Manual / Automatic quiet mode, Second battery, Vehicle power, …) — the unit's own terms, EN + DE |
+| — | the vocabulary itself ({term}`Immediate heating` / {term}`Continuous heating`, Manual / Automatic {term}`quiet mode`, {term}`Second battery`, Vehicle power, …) — the unit's own terms, EN + DE |
 
 The vendor's trademarks appear only nominatively, to identify the vehicle the interface controls
 (see `DISCLAIMER.md`). No vendor icon, string, or layout is reproduced.

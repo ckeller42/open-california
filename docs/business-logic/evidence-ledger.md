@@ -12,7 +12,7 @@ proves what actually happens.
 | **BOARD** | Firmware behaviour seen on the real ESP32 board (CoreS3) on the bench, against the **mock** unit — proves the firmware, not a unit-protocol fact | console log + remote `screenshot`, dated (section below) |
 | **HOST-E2E** | Firmware behaviour seen on the Linux NimBLE host build (`cali-host`, upstream NimBLE 1.10) against the **Bumble fake unit**, in CI — proves the firmware's C code and its bytes on a real GATT link, not the esp-nimble port, a radio, or a unit-protocol fact | `tests/firmware/test_*_e2e.py` (CI `firmware-host-e2e`), the fake unit's recording (section below) |
 
-Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ catalog),
+Automated ties that keep this honest: `test_signal_coverage.py` ([dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) ↔ [catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog)),
 `test_doc_offset_consistency.py` (prose/comment `Field@offset` citations ↔ dictionary),
 `test_capture_diff.py` (our frames ↔ captured app frames).
 
@@ -50,7 +50,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   ledger line "NightTimer sentinels = 0 — CAPTURE": the captured power-on frame *did* send 0s, but that
   van had **no schedule set**, so 0 was simply the current value — the capture never showed that 0 means
   leave-unchanged (it doesn't; the leave-unchanged sentinels are `v()`'s 31/3, and the app re-sends them
-  in its 500 ms post-write neutral frame). **A capture only validates the state it was taken in.**
+  in its 500 ms post-write [neutral frame](https://ckeller42.github.io/open-california/glossary.html#term-Neutral-frame)). **A capture only validates the state it was taken in.**
   Since 2026-10-06 (ruling R1) every cooler write but `night_on`/`night_off` sends the app's 31
   (`fd771e3e1f1f` = power on, APP-RECORDED); those two still carry the current schedule — and are
   **refused while no cooler state is known** (ruling R4, `REASON_COOLER_STATE_UNKNOWN`: the carry
@@ -60,7 +60,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   vectors as `refused`, so the satellite's C twin answers the same words (tier: CI, below).
 - lighting per-zone SET + power — DEVICE (photon-verified 2026-08-16).
 - general(1001) SW-version decode + DC-DC +2 — DEVICE (live-read `0410`, `dcdc_current` −2→0, 2026-08-17).
-- roof InfoPopUp `5` = DRIVING (`_ROOF_ALERT`) + the web move-gate's block set {child_lock, error,
+- roof [InfoPopUp](https://ckeller42.github.io/open-california/glossary.html#term-InfoPopUp) `5` = DRIVING (`_ROOF_ALERT`) + the web move-gate's block set {child_lock, error,
   driving, emergency_locked, not_possible, low_battery, Position==15} — DECOMPILE (2026-09-15,
   `ig/c.java` `j()` movable-check; sensor_error is warn-only there). Call stack (#154): `j()` (`ig/c.java:707-713`:
   Position 15 or InfoPopUp in {1,4,5,7,10,11} → not movable; `k()` `:720-723` warns on {2,3,12}) runs in the
@@ -68,12 +68,12 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   never reported 5 while calictl was polling. Owed: one drive with the roof screen open.
 - roof InfoPopUp 2 = pre-open safety-checklist prompt (`open_checklist`, no move block), 12 moving,
   8 end of travel, 3 stopped mid-travel (progress codes, no alert) — CAPTURE 2026-10-10 (real app,
-  real unit, HCI snoop of a full open + close: `0302` → checklist → `030c`/`230c` → `2308` →
+  real unit, [HCI snoop](https://ckeller42.github.io/open-california/glossary.html#term-HCI-snoop) of a full open + close: `0302` → checklist → `030c`/`230c` → `2308` →
   `1300`/`0300`; release mid-travel `2303` → `2300`). Supersedes the 2026-09-16 fake-unit `in_use`.
 - roof InfoPopUp → dialog texts (1 over-use cooldown, 5 roof-open-while-driving, 6 jammed/blocked,
   7 secure manually, 10 unavailable, 11 low battery/run engine) — DECOMPILE (2026-09-16, `ig/c.java`
   switch → `ea/j`/`ea/n` string accessors → `.cvr` EN/DE tables).
-- campingmode `Enable` (1202 bit 3) = terminal-15, **one poll behind** 1004 `TerminalOneFive` —
+- campingmode `Enable` (1202 bit 3) = [terminal-15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15), **one poll behind** 1004 `TerminalOneFive` —
   DEVICE (2026-09-16, camping-watch: 8 paired `ignition 0→1` / `enable 0→1` / `master_on 1→0`
   transitions; owner screenshot of the lag). Decompile: `tf/a.java n0()` ignitionTerminal15Flow.
 - air-heater run-time cap 120 min + ErrorCode IDs 1–5; cooler quiet-needs-ON / timer-needs-OFF
@@ -85,8 +85,8 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   (mismatch → "Wrong vehicle found"); heater ON `3d7b007f1f3f` + neutral `3f7b007f1f3f` @ +500 ms,
   continuous-heating OFF `0f7b007f1f3f`, untargeted fields at their defaults; roof page streams
   `Up=0 Down=0 SafetyCounter+1` every ~500 ms and requires `SafetyCounterValid`; roof `InfoPopUp`
-  1–15 → dialog/tile texts (2/3/12 "in use" tile — fake unit only, see CAPTURE 2026-10-10 above; 9 not stationary, 8/13/14 nothing); heater sliders 1–9+HI
-  and 10–120; `1003` heartbeat cadence ~750 ms while the app is connected; lighting All-lights
+  1–15 → dialog/tile texts (2/3/12 "in use" tile — [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit) only, see CAPTURE 2026-10-10 above; 9 not stationary, 8/13/14 nothing); heater sliders 1–9+HI
+  and 10–120; `1003` [heartbeat](https://ckeller42.github.io/open-california/glossary.html#term-Heartbeat) cadence ~750 ms while the app is connected; lighting All-lights
   frames byte-identical to calictl's, lamp taps write nibble value 11 (DEFAULT), and the app's lamp →
   nibble positions confirm calictl's DEVICE-verified `LIGHT_ZONES` for all nine app lamps (the
   cabinet light `LSix` has no app control); cooler
@@ -143,7 +143,7 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   byte since 2026-10-06** (ruling R1: every untargeted field at the app's leave-unchanged value; the
   replay now compares whole frames for every function but the roof);
   `roof-hold.jsonl` — ignition on, the rocker's upper half held 16 s streams `Up=1` until the mock
-  reports open (matches `control.build("roof","open")` on `Up`; the SafetyCounter is not a targeted
+  reports open (matches `control.build("roof","open")` on `Up`; the [SafetyCounter](https://ckeller42.github.io/open-california/glossary.html#term-SafetyCounter) is not a targeted
   field); `lighting-profile.jsonl` — press-and-hold tile A = `save_profile 1` (matches calictl);
   `lighting-wakeup.jsonl` — the Mode-20 wake-up frame for 07:00 (was a declared `GAPS` entry; since A2
   calictl's `wakeup` builder reproduces it, so it replays as `action`).
@@ -158,14 +158,14 @@ Automated ties that keep this honest: `test_signal_coverage.py` (dictionary ↔ 
   metered shore-charging read to upgrade `shore_current` to DEVICE.
 - roof `Installed=1` — DEVICE (live read 2026-08-26, #106): the pop-top IS installed (motor never driven).
 
-Captures come from the Mac "bar" (PacketLogger/tshark) or buspi HCI. When one lands: add a
+Captures come from the Mac "bar" (PacketLogger/tshark) or [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi) HCI. When one lands: add a
 `tools/scenarios/<fn>/<case>.yaml`, assert our frame matches in `test_capture_diff.py`, flip the row
 to CAPTURE, and drop the GUI "not verified" confirm for that control. See the memory
 `capture-evidence-tier`. A scenario is one (function, action) capture target for
 `python3 -m tools.capture_diff <capture> <fn>/<case> [--frames]`: keys `function`, `what`,
 `value` (the `calictl set` arguments that should reproduce the app's write), `control_char` (short
 UUID the app writes, e.g. `"1501"`), optional `handle` (ATT handle, if known), `capture_label`, and
-`state` (decoded state at capture time, carried into the full-packet `control.build`); a leading
+`state` (decoded state at capture time, carried into the [full-packet](https://ckeller42.github.io/open-california/glossary.html#term-Full-packet) `control.build`); a leading
 comment says what to do at the van (see `tools/scenarios/lighting/kitchen-50.yaml`).
 
 - lighting **zone 9 = pop-top roof READING light** — DEVICE (2026-08-30, single-light isolation:
@@ -182,12 +182,12 @@ comment says what to do at the van (see `tools/scenarios/lighting/kitchen-50.yam
   scanning at 100% duty (window == interval, 11.25 ms) because another client held discovery,
   ~300 ms later `Connection Failed to be Established (0x3e)`; with all scanners stopped the same
   connect succeeded. See `guided-pairing.md` "Environment the wizard needs".
-- the camper unit **advertises from a rotating address** — CAPTURE (observed 2026-09-25):
+- the [camper unit](https://ckeller42.github.io/open-california/glossary.html#term-Camper-unit) **advertises from a rotating address** — CAPTURE (observed 2026-09-25):
   four different advertising addresses seen over about 45 minutes of continuous scanning; only
   the bonded identity address is stable, and only becomes known once bonded.
 - the unit **refuses Just Works pairing** — CAPTURE (btmon on buspi, 2026-09-26): a Pairing
   Request with `IO capability: NoInputNoOutput`, `No MITM` was answered by the unit dropping the
-  link (`Remote User Terminated Connection`, 0x13) within ~0.5 s. Cause on our side: the LE link
+  link (`Remote User Terminated Connection`, [0x13](https://ckeller42.github.io/open-california/glossary.html#term-HCI-reason-code)) within ~0.5 s. Cause on our side: the LE link
   was created before the KeyboardOnly agent was registered. See `guided-pairing.md`.
 - the unit **ignores links from an unbonded central outside "Gerät verbinden"** — HYPOTHESIS
   (btmon on buspi, 2026-09-26): with every other scanner stopped and scanning DISABLED at each
@@ -196,7 +196,7 @@ comment says what to do at the van (see `tools/scenarios/lighting/kitchen-50.yam
   Timing correlation only — so a quiet radio is necessary but not sufficient; open the screen
   BEFORE starting the wizard.
 - the unit's own screen shows **"Passcode: ---" until a pairing request arrives** — OBSERVED
-  (owner photo, 2026-09-25): the placeholder stays literal `---` until a central starts pairing
+  (owner photo, 2026-09-25): the placeholder stays literal `---` until a [central](https://ckeller42.github.io/open-california/glossary.html#term-Central) starts pairing
   against the unit, then is replaced by the 6-digit passcode.
 - roof **Position decode + L9=roof-reading** — DEVICE (2026-08-30, roof physically opened): live read
   `roof.Position=1 -> position_name "open"` (first live confirm — roof was never driven before), and a
@@ -233,7 +233,7 @@ shows for the same frame — not against a physical meter.
 | Level Indicator | `-.-°` / `-.-°`, `Signal unavailable. Ignition is off.` | `TerminalOneFive` 0, `CarLevelRoll`/`CarLevelPitch` 0 → `level_roll`/`level_pitch` **0.0** | DIFF then, MATCH since #282: calictl now reports no value with ignition off, like the app. Scale verified: 0.01° per LSB (HCI 2026-07-08). The sign against the app's display is still to confirm with ignition on |
 
 Caveat seen on the way: the first dump right after opening *Vehicle Information* showed old numbers
-(`12.2 V • -7.0 A` starter, `13.1 V • 1.0 A` second battery) that calictl's raw frame did not
+(`12.2 V • -7.0 A` starter, `13.1 V • 1.0 A` [second battery](https://ckeller42.github.io/open-california/glossary.html#term-Zweitbatterie)) that calictl's raw frame did not
 contain; every later dump (4 over 70 s) matched calictl. The app renders what it last held before
 the fresh frame arrives — never use the first render of an app screen as evidence.
 
@@ -403,7 +403,7 @@ show the content, not the backlight level).
 
 ## ESP32 satellite — first DEVICE rows (van, real unit, 2026-10-08)
 
-ESP (CoreS3, fw from CI `51f1bee`) on the van WiFi, buspi's calictl polling the same unit. Owner
+ESP ([CoreS3](https://ckeller42.github.io/open-california/glossary.html#term-Satellite), fw from CI `51f1bee`) on the van WiFi, buspi's calictl polling the same unit. Owner
 at the unit as the eyes; unit-screen photos are the ground truth.
 
 | Date | Fact | Evidence |

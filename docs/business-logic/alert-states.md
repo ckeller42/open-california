@@ -41,7 +41,7 @@ Each alert is raised through a common pipeline, visible identically in every fea
   exact end-user label UNVERIFIED).
 - **`_CONFIRMED` / `_INTERACTED` constants** (`BLUETOOTH_<ALERT>_CONFIRMED`,
   `BLUETOOTH_<ALERT>_INTERACTED`, plus one `EXLAP_COOLER_ERROR_INTERACTED`) are a **separate,
-  local-BLE-only ack channel** (matches the "VW EXLAP light-profile" local-connection mode noted
+  local-BLE-only ack channel** (matches the "VW [EXLAP](https://ckeller42.github.io/open-california/glossary.html#term-EXLAP) light-profile" local-connection mode noted
   in `lighting-energy-water-sat-roof.md`) — analytics-style events fired when the user
   acknowledges an alert while connected directly over Bluetooth (as opposed to the
   backend/MQTT-style channel the `_ID`/`_NOTIFICATION_ID` pair above uses). Full trigger-site trace
@@ -77,7 +77,7 @@ stateDiagram-v2
 
 ## 2. Cooler (fridge)
 
-Trigger field: **`Error`**, dictionary `cooler.state_fields[Error]` — `offset: 0, width: 2` (raw
+Trigger field: **`Error`**, [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) `cooler.state_fields[Error]` — `offset: 0, width: 2` (raw
 range 0-3). Decoded in `vf/c.java:420-424` (`aVar19` = `f27285n0`), dispatch at
 `vf/c.java:423-567`.
 
@@ -368,15 +368,15 @@ bits 12-15** (`ig/c.java:241-246`). Dispatch `switch(InfoPopUp)` (`:311-638`):
 Move-gate = `ig/c.java j()` movable-check (blocks {1,4,5,7,10,11} or `Position==15`); `i()` is the
 warning-only set {6,1,11} shown alongside. Texts resolved 2026-09-16 (`ig/c.java` switch → `ea/j`
 / `ea/n` string accessors → `.cvr` tables) and **every code 1–15 OBSERVED on the running app**
-the same day (`tools/applab`: the fake unit pushed each `InfoPopUp` value; the app's dialogs and
+the same day (`tools/applab`: the [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit) pushed each `InfoPopUp` value; the app's dialogs and
 roof-tile texts are as tabled). The web UI's banners (`webui/app.js ROOF_ALERT_MSG`) and its
 `ROOF_MOVE_BLOCK` set mirror this table; calictl names 2 `open_checklist` and 9 `not_stationary`
 (Influx `alert_code` 10 / 9, appended; code 8 = the retired `in_use`). **Correction 2026-10-10:**
 against the *fake* unit the app's dashboard tile read "Function currently in use" for 2/3/12
-(its `k()` set), so calictl had named all three `in_use` and blocked moves on them. The HCI snoop
+(its `k()` set), so calictl had named all three `in_use` and blocked moves on them. The [HCI snoop](https://ckeller42.github.io/open-california/glossary.html#term-HCI-snoop)
 of the real app on the real unit (owner, full open + close) shows they are the checklist prompt
 (2) and motion progress (12/8/3); they no longer block, and 3/8/12 surface no alert. The roof page itself also refuses to show its controls
-without terminal 15 ("Switch on the ignition — Please switch on the ignition to operate the
+without [terminal 15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) ("Switch on the ignition — Please switch on the ignition to operate the
 pop-up roof.", `dialog_info_popUpRoof_activateIgnition_*`). Dashboard tile + roof-page meanings of 2/3/9/12
 traced decompile cross-check 2026-10-06, enigma `46f982d3` (`defpackage/i1.java:1652-1673`, `tj/f.java:601-606`, roof page `hj/c`).
 
@@ -396,7 +396,7 @@ were previously UNVERIFIED here — they pair with these `1402` `InfoPopUp` valu
 | `CLOCK_OUT_OF_SYNC_ID` | Camper's onboard clock (Year/Month/Day/Hour/Min/Sec fields, `general` service) disagrees with phone/app time | Fires when **\|phone − camper clock\| > 5 min** (UTC), or unconditionally if the car-time object is null (`bad/sources/zf/d.java:235,242-248`; unit `n20/d.java:42` = MINUTES); dispatched from `h(List)` `zf/d.java:352-361`. Car clock = general `0x1004` `CarTime*` fields. | LOW | `zf/d.java:352-361` |
 | `LEVELING_OVER_SPEED_ID` | Level-indicator (bubble level) screen warns leveling is unsafe/inaccurate above some vehicle speed | Compose UI boolean flow, gated on a "vehicle over speed" condition — **not** a camper-protocol field, this is core-vehicle speed (own-vehicle interop, not BLE camper unit) | HIGH | `ut/qa.java:78-97` |
 
-Not real vehicle alerts (excluded from the catalog, noted for completeness since they matched the
+Not real vehicle alerts (excluded from the [catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog), noted for completeness since they matched the
 enumeration regex): `MODULE_ID`, `ACCESSIBILITY_CLICKABLE_SPAN_ID`, `UNEXPECTED_FLEXIBLE_TYPE_ID`
 (decoder-internal fallback/exception marker), `DIALOG_SAT_SYSTEM_STARTING_ID` (transient "booting"
 dialog, not a fault).

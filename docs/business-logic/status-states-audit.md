@@ -6,7 +6,7 @@ app *reads/subscribes to* as vehicle status, compared against
 `the decompiled sources (local, git-ignored)`
 (re-decompiled two classes with `--show-bad-code` where JADX's normal pass failed —
 noted inline). All camper-protocol characteristics share the UUID suffix
-`-6C77-4B7D-BBF6-A5E587701F3D` ("Exlap" protocol).
+`-6C77-4B7D-BBF6-A5E587701F3D` ("[Exlap](https://ckeller42.github.io/open-california/glossary.html#term-EXLAP)" protocol).
 
 ## RESOLVED 2026-07-06 (commits e74e176, 7ac5480)
 
@@ -23,7 +23,7 @@ is kept as the historical record of what was found.
 
 ## Verdict (short) — HISTORICAL (now resolved, see above)
 
-**INCOMPLETE.** The dictionary is missing two entire status functions (Roof,
+**INCOMPLETE.** The [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) is missing two entire status functions (Roof,
 Lighting — never even referenced in the 11-function list), has a completely
 empty field list for `general` despite 15 real fields, undercounts
 `satelliteantenna` by 6 fields, and undercounts `energy` by 19 fields — the
@@ -178,7 +178,7 @@ extraction script missed them — the field data exists only behind
 
 ### Roof (service `0x1400`) — MISSING ENTIRELY
 
-- Control char `1401` (`jg/a.java`): `Up`, `Down`, `SafetyCounter` (already
+- [Control char](https://ckeller42.github.io/open-california/glossary.html#term-GATT-characteristic) `1401` (`jg/a.java`): `Up`, `Down`, `SafetyCounter` (already
   known-unresolved in dictionary).
 - **State char `1402`** (`ig/c.java:241-257`, boolArr ≥16 bits), log line
   `"<-- Incoming Data for Roof: ..."`:

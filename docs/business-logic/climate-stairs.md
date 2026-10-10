@@ -24,7 +24,7 @@ Each BLE "feature" has three cooperating classes:
   aVar.y(true);              // write the characteristic now, and arm a 500ms resend timer
   ```
 
-**Critical interop fact:** the control model is a *stateful full-packet* writer, not a delta
+**Critical interop fact:** the control model is a *stateful [full-packet](https://ckeller42.github.io/open-california/glossary.html#term-Full-packet)* writer, not a delta
 writer. `y()` (`m2/a.java:152-170`) always serializes **every** field currently cached in the
 control object (`f()` builds the whole bit array from all `sg.a` boxes), not just the one the
 action just touched. The cached values are seeded once from the constructor defaults and are
@@ -38,14 +38,14 @@ settings back to their power-up defaults.
 the widths actually used below are: `widthCode 4` → 2 bits (0-3), `widthCode 6` → 4 bits (0-15),
 `widthCode 7` → 8 bits (0-255). Several fields are deliberately initialized **outside** their
 documented valid range (e.g. a 2-bit on/off field defaulting to `3`, a 4-bit enum defaulting to
-`7`) — this is the protocol's "leave unchanged" sentinel, confirmed by the fact the app's own
+`7`) — this is the protocol's "leave unchanged" [sentinel](https://ckeller42.github.io/open-california/glossary.html#term-Sentinel), confirmed by the fact the app's own
 setters never write those values.
 
 ---
 
 ## RoofAirCondition
 
-Service `00002000-...`. State char `00002002-...` (`kg/b.java:192`, state model `lg/b.java`
+Service `00002000-...`. [State char](https://ckeller42.github.io/open-california/glossary.html#term-GATT-characteristic) `00002002-...` (`kg/b.java:192`, state model `lg/b.java`
 constructed with `i=0`). Control char `00002001-...` (`lg/a.java:139-147`, control model built as
 `new lg.a(bVar, this /*kg.b*/, aVar2)` from `kg/b.java:90`).
 
@@ -254,7 +254,7 @@ the UI (on when both are off, i.e. the switch represents "turn all lights on"), 
 interface.
 
 **APP-OBSERVED 2026-09-27** (`tools/applab`, app 5.0.8.3028, inventory screens 38-40). The camping
-page has one switch (the master) and three status rows. The fake unit's four `InteriorLight` /
+page has one switch (the master) and three status rows. The [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit)'s four `InteriorLight` /
 `OutsideLight` combinations (master on):
 
 | `InteriorLight`, `OutsideLight` | front-door row | sliding-door row |
@@ -275,7 +275,7 @@ is a no-op on `tf/a`. Row gates (decompile cross-check 2026-10-06, enigma `46f98
 `bc/a.java:117-140`), no equipment gate and no enabled-gate on the row; the last boolean passed to the row is
 `tf/a.R2` = `CALIFORNIA_7 && !isRearUsbInT7AlwaysOn` (the show-rear-USB flag — earlier mapping name corrected),
 probably the divider (unverified). The whole page shows "Only possible when stationary" while 1202 `Enable`
-(terminal-15 mirror) is set (`ut/hf.java:68-80`). Owed: an APP-OBSERVED pass that sets DOOR_CONTACT on the fake
+([terminal-15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) mirror) is set (`ut/hf.java:68-80`). Owed: an APP-OBSERVED pass that sets DOOR_CONTACT on the fake
 unit and watches the row.
 The USB row follows `UsbCharger` 1/0 (Enabled/Disabled). With the master off (`State=0`) the page
 body is unchanged. No lights or USB **switch** is shown on this page; whether tapping the row icons

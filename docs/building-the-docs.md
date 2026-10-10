@@ -8,7 +8,7 @@ Requirements and their test traceability are authored **as `sphinx-needs`
 objects inside code docstrings** — `.. req::` next to the implementation,
 `.. test:: … :links: R_*` next to the verifying test — and collected here by
 autodoc. This keeps requirements as close to the code as possible; a `:links:` to a
-nonexistent ID is a build-time failure (`-W`), while a requirement with no test builds clean
+nonexistent {term}`ID <Requirement ID>` is a build-time failure (`-W`), while a requirement with no test builds clean
 and simply shows an empty `incoming` — check `needs.json` for that.
 
 ## Build
@@ -56,9 +56,19 @@ sh docs/build_site.sh                    # full site: product docs + the evidenc
   term lines directly above the same definition.
 - **Link it:** `` {term}`Latch` `` in Markdown, ``:term:`Latch` `` in rst (case-insensitive;
   `` {term}`text <Latch>` `` for other link text). `sphinx -W` fails on an unknown term.
+- **Where to link:** the first meaningful use of a term on each page, in prose only (not in
+  headings, code, tables that would break, or Mermaid). Skip common words where the specific
+  meaning does not matter.
+- **Lab notes** (`business-logic/`) are the separate evidence build, where `{term}` does not
+  resolve. Link the glossary entry by absolute URL there:
+  `[latch](https://ckeller42.github.io/open-california/glossary.html#term-Latch)`. The anchor
+  is `term-` plus the term with spaces as `-` and accents dropped (`term-Flustermodus`).
 - **Index:** every term lands in the general index (`genindex`, linked from the start page).
 - `tests/test_glossary.py` fails on a second glossary (a hand-written "Glossary" definition
-  list or another `glossary` directive) and on duplicate terms.
+  list or another `glossary` directive), on duplicate terms, and on an orphan entry: a
+  definition that no page links to through any of its synonyms (a `{term}`/`:term:` role or a
+  `glossary.html#term-…` URL). Link the new term somewhere, or add it to `ORPHAN_ALLOW` with a
+  reason.
 
 ## Conventions
 

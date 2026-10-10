@@ -32,7 +32,7 @@ traceability table on the index page):
    readback is only a write-through :term:`echo <Readback echo>` and proves nothing.
 ``mock-only``
    Exercised end-to-end only against ``tools/mock_unit`` / ``tools/applab`` (for the ESP32 satellite
-   also the Bumble fake unit and a CoreS3 on the bench). The frames match the app, but
+   also the Bumble :term:`fake unit <Mock unit>` and a CoreS3 on the bench). The frames match the app, but
    ``calictl`` (or the satellite) has never run this sequence against the real unit.
 ``ci-real-stack``
    Verified in CI against the real host Bluetooth stack (BlueZ, ``bluetoothd``, D-Bus and the
@@ -188,9 +188,9 @@ Session foundation — connect, handshake, subscribe
      3 attempts, 4 s apart. With ``CALICTL_ADAPTER_RESET=1`` the adapter is power-cycled once
      after the first failure (default off, because ``hci0`` is shared). After the third failure,
      raise ``ConnectionUnavailable``. The unit is asleep, or Bluetooth is disabled on the unit. (A
-     phone app that holds a link does not block ``calictl``: the unit served the app, buspi and the
+     phone app that holds a link does not block ``calictl``: the unit served the app, :term:`buspi` and the
      ESP32 satellite at the same time on 2026-10-10.)
-   * Paths that write, and the persistent session, then read ``1001`` VERSION and ``1004``
+   * Paths that write, and the :term:`persistent session`, then read ``1001`` VERSION and ``1004``
      vehicle (read failures are swallowed and logged as a weak handshake). The per-op read path
      skips these two reads.
    * Subscribe every notify/indicate char (:py:meth:`~calictl.device.CamperDevice._subscribe_all`).
@@ -240,12 +240,12 @@ connectable windows more often. See `control-and-actuation.md §2
 <https://ckeller42.github.io/open-california/business-logic/protocol-crosscheck-applab.html>`_.
 
 **CAPTURE 2026-10-10** (the real CaliforniaOnTour app on a Fairphone 6 against the van's unit,
-AmbSw ``0410`` / CommunicationVersion 2, Android HCI snoop; evidence-ledger 2026-10-10). With the
+AmbSw ``0410`` / :term:`CommunicationVersion` 2, Android :term:`HCI snoop`; evidence-ledger 2026-10-10). With the
 GATT table cached the phone runs **no service discovery**. It reads ``1002`` (identity), ``1001``,
 ``1004``; writes CCCD ``0100`` for ``1702``, ``1502``, ``1102``, ``1602``, ``1004``, ``1302``,
 ``1402``, ``1202`` (in that order); then reads ``1702``, ``1102``, ``1001``, ``1602``, ``1302``,
-``1004``, ``f001``, ``1402``, ``1502``, ``1202``; then the ``1003`` heartbeat starts. That is 8
-subscriptions, the chars of the functions fitted on this van plus ``1004``, not the 12 the app lab
+``1004``, ``f001``, ``1402``, ``1502``, ``1202``; then the ``1003`` :term:`heartbeat` starts. That is 8
+subscriptions, the chars of the functions fitted on this van plus ``1004``, not the 12 the :term:`app lab`
 saw against a fake unit with every function fitted. ``calictl`` still subscribes all 12; the unit
 accepts both. The 8 match app 5.4.0's per-variant subscribe gate (decompile 2026-10-10, ``gg/o``):
 on a T7 it no longer subscribes stairs, satellite, roof A/C and living-room heater, whatever their
@@ -278,7 +278,7 @@ Guided pairing — passkey entry and stale-bond recovery
      ``Device1`` with that name and an ``RSSI``) is adopted directly, since BlueZ raises no new
      discovery callback for it while another client keeps discovery running. When our scan stops
      and ``Adapter1.Discovering`` is still true, the snapshot reports ``radio_busy`` (another client
-     is scanning, so a new LE connect will likely fail with HCI 0x3e) and the wizard shows a hint.
+     is scanning, so a new LE connect will likely fail with HCI :term:`0x3e <HCI reason code>`) and the wizard shows a hint.
    * CONNECTING (20 s). Every step shares one deadline, 18 s after the margins. **Bond probe
      first:** when BlueZ already holds a bond, a bounded connect plus the auth-gated ``1004`` read
      (at most 5 s) tells a working bond from a stale one. A **working bond is kept**: its link is
@@ -398,8 +398,8 @@ Notifications
      :py:meth:`calictl.observer.CampingObserver.on_push`, which decodes ``1202`` camping, ``1004``
      vehicle and ``1102`` cooler pushes and **logs** changes (``camping-push``) without writing
      served state. It also **latches the lighting configuration** from ``1502`` pushes (wake-up
-     Mode 20, door contact Mode 16 / PN 8, stored favourites Mode 12) into the cached lighting
-     state, so a REQUEST_CONFIG reply of several frames in a row is not reduced to the last one.
+     Mode 20, :term:`door contact` Mode 16 / PN 8, stored :term:`favourites <Favourite>` Mode 12) into the cached lighting
+     state, so a :term:`REQUEST_CONFIG` reply of several frames in a row is not reduced to the last one.
      It does so only once a lighting decode is cached.
    * After a lighting write, the newer ``1502`` pushes are the confirmation. Each updates the served
      lighting state; the daemon keeps watching until one shows the requested level (a rising zone
@@ -549,7 +549,7 @@ Heartbeat-armed control write
 
    The persistent-session path (:need:`S_SEQ_SESSION`) writes immediately over its already-ticking
    heartbeat, with no handshake and no arm delay. A verified write still waits ``SETTLE_S`` before
-   its readback. ``calictl`` sends no trailing neutral frame, except the lighting flush.
+   its readback. ``calictl`` sends no trailing :term:`neutral frame`, except the lighting flush.
 
    The daemon wraps either path (``Server.on_command``). Writes are refused outright while the
    daemon runs read-only (the default, ``--enable-writes`` lifts it). A command first passes
@@ -582,9 +582,9 @@ campingmode (master/lights/USB). The jadx decompile matches: ``d2/s`` driver and
 call-stack reading; the 2026-07-14 reading of a 500 ms timer, ``zf/d`` ``J0=500L``, and seed 0 was
 wrong). ``calictl``'s 0.6 s cadence and fixed start value satisfy the same liveness/monotonicity
 check; the value itself does not matter. **APP-OBSERVED 2026-09-16** (``tools/applab``, app 5.0.8):
-the connected app beats ``1003`` continuously at ~750 ms. Its writes are full-packet with untargeted fields at the model defaults (2-bit
+the connected app beats ``1003`` continuously at ~750 ms. Its writes are :term:`full-packet` with untargeted fields at the model defaults (2-bit
 ``3``; heater ``HeatingLevel 11 / RunningTime 127``, cooler ``Level 7 / Mode 7``, timer hours
-``30/62/31``). 500 ms later it sends a neutral frame with **every** field at its sentinel
+``30/62/31``). 500 ms later it sends a neutral frame with **every** field at its :term:`sentinel`
 (cooler ``ff771e3e1f1f``, heater ``3f7b007f1f3f``, camping ``ff``, energy ``30``, lighting
 ``0e00…``). The unit accepts both styles. See `control-and-actuation.md §1
 <https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html>`_.
@@ -945,11 +945,11 @@ Roof actuation — press-and-hold, SafetyCounter-gated
         S->>C: the stream ends, the session stays up
 
 **Evidence.** Settled 2026-07-13 from the **decompiled roof class** (``w8/a``), reconciled against
-an at-the-van capture of a full open and close. Control char ``1401`` is ATT handle ``0x0037``;
+an at-the-van capture of a full open and close. :term:`Control char <GATT characteristic>` ``1401`` is ATT handle ``0x0037``;
 state ``1402`` is handle ``0x0033``. The frame is 5 bytes, and the direction bytes match
 :py:func:`calictl.control.roof_frame` byte for byte. There is **no confirmation or STOP-hold
 phase**: an earlier "safety hold" reading was the user releasing the button while reading the
-safety dialog. The **SafetyCounter is app-generated** (``b1/d.java:352``) and never echoed. The old
+safety dialog. The :term:`SafetyCounter` is **app-generated** (``b1/d.java:352``) and never echoed. The old
 "echoes the unit's counter, ~0.8 per frame" reading came from **two overlapping senders**: the
 500 ms counter engine and a secondary 1000 ms ``ig/c`` direction re-send repeating the current
 value, which averaged ~0.8 increments per observed frame. The ~3 s wait is **unit-enforced**. The
@@ -962,13 +962,13 @@ app's 3000 ms dead-man only reports "SafetyCounter is invalid after 3 seconds"
 ``SafetyCounterValid@7`` in byte 0's low bits. So ``03xx`` means closed + installed + counter
 valid, and ``23xx`` means middle. ``InfoPopUp@12`` is byte 1's low nibble (the alert enum,
 ``R_ROOF_ALERT``). **CAPTURE 2026-10-10 (real app, real unit)**, a full open + close: the first
-open press after the page opened answers ``0302`` (InfoPopUp 2, the app shows its pre-open safety
+open press after the page opened answers ``0302`` (:term:`InfoPopUp` 2, the app shows its pre-open safety
 checklist, no motion; after OK a fresh press moves), then ``030c`` → ``230c`` while moving
 (InfoPopUp 12), ``2308`` at end of travel (8), then ``1300`` (open) or ``0300`` (closed); a release
 mid-travel gives ``2303`` (3) then ``2300``. These are prompt/progress codes, not alerts: none of
 them blocks a move or STOP. **APP-OBSERVED 2026-09-16** (``tools/applab``): the roof page pre-streams
 ``[0x00][counter]`` from the moment it opens. While a button is held the rate rises to ~8 frames/s,
-with four consecutive frames carrying the same counter. Without terminal 15 the page hides its
+with four consecutive frames carrying the same counter. Without :term:`terminal 15 <Terminal-15>` the page hides its
 controls ("Switch on the ignition"). The no-pre-arm stream is from the 2026-08-30 decompile
 cross-check (#150). The heartbeat during the move follows the app (decompile + the ``roof-hold``
 recording, #235); it replaced the #198 no-heartbeat handover. **Mock-tested only**: ``calictl`` has never driven
@@ -987,7 +987,7 @@ on, stationary, a full open and a full close; evidence-ledger 2026-10-10 roof ro
   held, a second frame repeats the current value about once a second, so frames arrive every
   ~0.1–0.5 s — exactly the decompiled two-timer model (the 500 ms counter timer plus the 1000 ms
   ``ig/c`` re-send). This **contradicts** the 2026-09-16 lab reading above (about 8 frames/s
-  while held, four frames per counter value). ``calictl``'s roof view follows the stream and the
+  while held, four frames per counter value). ``calictl``'s :term:`roof view <STOP stream>` follows the stream and the
   repeat-on-change (``R_ROOF_VIEW_STREAM``); it omits the 1000 ms re-send.
 * **First press.** The first open press after the screen opened got ``1402`` = ``0302``
   (closed, counter valid, InfoPopUp 2). The app showed its pre-open safety checklist dialog and the
@@ -1114,7 +1114,7 @@ the stale latch. The 2026-07-09 "1 L → 11 L after a heartbeat" was correlation
 earlier "water is push-only" rule (decompile 2026-07-14) was **dropped on 2026-10-07**: the app
 subscribes ``1302`` and then *reads* it, and a read and a push go to the same decoder (VM ``qg/b``),
 so the last frame wins. The parked "1 L" was not a stale push: the unit sends no
-subscribe-time push (CAPTURE 2026-10-10), and ``1`` is the unit's own "not measuring" value. A
+subscribe-time push (CAPTURE 2026-10-10), and ``1`` is the unit's own ":term:`not measuring <Water latch>`" value. A
 measurement ramps the level from ``1`` to the real value in ~4 s. The guard stays, narrowed to the
 ≤ 1 L latch (#274), and a debounce for the ramp is in flight (#290). What starts a measurement is
 still open. See `value-freshness.md
@@ -1248,8 +1248,8 @@ time: the phone app holding a link, buspi polling (99 clean connect / read / rel
 hour, no errors) and the ESP32 satellite. While parked, the unit dropped the satellite's held link
 (HCI ``0x13`` ~30 s after each connect: 30.0 s and 31.3 s measured) but **not** the app's held link (46 min) and **not**
 buspi's held persistent session (3 min with a viewer, 11:45). **Root cause found and fixed (#279,
-``faaf7b0``):** right after connect the unit sends every central an ATT Exchange MTU Request (Client RX MTU 247).
-BlueZ and Android answer it. The satellite's NimBLE was built without a GATT server (in IDF v6.1
+``faaf7b0``):** right after connect the unit sends every :term:`central` :term:`an ATT Exchange MTU Request <ATT Exchange MTU Request>` (Client RX MTU 247).
+BlueZ and Android answer it. The satellite's NimBLE was built without a :term:`GATT server` (in IDF v6.1
 ``BT_NIMBLE_GATT_SERVER`` depends on ``BT_NIMBLE_ROLE_PERIPHERAL``, which was off), so esp-nimble
 silently drops the request, and the unit's ATT transaction timeout then ends the link (``0x13``).
 The fix enables both options in the satellite's ``sdkconfig``. It is a missing ATT response, not

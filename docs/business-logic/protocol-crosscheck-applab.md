@@ -1,7 +1,7 @@
 # Protocol docs × app lab — claim-by-claim cross-check
 
 Every protocol claim this repo makes, checked against the **real CaliforniaOnTour app** running in
-the Android emulator against `tools/applab/fake_unit_ble.py` (the fake unit = `tools/mock_unit.py`
+the Android emulator against `tools/applab/fake_unit_ble.py` (the [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit) = `tools/mock_unit.py`
 over the unit's GATT layout). The lab shows what the *app* does on the wire; it cannot show what
 the *unit* does (those rows say NOT TESTABLE and keep their DEVICE/CAPTURE tier). Verdicts:
 **OBSERVED** (seen directly, frame/log cited), **CONSISTENT** (calictl's behaviour is compatible
@@ -74,7 +74,7 @@ against the real unit (2026-10-10).
 
 ## Fault dialogs and equipment gating (fake unit `set <fn> <Field>=<v>` while the app watches)
 
-Every fault code the dictionary knows was injected one at a time; the app pops a toast the moment
+Every fault code the [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) knows was injected one at a time; the app pops a toast the moment
 the readback changes, on whatever page is open. Texts are verbatim in `alert-states.md` (§4
 energy, §5 water) and `cooler-airheater.md` (heater ErrorCode); the web UI's `*_MSG` tables
 carry them, and `semantics.water` now surfaces `fresh_alert` / `waste_alert`.
@@ -117,7 +117,7 @@ The fake unit's `campingmode` fields were set from the console with `State=1` (m
 ## The hardware side: trace the real unit, replay it through the mock
 
 The lab validates the **app**; the unit's own behaviour (push cadence, countdown rates, coupling,
-frame bits the dictionary might miss) is validated from a **trace of the real van**: run buspi's
+frame bits the dictionary might miss) is validated from a **trace of the real van**: run [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi)'s
 daemon with `CALICTL_BLE_TRACE=~/ble.jsonl` (`calictl/trace.py` — one JSON line per notify /
 read / write / link event; `CALICTL_BLE_TRACE_HEARTBEAT=1` to include the 1003 beats), let it
 run through a drive / a heater cycle / a roof move, then `python3 -m tools.trace_compare
@@ -127,7 +127,7 @@ subscribe and afterwards every char whose frame changes, except the 1004 clock a
 re-delivery of each read as a notification is counted apart as `read_echoes`; the 2026-07 "energy
 ~3 Hz" note was contradicted by the first trace below), `RunningTimeinAction` and
 `AgeOneBattValuesMinutes` rates vs the mock's ±1/min, roof `Position` transitions with timings,
-and the terminal-15 → `campingmode.Enable`/master-shed coupling delay. A difference is a mock bug
+and the [terminal-15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) → `campingmode.Enable`/master-shed coupling delay. A difference is a mock bug
 or a new protocol fact — never a reason to touch the trace. Results land in this file's tables.
 
 ### First real-unit trace (buspi, van awake, 2026-09-16 17:08–17:20)
@@ -163,7 +163,7 @@ and retries silently — so they are calictl's own contribution, not a mirror of
 
 ## Not testable in the lab (unit-side; keep DEVICE/CAPTURE tier)
 
-`0x0E` link drop on out-of-range values; water measurement-gating / stale latch; deep-sleep and
+`0x0E` link drop on out-of-range values; water measurement-gating / stale [latch](https://ckeller42.github.io/open-california/glossary.html#term-Water-latch); deep-sleep and
 advertising stop when parked; real motor withhold (~3 s) and travel time; `1502` Mode-4 ramp
 notifications; readback-is-an-echo; RPA rotation.
 
@@ -192,7 +192,7 @@ Recording sessions (2026-10-05, app 5.0.8.3028, thinky lab34 — see `tools/appl
   `ff27…`/`ff07…`, automatic quiet `ff47…`, power off `fc77…`, timer start `f777…` / cancel `df77…`.
   The app absorbs the first tap on the timer switch after arming; the second tap cancels.
 - `tests/vectors/app/roof-hold.jsonl` — ignition on, the rocker's upper half held 16 s: `Up=1` frames
-  with an incrementing SafetyCounter until the mock reports the roof open.
+  with an incrementing [SafetyCounter](https://ckeller42.github.io/open-california/glossary.html#term-SafetyCounter) until the mock reports the roof open.
 - `tests/vectors/app/lighting-profile.jsonl` — press-and-hold tile A = `save_profile 1`
   `010400000000000000000005e00eeeee` (current zone levels, NOT_EQUIPPED → 14), matching calictl.
 - `tests/vectors/app/lighting-wakeup.jsonl` — wake-up time 07:00 via the wheel + OK writes the Mode-20
@@ -209,7 +209,7 @@ recordings, every write `action`/`flush`/`app-only` (12 recordings in all):
   write (no revert / toast); reopening the page shows 08:00.
 - `tests/vectors/app/door-contact.jsonl` — the "Opening sliding door…" status row toggles: `0810…01` /
   `0810…00`, the row text follows the mock's Mode 16 / PN 8 echo (Enabled / Disabled).
-- `tests/vectors/app/lighting-favourite.jsonl` — save A (`0104…`, then REQUEST_CONFIG), all lights off
+- `tests/vectors/app/lighting-favourite.jsonl` — save A (`0104…`, then [REQUEST_CONFIG](https://ckeller42.github.io/open-california/glossary.html#term-REQUEST_CONFIG)), all lights off
   `0010…`, tap A `0110…` (SET_PROFILE PN 1). OBSERVED: after the save tile A is the active profile and a
   tap on it writes nothing; tile A turns from "+" to filled from the REQUEST_CONFIG reply's bit 0.
 
@@ -240,7 +240,7 @@ The phone's version (split APKs, arm64 code via the x86_64 image's ARM translati
 ## Real app on the real unit (CAPTURE 2026-10-10)
 
 The lab claims above, checked against the **real** CaliforniaOnTour app (5.4.0.3036) on a Fairphone 6 talking
-to the van's unit (AmbSw `0410`, CommunicationVersion 2), Android HCI snoop pulled over adb from
+to the van's unit (AmbSw `0410`, [CommunicationVersion](https://ckeller42.github.io/open-california/glossary.html#term-CommunicationVersion) 2), Android [HCI snoop](https://ckeller42.github.io/open-california/glossary.html#term-HCI-snoop) pulled over adb from
 buspi (decoded ATT kept on buspi, not committed; evidence-ledger 2026-10-10). Verdicts as above:
 **OBSERVED** (the same on the real unit), **CONSISTENT**, **CONTRADICTED** (by the real unit).
 
