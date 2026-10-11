@@ -81,6 +81,10 @@ class SessionSupervisor:
         float write is atomic under the GIL."""
         self._last_ui_activity = time.time()
 
+    def ui_active(self):
+        """Public view of :meth:`_ui_active` for the daemon's poll cadence."""
+        return self._ui_active()
+
     def _ui_active(self):
         """True while the UI has been used within ``ui_idle_s``. A manual "release" forces inactive
         regardless of polling, so the session stays released until Connect / a command."""

@@ -18,6 +18,7 @@ Daemon state
 
 .. automethod:: calictl.serve.Server._save_last
 .. automethod:: calictl.serve.Server._pull_lighting_config
+.. automethod:: calictl.serve.Server._poll_nap
 
 Device / reads
 --------------
@@ -145,6 +146,7 @@ Tests
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
+.. autofunction:: tests.test_web_serve.test_poll_nap_shortens_only_while_watched_on_a_held_session
 .. autofunction:: tests.test_web_serve.test_roof_move_skips_the_session_warmup
 .. autofunction:: tests.test_web_serve.test_roof_move_reuses_a_live_session
 .. autofunction:: tests.test_mock_integration.test_roof_move_runs_inside_the_live_session_with_the_heartbeat_ticking

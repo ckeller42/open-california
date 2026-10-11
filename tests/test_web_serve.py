@@ -697,6 +697,52 @@ def test_ui_active_window():
     assert s._sessions._ui_active() is False  # gone idle -> release the session
 
 
+def test_poll_nap_shortens_only_while_watched_on_a_held_session(monkeypatch):
+    """Idle -> ``--interval``; watched but no live session -> still ``--interval`` (no cold connects
+    at the UI cadence); watched on a held session -> ``CALICTL_UI_POLL_S``.
+
+    .. test:: The poll loop takes the UI cadence only while watched on a held session
+       :id: T_UI_POLL_CADENCE
+       :links: R_UI_POLL_CADENCE
+    """
+    from calictl import serve
+
+    s = serve.Server(influx_enabled=False)  # default --interval 30 s
+    live = {"session": None}
+    monkeypatch.setattr(s, "_live_session", lambda: live["session"])
+    assert s._poll_nap() == 30.0  # nobody watching
+    s._note_ui_activity()
+    assert s._poll_nap() == 30.0  # watched, but no session up: stay idle-paced
+    live["session"] = object()
+    assert s._poll_nap() == serve._UI_POLL_S  # watched on a held session
+    s._sessions._last_ui_activity = 0.0
+    assert s._poll_nap() == 30.0  # the watcher left
+
+
+def test_nap_switches_to_the_ui_cadence_mid_nap(monkeypatch):
+    """A browser opening the UI 3 s into a 30 s idle nap ends the nap at the UI cadence."""
+    import asyncio
+    import types
+
+    from calictl import serve
+
+    s = serve.Server(influx_enabled=False)
+    clock = {"t": 0.0}
+    live = {"session": None}
+    monkeypatch.setattr(s, "_live_session", lambda: live["session"])
+
+    async def fake_sleep(d):
+        clock["t"] += d
+        if clock["t"] >= 3 and live["session"] is None:  # UI opens, session comes up
+            live["session"] = object()
+            s._note_ui_activity()
+
+    monkeypatch.setattr(serve, "time", types.SimpleNamespace(monotonic=lambda: clock["t"]))
+    monkeypatch.setattr(serve, "asyncio", types.SimpleNamespace(sleep=fake_sleep))
+    asyncio.run(s._nap())
+    assert clock["t"] == serve._UI_POLL_S  # not the 30 s idle nap
+
+
 def test_supervise_releases_session_when_ui_idle(monkeypatch):
     """When the web UI is idle, the supervisor RELEASES the held session (brief cold polls
     instead of a link nobody is watching).
