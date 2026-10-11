@@ -31,7 +31,12 @@
  * previous slot (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE).
  *
  * Time (R_FW_TIME, components/cali_sntp): every boot bumps the NVS boot counter (cali_time_init); with
- * WiFi up, SNTP (pool.ntp.org + the DHCP-offered server) sets the clock the SD log's ts reads.
+ * WiFi up, SNTP (pool.ntp.org + the DHCP-offered server) sets the clock the SD log's ts reads; without
+ * it, the unit's own clock from its 1004 frames does (fed through the session's IO hook).
+ *
+ * SD log (R_FW_SD_LOG, components/cali_sdcard): the session's IO hook (cali_session_on_io =
+ * cali_sdlog_io) stamps every unit frame + link change on this owner task and queues it; an SD task
+ * mounts the card after the display init and appends JSONL to /sdcard/log. No card: nothing queued.
  *
  * QEMU build (CONFIG_CALI_QEMU_PROBE, firmware/qemu/sdkconfig.qemu only): nimble_port_init() is not
  * called at all (QEMU does not model the controller; esp_bt_controller_init asserts there and the
@@ -75,11 +80,13 @@
 #include "cali_console.h"
 #if CONFIG_CALI_DISPLAY
 #include "cali_display.h"
+#include "cali_sdcard_esp.h"
 #endif
 #include "cali_net_esp.h"
 #include "cali_ota_esp.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
+#include "cali_sdlog.h"
 #include "cali_session.h"
 #include "cali_sntp_esp.h"
 #include "cali_time.h"
@@ -181,6 +188,7 @@ static void do_work(void) {
         uint64_t now = cali_uptime_ms();
         cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
         cali_session_tick(now);       /* delays this tick's heartbeat decision */
+        cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
         if (s_wifi) {
             cali_net_esp_poll(now);   /* WiFi events -> the runner's sink */
             cali_wifi_run_tick(now);
@@ -355,6 +363,38 @@ void cali_heap_stats(unsigned *free_bytes, unsigned *largest) {
     *largest = (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
 }
 
+/* Busy % of both cores since the previous call (the first: since boot), from the idle tasks' run
+ * time (CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS, esp_timer us, 64-bit counters); -1 without it. */
+static int cpu_pct(void) {
+#if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
+    static uint64_t s_idle, s_at;
+    static int s_pct = -1;
+    uint64_t idle = 0, at = (uint64_t)esp_timer_get_time();
+    for (BaseType_t c = 0; c < portNUM_PROCESSORS; c++) idle += ulTaskGetIdleRunTimeCounterForCore(c);
+    if (at > s_at) {
+        uint64_t span = (at - s_at) * portNUM_PROCESSORS, quiet = idle - s_idle;
+        s_pct = quiet >= span ? 0 : (int)(100 - quiet * 100 / span);
+    }
+    s_idle = idle;
+    s_at = at;
+    return s_pct;
+#else
+    return -1;
+#endif
+}
+
+/* Overrides web.c's weak all-unknown stub: device.res in /api/state. */
+void cali_res_stats(cali_res_t *r) {
+    r->heap_free_kb = (int)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024);
+    r->heap_min_kb = (int)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024);
+#if CONFIG_SPIRAM
+    r->psram_free_kb = (int)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024);
+#else
+    r->psram_free_kb = -1;   /* the QEMU image: no PSRAM */
+#endif
+    r->cpu_pct = cpu_pct();
+}
+
 void app_main(void) {
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -365,6 +405,7 @@ void app_main(void) {
     console_init();
     if (cali_platform_init(NULL) != 0) cali_log("store: NVS namespace unusable, bonds will not persist");
     (void)cali_time_init();   /* the boot counter (R_FW_TIME): "LOG time: boot N", test_qemu_boot.py */
+    cali_session_on_io = cali_sdlog_io;   /* unit frames -> the unit clock + the SD log (R_FW_SD_LOG) */
 
     s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);
     configASSERT(s_lines != NULL);
@@ -393,7 +434,7 @@ void app_main(void) {
     const cali_transport_t *ble = err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble;
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
-    (void)cali_display_init(ble);   /* -1: no screen; BLE/WiFi carry on */
+    if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */
 #endif
 
     const esp_timer_create_args_t targs = {.callback = tick_cb, .name = "cali_tick"};

@@ -17,6 +17,12 @@
 
 enum { LINK_DOWN, LINK_CONNECTING, LINK_CONNECTED, LINK_UP };
 
+cali_session_io_fn cali_session_on_io;
+
+static void io(int what, uint16_t c, const uint8_t *data, size_t len) {
+    if (cali_session_on_io) cali_session_on_io(what, c, data, len);
+}
+
 static const cali_transport_t *s_t;
 static int s_active;           /* keep (or re-establish) a link for the stored bond */
 static int s_link;
@@ -246,6 +252,7 @@ static void unit_check(void) {
 }
 
 static void link_clear(void) {
+    if (s_link == LINK_UP) io(CALI_SESSION_IO_DOWN, 0, NULL, 0);
     s_link = LINK_DOWN;
     s_hb_on = 0;
     s_warming = 0;
@@ -275,6 +282,7 @@ static void link_lost(void) {
 }
 
 static void link_up(void) {
+    io(CALI_SESSION_IO_UP, 0, NULL, 0);
     s_link = LINK_UP;
     s_up_at = s_now;
     s_reconnect_pending = 0;
@@ -333,6 +341,7 @@ static void start_reads(void) {
 
 static void on_read(const cali_tevent_t *e) {
     int w;
+    if (e->status == 0 && index_of(e->char_short) >= 0) io(CALI_SESSION_IO_READ, e->char_short, e->data, e->len);
     if (s_rereading && e->char_short == WATER_CHAR && (w = index_of(WATER_CHAR)) >= 0) {
         s_rereading = 0;
         if (e->status == 0) {
@@ -382,6 +391,7 @@ static void on_event(const cali_tevent_t *e) {
         break;
     case CALI_TEV_NOTIFY:
         if (s_link != LINK_UP || (i = index_of(e->char_short)) < 0) break;
+        io(CALI_SESSION_IO_NOTIFY, e->char_short, e->data, e->len);
         store((size_t)i, e->data, e->len);
         if (s_snapped) cali_console_snapshot(s_now);
         break;

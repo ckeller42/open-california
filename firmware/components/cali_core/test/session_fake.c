@@ -26,6 +26,7 @@
  *     fail <call>          the next call of that transport function returns -1
  *     syncwritten <status> the next write() delivers its WRITTEN <status> inside the call (as the
  *                          NimBLE transport does for an ATT request it cannot start)
+ *     iohook               from now on, print "IO <what> <hex char> <hex data>" per cali_session_on_io call
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
  *     watergood            print "WATERGOOD <cali_session_water_held()> <cali_session_water_good_ms()>"
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
@@ -278,6 +279,12 @@ static void net_scan_done(const char *line) {
     net_deliver(CALI_NET_EV_SCAN_DONE, CALI_NET_REASON_NONE, 0, n, aps);
 }
 
+static void print_io(int what, uint16_t c, const uint8_t *data, size_t len) {
+    printf("IO %d %x ", what, (unsigned)c);
+    for (size_t i = 0; i < len; i++) printf("%02x", data[i]);
+    printf("\n");
+}
+
 int main(void) {
     char line[512], word[32];
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -291,6 +298,10 @@ int main(void) {
         line[strcspn(line, "\n")] = 0;
         if (line[0] == '>') {
             cali_console_line(line + 1);
+            continue;
+        }
+        if (strcmp(line, "iohook") == 0) {
+            cali_session_on_io = print_io;
             continue;
         }
         if (strncmp(line, "submit ", 7) == 0) {   /* submit <local_now|-> <fn> <what> [value…] */

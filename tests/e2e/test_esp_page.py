@@ -210,6 +210,49 @@ def test_clock_line_shows_sync_and_boot(page, locale, lang):
         expect(line).to_have_text(STRINGS["time_none"][lang].replace("{boot}", "17"))
 
 
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_storage_and_resources_lines(page, locale, lang):
+    """The /device Storage line (R_FW_SD_LOG: device.sd ok / absent / error, + dropped records) and
+    the Resources line (device.res), EN + DE; the unit-clock text of the clock line (R_FW_TIME).
+
+    .. test:: The /device page shows device.sd and device.res
+       :id: T_FW_SD_LOG_PAGE
+       :links: R_FW_SD_LOG
+    """
+
+    def s(key, **kw):
+        out = STRINGS[key][lang]
+        for k, v in kw.items():
+            out = out.replace("{%s}" % k, str(v))
+        return out
+
+    storage = s("sd_title") + ": "
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        dev = stub.fixtures["station"]["/api/state"]["device"]
+        line = pg.locator("#sd")
+        expect(line).to_have_text(
+            storage + s("sd_ok", free="28.1", total="29.7") + " · " + s("sd_log", seq=1042)
+        )
+        expect(pg.locator("#res")).to_have_text(
+            s("res_title")
+            + ": "
+            + " · ".join([s("res_ram", free=61, min=38), s("res_psram", free=7302), s("res_cpu", pct=4)])
+        )
+        dev["sd"].update(dropped=3)
+        expect(line).to_have_text(
+            storage
+            + " · ".join([s("sd_ok", free="28.1", total="29.7"), s("sd_log", seq=1042), s("sd_dropped", n=3)])
+        )
+        dev["sd"].update(state="absent", total_mb=None, free_mb=None, dropped=0)
+        expect(line).to_have_text(storage + s("sd_absent"))
+        dev["sd"].update(state="error")
+        expect(line).to_have_text(storage + s("sd_error"))
+        dev["res"].update(heap_free_kb=None, heap_min_kb=None, psram_free_kb=None, cpu_pct=None)
+        expect(pg.locator("#res")).to_have_text("")
+        dev["time"].update(source="unit", synced=False)
+        expect(pg.locator("#time")).to_have_text(s("time_unit", boot=17))
+
+
 def test_firmware_row_offers_no_update_over_the_setup_hotspot(stub, page):
     """Like the firmware's 403: no Check/Install outside station mode, and the row says why."""
     with page(stub.base, locale="en-US") as pg:

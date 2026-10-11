@@ -1,0 +1,5 @@
+## ESP-IDF component manager manifest for cali_sdcard (R_FW_SD_LOG): the board package's SD power
+## switch (bsp_feature_enable) and pin/host constants. Same exact pin as cali_display's manifest —
+## keep the two in step.
+dependencies:
+  espressif/m5stack_core_s3: "==4.1.0"

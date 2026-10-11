@@ -207,6 +207,8 @@ def esp_fixtures():
             "fw": "bef07f1",
             "ota": dict(OTA_IDLE),
             "time": {"source": "sntp", "synced": True, "boot": 17, "up": 3912400},
+            "sd": {"state": "ok", "total_mb": 30413, "free_mb": 28774, "last_seq": 1042, "dropped": 0},
+            "res": {"heap_free_kb": 61, "heap_min_kb": 38, "psram_free_kb": 7302, "cpu_pct": 4},
             "water_held": False,
         },
     }
@@ -224,6 +226,14 @@ def esp_fixtures():
                     "fw": "bef07f1",
                     "ota": dict(OTA_IDLE),
                     "time": {"source": "sntp", "synced": False, "boot": 1, "up": 41250},
+                    "sd": {
+                        "state": "absent",
+                        "total_mb": None,
+                        "free_mb": None,
+                        "last_seq": None,
+                        "dropped": 0,
+                    },
+                    "res": {"heap_free_kb": 74, "heap_min_kb": 52, "psram_free_kb": 7390, "cpu_pct": 2},
                     "water_held": False,
                 },
             },
