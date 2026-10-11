@@ -68,7 +68,7 @@
 #define LFD 3
 #define CFD 7
 #define LINE_MAX 8192
-#define OUT_MAX 65536
+#define OUT_MAX (65536 + 4096)   /* a WEB_APP_GZ_MAX bundle + its response head */
 #define N_OF(a) (sizeof (a) / sizeof *(a))
 
 /* ---- the scripted socket ---- */

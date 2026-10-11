@@ -139,6 +139,7 @@ Tests
 .. autofunction:: tests.e2e.test_satellite.test_a_command_is_confirmed_from_the_units_own_state
 .. autofunction:: tests.e2e.test_satellite.test_an_unconfirmed_write_is_watched_across_the_reconnect
 .. autofunction:: tests.e2e.test_satellite.test_wakeup_card_is_live_and_sends_the_browsers_wall_clock
+.. autofunction:: tests.e2e.test_satellite.test_auto_camper_toggle_on_a_firmware_that_reports_it
 .. autofunction:: tests.e2e.test_satellite.test_wizard_pairs_the_satellite
 .. autofunction:: tests.e2e.test_satellite.test_wizard_over_the_setup_hotspot_via_app
 .. autofunction:: tests.e2e.test_esp_page.test_firmware_row_checks_and_installs

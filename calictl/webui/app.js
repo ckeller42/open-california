@@ -722,9 +722,10 @@ const FEATURES = {
  */
 async function api(path, opts) {
   // Defence in depth: the satellite serves /api/state, /api/pairing and, when it accepts writes,
-  // /api/command -- never let any caller fan out to a calictl-only endpoint there; refuse before any
-  // network request.
-  if (satellite() && path !== "/api/state" && path !== "/api/pairing" && !(path === "/api/command" && !readOnly()))
+  // /api/command (+ /api/auto_camper if reported) -- never let any caller fan out to a calictl-only
+  // endpoint there; refuse before any network request.
+  const w = path === "/api/command" || (path === "/api/auto_camper" && hasAutoCamper());
+  if (satellite() && path !== "/api/state" && path !== "/api/pairing" && !(w && !readOnly()))
     throw new Error("satellite: no " + path);
   const r = await fetch(path, opts);
   return r.json();
@@ -751,12 +752,14 @@ function installed(fn) {
 // read-only = the daemon rejects control writes (the safe default; enable with --enable-writes /
 // CALICTL_ENABLE_WRITES=1). The UI disables every control and shows a banner when true.
 // Unknown runtime (no `_meta` answered yet) is treated restrictively: read-only, and no calictl-only
-// affordance (the same app.js runs on the ESP32 satellite, which must never see /api/session|auto_camper|...).
+// affordance (the same app.js runs on the ESP32 satellite, which must never see /api/session|roof|...).
 const readOnly = () => !STATE._meta || !!STATE._meta.read_only;
-// The ESP32 satellite (semantics.js adaptSatellite): no auto-camper or session API.
+// The ESP32 satellite (semantics.js adaptSatellite): no session API.
 const satellite = () => !!(STATE._meta && STATE._meta.satellite);
 // A calictl daemon has answered (positively known; not the satellite, not still unknown).
 const isCalictl = () => !!(STATE._meta && !STATE._meta.satellite);
+// calictl, or a satellite firmware reporting device.auto_camper
+const hasAutoCamper = () => isCalictl() || !!(STATE._meta && STATE._meta.auto_camper);
 // What the satellite cannot do (the roof): the firmware answers the same words.
 const ELSEWHERE = "Only via buspi or the app";
 // The firmware's /api/command error codes the owner can act on, as a sentence (the rest stay
@@ -1974,7 +1977,7 @@ function renderFeature(fn) {
     app.appendChild(card);
   }
   if (f.roof) app.appendChild(roofControls(s));
-  if (fn === "campingmode" && isCalictl()) app.appendChild(autoCamperCard());
+  if (fn === "campingmode" && hasAutoCamper()) app.appendChild(autoCamperCard());
   if (f.readouts && f.readouts.length) {
     const card = document.createElement("div");
     card.className = "card";
@@ -2210,8 +2213,9 @@ function autoCamperCard() {
   sw.onclick = async () => {
     sw.disabled = true;
     try {
-      await api("/api/auto_camper", { method: "POST", headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ enabled: !ac.enabled }) });
+      const r = await api("/api/auto_camper", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ enabled: !ac.enabled }) });
+      if (!r.ok) throw 0;
       toast(ac.enabled ? "Auto camper off" : "Auto camper on", "ok");
     } catch (e) { toast("Couldn't change auto camper", "error"); }
     await refreshState(true);
