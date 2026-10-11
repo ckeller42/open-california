@@ -312,10 +312,14 @@ jobs:
           . "$IDF_PATH/export.sh"
           idf.py build
           { echo '```'; idf.py size; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          # First-flash image for new boards (docs/howto-esp-first-flash.md): every image at the
+          # build's own offsets, gaps 0xFF — so it ERASES NVS (bonds, WiFi). Never used by OTA.
+          (cd build && python -m esptool --chip esp32s3 merge-bin -o cali_fw_full.bin @flash_args)
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: firmware-esp32s3
           # *.bin = cali_fw.bin + ota_data_initial.bin (otadata, R_FW_OTA: flash_ci.sh writes it)
+          # + cali_fw_full.bin (the merged first-flash image; flash_ci.sh ignores it)
           path: |
             firmware/build/*.bin
             firmware/build/bootloader/bootloader.bin
@@ -342,7 +346,7 @@ jobs:
         with:
           name: firmware-esp32s3
           path: fw
-      - name: Upload cali_fw.bin + manifest.json to the esp-latest prerelease
+      - name: Upload cali_fw.bin + manifest.json (+ the first-flash cali_fw_full.bin) to the esp-latest prerelease
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -360,6 +364,7 @@ jobs:
             --notes "The ESP32 satellite's OTA source: the app image of the latest main merge (R_FW_OTA, docs/firmware.md). Rewritten by CI on every merge."
           gh release upload esp-latest "$bin" --clobber
           gh release upload esp-latest manifest.json --clobber
+          gh release upload esp-latest fw/cali_fw_full.bin --clobber   # USB first flash only; not in the manifest
 
   # The "chip simulator" tier (#154 Task 9): the esp32s3 image boots in Espressif's QEMU (pinned by
   # the IDF: tools/tools.json, esp-develop-9.2.2-20260417, in the same container). Its own variant

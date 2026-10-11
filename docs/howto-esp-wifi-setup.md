@@ -19,7 +19,8 @@ and the device's own state (Bluetooth pairing, link, WiFi).
 
 ## What you need
 
-- The satellite, powered (USB-C).
+- The satellite, powered (USB-C), with the firmware on it — a new board gets it once over USB:
+  [How to set up a new satellite](howto-esp-first-flash.md).
 - A phone, tablet or laptop with WiFi.
 - The name and password of the WiFi network you want the satellite on — a **2.4 GHz network with
   a password** (WPA2-Personal). The ESP32-S3 radio has no 5 GHz, and **open networks (no
