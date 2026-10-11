@@ -156,6 +156,63 @@ static void seg_path(char *out, size_t cap, uint32_t first) {
     snprintf(out, cap, "%s/%lu.jsonl", s_dir, (unsigned long)first);
 }
 
+/* In dir: above = 0 -> the newest segment whose first seq is <= ref; above = 1 -> the oldest one
+ * whose first seq is > ref. 0 = none. */
+static uint32_t seg_near(const char *dir, uint32_t ref, int above) {
+    DIR *d = opendir(dir);
+    struct dirent *e;
+    uint32_t best = 0, v;
+    if (!d) return 0;
+    while ((e = readdir(d)) != NULL)
+        if (seg_name(e->d_name, &v) && (above ? v > ref && (!best || v < best) : v <= ref && v > best)) best = v;
+    closedir(d);
+    return best;
+}
+
+int cali_sdlog_page(const char *dir, uint32_t since, uint32_t max, uint32_t boot, char *buf, size_t cap) {
+    char p[PATH_MAX_LEN + 16], line[CALI_SDLOG_LINE_MAX];
+    size_t n = 0, room;
+    uint32_t next = since, count = 0, lost = 0;
+    int more = 0;
+    if (cap < CALI_SDLOG_PAGE_MIN) return -1;
+    room = cap - (CALI_SDLOG_PAGE_MIN - CALI_SDLOG_LINE_MAX);   /* the trailer always fits */
+    if (!max) max = CALI_SDLOG_PAGE_DEFAULT;
+    uint32_t seg = since < UINT32_MAX ? seg_near(dir, since + 1, 0) : 0;
+    if (!seg) {   /* since+1 is older than every segment: resume from the oldest, count the gap */
+        seg = seg_near(dir, 0, 1);
+        if (seg > since + 1) lost = seg - since - 1;
+    }
+    while (seg && !more) {
+        int whole = 1;   /* the chunk being read starts a line */
+        snprintf(p, sizeof p, "%s/%lu.jsonl", dir, (unsigned long)seg);
+        FILE *f = fopen(p, "r");
+        if (!f) return -1;
+        while (!more && fgets(line, sizeof line, f)) {
+            size_t len = strlen(line);
+            int complete = len && line[len - 1] == '\n';
+            if (complete && whole && strncmp(line, "{\"seq\":", 7) == 0) {
+                unsigned long long seq = strtoull(line + 7, NULL, 10);
+                if (seq > next && seq <= UINT32_MAX) {
+                    if (count >= max || n + len > room) {
+                        more = 1;
+                    } else {
+                        memcpy(buf + n, line, len);
+                        n += len;
+                        next = (uint32_t)seq;
+                        count++;
+                    }
+                }
+            }
+            whole = complete;
+        }
+        fclose(f);
+        seg = seg_near(dir, seg, 1);
+    }
+    int t = snprintf(buf + n, cap - n, "{\"next\":%lu,\"more\":%s,\"boot\":%lu,\"lost\":%lu}\n", (unsigned long)next,
+                     more ? "true" : "false", (unsigned long)boot, (unsigned long)lost);
+    return t < 0 || (size_t)t >= cap - n ? -1 : (int)(n + (size_t)t);
+}
+
 static int open_seg(uint32_t first, long bytes) {
     char p[PATH_MAX_LEN + 16];
     seg_path(p, sizeof p, first);
@@ -261,3 +318,45 @@ void cali_sdlog_close(void) {
 }
 
 uint32_t cali_sdlog_next_seq(void) { return s_next; }
+
+/* ---- /api/log hand-off: owner task requests, SD task reads (shared fields __atomic) ---- */
+enum { PAGE_IDLE, PAGE_REQ, PAGE_DONE, PAGE_FAIL };
+static int s_pg = PAGE_IDLE;
+static char *s_pg_buf;
+static size_t s_pg_cap, s_pg_len;
+static uint32_t s_pg_since, s_pg_max;
+
+void cali_sdlog_page_buffer(char *buf, size_t cap) {
+    s_pg_buf = buf;
+    s_pg_cap = cap;
+}
+
+int cali_sdlog_page_request(uint32_t since, uint32_t max) {
+    if (!s_pg_buf || __atomic_load_n(&s_state, __ATOMIC_ACQUIRE) != CALI_SD_OK) return -1;
+    if (__atomic_load_n(&s_pg, __ATOMIC_ACQUIRE) == PAGE_REQ) return -2;
+    s_pg_since = since;
+    s_pg_max = max;
+    __atomic_store_n(&s_pg, PAGE_REQ, __ATOMIC_RELEASE);
+    return 0;
+}
+
+int cali_sdlog_page_result(const char **body, size_t *len) {
+    int st = __atomic_load_n(&s_pg, __ATOMIC_ACQUIRE);
+    if (st == PAGE_FAIL) return -1;
+    if (st != PAGE_DONE) return 0;
+    *body = s_pg_buf;
+    *len = s_pg_len;
+    return 1;
+}
+
+int cali_sdlog_page_pending(void) { return __atomic_load_n(&s_pg, __ATOMIC_ACQUIRE) == PAGE_REQ; }
+
+void cali_sdlog_page_serve(void) {
+    int n;
+    if (__atomic_load_n(&s_pg, __ATOMIC_ACQUIRE) != PAGE_REQ) return;
+    /* the newest records sit in the stdio buffer, and FATFS publishes a file's size only on f_sync */
+    if (!s_f || cali_sdlog_sync() != 0) n = -1;
+    else n = cali_sdlog_page(s_dir, s_pg_since, s_pg_max, cali_time_boot(), s_pg_buf, s_pg_cap);
+    s_pg_len = n > 0 ? (size_t)n : 0;
+    __atomic_store_n(&s_pg, n > 0 ? PAGE_DONE : PAGE_FAIL, __ATOMIC_RELEASE);
+}

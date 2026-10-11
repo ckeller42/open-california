@@ -75,6 +75,65 @@ def installed_from(states: dict) -> set:
     return {fn for fn, i in states.items() if i.get("installed")}
 
 
+def interpret_frames(funcs, raw, last):
+    """One read's frames -> interpreted states: decode, the lighting config latch, interpret, and the
+    cross-function firmware corrections. The stateless half of :meth:`Server.poll`, shared with the
+    ESP log replay (:mod:`calictl.esp_ingest`).
+
+    :param funcs: the dictionary (``protocol.load`` + ``overrides.apply``).
+    :param raw: ``{function: frame bytes}`` (a correction needing another function's state — the
+        DC-DC +2 needs ``general`` — applies only when that frame is in ``raw`` too).
+    :param last: the previous decoded cache ``{function: decoded}`` (lighting keeps its lamps across
+        a config/ack frame, #284); not mutated.
+    :returns: ``(states, new_last)`` — ``{function: interpreted}`` and a new decoded cache.
+    """
+    states = {}
+    new_last = dict(last)
+    for fn, data in raw.items():
+        decoded = protocol.decode(funcs[fn], data)
+        if fn == "lighting":  # a config/ack frame keeps the lamps; the config carries across (#284)
+            decoded = semantics.lighting_merge(last.get("lighting"), decoded)
+        new_last[fn] = decoded
+        states[fn] = semantics.interpret(fn, decoded)
+    semantics.apply_sw_corrections(states)  # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
+    return states, new_last
+
+
+def guard_water(st, states, now, wall, settle, stale_from=None):
+    """The water guard of :meth:`Server.poll` (``freshness.settle_water``): the unit reports fresh 1 L
+    whenever it is NOT measuring and ramps 1 -> real value in ~4 s when it starts. Hold the last
+    adopted reading, flagged stale, against the 1 L latch AND while a new level hasn't settled (a 30 s
+    poll can land mid-ramp: buspi read 16 on the way to 20). Cold start: nothing is shown until a level
+    >= 2 settles. Shared with the ESP log replay (:mod:`calictl.esp_ingest`).
+
+    :param st: the holder of the guard's state — ``_water_good``, ``_water_pending``,
+        ``_water_measured_at``, ``_water_stale_since`` (the :class:`Server`; the replay's state).
+    :param states: this read's interpreted states; ``states["water"]`` is replaced by the held
+        reading, or dropped (nothing measured yet). Mutated.
+    :param now: the settle clock (serve: ``time.monotonic()``; replay: the record's time, s).
+    :param wall: epoch s for ``_water_measured_at``.
+    :param settle: ``WATER_SETTLE_S`` (or ``CALICTL_WATER_SETTLE_S``).
+    :param stale_from: when the hold started if not already stale (serve: the last good poll).
+    :returns: True adopted, False held/dropped, None no fresh level in ``states`` (untouched).
+    """
+    new_water = states.get("water")
+    if new_water is None or (new_water.get("fresh") or {}).get("liters") is None:
+        return None
+    base = st._water_good
+    adopt, st._water_pending = freshness.settle_water(new_water, base, st._water_pending, now, settle)
+    if adopt:
+        st._water_good = new_water
+        st._water_measured_at = wall
+        st._water_stale_since = None
+        return True
+    if base is not None:
+        states["water"] = base  # MQTT/Influx get the held level, not the latch/ramp
+    else:
+        states.pop("water")  # nothing measured yet: publish nothing, not a fake 1 L
+    st._water_stale_since = st._water_stale_since or stale_from or wall
+    return False
+
+
 def _pairing_cache_address():
     """Best-effort read of the persisted pairing-cache ``address`` (``CALICTL_PAIRING_CACHE``,
     default ``~/.local/state/calictl/pairing.json``) — used ONLY as a `pairing_snapshot()`
@@ -669,15 +728,7 @@ class Server:
                 return {}
             sess = self._live_session()
             raw = await (sess.read_all(self.funcs) if sess is not None else self.dev.read_all(self.funcs))
-        states = {}
-        new_last = dict(self._last)  # build a fresh copy, then publish atomically
-        for fn, data in raw.items():
-            decoded = protocol.decode(self.funcs[fn], data)
-            if fn == "lighting":  # a config/ack frame keeps the lamps; the config carries across (#284)
-                decoded = semantics.lighting_merge(self._last.get("lighting"), decoded)
-            new_last[fn] = decoded
-            states[fn] = semantics.interpret(fn, decoded)
-        semantics.apply_sw_corrections(states)  # e.g. DC-DC current +2 on AmbSwVersion 0409/0410
+        states, new_last = interpret_frames(self.funcs, raw, self._last)  # a fresh copy, published atomically
         # Firmware/protocol DRIFT: if the (amb_sw, comm) identity changed since we last saw it, dump a
         # raw-frame snapshot NOW — the old-firmware wire bytes vanish once the unit updates, and that
         # snapshot is the only thing that makes a new correction derivable. Log either way; remember +
@@ -723,22 +774,7 @@ class Server:
         # (persisted `_water_good`, survives restarts, NO Influx dependency) flagged stale against
         # the 1 L latch AND while a new level hasn't settled (a 30 s poll can land mid-ramp: buspi
         # read 16 on the way to 20). Cold start: nothing is shown until a level >= 2 settles.
-        new_water = states.get("water")
-        if new_water is not None and (new_water.get("fresh") or {}).get("liters") is not None:
-            base = self._water_good
-            adopt, self._water_pending = freshness.settle_water(
-                new_water, base, self._water_pending, time.monotonic(), self._water_settle_s
-            )
-            if adopt:
-                self._water_good = new_water
-                self._water_measured_at = time.time()
-                self._water_stale_since = None
-            else:
-                if base is not None:
-                    states["water"] = base  # MQTT/Influx get the held level, not the latch/ramp
-                else:
-                    states.pop("water")  # nothing measured yet: publish nothing, not a fake 1 L
-                self._water_stale_since = self._water_stale_since or self._last_ok_ts or time.time()
+        guard_water(self, states, time.monotonic(), time.time(), self._water_settle_s, self._last_ok_ts)
         if states:  # a real read happened -> mark fresh + persist
             # Rebind (never mutate in place): the web thread reads `_last` unlocked in
             # ServeBackend.state(), so it must only ever see a complete dict, not one

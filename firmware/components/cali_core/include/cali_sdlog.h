@@ -83,6 +83,33 @@ uint32_t cali_sdlog_next_seq(void);   /* the seq the next record gets */
 /* The card as the SD task sees it (device.sd). total/free in MB (ignored unless CALI_SD_OK). */
 void cali_sdlog_card(int state, uint32_t total_mb, uint32_t free_mb);
 
+/* ---- GET /api/log (R_FW_LOG_API): one page of the log for buspi's esp-ingest ----
+ * Portable, any task: one page of the log in dir into buf — every complete record line with
+ * seq > since, oldest first, at most max records and as many as fit cap less the trailer — then the
+ * trailer line
+ *   {"next":<the page's last seq, or since>,"more":<bool>,"boot":<boot>,"lost":<n>}
+ * more = records were left for the next page; lost = seqs since+1 .. that are gone (their segment
+ * was deleted at 90 % full): the page resumes from the oldest segment. A line without its '\n' (a
+ * record being written / cut by a power loss) is never sent. Returns the bytes in buf, or -1 (a
+ * segment unreadable, cap below CALI_SDLOG_PAGE_MIN). */
+#define CALI_SDLOG_PAGE_DEFAULT 2000u   /* records per page when max is 0 */
+#define CALI_SDLOG_PAGE_MIN (CALI_SDLOG_LINE_MAX + 96)   /* one record + the trailer */
+int cali_sdlog_page(const char *dir, uint32_t since, uint32_t max, uint32_t boot, char *buf, size_t cap);
+
+/* The owner task <-> SD task hand-off (the owner task never touches the card):
+ *   platform, once      cali_sdlog_page_buffer(buf, cap): the page buffer (ESP: PSRAM). None = no /api/log.
+ *   owner (web.c)       cali_sdlog_page_request(since, max): 0 queued, -1 no card / no buffer,
+ *                       -2 busy (an earlier page is still being read); then cali_sdlog_page_result:
+ *                       1 done (*body, *len: the page, valid until the next request), 0 not yet,
+ *                       -1 the read failed.
+ *   SD task             cali_sdlog_page_serve(): reads a requested page of the open log (after a
+ *                       sync, so it ends at the newest record); a no-op otherwise. */
+void cali_sdlog_page_buffer(char *buf, size_t cap);
+int cali_sdlog_page_request(uint32_t since, uint32_t max);
+int cali_sdlog_page_result(const char **body, size_t *len);
+void cali_sdlog_page_serve(void);
+int cali_sdlog_page_pending(void);   /* SD task: 1 while a page is requested (take the bus lock, serve) */
+
 #ifdef __cplusplus
 }
 #endif

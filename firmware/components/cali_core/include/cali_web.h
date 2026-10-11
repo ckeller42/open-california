@@ -121,6 +121,15 @@
  *                     -> 200 {"ok":true}; station mode only (403 setup_mode), 400 bad_json (other keys,
  *                     a key twice, a non-bool flag, a non-integer percent), 400 bad_value (min 1..50,
  *                     max 20..100, min < max, offset -50..50), 500 store, 405 for another method.
+ *   GET /api/log?since=<seq>&max=<n>   (R_FW_LOG_API, buspi's `calictl esp-ingest`) one page of the
+ *                     SD log, 200 application/x-ndjson: the record lines with seq > since (default 0),
+ *                     at most max (0/absent = CALI_SDLOG_PAGE_DEFAULT, 2000) and what fits the page
+ *                     buffer, then {"next","more","boot","lost"} (cali_sdlog.h cali_sdlog_page). In
+ *                     every WiFi mode (read only). The SD task reads it (cali_sdlog_page_request ->
+ *                     CALI_HTTP_PENDING until cali_sdlog_page_result); the owner task never touches
+ *                     the card. 400 bad_value (anything but since/max digits), 503 no_card (card not
+ *                     ok, or no page buffer: host, QEMU), 503 sd_read (the read failed), 409 busy (an
+ *                     earlier page still being read), 405 method.
  *   other method on /api/wifi, /api/state or /api/pairing -> 405 {"ok":false,"error":"method"}
  *   anything else     setup mode: an OS captive-portal probe path (cali_captive_is_probe) -> 302
  *                     Location "http://" NET_AP_ADDR "/"; any other path -> 302 Location "/".

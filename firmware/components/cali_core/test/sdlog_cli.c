@@ -17,6 +17,8 @@
  *   deloldest               "DEL <rc>"
  *   json                    "JSON <the device.sd object>"
  *   queued                  "QUEUED <n>"
+ *   page <since> <max> <cap> <boot> [dir]   cali_sdlog_page over dir (default: the last opened one)
+ *                           -> "PAGE <rc>", the page bytes, then "END"
  * cali_log prints "LOG <text>".
  */
 #include <stdio.h>
@@ -35,6 +37,7 @@
 static cali_sdlog_rec_t s_q[QMAX];
 static int s_qn, s_qcap = 64;
 static int s_link;
+static char s_dir[256];
 static struct {
     uint8_t f[CODEC_FRAME_MAX];
     size_t n;
@@ -111,7 +114,18 @@ int main(int argc, char **argv) {
             s_qn = 0;
             if (rc < 0) printf("ERR write\n");
             else printf("WROTE %d ROLLED %d\n", n, rolled);
+        } else if (strncmp(line, "page ", 5) == 0) {
+            static char pg[1 << 20];
+            static char dir[256];
+            unsigned long since, max, cap, boot;
+            int k = sscanf(line + 5, "%lu %lu %lu %lu %255s", &since, &max, &cap, &boot, dir);
+            if (k < 4 || cap > sizeof pg) return 3;
+            int rc = cali_sdlog_page(k == 5 ? dir : s_dir, (uint32_t)since, (uint32_t)max, (uint32_t)boot, pg, cap);
+            printf("PAGE %d\n", rc);
+            if (rc > 0) fwrite(pg, 1, (size_t)rc, stdout);
+            printf("END\n");
         } else if (strncmp(line, "open ", 5) == 0) {
+            snprintf(s_dir, sizeof s_dir, "%s", line + 5);
             int rc = cali_sdlog_open(line + 5);
             printf("OPEN %d NEXT %lu\n", rc, (unsigned long)cali_sdlog_next_seq());
         } else if (strncmp(line, "fill ", 5) == 0) {

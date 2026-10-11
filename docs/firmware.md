@@ -196,6 +196,7 @@ with them on any build, a dirty local one included. A `GET` whose `If-None-Match
 | `POST /api/wifi` | Body exactly `{"ssid":"…","psk":"…"}` (fixed-shape parser). SSID 1–32 bytes, PSK 8–63 bytes (open networks unsupported) -> stored in the kv store, handed to the runner -> 200 `{"ok":true}`; else 400 `{"ok":false,"error":"json"|"ssid"|"psk"}`, a kv failure 500 `"store"`. |
 | `DELETE /api/wifi` | Forget the WiFi (-> `SETUP_AP`) -> 200 `{"ok":true}`. |
 | `POST /api/command` | calictl's control request `{"function","what","value","confirm"}` plus the optional `local_now` (the page's clock for `lighting wakeup`, see [Control path](#control-path)) (`value` a string, integer or null — booleans/fractions/nesting 400 `bad_json`). **Station mode only**: anywhere else 403 `setup_mode` (ruling B: never over the setup hotspot). Then web.py's 400 `missing_function_or_what` / `confirm_required` (airheater, roof), then the sequencer (`cali_control.h`): accepted -> the answer waits for the write ACKs (`CALI_HTTP_PENDING`, <= `CALI_CTL_DEADLINE_MS`) -> 200 `{"ok":true,"applied":null,"state":null,"error":null,"function":fn}` (`applied` never true: no readback; plus `"unconfirmed":true` when the link dropped after a frame went out — it may have landed, #264) or 502 `write_failed` / 504 `write_timeout`; a gate or "Only via buspi or the app" -> 200 `{"ok":true,"applied":false,"refused":<text>,…}`; 400 `bad_value` / `unknown_control`, 409 `busy`, 503 `not_connected`. The core caps a pending answer at `CALI_HTTP_PENDING_MAX_MS` (2 x the deadline; 504 text/plain) so a handler that never answers cannot wedge the single connection. Deliberate differences from calictl: Content-Type is not checked (calictl: 415), `-0` passes as the text `"-0"` (refused as not on/off where calictl reads OFF — the safe direction), a >= 64-byte value is `bad_json` before the gates (the console `set` gates first; both refuse). |
+| `GET /api/log?since=<seq>&max=<n>` | One page of the SD log for buspi's `calictl esp-ingest` (`R_FW_LOG_API`, [below](#sd-log-r_fw_sd_log)), in every WiFi mode: 200 `application/x-ndjson`, the record lines with `seq > since`, oldest first, at most `max` (default 2000) and what fits the 400 KB PSRAM page buffer, then the trailer `{"next":<last seq sent, or since>,"more":<bool>,"boot":<current boot>,"lost":<n>}`. 400 `bad_value` (any other query), 503 `no_card` / `sd_read`, 409 `busy`, 405 `method`. |
 | `POST /api/ota` | `{"action":"check"\|"install"}` (`R_FW_OTA`, [Firmware update from GitHub](#firmware-update-from-github-r_fw_ota)): starts the OTA task -> 200 `{"ok":true}` at once, progress in `/api/state` `device.ota`. Station mode only (403 `setup_mode`), 400 `bad_json`/`bad_action`, 409 `busy`, 503 `ota_unavailable` (host build, QEMU). |
 | `POST /api/auto_camper` | `{"enabled":<bool>}` (exactly that object; serve's endpoint, `R_FW_AUTO_CAMPER`): saves the toggle -> 200 `{"ok":true,"auto_camper":<bool>}`. Station mode only (403 `setup_mode`), 400 `bad_json`, 500 `store`. |
 | `POST /api/display` | `{"auto"?,"prox_wake"?,"min"?,"max"?,"offset"?}` (`R_FW_DISPLAY_WAKE`, [Screen wake and brightness](#screen-wake-and-brightness-r_fw_display_wake)): merged into the stored settings -> 200 `{"ok":true}`. Station mode only (403 `setup_mode`), 400 `bad_json` (another key, a key twice, a non-bool flag, a non-integer percent), 400 `bad_value` (min 1–50, max 20–100, min < max, offset −50…50), 500 `store`. |
@@ -567,7 +568,7 @@ counts boots, `boot` 0 there). The `/device` page shows it as one line (*Clock s
 ## SD log (`R_FW_SD_LOG`)
 
 Every unit frame and link change, stamped at log time, as JSONL on the CoreS3's microSD card, so
-buspi can later fill the gaps of its own history (ingest: a later PR).
+buspi can later fill the gaps of its own history (`calictl esp-ingest`, `R_ESP_INGEST_GAPFILL`, see [the Pi setup](raspberry-pi-setup.md#esp-ingest-gap-fill)).
 
 - **Format** — one record per line, the shape of calictl's `CALICTL_BLE_TRACE` (`calictl/trace.py`;
   `trace.read_events` reads a segment as it is) plus `seq`, `boot`, `up`, `ts`, `tsrc`:
@@ -603,6 +604,19 @@ buspi can later fill the gaps of its own history (ingest: a later PR).
   own `sdspi_host_init_device`, as an input, which `gpio_config` flags (`esp_driver_gpio`: "Right now,
   we just give a warning"). Nothing else owns GPIO4 on the CoreS3 (`BSP_SD_SPI_CS`); a remount shows
   it once more. Harmless, left as is.
+
+- **`GET /api/log`** (`R_FW_LOG_API`) — buspi pulls the log page by page: every complete record
+  with `seq > since` in seq order, across segments, at most `max` (default 2000) and what fits the
+  page buffer (400 KB, PSRAM), then one trailer line
+  `{"next":<the page's last seq, or since>,"more":<bool>,"boot":<current boot>,"lost":<n>}`.
+  `more` = records were left for the next page (ask again with `since=next`); `boot` tells the
+  ingest which unstamped records may still get a `ts` (the current boot's); `lost` = seqs after
+  `since` whose segment was deleted at 90 % full (the page resumes from the oldest segment). A line
+  without its `\n` (half-written) is never sent. The web handler only requests the page
+  (`cali_sdlog_page_request`, then `CALI_HTTP_PENDING`); the SD task reads it under the display lock
+  after an `fsync` (FATFS publishes a file's size only on sync), so the owner task never touches the
+  card. No card or no page buffer (host, QEMU) = 503 `no_card`. The paging core
+  (`cali_sdlog_page`) is plain stdio, host-tested against a temp dir.
 
 `device.sd` in `/api/state`: `{"state": "absent"|"error"|"ok", "total_mb", "free_mb", "last_seq", "dropped"}` —
 `total_mb`/`free_mb` (FAT, MiB) only while `ok`, else `null`; `last_seq` = the last record fsynced to the card
@@ -1128,6 +1142,17 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    ``device.auto_camper`` ``{enabled, state}``, ``POST /api/auto_camper`` switches it (station mode
    only) and the ``/device`` page shows and switches it (EN + DE).
 
+.. req:: The satellite serves its SD log page by page over HTTP
+   :id: R_FW_LOG_API
+   :status: implemented
+   :tags: esp32, sd, log
+
+   ``GET /api/log?since=<seq>&max=<n>`` shall answer the complete log records with ``seq > since``
+   in seq order across segments, at most ``max`` (default 2000) and what fits the page buffer, then
+   a trailer ``{"next", "more", "boot", "lost"}`` (``lost`` = seqs in deleted segments, the page
+   resuming from the oldest one); never a half-written line. The card is read only by the SD task;
+   no card = 503 with a JSON error.
+
 .. req:: The satellite serves the calictl web UI from its own BLE data, controls live except the roof
    :id: R_FW_SHARED_UI
    :status: implemented
@@ -1267,6 +1292,11 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   October hour that happens twice = none, day 0 = none, a skipped frame keeps the anchor, `ts`
   advances with uptime, `ntp` wins over `unit`). SNTP and the unit clock over the air are
   board-only (owed: `device.time.synced` true after a join; `source: unit` with the WiFi off).
+- **`R_FW_LOG_API`** — verified by `T_FW_LOG_API_PAGE` (`tests/firmware/test_sdlog.py`: pages across a
+  1 MB roll, `since` inside a segment, `max` and the buffer bound a page with `more`, `since` past
+  the end, a cut last line never sent, deleted oldest segments reported as `lost`) and
+  `T_FW_LOG_API_ROUTE` (`tests/firmware/test_web_handlers.py`: the route waits for the SD side's
+  page, NDJSON + trailer, 503 no card / failed read, 400, 405). On the board: owed (first ingest).
 - **`R_FW_SD_LOG`** — verified by `T_FW_SD_LOG` (`tests/firmware/test_sdlog.py`: `sdlog.c` against a
   temp dir — the record shape read back by `calictl.trace.read_events`, a `1004` record stamped by
   its own clock, the roll at 1 MB with `seq` running on, `seq` resumed after a cut last line, an

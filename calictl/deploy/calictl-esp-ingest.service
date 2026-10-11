@@ -1,0 +1,19 @@
+# One esp-ingest run: fill InfluxDB gaps from the ESP satellite's SD log (R_ESP_INGEST_GAPFILL).
+# Not BLE — `calictl serve` stays the single BLE owner. Started by calictl-esp-ingest.timer.
+# Set the ESP's address with `systemctl edit calictl-esp-ingest.service`:
+#   [Service]
+#   Environment=CALICTL_ESP_URL=http://<esp-ip-or-name>
+[Unit]
+Description=VW California: ESP satellite SD log -> InfluxDB gap fill
+After=influxdb.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/solix-env/bin/python -m calictl esp-ingest --url ${CALICTL_ESP_URL}
+WorkingDirectory=/home/pi/open-california
+EnvironmentFile=-/etc/buspi/secrets.env
+EnvironmentFile=-/etc/buspi/calictl.env
+Environment=PYTHONUNBUFFERED=1
+TimeoutStartSec=15min
+User=pi

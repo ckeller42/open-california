@@ -19,6 +19,8 @@ Daemon state
 .. automethod:: calictl.serve.Server._save_last
 .. automethod:: calictl.serve.Server._pull_lighting_config
 .. automethod:: calictl.serve.Server._poll_nap
+.. autofunction:: calictl.serve.interpret_frames
+.. autofunction:: calictl.serve.guard_water
 
 Device / reads
 --------------
@@ -242,6 +244,8 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_sdlog
 .. automodule:: tests.firmware.test_auto_camper_parity
 .. automodule:: tests.firmware.test_auto_camper_e2e
+.. automodule:: calictl.esp_ingest
+.. automodule:: tests.test_esp_ingest
 .. automodule:: tests.test_wifi_sm_ref
 .. automodule:: tests.test_web_strings
 .. automodule:: tests.test_ux_gallery_esp_fixtures

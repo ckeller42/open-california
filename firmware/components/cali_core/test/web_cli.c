@@ -40,6 +40,8 @@
  *   ctldone <rc> <polls> [reason…]   rc = ok failed timeout refused: the done callback of the last
  *                    accepted command fires <polls> polls into the next request, with the reason
  *                    (NULL when absent)
+ *   sdlog <dir> <cap>   the SD side: cali_sdlog_open(dir), card "ok", a <cap>-byte /api/log page buffer;
+ *                    every poll of a request then also runs cali_sdlog_page_serve (the SD task)
  *   otainit          cali_ota_init with fake ops (default: none, so /api/ota answers 503); their
  *                    wake prints "CALL ota_wake", the rest are never reached (ota.c runs on the OTA
  *                    task, tests/firmware/test_ota.py)
@@ -59,6 +61,7 @@
 #include "cali_ota.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
+#include "cali_sdlog.h"
 #include "cali_session.h"
 #include "cali_web.h"
 #include "cali_wifi_run.h"
@@ -278,6 +281,7 @@ static void request(const char *text) {
         s_sent_poll = 0;
         s_now += 10;
         cali_web_poll(s_now);
+        cali_sdlog_page_serve();   /* the SD task's side of /api/log (a no-op unless requested) */
         if (s_done_after > 0 && --s_done_after == 0 && s_ctl_done) {
             cali_ctl_done_t d = s_ctl_done;
             s_ctl_done = NULL;
@@ -318,6 +322,14 @@ int main(void) {
         else if (strcmp(w, "flipping") == 0) s_flipping = (int)v;
         else if (strcmp(w, "nofn") == 0) s_nofn = 1;
         else if (strcmp(w, "otainit") == 0) cali_ota_init(&fake_ota);
+        else if (strcmp(w, "sdlog") == 0) {
+            static char pagebuf[OUT_MAX], dir[256];
+            unsigned long cap = 0;
+            if (sscanf(line + 6, "%255s %lu", dir, &cap) != 2) cap = 0;
+            printf("SDLOG %d\n", cali_sdlog_open(dir));
+            cali_sdlog_card(CALI_SD_OK, 100, 50);
+            cali_sdlog_page_buffer(pagebuf, cap < sizeof pagebuf ? (size_t)cap : sizeof pagebuf);
+        }
         else if (strcmp(w, "joined") == 0) s_wifi.joined_once = (uint8_t)v;
         else if (strcmp(w, "bond") == 0) s_bond = (int)v;
         else if (strcmp(w, "active") == 0) s_active = (int)v;
