@@ -483,7 +483,10 @@ run it, so the release is always a real merge commit.
 **The flow** (`cali_core/ota.c`, portable; `components/cali_ota`, ESP only): `POST /api/ota
 {"action":"check"}` (or the console `ota check`) has the OTA task — never the owner task, which keeps
 the BLE session and the web server — fetch the manifest over HTTPS (ESP certificate bundle,
-following GitHub's redirect to its asset host). Its `sha` starting with the running `device.fw`
+following GitHub's redirect to its asset host; a `?t=<uptime ms>` query per check plus
+`Cache-Control`/`Pragma: no-cache`, since on 2026-10-11 GitHub's edge served the ESP the replaced
+manifest for ~2 min while other clients saw the new one — a check right after a merge may still
+need a retry if GitHub lags). Its `sha` starting with the running `device.fw`
 (the build's `git describe`, a sha prefix) is `up_to_date`; anything else is `available`.
 `{"action":"install"}` then streams `cali_fw.bin` into the inactive slot with `esp_https_ota`, reads
 the slot back and checks its SHA-256 against the manifest (a release replaced mid-download fails

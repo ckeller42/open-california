@@ -29,6 +29,7 @@ static int s_get_fail, s_download_fail, s_slot_fail, s_commit_fail;
 static uint8_t s_slot[32];
 
 const char *cali_fw_version(void) { return s_fw; }
+uint64_t cali_uptime_ms(void) { static uint64_t t = 1000; return t += 1000; } /* each call a later "now" */
 void cali_log(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
