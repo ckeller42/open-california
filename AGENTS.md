@@ -142,7 +142,8 @@ buspi's own adapter). Warm the fast session first with `POST /api/session {"acti
 - **Control writes WORK** (issue #2, 2026-07-07): armed by a **+1 4-byte-BE liveness heartbeat on
   char `1003`** (~0.6 s). One-shot arm — the load latches, so the heartbeat only spans the write
   window (`device.actuate`, under the `serve` lock). Live-verified on-device: **cooler**, **campingmode** (master/lights/usb), **lighting** (per-zone
-  brightness). **CAPTURE 2026-10-10:** the real app's frames on the real unit are byte-identical to
+  brightness), **air heater** (start/level/runtime/timer arm+cancel, 2026-10-11 — the first
+  calictl-driven heater run; the roof is still never driven). **CAPTURE 2026-10-10:** the real app's frames on the real unit are byte-identical to
   `control.build` for every non-motor control exercised (cooler power/level/quiet/timer incl. the
   `State=3` frames, lighting, camping) — the app adds a neutral re-write (`ff771e3e1f1f` / `ff`) 500 ms
   later, which the unit ignores; calictl doesn't send it.

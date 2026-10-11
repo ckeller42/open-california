@@ -85,7 +85,7 @@ answers wire facts; it adds nothing for app-side logic or unexposed features.
 
 | Unclear item | Capture resolves it? | What to do |
 |---|---|---|
-| **Air-heater level range** (is it 1–10 or the raw 0–15?) | ✅ **yes, fully** | In the app, set the heater to its **lowest** then **highest** level. The writes to char `1701` carry the exact min/max `HeatingLevel` raw values → pins the real range. Until then `semantics.airheater` keeps the honest raw 0–15 (`HeatingLevel` is 4-bit, dict-marked `UNVERIFIED`). |
+| ~~**Air-heater level range**~~ | ✅ **DONE** | 1–10 (HI=10), captured 2026-07-14; live 2026-10-11: calictl `level 3` and the app's `level 8` (`3f78007f1f3f`, = calictl's) both applied on the real unit. |
 | **`car_variant` → model name** | 🟡 **partial** | A single **read** of char `1004` shows this van's raw `CarVariant`; the app screen shows the model. Pairs raw→label for *this* van (confirms whether `1 = California 7`, per `te/a.java`). Can't prove the other variants — only one vehicle. Kept as raw int meanwhile. |
 | **Vehicle clock-out-of-sync** | ❌ **no — not on the wire** | The RTC decode is already correct. "Out of sync" is the app comparing the unit clock to the **phone** clock (>5 min, `zf/d.java:235`). Nothing to capture — implement daemon-side (compare `vehicle.car_clock` to the Pi system clock) if wanted. |
 | **Lighting colour (`SET_COLOR`)** | ❌ **no — not exposed** | The colour UI is model-gated (likely Grand-California-only), so a T7 app never emits a colour frame. calictl sends SET_COLOR only as the `save_profile N <colour>` preface (DECOMPILE-only); the standalone `set lighting color` is retired. |
@@ -95,7 +95,8 @@ answers wire facts; it adds nothing for app-side logic or unexposed features.
 1. **Roof actuation** — the last control path still NOT-LIVE-VERIFIED, and the roof **is** fitted here.
    A *passive* capture (you tap, we watch — zero risk) confirms SafetyCounter cadence, the ~3 s
    self-gate, and direction bytes vs `device.actuate_roof`. See §5 + Priority 5.
-2. **Air-heater level range** (above) + a live read while it runs.
+2. ~~**Air-heater level range** + a live read while it runs~~ — **DONE** 2026-10-11: a calictl-driven
+   30-min run with live `1702` reads (`cooler-airheater.md`, evidence ledger).
 3. **Full 16-zone lamp map** — only L1–L8 identified; drag each remaining lamp to a distinct level.
 
 ## Runbook — copy-paste (staged 2026-07-13, ready to run)
@@ -246,8 +247,10 @@ Questions the static trace (enigma `46f982d3`) could not settle; each is an app-
 
 ## Priority 5 — finish the smaller gaps
 
-- **air-heater level + runtime** (only on/off captured; the physical fields were at sentinels):
-  drag Heizstufe to 3 then 8; Laufzeit to 30 then 90 min.
+- ~~**air-heater level + runtime**~~ — **DONE** DEVICE/CAPTURE 2026-10-11: calictl `level 3`,
+  `runtime 30`, `power on`, `timer` + `timer_start`/`timer_cancel` all applied; the app's level 3→8 drag
+  = `3f78007f1f3f` (= calictl `level 8`); the heater ran exactly 30 min. Still owed: an armed timer
+  actually firing at its start time.
 - **WAKEUP_TIME** (Wecklicht): time edit **APP-RECORDED** (`lighting-wakeup.jsonl`, packing settled by
   call stack) and built by calictl `wakeup`; the on/off switch and a time edit while enabled are
   **APP-RECORDED** too (2026-10-06, re-recorded `lighting-wakeup.jsonl`). Owed only on the van: does the
