@@ -515,7 +515,7 @@ def render_app_bundle() -> str:
 
     ``calictl/webui/index.html`` with ``/app.css`` as an inline ``<style>`` and ``/strings.de.js``,
     ``/semantics.js``, ``/app.js`` as inline ``<script>`` tags (verbatim). The manifest / apple-touch-icon
-    / icon links stay: the satellite serves exactly those files (:data:`_PWA_FILES`, cached a day), so
+    / icon links stay: the satellite serves exactly those files (:data:`_PWA_FILES`, ETag-validated), so
     the page is home-screen-installable like buspi's.
 
     :raises ValueError: when a source contains ``</script`` or ``</style`` (it would end its inline

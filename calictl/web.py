@@ -7,6 +7,7 @@ assets in calictl/webui/ plus a small JSON API. Stdlib-only.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import posixpath
@@ -79,12 +80,22 @@ def make_handler(backend, webui_dir):
             self.end_headers()
             self.wfile.write(body)
 
-        def _send_bytes(self, body, ctype, status=200):
+        def _send_bytes(self, body, ctype, status=200, etag=None):
+            inm = self.headers.get("If-None-Match", "")
+            if etag and (inm.strip() == "*" or etag in inm):  # the client's copy is current
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                return
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            # no-cache so a redeployed UI is picked up on the next load, not a stale copy
+            # no-cache so a redeployed UI is picked up on the next load, not a stale copy (an
+            # unchanged one costs a 304 when the ETag matches)
             self.send_header("Cache-Control", "no-cache")
+            if etag:
+                self.send_header("ETag", etag)
             self.end_headers()
             self.wfile.write(body)
 
@@ -117,7 +128,9 @@ def make_handler(backend, webui_dir):
                 return self._send_json({"error": "not_found"}, 404)
             ext = os.path.splitext(full)[1]
             with open(full, "rb") as f:
-                self._send_bytes(f.read(), _CONTENT_TYPES.get(ext, "application/octet-stream"))
+                body = f.read()
+            etag = '"%s"' % hashlib.sha256(body).hexdigest()[:16]  # strong: changes with the bytes
+            self._send_bytes(body, _CONTENT_TYPES.get(ext, "application/octet-stream"), etag=etag)
 
         def do_POST(self):
             path = self.path.split("?", 1)[0]

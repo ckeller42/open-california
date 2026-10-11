@@ -41,6 +41,7 @@ static const char *reason(int status) {
     case 204: return "No Content";
     case 302: return "Found";
     case 303: return "See Other";
+    case 304: return "Not Modified";
     case 400: return "Bad Request";
     case 403: return "Forbidden";
     case 404: return "Not Found";
@@ -83,15 +84,21 @@ static void respond(const cali_http_resp_t *r, uint64_t now_ms) {
     size_t body_len = r->body ? r->body_len : 0;
     const char *cc = r->cache_control ? r->cache_control : r->content_encoding ? "no-cache" : NULL;
     int n = -1; /* a redirect without a Location is the handler's error: 500 */
-    if (!(r->status >= 300 && r->status < 400 && r->status != 304 && !r->location))
+    if (r->status == 304) { /* no body, no Content-Type/-Length; the validators stay (RFC 9110 15.4.5) */
+        body_len = 0;
+        n = snprintf(S.out_head, sizeof S.out_head, "HTTP/1.1 304 %s\r\n%s%s%s%s%s%sConnection: close\r\n\r\n",
+                     reason(304), r->etag ? "ETag: " : "", r->etag ? r->etag : "", r->etag ? "\r\n" : "",
+                     cc ? "Cache-Control: " : "", cc ? cc : "", cc ? "\r\n" : "");
+    } else if (!(r->status >= 300 && r->status < 400 && !r->location))
         n = snprintf(S.out_head, sizeof S.out_head,
-                     "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %lu\r\n%s%s%s%s%s%s%s%s%s"
+                     "HTTP/1.1 %d %s\r\nContent-Type: %s\r\nContent-Length: %lu\r\n%s%s%s%s%s%s%s%s%s%s%s%s"
                      "Connection: close\r\n\r\n",
                      r->status, reason(r->status), r->content_type ? r->content_type : "text/plain",
                      (unsigned long)body_len, r->location ? "Location: " : "", r->location ? r->location : "",
                      r->location ? "\r\n" : "", r->content_encoding ? "Content-Encoding: " : "",
                      r->content_encoding ? r->content_encoding : "", r->content_encoding ? "\r\n" : "",
-                     cc ? "Cache-Control: " : "", cc ? cc : "", cc ? "\r\n" : "");
+                     cc ? "Cache-Control: " : "", cc ? cc : "", cc ? "\r\n" : "",
+                     r->etag ? "ETag: " : "", r->etag ? r->etag : "", r->etag ? "\r\n" : "");
     if (n < 0 || (size_t)n >= sizeof S.out_head) {
         body = reason(500);
         body_len = strlen(body);
@@ -109,7 +116,7 @@ static void respond(const cali_http_resp_t *r, uint64_t now_ms) {
 }
 
 static void respond_error(int status, uint64_t now_ms) {
-    cali_http_resp_t r = {status, "text/plain", reason(status), strlen(reason(status)), NULL, NULL, NULL};
+    cali_http_resp_t r = {status, "text/plain", reason(status), strlen(reason(status)), NULL, NULL, NULL, NULL};
     respond(&r, now_ms);
 }
 
@@ -157,6 +164,28 @@ static long content_length(size_t from, size_t to) {
     return v;
 }
 
+/* The If-None-Match value in the header lines buf[from..to), NUL-terminated in place (its "\r"
+ * becomes the NUL), or NULL when absent. Call after content_length (which reads the raw lines). */
+static const char *if_none_match(size_t from, size_t to) {
+    while (from < to) {
+        size_t eol = from, i;
+        while (eol + 1 < to && !(S.buf[eol] == '\r' && S.buf[eol + 1] == '\n')) eol++;
+        if ((i = header_value(from, eol, "if-none-match:")) != 0) {
+            while (i < eol && (S.buf[i] == ' ' || S.buf[i] == '\t')) i++;
+            S.buf[eol] = '\0';
+            return S.buf + i;
+        }
+        from = eol + 2;
+    }
+    return NULL;
+}
+
+/* Whether an If-None-Match value matches etag (quotes included): "*", or etag among its entries —
+ * a substring test on the quoted tag, which is the weak comparison (W/"x" matches "x"). */
+static int etag_matches(const char *inm, const char *etag) {
+    return strcmp(inm, "*") == 0 || strstr(inm, etag) != NULL;
+}
+
 /* Splits the request line buf[0..eol) in place into NUL-terminated method/path/query;
  * 0 ok, -1 malformed ("METHOD SP /target SP HTTP/1.x", method A-Z, no NUL, exactly two SPs). */
 static int parse_request_line(size_t eol, cali_http_req_t *req) {
@@ -196,14 +225,20 @@ static void answer(const cali_http_req_t *req, int h, const cali_http_resp_t *re
         return;
     }
     S.waiting = 0;
-    if (h) respond(resp, now_ms);
+    if (h && resp->status == 200 && resp->etag && req->if_none_match && etag_matches(req->if_none_match, resp->etag)) {
+        cali_http_resp_t nm = *resp;   /* the client's copy is current: headers only */
+        nm.status = 304;
+        respond(&nm, now_ms);
+    } else if (h) respond(resp, now_ms);
     else respond_error(404, now_ms);
 }
 
 static void dispatch(uint64_t now_ms) {
     cali_http_req_t req;
-    cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL, NULL};
-    if (parse_request_line(request_line_end(), &req) != 0) {
+    cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL, NULL, NULL};
+    size_t line_end = request_line_end();
+    req.if_none_match = if_none_match(line_end + 2, S.head_len - 2);   /* before the line is split */
+    if (parse_request_line(line_end, &req) != 0) {
         respond_error(400, now_ms);
         return;
     }
@@ -247,7 +282,7 @@ void cali_http_poll(uint64_t now_ms) {
         return;
     }
     if (S.waiting) {   /* a held request: ask the handler again; no idle timeout meanwhile, but a cap */
-        cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL, NULL};
+        cali_http_resp_t resp = {200, "text/plain", NULL, 0, NULL, NULL, NULL, NULL};
         if (now_ms - S.last_ms > CALI_HTTP_PENDING_MAX_MS) {   /* last_ms = the request's last byte */
             S.waiting = 0;
             respond_error(504, now_ms);

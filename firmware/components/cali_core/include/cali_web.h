@@ -2,6 +2,10 @@
  * (cali_http.h) (#154).
  *
  * Routes (cali_web_handle):
+ * Static answers (/, /app, /device, the PWA assets) carry a strong ETag (FNV-1a 64 of the bytes
+ * served) — a matching If-None-Match gets the core's 304 (cali_http.h); HTML + manifest are
+ * Cache-Control no-cache, icons max-age=86400. JSON built by finish_json (/api/state, /api/wifi,
+ * /api/pairing) is Cache-Control no-store, no ETag.
  *   GET /             station mode: 200 text/html, Content-Encoding gzip, Cache-Control no-cache — the
  *                     calictl web UI (app_bundle_gen.h's WEB_APP_HTML_GZ, tools/gen_c_dict.py), which
  *                     interprets /api/state in the browser (calictl/webui/semantics.js). Setup and off
