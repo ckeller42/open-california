@@ -962,6 +962,554 @@
     "CarLevelPitch": 35
    }
   },
+  "heater_not_possible": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 5,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
+  "heater_error_4": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 4,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
+  "heater_permanent": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 1,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 0,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
+  "heater_timer_armed": {
+   "general": {
+    "AmbSwVersion": 808726832,
+    "CmSwVersion": 808595511,
+    "CommunicationVersion": 2
+   },
+   "cooler": {
+    "Error": 0,
+    "NightTimerSet": 0,
+    "Installed": 1,
+    "TimerElapsed": 0,
+    "TimerState": 0,
+    "State": 0,
+    "Mode": 4,
+    "Level": 3,
+    "TimerHourSet": 0,
+    "TimerMinSet": 0,
+    "TimerCounterHour": 0,
+    "TimerCounterMin": 0,
+    "NightTimerHourOn": 0,
+    "NightTimerHourOff": 0
+   },
+   "campingmode": {
+    "Installed": 1,
+    "Enable": 0,
+    "InteriorLight": 0,
+    "OutsideLight": 0,
+    "UsbCharger": 0,
+    "State": 0
+   },
+   "airheater": {
+    "AirDistribution": 0,
+    "Installed": 1,
+    "FaultTriggerBit": 0,
+    "PermanentOperation": 0,
+    "NormalOperation": 0,
+    "PermanentOperationRequestConfirmation": 0,
+    "HeatingLevel": 0,
+    "ErrorCode": 0,
+    "OperationModeCombined": 0,
+    "OperationModeAirHeater": 3,
+    "RunningTime": 0,
+    "TimerHour": 0,
+    "TimerMin": 0,
+    "RunningTimeinAction": 0
+   },
+   "roof": {
+    "Position": 0,
+    "Installed": 1,
+    "SafetyCounterValid": 1,
+    "InfoPopUp": 0
+   },
+   "lighting": {
+    "ProfileNumber": 0,
+    "Mode": 0,
+    "Timestamp": 0,
+    "LightValue": 0,
+    "BrightnessLTwo": 0,
+    "BrightnessLOne": 0,
+    "BrightnessLFour": 0,
+    "BrightnessLThree": 0,
+    "BrightnessLSix": 0,
+    "BrightnessLFive": 0,
+    "BrightnessLEight": 0,
+    "BrightnessLSeven": 0,
+    "BrightnessLOneZero": 13,
+    "BrightnessLNine": 0,
+    "BrightnessLOneTwo": 0,
+    "BrightnessLOneOne": 13,
+    "BrightnessLOneFour": 13,
+    "BrightnessLOneThree": 13,
+    "BrightnessLOneSix": 13,
+    "BrightnessLOneFive": 13
+   },
+   "water": {
+    "FreshWaterInfoPopUp": 0,
+    "Installed": 1,
+    "FreshWaterUnit": 1,
+    "FreshWaterLevel": 11,
+    "FreshWaterVolume": 29,
+    "WasteWaterInfoPopUp": 0,
+    "WasteWaterUnit": 1,
+    "WasteWaterLevel": 0,
+    "WasteWaterVolume": 22
+   },
+   "energy": {
+    "LandNotAvailable": 0,
+    "LandDefect": 0,
+    "EnergyModeNotSelectable": 0,
+    "DcdcDefect": 0,
+    "WarningLevelActive": 0,
+    "TwoBattSwitchAtWorkshop": 0,
+    "TwoBattSwitchAtCharging": 0,
+    "TwoBattNotCharged": 0,
+    "DcdcInstalled": 1,
+    "LadInstalled": 1,
+    "PvInstalled": 0,
+    "EmpInstalled": 0,
+    "SystemError": 0,
+    "CurrentDeratingTemperature": 0,
+    "SleepWarning": 0,
+    "PvDefect": 0,
+    "SocOneBattAfs": 5,
+    "EnergyMode": 0,
+    "WarningLevelTwo": 0,
+    "StateDcdcAfs": 0,
+    "SocTwoBattAfs": 10,
+    "StatePvAfs": 0,
+    "StateLandAfs": 0,
+    "AgeOneBattValuesMinutes": 255,
+    "IOneBattBemAfs": 129,
+    "PDcdcAfs": 0,
+    "PLandAfs": 0,
+    "PPvAfs": 0,
+    "tTwoBattRemainingh": 58,
+    "tTwoBattRemainingmin": 0,
+    "UOneBattBemAfs": 48,
+    "UTwoBattBemAfs": 141,
+    "ITwoBattBemAfs": 0,
+    "IDcdcAfs": 0,
+    "ILandAfs": 0,
+    "IPvAfs": 0
+   },
+   "vehicle": {
+    "CarVariant": 4,
+    "CarLevelPopUp": 0,
+    "TerminalOneFive": 0,
+    "CarTimeYear": 126,
+    "CarTimeMonth": 6,
+    "CarTimeDay": 8,
+    "CarTimeHour": 19,
+    "CarTimeMinute": 30,
+    "CarTimeSecond": 0,
+    "CarLevelRoll": 65427,
+    "CarLevelPitch": 35
+   }
+  },
   "roof_closed": {
    "general": {
     "AmbSwVersion": 808726832,
@@ -7301,6 +7849,68 @@
    }
   },
   {
+   "id": "airheater/power/\"on\"@heater_not_possible",
+   "function": "airheater",
+   "what": "power",
+   "value": "on",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "refused",
+    "reason": "the auxiliary air heater cannot be activated when the engine is running or when the auxiliary water heater is activated"
+   }
+  },
+  {
+   "id": "airheater/power/\"on\"@heater_error_4",
+   "function": "airheater",
+   "what": "power",
+   "value": "on",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3d7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/power/\"on\"@heater_permanent",
+   "function": "airheater",
+   "what": "power",
+   "value": "on",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3d7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/power/\"on\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "power",
+   "value": "on",
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3d7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/power/\"off\"@seed",
    "function": "airheater",
    "what": "power",
@@ -7323,6 +7933,74 @@
    "what": "power",
    "value": "off",
    "state": "empty",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3c7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/power/\"off\"@heater_not_possible",
+   "function": "airheater",
+   "what": "power",
+   "value": "off",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3c7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/power/\"off\"@heater_error_4",
+   "function": "airheater",
+   "what": "power",
+   "value": "off",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3c7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/power/\"off\"@heater_permanent",
+   "function": "airheater",
+   "what": "power",
+   "value": "off",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3c7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/power/\"off\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "power",
+   "value": "off",
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7369,6 +8047,74 @@
    }
   },
   {
+   "id": "airheater/level/1@heater_not_possible",
+   "function": "airheater",
+   "what": "level",
+   "value": 1,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f71007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/1@heater_error_4",
+   "function": "airheater",
+   "what": "level",
+   "value": 1,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f71007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/1@heater_permanent",
+   "function": "airheater",
+   "what": "level",
+   "value": 1,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f71007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/1@heater_timer_armed",
+   "function": "airheater",
+   "what": "level",
+   "value": 1,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f71007f1f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/level/10@seed",
    "function": "airheater",
    "what": "level",
@@ -7403,6 +8149,74 @@
    }
   },
   {
+   "id": "airheater/level/10@heater_not_possible",
+   "function": "airheater",
+   "what": "level",
+   "value": 10,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7a007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/10@heater_error_4",
+   "function": "airheater",
+   "what": "level",
+   "value": 10,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7a007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/10@heater_permanent",
+   "function": "airheater",
+   "what": "level",
+   "value": 10,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7a007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/10@heater_timer_armed",
+   "function": "airheater",
+   "what": "level",
+   "value": 10,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7a007f1f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/level/0@seed",
    "function": "airheater",
    "what": "level",
@@ -7423,6 +8237,46 @@
    }
   },
   {
+   "id": "airheater/level/0@heater_not_possible",
+   "function": "airheater",
+   "what": "level",
+   "value": 0,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/level/0@heater_error_4",
+   "function": "airheater",
+   "what": "level",
+   "value": 0,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/level/0@heater_permanent",
+   "function": "airheater",
+   "what": "level",
+   "value": 0,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/level/0@heater_timer_armed",
+   "function": "airheater",
+   "what": "level",
+   "value": 0,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "airheater/level/11@seed",
    "function": "airheater",
    "what": "level",
@@ -7438,6 +8292,46 @@
    "what": "level",
    "value": 11,
    "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/level/11@heater_not_possible",
+   "function": "airheater",
+   "what": "level",
+   "value": 11,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/level/11@heater_error_4",
+   "function": "airheater",
+   "what": "level",
+   "value": 11,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/level/11@heater_permanent",
+   "function": "airheater",
+   "what": "level",
+   "value": 11,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/level/11@heater_timer_armed",
+   "function": "airheater",
+   "what": "level",
+   "value": 11,
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "bad"
    }
@@ -7465,6 +8359,74 @@
    "what": "level",
    "value": "5",
    "state": "empty",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f75007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/\"5\"@heater_not_possible",
+   "function": "airheater",
+   "what": "level",
+   "value": "5",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f75007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/\"5\"@heater_error_4",
+   "function": "airheater",
+   "what": "level",
+   "value": "5",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f75007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/\"5\"@heater_permanent",
+   "function": "airheater",
+   "what": "level",
+   "value": "5",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f75007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/level/\"5\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "level",
+   "value": "5",
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7511,6 +8473,68 @@
    }
   },
   {
+   "id": "airheater/runtime/0@heater_not_possible",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 0,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b00001f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/0@heater_error_4",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 0,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b00001f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/0@heater_permanent",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 0,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "refused",
+    "reason": "the run time cannot be changed while continuous heating is on"
+   }
+  },
+  {
+   "id": "airheater/runtime/0@heater_timer_armed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 0,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b00001f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/runtime/120@seed",
    "function": "airheater",
    "what": "runtime",
@@ -7545,6 +8569,68 @@
    }
   },
   {
+   "id": "airheater/runtime/120@heater_not_possible",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 120,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b00781f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/120@heater_error_4",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 120,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b00781f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/120@heater_permanent",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 120,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "refused",
+    "reason": "the run time cannot be changed while continuous heating is on"
+   }
+  },
+  {
+   "id": "airheater/runtime/120@heater_timer_armed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 120,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b00781f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/runtime/121@seed",
    "function": "airheater",
    "what": "runtime",
@@ -7560,6 +8646,47 @@
    "what": "runtime",
    "value": 121,
    "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/121@heater_not_possible",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 121,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/121@heater_error_4",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 121,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/121@heater_permanent",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 121,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "refused",
+    "reason": "the run time cannot be changed while continuous heating is on"
+   }
+  },
+  {
+   "id": "airheater/runtime/121@heater_timer_armed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": 121,
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "bad"
    }
@@ -7599,6 +8726,68 @@
    }
   },
   {
+   "id": "airheater/runtime/\"60\"@heater_not_possible",
+   "function": "airheater",
+   "what": "runtime",
+   "value": "60",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b003c1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/\"60\"@heater_error_4",
+   "function": "airheater",
+   "what": "runtime",
+   "value": "60",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b003c1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/runtime/\"60\"@heater_permanent",
+   "function": "airheater",
+   "what": "runtime",
+   "value": "60",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "refused",
+    "reason": "the run time cannot be changed while continuous heating is on"
+   }
+  },
+  {
+   "id": "airheater/runtime/\"60\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": "60",
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b003c1f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/runtime/null@seed",
    "function": "airheater",
    "what": "runtime",
@@ -7614,6 +8803,47 @@
    "what": "runtime",
    "value": null,
    "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/null@heater_not_possible",
+   "function": "airheater",
+   "what": "runtime",
+   "value": null,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/null@heater_error_4",
+   "function": "airheater",
+   "what": "runtime",
+   "value": null,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/runtime/null@heater_permanent",
+   "function": "airheater",
+   "what": "runtime",
+   "value": null,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "refused",
+    "reason": "the run time cannot be changed while continuous heating is on"
+   }
+  },
+  {
+   "id": "airheater/runtime/null@heater_timer_armed",
+   "function": "airheater",
+   "what": "runtime",
+   "value": null,
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "bad"
    }
@@ -7653,6 +8883,68 @@
    }
   },
   {
+   "id": "airheater/timer/\"06:45\"@heater_not_possible",
+   "function": "airheater",
+   "what": "timer",
+   "value": "06:45",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b007f062d"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer/\"06:45\"@heater_error_4",
+   "function": "airheater",
+   "what": "timer",
+   "value": "06:45",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b007f062d"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer/\"06:45\"@heater_permanent",
+   "function": "airheater",
+   "what": "timer",
+   "value": "06:45",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f7b007f062d"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer/\"06:45\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "timer",
+   "value": "06:45",
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "refused",
+    "reason": "the start time cannot be changed while the timer is on (stop the timer first)"
+   }
+  },
+  {
    "id": "airheater/timer/\"25:00\"@seed",
    "function": "airheater",
    "what": "timer",
@@ -7673,6 +8965,47 @@
    }
   },
   {
+   "id": "airheater/timer/\"25:00\"@heater_not_possible",
+   "function": "airheater",
+   "what": "timer",
+   "value": "25:00",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/timer/\"25:00\"@heater_error_4",
+   "function": "airheater",
+   "what": "timer",
+   "value": "25:00",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/timer/\"25:00\"@heater_permanent",
+   "function": "airheater",
+   "what": "timer",
+   "value": "25:00",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/timer/\"25:00\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "timer",
+   "value": "25:00",
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "refused",
+    "reason": "the start time cannot be changed while the timer is on (stop the timer first)"
+   }
+  },
+  {
    "id": "airheater/timer/null@seed",
    "function": "airheater",
    "what": "timer",
@@ -7690,6 +9023,47 @@
    "state": "empty",
    "expect": {
     "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/timer/null@heater_not_possible",
+   "function": "airheater",
+   "what": "timer",
+   "value": null,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/timer/null@heater_error_4",
+   "function": "airheater",
+   "what": "timer",
+   "value": null,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/timer/null@heater_permanent",
+   "function": "airheater",
+   "what": "timer",
+   "value": null,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/timer/null@heater_timer_armed",
+   "function": "airheater",
+   "what": "timer",
+   "value": null,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "refused",
+    "reason": "the start time cannot be changed while the timer is on (stop the timer first)"
    }
   },
   {
@@ -7715,6 +9089,74 @@
    "what": "timer_start",
    "value": null,
    "state": "empty",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f3b017f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer_start/null@heater_not_possible",
+   "function": "airheater",
+   "what": "timer_start",
+   "value": null,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f3b017f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer_start/null@heater_error_4",
+   "function": "airheater",
+   "what": "timer_start",
+   "value": null,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f3b017f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer_start/null@heater_permanent",
+   "function": "airheater",
+   "what": "timer_start",
+   "value": null,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f3b017f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer_start/null@heater_timer_armed",
+   "function": "airheater",
+   "what": "timer_start",
+   "value": null,
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7761,6 +9203,74 @@
    }
   },
   {
+   "id": "airheater/timer_cancel/null@heater_not_possible",
+   "function": "airheater",
+   "what": "timer_cancel",
+   "value": null,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f0b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer_cancel/null@heater_error_4",
+   "function": "airheater",
+   "what": "timer_cancel",
+   "value": null,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f0b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer_cancel/null@heater_permanent",
+   "function": "airheater",
+   "what": "timer_cancel",
+   "value": null,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f0b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/timer_cancel/null@heater_timer_armed",
+   "function": "airheater",
+   "what": "timer_cancel",
+   "value": null,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "3f0b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/permanent/\"off\"@seed",
    "function": "airheater",
    "what": "permanent",
@@ -7795,6 +9305,74 @@
    }
   },
   {
+   "id": "airheater/permanent/\"off\"@heater_not_possible",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "off",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"off\"@heater_error_4",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "off",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"off\"@heater_permanent",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "off",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"off\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "off",
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/permanent/\"on\"@seed",
    "function": "airheater",
    "what": "permanent",
@@ -7810,6 +9388,46 @@
    "what": "permanent",
    "value": "on",
    "state": "empty",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/permanent/\"on\"@heater_not_possible",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "on",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/permanent/\"on\"@heater_error_4",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "on",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/permanent/\"on\"@heater_permanent",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "on",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/permanent/\"on\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "on",
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "bad"
    }
@@ -7837,6 +9455,74 @@
    "what": "permanent",
    "value": "OFF",
    "state": "empty",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"OFF\"@heater_not_possible",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "OFF",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"OFF\"@heater_error_4",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "OFF",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"OFF\"@heater_permanent",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "OFF",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"OFF\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "OFF",
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "frames",
     "frames": [
@@ -7883,6 +9569,74 @@
    }
   },
   {
+   "id": "airheater/permanent/\"0\"@heater_not_possible",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "0",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"0\"@heater_error_4",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "0",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"0\"@heater_permanent",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "0",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"0\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "0",
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/permanent/\"false\"@seed",
    "function": "airheater",
    "what": "permanent",
@@ -7917,6 +9671,74 @@
    }
   },
   {
+   "id": "airheater/permanent/\"false\"@heater_not_possible",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "false",
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"false\"@heater_error_4",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "false",
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"false\"@heater_permanent",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "false",
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
+   "id": "airheater/permanent/\"false\"@heater_timer_armed",
+   "function": "airheater",
+   "what": "permanent",
+   "value": "false",
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "frames",
+    "frames": [
+     {
+      "char": "1701",
+      "delay_ms": 0,
+      "hex": "0f7b007f1f3f"
+     }
+    ]
+   }
+  },
+  {
    "id": "airheater/permanent/null@seed",
    "function": "airheater",
    "what": "permanent",
@@ -7937,6 +9759,46 @@
    }
   },
   {
+   "id": "airheater/permanent/null@heater_not_possible",
+   "function": "airheater",
+   "what": "permanent",
+   "value": null,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/permanent/null@heater_error_4",
+   "function": "airheater",
+   "what": "permanent",
+   "value": null,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/permanent/null@heater_permanent",
+   "function": "airheater",
+   "what": "permanent",
+   "value": null,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
+   "id": "airheater/permanent/null@heater_timer_armed",
+   "function": "airheater",
+   "what": "permanent",
+   "value": null,
+   "state": "heater_timer_armed",
+   "expect": {
+    "kind": "bad"
+   }
+  },
+  {
    "id": "airheater/bogus/1@seed",
    "function": "airheater",
    "what": "bogus",
@@ -7952,6 +9814,46 @@
    "what": "bogus",
    "value": 1,
    "state": "empty",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "id": "airheater/bogus/1@heater_not_possible",
+   "function": "airheater",
+   "what": "bogus",
+   "value": 1,
+   "state": "heater_not_possible",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "id": "airheater/bogus/1@heater_error_4",
+   "function": "airheater",
+   "what": "bogus",
+   "value": 1,
+   "state": "heater_error_4",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "id": "airheater/bogus/1@heater_permanent",
+   "function": "airheater",
+   "what": "bogus",
+   "value": 1,
+   "state": "heater_permanent",
+   "expect": {
+    "kind": "none"
+   }
+  },
+  {
+   "id": "airheater/bogus/1@heater_timer_armed",
+   "function": "airheater",
+   "what": "bogus",
+   "value": 1,
+   "state": "heater_timer_armed",
    "expect": {
     "kind": "none"
    }

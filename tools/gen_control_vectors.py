@@ -190,7 +190,14 @@ VARIANTS = {
     "cooler": ["seed", "empty", "fridge_on", "fridge_off", "cooler_schedule"],
     "campingmode": ["seed", "empty", "camping_off", "camping_on"],
     "energy": ["seed", "empty", "energy_locked"],
-    "airheater": ["seed", "empty"],
+    "airheater": [
+        "seed",
+        "empty",
+        "heater_not_possible",
+        "heater_error_4",
+        "heater_permanent",
+        "heater_timer_armed",
+    ],
     "lighting": [
         "seed",
         "empty",
@@ -245,6 +252,10 @@ def _states(funcs) -> dict[str, dict]:
         "camping_off": v(campingmode={"State": 0}),
         "camping_on": v(campingmode={"State": 1}),
         "energy_locked": v(energy={"EnergyModeNotSelectable": 1}),
+        "heater_not_possible": v(airheater={"ErrorCode": 5}),
+        "heater_error_4": v(airheater={"ErrorCode": 4}),  # every other code: ON still allowed
+        "heater_permanent": v(airheater={"PermanentOperation": 1}),
+        "heater_timer_armed": v(airheater={"OperationModeAirHeater": 3}),
         "roof_closed": v(roof={"Position": 0}),
         "roof_closed_14": v(roof={"Position": 14}),
         "roof_open": v(roof={"Position": 1}),

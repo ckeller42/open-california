@@ -449,7 +449,9 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
   the CLI and HA/MQTT — the web UI's greying is only the affordance on top): roof reading light needs
   the roof raised, the cooling timer needs the fridge off, quiet mode + its night schedule need the
   fridge **on**, camping lights/USB need the camping master on, and the energy mode is refused while
-  the unit reports `EnergyModeNotSelectable`. Each blocks only when the gating state is *positively*
+  the unit reports `EnergyModeNotSelectable`, and the air heater (app 5.4.0, 2026-10-11,
+  `R_AIRHEATER_APP_GATES`) refuses immediate heating ON under `ErrorCode` 5, the run time under
+  continuous heating and the start time while its timer is armed. Each blocks only when the gating state is *positively*
   wrong — unknown/absent state allows the write. The camping **master** is deliberately not gated
   (the firmware itself refuses it while driving). Two exceptions where a default would be WRITTEN
   (2026-10-06, rulings R3/R4, `R_ONOFF_STRICT`): an on/off command whose value is not

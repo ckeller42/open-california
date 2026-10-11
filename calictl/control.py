@@ -474,6 +474,15 @@ REASON_CAMPING_NEEDS_MASTER = "camping lights and USB need camping mode on (turn
 REASON_ENERGY_LOCKED = "the unit currently does not allow changing the energy mode"
 REASON_FAVOURITE_EMPTY = "this favourite is empty on the unit — save it first"
 REASON_WAKEUP_NO_AREA = "the wake-up light needs at least one vehicle area"
+# Air heater (app 5.4.0, DECOMPILE + APP-OBSERVED + REAL PHONE 2026-10-11): the app writes nothing on
+# an immediate-heating ON while ErrorCode 5 (OPERATION_NOT_POSSIBLE) and re-shows this dialog; it
+# greys the run-time slider under continuous heating and the start time while the timer is armed.
+REASON_AIRHEATER_NOT_POSSIBLE = (
+    "the auxiliary air heater cannot be activated when the engine is running or when the auxiliary"
+    " water heater is activated"
+)
+REASON_AIRHEATER_RUNTIME_PERMANENT = "the run time cannot be changed while continuous heating is on"
+REASON_AIRHEATER_TIMER_ARMED = "the start time cannot be changed while the timer is on (stop the timer first)"
 # Every (function, what) whose value is an on/off token (ruling R3: anything else is refused up
 # front, with REASON_NOT_ONOFF, before a builder could read it as OFF).
 ONOFF_COMMANDS = frozenset(
@@ -516,6 +525,17 @@ def command_precondition(function, what, value, states):
        :data:`REASON_COOLER_STATE_UNKNOWN` while no cooler state is known — never send the
        default-filled frame (ruling R4). Both texts are emitted into ``control_consts.h`` for the
        ESP's C twin.
+
+    .. req:: Air-heater writes are gated as the app gates them
+       :id: R_AIRHEATER_APP_GATES
+       :status: implemented
+       :tags: control, airheater
+
+       As the CaliforniaOnTour app 5.4.0 does, an air-heater ``power`` ON shall be refused with
+       :data:`REASON_AIRHEATER_NOT_POSSIBLE` while ``ErrorCode`` is 5 (no other code blocks, OFF
+       always passes); ``runtime`` with :data:`REASON_AIRHEATER_RUNTIME_PERMANENT` while
+       ``PermanentOperation`` is on; ``timer`` with :data:`REASON_AIRHEATER_TIMER_ARMED` while the
+       departure timer is armed (``OperationModeAirHeater`` 3). Same texts in the ESP's C twin.
     """
     if (function, what) in ONOFF_COMMANDS and not is_onoff(value):
         return REASON_NOT_ONOFF
@@ -547,6 +567,16 @@ def command_precondition(function, what, value, states):
     if function == "campingmode" and what in ("lights", "usb"):
         if (states.get("campingmode") or {}).get("State") == 0:
             return REASON_CAMPING_NEEDS_MASTER
+    # Air heater, as the app 5.4.0 gates it: ON refused only for ErrorCode 5 (codes 1-4, 6, 7 do not
+    # block; OFF always passes); run time refused under continuous heating; start time refused while
+    # the departure timer is armed (OperationModeAirHeater 3 = semantics.timer_armed).
+    heater = states.get("airheater") or {}
+    if function == "airheater" and what == "power" and _truthy(value) and heater.get("ErrorCode") == 5:
+        return REASON_AIRHEATER_NOT_POSSIBLE
+    if function == "airheater" and what == "runtime" and heater.get("PermanentOperation") == 1:
+        return REASON_AIRHEATER_RUNTIME_PERMANENT
+    if function == "airheater" and what == "timer" and heater.get("OperationModeAirHeater") == 3:
+        return REASON_AIRHEATER_TIMER_ARMED
     # The unit can lock the energy-mode selector (EnergyModeNotSelectable); honour it off-UI too.
     if function == "energy" and what == "mode":
         if (states.get("energy") or {}).get("EnergyModeNotSelectable") == 1:

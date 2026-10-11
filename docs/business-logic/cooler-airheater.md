@@ -371,10 +371,36 @@ Send the full 10-field frame every time (shared-send behavior above).
   then/also set `NormalOperationRequest = 1` (via `C2(true)`). `rf/b.java:198-218`.
 - **ErrorCode (1702) → app fault IDs** (`rf/b.java:461-671`): 1 `AIR_HEATER_LOW_BATTERY`,
   2 `FUEL_LOW`, 3 `SYSTEM_ERROR`, 4 `HEATING_TIME_EXCEEDED`, 5 `OPERATION_NOT_POSSIBLE`;
-  0 clears. Each drives a dialog AFTER a refused start (the app never greys the heater switch
-  pre-emptively). Surfaced by `semantics.airheater` as `error` (`low_battery` / `low_fuel` /
+  0 clears. Each drives a dialog AFTER a refused start (the app never greys the heater switch;
+  but code 5 refuses an ON with no write — app gates below). Surfaced by `semantics.airheater` as `error` (`low_battery` / `low_fuel` /
   `system_error` / `heating_time_exceeded` / `not_possible`) next to the raw `error_code`; the
   web UI shows it as a banner. Code→dialog-string pairing beyond the IDs is unresolved.
+
+**App gates (app 5.4.0; DECOMPILE 5.4.0.3036 + APP-OBSERVED 2026-10-11 (thinky lab vs fake unit) + REAL PHONE 2026-10-11 (at the van)):**
+
+- *Immediate heating* ON while `ErrorCode` 5: **no write**, the dialog "The auxiliary air heater cannot
+  be activated when the engine is running or when the auxiliary water heater is activated." again.
+  Only code 5; OFF always passes. Not greyed.
+- *Immediate heating* ON while continuous heating is on: "Turn off continuous heating? You can only
+  turn continuous heating on again using the controls in your California." → a plain
+  `NormalOperationRequest=1`.
+- Run-time slider: **10-min steps**; **greyed** while `PermanentOperation` is on. A change while
+  heating: "Apply new settings now? Resetting the duration. The heating will stay on for N minutes."
+  → the app writes **three** frames: OFF `3c7b007f1f3f`, RunningTime, ON `3d7b007f1f3f`. calictl
+  writes RunningTime alone (owner rule: no heater short cycles; unverified on the unit — OPEN).
+- "Start heating at": **greyed** (tap does nothing) while the timer is armed.
+- Start timer while continuous heating is on: "Continuous heating will turn off when the timer
+  ends. Would you like to proceed?"
+- Status bar while active with the timer armed: "Active • Remaining time: N • Timer starts: HH:MM";
+  continuous + armed: "Active • Continuous heating • Timer starts in HH:MM".
+- No ignition / engine / battery gate. Permanent-heating card while off: a clickable card that opens
+  "Continuous heating can be initiated only in the vehicle." (no write).
+- calictl mirrors the refusals in `control.command_precondition` (Python + the ESP's C twin,
+  `REASON_AIRHEATER_*`) and the greying/confirms/status in the shared web UI.
+- Elsewhere in the app (recorded, not mirrored): the dashboard tile says "Error" for codes 1–5 and
+  "Warning" for 6–7; `Installed=0` hides the tile; disconnected greys every quick button; energy
+  `WarningLevelActive=1` ("Battery is flat. Charge now!") and `SleepWarning=1` (charging cable still
+  plugged in) raise blocking modals with no buttons.
 
 **Observed on the running app (2026-09-16, `tools/applab` — the real app against a fake unit):**
 
@@ -418,6 +444,34 @@ Send the full 10-field frame every time (shared-send behavior above).
   **`3f0b007f1f3f`** (APP-OBSERVED). calictl: `set airheater timer_cancel`.
   `rf/b.java:745-749`.
 
+**First calictl-driven heater run (DEVICE/CAPTURE 2026-10-11 (real van, app 5.4.0.3036, owner present, ignition off)):** calictl's writes to `1701` (buspi
+`CALICTL_BLE_TRACE`) → the unit's `1702` notify:
+
+| Time | calictl write | `1701` frame | `1702` notify | App / physical |
+|---|---|---|---|---|
+| 09:08:56 | `timer 23:31` | `3f7b007f171f` | `1060003c171f3c` | "After the timer is activated, the heating starts today at 23:31." — the unit stores the time |
+| 09:09:20 | `timer_start` | `3f3b017f1f3f` | `1060133c171f3c` | "Timer: On", "…starts today at 23:31 and stays on for 60 minutes.", status "Inactive • Timer: 23:31"; "Start heating at" greyed (real phone) |
+| 09:09:45 | `timer_cancel` | `3f0b007f1f3f` | `1060103c171f3c` | "Timer: Off", "Inactive" |
+| 09:09:52 | `timer 12:00` (restore) | `3f7b007f0c00` | | |
+| 09:10:07 | `level 3` | `3f73007f1f3f` | | |
+| 09:10:12 | `runtime 30` | `3f7b001e1f3f` | | |
+| 09:10:26 | `power on` | `3d7b007f1f3f` | `1230101e0c001e` | NormalOperation, 30 min; "Active • 30 min remaining" |
+| 09:11:15 | (the APP, level 3→8) | `3f78007f1f3f` + neutral `3f7b007f1f3f` | `1280101e0c001e` | byte-identical to calictl `level 8` |
+
+- `RunningTimeinAction` counted down ~1/min from `…001e` to `…0000` at 09:40:27, then byte 0
+  went `0x12`→`0x10` (NormalOperation off): exactly 30 min. Mode 0 and ErrorCode 0 throughout.
+  After the run `running_time_remaining` = 0 (not the configured run time); the end-of-run state is
+  idle, as the mock assumes.
+- Physical proof, second-battery current (`1602`): −0.6 A idle; ~−9 A 09:12–09:14 (glow plug /
+  ignition); −1.2…−1.7 A steady burn; after the stop −6…−8 A for ~1 min (glow-plug burn-off /
+  run-on), then −0.5 A. Battery held 13.1 V.
+- **Deliberate difference:** calictl sends no neutral follow-up frame after a write (the app does,
+  500 ms later); the unit applied every calictl write without it.
+- Real phone, idle: tapping the grey "Permanent Heating" card opens "Continuous heating can be
+  initiated only in the vehicle. / This feature can be disabled from the mobile app, but it can be
+  activated only using the in-vehicle systems." [Got it] — no write. While running, the app greys
+  nothing else. The run-time slider shows 10…120 with 12 ticks.
+
 ---
 
 ## Open questions (UNVERIFIED, out of scope of these two files)
@@ -432,4 +486,5 @@ Send the full 10-field frame every time (shared-send behavior above).
 - Whether "Permanent Heating ON" has a direct control-field write anywhere in the app — none
   found; `a2()` turned out to be the departure-timer arm, not a permanent-heating path (2026-09-16).
 - What `1702` reports once the armed timer fires (Mode stays 3? drops to 0? `NormalOperation`
-  rises?) — needs a real-unit trace across a timer start.
+  rises?) — needs a real-unit trace across a timer firing (2026-10-11 armed + cancelled only; the
+  unit stores the start time and reports Mode 3 / 0).

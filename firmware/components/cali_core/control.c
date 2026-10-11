@@ -607,6 +607,14 @@ static const char *gate(const char *fn, const char *what, const char *value, cal
     if (strcmp(fn, "campingmode") == 0 && (strcmp(what, "lights") == 0 || strcmp(what, "usb") == 0) &&
         get("campingmode", "State", &x) && x == 0)
         return CALI_REASON_CAMPING_NEEDS_MASTER;
+    if (strcmp(fn, "airheater") == 0) {   /* app 5.4.0: ON under ErrorCode 5, run time under permanent, time while armed */
+        if (strcmp(what, "power") == 0 && onoff(value) == 1 && get("airheater", "ErrorCode", &x) && x == 5)
+            return CALI_REASON_AIRHEATER_NOT_POSSIBLE;
+        if (strcmp(what, "runtime") == 0 && get("airheater", "PermanentOperation", &x) && x == 1)
+            return CALI_REASON_AIRHEATER_RUNTIME_PERMANENT;
+        if (strcmp(what, "timer") == 0 && get("airheater", "OperationModeAirHeater", &x) && x == 3)
+            return CALI_REASON_AIRHEATER_TIMER_ARMED;
+    }
     if (strcmp(fn, "energy") == 0 && strcmp(what, "mode") == 0 && get("energy", "EnergyModeNotSelectable", &x) &&
         x == 1)
         return CALI_REASON_ENERGY_LOCKED;

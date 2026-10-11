@@ -231,6 +231,9 @@ def airheater(d: dict) -> dict:
         # two independent op bits -> a single "running" state (see AirHeater notes)
         "running": bool(d.get("NormalOperation") or d.get("PermanentOperation")),
         "permanent": bool(d.get("PermanentOperation")),
+        # the app's "Immediate heating" switch alone (NormalOperation): OFF under continuous heating,
+        # where an ON tap first asks to turn continuous heating off (app 5.4.0, 2026-10-11)
+        "normal": bool(d.get("NormalOperation")),
         "level": d.get("HeatingLevel"),
         "error_code": err,
         "error": None if not err else _AIRHEATER_ERROR.get(err, "unknown"),

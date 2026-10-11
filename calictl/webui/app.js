@@ -70,6 +70,7 @@
  * // airheater (semantics.airheater)
  * @property {boolean} [running]
  * @property {boolean} [permanent]
+ * @property {boolean} [normal]   // NormalOperation alone: the "Immediate heating" switch
  * @property {number|null} [error_code]   // raw ErrorCode; `error` (above) carries its NAME here
  * @property {number|null} [air_distribution]
  * @property {number|null} [running_time]
@@ -147,14 +148,14 @@
 /**
  * A control's per-control confirm gate: a function returning the prompt (or null/false to skip),
  * or a bare string. The callback arg varies by kind (value for most, the action object for buttons).
- * @typedef {((v?: any) => (string|null|false|undefined)) | string} ConfirmSpec
+ * @typedef {((v?: any, s?: FnState) => (string|null|false|undefined)) | string} ConfirmSpec
  * @typedef {{ value: string, label: string }} SelectOption
  * @typedef {{ what: string, label: string, value?: string|number|null }} ButtonAction
  * `disabled(s)` returns true/a-reason-string when the current state forbids the control
  * (greyed + blocked, mirroring the app), a falsy value when it's available.
  * @typedef {{ what: string, label: string, confirm?: ConfirmSpec, disabled?: (s: FnState) => (boolean|string|undefined) }} ControlBase
  * @typedef {ControlBase & { kind: 'toggle', state: keyof FnState }} ToggleControl
- * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, unit?: string }} SliderControl
+ * @typedef {ControlBase & { kind: 'slider', state: keyof FnState, min: number, max: number, step?: number, unit?: string }} SliderControl
  * @typedef {ControlBase & { kind: 'select', options: SelectOption[], current?: (s: FnState) => (string|null|undefined) }} SelectControl
  * @typedef {ControlBase & { kind: 'hour', current?: (s: FnState) => number }} HourControl
  * @typedef {ControlBase & { kind: 'time', current?: (s: FnState) => (string|null) }} TimeControl
@@ -542,8 +543,11 @@ const FEATURES = {
     // can't arm anything, and it has its own prompt below — no feature-level one on top.
     confirm: (w, v) => (w === "permanent" || w === "timer_cancel" ? null : tf("Start the fuel-burning auxiliary air heater ({w})? It is not live-verified. Continue?", { w: w })),
     controls: [
-      // "Immediate heating" = NormalOperation (start now, for `runtime` minutes).
-      { what: "power", kind: "toggle", label: "Immediate heating", state: "running" },
+      // "Immediate heating" = NormalOperation (start now, for `runtime` minutes). Never greyed (app
+      // 5.4.0): under ErrorCode 5 the server refuses ON with the app's dialog text; under continuous
+      // heating an ON first asks to turn it off (the plain NormalOperationRequest=1 does that).
+      { what: "power", kind: "toggle", label: "Immediate heating", state: "normal",
+        confirm: (v, s) => (v === "on" && s && s.permanent ? t("Turn off continuous heating? You can only turn continuous heating on again using the controls in your California.") : null) },
       // "Continuous heating" (PermanentOperation) can only be STARTED from inside the vehicle —
       // the only remote write is OFF (the server refuses "on"). So the switch is live only while
       // it is on, and greyed with the reason otherwise. Optimistic: stays live for the
@@ -554,15 +558,22 @@ const FEATURES = {
       // The app's temperature scale is 1–9 + "HI" (level 10); its run-time slider spans 10–120 min
       // (both observed on the app's heater page, tools/applab 2026-09-16).
       { what: "level", kind: "slider", label: "Heating temperature", state: "level", min: CTL_AIRHEATER_LEVEL_RANGE[0], max: CTL_AIRHEATER_LEVEL_RANGE[1] },
-      { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 10, max: 120, unit: "min" },
+      // App 5.4.0 (2026-10-11): 10-min steps, greyed under continuous heating; a change while heating
+      // asks first (the app then writes OFF, RunningTime, ON — calictl writes RunningTime only).
+      { what: "runtime", kind: "slider", label: "Run time", state: "running_time", min: 10, max: 120, step: 10, unit: "min",
+        disabled: (s) => optOn("airheater", "permanent", !!s.permanent) && "Not available during continuous heating",
+        confirm: (v, s) => (s && s.running ? tf("Apply new settings now? Resetting the duration. The heating will stay on for {n} minutes.", { n: v }) : null) },
+      // Greyed while the departure timer is armed (the app's row does nothing on tap then).
       { what: "timer", kind: "time", label: "Start heating at",
         current: (s) => (s.timer_hour != null && s.timer_min != null)
-          ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null },
+          ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null,
+        disabled: (s) => !!s.timer_armed && "Stop the timer first" },
       // The app's timer widget: "Start timer" arms the departure timer (OperationModeAirHeater=3 +
       // OperationModeCombined=1, frame 3f3b017f1f3f), "Stop" clears it (Mode=0, 3f0b007f1f3f) —
       // app-observed 2026-09-16. Armed, the heater starts at "Start heating at" for "Run time".
       { what: "__heattimer", kind: "buttons", label: "Timer",
-        actions: [{ what: "timer_start", label: "Start timer" }, { what: "timer_cancel", label: "Stop timer" }] },
+        actions: [{ what: "timer_start", label: "Start timer" }, { what: "timer_cancel", label: "Stop timer" }],
+        confirm: (b, s) => (b.what === "timer_start" && s && s.permanent ? t("Continuous heating will turn off when the timer ends. Would you like to proceed?") : null) },
     ],
     readouts: [
       { label: "Heating temperature", get: (s) => (s.level == null ? "—" : s.level >= 10 ? "HI" : `${t("Level")} ${s.level}`) },
@@ -580,14 +591,17 @@ const FEATURES = {
     // N min remaining / Inactive (• Timer HH:MM when one is armed).
     summary: (s) => {
       if (s.error) return /** @type {string} */ (t(AIRHEATER_ERROR_MSG[/** @type {string} */ (s.error)] || "⚠ Heater error"));
-      if (s.running) {
-        if (s.permanent) return `${t("Active")} • ${t("Continuous heating")}`;
-        if (s.running_time_remaining != null) return tf("Active • {n} min remaining", { n: s.running_time_remaining });
-        return /** @type {string} */ (t("Active"));
-      }
       // "• Timer: HH:MM" only while ARMED (the app drops it after "Stop" even with a time set).
       const timer = (s.timer_armed && s.timer_hour != null && s.timer_min != null)
         ? String(s.timer_hour).padStart(2, "0") + ":" + String(s.timer_min).padStart(2, "0") : null;
+      if (s.running) {
+        if (s.permanent) return timer ? tf("Active • Continuous heating • Timer starts in {t}", { t: timer }) : `${t("Active")} • ${t("Continuous heating")}`;
+        if (s.running_time_remaining != null) {
+          return timer ? tf("Active • Remaining time: {n} min • Timer starts: {t}", { n: s.running_time_remaining, t: timer })
+            : tf("Active • {n} min remaining", { n: s.running_time_remaining });
+        }
+        return /** @type {string} */ (t("Active"));
+      }
       return timer ? tf("Inactive • Timer: {t}", { t: timer }) : /** @type {string} */ (t("Inactive"));
     },
   },
@@ -1880,7 +1894,7 @@ function renderControl(fn, c, s) {
   // one in act(); c.confirm(value) returns the prompt, or null/false to skip.
   /** @param {string|number} val */
   const fire = (val) => {
-    const msg = typeof c.confirm === "function" ? c.confirm(val) : c.confirm;
+    const msg = typeof c.confirm === "function" ? c.confirm(val, s) : c.confirm;
     if (msg && !confirm(msg)) return;
     act(fn, c.what, val);
   };
@@ -1899,6 +1913,7 @@ function renderControl(fn, c, s) {
     inp.type = "range";
     inp.min = /** @type {any} */ (c.min);
     inp.max = /** @type {any} */ (c.max);
+    if (c.step) inp.step = String(c.step);
     inp.value = /** @type {any} */ (val);
     inp.disabled = ro;
     const out = document.createElement("span");
@@ -1952,7 +1967,8 @@ function renderControl(fn, c, s) {
       btn.textContent = /** @type {string} */ (t(b.label));
       btn.disabled = ro;
       btn.onclick = () => {
-        if (c.confirm && !confirm(/** @type {string} */ (typeof c.confirm === "function" ? c.confirm(b) : c.confirm))) return;
+        const msg = typeof c.confirm === "function" ? c.confirm(b, s) : c.confirm;   // null = no prompt
+        if (msg && !confirm(msg)) return;
         act(fn, b.what, b.value != null ? b.value : null);
       };
       grp.appendChild(btn);
