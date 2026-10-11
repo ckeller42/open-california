@@ -98,6 +98,7 @@ static FILE *s_f;
 static uint32_t s_next = 1;   /* the seq the next record gets */
 static uint32_t s_seg_first;  /* the open segment's name */
 static long s_seg_bytes;
+static uint32_t s_written;    /* the last seq written (buffered); published as last_seq once synced */
 static char s_iobuf[4096];    /* stdio buffer: whole sectors to the card, not 128 B pieces */
 
 static const char *fn_of(uint16_t c) {
@@ -214,7 +215,8 @@ int cali_sdlog_open(const char *dir) {
         kept = 0;
     }
     if (open_seg(newest, kept) != 0) return -1;
-    __atomic_store_n(&s_last_seq, s_next - 1, __ATOMIC_RELAXED);
+    s_written = s_next - 1;
+    __atomic_store_n(&s_last_seq, s_written, __ATOMIC_RELAXED);
     cali_log("sdlog: %s/%lu.jsonl, next seq %lu", s_dir, (unsigned long)newest, (unsigned long)s_next);
     return 0;
 }
@@ -233,14 +235,14 @@ int cali_sdlog_write(const cali_sdlog_rec_t *r) {
     }
     if (fwrite(line, 1, (size_t)n, s_f) != (size_t)n) return -1;
     s_seg_bytes += n;
-    __atomic_store_n(&s_last_seq, s_next, __ATOMIC_RELAXED);
-    s_next++;
+    s_written = s_next++;
     return rolled;
 }
 
 int cali_sdlog_sync(void) {
-    if (!s_f) return -1;
-    return fflush(s_f) == 0 && fsync(fileno(s_f)) == 0 ? 0 : -1;
+    if (!s_f || fflush(s_f) != 0 || fsync(fileno(s_f)) != 0) return -1;
+    __atomic_store_n(&s_last_seq, s_written, __ATOMIC_RELAXED);   /* now really on the card */
+    return 0;
 }
 
 int cali_sdlog_delete_oldest(void) {

@@ -65,7 +65,7 @@ void cali_sdlog_io(int what, uint16_t char_short, const uint8_t *data, size_t le
 void cali_sdlog_tick(uint64_t now_ms);   /* the 5-min snapshot */
 /* device.sd (a value: call cali_json_key first):
  * {"state":"absent"|"error"|"ok","total_mb":<int>|null,"free_mb":<int>|null,"last_seq":<int>|null,"dropped":<int>}
- * total/free only while ok; last_seq = the last record on the card (null: none yet). */
+ * total/free only while ok; last_seq = the last record fsynced to the card (null: none yet). */
 void cali_sdlog_json(cali_json_t *j);
 
 /* ---- SD task ---- */

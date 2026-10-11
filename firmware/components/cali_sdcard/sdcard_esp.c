@@ -42,6 +42,8 @@ static QueueHandle_t s_q;
 static sdmmc_card_t *s_card;
 static int s_powered;
 static int s_last_state = -1;   /* log each state change once, not every 5-min retry */
+static uint64_t s_next_try;     /* the next mount attempt while unmounted */
+static uint64_t s_last_fail;    /* uptime of the last write/fsync failure (0 = none) */
 
 static int put(const cali_sdlog_rec_t *r) { return xQueueSend(s_q, r, 0) == pdTRUE ? 0 : -1; }
 
@@ -100,25 +102,39 @@ static void mount(void) {
         return;
     }
     prune();
+    uint64_t total = 0, freeb = 0;   /* still full after pruning (not our files): no room to log */
+    if (esp_vfs_fat_info(MOUNT_POINT, &total, &freeb) == ESP_OK && freeb < (uint64_t)CALI_SDLOG_SEGMENT_BYTES) {
+        cali_log("sd: card full (not by the log), not logging");
+        unmount();
+        set_state(CALI_SD_ERROR);
+        return;
+    }
     set_state(CALI_SD_OK);
 }
 
-/* A write or fsync failed: the card was pulled or broke. Remount at once (that sets the state). */
+/* A write or fsync failed: the card was pulled or broke. Remount at once (that sets the state:
+ * absent for a pulled card) — but a second failure within RETRY_MS (a card that mounts but cannot
+ * be written) is an error and waits out RETRY_MS, never a remount storm under the display lock. */
 static void io_failed(const char *what) {
-    cali_log("sd: %s failed, remounting", what);
+    uint64_t now = cali_uptime_ms();
+    int again = s_last_fail && now - s_last_fail < RETRY_MS;
+    cali_log("sd: %s failed%s", what, again ? " again, retry in 5 min" : ", remounting");
+    s_last_fail = now;
+    s_next_try = now + RETRY_MS;
     unmount();
-    mount();
+    if (again) set_state(CALI_SD_ERROR);
+    else mount();
 }
 
 static void sd_task(void *arg) {
     (void)arg;
-    uint64_t next_try = 0, last_sync = 0;
+    uint64_t last_sync = 0;
     int dirty = 0;
     cali_sdlog_rec_t r;
     for (;;) {
         uint64_t now = cali_uptime_ms();
-        if (!s_card && now >= next_try) {
-            next_try = now + RETRY_MS;
+        if (!s_card && now >= s_next_try) {
+            s_next_try = now + RETRY_MS;
             bsp_display_lock(0);   /* 0 = wait: the card's init must not interleave an LCD flush */
             mount();
             bsp_display_unlock();

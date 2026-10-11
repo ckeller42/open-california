@@ -231,3 +231,13 @@ def test_snapshot_every_5_min_only_while_linked(cli, dirs):
     recs = records(log)
     assert [(r["ev"], r["fn"]) for r in recs] == [("snap", "energy"), ("snap", "water")] * 2
     assert recs[0]["hex"] == ENERGY
+
+
+def test_last_seq_is_published_once_fsynced(cli, dirs):
+    """device.sd.last_seq is what is on the card: buffered records count only after the fsync."""
+    kv, log = dirs
+    out = run(cli, kv, "card ok 1 1", "open %s" % log, "fill 3", "json", "sync", "json", "close")
+    assert [o["last_seq"] for o in (json.loads(ln[5:])["sd"] for ln in out if ln.startswith("JSON "))] == [
+        None,
+        3,
+    ]

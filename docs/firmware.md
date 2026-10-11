@@ -579,7 +579,10 @@ buspi can later fill the gaps of its own history (ingest: a later PR).
   the existing `SPI3_HOST` bus (never initialised again), CS GPIO4, `esp_vfs_fat_sdspi_mount` with
   `format_if_mount_failed = false`. Never the `BSP_ERROR_CHECK`-wrapped `bsp_sdcard_mount` (it aborts
   without a card: a boot loop). No card-detect pin: while absent, a retry every 5 min; a failed write
-  or `fsync` (card pulled) unmounts and remounts at once, which sets the state.
+  or `fsync` (card pulled) unmounts and remounts at once, which sets the state; a second failure
+  within 5 min (a card that mounts but cannot be written) is `error` and waits out the 5 min, and a
+  card with less than one segment free after pruning (filled by other files) is `error`, so a bad
+  card never makes the SD task remount in a loop under the display lock.
 - **`GPIO[4]` warning** — `gpio: conflict found for GPIO[4]` at unmount (the SD probe saw it) comes from
   IDF's own `sdspi_host_remove_device`: it re-configures its CS pin, still reserved as an output by its
   own `sdspi_host_init_device`, as an input, which `gpio_config` flags (`esp_driver_gpio`: "Right now,
@@ -587,8 +590,8 @@ buspi can later fill the gaps of its own history (ingest: a later PR).
   it once more. Harmless, left as is.
 
 `device.sd` in `/api/state`: `{"state": "absent"|"error"|"ok", "total_mb", "free_mb", "last_seq", "dropped"}` —
-`total_mb`/`free_mb` (FAT, MiB) only while `ok`, else `null`; `last_seq` = the last record on the card
-(`null`: none yet); `error` = a card answered but holds no usable FAT (`ESP_FAIL`) or the log directory
+`total_mb`/`free_mb` (FAT, MiB) only while `ok`, else `null`; `last_seq` = the last record fsynced to the card
+(`null`: none yet; it trails the queue by up to 10 s); `error` = a card answered but holds no usable FAT (`ESP_FAIL`) or the log directory
 cannot be opened. The `/device` page and the shared UI's *Device status* card (menu → Device status)
 show one **Storage** row: *SD 28.1 of 29.7 GB free · log #1042*, *No SD card* or *SD card error*, plus
 *N records dropped* when `dropped > 0`, EN + DE.
