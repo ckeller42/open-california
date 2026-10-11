@@ -184,6 +184,8 @@ function renderFw(d) {
 async function ota(action) {
   const msg = $("fw-msg");
   msg.textContent = "";
+  /* no second click while this one is in flight: the next poll shows the buttons again (busy -> not) */
+  $("fw-check").hidden = $("fw-install").hidden = true;
   try {
     const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/ota", {method: "POST",
       headers: {"Content-Type": "application/json"}, body: JSON.stringify({action: action})}));

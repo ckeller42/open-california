@@ -154,10 +154,9 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`). `flasher_args.json` now lists bootloader 0x0, partition
   table 0x8000, `ota_data_initial.bin` 0x10000 and the app 0x20000; the OTA build is 0x1dafd0 =
   1,945,552 B (38 % of a slot free). History, R18: one factory app at 0x10000, **3 MB (0x300000)**
-  instead of 1500K; flash stays 16 MB. Flash offsets
-  unchanged (`flasher_args.json`: bootloader 0x0, partition table 0x8000, app 0x10000); the QEMU
-  flash image is padded to the build's `flash_size` (16MB), so it matches without change. After
-  switching, delete the stale `firmware/sdkconfig` / `build-qemu/sdkconfig` (and
+  instead of 1500K, app at 0x10000 (pre-OTA layout, superseded); flash stays 16 MB. The QEMU
+  flash image is padded to the build's `flash_size` (16MB), so it matches without change. After a
+  partition-table change, delete the stale `firmware/sdkconfig` / `build-qemu/sdkconfig` (and
   `build-qemu/qemu_flash.bin`, whose partition table is the old one).
 - **Size (`idf.py size`, release):** `cali_fw.bin` before WiFi 0x71190 = 463,248 B (70 % of the old
   1,536,000 B app partition free) -> with WiFi **0x107660 = 1,078,880 B** (+615,632 B: net80211,

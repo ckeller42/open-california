@@ -176,6 +176,7 @@ def test_firmware_row_checks_and_installs(page, locale, lang):
         expect(pg.locator("#fw-install")).to_be_hidden()
         with pg.expect_response("**/api/ota"):
             pg.click("#fw-check")
+            expect(pg.locator("#fw-check")).to_be_hidden()  # no second click while it is in flight
         assert posts == [{"action": "check"}]
         expect(pg.locator("#fw-msg")).to_have_text("")
         stub.fixtures["station"]["/api/state"]["device"]["ota"].update(state="available", available_sha=SHA)
