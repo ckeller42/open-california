@@ -144,3 +144,56 @@ def test_connect_gives_up_after_the_one_retry(stub, page):
         expect(pg.locator("#setup-msg")).to_have_text(STRINGS["err_net"]["en"], timeout=6000)
         pg.wait_for_timeout(CONSTS["NET_CONNECT_RETRY_MS"] + 500)
         assert len(posts) == 2
+
+
+SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_firmware_row_checks_and_installs(page, locale, lang):
+    """The /device firmware row (R_FW_OTA): the running build, Check, then "Install <sha7>" once the
+    firmware reports a newer build; each button posts /api/ota's action; a refusal shows its code.
+
+    .. test:: The /device page's firmware row drives POST /api/ota
+       :id: T_FW_OTA_PAGE
+       :links: R_FW_OTA
+    """
+    posts = []
+
+    def on_ota(route):
+        posts.append(json.loads(route.request.post_data))
+        ok = len(posts) == 1
+        route.fulfill(
+            status=200 if ok else 409,
+            content_type="application/json",
+            body='{"ok":true}' if ok else '{"ok":false,"error":"busy"}',
+        )
+
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        pg.route("**/api/ota", on_ota)
+        status = pg.locator("#fw-status")
+        expect(status).to_have_text(STRINGS["fw_running"][lang].replace("{sha}", "bef07f1"))
+        expect(pg.locator("#fw-install")).to_be_hidden()
+        with pg.expect_response("**/api/ota"):
+            pg.click("#fw-check")
+        assert posts == [{"action": "check"}]
+        expect(pg.locator("#fw-msg")).to_have_text("")
+        stub.fixtures["station"]["/api/state"]["device"]["ota"].update(state="available", available_sha=SHA)
+        install = pg.locator("#fw-install")
+        expect(install).to_have_text(STRINGS["fw_install"][lang].replace("{sha}", SHA[:7]))
+        expect(status).to_contain_text(STRINGS["ota_available"][lang].replace("{sha}", SHA[:7]))
+        install.click()
+        expect(pg.locator("#fw-msg")).to_have_text(STRINGS["ota_error"][lang].replace("{error}", "busy"))
+        assert posts[1] == {"action": "install"}
+        stub.fixtures["station"]["/api/state"]["device"]["ota"].update(state="downloading", progress_pct=42)
+        expect(status).to_contain_text(STRINGS["ota_downloading"][lang].replace("{pct}", "42"))
+        expect(install).to_be_hidden()
+        expect(pg.locator("#fw-check")).to_be_hidden()
+
+
+def test_firmware_row_offers_no_update_over_the_setup_hotspot(stub, page):
+    """Like the firmware's 403: no Check/Install outside station mode, and the row says why."""
+    with page(stub.base, locale="en-US") as pg:
+        expect(pg.locator("#fw-status")).to_contain_text(STRINGS["fw_station_only"]["en"])
+        expect(pg.locator("#fw-check")).to_be_hidden()
+        expect(pg.locator("#fw-install")).to_be_hidden()

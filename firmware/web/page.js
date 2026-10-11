@@ -12,7 +12,8 @@
  * @typedef {{ mode: string, ssid: string|null, ip: string|null, rssi: number|null }} Wifi
  * @typedef {{ ssid: string, rssi: number, secure: boolean }} Ap
  * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi }} Device  the /api/state fields this page reads
+ * @typedef {{ state: string, available_sha: string|null, progress_pct: number, error: string|null }} Ota
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -34,6 +35,10 @@ function t(key, vars) {
 const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
 /** @type {Record<string, string>} */
 const POST_ERROR = {ssid: "err_ssid", psk: "err_psk", store: "err_store"};
+/* device.ota.state -> its text (idle: none) */
+/** @type {Record<string, string>} */
+const OTA_TEXT = {checking: "ota_checking", up_to_date: "ota_up_to_date", available: "ota_available",
+  downloading: "ota_downloading", verifying: "ota_verifying", rebooting: "ota_rebooting", error: "ota_error"};
 
 /**
  * @param {string} id
@@ -83,6 +88,8 @@ $("ssid-label").textContent = t("network");
 $("psk-label").textContent = t("password");
 $("connect").textContent = t("connect");
 $("rescan").textContent = t("rescan");
+$("fw-title").textContent = t("fw_title");
+$("fw-check").textContent = t("fw_check");
 document.documentElement.lang = LANG;
 
 /** @type {Join|null} a submitted join being watched */
@@ -97,6 +104,33 @@ function renderLink(d) {
   const a = el("a", t(station || d.pairing.address ? "app_link" : "app_link_pair"));
   a.href = station ? "/" : "/app";
   box.appendChild(a);
+}
+
+/* The firmware row (R_FW_OTA): the running build, the update's progress, Check / Install <sha7>
+ * (station mode only, like the firmware's POST /api/ota). */
+/** @param {Device} d */
+function renderFw(d) {
+  const o = d.ota, sha = (o.available_sha || "").slice(0, 7), key = OTA_TEXT[o.state];
+  const station = d.wifi.mode === "station", busy = ["checking", "downloading", "verifying", "rebooting"].includes(o.state);
+  let text = t("fw_running", {sha: d.fw});
+  if (key) text += " · " + t(key, {sha: sha, pct: o.progress_pct, error: o.error || ""});
+  if (!station) text += " · " + t("fw_station_only");
+  $("fw-status").textContent = text;
+  $("fw-check").hidden = !station || busy;
+  const install = $("fw-install");
+  install.hidden = !station || busy || !sha;
+  install.textContent = t("fw_install", {sha: sha});
+}
+
+/** @param {"check"|"install"} action */
+async function ota(action) {
+  const msg = $("fw-msg");
+  msg.textContent = "";
+  try {
+    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/ota", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({action: action})}));
+    if (!r.body.ok) msg.textContent = t("ota_error", {error: r.body.error || ""});
+  } catch (e) { msg.textContent = t("err_net"); }
 }
 
 /** @param {Ap[]} scan */
@@ -202,6 +236,7 @@ async function poll() {
     const s = (/** @type {{body: State}} */ (await fetchJson("/api/state"))).body;
     $("banner").style.display = "none";
     renderLink(s.device);
+    renderFw(s.device);
     const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
     $("setup").hidden = !setup;
     if (setup && !setupShown && !joining) scan();
@@ -215,4 +250,6 @@ async function poll() {
 
 $("connect").addEventListener("click", connect);
 $("rescan").addEventListener("click", scan);
+$("fw-check").addEventListener("click", () => ota("check"));
+$("fw-install").addEventListener("click", () => ota("install"));
 poll();

@@ -27,6 +27,7 @@ from .api_shape import (
     CONTROL_KEYS,
     DEVICE_KEYS,
     LINK_KEYS,
+    OTA_KEYS,
     PAIRING_API_KEYS,
     PAIRING_KEYS,
     STATE_KEYS,
@@ -78,6 +79,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "json.c"),
             str(CORE / "snapshot.c"),
             str(CORE / "status.c"),
+            str(CORE / "ota.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
             "-o",
@@ -189,6 +191,8 @@ def test_api_state_shape(web_cli):
     assert set(body["device"]) == DEVICE_KEYS
     assert set(body["device"]["pairing"]) == PAIRING_KEYS and set(body["device"]["link"]) == LINK_KEYS
     assert set(body["device"]["wifi"]) == WIFI_KEYS
+    assert body["device"]["ota"] == {"state": "idle", "available_sha": None, "progress_pct": 0, "error": None}
+    assert set(body["device"]["ota"]) == OTA_KEYS
     assert body["device"]["control"] == {"writes": True} and set(body["device"]["control"]) == CONTROL_KEYS
     assert list(body["fn"]) == ["cooler", "roof"]  # CODEC_CHARS order, frames held only
     assert body["fn"]["cooler"]["Level"] == 3
@@ -212,7 +216,8 @@ _PIN_SETUP = [
 EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
     '"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
-    '"control":{"writes":true},"uptime_ms":5010,"fw":"test","water_held":false}}'
+    '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
+    '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null},"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
     '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
@@ -1131,3 +1136,70 @@ def test_cancel_outside_a_flow_is_a_no_op(web_cli, state, acts):
     )
     assert r.status == 200 and r.json()["state"] == state
     assert pair_calls(other) == (["CALL pair_cancel"] if acts else [])
+
+
+# ---- POST /api/ota (R_FW_OTA) -----------------------------------------------------------------
+
+
+def ota_wakes(other):
+    return [ln for ln in other if ln == "CALL ota_wake"]
+
+
+@pytest.mark.parametrize("action", ["check", "install"])
+def test_ota_starts_on_the_ota_task_and_shows_in_state(web_cli, action):
+    """The request only starts the OTA task (``wake``) and answers at once; device.ota says checking.
+
+    .. test:: POST /api/ota: station mode only, shape and codes, progress in device.ota
+       :id: T_FW_OTA_API
+       :links: R_FW_OTA
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"otainit",
+            req("POST", "/api/ota", '{"action":"%s"}' % action),
+            req("GET", "/api/state"),
+            req("POST", "/api/ota", '{"action":"check"}'),
+        ],
+    )
+    assert (resps[0].status, resps[0].json()) == (200, {"ok": True})
+    assert resps[1].json()["device"]["ota"]["state"] == "checking"
+    assert (resps[2].status, resps[2].json()) == (409, {"ok": False, "error": "busy"})
+    assert len(ota_wakes(other)) == 1
+
+
+@pytest.mark.parametrize("state,joined", NOT_STATION)
+def test_ota_refused_outside_station_mode(web_cli, state, joined):
+    """Like /api/command: never over the setup hotspot or a setup-flow join."""
+    r, other = one(
+        web_cli,
+        "POST",
+        "/api/ota",
+        '{"action":"install"}',
+        setup=["wifi " + state, "joined %d" % joined, "otainit"],
+    )
+    assert (r.status, r.json()) == (403, {"ok": False, "error": "setup_mode"})
+    assert not ota_wakes(other)
+
+
+@pytest.mark.parametrize(
+    "method,body,status,error",
+    [
+        ("GET", None, 405, "method"),
+        ("POST", "", 400, "bad_json"),
+        ("POST", '{"action":"install","x":1}', 400, "bad_json"),
+        ("POST", '{"action":"update"}', 400, "bad_action"),
+        ("POST", "{}", 400, "bad_action"),
+    ],
+)
+def test_ota_errors(web_cli, method, body, status, error):
+    r, other = one(web_cli, method, "/api/ota", body, setup=[*STATION, "otainit"])
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+    assert not ota_wakes(other)
+
+
+def test_ota_unavailable_without_an_ota_task(web_cli):
+    """The host build and the QEMU image have no OTA I/O: 503, never a hang."""
+    r, _ = one(web_cli, "POST", "/api/ota", '{"action":"check"}', setup=STATION)
+    assert (r.status, r.json()) == (503, {"ok": False, "error": "ota_unavailable"})

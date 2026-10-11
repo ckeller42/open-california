@@ -21,7 +21,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
 | `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); they are regenerated locally from the APK with a `vd2svg.py` converter that is itself **not in the repo** (`ui/assets/` is untracked); `build_prototype.py` falls back to neutral placeholders without them. |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
-| `firmware/` | ESP32-S3 satellite (#154, WIP; controls cooler/camping/lighting/air heater/energy — no roof; the wake-up light with the page's clock `local_now` + the unit's latched config (`R_FW_WAKEUP`), writes only in station mode, one write allow-list `R_FW_WRITE_ALLOWLIST`; bench CoreS3 + mock unit (2026-10-07); **bonded to and running against the real unit since 2026-10-08**, holds its link while parked since #279): `cali_core` (pairing SM/runner/session/console + `control` = C twin of `calictl.control` held to `tests/vectors/control.json` + `control_run` sequencer, WiFi SM/runner, HTTP core, captive DNS, web endpoints incl. `POST /api/command` and calictl's pairing wizard `GET/POST /api/pairing` (`R_FW_PAIRING_WIZARD`, also over the setup hotspot via `GET /app`) — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`page.js`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (3 MB app partition); see `docs/firmware.md`, owner how-to `docs/howto-esp-wifi-setup.md` |
+| `firmware/` | ESP32-S3 satellite (#154, WIP; controls cooler/camping/lighting/air heater/energy — no roof; the wake-up light with the page's clock `local_now` + the unit's latched config (`R_FW_WAKEUP`), writes only in station mode, one write allow-list `R_FW_WRITE_ALLOWLIST`; bench CoreS3 + mock unit (2026-10-07); **bonded to and running against the real unit since 2026-10-08**, holds its link while parked since #279): `cali_core` (pairing SM/runner/session/console + `control` = C twin of `calictl.control` held to `tests/vectors/control.json` + `control_run` sequencer, WiFi SM/runner, HTTP core, captive DNS, web endpoints incl. `POST /api/command` and calictl's pairing wizard `GET/POST /api/pairing` (`R_FW_PAIRING_WIZARD`, also over the setup hotspot via `GET /app`) — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`page.js`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (two 3 MB OTA slots; on-request update from the `esp-latest` GitHub release, `R_FW_OTA`); see `docs/firmware.md`, owner how-to `docs/howto-esp-wifi-setup.md` |
 
 ## Hard rules (don't break these)
 
@@ -96,10 +96,13 @@ make -C firmware/host cali-host && python -m pytest tests/firmware -v   # firmwa
 docker run --rm -v "$PWD":/project -w /project/firmware espressif/idf:v6.1 bash -c '. $IDF_PATH/export.sh >/dev/null && idf.py -B build-qemu -D SDKCONFIG=build-qemu/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;qemu/sdkconfig.qemu" build'   # firmware QEMU tier build
 python -m tools.ux_gallery --esp --out docs/screenshots   # ESP page shots for the docs (stub + fixtures, no firmware)
 ssh pi@buspi 'cd ~/open-california && git pull && sudo systemctl restart calictl'   # deploy main to buspi
-ssh pi@buspi '~/open-california/tools/esplab/flash_ci.sh <ci-run-id> /dev/ttyACM0'   # flash the ESP from THAT merge's ci.yml run
+curl -s -X POST http://<esp>/api/ota -d '{"action":"install"}'   # update the ESP (OTA, R_FW_OTA) once the merge's firmware-release job passed
+ssh pi@buspi '~/open-california/tools/esplab/flash_ci.sh <ci-run-id> /dev/ttyACM0'   # USB recovery / new partition layout: flash THAT merge's ci.yml run
 ```
 
-**Flash the ESP by explicit CI run id**, never `flash_ci.sh main`: it picks the latest *successful*
+**Update the ESP over the air** (`POST /api/ota`, or `/device` → *Install*): CI's `firmware-release`
+puts each `main` merge on the `esp-latest` prerelease (`docs/firmware.md` "Firmware update from
+GitHub"). Over USB, **flash by explicit CI run id**, never `flash_ci.sh main`: it picks the latest *successful*
 run, and the `[skip ci]` screenshot commit that lands right after a merge cancels the merge commit's
 run, so `main` silently flashes the previous build (`gh run rerun <id>` first). Verify with
 `curl http://<esp>/api/state` → `device.fw`.

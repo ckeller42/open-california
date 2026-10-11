@@ -147,9 +147,14 @@ reuses `firmware/sdkconfig` of the release build, and a stale `sdkconfig` beats
   `esp_wifi_init`/`esp_wifi_start` fails takes the same path: `LOG wifi: driver unavailable` once,
   the WiFi SM stays `WIFI_UNPROVISIONED` (STATE has no `wifi` member, `wifi status` -> `LOG wifi: not
   enabled`), nothing listens, no reboot.
-- **Partition table (ruling R18):** `partitions.csv` (`CONFIG_PARTITION_TABLE_CUSTOM=y`) replaces
-  IDF's single-app-large table: the same nvs (0x9000, 0x6000) + phy_init (0xf000, 0x1000) and one
-  factory app at 0x10000, now **3 MB (0x300000)** instead of 1500K; flash stays 16 MB. Flash offsets
+- **Partition table (ruling R18, then R_FW_OTA 2026-10-11):** `partitions.csv`
+  (`CONFIG_PARTITION_TABLE_CUSTOM=y`): nvs (0x9000, 0x6000) + phy_init (0xf000, 0x1000), unchanged,
+  then **otadata (0x10000, 0x2000) + two 3 MB OTA slots, ota_0 at 0x20000 and ota_1 at 0x320000**
+  (`docs/firmware.md` "Firmware update from GitHub"; rollback on,
+  `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`). `flasher_args.json` now lists bootloader 0x0, partition
+  table 0x8000, `ota_data_initial.bin` 0x10000 and the app 0x20000; the OTA build is 0x1dafd0 =
+  1,945,552 B (38 % of a slot free). History, R18: one factory app at 0x10000, **3 MB (0x300000)**
+  instead of 1500K; flash stays 16 MB. Flash offsets
   unchanged (`flasher_args.json`: bootloader 0x0, partition table 0x8000, app 0x10000); the QEMU
   flash image is padded to the build's `flash_size` (16MB), so it matches without change. After
   switching, delete the stale `firmware/sdkconfig` / `build-qemu/sdkconfig` (and
@@ -384,6 +389,14 @@ This test has no BLE/NimBLE dependency (pure C, no radio) and runs on any host w
 `linux_only`, which need the 32-bit NimBLE Linux host build; the default test run deselects them
 with `-m "not linux_only"`).
 
+### Firmware update (`components/cali_ota`, `R_FW_OTA`)
+
+`cali_core/ota.c` is the portable state machine (manifest -> up to date / available -> download ->
+SHA-256 -> boot switch -> restart) behind `cali_ota_ops_t`; `components/cali_ota/ota_esp.c` (ESP
+only, like `cali_display`; the host build never links it, so `/api/ota` answers 503 there) supplies
+the HTTPS/flash I/O on its own FreeRTOS task, marks a new image valid after 60 s healthy and
+handles the console's `ota …` lines. Details: `docs/firmware.md` "Firmware update from GitHub".
+
 ### Status display (CoreS3 screen, `R_FW_STATUS_DISPLAY`)
 
 The board build paints a 320 x 240 status screen: title + `fw <version>`, then three rows with a
@@ -607,6 +620,13 @@ defined in `docs/firmware.md` too, with their verifying tests (`T_WIFI_SM_REF`,
 `T_FW_ESP_SCREENSHOT_FIXTURES`, `T_FW_WIFI_LOSS_SESSION`, `T_FW_WEB_E2E`) declared in the test
 modules' docstrings.
 
+**R_FW_OTA** (the on-request update from the `esp-latest` GitHub release, rollback after 60 s
+healthy) is defined in `docs/firmware.md` too; verified by `T_FW_OTA_SM` (`tests/firmware/test_ota.py`,
+`cali_core/ota.c` against a fake fetcher/slot via `test/ota_cli.c`), `T_FW_OTA_API` and
+`T_FW_OTA_PAGE`. The ESP I/O (`components/cali_ota/ota_esp.c`: `esp_https_ota`, the certificate
+bundle, the flash read-back SHA-256, rollback, console `ota check|install|status|invalid`) is
+board-only.
+
 ## On-board verification
 
 The bring-up plan for a real M5Stack CoreS3, in order (run 2026-10-01 against the mock unit on the
@@ -624,7 +644,10 @@ BOARD/DEVICE rows of the evidence ledger record what has been proven):
    **From CI on a Linux host (buspi in the van, or thinky):** `tools/esplab/flash_ci.sh [branch|run-id]
    [port]` downloads the `firmware-esp32s3` artifact of the latest successful CI run (default `main`)
    with `gh` into `~/calictl-esp/ci-<sha>-<run>/` and flashes it with `tools/esplab/flash.sh` — the
-   offsets still come from that artifact's `flasher_args.json`. Needs `gh` logged in,
+   offsets still come from that artifact's `flasher_args.json` (since `R_FW_OTA` that includes
+   `ota_data_initial.bin`; the script refuses an artifact missing a listed image). Once the ESP runs an
+   OTA build this USB path is for recovery only: updates come over WiFi (`POST /api/ota`, see
+   `docs/firmware.md`). Needs `gh` logged in,
    `~/esp-venv/bin/esptool` and the user in `dialout`; console afterwards:
    `tools/esplab/esp_cmd.py /dev/ttyACM0 2 status` (opens the port without resetting the chip).
 2. **Console over USB-Serial/JTAG.** The CoreS3's USB-C enumerates as the S3's native USB (not a

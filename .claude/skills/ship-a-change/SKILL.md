@@ -1,9 +1,9 @@
 ---
 name: ship-a-change
-description: Use when any change is ready to leave your working tree in open-california (or buspi-config / californiaontour-re) — opening a PR, waiting on CI or CodeRabbit/claude-review, merging, rebasing over a generated-file conflict, deploying to buspi, or flashing the ESP satellite after a merge.
+description: Use when any change is ready to leave your working tree in open-california (or buspi-config / californiaontour-re) — opening a PR, waiting on CI or CodeRabbit/claude-review, merging, rebasing over a generated-file conflict, deploying to buspi, or updating (OTA) or USB-flashing the ESP satellite after a merge.
 ---
 
-# Ship a change: PR → review loop → merge → deploy → flash
+# Ship a change: PR → review loop → merge → deploy → update the ESP
 
 Merge yourself only when CI is green **and** every sensible bot comment is handled; then put the
 merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailscale): `buspi-deploy`.
@@ -22,7 +22,7 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 | Merge | `gh pr merge N --squash --delete-branch` (also buspi-config, californiaontour-re). |
 | Deploy | `ssh pi@buspi 'cd ~/open-california && git pull && sudo systemctl restart calictl'`; verify `systemctl is-active calictl`, `git log -1`, `/api/state` on :8088. |
 | Dashboard | After signal/enum changes: `push_dashboard.py` to Pi :3000 (`GRAFANA_PASSWORD`) and Cloud (`sudo -n bash -c 'set -a; . /etc/buspi/secrets.env; GRAFANA_TOKEN=$GRAFANA_CLOUD_TOKEN …'`; 503 → retry). Never echo secrets. |
-| Flash ESP | If `firmware/`, `calictl/webui/**` or semantics changed (UI is bundled): below. |
+| Update ESP | If `firmware/`, `calictl/webui/**` or semantics changed (UI is bundled): OTA from the merge's `firmware-release`, below. |
 | Offline | `until ssh -o ConnectTimeout=8 -o BatchMode=yes pi@buspi true; do sleep 60; done` in background; then deploy/flash, tell the owner. |
 
 ## Generated-file conflicts (rebase on `origin/main`)
@@ -38,18 +38,28 @@ git fetch origin    # lease = the remote sha you last saw
 git push --force-with-lease=BRANCH:$(git rev-parse origin/BRANCH) origin BRANCH
 ```
 
-## Flash the ESP from the merge commit
+## Update the ESP from the merge commit (OTA)
+
+CI's `firmware-release` job (push to `main` only) puts the merge commit's `cali_fw.bin` +
+`manifest.json` on the prerelease `esp-latest`; the ESP installs it on request (`R_FW_OTA`,
+`docs/firmware.md` "Firmware update from GitHub"):
 
 ```sh
 SHA=$(gh pr view N --json mergeCommit --jq .mergeCommit.oid)
 RUN=$(gh run list -R ckeller42/open-california --workflow ci.yml --commit "$SHA" --json databaseId --jq '.[0].databaseId')
-gh run watch "$RUN" --exit-status          # cancelled? gh run rerun "$RUN"
-ssh pi@buspi "~/open-california/tools/esplab/flash_ci.sh $RUN /dev/ttyACM0"
-curl -s http://<esp-ip>/api/state          # IP: esp_cmd.py … "wifi status"; device.fw == merge sha, device.link.up, a value (water)
+gh run watch "$RUN" --exit-status          # firmware-release must pass; cancelled? gh run rerun "$RUN"
+curl -s -X POST http://<esp-ip>/api/ota -d '{"action":"install"}'   # or /device → Install <sha7>
+curl -s http://<esp-ip>/api/state          # device.ota: downloading → rebooting; then device.fw == merge sha, device.link.up
 ```
 
-The ESP hangs off buspi's USB (`/dev/ttyACM0`). Link timing: `tools/esplab/esp_cmd.py /dev/ttyACM0 --tail 120`
-(timestamped, no reset).
+`device.ota.state` `up_to_date` = already running it; `error` + `checksum` = a newer merge replaced
+the release mid-download (install again). Station mode only (`403` over the setup hotspot). The new
+build marks itself valid after 60 s healthy; a crash before that boots the previous slot.
+
+**USB recovery path** (both slots broken, or the first flash of a new partition layout): the ESP on
+a laptop's/buspi's USB, then `tools/esplab/flash_ci.sh <run-id> /dev/ttyACM0` (bootloader, partition
+table, `ota_data_initial.bin`, app at `ota_0`; NVS untouched). Link timing over USB:
+`tools/esplab/esp_cmd.py /dev/ttyACM0 --tail 120` (timestamped, no reset).
 
 ## Common mistakes
 
@@ -57,6 +67,7 @@ The ESP hangs off buspi's USB (`/dev/ttyACM0`). Link timing: `tools/esplab/esp_c
 |---|---|
 | Plain `--force-with-lease` → "stale info" | Explicit lease `=BRANCH:<remote sha>` |
 | `flash_ci.sh main` | Run id of the merge commit; the `[skip ci]` screenshot commit cancels/supersedes it and `main` flashes the previous build |
+| OTA before `firmware-release` finished | The manifest still names the previous merge (`up_to_date` / old sha); wait for the job, then install |
 | UI change, bundle not regenerated → ESP serves old UI | Regenerate `app_bundle_gen.h` (`gen_c_dict`); `--check` it |
 | Mutation check against the source, not the regenerated bundle | Break → regenerate → watch the test fail |
 | Merged on green CI before reading bot comments | Read both comment endpoints first |

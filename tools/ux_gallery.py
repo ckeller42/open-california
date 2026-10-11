@@ -181,6 +181,9 @@ def calictl_state(fn):
     return out
 
 
+OTA_IDLE = {"state": "idle", "available_sha": None, "progress_pct": 0, "error": None}  # device.ota
+
+
 def esp_fixtures():
     """Canned firmware API responses for the two page modes.
 
@@ -202,6 +205,7 @@ def esp_fixtures():
             "control": {"writes": True},
             "uptime_ms": 3912400,
             "fw": "bef07f1",
+            "ota": dict(OTA_IDLE),
             "water_held": False,
         },
     }
@@ -217,6 +221,7 @@ def esp_fixtures():
                     "control": {"writes": False},
                     "uptime_ms": 41250,
                     "fw": "bef07f1",
+                    "ota": dict(OTA_IDLE),
                     "water_held": False,
                 },
             },

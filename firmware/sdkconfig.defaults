@@ -21,10 +21,13 @@ CONFIG_BT_NIMBLE_NVS_PERSIST=n
 # UART0 (qemu/sdkconfig.qemu).
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
-# partitions.csv (ruling R18): nvs + phy_init + a 3 MB factory app at 0x10000 (the WiFi build is
-# ~1.08 MB; IDF's single-app-large table has only 1500K). Offsets unchanged: 0x0 / 0x8000 / 0x10000.
+# partitions.csv (rulings R18 + R_FW_OTA): nvs + phy_init (offsets as before) + otadata + two 3 MB
+# OTA slots (ota_0 at 0x20000, ota_1 at 0x320000). Bootloader 0x0, partition table 0x8000.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+# R_FW_OTA rollback: a new slot boots "pending verify"; the app marks itself valid after 60 s of a
+# healthy run (main/app_main.c), and a reset before that boots the previous slot.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # Same as the host build (firmware/README.md "Host build notes" 3 + Task 7 review):
 # LE Secure Connections only (a legacy-only peer fails before any passkey), RPA resolution in the
