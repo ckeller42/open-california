@@ -633,13 +633,17 @@ def vehicle(d: dict) -> dict:
     ign = bool(d.get("TerminalOneFive"))  # terminal-15 line
     # Ignition off: the unit sends 0/0 but has no level signal — the app shows "-.-°, Signal
     # unavailable. Ignition is off." (APP-DISPLAY 2026-10-10), so the axes are unavailable, not 0.0.
+    # Driving: CarLevelPopUp 2 with 0/0 axes — the app replaces the gauges with "Please slow down. To
+    # use the level indicator, the vehicle must be moving at less than 10 km/h." (REAL PHONE 2026-10-11).
+    popup = d.get("CarLevelPopUp")
+    level = ign and popup != 2
     return {
         "installed": True,
         "ignition_on": ign,
         "car_variant": d.get("CarVariant"),
-        "level_popup": d.get("CarLevelPopUp"),
-        "level_roll": deg(d.get("CarLevelRoll")) if ign else None,  # degrees (signed, 0.01° resolution)
-        "level_pitch": deg(d.get("CarLevelPitch")) if ign else None,
+        "level_popup": popup,
+        "level_roll": deg(d.get("CarLevelRoll")) if level else None,  # degrees (signed, 0.01° resolution)
+        "level_pitch": deg(d.get("CarLevelPitch")) if level else None,
         "car_clock": clock,
     }
 

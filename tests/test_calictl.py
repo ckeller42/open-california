@@ -838,6 +838,12 @@ def test_vehicle_decode_char_1004():
     # a 0xFFFF roll = -1 raw = -0.01°, not 655.35
     raw_neg = bytes.fromhex("057e060717142affff0000")
     assert semantics.vehicle(P.decode(f["vehicle"], raw_neg))["level_roll"] == -0.01
+    # driving: CarLevelPopUp 2 — the app shows "Please slow down" instead of the gauges (REAL PHONE
+    # 2026-10-11), so the 0/0 axes are unavailable, not a level reading
+    moving = P.decode(f["vehicle"], raw_neg)
+    moving["CarLevelPopUp"] = 2
+    v = semantics.vehicle(moving)
+    assert v["level_popup"] == 2 and v["level_roll"] is None and v["level_pitch"] is None
 
 
 def test_cli_set_check_all_rows():

@@ -315,13 +315,15 @@ function semVehicle(d) {
     clock = `${pad(y + 1900, 4)}-${pad(mo + 1, 2)}-${pad(da, 2)} ${pad(h, 2)}:${pad(mi, 2)}:${pad(se, 2)}`;
   }
   const ign = !!semGet(d, "TerminalOneFive");
+  const popup = semGet(d, "CarLevelPopUp");
+  const level = ign && popup !== 2;  // ignition off: no signal (app "-.-°"); popup 2 = driving (app "Please slow down")
   return {
     installed: true,
     ignition_on: ign,
     car_variant: semGet(d, "CarVariant"),
-    level_popup: semGet(d, "CarLevelPopUp"),
-    level_roll: ign ? deg(semGet(d, "CarLevelRoll")) : null,  // ignition off: no level signal (app "-.-°")
-    level_pitch: ign ? deg(semGet(d, "CarLevelPitch")) : null,
+    level_popup: popup,
+    level_roll: level ? deg(semGet(d, "CarLevelRoll")) : null,
+    level_pitch: level ? deg(semGet(d, "CarLevelPitch")) : null,
     car_clock: clock,
   };
 }

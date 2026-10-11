@@ -300,6 +300,13 @@ def _hand_cases() -> list:
         ("vehicle/clock", "vehicle", {**clock, "TerminalOneFive": 1, "CarVariant": 4, "CarLevelPopUp": 1})
     )
     c.append(("vehicle/rtc-day-0", "vehicle", {**clock, "CarTimeDay": 0}))
+    c.append(  # driving: popup 2 = "Please slow down", axes unavailable
+        (
+            "vehicle/moving",
+            "vehicle",
+            {"TerminalOneFive": 1, "CarLevelPopUp": 2, "CarLevelRoll": 35, "CarLevelPitch": 146},
+        )
+    )
     c.append(
         ("vehicle/rtc-epoch", "vehicle", {**clock, "CarTimeYear": 0, "CarTimeMonth": 0, "CarTimeDay": 1})
     )

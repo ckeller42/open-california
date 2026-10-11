@@ -690,7 +690,9 @@ const FEATURES = {
     readouts: [
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
       { label: "Level indicator (roll / pitch)",
-        get: (s) => (s.level_roll == null || s.level_pitch == null
+        // CarLevelPopUp 2 = driving: the app swaps the gauges for "Please slow down" (< 10 km/h).
+        get: (s) => (s.level_popup === 2 && s.ignition_on ? t("Please slow down (below 10 km/h)")
+          : s.level_roll == null || s.level_pitch == null
           ? "—" : `${fmtDeg(s.level_roll)} / ${fmtDeg(s.level_pitch)}`),
         widget: (s) => bubbleLevel(s.level_roll, s.level_pitch) },
       { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },

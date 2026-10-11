@@ -22,6 +22,7 @@ window.STRINGS_DE = {
   "up": "verbunden",
   "reconnecting…": "verbindet neu…",
   "Signal": "Signal",
+  "Please slow down (below 10 km/h)": "Bitte langsamer fahren (unter 10 km/h)",
   "Uptime": "Laufzeit",
   "{m} min": "{m} Min",
   "{h} h {m} min": "{h} Std {m} Min",
