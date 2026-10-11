@@ -12,6 +12,11 @@
 #include "driver/i2c_master.h"
 #include "lvgl.h"
 #include "net_consts.h"
+#include "esp_vfs_fat.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "sdmmc_cmd.h"
+#include "driver/sdspi_host.h"
 
 #define AXP2101_ADDR 0x34 /* power chip: BSP 4.1.0 src/bsp_feature_en.c BSP_AXP2101_ADDR */
 #define AW9523_ADDR 0x58  /* IO expander: ESP_IO_EXPANDER_I2C_AW9523_ADDRESS_00 (BSP_IO_EXPANDER_ADDRESS) */
@@ -117,6 +122,55 @@ static void build(void) {
 
 int cali_display_ready(void) { return s_ok; }
 
+/* THROWAWAY SD probe (probe/sd-card, do not merge): never aborts, logs every step with SDPROBE. */
+static void sd_probe(void) {
+    esp_err_t e = bsp_feature_enable(BSP_FEATURE_SD, true); /* AW9523 P0.4 + AXP2101 ALDO4 3.3 V */
+    cali_log("SDPROBE power: %s", esp_err_to_name(e));
+    /* bus SPI3_HOST is already up: bsp_display_start -> bsp_spi_init (idempotent, same pins) */
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = BSP_SDSPI_HOST;
+    sdspi_device_config_t slot = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot.gpio_cs = BSP_SD_SPI_CS;
+    slot.host_id = BSP_SDSPI_HOST;
+    const esp_vfs_fat_sdmmc_mount_config_t mc = {.format_if_mount_failed = false, .max_files = 2,
+                                                 .allocation_unit_size = 16 * 1024};
+    sdmmc_card_t *card = NULL;
+    e = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot, &mc, &card);
+    cali_log("SDPROBE mount: %s", esp_err_to_name(e));
+    if (e != ESP_OK) return;
+    sdmmc_card_print_info(stdout, card);
+    cali_log("SDPROBE card name=%s sectors=%u sector_size=%u MB=%llu type=%s", card->cid.name,
+             (unsigned)card->csd.capacity, (unsigned)card->csd.sector_size,
+             (unsigned long long)card->csd.capacity * card->csd.sector_size / (1024 * 1024),
+             card->is_mmc ? "MMC" : (card->ocr & (1u << 30)) ? "SDHC/SDXC" : "SDSC");
+    uint64_t total = 0, freeb = 0;
+    e = esp_vfs_fat_info("/sdcard", &total, &freeb);
+    cali_log("SDPROBE fat_info: %s total=%llu free=%llu", esp_err_to_name(e), (unsigned long long)total,
+             (unsigned long long)freeb);
+    FILE *f = fopen("/sdcard/probe.txt", "w");
+    int w = f ? fputs("calictl sd probe\n", f) : -1;
+    if (f) fclose(f);
+    char buf[32] = "";
+    f = fopen("/sdcard/probe.txt", "r");
+    if (f) { if (!fgets(buf, sizeof buf, f)) buf[0] = 0; fclose(f); }
+    int rm = remove("/sdcard/probe.txt");
+    cali_log("SDPROBE write=%d read=\"%.*s\" remove=%d %s", w, (int)strcspn(buf, "\n"), buf, rm,
+             strcmp(buf, "calictl sd probe\n") == 0 && rm == 0 ? "OK" : "FAIL");
+    e = esp_vfs_fat_sdcard_unmount("/sdcard", card);
+    cali_log("SDPROBE unmount: %s", esp_err_to_name(e));
+}
+
+/* own 8 KB task: app_main's default stack is too small for FATFS + printf */
+static void sd_probe_task(void *arg) {
+    (void)arg;
+    /* hold the display lock: no LVGL flush on the shared SPI3 bus while the card initialises */
+    int locked = bsp_display_lock(1000);
+    cali_log("SDPROBE start (display lock %s)", locked ? "held" : "NOT held");
+    sd_probe();
+    if (locked) bsp_display_unlock();
+    vTaskDelete(NULL);
+}
+
 int cali_display_init(const cali_transport_t *t) {
 #if CONFIG_CALI_DISPLAY_FORCE_FAIL  /* test-only: the failure path without unplugging anything */
     cali_log("display: unavailable (forced)");
@@ -138,6 +192,7 @@ int cali_display_init(const cali_transport_t *t) {
     s_t = t;
     cali_display_model_init(&s_model);
     s_ok = 1;
+    if (xTaskCreate(sd_probe_task, "sdprobe", 8192, NULL, 4, NULL) != pdPASS) cali_log("SDPROBE task create failed");
     return 0;
 }
 
