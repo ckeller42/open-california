@@ -206,6 +206,7 @@ def esp_fixtures():
             "uptime_ms": 3912400,
             "fw": "bef07f1",
             "ota": dict(OTA_IDLE),
+            "time": {"source": "sntp", "synced": True, "boot": 17},
             "water_held": False,
         },
     }
@@ -222,6 +223,7 @@ def esp_fixtures():
                     "uptime_ms": 41250,
                     "fw": "bef07f1",
                     "ota": dict(OTA_IDLE),
+                    "time": {"source": "sntp", "synced": False, "boot": 1},
                     "water_held": False,
                 },
             },

@@ -13,7 +13,8 @@
  * @typedef {{ ssid: string, rssi: number, secure: boolean }} Ap
  * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
  * @typedef {{ state: string, available_sha: string|null, progress_pct: number, error: string|null }} Ota
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota }} Device  the /api/state fields this page reads
+ * @typedef {{ source: string, synced: boolean, boot: number }} Time
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -104,6 +105,13 @@ function renderLink(d) {
   const a = el("a", t(station || d.pairing.address ? "app_link" : "app_link_pair"));
   a.href = station ? "/" : "/app";
   box.appendChild(a);
+}
+
+/* The clock the SD log stamps with (R_FW_TIME): SNTP synced or not, and the boot number. */
+/** @param {Time} c */
+function renderTime(c) {
+  const key = c.source === "none" ? "time_none" : c.synced ? "time_synced" : "time_waiting";
+  $("time").textContent = t(key, {boot: c.boot});
 }
 
 /* The firmware row (R_FW_OTA): the running build, the update's progress, Check / Install <sha7>
@@ -239,6 +247,7 @@ async function poll() {
     $("banner").style.display = "none";
     renderLink(s.device);
     renderFw(s.device);
+    renderTime(s.device.time);
     const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
     $("setup").hidden = !setup;
     if (setup && !setupShown && !joining) scan();

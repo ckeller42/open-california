@@ -25,6 +25,7 @@ from tests.firmware.api_shape import (
     PAIRING_API_KEYS,
     PAIRING_KEYS,
     STATE_KEYS,
+    TIME_KEYS,
     WIFI_GET_KEYS,
     WIFI_KEYS,
 )
@@ -45,6 +46,7 @@ def test_state_fixture_shape(fixtures, mode):
     assert set(d["pairing"]) == PAIRING_KEYS
     assert set(d["link"]) == LINK_KEYS
     assert set(d["ota"]) == OTA_KEYS
+    assert set(d["time"]) == TIME_KEYS
     assert set(d["control"]) == CONTROL_KEYS and d["control"]["writes"] is (mode != "setup")
     assert set(d["wifi"]) == WIFI_KEYS and d["wifi"]["mode"] == ("station" if mode == "satellite" else mode)
     assert d["uptime_ms"] == state["t"]

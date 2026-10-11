@@ -19,7 +19,14 @@ BOOT_BANNER = "ESP-ROM:"  # the ROM's first line on every (re)boot of the chip
 
 
 def test_boots_unpaired_and_nvs_survives_reboot(qemu):
+    """Also the boot counter (``R_FW_TIME``): 1 on the fresh flash, 2 after the reboot, in real NVS.
+
+    .. test:: The boot counter persists in NVS and counts every boot (QEMU tier)
+       :id: T_FW_TIME_QEMU
+       :links: R_FW_TIME
+    """
     s = qemu.boot()
+    assert s.expect("LOG time: boot", timeout=90) == "1"
     s.expect("LOG ble: controller unavailable", timeout=90)
     s.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
     s.send("status")
@@ -28,6 +35,7 @@ def test_boots_unpaired_and_nvs_survives_reboot(qemu):
     s.expect("LOG kvprobe ok")
     s.stop()
     s2 = qemu.boot()  # same flash.bin
+    assert s2.expect("LOG time: boot", timeout=90) == "2"
     s2.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
     s2.send("kvprobe get")
     assert s2.expect("LOG kvprobe").endswith("0a0b0c")

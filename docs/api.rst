@@ -141,6 +141,7 @@ Tests
 .. autofunction:: tests.e2e.test_satellite.test_wizard_pairs_the_satellite
 .. autofunction:: tests.e2e.test_satellite.test_wizard_over_the_setup_hotspot_via_app
 .. autofunction:: tests.e2e.test_esp_page.test_firmware_row_checks_and_installs
+.. autofunction:: tests.e2e.test_esp_page.test_clock_line_shows_sync_and_boot
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
@@ -232,6 +233,7 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_control_e2e
 .. automodule:: tests.firmware.test_qemu_boot
 .. automodule:: tests.firmware.test_ota
+.. automodule:: tests.firmware.test_time
 .. automodule:: tests.test_wifi_sm_ref
 .. automodule:: tests.test_web_strings
 .. automodule:: tests.test_ux_gallery_esp_fixtures
