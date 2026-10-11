@@ -64,7 +64,7 @@ OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include 
 COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o control.o codec.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o json.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o display_model.o
+CORE_OBJ := console.o snapshot.o status.o json.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o display_model.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
@@ -184,12 +184,18 @@ web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h 
 		$(CORE_H)/cali_captive.h $(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CORE_H)/cali_status.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
-		../web/app_bundle_gen.h $(CORE_H)/cali_ota.h $(COMPONENTS)/platform/include/cali_platform.h
+		../web/app_bundle_gen.h $(CORE_H)/cali_ota.h $(CORE_H)/cali_time.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The OTA state machine (R_FW_OTA): /api/ota + device.ota. The host has no OTA I/O (cali_ota_init is
 # never called), so /api/ota answers 503; the SM itself: tests/firmware/test_ota.py.
 ota.o: $(COMPONENTS)/cali_core/ota.c $(CORE_H)/cali_ota.h $(CORE_H)/cali_json.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The boot counter + SNTP state (R_FW_TIME): device.time. The host has no SNTP (source "none");
+# cali-host never calls cali_time_init (boot 0). The SM: tests/firmware/test_time.py.
+time.o: $(COMPONENTS)/cali_core/time.c $(CORE_H)/cali_time.h $(CORE_H)/cali_json.h \
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 

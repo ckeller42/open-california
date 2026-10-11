@@ -1,6 +1,6 @@
 /* web_cli.c — line-protocol driver for tests/firmware/test_web_handlers.py ONLY; not part of the ESP
  * build. Links web.c + http_core.c + captive_dns.c (for cali_captive_is_probe) + json.c + snapshot.c
- * + ota.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
+ * + ota.c + time.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
  * frames, the runner state, a transport (has_bond/identity), an in-memory kv store, the clock, the
  * log, cali_fw_version ("test"), the WiFi runtime (cali_wifi_run.h) and the control sequencer
  * (cali_ctl_submit).

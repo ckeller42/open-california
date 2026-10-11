@@ -396,6 +396,13 @@ only, like `cali_display`; the host build never links it, so `/api/ota` answers 
 the HTTPS/flash I/O on its own FreeRTOS task, marks a new image valid after 60 s healthy and
 handles the console's `ota …` lines. Details: `docs/firmware.md` "Firmware update from GitHub".
 
+### Time (`components/cali_sntp`, `R_FW_TIME`)
+
+`cali_core/time.c` holds the NVS boot counter (key `boot_count`) and the SNTP sync flag behind
+`device.time`; `components/cali_sntp/sntp_esp.c` (ESP only) runs `esp_netif_sntp` (DHCP server +
+`pool.ntp.org`, `CONFIG_LWIP_SNTP_MAX_SERVERS=2`, `CONFIG_LWIP_DHCP_GET_NTP_SRV=y`). Details:
+`docs/firmware.md` "Time".
+
 ### Status display (CoreS3 screen, `R_FW_STATUS_DISPLAY`)
 
 The board build paints a 320 x 240 status screen: title + `fw <version>`, then three rows with a
@@ -625,6 +632,10 @@ healthy) is defined in `docs/firmware.md` too; verified by `T_FW_OTA_SM` (`tests
 `T_FW_OTA_PAGE`. The ESP I/O (`components/cali_ota/ota_esp.c`: `esp_https_ota`, the certificate
 bundle, the flash read-back SHA-256, rollback, console `ota check|install|status|invalid`) is
 board-only.
+
+**R_FW_TIME** (NVS boot counter + SNTP for the log stamps) is defined in `docs/firmware.md`; verified
+by `T_FW_TIME` (`tests/firmware/test_time.py`, `cali_core/time.c` via `test/time_cli.c` over the host
+kv store), `T_FW_TIME_QEMU` and `T_FW_TIME_PAGE`. SNTP itself (`components/cali_sntp`) is board-only.
 
 ## On-board verification
 

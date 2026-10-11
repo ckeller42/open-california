@@ -192,6 +192,24 @@ def test_firmware_row_checks_and_installs(page, locale, lang):
         expect(pg.locator("#fw-check")).to_be_hidden()
 
 
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_clock_line_shows_sync_and_boot(page, locale, lang):
+    """The /device clock line (R_FW_TIME): device.time's source/synced picks the text, with the boot number.
+
+    .. test:: The /device page shows device.time
+       :id: T_FW_TIME_PAGE
+       :links: R_FW_TIME
+    """
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        line = pg.locator("#time")
+        expect(line).to_have_text(STRINGS["time_synced"][lang].replace("{boot}", "17"))
+        clock = stub.fixtures["station"]["/api/state"]["device"]["time"]
+        clock.update(synced=False)
+        expect(line).to_have_text(STRINGS["time_waiting"][lang].replace("{boot}", "17"))
+        clock.update(source="none")
+        expect(line).to_have_text(STRINGS["time_none"][lang].replace("{boot}", "17"))
+
+
 def test_firmware_row_offers_no_update_over_the_setup_hotspot(stub, page):
     """Like the firmware's 403: no Check/Install outside station mode, and the row says why."""
     with page(stub.base, locale="en-US") as pg:

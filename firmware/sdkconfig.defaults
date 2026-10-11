@@ -85,6 +85,10 @@ CONFIG_LWIP_MAX_SOCKETS=6
 # and lwIP allocates send pbufs only while data is queued. (WiFi modem sleep stays: with BT + WiFi
 # coexistence IDF requires it, which is the ~65-120 ms ping.)
 CONFIG_LWIP_TCP_SND_BUF_DEFAULT=23040
+# Log clock (R_FW_TIME, components/cali_sntp): SNTP takes the DHCP-offered server (option 42, index
+# 0) plus pool.ntp.org (index 1, re-set on every lease).
+CONFIG_LWIP_SNTP_MAX_SERVERS=2
+CONFIG_LWIP_DHCP_GET_NTP_SRV=y
 
 # Status display (#154). CoreS3 has 8 MB quad PSRAM.
 # - PSRAM: malloc() may use it (SPIRAM_USE_MALLOC default); allocations < 16 KB stay internal

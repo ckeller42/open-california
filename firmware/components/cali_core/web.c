@@ -15,6 +15,7 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
+#include "cali_time.h"
 #include "cali_snapshot.h"
 #include "cali_status.h"
 #include "cali_wifi_run.h"
@@ -151,6 +152,8 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_str(&j, st.fw);
     cali_json_key(&j, "ota");   /* POST /api/ota's progress (R_FW_OTA) */
     cali_ota_json(&j);
+    cali_json_key(&j, "time");   /* the SD log's clock (R_FW_TIME) */
+    cali_time_json(&j);
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
     uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */

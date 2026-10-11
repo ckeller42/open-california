@@ -18,6 +18,7 @@
  *                                  "control":{"writes":<bool>},   -- POST /api/command accepted (station mode)
  *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>",
  *                                  "ota":{"state","available_sha","progress_pct","error"},   -- cali_ota.h
+ *                                  "time":{"source","synced","boot","up"},   -- cali_time.h (R_FW_TIME)
  *                                  "water_held":<bool>,
  *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
  *                                                                   was measured on this boot

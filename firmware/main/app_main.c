@@ -30,6 +30,9 @@
  * the web server listening (no BLE link needed: the van may sleep); a reset before that boots the
  * previous slot (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE).
  *
+ * Time (R_FW_TIME, components/cali_sntp): every boot bumps the NVS boot counter (cali_time_init); with
+ * WiFi up, SNTP (pool.ntp.org + the DHCP-offered server) sets the clock the SD log's ts reads.
+ *
  * QEMU build (CONFIG_CALI_QEMU_PROBE, firmware/qemu/sdkconfig.qemu only): nimble_port_init() is not
  * called at all (QEMU does not model the controller; esp_bt_controller_init asserts there and the
  * chip reboots in a loop), so the no-controller path above runs, and the bond store is still loaded
@@ -78,6 +81,8 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
+#include "cali_sntp_esp.h"
+#include "cali_time.h"
 #include "cali_web.h"
 #include "cali_wifi_run.h"
 
@@ -339,6 +344,7 @@ static void wifi_init(const cali_transport_t *t) {
     if (cali_web_init(&cali_net_esp, t, NET_HTTP_PORT) != 0) cali_log("http: cannot listen on port %d", NET_HTTP_PORT);
     else s_web = 1;
     cali_ota_esp_start();        /* its own task: HTTPS never blocks this owner task (R_FW_OTA) */
+    cali_sntp_esp_start();       /* the log clock: SNTP whenever the station has a lease (R_FW_TIME) */
     cali_wifi_run_boot();        /* saved creds -> join; none -> setup hotspot (events on the tick) */
 }
 
@@ -358,6 +364,7 @@ void app_main(void) {
     ESP_ERROR_CHECK(err);
     console_init();
     if (cali_platform_init(NULL) != 0) cali_log("store: NVS namespace unusable, bonds will not persist");
+    (void)cali_time_init();   /* the boot counter (R_FW_TIME): "LOG time: boot N", test_qemu_boot.py */
 
     s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);
     configASSERT(s_lines != NULL);
