@@ -156,17 +156,13 @@ function renderFw(d) {
   install.textContent = t("fw_install", {sha: sha});
 }
 
-/* Auto camper mode (R_FW_AUTO_CAMPER): on/off, a restore owed, the toggle (station mode only). */
+/* Auto camper (R_FW_AUTO_CAMPER): on/off, a restore owed, the toggle (station mode only) */
 /** @param {Device} d */
 function renderAutoCamper(d) {
-  const a = d.auto_camper, station = d.wifi.mode === "station";
-  let text = t(a.enabled ? "ac_on" : "ac_off");
-  if (a.state === "armed") text += " · " + t("ac_armed");
-  if (a.state === "restoring") text += " · " + t("ac_restoring");
-  if (!station) text += " · " + t("ac_station_only");
-  $("ac-status").textContent = text;
-  const b = $("ac-toggle");
-  b.hidden = !station;
+  const a = d.auto_camper, st = d.wifi.mode === "station", b = $("ac-toggle");
+  $("ac-status").textContent = [t(a.enabled ? "ac_on" : "ac_off"), a.state === "armed" ? t("ac_armed") : "",
+    a.state === "restoring" ? t("ac_restoring") : "", st ? "" : t("ac_station_only")].filter(Boolean).join(" · ");
+  b.hidden = !st;
   b.textContent = t(a.enabled ? "ac_turn_off" : "ac_turn_on");
   b.dataset.on = a.enabled ? "1" : "";
 }
@@ -174,12 +170,13 @@ function renderAutoCamper(d) {
 async function toggleAutoCamper() {
   const b = $("ac-toggle"), msg = $("ac-msg");
   msg.textContent = "";
-  b.hidden = true;   /* the next poll shows it again, with the new state */
+  b.hidden = true;   /* the next poll shows it again */
+  let ok = false;
   try {
-    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/auto_camper", {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: !b.dataset.on})}));
-    if (!r.body.ok) msg.textContent = t("ac_error");
-  } catch (e) { msg.textContent = t("ac_error"); }
+    ok = (/** @type {{body: PostResult}} */ (await fetchJson("/api/auto_camper", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: !b.dataset.on})}))).body.ok;
+  } catch (e) { /* ok stays false */ }
+  if (!ok) msg.textContent = t("ac_error");
 }
 
 /** @param {"check"|"install"} action */
