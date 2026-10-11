@@ -14,6 +14,7 @@
 #include "cali_ota.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
+#include "cali_sdlog.h"
 #include "cali_session.h"
 #include "cali_time.h"
 #include "cali_snapshot.h"
@@ -102,6 +103,26 @@ static void finish_json(cali_json_t *j, cali_http_resp_t *resp) {
     set_body(resp, 200, JSON_TYPE, s_json, (size_t)n);
 }
 
+__attribute__((weak)) void cali_res_stats(cali_res_t *r) {
+    r->heap_free_kb = r->heap_min_kb = r->psram_free_kb = r->cpu_pct = -1;
+}
+
+static void res_member(cali_json_t *j, const char *key, int v) {
+    cali_json_key(j, key);
+    if (v >= 0) cali_json_int(j, v); else cali_json_null(j);
+}
+
+static void res_json(cali_json_t *j) {
+    cali_res_t r;
+    cali_res_stats(&r);
+    cali_json_obj_begin(j);
+    res_member(j, "heap_free_kb", r.heap_free_kb);
+    res_member(j, "heap_min_kb", r.heap_min_kb);
+    res_member(j, "psram_free_kb", r.psram_free_kb);
+    res_member(j, "cpu_pct", r.cpu_pct);
+    cali_json_obj_end(j);
+}
+
 static void api_state(cali_http_resp_t *resp) {
     cali_json_t j;
     cali_status_t st;
@@ -154,6 +175,10 @@ static void api_state(cali_http_resp_t *resp) {
     cali_ota_json(&j);
     cali_json_key(&j, "time");   /* the SD log's clock (R_FW_TIME) */
     cali_time_json(&j);
+    cali_json_key(&j, "sd");   /* the SD log (R_FW_SD_LOG) */
+    cali_sdlog_json(&j);
+    cali_json_key(&j, "res");
+    res_json(&j);
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
     uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */

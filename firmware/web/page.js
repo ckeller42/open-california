@@ -14,7 +14,9 @@
  * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
  * @typedef {{ state: string, available_sha: string|null, progress_pct: number, error: string|null }} Ota
  * @typedef {{ source: string, synced: boolean, boot: number }} Time
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time }} Device  the /api/state fields this page reads
+ * @typedef {{ state: string, total_mb: number|null, free_mb: number|null, last_seq: number|null, dropped: number }} Sd
+ * @typedef {{ heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null }} Res
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -110,8 +112,30 @@ function renderLink(d) {
 /* The clock the SD log stamps with (R_FW_TIME): SNTP synced or not, and the boot number. */
 /** @param {Time} c */
 function renderTime(c) {
-  const key = c.source === "none" ? "time_none" : c.synced ? "time_synced" : "time_waiting";
+  const key = c.source === "none" ? "time_none" : c.source === "unit" ? "time_unit" : c.synced ? "time_synced" : "time_waiting";
   $("time").textContent = t(key, {boot: c.boot});
+}
+
+/* The SD log's card (R_FW_SD_LOG): "Storage: SD 28.1 of 29.7 GB free · log #1042 · 3 records dropped". */
+/** @param {Sd} sd */
+function renderSd(sd) {
+  /** @param {number|null} mb */
+  const gb = (mb) => ((mb || 0) / 1024).toFixed(1);
+  const parts = [sd.state === "ok" ? t("sd_ok", {free: gb(sd.free_mb), total: gb(sd.total_mb)})
+    : t(sd.state === "error" ? "sd_error" : "sd_absent")];
+  if (sd.state === "ok" && sd.last_seq !== null) parts.push(t("sd_log", {seq: sd.last_seq}));
+  if (sd.dropped > 0) parts.push(t("sd_dropped", {n: sd.dropped}));
+  $("sd").textContent = t("sd_title") + ": " + parts.join(" · ");
+}
+
+/* The satellite's own resources: internal RAM free (lowest since boot), PSRAM free, CPU busy. */
+/** @param {Res} r */
+function renderRes(r) {
+  const parts = [];
+  if (r.heap_free_kb !== null) parts.push(t("res_ram", {free: r.heap_free_kb, min: r.heap_min_kb ?? "?"}));
+  if (r.psram_free_kb !== null) parts.push(t("res_psram", {free: r.psram_free_kb}));
+  if (r.cpu_pct !== null) parts.push(t("res_cpu", {pct: r.cpu_pct}));
+  $("res").textContent = parts.length ? t("res_title") + ": " + parts.join(" · ") : "";
 }
 
 /* The firmware row (R_FW_OTA): the running build, the update's progress, Check / Install <sha7>
@@ -248,6 +272,8 @@ async function poll() {
     renderLink(s.device);
     renderFw(s.device);
     renderTime(s.device.time);
+    renderSd(s.device.sd);
+    renderRes(s.device.res);
     const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
     $("setup").hidden = !setup;
     if (setup && !setupShown && !joining) scan();

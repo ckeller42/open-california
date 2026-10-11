@@ -20,6 +20,11 @@
  * @typedef {{ liters: number|null, capacity_l: number|null, percent: number|null, stale?: boolean }} Tank
  */
 /**
+ * The satellite's SD log card (firmware device.sd, R_FW_SD_LOG) and its own resources (device.res).
+ * @typedef {{state: string, total_mb: number|null, free_mb: number|null, last_seq: number|null, dropped: number}} SatSd
+ * @typedef {{heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null}} SatRes
+ */
+/**
  * `serve.state()::_meta`. `session`/`session_mode` are `"off"` unless the persistent session is on.
  * @typedef {Object} Meta
  * @property {number|null} last_seen        epoch seconds of the last successful poll (null = none yet)
@@ -33,7 +38,7 @@
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
- * @property {{fw: string|null, uptime_ms: number|null, wifi: ?{mode?:string, ssid?:string|null, ip?:string|null, rssi?:number|null}, link_up: boolean}} [sat]  satellite-only device rows (adaptSatellite passthrough) for the Device-status screen
+ * @property {{fw: string|null, uptime_ms: number|null, wifi: ?{mode?:string, ssid?:string|null, ip?:string|null, rssi?:number|null}, link_up: boolean, sd?: ?SatSd, res?: ?SatRes}} [sat]  satellite-only device rows (adaptSatellite passthrough) for the Device-status screen
  */
 /**
  * The broad union of every function's interpreted leaves (semantics.py). A given `STATE[fn]` only
@@ -1510,6 +1515,26 @@ function uptimeText(ms) {
   return tf("{d} d {h} h", { d: Math.floor(h / 24), h: h % 24 });
 }
 
+/** The SD log's card, as the firmware's /device page says it. @param {SatSd} sd @returns {string} */
+function sdText(sd) {
+  /** @param {number|null} mb */
+  const gb = (mb) => ((mb || 0) / 1024).toFixed(1);
+  const parts = [sd.state === "ok" ? tf("SD {free} of {total} GB free", { free: gb(sd.free_mb), total: gb(sd.total_mb) })
+    : /** @type {string} */ (t(sd.state === "error" ? "SD card error" : "No SD card"))];
+  if (sd.state === "ok" && sd.last_seq != null) parts.push(tf("log #{seq}", { seq: sd.last_seq }));
+  if (sd.dropped > 0) parts.push(tf("{n} records dropped", { n: sd.dropped }));
+  return parts.join(" · ");
+}
+
+/** RAM / PSRAM / CPU of the satellite; "" when it reports none. @param {SatRes} r @returns {string} */
+function resText(r) {
+  const parts = [];
+  if (r.heap_free_kb != null) parts.push(tf("RAM {free} KB free (lowest {min})", { free: r.heap_free_kb, min: r.heap_min_kb ?? "?" }));
+  if (r.psram_free_kb != null) parts.push(tf("PSRAM {free} KB free", { free: r.psram_free_kb }));
+  if (r.cpu_pct != null) parts.push(tf("CPU {pct} %", { pct: r.cpu_pct }));
+  return parts.join(" · ");
+}
+
 function renderDeviceStatus() {
   titleEl.textContent = /** @type {string} */ (t("Device status"));
   const m = STATE._meta || /** @type {Meta} */ ({});
@@ -1536,6 +1561,9 @@ function renderDeviceStatus() {
       card.appendChild(sumRow(/** @type {string} */ (t("Signal")), w.rssi + " dBm"));
     if (sat.uptime_ms != null)
       card.appendChild(sumRow(/** @type {string} */ (t("Uptime")), uptimeText(sat.uptime_ms)));
+    if (sat.sd) card.appendChild(sumRow(/** @type {string} */ (t("Storage")), sdText(sat.sd)));
+    const res = sat.res && resText(sat.res);
+    if (res) card.appendChild(sumRow(/** @type {string} */ (t("Resources")), res));
   }
   app.appendChild(card);
   if (sat) {

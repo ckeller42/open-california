@@ -459,6 +459,8 @@ function adaptSatellite(body, nowMs) {
       uptime_ms: typeof dev.uptime_ms === "number" ? dev.uptime_ms : null,
       wifi: dev.wifi || null,
       link_up: !!link.up,
+      sd: dev.sd || null,     // the SD log's card (R_FW_SD_LOG)
+      res: dev.res || null,   // heap / PSRAM / CPU of the satellite itself
     },
   };
   return out;

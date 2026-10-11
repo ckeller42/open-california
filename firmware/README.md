@@ -401,7 +401,17 @@ handles the console's `ota …` lines. Details: `docs/firmware.md` "Firmware upd
 `cali_core/time.c` holds the NVS boot counter (key `boot_count`) and the SNTP sync flag behind
 `device.time`; `components/cali_sntp/sntp_esp.c` (ESP only) runs `esp_netif_sntp` (DHCP server +
 `pool.ntp.org`, `CONFIG_LWIP_SNTP_MAX_SERVERS=2`, `CONFIG_LWIP_DHCP_GET_NTP_SRV=y`). Details:
-`docs/firmware.md` "Time".
+`docs/firmware.md` "Time". The unit clock (`source: unit`, the `1004` frame's `CarTime*` in UTC) is
+`cali_time_on_vehicle`, fed by the session's IO hook.
+
+### SD log (`components/cali_sdcard`, `R_FW_SD_LOG`)
+
+`cali_core/sdlog.c` (portable, stdio + dirent) stamps every unit frame and link change on the owner
+task (`cali_session_on_io` = `cali_sdlog_io`, plus the 5-min snapshot in `cali_sdlog_tick`), queues it,
+and formats / rolls (1 MB `<first seq>.jsonl` segments) / recovers `seq` on the SD task;
+`components/cali_sdcard/sdcard_esp.c` (ESP only, board package like `cali_display`) powers and mounts
+the microSD on the LCD's `SPI3_HOST` under `bsp_display_lock` and runs that task. `device.sd` and
+`device.res` (heap / PSRAM / CPU) are in `/api/state`. Details: `docs/firmware.md` "SD log".
 
 ### Status display (CoreS3 screen, `R_FW_STATUS_DISPLAY`)
 
@@ -635,7 +645,12 @@ board-only.
 
 **R_FW_TIME** (NVS boot counter + SNTP for the log stamps) is defined in `docs/firmware.md`; verified
 by `T_FW_TIME` (`tests/firmware/test_time.py`, `cali_core/time.c` via `test/time_cli.c` over the host
-kv store), `T_FW_TIME_QEMU` and `T_FW_TIME_PAGE`. SNTP itself (`components/cali_sntp`) is board-only.
+kv store), `T_FW_TIME_QEMU`, `T_FW_TIME_PAGE` and `T_FW_TIME_UNIT` (the unit clock across both DST
+switches). SNTP itself (`components/cali_sntp`) is board-only.
+
+**R_FW_SD_LOG** (the SD log, `device.sd`) is defined in `docs/firmware.md`; verified by `T_FW_SD_LOG`
+(`tests/firmware/test_sdlog.py`, `sdlog.c` via `test/sdlog_cli.c` against a temp dir),
+`T_FW_SD_LOG_TAP` and `T_FW_SD_LOG_PAGE`. Mount, card power and the SD task are board-only.
 
 ## On-board verification
 

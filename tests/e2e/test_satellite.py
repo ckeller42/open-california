@@ -130,6 +130,11 @@ def test_menu_device_status_screen(sat, stub):
     expect(sat.get_by_text("bef07f1")).to_be_visible()  # satellite firmware (device.fw)
     expect(sat.get_by_text("HomeNet")).to_be_visible()  # WiFi SSID
     expect(sat.get_by_text("C0:FF:EE:CA:11:F0")).to_be_visible()  # bonded unit (/api/pairing)
+    # the SD log's card (R_FW_SD_LOG, device.sd) and the satellite's own resources (device.res)
+    expect(sat.locator(".row", has_text="Storage")).to_contain_text("SD 28.1 of 29.7 GB free · log #1042")
+    expect(sat.locator(".row", has_text="Resources")).to_contain_text(
+        "RAM 61 KB free (lowest 38) · PSRAM 7302 KB free · CPU 4 %"
+    )
     sat.get_by_text("Open setup").click()  # satellite-only link
     sat.wait_for_url(stub.base + "/device")
     sat.wait_for_selector('#device a[href="/"]')  # the link back (station mode)

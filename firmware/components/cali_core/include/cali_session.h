@@ -66,6 +66,14 @@ extern "C" {
 /* The water guard's constants (the 1 L latch, the 5 s ramp debounce) live with its one C
  * implementation: csrc/ports.h FRESH_LATCH_MAX_L / FRESH_SETTLE_MS. */
 
+/* Every unit frame the session sees and every link change, for the SD log (R_FW_SD_LOG): a NOTIFY
+ * or a successful READ as it arrived (the raw frame, before the water guard), IO_UP when the link
+ * comes up (encrypted), IO_DOWN when an up link goes away (data NULL, len 0). NULL = nobody listens.
+ * Called on the session's task, from inside its event handling: the hook only copies and returns. */
+enum { CALI_SESSION_IO_NOTIFY, CALI_SESSION_IO_READ, CALI_SESSION_IO_UP, CALI_SESSION_IO_DOWN };
+typedef void (*cali_session_io_fn)(int what, uint16_t char_short, const uint8_t *data, size_t len);
+extern cali_session_io_fn cali_session_on_io;
+
 void cali_session_init(const cali_transport_t *t);
 void cali_session_boot(void);
 void cali_session_on_bonded(void);        /* runner -> session: discover, subscribe, start read_all */

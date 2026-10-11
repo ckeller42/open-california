@@ -19,6 +19,9 @@
  *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>",
  *                                  "ota":{"state","available_sha","progress_pct","error"},   -- cali_ota.h
  *                                  "time":{"source","synced","boot","up"},   -- cali_time.h (R_FW_TIME)
+ *                                  "sd":{"state","total_mb","free_mb","last_seq","dropped"},   -- cali_sdlog.h
+ *                                  "res":{"heap_free_kb","heap_min_kb","psram_free_kb","cpu_pct"},
+ *                                        -- cali_res_stats; each an int or null (unknown: host, no PSRAM)
  *                                  "water_held":<bool>,
  *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
  *                                                                   was measured on this boot
@@ -129,6 +132,14 @@ extern "C" {
 /* Starts the HTTP core on port with cali_web_handle. t: the BLE transport, for the pairing address
  * (NULL = address always null). Returns cali_http_init's result (0 ok, -1 listen failed). */
 int cali_web_init(const cali_net_t *net, const cali_transport_t *t, uint16_t port);
+
+/* device.res: the satellite's own resources. Internal heap free now / lowest since boot, PSRAM free
+ * (KB), and the busy % of both cores since the previous call. -1 = unknown (JSON null). */
+typedef struct {
+    int heap_free_kb, heap_min_kb, psram_free_kb, cpu_pct;
+} cali_res_t;
+/* Platform: fill r. web.c's weak default reports everything unknown (host); app_main.c overrides. */
+void cali_res_stats(cali_res_t *r);
 void cali_web_poll(uint64_t now_ms);   /* cali_http_poll */
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx);   /* 1 = handled */
 

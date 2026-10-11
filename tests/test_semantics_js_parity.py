@@ -159,7 +159,14 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
             "firmware": ServeBackend._firmware_meta(py["general"]),
             "anchors": anchors.check(py),
             # raw device rows passed through for the in-app Device-status screen
-            "sat": {"fw": "abc1234", "uptime_ms": 5000, "wifi": _DEVICE["wifi"], "link_up": True},
+            "sat": {
+                "fw": "abc1234",
+                "uptime_ms": 5000,
+                "wifi": _DEVICE["wifi"],
+                "link_up": True,
+                "sd": None,  # an older firmware without device.sd / device.res
+                "res": None,
+            },
         },
     )
 

@@ -180,6 +180,22 @@ def test_bonded_discovers_subscribes_then_reads_every_function_in_order(fake):
     assert len(snaps(out)) == 1 and out[-1].startswith("SNAP ")  # one SNAP, after the last read
 
 
+def test_io_hook_sees_every_unit_frame_and_link_change(fake):
+    """The SD log's tap (R_FW_SD_LOG, cali_session_on_io): link up, every READ and NOTIFY as the unit
+    sent it (before the water guard), link down — and nothing for a failed read.
+
+    .. test:: The session hands every unit frame and link change to the SD log
+       :id: T_FW_SD_LOG_TAP
+       :links: R_FW_SD_LOG
+    """
+    reads = ["READ %x %d" % (c, 14 if c == 0x1602 else 0) for c in CHARS]  # energy's read fails
+    out = run(fake, "iohook", *PAIRED, *read_all(reads=reads), "NOTIFY 1302 01", "DISCONNECTED")
+    io = [line for line in out if line.startswith("IO ")]
+    assert io[0] == "IO 2 0 "  # up
+    assert io[1:-2] == ["IO 1 %x 0102" % c for c in CHARS if c != 0x1602]  # reads, raw
+    assert io[-2:] == ["IO 0 1302 01", "IO 3 0 "]  # the 1 L latch as sent (held, not served), down
+
+
 def test_snap_is_codec_decode_of_every_stored_frame(fake):
     funcs = protocol.load()
     overrides.apply(funcs)
