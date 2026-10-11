@@ -163,11 +163,43 @@ def test_every_gate_is_exercised_both_ways():
         "REASON_NOT_ONOFF",
         "REASON_COOLER_STATE_UNKNOWN",
         "REASON_WAKEUP_NO_AREA",
+        "REASON_AIRHEATER_NOT_POSSIBLE",
+        "REASON_AIRHEATER_RUNTIME_PERMANENT",
+        "REASON_AIRHEATER_TIMER_ARMED",
     ):
         text = getattr(control, name)
         assert text in refused, name
         assert refused[text] & allowed, name  # the same command also passes the gate somewhere
     assert control.WAKEUP_UNKNOWN in refused and refused[control.WAKEUP_UNKNOWN] & allowed
+
+
+def test_airheater_gates_mirror_the_app():
+    """App 5.4.0 (DECOMPILE + APP-OBSERVED + REAL PHONE 2026-10-11): immediate heating ON is refused
+    only under ErrorCode 5 (OFF always passes, codes 1-4/6/7 never block); the run time is refused
+    under continuous heating; the start time is refused while the departure timer is armed.
+
+    .. test:: Air-heater gates mirror the app
+       :id: T_AIRHEATER_APP_GATES
+       :links: R_AIRHEATER_APP_GATES
+    """
+    gate = control.command_precondition
+    for code in range(8):
+        st = {"airheater": {"ErrorCode": code}}
+        want = control.REASON_AIRHEATER_NOT_POSSIBLE if code == 5 else None
+        assert gate("airheater", "power", "on", st) == want, code
+        assert gate("airheater", "power", "off", st) is None, code
+    perm = {"airheater": {"PermanentOperation": 1}}
+    assert gate("airheater", "runtime", 60, perm) == control.REASON_AIRHEATER_RUNTIME_PERMANENT
+    assert gate("airheater", "level", 5, perm) is None  # the level slider is never greyed
+    assert gate("airheater", "runtime", 60, {"airheater": {"PermanentOperation": 0}}) is None
+    armed = {"airheater": {"OperationModeAirHeater": 3}}
+    assert gate("airheater", "timer", "06:45", armed) == control.REASON_AIRHEATER_TIMER_ARMED
+    assert gate("airheater", "timer_cancel", None, armed) is None  # Stop must always get through
+    assert gate("airheater", "timer", "06:45", {"airheater": {"OperationModeAirHeater": 0}}) is None
+    assert gate("airheater", "runtime", 60, {}) is None  # unknown state allows
+    by_id = {c["id"]: c["expect"] for c in V["cases"]}
+    assert by_id['airheater/power/"on"@heater_error_4']["kind"] == "frames"
+    assert by_id['airheater/power/"off"@heater_not_possible']["kind"] == "frames"
 
 
 def test_generator_shape_is_device_actuates_write_order():

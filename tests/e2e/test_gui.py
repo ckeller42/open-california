@@ -350,10 +350,16 @@ def test_heater_timer_buttons_arm_and_stop(page):
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
     # readout "Timer" shows the armed start time (mock seed 00:00) only while Mode is 3 …
     expect(page.get_by_text("00:00", exact=True)).to_be_visible(timeout=15000)
+    # app 5.4.0: "Start heating at" is greyed while the timer is armed
+    start_at = page.locator('input[type="time"]')
+    expect(start_at).to_be_disabled()
     stop.click()
     expect(page.get_by_text("Applied")).to_be_visible(timeout=15000)
     # … and falls back to "off" once the readback shows Mode 0 again.
     expect(page.get_by_text("00:00", exact=True)).to_have_count(0, timeout=15000)
+    expect(start_at).to_be_enabled()
+    # the run-time slider moves in the app's 10-min steps
+    expect(page.locator('input[type="range"][max="120"]')).to_have_attribute("step", "10")
 
 
 def test_camping_master_toggle_applies(page):

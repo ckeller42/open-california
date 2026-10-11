@@ -169,6 +169,7 @@ function semAirheater(d) {
     installed: !!semGet(d, "Installed"),
     running: !!(semGet(d, "NormalOperation") || semGet(d, "PermanentOperation")),
     permanent: !!semGet(d, "PermanentOperation"),
+    normal: !!semGet(d, "NormalOperation"),
     level: semGet(d, "HeatingLevel"),
     error_code: err,
     error: !err ? null : semLookup(SEM_AIRHEATER_ERROR, err, "unknown"),

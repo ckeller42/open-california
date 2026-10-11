@@ -99,6 +99,9 @@ static const uint8_t CALI_ROOF_CLOSED_POSITIONS[] = {0, 14};
 static const uint8_t CALI_WAKEUP_RAMPS_MIN[] = {0, 10, 20, 30};
 static const uint8_t CALI_LIGHT_REQUEST_CONFIG[16] = {0x0d, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0xee};
 #define CALI_WAKEUP_UNKNOWN "wake-up config not known yet (the unit has not reported it): give on|off with the edit"
+#define CALI_REASON_AIRHEATER_NOT_POSSIBLE "the auxiliary air heater cannot be activated when the engine is running or when the auxiliary water heater is activated"
+#define CALI_REASON_AIRHEATER_RUNTIME_PERMANENT "the run time cannot be changed while continuous heating is on"
+#define CALI_REASON_AIRHEATER_TIMER_ARMED "the start time cannot be changed while the timer is on (stop the timer first)"
 #define CALI_REASON_CAMPING_NEEDS_MASTER "camping lights and USB need camping mode on (turn the camping master on first)"
 #define CALI_REASON_COOLER_STATE_UNKNOWN "the cooler's current schedule is not known yet (no cooler state read) \342\200\224 refusing to overwrite it"
 #define CALI_REASON_COOLER_TIMER_NEEDS_FRIDGE_OFF "the cooling timer can only be set while the fridge is off (turn the cooler off first)"

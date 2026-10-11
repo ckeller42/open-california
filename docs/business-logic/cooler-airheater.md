@@ -371,10 +371,36 @@ Send the full 10-field frame every time (shared-send behavior above).
   then/also set `NormalOperationRequest = 1` (via `C2(true)`). `rf/b.java:198-218`.
 - **ErrorCode (1702) → app fault IDs** (`rf/b.java:461-671`): 1 `AIR_HEATER_LOW_BATTERY`,
   2 `FUEL_LOW`, 3 `SYSTEM_ERROR`, 4 `HEATING_TIME_EXCEEDED`, 5 `OPERATION_NOT_POSSIBLE`;
-  0 clears. Each drives a dialog AFTER a refused start (the app never greys the heater switch
-  pre-emptively). Surfaced by `semantics.airheater` as `error` (`low_battery` / `low_fuel` /
+  0 clears. Each drives a dialog AFTER a refused start (the app never greys the heater switch;
+  but code 5 refuses an ON with no write — app gates below). Surfaced by `semantics.airheater` as `error` (`low_battery` / `low_fuel` /
   `system_error` / `heating_time_exceeded` / `not_possible`) next to the raw `error_code`; the
   web UI shows it as a banner. Code→dialog-string pairing beyond the IDs is unresolved.
+
+**App gates (app 5.4.0; DECOMPILE 5.4.0.3036 + APP-OBSERVED 2026-10-11 (thinky lab vs fake unit) + REAL PHONE 2026-10-11 (at the van)):**
+
+- *Immediate heating* ON while `ErrorCode` 5: **no write**, the dialog "The auxiliary air heater cannot
+  be activated when the engine is running or when the auxiliary water heater is activated." again.
+  Only code 5; OFF always passes. Not greyed.
+- *Immediate heating* ON while continuous heating is on: "Turn off continuous heating? You can only
+  turn continuous heating on again using the controls in your California." → a plain
+  `NormalOperationRequest=1`.
+- Run-time slider: **10-min steps**; **greyed** while `PermanentOperation` is on. A change while
+  heating: "Apply new settings now? Resetting the duration. The heating will stay on for N minutes."
+  → the app writes **three** frames: OFF `3c7b007f1f3f`, RunningTime, ON `3d7b007f1f3f`. calictl
+  writes RunningTime alone (owner rule: no heater short cycles; unverified on the unit — OPEN).
+- "Start heating at": **greyed** (tap does nothing) while the timer is armed.
+- Start timer while continuous heating is on: "Continuous heating will turn off when the timer
+  ends. Would you like to proceed?"
+- Status bar while active with the timer armed: "Active • Remaining time: N • Timer starts: HH:MM";
+  continuous + armed: "Active • Continuous heating • Timer starts in HH:MM".
+- No ignition / engine / battery gate. Permanent-heating card while off: a clickable card that opens
+  "Continuous heating can be initiated only in the vehicle." (no write).
+- calictl mirrors the refusals in `control.command_precondition` (Python + the ESP's C twin,
+  `REASON_AIRHEATER_*`) and the greying/confirms/status in the shared web UI.
+- Elsewhere in the app (recorded, not mirrored): the dashboard tile says "Error" for codes 1–5 and
+  "Warning" for 6–7; `Installed=0` hides the tile; disconnected greys every quick button; energy
+  `WarningLevelActive=1` ("Battery is flat. Charge now!") and `SleepWarning=1` (charging cable still
+  plugged in) raise blocking modals with no buttons.
 
 **Observed on the running app (2026-09-16, `tools/applab` — the real app against a fake unit):**
 

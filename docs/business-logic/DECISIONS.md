@@ -8,6 +8,33 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-11 — air heater: the app's gates, mirrored
+
+DECOMPILE 5.4.0.3036 + APP-OBSERVED 2026-10-11 (thinky lab vs fake unit) + REAL PHONE 2026-10-11 (at the van). The 2026-09-16 entry below said the app "never greys the heater
+switch pre-emptively"; that holds for the switch, not for the page:
+
+- **Immediate heating ON while `ErrorCode` 5** (OPERATION_NOT_POSSIBLE): the app writes nothing and
+  re-shows "The auxiliary air heater cannot be activated when the engine is running or when the
+  auxiliary water heater is activated." The switch is not greyed. Codes 1–4, 6, 7 do not block; OFF
+  always passes. calictl: `control.command_precondition` refuses ON (`REASON_AIRHEATER_NOT_POSSIBLE`,
+  same text in the ESP's C twin).
+- **Run time is greyed while continuous heating is on** (the level slider never is) and moves in
+  **10-min steps** (10–120). calictl: web `disabled:` + `step: 10`, server/ESP refuse `runtime`
+  (`REASON_AIRHEATER_RUNTIME_PERMANENT`).
+- **"Start heating at" is greyed while the timer is armed** (`timer_armed`). calictl: web `disabled:`,
+  server/ESP refuse `timer` (`REASON_AIRHEATER_TIMER_ARMED`).
+- **No ignition / engine / battery gate** on any heater control.
+- Confirms (web, the app's wording): immediate ON under continuous heating ("Turn off continuous
+  heating? …", then a plain `NormalOperationRequest=1`); a run-time change while heating ("Apply new
+  settings now? …"); Start timer under continuous heating ("Continuous heating will turn off when the
+  timer ends. …"). The Immediate-heating switch now shows `NormalOperation` alone (semantics
+  `normal`), so it reads OFF under continuous heating as the app's does.
+- **Not mirrored (open):** on "Apply" the app writes three frames — OFF `3c7b007f1f3f`, RunningTime,
+  ON `3d7b007f1f3f`. calictl keeps its single RunningTime write (owner rule: no heater short cycles;
+  the sequence is unverified on the unit).
+- The Permanent-heating switch question is closed: while off, the card is clickable and opens the
+  info sheet "Continuous heating can be initiated only in the vehicle." (no write).
+
 ## 2026-10-10 — the unit serves several centrals at once
 
 CAPTURE 2026-10-10: the phone app holding a link, [buspi](https://ckeller42.github.io/open-california/glossary.html#term-buspi) polling (99 clean cycles in an hour) and the
@@ -295,7 +322,9 @@ lighting profiles, roof dialogs) closed three gaps that were live in calictl:
 - **ErrorCode has names.** `rf/b.java:461-671`: 1 `AIR_HEATER_LOW_BATTERY`, 2 `FUEL_LOW`,
   3 `SYSTEM_ERROR`, 4 `HEATING_TIME_EXCEEDED`, 5 `OPERATION_NOT_POSSIBLE`, 0 clears. Each is a
   dialog the app raises AFTER a refused start — it never greys the heater switch pre-emptively,
-  so calictl doesn't either. `semantics.airheater` now emits `error` (named) beside the raw
+  so calictl doesn't either. (**Corrected 2026-10-11**, entry above: the switch is never greyed, but
+  code 5 refuses ON with no write, the run time is greyed under continuous heating and the timer
+  time while the timer is armed.) `semantics.airheater` now emits `error` (named) beside the raw
   `error_code`; the web UI shows it as a banner. Code→dialog-string pairing beyond the IDs is
   unresolved.
 - **Refrigerator-box gates resolved from the string tables**: "To activate quiet mode, the

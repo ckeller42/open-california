@@ -55,7 +55,8 @@ widgets:
     range: null
     controls: {field: NormalOperationRequest, action: C2}
     elements: []
-    constraints: null
+    constraints: "Never greyed. ON while ErrorCode 5 (OPERATION_NOT_POSSIBLE): the app writes NOTHING and re-shows 'The auxiliary air heater cannot be activated when the engine is running or when the auxiliary water heater is activated.' — codes 1-4, 6, 7 do not block; OFF always passes. ON while continuous heating is on: 'Turn off continuous heating? You can only turn continuous heating on again using the controls in your California.' then a plain NormalOperationRequest=1. No ignition/engine/battery gate. calictl: command_precondition REASON_AIRHEATER_NOT_POSSIBLE (Python + ESP C twin), web confirm; the switch shows NormalOperation alone (semantics `normal`)."
+    evidence: DECOMPILE 5.4.0.3036 + APP-OBSERVED 2026-10-11 (thinky lab vs fake unit) + REAL PHONE 2026-10-11 (at the van)
 
   - id: heatingSlider
     type: slider
@@ -74,7 +75,7 @@ widgets:
     range: "10..120"
     controls: {field: RunningTime, action: D4}
     elements: []
-    constraints: "Minutes, slider 10..120 (OBSERVED on the running app 2026-09-16, tools/applab; ticks every ~11 min). D4 writes the raw int unclamped; the cap is UI-side (infoPage_heating_immediate_description: 'limited to 120 minutes'; unit raises ErrorCode 4 HEATING_TIME_EXCEEDED past it). Protocol raw_range is 0..255."
+    constraints: "Minutes, slider 10..120 in 10-min steps (2026-10-11; the 2026-09-16 '~11 min ticks' was the tick-mark spacing). GREYED while continuous heating (PermanentOperation) is on; the level slider is never greyed. A change while heating raises applyDialog ('Apply new settings now? Resetting the duration. The heating will stay on for N minutes.'); on Apply the app writes THREE frames: OFF 3c7b007f1f3f, RunningTime, ON 3d7b007f1f3f — calictl keeps its single RunningTime write (owner rule: no heater short cycles; the 3-frame sequence is unverified on the unit — OPEN). calictl: web disabled + REASON_AIRHEATER_RUNTIME_PERMANENT. D4 writes the raw int unclamped; the cap is UI-side (infoPage_heating_immediate_description: 'limited to 120 minutes'; unit raises ErrorCode 4 HEATING_TIME_EXCEEDED past it). Protocol raw_range is 0..255."
 
   - id: timerWidget
     type: timer
@@ -85,8 +86,8 @@ widgets:
       - afterTheTimerIsActivated_text
       - heatingWillStart_text
       - startHeatingAt_text
-    constraints: "OBSERVED on the running app 2026-09-16 (tools/applab): expander row 'Timer: Off/On'; body = explanatory text ('After the timer is activated, the heating starts tomorrow at HH:MM and stays on for N min' / armed: 'The heating starts tomorrow at HH:MM and stays on for N min'), 'Start heating at: HH:MM' picker row, then ONE button — 'Start timer' when off, 'Stop' when armed. Start timer -> uh/d -> rf/b.a2(AIR_HEATER) = OperationModeAirHeater 3 + OperationModeCombined 1 (frame 3f3b017f1f3f); Stop -> j4 = Mode 0 (3f0b007f1f3f). Page status bar reads 'Inactive • Timer: HH:MM' only while armed. No confirm dialog on this path. calictl: timer_start / timer_cancel + semantics timer_armed. B0 APP-OBSERVED 2026-09-27 (screens 35-37): tapping the 'Start heating at' value opens a bottom-sheet hour/minute wheel; its OK writes the time at once, with no confirm, independent of Start timer (does not arm); 09:31 -> 3f7b007f091f (TimerHour@32=0x09, TimerMin@40=0x1f, every other field at its sentinel). Identical to calictl 'timer 09:31' (T_AIRHEATER_TIMER_TIME, tools/scenarios/airheater/timer-time.yaml)."
-    evidence: APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE
+    constraints: "The 'Start heating at' row is GREYED (tap does nothing) while the timer is armed (OperationModeAirHeater 3) — 2026-10-11; calictl: web disabled + REASON_AIRHEATER_TIMER_ARMED. OBSERVED on the running app 2026-09-16 (tools/applab): expander row 'Timer: Off/On'; body = explanatory text ('After the timer is activated, the heating starts tomorrow at HH:MM and stays on for N min' / armed: 'The heating starts tomorrow at HH:MM and stays on for N min'), 'Start heating at: HH:MM' picker row, then ONE button — 'Start timer' when off, 'Stop' when armed. Start timer -> uh/d -> rf/b.a2(AIR_HEATER) = OperationModeAirHeater 3 + OperationModeCombined 1 (frame 3f3b017f1f3f); Stop -> j4 = Mode 0 (3f0b007f1f3f). Page status bar reads 'Inactive • Timer: HH:MM' only while armed. No confirm dialog on this path. calictl: timer_start / timer_cancel + semantics timer_armed. B0 APP-OBSERVED 2026-09-27 (screens 35-37): tapping the 'Start heating at' value opens a bottom-sheet hour/minute wheel; its OK writes the time at once, with no confirm, independent of Start timer (does not arm); 09:31 -> 3f7b007f091f (TimerHour@32=0x09, TimerMin@40=0x1f, every other field at its sentinel). Identical to calictl 'timer 09:31' (T_AIRHEATER_TIMER_TIME, tools/scenarios/airheater/timer-time.yaml)."
+    evidence: DECOMPILE 5.4.0.3036 + APP-OBSERVED 2026-10-11 (thinky lab vs fake unit) + REAL PHONE 2026-10-11 (at the van) | APP-OBSERVED 2026-09-27 | APP-OBSERVED 2026-09-16 | DECOMPILE
 
   - id: permanentHeatingWidget
     type: toggle
@@ -95,7 +96,8 @@ widgets:
     controls: {field: PermanentOperationRequest, action: E3}
     elements:
       - canOnlyBeActivated_text
-    constraints: "OFF-only switch from the app: E3 writes PermanentOperationRequest=0; NO ON write site exists in rf/b.java (re-confirmed 2026-09-16). ON is started from the in-vehicle controls; the app's ON tap raises permanentHeatingOnDialog ('can only be activated in the vehicle' — infoPage_heating_permanent_description says the same). Whether the Compose Switch is disabled or just opens that dialog on ON: UNRESOLVED (Compose layer). calictl mirrors OFF-only (control._airheater 'permanent', web switch greyed while off). REAL-PHONE 2026-10-10 (app 5.4.0.3036, ignition off, heater off): the card reads 'Permanent Heating' with the subline 'Can only be started in the vehicle.' next to a light-grey (disabled-looking) switch; not tapped, so disabled-vs-dialog stays open."
+    constraints: "OFF-only switch from the app: E3 writes PermanentOperationRequest=0; NO ON write site exists in rf/b.java (re-confirmed 2026-09-16). ON is started from the in-vehicle controls; the app's ON tap raises permanentHeatingOnDialog ('can only be activated in the vehicle' — infoPage_heating_permanent_description says the same). RESOLVED 2026-10-11 (lab + real phone): while off, the whole card is clickable and opens the info sheet 'Continuous heating can be initiated only in the vehicle.' — no write; the light-grey switch (REAL-PHONE 2026-10-10) is only its look. calictl mirrors OFF-only (control._airheater 'permanent', web switch greyed with the same reason)."
+    evidence: DECOMPILE 5.4.0.3036 + APP-OBSERVED 2026-10-11 (thinky lab vs fake unit) + REAL PHONE 2026-10-11 (at the van)
 
   - id: permanentHeatingOnDialog
     type: drawer
@@ -104,7 +106,7 @@ widgets:
     controls: null
     elements:
       - thisFeatureCanBeDisabled_text
-    constraints: "Confirmation dialog shown before turning permanent heating ON; exact confirm-action wiring UNVERIFIED (see permanentHeatingWidget note)"
+    constraints: "Info sheet (no confirm action, no write) opened by tapping the permanentHeatingWidget card while continuous heating is off: 'Continuous heating can be initiated only in the vehicle.' (2026-10-11, lab + real phone)"
 
   - id: permanentHeatingOffDialog
     type: drawer
@@ -123,7 +125,7 @@ widgets:
     elements:
       - permanentHeatingWillTurnOff_text
       - yesStartTimer_button
-    constraints: "Shown when starting a heating timer while permanent heating is active; confirms that starting the timer will turn permanent heating off"
+    constraints: "Shown on 'Start timer' while continuous heating is on: 'Continuous heating will turn off when the timer ends. Would you like to proceed?' (2026-10-11). calictl: web confirm on timer_start."
 
   - id: applyDialog
     type: drawer
@@ -132,7 +134,7 @@ widgets:
     controls: {field: "HeatingLevel/RunningTime", action: "q4/D4"}
     elements:
       - runTimeWillBeReset_text
-    constraints: "Confirms applying changed heatingSlider/runTimeSlider values while heating is already running; warns RunningTime counter will reset"
+    constraints: "Shown on a runTimeSlider change while heating: 'Apply new settings now? Resetting the duration. The heating will stay on for N minutes.' Apply writes OFF, RunningTime, ON (3 frames, 2026-10-11) — calictl mirrors the prompt only and writes RunningTime alone (see runTimeSlider)."
 
   - id: statusBar
     type: readout
@@ -146,8 +148,8 @@ widgets:
       - activeRunTime_text
       - inactive_text
       - inactiveStartTimer_text
-    constraints: "Read-only status line under the title. APP-OBSERVED 2026-09-27 (screen 34 variants): 'Inactive' (idle); 'Active • N min remaining' (NormalOperation=1, RunningTimeinAction=N); 'Active • Continuous heating' (PermanentOperation=1); 'Inactive • Timer: HH:MM' (OperationModeAirHeater=3 + OperationModeCombined=1). The two remaining keys (activePermHeatingTimer, activeRemainingTimerStartTimer) look (by key name) like the timer-armed-while-active variants — not provoked, UNVERIFIED."
-    evidence: APP-OBSERVED 2026-09-27 | DECOMPILE
+    constraints: "Read-only status line under the title. APP-OBSERVED 2026-09-27 (screen 34 variants): 'Inactive' (idle); 'Active • N min remaining' (NormalOperation=1, RunningTimeinAction=N); 'Active • Continuous heating' (PermanentOperation=1); 'Inactive • Timer: HH:MM' (OperationModeAirHeater=3 + OperationModeCombined=1). 2026-10-11 the two remaining keys: running + timer armed -> 'Active • Remaining time: N • Timer starts: HH:MM' (activeRemainingTimerStartTimer); permanent + timer armed -> 'Active • Continuous heating • Timer starts in HH:MM' (activePermHeatingTimer). calictl's summary mirrors all six."
+    evidence: DECOMPILE 5.4.0.3036 + APP-OBSERVED 2026-10-11 (thinky lab vs fake unit) + REAL PHONE 2026-10-11 (at the van) | APP-OBSERVED 2026-09-27 | DECOMPILE
 
   - id: faultToasts
     type: dialog

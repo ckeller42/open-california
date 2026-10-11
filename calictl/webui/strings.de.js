@@ -184,6 +184,16 @@ window.STRINGS_DE = {
   "Stop timer": "Timer stoppen",
   "Active • {n} min remaining": "Aktiv • Restlaufzeit: {n} min",
   "Inactive • Timer: {t}": "Inaktiv • Timer: {t}",
+  "Active • Remaining time: {n} min • Timer starts: {t}": "Aktiv • Restlaufzeit: {n} min • Timer startet: {t}",
+  "Active • Continuous heating • Timer starts in {t}": "Aktiv • Dauerbetrieb • Timer startet in {t}",
+  "Turn off continuous heating? You can only turn continuous heating on again using the controls in your California.":
+    "Dauerbetrieb ausschalten? Den Dauerbetrieb können Sie nur über die Bedienelemente in Ihrem California wieder einschalten.",
+  "Apply new settings now? Resetting the duration. The heating will stay on for {n} minutes.":
+    "Neue Einstellungen jetzt übernehmen? Die Laufzeit wird zurückgesetzt. Die Heizung bleibt {n} Minuten eingeschaltet.",
+  "Continuous heating will turn off when the timer ends. Would you like to proceed?":
+    "Der Dauerbetrieb endet, wenn der Timer abläuft. Möchten Sie fortfahren?",
+  "Not available during continuous heating": "Im Dauerbetrieb nicht verfügbar",
+  "Stop the timer first": "Zuerst den Timer stoppen",
   "⚠ Battery voltage too low — charge the second battery or connect external power": "⚠ Batteriespannung zu niedrig — Zweitbatterie laden oder externe Stromquelle anschließen",
   "⚠ Low fuel — the heater switched off, please refuel": "⚠ Kraftstoffstand niedrig — die Heizung wurde abgeschaltet, bitte tanken",
   "⚠ Auxiliary air heater fault — please contact your workshop": "⚠ Störung der Standheizung — bitte Werkstatt kontaktieren",
