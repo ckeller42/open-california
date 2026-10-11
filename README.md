@@ -154,7 +154,7 @@ tables: **[Hardware reference](https://ckeller42.github.io/open-california/hardw
   after a frame went out. Tested on a Linux host build + a Bumble [fake unit](https://ckeller42.github.io/open-california/glossary.html#term-Mock-unit), in Espressif's QEMU, on
   a CoreS3 against the mock unit, and live on the real unit. See **[ESP32 firmware](https://ckeller42.github.io/open-california/firmware.html)**.
   It joins your WiFi through its own setup hotspot and serves a status page and the calictl UI with
-  live controls on your home network (never over the setup hotspot) — **[How to put the ESP32 satellite on your WiFi](https://ckeller42.github.io/open-california/howto-esp-wifi-setup.html)**.
+  live controls on your home network (never over the setup hotspot) — **[How to set up a new satellite](https://ckeller42.github.io/open-california/howto-esp-first-flash.html)** (first flash over USB), then **[How to put the ESP32 satellite on your WiFi](https://ckeller42.github.io/open-california/howto-esp-wifi-setup.html)**.
 
 - **Evidence from the real app** — the vendor app (CaliforniaOnTour 5.4.0) is a live concurrent
   [central](https://ckeller42.github.io/open-california/glossary.html#term-Central) too: its HCI snoop log, pulled over wireless adb from the Pi (skill `phone-app-lab`,

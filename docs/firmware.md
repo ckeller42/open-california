@@ -505,7 +505,9 @@ rollback for the board test; `ota status` logs `device.ota` and the running slot
 layout writes the bootloader, the partition table, `ota_data_initial.bin` (blank otadata: boot
 `ota_0`) and the app at `0x20000` — never NVS, so the bond and WiFi credentials survive (the link
 comes back without a re-pair). After that, an update is `curl -X POST http://<esp>/api/ota -d
-'{"action":"install"}'` (or the button); `flash_ci.sh` stays the USB recovery path.
+'{"action":"install"}'` (or the button); `flash_ci.sh` stays the USB recovery path. A **new** board gets `cali_fw_full.bin` (the merged
+image `firmware-build` makes with `esptool merge-bin @flash_args`; it erases NVS) from the same
+release: [How to set up a new satellite](howto-esp-first-flash.md).
 
 **Not yet measured on the board:** HTTPS heap use during a download alongside the BLE session
 (PSRAM present; the TLS buffers are malloc'd), and the download time.
@@ -518,7 +520,7 @@ comes back without a re-pair). After that, an update is `curl -X POST http://<es
 | `codec-parity` | `gen_c_dict` / `gen_codec_vectors` / `gen_control_vectors --check` and the C parity modules (`test_control_parity.py` among them) with `gcc` |
 | `firmware-host-e2e` | The NimBLE-Linux + Bumble end-to-end tier, incl. the WiFi/web e2e, the control path (`test_control_e2e.py`) and the page in Chromium with a live fridge toggle reaching the fake unit (`tools/ci.sh firmware`) |
 | `firmware-build` | Compiles the release esp32s3 image against ESP-IDF's real esp-nimble; uploads the flashable images |
-| `firmware-release` | Push to `main` only: uploads `cali_fw.bin` + `manifest.json` to the `esp-latest` prerelease (the OTA source, `R_FW_OTA`); the only job besides `coverage-badge` with `contents: write` |
+| `firmware-release` | Push to `main` only: uploads `cali_fw.bin` + `manifest.json` to the `esp-latest` prerelease (the OTA source, `R_FW_OTA`), plus the first-flash `cali_fw_full.bin`; the only job besides `coverage-badge` with `contents: write` |
 | `firmware-qemu` | Builds the QEMU-probe variant (no WiFi driver) and boots it in QEMU |
 
 ## Hardware watch items (unresolved until the CoreS3 board runs)

@@ -638,7 +638,8 @@ BOARD/DEVICE rows of the evidence ledger record what has been proven):
    `cd firmware/build && python -m esptool --chip esp32s3 -p /dev/cu.usbmodemXXXX write_flash
    @flash_args` (the same `@flash_args` pattern `qemu/run_qemu.sh` uses to merge the image for
    QEMU) — both read the addresses/sizes out of the build, so a bootloader/partition-table/app
-   offset never gets hand-typed and drifts from the build. See the `flashing-cores3-on-bar` skill
+   offset never gets hand-typed and drifts from the build. (A **new user's** board: the merged
+   `cali_fw_full.bin` from the `esp-latest` release at `0x0` — `docs/howto-esp-first-flash.md`.) See the `flashing-cores3-on-bar` skill
    for the CoreS3-specific port-finding and serial-capture mechanics on the bar Mac.
    **From CI on a Linux host (buspi in the van, or thinky):** `tools/esplab/flash_ci.sh [branch|run-id]
    [port]` downloads the `firmware-esp32s3` artifact of the latest successful CI run (default `main`)
