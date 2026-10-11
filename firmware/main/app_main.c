@@ -75,6 +75,7 @@
 #include "nimble/nimble_port.h"
 #include "nimble/nimble_port_freertos.h"
 
+#include "cali_auto_camper.h"
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
@@ -189,6 +190,7 @@ static void do_work(void) {
         cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
         cali_session_tick(now);       /* delays this tick's heartbeat decision */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
+        cali_ac_tick(now);            /* auto camper (R_FW_AUTO_CAMPER): restore camping after park */
         if (s_wifi) {
             cali_net_esp_poll(now);   /* WiFi events -> the runner's sink */
             cali_wifi_run_tick(now);
@@ -406,6 +408,7 @@ void app_main(void) {
     if (cali_platform_init(NULL) != 0) cali_log("store: NVS namespace unusable, bonds will not persist");
     (void)cali_time_init();   /* the boot counter (R_FW_TIME): "LOG time: boot N", test_qemu_boot.py */
     cali_session_on_io = cali_sdlog_io;   /* unit frames -> the unit clock + the SD log (R_FW_SD_LOG) */
+    cali_ac_init();           /* the auto-camper toggle + restore debt (R_FW_AUTO_CAMPER) */
 
     s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);
     configASSERT(s_lines != NULL);

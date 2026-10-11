@@ -37,7 +37,8 @@ CONSTS = {
     "NET_HTTP_PORT": 80,
     "NET_HTTP_REQ_MAX": 2048,
     # The status/setup page budget (tests/test_web_strings.py): the rendered index_gen.html must fit.
-    "NET_HTTP_BODY_MAX": 20480,
+    # A flash-only budget (the page is a const array, no RAM buffer); 24 KB since the auto-camper row.
+    "NET_HTTP_BODY_MAX": 24576,
     # Status display (#154, spec 2026-10-01): refresh, stale threshold, dimming, LVGL lock bound
     # (the tick runs on the NimBLE host task: never wait on a wedged render longer than this).
     "DISPLAY_REFRESH_MS": 500,

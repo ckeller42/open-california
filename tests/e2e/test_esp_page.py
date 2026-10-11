@@ -259,3 +259,47 @@ def test_firmware_row_offers_no_update_over_the_setup_hotspot(stub, page):
         expect(pg.locator("#fw-status")).to_contain_text(STRINGS["fw_station_only"]["en"])
         expect(pg.locator("#fw-check")).to_be_hidden()
         expect(pg.locator("#fw-install")).to_be_hidden()
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_auto_camper_row_shows_and_switches(page, locale, lang):
+    """The /device auto-camper row (R_FW_AUTO_CAMPER): on/off, a restore owed, the toggle posts
+    ``{"enabled": <the opposite>}``; a refusal shows the error; the setup hotspot has no toggle.
+
+    .. test:: The /device page shows device.auto_camper and switches it
+       :id: T_FW_AUTO_CAMPER_PAGE
+       :links: R_FW_AUTO_CAMPER
+    """
+    posts = []
+
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        ac = stub.fixtures["station"]["/api/state"]["device"]["auto_camper"]
+
+        def on_post(route):
+            posts.append(json.loads(route.request.post_data))
+            ok = len(posts) == 1
+            if ok:
+                ac.update(enabled=posts[-1]["enabled"])
+            route.fulfill(
+                status=200 if ok else 500,
+                content_type="application/json",
+                body='{"ok":true,"auto_camper":false}' if ok else '{"ok":false,"error":"store"}',
+            )
+
+        pg.route("**/api/auto_camper", on_post)
+        status, toggle = pg.locator("#ac-status"), pg.locator("#ac-toggle")
+        expect(pg.locator("#ac-title")).to_have_text(STRINGS["ac_title"][lang])
+        expect(status).to_have_text(STRINGS["ac_on"][lang])
+        expect(toggle).to_have_text(STRINGS["ac_turn_off"][lang])
+        ac.update(state="armed")
+        expect(status).to_have_text(STRINGS["ac_on"][lang] + " · " + STRINGS["ac_armed"][lang])
+        toggle.click()
+        expect(status).to_have_text(STRINGS["ac_off"][lang] + " · " + STRINGS["ac_armed"][lang])
+        expect(toggle).to_have_text(STRINGS["ac_turn_on"][lang])
+        assert posts == [{"enabled": False}]
+        toggle.click()
+        expect(pg.locator("#ac-msg")).to_have_text(STRINGS["ac_error"][lang])
+        assert posts[1] == {"enabled": True}
+    with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
+        expect(pg.locator("#ac-status")).to_contain_text(STRINGS["ac_station_only"][lang])
+        expect(pg.locator("#ac-toggle")).to_be_hidden()

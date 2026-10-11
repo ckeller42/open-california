@@ -22,6 +22,8 @@
  *                                  "sd":{"state","total_mb","free_mb","last_seq","dropped"},   -- cali_sdlog.h
  *                                  "res":{"heap_free_kb","heap_min_kb","psram_free_kb","cpu_pct"},
  *                                        -- cali_res_stats; each an int or null (unknown: host, no PSRAM)
+ *                                  "auto_camper":{"enabled":<bool>,"state":"idle"|"armed"|"restoring"},
+ *                                                -- cali_auto_camper.h (R_FW_AUTO_CAMPER)
  *                                  "water_held":<bool>,
  *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
  *                                                                   was measured on this boot
@@ -96,6 +98,9 @@
  *                     Content-Type header is not checked (calictl answers 415 for a non-JSON one; the
  *                     core does not expose headers, the UI always sends application/json); a cancel
  *                     outside a running flow is a no-op (calictl steps its SM to idle).
+ *   POST /api/auto_camper  {"enabled":<bool>} (exactly that object; R_FW_AUTO_CAMPER, serve's endpoint):
+ *                     cali_ac_set_enabled -> 200 {"ok":true,"auto_camper":<bool>}; station mode only
+ *                     (403 setup_mode), 400 bad_json, 500 store (not saved), 405 for another method.
  *   POST /api/ota     {"action":"check"|"install"} (R_FW_OTA, cali_ota.h): starts the OTA task and
  *                     answers at once 200 {"ok":true}; progress in /api/state device.ota. Station mode
  *                     only, like /api/command (else 403 setup_mode, checked first after the method);

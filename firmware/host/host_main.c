@@ -11,7 +11,8 @@
  *                captive DNS (UDP 53 — only where bindable, e.g. as root in the CI container) and the
  *                web endpoints on 127.0.0.1:<port>. Without it nothing network-related runs.
  *   --fake-wifi  the fake WiFi's script (cali_net_host.h); missing = no networks (ruling R2)
- * Besides the console's lines, stdin takes one test-only line: "twrite" (see twrite() below).
+ * Besides the console's lines, stdin takes two test-only lines: "twrite" (see twrite() below) and
+ * "acstep <ms>" (the auto-camper step period, CALI_AC_STEP_MS = 30 s otherwise; test_auto_camper_e2e.py).
  *
  * Threads: main runs nimble_port_run() — the NimBLE host task; EVERY cali_core and transport call
  * happens there (the --http setup in main() runs before it, on the same thread). The HCI socket RX
@@ -31,6 +32,7 @@
 #include "nimble/nimble_npl.h"
 #include "nimble/nimble_port.h"
 
+#include "cali_auto_camper.h"
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
@@ -89,6 +91,7 @@ static void drain(void) {
         s_len--;
         pthread_mutex_unlock(&s_mu);
         if (strncmp(line, "twrite ", 7) == 0) twrite(line + 7);
+        else if (strncmp(line, "acstep ", 7) == 0) cali_ac_set_step_ms((uint32_t)strtoul(line + 7, NULL, 10));
         else cali_console_line(line);
         memset(line, 0, sizeof line);   /* a "wifi set" line holds a passphrase */
     }
@@ -104,6 +107,7 @@ static void tick_cb(struct ble_npl_event *ev) {
     uint64_t now = cali_uptime_ms();
     cali_runner_tick(now);              /* BLE first: WiFi/web work never delays this tick's */
     cali_session_tick(now);             /* heartbeat decision (same order as app_main.c) */
+    cali_ac_tick(now);
     if (s_http) {
         cali_net_host_poll(now);        /* WiFi events -> the runner's sink */
         cali_wifi_run_tick(now);
@@ -192,6 +196,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     ble_hci_sock_set_device(port);
+    cali_ac_init();
 
     nimble_port_init();           /* also connects the TCP HCI socket (ble_transport_ll_init) */
     cali_ble_nimble_init(on_sync);

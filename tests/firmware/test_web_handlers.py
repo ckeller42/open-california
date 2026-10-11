@@ -85,6 +85,8 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "ota.c"),
             str(CORE / "time.c"),
             str(CORE / "sdlog.c"),
+            str(CORE / "auto_camper.c"),
+            str(CORE / "auto_camper_run.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
             "-o",
@@ -242,7 +244,8 @@ EXPECTED_DEVICE_TAIL = (
     '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null},'
     '"time":{"source":"none","synced":false,"boot":0,"up":5010},'
     '"sd":{"state":"absent","total_mb":null,"free_mb":null,"last_seq":null,"dropped":0},'
-    '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},"water_held":false}}'
+    '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
+    '"auto_camper":{"enabled":true,"state":"idle"},"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
     '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
@@ -1228,3 +1231,80 @@ def test_ota_unavailable_without_an_ota_task(web_cli):
     """The host build and the QEMU image have no OTA I/O: 503, never a hang."""
     r, _ = one(web_cli, "POST", "/api/ota", '{"action":"check"}', setup=STATION)
     assert (r.status, r.json()) == (503, {"ok": False, "error": "ota_unavailable"})
+
+
+# ---- /api/auto_camper (R_FW_AUTO_CAMPER) -------------------------------------------------------
+
+
+def test_auto_camper_toggle_defaults_on_persists_and_shows_in_state(web_cli):
+    """Default ON; ``{"enabled":false}`` answers serve's shape, lands in the kv store (``ac_on``) and
+    in ``device.auto_camper``; on again restores it.
+
+    .. test:: POST /api/auto_camper: default on, persisted, station mode only, in device.auto_camper
+       :id: T_FW_AUTO_CAMPER_API
+       :links: R_FW_AUTO_CAMPER
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("GET", "/api/state"),
+            req("POST", "/api/auto_camper", '{"enabled": false}'),
+            b"kv ac_on",
+            req("GET", "/api/state"),
+            req("POST", "/api/auto_camper", '{"enabled":true}'),
+            b"kv ac_on",
+        ],
+    )
+    assert resps[0].json()["device"]["auto_camper"] == {"enabled": True, "state": "idle"}
+    assert (resps[1].status, resps[1].json()) == (200, {"ok": True, "auto_camper": False})
+    assert resps[2].json()["device"]["auto_camper"] == {"enabled": False, "state": "idle"}
+    assert (resps[3].status, resps[3].json()) == (200, {"ok": True, "auto_camper": True})
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV ", "KV \x01"]  # 0 / 1 (%.*s stops at the NUL)
+    assert "LOG auto-camper: disabled" in other and "LOG auto-camper: ENABLED" in other
+
+
+def test_auto_camper_reenable_clears_a_stale_debt(web_cli):
+    """Off in NVS but a debt still stored (an earlier off whose state write failed): turning it on
+    clears the debt, persisted; a failed debt write stores no toggle (500, ``ac_on`` unchanged)."""
+    stale = "01010101010001020202"  # owe, pre usb+lights, window open, prevs ign off / camping on
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"kvhex ac_on 00",
+            ("kvhex ac_state " + stale).encode(),
+            b"acinit",
+            req("GET", "/api/state"),
+            b"kvfail 1",
+            req("POST", "/api/auto_camper", '{"enabled":true}'),
+            b"kvfail 0",
+            b"kv ac_on",
+            req("POST", "/api/auto_camper", '{"enabled":true}'),
+            b"acinit",
+            req("GET", "/api/state"),
+        ],
+    )
+    assert resps[0].json()["device"]["auto_camper"] == {"enabled": False, "state": "restoring"}
+    assert (resps[1].status, resps[1].json()) == (500, {"ok": False, "error": "store"})
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV "]  # ac_on still 0 after the failed write
+    assert (resps[2].status, resps[2].json()) == (200, {"ok": True, "auto_camper": True})
+    assert resps[3].json()["device"]["auto_camper"] == {"enabled": True, "state": "idle"}  # after a "reboot"
+    assert "LOG auto-camper: off (restore owed)" in other and other[-1] == "LOG auto-camper: on"
+
+
+@pytest.mark.parametrize(
+    "setup,method,body,status,error",
+    [
+        (STATION, "GET", None, 405, "method"),
+        (STATION, "POST", "", 400, "bad_json"),
+        (STATION, "POST", '{"enabled":1}', 400, "bad_json"),
+        (STATION, "POST", '{"enabledX":true}', 400, "bad_json"),
+        (STATION, "POST", '{"enabled":true,"x":1}', 400, "bad_json"),
+        (STATION + ["kvfail 1"], "POST", '{"enabled":false}', 500, "store"),
+        (["wifi setup_ap"], "POST", '{"enabled":false}', 403, "setup_mode"),
+    ],
+)
+def test_auto_camper_errors(web_cli, setup, method, body, status, error):
+    r, _ = one(web_cli, method, "/api/auto_camper", body, setup=setup)
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})

@@ -7,7 +7,20 @@ docs screenshots — so a handler shape change that updates one and not the othe
 
 STATE_KEYS = frozenset({"t", "fn", "device"})  # GET /api/state
 DEVICE_KEYS = frozenset(
-    {"pairing", "link", "wifi", "control", "uptime_ms", "fw", "ota", "time", "sd", "res", "water_held"}
+    {
+        "pairing",
+        "link",
+        "wifi",
+        "control",
+        "uptime_ms",
+        "fw",
+        "ota",
+        "time",
+        "sd",
+        "res",
+        "auto_camper",
+        "water_held",
+    }
 )  # /api/state device
 OTA_KEYS = frozenset({"state", "available_sha", "progress_pct", "error"})  # /api/state device.ota (R_FW_OTA)
 TIME_KEYS = frozenset({"source", "synced", "boot", "up"})  # /api/state device.time (R_FW_TIME)
