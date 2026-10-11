@@ -10445,6 +10445,25 @@
   },
   {
    "expect": {
+    "car_clock": null,
+    "car_variant": null,
+    "ignition_on": true,
+    "installed": true,
+    "level_pitch": null,
+    "level_popup": 2,
+    "level_roll": null
+   },
+   "fields": {
+    "CarLevelPitch": 146,
+    "CarLevelPopUp": 2,
+    "CarLevelRoll": 35,
+    "TerminalOneFive": 1
+   },
+   "function": "vehicle",
+   "id": "vehicle/moving"
+  },
+  {
+   "expect": {
     "car_clock": "1900-01-01 19:30:05",
     "car_variant": null,
     "ignition_on": false,
