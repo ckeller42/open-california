@@ -43,6 +43,13 @@ a{color:var(--accent)}
   <p id="setup-msg"></p>
 </section>
 <p id="device"></p>
+<section id="fw" class="box">
+  <h2 id="fw-title"></h2>
+  <p id="fw-status"></p>
+  <button id="fw-install" type="button" hidden></button>
+  <button id="fw-check" class="secondary" type="button" hidden></button>
+  <p id="fw-msg" class="bad"></p>
+</section>
 </main>
 <script>
 const CFG = {pollMs: {{NET_PAGE_POLL_MS}}, connectTimeoutMs: {{NET_CONNECT_TIMEOUT_MS}}, connectRetryMs: {{NET_CONNECT_RETRY_MS}}, host: "{{NET_HOSTNAME}}", ssidMax: {{NET_SSID_MAX}}, pskMin: {{NET_PSK_MIN}}, pskMax: {{NET_PSK_MAX}}};

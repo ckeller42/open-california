@@ -17,6 +17,7 @@
  *                                          "ip":"a.b.c.d"|null,"rssi":<int>|null},
  *                                  "control":{"writes":<bool>},   -- POST /api/command accepted (station mode)
  *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>",
+ *                                  "ota":{"state","available_sha","progress_pct","error"},   -- cali_ota.h
  *                                  "water_held":<bool>,
  *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
  *                                                                   was measured on this boot
@@ -91,6 +92,12 @@
  *                     Content-Type header is not checked (calictl answers 415 for a non-JSON one; the
  *                     core does not expose headers, the UI always sends application/json); a cancel
  *                     outside a running flow is a no-op (calictl steps its SM to idle).
+ *   POST /api/ota     {"action":"check"|"install"} (R_FW_OTA, cali_ota.h): starts the OTA task and
+ *                     answers at once 200 {"ok":true}; progress in /api/state device.ota. Station mode
+ *                     only, like /api/command (else 403 setup_mode, checked first after the method);
+ *                     400 bad_json (the /api/pairing parser: action/value/confirm keys), 400
+ *                     bad_action, 409 busy (one runs), 503 ota_unavailable (no OTA I/O: the host
+ *                     build, the QEMU image). Any other method: 405 method.
  *   other method on /api/wifi, /api/state or /api/pairing -> 405 {"ok":false,"error":"method"}
  *   anything else     setup mode: an OS captive-portal probe path (cali_captive_is_probe) -> 302
  *                     Location "http://" NET_AP_ADDR "/"; any other path -> 302 Location "/".

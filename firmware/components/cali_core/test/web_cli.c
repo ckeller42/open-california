@@ -1,6 +1,6 @@
 /* web_cli.c — line-protocol driver for tests/firmware/test_web_handlers.py ONLY; not part of the ESP
  * build. Links web.c + http_core.c + captive_dns.c (for cali_captive_is_probe) + json.c + snapshot.c
- * + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
+ * + ota.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
  * frames, the runner state, a transport (has_bond/identity), an in-memory kv store, the clock, the
  * log, cali_fw_version ("test"), the WiFi runtime (cali_wifi_run.h) and the control sequencer
  * (cali_ctl_submit).
@@ -38,6 +38,9 @@
  *   ctldone <rc> <polls> [reason…]   rc = ok failed timeout refused: the done callback of the last
  *                    accepted command fires <polls> polls into the next request, with the reason
  *                    (NULL when absent)
+ *   otainit          cali_ota_init with fake ops (default: none, so /api/ota answers 503); their
+ *                    wake prints "CALL ota_wake", the rest are never reached (ota.c runs on the OTA
+ *                    task, tests/firmware/test_ota.py)
  * The runner's actions print "CALL pair_start", "CALL pair_passkey <6 digits>", "CALL pair_cancel",
  * "CALL pair_forget". Calls into the fake WiFi runtime print "CALL set_creds [<ssid>] [<psk>]", "CALL forget",
  * "CALL scan_auto"; cali_ctl_submit prints "CALL submit [<fn>] [<what>] [<value>]" (+ " t=<local_now>"
@@ -50,6 +53,7 @@
 #include <string.h>
 
 #include "cali_control.h"
+#include "cali_ota.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
@@ -236,6 +240,10 @@ static int rc_named(const char *s) {
     return -1;
 }
 
+/* ---- OTA (ota.c is real; only the OTA task's I/O is faked) ---- */
+static void ota_wake(void) { printf("CALL ota_wake\n"); }
+static const cali_ota_ops_t fake_ota = {.wake = ota_wake};
+
 static const char *const WIFI_NAMES[] = {"unprovisioned", "setup_ap", "connecting", "online", "retrying",
                                          "setup_ap_retrying"};
 
@@ -304,6 +312,7 @@ int main(void) {
         else if (strcmp(w, "flip") == 0) flip();
         else if (strcmp(w, "flipping") == 0) s_flipping = (int)v;
         else if (strcmp(w, "nofn") == 0) s_nofn = 1;
+        else if (strcmp(w, "otainit") == 0) cali_ota_init(&fake_ota);
         else if (strcmp(w, "joined") == 0) s_wifi.joined_once = (uint8_t)v;
         else if (strcmp(w, "bond") == 0) s_bond = (int)v;
         else if (strcmp(w, "active") == 0) s_active = (int)v;

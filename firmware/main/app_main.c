@@ -24,6 +24,12 @@
  * built with CONFIG_CALI_WIFI=n): "LOG wifi: driver unavailable" once; the WiFi SM stays
  * WIFI_UNPROVISIONED (console: no "wifi" in STATE, "wifi: not enabled"), nothing listens.
  *
+ * Firmware update (R_FW_OTA, components/cali_ota): with WiFi up, an OTA task fetches the GitHub
+ * release on request (POST /api/ota, console "ota …"); the owner task only starts it and reads its
+ * state. A freshly installed app is marked valid once the tick has run CALI_OTA_VALID_AFTER_MS with
+ * the web server listening (no BLE link needed: the van may sleep); a reset before that boots the
+ * previous slot (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE).
+ *
  * QEMU build (CONFIG_CALI_QEMU_PROBE, firmware/qemu/sdkconfig.qemu only): nimble_port_init() is not
  * called at all (QEMU does not model the controller; esp_bt_controller_init asserts there and the
  * chip reboots in a loop), so the no-controller path above runs, and the bond store is still loaded
@@ -68,6 +74,7 @@
 #include "cali_display.h"
 #endif
 #include "cali_net_esp.h"
+#include "cali_ota_esp.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
@@ -84,6 +91,8 @@ static atomic_int s_ready;             /* the owner may take lines (NimBLE synce
 static struct ble_npl_event s_work_ev; /* BLE: the owner is the NimBLE host task */
 static TaskHandle_t s_core_task;       /* no BLE: the owner is this task */
 static int s_wifi;                     /* cali_net_esp_init succeeded: the network runs on the tick */
+static int s_web;                      /* the web server listens (the OTA "healthy run" needs it) */
+static int s_valid_checked;            /* cali_ota_esp_mark_valid ran (once, R_FW_OTA rollback) */
 
 #if CONFIG_CALI_QEMU_PROBE
 #define KVPROBE_KEY "kvprobe"
@@ -176,6 +185,10 @@ static void do_work(void) {
 #if CONFIG_CALI_DISPLAY
         cali_display_tick(now);   /* repaints at most every DISPLAY_REFRESH_MS; never blocks on BLE */
 #endif
+        if (!s_valid_checked && now >= CALI_OTA_VALID_AFTER_MS && s_web) {   /* tick alive + web up */
+            s_valid_checked = 1;
+            cali_ota_esp_mark_valid();
+        }
     }
     if (!atomic_load(&s_ready)) return;
     while (xQueueReceive(s_lines, line, 0) == pdTRUE) {
@@ -185,7 +198,8 @@ static void do_work(void) {
 #if CONFIG_CALI_DISPLAY
             if (!cali_display_shot_line(line))
 #endif
-                cali_console_line(line);
+                if (!cali_ota_esp_console_line(line))
+                    cali_console_line(line);
         memset(line, 0, sizeof line);   /* a "wifi set" line holds a passphrase */
     }
 }
@@ -323,6 +337,8 @@ static void wifi_init(const cali_transport_t *t) {
     s_wifi = 1;
     cali_wifi_run_init(&cali_net_esp);
     if (cali_web_init(&cali_net_esp, t, NET_HTTP_PORT) != 0) cali_log("http: cannot listen on port %d", NET_HTTP_PORT);
+    else s_web = 1;
+    cali_ota_esp_start();        /* its own task: HTTPS never blocks this owner task (R_FW_OTA) */
     cali_wifi_run_boot();        /* saved creds -> join; none -> setup hotspot (events on the tick) */
 }
 

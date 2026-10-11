@@ -1,7 +1,11 @@
-# Partition table for the esp32s3 / M5Stack CoreS3 (16 MB flash), #154 Task 9 (ruling R18).
-# Same layout as ESP-IDF's partitions_singleapp_large.csv (nvs + phy_init + one factory app at
-# 0x10000), but the app gets 3 MB instead of 1500K: with WiFi + lwIP + mdns the app is ~1.08 MB.
+# Partition table for the esp32s3 / M5Stack CoreS3 (16 MB flash), #154 (rulings R18 + R_FW_OTA).
+# Two 3 MB OTA slots for the GitHub-release update (docs/firmware.md "Firmware update"); the app is
+# ~1.6 MB. nvs and phy_init keep their offsets, so a USB flash of this table keeps the bonds, the
+# WiFi credentials and the water baseline (NVS is never written by esptool). The bootloader boots
+# ota_0 while otadata is blank (ota_data_initial.bin, flashed with the full image).
 # Name,   Type, SubType, Offset,   Size,     Flags
 nvs,      data, nvs,     0x9000,   0x6000,
 phy_init, data, phy,     0xf000,   0x1000,
-factory,  app,  factory, 0x10000,  0x300000,
+otadata,  data, ota,     0x10000,  0x2000,
+ota_0,    app,  ota_0,   0x20000,  0x300000,
+ota_1,    app,  ota_1,   0x320000, 0x300000,

@@ -11,6 +11,7 @@
 #include "cali_captive.h"
 #include "cali_control.h"
 #include "cali_json.h"
+#include "cali_ota.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
@@ -48,6 +49,9 @@ static const char ERR_MISSING[] = "{\"ok\":false,\"error\":\"missing_function_or
 static const char ERR_CONFIRM[] = "{\"ok\":false,\"error\":\"confirm_required\"}";
 static const char ERR_SETUP_MODE[] = "{\"ok\":false,\"error\":\"setup_mode\"}";
 static const char ERR_BAD_VALUE[] = "{\"ok\":false,\"error\":\"bad_value\"}";
+static const char ERR_BAD_ACTION[] = "{\"ok\":false,\"error\":\"bad_action\"}";
+static const char ERR_BUSY[] = "{\"ok\":false,\"error\":\"busy\"}";
+static const char ERR_OTA_UNAVAILABLE[] = "{\"ok\":false,\"error\":\"ota_unavailable\"}";
 static const char OVERFLOW_BODY[] = "response too large";
 /* /api/pairing errors: calictl's own bodies (web.py), no "ok" member */
 static const char ERR_P_BAD_JSON[] = "{\"error\":\"bad_json\"}";
@@ -145,6 +149,8 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_int(&j, (long long)st.uptime_ms);
     cali_json_key(&j, "fw");
     cali_json_str(&j, st.fw);
+    cali_json_key(&j, "ota");   /* POST /api/ota's progress (R_FW_OTA) */
+    cali_ota_json(&j);
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
     uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */
@@ -618,6 +624,27 @@ static void api_pairing(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* ---- POST /api/ota {"action":"check"|"install"} (R_FW_OTA): station mode only, like /api/command ---- */
+static void api_ota(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static pair_req_t r;   /* the same {"action":…} shape as /api/pairing */
+    int rc;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot */
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (parse_pairing(req->body, req->body_len, &r) != 0) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (!is_action(&r, "check") && !is_action(&r, "install")) {
+        SET_CONST(resp, 400, ERR_BAD_ACTION);
+    } else if ((rc = cali_ota_request(is_action(&r, "install"))) == -1) {
+        SET_CONST(resp, 503, ERR_OTA_UNAVAILABLE);
+    } else if (rc == -2) {
+        SET_CONST(resp, 409, ERR_BUSY);
+    } else {
+        SET_CONST(resp, 200, OK_BODY);   /* progress: /api/state device.ota */
+    }
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
@@ -645,6 +672,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/pairing") == 0) {
         api_pairing(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/ota") == 0) {
+        api_ota(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */
