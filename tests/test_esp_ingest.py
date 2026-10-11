@@ -337,3 +337,11 @@ def test_replay_adopts_a_settled_ramp_on_a_later_record(funcs, frames):
     assert "water" not in r.process(rec(9, "cooler", frames["cooler"], ts=T0 + 4000), T0 + 4000)
     out = r.process(rec(10, "cooler", frames["cooler"], ts=T0 + 6000), T0 + 6000)
     assert out["water"]["fresh"]["liters"] == 20 and "cooler" in out
+
+
+def test_cli_refuses_an_empty_url(capsys):
+    """The timer with CALICTL_ESP_URL unset passes --url '': a clear error, not a urllib traceback."""
+    from calictl import cli
+
+    assert cli.main(["esp-ingest", "--url", ""]) == 2
+    assert "CALICTL_ESP_URL" in capsys.readouterr().err

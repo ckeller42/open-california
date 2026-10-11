@@ -279,6 +279,12 @@ def main(argv=None):
     if args.cmd == "esp-ingest":
         from . import esp_ingest
 
+        if not args.url.startswith(("http://", "https://")):  # e.g. the timer's CALICTL_ESP_URL unset
+            print(
+                "esp-ingest: --url must be http(s)://<esp>, got %r (timer: set CALICTL_ESP_URL)" % args.url,
+                file=sys.stderr,
+            )
+            return 2
         args.cursor = args.cursor or esp_ingest.DEFAULT_CURSOR
         return esp_ingest.main(args)
     if args.cmd == "serve":
