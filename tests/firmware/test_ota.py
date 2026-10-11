@@ -100,7 +100,7 @@ def test_same_sha_is_up_to_date(ota_cli, fw):
     assert ota(out)["state"] == "up_to_date"
     assert calls(out) == [
         "wake",
-        "get " + BASE + "manifest.json",
+        "get " + BASE + "manifest.json?t=2000",
     ]  # install of the running build: no download
 
 
@@ -109,14 +109,23 @@ def test_other_build_sees_available_and_check_downloads_nothing(ota_cli, fw):
     out = run(ota_cli, "fw " + fw, "manifest " + manifest(), "check", "json", "work", "json")
     assert otas(out)[0] == {"state": "checking", "available_sha": None, "progress_pct": 0, "error": None}
     assert ota(out) == {"state": "available", "available_sha": SHA, "progress_pct": 0, "error": None}
-    assert calls(out) == ["wake", "get " + BASE + "manifest.json"]
+    assert calls(out) == ["wake", "get " + BASE + "manifest.json?t=2000"]
+
+
+def test_every_check_fetches_a_fresh_manifest_url(ota_cli):
+    """A cache-buster per check (GitHub's edge once served a stale manifest for ~2 min); the image
+    URL carries none (it is SHA-256 checked)."""
+    out = run(ota_cli, "manifest " + manifest(), "check", "work", "check", "work")
+    gets = [c for c in calls(out) if c.startswith("get ")]
+    assert len(gets) == 2 and gets[0] != gets[1]
+    assert all(g.startswith("get " + BASE + "manifest.json?t=") for g in gets)
 
 
 def test_install_downloads_verifies_then_switches_and_restarts(ota_cli):
     out = run(ota_cli, "manifest " + manifest(), "slot " + DIGEST, "install", "work", "json")
     assert calls(out) == [
         "wake",
-        "get " + BASE + "manifest.json",
+        "get " + BASE + "manifest.json?t=2000",
         "download %scali_fw.bin %d (downloading)" % (BASE, len(IMAGE)),  # never "available" in between
         "slot_sha256 %d" % len(IMAGE),
         "commit",

@@ -65,6 +65,8 @@ static int e_get(const char *url, char *buf, size_t cap) {
     esp_err_t err;
     int status;
     if (!c) return -1;
+    esp_http_client_set_header(c, "Cache-Control", "no-cache");   /* + the URL's ?t= (cali_ota_work) */
+    esp_http_client_set_header(c, "Pragma", "no-cache");
     err = esp_http_client_perform(c);   /* follows the redirect to the asset host */
     status = esp_http_client_get_status_code(c);
     esp_http_client_cleanup(c);

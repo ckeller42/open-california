@@ -1,6 +1,7 @@
 /* ota.c — the firmware-update state machine (R_FW_OTA). Contract: include/cali_ota.h. */
 #include "cali_ota.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -104,12 +105,15 @@ static void fail(const char *code) {
 
 void cali_ota_work(void) {
     static char body[CALI_OTA_MANIFEST_MAX];
-    char sha[41], want[65], got_hex[65];
+    char url[sizeof CALI_OTA_MANIFEST_URL + 24], sha[41], want[65], got_hex[65];
     uint8_t got[32];
     size_t size;
     int req = __atomic_exchange_n(&s_pending, 0, __ATOMIC_ACQUIRE);
     if (!req || !s_ops) return;
-    if (s_ops->get(CALI_OTA_MANIFEST_URL, body, sizeof body) < 0 || parse_manifest(body, sha, want, &size) != 0) {
+    /* a fresh query per check: GitHub's edge served one client the old manifest's redirect for ~2 min
+     * after CI replaced it (2026-10-11). The image itself is SHA-256 checked, so it needs none. */
+    snprintf(url, sizeof url, CALI_OTA_MANIFEST_URL "?t=%llu", (unsigned long long)cali_uptime_ms());
+    if (s_ops->get(url, body, sizeof body) < 0 || parse_manifest(body, sha, want, &size) != 0) {
         fail("manifest");
         return;
     }
