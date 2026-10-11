@@ -643,7 +643,7 @@ firmware remembers what was on and turns it back on once you park.
 - **Persisted.** The toggle is kv key `ac_on` (1 byte, missing = **on**) and the restore debt kv key
   `ac_state` (10 bytes, written only when it changes), namespace `cali`; never a bond, WiFi or water
   key. serve keeps a wall-clock deadline; the ESP may boot with no wall clock yet (no SNTP, no unit RTC), so a reboot inside the
-  window opens a fresh window (the tries so far carry over, so they stay bounded).
+  window opens a fresh window (the tries so far carry over, so they stay bounded). Switching it off clears the debt, and so does switching it back on (an off whose debt write failed must not leave a stale restore behind); if the debt write fails, the toggle is not stored either (500 `store`).
 - **Log** lines as serve's: `auto-camper[armed_engine_shed|restoring|restored|stood_down|gave_up]: …
   (ignition=… camping=… soc=… warn=… fails=… owe=…)`, `auto-camper: ENABLED|disabled`, and at boot
   `auto-camper: on|off[ (restore owed)]`.

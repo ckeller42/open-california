@@ -65,12 +65,16 @@ static void pack(uint8_t b[STATE_LEN]) {
     b[9] = (uint8_t)(S.prev_lights + 1);
 }
 
-static void save(void) {
+static int save(void) {
     uint8_t b[STATE_LEN];
     pack(b);
-    if (memcmp(b, s_saved, sizeof b) == 0) return;
-    if (cali_kv_set(CALI_AC_STATE_KEY, b, sizeof b) == 0) memcpy(s_saved, b, sizeof b);
-    else cali_log("auto-camper: state not saved");
+    if (memcmp(b, s_saved, sizeof b) == 0) return 0;
+    if (cali_kv_set(CALI_AC_STATE_KEY, b, sizeof b) != 0) {
+        cali_log("auto-camper: state not saved");
+        return -1;
+    }
+    memcpy(s_saved, b, sizeof b);
+    return 0;
 }
 
 void cali_ac_init(void) {
@@ -99,16 +103,18 @@ int cali_ac_enabled(void) { return s_on; }
 
 int cali_ac_set_enabled(int on) {
     uint8_t b = (uint8_t)(on != 0);
-    s_on = b;
-    if (!s_on) {   /* AutoCamper.set_enabled: off clears the debt */
+    /* AutoCamper.set_enabled: off clears the debt; so does off -> on, in case an earlier off's
+     * state write failed and a stale debt is still stored */
+    if (!b || !s_on) {
         S.owe = 0;
         S.until = -1;
         S.fails = 0;
         s_resume = 0;
         s_n = 0;
     }
+    s_on = b;
     cali_log("auto-camper: %s", s_on ? "ENABLED" : "disabled");
-    save();
+    if (save() != 0) return -1;   /* the debt is not cleared in NVS: don't store the toggle either */
     return cali_kv_set(CALI_AC_ON_KEY, &b, 1);
 }
 

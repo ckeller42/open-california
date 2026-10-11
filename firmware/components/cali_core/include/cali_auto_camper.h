@@ -70,7 +70,8 @@ void cali_ac_decide(const cali_ac_in_t *in, const cali_ac_cfg_t *cfg, cali_ac_st
 /* ---- the controller (auto_camper_run.c) ---- */
 void cali_ac_init(void);                 /* owner task, after cali_platform_init: load toggle + debt */
 void cali_ac_tick(uint64_t now_ms);      /* owner task, after cali_session_tick */
-int cali_ac_set_enabled(int on);         /* persisted; off clears the debt. 0 ok, -1 not saved */
+int cali_ac_set_enabled(int on);         /* persisted; off, and off -> on, clear the debt. 0 ok, -1 not saved
+                                          * (a failed debt write stores no toggle) */
 int cali_ac_enabled(void);
 void cali_ac_set_step_ms(uint32_t ms);   /* tests only (cali-host "acstep"): the step period */
 /* device.auto_camper: {"enabled":<bool>,"state":"idle"|"armed"|"restoring"} (a value: key first). */

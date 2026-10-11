@@ -33,6 +33,8 @@
  *   now <ms>         cali_uptime_ms()
  *   kv <key>         print "KV <value>" or "KV <missing>"
  *   kvfail 0|1       cali_kv_set fails
+ *   kvhex <key> <hex>   store <hex> bytes under <key> (e.g. a stale auto-camper debt)
+ *   acinit           cali_ac_init (the toggle + debt from the kv store, as at boot)
  *   ctl <rc> [reason…]   what cali_ctl_submit answers (default pending): pending refused elsewhere bad
  *                    none busy notready; the rest of the line is *reason (NULL when absent)
  *   ctldone <rc> <polls> [reason…]   rc = ok failed timeout refused: the done callback of the last
@@ -52,6 +54,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_auto_camper.h"
 #include "cali_control.h"
 #include "cali_ota.h"
 #include "cali_platform.h"
@@ -322,6 +325,13 @@ int main(void) {
         else if (strcmp(w, "waterheld") == 0) s_water_held = (int)v;
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
         else if (strcmp(w, "ctlbusy") == 0) s_ctl_busy = (int)v;
+        else if (strcmp(w, "acinit") == 0) cali_ac_init();
+        else if (strcmp(w, "kvhex") == 0) {
+            unsigned char b[32];
+            size_t k = 0;
+            while (k < sizeof b && a2[2 * k] && sscanf(a2 + 2 * k, "%2hhx", &b[k]) == 1) k++;
+            (void)cali_kv_set(a1, b, k);
+        }
         else if (strcmp(w, "attempts") == 0) s_pair.attempts = (uint8_t)v;
         else if (strcmp(w, "pairerr") == 0) {
             size_t i;
