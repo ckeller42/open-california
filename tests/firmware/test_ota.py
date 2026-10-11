@@ -117,7 +117,7 @@ def test_install_downloads_verifies_then_switches_and_restarts(ota_cli):
     assert calls(out) == [
         "wake",
         "get " + BASE + "manifest.json",
-        "download %scali_fw.bin %d" % (BASE, len(IMAGE)),
+        "download %scali_fw.bin %d (downloading)" % (BASE, len(IMAGE)),  # never "available" in between
         "slot_sha256 %d" % len(IMAGE),
         "commit",
         "restart",
@@ -135,7 +135,7 @@ def test_checksum_mismatch_is_an_error_and_never_switches_the_slot(ota_cli, slot
 
 def test_download_failure_aborts_without_switching(ota_cli):
     out = run(ota_cli, "manifest " + manifest(), "download fail", "install", "work", "json")
-    assert calls(out)[-2:] == ["download %scali_fw.bin %d" % (BASE, len(IMAGE)), "abort"]
+    assert calls(out)[-2:] == ["download %scali_fw.bin %d (downloading)" % (BASE, len(IMAGE)), "abort"]
     assert ota(out)["error"] == "download" and 0 < ota(out)["progress_pct"] < 100  # half way
 
 

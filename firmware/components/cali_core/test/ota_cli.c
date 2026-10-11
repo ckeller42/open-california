@@ -11,7 +11,7 @@
  *   check | install     cali_ota_request -> "REQ <rc>"
  *   work                cali_ota_work()
  *   json                "JSON <the device.ota object>"
- * ops calls print "CALL get <url>", "CALL download <url> <size>", "CALL slot_sha256 <size>",
+ * ops calls print "CALL get <url>", "CALL download <url> <size> (<state meanwhile>)", "CALL slot_sha256 <size>",
  * "CALL commit", "CALL abort", "CALL restart", "CALL wake"; cali_log prints "LOG <text>".
  */
 #include <stdarg.h>
@@ -46,7 +46,7 @@ static int f_get(const char *url, char *buf, size_t cap) {
     return (int)n;
 }
 static int f_download(const char *url, size_t size) {
-    printf("CALL download %s %lu\n", url, (unsigned long)size);
+    printf("CALL download %s %lu (%s)\n", url, (unsigned long)size, cali_ota_state_name(cali_ota_state()));
     cali_ota_progress(size / 2, size);
     if (s_download_fail) return -1;
     cali_ota_progress(size, size);

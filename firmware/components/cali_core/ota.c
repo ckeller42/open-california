@@ -120,10 +120,11 @@ void cali_ota_work(void) {
     }
     memcpy(s_sha, sha, sizeof s_sha);
     cali_log("ota: available %.7s (running %s)", sha, cali_fw_version());
-    set_state(CALI_OTA_AVAILABLE);
+    /* an install goes straight on: never a non-busy state in between, where the owner could start a
+     * second request while this one still runs */
+    set_state(req == 2 ? CALI_OTA_DOWNLOADING : CALI_OTA_AVAILABLE);
     if (req != 2) return;
 
-    set_state(CALI_OTA_DOWNLOADING);
     if (s_ops->download(CALI_OTA_BIN_URL, size) != 0) {
         s_ops->abort();
         fail("download");
