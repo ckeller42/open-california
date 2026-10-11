@@ -118,7 +118,7 @@ class Resp:
         lines = head.decode("latin-1").split("\r\n")
         self.status = int(lines[0].split(" ")[1])
         self.headers = {k.lower(): v for k, _, v in (ln.partition(": ") for ln in lines[1:])}
-        assert int(self.headers["content-length"]) == len(self.body)
+        assert int(self.headers.get("content-length", 0)) == len(self.body)
 
     def json(self):
         return json.loads(self.body)
@@ -143,8 +143,8 @@ def drive(cli, lines):
     return resps, other
 
 
-def req(method, path, body=None):
-    text = "%s %s HTTP/1.1\r\nHost: x\r\n" % (method, path)
+def req(method, path, body=None, headers=""):
+    text = "%s %s HTTP/1.1\r\nHost: x\r\n%s" % (method, path, headers)
     b = text.encode()
     if body is not None:
         body = body.encode() if isinstance(body, str) else body
@@ -550,6 +550,7 @@ def test_station_root_serves_the_gzipped_calictl_ui(web_cli, state, joined):
     r, _ = one(web_cli, "GET", "/", setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.headers["content-type"] == "text/html; charset=utf-8"
     assert r.headers["content-encoding"] == "gzip" and r.headers["cache-control"] == "no-cache"
+    assert r.headers["etag"] == etag(BUNDLE)
     assert r.body == BUNDLE
     assert gzip.decompress(r.body) == gen_c_dict.render_app_bundle().encode("utf-8")
 
@@ -571,7 +572,8 @@ def test_root_outside_station_mode_is_the_setup_page(web_cli, state, joined):
     r, _ = one(web_cli, "GET", "/", setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.headers["content-type"].startswith("text/html")
     assert r.body == PAGE.read_bytes()
-    assert "content-encoding" not in r.headers and "cache-control" not in r.headers
+    assert "content-encoding" not in r.headers and r.headers["cache-control"] == "no-cache"
+    assert r.headers["etag"] == etag(r.body)
     assert b'id="setup"' in r.body and b'id="device"' in r.body
 
 
@@ -591,8 +593,60 @@ MODES = [("online", 1), ("setup_ap", 0), ("unprovisioned", 0), ("connecting", 0)
 def test_pwa_assets_served_in_every_mode(web_cli, state, joined, path, ctype, data):
     r, _ = one(web_cli, "GET", path, setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.headers["content-type"] == ctype
-    assert r.headers["cache-control"] == "max-age=86400" and "content-encoding" not in r.headers
-    assert r.body == data
+    cc = "no-cache" if path == "/manifest.webmanifest" else "max-age=86400"
+    assert r.headers["cache-control"] == cc and "content-encoding" not in r.headers
+    assert r.headers["etag"] == etag(data) and r.body == data
+
+
+# ---- HTTP caching: a strong ETag on every static asset, If-None-Match -> 304 -------------------
+
+
+def etag(data):
+    """web.c's ETag: the quoted FNV-1a 64 of the exact bytes served."""
+    h = 0xCBF29CE484222325
+    for b in data:
+        h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return '"%016x"' % h
+
+
+def cond(cli, path, inm, setup=("wifi online", "joined 1")):
+    resps, _ = drive(
+        cli, [s.encode() for s in setup] + [req("GET", path, headers="If-None-Match: %s\r\n" % inm)]
+    )
+    return resps[0]
+
+
+STATIC = ["/", "/app", "/device", "/manifest.webmanifest", "/favicon.ico", "/icon-192.png"]
+
+
+@pytest.mark.parametrize("path", STATIC)
+def test_static_matching_if_none_match_is_304_without_body(web_cli, path):
+    r, _ = one(web_cli, "GET", path, setup=["wifi online", "joined 1"])
+    tag = r.headers["etag"]
+    for inm in (tag, "W/" + tag, '"stale", ' + tag, "*"):
+        nm = cond(web_cli, path, inm)
+        assert nm.status == 304 and nm.body == b"", inm
+        assert nm.headers["etag"] == tag and nm.headers["cache-control"] == r.headers["cache-control"]
+        assert "content-length" not in nm.headers and "content-type" not in nm.headers
+
+
+@pytest.mark.parametrize("path", STATIC)
+def test_static_stale_if_none_match_is_200_with_body(web_cli, path):
+    r = cond(web_cli, path, '"0000000000000000"')
+    assert r.status == 200 and r.body and r.headers["etag"] == etag(r.body)
+
+
+def test_root_etag_follows_the_mode_bytes(web_cli):
+    """/ serves the bundle in station mode and the setup page elsewhere: a tag from one never
+    validates the other."""
+    r, _ = one(web_cli, "GET", "/", setup=["wifi online", "joined 1"])
+    s = cond(web_cli, "/", r.headers["etag"], setup=("wifi setup_ap", "joined 0"))
+    assert s.status == 200 and s.body == PAGE.read_bytes()
+
+
+def test_api_state_is_never_cached(web_cli):
+    r = cond(web_cli, "/api/state", "*")
+    assert r.status == 200 and "etag" not in r.headers and r.headers["cache-control"] == "no-store"
 
 
 def test_pwa_icons_are_the_calictl_webui_files():

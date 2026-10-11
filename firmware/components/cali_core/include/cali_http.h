@@ -23,7 +23,8 @@
  * Connection: close; a response with a location (302) also carries Location. A 302 MUST set
  * location (see 500 above).
  * A response with a content_encoding also carries Content-Encoding and Cache-Control: no-cache;
- * a cache_control replaces that no-cache, or adds Cache-Control to any response.
+ * a cache_control replaces that no-cache, or adds Cache-Control to any response. A response with an
+ * etag carries ETag, and a GET whose If-None-Match matches it is answered 304 (cali_http_resp_t).
  *
  * Request views (method, path, query, body) are NUL-terminated and point into the core's request
  * buffer; query is "" when the target has no '?'. The buffer is not touched again until the
@@ -57,13 +58,17 @@ extern "C" {
 #define CALI_HTTP_PENDING_MAX_MS 8000u   /* 2 x CALI_CTL_DEADLINE_MS: never reached by a well-behaved handler */
 
 /* resume: 0 on the first call for a request, 1 on every re-ask after CALI_HTTP_PENDING. */
-typedef struct { const char *method; const char *path; const char *query; const char *body; size_t body_len; int resume; } cali_http_req_t;
+/* if_none_match: the If-None-Match header's value (NUL-terminated view), NULL when absent. */
+typedef struct { const char *method; const char *path; const char *query; const char *body; size_t body_len; int resume; const char *if_none_match; } cali_http_req_t;
 /* Pre-filled before the handler runs: status 200, content_type "text/plain", no body, no location,
  * no content_encoding. A content_encoding (e.g. "gzip" for a pre-compressed static body) adds
  * "Content-Encoding: <it>" and "Cache-Control: no-cache" (an encoded body is an asset baked into the
  * image: a reflash must show on the next load); without it the headers are unchanged. A cache_control
- * (e.g. "max-age=86400" for a static icon) is sent as "Cache-Control: <it>", replacing that no-cache. */
-typedef struct { int status; const char *content_type; const char *body; size_t body_len; const char *location; const char *content_encoding; const char *cache_control; } cali_http_resp_t;
+ * (e.g. "max-age=86400" for a static icon) is sent as "Cache-Control: <it>", replacing that no-cache. An etag (a quoted
+ * strong validator, e.g. "\"0123456789abcdef\"") adds "ETag: <it>"; when the answer is 200 and the
+ * request's If-None-Match is "*" or lists it, the core sends 304 Not Modified instead: no body, no
+ * Content-Type/Content-Length, the ETag and Cache-Control kept. */
+typedef struct { int status; const char *content_type; const char *body; size_t body_len; const char *location; const char *content_encoding; const char *cache_control; const char *etag; } cali_http_resp_t;
 typedef int (*cali_http_handler_t)(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx);   /* 1 = handled, 0 = 404, CALI_HTTP_PENDING */
 
 /* Listens on port: 0 ok; -1 tcp_listen failed, and cali_http_poll stays a no-op. */

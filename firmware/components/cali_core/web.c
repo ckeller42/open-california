@@ -66,11 +66,30 @@ static const char ERR_P_BUSY[] = "{\"error\":\"busy\"}";
 /* See cali_web.h / cali_wifi_run.h for the mapping and why a setup-flow join reports "off". */
 static int wifi_mode(void) { return cali_wifi_mode(cali_wifi_run_state()); }
 
+#define HTML_TYPE "text/html; charset=utf-8"
+#define NO_CACHE "no-cache"   /* HTML + manifest: always revalidate (a 304 when unchanged), so an OTA shows at once */
+
 static void set_body(cali_http_resp_t *resp, int status, const char *type, const char *body, size_t len) {
     resp->status = status;
     resp->content_type = type;
     resp->body = body;
     resp->body_len = len;
+}
+
+/* A static asset baked into the image: 200 + body, the given Cache-Control, and a strong ETag — the
+ * FNV-1a 64 of the exact bytes served, so it changes with them on any build (dirty ones included),
+ * and a matching If-None-Match gets a body-less 304 from the core. Hashed per request (~65 KB at
+ * most, ~1 ms on the ESP); the tag lives in a static buffer: one connection, valid until its close.
+ * ponytail: rehashed per request, memoize per asset if it ever shows in a profile. */
+static void set_static(cali_http_resp_t *resp, const char *type, const unsigned char *body, size_t len,
+                       const char *cache_control) {
+    static char etag[19];   /* "\"" + 16 hex + "\"" + NUL */
+    unsigned long long h = 0xcbf29ce484222325ull;
+    for (size_t i = 0; i < len; i++) h = (h ^ body[i]) * 0x100000001b3ull;
+    snprintf(etag, sizeof etag, "\"%016llx\"", h);
+    set_body(resp, 200, type, (const char *)body, len);
+    resp->cache_control = cache_control;
+    resp->etag = etag;
 }
 
 #define SET_CONST(resp, status, body) set_body((resp), (status), JSON_TYPE, (body), sizeof (body) - 1)
@@ -102,6 +121,7 @@ static void finish_json(cali_json_t *j, cali_http_resp_t *resp) {
         return;
     }
     set_body(resp, 200, JSON_TYPE, s_json, (size_t)n);
+    resp->cache_control = "no-store";   /* live state: never a cached copy, no validator */
 }
 
 __attribute__((weak)) void cali_res_stats(cali_res_t *r) {
@@ -704,22 +724,24 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     if (strcmp(req->path, "/api/command") == 0) return api_command(req, resp);
     if (get && strcmp(req->path, "/") == 0) {
         if (wifi_mode() == CALI_WIFI_MODE_STATION) {   /* the calictl web UI (R_FW_SHARED_UI) */
-            set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN);
+            set_static(resp, HTML_TYPE, WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN, NO_CACHE);
             resp->content_encoding = "gzip";
         } else {                                       /* setup hotspot / setup-flow join: the setup page */
-            set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_INDEX_HTML, WEB_INDEX_HTML_LEN);
+            set_static(resp, HTML_TYPE, WEB_INDEX_HTML, WEB_INDEX_HTML_LEN, NO_CACHE);
         }
         return 1;
     }
     if (get && strcmp(req->path, "/app") == 0) {       /* the calictl web UI in every mode: the wizard over the hotspot */
-        set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN);
+        set_static(resp, HTML_TYPE, WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN, NO_CACHE);
         resp->content_encoding = "gzip";
         return 1;
     }
     for (size_t i = 0; get && i < N_OF(PWA_ASSETS); i++) {   /* "Add to Home Screen", in every mode */
         if (strcmp(req->path, PWA_ASSETS[i].path) == 0) {
-            set_body(resp, 200, PWA_ASSETS[i].type, (const char *)PWA_ASSETS[i].body, PWA_ASSETS[i].len);
-            resp->cache_control = "max-age=86400";   /* a day: a reflash shows by tomorrow */
+            /* the manifest revalidates every load like the page; an icon is fresh a day (a reflash
+             * shows by tomorrow), then a cheap 304 — never immutable: its URL never changes */
+            set_static(resp, PWA_ASSETS[i].type, PWA_ASSETS[i].body, PWA_ASSETS[i].len,
+                       strcmp(PWA_ASSETS[i].path, "/manifest.webmanifest") == 0 ? NO_CACHE : "max-age=86400");
             return 1;
         }
     }
@@ -736,7 +758,7 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */
-        set_body(resp, 200, "text/html; charset=utf-8", (const char *)WEB_INDEX_HTML, WEB_INDEX_HTML_LEN);
+        set_static(resp, HTML_TYPE, WEB_INDEX_HTML, WEB_INDEX_HTML_LEN, NO_CACHE);
         return 1;
     }
     if (strcmp(req->path, "/api/state") == 0) {
