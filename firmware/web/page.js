@@ -16,7 +16,8 @@
  * @typedef {{ source: string, synced: boolean, boot: number }} Time
  * @typedef {{ state: string, total_mb: number|null, free_mb: number|null, last_seq: number|null, dropped: number }} Sd
  * @typedef {{ heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null }} Res
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res }} Device  the /api/state fields this page reads
+ * @typedef {{ enabled: boolean, state: string }} AutoCamper
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, auto_camper: AutoCamper }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -92,6 +93,7 @@ $("psk-label").textContent = t("password");
 $("connect").textContent = t("connect");
 $("rescan").textContent = t("rescan");
 $("fw-title").textContent = t("fw_title");
+$("ac-title").textContent = t("ac_title");
 $("fw-check").textContent = t("fw_check");
 document.documentElement.lang = LANG;
 
@@ -152,6 +154,32 @@ function renderFw(d) {
   const install = $("fw-install");
   install.hidden = !station || busy || !sha;
   install.textContent = t("fw_install", {sha: sha});
+}
+
+/* Auto camper mode (R_FW_AUTO_CAMPER): on/off, a restore owed, the toggle (station mode only). */
+/** @param {Device} d */
+function renderAutoCamper(d) {
+  const a = d.auto_camper, station = d.wifi.mode === "station";
+  let text = t(a.enabled ? "ac_on" : "ac_off");
+  if (a.state === "armed") text += " · " + t("ac_armed");
+  if (a.state === "restoring") text += " · " + t("ac_restoring");
+  if (!station) text += " · " + t("ac_station_only");
+  $("ac-status").textContent = text;
+  const b = $("ac-toggle");
+  b.hidden = !station;
+  b.textContent = t(a.enabled ? "ac_turn_off" : "ac_turn_on");
+  b.dataset.on = a.enabled ? "1" : "";
+}
+
+async function toggleAutoCamper() {
+  const b = $("ac-toggle"), msg = $("ac-msg");
+  msg.textContent = "";
+  b.hidden = true;   /* the next poll shows it again, with the new state */
+  try {
+    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/auto_camper", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: !b.dataset.on})}));
+    if (!r.body.ok) msg.textContent = t("ac_error");
+  } catch (e) { msg.textContent = t("ac_error"); }
 }
 
 /** @param {"check"|"install"} action */
@@ -271,6 +299,7 @@ async function poll() {
     $("banner").style.display = "none";
     renderLink(s.device);
     renderFw(s.device);
+    renderAutoCamper(s.device);
     renderTime(s.device.time);
     renderSd(s.device.sd);
     renderRes(s.device.res);
@@ -287,6 +316,7 @@ async function poll() {
 
 $("connect").addEventListener("click", connect);
 $("rescan").addEventListener("click", scan);
+$("ac-toggle").addEventListener("click", toggleAutoCamper);
 $("fw-check").addEventListener("click", () => ota("check"));
 $("fw-install").addEventListener("click", () => ota("install"));
 poll();

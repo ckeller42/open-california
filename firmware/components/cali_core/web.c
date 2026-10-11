@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_auto_camper.h"
 #include "cali_captive.h"
 #include "cali_control.h"
 #include "cali_json.h"
@@ -179,6 +180,8 @@ static void api_state(cali_http_resp_t *resp) {
     cali_sdlog_json(&j);
     cali_json_key(&j, "res");
     res_json(&j);
+    cali_json_key(&j, "auto_camper");   /* restore camping after park (R_FW_AUTO_CAMPER) */
+    cali_ac_json(&j);
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
     uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */
@@ -673,6 +676,28 @@ static void api_ota(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* ---- POST /api/auto_camper {"enabled":<bool>} (R_FW_AUTO_CAMPER, serve's endpoint): station mode only ---- */
+static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    cursor_t c = {req->body, req->body + req->body_len};
+    char key[8];
+    size_t klen;
+    int on;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 || strcmp(key, "enabled") != 0 ||
+               expect(&c, ':') != 0 || parse_bool(&c, &on) != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (cali_ac_set_enabled(on) != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else if (on) {
+        SET_CONST(resp, 200, "{\"ok\":true,\"auto_camper\":true}");
+    } else {
+        SET_CONST(resp, 200, "{\"ok\":true,\"auto_camper\":false}");
+    }
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
@@ -704,6 +729,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/ota") == 0) {
         api_ota(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/auto_camper") == 0) {
+        api_auto_camper(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */

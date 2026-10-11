@@ -209,6 +209,7 @@ def esp_fixtures():
             "time": {"source": "sntp", "synced": True, "boot": 17, "up": 3912400},
             "sd": {"state": "ok", "total_mb": 30413, "free_mb": 28774, "last_seq": 1042, "dropped": 0},
             "res": {"heap_free_kb": 61, "heap_min_kb": 38, "psram_free_kb": 7302, "cpu_pct": 4},
+            "auto_camper": {"enabled": True, "state": "idle"},
             "water_held": False,
         },
     }
@@ -234,6 +235,7 @@ def esp_fixtures():
                         "dropped": 0,
                     },
                     "res": {"heap_free_kb": 74, "heap_min_kb": 52, "psram_free_kb": 7390, "cpu_pct": 2},
+                    "auto_camper": {"enabled": True, "state": "idle"},
                     "water_held": False,
                 },
             },

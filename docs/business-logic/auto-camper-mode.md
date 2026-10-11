@@ -7,9 +7,9 @@
 > `control-and-actuation.md` §4). The decompile confirms the app has **no** speed/brake/gear signal —
 > only [Terminal-15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) — and the gate is enforced **unit-side**; the camping `enable` bit mirrors ignition
 > (reads 1 while driving = blocked). So the feature now **restores camping once you park** (ignition
-> **falling** edge). **Not yet live-verified:** that the unit accepts the camping-on write *immediately*
-> after ignition-off (a brief post-park lock is possible) — the retry window covers it, but a
-> park-then-write test is still owed. Feature stays **off by default** until that is confirmed.
+> **falling** edge). **Live-verified on buspi 2026-10-11:** the unit does hold a brief post-park lock
+> (two tries refused, camping back ~1.5 min after park) and the retry window covers it. calictl's
+> toggle stays off by default; the ESP satellite's is on by default (below).
 
 A calictl-only feature (**not in the VW app**): the [camper unit](https://ckeller42.github.io/open-california/glossary.html#term-Camper-unit) **drops camper mode when the engine
 starts** (ignition / terminal-15 goes on) and **will not let it back on until the vehicle is
@@ -18,6 +18,14 @@ so you don't have to re-toggle it after every drive — while **respecting a man
 critically, **never fighting the unit's battery protection.**
 
 Toggle it on the web-UI **Camping** card. The setting persists across daemon restarts. Off by default.
+
+**On the ESP32 satellite too** (since 2026-10-11, `R_FW_AUTO_CAMPER`, `docs/firmware.md` "Auto camper
+mode"): the same decision as a C twin held to this function by generated vectors, **on by default**,
+switched on the satellite's `/device` page. If buspi's auto-camper also runs, both may restore after the
+same park — harmless: the decision skips once camping reads on again, and the camping frame is
+full-packet with every other field at the leave-unchanged sentinel, so a second restore writes the same
+state. buspi's journal 2026-10-11 shows the cycle on the real van: 17:43:20 `armed_engine_shed`, two
+`restoring` tries refused by the post-park lock, 17:47:59 `restored`.
 
 ## How it decides (pure logic: `calictl/automation.py::auto_camper_restore_decide`)
 

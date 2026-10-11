@@ -1,6 +1,6 @@
 /* web_cli.c — line-protocol driver for tests/firmware/test_web_handlers.py ONLY; not part of the ESP
  * build. Links web.c + http_core.c + captive_dns.c (for cali_captive_is_probe) + json.c + snapshot.c
- * + ota.c + time.c + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
+ * + ota.c + time.c + auto_camper.c + auto_camper_run.c (never ticked here) + csrc/codec.c, and fakes everything else web.c reaches: a scripted cali_net socket, the session's
  * frames, the runner state, a transport (has_bond/identity), an in-memory kv store, the clock, the
  * log, cali_fw_version ("test"), the WiFi runtime (cali_wifi_run.h) and the control sequencer
  * (cali_ctl_submit).
@@ -133,6 +133,8 @@ int cali_session_frame(size_t i, const uint8_t **frame, size_t *len) {
 int cali_session_active(void) { return s_active; }
 int cali_session_link_up(void) { return s_linkup; }
 uint64_t cali_session_last_update_ms(void) { return s_stamp; }
+int cali_session_ready(void) { return 0; }
+int cali_session_frame_live(size_t i, const uint8_t **frame, size_t *len) { return cali_session_frame(i, frame, len); }
 int cali_session_water_held(void) { return s_water_held; }
 uint64_t cali_session_water_good_ms(void) { return s_water_good; }
 int cali_session_light_cfg(int live, codec_kv_t out[CALI_LCFG_N]) { (void)live; (void)out; return 0; }
