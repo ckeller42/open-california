@@ -194,6 +194,12 @@ window.STRINGS_DE = {
     "Der Dauerbetrieb endet, wenn der Timer abläuft. Möchten Sie fortfahren?",
   "Not available during continuous heating": "Im Dauerbetrieb nicht verfügbar",
   "Stop the timer first": "Zuerst den Timer stoppen",
+  // server refusals (control.REASON_AIRHEATER_*), toasted through t()
+  "the auxiliary air heater cannot be activated when the engine is running or when the auxiliary water heater is activated":
+    "die Luftstandheizung kann bei laufendem Motor oder aktivierter Wasser-Standheizung nicht eingeschaltet werden",
+  "the run time cannot be changed while continuous heating is on": "die Laufzeit kann im Dauerbetrieb nicht geändert werden",
+  "the start time cannot be changed while the timer is on (stop the timer first)":
+    "die Startzeit kann bei aktivem Timer nicht geändert werden (zuerst den Timer stoppen)",
   "⚠ Battery voltage too low — charge the second battery or connect external power": "⚠ Batteriespannung zu niedrig — Zweitbatterie laden oder externe Stromquelle anschließen",
   "⚠ Low fuel — the heater switched off, please refuel": "⚠ Kraftstoffstand niedrig — die Heizung wurde abgeschaltet, bitte tanken",
   "⚠ Auxiliary air heater fault — please contact your workshop": "⚠ Störung der Standheizung — bitte Werkstatt kontaktieren",
