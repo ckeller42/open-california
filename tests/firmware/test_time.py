@@ -55,8 +55,16 @@ def run(cli, store, *lines):
     return out.stdout.splitlines()
 
 
+def times(out):
+    """Every ``json`` line's device.time, ``up`` checked (uptime ms of this run) and dropped."""
+    objs = [json.loads(ln[5:])["time"] for ln in out if ln.startswith("JSON ")]
+    for o in objs:
+        assert isinstance(o.pop("up"), int)
+    return objs
+
+
 def time_obj(out):
-    return [json.loads(ln[5:])["time"] for ln in out if ln.startswith("JSON ")][-1]
+    return times(out)[-1]
 
 
 def test_boot_counter_counts_every_boot(time_cli, tmp_path):
@@ -83,10 +91,12 @@ def test_ts_is_null_until_the_first_sync_then_the_clock(time_cli, tmp_path):
     out = run(time_cli, tmp_path, "init", "sntp", "clock 1789639127412", "ts", "json", "synced", "ts", "json")
     assert [ln for ln in out if ln.startswith("TS ")] == ["TS none", "TS 1789639127412"]
     assert time_obj(out) == {"source": "sntp", "synced": True, "boot": 1}
-    assert [json.loads(ln[5:])["time"]["synced"] for ln in out if ln.startswith("JSON ")] == [False, True]
+    assert [o["synced"] for o in times(out)] == [False, True]
 
 
 def test_a_new_boot_starts_unsynced(time_cli, tmp_path):
+    """A clock already holding real time (it survived the reset) is not synced: only this boot's
+    SNTP callback counts, never a plausible-looking clock."""
     run(time_cli, tmp_path, "init", "sntp", "synced")
-    out = run(time_cli, tmp_path, "init", "sntp", "ts", "json")
+    out = run(time_cli, tmp_path, "init", "sntp", "clock 1789639127412", "ts", "json")
     assert "TS none" in out and time_obj(out) == {"source": "sntp", "synced": False, "boot": 2}

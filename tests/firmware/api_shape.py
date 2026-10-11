@@ -10,7 +10,7 @@ DEVICE_KEYS = frozenset(
     {"pairing", "link", "wifi", "control", "uptime_ms", "fw", "ota", "time", "water_held"}
 )  # /api/state device
 OTA_KEYS = frozenset({"state", "available_sha", "progress_pct", "error"})  # /api/state device.ota (R_FW_OTA)
-TIME_KEYS = frozenset({"source", "synced", "boot"})  # /api/state device.time (R_FW_TIME)
+TIME_KEYS = frozenset({"source", "synced", "boot", "up"})  # /api/state device.time (R_FW_TIME)
 CONTROL_KEYS = frozenset({"writes"})  # /api/state device.control: POST /api/command accepted (station mode)
 PAIRING_KEYS = frozenset({"state", "address"})  # /api/state device.pairing
 # GET/POST /api/pairing: calictl serve.pairing_snapshot()

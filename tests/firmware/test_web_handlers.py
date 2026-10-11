@@ -195,7 +195,12 @@ def test_api_state_shape(web_cli):
     assert set(body["device"]["wifi"]) == WIFI_KEYS
     assert body["device"]["ota"] == {"state": "idle", "available_sha": None, "progress_pct": 0, "error": None}
     assert set(body["device"]["ota"]) == OTA_KEYS
-    assert body["device"]["time"] == {"source": "none", "synced": False, "boot": 0}  # no cali_time_init
+    assert body["device"]["time"] == {
+        "source": "none",
+        "synced": False,
+        "boot": 0,
+        "up": 5010,
+    }  # no cali_time_init
     assert set(body["device"]["time"]) == TIME_KEYS
     assert body["device"]["control"] == {"writes": True} and set(body["device"]["control"]) == CONTROL_KEYS
     assert list(body["fn"]) == ["cooler", "roof"]  # CODEC_CHARS order, frames held only
@@ -222,7 +227,7 @@ EXPECTED_DEVICE_TAIL = (
     '"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
     '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
     '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null},'
-    '"time":{"source":"none","synced":false,"boot":0},"water_held":false}}'
+    '"time":{"source":"none","synced":false,"boot":0,"up":5010},"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
     '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'

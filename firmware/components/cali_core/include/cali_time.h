@@ -9,7 +9,9 @@
  * station is up); without one (host, QEMU, no WiFi driver) ts stays -1. No fallback clock: buspi
  * stamps such a boot from the unit RTC in its 1004 frames.
  *
- * device.time (cali_time_json): {"source":"sntp"|"none","synced":<bool>,"boot":<int>}.
+ * device.time (cali_time_json): {"source":"sntp"|"none","synced":<bool>,"boot":<int>,"up":<ms>}.
+ * synced comes only from the SNTP callback of THIS boot (RAM flag, never a "clock > 2020" check):
+ * a clock that survived a reset or was restored is not synced.
  *
  * Threads: cali_time_synced may run on any task (the SNTP callback); the rest on the owner task.
  * C99, no ESP-IDF headers. Proven by tests/firmware/test_time.py (test/time_cli.c).

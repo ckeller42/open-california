@@ -45,5 +45,7 @@ void cali_time_json(cali_json_t *j) {
     cali_json_bool(j, s_epoch && __atomic_load_n(&s_synced, __ATOMIC_ACQUIRE));
     cali_json_key(j, "boot");
     cali_json_int(j, (long long)s_boot);
+    cali_json_key(j, "up");   /* the log's `up` now: buspi anchors this boot from its own clock */
+    cali_json_int(j, (long long)cali_uptime_ms());
     cali_json_obj_end(j);
 }
