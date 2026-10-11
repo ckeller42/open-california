@@ -156,14 +156,28 @@ label.row { cursor: pointer; }
 .toast.error { border-left-color: var(--error); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
-/* Leveling spirit-level bubble (Vehicle screen) — theme-aware via the shared vars. */
-.bubble-wrap { display: flex; flex-direction: column; align-items: center; gap: .5rem; padding: .3rem 0 1rem; }
-.bubble-level { width: 148px; height: 148px; display: block; }
-.bl-ring { fill: none; stroke: var(--border); stroke-width: 2; }
-.bl-cross { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3 4; }
-.bl-bubble { fill: var(--warn); transition: cx .4s ease, cy .4s ease; }
-.bubble-level.level .bl-bubble { fill: var(--ok); }
-.bl-nums { font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Level indicator (Vehicle screen): the app's two gauges — van from the side (pitch) and from the
+   rear (roll) on a fixed scale; the ring and level mark turn green when level. Theme-aware. */
+.lg-wrap { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem 1.25rem; padding: .3rem 0 1rem; }
+.lg-gauge { display: flex; flex-direction: column; align-items: center; gap: .25rem; }
+.lg-svg { width: 150px; height: 150px; display: block; }
+.lg-ring { fill: none; stroke: var(--border); stroke-width: 5; }
+.lg-svg.ok .lg-ring { stroke: var(--ok); }
+.lg-face { fill: var(--bar); }
+.lg-tick { stroke: var(--muted); stroke-width: 1.2; }
+.lg-tick.major { stroke-width: 2.4; }
+.lg-tick.zero { stroke: var(--fg); stroke-width: 3; }
+.lg-svg.ok .lg-tick.zero { stroke: var(--ok); }
+.lg-axis { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+.lg-body, .lg-logo { fill: var(--muted); }
+.lg-roof { fill: var(--muted); opacity: .7; }
+.lg-glass { fill: var(--card); opacity: .85; }
+.lg-tyre { fill: #1d2027; stroke: var(--muted); stroke-width: 1; }   /* dark rubber in both themes */
+.lg-hub { fill: var(--muted); }
+.lg-light { fill: var(--error); }
+.lg-val { fill: var(--fg); font-size: 15px; font-weight: 600; text-anchor: middle; font-variant-numeric: tabular-nums; }
+.lg-label { font-size: .82rem; color: var(--muted); }
+.lg-hint { font-size: .82rem; color: var(--muted); padding: .1rem 0 .8rem; }
 
 /* Read-only mode banner (daemon rejects writes; the safe default). */
 .readonly { margin-bottom: .9rem; padding: .7rem 1rem; border-radius: 12px; font-size: .9rem;

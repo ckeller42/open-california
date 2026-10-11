@@ -691,10 +691,12 @@ const FEATURES = {
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
       { label: "Level indicator (roll / pitch)",
         // CarLevelPopUp 2 = driving: the app swaps the gauges for "Please slow down" (< 10 km/h).
+        // No reading (ignition off): the app's "-.-°" plus its "Signal unavailable" hint.
         get: (s) => (s.level_popup === 2 && s.ignition_on ? t("Please slow down (below 10 km/h)")
           : s.level_roll == null || s.level_pitch == null
-          ? "—" : `${fmtDeg(s.level_roll)} / ${fmtDeg(s.level_pitch)}`),
-        widget: (s) => bubbleLevel(s.level_roll, s.level_pitch) },
+          ? "-.-° / -.-°" : `${fmtLevel(s.level_roll)} / ${fmtLevel(s.level_pitch)}`),
+        widget: (s) => (s.level_popup === 2 && s.ignition_on ? null
+          : levelGauges(s.level_roll, s.level_pitch, roofIsUp())) },
       { label: "Vehicle clock", get: (s) => s.car_clock ?? "—", tick: true },
       { label: "Firmware (amb · cm · comm)",
         get: () => {
@@ -1053,36 +1055,124 @@ function sessionToggle() {
   return el;
 }
 
-/** @type {(d: number) => string} */
-const fmtDeg = (d) => (d > 0 ? "+" : "") + d + "°";
+// --- Level indicator: the app's two gauges -------------------------------------------------------
+// The vehicle app shows two round gauges: the van from the SIDE (pitch) and from the REAR (roll),
+// each tilted by its angle against a fixed scale, the angle below as an ABSOLUTE value with one
+// decimal ("1.5°"), the ring green when level (evidence-ledger "Level Indicator", REAL PHONE
+// 2026-10-11). The van outlines are our own drawing, not the app's artwork. Sign conventions:
+// +pitch = nose up (front, drawn left, goes up; verified); +roll = the right side up (assumed, as the
+// old bubble did; roll's sign is not yet confirmed on the van).
+/** Ring green within this many degrees (the app: green at 0.0°, not at 1.5°; its threshold is unknown). */
+const LEVEL_OK_DEG = 1;
+/** The drawn tilt is exaggerated so 1–2° is visible; the number below it is exact. */
+const LEVEL_TILT_GAIN = 3;
+/** The scale's ends (drawn degrees); a larger tilt pins at the end. */
+const LEVEL_SCALE_DEG = 40;
 
-// A spirit-level "bubble" for the 2-axis van leveling: a target with a bubble offset by roll (x)
-// and pitch (y). Returns null when there's no reading (ignition off) so the row just shows "—".
+/** @type {(d: number) => string} */
+const fmtLevel = (d) => Math.abs(d).toFixed(1) + "°";
+
+// The Open California logo's van (docs/assets/logo.svg), side view facing left, as filled evenodd
+// paths in half the logo's 586x471 units: VAN_BODY = everything below the roofline, VAN_TENT = the raised
+// pop-top. Derived by keeping only the logo's big shapes (no background, wordmark, tent mesh, figure or
+// small trim), coordinates halved, rounded and made relative. VAN_SHELL = the closed pop-top (our drawing, logo style).
+const VAN_BODY = "M195 195c14-1 33-1 42-1 35-1 49-2 47-4 0 0-8-1-22-2-8 0-15 0-15-1 0 0 1-1 1-2 2-3 4-5 5-9 1-9-3-18-11-22-4-2-4-2-8-2-4 0-6 0-8 2-6 2-10 6-12 12-1 2-1 4-1 7 0 5 1 8 4 12l2 3-2-1c-3 0-132-1-137 0l-4 1 2-4c3-4 4-8 4-13-1-5-3-9-6-13-12-12-32-5-34 11-2 6 0 13 4 17l2 2-2 0c-1 0-4 0-5 0-2 0-8 0-14 0-14 1-21 2-17 3 7 2 44 3 100 4 18 0 40 0 46 0 8 0 24 0 39 0zm-139-11c-2 0-6-4-6-6-2-2-2-7-1-10 1-2 4-6 7-8 3-1 8-1 11 1 5 2 7 6 7 11 0 10-8 16-18 12zm174 1c-6-2-10-7-10-13 0-8 6-12 13-12 3 0 6 0 9 3 4 3 5 8 4 13-2 6-10 11-16 9zm-164-5c6-4 5-14-2-16-4-1-8 0-10 4-3 4-1 11 4 12 2 2 6 1 8 0zm172 0c6-4 5-12-1-16-3-1-5-1-8 0-3 2-4 4-5 6 0 4 2 9 5 10 3 2 7 1 9 0zm-202-6c0-2 0-6 0-7 1-4 4-11 6-13 0 0 0 0 0 0 0-1-2-4-8-10-1-1-2-2-2-2-1 1-4 2-8 2-12 2-14 3-16 7 0 3 0 8 0 9 1 0 3 0 8 1 6 0 8 0 8-1 0-2-2-2-6-2-4 0-5-1-4-3 1-1 2-1 6-1 2 0 5 0 6 0 1 1 2 6 3 11 0 5 0 5-1 6-1 1-2 1-6 1-5 0-6-1-10-6 0-1-1-2-2-2l-2 0 0 2c2 7 10 11 26 12l2 0 0-4zm87 3 9 0 0-5 0-5-20-1c-16 0-20 0-20 0 0-1 0-1 0-2 0 0 4 0 20-1l20 0 0-11c0-13 0-13 6-17 4-3 4-3 4-4l0-1-14 0c-8 0-22 0-32 0l-18 1 0 11 0 10 2 2c4 4 6 10 8 18 0 6 0 6 14 6 6 0 16 0 21-1zm83-1c0 0 1-2 1-2 0-7 3-15 7-20 6-4 10-7 17-8 9 0 17 4 23 11l2 3 5 0c3 0 6 0 7 0l2 0 0-16 0-16-10 0c-6 0-26 0-46 0-20 1-42 1-52 2l-16 0 0 16 0 17 28 0 29 0 1 1c0 1 0 2 0 2 0 0-14 0-30 0l-28 0 0 6 0 5 30 0c22-1 30-1 30-1zm65 0c11-2 13-2 13-4 1-2 1-5 0-7-1-3-2-3-15-2-10 0-11 1-11 1 0 4 0 6 0 9 0 3 0 3 2 3 0 0 5 0 11 0zm-223-26c6-4 14-6 21-3 2 1 4 1 5 1 0 0 0 0 0-8l0-9-12 0c-7 0-14 0-16 1l-4 0-4 4-3 4 5 6c3 2 5 5 6 5 0 0 0-1 2-1zm-18-21 5-1 3-2c2-2 6-4 12-7 4-3 9-5 10-5l1-2-5-1c-4 0-6-1-7-1-2 0-15 6-21 9-3 1-6 3-8 5-2 1-5 6-5 6 1 0 3 0 5 0 2 0 6 0 10-1zm38-1 6 0 0-5 0-4-1 0c-3 0-3-1-3-3 0 0 1-2 6-7 12-12 24-21 32-25 4-2 8-2 19-2 11 0 11 0 11 3 0 3-2 19-3 27-1 4 0 4-15 5-16 0-42 1-42 2 0 0 0 2 0 5l0 4 16-1c10 0 24 0 33-1l15 0 0-25 0-25-6 0c-16 1-26 2-33 6-5 2-30 23-39 32-3 2-4 4-8 6-8 4-15 7-15 8 0 0 17 0 27 0zm135-2c17-1 39-1 49-2l18 0 0-4c0-11-2-25-5-35-1-6-2-8-3-9 0 0-27 0-59 0l-57 0 0 26 0 24 12 0c8 0 28 0 45 0zm77-2c0 0 0-3-1-6-1-16-6-36-9-40 0-1-4-2-4-2 0 0 0 2 1 3 3 6 7 33 7 42l0 3 2 0c2 0 4 1 4 1 0 0 0 0 0-1zm-128-8c-2-2-2-3-2-18 0-12 0-14 0-16 1 0 2 0 12 0 7 0 30-1 50-1 42 0 42 0 43 3 1 2 3 6 3 16 1 8 1 10 0 11-1 3 0 3-40 4-19 0-42 1-50 1-12 0-15 0-16 0zm-84-10c7-8 27-24 30-25 1-1 2-1 0-1 0 0-1 0-2-1-2 0-2 1-8 5-12 8-31 22-31 24 0 0 1 0 5 0 2 0 2 0 6-2z";
+const VAN_TENT = "M109 76c3-1 5-2 7-2 2 0 2 0 2 0 0-2-2-4-2-4-4-2-12 1-16 4-1 2-1 2 0 2 1 2 4 1 9 0zm73-4c0 0-4-7-4-8-1 0-5 0-18 0-16 0-16 0-16-2-2-2 2-11 6-16 4-4 7-6 10-6 4-2 4-2 4-2-1-1-2-3-4-6-2-4-2-4-5-4-3-2-21-8-21-8-1 0-1 2-1 4-2 16-4 27-8 38-1 5-3 9-3 10 0 0 1 0 30 0 20 0 30 0 30 0zm8 0c-1-1-4-7-8-14-8-16-10-19-10-19 1 0 4 1 7 2 7 2 14 5 17 9 6 4 8 10 6 12-1 2-2 2-7 2-5 0-6 0-6 0 0 0 1 2 2 4l2 4 13 0c8 0 14 0 14 0 0 0 0-1 0-2-2-4-2-4 2-6 5-3 5-3 2-5-6-3-8-5-8-6 0-1 2-2 2-3 2-1 2-2 2-2 0 0-10-4-23-8-12-4-25-8-28-8-3-2-6-2-6-2 0 0 3 5 17 30 6 13 6 12 8 12 2 0 2 0 2 0zm68-1c0-3 0-7 0-9 1 0 2-2 2-2 0 0-4-1-8-2l-7-2-5 2c-4 2-6 4-6 4 0 0 11 8 14 10 2 0 3 0 6 0 4 0 4 0 4-1zm10-14c0-1-2-3-4-5-1-2-3-2-38-13-10-3-25-8-33-11-20-6-31-10-35-10-2-1-9-4-16-6-14-4-16-4-19-3-2 1-2 2-1 3 1 1 6 3 38 13 8 2 17 5 20 6 4 1 13 4 21 7 37 11 42 13 53 16 6 2 11 4 12 4 0 0 1 0 2-1z";
+const VAN_SHELL = "M98 74.5L107 68Q109.5 66.5 115 66L265 64Q273 63.5 274 68.5L274.5 74.5Z";
 /**
+ * The side view: the logo's van, scaled into the gauge, its pop-top up or down as the unit reports it.
+ * @param {boolean} roofUp
+ * @returns {string}
+ */
+const vanSide = (roofUp) =>
+  `<g transform="scale(0.33) translate(-145.5 -129)"><path class="lg-logo" fill-rule="evenodd" ` +
+  `d="${VAN_BODY} ${roofUp ? VAN_TENT : VAN_SHELL}"/></g>`;
+/**
+ * The rear view (our drawing, the logo's solid style) around (0, 0) in gauge units; the raised
+ * pop-top shows as the tent above the roof shell.
+ * @param {boolean} roofUp
+ * @returns {string}
+ */
+const vanRear = (roofUp) =>
+  (roofUp ? `<path d="M-19,-29 L-14,-42 L14,-42 L19,-29 Z" class="lg-roof"/>` : "") + VAN_REAR;
+const VAN_REAR =
+  `<rect x="-20" y="-29" width="40" height="5" rx="2" class="lg-roof"/>` +
+  `<rect x="-28" y="-24" width="56" height="36" rx="7" class="lg-body"/>` +
+  `<rect x="-21" y="-19" width="42" height="13" rx="4" class="lg-glass"/>` +
+  `<rect x="-27" y="-2" width="7" height="5" rx="1.5" class="lg-light"/>` +
+  `<rect x="20" y="-2" width="7" height="5" rx="1.5" class="lg-light"/>` +
+  `<rect x="-29" y="12" width="12" height="8" rx="2.5" class="lg-tyre"/>` +
+  `<rect x="17" y="12" width="12" height="8" rx="2.5" class="lg-tyre"/>`;
+
+/**
+ * One gauge: a fixed scale (ticks every 5° from -40° to +40° on both sides, the level mark at 0°),
+ * the van and its axis markers tilted by the angle, the absolute angle below.
+ * @param {number} deg the angle in degrees (signed)
+ * @param {string} van the van outline (vanSide() / vanRear())
+ * @param {string} label "Nick" / "Roll"
+ * @returns {HTMLDivElement}
+ */
+function levelGauge(deg, van, label) {
+  const C = 80, FACE = 66;
+  const ok = Math.abs(deg) < LEVEL_OK_DEG;
+  const tilt = Math.max(-LEVEL_SCALE_DEG, Math.min(LEVEL_SCALE_DEG, deg * LEVEL_TILT_GAIN));
+  let ticks = "";
+  for (let a = -LEVEL_SCALE_DEG; a <= LEVEL_SCALE_DEG; a += 5) {
+    const cls = a === 0 ? "lg-tick zero" : a % 20 === 0 ? "lg-tick major" : "lg-tick";
+    const r1 = FACE - (a === 0 ? 14 : a % 20 === 0 ? 10 : 6), r2 = FACE - 2;
+    const rad = (a * Math.PI) / 180;
+    for (const side of [1, -1]) {   // right, left (mirrored)
+      /** @type {(r: number) => string} */
+      const x = (r) => (C + side * r * Math.cos(rad)).toFixed(1);
+      /** @type {(r: number) => string} */
+      const y = (r) => (C - r * Math.sin(rad)).toFixed(1);
+      ticks += `<line x1="${x(r1)}" y1="${y(r1)}" x2="${x(r2)}" y2="${y(r2)}" class="${cls}"/>`;
+    }
+  }
+  // SVG rotate() is clockwise; a positive angle lifts the van's left end (front / right side): -tilt.
+  const turn = `rotate(${(-tilt).toFixed(2)} ${C} ${C})`;
+  const g = document.createElement("div");
+  g.className = "lg-gauge";
+  g.innerHTML =
+    `<svg viewBox="0 0 ${2 * C} ${2 * C}" class="lg-svg${ok ? " ok" : ""}" role="img" ` +
+    `aria-label="${label} ${fmtLevel(deg)}">` +
+    `<circle cx="${C}" cy="${C}" r="76" class="lg-ring"/>` +
+    `<circle cx="${C}" cy="${C}" r="${FACE}" class="lg-face"/>` + ticks +
+    `<g transform="${turn}">` +
+    `<line x1="${C - FACE + 3}" y1="${C}" x2="${C - FACE + 18}" y2="${C}" class="lg-axis"/>` +
+    `<line x1="${C + FACE - 18}" y1="${C}" x2="${C + FACE - 3}" y2="${C}" class="lg-axis"/>` +
+    `<g transform="translate(${C} ${C - 2})">${van}</g></g>` +
+    `<text x="${C}" y="${C + 44}" class="lg-val">${fmtLevel(deg)}</text></svg>` +
+    `<div class="lg-label">${label}</div>`;
+  return g;
+}
+
+/**
+ * The level indicator widget: the pitch (side) and roll (rear) gauges, or — with no reading
+ * (ignition off) — the app's own "Signal unavailable" hint.
  * @param {number|null|undefined} roll
  * @param {number|null|undefined} pitch
- * @returns {HTMLDivElement|null}
+ * @param {boolean} roofUp the pop-top is open (or part-way); the van is drawn closed otherwise
+ * @returns {HTMLDivElement}
  */
-function bubbleLevel(roll, pitch) {
-  if (roll == null || pitch == null) return null;
-  const MAX = 6, R = 70, ring = 64, br = 13, reach = ring - br;   // ±6° maps to the outer ring
-  /** @type {(v: number) => number} */
-  const clamp = (v) => Math.max(-1, Math.min(1, v / MAX));
-  const bx = (R + clamp(roll) * reach).toFixed(1);
-  const by = (R - clamp(pitch) * reach).toFixed(1);               // +pitch (nose up) => bubble up
-  const level = Math.abs(roll) < 1 && Math.abs(pitch) < 1;
+function levelGauges(roll, pitch, roofUp) {
   const wrap = document.createElement("div");
-  wrap.className = "bubble-wrap";
-  wrap.innerHTML =
-    `<svg viewBox="0 0 ${2 * R} ${2 * R}" class="bubble-level${level ? " level" : ""}" role="img" aria-label="leveling">` +
-    `<circle cx="${R}" cy="${R}" r="${ring}" class="bl-ring"/>` +
-    `<circle cx="${R}" cy="${R}" r="42" class="bl-ring"/>` +
-    `<circle cx="${R}" cy="${R}" r="20" class="bl-ring"/>` +
-    `<line x1="${R}" y1="6" x2="${R}" y2="${2 * R - 6}" class="bl-cross"/>` +
-    `<line x1="6" y1="${R}" x2="${2 * R - 6}" y2="${R}" class="bl-cross"/>` +
-    `<circle cx="${bx}" cy="${by}" r="${br}" class="bl-bubble"/></svg>` +
-    `<div class="bl-nums">${t("roll")} ${fmtDeg(roll)} · ${t("pitch")} ${fmtDeg(pitch)}${level ? " · " + t("level ✓") : ""}</div>`;
+  if (roll == null || pitch == null) {
+    wrap.className = "lg-hint";
+    wrap.textContent = /** @type {string} */ (t("Signal unavailable. Ignition is off."));
+    return wrap;
+  }
+  wrap.className = "lg-wrap";
+  // Left to right in the row label's order, "roll / pitch".
+  wrap.appendChild(levelGauge(roll, vanRear(roofUp), cap(/** @type {string} */ (t("roll")))));
+  wrap.appendChild(levelGauge(pitch, vanSide(roofUp), cap(/** @type {string} */ (t("pitch")))));
   return wrap;
+}
+
+/** @returns {boolean} the unit reports the pop-top open or part-way (semantics.roof `position_name`) */
+function roofIsUp() {
+  const pos = STATE.roof && STATE.roof.position_name;
+  return pos === "open" || pos === "middle";
 }
 
 // --- Guided BLE pairing wizard --------------------------------------------------------------
@@ -2231,9 +2321,16 @@ function roofControls(s) {
   return card;
 }
 
+// Live values: poll the state every 2 s while the page is visible. A hidden tab stops polling, so
+// buspi's daemon sees the UI go idle and drops back from its watched cadence (5 s reads on a held
+// session) to the idle one; coming back refreshes at once instead of showing stale numbers for up
+// to a tick.
+const STATE_POLL_MS = 2000;
+
 async function main() {
   await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
   render();
-  setInterval(() => refreshState(false), 2000);
+  setInterval(() => { if (!document.hidden) refreshState(false); }, STATE_POLL_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshState(true); });
 }
 main();

@@ -301,7 +301,7 @@ window.STRINGS_DE = {
   "Level indicator (roll / pitch)": "Niveauanzeige (Roll / Nick)",
   "roll": "Roll",
   "pitch": "Nick",
-  "level ✓": "eben ✓",
+  "Signal unavailable. Ignition is off.": "Signal nicht verfügbar. Zündung ist aus.",
   "Vehicle clock": "Fahrzeuguhr",
   "Firmware (amb · cm · comm)": "Firmware (Umg. · CM · Komm)",
   "  ⚠ untested": "  ⚠ ungetestet",

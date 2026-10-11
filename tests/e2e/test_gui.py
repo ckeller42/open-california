@@ -1313,6 +1313,59 @@ def test_door_contact_row_hidden_on_grand_california(page, base_url):
     assert page.get_by_role("switch", name="Sliding door lighting").count() == 0
 
 
+def _level_state(page, roof_position):
+    """Serve the mock's state with a level reading (ignition on) and the given roof position."""
+
+    def patch(route):
+        r = route.fetch()
+        body = r.json()
+        body.setdefault("vehicle", {}).update(
+            ignition_on=True, level_roll=-1.09, level_pitch=1.46, level_popup=0
+        )
+        body.setdefault("roof", {})["position_name"] = roof_position
+        route.fulfill(response=r, json=body)
+
+    page.route("**/api/state", patch)
+
+
+def test_level_indicator_shows_the_apps_two_gauges(page, base_url):
+    """With a reading, the Vehicle view shows the app's level indicator: a roll (rear) and a pitch
+    (side, the Open California logo's van) gauge with ABSOLUTE one-decimal angles, the row reading
+    "roll / pitch". The van is drawn with the pop-top CLOSED unless the unit reports it open."""
+    _level_state(page, "closed")
+    page.goto(base_url)
+    page.locator(".tile:has(.tt:text-is('Vehicle'))").click()
+    app = page.locator("#app")
+    expect(app.get_by_text("1.1° / 1.5°", exact=True)).to_be_visible()
+    gauges = app.locator(".lg-gauge")
+    expect(gauges).to_have_count(2)
+    expect(gauges.nth(0).locator(".lg-label")).to_have_text("Roll")
+    expect(gauges.nth(1).locator(".lg-label")).to_have_text("Pitch")
+    expect(gauges.nth(1).locator("svg")).to_have_attribute("aria-label", "Pitch 1.5°")
+    expect(gauges.nth(1).locator("svg")).not_to_have_class("lg-svg ok")  # 1.5° is not level
+    side = gauges.nth(1).locator(".lg-logo").get_attribute("d")
+    assert "M98 74.5" in side  # the closed pop-top shell, not the raised tent
+
+
+def test_level_indicator_draws_the_raised_pop_top_when_the_roof_is_open(page, base_url):
+    _level_state(page, "open")
+    page.goto(base_url)
+    page.locator(".tile:has(.tt:text-is('Vehicle'))").click()
+    side = page.locator("#app .lg-gauge").nth(1).locator(".lg-logo").get_attribute("d")
+    assert "M98 74.5" not in side  # the logo's raised tent instead of the closed shell
+
+
+def test_level_indicator_without_a_reading_shows_the_apps_hint(page, base_url):
+    """Ignition off (the mock's state): the app's "-.-°" and its "Signal unavailable" hint, no
+    gauges."""
+    page.goto(base_url)
+    page.locator(".tile:has(.tt:text-is('Vehicle'))").click()
+    app = page.locator("#app")
+    expect(app.get_by_text("-.-° / -.-°", exact=True)).to_be_visible()
+    expect(app.get_by_text("Signal unavailable. Ignition is off.", exact=True)).to_be_visible()
+    expect(app.locator(".lg-gauge")).to_have_count(0)
+
+
 def test_energy_card_hides_power_sources_the_van_does_not_have(page, base_url):
     """A source the unit reports as not installed (the mock's solar, like this van) gets no row
     at all — owner 2026-10-10: "Why do you show stuff that is not available and installed in the

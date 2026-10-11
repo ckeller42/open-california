@@ -48,6 +48,10 @@ _CONFIG_PULL_S = float(os.environ.get("CALICTL_CONFIG_PULL_S", "2.0"))
 # the daemon RELEASES the session (dropping to brief cold polls) rather than hold a link nobody is
 # watching. (The unit itself serves several centrals at once; nothing is "freed" for the app.)
 _UI_IDLE_S = float(os.environ.get("CALICTL_UI_IDLE_S", "25"))
+# While someone is watching (UI active) AND the persistent session is up, poll the unit this often
+# instead of the idle `--interval` (30 s): the page polls the cache every 2 s, so the cache should
+# not lag the van by half a minute. Only on a link that is already held — never a cold connect.
+_UI_POLL_S = float(os.environ.get("CALICTL_UI_POLL_S", "5"))
 
 # When a command arrives and no session is up yet, wait up to this long for the supervisor to bring
 # one up (it's connecting due to the keep-warm nudge) and ride it — rather than racing it with a
@@ -454,6 +458,38 @@ class Server:
     def _note_ui_activity(self):
         """Mark the web UI active NOW (a browser poll or a command) — see SessionSupervisor."""
         self._sessions.note_activity()
+
+    def _poll_nap(self):
+        """Seconds the poll loop should wait before the next read.
+
+        .. req:: Poll at the UI cadence while the web UI is watched on a held session
+           :id: R_UI_POLL_CADENCE
+           :status: implemented
+           :tags: serve, freshness
+
+           The poll loop shall wait the observer's nap (``--interval``, or the engine-start burst),
+           shortened to ``CALICTL_UI_POLL_S`` (default 5 s) while the web UI is active AND the
+           persistent session is up, so the cache the page polls every 2 s does not lag the van by
+           the idle interval. With no live session the idle cadence stays (no cold connects at the
+           UI cadence).
+
+        :returns: the nap in seconds.
+        """
+        nap = self._observer.poll_interval(self.interval)
+        if self._live_session() is not None and self._sessions.ui_active():
+            nap = min(nap, _UI_POLL_S)
+        return nap
+
+    async def _nap(self):
+        """Wait until the next poll is due, re-checking :meth:`_poll_nap` every second — a browser
+        that opens the UI mid-way through a 30 s idle nap switches to the UI cadence as soon as the
+        session is up, instead of waiting the nap out."""
+        start = time.monotonic()
+        while True:
+            left = self._poll_nap() - (time.monotonic() - start)
+            if left <= 0:
+                return
+            await asyncio.sleep(min(1.0, left))
 
     async def set_session_mode(self, action):
         """Explicit Connect/Disconnect from the web UI (the connection toggle). Delegates to the
@@ -1241,8 +1277,9 @@ class Server:
                     log.exception("poll error:")
                     self._record_outcome("error", e)
                 # Fast-poll burst after an engine start is owned by the observer (poll_interval
-                # returns the short cadence while a burst window is active, else self.interval).
-                await asyncio.sleep(self._observer.poll_interval(self.interval))
+                # returns the short cadence while a burst window is active, else self.interval);
+                # a watched UI on a held session shortens it further (_poll_nap).
+                await self._nap()
 
         try:
             loop.run_until_complete(_forever())
