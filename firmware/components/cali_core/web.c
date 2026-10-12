@@ -848,10 +848,11 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     for (size_t i = 0; get && i < N_OF(PWA_ASSETS); i++) {   /* "Add to Home Screen", in every mode */
         if (strcmp(req->path, PWA_ASSETS[i].path) == 0) {
-            /* the manifest revalidates every load like the page; an icon is fresh a day (a reflash
-             * shows by tomorrow), then a cheap 304 — never immutable: its URL never changes */
+            /* the manifest + sw.js revalidate every load like the page (an OTA shows at once); an
+             * icon is fresh a day (a reflash shows by tomorrow), then a cheap 304 — never immutable:
+             * its URL never changes */
             set_static(resp, PWA_ASSETS[i].type, PWA_ASSETS[i].body, PWA_ASSETS[i].len,
-                       strcmp(PWA_ASSETS[i].path, "/manifest.webmanifest") == 0 ? NO_CACHE : "max-age=86400");
+                       strncmp(PWA_ASSETS[i].type, "image/", 6) == 0 ? "max-age=86400" : NO_CACHE);
             return 1;
         }
     }

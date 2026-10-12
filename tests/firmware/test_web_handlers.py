@@ -602,7 +602,7 @@ MODES = [("online", 1), ("setup_ap", 0), ("unprovisioned", 0), ("connecting", 0)
 def test_pwa_assets_served_in_every_mode(web_cli, state, joined, path, ctype, data):
     r, _ = one(web_cli, "GET", path, setup=["wifi " + state, "joined %d" % joined])
     assert r.status == 200 and r.headers["content-type"] == ctype
-    cc = "no-cache" if path == "/manifest.webmanifest" else "max-age=86400"
+    cc = "max-age=86400" if ctype.startswith("image/") else "no-cache"  # manifest + sw.js revalidate
     assert r.headers["cache-control"] == cc and "content-encoding" not in r.headers
     assert r.headers["etag"] == etag(data) and r.body == data
 
@@ -625,7 +625,7 @@ def cond(cli, path, inm, setup=("wifi online", "joined 1")):
     return resps[0]
 
 
-STATIC = ["/", "/app", "/device", "/manifest.webmanifest", "/favicon.ico", "/icon-192.png"]
+STATIC = ["/", "/app", "/device", "/manifest.webmanifest", "/sw.js", "/favicon.ico", "/icon-192.png"]
 
 
 @pytest.mark.parametrize("path", STATIC)
@@ -681,7 +681,20 @@ def test_served_assets_are_exactly_the_bundle_links_plus_the_manifest_icons():
 
     links = set(re.findall(r'<link\b[^>]*\bhref="([^"]+)"', gen_c_dict.render_app_bundle()))
     icons = {i["src"] for i in json.loads(PWA[0][2])["icons"]}
-    assert links | icons == {p for p, _, _ in PWA}
+    assert links | icons | {"/sw.js"} == {p for p, _, _ in PWA}
+
+
+def test_service_worker_is_served_for_the_offline_shell(web_cli):
+    """/sw.js: the calictl webui file byte-for-byte, as JavaScript, revalidated every load.
+
+    .. test:: The satellite serves the offline shell's service worker
+       :id: T_FW_SW_SERVED
+       :links: R_UI_PWA_OFFLINE
+    """
+    r, _ = one(web_cli, "GET", "/sw.js", setup=["wifi online", "joined 1"])
+    data = (ROOT / "calictl" / "webui" / "sw.js").read_bytes()
+    assert r.status == 200 and r.body == data and r.headers["content-type"] == "text/javascript"
+    assert r.headers["cache-control"] == "no-cache" and r.headers["etag"] == etag(data)
 
 
 def test_pwa_post_is_not_served(web_cli):

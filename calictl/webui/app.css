@@ -154,6 +154,7 @@ label.row { cursor: pointer; }
   animation: rise .2s ease; }
 .toast.ok { border-left-color: var(--ok); } .toast.warn { border-left-color: var(--warn); }
 .toast.error { border-left-color: var(--error); }
+.toast.update { border-left-color: var(--ok); cursor: pointer; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
 /* Level indicator (Vehicle screen): the app's two gauges — van from the side (pitch) and from the

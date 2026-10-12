@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Open California</title>
 <link rel="stylesheet" href="/app.css">
-<!-- Installable web app (Add to Home Screen). Service-worker/offline needs HTTPS, which
-     buspi's http LAN endpoint isn't — so this is the installable-fullscreen subset only. -->
+<!-- Installable web app (Add to Home Screen). The offline shell (sw.js, registered by app.js) needs
+     HTTPS: only the tailnet fronts get it; plain http on the LAN is the installable-fullscreen subset. -->
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#12395c">
 <meta name="mobile-web-app-capable" content="yes">

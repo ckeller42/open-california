@@ -7,6 +7,7 @@ window.STRINGS_DE = {
   "live": "live",
   "offline": "offline",
   "Sending…": "Wird gesendet…",
+  "New version — tap to reload": "Neue Version — zum Neuladen tippen",
 
   // --- ⋮ menu / Device-status screen ----------------------------------------------------------
   "Device status": "Gerätestatus",

@@ -117,6 +117,12 @@ home screen like an app:
   browser rule, not the satellite). The Pi's UI over Tailscale HTTPS
   (`https://buspi.<tailnet>.ts.net`) installs as a full app.
 
+**Best: install it from the HTTPS address** `https://busnet.<tailnet>.ts.net:8443/` (your phone on
+the tailnet). There it installs as a real app on Android too, opens instantly from its saved copy
+and, when the satellite is out of reach, still shows the last values behind the *Offline* banner.
+After a firmware update it offers *New version — tap to reload*. Over plain `http://` none of this
+applies (a browser rule): the UI just loads from the satellite each time.
+
 The shortcut opens `/app`, the camper UI in every WiFi mode. It is tied to the address you added it
 from: one added from `http://calictl-esp.local` does not work over the setup hotspot
 (`192.168.4.1`), and vice versa.
