@@ -73,11 +73,16 @@ class _FakePoint:
         self.fields[k] = v
         return self
 
+    def time(self, t, precision):
+        self.t = (t, precision)
+        return self
+
 
 @pytest.fixture
 def fake_influx(monkeypatch):
     mod = types.ModuleType("influxdb_client")
     mod.Point = _FakePoint
+    mod.WritePrecision = types.SimpleNamespace(MS="ms", NS="ns")
     monkeypatch.setitem(sys.modules, "influxdb_client", mod)
     return mod
 
@@ -201,6 +206,22 @@ def test_ux_points_one_per_event(fake_influx):
     assert pts[1].tags == {**base, "type": "control", "fn": "cooler", "control": "power"}
     assert pts[2].fields == {"n": 1, "sid": "3f9a1c0b7d2e4a65", "ttfb": 120, "dcl": 340, "tiles": 560}
     assert pts[3].fields == {"n": 1, "sid": "3f9a1c0b7d2e4a65", "msg": "boom @ app.js:1"}
+
+
+def test_ux_points_identical_events_of_one_beacon_stay_distinct(fake_influx):
+    """Without a timestamp the server stamped every line of a write alike, so two identical events
+    of one beacon (same series) merged into one point: each event gets receive time + its index ns.
+
+    .. test:: calictl stamps each ui_ux point of a beacon at receive time + event index ns
+       :id: T_UX_POINTS_DISTINCT_TIME
+       :links: R_UX_TELEMETRY
+    """
+    view = {"type": "view", "screen": "cooler"}
+    a, b = influx.ux_points({**_UX, "events": [view, dict(view)]}, time_ns=10**18)
+    assert (a.tags, a.fields) == (b.tags, b.fields)  # the same series
+    assert (a.t, b.t) == ((10**18, "ns"), (10**18 + 1, "ns"))
+    c, d = influx.ux_points({**_UX, "events": [view, view]})  # default: now
+    assert c.t[0] + 1 == d.t[0] and c.t[1] == "ns"
 
 
 def test_serve_backend_ux_logs_and_writes(fake_influx, caplog):
