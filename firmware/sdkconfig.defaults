@@ -96,7 +96,7 @@ CONFIG_FREERTOS_RUN_TIME_COUNTER_TYPE_U64=y
 
 # Status display (#154). CoreS3 has 8 MB quad PSRAM.
 # - PSRAM: malloc() may use it (SPIRAM_USE_MALLOC default); allocations < 16 KB stay internal
-#   (SPIRAM_MALLOC_ALWAYSINTERNAL), WiFi/NimBLE stay internal.
+#   (SPIRAM_MALLOC_ALWAYSINTERNAL), NimBLE stays internal (WiFi/lwIP/mbedTLS: the block below).
 # - LVGL uses the C heap (not its 64 KB static pool in internal .bss), so its big allocations
 #   (LV_MEM_SIZE is then unused) land in PSRAM.
 # - Draw buffers: the BSP hard-codes internal DMA memory (bsp_display_start), so keep them small:
@@ -114,3 +114,25 @@ CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_SNAPSHOT=y
 CONFIG_BSP_LCD_DRAW_BUF_HEIGHT=20
 CONFIG_BSP_LCD_DRAW_BUF_DOUBLE=n
+
+# Internal-heap budget (field 2026-10-12, fw 38339ca: device.res heap_min_kb 0 three minutes after
+# boot, heap_free 8 KB during an OTA download that failed once with "download", /api/log pages
+# dropped with RemoteDisconnected/timeouts; meanwhile psram_free 7.7 MB of 8 MB, i.e. PSRAM unused).
+# The app's own buffers are static or PSRAM; the internal-heap peaks were the network stack's,
+# which IDF keeps in internal RAM by default (diag heap_min fell 16.9 -> 7.9 -> 0.7 KB across the
+# 74 KB "/" and 254 KB /api/log responses):
+# - lwIP pbufs: plain malloc, each < SPIRAM_MALLOC_ALWAYSINTERNAL -> internal; up to
+#   LWIP_TCP_SND_BUF_DEFAULT (23 KB, above) queued per response, plus the RX window;
+# - WiFi dynamic TX buffers (DMA, internal only, up to 32 x 1.6 KB: a copy of every queued frame)
+#   and dynamic RX copies (up to 32);
+# - mbedTLS (internal by default): the 16 KB TLS in-record + 4 KB out-record + handshake (OTA).
+# SPIRAM_TRY_ALLOCATE_WIFI_LWIP puts lwIP's pbufs and the WiFi driver's heap buffers in PSRAM first
+# (TX by reference, no per-frame DMA copy) and makes the TX buffers static: 8 x 1.6 KB of DMA RAM
+# fixed at init (IDF's PSRAM "Default" rank). The option would also raise the static RX buffers and
+# the BA window to 16 (~+10 KB internal); pinned at their previous values.
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER=y
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_RX_BA_WIN=6
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y

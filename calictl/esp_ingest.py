@@ -64,8 +64,10 @@ at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_p
 from __future__ import annotations
 
 import bisect
+import http.client
 import json
 import os
+import time
 import urllib.request
 from datetime import UTC, datetime
 
@@ -101,14 +103,37 @@ COMPARE = {
 # ---- 1. the ESP ---------------------------------------------------------------------------------
 
 
-def http_fetch(url, timeout=30.0):
-    """A ``fetch(since, max) -> (records, trailer)`` over ``GET <url>/api/log``."""
+def http_fetch(url, timeout=30.0, tries=3, backoff_s=2.0, sleep=time.sleep):
+    """A ``fetch(since, max) -> (records, trailer)`` over ``GET <url>/api/log``.
+
+    A satellite on WiFi drops a page now and then (a reset connection, a timeout, a cut body), so
+    each page is tried up to ``tries`` times, ``backoff_s * attempt`` apart; the last error is raised.
+
+    :param url: the ESP's base URL.
+    :param timeout: per-request timeout, s.
+    :param tries: attempts per page (>= 1).
+    :param backoff_s: the wait before attempt n+1 is ``backoff_s * n``.
+    :param sleep: injectable for tests.
+    :returns: the ``fetch`` callable :func:`ingest` takes.
+    """
 
     def fetch(since, max_):
-        with urllib.request.urlopen(
-            "%s/api/log?since=%d&max=%d" % (url.rstrip("/"), since, max_), timeout=timeout
-        ) as r:
-            lines = [json.loads(ln) for ln in r.read().decode().splitlines() if ln.strip()]
+        for attempt in range(1, tries + 1):
+            try:
+                with urllib.request.urlopen(
+                    "%s/api/log?since=%d&max=%d" % (url.rstrip("/"), since, max_), timeout=timeout
+                ) as r:
+                    body = r.read()
+                break
+            # URLError, timeouts, RemoteDisconnected (all OSError); IncompleteRead (HTTPException)
+            except (OSError, http.client.HTTPException) as e:
+                if attempt == tries:
+                    raise
+                log.warning(
+                    "esp-ingest: page since=%d failed (%s), retry %d/%d", since, e, attempt, tries - 1
+                )
+                sleep(backoff_s * attempt)
+        lines = [json.loads(ln) for ln in body.decode().splitlines() if ln.strip()]
         if not lines or "next" not in lines[-1]:
             raise ValueError("/api/log page without its trailer")
         return lines[:-1], lines[-1]
