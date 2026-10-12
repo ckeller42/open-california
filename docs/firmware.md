@@ -1262,8 +1262,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    shell (the page at ``/`` and the same-origin files it links; the satellite's ``/app`` is the same
    bundle) stale-while-revalidate keyed on the server's ``ETag``, offers "New version — tap to
    reload" when a revalidated file changed, and never caches ``/api/*``. The page keeps the last
-   ``/api/state`` in ``localStorage`` and shows it at start, behind the offline banner with its
-   age, until the first live poll answers.
+   ``/api/state`` in ``localStorage`` and shows it at start, read-only behind the offline banner
+   with its age, until the first live poll answers.
 ```
 
 - **`R_FW_PAIRING_SM`** (C twin of the pairing state machine, `firmware/components/cali_core/pairing_sm.c`)

@@ -28,6 +28,7 @@ except Exception as _e:  # noqa: BLE001 — any launch failure (missing executab
 
 WEBUI = Path(web.__file__).resolve().parent / "webui"
 FIX = ux_gallery.esp_fixtures()["calictl"]
+FIX["/api/state"]["_meta"]["read_only"] = False  # a write-enabled daemon: its controls are live
 CACHED = "async () => (await (await caches.open('oc-shell-v1')).keys()).map((r) => new URL(r.url).pathname)"
 
 
@@ -111,7 +112,10 @@ def test_offline_reload_shows_the_last_state(daemon):
         expect(pg.locator(".offline")).to_contain_text("Offline — van asleep. Last data")
         expect(pg.get_by_text("Cooler").first).to_be_visible()
         expect(pg.locator("#status")).to_have_text("offline")
-        assert pg.evaluate("() => STATE._meta.online") is False
+        assert pg.evaluate("() => STATE._meta.online === false && readOnly()") is True
+        pg.locator(".tile", has_text="Cooler").first.click()
+        controls = "#app :is(input,select):enabled, #app [role=switch]:not([disabled])"
+        assert pg.locator(controls).count() == 0  # greyed until a live poll answers
 
 
 def test_a_changed_shell_offers_a_reload(daemon):

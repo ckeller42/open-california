@@ -2472,7 +2472,8 @@ function restoreLastState() {
     if (!saved || !saved.state || !saved.state._meta) return;
     const m = saved.state._meta;
     const seen = m.last_seen != null ? m.last_seen : saved.at / 1000 - (m.age_s || 0);
-    m.online = false;   // nothing is live until a poll says so: the offline banner + its age
+    m.online = false;   // nothing is live until a poll says so: the offline banner + its age,
+    m.read_only = true; // and controls greyed (a write could not reach the daemon anyway)
     m.last_seen = seen;
     m.age_s = Math.max(0, Math.round(Date.now() / 1000 - seen));
     STATE = saved.state;
