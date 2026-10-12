@@ -37,6 +37,7 @@
  * @property {{enabled:boolean, armed:boolean, notice:?{ts:number,msg:string}}} [auto_camper] auto-camper toggle + notice
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
+ * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
  * @property {{fw: string|null, uptime_ms: number|null, wifi: ?{mode?:string, ssid?:string|null, ip?:string|null, rssi?:number|null}, link_up: boolean, sd?: ?SatSd, res?: ?SatRes}} [sat]  satellite-only device rows (adaptSatellite passthrough) for the Device-status screen
  */
@@ -1585,7 +1586,7 @@ function render() {
   if (sp) app.appendChild(sp);
   const ob = offlineBanner();
   if (ob) app.appendChild(ob);
-  if (readOnly() && STATE._meta) {
+  if (readOnly() && STATE._meta && !STATE._meta.restored) {
     const b = document.createElement("div");
     b.className = "readonly";
     b.textContent = /** @type {string} */ (satellite() ? t("Satellite — display only")
@@ -2474,6 +2475,7 @@ function restoreLastState() {
     const seen = m.last_seen != null ? m.last_seen : saved.at / 1000 - (m.age_s || 0);
     m.online = false;   // nothing is live until a poll says so: the offline banner + its age,
     m.read_only = true; // and controls greyed (a write could not reach the daemon anyway)
+    m.restored = true;  // the offline banner explains it: no read-only banner on top
     m.last_seen = seen;
     m.age_s = Math.max(0, Math.round(Date.now() / 1000 - seen));
     STATE = saved.state;

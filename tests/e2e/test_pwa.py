@@ -113,6 +113,7 @@ def test_offline_reload_shows_the_last_state(daemon):
         expect(pg.get_by_text("Cooler").first).to_be_visible()
         expect(pg.locator("#status")).to_have_text("offline")
         assert pg.evaluate("() => STATE._meta.online === false && readOnly()") is True
+        assert pg.locator(".readonly").count() == 0  # the offline banner explains it
         pg.locator(".tile", has_text="Cooler").first.click()
         controls = "#app :is(input,select):enabled, #app [role=switch]:not([disabled])"
         assert pg.locator(controls).count() == 0  # greyed until a live poll answers
