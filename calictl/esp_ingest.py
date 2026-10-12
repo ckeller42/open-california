@@ -79,7 +79,7 @@ log = _log.get(__name__)
 
 WINDOW_MS = 90_000  # 3x buspi's 30 s poll: a buspi point this close covers an ESP record
 SLOT_MS = 30_000  # buspi's poll: a gap keeps the LAST ESP record per function and slot (Replay.thin)
-PAGE = 2000
+PAGE = 500  # records per /api/log request (~64 KB): the ESP serves one connection at a time
 FRAME_EVS = ("notify", "read", "snap")
 DEFAULT_CURSOR = os.path.expanduser("~/.cache/calictl/esp_cursor.json")
 # --verify: the side-by-side fields (ESP replay vs buspi's point)
