@@ -175,3 +175,64 @@ def test_field_series_maps_records_ascending(monkeypatch):
     monkeypatch.setitem(sys.modules, "influxdb_client", mod)
     out = influx.field_series("temp_c", "cooler", fn="last")
     assert out == [(10, 1.0), (40, 5.5)]  # None value dropped, time-sorted
+
+
+# --------------------------------------------------------------------- ui_ux (R_UX_TELEMETRY)
+
+_UX = {
+    "sid": "3f9a1c0b7d2e4a65",
+    "ua_class": "android",
+    "standalone": False,
+    "origin": "busnet",
+    "events": [
+        {"type": "view", "screen": "cooler"},
+        {"type": "control", "fn": "cooler", "control": "power"},
+        {"type": "timing", "ttfb": 120, "dcl": 340, "tiles": 560},
+        {"type": "error", "msg": "boom @ app.js:1"},
+    ],
+}
+
+
+def test_ux_points_one_per_event(fake_influx):
+    pts = influx.ux_points(_UX)
+    assert [p.measurement for p in pts] == ["ui_ux"] * 4
+    base = {"ua_class": "android", "origin": "busnet", "standalone": "false"}
+    assert pts[0].tags == {**base, "type": "view", "screen": "cooler"}
+    assert pts[1].tags == {**base, "type": "control", "fn": "cooler", "control": "power"}
+    assert pts[2].fields == {"n": 1, "sid": "3f9a1c0b7d2e4a65", "ttfb": 120, "dcl": 340, "tiles": 560}
+    assert pts[3].fields == {"n": 1, "sid": "3f9a1c0b7d2e4a65", "msg": "boom @ app.js:1"}
+
+
+def test_serve_backend_ux_logs_and_writes(fake_influx, caplog):
+    """ServeBackend.ux: one INFO journal line + the ui_ux points when Influx is configured;
+    ``_meta.ux`` follows CALICTL_UX.
+
+    .. test:: calictl journals a UX beacon and writes ui_ux points; CALICTL_UX=0 -> _meta.ux false
+       :id: T_UX_CALICTL_SINKS
+       :links: R_UX_TELEMETRY
+    """
+    import logging
+
+    from calictl import serve
+
+    writes = []
+    s = serve.Server(influx_enabled=False)
+    s._iw = SimpleNamespace(write=lambda **kw: writes.append(kw))
+    be = serve.ServeBackend(s, loop=None)
+    assert be.state()["_meta"]["ux"] is True
+    with caplog.at_level(logging.INFO, logger="calictl.serve"):
+        be.ux(_UX)
+    line = [r.getMessage() for r in caplog.records if r.getMessage().startswith("ux ")]
+    assert line == [
+        "ux sid=3f9a1c0b7d2e4a65 ua=android standalone=0 origin=busnet view:cooler control:cooler.power"
+        " timing:ttfb=120,dcl=340,tiles=560 error:'boom @ app.js:1'"
+    ]
+    assert len(writes) == 1 and len(writes[0]["record"]) == 4
+
+
+def test_meta_ux_off_with_env(monkeypatch):
+    from calictl import serve
+
+    monkeypatch.setenv("CALICTL_UX", "0")
+    be = serve.ServeBackend(serve.Server(influx_enabled=False), loop=None)
+    assert be.ux_enabled is False and be.state()["_meta"]["ux"] is False

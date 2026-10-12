@@ -244,9 +244,6 @@ def test_last_seq_is_published_once_fsynced(cli, dirs):
     ]
 
 
-# ---- GET /api/log paging core (R_FW_LOG_API) ----
-
-
 def page(cli, kv, log, since, max_=0, cap=1 << 20, boot=7):
     """One cali_sdlog_page: (records, trailer) through calictl's JSON reader."""
     out = run(cli, kv, "open %s" % log, "page %d %d %d %d" % (since, max_, cap, boot), "close")

@@ -9,6 +9,7 @@ OPT-IN like test_gui.py: skipped without Playwright + Chromium.
 """
 
 import calendar
+import contextlib
 import datetime
 import json
 import re
@@ -29,7 +30,8 @@ except Exception as _e:  # noqa: BLE001 — any launch failure (missing executab
 
 TILES = ("Cooler", "Camping mode", "Lighting", "Air heater", "Water", "Energy", "Roof", "Vehicle")
 # + the wizard endpoint (R_FW_PAIRING_WIZARD) + the home-screen manifest/icons a browser may fetch
-ALLOWED = {"/", "/api/state", "/api/pairing"} | {p for p, _, _ in gen_c_dict.pwa_assets()}
+# + the usage beacons (R_UX_TELEMETRY)
+ALLOWED = {"/", "/api/state", "/api/pairing", "/api/ux"} | {p for p, _, _ in gen_c_dict.pwa_assets()}
 ALLOWED_LIVE = ALLOWED | {"/api/command"}
 ELSEWHERE = "Only via buspi or the app"
 LIVE = "() => !!(STATE._meta && STATE._meta.satellite && STATE._meta.read_only === false)"
@@ -869,6 +871,105 @@ def test_held_water_shows_its_age(stub, error_gated_page, mode, locale, age_s, t
     with error_gated_page(stub.base, locale=locale) as pg:
         _open(pg, "Wasser" if locale == "de-DE" else "Water")
         expect(pg.locator("#app").get_by_text(text)).to_have_count(2)  # fresh + waste readouts
+
+
+# ---- usage beacons (R_UX_TELEMETRY) -------------------------------------------------------------
+
+PAGEHIDE = "dispatchEvent(new PageTransitionEvent('pagehide'))"  # the flush a closing tab triggers
+
+
+@contextlib.contextmanager
+def _page(url):
+    """A page that RECORDS (not fails on) page errors + console errors: these tests throw on purpose
+    or let a beacon 404. Yields ``(page, errors)``."""
+    with sync_api.sync_playwright() as p:
+        browser = p.chromium.launch()
+        pg = browser.new_page()
+        errors = []
+        pg.on("pageerror", lambda e: errors.append("pageerror: %s" % e))
+        pg.on("console", lambda m: errors.append("console: %s" % m.text) if m.type == "error" else None)
+        pg.goto(url)
+        try:
+            yield pg, errors
+        finally:
+            browser.close()
+
+
+def _beacons(pg, stub, n=1):
+    for _ in range(50):
+        if len(stub.ux_beacons) >= n:
+            return stub.ux_beacons
+        pg.wait_for_timeout(100)
+    raise AssertionError("no beacon reached the stub")
+
+
+def test_beacons_carry_views_controls_errors_never_values(stub):
+    """View, control (ids only: the cooler toggle's "on" never leaves the page), timing and a script
+    error, batched into one sendBeacon on pagehide, with the per-tab session fields.
+
+    .. test:: The web UI's usage beacons carry ids, timings and errors, never values
+       :id: T_UX_BEACONS
+       :links: R_UX_TELEMETRY
+    """
+    with _page(stub.base) as (pg, errors):
+        pg.wait_for_function(LIVE)
+        pg.on("dialog", lambda d: d.accept())
+        _open(pg, "Cooler")
+        pg.get_by_role("switch", name="Refrigerator box").click()
+        _wait_commands(pg, stub)
+        pg.evaluate("setTimeout(() => { throw new Error('boom ' + 'x'.repeat(300)) })")
+        pg.wait_for_timeout(200)
+        pg.evaluate(PAGEHIDE)
+        (b,) = _beacons(pg, stub)
+        pg.evaluate(PAGEHIDE)  # nothing new: no empty beacon
+        pg.wait_for_timeout(300)
+    assert len(stub.ux_beacons) == 1
+    assert [e for e in errors if "boom" not in e] == []  # only the error thrown on purpose
+    assert set(b) == {"sid", "ua_class", "standalone", "origin", "events"}
+    assert re.fullmatch(r"[0-9a-f]{16}", b["sid"]) and b["standalone"] is False
+    assert b["origin"] == "lan" and b["ua_class"] in ("mac", "other")  # 127.0.0.1, headless Chromium
+    evs = b["events"]
+    assert evs[:3] == [{"type": "view", "screen": "home"}, evs[1], {"type": "view", "screen": "cooler"}]
+    assert evs[1]["type"] == "timing" and set(evs[1]) == {"type", "ttfb", "dcl", "tiles"}
+    assert {"type": "control", "fn": "cooler", "control": "power"} in evs
+    err = [e for e in evs if e["type"] == "error"]
+    assert (
+        len(err) == 1 and err[0]["msg"].startswith("Uncaught Error: boom xxx") and len(err[0]["msg"]) == 200
+    )
+    assert "on" not in [v for e in evs for v in e.values()]  # the value never travels
+    assert set(stub.requests) <= ALLOWED_LIVE, stub.requests
+
+
+def test_no_beacons_while_switched_off(stub, error_gated_page):
+    stub.fixtures["satellite"]["/api/state"]["device"]["ux"] = {"enabled": False}
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_function("() => !!(STATE._meta && STATE._meta.satellite)")
+        _open(pg, "Cooler")
+        pg.evaluate(PAGEHIDE)
+        pg.wait_for_timeout(500)
+    assert stub.ux_beacons == [] and "/api/ux" not in stub.requests
+
+
+def test_a_firmware_without_the_endpoint_never_breaks_the_page(stub, error_gated_page):
+    """An older firmware: no device.ux (-> _meta.ux false, nothing sent); and a beacon that 404s
+    leaves the page working, without a page error."""
+    stub.fixtures["satellite"]["/api/state"]["device"].pop("ux")
+    with error_gated_page(stub.base) as pg:
+        pg.wait_for_selector(".tilegrid .tile")
+        pg.evaluate(PAGEHIDE)
+        pg.wait_for_timeout(300)
+    assert stub.ux_beacons == []
+    stub.fixtures["satellite"]["/api/state"]["device"]["ux"] = {"enabled": True}
+    stub.ux_status = 404
+    with _page(stub.base) as (pg, errors):
+        pg.wait_for_selector(".tilegrid .tile")
+        pg.evaluate(PAGEHIDE)
+        _beacons(pg, stub)
+        _open(pg, "Cooler")  # still navigates + renders after the 404
+        n = len(stub.requests)
+        pg.wait_for_timeout(2500)
+        assert stub.requests.count("/api/state") and len(stub.requests) > n  # still polling
+    assert not [e for e in errors if e.startswith("pageerror")], errors
 
 
 @pytest.mark.parametrize(

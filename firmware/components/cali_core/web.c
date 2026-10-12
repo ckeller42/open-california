@@ -63,12 +63,26 @@ static const char ERR_P_BAD_ACTION[] = "{\"error\":\"bad_action\"}";
 static const char ERR_P_CONFIRM[] = "{\"error\":\"confirm_required\"}";
 static const char ERR_P_BAD_PASSKEY[] = "{\"error\":\"bad_passkey\"}";
 static const char ERR_P_BUSY[] = "{\"error\":\"busy\"}";
+/* /api/ux errors: calictl's own bodies (web.py), no "ok" member */
+static const char ERR_UX_BAD[] = "{\"error\":\"bad_ux\"}";
+static const char ERR_UX_TOO_LARGE[] = "{\"error\":\"too_large\"}";
 
 /* See cali_web.h / cali_wifi_run.h for the mapping and why a setup-flow join reports "off". */
 static int wifi_mode(void) { return cali_wifi_mode(cali_wifi_run_state()); }
 
 #define HTML_TYPE "text/html; charset=utf-8"
 #define NO_CACHE "no-cache"   /* HTML + manifest: always revalidate (a 304 when unchanged), so an OTA shows at once */
+
+/* "Send usage data" (R_UX_TELEMETRY): NVS ux_on, default on, read once */
+static int s_ux = -1;
+static int ux_on(void) {
+    if (s_ux < 0) {
+        uint8_t b = 1;
+        size_t n = 1;
+        s_ux = cali_kv_get(CALI_UX_ON_KEY, &b, &n) == CALI_KV_OK && n == 1 ? b != 0 : 1;
+    }
+    return s_ux;
+}
 
 static void set_body(cali_http_resp_t *resp, int status, const char *type, const char *body, size_t len) {
     resp->status = status;
@@ -205,6 +219,11 @@ static void api_state(cali_http_resp_t *resp) {
     cali_ac_json(&j);
     cali_json_key(&j, "display");   /* screen state + settings (R_FW_DISPLAY_WAKE) */
     cali_display_json(&j);
+    cali_json_key(&j, "ux");   /* the web UI's usage beacons (R_UX_TELEMETRY) */
+    cali_json_obj_begin(&j);
+    cali_json_key(&j, "enabled");
+    cali_json_bool(&j, ux_on());
+    cali_json_obj_end(&j);
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
     uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */
@@ -827,6 +846,231 @@ static int api_log(const cali_http_req_t *req, cali_http_resp_t *resp) {
     return 1;
 }
 
+/* ---- POST /api/ux: the web UI's usage beacon (R_UX_TELEMETRY), calictl's web.ux_batch rules ----
+ * {"sid":<8-32 hex>,"ua_class":ios|android|mac|other,"standalone":<bool>,"origin":lan|busnet|buspi,
+ *  "events":[1..16 of {"type":view|control|timing|error, + exactly that type's keys}]} (any member
+ * order): ids [a-z0-9_.-]{1,32}, timings integers 0..600000, msg 1..200 printable ASCII. Parsed
+ * twice: a first pass validates the whole body (and fills the header), the second writes one SD
+ * record per event — a bad beacon never leaves half its events on the card. */
+#define UX_EVENTS_MAX 16
+#define UX_MSG_MAX 200
+#define UX_INT_MAX 600000L
+enum { UX_SCREEN = 1, UX_FN = 2, UX_CONTROL = 4, UX_TTFB = 8, UX_DCL = 16, UX_TILES = 32, UX_MSG = 64, UX_TYPE = 128 };
+static const char *const UX_KEYS[] = {"screen", "fn", "control", "ttfb", "dcl", "tiles", "msg", "type"};
+static const char *const UX_TYPES[] = {"view", "control", "timing", "error"};
+static const unsigned UX_NEEDS[] = {UX_SCREEN, UX_FN | UX_CONTROL, UX_TTFB | UX_DCL | UX_TILES, UX_MSG};
+static const char *const UX_UA[] = {"ios", "android", "mac", "other"};
+static const char *const UX_ORIGIN[] = {"lan", "busnet", "buspi"};
+
+typedef struct {
+    char sid[33];
+    int ua, origin, standalone;
+} ux_hdr_t;
+
+static int index_of(const char *s, const char *const *set, size_t n) {
+    for (size_t i = 0; i < n; i++)
+        if (strcmp(s, set[i]) == 0) return (int)i;
+    return -1;
+}
+
+/* a string member value that is one of set: its index, else -1 */
+static int parse_enum(cursor_t *c, const char *const *set, size_t n) {
+    char v[16];
+    size_t len;
+    if (parse_str(c, v, sizeof v, &len) != 0 || len >= sizeof v) return -1;
+    return index_of(v, set, n);
+}
+
+static int ux_chars(const char *s, size_t len, size_t max, int id) {
+    if (len < 1 || len > max) return -1;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (id ? !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.' || ch == '-')
+               : (ch < 0x20 || ch > 0x7e))
+            return -1;
+    }
+    return 0;
+}
+
+/* an unsigned JSON integer 0..UX_INT_MAX (no sign, fraction, exponent or leading zero) */
+static int parse_ux_int(cursor_t *c, long *out) {
+    long v = 0;
+    skip_ws(c);
+    if (c->p == c->end || *c->p < '0' || *c->p > '9') return -1;
+    if (*c->p == '0' && c->p + 1 < c->end && c->p[1] >= '0' && c->p[1] <= '9') return -1;
+    while (c->p < c->end && *c->p >= '0' && *c->p <= '9') {
+        v = v * 10 + (*c->p++ - '0');
+        if (v > UX_INT_MAX) return -1;
+    }
+    if (c->p < c->end && (*c->p == '.' || *c->p == 'e' || *c->p == 'E')) return -1;
+    *out = v;
+    return 0;
+}
+
+/* One event object. emit: write its SD record (h complete). 0 ok, -1 not the shape. */
+static int ux_event(cursor_t *c, const ux_hdr_t *h, int emit) {
+    char id[3][33], msg[UX_MSG_MAX + 1], key[8];
+    long num[3] = {0, 0, 0};
+    unsigned seen = 0;
+    int type = -1;
+    if (expect(c, '{') != 0) return -1;
+    for (;;) {
+        size_t klen, len;
+        int k;
+        if (parse_str(c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(c, ':') != 0) return -1;
+        k = index_of(key, UX_KEYS, N_OF(UX_KEYS));
+        if (k < 0 || (seen & (1u << k))) return -1;
+        seen |= 1u << k;
+        if (k <= 2) {   /* screen / fn / control */
+            if (parse_str(c, id[k], sizeof id[k], &len) != 0 || ux_chars(id[k], len, 32, 1) != 0) return -1;
+        } else if (k <= 5) {   /* ttfb / dcl / tiles */
+            if (parse_ux_int(c, &num[k - 3]) != 0) return -1;
+        } else if (k == 6) {
+            if (parse_str(c, msg, sizeof msg, &len) != 0 || ux_chars(msg, len, UX_MSG_MAX, 0) != 0) return -1;
+        } else if ((type = parse_enum(c, UX_TYPES, N_OF(UX_TYPES))) < 0) {
+            return -1;
+        }
+        skip_ws(c);
+        if (c->p < c->end && *c->p == ',') {
+            c->p++;
+            continue;
+        }
+        if (expect(c, '}') != 0) return -1;
+        break;
+    }
+    if (type < 0 || seen != (UX_TYPE | UX_NEEDS[type])) return -1;
+    if (emit) {
+        /* the members without braces, < CALI_SDLOG_DATA_MAX (cali_sdlog_text): an error's msg is cut
+         * (8 bytes a try) until the record fits — the SD record keeps ~150 of its 200 chars at worst */
+        char buf[CALI_SDLOG_DATA_MAX + 1];
+        size_t cut = strlen(msg);
+        int n;
+        for (;;) {
+            cali_json_t j;
+            msg[cut] = '\0';
+            cali_json_begin(&j, buf, sizeof buf);
+            cali_json_key(&j, "ev");
+            cali_json_str(&j, "ux");
+            cali_json_key(&j, "sid");
+            cali_json_str(&j, h->sid);
+            cali_json_key(&j, "ua_class");
+            cali_json_str(&j, UX_UA[h->ua]);
+            cali_json_key(&j, "standalone");
+            cali_json_bool(&j, h->standalone);
+            cali_json_key(&j, "origin");
+            cali_json_str(&j, UX_ORIGIN[h->origin]);
+            cali_json_key(&j, "type");
+            cali_json_str(&j, UX_TYPES[type]);
+            for (int k = 0; k <= 6; k++) {
+                if (!(seen & (1u << k))) continue;
+                cali_json_key(&j, UX_KEYS[k]);
+                if (k <= 2) cali_json_str(&j, id[k]);
+                else if (k <= 5) cali_json_int(&j, num[k - 3]);
+                else cali_json_str(&j, msg);
+            }
+            n = cali_json_end(&j);   /* "{…}": the body is buf+1 up to the '}' */
+            if ((n > 0 && (size_t)n - 2 < CALI_SDLOG_DATA_MAX) || cut == 0) break;
+            cut = cut > 8 ? cut - 8 : 0;
+        }
+        if (n > 2 && (size_t)n - 2 < CALI_SDLOG_DATA_MAX) {
+            buf[n - 1] = '\0';
+            (void)cali_sdlog_text(buf + 1);   /* no card / queue full: not logged (counted) */
+        }
+    }
+    return 0;
+}
+
+/* The whole beacon; emit: write each event's record. 0 ok, -1 not the shape. */
+static int ux_parse(const char *body, size_t body_len, ux_hdr_t *h, int emit) {
+    cursor_t c = {body, body + body_len};
+    unsigned seen = 0;
+    if (expect(&c, '{') != 0) return -1;
+    for (;;) {
+        char key[12];
+        size_t klen, len;
+        int k;
+        static const char *const KEYS[] = {"sid", "ua_class", "standalone", "origin", "events"};
+        if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
+        k = index_of(key, KEYS, N_OF(KEYS));
+        if (k < 0 || (seen & (1u << k))) return -1;
+        seen |= 1u << k;
+        if (k == 0) {
+            if (parse_str(&c, h->sid, sizeof h->sid, &len) != 0 || len < 8 || len > 32) return -1;
+            for (size_t i = 0; i < len; i++)
+                if (!((h->sid[i] >= '0' && h->sid[i] <= '9') || (h->sid[i] >= 'a' && h->sid[i] <= 'f'))) return -1;
+        } else if (k == 1) {
+            if ((h->ua = parse_enum(&c, UX_UA, N_OF(UX_UA))) < 0) return -1;
+        } else if (k == 2) {
+            if (parse_bool(&c, &h->standalone) != 0) return -1;
+        } else if (k == 3) {
+            if ((h->origin = parse_enum(&c, UX_ORIGIN, N_OF(UX_ORIGIN))) < 0) return -1;
+        } else {
+            int n = 0;
+            if (expect(&c, '[') != 0) return -1;
+            for (;;) {
+                if (++n > UX_EVENTS_MAX || ux_event(&c, h, emit) != 0) return -1;
+                skip_ws(&c);
+                if (c.p == c.end || *c.p != ',') break;
+                c.p++;
+            }
+            if (expect(&c, ']') != 0) return -1;
+        }
+        skip_ws(&c);
+        if (c.p < c.end && *c.p == ',') {
+            c.p++;
+            continue;
+        }
+        if (expect(&c, '}') != 0) return -1;
+        break;
+    }
+    skip_ws(&c);
+    return seen == 31u && c.p == c.end ? 0 : -1;
+}
+
+static void api_ux(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    ux_hdr_t h;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (req->body_len > CALI_UX_BODY_MAX) {   /* the core 413s most of these already */
+        SET_CONST(resp, 413, ERR_UX_TOO_LARGE);
+    } else if (!ux_on()) {
+        set_body(resp, 204, NULL, NULL, 0);   /* switched off on /device: nothing recorded */
+    } else if (ux_parse(req->body, req->body_len, &h, 0) != 0) {
+        SET_CONST(resp, 400, ERR_UX_BAD);
+    } else {
+        (void)ux_parse(req->body, req->body_len, &h, 1);
+        set_body(resp, 204, NULL, NULL, 0);
+    }
+}
+
+/* ---- POST /api/ux_setting {"enabled":<bool>}: the /device "Send usage data" switch, station only ---- */
+static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    cursor_t c = {req->body, req->body + req->body_len};
+    char key[8];
+    size_t klen;
+    int on;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 || strcmp(key, "enabled") != 0 ||
+               expect(&c, ':') != 0 || parse_bool(&c, &on) != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else {
+        uint8_t b = (uint8_t)on;
+        if (cali_kv_set(CALI_UX_ON_KEY, &b, 1) != 0) {
+            SET_CONST(resp, 500, ERR_STORE);
+            return;
+        }
+        s_ux = on;
+        cali_log("ux: usage data %s", on ? "on" : "off");
+        if (on) SET_CONST(resp, 200, "{\"ok\":true,\"ux\":true}");
+        else SET_CONST(resp, 200, "{\"ok\":true,\"ux\":false}");
+    }
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
@@ -870,6 +1114,14 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/display") == 0) {
         api_display(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/ux") == 0) {
+        api_ux(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/ux_setting") == 0) {
+        api_ux_setting(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */

@@ -97,6 +97,7 @@ Automation
    :no-members:
 .. autoclass:: calictl.web._NoResolveHTTPServer
    :no-members:
+.. autofunction:: calictl.web.ux_batch
 .. autoclass:: calictl.session.SessionSupervisor
    :members: attach, live_session, note_activity, set_mode, claim_intent, nudge, supervise, mode
 
@@ -153,6 +154,10 @@ Tests
 .. autofunction:: tests.e2e.test_esp_page.test_storage_and_resources_lines
 .. autofunction:: tests.e2e.test_esp_page.test_auto_camper_row_shows_and_switches
 .. autofunction:: tests.e2e.test_esp_page.test_screen_row_shows_state_and_switches
+.. autofunction:: tests.e2e.test_esp_page.test_usage_data_row_shows_and_switches
+.. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_errors_never_values
+.. autofunction:: tests.test_web.test_ux_beacon_recorded_any_content_type
+.. autofunction:: tests.test_influx_fields.test_serve_backend_ux_logs_and_writes
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle

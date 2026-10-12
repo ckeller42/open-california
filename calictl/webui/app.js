@@ -38,6 +38,7 @@
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
  * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
+ * @property {boolean} [ux]                 send usage beacons (POST /api/ux, R_UX_TELEMETRY); calictl: CALICTL_UX, satellite: device.ux.enabled
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
  * @property {{fw: string|null, uptime_ms: number|null, wifi: ?{mode?:string, ssid?:string|null, ip?:string|null, rssi?:number|null}, link_up: boolean, sd?: ?SatSd, res?: ?SatRes}} [sat]  satellite-only device rows (adaptSatellite passthrough) for the Device-status screen
  */
@@ -328,6 +329,48 @@ const qKey = (fn, what) => fn + "·" + what;
 // calictl ignores it (buspi keeps its clock).
 const localNow = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 1000);
 const hasWork = () => !!inflight || queue.length > 0;
+
+// --- UX telemetry (R_UX_TELEMETRY): screen views, control ids (NEVER values), load timings and
+// script errors, batched into one navigator.sendBeacon("/api/ux") per 10 s + one on pagehide, and
+// only while `_meta.ux` is true (events queued before the first `_meta` wait for it). A random
+// per-tab id held in memory only; no user identity, no values. Telemetry never breaks the page: an
+// old firmware's 404 is ignored (a beacon has no answer to read), and every step is guarded.
+const UX_FLUSH_MS = 10000, UX_MAX_EVENTS = 16, UX_MAX_BYTES = 1024;   // the ESP's request buffer is 2 KB with headers
+/** @type {Record<string, string|number>[]} */
+let uxQueue = [];
+const UX_SID = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
+const UX_UA = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+  ? "ios" : /Android/.test(navigator.userAgent) ? "android" : /Macintosh/.test(navigator.userAgent) ? "mac" : "other";
+// buspi (buspi:8088 / buspi.<tailnet>.ts.net), the van router's LAN (GL.iNet 192.168.8.x), else home
+const UX_ORIGIN = location.hostname.startsWith("buspi") ? "buspi" : location.hostname.startsWith("192.168.8.") ? "busnet" : "lan";
+const UX_STANDALONE = matchMedia("(display-mode: standalone)").matches || /** @type {any} */ (navigator).standalone === true;
+/** An id as the endpoints accept it: [a-z0-9_.-]{1,32}. @param {string} s */
+const uxId = (s) => String(s).toLowerCase().replace(/[^a-z0-9_.-]/g, "_").slice(0, 32) || "_";
+/** @param {Record<string, string|number>} ev */
+function ux(ev) {
+  uxQueue.push(ev);
+  if (uxQueue.length > UX_MAX_EVENTS) uxQueue.shift();
+}
+/** An error as one line of printable ASCII, at most 200 chars. @param {string} msg @param {string} [file] @param {number} [line] */
+function uxError(msg, file, line) {
+  const where = file ? " @ " + file.split("/").pop() + ":" + (line || 0) : "";
+  ux({ type: "error", msg: (String(msg) + where).replace(/[^ -~]/g, "?").slice(0, 200) || "?" });
+}
+function uxFlush() {
+  try {
+    if (!uxQueue.length || !STATE._meta) return;
+    if (!STATE._meta.ux) { uxQueue = []; return; }
+    const body = { sid: UX_SID, ua_class: UX_UA, standalone: UX_STANDALONE, origin: UX_ORIGIN, events: uxQueue };
+    uxQueue = [];
+    let s = JSON.stringify(body);
+    while (s.length > UX_MAX_BYTES && body.events.length > 1) { body.events.shift(); s = JSON.stringify(body); }
+    if (navigator.sendBeacon) navigator.sendBeacon("/api/ux", s);
+  } catch (e) { /* telemetry never breaks the page */ }
+}
+addEventListener("error", (e) => uxError(e.message, e.filename, e.lineno));
+addEventListener("unhandledrejection", (e) => uxError("unhandled rejection: " + (e.reason && e.reason.message || e.reason)));
+addEventListener("pagehide", uxFlush);
+setInterval(uxFlush, UX_FLUSH_MS);
 // a control has a command queued or in flight -> show a pending badge
 /**
  * @param {string} fn
@@ -955,6 +998,7 @@ async function refreshState(force) {
  */
 function command(fn, what, value) {
   if (readOnly()) { toast("Read-only mode — writes are disabled", "warn"); return; }
+  ux({ type: "control", fn: uxId(fn), control: uxId(what) });   // which control, never its value
   const key = qKey(fn, what);
   optimistic[key] = value;
   const i = queue.findIndex((c) => c.key === key);   // prune a superseded queued command
@@ -1077,6 +1121,7 @@ function act(fn, what, value) {
 /** @param {string} v */
 function goto(v) {
   view = v;
+  ux({ type: "view", screen: uxId(v) });
   lastRender = "";
   render();
   titleEl.focus();   // move focus to the new screen's heading so keyboard/SR users follow the nav
@@ -2499,6 +2544,11 @@ if (PWA) {
 async function main() {
   await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
   render();
+  const nav = /** @type {PerformanceNavigationTiming|undefined} */ (performance.getEntriesByType("navigation")[0]);
+  ux({ type: "view", screen: uxId(view) });
+  const ms = (/** @type {number} */ v) => Math.min(600000, Math.max(0, Math.round(v)));   // the endpoints' range
+  ux({ type: "timing", ttfb: ms(nav ? nav.responseStart : 0), dcl: ms(nav ? nav.domContentLoadedEventEnd : 0),
+    tiles: ms(performance.now()) });   // first render of the tiles, ms since navigation start
   setInterval(() => { if (!document.hidden) refreshState(false); }, STATE_POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshState(true); });
 }

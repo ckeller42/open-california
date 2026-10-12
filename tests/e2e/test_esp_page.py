@@ -306,6 +306,48 @@ def test_auto_camper_row_shows_and_switches(page, locale, lang):
 
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_usage_data_row_shows_and_switches(page, locale, lang):
+    """The /device "Send usage data" row (R_UX_TELEMETRY): device.ux on/off, the toggle posts
+    ``{"enabled": <the opposite>}`` to /api/ux_setting; a refusal shows the error; no toggle over
+    the setup hotspot.
+
+    .. test:: The /device page shows device.ux and switches it
+       :id: T_UX_DEVICE_PAGE
+       :links: R_UX_TELEMETRY
+    """
+    posts = []
+
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        ux = stub.fixtures["station"]["/api/state"]["device"]["ux"]
+
+        def on_post(route):
+            posts.append(json.loads(route.request.post_data))
+            ok = len(posts) == 1
+            if ok:
+                ux.update(enabled=posts[-1]["enabled"])
+            route.fulfill(
+                status=200 if ok else 500,
+                content_type="application/json",
+                body='{"ok":true,"ux":false}' if ok else '{"ok":false,"error":"store"}',
+            )
+
+        pg.route("**/api/ux_setting", on_post)
+        status, toggle = pg.locator("#ux-status"), pg.locator("#ux-toggle")
+        expect(status).to_have_text(STRINGS["ux_on"][lang])
+        expect(toggle).to_have_text(STRINGS["ac_turn_off"][lang])
+        toggle.click()
+        expect(status).to_have_text(STRINGS["ux_off"][lang])
+        expect(toggle).to_have_text(STRINGS["ac_turn_on"][lang])
+        assert posts == [{"enabled": False}]
+        toggle.click()
+        expect(pg.locator("#ux-msg")).to_have_text(STRINGS["ux_error"][lang])
+        assert posts[1] == {"enabled": True}
+    with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
+        expect(pg.locator("#ux-status")).to_have_text(STRINGS["ux_on"][lang])
+        expect(pg.locator("#ux-toggle")).to_be_hidden()
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_screen_row_shows_state_and_switches(page, locale, lang):
     """The /device Screen row (R_FW_DISPLAY_WAKE): state, brightness with its range, room light, a
     sensor fault; each switch posts its one member to ``/api/display``, the -/+ stepper the offset in

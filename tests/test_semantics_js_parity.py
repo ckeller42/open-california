@@ -159,6 +159,7 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
             "satellite": True,
             "firmware": ServeBackend._firmware_meta(py["general"]),
             "anchors": anchors.check(py),
+            "ux": False,  # an older firmware without device.ux sends no usage beacons
             # raw device rows passed through for the in-app Device-status screen
             "sat": {
                 "fw": "abc1234",
@@ -170,6 +171,12 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
             },
         },
     )
+
+
+@pytest.mark.parametrize("ux,want", [({"enabled": True}, True), ({"enabled": False}, False), (None, False)])
+def test_adapter_maps_device_ux_to_meta_ux(ux, want):
+    """``device.ux.enabled`` (the /device "Send usage data" switch) -> ``_meta.ux`` (R_UX_TELEMETRY)."""
+    assert _adapt(_body(**({"ux": ux} if ux else {})))["_meta"]["ux"] is want
 
 
 def test_adapter_wires_anchor_violations():

@@ -452,6 +452,7 @@ function adaptSatellite(body, nowMs) {
     satellite: true,
     firmware: firmwareMeta(out.general),
     anchors: anchorsCheck(out),
+    ux: !!(dev.ux && dev.ux.enabled === true),   // usage beacons (R_UX_TELEMETRY); older firmware: none
     // Raw device identity/transport rows for the in-app Device-status screen (only the
     // satellite has them; calictl's _meta carries its own session fields instead).
     sat: {
