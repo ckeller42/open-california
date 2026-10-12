@@ -44,7 +44,7 @@ def test_vehicle_leveling_is_degrees():
 
 
 def test_vehicle_clock_unavailable_when_rtc_unset():
-    # ignition off / asleep -> all-zero time fields; clock must be None, not "1900-01-00..."
+    # the unit's all-zero clock (seen for hours while parked) -> clock must be None, not "1900-01-00..."
     from calictl import semantics
 
     f = _f()

@@ -21,7 +21,7 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
 | `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); they are regenerated locally from the APK with a `vd2svg.py` converter that is itself **not in the repo** (`ui/assets/` is untracked); `build_prototype.py` falls back to neutral placeholders without them. |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
-| `firmware/` | ESP32-S3 satellite (#154, WIP; controls cooler/camping/lighting/air heater/energy — no roof; the wake-up light with the page's clock `local_now` + the unit's latched config (`R_FW_WAKEUP`), writes only in station mode, one write allow-list `R_FW_WRITE_ALLOWLIST`; bench CoreS3 + mock unit (2026-10-07); **bonded to and running against the real unit since 2026-10-08**, holds its link while parked since #279): `cali_core` (pairing SM/runner/session/console + `control` = C twin of `calictl.control` held to `tests/vectors/control.json` + `control_run` sequencer, WiFi SM/runner, HTTP core, captive DNS, web endpoints incl. `POST /api/command` and calictl's pairing wizard `GET/POST /api/pairing` (`R_FW_PAIRING_WIZARD`, also over the setup hotspot via `GET /app`) — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`page.js`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (two 3 MB OTA slots; on-request update from the `esp-latest` GitHub release, `R_FW_OTA`; NVS boot counter + SNTP/unit clock `device.time`, `R_FW_TIME`; JSONL frame log on the microSD `device.sd`, `R_FW_SD_LOG`; `device.res` heap/PSRAM/CPU — no power measurement, the AXP2101 has no current ADC; auto camper = calictl's restore-after-park as a C twin, on by default, `R_FW_AUTO_CAMPER`; the screen wakes on tap / hand near (LTR-553) / a red-amber row, dims, goes off, brightness from the room light, `device.display` + `POST /api/display`, `R_FW_DISPLAY_WAKE`); see `docs/firmware.md`, owner how-to `docs/howto-esp-wifi-setup.md` |
+| `firmware/` | ESP32-S3 satellite (#154, WIP; controls cooler/camping/lighting/air heater/energy — no roof; the wake-up light with the page's clock `local_now` + the unit's latched config (`R_FW_WAKEUP`), writes only in station mode, one write allow-list `R_FW_WRITE_ALLOWLIST`; bench CoreS3 + mock unit (2026-10-07); **bonded to and running against the real unit since 2026-10-08**, holds its link while parked since #279): `cali_core` (pairing SM/runner/session/console + `control` = C twin of `calictl.control` held to `tests/vectors/control.json` + `control_run` sequencer, WiFi SM/runner, HTTP core, captive DNS, web endpoints incl. `POST /api/command` and calictl's pairing wizard `GET/POST /api/pairing` (`R_FW_PAIRING_WIZARD`, also over the setup hotspot via `GET /app`) — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`page.js`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (two 3 MB OTA slots; on-request update from the `esp-latest` GitHub release, `R_FW_OTA`; NVS boot counter + SNTP/unit clock `device.time`, `R_FW_TIME`; JSONL frame log on the microSD `device.sd`, `R_FW_SD_LOG`; `device.res` heap/PSRAM/CPU — no power measurement, the AXP2101 has no current ADC; auto camper = calictl's restore-after-park as a C twin, on by default, `R_FW_AUTO_CAMPER`; the screen wakes on tap / hand near (LTR-553) / a red-amber row, dims, goes off, brightness from the room light, `device.display` + `POST /api/display`, `R_FW_DISPLAY_WAKE`); see `docs/firmware.md`, owner how-tos `docs/howto-esp-wifi-setup.md` + `docs/howto-esp-standalone.md` |
 
 ## Hard rules (don't break these)
 
@@ -203,9 +203,11 @@ buspi's own adapter). Warm the fast session first with `POST /api/session {"acti
   web UI shows an offline banner. See `value-freshness.md`.
 - **`vehicle` (char 1004):** ignition (terminal-15 is **bit 7**, not 0 — was a decode bug), car
   variant, unit RTC, 2-axis roll/pitch leveling. **Hand-added to `dictionary.yaml` — NOT emitted by
-  `extract_protocol`, so preserve it on regen.** Leveling/RTC read only while ignition is on: with ignition off `level_roll`/`level_pitch` are `None`
-  (the unit sends 0/0; the app shows "-.-°", #282). (`general`
-  is char 1001.)
+  `extract_protocol`, so preserve it on regen.** Leveling reads only while ignition is on: with ignition off `level_roll`/`level_pitch` are `None`
+  (the unit sends 0/0; the app shows "-.-°", #282). The unit clock (`CarTime*`) is NOT
+  ignition-gated: present with ignition on and off, 3–5 s behind NTP, but sometimes all-zero (day 0
+  → `car_clock` `None`) for hours while parked, cause unknown (buspi trace 2026-09-16…10-11,
+  `evidence-ledger.md`). (`general` is char 1001.)
 - **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar (semantics
   static-verified against the app's getters — no live check possible here). The pop-top **roof IS
   installed** (`roof.Installed=1`, #106) but its motor has never been driven by calictl.
@@ -222,6 +224,14 @@ buspi's own adapter). Warm the fast session first with `POST /api/session {"acti
   GATT server (`CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y` + `GATT_SERVER=y`, #279, guarded by
   `test_sdkconfig_gatt_server.py`) or it is "kicked" every ~30 s. "`serve` is the single BLE owner"
   is about buspi's own `hci0`, not a unit slot.
+- **ESP standalone (no buspi in the path, spec `2026-10-11-esp-standalone-design`):** OTA from the
+  `esp-latest` release **live-verified on the board 2026-10-11** (install of a newer build AND
+  `ota invalid` → rollback to the previous slot); SNTP synced on the board (`device.time` `sntp`);
+  SD log `ok` on a 32 GB card (`device.sd`). Own 5 V USB-C supply; power draw is unmeasurable from
+  the ESP (AXP2101 has no current ADC). HTTPS: the router's `tailscale serve` →
+  `https://busnet.tail0e7f29.ts.net:8443/` (tailnet-only, buspi-config #83), LAN fallback
+  `http://192.168.8.183`. buspi's gap-fill collector `esp-ingest` = #320 (merged). Owner how-to:
+  `docs/howto-esp-standalone.md`.
 - **App versions:** the owner's phone runs CaliforniaOnTour **5.4.0.3036**; decompile + mapping exist for
   5.4.0 and 5.0.8.3028 (private repo `ckeller42/californiaontour-re`, skill `decompile-app`). For this
   van (CommunicationVersion 2) 5.4.0's protocol is unchanged; 5.4.0 adds a V3 layer (chars `1603`,

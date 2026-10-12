@@ -477,6 +477,35 @@ gave the factory app **3 MB** on the 16 MB flash (66 % free); the plan's ~250 KB
 by about 2.5x. Details: `firmware/README.md` "WiFi build". Since the firmware update (`R_FW_OTA`,
 below) the app has **two 3 MB OTA slots** instead of the factory partition.
 
+## Running without buspi
+
+Since 2026-10-11 the satellite runs on its own: no USB link to {term}`buspi`, and its readings still
+reach buspi's history once buspi is back. The pieces, each detailed in its own section below:
+
+- **Power** — its own 5 V USB-C supply in the van. The satellite cannot measure its own power draw
+  (the CoreS3's AXP2101 has no current ADC, see *Device resources* below);
+  use an inline USB-C meter.
+- **Updates** — over the air from the `esp-latest` GitHub release, on request, with automatic
+  rollback ([Firmware update from GitHub](#firmware-update-from-github-r_fw_ota), #311, #318).
+  Live-verified on the board 2026-10-11: install of a newer build, and `ota invalid` → rollback.
+  `tools/esplab/flash_ci.sh` over USB stays the recovery path.
+- **Time** — SNTP once on WiFi, else the camper unit's own clock from `1004`
+  ([Time](#time-r_fw_time), #312, #315). The unit clock runs 3–5 s behind NTP with ignition on and
+  off, but is sometimes all-zero for hours while parked; records then carry `ts: null`.
+- **Log** — every unit frame on the microSD card ([SD log](#sd-log-r_fw_sd_log), #315; `ok` on a
+  32 GB card on the board).
+- **Collector** — buspi pulls the log over `GET /api/log` and writes only the minutes its own
+  polls missed (`python -m calictl esp-ingest`, `source=esp`; #320, set-up in
+  [the Pi setup](raspberry-pi-setup.md#esp-ingest-gap-fill)).
+- **Auto camper** — the restore-after-park runs on the satellite too
+  ([Auto camper mode](#auto-camper-mode-r_fw_auto_camper), #319).
+- **Access** — on the van LAN at `http://192.168.8.183` (static lease) or `http://calictl-esp.local`;
+  from anywhere on the tailnet over HTTPS at `https://busnet.tail0e7f29.ts.net:8443/` (the van
+  router's `tailscale serve`, tailnet-only, never funnel; buspi-config #83). HTTPS gives the shared
+  UI a secure context (installable app); the plain LAN address stays the fallback.
+
+Owner how-to: [How to run the satellite on its own](howto-esp-standalone.md).
+
 ## Firmware update from GitHub (`R_FW_OTA`)
 
 The satellite updates itself from the prerelease
