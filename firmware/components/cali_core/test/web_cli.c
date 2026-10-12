@@ -35,6 +35,8 @@
  *   kvfail 0|1       cali_kv_set fails
  *   kvhex <key> <hex>   store <hex> bytes under <key> (e.g. a stale auto-camper debt)
  *   acinit           cali_ac_init (the toggle + debt from the kv store, as at boot)
+ *   sdcard           the SD log's card "ok" + a queue that prints each queued text record as
+ *                    "SDTEXT <its cali_sdlog_format line>" (seq 1, boot 0) (R_UX_TELEMETRY)
  *   ctl <rc> [reason…]   what cali_ctl_submit answers (default pending): pending refused elsewhere bad
  *                    none busy notready; the rest of the line is *reason (NULL when absent)
  *   ctldone <rc> <polls> [reason…]   rc = ok failed timeout refused: the done callback of the last
@@ -60,6 +62,7 @@
 #include "cali_control.h"
 #include "cali_ota.h"
 #include "cali_platform.h"
+#include "cali_sdlog.h"
 #include "cali_runner.h"
 #include "cali_sdlog.h"
 #include "cali_session.h"
@@ -197,6 +200,15 @@ void cali_log(const char *fmt, ...) {
     vprintf(fmt, ap);
     printf("\n");
     va_end(ap);
+}
+
+/* ---- the SD log's queue (sdcard) ---- */
+static int put_rec(const cali_sdlog_rec_t *r) {
+    char line[CALI_SDLOG_LINE_MAX];
+    int n = r->ev == CALI_SDLOG_TEXT ? cali_sdlog_format(line, sizeof line, 1, 0, r) : -1;
+    if (n < 0) return 0;
+    printf("SDTEXT %.*s\n", n > 0 ? n - 1 : 0, line);   /* without its '\n' */
+    return 0;
 }
 
 /* ---- the fake WiFi runtime ---- */
@@ -339,6 +351,10 @@ int main(void) {
         else if (strcmp(w, "kvfail") == 0) s_kvfail = (int)v;
         else if (strcmp(w, "ctlbusy") == 0) s_ctl_busy = (int)v;
         else if (strcmp(w, "acinit") == 0) cali_ac_init();
+        else if (strcmp(w, "sdcard") == 0) {
+            cali_sdlog_card(CALI_SD_OK, 100, 50);
+            cali_sdlog_init(put_rec);
+        }
         else if (strcmp(w, "kvhex") == 0) {
             unsigned char b[32];
             size_t k = 0;

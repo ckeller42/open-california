@@ -166,6 +166,8 @@ class ServeBackend:
         self._s = server
         self._loop = loop
         self.read_only = read_only
+        # UX telemetry (R_UX_TELEMETRY): on unless CALICTL_UX=0; the web UI reads it as _meta.ux
+        self.ux_enabled = os.environ.get("CALICTL_UX", "1") != "0"
 
     def state(self):
         """Interpreted state for every function in the poll cache (no BLE read), plus a `_meta`
@@ -226,8 +228,29 @@ class ServeBackend:
             # Plausibility-anchor violations (empty = all decoded values in physical range). A
             # non-empty list hints at a decode drift — see calictl/firmware.py drift capture.
             "anchors": anchors.check(out),
+            # the web UI sends its usage beacons (POST /api/ux) only while this is true
+            "ux": self.ux_enabled,
         }
         return out
+
+    def ux(self, batch):
+        """One validated ``/api/ux`` beacon (``web.ux_batch``): an INFO journal line, and the
+        ``ui_ux`` points to Influx when it is configured (the web thread; a failure only logs)."""
+        log.info(
+            "ux sid=%s ua=%s standalone=%d origin=%s %s",
+            batch["sid"],
+            batch["ua_class"],
+            batch["standalone"],
+            batch["origin"],
+            " ".join(influx.ux_label(e) for e in batch["events"]),
+        )
+        iw = getattr(self._s, "_iw", None)
+        if iw is not None:
+            iw.write(
+                bucket=os.environ.get("INFLUX_BUCKET", "buspi"),
+                org=os.environ.get("INFLUX_ORG", "home"),
+                record=influx.ux_points(batch),
+            )
 
     @staticmethod
     def _firmware_meta(general):

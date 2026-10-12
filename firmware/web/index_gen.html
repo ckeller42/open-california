@@ -60,6 +60,8 @@ a{color:var(--accent)}
   <label><input id="scr-prox" type="checkbox"><span id="scr-prox-l"></span></label>
   <p><button id="scr-dn" class="secondary">−</button><span id="scr-off"></span><button id="scr-up" class="secondary">+</button></p>
 </section>
+<p id="ux"><span id="ux-status"></span> <button id="ux-toggle" class="secondary" type="button" hidden></button></p>
+<p id="ux-msg" class="bad"></p>
 <section id="fw" class="box">
   <h2 id="fw-title"></h2>
   <p id="fw-status"></p>
@@ -70,7 +72,7 @@ a{color:var(--accent)}
 </main>
 <script>
 const CFG = {pollMs: 2000, connectTimeoutMs: 8000, connectRetryMs: 3000, host: "calictl-esp", ssidMax: 32, pskMin: 8, pskMax: 63};
-const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"ac_turn_off":{"de":"Ausschalten","en":"Turn off"},"ac_turn_on":{"de":"Einschalten","en":"Turn on"},"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"app_link_pair":{"de":"Camper-Oberfläche öffnen, um die Einheit zu koppeln","en":"Open the camper UI to pair the unit"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_station_only":{"de":"Updates brauchen das Heim-WLAN.","en":"Updates need the home WiFi."},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Camper-Einrichtung","en":"Camper setup"}};
+const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"ac_turn_off":{"de":"Ausschalten","en":"Turn off"},"ac_turn_on":{"de":"Einschalten","en":"Turn on"},"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"app_link_pair":{"de":"Camper-Oberfläche öffnen, um die Einheit zu koppeln","en":"Open the camper UI to pair the unit"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_station_only":{"de":"Updates brauchen das Heim-WLAN.","en":"Updates need the home WiFi."},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Camper-Einrichtung","en":"Camper setup"},"ux_error":{"de":"Nutzungsdaten konnten nicht geändert werden","en":"Couldn't change usage data"},"ux_off":{"de":"Nutzungsdaten senden: aus","en":"Send usage data: off"},"ux_on":{"de":"Nutzungsdaten senden: an","en":"Send usage data: on"}};
 </script>
 <script>
 /* page.js — the ESP32 firmware's WiFi setup page script (#154): the provisioning form + a link to the
@@ -93,7 +95,7 @@ const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳
  * @typedef {{ heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null }} Res
  * @typedef {{ enabled: boolean, state: string }} AutoCamper
  * @typedef {{ state: string|null, lux: number|null, brightness_pct: number|null, sensor: string|null, auto: boolean, prox_wake: boolean, min: number, max: number, offset: number }} Display
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, auto_camper: AutoCamper, display: Display }} Device  the /api/state fields this page reads
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, auto_camper: AutoCamper, display: Display, ux?: { enabled: boolean } }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -246,16 +248,27 @@ function renderAutoCamper(d) {
   b.dataset.on = a.enabled ? "1" : "";
 }
 
-async function toggleAutoCamper() {
-  const b = $("ac-toggle"), msg = $("ac-msg");
+/* "Send usage data" (R_UX_TELEMETRY): the web UI's usage beacons on/off (station mode only) */
+/** @param {Device} d */
+function renderUx(d) {
+  const on = !!(d.ux && d.ux.enabled), b = $("ux-toggle");
+  $("ux-status").textContent = t(on ? "ux_on" : "ux_off");
+  b.hidden = d.wifi.mode !== "station";
+  b.textContent = t(on ? "ac_turn_off" : "ac_turn_on");
+  b.dataset.on = on ? "1" : "";
+}
+
+/** POST {"enabled": <the opposite>} to a toggle endpoint. @param {string} path @param {string} id the row's id prefix @param {string} err */
+async function toggle(path, id, err) {
+  const b = $(id + "-toggle"), msg = $(id + "-msg");
   msg.textContent = "";
   b.hidden = true;   /* the next poll shows it again */
   let ok = false;
   try {
-    ok = (/** @type {{body: PostResult}} */ (await fetchJson("/api/auto_camper", {method: "POST",
+    ok = (/** @type {{body: PostResult}} */ (await fetchJson(path, {method: "POST",
       headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: !b.dataset.on})}))).body.ok;
   } catch (e) { /* ok stays false */ }
-  if (!ok) msg.textContent = t("ac_error");
+  if (!ok) msg.textContent = t(err);
 }
 
 /* Screen (R_FW_DISPLAY_WAKE) */
@@ -400,6 +413,7 @@ async function poll() {
     renderLink(s.device);
     renderFw(s.device);
     renderAutoCamper(s.device);
+    renderUx(s.device);
     renderScreen(s.device);
     renderTime(s.device.time);
     renderSd(s.device.sd);
@@ -417,7 +431,8 @@ async function poll() {
 
 $("connect").addEventListener("click", connect);
 $("rescan").addEventListener("click", scan);
-$("ac-toggle").addEventListener("click", toggleAutoCamper);
+$("ac-toggle").addEventListener("click", () => toggle("/api/auto_camper", "ac", "ac_error"));
+$("ux-toggle").addEventListener("click", () => toggle("/api/ux_setting", "ux", "ux_error"));
 for (const [id, k] of [["scr-auto", "auto"], ["scr-prox", "prox_wake"]]) $(id).addEventListener("change", () => scrPost({[k]: input(id).checked}));
 $("scr-dn").addEventListener("click", () => scrStep(-5));
 $("scr-up").addEventListener("click", () => scrStep(5));

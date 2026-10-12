@@ -254,7 +254,7 @@ EXPECTED_DEVICE_TAIL = (
     '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
     '"auto_camper":{"enabled":true,"state":"idle"},'
     '"display":{"state":null,"lux":null,"prox":null,"brightness_pct":null,"sensor":null,"auto":true,'
-    '"prox_wake":true,"min":8,"max":100,"offset":0},"water_held":false}}'
+    '"prox_wake":true,"min":8,"max":100,"offset":0},"ux":{"enabled":true},"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
     '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
@@ -1383,6 +1383,198 @@ def test_auto_camper_reenable_clears_a_stale_debt(web_cli):
 )
 def test_auto_camper_errors(web_cli, setup, method, body, status, error):
     r, _ = one(web_cli, method, "/api/auto_camper", body, setup=setup)
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+# ---- /api/ux + /api/ux_setting (R_UX_TELEMETRY) ---------------------------------------------------
+
+UX = {
+    "sid": "3f9a1c0b7d2e4a65",
+    "ua_class": "ios",
+    "standalone": True,
+    "origin": "lan",
+    "events": [
+        {"type": "view", "screen": "cooler"},
+        {"type": "control", "fn": "cooler", "control": "power"},
+        {"type": "timing", "ttfb": 120, "dcl": 340, "tiles": 560},
+        {"type": "error", "msg": 'TypeError: "x" is undefined \\ @ app.js:123'},
+    ],
+}
+UX_STAMP = {"seq": 1, "boot": 0, "up": "<int>", "ts": None, "tsrc": None}
+UX_COMMON = {"ev": "ux", "sid": UX["sid"], "ua_class": "ios", "standalone": True, "origin": "lan"}
+
+
+def _sd(other):
+    """The SD text records the driver printed; ``up`` (the fake clock) as ``"<int>"``."""
+    recs = [json.loads(ln[7:]) for ln in other if ln.startswith("SDTEXT ")]
+    for r in recs:
+        assert isinstance(r["up"], int)
+        r["up"] = "<int>"
+    return recs
+
+
+def test_ux_beacon_writes_one_sd_record_per_event(web_cli):
+    """A valid beacon -> 204 and one ``{"ev":"ux"}`` SD record per event, its keys in canonical order;
+    switched off on /device -> 204 and nothing recorded, persisted as ``ux_on`` and in device.ux.
+
+    .. test:: ESP POST /api/ux: validated, one SD record per event, station only, off switch -> 204 no record
+       :id: T_UX_ESP_API
+       :links: R_UX_TELEMETRY
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"sdcard",
+            req("POST", "/api/ux", json.dumps(UX)),
+            req("POST", "/api/ux_setting", '{"enabled":false}'),
+            b"kv ux_on",
+            req("GET", "/api/state"),
+            req("POST", "/api/ux", json.dumps(UX)),
+            req("POST", "/api/ux", "not json"),  # off: not even validated
+            req("POST", "/api/ux_setting", '{"enabled":true}'),
+            req("GET", "/api/state"),
+        ],
+    )
+    assert [r.status for r in resps] == [204, 200, 200, 204, 204, 200, 200]
+    assert resps[0].body == b""
+    assert resps[1].json() == {"ok": True, "ux": False} and resps[5].json() == {"ok": True, "ux": True}
+    assert resps[2].json()["device"]["ux"] == {"enabled": False}
+    assert resps[6].json()["device"]["ux"] == {"enabled": True}
+    assert [ln for ln in other if ln.startswith("KV ")] == ["KV "]  # 0 (%.*s stops at the NUL)
+    recs = _sd(other)
+    assert recs == [{**UX_STAMP, **UX_COMMON, **e} for e in UX["events"]]
+    assert [list(r)[10:] for r in recs] == [
+        ["type", "screen"],
+        ["type", "fn", "control"],
+        ["type", "ttfb", "dcl", "tiles"],
+        ["type", "msg"],
+    ]
+
+
+def test_ux_long_error_is_cut_to_fit_the_sd_record(web_cli):
+    """A 200-char message full of escapes is cut (never dropped) so the record fits
+    CALI_SDLOG_DATA_MAX; the line stays valid JSON."""
+    msg = '"\\' * 100  # 200 chars, 400 escaped
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"sdcard",
+            req("POST", "/api/ux", json.dumps(_ev(type="error", msg=msg))),
+        ],
+    )
+    assert resps[0].status == 204
+    (rec,) = _sd(other)
+    assert rec["type"] == "error" and 0 < len(rec["msg"]) < 200 and msg.startswith(rec["msg"])
+
+
+def test_ux_any_member_order_and_whitespace(web_cli):
+    body = (
+        '{ "events" : [ {"screen":"home" , "type":"view"} ] , "origin":"buspi","standalone":false,'
+        '"ua_class":"other","sid":"0123456789abcdef0123456789abcdef" }'
+    )
+    resps, other = drive(web_cli, [*(s.encode() for s in STATION), b"sdcard", req("POST", "/api/ux", body)])
+    assert resps[0].status == 204
+    assert _sd(other) == [
+        {
+            **UX_STAMP,
+            "ev": "ux",
+            "sid": "0123456789abcdef0123456789abcdef",
+            "ua_class": "other",
+            "standalone": False,
+            "origin": "buspi",
+            "type": "view",
+            "screen": "home",
+        }
+    ]
+
+
+def _with(**kw):
+    return {**UX, **kw}
+
+
+def _ev(**e):
+    return _with(events=[e])
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "not json",
+        "[]",
+        "{}",
+        json.dumps(_with(sid="XYZXYZXYZ")),
+        json.dumps(_with(sid="abc")),
+        json.dumps(_with(ua_class="windows")),
+        json.dumps(_with(origin="internet")),
+        json.dumps(_with(standalone=1)),
+        json.dumps(_with(events=[])),
+        json.dumps(_with(events=[{"type": "view", "screen": "home"}] * 17)),
+        json.dumps(_with(extra=1)),
+        json.dumps({k: v for k, v in UX.items() if k != "origin"}),
+        json.dumps(UX)[:-1] + ',"sid":"abcdef12"}',  # a member twice
+        json.dumps(_ev(type="view")),
+        json.dumps(_ev(type="view", screen="home", value=3)),  # never a value
+        json.dumps(_ev(type="control", fn="cooler", control="level", value="7")),
+        json.dumps(_ev(type="view", screen="Cooler")),
+        json.dumps(_ev(type="view", screen="x" * 33)),
+        json.dumps(_ev(type="timing", ttfb=-1, dcl=0, tiles=0)),
+        json.dumps(_ev(type="timing", ttfb=True, dcl=0, tiles=0)),
+        json.dumps(_ev(type="timing", ttfb=1.5, dcl=0, tiles=0)),
+        json.dumps(_ev(type="timing", ttfb=600001, dcl=0, tiles=0)),
+        json.dumps(_ev(type="timing", ttfb=0o1, dcl=0, tiles=0)).replace('"ttfb": 1', '"ttfb": 01'),
+        json.dumps(_ev(type="error", msg="x" * 201)),
+        json.dumps(_ev(type="error", msg="line\nbreak")),
+        json.dumps(_ev(type="error", msg="")),
+        json.dumps(_ev(type="error", msg="caf\u00e9")),
+        json.dumps(_ev(type="click", id="x")),
+        json.dumps(UX) + "x",
+    ],
+)
+def test_ux_rejects_anything_but_the_shape(web_cli, body):
+    """The same rejections as calictl's web.ux_batch (tests/test_web.py), and nothing recorded —
+    not even the valid events before the bad one."""
+    resps, other = drive(web_cli, [*(s.encode() for s in STATION), b"sdcard", req("POST", "/api/ux", body)])
+    assert (resps[0].status, resps[0].json()) == (400, {"error": "bad_ux"})
+    assert _sd(other) == []
+
+
+def test_ux_half_bad_beacon_records_nothing(web_cli):
+    bad = _with(events=[{"type": "view", "screen": "home"}, {"type": "view", "screen": "BAD"}])
+    resps, other = drive(
+        web_cli, [*(s.encode() for s in STATION), b"sdcard", req("POST", "/api/ux", json.dumps(bad))]
+    )
+    assert resps[0].status == 400 and _sd(other) == []
+
+
+@pytest.mark.parametrize(
+    "setup,method,body,status,error",
+    [
+        (STATION, "GET", None, 405, {"ok": False, "error": "method"}),
+        (["wifi setup_ap"], "POST", json.dumps(UX), 403, {"ok": False, "error": "setup_mode"}),
+        (STATION, "POST", "x" * 2100, 413, None),  # the core's 2 KB request buffer
+    ],
+)
+def test_ux_errors(web_cli, setup, method, body, status, error):
+    r, other = one(web_cli, method, "/api/ux", body, setup=[*setup, "sdcard"])
+    assert r.status == status and _sd(other) == []
+    if error:
+        assert r.json() == error
+
+
+@pytest.mark.parametrize(
+    "setup,method,body,status,error",
+    [
+        (STATION, "GET", None, 405, "method"),
+        (STATION, "POST", '{"enabled":1}', 400, "bad_json"),
+        (STATION, "POST", '{"enabled":true,"x":1}', 400, "bad_json"),
+        (STATION + ["kvfail 1"], "POST", '{"enabled":false}', 500, "store"),
+        (["wifi setup_ap"], "POST", '{"enabled":false}', 403, "setup_mode"),
+    ],
+)
+def test_ux_setting_errors(web_cli, setup, method, body, status, error):
+    r, _ = one(web_cli, method, "/api/ux_setting", body, setup=setup)
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
 
 

@@ -237,6 +237,43 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
               example: { error: auto_camper_failed }
+  /api/ux:
+    post:
+      summary: Web UI usage beacon (R_UX_TELEMETRY)
+      description: |
+        `navigator.sendBeacon` from the web UI (any Content-Type — a beacon string is text/plain):
+        screen views, control ids (never their values), load timings and script errors, under a
+        random per-tab id. Logged at INFO and written to Influx measurement `ui_ux`. Sent only while
+        `_meta.ux` is true; `CALICTL_UX=0` turns it off (then 204, nothing recorded). The ESP32
+        satellite serves the same endpoint (station mode only), recording to its SD log.
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema: { $ref: "#/components/schemas/UxBatch" }
+            example:
+              sid: 3f9a1c0b7d2e4a65
+              ua_class: ios
+              standalone: true
+              origin: lan
+              events:
+                - { type: view, screen: cooler }
+                - { type: control, fn: cooler, control: power }
+      responses:
+        "204":
+          description: Recorded (or telemetry is switched off — nothing recorded).
+        "400":
+          description: Not exactly the UxBatch shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: bad_ux }
+        "413":
+          description: Body larger than 2048 bytes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: too_large }
   /api/pairing:
     get:
       summary: Guided-pairing wizard state
@@ -308,7 +345,7 @@ components:
           enum: [state_failed, not_found, unsupported_media_type, bad_request,
                  bad_json, read_only, missing_function_or_what, confirm_required, command_failed,
                  bad_action, session_failed, bad_enabled, auto_camper_failed, bad_passkey,
-                 pairing_failed, roof_view_failed]
+                 pairing_failed, roof_view_failed, bad_ux, too_large]
     State:
       type: object
       description: |
@@ -329,7 +366,7 @@ components:
     Meta:
       type: object
       description: Non-function metadata about the poll cache + session.
-      required: [last_seen, age_s, online, read_only, session, session_mode, auto_camper, firmware, anchors]
+      required: [last_seen, age_s, online, read_only, session, session_mode, auto_camper, firmware, anchors, ux]
       properties:
         last_seen:
           type: [number, "null"]
@@ -365,6 +402,30 @@ components:
           type: array
           items: { type: string }
           description: Plausibility-anchor violations (empty = all decoded values in physical range; non-empty hints at a decode drift).
+        ux:
+          type: boolean
+          description: The web UI sends its POST /api/ux usage beacons only while true (CALICTL_UX=0 turns it off).
+    UxBatch:
+      type: object
+      additionalProperties: false
+      required: [sid, ua_class, standalone, origin, events]
+      properties:
+        sid: { type: string, pattern: "^[0-9a-f]{8,32}$", description: Random per-tab id, never stored. }
+        ua_class: { type: string, enum: [ios, android, mac, other] }
+        standalone: { type: boolean, description: Installed web app (home screen) vs browser tab. }
+        origin: { type: string, enum: [lan, busnet, buspi], description: Derived from the page's host name. }
+        events:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: object
+            required: [type]
+            description: |
+              view {screen} | control {fn, control} | timing {ttfb, dcl, tiles} (ms) | error {msg}
+              (1-200 printable ASCII). Ids are [a-z0-9_.-]{1,32}; exactly these keys, no values.
+            properties:
+              type: { type: string, enum: [view, control, timing, error] }
     AutoCamperMeta:
       type: object
       required: [enabled, armed, notice]

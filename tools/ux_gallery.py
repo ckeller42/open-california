@@ -224,6 +224,7 @@ def esp_fixtures():
             "res": {"heap_free_kb": 61, "heap_min_kb": 38, "psram_free_kb": 7302, "cpu_pct": 4},
             "display": dict(DISPLAY_ON),
             "auto_camper": {"enabled": True, "state": "idle"},
+            "ux": {"enabled": True},
             "water_held": False,
         },
     }
@@ -251,6 +252,7 @@ def esp_fixtures():
                     "res": {"heap_free_kb": 74, "heap_min_kb": 52, "psram_free_kb": 7390, "cpu_pct": 2},
                     "display": dict(DISPLAY_ON),
                     "auto_camper": {"enabled": True, "state": "idle"},
+                    "ux": {"enabled": True},
                     "water_held": False,
                 },
             },
@@ -302,7 +304,9 @@ class EspStub:
     the firmware's runner would, compressed: start -> ``waiting_passkey`` (from idle/error), the
     passkey ``pairing_passkey`` -> ``bonded`` (any other -> ``error`` / ``pairing_failed``), cancel ->
     ``idle``, reset (``confirm: true``) -> ``idle`` without a bond; ``pairing_status`` other than 200
-    answers ``{"error": pairing_error}`` instead. ``GET /app`` is the UI bundle in every mode, and the
+    answers ``{"error": pairing_error}`` instead. ``POST /api/ux`` (the UI's usage beacons,
+    R_UX_TELEMETRY) appends the parsed body to ``ux_beacons`` and answers ``ux_status`` (204; 404 =
+    a firmware without the endpoint). ``GET /app`` is the UI bundle in every mode, and the
     manifest + icons (``gen_c_dict.pwa_assets``) are served in every mode too."""
 
     def __init__(self, mode="setup"):
@@ -320,6 +324,8 @@ class EspStub:
         self.polls_while_pending = 0
         self.on_command = None  # callable(body): change the fixtures as the unit would (a push)
         self.pairing_posts = []  # POST /api/pairing bodies, in order
+        self.ux_beacons = []  # POST /api/ux bodies, in order
+        self.ux_status = 204
         self.pairing_passkey = "123456"  # the code the stub "unit" shows
         self.pairing_status, self.pairing_error = 200, None  # e.g. 409, "busy"
         self.pairing_get_delay_s = 0.0  # GET /api/pairing answers this late (a stalled core)
@@ -354,6 +360,12 @@ class EspStub:
                         self._json(stub.pairing_status, {"error": stub.pairing_error})
                         return
                     self._json(200, stub._pair(body))
+                    return
+                if path == "/api/ux":
+                    stub.ux_beacons.append(body)
+                    self.send_response(stub.ux_status)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
                     return
                 if path != "/api/command":
                     self.send_error(404)

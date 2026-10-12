@@ -18,7 +18,7 @@
  * @typedef {{ heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null }} Res
  * @typedef {{ enabled: boolean, state: string }} AutoCamper
  * @typedef {{ state: string|null, lux: number|null, brightness_pct: number|null, sensor: string|null, auto: boolean, prox_wake: boolean, min: number, max: number, offset: number }} Display
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, auto_camper: AutoCamper, display: Display }} Device  the /api/state fields this page reads
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, auto_camper: AutoCamper, display: Display, ux?: { enabled: boolean } }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -171,16 +171,27 @@ function renderAutoCamper(d) {
   b.dataset.on = a.enabled ? "1" : "";
 }
 
-async function toggleAutoCamper() {
-  const b = $("ac-toggle"), msg = $("ac-msg");
+/* "Send usage data" (R_UX_TELEMETRY): the web UI's usage beacons on/off (station mode only) */
+/** @param {Device} d */
+function renderUx(d) {
+  const on = !!(d.ux && d.ux.enabled), b = $("ux-toggle");
+  $("ux-status").textContent = t(on ? "ux_on" : "ux_off");
+  b.hidden = d.wifi.mode !== "station";
+  b.textContent = t(on ? "ac_turn_off" : "ac_turn_on");
+  b.dataset.on = on ? "1" : "";
+}
+
+/** POST {"enabled": <the opposite>} to a toggle endpoint. @param {string} path @param {string} id the row's id prefix @param {string} err */
+async function toggle(path, id, err) {
+  const b = $(id + "-toggle"), msg = $(id + "-msg");
   msg.textContent = "";
   b.hidden = true;   /* the next poll shows it again */
   let ok = false;
   try {
-    ok = (/** @type {{body: PostResult}} */ (await fetchJson("/api/auto_camper", {method: "POST",
+    ok = (/** @type {{body: PostResult}} */ (await fetchJson(path, {method: "POST",
       headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: !b.dataset.on})}))).body.ok;
   } catch (e) { /* ok stays false */ }
-  if (!ok) msg.textContent = t("ac_error");
+  if (!ok) msg.textContent = t(err);
 }
 
 /* Screen (R_FW_DISPLAY_WAKE) */
@@ -325,6 +336,7 @@ async function poll() {
     renderLink(s.device);
     renderFw(s.device);
     renderAutoCamper(s.device);
+    renderUx(s.device);
     renderScreen(s.device);
     renderTime(s.device.time);
     renderSd(s.device.sd);
@@ -342,7 +354,8 @@ async function poll() {
 
 $("connect").addEventListener("click", connect);
 $("rescan").addEventListener("click", scan);
-$("ac-toggle").addEventListener("click", toggleAutoCamper);
+$("ac-toggle").addEventListener("click", () => toggle("/api/auto_camper", "ac", "ac_error"));
+$("ux-toggle").addEventListener("click", () => toggle("/api/ux_setting", "ux", "ux_error"));
 for (const [id, k] of [["scr-auto", "auto"], ["scr-prox", "prox_wake"]]) $(id).addEventListener("change", () => scrPost({[k]: input(id).checked}));
 $("scr-dn").addEventListener("click", () => scrStep(-5));
 $("scr-up").addEventListener("click", () => scrStep(5));

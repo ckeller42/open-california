@@ -32,6 +32,8 @@
  *                                             "sensor":"ok"|"absent"|"error","auto":<bool>,
  *                                             "prox_wake":<bool>,"min","max","offset"}   -- R_FW_DISPLAY_WAKE;
  *                                             the live members are null without a screen (host, QEMU)
+ *                                  "ux":{"enabled":<bool>},   -- "Send usage data" (NVS ux_on, default on;
+ *                                                                the web UI's _meta.ux, R_UX_TELEMETRY)
  *                                  "water_held":<bool>,
  *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
  *                                                                   was measured on this boot
@@ -106,6 +108,14 @@
  *                     Content-Type header is not checked (calictl answers 415 for a non-JSON one; the
  *                     core does not expose headers, the UI always sends application/json); a cancel
  *                     outside a running flow is a no-op (calictl steps its SM to idle).
+ *   POST /api/ux      the web UI's usage beacon (R_UX_TELEMETRY; calictl web.ux_batch's shape and rules):
+ *                     station mode only (403 setup_mode), body <= CALI_UX_BODY_MAX (else 413 {"error":
+ *                     "too_large"}); "Send usage data" off -> 204, nothing recorded; not exactly the
+ *                     shape -> 400 {"error":"bad_ux"}; else one SD text record per event
+ *                     {…stamp,"ev":"ux","sid","ua_class","standalone","origin","type",<the event's keys>}
+ *                     (cali_sdlog_text; no card: none) and 204. 405 for another method.
+ *   POST /api/ux_setting  {"enabled":<bool>} (exactly that object): the /device switch -> NVS ux_on,
+ *                     200 {"ok":true,"ux":<bool>}; station mode only (403), 400 bad_json, 500 store, 405.
  *   POST /api/auto_camper  {"enabled":<bool>} (exactly that object; R_FW_AUTO_CAMPER, serve's endpoint):
  *                     cali_ac_set_enabled -> 200 {"ok":true,"auto_camper":<bool>}; station mode only
  *                     (403 setup_mode), 400 bad_json, 500 store (not saved), 405 for another method.
@@ -146,6 +156,9 @@
  */
 #ifndef CALI_WEB_H
 #define CALI_WEB_H
+
+#define CALI_UX_ON_KEY "ux_on"     /* NVS (namespace cali): "Send usage data", 1 byte, absent = on */
+#define CALI_UX_BODY_MAX 2048      /* POST /api/ux body cap (calictl web.UX_MAX_BODY) */
 
 #include <stdint.h>
 

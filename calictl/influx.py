@@ -100,6 +100,45 @@ def points_for(states: dict, *, time_ms: int | None = None, tags: dict | None = 
     return pts
 
 
+def ux_label(event: dict) -> str:
+    """One UX event as a short journal token: ``view:cooler``, ``control:cooler.power``,
+    ``timing:ttfb=120,dcl=340,tiles=560``, ``error:"msg"``."""
+    k = event["type"]
+    if k == "view":
+        return "view:" + event["screen"]
+    if k == "control":
+        return "control:%s.%s" % (event["fn"], event["control"])
+    if k == "timing":
+        return "timing:ttfb=%d,dcl=%d,tiles=%d" % (event["ttfb"], event["dcl"], event["tiles"])
+    return "error:%r" % event["msg"]
+
+
+def ux_points(batch: dict) -> list:
+    """InfluxDB points (measurement ``ui_ux``) for one validated ``/api/ux`` beacon: one per event,
+    tagged ``type``/``ua_class``/``origin``/``standalone`` (+ the low-cardinality ``screen``/``fn``/
+    ``control`` ids); fields ``n=1``, the session id, timings in ms and an error's ``msg``."""
+    from influxdb_client import Point
+
+    pts = []
+    for e in batch["events"]:
+        p = (
+            Point("ui_ux")
+            .tag("type", e["type"])
+            .tag("ua_class", batch["ua_class"])
+            .tag("origin", batch["origin"])
+            .tag("standalone", str(batch["standalone"]).lower())
+            .field("n", 1)
+            .field("sid", batch["sid"])
+        )
+        for k, v in e.items():
+            if k in ("screen", "fn", "control"):
+                p.tag(k, v)
+            elif k != "type":
+                p.field(k, v)
+        pts.append(p)
+    return pts
+
+
 def build_points(states: dict[str, dict]):
     return points_for(states)
 

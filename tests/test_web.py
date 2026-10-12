@@ -349,3 +349,118 @@ def test_api_command_internal_value_error_stays_a_500():
     finally:
         srv.shutdown()
     assert status == 500 and body["error"] == "command_failed"
+
+
+# ---- POST /api/ux (R_UX_TELEMETRY) ----------------------------------------------------------------
+
+UX_BATCH = {
+    "sid": "3f9a1c0b7d2e4a65",
+    "ua_class": "ios",
+    "standalone": True,
+    "origin": "lan",
+    "events": [
+        {"type": "view", "screen": "cooler"},
+        {"type": "control", "fn": "cooler", "control": "power"},
+        {"type": "timing", "ttfb": 120, "dcl": 340, "tiles": 560},
+        {"type": "error", "msg": "TypeError: x is undefined @ app.js:123"},
+    ],
+}
+
+
+def _beacon(url, body, ctype="text/plain;charset=UTF-8"):
+    data = body if isinstance(body, bytes) else json.dumps(body).encode()
+    req = urllib.request.Request(url, data=data, method="POST", headers={"Content-Type": ctype})
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+@pytest.fixture
+def ux_server():
+    be = FakeBackend()
+    be.ux_enabled = True
+    be.beacons = []
+    be.ux = be.beacons.append
+    srv = web.serve_http(be, WEBUI, "127.0.0.1", 0)
+    yield be, "http://127.0.0.1:%d/api/ux" % srv.server_address[1]
+    srv.shutdown()
+
+
+def test_ux_beacon_recorded_any_content_type(ux_server):
+    """A sendBeacon string (text/plain) is accepted: 204, handed to the backend as validated.
+
+    .. test:: calictl POST /api/ux validates a beacon and records it; off -> 204, nothing recorded
+       :id: T_UX_CALICTL_API
+       :links: R_UX_TELEMETRY
+    """
+    be, url = ux_server
+    assert _beacon(url, UX_BATCH) == (204, b"")
+    assert _beacon(url, UX_BATCH, "application/json") == (204, b"")
+    assert be.beacons == [UX_BATCH, UX_BATCH]
+
+
+def test_ux_switched_off_records_nothing(ux_server):
+    be, url = ux_server
+    be.ux_enabled = False
+    assert _beacon(url, UX_BATCH) == (204, b"")
+    assert _beacon(url, b"not json") == (204, b"")  # off: not even validated
+    assert be.beacons == []
+
+
+def test_ux_backend_without_ux_is_off(server):
+    """A backend without the hook (older tooling) answers 204 and records nothing."""
+    _be, base = server
+    assert _beacon(base + "/api/ux", UX_BATCH) == (204, b"")
+
+
+def _with(**kw):
+    return {**UX_BATCH, **kw}
+
+
+def _ev(**e):
+    return _with(events=[e])
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"not json",
+        b"[]",
+        _with(sid="XYZ"),  # not hex
+        _with(sid="abc"),  # too short
+        _with(ua_class="windows"),
+        _with(origin="internet"),
+        _with(standalone=1),
+        _with(events=[]),
+        _with(events=[{"type": "view", "screen": "home"}] * 17),
+        _with(extra=1),
+        {k: v for k, v in UX_BATCH.items() if k != "origin"},
+        _ev(type="view"),  # missing screen
+        _ev(type="view", screen="home", value=3),  # never a value
+        _ev(type="control", fn="cooler", control="level", value="7"),
+        _ev(type="view", screen="Cooler"),  # ids are lower-case
+        _ev(type="view", screen="x" * 33),
+        _ev(type="timing", ttfb=-1, dcl=0, tiles=0),
+        _ev(type="timing", ttfb=True, dcl=0, tiles=0),
+        _ev(type="timing", ttfb=1.5, dcl=0, tiles=0),
+        _ev(type="error", msg="x" * 201),
+        _ev(type="error", msg="line\nbreak"),
+        _ev(type="error", msg=""),
+        _ev(type="click", id="x"),
+    ],
+)
+def test_ux_rejects_anything_but_the_shape(ux_server, body):
+    be, url = ux_server
+    assert _beacon(url, body) == (400, {"error": "bad_ux"})
+    assert be.beacons == []
+
+
+def test_ux_body_over_2kb_is_413(ux_server):
+    be, url = ux_server
+    big = _ev(type="error", msg="x" * 200)
+    big["sid"] = "a" * 32
+    raw = json.dumps(big).encode() + b" " * 2048
+    assert _beacon(url, raw) == (413, {"error": "too_large"})
+    assert be.beacons == []

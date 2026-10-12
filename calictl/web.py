@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import posixpath
+import re
 import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
@@ -41,6 +42,11 @@ class _NoResolveHTTPServer(ThreadingHTTPServer):
        comes up.
     """
 
+    # socketserver's default listen backlog is 5: a page load (HTML + scripts + icons + the first
+    # /api/state) plus the previous page's pagehide usage beacon can overflow it, and a refused
+    # connection fails a script load. 64 is free.
+    request_queue_size = 64
+
     def server_bind(self):
         socketserver.TCPServer.server_bind(self)  # bind the socket; skip the getfqdn() reverse lookup
         host, port = self.server_address[:2]
@@ -64,6 +70,76 @@ _CONTENT_TYPES = {
     ".webmanifest": "application/manifest+json",
     ".ico": "image/x-icon",
 }
+
+
+# ---- UX telemetry (POST /api/ux, R_UX_TELEMETRY) -----------------------------------------------
+UX_MAX_BODY = 2048  # the satellite's whole request buffer is 2 KB (NET_HTTP_REQ_MAX); same cap here
+UX_MAX_EVENTS = 16
+UX_MSG_MAX = 200
+UX_ENUMS = {"ua_class": ("ios", "android", "mac", "other"), "origin": ("lan", "busnet", "buspi")}
+# every key an event of that type carries (all required, nothing else): ids / non-negative ints / msg
+UX_EVENTS = {
+    "view": ("screen",),
+    "control": ("fn", "control"),
+    "timing": ("ttfb", "dcl", "tiles"),
+    "error": ("msg",),
+}
+_UX_ID = re.compile(r"[a-z0-9_.-]{1,32}\Z")
+_UX_SID = re.compile(r"[0-9a-f]{8,32}\Z")
+_UX_MSG = re.compile(r"[ -~]{1,%d}\Z" % UX_MSG_MAX)  # printable ASCII: the page sanitizes first
+_UX_INT_MAX = 600000  # ms: a timing beyond 10 min is no page load
+
+
+def _ux_value(key, v):
+    if key == "msg":
+        return isinstance(v, str) and bool(_UX_MSG.match(v))
+    if key in ("ttfb", "dcl", "tiles"):
+        return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= _UX_INT_MAX
+    return isinstance(v, str) and bool(_UX_ID.match(v))
+
+
+def ux_batch(obj):
+    """Validate one ``POST /api/ux`` beacon from the web UI; ``None`` when it is not exactly the shape.
+
+    ``{"sid": <8-32 hex>, "ua_class": ios|android|mac|other, "standalone": <bool>,
+    "origin": lan|busnet|buspi, "events": [<1-16 events>]}``, each event ``{"type": …}`` plus exactly
+    its :data:`UX_EVENTS` keys: ids ``[a-z0-9_.-]{1,32}``, timings ints 0..600000 ms, ``msg`` 1-200
+    printable ASCII chars. No values, no free text beyond an error message. The firmware's
+    ``web.c`` ``api_ux`` holds the same rules (``tests/firmware/test_web_handlers.py``).
+
+    .. req:: UX telemetry: the web UI's usage beacons, no values, with an off switch
+       :id: R_UX_TELEMETRY
+       :status: implemented
+       :tags: web, firmware, telemetry
+
+       The web UI shall batch usage events (screen views, control ids — never their values —
+       load timings, script errors truncated to 200 chars) with a random per-tab id into at most
+       one ``navigator.sendBeacon('/api/ux')`` per 10 s plus one on ``pagehide``, and only while
+       ``_meta.ux`` is true; a missing endpoint shall never break the page. calictl shall validate
+       a beacon (``ux_batch``), log it at INFO and write measurement ``ui_ux`` to Influx; the ESP32
+       satellite shall accept it in station mode only (body <= 2 KB), write one ``{"ev":"ux"}`` SD
+       record per event, and answer 204 without a record while its ``ux_on`` setting (``/device``
+       "Send usage data") is off. No client IPs, no user identity are recorded.
+
+    :param obj: the decoded JSON body.
+    :returns: the batch (the same dict) or ``None``.
+    """
+    if not isinstance(obj, dict) or set(obj) != {"sid", "ua_class", "standalone", "origin", "events"}:
+        return None
+    if not (isinstance(obj["sid"], str) and _UX_SID.match(obj["sid"])) or not isinstance(
+        obj["standalone"], bool
+    ):
+        return None
+    if any(obj[k] not in allowed for k, allowed in UX_ENUMS.items()):
+        return None
+    evs = obj["events"]
+    if not isinstance(evs, list) or not 1 <= len(evs) <= UX_MAX_EVENTS:
+        return None
+    for e in evs:
+        keys = UX_EVENTS.get(str(e.get("type"))) if isinstance(e, dict) else None
+        if keys is None or set(e) != {"type", *keys} or not all(_ux_value(k, e[k]) for k in keys):
+            return None
+    return obj
 
 
 def make_handler(backend, webui_dir):
@@ -132,10 +208,45 @@ def make_handler(backend, webui_dir):
             etag = '"%s"' % hashlib.sha256(body).hexdigest()[:16]  # strong: changes with the bytes
             self._send_bytes(body, _CONTENT_TYPES.get(ext, "application/octet-stream"), etag=etag)
 
+        def _ux(self):
+            """``POST /api/ux`` (R_UX_TELEMETRY): any Content-Type (``sendBeacon`` sends text/plain),
+            204 on success and while switched off (``CALICTL_UX=0``: nothing recorded)."""
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = -1
+            if length < 0:
+                return self._send_json({"error": "bad_request"}, 400)
+            if length > UX_MAX_BODY:
+                return self._send_json({"error": "too_large"}, 413)
+            raw = self.rfile.read(length)
+            if not getattr(backend, "ux_enabled", False):
+                return self._send_bytes(b"", "text/plain", 204)
+            try:
+                batch = ux_batch(json.loads(raw))
+            except ValueError:
+                batch = None
+            if batch is None:
+                return self._send_json({"error": "bad_ux"}, 400)
+            try:
+                backend.ux(batch)
+            except Exception as e:  # telemetry must never fail the page
+                log.warning("web: ux failed: %r" % (e,))
+            return self._send_bytes(b"", "text/plain", 204)
+
         def do_POST(self):
             path = self.path.split("?", 1)[0]
-            if path not in ("/api/command", "/api/session", "/api/roof", "/api/auto_camper", "/api/pairing"):
+            if path not in (
+                "/api/command",
+                "/api/session",
+                "/api/roof",
+                "/api/auto_camper",
+                "/api/pairing",
+                "/api/ux",
+            ):
                 return self._send_json({"error": "not_found"}, 404)
+            if path == "/api/ux":  # before the Content-Type check: sendBeacon posts text/plain
+                return self._ux()
             ctype = self.headers.get("Content-Type", "")
             if ctype.split(";", 1)[0].strip().lower() != "application/json":
                 return self._send_json({"error": "unsupported_media_type"}, 415)
