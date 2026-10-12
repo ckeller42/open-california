@@ -940,6 +940,21 @@ def test_beacons_carry_views_controls_errors_never_values(stub):
     assert set(stub.requests) <= ALLOWED_LIVE, stub.requests
 
 
+@pytest.mark.parametrize(
+    "host,origin",
+    [
+        ("busnet.example.ts.net", "busnet"),  # the van router's tailnet HTTPS proxy
+        ("buspi", "buspi"),
+        ("buspi.example.ts.net", "buspi"),
+        ("192.168.8.183", "lan"),  # the van LAN is a LAN
+        ("calictl-esp.local", "lan"),
+        ("127.0.0.1", "lan"),
+    ],
+)
+def test_beacon_origin_from_the_host_name(sat, host, origin):
+    assert sat.evaluate("uxOrigin(%r)" % host) == origin
+
+
 def test_no_beacons_while_switched_off(stub, error_gated_page):
     stub.fixtures["satellite"]["/api/state"]["device"]["ux"] = {"enabled": False}
     with error_gated_page(stub.base) as pg:

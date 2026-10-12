@@ -802,8 +802,8 @@ whichever runtime served the page.
   to its name, printable ASCII, cut at 200 chars). Each beacon:
   `{"sid":"3f9a1c0b7d2e4a65","ua_class":"ios","standalone":true,"origin":"lan","events":[{"type":"view","screen":"cooler"},{"type":"control","fn":"cooler","control":"power"}]}`
   — `sid` a random per-tab id (memory only), `ua_class` `ios|android|mac|other`, `standalone` (home
-  screen app vs browser), `origin` from the page's host name (`buspi…` -> `buspi`, the van router's
-  `192.168.8.x` -> `busnet`, else `lan`). At most 16 events and 1 KB per beacon (oldest dropped),
+  screen app vs browser), `origin` from the page's host name (`busnet…` -> `busnet`, the van router's
+  tailnet HTTPS proxy; `buspi…` -> `buspi`; else `lan`, the van LAN's `192.168.8.x` included). At most 16 events and 1 KB per beacon (oldest dropped),
   since the satellite's whole request, headers included, must fit 2 KB.
 - **Only while `_meta.ux` is true** — events before the first `/api/state` wait for it; when it is
   false they are dropped. An old firmware without `device.ux` reads as false (nothing sent), and a

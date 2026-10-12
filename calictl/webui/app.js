@@ -341,8 +341,11 @@ let uxQueue = [];
 const UX_SID = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
 const UX_UA = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
   ? "ios" : /Android/.test(navigator.userAgent) ? "android" : /Macintosh/.test(navigator.userAgent) ? "mac" : "other";
-// buspi (buspi:8088 / buspi.<tailnet>.ts.net), the van router's LAN (GL.iNet 192.168.8.x), else home
-const UX_ORIGIN = location.hostname.startsWith("buspi") ? "buspi" : location.hostname.startsWith("192.168.8.") ? "busnet" : "lan";
+// busnet.<tailnet> (the van router's tailnet HTTPS proxy to the ESP), buspi (buspi:8088 /
+// buspi.<tailnet>), else "lan" (the home or van LAN, 192.168.8.x included). Prefix match only.
+/** @param {string} host */
+const uxOrigin = (host) => host.startsWith("busnet") ? "busnet" : host.startsWith("buspi") ? "buspi" : "lan";
+const UX_ORIGIN = uxOrigin(location.hostname);
 const UX_STANDALONE = matchMedia("(display-mode: standalone)").matches || /** @type {any} */ (navigator).standalone === true;
 /** An id as the endpoints accept it: [a-z0-9_.-]{1,32}. @param {string} s */
 const uxId = (s) => String(s).toLowerCase().replace(/[^a-z0-9_.-]/g, "_").slice(0, 32) || "_";
