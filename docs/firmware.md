@@ -826,7 +826,11 @@ whichever runtime served the page.
   message, no client IPs (neither runtime records the peer address; the SD record and the Influx
   point have no address field), no user identity (the per-tab id is random, never stored, and
   differs per tab and load), and an off switch on each runtime (`/device` "Send usage data",
-  `CALICTL_UX=0`). Ingest of the SD `ux` records into Influx and the Grafana row: delivery item 3.
+  `CALICTL_UX=0`).
+- **Influx + Grafana** — buspi's `calictl esp-ingest` writes each SD `ux` record as the `ui_ux` point
+  calictl writes for its own beacons (same tags and field types), tagged `source=esp` (calictl's own
+  have no `source`; `R_ESP_INGEST_DIAG`). The dashboard's **🧭 UI usage** row reads both: views per
+  screen, controls used, page-load p50/p95, script errors.
 
 The `/device` page budget `NET_HTTP_BODY_MAX` grew 24 -> 28 KB for the usage-data row (flash only).
 

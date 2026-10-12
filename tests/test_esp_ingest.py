@@ -43,7 +43,7 @@ class _Point:
 def fake_influx(monkeypatch):
     mod = types.ModuleType("influxdb_client")
     mod.Point = _Point
-    mod.WritePrecision = types.SimpleNamespace(MS="ms")
+    mod.WritePrecision = types.SimpleNamespace(MS="ms", NS="ns")
     monkeypatch.setitem(sys.modules, "influxdb_client", mod)
 
 
@@ -178,11 +178,12 @@ def test_ingest_writes_only_the_gaps_tagged_esp_at_the_record_time(tmp_path, fra
     ]
     db = DB({"cooler": [T0 + 30_000, T0 + 490_000]})
     s = esp_ingest.ingest(pager(records, boot=1), db, str(tmp_path / "c.json"))
-    no_diag = dict.fromkeys(("esp_diag", "esp_perf", "esp_evt", "esp_log"), 0)
+    no_diag = dict.fromkeys((m for m, _ in esp_ingest.DIAG.values()), 0)
     assert s == {
         "pulled": 4,
-        "written": 2,
+        "written": 2,  # the 30 s slot of seq 2/3 ends at seq 4 (covered or not)
         "skipped_covered": 2,
+        "thinned": 0,
         "skipped_no_time": 0,
         "held": 0,
         "lost": 0,
@@ -195,6 +196,63 @@ def test_ingest_writes_only_the_gaps_tagged_esp_at_the_record_time(tmp_path, fra
         ("energy", "esp", (T0 + 200_000, "ms")),
     ]
     assert json.loads((tmp_path / "c.json").read_text())["seq"] == 4
+
+
+S0 = (T0 // 30_000 + 1) * 30_000  # a 30 s slot boundary
+
+
+def test_thinning_keeps_the_last_gap_record_per_30_s_slot(tmp_path, frames):
+    """Dense notifies in one slot -> one point, the slot's last (S0 + 29.999 s is still in it,
+    S0 + 30 s is not); the slot is written when a later slot's record arrives, the newest waits in
+    the cursor; a re-run, and a run paged one record at a time, write identical points.
+
+    .. test:: esp-ingest writes the last gap record per function and 30 s slot, deterministically
+       :id: T_ESP_INGEST_THIN
+       :links: R_ESP_INGEST_GAPFILL
+    """
+    records = [
+        rec(1, "cooler", frames["cooler"], ts=S0),
+        rec(2, "cooler", frames["cooler"], ts=S0 + 10_000),
+        rec(3, "cooler", frames["cooler"], ts=S0 + 29_999),
+        rec(4, "cooler", frames["cooler"], ts=S0 + 30_000),  # next slot: closes the first
+    ]
+    a = DB()
+    s = esp_ingest.ingest(pager(records, boot=1), a, str(tmp_path / "a.json"))
+    assert (s["written"], s["thinned"]) == (1, 2)
+    assert [p[3] for w in a.writes for p in w] == [(S0 + 29_999, "ms")]
+    state = json.loads((tmp_path / "a.json").read_text())["state"]
+    assert state["thin"]["pending"]["cooler"][0] == S0 + 30_000
+    b, c = DB(), DB()
+    esp_ingest.ingest(pager(records, boot=1), b, str(tmp_path / "b.json"))
+    esp_ingest.ingest(pager(records, boot=1), c, str(tmp_path / "c.json"), page=1)
+
+    def flat(db):
+        return [p for w in db.writes for p in w]
+
+    assert flat(b) == flat(c) == flat(a)
+    assert json.loads((tmp_path / "c.json").read_text())["state"] == state
+
+
+def test_thinning_writes_every_alert_or_ignition_change_at_once(funcs):
+    """A record whose ``*_code`` or ``ignition_on`` differs from the previous point is written at
+    once (after the pending point it follows), even mid-slot; the cursor state carries the codes.
+
+    .. test:: esp-ingest never thins away an alert-code or ignition change
+       :id: T_ESP_INGEST_THIN_CHANGE
+       :links: R_ESP_INGEST_GAPFILL
+    """
+    ok, err = {"installed": True, "fault": None}, {"installed": True, "fault": "error"}
+    r = esp_ingest.Replay(funcs)
+    assert r.thin("cooler", S0 + 1000, ok) == []
+    assert r.thin("cooler", S0 + 2000, err) == [("cooler", S0 + 1000, ok), ("cooler", S0 + 2000, err)]
+    assert r.thin("cooler", S0 + 3000, err) == []  # unchanged: pending
+    assert r.thin("cooler", S0 + 4000, ok) == [("cooler", S0 + 3000, err), ("cooler", S0 + 4000, ok)]
+    on, off = {"installed": True, "ignition_on": True}, {"installed": True, "ignition_on": False}
+    assert r.thin("vehicle", S0 + 5000, off) == []
+    assert r.thin("vehicle", S0 + 6000, on) == [("vehicle", S0 + 5000, off), ("vehicle", S0 + 6000, on)]
+    again = esp_ingest.Replay(funcs, json.loads(json.dumps(r.dump())))  # the cursor round trip
+    assert again.thin("vehicle", S0 + 7000, off) == [("vehicle", S0 + 7000, off)]
+    assert again.close(S0 + 30_000) == [] and r.thinned == 0
 
 
 # ---- 5. the cursor -------------------------------------------------------------------------------
@@ -211,7 +269,8 @@ def test_cursor_moves_only_after_a_successful_write_and_a_rerun_writes_identical
     records = [
         rec(1, "general", frames["general"], ts=T0),
         rec(2, "energy", frames["energy"], ts=T0 + 1000),
-        rec(3, "cooler", frames["cooler"], up=5000, boot=2),  # current boot, no stamp yet: held
+        rec(3, "cooler", frames["cooler"], ts=T0 + 60_000),  # ends seq 1/2's slot; itself pending
+        rec(4, "cooler", frames["cooler"], up=5000, boot=2),  # current boot, no stamp yet: held
     ]
     cur = str(tmp_path / "c.json")
     with pytest.raises(OSError):
@@ -221,13 +280,14 @@ def test_cursor_moves_only_after_a_successful_write_and_a_rerun_writes_identical
     s = esp_ingest.ingest(pager(records, boot=2), a, cur)
     assert s["held"] == 1 and s["written"] == 2
     saved = json.loads((tmp_path / "c.json").read_text())
-    assert saved["seq"] == 2  # held at the current boot's unstamped record
+    assert saved["seq"] == 3  # held at the current boot's unstamped record
+    assert list(saved["state"]["thin"]["pending"]) == ["cooler"]  # seq 3 waits in the cursor
     energy = next(dict(p[2]) for p in a.writes[0] if dict(p[1])["function"] == "energy")
     assert energy["dcdc_current"] == 2.0  # serve's +2 on AmbSwVersion 0410, from the replayed general
     # the next run starts at the hold; a re-run from the same cursor writes byte-identical points
     nxt = pager(records, boot=2)
     esp_ingest.ingest(nxt, DB(), cur)
-    assert nxt.calls[0] == 2
+    assert nxt.calls[0] == 3
     b = DB()
     esp_ingest.ingest(pager(records, boot=2), b, str(tmp_path / "c2.json"))
     assert b.writes == a.writes
@@ -498,6 +558,41 @@ def test_diag_record_maps_to_its_measurement(body, measurement, tags, fields):
     assert (p.measurement, p.tags, p.fields, p.t) == (measurement, tags, fields, (T0 + 5, "ms"))
 
 
+# web.c api_ux: one SD record per beacon event, the beacon-wide keys repeated on each
+UX_HEAD = {"ev": "ux", "sid": "3f9a1c0b7d2e4a65", "ua_class": "ios", "standalone": True, "origin": "lan"}
+UX_EVENTS = [
+    {"type": "view", "screen": "cooler"},
+    {"type": "control", "fn": "cooler", "control": "power"},
+    {"type": "timing", "ttfb": 120, "dcl": 340, "tiles": 560},
+    {"type": "error", "msg": "boom @ app.js:1"},
+]
+
+
+@pytest.mark.parametrize("event", UX_EVENTS, ids=[e["type"] for e in UX_EVENTS])
+def test_ux_record_is_calictls_own_ui_ux_point_tagged_esp(event):
+    """A ``ux`` SD record -> exactly the ``ui_ux`` point calictl writes for the same beacon event
+    from its own ``POST /api/ux`` (same tags, int fields — one series, no field-type clash), plus
+    ``source=esp`` (calictl's own points carry no ``source``), at the record's time.
+
+    .. test:: esp-ingest maps every ux event type to calictl's own ui_ux point, tagged source=esp
+       :id: T_ESP_INGEST_DIAG_UX
+       :links: R_ESP_INGEST_DIAG
+    """
+    from calictl import influx
+
+    (own,) = influx.ux_points({**{k: UX_HEAD[k] for k in esp_ingest.UX_BATCH}, "events": [event]})
+    assert "source" not in own.tags
+    p = esp_ingest.diag_point(drec(9, {**UX_HEAD, **event}, ts=T0 + 5), T0 + 5)
+    assert (p.measurement, p.tags, p.fields, p.t) == (
+        "ui_ux",
+        {**own.tags, "source": "esp"},
+        own.fields,
+        ((T0 + 5) * 1_000_000 + 9, "ns"),  # + seq ns: same-ms events of one beacon stay apart
+    )
+    assert all(type(v) is not float for v in p.fields.values())  # n=1 + timings stay ints
+    assert set(p.tags) - {"source"} <= set(esp_ingest.DIAG["ux"][1])
+
+
 def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frames):
     """Diagnostics records skip replay and gap fill (buspi's points never cover them), share the
     frames' back-stamping and cursor, and are counted per measurement; a dry run writes none but
@@ -519,8 +614,9 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         drec(4, {"ev": "diag", "heap_free": 1, "ble_rssi": None, "link_up": True}, ts=T0 + 1000, up=6000),
         drec(5, {"ev": "log", "lvl": "E", "tag": "sd", "msg": "fsync"}, ts=T0 + 2000, up=7000),
         drec(6, {"ev": "unknown_ev", "x": 1}, ts=T0 + 3000, up=8000),  # not ours: skipped
+        drec(7, {**UX_HEAD, **UX_EVENTS[0]}, ts=T0 + 4000, up=9000),
     ]
-    counts = {"esp_diag": 1, "esp_perf": 1, "esp_evt": 1, "esp_log": 1}
+    counts = {"esp_diag": 1, "esp_perf": 1, "esp_evt": 1, "esp_log": 1, "ui_ux": 1}
     db, diag = DB({"cooler": [T0]}), []
     s = esp_ingest.ingest(
         pager(records, boot=1), db, str(tmp_path / "dry.json"), dry_run=True, report=[], diag=diag
@@ -531,6 +627,7 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         ("esp_perf", T0 - 3000),
         ("esp_diag", T0 + 1000),
         ("esp_log", T0 + 2000),
+        ("ui_ux", T0 + 4000),
     ]
 
     s = esp_ingest.ingest(pager(records, boot=1), db, str(tmp_path / "c.json"))
@@ -541,8 +638,9 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         ("esp_perf", T0 - 3000),
         ("esp_diag", T0 + 1000),
         ("esp_log", T0 + 2000),
+        ("ui_ux", (T0 + 4000) * 1_000_000 + 7),
     ]
-    assert json.loads((tmp_path / "c.json").read_text())["seq"] == 6
+    assert json.loads((tmp_path / "c.json").read_text())["seq"] == 7
 
 
 def test_verify_diag_marks_measurements_missing_from_influx():

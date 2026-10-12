@@ -15,13 +15,15 @@ single BLE owner):
    replay state (decoded cache + water hold) next to the cursor;
 4. gap fill (owner decision 1A, buspi's live data wins): one Flux query per batch lists buspi's own
    points (the series WITHOUT a ``source`` tag) per function; an ESP point is written only when buspi
-   has none for that function within ``WINDOW_MS`` (inclusive);
+   has none for that function within ``WINDOW_MS`` (inclusive); of those, only the last per function
+   and 30 s slot (``SLOT_MS``, buspi's poll) is written, once a later slot's record arrives — or at
+   once when its alert codes / ignition change (:meth:`Replay.thin`);
 5. write with ``influx.points_for`` at the record's own time, tag ``source=esp``; the cursor (and the
    replay state) move only after the write succeeded. InfluxDB dedups same series + time, so a re-run
    writes identical points.
 
-The satellite's own diagnostics (``R_FW_DIAG_LOG``: ``diag``, ``evt``, ``perf``, ``log``) ride in
-the same stream; only the ESP has them, so they skip replay and gap fill and are written as they are
+The satellite's own diagnostics (``R_FW_DIAG_LOG``: ``diag``, ``evt``, ``perf``, ``log``, ``ux``) ride
+in the same stream; only the ESP has them, so they skip replay and gap fill and are written as they are
 at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_point`).
 
 ``--dry-run`` does steps 1-4, writes nothing, keeps the cursor and prints a per-function summary;
@@ -37,8 +39,11 @@ at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_p
    alone (``ts`` as is; an unstamped record back-stamped from the next stamped record of its boot;
    the current boot's unanchored records held, an older boot's skipped and counted), replay the
    frames in seq order through serve's decode, interpret and water guard, write a point (tag
-   ``source=esp``, the record's time) only where buspi has no point of that function within ±90 s,
-   advance its cursor only after a successful write, and log ``{pulled, written, skipped_covered,
+   ``source=esp``, the record's time) only where buspi has no point of that function within ±90 s
+   — of those only the last record per function and 30 s slot (``floor(ts / 30 s)``), plus every
+   record whose ``*_code`` fields or ``ignition_on`` differ from the function's previous point —
+   keep the slot's pending point and the last written codes in the cursor, advance its cursor only
+   after a successful write, and log ``{pulled, written, skipped_covered, thinned,
    skipped_no_time}``. A re-run writes identical points.
 
 .. req:: Write the ESP's diagnostics records to InfluxDB as they are
@@ -51,7 +56,9 @@ at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_p
    flattened to ``stack_min_<task>``), ``esp_perf`` (tags ``route`` or ``char`` + ``op``),
    ``esp_evt`` (tag ``kind``; numeric and string fields), ``esp_log`` (tags ``lvl``, ``tag``; string
    ``msg``; numeric ``dropped``) — with no gap-fill rule, under the frames' timing and cursor rules,
-   and count them per measurement in its summary (``diag_points``).
+   and count them per measurement in its summary (``diag_points``). A ``ux`` record (the web UI's
+   usage beacon, ``R_UX_TELEMETRY``) shall become the ``ui_ux`` point calictl writes for its own
+   ``POST /api/ux`` — same tags and field types — tagged ``source=esp``.
 """
 
 from __future__ import annotations
@@ -69,6 +76,7 @@ from .freshness import WATER_SETTLE_S
 log = _log.get(__name__)
 
 WINDOW_MS = 90_000  # 3x buspi's 30 s poll: a buspi point this close covers an ESP record
+SLOT_MS = 30_000  # buspi's poll: a gap keeps the LAST ESP record per function and slot (Replay.thin)
 PAGE = 2000
 FRAME_EVS = ("notify", "read", "snap")
 DEFAULT_CURSOR = os.path.expanduser("~/.cache/calictl/esp_cursor.json")
@@ -79,7 +87,10 @@ DIAG = {
     "perf": ("esp_perf", ("route", "char", "op")),
     "evt": ("esp_evt", ("kind",)),
     "log": ("esp_log", ("lvl", "tag")),
+    # the web UI's usage beacons (R_UX_TELEMETRY): calictl's own ui_ux layout + source=esp (ux_point)
+    "ux": ("ui_ux", ("type", "ua_class", "origin", "standalone", "screen", "fn", "control")),
 }
+UX_BATCH = ("sid", "ua_class", "standalone", "origin")  # a ux record's beacon-wide keys; the rest = event
 STAMP = ("seq", "boot", "up", "ts", "tsrc", "ev")  # the log's own keys, never fields
 COMPARE = {
     "water": ("fresh_liters", "waste_liters"),
@@ -155,6 +166,10 @@ class Replay:
         self._water_pending = ((tuple(p[0]), p[1])) if p else None
         self._water_measured_at = s.get("water_measured_at")
         self._water_stale_since = s.get("water_stale_since")
+        t = s.get("thin") or {}
+        self._pending = {f: tuple(v) for f, v in t.get("pending", {}).items()}  # fn -> (ts, interp)
+        self._codes = t.get("codes", {})  # fn -> state codes of its last written point
+        self.thinned = 0  # this run's gap records dropped for a later one of the same slot
 
     def dump(self):
         p = self._water_pending
@@ -165,7 +180,34 @@ class Replay:
             "water_pending": [list(p[0]), p[1]] if p else None,
             "water_measured_at": self._water_measured_at,
             "water_stale_since": self._water_stale_since,
+            "thin": {"pending": {f: list(v) for f, v in self._pending.items()}, "codes": self._codes},
         }
+
+    def close(self, ts_ms):
+        """``[(fn, ts, interp)]`` to write: the pending points whose 30 s slot ended before ``ts_ms``."""
+        slot = ts_ms // SLOT_MS
+        done = sorted(f for f, (t, _) in self._pending.items() if t // SLOT_MS < slot)
+        return [self._emit(f, *self._pending.pop(f)) for f in done]
+
+    def thin(self, fn, ts_ms, interp):
+        """A gap record of ``fn`` -> ``[(fn, ts, interp)]`` to write now. It becomes the slot's pending
+        point (an older pending one of the same slot is dropped); a record whose state codes
+        (:func:`state_codes`) differ from ``fn``'s previous point (the pending one, else the last
+        written) is written at once, after the pending point it follows."""
+        out = self.close(ts_ms)
+        prev = state_codes(self._pending[fn][1]) if fn in self._pending else self._codes.get(fn)
+        if prev is not None and state_codes(interp) != prev:
+            if fn in self._pending:
+                out.append(self._emit(fn, *self._pending.pop(fn)))
+            out.append(self._emit(fn, ts_ms, interp))
+            return out
+        self.thinned += fn in self._pending
+        self._pending[fn] = (ts_ms, interp)
+        return out
+
+    def _emit(self, fn, ts_ms, interp):
+        self._codes[fn] = state_codes(interp)
+        return fn, ts_ms, interp
 
     def process(self, rec, ts_ms):
         """One timed record -> ``{function: interpreted}`` to store at ``ts_ms`` (installed functions
@@ -190,6 +232,13 @@ class Replay:
             if serve.guard_water(self, w, now, now, self.settle):
                 out.update(w)
         return {f: i for f, i in out.items() if i.get("installed")}
+
+
+def state_codes(interp):
+    """The fields whose change is always written: the ``*_code`` alert enums and ``ignition_on``."""
+    return {
+        k: v for k, v in influx.numeric_fields(interp).items() if k.endswith("_code") or k == "ignition_on"
+    }
 
 
 def diag_fields(rec):
@@ -223,6 +272,8 @@ def diag_point(rec, ts_ms):
     """One InfluxDB point for a diagnostics record at ``ts_ms`` (None without any field)."""
     from influxdb_client import Point, WritePrecision
 
+    if rec["ev"] == "ux":
+        return ux_point(rec, ts_ms)
     tags, fields = diag_fields(rec)
     if not fields:
         return None
@@ -232,6 +283,19 @@ def diag_point(rec, ts_ms):
     for k, v in fields.items():
         p.field(k, v)
     return p.time(int(ts_ms), WritePrecision.MS)
+
+
+def ux_point(rec, ts_ms):
+    """A ``ux`` record as the ``ui_ux`` point calictl writes for its own ``POST /api/ux``
+    (:func:`calictl.influx.ux_points`: same tags, int fields), plus tag ``source=esp`` — buspi's own
+    points carry no ``source`` — at ``ts_ms`` plus ``seq`` nanoseconds: a beacon's events share the
+    millisecond on the card, and InfluxDB keeps one point per series + time (stable on a re-run)."""
+    from influxdb_client import WritePrecision
+
+    batch = {k: rec[k] for k in UX_BATCH}
+    event = {k: v for k, v in rec.items() if k not in STAMP and k not in UX_BATCH}
+    (p,) = influx.ux_points({**batch, "events": [event]})
+    return p.tag("source", "esp").time(int(ts_ms) * 1_000_000 + rec["seq"] % 1_000_000, WritePrecision.NS)
 
 
 # ---- 4. gap fill ---------------------------------------------------------------------------------
@@ -291,7 +355,10 @@ class Influx:
 
     def diag_counts(self, lo, hi):
         """``{measurement: points}`` of the :data:`DIAG` measurements in range (distinct times)."""
-        flt = " or ".join('r._measurement == "%s"' % m for m, _ in DIAG.values())
+        flt = " or ".join(
+            ('(r._measurement == "%s" and r.source == "esp")' if ev == "ux" else 'r._measurement == "%s"') % m
+            for ev, (m, _) in DIAG.items()
+        )
         flux = (
             'from(bucket:"%s") |> range(start:%s, stop:%s) |> filter(fn:(r) => %s) '
             '|> keep(columns:["_time","_measurement"]) |> group(columns:["_measurement"]) '
@@ -365,7 +432,7 @@ def ingest(
     since = cur["seq"]
     buf: list = []
     summary: dict = dict.fromkeys(
-        ("pulled", "written", "skipped_covered", "skipped_no_time", "held", "lost"), 0
+        ("pulled", "written", "skipped_covered", "thinned", "skipped_no_time", "held", "lost"), 0
     )
     summary["diag_points"] = dict.fromkeys((m for m, _ in DIAG.values()), 0)
     while True:
@@ -406,11 +473,12 @@ def ingest(
             )
             for fn, ts, tsrc, interp in batch:
                 cov = covered(have.get(fn, []), ts)
-                summary["skipped_covered" if cov else "written"] += 1
+                summary["skipped_covered"] += cov
                 if report is not None:
                     report.append((fn, ts, tsrc, cov, interp))
-                if not cov:
-                    points += influx.points_for({fn: interp}, time_ms=ts, tags={"source": "esp"})
+                for f, t, i in replay.close(ts) if cov else replay.thin(fn, ts, interp):
+                    summary["written"] += 1
+                    points += influx.points_for({f: i}, time_ms=t, tags={"source": "esp"})
             if not dry_run:
                 if points:
                     db.write(points)  # raises -> the cursor stays where it was
@@ -418,6 +486,7 @@ def ingest(
         if final:
             break
     summary["held"] = len(buf)  # the current boot's records still waiting for a time
+    summary["thinned"] = replay.thinned
     if dry_run:
         summary["written"] = 0
     log.info("esp-ingest: %s" % json.dumps(summary))
