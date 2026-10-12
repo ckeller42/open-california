@@ -244,13 +244,14 @@ def diag_point(rec, ts_ms):
 def ux_point(rec, ts_ms):
     """A ``ux`` record as the ``ui_ux`` point calictl writes for its own ``POST /api/ux``
     (:func:`calictl.influx.ux_points`: same tags, int fields), plus tag ``source=esp`` — buspi's own
-    points carry no ``source`` — at ``ts_ms``."""
+    points carry no ``source`` — at ``ts_ms`` plus ``seq`` nanoseconds: a beacon's events share the
+    millisecond on the card, and InfluxDB keeps one point per series + time (stable on a re-run)."""
     from influxdb_client import WritePrecision
 
     batch = {k: rec[k] for k in UX_BATCH}
     event = {k: v for k, v in rec.items() if k not in STAMP and k not in UX_BATCH}
     (p,) = influx.ux_points({**batch, "events": [event]})
-    return p.tag("source", "esp").time(int(ts_ms), WritePrecision.MS)
+    return p.tag("source", "esp").time(int(ts_ms) * 1_000_000 + rec["seq"] % 1_000_000, WritePrecision.NS)
 
 
 # ---- 4. gap fill ---------------------------------------------------------------------------------

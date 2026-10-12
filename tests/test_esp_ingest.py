@@ -43,7 +43,7 @@ class _Point:
 def fake_influx(monkeypatch):
     mod = types.ModuleType("influxdb_client")
     mod.Point = _Point
-    mod.WritePrecision = types.SimpleNamespace(MS="ms")
+    mod.WritePrecision = types.SimpleNamespace(MS="ms", NS="ns")
     monkeypatch.setitem(sys.modules, "influxdb_client", mod)
 
 
@@ -527,7 +527,7 @@ def test_ux_record_is_calictls_own_ui_ux_point_tagged_esp(event):
         "ui_ux",
         {**own.tags, "source": "esp"},
         own.fields,
-        (T0 + 5, "ms"),
+        ((T0 + 5) * 1_000_000 + 9, "ns"),  # + seq ns: same-ms events of one beacon stay apart
     )
     assert all(type(v) is not float for v in p.fields.values())  # n=1 + timings stay ints
     assert set(p.tags) - {"source"} <= set(esp_ingest.DIAG["ux"][1])
@@ -578,7 +578,7 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         ("esp_perf", T0 - 3000),
         ("esp_diag", T0 + 1000),
         ("esp_log", T0 + 2000),
-        ("ui_ux", T0 + 4000),
+        ("ui_ux", (T0 + 4000) * 1_000_000 + 7),
     ]
     assert json.loads((tmp_path / "c.json").read_text())["seq"] == 7
 
