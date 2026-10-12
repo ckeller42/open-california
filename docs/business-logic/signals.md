@@ -56,7 +56,9 @@ resolved them and prevents recurrence.
   (`COVERAGE-GAP`, `STALE`, `GUI-SHOWN-BUT-OMITTED`, `SCALE-MISMATCH`, `OUT-OF-RANGE`,
   `SEMANTIC-REVIEW-NEEDED`). Currently **clean**.
 - `python3 -m tools.audit_signals --seed` — add a stub entry for any new field (existing
-  entries untouched). Replace each stub's `TODO` reason with a real decision; a `TODO` fails the guardrail.
+  entries untouched). Review every stub: a GUI-matched field arrives as a low-confidence `surface`
+  (lower-cased name, `scale: UNVERIFIED`), the rest as `omit` with a `TODO` reason, which fails the guardrail
+  until replaced.
 - `protocol/signals.yaml` is the only source of the decisions — edit it by hand. (The one-shot
   `tools/triage.py` that seeded it on 2026-07-06 drifted and was removed, #240.)
 - `tests/test_signal_coverage.py` — **the guardrail**, three invariants:
