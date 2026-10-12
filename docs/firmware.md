@@ -458,7 +458,7 @@ radio-bound. `http_core`'s `pump()` writes until the socket buffer is full and r
 van WiFi: 57,659 B in 1.18 s, first byte 0.17 s; `/api/state` 0.16 s). `CONFIG_LWIP_TCP_SND_BUF_DEFAULT`
 is now 23040 B (16 x MSS) → ~3 ticks. WiFi modem sleep stays on (IDF requires it with BT + WiFi
 coexistence), which is the 65-120 ms ping; it costs each request one round trip, not throughput.
-The bundle is now ~59.2 KB, **90 % of `WEB_APP_GZ_MAX`** — watch it (2026-10-10, with the manifest/icon links).
+The bundle is now ~59.2 KB, **90 % of `WEB_APP_GZ_MAX`** — watch it (2026-10-10, with the manifest/icon links). Budget raised to 96 KB on 2026-10-12 (65,472 B after #322; only tests read it).
 
 **Where the credentials live:** the kv store keys `wifi_ssid` / `wifi_psk` — NVS namespace `cali`
 on the device (esp_wifi's own NVS copy is off: `WIFI_STORAGE_RAM`, `CONFIG_ESP_WIFI_NVS_ENABLED=n`),
