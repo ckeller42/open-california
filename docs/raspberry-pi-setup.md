@@ -206,6 +206,10 @@ per-feature screens) from the same BLE-owning process — no extra connection, n
 - The UI is in **English by default**; the ⋮ menu has a **Deutsch / English** entry that switches
   the language. On first load it follows the browser language (German browsers start in German);
   your choice is remembered per browser (`localStorage`).
+- Every screen's ⋮ menu has a **Help** entry: a short sheet (English/German) that explains that
+  screen and links to the matching page of these docs — see
+  [In-app help](UI-DESIGN-RATIONALE.md#in-app-help-help). The screens themselves only show
+  short status hints (e.g. "🕒 measured 3 min ago").
 
 To enable it under systemd, append `--web 8080` to the unit's `ExecStart` and restart
 (`sudo systemctl daemon-reload && sudo systemctl restart calictl`).

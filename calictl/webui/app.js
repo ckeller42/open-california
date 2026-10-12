@@ -279,6 +279,13 @@ menuEl.onclick = (ev) => {
       menuPop.appendChild(unpair);
     }
   }
+  if (HELP[view]) {   // per-screen help (#314)
+    const help = document.createElement("button");
+    help.type = "button";
+    help.textContent = /** @type {string} */ (t("Help"));
+    help.onclick = openHelp;
+    menuPop.appendChild(help);
+  }
   // Language toggle: label names the language you'd switch TO.
   const lang = document.createElement("button");
   lang.type = "button";
@@ -468,6 +475,119 @@ const ignitionOn = (s) => {
 };
 
 const ORDER = ["cooler", "campingmode", "lighting", "airheater", "water", "energy", "roof", "vehicle"];
+
+// --- per-screen Help (⋮ → Help, #314): the explanations live HERE, not as banners on the screens.
+// view -> [docs page under DOCS_URL, English source text]; the German text is the strings.de.js
+// entry keyed by the same English text (paragraphs split on a blank line). Facts come from
+// docs/business-logic/*; tests/test_webui_help.py checks every docs page exists.
+const DOCS_URL = "https://ckeller42.github.io/open-california/";
+/** @type {Record<string, [string, string]>} */
+const HELP = {
+  home: ["index.html",
+    "Each tile is one function of the camper unit; tap it for details. Only functions fitted to this van "
+    + "are shown. A ⚠ on a tile means the unit reports a fault there.\n\n"
+    + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
+    + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
+    + "Read-only: control writes are switched off on this device; values still update. An untested-firmware "
+    + "warning means the unit runs software this project was not validated on, so decoded values may be off."],
+  devicestatus: ["firmware.html",
+    "Camper unit: online while the Bluetooth link to the unit works; offline usually means the parked unit "
+    + "is asleep. Last update is the age of the newest data. Bonded unit is the unit this device is paired "
+    + "with; pair or unpair from the ⋮ menu.\n\n"
+    + "On the ESP satellite this screen also shows its firmware, Bluetooth link, WiFi, uptime, microSD log "
+    + "and free memory. Open setup leads to the satellite's own page: WiFi, auto camper, clock and the "
+    + "firmware update (only on request, needs the home WiFi)."],
+  cooler: ["business-logic/cooler-airheater.html#cooler",
+    "Switch the refrigerator box on or off and set its cooling level.\n\n"
+    + "Quiet mode: Off, Manual or Automatic. Manual runs quiet mode for up to 23 hours; Automatic runs it "
+    + "between the start and end hour you set. Quiet mode can only be set while the box is on.\n\n"
+    + "The timer starts cooling at a set time. It can only be set while the box is off.\n\n"
+    + "Quiet mode and timer are not yet verified on the van. Banners show what the unit reports: the door "
+    + "is not fully closed, emergency mode, or an error for the workshop."],
+  campingmode: ["business-logic/auto-camper-mode.html",
+    "Camping mode is the unit's master switch for the camper functions. Exterior and interior lighting and "
+    + "the rear USB ports only work while it is on; the rear USB ports are off whenever camping mode is off.\n\n"
+    + "The unit turns camping mode off when the engine starts and does not allow it while the ignition is "
+    + "on: it is only possible when stationary.\n\n"
+    + "Restore camping after you park: turns camping mode and the rear USB ports back on once you park "
+    + "(ignition off), if the engine had switched them off. It respects a manual off and stands down on "
+    + "low battery, so it never fights the unit's power saving."],
+  lighting: ["business-logic/lighting-energy-water-sat-roof.html#lighting-service-0x1500-char-0x1501",
+    "All lights switches every lamp on or off. The favourites 1–4 recall light profiles stored on the "
+    + "unit; save the current lamp levels to one under Functions & settings.\n\n"
+    + "Each lamp has a brightness from 0 (off) to 10 (100 %). The pop-up roof reading light only works "
+    + "while the pop-up roof is open.\n\n"
+    + "Wake-up light: at the wake-up time the chosen vehicle areas light up to the set brightness; the lead "
+    + "time adds a gentle ramp of that many minutes before it. At least one area stays selected.\n\n"
+    + "Lighting & sliding door: when on, opening the sliding door switches on the rear interior lights."],
+  airheater: ["business-logic/cooler-airheater.html#airheater",
+    "Immediate heating starts the heater now for the set run time (10–120 min). Continuous heating runs "
+    + "without a time limit. It can only be started from inside the vehicle; here you can only turn it "
+    + "off, and the run time is locked while it runs.\n\n"
+    + "Heating temperature is a level from 1 to 9 or HI, not degrees.\n\n"
+    + "Timer: set Start heating at, then Start timer. The heater then starts at that time for the run "
+    + "time. If continuous heating is on, it turns off when the timer ends.\n\n"
+    + "The heater burns fuel, so every start asks first; it is not live-verified. A ⚠ banner shows why "
+    + "the unit refused or stopped it, for example low battery, low fuel or a running engine."],
+  water: ["business-logic/value-freshness.html",
+    "Fresh and waste water are read-only. The unit measures the tanks only while the van's water system "
+    + "is running. Parked, it keeps its last measurement, so the level can lag until the water system "
+    + "runs again: it is read correctly, just not live.\n\n"
+    + "🕒 marks such a held value and when it was measured. A drop to about 1 litre while parked is the "
+    + "unit's stale value, not a real reading; the last plausible level is kept until a new measurement "
+    + "arrives.\n\n"
+    + "⚠ banners are the unit's own tank alerts, for example pump protection, tank empty or full, or a "
+    + "sensor fault."],
+  energy: ["business-logic/lighting-energy-water-sat-roof.html#energy-service-0x1600",
+    "Second battery is the leisure battery; it is measured all the time. The starter battery is only "
+    + "measured with the engine running, so parked it keeps its last values (🕒 stale).\n\n"
+    + "The battery bars come from a coarse level shown in 10 % steps, as in the app, not from a precise "
+    + "percentage. Voltages and currents are in volts and amps.\n\n"
+    + "Vehicle power is the charger fed by the alternator while the engine runs. Shore and solar power "
+    + "appear only if fitted. Issues lists the unit's own warnings.\n\n"
+    + "The energy mode is not yet verified on the van, and the unit can lock it."],
+  roof: ["business-logic/lighting-energy-water-sat-roof.html#roof-pop-top-service-0x1400-char-0x1401",
+    "Press and hold open or close: the roof moves while you hold and stops when you release (or press "
+    + "stop). The ignition must be on. The unit may wait about 3 seconds before the motor starts, and a "
+    + "new press within 1 second is ignored. The roof stops by itself at its end position.\n\n"
+    + "⚠ banners are the unit's own roof alerts; most of them block open and close, stop always works.\n\n"
+    + "Roof control is not live-verified: watch the roof while it moves. The ESP satellite has no roof "
+    + "control."],
+  vehicle: ["business-logic/alert-states.html",
+    "Ignition shows terminal 15 as the unit reports it.\n\n"
+    + "Level indicator: roll and pitch of the van in degrees. They are only available with the ignition "
+    + "on; with it off the gauges show -.-°. Above about 10 km/h the unit sends no reading and asks you "
+    + "to slow down. Positive pitch means the front is up; the roll direction is not yet confirmed.\n\n"
+    + "Vehicle clock is the unit's own clock, advanced live between reads. Firmware shows the unit's "
+    + "software versions and whether this project was tested on them."],
+};
+
+/** Open the Help sheet for the current screen (a native modal <dialog>; Esc or Close dismisses). */
+function openHelp() {
+  closeMenu();
+  const h = HELP[view];
+  if (!h) return;
+  const d = document.createElement("dialog");
+  d.className = "help";
+  const head = document.createElement("h2");
+  head.textContent = t("Help") + " · " + titleEl.textContent;
+  d.appendChild(head);
+  for (const para of /** @type {string} */ (t(h[1])).split("\n\n")) {
+    const p = document.createElement("p"); p.textContent = para; d.appendChild(p);
+  }
+  const a = document.createElement("a");
+  a.href = DOCS_URL + h[0]; a.target = "_blank"; a.rel = "noopener";
+  a.textContent = /** @type {string} */ (t("More in the documentation"));
+  const close = document.createElement("button");
+  close.type = "button"; close.className = "btn";
+  close.textContent = /** @type {string} */ (t("Close"));
+  close.onclick = () => d.close();
+  d.append(a, close);
+  d.onclick = (ev) => { if (ev.target === d) d.close(); };   // tap on the backdrop closes
+  d.onclose = () => d.remove();
+  document.body.appendChild(d);   // outside #app: survives the 2 s re-render
+  d.showModal();
+}
 /** @type {Record<string, Feature>} */
 const FEATURES = {
   cooler: {
@@ -625,19 +745,8 @@ const FEATURES = {
       const w = s.waste_alert ? WASTE_WATER_ALERT_MSG[/** @type {string} */ (s.waste_alert)] : null;
       return f && w ? `${t(f)} ${t(w)}` : (f || w || null);
     },
-    // Water is READ-ONLY on BLE (char 1302) and the unit only re-measures while the van's water
-    // system runs — confirmed 2026-08-19: no BLE activity (not even the 1003 heartbeat) triggers a
-    // refresh, so the char just holds the LAST MEASURED level until the pump/system next runs. This
-    // is a soft `note` (informational, expected while parked) — NOT a `warn`/fault. See
-    // docs/business-logic/value-freshness.md.
-    note: (s) => {
-      if (!((s.fresh && s.fresh.stale) || (s.waste && s.waste.stale))) return null;
-      // agoText already ends in "ago" — just wrap it in parens (no extra " ago").
-      const ago = s.stale_since ? " (" + agoText(Math.round(Date.now() / 1000 - s.stale_since)) + ")" : "";
-      return tf("🕒 Showing the LAST MEASURED water level{ago} — the BLE level only refreshes while "
-        + "the van's water system is running, so it lags until the pump next runs. It's read correctly, "
-        + "just not live.", { ago: ago });
-    },
+    // Held (stale) tanks carry their own "🕒 measured …" hint in the readouts above; the why (the unit
+    // measures only while the water system runs) lives in the screen's Help (⋮, #314).
     summary: (s) => (s.fresh ? `${t("Fresh")} ${s.fresh.percent}%${s.fresh.stale ? " " + measuredText(s, /** @type {string} */ (t("(last meas.)"))) : ""}` : ""),
   },
   energy: {
@@ -671,11 +780,7 @@ const FEATURES = {
       { label: "Starter data age", get: (s) => (s.stale ? "🕒 stale (starter asleep)"
         : s.age_min != null ? `${s.age_min} min` : "—") },
     ],
-    // Soft note (not a fault): the starter battery is only measured engine-on, so its values latch
-    // stale when parked. The leisure battery stays live. Mirrors the water stale-hold pattern.
-    note: (s) => (s.stale ? "🕒 Starter-battery values are stale — that subsystem only measures "
-      + "with the engine on, so it holds the last reading while parked. The leisure battery stays live."
-      : null),
+    // Starter-battery staleness is the "Starter data age" row; the why lives in the Help (⋮, #314).
     summary: (s) => (s.soc2_pct != null ? `${t("Battery")} ${s.soc2_pct}%` : ""),
   },
   roof: {
@@ -1488,7 +1593,7 @@ function render() {
   if (fw && fw.untested) {
     const b = document.createElement("div");
     b.className = "fwwarn";
-    b.textContent = tf("⚠ Untested firmware — unit reports amb {amb} · comm {comm} (this project was validated on {tested}). Decode/semantics may have drifted; treat readings with care.",
+    b.textContent = tf("⚠ Untested firmware — unit reports amb {amb} · comm {comm} (validated on {tested}); readings may be off.",
       { amb: fw.amb_sw_version ?? "?", comm: fw.comm_version ?? "?", tested: fw.tested });
     app.appendChild(b);
   }
@@ -2221,13 +2326,6 @@ function autoCamperCard() {
     await refreshState(true);
   };
   row.appendChild(sw); card.appendChild(row);
-  const sub = document.createElement("div");
-  sub.style.cssText = "padding: 0 1rem .7rem; color: var(--muted); font-size: .8rem; line-height: 1.35;";
-  sub.textContent = /** @type {string} */ (t("The unit drops camper mode when the engine starts and won't allow it back on "
-    + "while driving. This turns camper mode + rear USB back on once you park (ignition off), if the "
-    + "engine had shed it. Respects a manual off, and stands down on low battery so it never fights "
-    + "the unit's power saving."));
-  card.appendChild(sub);
   return card;
 }
 
