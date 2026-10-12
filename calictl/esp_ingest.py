@@ -388,7 +388,8 @@ class Influx:
         flux = (
             'from(bucket:"%s") |> range(start:%s, stop:%s) |> filter(fn:(r) => %s) '
             '|> keep(columns:["_time","_measurement"]) |> group(columns:["_measurement"]) '
-            '|> unique(column:"_time") |> map(fn:(r) => ({r with _value: 1})) |> count()' % (self.bucket, _rfc3339(lo), _rfc3339(hi + 1), flt)
+            '|> unique(column:"_time") |> map(fn:(r) => ({r with _value: 1})) |> count()'
+            % (self.bucket, _rfc3339(lo), _rfc3339(hi + 1), flt)
         )
         return {r.values["_measurement"]: int(r.get_value()) for r in self.rows(flux)}
 
