@@ -13,6 +13,8 @@
 #include "cali_platform.h"
 #include "cali_status.h"
 #include "driver/i2c_master.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "lvgl.h"
 #include "net_consts.h"
 
@@ -158,6 +160,13 @@ static int ltr_get(uint8_t reg, uint8_t *v) {   /* single-byte combined reads, a
 static void ltr_init(void) {
     i2c_device_config_t cfg = {.dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = LTR_ADDR, .scl_speed_hz = 400000};
     uint8_t id = 0;
+    /* The LTR-553 sits on the camera/proximity flex, powered by the camera rails (AXP2101 ALDO3 +
+     * BLDO1/2), which BSP 4.1.0 switches on only in BSP_FEATURE_CAMERA (bsp_camera_start). Unpowered,
+     * it NACKs 0x23 (live: device.display.sensor "absent"). M5Unified's CoreS3 setup enables every LDO
+     * (AXP2101 0x90 = 0xBF) before any sensor; then wait the data sheet's 100 ms power-up time.
+     * ponytail: this also releases the GC0308 reset (AW9523 P1_0); camera idles without XCLK. */
+    if (bsp_feature_enable(BSP_FEATURE_CAMERA, true) != ESP_OK) cali_log("display: camera/sensor rail enable failed");
+    vTaskDelay(pdMS_TO_TICKS(100));
     if (i2c_master_probe(bsp_i2c_get_handle(), LTR_ADDR, PROBE_MS) != ESP_OK ||
         i2c_master_bus_add_device(bsp_i2c_get_handle(), &cfg, &s_ltr) != ESP_OK) {
         s_ltr = NULL;
