@@ -1457,7 +1457,12 @@ def test_ux_long_error_is_cut_to_fit_the_sd_record(web_cli):
     CALI_SDLOG_DATA_MAX; the line stays valid JSON."""
     msg = '"\\' * 100  # 200 chars, 400 escaped
     resps, other = drive(
-        web_cli, [*(s.encode() for s in STATION), b"sdcard", req("POST", "/api/ux", json.dumps(_ev(type="error", msg=msg)))]
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"sdcard",
+            req("POST", "/api/ux", json.dumps(_ev(type="error", msg=msg))),
+        ],
     )
     assert resps[0].status == 204
     (rec,) = _sd(other)
