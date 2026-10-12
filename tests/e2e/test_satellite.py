@@ -10,6 +10,7 @@ OPT-IN like test_gui.py: skipped without Playwright + Chromium.
 
 import calendar
 import datetime
+import json
 import re
 import threading
 from zoneinfo import ZoneInfo
@@ -105,7 +106,15 @@ def test_every_tile_renders_and_every_control_is_disabled(sat, stub):
     assert set(stub.requests) <= ALLOWED, stub.requests
 
 
-def test_satellite_hides_calictl_only_chrome(sat):
+def test_satellite_hides_calictl_only_chrome(stub, error_gated_page):
+    _display_only(stub)
+    stub.fixtures["satellite"]["/api/state"]["device"].pop("auto_camper", None)  # an older firmware
+    with error_gated_page(stub.base) as sat:
+        expect(sat.get_by_text("Satellite — display only")).to_be_visible()
+        _hides_calictl_only_chrome(sat)
+
+
+def _hides_calictl_only_chrome(sat):
     assert sat.locator(".session-pill").count() == 0
     _open(sat, "Camping mode")
     assert sat.get_by_text("Restore camping after you park").count() == 0
@@ -536,7 +545,14 @@ def test_wakeup_unconfirmed_when_the_unit_reports_another_config(stub, error_gat
         expect(pg.locator(".toast")).to_have_text(NOT_CONFIRMED, timeout=9000)
 
 
-def test_api_still_refuses_calictl_only_paths_on_the_live_satellite(live, stub):
+def test_api_still_refuses_calictl_only_paths_on_the_live_satellite(stub, error_gated_page):
+    stub.fixtures["satellite"]["/api/state"]["device"].pop("auto_camper", None)  # an older firmware
+    with error_gated_page(stub.base) as live:
+        live.wait_for_function(LIVE)
+        _refuses_calictl_only_paths(live, stub)
+
+
+def _refuses_calictl_only_paths(live, stub):
     for path in ("/api/session", "/api/auto_camper"):
         got = live.evaluate("p => api(p).then(() => 'fetched', e => e.message)", path)
         assert got == "satellite: no " + path
@@ -853,3 +869,47 @@ def test_held_water_shows_its_age(stub, error_gated_page, mode, locale, age_s, t
     with error_gated_page(stub.base, locale=locale) as pg:
         _open(pg, "Wasser" if locale == "de-DE" else "Water")
         expect(pg.locator("#app").get_by_text(text)).to_have_count(2)  # fresh + waste readouts
+
+
+@pytest.mark.parametrize(
+    "locale,tile,label",
+    [
+        ("en-US", "Camping mode", "Restore camping after you park"),
+        ("de-DE", "Campingmodus", "Campingmodus nach dem Parken wiederherstellen"),
+    ],
+)
+def test_auto_camper_toggle_on_a_firmware_that_reports_it(stub, error_gated_page, locale, tile, label):
+    """A firmware reporting ``device.auto_camper`` gets calictl's Camping-screen toggle (EN + DE): it
+    shows the restore owed, POSTs ``{"enabled": <the opposite>}`` to the satellite's
+    ``/api/auto_camper`` and is disabled while the satellite is read-only (the setup hotspot).
+
+    .. test:: The satellite's Camping screen switches auto camper mode
+       :id: T_SAT_UI_AUTO_CAMPER
+       :links: R_FW_SHARED_UI, R_FW_AUTO_CAMPER
+    """
+    dev = stub.fixtures["satellite"]["/api/state"]["device"]
+    dev["auto_camper"] = {"enabled": True, "state": "armed"}
+    posts = []
+    with error_gated_page(stub.base, locale=locale) as pg:
+
+        def on_post(route):
+            posts.append(json.loads(route.request.post_data))
+            dev["auto_camper"]["enabled"] = posts[-1]["enabled"]
+            route.fulfill(
+                status=200,
+                content_type="application/json",
+                body=json.dumps({"ok": True, "auto_camper": posts[-1]["enabled"]}),
+            )
+
+        pg.route("**/api/auto_camper", on_post)
+        pg.wait_for_function(LIVE)
+        _open(pg, tile)
+        expect(pg.get_by_text(label)).to_be_visible()
+        expect(pg.get_by_text("⟳", exact=False)).to_be_visible()  # armed: a restore is owed
+        sw = pg.get_by_role("switch", name="Auto camper mode")
+        expect(sw).to_have_attribute("aria-checked", "true")
+        sw.click()
+        expect(sw).to_have_attribute("aria-checked", "false")
+        assert posts == [{"enabled": False}]
+        dev["control"]["writes"] = False  # the setup hotspot: read-only
+        expect(pg.get_by_role("switch", name="Auto camper mode")).to_be_disabled()

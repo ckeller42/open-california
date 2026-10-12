@@ -415,7 +415,7 @@ function isSatelliteBody(b) {
 /**
  * The satellite's raw /api/state -> the interpreted STATE calictl's /api/state carries, with a
  * synthesized `_meta` shaped like serve.py:135 ServeBackend.state(): read-only unless the firmware
- * reports `device.control.writes` (station mode), no session, no auto-camper, plus
+ * reports `device.control.writes` (station mode), no session, auto-camper if reported, plus
  * `satellite: true` (app.js gates calictl-only chrome on it).
  * @param {any} body  {t, fn, device}
  * @param {number} nowMs  Date.now(): the ESP has no wall clock, so last_seen = now - age
@@ -463,5 +463,8 @@ function adaptSatellite(body, nowMs) {
       res: dev.res || null,   // heap / PSRAM / CPU of the satellite itself
     },
   };
+  // = AutoCamper.snapshot()
+  const ac = dev.auto_camper;
+  if (ac) out._meta.auto_camper = { enabled: !!ac.enabled, armed: ac.state !== "idle", notice: null };
   return out;
 }

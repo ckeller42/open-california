@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from calictl import anchors, semantics
+from calictl.automation import AutoCamper
 from calictl.serve import ServeBackend
 from tools import gen_semantics_vectors
 
@@ -217,6 +218,24 @@ def test_adapter_read_only_follows_the_firmwares_control_flag(control, read_only
     an older firmware without the field stays display-only."""
     body = _body() if control is None else _body(control=control)
     assert _adapt(body)["_meta"]["read_only"] is read_only
+
+
+@pytest.mark.parametrize(
+    "ac,want",
+    [
+        (None, None),  # an older firmware: no auto-camper, as before
+        ({"enabled": True, "state": "idle"}, {"enabled": True, "armed": False, "notice": None}),
+        ({"enabled": False, "state": "armed"}, {"enabled": False, "armed": True, "notice": None}),
+        ({"enabled": True, "state": "restoring"}, {"enabled": True, "armed": True, "notice": None}),
+    ],
+)
+def test_adapter_maps_device_auto_camper_to_calictls_meta(ac, want):
+    """``device.auto_camper {enabled, state}`` -> calictl's ``_meta.auto_camper`` shape
+    (``AutoCamper.snapshot``: armed = a restore is owed); absent stays absent."""
+    meta = _adapt(_body() if ac is None else _body(auto_camper=ac))["_meta"]
+    assert meta.get("auto_camper") == want
+    if want:
+        assert set(want) == set(AutoCamper().snapshot())
 
 
 def test_adapter_with_no_functions():
