@@ -312,6 +312,11 @@ jobs:
           . "$IDF_PATH/export.sh"
           idf.py build
           { echo '```'; idf.py size; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+          # Flash budget: the app must leave >= 10 % of its OTA slot free (slot size from partitions.csv).
+          slot=$(( $(awk -F, '$1 ~ /^ota_0/ {gsub(/ /, "", $5); print $5}' partitions.csv) ))
+          app=$(wc -c < build/cali_fw.bin)
+          echo "app $app B = $(( app * 100 / slot )) % of slot ($slot B)" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ $(( app * 10 )) -le $(( slot * 9 )) ] || { echo "::error::cali_fw.bin exceeds 90 % of the OTA slot"; exit 1; }
           # First-flash image for new boards (docs/howto-esp-first-flash.md): every image at the
           # build's own offsets, gaps 0xFF — so it ERASES NVS (bonds, WiFi). Never used by OTA.
           (cd build && python -m esptool --chip esp32s3 merge-bin -o cali_fw_full.bin @flash_args)

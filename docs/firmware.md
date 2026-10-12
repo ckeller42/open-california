@@ -508,6 +508,8 @@ here, `error: checksum`), and only then sets the boot partition and restarts. Pr
 runs; `503 ota_unavailable` on the host build and the QEMU image (no OTA I/O). The `/device` page
 has a *Firmware update* row: the running sha, *Check for update*, and *Install `<sha7>`* once one is
 available.
+After a merge, `tools/esplab/ota_deploy.sh [sha|main] [esp-url]` runs check → install → rollback
+window from a shell (USB recovery: `flash_ci.sh`, below).
 
 **Rollback** (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`): the new slot boots *pending verify*. The
 app marks itself valid after **60 s of a healthy run** — the owner tick alive and the web server
