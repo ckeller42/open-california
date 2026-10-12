@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "cali_captive.h"
+#include "cali_diag.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "pairing_consts.h"
@@ -38,6 +39,8 @@ static struct {
     int join_failed;                 /* a STA_START that could not start: FAILED(OTHER) next tick */
     int ap_running;                  /* ap_start() succeeded and no WACT_AP_STOP since */
     uint32_t last_fail;              /* the last WACT_LOG_REASON's reason; NONE after CREDS_SET/GOT_IP */
+    uint32_t last_ip;                /* the previous lease (wifi_up's ip_changed; the address is never logged) */
+    uint64_t up_at;                  /* now of the last GOT_IP (wifi_down's dur_ms) */
 } W;
 
 static void wipe_creds(void) {
@@ -130,6 +133,7 @@ static void run_action(const cali_wifi_action_t *a) {
     case WACT_LOG_REASON:
         W.last_fail = a->arg ? a->arg : CALI_NET_REASON_OTHER;   /* the page shows why (R23) */
         cali_log("wifi: failed %s", reason_name(a->arg));
+        cali_diag_evt("net", "\"err\":\"join\",\"reason\":\"%s\"", reason_name(a->arg));
         break;
     default:
         break;
@@ -156,12 +160,17 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
             W.ip = e->ip;
             W.rssi = W.net->sta_rssi();
             W.rssi_at = 0;
+            cali_diag_evt("wifi_up", "\"rssi\":%d,\"ip_changed\":%s", W.rssi, W.last_ip && W.last_ip != e->ip ? "true" : "false");
+            W.last_ip = e->ip;
+            W.up_at = W.now;
             cali_log("wifi: online %u.%u.%u.%u", (unsigned)(e->ip >> 24), (unsigned)(e->ip >> 16 & 0xffu),
                      (unsigned)(e->ip >> 8 & 0xffu), (unsigned)(e->ip & 0xffu));
         }
         break;
     case CALI_NET_EV_STA_LOST: {
         if (W.sm.st == WIFI_ONLINE) {    /* logged before the SM's STA_STOP runs */
+            cali_diag_evt("wifi_down", "\"reason\":\"lost\",\"rssi\":%d,\"dur_ms\":%llu", W.rssi,
+                          (unsigned long long)(W.now - W.up_at));
             W.ip = 0;
             W.rssi = 0;
             cali_log("wifi: lost");

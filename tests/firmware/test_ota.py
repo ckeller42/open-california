@@ -54,6 +54,7 @@ def ota_cli(tmp_path_factory):
             "-I",
             str(ROOT / "firmware" / "components" / "platform" / "include"),
             str(CORE / "ota.c"),
+            str(CORE / "diag.c"),
             str(CORE / "json.c"),
             str(CORE / "test" / "ota_cli.c"),
             "-o",
@@ -100,7 +101,7 @@ def test_same_sha_is_up_to_date(ota_cli, fw):
     assert ota(out)["state"] == "up_to_date"
     assert calls(out) == [
         "wake",
-        "get " + BASE + "manifest.json?t=2000",
+        "get " + BASE + "manifest.json?t=4000",  # fake clock: +1 s per read (2 by the ota diag event)
     ]  # install of the running build: no download
 
 
@@ -109,7 +110,7 @@ def test_other_build_sees_available_and_check_downloads_nothing(ota_cli, fw):
     out = run(ota_cli, "fw " + fw, "manifest " + manifest(), "check", "json", "work", "json")
     assert otas(out)[0] == {"state": "checking", "available_sha": None, "progress_pct": 0, "error": None}
     assert ota(out) == {"state": "available", "available_sha": SHA, "progress_pct": 0, "error": None}
-    assert calls(out) == ["wake", "get " + BASE + "manifest.json?t=2000"]
+    assert calls(out) == ["wake", "get " + BASE + "manifest.json?t=4000"]  # fake clock: +1 s per read
 
 
 def test_every_check_fetches_a_fresh_manifest_url(ota_cli):
@@ -125,7 +126,7 @@ def test_install_downloads_verifies_then_switches_and_restarts(ota_cli):
     out = run(ota_cli, "manifest " + manifest(), "slot " + DIGEST, "install", "work", "json")
     assert calls(out) == [
         "wake",
-        "get " + BASE + "manifest.json?t=2000",
+        "get " + BASE + "manifest.json?t=4000",  # fake clock: +1 s per read (2 by the ota diag event)
         "download %scali_fw.bin %d (downloading)" % (BASE, len(IMAGE)),  # never "available" in between
         "slot_sha256 %d" % len(IMAGE),
         "commit",
@@ -182,3 +183,30 @@ def test_one_request_at_a_time_then_again_after_it_ends(ota_cli):
 def test_no_ota_build_refuses(ota_cli):
     out = run(ota_cli, "noinit", "check", "work")
     assert out[0] == "REQ -1" and calls(out) == []
+
+
+def test_every_transition_is_an_ota_event(ota_cli):
+    """R_FW_DIAG_LOG: check -> downloading -> verifying -> rebooting (or error + its code), each with
+    the time since the request (the fake clock: +1 s per read).
+
+    .. test:: Every OTA state transition is a diagnostics event
+       :id: T_FW_DIAG_OTA
+       :links: R_FW_DIAG_LOG
+    """
+    import json
+
+    def evts(*lines):
+        out = run(ota_cli, "diaghook", "manifest " + manifest(), *lines)
+        return [json.loads(ln[5:]) for ln in out if ln.startswith("DIAG ")]
+
+    ok = evts("slot " + DIGEST, "install", "work")
+    assert [e["state"] for e in ok] == ["checking", "downloading", "verifying", "rebooting"]
+    assert all(e["kind"] == "ota" and "error" not in e for e in ok) and ok[-1]["dur_ms"] > ok[0]["dur_ms"]
+    bad = evts("install", "work")  # slot digest all zero: checksum
+    assert bad[-1] | {"dur_ms": 0} == {
+        "ev": "evt",
+        "kind": "ota",
+        "state": "error",
+        "dur_ms": 0,
+        "error": "checksum",
+    }

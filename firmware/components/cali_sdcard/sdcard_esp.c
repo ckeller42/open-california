@@ -22,17 +22,20 @@
 #include "driver/sdspi_host.h"
 #include "esp_heap_caps.h"
 #include "esp_vfs_fat.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "sdmmc_cmd.h"
 
+#include "cali_diag.h"
 #include "cali_platform.h"
 #include "cali_sdlog.h"
 
 #define MOUNT_POINT "/sdcard"
 #define LOG_DIR MOUNT_POINT "/log"
-#define QUEUE_LEN 64                    /* ~3.5 KB: minutes of notifies, a whole snapshot burst */
+#define QUEUE_LEN 64                    /* ~16 KB of PSRAM: minutes of notifies, a whole snapshot burst */
 #define RETRY_MS (5u * 60u * 1000u)     /* no card-detect pin: try again every 5 min */
 #define SYNC_MS 10000u                  /* fflush + fsync: a power cut loses <= 10 s */
 #define FULL_PCT 90                     /* above: delete the oldest segment */
@@ -127,6 +130,7 @@ static void io_failed(const char *what) {
     unmount();
     if (again) set_state(CALI_SD_ERROR);
     else mount();
+    cali_diag_evt("sd", "\"err\":\"%s\",\"again\":%s", what, again ? "true" : "false");   /* lands if remounted */
 }
 
 static void sd_task(void *arg) {
@@ -175,7 +179,8 @@ static void sd_task(void *arg) {
 }
 
 void cali_sdcard_esp_start(void) {
-    s_q = xQueueCreate(QUEUE_LEN, sizeof(cali_sdlog_rec_t));
+    /* PSRAM: 256 B records (a text record's body); only tasks touch it, never with the cache off */
+    s_q = xQueueCreateWithCaps(QUEUE_LEN, sizeof(cali_sdlog_rec_t), MALLOC_CAP_SPIRAM);
     if (!s_q || xTaskCreate(sd_task, "cali_sd", TASK_STACK, NULL, 3, NULL) != pdPASS) {
         cali_log("sd: no SD task (out of memory)");   /* cali_sdlog stays uninitialised: nothing queued */
         return;

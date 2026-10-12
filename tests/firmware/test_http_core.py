@@ -11,6 +11,8 @@ sends capped at 64 bytes), with a handler answering ``GET /hello`` and ``POST /e
    :links: R_FW_HTTP_STATUS
 """
 
+import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -40,6 +42,7 @@ def http_cli(tmp_path_factory):
             "-I",
             str(ROOT / "csrc"),
             str(CORE / "http_core.c"),
+            str(CORE / "diag.c"),
             str(CORE / "test" / "http_fake_sock.c"),
             "-o",
             str(out),
@@ -419,3 +422,26 @@ def test_peer_closing_while_pending_frees_the_slot(http_cli):
         + ["conn", "frag GET /hello HTTP/1.1\\r\\n\\r\\n", "tick 10", "tick 10"],
     )
     assert raw == "<accept><closed><accept>" + HELLO_200 + "<closed><stopped>"
+
+
+def test_every_response_is_one_perf_record(http_cli):
+    """R_FW_DIAG_LOG: each response -> {"ev":"perf","route","status","bytes","ms"} — the path without
+    its query, the bytes the socket took, accept -> last byte (poll clock); a 404 is "other", an unparsed one "-".
+
+    .. test:: The HTTP core records route, status, bytes and time per response
+       :id: T_FW_DIAG_HTTP_PERF
+       :links: R_FW_DIAG_LOG
+    """
+
+    def perf(fragments, extra=(), **kw):
+        sent, _ = session(http_cli, fragments, setup=("diaghook", *extra), **kw)
+        return [json.loads(m) for m in re.findall(r"<rec (\{.*?\})>", sent)]
+
+    assert perf(["GET /hello?x=1 HTTP/1.1\r\n\r\n"]) == [
+        {"ev": "perf", "route": "/hello", "status": 200, "bytes": len(HELLO_200), "ms": 0}
+    ]
+    assert perf(["GET /nope?secret=1 HTTP/1.1\r\n\r\n"])[0]["route"] == "other"
+    bad = perf(["BROKEN\r\n\r\n"])[0]
+    assert bad["route"] == "-" and bad["status"] == 400
+    slow = perf(["GET /big HTTP/1.1\r\n\r\n"], extra=("big 300", "sendmax 100"), tail=(10, 10, 10, 10))
+    assert slow[0]["bytes"] > 300 and slow[0]["ms"] >= 20  # streamed over several polls

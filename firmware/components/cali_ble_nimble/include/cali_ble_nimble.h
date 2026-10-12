@@ -52,6 +52,10 @@ void cali_ble_nimble_init(void (*on_sync)(void));
  * any other failure keeps it. */
 const cali_transport_t *cali_ble_nimble_transport(void);
 
+/* The held link's RSSI in dBm, or 0 (no link, or the controller would not say). Host task. For the
+ * diag record (R_FW_DIAG_LOG); read/write/heartbeat latencies go to cali_diag_ble as ops complete. */
+int cali_ble_nimble_rssi(void);
+
 #ifdef __cplusplus
 }
 #endif

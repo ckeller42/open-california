@@ -8,6 +8,8 @@
  * ev: "notify" | "read" (as the unit sent it) | "snap" (the session's held frame, written for every
  * function every CALI_SDLOG_SNAP_MS while the link is up, so one segment always holds the whole
  * state) | "connect" | "disconnect". seq counts up by one per written record, across boots.
+ * A text record (cali_sdlog_text: the diagnostics of cali_diag.h, R_FW_DIAG_LOG) carries its own
+ * fields after the stamp: {"seq":…,"tsrc":…,"ev":"diag",…}.
  *
  * Files: <dir>/<first seq>.jsonl, a new segment once the next line would pass
  * CALI_SDLOG_SEGMENT_BYTES. cali_sdlog_open resumes seq from the newest segment's last complete line
@@ -39,10 +41,11 @@ extern "C" {
 
 #define CALI_SDLOG_SEGMENT_BYTES (1024L * 1024L)   /* roll at 1 MB */
 #define CALI_SDLOG_SNAP_MS (5u * 60u * 1000u)       /* full snapshot every 5 min while linked */
-#define CALI_SDLOG_LINE_MAX 256                     /* the longest record is ~190 B */
+#define CALI_SDLOG_DATA_MAX 288                     /* a frame (<= CODEC_FRAME_MAX) or a text body */
+#define CALI_SDLOG_LINE_MAX 416                     /* the stamp (<= 110 B) + a text body + "}\n" */
 
 /* ev codes: cali_session.h's CALI_SESSION_IO_* (notify, read, connect, disconnect) + snap */
-enum { CALI_SDLOG_NOTIFY, CALI_SDLOG_READ, CALI_SDLOG_CONNECT, CALI_SDLOG_DISCONNECT, CALI_SDLOG_SNAP };
+enum { CALI_SDLOG_NOTIFY, CALI_SDLOG_READ, CALI_SDLOG_CONNECT, CALI_SDLOG_DISCONNECT, CALI_SDLOG_SNAP, CALI_SDLOG_TEXT };
 /* device.sd.state */
 enum { CALI_SD_ABSENT, CALI_SD_ERROR, CALI_SD_OK };
 
@@ -52,8 +55,8 @@ typedef struct {
     uint8_t tsrc;     /* CALI_TSRC_* */
     uint8_t ev;       /* CALI_SDLOG_* */
     uint16_t chr;     /* the char's short id (0 for a link event) */
-    uint8_t len;
-    uint8_t data[CODEC_FRAME_MAX];
+    uint16_t len;
+    uint8_t data[CALI_SDLOG_DATA_MAX];   /* the frame, or (CALI_SDLOG_TEXT) the body, no NUL */
 } cali_sdlog_rec_t;
 
 /* The platform's queue to the SD task: 0 queued, -1 full (never blocks). */
@@ -63,6 +66,10 @@ typedef int (*cali_sdlog_put_fn)(const cali_sdlog_rec_t *r);
 void cali_sdlog_init(cali_sdlog_put_fn put);   /* NULL (host, QEMU): nothing is logged */
 void cali_sdlog_io(int what, uint16_t char_short, const uint8_t *data, size_t len);   /* cali_session_io_fn */
 void cali_sdlog_tick(uint64_t now_ms);   /* the 5-min snapshot */
+/* ANY task (cali_diag_sink): a text record, body = `"ev":"…",…` without braces (< CALI_SDLOG_DATA_MAX
+ * bytes). Never blocks: a concurrent caller, a full queue or an overlong body is dropped and counted.
+ * 0 queued, -1 not (also: no card). */
+int cali_sdlog_text(const char *body);
 /* device.sd (a value: call cali_json_key first):
  * {"state":"absent"|"error"|"ok","total_mb":<int>|null,"free_mb":<int>|null,"last_seq":<int>|null,"dropped":<int>}
  * total/free only while ok; last_seq = the last record fsynced to the card (null: none yet). */

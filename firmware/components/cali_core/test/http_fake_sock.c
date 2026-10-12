@@ -19,6 +19,7 @@
  *   sendzero      the next tcp_send returns 0 (likewise)
  *   senderr       the next tcp_send returns -2 (the peer is gone)
  *   big <n>       GET /big answers <n> bytes (i % 26 + 'a'), at most BIG_MAX
+ *   diaghook      print each diagnostics record (cali_diag_http's perf) inline as "<rec {<body>}>"
  *   release       GET /later (answers CALI_HTTP_PENDING until then) now answers 200 "done"; a /later
  *                 re-asked with resume 0 (a core bug) answers "BAD"
  * Other routes: GET /redir -> 302 Location "/"; GET /redir-bare -> 302 without a location;
@@ -30,6 +31,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_diag.h"
 #include "cali_http.h"
 
 #define LFD 3
@@ -176,6 +178,11 @@ static size_t unescape(const char *s, char *out, size_t cap) {
     return n;
 }
 
+static int print_rec(const char *body) {
+    printf("<rec {%s}>", body);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     static char line[LINE_MAX];
     unsigned long long now = 1000;
@@ -201,6 +208,8 @@ int main(int argc, char **argv) {
             send_err = 1;
         } else if (strncmp(line, "eof", 3) == 0) {
             eof_queued = 1;
+        } else if (strncmp(line, "diaghook", 8) == 0) {
+            cali_diag_sink = print_rec;
         } else if (strncmp(line, "release", 7) == 0) {
             released = 1;
         } else if (sscanf(line, "tick %llu", &ms) == 1) {

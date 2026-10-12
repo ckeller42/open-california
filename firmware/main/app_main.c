@@ -38,6 +38,10 @@
  * cali_sdlog_io) stamps every unit frame + link change on this owner task and queues it; an SD task
  * mounts the card after the display init and appends JSONL to /sdcard/log. No card: nothing queued.
  *
+ * Diagnostics (R_FW_DIAG_LOG, cali_diag.h): cali_diag_sink = cali_sdlog_text; diag_tick (owner) writes
+ * the boot event once the card takes it and the diag record every minute; ESP_LOGW/E lines are
+ * mirrored through an esp_log_set_vprintf hook (any task, rate-limited in cali_diag_log).
+ *
  * QEMU build (CONFIG_CALI_QEMU_PROBE, firmware/qemu/sdkconfig.qemu only): nimble_port_init() is not
  * called at all (QEMU does not model the controller; esp_bt_controller_init asserts there and the
  * chip reboots in a loop), so the no-controller path above runs, and the bond store is still loaded
@@ -60,8 +64,11 @@
 #else
 #error "console must be USB-Serial/JTAG (device) or UART (QEMU): see firmware/README.md"
 #endif
+#include "esp_attr.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "esp_system.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
@@ -79,6 +86,7 @@
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
+#include "cali_diag.h"
 #if CONFIG_CALI_DISPLAY
 #include "cali_display.h"
 #include "cali_sdcard_esp.h"
@@ -106,6 +114,86 @@ static TaskHandle_t s_core_task;       /* no BLE: the owner is this task */
 static int s_wifi;                     /* cali_net_esp_init succeeded: the network runs on the tick */
 static int s_web;                      /* the web server listens (the OTA "healthy run" needs it) */
 static int s_valid_checked;            /* cali_ota_esp_mark_valid ran (once, R_FW_OTA rollback) */
+
+/* ---- diagnostics (R_FW_DIAG_LOG) ---- */
+#define RTC_MAGIC 0xd1a6b007u
+RTC_NOINIT_ATTR static uint32_t s_rtc_magic, s_rtc_up_s;   /* the last diag's uptime: survives a reset, not power-off */
+static long s_prev_up = -1;   /* the previous boot's, read once at boot */
+static int s_boot_logged;
+static vprintf_like_t s_vprintf;
+
+static const char *reset_name(esp_reset_reason_t r) {
+    switch (r) {
+    case ESP_RST_POWERON: return "poweron";
+    case ESP_RST_EXT: return "ext";
+    case ESP_RST_SW: return "sw";
+    case ESP_RST_PANIC: return "panic";
+    case ESP_RST_INT_WDT: return "int_wdt";
+    case ESP_RST_TASK_WDT: return "task_wdt";
+    case ESP_RST_WDT: return "wdt";
+    case ESP_RST_DEEPSLEEP: return "deepsleep";
+    case ESP_RST_BROWNOUT: return "brownout";
+    case ESP_RST_USB: return "usb";
+    case ESP_RST_JTAG: return "jtag";
+    case ESP_RST_PWR_GLITCH: return "pwr_glitch";
+    case ESP_RST_CPU_LOCKUP: return "cpu_lockup";
+    default: return "unknown";
+    }
+}
+
+/* Any task: every ESP_LOGx line goes to the console as before; W/E lines also to cali_diag_log. */
+static int log_hook(const char *fmt, va_list ap) {
+    static char line[192];
+    static int busy;
+    const char *p = fmt;
+    if (*p == '\033' && (p = strchr(p, 'm')) != NULL) p++;   /* a coloured line: "\033[0;33mW (…" */
+    if (p && (*p == 'W' || *p == 'E') && !__atomic_exchange_n(&busy, 1, __ATOMIC_ACQUIRE)) {
+        va_list cp;
+        va_copy(cp, ap);
+        vsnprintf(line, sizeof line, fmt, cp);
+        va_end(cp);
+        cali_diag_log(cali_uptime_ms(), line);
+        __atomic_store_n(&busy, 0, __ATOMIC_RELEASE);
+    }
+    return s_vprintf(fmt, ap);
+}
+
+typedef struct { uint64_t idle, at; int pct; } cpu_win_t;   /* cpu_pct's window */
+static int cpu_pct(cpu_win_t *w);
+
+/* Owner task, every tick: the boot event (retried until the card takes it), the diag record. */
+static void diag_tick(uint64_t now) {
+    static const char *const TASKS[][2] = {{"nimble_host", "owner"}, {"cali_core", "owner"}, {"cali_sd", "sd"},
+                                           {"taskLVGL", "display"}, {"cali_ota", "ota"}, {"cali_console", "console"},
+                                           {"tiT", "lwip"}};
+    static cpu_win_t win = {0, 0, -1};
+    cali_diag_health_t h = {0};
+    if (!s_boot_logged)
+        s_boot_logged = cali_diag_boot(reset_name(esp_reset_reason()), cali_fw_version(), cali_time_boot(), s_prev_up) == 0;
+    if (!cali_diag_due(now)) return;
+    cali_diag_log(now, NULL);   /* a log storm's dropped count, even if no warning follows */
+    s_rtc_up_s = (uint32_t)(now / 1000);
+    s_rtc_magic = RTC_MAGIC;
+    for (size_t i = 0; i < sizeof TASKS / sizeof *TASKS && h.nstack < CALI_DIAG_STACKS; i++) {
+        TaskHandle_t t = xTaskGetHandle(TASKS[i][0]);
+        if (!t) continue;
+        h.stack_name[h.nstack] = TASKS[i][1];
+        h.stack_min[h.nstack++] = (unsigned)uxTaskGetStackHighWaterMark(t);   /* IDF: bytes */
+    }
+    h.heap_free = (long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+    h.heap_min = (long)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+#if CONFIG_SPIRAM
+    h.psram_free = (long)heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+#else
+    h.psram_free = -1;
+#endif
+    h.cpu_pct = cpu_pct(&win);
+    h.link_up = cali_session_link_up();
+    h.wifi_rssi = cali_wifi_run_rssi();
+    h.ble_rssi = h.link_up ? cali_ble_nimble_rssi() : 0;
+    h.uptime_s = (unsigned long)(now / 1000);
+    cali_diag_health(&h);
+}
 
 #if CONFIG_CALI_QEMU_PROBE
 #define KVPROBE_KEY "kvprobe"
@@ -191,6 +279,7 @@ static void do_work(void) {
         cali_session_tick(now);       /* delays this tick's heartbeat decision */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
         cali_ac_tick(now);            /* auto camper (R_FW_AUTO_CAMPER): restore camping after park */
+        diag_tick(now);               /* R_FW_DIAG_LOG: boot event, the minute's diag record */
         if (s_wifi) {
             cali_net_esp_poll(now);   /* WiFi events -> the runner's sink */
             cali_wifi_run_tick(now);
@@ -365,22 +454,22 @@ void cali_heap_stats(unsigned *free_bytes, unsigned *largest) {
     *largest = (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
 }
 
-/* Busy % of both cores since the previous call (the first: since boot), from the idle tasks' run
- * time (CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS, esp_timer us, 64-bit counters); -1 without it. */
-static int cpu_pct(void) {
+/* Busy % of both cores since the previous call with the same window w (the first: since boot), from
+ * the idle tasks' run time (CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS, esp_timer us, 64-bit counters);
+ * -1 without it. One window for /api/state, one for the diag record, so neither shortens the other. */
+static int cpu_pct(cpu_win_t *w) {
 #if CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS
-    static uint64_t s_idle, s_at;
-    static int s_pct = -1;
     uint64_t idle = 0, at = (uint64_t)esp_timer_get_time();
     for (BaseType_t c = 0; c < portNUM_PROCESSORS; c++) idle += ulTaskGetIdleRunTimeCounterForCore(c);
-    if (at > s_at) {
-        uint64_t span = (at - s_at) * portNUM_PROCESSORS, quiet = idle - s_idle;
-        s_pct = quiet >= span ? 0 : (int)(100 - quiet * 100 / span);
+    if (at > w->at) {
+        uint64_t span = (at - w->at) * portNUM_PROCESSORS, quiet = idle - w->idle;
+        w->pct = quiet >= span ? 0 : (int)(100 - quiet * 100 / span);
     }
-    s_idle = idle;
-    s_at = at;
-    return s_pct;
+    w->idle = idle;
+    w->at = at;
+    return w->pct;
 #else
+    (void)w;
     return -1;
 #endif
 }
@@ -394,7 +483,8 @@ void cali_res_stats(cali_res_t *r) {
 #else
     r->psram_free_kb = -1;   /* the QEMU image: no PSRAM */
 #endif
-    r->cpu_pct = cpu_pct();
+    static cpu_win_t win = {0, 0, -1};
+    r->cpu_pct = cpu_pct(&win);
 }
 
 void app_main(void) {
@@ -405,6 +495,10 @@ void app_main(void) {
     }
     ESP_ERROR_CHECK(err);
     console_init();
+    if (s_rtc_magic == RTC_MAGIC) s_prev_up = (long)s_rtc_up_s;
+    s_rtc_magic = 0;   /* this boot writes its own once its first diag is due */
+    cali_diag_sink = cali_sdlog_text;   /* diagnostics -> the SD log (no card: dropped) */
+    s_vprintf = esp_log_set_vprintf(log_hook);
     if (cali_platform_init(NULL) != 0) cali_log("store: NVS namespace unusable, bonds will not persist");
     (void)cali_time_init();   /* the boot counter (R_FW_TIME): "LOG time: boot N", test_qemu_boot.py */
     cali_session_on_io = cali_sdlog_io;   /* unit frames -> the unit clock + the SD log (R_FW_SD_LOG) */

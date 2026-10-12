@@ -556,7 +556,7 @@ static int api_command(const cali_http_req_t *req, cali_http_resp_t *resp) {
         s_cmd = CALI_CTL_PENDING;
         s_cmd_reason = NULL;
         rc = cali_ctl_submit(cmd.fn, cmd.what, cmd.value, cmd.has_local_now ? (int64_t)cmd.local_now : -1,
-                             cmd_done, &reason);
+                             cmd_done, &reason, "web");
         if (rc == CALI_CTL_PENDING) return CALI_HTTP_PENDING;
         s_cmd = rc;
         cmd_answer(resp, rc, reason);
