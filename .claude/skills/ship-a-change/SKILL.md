@@ -20,7 +20,7 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 | Fix | Ponytail lens: real bug → fix; noise → one-line reply. Reply on every thread; `line: null` = outdated, maybe fixed. Loop. |
 | Privacy | `gh pr diff N --name-only`: no images/app screenshots (private `californiaontour-re` only), captures, APK, decompile, VIN, unit MAC `20:81:9A…`. |
 | Merge | `gh pr merge N --squash --delete-branch` (also buspi-config, californiaontour-re). |
-| Deploy | `ssh pi@buspi 'cd ~/open-california && git pull && sudo systemctl restart calictl'`; verify `systemctl is-active calictl`, `git log -1`, `/api/state` on :8088. |
+| Deploy | `ssh pi@buspi 'cd ~/open-california && git checkout main && git pull --ff-only && sudo systemctl restart calictl'` (never a detached sha); verify `systemctl is-active calictl`, `git log -1`, `/api/state` on :8088. |
 | Dashboard | After signal/enum changes: `push_dashboard.py` to Pi :3000 (`GRAFANA_PASSWORD`) and Cloud (`sudo -n bash -c 'set -a; . /etc/buspi/secrets.env; GRAFANA_TOKEN=$GRAFANA_CLOUD_TOKEN …'`; 503 → retry). Never echo secrets. |
 | Update ESP | If `firmware/`, `calictl/webui/**` or semantics changed (UI is bundled): OTA from the merge's `firmware-release`, below. |
 | Offline | `until ssh -o ConnectTimeout=8 -o BatchMode=yes pi@buspi true; do sleep 60; done` in background; then deploy/flash, tell the owner. |
@@ -44,6 +44,10 @@ CI's `firmware-release` job (push to `main` only) puts the merge commit's `cali_
 `manifest.json` on the prerelease `esp-latest`; the ESP installs it on request (`R_FW_OTA`,
 `docs/firmware.md` "Firmware update from GitHub"):
 
+`tools/esplab/ota_deploy.sh [sha|main] [esp-url]` does all of it: waits for `esp-latest` to name
+the sha, checks every 15 s until the ESP offers it, installs, waits for `device.fw` + the rollback
+window, prints `device.fw`/`link`/`ota` (fails on `ota.state` `error`). By hand:
+
 ```sh
 SHA=$(gh pr view N --json mergeCommit --jq .mergeCommit.oid)
 RUN=$(gh run list -R ckeller42/open-california --workflow ci.yml --commit "$SHA" --json databaseId --jq '.[0].databaseId')
@@ -56,7 +60,7 @@ curl -s http://<esp-ip>/api/state          # device.ota: downloading → rebooti
 the release mid-download (install again). Station mode only (`403` over the setup hotspot). The new
 build marks itself valid after 60 s healthy; a crash before that boots the previous slot.
 
-**USB recovery path** (both slots broken, or the first flash of a new partition layout): the ESP on
+**USB recovery path** (`flash_ci.sh`; both slots broken, or the first flash of a new partition layout): the ESP on
 a laptop's/buspi's USB, then `tools/esplab/flash_ci.sh <run-id> /dev/ttyACM0` (bootloader, partition
 table, `ota_data_initial.bin`, app at `ota_0`; NVS untouched). Link timing over USB:
 `tools/esplab/esp_cmd.py /dev/ttyACM0 --tail 120` (timestamped, no reset).
