@@ -102,13 +102,15 @@ def test_http_route_is_the_path_never_a_404s_or_a_quote(cli):
 
 
 def test_ble_ops_are_timed_each_at_most_1_per_s_else_1_in_10(cli):
-    # water re-read every 30 s: every one; heartbeat every 600 ms: 1 in 10; a char's first op always
+    # water re-read every 30 s: every one; heartbeat every 600 ms: one a minute; a char's first op always
     lines = ["ble 1302 read 80 %d" % t for t in (0, 30000, 60000)]
-    lines += ["ble 1003 hb 40 %d" % (t * 600) for t in range(25)]
+    lines += ["ble 1003 hb 40 %d" % (t * 600) for t in range(250)]  # 0 .. 149.4 s
+    lines += ["ble 1101 write 30 %d" % (t * 600) for t in range(25)]  # any other op asked often: 1 in 10
     out = recs(run(cli, *lines))
     assert [r["ms"] for r in out if r["char"] == "1302"] == [80, 80, 80]
     hb = [r for r in out if r["char"] == "1003"]
-    assert len(hb) == 3 and hb[0] == {"ev": "perf", "char": "1003", "op": "hb", "ms": 40}
+    assert len(hb) == 3 and hb[0] == {"ev": "perf", "char": "1003", "op": "hb", "ms": 40}  # 0, 60, 120 s
+    assert len([r for r in out if r["char"] == "1101"]) == 3
 
 
 def test_log_mirror_keeps_warnings_and_errors_only_20_a_minute(cli):

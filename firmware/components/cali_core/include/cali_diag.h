@@ -35,6 +35,7 @@ extern "C" {
 #define CALI_DIAG_LOG_PER_MIN 20      /* mirrored log lines per minute, then one "dropped" record */
 #define CALI_DIAG_BLE_EVERY_MS 1000u  /* a char asked at most this often: every op timed */
 #define CALI_DIAG_BLE_SAMPLE 10       /* else 1 op in this many */
+#define CALI_DIAG_HB_EVERY_MS 60000u  /* heartbeat ("hb") ops: at most one a minute */
 
 /* The body's destination: 0 queued, -1 not (no card, queue full, too long). Any task. */
 typedef int (*cali_diag_sink_fn)(const char *body);
@@ -76,7 +77,8 @@ int cali_diag_due(uint64_t now_ms);
 /* Owner task: one HTTP response. path NULL (an unparsed request) -> "-"; a 404 -> "other" (scanners
  * must not grow the route set). */
 void cali_diag_http(const char *path, int status, size_t bytes, uint64_t ms);
-/* Owner task: one completed BLE op on chr ("read" | "write" | "hb"), sampled per char. */
+/* Owner task: one completed BLE op on chr ("read" | "write" | "hb"), sampled per char; heartbeats
+ * at most once per CALI_DIAG_HB_EVERY_MS. */
 void cali_diag_ble(uint16_t chr, const char *op, uint32_t ms, uint64_t now_ms);
 /* Any task: one formatted ESP log line ("W (123) tag: msg", colour codes allowed). W and E are
  * recorded, CALI_DIAG_LOG_PER_MIN a minute, the rest counted and reported as one

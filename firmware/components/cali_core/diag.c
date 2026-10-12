@@ -106,7 +106,14 @@ void cali_diag_ble(uint16_t chr, const char *op, uint32_t ms, uint64_t now_ms) {
         uint8_t n;       /* ops since the last one timed, while asked more often than 1/s */
         uint64_t last;   /* the previous op's now_ms */
     } t[24];
+    static uint64_t hb_next;   /* heartbeats: one a minute (every 600 ms otherwise dominates the card) */
     size_t i;
+    if (strcmp(op, "hb") == 0) {
+        if (hb_next && now_ms < hb_next) return;
+        hb_next = now_ms + CALI_DIAG_HB_EVERY_MS;
+        cali_diag_rec("perf", "\"char\":\"%04x\",\"op\":\"hb\",\"ms\":%lu", (unsigned)chr, (unsigned long)ms);
+        return;
+    }
     for (i = 0; i < sizeof t / sizeof t[0] - 1 && t[i].chr && t[i].chr != chr; i++) {
     }   /* full table: the last slot is shared (ponytail: 24 > the unit's 16 chars + heartbeat) */
     int often = t[i].chr == chr && now_ms - t[i].last < CALI_DIAG_BLE_EVERY_MS;

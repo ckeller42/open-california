@@ -651,13 +651,13 @@ IP and no user-typed value is ever recorded.
 | `evt` `sd` | a failed write/fsync, once remounted | `err` (`write`/`fsync`), `again` |
 | `evt` `display` | reserved for the display-wake PR | `state` (`on`/`dim`/`off`), `src` (`tap`/`prox`/`alert`) |
 | `perf` (HTTP) | every response (http_core.c) | `route` (the path, no query; a 404 is `other`, an unparsed request `-`), `status`, `bytes` sent, `ms` accept -> last byte (100 ms poll clock) |
-| `perf` (BLE) | read/write/heartbeat completions (ble_nimble.c) | `char`, `op` (`read`/`write`/`hb`), `ms`; every op of a char asked at most once a second, else 1 in 10 |
+| `perf` (BLE) | read/write/heartbeat completions (ble_nimble.c) | `char`, `op` (`read`/`write`/`hb`), `ms`; every op of a char asked at most once a second, else 1 in 10; heartbeats at most one a minute |
 | `log` | an `ESP_LOGW`/`ESP_LOGE` line (`esp_log_set_vprintf` hook) | `lvl` (`W`/`E`), `tag`, `msg` (<= 117 chars); at most 20 a minute, then one `{"ev":"log","dropped":n}` when the minute ends |
 
 `cali_log` lines have no level and stay console-only. Size: a stamped line is ~70 B + the body. A
-day fully linked with no browser open: diag 1440 x ~300 B = 0.43 MB, heartbeat perf (1 in 10 at
-600 ms) 14 400 x ~125 B = 1.8 MB, water re-reads 2880 x ~125 B = 0.36 MB, a few kB of events — about
-2.6 MB/day on top of the frame log; an open web UI adds ~150 B per request.
+day fully linked with no browser open: diag 1440 x ~300 B = 0.43 MB, water re-reads 2880 x ~125 B =
+0.36 MB, heartbeat perf 1440 x ~125 B = 0.18 MB, a few kB of events — about 1 MB/day on top of the
+frame log; an open web UI adds ~150 B per request.
 
 ### Device resources (`device.res`)
 
