@@ -11,6 +11,7 @@
 #include "cali_auto_camper.h"
 #include "cali_captive.h"
 #include "cali_control.h"
+#include "cali_display_model.h"
 #include "cali_json.h"
 #include "cali_ota.h"
 #include "cali_platform.h"
@@ -202,6 +203,8 @@ static void api_state(cali_http_resp_t *resp) {
     res_json(&j);
     cali_json_key(&j, "auto_camper");   /* restore camping after park (R_FW_AUTO_CAMPER) */
     cali_ac_json(&j);
+    cali_json_key(&j, "display");   /* screen state + settings (R_FW_DISPLAY_WAKE) */
+    cali_display_json(&j);
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
     uint64_t wg = cali_session_water_good_ms();   /* adopted on this boot; NVS restore has no time */
@@ -718,6 +721,64 @@ static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) 
     }
 }
 
+/* ---- POST /api/display {"auto"?,"prox_wake"?,"min"?,"max"?,"offset"?} (R_FW_DISPLAY_WAKE): station mode only ---- */
+
+static int parse_pct(cursor_t *c, int *out, int sign) {   /* [-]1-3 digits; a 4th is then bad JSON */
+    const char *s;
+    int v = 0, neg = 0;
+    skip_ws(c);
+    if (sign && c->p < c->end && *c->p == '-') { neg = 1; c->p++; }
+    for (s = c->p; c->p < c->end && c->p - s < 3 && *c->p >= '0' && *c->p <= '9'; c->p++) v = v * 10 + (*c->p - '0');
+    if (v > 127) v = 127;   /* out of every range (bad_value), and still fits the int8 offset */
+    *out = neg ? -v : v;
+    return c->p == s ? -1 : 0;
+}
+
+/* Merges the given members into *d. 0 ok, -1 not an object of those keys (each at most once). */
+static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *d) {
+    static const char *const KEYS[5] = {"auto", "prox_wake", "min", "max", "offset"};
+    uint8_t *dst[5] = {&d->auto_on, &d->prox_wake, &d->min_pct, &d->max_pct, (uint8_t *)&d->offset};
+    cursor_t c = {body, body + body_len};
+    int seen = 0;
+    if (expect(&c, '{') != 0) return -1;
+    skip_ws(&c);
+    if (c.p < c.end && *c.p == '}') c.p++;
+    else for (;;) {
+        char key[12];
+        size_t klen;
+        int i, v;
+        if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
+        for (i = 0; i < 5 && strcmp(key, KEYS[i]) != 0; i++) {}
+        if (i == 5 || (seen & (1 << i)) || (i < 2 ? parse_bool(&c, &v) : parse_pct(&c, &v, i == 4)) != 0) return -1;
+        seen |= 1 << i;
+        *dst[i] = (uint8_t)(int8_t)v;
+        skip_ws(&c);
+        if (c.p < c.end && *c.p == ',') { c.p++; continue; }
+        if (expect(&c, '}') != 0) return -1;
+        break;
+    }
+    skip_ws(&c);
+    return c.p == c.end ? 0 : -1;
+}
+
+static void api_display(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    cali_display_cfg_t d = *cali_display_cfg();
+    int rc;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (parse_display(req->body, req->body_len, &d) != 0) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if ((rc = cali_display_cfg_set(&d)) == -1) {
+        SET_CONST(resp, 400, ERR_BAD_VALUE);
+    } else if (rc != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else {
+        SET_CONST(resp, 200, OK_BODY);   /* the new settings: /api/state device.display */
+    }
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
@@ -755,6 +816,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/auto_camper") == 0) {
         api_auto_camper(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/display") == 0) {
+        api_display(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */

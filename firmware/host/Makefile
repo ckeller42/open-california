@@ -64,10 +64,10 @@ OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include 
 COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o control.o codec.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o json.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o auto_camper.o auto_camper_run.o
+CORE_OBJ := console.o snapshot.o status.o json.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o auto_camper.o auto_camper_run.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
-LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++
+LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
 
 .PHONY: all clean
 all: cali-host store-cli
@@ -185,7 +185,7 @@ web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h 
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
 		../web/app_bundle_gen.h $(CORE_H)/cali_ota.h $(CORE_H)/cali_time.h $(CORE_H)/cali_sdlog.h $(CORE_H)/cali_auto_camper.h \
-		$(COMPONENTS)/platform/include/cali_platform.h
+		$(CORE_H)/cali_display_model.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The OTA state machine (R_FW_OTA): /api/ota + device.ota. The host has no OTA I/O (cali_ota_init is
@@ -214,10 +214,15 @@ sdlog.o: $(COMPONENTS)/cali_core/sdlog.c $(CORE_H)/cali_sdlog.h $(CORE_H)/cali_t
 		$(CORE_H)/cali_session.h $(CSRC)/codec.h $(CSRC)/codec_chars.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
-# The pure status-display model (#154): rows, stale rule, footer, dimming.
+# The pure status-display model (#154): rows, stale rule, footer, wake + brightness (R_FW_DISPLAY_WAKE).
 display_model.o: $(COMPONENTS)/cali_core/display_model.c $(CORE_H)/cali_display_model.h \
 		$(CORE_H)/cali_status.h $(CORE_H)/cali_wifi_run.h $(CSRC)/net_consts.h \
 		$(CSRC)/pairing_consts.h ../web/strings_gen.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# The screen settings (kv) + device.display (R_FW_DISPLAY_WAKE). The host has no screen: live members null.
+display_cfg.o: $(COMPONENTS)/cali_core/display_cfg.c $(CORE_H)/cali_display_model.h $(CORE_H)/cali_json.h \
+		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 session.o: $(COMPONENTS)/cali_core/session.c $(CORE_H)/cali_session.h $(CORE_H)/cali_console.h $(CORE_H)/cali_control.h \

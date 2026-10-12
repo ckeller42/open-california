@@ -145,6 +145,7 @@ Tests
 .. autofunction:: tests.e2e.test_esp_page.test_clock_line_shows_sync_and_boot
 .. autofunction:: tests.e2e.test_esp_page.test_storage_and_resources_lines
 .. autofunction:: tests.e2e.test_esp_page.test_auto_camper_row_shows_and_switches
+.. autofunction:: tests.e2e.test_esp_page.test_screen_row_shows_state_and_switches
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle

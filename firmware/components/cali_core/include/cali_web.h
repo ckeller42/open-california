@@ -28,6 +28,10 @@
  *                                        -- cali_res_stats; each an int or null (unknown: host, no PSRAM)
  *                                  "auto_camper":{"enabled":<bool>,"state":"idle"|"armed"|"restoring"},
  *                                                -- cali_auto_camper.h (R_FW_AUTO_CAMPER)
+ *                                  "display":{"state":"on"|"dim"|"off","lux","prox","brightness_pct",
+ *                                             "sensor":"ok"|"absent"|"error","auto":<bool>,
+ *                                             "prox_wake":<bool>,"min","max","offset"}   -- R_FW_DISPLAY_WAKE;
+ *                                             the live members are null without a screen (host, QEMU)
  *                                  "water_held":<bool>,
  *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
  *                                                                   was measured on this boot
@@ -111,6 +115,12 @@
  *                     400 bad_json (the /api/pairing parser: action/value/confirm keys), 400
  *                     bad_action, 409 busy (one runs), 503 ota_unavailable (no OTA I/O: the host
  *                     build, the QEMU image). Any other method: 405 method.
+ *   POST /api/display {"auto"?:<bool>,"prox_wake"?:<bool>,"min"?:<int>,"max"?:<int>,"offset"?:<int>}
+ *                     (R_FW_DISPLAY_WAKE): merged into the current settings, persisted (kv disp_auto/
+ *                     disp_prox/disp_min/disp_max/disp_off)
+ *                     -> 200 {"ok":true}; station mode only (403 setup_mode), 400 bad_json (other keys,
+ *                     a key twice, a non-bool flag, a non-integer percent), 400 bad_value (min 1..50,
+ *                     max 20..100, min < max, offset -50..50), 500 store, 405 for another method.
  *   other method on /api/wifi, /api/state or /api/pairing -> 405 {"ok":false,"error":"method"}
  *   anything else     setup mode: an OS captive-portal probe path (cali_captive_is_probe) -> 302
  *                     Location "http://" NET_AP_ADDR "/"; any other path -> 302 Location "/".

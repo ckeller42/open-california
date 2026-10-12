@@ -1,6 +1,9 @@
 /* display.c — paints the pure status model (cali_display_model.h) on the CoreS3 screen (#154).
  * Runs on the owner task (cali_display_tick from do_work); LVGL renders on esp_lvgl_port's task, so
- * every LVGL call sits under bsp_display_lock. Only changed labels/dots are touched. */
+ * every LVGL call sits under bsp_display_lock. Only changed labels/dots are touched.
+ * Wake + brightness (R_FW_DISPLAY_WAKE): reads the LTR-553ALS light/proximity sensor on the board
+ * package's I2C bus every tick and filters the touch input (a wake tap is swallowed); the model
+ * decides on / dim / off and the level. */
 #include <stdio.h>
 #include <string.h>
 
@@ -16,6 +19,23 @@
 #define AXP2101_ADDR 0x34 /* power chip: BSP 4.1.0 src/bsp_feature_en.c BSP_AXP2101_ADDR */
 #define AW9523_ADDR 0x58  /* IO expander: ESP_IO_EXPANDER_I2C_AW9523_ADDRESS_00 (BSP_IO_EXPANDER_ADDRESS) */
 #define PROBE_MS 50
+
+/* LTR-553ALS-WA ambient light + proximity, I2C 0x23 on the BSP's bus (no BSP helper in 4.1.0; the INT
+ * pin reaches no ESP GPIO, so it is polled). Registers + bits: Lite-On LTR-553ALS-WA data sheet Rev 1.0
+ * (22 May 2013), pp. 13-24: ALS_CONTR 0x80 (gain 4:2, SW reset 1, active 0), PS_CONTR 0x81 (active
+ * 1:0 = 10), PS_LED 0x82, PS_N_PULSES 0x83, ALS_MEAS_RATE 0x85 (integration 5:3, rate 2:0), PART_ID
+ * 0x86 (= 0x92), ALS_DATA_CH1 0x88/0x89 then CH0 0x8A/0x8B (read CH1 first: the four lock until 0x8B
+ * is read), ALS_PS_STATUS 0x8C (bit 7 = ALS data INVALID), PS_DATA 0x8D + 0x8E bits 2:0 (11 bit). */
+#define LTR_ADDR 0x23
+#define LTR_GAIN 8   /* ALS gain 8x: 0.125 .. 8k lux (dark van to daylight through glass) */
+#define LTR_IO_MS 10 /* per transfer: a dead sensor costs the owner (NimBLE host) task one 10 ms wait per tick */
+static const uint8_t LTR_INIT[][2] = {
+    {0x82, 0x7B},              /* PS LED 60 kHz, 100 % duty, 50 mA (the data sheet's own example) */
+    {0x83, 0x04},              /* 4 PS pulses */
+    {0x85, 0x01},              /* ALS integration 100 ms, repeat 100 ms */
+    {0x80, (3 << 2) | 1},      /* ALS gain 8x, active */
+    {0x81, 0x02},              /* PS active, gain 16x */
+};
 
 #if CONFIG_CALI_DISPLAY_LANG_EN
 #define LANG CALI_LANG_EN
@@ -55,6 +75,10 @@ static row_ui_t s_rows[3];
 static lv_obj_t *s_footer;
 static char s_footer_now[CALI_ROW_TEXT_MAX];
 static int s_brightness = -1;
+static i2c_master_dev_handle_t s_ltr;   /* NULL: no light/proximity sensor */
+static lv_indev_read_cb_t s_touch_read;
+static uint8_t s_swallow;               /* LVGL task only */
+static int s_touched, s_awake = 1;      /* LVGL task <-> owner task, __atomic */
 
 static lv_obj_t *box(lv_obj_t *parent, int x, int y, int w, int h, uint32_t rgb) {
     lv_obj_t *o = lv_obj_create(parent);
@@ -117,6 +141,58 @@ static void build(void) {
 
 int cali_display_ready(void) { return s_ok; }
 
+/* The touch read in LVGL's task: note the touch for the model, swallow a wake tap (cali_display_touch_gate). */
+static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
+    int pressed;
+    s_touch_read(indev, data);
+    pressed = data->state == LV_INDEV_STATE_PRESSED;
+    if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
+    if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED)))
+        data->state = LV_INDEV_STATE_RELEASED;
+}
+
+static int ltr_get(uint8_t reg, uint8_t *v) {   /* single-byte combined reads, as the data sheet shows */
+    return i2c_master_transmit_receive(s_ltr, &reg, 1, v, 1, LTR_IO_MS) == ESP_OK ? 0 : -1;
+}
+
+static void ltr_init(void) {
+    i2c_device_config_t cfg = {.dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = LTR_ADDR, .scl_speed_hz = 400000};
+    uint8_t id = 0;
+    if (i2c_master_probe(bsp_i2c_get_handle(), LTR_ADDR, PROBE_MS) != ESP_OK ||
+        i2c_master_bus_add_device(bsp_i2c_get_handle(), &cfg, &s_ltr) != ESP_OK) {
+        s_ltr = NULL;
+        cali_log("display: no light sensor (ltr553), fixed brightness");
+        return;
+    }
+    for (size_t i = 0; i < sizeof LTR_INIT / sizeof LTR_INIT[0]; i++)
+        if (i2c_master_transmit(s_ltr, LTR_INIT[i], 2, PROBE_MS) != ESP_OK) cali_log("display: ltr553 init write failed");
+    (void)ltr_get(0x86, &id);
+    cali_log("display: light sensor ltr553 part 0x%02x", id);
+}
+
+/* lux (-1 = no valid reading) and proximity counts (-1 = none). Lux: Lite-On's family formula (the
+ * LTR-553/-329 data sheets' "Appendix A", not printed in the WA Rev 1.0 PDF; coefficients as in
+ * ESPHome's ltr_als_ps driver): ratio = ch1/(ch0+ch1); < 0.45: 1.7743 ch0 + 1.1059 ch1;
+ * < 0.64: 4.2785 ch0 - 1.9548 ch1; < 0.85: 0.5926 ch0 + 0.1185 ch1; else 0; / gain / (integration/100 ms).
+ * The WA sheet's typical 200 lux point (gain 96: ch0 4900, ch1 1800) gives ~111 lux by it, and the
+ * cover glass dims it further: absolute lux is uncalibrated — DISPLAY_LUX_LOW/HIGH are the knobs. */
+static void ltr_read(int32_t *lux, int32_t *prox) {
+    uint8_t st, b[4], p0, p1;
+    *lux = *prox = -1;
+    if (ltr_get(0x8C, &st) != 0 || ltr_get(0x8D, &p0) != 0 || ltr_get(0x8E, &p1) != 0) return;   /* first failure ends it */
+    *prox = (int32_t)((p1 & 0x07) << 8 | p0);
+    for (int i = 0; i < 4; i++)
+        if (ltr_get((uint8_t)(0x88 + i), &b[i]) != 0) return;
+    if (st & 0x80) return;   /* ALS data invalid */
+    {
+        float ch1 = (float)(b[1] << 8 | b[0]), ch0 = (float)(b[3] << 8 | b[2]);
+        float r = ch0 + ch1 > 0 ? ch1 / (ch0 + ch1) : 0, l;
+        l = r < 0.45f ? 1.7743f * ch0 + 1.1059f * ch1 : r < 0.64f ? 4.2785f * ch0 - 1.9548f * ch1
+            : r < 0.85f ? 0.5926f * ch0 + 0.1185f * ch1 : 0;
+        *lux = (int32_t)(l / LTR_GAIN + 0.5f);
+    }
+}
+
 int cali_display_init(const cali_transport_t *t) {
 #if CONFIG_CALI_DISPLAY_FORCE_FAIL  /* test-only: the failure path without unplugging anything */
     cali_log("display: unavailable (forced)");
@@ -133,6 +209,14 @@ int cali_display_init(const cali_transport_t *t) {
         return -1;
     }
     build();
+    {
+        lv_indev_t *in = bsp_display_get_input_dev();
+        if (in) {
+            s_touch_read = lv_indev_get_read_cb(in);
+            lv_indev_set_read_cb(in, touch_read);
+        }
+    }
+    ltr_init();
     bsp_display_unlock();
     bsp_display_backlight_on();
     s_t = t;
@@ -159,13 +243,17 @@ static void paint_row(row_ui_t *r, const cali_row_t *m) {
 void cali_display_tick(uint64_t now_ms) {
     cali_status_t st;
     cali_display_view_t v;
+    cali_display_in_t in = {-1, -1, s_ltr != NULL, 0};
     if (!s_ok || now_ms - s_last_paint < DISPLAY_REFRESH_MS) return;
     s_last_paint = now_ms;
     /* The owner task is the NimBLE host task: never wait on a wedged render. A skipped paint leaves
      * the model and the painted-text buffers untouched, so the next try repaints whatever changed. */
     if (!bsp_display_lock(DISPLAY_LOCK_TIMEOUT_MS)) return;
+    if (s_ltr) ltr_read(&in.lux, &in.prox);
+    in.touched = (uint8_t)__atomic_exchange_n(&s_touched, 0, __ATOMIC_RELAXED);
     cali_status_get(&st, s_t, now_ms);
-    cali_display_model(&s_model, &st, now_ms, LANG, &v);
+    cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), &v);
+    __atomic_store_n(&s_awake, v.state == CALI_DISP_ON, __ATOMIC_RELAXED);
 
     paint_row(&s_rows[0], &v.device);
     paint_row(&s_rows[1], &v.wifi);
@@ -175,6 +263,7 @@ void cali_display_tick(uint64_t now_ms) {
         lv_label_set_text(s_footer, v.footer);
     }
     bsp_display_unlock();
+    cali_display_publish(&v);   /* /api/state device.display */
 
     /* only after a successful paint; can still block/abort inside the board package (cali_display.h) */
     if (s_brightness != v.brightness_pct) {
