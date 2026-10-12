@@ -15,7 +15,8 @@ See `ARCHITECTURE.md`.
    `MERGED_AMBIGUOUS`, resolve its offset in `calictl/overrides.py` from the app's `f()`
    builder — do NOT guess; the `sg.a(value, type)` 2nd arg is the TYPE (type 4=2-bit,
    6=4-bit, 3=16-bit, 7=8-bit, 5=32-bit, 1=16-bit), not the width.
-2. **Catalog it** in `protocol/signals.yaml` (or `python3 -m tools.triage`): `decision:
+2. **Catalog it** in `protocol/signals.yaml` (hand-edited; `python3 -m tools.audit_signals --seed` stubs
+   new fields): `decision:
    surface` needs a `name:`; `decision: omit` needs a `reason:`. Keys must exactly match the
    dictionary fields (both directions — no stale entries).
 3. **Emit it** from the function's interpreter in `calictl/semantics.py` under the catalog

@@ -16,7 +16,7 @@ cross-validated against four independent sources, enforced by pytest on every co
 
 ```mermaid
 flowchart TD
-  DF["dictionary.yaml field\n(state or control)"] --> TR{"tools/triage.py\ndecision"}
+  DF["dictionary.yaml field\n(state or control)"] --> TR{"decision\n(hand-edited)"}
   TR -->|surface + name| SY["signals.yaml\ncatalog entry"]
   TR -->|omit + reason| SY
   SY --> INV["test_signal_coverage.py\n3 invariants"]
@@ -55,8 +55,10 @@ resolved them and prevents recurrence.
 - `python3 -m tools.audit_signals --report` — triangulate + print discrepancies
   (`COVERAGE-GAP`, `STALE`, `GUI-SHOWN-BUT-OMITTED`, `SCALE-MISMATCH`, `OUT-OF-RANGE`,
   `SEMANTIC-REVIEW-NEEDED`). Currently **clean**.
-- `python3 -m tools.audit_signals --seed` — add a stub entry for any new field.
-- `tools/triage.py` — documents every surface/omit decision (re-runnable, deterministic).
+- `python3 -m tools.audit_signals --seed` — add a stub entry for any new field (existing
+  entries untouched). Replace each stub's `TODO` reason with a real decision; a `TODO` fails the guardrail.
+- `protocol/signals.yaml` is the only source of the decisions — edit it by hand. (The one-shot
+  `tools/triage.py` that seeded it on 2026-07-06 drifted and was removed, #240.)
 - `tests/test_signal_coverage.py` — **the guardrail**, three invariants:
   1. **Coverage** — every [dictionary](https://ckeller42.github.io/open-california/glossary.html#term-Dictionary) field has a catalog decision (new field ⇒ CI fails).
   2. **Surfaced ⇒ emitted** — every `surface` state field's canonical name is actually

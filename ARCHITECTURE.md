@@ -477,7 +477,8 @@ the unit's on-screen display, not a guess. See [`signals.md`](https://ckeller42.
 
 ### Add a signal (the loop)
 
-1. **Catalog it** — `python3 -m tools.triage` (surface-or-omit, with provenance).
+1. **Catalog it** in `protocol/signals.yaml` (surface-or-omit, with provenance; `python3 -m tools.audit_signals --seed`
+   stubs any new field for you to decide).
 2. **Emit it** in `semantics.py`.
 3. **Surface it** — update the Grafana dashboard (`calictl/deploy/camper-dashboard.json`, pushed with
    `push_dashboard.py`) and Home Assistant.
