@@ -268,9 +268,8 @@ buspi's own adapter). Warm the fast session first with `POST /api/session {"acti
 ## Working style
 
 Read `docs/business-logic/` before changing decode/semantics. Follow the existing
-dictionary-driven pattern; put manual offsets only in `overrides.py`. When surfacing a new
-signal: catalog it (`protocol/signals.yaml`) → emit it in `semantics` → update dashboard + HA →
-run the auditor. Prefer small, test-backed changes.
+dictionary-driven pattern; put manual offsets only in `overrides.py`. Surfacing a new signal:
+skill `add-signal`. Prefer small, test-backed changes.
 
 - **Claude automation is committed as a skill or a `tools/` script, never in `.claude/` config.**
   `.claude/*` is gitignored **except `.claude/skills/`** — `.claude/settings.json` and
