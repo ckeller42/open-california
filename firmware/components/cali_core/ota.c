@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_diag.h"
 #include "cali_platform.h"
 
 static const char *const NAMES[] = {"idle", "checking", "up_to_date", "available",
@@ -17,8 +18,16 @@ static const cali_ota_ops_t *s_ops;
 static int s_state, s_pending, s_pct;
 static const char *s_error;
 static char s_sha[41];
+static uint64_t s_started;   /* uptime of the request (written before the OTA task is woken) */
 
-static void set_state(int st) { __atomic_store_n(&s_state, st, __ATOMIC_RELEASE); }
+/* Every transition is an ota diagnostics event (R_FW_DIAG_LOG); either task. */
+static void set_state(int st) {
+    const char *err = __atomic_load_n(&s_error, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_state, st, __ATOMIC_RELEASE);
+    cali_diag_evt("ota", "\"state\":\"%s\",\"dur_ms\":%llu%s%s%s", NAMES[st],
+                  (unsigned long long)(cali_uptime_ms() - s_started), st == CALI_OTA_ERROR && err ? ",\"error\":\"" : "",
+                  st == CALI_OTA_ERROR && err ? err : "", st == CALI_OTA_ERROR && err ? "\"" : "");
+}
 int cali_ota_state(void) { return __atomic_load_n(&s_state, __ATOMIC_ACQUIRE); }
 
 const char *cali_ota_state_name(int st) {
@@ -37,6 +46,7 @@ int cali_ota_request(int install) {
     __atomic_store_n(&s_error, NULL, __ATOMIC_RELAXED);
     __atomic_store_n(&s_pct, 0, __ATOMIC_RELAXED);
     __atomic_store_n(&s_pending, install ? 2 : 1, __ATOMIC_RELAXED);
+    s_started = cali_uptime_ms();
     set_state(CALI_OTA_CHECKING);
     s_ops->wake();
     return 0;

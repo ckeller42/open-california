@@ -627,6 +627,38 @@ cannot be opened. The `/device` page and the shared UI's *Device status* card (m
 show one **Storage** row: *SD 28.1 of 29.7 GB free · log #1042*, *No SD card* or *SD card error*, plus
 *N records dropped* when `dropped > 0`, EN + DE.
 
+### Diagnostics on the SD log (`R_FW_DIAG_LOG`)
+
+The firmware's own health, events, timings and warnings go into the same JSONL stream as extra
+`ev` types (same `seq`/`boot`/`up`/`ts`/`tsrc` stamp; `calictl.trace` readers and
+`tools/trace_compare` skip an `ev` they do not know). `cali_core/diag.c` builds the record body
+(host-tested), `cali_sdlog_text` stamps and queues it from any task (one static record behind a
+try-lock: a concurrent caller, a full queue or a body over 287 B is dropped and counted in
+`device.sd.dropped`; no card = not logged). The queue moved to PSRAM (64 x 312 B). No client MAC or
+IP and no user-typed value is ever recorded.
+
+| `ev` / `kind` | When | Fields |
+|---|---|---|
+| `diag` | every 60 s (app_main) | `heap_free`, `heap_min` (internal heap, B), `psram_free`, `cpu_pct` (since the previous diag), `stack_min` `{owner, sd, display, ota, console, lwip}` (high-water mark, B), `wifi_rssi`, `ble_rssi` (`null` offline / unlinked), `link_up`, `uptime_s` |
+| `evt` `boot` | once per boot, when the card takes it | `reset_reason` (`esp_reset_reason`: `poweron`/`sw`/`panic`/`task_wdt`/`int_wdt`/`brownout`/…), `fw`, `boot`, `prev_up_s` (the previous boot's last diag uptime, RTC no-init RAM: survives a reset, `null` after power-on) |
+| `evt` `link_up` | link encrypted (session.c) | `reconnect_ms` (down -> up; `null` for the first link of a boot), `attempts` (`connect_bonded` calls since) |
+| `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`stop`), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
+| `evt` `wifi_up` / `wifi_down` | station online / lost (wifi_run.c) | `rssi`, `ip_changed` (bool, never the address) / `reason` `lost`, `rssi`, `dur_ms` |
+| `evt` `net` | a failed join | `err` `join`, `reason` (`not_found`/`auth`/`other`) |
+| `evt` `cmd` | a control command ends (control_run.c) | `fn`, `what` (never the value), `result` (`ack`/`refused`/`elsewhere`/`bad_value`/`none`/`busy`/`not_ready`/`failed`/`timeout`/`unconfirmed`), `latency_ms` (0 = answered at once), `src` (`web`/`auto_camper`/`console`) |
+| `evt` `ota` | every state transition (ota.c) | `state`, `dur_ms` since the request, `error` on `error` |
+| `evt` `auto_camper` | a decision (as serve's log) | `decision` (`armed_engine_shed`/`restoring`/`restored`/`stood_down`/`gave_up`), `soc`, `fails` |
+| `evt` `sd` | a failed write/fsync, once remounted | `err` (`write`/`fsync`), `again` |
+| `evt` `display` | reserved for the display-wake PR | `state` (`on`/`dim`/`off`), `src` (`tap`/`prox`/`alert`) |
+| `perf` (HTTP) | every response (http_core.c) | `route` (the path, no query; a 404 is `other`, an unparsed request `-`), `status`, `bytes` sent, `ms` accept -> last byte (100 ms poll clock) |
+| `perf` (BLE) | read/write/heartbeat completions (ble_nimble.c) | `char`, `op` (`read`/`write`/`hb`), `ms`; every op of a char asked at most once a second, else 1 in 10 |
+| `log` | an `ESP_LOGW`/`ESP_LOGE` line (`esp_log_set_vprintf` hook) | `lvl` (`W`/`E`), `tag`, `msg` (<= 117 chars); at most 20 a minute, then one `{"ev":"log","dropped":n}` when the minute ends |
+
+`cali_log` lines have no level and stay console-only. Size: a stamped line is ~70 B + the body. A
+day fully linked with no browser open: diag 1440 x ~300 B = 0.43 MB, heartbeat perf (1 in 10 at
+600 ms) 14 400 x ~125 B = 1.8 MB, water re-reads 2880 x ~125 B = 0.36 MB, a few kB of events — about
+2.6 MB/day on top of the frame log; an open web UI adds ~150 B per request.
+
 ### Device resources (`device.res`)
 
 `{"heap_free_kb", "heap_min_kb", "psram_free_kb", "cpu_pct"}`, shown as a **Resources** row on
@@ -1131,6 +1163,21 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    ``{state: absent|error|ok, total_mb, free_mb, last_seq, dropped}``, shown as a Storage row on the
    ``/device`` page and in the shared UI's Device status card, EN + DE.
 
+.. req:: The satellite records its own health, events, timings and warnings on the SD log
+   :id: R_FW_DIAG_LOG
+   :status: implemented
+   :tags: esp32, sd, log, diagnostics
+
+   The firmware shall append to the SD log (``R_FW_SD_LOG``), with the same stamp: a ``diag``
+   record every 60 s (heap, PSRAM, CPU, per-task stack high-water marks, WiFi/BLE RSSI, link,
+   uptime); ``evt`` records for boot (with the reset reason), BLE link up/down (reason, duration,
+   reconnect time, attempts), WiFi up/down and join failures, every control command's result
+   (function and control name, never the value; latency; source), OTA transitions, auto camper
+   decisions and SD errors; a ``perf`` record per HTTP response (route, status, bytes, time) and per
+   BLE operation, sampled per characteristic; and ``ESP_LOGW``/``ESP_LOGE`` lines as ``log``
+   records, at most 20 a minute plus a dropped count. Records come from any task without blocking
+   (dropped and counted when the queue is full) and never hold a client's MAC or IP address.
+
 .. req:: The satellite restores camping mode after you park, as calictl serve does
    :id: R_FW_AUTO_CAMPER
    :status: implemented
@@ -1310,6 +1357,15 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   card). Mount, card power, `fsync` on FAT and the SD task are board-only (owed: a power cut while
   logging → the log continues, `seq` without a gap; the card pulled → `device.sd.state` `absent`, no
   reboot; `cpu_pct`/heap plausible on the board).
+- **`R_FW_DIAG_LOG`** — verified by `T_FW_DIAG_LOG` (`tests/firmware/test_diag.py`: record shapes, the
+  longest `diag` body fits, unknown values `null`, the boot event, the 60 s cadence, HTTP route rules,
+  BLE sampling, the log mirror's W/E filter, colour stripping, 20/min + dropped count),
+  `T_FW_DIAG_SDLOG` (`test_sdlog.py`: a text record shares stamp + seq, an overlong body is dropped and
+  counted), `T_FW_DIAG_EVENTS` (`test_session_fake.py`: link_up/link_down with reason, status,
+  duration, reconnect time and attempts; cmd with result, latency and source, no value; wifi up/down,
+  a failed join, no address), `T_FW_DIAG_HTTP_PERF` (`test_http_core.py`) and `T_FW_DIAG_OTA`
+  (`test_ota.py`). Board-only (owed): one reboot -> `evt boot` with its reason; a link drop ->
+  `link_down`/`link_up`; heap/stack/RSSI plausible; the `esp_log_set_vprintf` hook sees IDF warnings.
 - **`R_FW_AUTO_CAMPER`** — verified by `T_FW_AUTO_CAMPER_PARITY` (`tests/firmware/test_auto_camper_parity.py`:
   every vector of `tests/vectors/auto_camper.json` through the C twin, the vectors fresh and reaching
   every outcome), `T_FW_AUTO_CAMPER_API` (`tests/firmware/test_web_handlers.py`: default on, persisted,

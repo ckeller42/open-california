@@ -11,6 +11,7 @@ ESP-only.
 """
 
 import json
+import re
 import shutil
 import subprocess
 from datetime import UTC, datetime
@@ -393,3 +394,46 @@ def test_esp_ingest_reads_the_c_pager_over_http(cli, dirs, tmp_path, monkeypatch
     assert s["pulled"] == 7 and s["written"] == 7
     assert [p.t for p in written] == [1789639000000 + n * 200000 for n in range(1, 8)]
     assert json.loads((tmp_path / "cur.json").read_text())["seq"] == 7
+
+
+def test_text_records_carry_their_own_ev_after_the_stamp(cli, dirs):
+    """R_FW_DIAG_LOG: a diagnostics body becomes one stamped line in the same stream (seq runs on
+    across frame and text records); an overlong body, or one while no card is "ok", is not logged
+    (the former counted as dropped).
+
+    .. test:: Diagnostics records share the SD log's stamp, seq and drop counting
+       :id: T_FW_DIAG_SDLOG
+       :links: R_FW_DIAG_LOG
+    """
+    kv, log = dirs
+    room = (
+        int(
+            re.search(r"#define CALI_SDLOG_DATA_MAX (\d+)", (CORE / "include" / "cali_sdlog.h").read_text())[
+                1
+            ]
+        )
+        - 1
+    )
+    longest = '"ev":"log","msg":"%s"' % ("x" * (room - len('"ev":"log","msg":""')))
+    out = run(
+        cli,
+        kv,
+        *logging_session(
+            log,
+            "io %d 1602 %s" % (NOTIFY, ENERGY),
+            'text "ev":"evt","kind":"boot","reset_reason":"panic"',
+            "text " + longest,
+            "text " + longest + "x",
+            "json",
+        ),
+    )
+    assert out.count("TEXT 0") == 2 and "TEXT -1" in out and sd(out)["dropped"] == 1
+    recs = records(log)
+    assert [r["seq"] for r in recs] == [1, 2, 3] and recs[1]["boot"] == 1
+    assert recs[1] == {k: recs[1][k] for k in ("seq", "boot", "up", "ts", "tsrc")} | {
+        "ev": "evt",
+        "kind": "boot",
+        "reset_reason": "panic",
+    }
+    assert len(recs[2]["msg"]) == room - len('"ev":"log","msg":""')
+    assert "TEXT -1" in run(cli, kv, "init", "card absent 0 0", 'text "ev":"diag"')

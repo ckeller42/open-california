@@ -86,6 +86,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "ota.c"),
             str(CORE / "time.c"),
             str(CORE / "sdlog.c"),
+            str(CORE / "diag.c"),
             str(CORE / "auto_camper.c"),
             str(CORE / "auto_camper_run.c"),
             str(CORE / "display_cfg.c"),

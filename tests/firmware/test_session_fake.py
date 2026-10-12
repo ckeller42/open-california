@@ -110,6 +110,7 @@ def fake(tmp_path_factory):
             str(CORE / "snapshot.c"),
             str(CORE / "json.c"),
             str(CORE / "session.c"),
+            str(CORE / "diag.c"),
             str(CORE / "control.c"),
             str(CORE / "control_run.c"),
             str(CORE / "runner.c"),
@@ -1998,3 +1999,73 @@ def test_a_lighting_config_frame_keeps_the_stored_lamps(fake):
     assert {k: v for k, v in act.items() if k != "DoorContact"} == protocol.decode(
         funcs["lighting"], bytes.fromhex(activated)
     )
+
+
+def _diag(out):
+    return [json.loads(line[5:]) for line in out if line.startswith("DIAG ")]
+
+
+def test_diag_events_link_cmd_wifi(fake):
+    """R_FW_DIAG_LOG call sites: link_up (reconnect time + connect attempts since the last down),
+    link_down (why, the transport status, how long it was up), cmd (fn + control name, result,
+    latency, source — never the value), wifi_up/wifi_down and a failed join.
+
+    .. test:: The session, control sequencer and WiFi runner emit their diagnostics events
+       :id: T_FW_DIAG_EVENTS
+       :links: R_FW_DIAG_LOG
+    """
+    frames = {0x1102: pack("cooler", Installed=1, State=0, Mode=4, Level=3)}
+    t = ARM + 100
+    out = run(
+        fake,
+        "diaghook",
+        *armed(frames),
+        "> set cooler power on",
+        "tick %d" % t,
+        "tick %d" % (t + 300),
+        "WRITTEN 1101 0",
+        "> set cooler level 99",
+        "DISCONNECTED 531",
+        "tick %d" % (t + 1300),  # the 1 s backoff: connect_bonded
+        "CONNECT_FAIL",
+        "tick %d" % (t + 3300),  # 2 s: again
+        "CONNECTED",
+        "ENC_OK",
+    )
+    ev = [e for e in _diag(out) if e["ev"] == "evt"]
+    assert ev[0] == {
+        "ev": "evt",
+        "kind": "link_up",
+        "reconnect_ms": None,
+        "attempts": 0,
+    }  # paired: no down yet
+    assert ev[1] == {"ev": "evt", "kind": "cmd", "fn": "cooler", "what": "power", "result": "ack",
+                     "latency_ms": 400, "src": "console"}  # submitted at tick ARM, ACKed after t + 300  # fmt: skip
+    assert ev[2]["kind"] == "cmd" and ev[2]["result"] == "bad_value" and "99" not in json.dumps(ev[2])
+    assert ev[3] == {
+        "ev": "evt",
+        "kind": "link_down",
+        "reason": "disconnected",
+        "status": 531,
+        "dur_ms": t + 300,
+    }
+    assert ev[4] == {"ev": "evt", "kind": "link_up", "reconnect_ms": 3000, "attempts": 2}
+    # a heartbeat that cannot be written: the reason says so
+    hb = _diag(run(fake, "diaghook", *PAIRED, *READ_ALL, "fail write_heartbeat", "tick %d" % (T + PERIOD)))
+    assert hb[-1] | {"dur_ms": 0} == {
+        "ev": "evt",
+        "kind": "link_down",
+        "reason": "heartbeat",
+        "status": -1,
+        "dur_ms": 0,
+    }
+    # WiFi: up (rssi, no previous lease), lost (rssi, time online), a failed join; never the address
+    w = _diag(run(fake, "diaghook", *_online("rssi -61", "tick 100", "tick 5100", "NET_LOST")))
+    assert w == [
+        {"ev": "evt", "kind": "wifi_up", "rssi": 0, "ip_changed": False},
+        {"ev": "evt", "kind": "wifi_down", "reason": "lost", "rssi": -61, "dur_ms": 5100},
+    ]
+    typo = run(
+        fake, "diaghook", "wifi_boot", "NET_AP_STARTED", "> wifi set minsel wrong-psk-99", "NET_FAILED 2"
+    )
+    assert _diag(typo) == [{"ev": "evt", "kind": "net", "err": "join", "reason": "auth"}]

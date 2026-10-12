@@ -27,21 +27,44 @@ static uint32_t s_last_seq;   /* 0 = none yet */
 
 /* ---- owner task ---- */
 static cali_sdlog_put_fn s_put;
-static uint32_t s_dropped;
+static uint32_t s_dropped;   /* any task (text records): __atomic */
 static uint64_t s_next_snap;
+
+static int logging(void) { return s_put && __atomic_load_n(&s_state, __ATOMIC_ACQUIRE) == CALI_SD_OK; }
+
+/* Stamp r and queue it: 0, or -1 (dropped and counted). */
+static int stamp_put(cali_sdlog_rec_t *r, int ev, uint16_t c, const void *data, size_t len) {
+    r->up = cali_uptime_ms();
+    r->ts = 0;
+    r->tsrc = (uint8_t)cali_time_ts(&r->ts);   /* ponytail: another task may read a unit anchor mid-update (a ts off by one 1004 frame) */
+    r->ev = (uint8_t)ev;
+    r->chr = c;
+    r->len = (uint16_t)len;
+    if (len) memcpy(r->data, data, len);
+    if (s_put(r) == 0) return 0;
+    __atomic_add_fetch(&s_dropped, 1, __ATOMIC_RELAXED);
+    return -1;
+}
 
 static void enqueue(int ev, uint16_t c, const uint8_t *data, size_t len) {
     cali_sdlog_rec_t r;
-    if (!s_put || __atomic_load_n(&s_state, __ATOMIC_ACQUIRE) != CALI_SD_OK) return;
-    if (len > sizeof r.data) len = sizeof r.data;
-    r.up = cali_uptime_ms();
-    r.ts = 0;
-    r.tsrc = (uint8_t)cali_time_ts(&r.ts);
-    r.ev = (uint8_t)ev;
-    r.chr = c;
-    r.len = (uint8_t)len;
-    if (len) memcpy(r.data, data, len);
-    if (s_put(&r) != 0) s_dropped++;
+    if (!logging()) return;
+    (void)stamp_put(&r, ev, c, data, len > CODEC_FRAME_MAX ? CODEC_FRAME_MAX : len);
+}
+
+int cali_sdlog_text(const char *body) {
+    static cali_sdlog_rec_t r;   /* static: a log line may come from a task with a small stack */
+    static int busy;
+    size_t n = strlen(body);
+    int rc;
+    if (!logging()) return -1;
+    if (n >= sizeof r.data || __atomic_exchange_n(&busy, 1, __ATOMIC_ACQUIRE)) {
+        __atomic_add_fetch(&s_dropped, 1, __ATOMIC_RELAXED);
+        return -1;
+    }
+    rc = stamp_put(&r, CALI_SDLOG_TEXT, 0, body, n);
+    __atomic_store_n(&busy, 0, __ATOMIC_RELEASE);
+    return rc;
 }
 
 void cali_sdlog_init(cali_sdlog_put_fn put) {
@@ -82,7 +105,7 @@ void cali_sdlog_json(cali_json_t *j) {
     cali_json_key(j, "last_seq");
     if (last) cali_json_int(j, last); else cali_json_null(j);
     cali_json_key(j, "dropped");
-    cali_json_int(j, s_dropped);
+    cali_json_int(j, __atomic_load_n(&s_dropped, __ATOMIC_RELAXED));
     cali_json_obj_end(j);
 }
 
@@ -112,10 +135,18 @@ int cali_sdlog_format(char *buf, size_t cap, uint32_t seq, uint32_t boot, const 
     char ts[24] = "null";
     const char *src = r->tsrc == CALI_TSRC_NTP ? "\"ntp\"" : r->tsrc == CALI_TSRC_UNIT ? "\"unit\"" : "null";
     if (r->tsrc != CALI_TSRC_NONE) snprintf(ts, sizeof ts, "%lld", (long long)r->ts);
-    if (r->ev >= sizeof EV / sizeof EV[0]) return -1;
-    int n = snprintf(buf, cap, "{\"seq\":%lu,\"boot\":%lu,\"up\":%llu,\"ts\":%s,\"tsrc\":%s,\"ev\":\"%s\"",
-                     (unsigned long)seq, (unsigned long)boot, (unsigned long long)r->up, ts, src, EV[r->ev]);
+    if (r->ev > CALI_SDLOG_TEXT) return -1;
+    int n = snprintf(buf, cap, "{\"seq\":%lu,\"boot\":%lu,\"up\":%llu,\"ts\":%s,\"tsrc\":%s,",
+                     (unsigned long)seq, (unsigned long)boot, (unsigned long long)r->up, ts, src);
     if (n < 0 || (size_t)n >= cap) return -1;
+    if (r->ev == CALI_SDLOG_TEXT) {   /* the body brings its own "ev" */
+        if ((size_t)n + r->len + 3 > cap) return -1;
+        memcpy(buf + n, r->data, r->len);
+        memcpy(buf + n + r->len, "}\n", 3);
+        return n + r->len + 2;
+    }
+    n += snprintf(buf + n, cap - (size_t)n, "\"ev\":\"%s\"", EV[r->ev]);
+    if ((size_t)n >= cap) return -1;
     if (r->ev == CALI_SDLOG_CONNECT || r->ev == CALI_SDLOG_DISCONNECT) {
         /* calictl's link record carries the address; the card never holds the unit's MAC */
         n += snprintf(buf + n, cap - (size_t)n, ",\"addr\":null}\n");

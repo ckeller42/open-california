@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "cali_control.h"
+#include "cali_diag.h"
 #include "cali_platform.h"
 #include "cali_session.h"
 #include "codec.h"
@@ -150,7 +151,7 @@ static void chain_tick(void) {
     const char *reason;
     int rc;
     if (s_wait || s_i >= s_n) return;
-    rc = cali_ctl_submit("campingmode", s_chain[s_i], "on", -1, chain_done, &reason);
+    rc = cali_ctl_submit("campingmode", s_chain[s_i], "on", -1, chain_done, &reason, "auto_camper");
     if (rc == CALI_CTL_PENDING) {
         s_wait = 1;
     } else if (!(rc == CALI_CTL_BUSY || rc == CALI_CTL_NOT_READY || rc == CALI_CTL_REFUSED) || s_now >= s_until) {
@@ -199,6 +200,8 @@ static void step(uint64_t now) {
         cali_log("auto-camper[%s]: %s (ignition=%s camping=%s soc=%s warn=%s fails=%d owe=%s)", event,
                  out.notice ? out.notice : strcmp(event, "armed_engine_shed") == 0 ? "armed engine shed" : event,
                  py(in.ign), py(in.master), soc, py(in.warning), S.fails, py(S.owe));
+        cali_diag_evt("auto_camper", "\"decision\":\"%s\",\"soc\":%s,\"fails\":%d", event,
+                      in.soc >= 0 ? soc : "null", S.fails);
     }
     if (out.actuate) {   /* master first (it gates usb + lights), as AutoCamper.step */
         s_n = 0;

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_diag.h"
 #include "cali_platform.h"
 #include "cali_session.h"
 #include "codec.h"
@@ -27,7 +28,19 @@ static struct {
     char fn[24], what[32], value[CALI_CTL_VALUE_MAX];   /* the command, planned again after the pull */
     int64_t local_now;     /* the page's clock at the submit (s_now = submitted_at) */
     uint64_t submitted_at;
+    const char *src;       /* cali_ctl_submit's caller (static string) */
 } O;
+
+/* The cmd diagnostics event (R_FW_DIAG_LOG): the command's name only, never its value. */
+static void cmd_evt(const char *fn, const char *what, const char *src, int result, uint64_t ms) {
+    static const char *const R[] = {"ack", "refused", "elsewhere", "bad_value", "none", "pending",
+                                    "busy", "not_ready", "failed", "timeout", "unconfirmed"};
+    char f[32], w[40];
+    cali_diag_evt("cmd", "\"fn\":%s,\"what\":%s,\"result\":\"%s\",\"latency_ms\":%llu,\"src\":\"%s\"",
+                  cali_diag_q(f, sizeof f, fn, 24), cali_diag_q(w, sizeof w, what, 32),
+                  result >= 0 && result < (int)(sizeof R / sizeof *R) ? R[result] : "error", (unsigned long long)ms,
+                  src ? src : "?");
+}
 
 static int index_of(const char *fn) {
     for (size_t i = 0; i < CODEC_NCHARS; i++)
@@ -79,6 +92,7 @@ static void finish(int result, const char *why, const char *reason) {
     O.active = 0;
     O.pull = 0;
     O.done = NULL;
+    cmd_evt(O.fn, O.what, O.src, result, s_now - O.submitted_at);
     if (result == CALI_CTL_OK) cali_log("control: %s sent", O.label);
     else if (reason) cali_log("control: %s refused: %s", O.label, reason);
     else cali_log("control: %s %s", O.label, why);
@@ -87,8 +101,8 @@ static void finish(int result, const char *why, const char *reason) {
 
 int cali_ctl_busy(void) { return O.active || O.inflight; }
 
-int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now,
-                    cali_ctl_done_t done, const char **reason) {
+static int submit(const char *fn, const char *what, const char *value, int64_t local_now, cali_ctl_done_t done,
+                  const char **reason, const char *src) {
     static cali_ctl_plan_t plan;   /* static: the 8 KB host-task stack */
     int pulling;
     *reason = NULL;
@@ -135,12 +149,20 @@ int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t
     O.done = done;
     O.local_now = local_now;
     O.submitted_at = s_now;
+    O.src = src;
     snprintf(O.fn, sizeof O.fn, "%s", fn);
     snprintf(O.what, sizeof O.what, "%s", what);
     snprintf(O.value, sizeof O.value, "%s", value);
     snprintf(O.label, sizeof O.label, "%s/%s", fn, what);
     cali_log(pulling ? "control: %s pulling the lighting config" : "control: %s sending", O.label);
     return CALI_CTL_PENDING;
+}
+
+int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now,
+                    cali_ctl_done_t done, const char **reason, const char *src) {
+    int rc = submit(fn, what, value, local_now, done, reason, src);
+    if (rc != CALI_CTL_PENDING) cmd_evt(fn, what, src, rc, 0);   /* answered at once */
+    return rc;
 }
 
 /* ponytail: the next frame goes out on the CALI_CTL_TICK_MS tick and the ACK's own time is unknown

@@ -61,7 +61,8 @@ CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC) ../web
 # ble_nimble.o calls cali_ctl_write_ok (control.o, which needs the codec), and store-cli links it.
-COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o control.o codec.o
+# ble_nimble.o also times its GATT ops into diag.o (R_FW_DIAG_LOG; no sink on the host: nothing recorded).
+COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o control.o codec.o diag.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
 CORE_OBJ := console.o snapshot.o status.o json.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o auto_camper.o auto_camper_run.o
@@ -212,6 +213,10 @@ time.o: $(COMPONENTS)/cali_core/time.c $(CORE_H)/cali_time.h $(CORE_H)/cali_json
 # called: state "absent", nothing logged); format/rolling/recovery: tests/firmware/test_sdlog.py.
 sdlog.o: $(COMPONENTS)/cali_core/sdlog.c $(CORE_H)/cali_sdlog.h $(CORE_H)/cali_time.h $(CORE_H)/cali_json.h \
 		$(CORE_H)/cali_session.h $(CSRC)/codec.h $(CSRC)/codec_chars.h $(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
+# Diagnostics record bodies + perf sampling + the log mirror (R_FW_DIAG_LOG): tests/firmware/test_diag.py.
+diag.o: $(COMPONENTS)/cali_core/diag.c $(CORE_H)/cali_diag.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The pure status-display model (#154): rows, stale rule, footer, wake + brightness (R_FW_DISPLAY_WAKE).

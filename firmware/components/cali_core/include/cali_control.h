@@ -111,8 +111,9 @@ void cali_ctl_pull_plan(cali_ctl_plan_t *out);   /* REQUEST_CONFIG @0, commit @C
 int cali_ctl_write_ok(uint16_t chr, size_t len);
 
 void cali_ctl_run_init(const cali_transport_t *t);
+/* src: who asks — "web" | "auto_camper" | "console" — for the cmd diagnostics event (R_FW_DIAG_LOG). */
 int cali_ctl_submit(const char *fn, const char *what, const char *value, int64_t local_now,
-                    cali_ctl_done_t done, const char **reason);
+                    cali_ctl_done_t done, const char **reason, const char *src);
 void cali_ctl_tick(uint64_t now_ms);
 int cali_ctl_busy(void);   /* 1 while a command runs or a write awaits its ACK (submit would say BUSY) */
 void cali_ctl_on_written(const cali_tevent_t *e);

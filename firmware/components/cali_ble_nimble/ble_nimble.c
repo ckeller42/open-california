@@ -38,6 +38,7 @@
 
 #include "cali_ble_nimble.h"
 #include "cali_control.h"
+#include "cali_diag.h"
 #include "cali_platform.h"
 #include "cali_transport.h"
 #include "codec.h"
@@ -82,6 +83,7 @@ static uintptr_t s_gen;                     /* bumped per link: stale GATT callb
 static struct chr s_chrs[MAX_CHRS];
 static int s_nchrs, s_disc_done;
 static struct op s_ops[OPQ];
+static uint64_t s_op_t0;                    /* uptime the running op started (cali_diag_ble) */
 static unsigned s_ophead, s_oplen;
 static int s_op_busy;
 static uint16_t s_cccd;                     /* OP_SUB: the CCCD handle found so far */
@@ -233,6 +235,11 @@ static void op_finish(int status, const uint8_t *data, size_t len) {
     s_ophead = (s_ophead + 1) % OPQ;
     s_oplen--;
     s_op_busy = 0;
+    if (status == 0 && (o.kind == OP_READ || o.kind == OP_WRITE || o.kind == OP_WRITE_HB)) {
+        uint64_t now = cali_uptime_ms();
+        cali_diag_ble(o.kind == OP_WRITE_HB ? CODEC_CHAR_HEARTBEAT : o.short_id,
+                      o.kind == OP_READ ? "read" : o.kind == OP_WRITE ? "write" : "hb", (uint32_t)(now - s_op_t0), now);
+    }
     switch (o.kind) {
     case OP_DISC: emit(CALI_TEV_DISCOVERED, status, 0, NULL, 0, NULL); break;
     case OP_READ: emit(CALI_TEV_READ, status, o.short_id, status ? NULL : data, status ? 0 : len, NULL); break;
@@ -408,6 +415,7 @@ static int op_begin(struct op *o) {
 
 static void op_kick(void) {
     if (s_op_busy || !s_oplen) return;
+    s_op_t0 = cali_uptime_ms();
     int rc = op_begin(&s_ops[s_ophead]);
     if (rc == 0) s_op_busy = 1;
     else op_finish(rc, NULL, 0);         /* reports the failure, pops, and kicks the next */
@@ -823,6 +831,12 @@ static const cali_transport_t TRANSPORT = {
 };
 
 const cali_transport_t *cali_ble_nimble_transport(void) { return &TRANSPORT; }
+
+int cali_ble_nimble_rssi(void) {
+    int8_t rssi = 0;
+    if (s_conn == BLE_HS_CONN_HANDLE_NONE || ble_gap_conn_rssi(s_conn, &rssi) != 0 || rssi == 127) return 0;
+    return rssi;
+}
 
 /* ---- init ---------------------------------------------------------------------------------- */
 

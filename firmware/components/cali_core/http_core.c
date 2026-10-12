@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cali_diag.h"
+
 #define HEAD_OUT_MAX 512 /* status line + response headers, Location included */
 
 static struct {
@@ -25,6 +27,9 @@ static struct {
     const char *out_body; /* the handler's body (or a static reason): valid until close */
     size_t out_body_len;
     size_t out_off; /* bytes of out_head + out_body already sent */
+    uint64_t t0;    /* accept: the perf record's ms (R_FW_DIAG_LOG) */
+    int status;     /* the queued response's status (0 = none) */
+    char route[41]; /* the request's path (a copy: buf is wiped on close) */
 } S = {.lfd = -1, .fd = -1};
 
 static void close_conn(void) {
@@ -73,6 +78,7 @@ static void pump(uint64_t now_ms) {
         S.out_off += (size_t)r;
         S.last_ms = now_ms;
     }
+    cali_diag_http(S.route[0] ? S.route : NULL, S.status, S.out_off, now_ms - S.t0);
     close_conn();
 }
 
@@ -84,6 +90,7 @@ static void respond(const cali_http_resp_t *r, uint64_t now_ms) {
     size_t body_len = r->body ? r->body_len : 0;
     const char *cc = r->cache_control ? r->cache_control : r->content_encoding ? "no-cache" : NULL;
     int n = -1; /* a redirect without a Location is the handler's error: 500 */
+    S.status = r->status;
     if (r->status == 304) { /* no body, no Content-Type/-Length; the validators stay (RFC 9110 15.4.5) */
         body_len = 0;
         n = snprintf(S.out_head, sizeof S.out_head, "HTTP/1.1 304 %s\r\n%s%s%s%s%s%sConnection: close\r\n\r\n",
@@ -102,6 +109,7 @@ static void respond(const cali_http_resp_t *r, uint64_t now_ms) {
     if (n < 0 || (size_t)n >= sizeof S.out_head) {
         body = reason(500);
         body_len = strlen(body);
+        S.status = 500;
         n = snprintf(S.out_head, sizeof S.out_head,
                      "HTTP/1.1 500 %s\r\nContent-Type: text/plain\r\nContent-Length: %lu\r\n"
                      "Connection: close\r\n\r\n", body, (unsigned long)body_len);
@@ -242,6 +250,7 @@ static void dispatch(uint64_t now_ms) {
         respond_error(400, now_ms);
         return;
     }
+    snprintf(S.route, sizeof S.route, "%s", req.path);
     S.buf[S.head_len + S.body_len] = '\0';
     req.body = S.buf + S.head_len;
     req.body_len = S.body_len;
@@ -274,6 +283,8 @@ void cali_http_poll(uint64_t now_ms) {
         if (fd < 0) return;
         S.fd = fd;
         S.last_ms = now_ms;
+        S.t0 = now_ms;
+        S.route[0] = 0;
         S.len = S.head_len = S.body_len = 0;
         S.sending = S.waiting = 0;
     }

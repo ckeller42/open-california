@@ -7,6 +7,7 @@
  *   init [qcap]             cali_sdlog_init with a fake queue of qcap records (default 64); "init none" = NULL
  *   card ok|absent|error <total_mb> <free_mb>   cali_sdlog_card
  *   io <what> <char hex> [hex]   cali_sdlog_io (what = cali_session.h CALI_SESSION_IO_*)
+ *   text <body>             cali_sdlog_text (a diagnostics record, R_FW_DIAG_LOG) -> "TEXT <rc>"
  *   link 0|1                the fake cali_session_link_up
  *   frame <i> <hex>         the fake session's held frame for CODEC_CHARS[i]
  *   tick <ms>               cali_sdlog_tick
@@ -68,7 +69,7 @@ static size_t unhex(const char *h, uint8_t *out, size_t cap) {
 }
 
 int main(int argc, char **argv) {
-    char line[512], buf[256];
+    char line[512], buf[256];   /* line: a text body up to CALI_SDLOG_DATA_MAX fits */
     if (argc < 2 || cali_platform_init(argv[1]) != 0) return 2;
     setvbuf(stdout, NULL, _IOLBF, 0);
     while (fgets(line, sizeof line, stdin)) {
@@ -96,6 +97,8 @@ int main(int argc, char **argv) {
             if (sscanf(line + 3, "%d %x %127s", &what, &c, hex) < 2) return 3;
             size_t n = unhex(hex, d, sizeof d);
             cali_sdlog_io(what, (uint16_t)c, n ? d : NULL, n);
+        } else if (strncmp(line, "text ", 5) == 0) {
+            printf("TEXT %d\n", cali_sdlog_text(line + 5));
         } else if (strncmp(line, "link ", 5) == 0) {
             s_link = atoi(line + 5);
         } else if (strncmp(line, "frame ", 6) == 0) {

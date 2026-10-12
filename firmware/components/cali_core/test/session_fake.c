@@ -27,6 +27,7 @@
  *     syncwritten <status> the next write() delivers its WRITTEN <status> inside the call (as the
  *                          NimBLE transport does for an ATT request it cannot start)
  *     iohook               from now on, print "IO <what> <hex char> <hex data>" per cali_session_on_io call
+ *     diaghook             from now on, print "DIAG {<body>}" per diagnostics record (cali_diag_sink)
  *     lastupd              print "LASTUPD <cali_session_last_update_ms()>"
  *     watergood            print "WATERGOOD <cali_session_water_held()> <cali_session_water_good_ms()>"
  *     wifi_boot            cali_wifi_run_init(fake net) + cali_wifi_run_boot() (what host_main
@@ -54,6 +55,7 @@
 #include <string.h>
 
 #include "cali_console.h"
+#include "cali_diag.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_session.h"
@@ -285,6 +287,11 @@ static void print_io(int what, uint16_t c, const uint8_t *data, size_t len) {
     printf("\n");
 }
 
+static int print_diag(const char *body) {
+    printf("DIAG {%s}\n", body);
+    return 0;
+}
+
 int main(void) {
     char line[512], word[32];
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -304,13 +311,17 @@ int main(void) {
             cali_session_on_io = print_io;
             continue;
         }
+        if (strcmp(line, "diaghook") == 0) {
+            cali_diag_sink = print_diag;
+            continue;
+        }
         if (strncmp(line, "submit ", 7) == 0) {   /* submit <local_now|-> <fn> <what> [value…] */
             const char *reason = NULL;
             char *ln = strtok(line + 7, " "), *fn = strtok(NULL, " "), *what = strtok(NULL, " ");
             char *value = strtok(NULL, "");
             int rc = cali_ctl_submit(fn ? fn : "", what ? what : "", value ? value : "",
                                      ln && strcmp(ln, "-") != 0 ? (int64_t)strtoll(ln, NULL, 10) : -1, on_done,
-                                     &reason);
+                                     &reason, "console");
             printf("SUBMIT %d %s\n", rc, reason ? reason : "-");
             continue;
         }

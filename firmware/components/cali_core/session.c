@@ -9,6 +9,7 @@
 
 #include "cali_console.h"
 #include "cali_control.h"
+#include "cali_diag.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "codec.h"
@@ -73,6 +74,13 @@ static struct {
 /* now_ms (latest tick) of the latest stored frame; 0 = never (a store before the first tick is
  * stamped 1, so "stored" never reads as "never"). */
 static uint64_t s_last_update;
+
+/* R_FW_DIAG_LOG link events: why the up link went (set by link_lost), when, and the connects since */
+static const char *s_why = "stop";
+static int s_why_st;
+static int s_was_up;           /* a link was up this boot: s_down_at is valid */
+static uint64_t s_down_at;
+static unsigned s_attempts;    /* connect_bonded() calls since the last link_up */
 
 /* [0] across links (shown), [1] this link only (gated on; cleared by link_up) */
 static cali_light_cfg_t s_lcfg[2];
@@ -252,7 +260,15 @@ static void unit_check(void) {
 }
 
 static void link_clear(void) {
-    if (s_link == LINK_UP) io(CALI_SESSION_IO_DOWN, 0, NULL, 0);
+    if (s_link == LINK_UP) {
+        io(CALI_SESSION_IO_DOWN, 0, NULL, 0);
+        cali_diag_evt("link_down", "\"reason\":\"%s\",\"status\":%d,\"dur_ms\":%llu", s_why, s_why_st,
+                      (unsigned long long)(s_now - s_up_at));
+        s_was_up = 1;
+        s_down_at = s_now;
+    }
+    s_why = "stop";   /* cali_session_stop's: a forget or a pairing flow */
+    s_why_st = 0;
     s_link = LINK_DOWN;
     s_hb_on = 0;
     s_warming = 0;
@@ -273,15 +289,22 @@ static void schedule_reconnect(void) {
     s_backoff = s_backoff * 2 > CALI_SESSION_BACKOFF_MAX_MS ? CALI_SESSION_BACKOFF_MAX_MS : s_backoff * 2;
 }
 
-/* The link is unusable (for a reason already logged): drop it and try again later. */
-static void link_lost(void) {
+/* The link is unusable (for a reason already logged): drop it and try again later. why/status: the
+ * link_down event's reason (a transport status, else 0). */
+static void link_lost(const char *why, int status) {
     int was = s_link;
+    s_why = why;
+    s_why_st = status;
     link_clear();
     if (was != LINK_DOWN) (void)s_t->disconnect();   /* may be down already: silent either way */
     schedule_reconnect();
 }
 
 static void link_up(void) {
+    char rc_ms[24] = "null";   /* the first link of this boot: no down -> up time */
+    if (s_was_up) snprintf(rc_ms, sizeof rc_ms, "%llu", (unsigned long long)(s_now - s_down_at));
+    cali_diag_evt("link_up", "\"reconnect_ms\":%s,\"attempts\":%u", rc_ms, s_attempts);
+    s_attempts = 0;
     io(CALI_SESSION_IO_UP, 0, NULL, 0);
     s_link = LINK_UP;
     s_up_at = s_now;
@@ -301,7 +324,7 @@ static void link_up(void) {
     int rc = s_t->discover();
     if (rc != 0) {
         cali_log("session: discover failed %d", rc);
-        link_lost();
+        link_lost("discover", rc);
     }
 }
 
@@ -321,7 +344,7 @@ static void read_next(void) {
 static void on_discovered(int status) {
     if (status != 0) {
         cali_log("session: discovery failed %d", status);
-        link_lost();
+        link_lost("discover", status);
         return;
     }
     for (size_t i = 0; i < CODEC_NCHARS; i++)
@@ -377,12 +400,19 @@ static void on_event(const cali_tevent_t *e) {
         break;
     case CALI_TEV_CONNECT_FAIL:
     case CALI_TEV_ENC_FAIL:
-    case CALI_TEV_DISCONNECTED:
+    case CALI_TEV_DISCONNECTED: {
+        const char *why = e->ev == CALI_TEV_DISCONNECTED ? "disconnected" : e->ev == CALI_TEV_ENC_FAIL ? "enc_fail"
+                                                                                                    : "connect_fail";
         if (s_link == LINK_DOWN) break;
         cali_log("session: link lost (event %d, status %d)", (int)e->ev, e->status);
-        if (e->ev == CALI_TEV_DISCONNECTED || e->ev == CALI_TEV_CONNECT_FAIL) link_clear();
-        link_lost();
+        if (e->ev == CALI_TEV_DISCONNECTED || e->ev == CALI_TEV_CONNECT_FAIL) {
+            s_why = why;
+            s_why_st = e->status;
+            link_clear();
+        }
+        link_lost(why, e->status);
         break;
+    }
     case CALI_TEV_DISCOVERED:
         if (s_link == LINK_UP) on_discovered(e->status);
         break;
@@ -398,7 +428,7 @@ static void on_event(const cali_tevent_t *e) {
     case CALI_TEV_HEARTBEAT:
         if (s_link == LINK_UP && e->status != 0) {
             cali_log("session: heartbeat failed %d", e->status);
-            link_lost();
+            link_lost("heartbeat", e->status);
         }
         break;
     case CALI_TEV_WRITTEN:
@@ -437,6 +467,7 @@ void cali_session_init(const cali_transport_t *t) {
 
 static void connect_now(void) {
     int rc = s_t->connect_bonded();
+    s_attempts++;
     if (rc == 0) {
         s_link = LINK_CONNECTING;
         s_connect_started = s_now;
@@ -477,7 +508,7 @@ void cali_session_tick(uint64_t now_ms) {
         int rc = s_t->write_heartbeat(n);
         if (rc != 0) {
             cali_log("session: heartbeat not written %d", rc);
-            link_lost();
+            link_lost("heartbeat", rc);
             return;
         }
     }
@@ -496,12 +527,12 @@ void cali_session_tick(uint64_t now_ms) {
      * field night 2026-10-08: 45 min link-down with the unit awake). */
     if (s_link == LINK_CONNECTING && now_ms - s_connect_started >= CALI_SESSION_CONNECT_TIMEOUT_MS) {
         cali_log("session: no connect verdict after %u ms", (unsigned)CALI_SESSION_CONNECT_TIMEOUT_MS);
-        link_lost();
+        link_lost("connect_timeout", 0);
         return;
     }
     if (s_link == LINK_CONNECTED && now_ms - s_connected_at >= CALI_SESSION_ENC_TIMEOUT_MS) {
         cali_log("session: link not encrypted after %u ms", (unsigned)CALI_SESSION_ENC_TIMEOUT_MS);
-        link_lost();
+        link_lost("enc_timeout", 0);
         return;
     }
     if (s_link == LINK_DOWN && s_reconnect_pending && now_ms >= s_reconnect_at) {

@@ -11,6 +11,7 @@
  *   check | install     cali_ota_request -> "REQ <rc>"
  *   work                cali_ota_work()
  *   json                "JSON <the device.ota object>"
+ *   diaghook            from now on print "DIAG {<body>}" per diagnostics record (R_FW_DIAG_LOG)
  * ops calls print "CALL get <url>", "CALL download <url> <size> (<state meanwhile>)", "CALL slot_sha256 <size>",
  * "CALL commit", "CALL abort", "CALL restart", "CALL wake"; cali_log prints "LOG <text>".
  */
@@ -19,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cali_diag.h"
 #include "cali_json.h"
 #include "cali_ota.h"
 #include "cali_platform.h"
@@ -29,6 +31,10 @@ static int s_get_fail, s_download_fail, s_slot_fail, s_commit_fail;
 static uint8_t s_slot[32];
 
 const char *cali_fw_version(void) { return s_fw; }
+static int print_diag(const char *body) {
+    printf("DIAG {%s}\n", body);
+    return 0;
+}
 uint64_t cali_uptime_ms(void) { static uint64_t t = 1000; return t += 1000; } /* each call a later "now" */
 void cali_log(const char *fmt, ...) {
     va_list ap;
@@ -93,6 +99,7 @@ int main(void) {
         else if (strcmp(line, "check") == 0 || strcmp(line, "install") == 0)
             printf("REQ %d\n", cali_ota_request(line[0] == 'i'));
         else if (strcmp(line, "work") == 0) cali_ota_work();
+        else if (strcmp(line, "diaghook") == 0) cali_diag_sink = print_diag;
         else if (strcmp(line, "json") == 0) {
             char buf[256];
             cali_json_t j;
