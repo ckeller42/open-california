@@ -828,7 +828,7 @@ whichever runtime served the page.
   differs per tab and load), and an off switch on each runtime (`/device` "Send usage data",
   `CALICTL_UX=0`). Ingest of the SD `ux` records into Influx and the Grafana row: delivery item 3.
 
-The bundle budget `WEB_APP_GZ_MAX` grew 64 -> 80 KB with this (main was 237 B under 64 KB).
+The `/device` page budget `NET_HTTP_BODY_MAX` grew 24 -> 28 KB for the usage-data row (flash only).
 
 ## CI jobs (`.github/workflows/ci.yml`)
 
