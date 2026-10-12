@@ -77,3 +77,16 @@ def test_surfaced_control_fields_are_placed():
             if e.get("decision") == "surface" and field not in placed:
                 bad.append("%s.control.%s" % (fn, field))
     assert not bad, "surfaced control fields not placed/resolved: %s" % bad
+
+
+def test_no_undecided_seed_stubs():
+    """`audit_signals --seed` stubs new fields with a `TODO` reason; each must get a real decision."""
+    cat = catalog.load_catalog()
+    todo = sorted(
+        "%s.%s.%s" % (fn, kind, name)
+        for fn, kinds in cat.items()
+        for kind, fields in (kinds or {}).items()
+        for name, e in (fields or {}).items()
+        if str(e.get("reason", "")).startswith("TODO")
+    )
+    assert todo == [], "undecided catalog stubs (replace the TODO reason): %s" % todo

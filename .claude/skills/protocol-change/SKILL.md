@@ -32,8 +32,8 @@ order of operations so you fix things forward instead of chasing red CI.
    Stage both outputs with your change. Verify: both commands with `--check` exit 0.
    Generation fails loudly (that's correct, fix the cause) if a pinned-length control
    function has an unplaced field or a valid value ≥ 32.
-3. **Catalog every new/changed field** — `python3 -m tools.triage` or edit
-   `protocol/signals.yaml` (`surface` needs a `name`, `omit` needs a `reason`).
+3. **Catalog every new/changed field** — edit `protocol/signals.yaml` (`python3 -m tools.audit_signals --seed`
+   stubs new fields with a `TODO` reason to replace) (`surface` needs a `name`, `omit` needs a `reason`).
    A dropped/unaccounted field fails `tests/test_signal_coverage.py`.
 4. **If a SURFACED signal changed**: emit it in `calictl/semantics.py`, then follow
    the `add-signal` skill (dashboard + HA + auditor). Grafana dashboards do NOT

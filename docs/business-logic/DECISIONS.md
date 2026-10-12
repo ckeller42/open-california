@@ -366,7 +366,7 @@ published as `/ 10.0d` (`xf/d.java:159,173,175`; re-published on every notificat
 `xf/d.java:171` applies **no** divisor, only the `+2` correction for SW 0409/0410 (already wired in
 `semantics.apply_sw_corrections`, DEVICE-verified 2026-08-17). [Catalog](https://ckeller42.github.io/open-california/glossary.html#term-Catalog) now `'0.1'`/`raw` with
 `confidence: high` and the citations in `sources.app`; `tools/triage.py` table updated so a re-triage
-keeps it; the "Source currents (raw, unverified scale)" Grafana panel is now "(A)" `unit: amp`.
+keeps it (triage removed 2026-10-12, #240 — the catalog is hand-edited now); the "Source currents (raw, unverified scale)" Grafana panel is now "(A)" `unit: amp`.
 `tools/app_scales.py` cannot harvest this (its regex wants `Name * N`; the app writes
 `.doubleValue() / 10.0d` on an obfuscated holder) — the citation above is the evidence.
 Also recorded: the derived `soc*_pct` is app display math (level×10 for 0–10, `None` above), not a
