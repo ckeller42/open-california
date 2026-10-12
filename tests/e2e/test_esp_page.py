@@ -303,3 +303,55 @@ def test_auto_camper_row_shows_and_switches(page, locale, lang):
     with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
         expect(pg.locator("#ac-status")).to_contain_text(STRINGS["ac_station_only"][lang])
         expect(pg.locator("#ac-toggle")).to_be_hidden()
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_screen_row_shows_state_and_switches(page, locale, lang):
+    """The /device Screen row (R_FW_DISPLAY_WAKE): state, brightness with its range, room light, a
+    sensor fault; each switch posts its one member to ``/api/display``, the -/+ stepper the offset in
+    5-point steps; over the setup hotspot the controls are greyed; without a screen (host build, QEMU)
+    the row is hidden.
+
+    .. test:: The /device page shows device.display and switches its settings, EN + DE
+       :id: T_FW_DISPLAY_WAKE_PAGE
+       :links: R_FW_DISPLAY_WAKE
+    """
+    posts = []
+
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        disp = stub.fixtures["station"]["/api/state"]["device"]["display"]
+
+        def on_post(route):
+            posts.append(json.loads(route.request.post_data))
+            disp.update(posts[-1])
+            route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
+
+        pg.route("**/api/display", on_post)
+        status, auto = pg.locator("#scr-status"), pg.locator("#scr-auto")
+        expect(pg.locator("#scr-title")).to_have_text(STRINGS["scr_title"][lang])
+        expect(status).to_have_text(STRINGS["scr_on"][lang] + " · 68 % (8–100) · 42 lx")
+        expect(pg.locator("#scr-auto-l")).to_have_text(STRINGS["scr_auto"][lang])
+        expect(auto).to_be_checked()
+        expect(pg.locator("#scr-prox")).to_be_checked()
+        expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "0"))
+        auto.uncheck()
+        for _ in range(50):  # the POST lands before the fixture flips the next poll's state
+            if posts:
+                break
+            pg.wait_for_timeout(100)
+        pg.locator("#scr-up").click()
+        expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "+5"))
+        pg.locator("#scr-dn").click()
+        pg.locator("#scr-dn").click()
+        expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "-5"))
+        disp.update(state="off", brightness_pct=0, lux=None, sensor="error")
+        expect(status).to_have_text(
+            STRINGS["scr_off"][lang] + " · 0 % (8–100) · " + STRINGS["scr_nolux"][lang]
+        )
+        expect(auto).not_to_be_checked()
+        assert posts == [{"auto": False}, {"offset": 5}, {"offset": 0}, {"offset": -5}]
+    with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
+        expect(pg.locator("#scr-auto")).to_be_disabled()
+        expect(pg.locator("#scr-up")).to_be_disabled()
+        stub.fixtures["setup"]["/api/state"]["device"]["display"].update(state=None)
+        expect(pg.locator("#scr")).to_be_hidden()

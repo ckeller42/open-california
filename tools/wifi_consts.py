@@ -41,9 +41,12 @@ CONSTS = {
     "NET_HTTP_BODY_MAX": 24576,
     # Status display (#154, spec 2026-10-01): refresh, stale threshold, dimming, LVGL lock bound
     # (the tick runs on the NimBLE host task: never wait on a wedged render longer than this).
-    "DISPLAY_REFRESH_MS": 500,
+    # The tick also polls the light/proximity sensor (R_FW_DISPLAY_WAKE): 200 ms, so a hand near
+    # (two reads in a row) wakes the screen in well under a second; off after DISPLAY_OFF_AFTER_MS.
+    "DISPLAY_REFRESH_MS": 200,
     "DISPLAY_STALE_MS": 10000,
     "DISPLAY_DIM_AFTER_MS": 60000,
+    "DISPLAY_OFF_AFTER_MS": 300000,
     "DISPLAY_BRIGHT_PCT": 100,
     "DISPLAY_DIM_PCT": 10,
     "DISPLAY_LOCK_TIMEOUT_MS": 50,

@@ -17,7 +17,8 @@
  * @typedef {{ state: string, total_mb: number|null, free_mb: number|null, last_seq: number|null, dropped: number }} Sd
  * @typedef {{ heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null }} Res
  * @typedef {{ enabled: boolean, state: string }} AutoCamper
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, auto_camper: AutoCamper }} Device  the /api/state fields this page reads
+ * @typedef {{ state: string|null, lux: number|null, brightness_pct: number|null, sensor: string|null, auto: boolean, prox_wake: boolean, min: number, max: number, offset: number }} Display
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, auto_camper: AutoCamper, display: Display }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -95,6 +96,9 @@ $("rescan").textContent = t("rescan");
 $("fw-title").textContent = t("fw_title");
 $("ac-title").textContent = t("ac_title");
 $("fw-check").textContent = t("fw_check");
+$("scr-title").textContent = t("scr_title");
+$("scr-auto-l").textContent = t("scr_auto");
+$("scr-prox-l").textContent = t("scr_prox");
 document.documentElement.lang = LANG;
 
 /** @type {Join|null} a submitted join being watched */
@@ -178,6 +182,30 @@ async function toggleAutoCamper() {
   } catch (e) { /* ok stays false */ }
   if (!ok) msg.textContent = t("ac_error");
 }
+
+/* Screen (R_FW_DISPLAY_WAKE) */
+/** @type {Record<string, string>} */
+const SCR = {on: "scr_on", dim: "scr_dim", off: "scr_off"};
+/** @param {Device} d */
+function renderScreen(d) {
+  const p = d.display;
+  $("scr").hidden = p.state === null;
+  if (p.state === null) return;
+  $("scr-status").textContent = [t(SCR[p.state]), p.brightness_pct + " % (" + p.min + "–" + p.max + ")",
+    p.lux === null ? "" : p.lux + " lx", p.sensor === "ok" ? "" : t("scr_nolux")].filter(Boolean).join(" · ");
+  input("scr-auto").checked = p.auto;
+  input("scr-prox").checked = p.prox_wake;
+  scrOff = p.offset;
+  $("scr-off").textContent = t("scr_offset", {n: (p.offset > 0 ? "+" : "") + p.offset});
+  for (const id of ["scr-auto", "scr-prox", "scr-dn", "scr-up"]) input(id).disabled = d.wifi.mode !== "station";
+}
+
+let scrOff = 0;
+/** @param {object} o */
+const scrPost = (o) => fetchJson("/api/display", {method: "POST", headers: {"Content-Type": "application/json"},
+  body: JSON.stringify(o)}).catch(() => null);
+/** @param {number} step */
+const scrStep = (step) => scrPost({offset: scrOff = Math.max(-50, Math.min(50, scrOff + step))});
 
 /** @param {"check"|"install"} action */
 async function ota(action) {
@@ -297,6 +325,7 @@ async function poll() {
     renderLink(s.device);
     renderFw(s.device);
     renderAutoCamper(s.device);
+    renderScreen(s.device);
     renderTime(s.device.time);
     renderSd(s.device.sd);
     renderRes(s.device.res);
@@ -314,6 +343,9 @@ async function poll() {
 $("connect").addEventListener("click", connect);
 $("rescan").addEventListener("click", scan);
 $("ac-toggle").addEventListener("click", toggleAutoCamper);
+for (const [id, k] of [["scr-auto", "auto"], ["scr-prox", "prox_wake"]]) $(id).addEventListener("change", () => scrPost({[k]: input(id).checked}));
+$("scr-dn").addEventListener("click", () => scrStep(-5));
+$("scr-up").addEventListener("click", () => scrStep(5));
 $("fw-check").addEventListener("click", () => ota("check"));
 $("fw-install").addEventListener("click", () => ota("install"));
 poll();

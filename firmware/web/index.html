@@ -25,6 +25,7 @@ select,input,button{font:inherit;width:100%;padding:9px 10px;border-radius:8px;b
 button{background:var(--accent);border-color:var(--accent);color:#fff;margin-top:12px;cursor:pointer}
 button.secondary{background:transparent;color:var(--accent)}
 a{color:var(--accent)}
+#scr input{width:auto;margin-right:6px}#scr button{width:3em;margin:0 8px}
 </style>
 </head>
 <body>
@@ -51,6 +52,13 @@ a{color:var(--accent)}
   <p id="ac-status"></p>
   <button id="ac-toggle" class="secondary" type="button" hidden></button>
   <p id="ac-msg" class="bad"></p>
+</section>
+<section id="scr" class="box" hidden>
+  <h2 id="scr-title"></h2>
+  <p id="scr-status"></p>
+  <label><input id="scr-auto" type="checkbox"><span id="scr-auto-l"></span></label>
+  <label><input id="scr-prox" type="checkbox"><span id="scr-prox-l"></span></label>
+  <p><button id="scr-dn" class="secondary">−</button><span id="scr-off"></span><button id="scr-up" class="secondary">+</button></p>
 </section>
 <section id="fw" class="box">
   <h2 id="fw-title"></h2>

@@ -182,6 +182,19 @@ def calictl_state(fn):
 
 
 OTA_IDLE = {"state": "idle", "available_sha": None, "progress_pct": 0, "error": None}  # device.ota
+# device.display (R_FW_DISPLAY_WAKE): a lit screen in an evening van, default settings
+DISPLAY_ON = {
+    "state": "on",
+    "lux": 42,
+    "prox": 12,
+    "brightness_pct": 68,
+    "sensor": "ok",
+    "auto": True,
+    "prox_wake": True,
+    "min": 8,
+    "max": 100,
+    "offset": 0,
+}
 
 
 def esp_fixtures():
@@ -209,6 +222,7 @@ def esp_fixtures():
             "time": {"source": "sntp", "synced": True, "boot": 17, "up": 3912400},
             "sd": {"state": "ok", "total_mb": 30413, "free_mb": 28774, "last_seq": 1042, "dropped": 0},
             "res": {"heap_free_kb": 61, "heap_min_kb": 38, "psram_free_kb": 7302, "cpu_pct": 4},
+            "display": dict(DISPLAY_ON),
             "auto_camper": {"enabled": True, "state": "idle"},
             "water_held": False,
         },
@@ -235,6 +249,7 @@ def esp_fixtures():
                         "dropped": 0,
                     },
                     "res": {"heap_free_kb": 74, "heap_min_kb": 52, "psram_free_kb": 7390, "cpu_pct": 2},
+                    "display": dict(DISPLAY_ON),
                     "auto_camper": {"enabled": True, "state": "idle"},
                     "water_held": False,
                 },

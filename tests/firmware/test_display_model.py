@@ -36,6 +36,7 @@ def cli(tmp_path_factory):
             str(CORE / "test/display_cli.c"),
             "-o",
             str(out),
+            "-lm",
         ],
         check=True,
     )
@@ -256,3 +257,188 @@ def test_brightness_bright_then_dim_then_rebright(cli, changed):
         changed + " now=61000 lang=0",
     )
     assert [x["bright"] for x in v] == ["100", "100", "10", "100"]
+
+
+# ---- wake + brightness (R_FW_DISPLAY_WAKE) -------------------------------------------------------
+
+
+def ticks(start, end, step=200):
+    return range(start, end, step)
+
+
+def test_wake_timings_on_dim_off(cli):
+    """on for 60 s after the last wake event, dim until 5 min, then off (backlight 0); a touch wakes.
+
+    .. test:: Display wake model: timings, each wake source, alert-only waking, the swallowed wake tap,
+       the lux curve, EMA + deadband, the sensor fallback
+       :id: T_FW_DISPLAY_WAKE_MODEL
+       :links: R_FW_DISPLAY_WAKE
+    """
+    v = run(
+        cli,
+        "reset",
+        BASE + " now=0",
+        BASE + " now=59999",
+        BASE + " now=60000",
+        BASE + " now=299999",
+        BASE + " now=300000",
+        BASE + " now=400000 touch=1",
+        BASE + " now=459999",
+    )
+    assert [(x["state"], x["bright"]) for x in v] == [
+        ("on", "100"),
+        ("on", "100"),
+        ("dim", "10"),
+        ("dim", "10"),
+        ("off", "0"),
+        ("on", "100"),
+        ("on", "100"),
+    ]
+    assert v[0]["sensor"] == "absent"
+
+
+def test_alert_wakes_ordinary_change_does_not(cli):
+    lost = BASE.replace("link=1", "link=0")  # camper red
+    v = run(
+        cli,
+        "reset",
+        lost + " now=0",
+        BASE + " now=400000",  # red -> green: no wake
+        lost + " now=400200",  # green -> red: wake
+        lost + " now=800000",
+        BASE.replace("wstate=3", "wstate=4").replace("ip=3232281174", "ip=0").replace("link=1", "link=0")
+        + " now=800200",  # WiFi green -> amber (retrying): wake
+    )
+    assert [x["state"] for x in v] == ["on", "off", "on", "off", "on"]
+
+
+def test_hand_near_wakes_on_two_reads_with_hysteresis(cli):
+    off = BASE + " now=%d"
+    v = run(
+        cli,
+        "reset",
+        off % 0,
+        (off % 400000) + " prox=900",  # one read above NEAR: not yet
+        (off % 400200) + " prox=40",
+        (off % 400400) + " prox=900",
+        (off % 400600) + " prox=900",  # the second read in a row: wake
+        (off % 800000) + " prox=900",  # still near (a cup in front): no new wake, so off again
+        (off % 800200) + " prox=180",  # between FAR and NEAR: stays near
+        (off % 800400) + " prox=900",
+        (off % 800600) + " prox=900",
+        (off % 800800) + " prox=100",  # far
+        (off % 801000) + " prox=900",
+        (off % 801200) + " prox=900",  # near again: wake
+    )
+    assert [x["state"] for x in v] == [
+        "on",
+        "off",
+        "off",
+        "off",
+        "on",
+        "off",
+        "off",
+        "off",
+        "off",
+        "off",
+        "off",
+        "on",
+    ]
+
+
+def test_hand_near_ignored_when_prox_wake_off(cli):
+    v = run(
+        cli, "reset", BASE + " now=0", *(BASE + " now=%d prox=900 pw=0" % t for t in (400000, 400200, 400400))
+    )
+    assert v[-1]["state"] == "off"
+
+
+@pytest.mark.parametrize(
+    "pressed_awake,want", [(["10", "10", "11", "00", "11", "01"], ["0", "0", "0", "1", "1", "1"])]
+)
+def test_wake_tap_is_swallowed_until_release(cli, pressed_awake, want):
+    # a press on a dark screen is swallowed for its whole length, even once the screen is on; the next
+    # press on a lit screen reaches the widgets
+    assert [ln.split("=")[1] for ln in run_raw(cli, *("gate=" + g for g in pressed_awake))] == want
+
+
+def bright_at(cli, *lux, **cfg):
+    extra = "".join(" %s=%s" % kv for kv in cfg.items())
+    return [
+        x["bright"] for x in run(cli, *("reset\n" + BASE + " now=0 als=1 lux=%d" % lx + extra for lx in lux))
+    ]
+
+
+def test_lux_curve_endpoints_and_monotonic(cli):
+    got = [int(b) for b in bright_at(cli, 0, 1, 3, 10, 31, 100, 316, 999, 1000, 64000)]
+    assert got[:2] == [8, 8] and got[-2:] == [100, 100]
+    assert got == sorted(got) and len(set(got)) == 7
+    assert got[5] == 69  # log curve: 100 lux = 2/3 of the way from 8 to 100
+    assert [int(b) for b in bright_at(cli, 1, 1000, min=20, max=60)] == [20, 60]
+
+
+def test_dim_level_is_30_pct_of_on_with_a_floor(cli):
+    v = run(cli, "reset", BASE + " now=0 als=1 lux=1000", BASE + " now=60000 als=1 lux=1000")
+    assert [x["bright"] for x in v] == ["100", "30"]
+    v = run(cli, "reset", BASE + " now=0 als=1 lux=0", BASE + " now=60000 als=1 lux=0")
+    assert [x["bright"] for x in v] == ["8", "3"]
+
+
+def test_auto_off_uses_max_even_without_a_sensor(cli):
+    assert bright_at(cli, 1, auto=0, max=70) == ["70"]
+    (v,) = run(cli, "reset", BASE + " now=0 auto=0 max=70")  # no sensor at all
+    assert (v["bright"], v["sensor"]) == ("70", "absent")
+
+
+def test_headlight_burst_does_not_change_the_level_sustained_light_does(cli):
+    lines = ["reset"] + [BASE + " now=%d touch=1 als=1 lux=50" % t for t in ticks(0, 10000)]
+    lines += [BASE + " now=%d touch=1 als=1 lux=200" % t for t in ticks(10000, 11000)]  # 1 s, 4x brighter
+    lines += [BASE + " now=%d touch=1 als=1 lux=50" % t for t in ticks(11000, 20000)]
+    v = run(cli, *lines)
+    assert {x["bright"] for x in v} == {v[0]["bright"]}  # the applied level never moved
+    lines = ["reset"] + [BASE + " now=%d touch=1 als=1 lux=50" % t for t in ticks(0, 10000)]
+    lines += [BASE + " now=%d touch=1 als=1 lux=1000" % t for t in ticks(10000, 20000)]
+    v = run(cli, *lines)
+    assert int(v[0]["bright"]) < 85 <= int(v[-1]["bright"])  # within the 15 % deadband of the 100 % target
+    changes = [i for i in range(1, len(v)) if v[i]["bright"] != v[i - 1]["bright"]]
+    assert changes[0] > 50  # not on the first bright read: smoothed
+    assert all(
+        abs(int(v[i]["bright"]) - int(v[i - 1]["bright"])) * 100 > 15 * int(v[i - 1]["bright"])
+        for i in changes
+    )
+
+
+def test_sensor_failure_falls_back_after_5_s(cli):
+    v = run(
+        cli,
+        "reset",
+        BASE + " now=0 touch=1 als=1 lux=1",
+        BASE + " now=5000 touch=1 als=1 lux=-1",
+        BASE + " now=5001 touch=1 als=1 lux=-1",
+        BASE + " now=5200 touch=1 als=1 lux=1",  # readings back: the curve again
+    )
+    assert [(x["bright"], x["sensor"]) for x in v] == [
+        ("8", "ok"),
+        ("8", "ok"),
+        ("100", "error"),
+        ("8", "ok"),
+    ]
+    (v,) = run(
+        cli, "reset", BASE + " now=6000 als=1"
+    )  # present but never a valid reading: boot grace, then error
+    assert v["sensor"] == "ok" and v["bright"] == "100"
+
+
+def test_offset_shifts_the_level_clamps_and_reaches_dim(cli):
+    """The owner's brightness offset (disp_off): added to the curve's on level, clamped to min..max,
+    dim = 30 % of the shifted level; on the fixed max with auto off too."""
+    assert bright_at(cli, 100, off=10) == ["79"]  # 69 + 10
+    assert bright_at(cli, 100, off=-50) == ["19"]  # 69 - 50
+    assert bright_at(cli, 1000, off=20) == ["100"]  # clamped to max
+    assert bright_at(cli, 1, off=-50) == ["8"]  # clamped to min
+    assert bright_at(cli, 1, auto=0, off=-30) == ["70"]  # manual: max 100 - 30
+    v = run(cli, "reset", BASE + " now=0 als=1 lux=1000 off=-40", BASE + " now=60000 als=1 lux=1000 off=-40")
+    assert [x["bright"] for x in v] == ["60", "18"]
+    # a changed offset applies on the next tick, past the deadband
+    v = run(cli, "reset", BASE + " now=0 als=1 lux=100", BASE + " now=200 als=1 lux=100 off=5")
+    assert [x["bright"] for x in v] == ["69", "74"]

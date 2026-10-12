@@ -26,6 +26,7 @@ from .api_shape import (
     AP_KEYS,
     CONTROL_KEYS,
     DEVICE_KEYS,
+    DISPLAY_KEYS,
     LINK_KEYS,
     OTA_KEYS,
     PAIRING_API_KEYS,
@@ -87,6 +88,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "sdlog.c"),
             str(CORE / "auto_camper.c"),
             str(CORE / "auto_camper_run.c"),
+            str(CORE / "display_cfg.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
             "-o",
@@ -217,6 +219,10 @@ def test_api_state_shape(web_cli):
     }
     assert set(body["device"]["sd"]) == SD_KEYS
     assert body["device"]["res"] == dict.fromkeys(RES_KEYS)
+    # no screen on the host: the live members null, the default settings (R_FW_DISPLAY_WAKE)
+    assert body["device"]["display"] == dict(
+        dict.fromkeys(DISPLAY_KEYS), auto=True, prox_wake=True, min=8, max=100, offset=0
+    )
     assert body["device"]["control"] == {"writes": True} and set(body["device"]["control"]) == CONTROL_KEYS
     assert list(body["fn"]) == ["cooler", "roof"]  # CODEC_CHARS order, frames held only
     assert body["fn"]["cooler"]["Level"] == 3
@@ -245,7 +251,9 @@ EXPECTED_DEVICE_TAIL = (
     '"time":{"source":"none","synced":false,"boot":0,"up":5010},'
     '"sd":{"state":"absent","total_mb":null,"free_mb":null,"last_seq":null,"dropped":0},'
     '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
-    '"auto_camper":{"enabled":true,"state":"idle"},"water_held":false}}'
+    '"auto_camper":{"enabled":true,"state":"idle"},'
+    '"display":{"state":null,"lux":null,"prox":null,"brightness_pct":null,"sensor":null,"auto":true,'
+    '"prox_wake":true,"min":8,"max":100,"offset":0},"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
     '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
@@ -1362,3 +1370,103 @@ def test_auto_camper_reenable_clears_a_stale_debt(web_cli):
 def test_auto_camper_errors(web_cli, setup, method, body, status, error):
     r, _ = one(web_cli, method, "/api/auto_camper", body, setup=setup)
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+# ---- /api/display (R_FW_DISPLAY_WAKE) ---------------------------------------------------------
+
+
+def test_display_settings_merge_persist_and_show_in_state(web_cli):
+    """A partial body changes only its members, lands in the kv store (``disp_*``, one byte each) and
+    in ``device.display``; ``{}`` changes nothing.
+
+    .. test:: POST /api/display: merged, persisted, range-checked, station mode only, in device.display
+       :id: T_FW_DISPLAY_WAKE_API
+       :links: R_FW_DISPLAY_WAKE
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/display", '{"min": 20, "prox_wake":false}'),
+            req("GET", "/api/state"),
+            req("POST", "/api/display", "{ }"),
+            req("POST", "/api/display", '{"auto":false,"max":60,"min":5,"prox_wake":true}'),
+            req("GET", "/api/state"),
+            b"kv disp_auto",
+            b"kv disp_prox",
+            b"kv disp_min",
+            b"kv disp_max",
+        ],
+    )
+    assert [(resps[i].status, resps[i].json()) for i in (0, 2, 3)] == [(200, {"ok": True})] * 3
+    disp = {k: resps[1].json()["device"]["display"][k] for k in ("auto", "prox_wake", "min", "max")}
+    assert disp == {"auto": True, "prox_wake": False, "min": 20, "max": 100}
+    disp = {k: resps[4].json()["device"]["display"][k] for k in ("auto", "prox_wake", "min", "max")}
+    assert disp == {"auto": False, "prox_wake": True, "min": 5, "max": 60}
+    assert [ln for ln in other if ln.startswith("KV ")] == [
+        "KV ",
+        "KV \x01",
+        "KV \x05",
+        "KV <",
+    ]  # 0 / 1 / 5 / 60 (%.*s stops at the NUL)
+    assert "LOG display: settings auto=0 prox=1 min=5 max=60 offset=0" in other
+
+
+@pytest.mark.parametrize(
+    "setup,method,body,status,error",
+    [
+        (STATION, "GET", None, 405, "method"),
+        (["wifi setup_ap"], "POST", '{"min":10}', 403, "setup_mode"),
+        (STATION, "POST", "", 400, "bad_json"),
+        (STATION, "POST", '{"min":"10"}', 400, "bad_json"),
+        (STATION, "POST", '{"auto":1}', 400, "bad_json"),
+        (STATION, "POST", '{"min":10,"min":11}', 400, "bad_json"),
+        (STATION, "POST", '{"min":-1}', 400, "bad_json"),
+        (STATION, "POST", '{"min":1000}', 400, "bad_json"),
+        (STATION, "POST", '{"min":10.5}', 400, "bad_json"),
+        (STATION, "POST", '{"bright":10}', 400, "bad_json"),
+        (STATION, "POST", '{"min":10} x', 400, "bad_json"),
+        (STATION, "POST", '{"min":0}', 400, "bad_value"),
+        (STATION, "POST", '{"min":51}', 400, "bad_value"),
+        (STATION, "POST", '{"max":19}', 400, "bad_value"),
+        (STATION, "POST", '{"max":101}', 400, "bad_value"),
+        (STATION, "POST", '{"max":300}', 400, "bad_value"),  # past a byte: never wraps into range
+        (STATION, "POST", '{"min":30,"max":30}', 400, "bad_value"),
+        (STATION, "POST", '{"min":50,"max":20}', 400, "bad_value"),
+        (STATION, "POST", '{"offset":51}', 400, "bad_value"),
+        (STATION, "POST", '{"offset":-51}', 400, "bad_value"),
+        (STATION, "POST", '{"offset":-200}', 400, "bad_value"),  # past an int8: never wraps into range
+        (STATION, "POST", '{"offset":"5"}', 400, "bad_json"),
+        (STATION, "POST", '{"offset":--5}', 400, "bad_json"),
+        (STATION, "POST", '{"min":-5}', 400, "bad_json"),  # only the offset is signed
+        (STATION + ["kvfail 1"], "POST", '{"min":10}', 500, "store"),
+    ],
+)
+def test_display_settings_errors(web_cli, setup, method, body, status, error):
+    r, _ = one(web_cli, method, "/api/display", body, setup=setup)
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+def test_display_settings_bounds_accepted(web_cli):
+    for body in ('{"min":1,"max":20}', '{"min":50,"max":100}', '{"offset":-50}', '{"offset":50}'):
+        r, _ = one(web_cli, "POST", "/api/display", body, setup=STATION)
+        assert (r.status, r.json()) == (200, {"ok": True})
+
+
+def test_display_offset_persists_and_is_read_back_after_a_reboot(web_cli):
+    """``offset`` lands in kv ``disp_off`` (signed byte); a fresh boot (a new driver process) with the
+    stored bytes reads them back, and an out-of-range store falls back to the defaults."""
+    resps, other = drive(
+        web_cli,
+        [*(s.encode() for s in STATION), req("POST", "/api/display", '{"offset":15}'), b"kv disp_off"],
+    )
+    assert resps[0].status == 200 and "KV \x0f" in other
+    resps, _ = drive(
+        web_cli, [*(s.encode() for s in STATION), b"kvhex disp_off f1", req("GET", "/api/state")]
+    )
+    assert resps[0].json()["device"]["display"]["offset"] == -15
+    resps, other = drive(
+        web_cli, [*(s.encode() for s in STATION), b"kvhex disp_off 64", req("GET", "/api/state")]
+    )
+    assert resps[0].json()["device"]["display"]["offset"] == 0  # +100: out of range -> defaults
+    assert "LOG display: stored settings out of range, using defaults" in other

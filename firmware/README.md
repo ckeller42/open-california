@@ -423,14 +423,17 @@ no data for more than 10 s / pairing failed = red) — and a footer: `http://cal
 in setup mode the hotspot SSID and passphrase. The full row table with the German texts is in
 `docs/howto-esp-wifi-setup.md` "What the screen tells you". Pieces: `cali_core/status.c` (one
 `cali_status_t`, shared with `/api/state`), `cali_core/display_model.c` (pure model, host-tested),
+`cali_core/display_cfg.c` (the screen settings in NVS + `device.display`),
 `components/cali_display/` (LVGL painter + `screenshot`, board only).
 
 - **Timing and brightness** come from `csrc/net_consts.h` (generated from `tools/wifi_consts.py`):
-  `DISPLAY_REFRESH_MS` 500, `DISPLAY_STALE_MS` 10000, `DISPLAY_DIM_AFTER_MS` 60000,
-  `DISPLAY_BRIGHT_PCT` 100, `DISPLAY_DIM_PCT` 10, `DISPLAY_LOCK_TIMEOUT_MS` 50. Full brightness at
-  boot and on any change of a row's colour or wording or of the footer mode (a ticking age or
-  uptime does not count); dimmed after 60 s without one. The painter logs
-  `LOG display: brightness <pct>` on every change.
+  `DISPLAY_REFRESH_MS` 200, `DISPLAY_STALE_MS` 10000, `DISPLAY_DIM_AFTER_MS` 60000,
+  `DISPLAY_OFF_AFTER_MS` 300000, `DISPLAY_BRIGHT_PCT` 100, `DISPLAY_DIM_PCT` 10 (the no-sensor
+  fallback), `DISPLAY_LOCK_TIMEOUT_MS` 50. Wake (tap, hand near, a row turning red/amber), dim, off,
+  and the brightness from the LTR-553 room light: `docs/firmware.md` "Screen wake and brightness"
+  (`R_FW_DISPLAY_WAKE`; calibration knobs in `cali_display_model.h`). The painter logs
+  `LOG display: brightness <pct>` on every change and `display: light sensor ltr553 part 0x..` /
+  `display: no light sensor (ltr553), fixed brightness` once at init.
 - **Language:** German by default; `CONFIG_CALI_DISPLAY_LANG_EN=y` selects English. Texts are the
   `d_*` keys of `firmware/web/strings.json` (same generator as the page); the fonts are generated
   Latin-1 subsets (`tools/gen_display_font.sh`, OFL notice in `components/cali_display/FONTS-LICENSE`).

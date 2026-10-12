@@ -1,10 +1,11 @@
 /* display_model.c — pure status-display model, see include/cali_display_model.h (#154).
  * Implements ``R_FW_STATUS_DISPLAY`` (docs/firmware.md): three rows (device always green; WiFi
  * green/amber/red; camper green/amber/red/grey), a stale rule (no snapshot for DISPLAY_STALE_MS turns
- * the camper row red), the footer, and a dim-after-idle brightness, all derived from one
- * cali_status_t. Every text is an EN/DE pair generated from firmware/web/strings.json. */
+ * the camper row red), the footer, all derived from one cali_status_t; and the screen state + brightness
+ * from the light/proximity/touch inputs (R_FW_DISPLAY_WAKE). Every text is an EN/DE pair generated from firmware/web/strings.json. */
 #include "cali_display_model.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -73,7 +74,7 @@ static void fmt_uptime(uint64_t ms, char out[24]) {
     else snprintf(out, 24, "%u d %u h", (unsigned)d, (unsigned)(h % 24u));
 }
 
-static int wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
+static void wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
     const char *label = tx(K_WIFI, lang);
     if (s->wifi_mode == CALI_WIFI_MODE_STATION && s->ip != 0) {
         char ip[16], tmp[2 * CALI_ROW_TEXT_MAX];
@@ -83,19 +84,19 @@ static int wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
         r->dot = CALI_DOT_GREEN;
         r->label = label;
         set_text(r, tmp);
-        return 0; /* the text key: only the colour/wording matters for dimming, not the numbers */
+        return;
     }
     if (s->wifi_mode == CALI_WIFI_MODE_SETUP) {
         row(r, CALI_DOT_AMBER, label, K_SETUP, lang, NET_AP_SSID, NET_AP_ADDR);
-        return K_SETUP;
+        return;
     }
     if (s->wifi_state == WIFI_CONNECTING) {
         row(r, CALI_DOT_AMBER, label, K_JOINING, lang, s->ssid, NULL);
-        return K_JOINING;
+        return;
     }
     if (s->wifi_state == WIFI_RETRYING && s->wifi_mode == CALI_WIFI_MODE_STATION) {
         row(r, CALI_DOT_AMBER, label, K_RETRYING, lang, s->ssid, NULL);
-        return K_RETRYING;
+        return;
     }
     row(r, CALI_DOT_RED, label, K_WIFI_OFF, lang, NULL, NULL);
     if (s->last_fail[0]) {
@@ -106,61 +107,139 @@ static int wifi_row(cali_row_t *r, const cali_status_t *s, int lang) {
         snprintf(tmp, sizeof tmp, "%s · %s", r->text, tx(k, lang));
         set_text(r, tmp);
     }
-    return K_WIFI_OFF;
 }
 
-static int camper_row(cali_row_t *r, const cali_status_t *s, int lang) {
+static void camper_row(cali_row_t *r, const cali_status_t *s, int lang) {
     const char *label = tx(K_CAMPER, lang);
     char age[24];
     switch (s->pair_state) {
     case PAIR_SCANNING: case PAIR_CONNECTING: case PAIR_RESETTING:
         row(r, CALI_DOT_AMBER, label, K_CONNECTING, lang, NULL, NULL);
-        return K_CONNECTING;
+        return;
     case PAIR_WAITING_PASSKEY:
         row(r, CALI_DOT_AMBER, label, K_PASSKEY, lang, NULL, NULL);
-        return K_PASSKEY;
+        return;
     case PAIR_PAIRING: case PAIR_VERIFYING:
         row(r, CALI_DOT_AMBER, label, K_PAIRING, lang, NULL, NULL);
-        return K_PAIRING;
+        return;
     case PAIR_ERROR:
         row(r, CALI_DOT_RED, label, K_PAIR_ERROR, lang, NULL, NULL);
-        return K_PAIR_ERROR;
+        return;
     default:
         break;
     }
     if (!s->address[0]) {
         row(r, CALI_DOT_GREY, label, K_NOT_PAIRED, lang, NULL, NULL);
-        return K_NOT_PAIRED;
+        return;
     }
     if (!s->link_up) {
         row(r, CALI_DOT_RED, label, K_LINK_LOST, lang, NULL, NULL);
-        return K_LINK_LOST;
+        return;
     }
     if (s->snap_age_ms < 0) {  /* link up, nothing received yet */
         row(r, CALI_DOT_AMBER, label, K_CONNECTING, lang, NULL, NULL);
-        return K_CONNECTING;
+        return;
     }
     if (s->snap_age_ms > DISPLAY_STALE_MS) {  /* whole seconds, rounded down */
         snprintf(age, sizeof age, "%u s", (unsigned)(s->snap_age_ms / 1000));
         row(r, CALI_DOT_RED, label, K_STALE, lang, age, NULL);
-        return K_STALE;
+        return;
     }
     {  /* rounded up, at least 1 s */
         unsigned sec = (unsigned)((s->snap_age_ms + 999) / 1000);
         snprintf(age, sizeof age, "%u s", sec ? sec : 1u);
     }
     row(r, CALI_DOT_GREEN, label, K_CONNECTED, lang, age, NULL);
-    return K_CONNECTED;
 }
 
-void cali_display_model_init(cali_display_model_t *m) { memset(m, 0, sizeof *m); }
+void cali_display_model_init(cali_display_model_t *m) {
+    memset(m, 0, sizeof *m);
+    m->lux = m->prox = -1;
+}
+
+/* log curve: DISPLAY_LUX_LOW -> min, DISPLAY_LUX_HIGH -> max (x = the smoothed log10 lux) */
+static uint8_t on_level(float x, const cali_display_cfg_t *c) {
+    const float lo = log10f(DISPLAY_LUX_LOW), hi = log10f(DISPLAY_LUX_HIGH);
+    float f = x <= lo ? 0.0f : x >= hi ? 1.0f : (x - lo) / (hi - lo);
+    return (uint8_t)(c->min_pct + f * (float)(c->max_pct - c->min_pct) + 0.5f);
+}
+
+static int alert(cali_dot_t d) { return d == CALI_DOT_RED || d == CALI_DOT_AMBER; }
+
+/* Wake, lux EMA + deadband and the on/dim/off state (R_FW_DISPLAY_WAKE). */
+static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const cali_display_in_t *in,
+                                const cali_display_cfg_t *c, cali_display_view_t *out) {
+    int wake = !m->started || in->touched;
+    uint32_t sig = (uint32_t)c->auto_on | (uint32_t)c->min_pct << 8 | (uint32_t)c->max_pct << 16 |
+                   (uint32_t)(uint8_t)c->offset << 24;
+    uint8_t on, dim;
+    if (!m->started) m->last_good_ms = now_ms;   /* boot grace before "error" */
+    /* a row turning red/amber wakes; the device row is always green */
+    if (m->started && ((alert(out->wifi.dot) && out->wifi.dot != m->dots[0]) ||
+                       (alert(out->camper.dot) && out->camper.dot != m->dots[1])))
+        wake = 1;
+    m->dots[0] = (uint8_t)out->wifi.dot;
+    m->dots[1] = (uint8_t)out->camper.dot;
+    m->started = 1;
+
+    if (in->prox >= 0) {   /* near after two reads in a row above NEAR, far again below FAR */
+        m->prox = in->prox;
+        if (!m->near) {
+            m->near_reads = in->prox > DISPLAY_PROX_NEAR ? (uint8_t)(m->near_reads + 1) : 0;
+            if (m->near_reads >= 2) {
+                m->near = 1;
+                if (c->prox_wake) wake = 1;   /* the rising edge only: a cup in front never pins it on */
+            }
+        } else if (in->prox < DISPLAY_PROX_FAR) {
+            m->near = 0;
+            m->near_reads = 0;
+        }
+    }
+    if (in->present && in->lux >= 0) {   /* EMA on log10(lux), time constant DISPLAY_LUX_TAU_MS */
+        float x = log10f(in->lux > 1 ? (float)in->lux : 1.0f);
+        if (!m->have_lux) {
+            m->lux_log = x;
+        } else {
+            float dt = (float)(now_ms - m->last_lux_ms);
+            m->lux_log += (x - m->lux_log) * dt / (DISPLAY_LUX_TAU_MS + dt);
+        }
+        m->have_lux = 1;
+        m->lux = in->lux;
+        m->last_lux_ms = m->last_good_ms = now_ms;
+    }
+    if (wake) m->last_wake_ms = now_ms;
+
+    out->sensor = !in->present ? CALI_SENSOR_ABSENT
+                  : now_ms - m->last_good_ms > DISPLAY_SENSOR_FAIL_MS ? CALI_SENSOR_ERROR : CALI_SENSOR_OK;
+    if (c->auto_on && (out->sensor != CALI_SENSOR_OK || !m->have_lux)) {   /* fallback: fixed levels */
+        on = DISPLAY_BRIGHT_PCT;
+        dim = DISPLAY_DIM_PCT;
+        m->level = 0;   /* re-take the curve at once when readings come back */
+    } else {
+        int t = (c->auto_on ? on_level(m->lux_log, c) : c->max_pct) + c->offset;   /* the owner's tweak */
+        uint8_t target = (uint8_t)(t < c->min_pct ? c->min_pct : t > c->max_pct ? c->max_pct : t);
+        if (m->level == 0 || sig != m->cfg_sig ||
+            (target > m->level ? target - m->level : m->level - target) * 100 > DISPLAY_DEADBAND_PCT * m->level)
+            m->level = target;
+        on = m->level;
+        dim = (uint8_t)(on * DISPLAY_DIM_OF_ON_PCT / 100);   /* so the offset reaches dim proportionally */
+        if (dim < DISPLAY_DIM_FLOOR_PCT) dim = DISPLAY_DIM_FLOOR_PCT;
+    }
+    m->cfg_sig = sig;
+    out->lux = m->lux;
+    out->prox = m->prox;
+    {
+        uint64_t idle = now_ms - m->last_wake_ms;
+        out->state = idle < DISPLAY_DIM_AFTER_MS ? CALI_DISP_ON : idle < DISPLAY_OFF_AFTER_MS ? CALI_DISP_DIM : CALI_DISP_OFF;
+    }
+    out->brightness_pct = out->state == CALI_DISP_ON ? on : out->state == CALI_DISP_DIM ? dim : 0;
+}
 
 void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_t now_ms, int lang,
-                        cali_display_view_t *out) {
+                        const cali_display_in_t *in, const cali_display_cfg_t *cfg, cali_display_view_t *out) {
     char up[24];
-    int kw = wifi_row(&out->wifi, s, lang);
-    int kc = camper_row(&out->camper, s, lang);
-    uint32_t sig;
+    wifi_row(&out->wifi, s, lang);
+    camper_row(&out->camper, s, lang);
     fmt_uptime(s->uptime_ms, up);
     row(&out->device, CALI_DOT_GREEN, tx(K_DEVICE, lang), K_RUNNING, lang, up, NULL);
     out->footer_setup = s->wifi_mode == CALI_WIFI_MODE_SETUP;
@@ -171,19 +250,11 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
     } else {
         cali_display_fit_text(out->footer, "http://" NET_HOSTNAME ".local");
     }
+    wake_and_brightness(m, now_ms, in, cfg, out);
+}
 
-    /* dim signature: dots, text keys and footer; never the changing numbers */
-    sig = 2166136261u;
-    {
-        unsigned parts[] = {(unsigned)out->wifi.dot, (unsigned)kw, (unsigned)out->camper.dot,
-                            (unsigned)kc, (unsigned)out->footer_setup};
-        size_t i;
-        for (i = 0; i < sizeof parts / sizeof parts[0]; i++) sig = (sig ^ parts[i]) * 16777619u;
-    }
-    if (!m->started || sig != m->sig) {
-        m->started = 1;
-        m->sig = sig;
-        m->last_change_ms = now_ms;
-    }
-    out->brightness_pct = now_ms - m->last_change_ms < DISPLAY_DIM_AFTER_MS ? DISPLAY_BRIGHT_PCT : DISPLAY_DIM_PCT;
+int cali_display_touch_gate(uint8_t *swallow, int pressed, int awake) {
+    if (!pressed) *swallow = 0;
+    else if (!awake) *swallow = 1;
+    return !*swallow;
 }

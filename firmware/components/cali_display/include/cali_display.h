@@ -13,7 +13,8 @@
  * aborts inside the board package: BSP_ERROR_CHECK=y is required (=n does not compile with
  * espressif/m5stack_core_s3 4.1.0 + GCC 15). */
 int cali_display_init(const cali_transport_t *t);
-/* Called from do_work (the NimBLE host task) every tick; repaints at most every DISPLAY_REFRESH_MS.
+/* Called from do_work (the NimBLE host task) every tick; at most every DISPLAY_REFRESH_MS it reads the
+ * LTR-553 light/proximity sensor (when it answered at init), runs the model and repaints.
  * The LVGL lock wait is bounded by DISPLAY_LOCK_TIMEOUT_MS: when it is busy this paint is skipped and
  * the next one repaints what changed. Residual: bsp_display_brightness_set (only after a successful
  * paint, only when the level changed) is an I2C write to the AXP2101 inside the board package and,

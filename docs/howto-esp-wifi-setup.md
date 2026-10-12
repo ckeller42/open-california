@@ -178,8 +178,11 @@ password) at the bottom. The texts are German by default; an English build exist
 | **WLAN** (WiFi) | *\<network\> · 192.168.x.y · −58 dBm* — on your network, its address and signal | *Hotspot calictl-esp-setup · 192.168.4.1* (setup hotspot open); *verbinde mit \<network\>* (joining); *\<network\> nicht erreichbar, versuche neu* (out of reach, retrying) | *nicht verbunden* plus the reason: *Netz nicht gefunden*, *falsches Passwort* or *Verbindungsfehler* | — |
 | **Camper** | *verbunden · Daten vor 1 s* — linked, and how old the last reading is | *verbinde …* (connecting); *Kopplung läuft …* (pairing); *Code der Einheit eingeben* (type the code the unit shows) | *Verbindung verloren, verbinde neu* (link lost, reconnecting); *keine Daten seit 14 s* (linked, but no reading for more than 10 s); *Kopplung fehlgeschlagen* (pairing failed) | *nicht gekoppelt* — not paired yet |
 
-The screen is at full brightness for **60 seconds** after any row changes colour or wording (a
-ticking age or uptime does not count), then dims to 10 %. Each row has room for two lines; only an unusually long network name is cut
+The screen lights up when you **tap it** (that tap only wakes it, it presses nothing), when you
+**reach toward it**, or when a row turns amber or red; it dims after **60 seconds** and goes dark
+after **5 minutes**. How bright it is follows the room light — dim in a dark van, bright in
+daylight. The *Screen* box on `http://calictl-esp.local/device` shows it and switches the
+room-light brightness and the wake-on-hand off or on; − / + makes it a little darker or brighter. Each row has room for two lines; only an unusually long network name is cut
 with "…" — the page shows it in full.
 
 ## If your network is out of reach
