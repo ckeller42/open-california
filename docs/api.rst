@@ -248,6 +248,7 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_auto_camper_e2e
 .. automodule:: calictl.esp_ingest
 .. automodule:: tests.test_esp_ingest
+.. automodule:: tests.test_camper_dashboard
 .. automodule:: tests.test_wifi_sm_ref
 .. automodule:: tests.test_web_strings
 .. automodule:: tests.test_ux_gallery_esp_fixtures

@@ -1243,6 +1243,323 @@
      "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"camper\" and r.function == \"water\" and r._field == \"waste_alert_code\")\n  |> last()"
     }
    ]
+  },
+  {
+   "id": 28,
+   "type": "row",
+   "title": "📟 ESP satellite",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 72
+   },
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "id": 29,
+   "type": "timeseries",
+   "title": "ESP heap free / lowest (B)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 73
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_diag\" and (r._field == \"heap_free\" or r._field == \"heap_min\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: min, createEmpty: false)"
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "type": "timeseries",
+   "title": "ESP CPU (%)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 73
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_diag\" and r._field == \"cpu_pct\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)"
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "type": "timeseries",
+   "title": "ESP RSSI — WiFi / unit link (dBm)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 81
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "dBm"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_diag\" and (r._field == \"wifi_rssi\" or r._field == \"ble_rssi\"))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "type": "state-timeline",
+   "title": "ESP unit link",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 81
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "Down",
+         "color": "red"
+        },
+        "1": {
+         "text": "Up",
+         "color": "green"
+        }
+       }
+      }
+     ],
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_diag\" and r._field == \"link_up\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)"
+    }
+   ],
+   "options": {
+    "showValue": "never"
+   }
+  },
+  {
+   "id": 33,
+   "type": "timeseries",
+   "title": "ESP link reconnect time (ms)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 89
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0,
+     "custom": {
+      "drawStyle": "points",
+      "pointSize": 6
+     }
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_evt\" and r.kind == \"link_up\" and r._field == \"reconnect_ms\")"
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "type": "table",
+   "title": "ESP reboots (reset reason)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 89
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "prev_up_s"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       }
+      ]
+     }
+    ]
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_evt\" and r.kind == \"boot\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()\n  |> keep(columns: [\"_time\", \"reset_reason\", \"fw\", \"prev_up_s\"])\n  |> sort(columns: [\"_time\"], desc: true)"
+    }
+   ],
+   "options": {
+    "showHeader": true
+   }
+  },
+  {
+   "id": 35,
+   "type": "timeseries",
+   "title": "ESP HTTP latency p50 / p95 per route (ms)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 97
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_perf\" and r._field == \"ms\" and exists r.route)\n  |> group(columns: [\"route\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: (column, tables=<-) => tables |> quantile(q: 0.5, column: column), createEmpty: false)\n  |> set(key: \"stat\", value: \"p50\")\n  |> group(columns: [\"route\", \"stat\"])"
+    },
+    {
+     "refId": "B",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_perf\" and r._field == \"ms\" and exists r.route)\n  |> group(columns: [\"route\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: (column, tables=<-) => tables |> quantile(q: 0.95, column: column), createEmpty: false)\n  |> set(key: \"stat\", value: \"p95\")\n  |> group(columns: [\"route\", \"stat\"])"
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "type": "timeseries",
+   "title": "ESP BLE op latency p95 per char (ms)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 97
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_perf\" and r._field == \"ms\" and exists r.char)\n  |> group(columns: [\"char\", \"op\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: (column, tables=<-) => tables |> quantile(q: 0.95, column: column), createEmpty: false)\n  |> set(key: \"stat\", value: \"p95\")\n  |> group(columns: [\"char\", \"op\", \"stat\"])"
+    }
+   ]
+  },
+  {
+   "id": 37,
+   "type": "table",
+   "title": "ESP warnings + errors",
+   "gridPos": {
+    "h": 8,
+    "w": 24,
+    "x": 0,
+    "y": 105
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"esp_log\")\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()\n  |> keep(columns: [\"_time\", \"lvl\", \"tag\", \"msg\", \"dropped\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 500)"
+    }
+   ],
+   "options": {
+    "showHeader": true
+   }
   }
  ]
 }
