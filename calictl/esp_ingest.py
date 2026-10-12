@@ -20,6 +20,10 @@ single BLE owner):
    replay state) move only after the write succeeded. InfluxDB dedups same series + time, so a re-run
    writes identical points.
 
+The satellite's own diagnostics (``R_FW_DIAG_LOG``: ``diag``, ``evt``, ``perf``, ``log``) ride in
+the same stream; only the ESP has them, so they skip replay and gap fill and are written as they are
+at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_point`).
+
 ``--dry-run`` does steps 1-4, writes nothing, keeps the cursor and prints a per-function summary;
 ``--verify`` checks what is in InfluxDB (see :func:`verify`). Config: the ``serve`` env
 (``INFLUXDB_TOKEN``, ``INFLUX_URL``/``ORG``/``BUCKET``). Stdlib at import; ``influxdb_client`` lazily.
@@ -36,6 +40,18 @@ single BLE owner):
    ``source=esp``, the record's time) only where buspi has no point of that function within ±90 s,
    advance its cursor only after a successful write, and log ``{pulled, written, skipped_covered,
    skipped_no_time}``. A re-run writes identical points.
+
+.. req:: Write the ESP's diagnostics records to InfluxDB as they are
+   :id: R_ESP_INGEST_DIAG
+   :status: implemented
+   :tags: esp32, influx, ingest
+
+   ``calictl esp-ingest`` shall write every timed ``diag``/``perf``/``evt``/``log`` record of the
+   ESP's log as one point at the record's time — ``esp_diag`` (numeric fields, ``stack_min``
+   flattened to ``stack_min_<task>``), ``esp_perf`` (tags ``route`` or ``char`` + ``op``),
+   ``esp_evt`` (tag ``kind``; numeric and string fields), ``esp_log`` (tags ``lvl``, ``tag``; string
+   ``msg``; numeric ``dropped``) — with no gap-fill rule, under the frames' timing and cursor rules,
+   and count them per measurement in its summary (``diag_points``).
 """
 
 from __future__ import annotations
@@ -57,6 +73,14 @@ PAGE = 2000
 FRAME_EVS = ("notify", "read", "snap")
 DEFAULT_CURSOR = os.path.expanduser("~/.cache/calictl/esp_cursor.json")
 # --verify: the side-by-side fields (ESP replay vs buspi's point)
+# The ESP's own records (R_FW_DIAG_LOG): ev -> (measurement, tag keys). Add a row for a new ev.
+DIAG = {
+    "diag": ("esp_diag", ()),
+    "perf": ("esp_perf", ("route", "char", "op")),
+    "evt": ("esp_evt", ("kind",)),
+    "log": ("esp_log", ("lvl", "tag")),
+}
+STAMP = ("seq", "boot", "up", "ts", "tsrc", "ev")  # the log's own keys, never fields
 COMPARE = {
     "water": ("fresh_liters", "waste_liters"),
     "energy": ("soc1_level", "soc2_level", "batt2_current", "dcdc_current", "shore_current"),
@@ -168,6 +192,48 @@ class Replay:
         return {f: i for f, i in out.items() if i.get("installed")}
 
 
+def diag_fields(rec):
+    """``(tags, fields)`` of one diagnostics record: tag keys as strings, a nested object flattened
+    to ``<key>_<sub>``, numbers + booleans as floats (one type per field, bool -> 1.0/0.0), the other
+    strings as string fields, ``null`` dropped."""
+    _, tag_keys = DIAG[rec["ev"]]
+    tags: dict = {}
+    fields: dict = {}
+    flat: dict = {}
+    for k, v in rec.items():
+        if k in STAMP:
+            continue
+        if isinstance(v, dict):
+            flat.update(("%s_%s" % (k, sub), x) for sub, x in v.items())
+        else:
+            flat[k] = v
+    for k, v in flat.items():
+        if v is None:
+            continue
+        if k in tag_keys:
+            tags[k] = str(v)
+        elif isinstance(v, (bool, int, float)):
+            fields[k] = float(v)
+        elif isinstance(v, str):
+            fields[k] = v
+    return tags, fields
+
+
+def diag_point(rec, ts_ms):
+    """One InfluxDB point for a diagnostics record at ``ts_ms`` (None without any field)."""
+    from influxdb_client import Point, WritePrecision
+
+    tags, fields = diag_fields(rec)
+    if not fields:
+        return None
+    p = Point(DIAG[rec["ev"]][0])
+    for k, v in tags.items():
+        p.tag(k, v)
+    for k, v in fields.items():
+        p.field(k, v)
+    return p.time(int(ts_ms), WritePrecision.MS)
+
+
 # ---- 4. gap fill ---------------------------------------------------------------------------------
 
 
@@ -223,6 +289,16 @@ class Influx:
     def write(self, points):
         self._write.write(bucket=self.bucket, org=self.org, record=points)
 
+    def diag_counts(self, lo, hi):
+        """``{measurement: points}`` of the :data:`DIAG` measurements in range (distinct times)."""
+        flt = " or ".join('r._measurement == "%s"' % m for m, _ in DIAG.values())
+        flux = (
+            'from(bucket:"%s") |> range(start:%s, stop:%s) |> filter(fn:(r) => %s) '
+            '|> keep(columns:["_time","_measurement"]) |> group(columns:["_measurement"]) '
+            '|> distinct(column:"_time") |> count()' % (self.bucket, _rfc3339(lo), _rfc3339(hi + 1), flt)
+        )
+        return {r.values["_measurement"]: int(r.get_value()) for r in self.rows(flux)}
+
     def values(self, lo, hi, compare):
         """``{fn: [(ms, {field: value})]}`` of buspi's own points for the compare fields."""
         out: dict = {}
@@ -267,7 +343,9 @@ def _funcs():
     return funcs
 
 
-def ingest(fetch, db, cursor_path, *, dry_run=False, page=PAGE, funcs=None, from_seq=None, report=None):
+def ingest(
+    fetch, db, cursor_path, *, dry_run=False, page=PAGE, funcs=None, from_seq=None, report=None, diag=None
+):
     """One ingest run (see the module doc).
 
     :param fetch: ``fetch(since, max) -> (records, trailer)`` (:func:`http_fetch`).
@@ -276,14 +354,20 @@ def ingest(fetch, db, cursor_path, *, dry_run=False, page=PAGE, funcs=None, from
     :param dry_run: write nothing, keep the cursor; per-point decisions go to ``report``.
     :param from_seq: start here with a fresh replay state instead of the cursor (``--verify``).
     :param report: a list that receives ``(fn, ts_ms, tsrc, covered, interp)`` per point (dry run, verify).
-    :returns: the summary ``{pulled, written, skipped_covered, skipped_no_time, held, lost}``.
+    :param diag: a list that receives ``(measurement, ts_ms)`` per diagnostics point (verify).
+    :returns: the summary ``{pulled, written, skipped_covered, skipped_no_time, held, lost,
+        diag_points}`` — ``diag_points`` = ``{measurement: points}`` of the diagnostics records
+        (written, or in a dry run would be).
     """
     funcs = funcs or _funcs()
     cur = load_cursor(cursor_path) if from_seq is None else {"seq": from_seq, "state": None}
     replay = Replay(funcs, cur.get("state"))
     since = cur["seq"]
     buf: list = []
-    summary = dict.fromkeys(("pulled", "written", "skipped_covered", "skipped_no_time", "held", "lost"), 0)
+    summary: dict = dict.fromkeys(
+        ("pulled", "written", "skipped_covered", "skipped_no_time", "held", "lost"), 0
+    )
+    summary["diag_points"] = dict.fromkeys((m for m, _ in DIAG.values()), 0)
     while True:
         recs, tr = fetch(since, page)
         summary["pulled"] += len(recs)
@@ -300,9 +384,18 @@ def ingest(fetch, db, cursor_path, *, dry_run=False, page=PAGE, funcs=None, from
         done, buf = resolve(buf, tr["boot"], final)
         if done:
             batch = []  # (fn, ts, tsrc, interp)
+            points = []
             for rec, ts in done:
                 if ts is None:
                     summary["skipped_no_time"] += 1
+                    continue
+                if rec.get("ev") in DIAG:  # only the ESP has these: no replay, no gap fill
+                    p, m = diag_point(rec, ts), DIAG[rec["ev"]][0]
+                    if p is not None:
+                        points.append(p)
+                        summary["diag_points"][m] += 1
+                        if diag is not None:
+                            diag.append((m, ts))
                     continue
                 for fn, interp in replay.process(rec, ts).items():
                     batch.append((fn, ts, rec.get("tsrc") or "back", interp))
@@ -311,7 +404,6 @@ def ingest(fetch, db, cursor_path, *, dry_run=False, page=PAGE, funcs=None, from
                 if batch
                 else {}
             )
-            points = []
             for fn, ts, tsrc, interp in batch:
                 cov = covered(have.get(fn, []), ts)
                 summary["skipped_covered" if cov else "written"] += 1
@@ -411,14 +503,32 @@ def verify(report, db, out=print, samples=5):
     return problems
 
 
+def verify_diag(diag, db, out=print):
+    """Per :data:`DIAG` measurement: the replayed diagnostics points (``diag`` = ingest's
+    ``(measurement, ts_ms)`` list, distinct times) vs the points InfluxDB holds over their range;
+    fewer in InfluxDB is marked (not yet ingested, or lost). Printed only — never an exit code."""
+    if not diag:
+        out("verify: no ESP diagnostics records in range")
+        return
+    have = db.diag_counts(min(t for _, t in diag), max(t for _, t in diag))
+    for m, _ in DIAG.values():
+        mine = len({t for m2, t in diag if m2 == m})
+        got = have.get(m, 0)
+        out("%-12s replayed %6d  influx %6d%s" % (m, mine, got, "  <-- missing" if got < mine else ""))
+
+
 def main(args):
     """``calictl esp-ingest`` (cli.py). Returns the exit code."""
     fetch = http_fetch(args.url)
     db = Influx()
     report: list = []
     if args.verify:
-        ingest(fetch, db, args.cursor, dry_run=True, from_seq=args.from_seq, report=report)
-        return 1 if verify(report, db) else 0
+        diag: list = []
+        s = ingest(fetch, db, args.cursor, dry_run=True, from_seq=args.from_seq, report=report, diag=diag)
+        problems = verify(report, db)
+        verify_diag(diag, db)
+        print(json.dumps(s))
+        return 1 if problems else 0
     s = ingest(fetch, db, args.cursor, dry_run=args.dry_run, report=report if args.dry_run else None)
     if args.dry_run:
         print_dry_run(report)

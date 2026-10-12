@@ -276,9 +276,19 @@ buspi's live data always wins and the ESP fills the hours buspi was off or out o
 - **Cursor** — `~/.cache/calictl/esp_cursor.json` (`--cursor`): the last ingested seq plus the
   replay state. It moves only after a successful write; a failed run (ESP or InfluxDB unreachable)
   retries from the same place, and a re-run writes identical points.
+- **Diagnostics** — the satellite's own `diag`/`perf`/`evt`/`log` records ([firmware](firmware.md),
+  `R_FW_DIAG_LOG`) exist only on the ESP, so they skip replay and gap fill and are written as they
+  are, at their time (same back-stamping and cursor), one measurement each (`R_ESP_INGEST_DIAG`):
+  `esp_diag` (heap, PSRAM, CPU, RSSI, `link_up`, `uptime_s`, `stack_min_<task>`), `esp_perf` (tag
+  `route`, or `char` + `op`; fields `ms`, `bytes`, `status`), `esp_evt` (tag `kind`; its numbers and
+  strings such as `reason`, `reset_reason`, `result`, `state`, `error`, `decision`), `esp_log` (tags
+  `lvl`, `tag`; `msg`, or `dropped`). The summary counts them per measurement (`diag_points`);
+  `--verify` lists replayed vs stored per measurement. They feed the dashboard's **📟 ESP
+  satellite** row (heap, CPU, RSSI, link timeline + reconnect time, reboots, HTTP p50/p95 per
+  route, BLE op latency, warnings).
 - **Config** — serve's env (`INFLUXDB_TOKEN`, `INFLUX_URL`/`INFLUX_ORG`/`INFLUX_BUCKET`, from
   `/etc/buspi/secrets.env`). Each run logs `{pulled, written, skipped_covered, skipped_no_time,
-  held, lost}` (`lost` = records the card deleted at 90 % full before they were ingested).
+  held, lost, diag_points}` (`lost` = records the card deleted at 90 % full before they were ingested).
 
 ```sh
 python3 -m calictl esp-ingest --url http://<esp> --dry-run   # pull + time + gap check, write nothing:

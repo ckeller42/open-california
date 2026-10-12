@@ -178,7 +178,16 @@ def test_ingest_writes_only_the_gaps_tagged_esp_at_the_record_time(tmp_path, fra
     ]
     db = DB({"cooler": [T0 + 30_000, T0 + 490_000]})
     s = esp_ingest.ingest(pager(records, boot=1), db, str(tmp_path / "c.json"))
-    assert s == {"pulled": 4, "written": 2, "skipped_covered": 2, "skipped_no_time": 0, "held": 0, "lost": 0}
+    no_diag = dict.fromkeys(("esp_diag", "esp_perf", "esp_evt", "esp_log"), 0)
+    assert s == {
+        "pulled": 4,
+        "written": 2,
+        "skipped_covered": 2,
+        "skipped_no_time": 0,
+        "held": 0,
+        "lost": 0,
+        "diag_points": no_diag,
+    }
     assert len(db.queries) == 1  # one query per batch
     pts = [p for w in db.writes for p in w]
     assert [(dict(p[1])["function"], dict(p[1])["source"], p[3]) for p in pts] == [
@@ -345,3 +354,206 @@ def test_cli_refuses_an_empty_url(capsys):
 
     assert cli.main(["esp-ingest", "--url", ""]) == 2
     assert "CALICTL_ESP_URL" in capsys.readouterr().err
+
+
+# ---- diagnostics records (R_FW_DIAG_LOG -> R_ESP_INGEST_DIAG) --------------------------------------
+
+
+def drec(seq, body, *, ts=T0, up=0, boot=1):
+    """A diagnostics record as the card holds it: the stamp + the diag.c body."""
+    return {"seq": seq, "boot": boot, "up": up, "ts": ts, "tsrc": "unit" if ts is not None else None, **body}
+
+
+# (record body, measurement, tags, fields) — the shapes of docs/firmware.md's R_FW_DIAG_LOG table
+DIAG_CASES = [
+    (
+        {
+            "ev": "diag",
+            "heap_free": 61000,
+            "heap_min": 38000,
+            "psram_free": 7302000,
+            "cpu_pct": 4,
+            "stack_min": {"owner": 1200, "sd": 900},
+            "wifi_rssi": -61,
+            "ble_rssi": None,
+            "link_up": False,
+            "uptime_s": 3600,
+        },
+        "esp_diag",
+        {},
+        {
+            "heap_free": 61000.0,
+            "heap_min": 38000.0,
+            "psram_free": 7302000.0,
+            "cpu_pct": 4.0,
+            "stack_min_owner": 1200.0,
+            "stack_min_sd": 900.0,
+            "wifi_rssi": -61.0,
+            "link_up": 0.0,
+            "uptime_s": 3600.0,
+        },
+    ),
+    (
+        {"ev": "evt", "kind": "boot", "reset_reason": "panic", "fw": "6ac867c", "boot": 1, "prev_up_s": 812},
+        "esp_evt",
+        {"kind": "boot"},
+        {"reset_reason": "panic", "fw": "6ac867c", "prev_up_s": 812.0},
+    ),
+    (
+        {"ev": "evt", "kind": "link_up", "reconnect_ms": 4200, "attempts": 3},
+        "esp_evt",
+        {"kind": "link_up"},
+        {"reconnect_ms": 4200.0, "attempts": 3.0},
+    ),
+    (
+        {"ev": "evt", "kind": "link_down", "reason": "disconnected", "status": 531, "dur_ms": 60000},
+        "esp_evt",
+        {"kind": "link_down"},
+        {"reason": "disconnected", "status": 531.0, "dur_ms": 60000.0},
+    ),
+    (
+        {"ev": "evt", "kind": "wifi_up", "rssi": -58, "ip_changed": True},
+        "esp_evt",
+        {"kind": "wifi_up"},
+        {"rssi": -58.0, "ip_changed": 1.0},
+    ),
+    (
+        {"ev": "evt", "kind": "wifi_down", "reason": "lost", "rssi": -80, "dur_ms": 9000},
+        "esp_evt",
+        {"kind": "wifi_down"},
+        {"reason": "lost", "rssi": -80.0, "dur_ms": 9000.0},
+    ),
+    (
+        {"ev": "evt", "kind": "net", "err": "join", "reason": "auth"},
+        "esp_evt",
+        {"kind": "net"},
+        {"err": "join", "reason": "auth"},
+    ),
+    (
+        {
+            "ev": "evt",
+            "kind": "cmd",
+            "fn": "cooler",
+            "what": "power",
+            "result": "ack",
+            "latency_ms": 640,
+            "src": "web",
+        },
+        "esp_evt",
+        {"kind": "cmd"},
+        {"fn": "cooler", "what": "power", "result": "ack", "latency_ms": 640.0, "src": "web"},
+    ),
+    (
+        {"ev": "evt", "kind": "ota", "state": "error", "dur_ms": 1500, "error": "http"},
+        "esp_evt",
+        {"kind": "ota"},
+        {"state": "error", "dur_ms": 1500.0, "error": "http"},
+    ),
+    (
+        {"ev": "evt", "kind": "auto_camper", "decision": "restored", "soc": 8, "fails": 0},
+        "esp_evt",
+        {"kind": "auto_camper"},
+        {"decision": "restored", "soc": 8.0, "fails": 0.0},
+    ),
+    (
+        {"ev": "evt", "kind": "sd", "err": "fsync", "again": 1},
+        "esp_evt",
+        {"kind": "sd"},
+        {"err": "fsync", "again": 1.0},
+    ),
+    (
+        {"ev": "perf", "route": "/api/state", "status": 200, "bytes": 4512, "ms": 100},
+        "esp_perf",
+        {"route": "/api/state"},
+        {"status": 200.0, "bytes": 4512.0, "ms": 100.0},
+    ),
+    (
+        {"ev": "perf", "char": "1302", "op": "read", "ms": 85},
+        "esp_perf",
+        {"char": "1302", "op": "read"},
+        {"ms": 85.0},
+    ),
+    (
+        {"ev": "log", "lvl": "W", "tag": "NimBLE", "msg": "GATT procedure timeout"},
+        "esp_log",
+        {"lvl": "W", "tag": "NimBLE"},
+        {"msg": "GATT procedure timeout"},
+    ),
+    ({"ev": "log", "dropped": 12}, "esp_log", {}, {"dropped": 12.0}),
+]
+
+
+@pytest.mark.parametrize(
+    "body,measurement,tags,fields", DIAG_CASES, ids=[c[0].get("kind") or c[0]["ev"] for c in DIAG_CASES]
+)
+def test_diag_record_maps_to_its_measurement(body, measurement, tags, fields):
+    """Each ev/kind -> its measurement, tags and fields at the record's time; the stamp keys never
+    become fields, ``null`` is dropped, ``stack_min`` flattens to ``stack_min_<task>``.
+
+    .. test:: esp-ingest maps every diagnostics ev/kind to its measurement, tags and fields
+       :id: T_ESP_INGEST_DIAG_MAP
+       :links: R_ESP_INGEST_DIAG
+    """
+    p = esp_ingest.diag_point(drec(9, body, ts=T0 + 5), T0 + 5)
+    assert (p.measurement, p.tags, p.fields, p.t) == (measurement, tags, fields, (T0 + 5, "ms"))
+
+
+def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frames):
+    """Diagnostics records skip replay and gap fill (buspi's points never cover them), share the
+    frames' back-stamping and cursor, and are counted per measurement; a dry run writes none but
+    counts them.
+
+    .. test:: esp-ingest writes diagnostics at their time with no gap fill and counts them
+       :id: T_ESP_INGEST_DIAG_WRITE
+       :links: R_ESP_INGEST_DIAG
+    """
+    records = [
+        drec(
+            1,
+            {"ev": "evt", "kind": "boot", "reset_reason": "sw", "fw": "x", "boot": 1, "prev_up_s": None},
+            ts=None,
+            up=1000,
+        ),  # back-stamped from seq 3
+        drec(2, {"ev": "perf", "char": "1302", "op": "read", "ms": 80}, ts=None, up=2000),
+        rec(3, "cooler", frames["cooler"], ts=T0, up=5000),  # buspi covers it
+        drec(4, {"ev": "diag", "heap_free": 1, "ble_rssi": None, "link_up": True}, ts=T0 + 1000, up=6000),
+        drec(5, {"ev": "log", "lvl": "E", "tag": "sd", "msg": "fsync"}, ts=T0 + 2000, up=7000),
+        drec(6, {"ev": "unknown_ev", "x": 1}, ts=T0 + 3000, up=8000),  # not ours: skipped
+    ]
+    counts = {"esp_diag": 1, "esp_perf": 1, "esp_evt": 1, "esp_log": 1}
+    db, diag = DB({"cooler": [T0]}), []
+    s = esp_ingest.ingest(
+        pager(records, boot=1), db, str(tmp_path / "dry.json"), dry_run=True, report=[], diag=diag
+    )
+    assert db.writes == [] and s["diag_points"] == counts
+    assert diag == [
+        ("esp_evt", T0 - 4000),
+        ("esp_perf", T0 - 3000),
+        ("esp_diag", T0 + 1000),
+        ("esp_log", T0 + 2000),
+    ]
+
+    s = esp_ingest.ingest(pager(records, boot=1), db, str(tmp_path / "c.json"))
+    assert s["diag_points"] == counts and s["written"] == 0 and s["skipped_covered"] == 1
+    pts = [p for w in db.writes for p in w]
+    assert [(p[0], p[3][0]) for p in pts] == [
+        ("esp_evt", T0 - 4000),
+        ("esp_perf", T0 - 3000),
+        ("esp_diag", T0 + 1000),
+        ("esp_log", T0 + 2000),
+    ]
+    assert json.loads((tmp_path / "c.json").read_text())["seq"] == 6
+
+
+def test_verify_diag_marks_measurements_missing_from_influx():
+    class CountDB:
+        def diag_counts(self, lo, hi):
+            self.range = (lo, hi)
+            return {"esp_diag": 2}
+
+    out, db = [], CountDB()
+    esp_ingest.verify_diag([("esp_diag", T0), ("esp_diag", T0 + 60_000), ("esp_log", T0 + 1)], db, out.append)
+    assert db.range == (T0, T0 + 60_000)
+    assert [ln.split()[0] for ln in out if "missing" in ln] == ["esp_log"]
+    esp_ingest.verify_diag([], db, out.append)
+    assert out[-1] == "verify: no ESP diagnostics records in range"

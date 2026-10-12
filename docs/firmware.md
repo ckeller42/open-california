@@ -684,6 +684,11 @@ IP and no user-typed value is ever recorded.
 | `perf` (BLE) | read/write/heartbeat completions (ble_nimble.c) | `char`, `op` (`read`/`write`/`hb`), `ms`; every op of a char asked at most once a second, else 1 in 10; heartbeats at most one a minute |
 | `log` | an `ESP_LOGW`/`ESP_LOGE` line (`esp_log_set_vprintf` hook) | `lvl` (`W`/`E`), `tag`, `msg` (<= 117 chars); at most 20 a minute, then one `{"ev":"log","dropped":n}` when the minute ends |
 
+buspi's `calictl esp-ingest` writes these records to InfluxDB as they are, at their time, one
+measurement per `ev` — `esp_diag`, `esp_perf` (tag `route` or `char` + `op`), `esp_evt` (tag
+`kind`), `esp_log` (tags `lvl`, `tag`) — with no gap-fill rule, for the dashboard's 📟 ESP satellite
+row (`R_ESP_INGEST_DIAG`, [raspberry-pi-setup](raspberry-pi-setup.md#esp-ingest-gap-fill)).
+
 `cali_log` lines have no level and stay console-only. Size: a stamped line is ~70 B + the body. A
 day fully linked with no browser open: diag 1440 x ~300 B = 0.43 MB, water re-reads 2880 x ~125 B =
 0.36 MB, heartbeat perf 1440 x ~125 B = 0.18 MB, a few kB of events — about 1 MB/day on top of the
