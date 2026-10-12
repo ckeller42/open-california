@@ -253,6 +253,51 @@ working alongside it. Check it with `sudo tailscale serve status`; remove it wit
 - `tailscale serve`/`cert` need root; if you don't want `sudo` each time, run
   `sudo tailscale set --operator=$USER` once.
 
+## ESP ingest (gap fill)
+
+The [ESP32 satellite](firmware.md) logs every unit frame to its microSD card, stamped with its own
+time. `calictl esp-ingest` pulls that log over WiFi (`GET /api/log`) and writes the readings into
+InfluxDB **only where buspi has none of its own** — no point of that function within ±90 s — so
+buspi's live data always wins and the ESP fills the hours buspi was off or out of range
+(`R_ESP_INGEST_GAPFILL`). It is not BLE: `calictl serve` stays the single BLE owner.
+
+- **Points** — measurement `camper`, the same `function` + fields as serve, plus the tag
+  `source=esp` (a series of its own: dashboards filtering by function + field show both; the ESP
+  data can be audited or deleted by that tag), at the record's own time from the card.
+- **Time** — a record with `ts` keeps it; one without (between boot/link-up and the first clock) is
+  back-stamped from the next stamped record of the same ESP boot by uptime; the running boot's
+  unstamped records wait for their stamp; an older boot that never got one is skipped and counted.
+- **Replay** — the frames go through serve's own decode, interpretation and water guard (the 1 L
+  hold and the ramp debounce), in seq order.
+- **Cursor** — `~/.cache/calictl/esp_cursor.json` (`--cursor`): the last ingested seq plus the
+  replay state. It moves only after a successful write; a failed run (ESP or InfluxDB unreachable)
+  retries from the same place, and a re-run writes identical points.
+- **Config** — serve's env (`INFLUXDB_TOKEN`, `INFLUX_URL`/`INFLUX_ORG`/`INFLUX_BUCKET`, from
+  `/etc/buspi/secrets.env`). Each run logs `{pulled, written, skipped_covered, skipped_no_time,
+  held, lost}` (`lost` = records the card deleted at 90 % full before they were ingested).
+
+```sh
+python3 -m calictl esp-ingest --url http://<esp> --dry-run   # pull + time + gap check, write nothing:
+                                                             # per function count, time range, tsrc mix,
+                                                             # covered vs gap, sample points
+python3 -m calictl esp-ingest --url http://<esp>             # one real run
+python3 -m calictl esp-ingest --url http://<esp> --verify    # check InfluxDB: buspi vs source=esp points per
+                                                             # function, ESP points within ±90 s of a buspi
+                                                             # point (must be 0; exit 1 otherwise), and the
+                                                             # ESP replay vs buspi's points side by side
+                                                             # (water liters, SoC levels, currents)
+```
+
+**The timer (not installed by `install.sh`).** `calictl/deploy/calictl-esp-ingest.service` (oneshot)
+and `calictl-esp-ingest.timer` (every 5 min). After a first `--dry-run` and a `--verify` look:
+
+```sh
+sudo cp calictl/deploy/calictl-esp-ingest.{service,timer} /etc/systemd/system/
+sudo systemctl edit calictl-esp-ingest.service   # [Service] Environment=CALICTL_ESP_URL=http://<esp>
+sudo systemctl daemon-reload && sudo systemctl enable --now calictl-esp-ingest.timer
+journalctl -u calictl-esp-ingest -n 20            # the per-run summary
+```
+
 ## Troubleshooting
 
 - **`VWCAMPER` not found** — make sure the camper is on its "Connect device" screen (it only

@@ -241,3 +241,155 @@ def test_last_seq_is_published_once_fsynced(cli, dirs):
         None,
         3,
     ]
+
+
+# ---- GET /api/log paging core (R_FW_LOG_API) ----
+
+
+def page(cli, kv, log, since, max_=0, cap=1 << 20, boot=7):
+    """One cali_sdlog_page: (records, trailer) through calictl's JSON reader."""
+    out = run(cli, kv, "open %s" % log, "page %d %d %d %d" % (since, max_, cap, boot), "close")
+    body = out[out.index(next(ln for ln in out if ln.startswith("PAGE"))) + 1 : out.index("END")]
+    lines = [json.loads(ln) for ln in body]
+    return lines[:-1], lines[-1]
+
+
+def test_log_page_spans_segments_and_resumes_inside_one(cli, dirs):
+    """Pages run across 1 MB segments in seq order; since inside a segment starts right after it;
+    max and the buffer bound a page and say more; since past the end is an empty, final page.
+
+    .. test:: /api/log paging over segments, a cut last line and a deleted oldest segment
+       :id: T_FW_LOG_API_PAGE
+       :links: R_FW_LOG_API
+    """
+    kv, log = dirs
+    run(cli, kv, "boot", "open %s" % log, "fill 9000", "close")
+    second = min(int(p.stem) for p in log.glob("*.jsonl") if p.stem != "1")
+    recs, tr = page(cli, kv, log, since=second - 3, max_=5)
+    assert [r["seq"] for r in recs] == list(range(second - 2, second + 3))  # across the roll
+    assert tr == {"next": second + 2, "more": True, "boot": 7, "lost": 0}
+    assert all(r["ev"] == "notify" and r["fn"] == "energy" for r in recs)
+    recs, tr = page(cli, kv, log, since=100)  # default max 2000
+    assert [r["seq"] for r in recs] == list(range(101, 2101)) and tr["more"] is True
+    recs, tr = page(cli, kv, log, since=8990)
+    assert [r["seq"] for r in recs] == list(range(8991, 9001)) and tr == {
+        "next": 9000,
+        "more": False,
+        "boot": 7,
+        "lost": 0,
+    }
+    recs, tr = page(cli, kv, log, since=9000)
+    assert recs == [] and tr == {"next": 9000, "more": False, "boot": 7, "lost": 0}
+    recs, tr = page(cli, kv, log, since=0, cap=2000)  # the buffer bounds the page too
+    assert 5 <= len(recs) < 20 and tr["more"] is True and tr["next"] == recs[-1]["seq"]
+
+
+def test_log_page_skips_a_cut_last_line_and_reports_a_deleted_oldest_segment(cli, dirs):
+    """Segments 1..99 deleted (90 % full): the page resumes at the oldest one and reports the lost
+    seqs; a half-written last line (no '\\n') is never sent. Read without cali_sdlog_open, which
+    would truncate the cut line first."""
+    kv, log = dirs
+    log.mkdir()
+    for first in (100, 200):
+        (log / ("%d.jsonl" % first)).write_text(
+            "".join('{"seq":%d,"boot":1,"ev":"connect","addr":null}\n' % s for s in range(first, first + 3))
+        )
+    with open(log / "200.jsonl", "a") as f:
+        f.write('{"seq":203,"boot":1,"up":1')
+
+    def raw_page(since):
+        out = run(cli, kv, "page %d 0 65536 2 %s" % (since, log))
+        lines = [json.loads(ln) for ln in out[1 : out.index("END")]]  # out[0] = "PAGE <bytes>"
+        return lines[:-1], lines[-1]
+
+    recs, tr = raw_page(50)
+    assert [r["seq"] for r in recs] == [100, 101, 102, 200, 201, 202]
+    assert tr == {"next": 202, "more": False, "boot": 2, "lost": 49}
+    recs, tr = raw_page(101)
+    assert [r["seq"] for r in recs] == [102, 200, 201, 202] and tr["lost"] == 0
+    recs, tr = raw_page(0)  # seq 1 is the first ever: 1..99 lost
+    assert tr["lost"] == 99 and recs[0]["seq"] == 100
+
+
+def test_esp_ingest_reads_the_c_pager_over_http(cli, dirs, tmp_path, monkeypatch):
+    """The contract end to end: segments on "the card", the C pager (cali_sdlog_page) behind a real HTTP
+    socket, calictl's http_fetch + ingest paging through them in small pages until more=false.
+
+    .. test:: esp-ingest pages the firmware's real /api/log output
+       :id: T_ESP_INGEST_E2E
+       :links: R_ESP_INGEST_GAPFILL, R_FW_LOG_API
+    """
+    import http.server
+    import sys
+    import threading
+    import types
+    import urllib.parse
+
+    from calictl import esp_ingest
+
+    kv, log = dirs
+    log.mkdir()
+    cooler = "0843000000000000"
+    lines = [
+        '{"seq":%d,"boot":4,"up":%d,"ts":%d,"tsrc":"ntp","ev":"notify","char":"1102","fn":"cooler","hex":"%s"}\n'
+        % (s, s * 1000, 1789639000000 + s * 200000, cooler)
+        for s in range(1, 8)
+    ]
+    (log / "1.jsonl").write_text("".join(lines[:4]))
+    (log / "5.jsonl").write_text("".join(lines[4:]))
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            out = run(cli, kv, "page %s %s 65536 4 %s" % (q["since"][0], q["max"][0], log))
+            body = ("\n".join(out[1 : out.index("END")]) + "\n").encode()
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    mod = types.ModuleType("influxdb_client")
+
+    class P:  # a stand-in influxdb_client.Point: the tag/field/time chain
+        def __init__(self, m):
+            self.tags, self.fields, self.t = {}, {}, None
+
+        def tag(self, k, v):
+            self.tags[k] = v
+            return self
+
+        def field(self, k, v):
+            self.fields[k] = v
+            return self
+
+        def time(self, t, prec):
+            self.t = t
+            return self
+
+    mod.Point, mod.WritePrecision = P, types.SimpleNamespace(MS="ms")
+    monkeypatch.setitem(sys.modules, "influxdb_client", mod)
+    written = []
+
+    class DB:
+        def times(self, lo, hi, source=None):
+            return {}
+
+        def write(self, pts):
+            written.extend(pts)
+
+    try:
+        s = esp_ingest.ingest(
+            esp_ingest.http_fetch("http://127.0.0.1:%d" % srv.server_port),
+            DB(),
+            str(tmp_path / "cur.json"),
+            page=3,
+        )
+    finally:
+        srv.shutdown()
+    assert s["pulled"] == 7 and s["written"] == 7
+    assert [p.t for p in written] == [1789639000000 + n * 200000 for n in range(1, 8)]
+    assert json.loads((tmp_path / "cur.json").read_text())["seq"] == 7

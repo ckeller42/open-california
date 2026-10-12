@@ -254,6 +254,18 @@ def build_parser():
         help="allow control writes to the vehicle (DEFAULT is read-only). Also enabled "
         "by the env CALICTL_ENABLE_WRITES=1",
     )
+    ei = sub.add_parser("esp-ingest", help="fill InfluxDB gaps from the ESP satellite's SD log (not BLE)")
+    ei.add_argument("--url", required=True, help="the ESP, e.g. http://cali-esp.local")
+    ei.add_argument("--cursor", default=None, help="cursor file (default ~/.cache/calictl/esp_cursor.json)")
+    ei.add_argument(
+        "--dry-run", action="store_true", help="pull + time + gap-check, write nothing, keep the cursor"
+    )
+    ei.add_argument(
+        "--verify", action="store_true", help="replay the log and check InfluxDB (see esp_ingest.verify)"
+    )
+    ei.add_argument(
+        "--from-seq", type=int, default=0, help="--verify: replay from this seq (default: the whole card)"
+    )
     return p
 
 
@@ -264,6 +276,17 @@ def main(argv=None):
 
         influx.write_once(args.addr)
         return 0
+    if args.cmd == "esp-ingest":
+        from . import esp_ingest
+
+        if not args.url.startswith(("http://", "https://")):  # e.g. the timer's CALICTL_ESP_URL unset
+            print(
+                "esp-ingest: --url must be http(s)://<esp>, got %r (timer: set CALICTL_ESP_URL)" % args.url,
+                file=sys.stderr,
+            )
+            return 2
+        args.cursor = args.cursor or esp_ingest.DEFAULT_CURSOR
+        return esp_ingest.main(args)
     if args.cmd == "serve":
         from . import serve
 

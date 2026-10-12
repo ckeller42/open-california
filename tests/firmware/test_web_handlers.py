@@ -1470,3 +1470,66 @@ def test_display_offset_persists_and_is_read_back_after_a_reboot(web_cli):
     )
     assert resps[0].json()["device"]["display"]["offset"] == 0  # +100: out of range -> defaults
     assert "LOG display: stored settings out of range, using defaults" in other
+
+
+# ---- GET /api/log (R_FW_LOG_API) ---------------------------------------------------------------
+
+
+def _log_dir(tmp_path, n):
+    log = tmp_path / "log"
+    log.mkdir()
+    (log / "1.jsonl").write_text(
+        "".join(
+            '{"seq":%d,"boot":3,"up":%d,"ts":null,"tsrc":null,"ev":"read","char":"1302","fn":"water","hex":"03011d010016"}\n'
+            % (s, s * 10)
+            for s in range(1, n + 1)
+        )
+    )
+    return log
+
+
+def test_api_log_pages_through_the_sd_task(web_cli, tmp_path):
+    """The route parses since/max, waits (CALI_HTTP_PENDING) for the SD task's page and answers it as
+    NDJSON ending in the trailer; no card -> 503, bad query -> 400, other method -> 405.
+
+    .. test:: GET /api/log hands the page read to the SD task and streams it back
+       :id: T_FW_LOG_API_ROUTE
+       :links: R_FW_LOG_API
+    """
+    log = _log_dir(tmp_path, 5)
+    resps, other = drive(
+        web_cli,
+        [
+            req("GET", "/api/log?since=0"),  # no card yet
+            ("sdlog %s 65536" % log).encode(),
+            req("GET", "/api/log?since=2&max=2"),
+            req("GET", "/api/log?max=10&since=4"),
+            req("GET", "/api/log"),
+            req("GET", "/api/log?since=x"),
+            req("GET", "/api/log?since=1&foo=2"),
+            req("POST", "/api/log", ""),
+        ],
+    )
+    assert "SDLOG 0" in other
+    assert [r.status for r in resps] == [503, 200, 200, 200, 400, 400, 405]
+    assert resps[0].json() == {"ok": False, "error": "no_card"}
+    page = [json.loads(ln) for ln in resps[1].body.decode().splitlines()]
+    assert resps[1].headers["content-type"] == "application/x-ndjson"
+    assert [r["seq"] for r in page[:-1]] == [3, 4] and page[-1] == {
+        "next": 4,
+        "more": True,
+        "boot": 0,
+        "lost": 0,
+    }
+    page = [json.loads(ln) for ln in resps[2].body.decode().splitlines()]
+    assert [r["seq"] for r in page[:-1]] == [5] and page[-1]["more"] is False
+    page = [json.loads(ln) for ln in resps[3].body.decode().splitlines()]
+    assert len(page) == 6 and page[-1]["next"] == 5  # the default: from the start, up to 2000
+    assert resps[4].json()["error"] == "bad_value"
+
+
+def test_api_log_a_failed_sd_read_is_503(web_cli, tmp_path):
+    log = _log_dir(tmp_path, 1)
+    resps, _ = drive(web_cli, [("sdlog %s 10" % log).encode(), req("GET", "/api/log")])
+    # a buffer below CALI_SDLOG_PAGE_MIN cannot hold a page: the SD read fails -> 503 sd_read
+    assert resps[0].status == 503 and resps[0].json() == {"ok": False, "error": "sd_read"}

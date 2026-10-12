@@ -20,6 +20,7 @@
 
 #include "bsp/esp-bsp.h"
 #include "driver/sdspi_host.h"
+#include "esp_heap_caps.h"
 #include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -37,6 +38,8 @@
 #define FULL_PCT 90                     /* above: delete the oldest segment */
 #define BATCH 32                        /* records per display-lock hold */
 #define TASK_STACK 8192
+#define PAGE_BYTES (400u * 1024u)       /* /api/log: 2000 records of <= ~190 B, in PSRAM */
+#define WAIT_MS 200                     /* queue wait: how soon a requested /api/log page is read */
 
 static QueueHandle_t s_q;
 static sdmmc_card_t *s_card;
@@ -139,7 +142,13 @@ static void sd_task(void *arg) {
             mount();
             bsp_display_unlock();
         }
-        int got = xQueueReceive(s_q, &r, pdMS_TO_TICKS(1000)) == pdTRUE;
+        if (s_card && cali_sdlog_page_pending()) {   /* GET /api/log: a page the owner task asked for */
+            /* ponytail: the page read holds the display lock (shared SPI bus) for up to ~1 s every 5 min */
+            bsp_display_lock(0);
+            cali_sdlog_page_serve();
+            bsp_display_unlock();
+        }
+        int got = xQueueReceive(s_q, &r, pdMS_TO_TICKS(WAIT_MS)) == pdTRUE;
         if (got && s_card) {
             bsp_display_lock(0);
             for (int n = 0; got && s_card && n < BATCH; n++) {
@@ -172,4 +181,7 @@ void cali_sdcard_esp_start(void) {
         return;
     }
     cali_sdlog_init(put);
+    char *page = heap_caps_malloc(PAGE_BYTES, MALLOC_CAP_SPIRAM);
+    if (page) cali_sdlog_page_buffer(page, PAGE_BYTES);   /* none: /api/log answers 503 */
+    else cali_log("sd: no PSRAM for the /api/log page buffer");
 }

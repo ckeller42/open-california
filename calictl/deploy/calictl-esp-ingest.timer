@@ -1,0 +1,12 @@
+# Runs calictl-esp-ingest.service every 5 min (the ESP is often out of reach: a failed run just
+# retries next time; the cursor only moves after a successful write).
+[Unit]
+Description=VW California: ESP SD log gap fill every 5 min
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

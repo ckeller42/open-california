@@ -779,10 +779,59 @@ static void api_display(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* "since=<u32>&max=<u32>" (either order, each optional, nothing else): 0 ok, -1 malformed. */
+static int parse_log_query(const char *q, uint32_t *since, uint32_t *max) {
+    *since = 0;
+    *max = 0;
+    while (*q) {
+        uint32_t *dst = strncmp(q, "since=", 6) == 0 ? since : strncmp(q, "max=", 4) == 0 ? max : NULL;
+        unsigned long long v = 0;
+        if (!dst) return -1;
+        q = strchr(q, '=') + 1;
+        if (*q < '0' || *q > '9') return -1;
+        for (; *q >= '0' && *q <= '9'; q++)
+            if ((v = v * 10 + (unsigned)(*q - '0')) > UINT32_MAX) return -1;
+        *dst = (uint32_t)v;
+        if (*q == '&') q++;
+        else if (*q) return -1;
+    }
+    return 0;
+}
+
+/* ---- GET /api/log?since=&max= (R_FW_LOG_API): one page of the SD log, read by the SD task ---- */
+static int api_log(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static const char ERR_NO_CARD[] = "{\"ok\":false,\"error\":\"no_card\"}";
+    static const char ERR_SD_READ[] = "{\"ok\":false,\"error\":\"sd_read\"}";
+    const char *body;
+    size_t len;
+    uint32_t since, max;
+    int rc;
+    if (!req->resume) {
+        if (strcmp(req->method, "GET") != 0) {
+            SET_CONST(resp, 405, ERR_METHOD);
+        } else if (parse_log_query(req->query, &since, &max) != 0) {
+            SET_CONST(resp, 400, ERR_BAD_VALUE);
+        } else if ((rc = cali_sdlog_page_request(since, max)) == -1) {
+            SET_CONST(resp, 503, ERR_NO_CARD);
+        } else if (rc == -2) {
+            SET_CONST(resp, 409, ERR_BUSY);
+        } else {
+            return CALI_HTTP_PENDING;
+        }
+        return 1;
+    }
+    rc = cali_sdlog_page_result(&body, &len);
+    if (rc == 0) return CALI_HTTP_PENDING;
+    if (rc < 0) SET_CONST(resp, 503, ERR_SD_READ);
+    else set_body(resp, 200, "application/x-ndjson", body, len);
+    return 1;
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
     if (strcmp(req->path, "/api/command") == 0) return api_command(req, resp);
+    if (strcmp(req->path, "/api/log") == 0) return api_log(req, resp);
     if (get && strcmp(req->path, "/") == 0) {
         if (wifi_mode() == CALI_WIFI_MODE_STATION) {   /* the calictl web UI (R_FW_SHARED_UI) */
             set_static(resp, HTML_TYPE, WEB_APP_HTML_GZ, WEB_APP_HTML_GZ_LEN, NO_CACHE);

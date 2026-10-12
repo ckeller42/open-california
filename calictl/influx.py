@@ -70,9 +70,16 @@ def numeric_fields(interp: dict) -> dict[str, float]:
     return out
 
 
-def points_for(states: dict) -> list:
+def points_for(states: dict, *, time_ms: int | None = None, tags: dict | None = None) -> list:
     """Build InfluxDB Points from interpreted states (one per function with any
-    numeric field). Shared by the standalone `run` path and `serve`."""
+    numeric field). Shared by the standalone `run` path, `serve` and `esp-ingest`.
+
+    :param states: ``{function: interpreted}``.
+    :param time_ms: the points' timestamp, epoch ms (``esp-ingest``: the record's own time); None =
+        the server's receive time (``serve``'s live points).
+    :param tags: extra tags (``esp-ingest``: ``{"source": "esp"}``, a series of its own).
+    :returns: the points.
+    """
     from influxdb_client import Point
 
     pts = []
@@ -81,8 +88,14 @@ def points_for(states: dict) -> list:
         if not fields:
             continue
         p = Point("camper").tag("function", fn).tag("vehicle", "vwcamper")
+        for k, v in (tags or {}).items():
+            p.tag(k, v)
         for k, v in fields.items():
             p.field(k, v)
+        if time_ms is not None:
+            from influxdb_client import WritePrecision
+
+            p.time(int(time_ms), WritePrecision.MS)
         pts.append(p)
     return pts
 
