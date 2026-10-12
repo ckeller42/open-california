@@ -266,7 +266,7 @@ def test_static_etag_and_if_none_match(server):
     """Static webui files carry a strong ETag; a matching If-None-Match is a body-less 304 (ETag +
     no-cache kept), a stale one the full 200."""
     _, base = server
-    for path in ("/", "/app.js", "/manifest.webmanifest", "/icon-192.png"):
+    for path in ("/", "/app.js", "/sw.js", "/manifest.webmanifest", "/icon-192.png"):
         status, h, body = _cond_get(base, path)
         assert status == 200 and body and h["cache-control"] == "no-cache", path
         tag = h["etag"]

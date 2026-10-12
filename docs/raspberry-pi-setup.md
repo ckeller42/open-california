@@ -246,7 +246,9 @@ This is optional and changes no code — it's Pi-side configuration.
 
 Open that `https://…` URL from any device on your tailnet — clean padlock, encrypted, no browser
 warning. The config **persists across reboots**; the plain `http://<pi>:<port>` LAN path keeps
-working alongside it. Check it with `sudo tailscale serve status`; remove it with
+working alongside it. Over this HTTPS URL the UI is also an offline-capable app: *Add to Home
+screen* / *Install app*, it opens instantly and shows the last values while the Pi is unreachable.
+Check it with `sudo tailscale serve status`; remove it with
 `sudo tailscale serve --https=443 off`.
 
 - **Use `serve`, never `funnel`.** `tailscale funnel` would publish the same unauthenticated,

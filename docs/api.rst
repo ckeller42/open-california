@@ -144,6 +144,10 @@ Tests
 .. autofunction:: tests.e2e.test_satellite.test_auto_camper_toggle_on_a_firmware_that_reports_it
 .. autofunction:: tests.e2e.test_satellite.test_wizard_pairs_the_satellite
 .. autofunction:: tests.e2e.test_satellite.test_wizard_over_the_setup_hotspot_via_app
+.. autofunction:: tests.e2e.test_pwa.test_offline_reload_shows_the_last_state
+.. autofunction:: tests.e2e.test_pwa.test_a_changed_shell_offers_a_reload
+.. autofunction:: tests.e2e.test_pwa.test_no_worker_and_no_saved_state_on_an_insecure_origin
+.. autofunction:: tests.e2e.test_pwa.test_satellite_app_opens_offline
 .. autofunction:: tests.e2e.test_esp_page.test_firmware_row_checks_and_installs
 .. autofunction:: tests.e2e.test_esp_page.test_clock_line_shows_sync_and_boot
 .. autofunction:: tests.e2e.test_esp_page.test_storage_and_resources_lines

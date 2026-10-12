@@ -37,6 +37,7 @@
  * @property {{enabled:boolean, armed:boolean, notice:?{ts:number,msg:string}}} [auto_camper] auto-camper toggle + notice
  * @property {Record<string, any>} [firmware]   firmware baseline/drift snapshot (calictl.firmware)
  * @property {Record<string, any>} [anchors]    plausibility-check results (calictl.anchors)
+ * @property {boolean} [restored]           set only by restoreLastState(): the saved offline snapshot shown until a live poll answers
  * @property {boolean} [satellite]          set only by semantics.js adaptSatellite(): the ESP32 satellite (raw /api/state; controls live when the firmware reports device.control.writes, except the roof)
  * @property {{fw: string|null, uptime_ms: number|null, wifi: ?{mode?:string, ssid?:string|null, ip?:string|null, rssi?:number|null}, link_up: boolean, sd?: ?SatSd, res?: ?SatRes}} [sat]  satellite-only device rows (adaptSatellite passthrough) for the Device-status screen
  */
@@ -879,13 +880,15 @@ const CMD_ERRORS = {
 /**
  * @param {string} msg
  * @param {string} [kind]
+ * @param {number} [ms]
  */
-function toast(msg, kind) {
+function toast(msg, kind, ms = 4000) {
   const d = document.createElement("div");
   d.className = "toast" + (kind ? " " + kind : "");
   d.textContent = /** @type {string} */ (t(msg));
   (/** @type {HTMLElement} */ (document.getElementById("toasts"))).appendChild(d);
-  setTimeout(() => d.remove(), 4000);
+  if (ms) setTimeout(() => d.remove(), ms);   // 0 = stays until removed
+  return d;
 }
 
 let polling = false;     // a state poll is on the wire
@@ -913,6 +916,7 @@ async function refreshState(force) {
   forceNext = false;
   // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
   STATE = isSatelliteBody(next) ? /** @type {State} */ (adaptSatellite(next, Date.now())) : next;
+  if (PWA) try { localStorage.setItem(LAST_STATE_KEY, JSON.stringify({ at: Date.now(), state: STATE })); } catch (e) { /* storage blocked/full */ }
   // One-off /api/pairing (not the wizard's 1 s poll): decides the setup card's prominence and the
   // menu's "Unpair…". Taken the first time a `_meta` answers (calictl or the satellite) -- also when
   // the first poll failed (daemon restarting) -- and never on an unknown runtime.
@@ -1582,7 +1586,7 @@ function render() {
   if (sp) app.appendChild(sp);
   const ob = offlineBanner();
   if (ob) app.appendChild(ob);
-  if (readOnly() && STATE._meta) {
+  if (readOnly() && STATE._meta && !STATE._meta.restored) {
     const b = document.createElement("div");
     b.className = "readonly";
     b.textContent = /** @type {string} */ (satellite() ? t("Satellite — display only")
@@ -2456,6 +2460,41 @@ function roofControls(s) {
 // session) to the idle one; coming back refreshes at once instead of showing stale numbers for up
 // to a tick.
 const STATE_POLL_MS = 2000;
+
+// Offline app (R_UI_PWA_OFFLINE): on a secure origin (the tailnet HTTPS fronts; never plain http on
+// the LAN) sw.js serves the cached shell, and the last /api/state lives in localStorage: shown at
+// once, marked offline "as of" its poll, until the first live poll answers.
+const PWA = window.isSecureContext && "serviceWorker" in navigator;
+const LAST_STATE_KEY = "calictl.last_state";
+
+function restoreLastState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAST_STATE_KEY) || "null");
+    if (!saved || !saved.state || !saved.state._meta) return;
+    const m = saved.state._meta;
+    const seen = m.last_seen != null ? m.last_seen : saved.at / 1000 - (m.age_s || 0);
+    m.online = false;   // nothing is live until a poll says so: the offline banner + its age,
+    m.read_only = true; // and controls greyed (a write could not reach the daemon anyway)
+    m.restored = true;  // the offline banner explains it: no read-only banner on top
+    m.last_seen = seen;
+    m.age_s = Math.max(0, Math.round(Date.now() / 1000 - seen));
+    STATE = saved.state;
+    render();
+  } catch (e) { /* storage blocked or a corrupt entry: start empty, as without it */ }
+}
+
+if (PWA) {
+  navigator.serviceWorker.register("/sw.js").catch(() => { /* no offline shell; the page works without */ });
+  navigator.serviceWorker.onmessage = (ev) => {
+    if (ev.data !== "shell-updated" || document.querySelector(".toast.update")) return;
+    const d = toast("New version — tap to reload", "update", 0);
+    d.setAttribute("role", "button");
+    d.tabIndex = 0;
+    d.onclick = () => location.reload();
+    d.onkeydown = (k) => { if (k.key === "Enter" || k.key === " ") location.reload(); };
+  };
+  restoreLastState();
+}
 
 async function main() {
   await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
