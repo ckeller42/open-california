@@ -42,6 +42,11 @@ class _NoResolveHTTPServer(ThreadingHTTPServer):
        comes up.
     """
 
+    # socketserver's default listen backlog is 5: a page load (HTML + scripts + icons + the first
+    # /api/state) plus the previous page's pagehide usage beacon can overflow it, and a refused
+    # connection fails a script load. 64 is free.
+    request_queue_size = 64
+
     def server_bind(self):
         socketserver.TCPServer.server_bind(self)  # bind the socket; skip the getfqdn() reverse lookup
         host, port = self.server_address[:2]
