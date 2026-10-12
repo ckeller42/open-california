@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 
 from . import log as _log
 from . import mqtt, overrides, protocol, semantics
@@ -113,14 +114,18 @@ def ux_label(event: dict) -> str:
     return "error:%r" % event["msg"]
 
 
-def ux_points(batch: dict) -> list:
+def ux_points(batch: dict, time_ns: int | None = None) -> list:
     """InfluxDB points (measurement ``ui_ux``) for one validated ``/api/ux`` beacon: one per event,
     tagged ``type``/``ua_class``/``origin``/``standalone`` (+ the low-cardinality ``screen``/``fn``/
-    ``control`` ids); fields ``n=1``, the session id, timings in ms and an error's ``msg``."""
-    from influxdb_client import Point
+    ``control`` ids); fields ``n=1``, the session id, timings in ms and an error's ``msg``.
 
+    Stamped at ``time_ns`` (default: now, the beacon's receive time) + the event's index in ns:
+    InfluxDB keeps one point per series + time, so two identical events of one beacon stay two."""
+    from influxdb_client import Point, WritePrecision
+
+    t0 = time.time_ns() if time_ns is None else time_ns
     pts = []
-    for e in batch["events"]:
+    for i, e in enumerate(batch["events"]):
         p = (
             Point("ui_ux")
             .tag("type", e["type"])
@@ -129,6 +134,7 @@ def ux_points(batch: dict) -> list:
             .tag("standalone", str(batch["standalone"]).lower())
             .field("n", 1)
             .field("sid", batch["sid"])
+            .time(t0 + i, WritePrecision.NS)
         )
         for k, v in e.items():
             if k in ("screen", "fn", "control"):

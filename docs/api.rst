@@ -158,6 +158,7 @@ Tests
 .. autofunction:: tests.e2e.test_satellite.test_beacons_carry_views_controls_errors_never_values
 .. autofunction:: tests.test_web.test_ux_beacon_recorded_any_content_type
 .. autofunction:: tests.test_influx_fields.test_serve_backend_ux_logs_and_writes
+.. autofunction:: tests.test_influx_fields.test_ux_points_identical_events_of_one_beacon_stay_distinct
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle

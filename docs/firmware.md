@@ -811,7 +811,8 @@ whichever runtime served the page.
 - **calictl** (`POST /api/ux`, any Content-Type): `web.ux_batch` validates; one INFO journal line
   (`ux sid=… ua=ios standalone=1 origin=lan view:cooler control:cooler.power …`) and, with Influx
   configured, one point per event in measurement **`ui_ux`** (tags `type`, `ua_class`, `origin`,
-  `standalone`, `screen`/`fn`/`control`; fields `n`=1, `sid`, `ttfb`/`dcl`/`tiles`, `msg`). 204;
+  `standalone`, `screen`/`fn`/`control`; fields `n`=1, `sid`, `ttfb`/`dcl`/`tiles`, `msg`; stamped at
+  the beacon's receive time + the event's index in ns, so identical events of one beacon stay two). 204;
   `CALICTL_UX=0` switches it off (`_meta.ux` false, 204 without a record).
 - **ESP** — the same rules in C (`web.c` `api_ux`, parsed twice: validate all, then record, so a bad
   beacon leaves nothing on the card). One SD text record per event,
