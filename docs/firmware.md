@@ -781,7 +781,10 @@ The CoreS3 screen is dark when nobody uses it (spec `docs/superpowers/specs/2026
   `DISPLAY_BRIGHT_PCT` / `DISPLAY_DIM_PCT` (100 / 10) and `device.display.sensor` says `absent` /
   `error`. With `auto` off: `max`, dim 30 % of it.
 - **Sensor:** the LTR-553ALS-WA (ambient light + proximity, I2C `0x23`) on the board package's own
-  I2C bus (`bsp_i2c_get_handle()`; BSP 4.1.0 has no helper for it). ALS gain 8x / 100 ms, PS 4
+  I2C bus (`bsp_i2c_get_handle()`; BSP 4.1.0 has no helper for it). It sits on the camera/proximity
+  flex and is powered by the camera rails (AXP2101 ALDO3 + BLDO1/2), which the BSP switches on only
+  in `BSP_FEATURE_CAMERA`: init enables that feature and waits 100 ms before probing `0x23` (without
+  it the chip NACKs and `sensor` reads `absent`). ALS gain 8x / 100 ms, PS 4
   pulses at 50 mA, read every `DISPLAY_REFRESH_MS` (200 ms) under the display lock; its INT pin
   reaches no ESP GPIO. The lux formula is Lite-On's family formula (cited in `display.c`); absolute
   lux behind the cover glass is uncalibrated.
