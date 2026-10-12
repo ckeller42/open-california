@@ -28,6 +28,7 @@ clean and shows an empty "incoming" list).
    howto-pair-your-camper
    howto-esp-first-flash
    howto-esp-wifi-setup
+   howto-esp-standalone
 
 .. toctree::
    :maxdepth: 1

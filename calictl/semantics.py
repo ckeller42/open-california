@@ -625,8 +625,10 @@ def vehicle(d: dict) -> dict:
     y, mo, da = d.get("CarTimeYear"), d.get("CarTimeMonth"), d.get("CarTimeDay")
     h, mi, se = d.get("CarTimeHour"), d.get("CarTimeMinute"), d.get("CarTimeSecond")
     clock = None
-    # A day field of 0 means the RTC is unset (ignition off / asleep the unit reports all-zero
-    # time); don't format that as the nonsensical "1900-01-00 00:00:00" — leave it unavailable.
+    # A day field of 0 means the unit reports an all-zero clock; don't format that as the
+    # nonsensical "1900-01-00 00:00:00" — leave it unavailable. The clock is present with ignition
+    # on AND off (3-5 s behind NTP); all-zero happens for hours while parked, cause unknown
+    # (buspi trace 2026-09-16..10-11, evidence-ledger.md).
     if None not in (y, mo, da, h, mi, se) and da:
         # app applies +1900 to the year field and +1 to the month field
         clock = "%04d-%02d-%02d %02d:%02d:%02d" % (y + 1900, mo + 1, da, h, mi, se)  # type: ignore[operator, str-format]
