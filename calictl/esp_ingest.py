@@ -20,7 +20,7 @@ single BLE owner):
    replay state) move only after the write succeeded. InfluxDB dedups same series + time, so a re-run
    writes identical points.
 
-The satellite's own diagnostics (``R_FW_DIAG_LOG``: ``diag``, ``evt``, ``perf``, ``log``) ride in
+The satellite's own diagnostics (``R_FW_DIAG_LOG``: ``diag``, ``evt``, ``perf``, ``log``, ``ux``) ride in
 the same stream; only the ESP has them, so they skip replay and gap fill and are written as they are
 at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_point`).
 
@@ -51,7 +51,9 @@ at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_p
    flattened to ``stack_min_<task>``), ``esp_perf`` (tags ``route`` or ``char`` + ``op``),
    ``esp_evt`` (tag ``kind``; numeric and string fields), ``esp_log`` (tags ``lvl``, ``tag``; string
    ``msg``; numeric ``dropped``) — with no gap-fill rule, under the frames' timing and cursor rules,
-   and count them per measurement in its summary (``diag_points``).
+   and count them per measurement in its summary (``diag_points``). A ``ux`` record (the web UI's
+   usage beacon, ``R_UX_TELEMETRY``) shall become the ``ui_ux`` point calictl writes for its own
+   ``POST /api/ux`` — same tags and field types — tagged ``source=esp``.
 """
 
 from __future__ import annotations
@@ -79,7 +81,10 @@ DIAG = {
     "perf": ("esp_perf", ("route", "char", "op")),
     "evt": ("esp_evt", ("kind",)),
     "log": ("esp_log", ("lvl", "tag")),
+    # the web UI's usage beacons (R_UX_TELEMETRY): calictl's own ui_ux layout + source=esp (ux_point)
+    "ux": ("ui_ux", ("type", "ua_class", "origin", "standalone", "screen", "fn", "control")),
 }
+UX_BATCH = ("sid", "ua_class", "standalone", "origin")  # a ux record's beacon-wide keys; the rest = event
 STAMP = ("seq", "boot", "up", "ts", "tsrc", "ev")  # the log's own keys, never fields
 COMPARE = {
     "water": ("fresh_liters", "waste_liters"),
@@ -223,6 +228,8 @@ def diag_point(rec, ts_ms):
     """One InfluxDB point for a diagnostics record at ``ts_ms`` (None without any field)."""
     from influxdb_client import Point, WritePrecision
 
+    if rec["ev"] == "ux":
+        return ux_point(rec, ts_ms)
     tags, fields = diag_fields(rec)
     if not fields:
         return None
@@ -232,6 +239,18 @@ def diag_point(rec, ts_ms):
     for k, v in fields.items():
         p.field(k, v)
     return p.time(int(ts_ms), WritePrecision.MS)
+
+
+def ux_point(rec, ts_ms):
+    """A ``ux`` record as the ``ui_ux`` point calictl writes for its own ``POST /api/ux``
+    (:func:`calictl.influx.ux_points`: same tags, int fields), plus tag ``source=esp`` — buspi's own
+    points carry no ``source`` — at ``ts_ms``."""
+    from influxdb_client import WritePrecision
+
+    batch = {k: rec[k] for k in UX_BATCH}
+    event = {k: v for k, v in rec.items() if k not in STAMP and k not in UX_BATCH}
+    (p,) = influx.ux_points({**batch, "events": [event]})
+    return p.tag("source", "esp").time(int(ts_ms), WritePrecision.MS)
 
 
 # ---- 4. gap fill ---------------------------------------------------------------------------------
@@ -291,7 +310,10 @@ class Influx:
 
     def diag_counts(self, lo, hi):
         """``{measurement: points}`` of the :data:`DIAG` measurements in range (distinct times)."""
-        flt = " or ".join('r._measurement == "%s"' % m for m, _ in DIAG.values())
+        flt = " or ".join(
+            ('(r._measurement == "%s" and r.source == "esp")' if ev == "ux" else 'r._measurement == "%s"') % m
+            for ev, (m, _) in DIAG.items()
+        )
         flux = (
             'from(bucket:"%s") |> range(start:%s, stop:%s) |> filter(fn:(r) => %s) '
             '|> keep(columns:["_time","_measurement"]) |> group(columns:["_measurement"]) '

@@ -288,6 +288,11 @@ buspi's live data always wins and the ESP fills the hours buspi was off or out o
   `--verify` lists replayed vs stored per measurement. They feed the dashboard's **📟 ESP
   satellite** row (heap, CPU, RSSI, link timeline + reconnect time, reboots, HTTP p50/p95 per
   route, BLE op latency, warnings).
+- **UX records** — the satellite's `ux` records (one per web-UI beacon event, `R_UX_TELEMETRY`)
+  become the same `ui_ux` points calictl writes for its own `POST /api/ux` (same tags, same field
+  types), tagged `source=esp` — calictl's own carry no `source` — so both land in one series and
+  stay apart. They feed the **🧭 UI usage** row (views per screen, controls used, page-load
+  p50/p95, script errors), each split buspi / esp.
 - **Config** — serve's env (`INFLUXDB_TOKEN`, `INFLUX_URL`/`INFLUX_ORG`/`INFLUX_BUCKET`, from
   `/etc/buspi/secrets.env`). Each run logs `{pulled, written, skipped_covered, skipped_no_time,
   held, lost, diag_points}` (`lost` = records the card deleted at 90 % full before they were ingested).

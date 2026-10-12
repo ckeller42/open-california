@@ -178,7 +178,7 @@ def test_ingest_writes_only_the_gaps_tagged_esp_at_the_record_time(tmp_path, fra
     ]
     db = DB({"cooler": [T0 + 30_000, T0 + 490_000]})
     s = esp_ingest.ingest(pager(records, boot=1), db, str(tmp_path / "c.json"))
-    no_diag = dict.fromkeys(("esp_diag", "esp_perf", "esp_evt", "esp_log"), 0)
+    no_diag = dict.fromkeys((m for m, _ in esp_ingest.DIAG.values()), 0)
     assert s == {
         "pulled": 4,
         "written": 2,
@@ -498,6 +498,41 @@ def test_diag_record_maps_to_its_measurement(body, measurement, tags, fields):
     assert (p.measurement, p.tags, p.fields, p.t) == (measurement, tags, fields, (T0 + 5, "ms"))
 
 
+# web.c api_ux: one SD record per beacon event, the beacon-wide keys repeated on each
+UX_HEAD = {"ev": "ux", "sid": "3f9a1c0b7d2e4a65", "ua_class": "ios", "standalone": True, "origin": "lan"}
+UX_EVENTS = [
+    {"type": "view", "screen": "cooler"},
+    {"type": "control", "fn": "cooler", "control": "power"},
+    {"type": "timing", "ttfb": 120, "dcl": 340, "tiles": 560},
+    {"type": "error", "msg": "boom @ app.js:1"},
+]
+
+
+@pytest.mark.parametrize("event", UX_EVENTS, ids=[e["type"] for e in UX_EVENTS])
+def test_ux_record_is_calictls_own_ui_ux_point_tagged_esp(event):
+    """A ``ux`` SD record -> exactly the ``ui_ux`` point calictl writes for the same beacon event
+    from its own ``POST /api/ux`` (same tags, int fields — one series, no field-type clash), plus
+    ``source=esp`` (calictl's own points carry no ``source``), at the record's time.
+
+    .. test:: esp-ingest maps every ux event type to calictl's own ui_ux point, tagged source=esp
+       :id: T_ESP_INGEST_DIAG_UX
+       :links: R_ESP_INGEST_DIAG
+    """
+    from calictl import influx
+
+    (own,) = influx.ux_points({**{k: UX_HEAD[k] for k in esp_ingest.UX_BATCH}, "events": [event]})
+    assert "source" not in own.tags
+    p = esp_ingest.diag_point(drec(9, {**UX_HEAD, **event}, ts=T0 + 5), T0 + 5)
+    assert (p.measurement, p.tags, p.fields, p.t) == (
+        "ui_ux",
+        {**own.tags, "source": "esp"},
+        own.fields,
+        (T0 + 5, "ms"),
+    )
+    assert all(type(v) is not float for v in p.fields.values())  # n=1 + timings stay ints
+    assert set(p.tags) - {"source"} <= set(esp_ingest.DIAG["ux"][1])
+
+
 def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frames):
     """Diagnostics records skip replay and gap fill (buspi's points never cover them), share the
     frames' back-stamping and cursor, and are counted per measurement; a dry run writes none but
@@ -519,8 +554,9 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         drec(4, {"ev": "diag", "heap_free": 1, "ble_rssi": None, "link_up": True}, ts=T0 + 1000, up=6000),
         drec(5, {"ev": "log", "lvl": "E", "tag": "sd", "msg": "fsync"}, ts=T0 + 2000, up=7000),
         drec(6, {"ev": "unknown_ev", "x": 1}, ts=T0 + 3000, up=8000),  # not ours: skipped
+        drec(7, {**UX_HEAD, **UX_EVENTS[0]}, ts=T0 + 4000, up=9000),
     ]
-    counts = {"esp_diag": 1, "esp_perf": 1, "esp_evt": 1, "esp_log": 1}
+    counts = {"esp_diag": 1, "esp_perf": 1, "esp_evt": 1, "esp_log": 1, "ui_ux": 1}
     db, diag = DB({"cooler": [T0]}), []
     s = esp_ingest.ingest(
         pager(records, boot=1), db, str(tmp_path / "dry.json"), dry_run=True, report=[], diag=diag
@@ -531,6 +567,7 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         ("esp_perf", T0 - 3000),
         ("esp_diag", T0 + 1000),
         ("esp_log", T0 + 2000),
+        ("ui_ux", T0 + 4000),
     ]
 
     s = esp_ingest.ingest(pager(records, boot=1), db, str(tmp_path / "c.json"))
@@ -541,8 +578,9 @@ def test_diag_records_are_written_as_is_back_stamped_and_counted(tmp_path, frame
         ("esp_perf", T0 - 3000),
         ("esp_diag", T0 + 1000),
         ("esp_log", T0 + 2000),
+        ("ui_ux", T0 + 4000),
     ]
-    assert json.loads((tmp_path / "c.json").read_text())["seq"] == 6
+    assert json.loads((tmp_path / "c.json").read_text())["seq"] == 7
 
 
 def test_verify_diag_marks_measurements_missing_from_influx():

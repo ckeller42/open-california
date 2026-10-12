@@ -1560,6 +1560,151 @@
    "options": {
     "showHeader": true
    }
+  },
+  {
+   "id": 38,
+   "type": "row",
+   "title": "🧭 UI usage",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 113
+   },
+   "collapsed": false,
+   "panels": []
+  },
+  {
+   "id": 39,
+   "type": "bargauge",
+   "title": "UI views per screen (buspi / esp)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 114
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ui_ux\" and r.type == \"view\" and r._field == \"n\")\n  |> map(fn: (r) => ({r with source: if exists r.source then r.source else \"buspi\"}))\n  |> group(columns: [\"screen\", \"source\"])\n  |> sum()"
+    }
+   ],
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 40,
+   "type": "bargauge",
+   "title": "UI controls used (buspi / esp)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 114
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ui_ux\" and r.type == \"control\" and r._field == \"n\")\n  |> map(fn: (r) => ({r with source: if exists r.source then r.source else \"buspi\"}))\n  |> group(columns: [\"fn\", \"control\", \"source\"])\n  |> sum()"
+    }
+   ],
+   "options": {
+    "orientation": "horizontal",
+    "displayMode": "basic",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    }
+   }
+  },
+  {
+   "id": 41,
+   "type": "timeseries",
+   "title": "UI page load p50 / p95 — ttfb, dcl, tiles (ms)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 122
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "min": 0
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ui_ux\" and r.type == \"timing\" and (r._field == \"ttfb\" or r._field == \"dcl\" or r._field == \"tiles\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: (column, tables=<-) => tables |> quantile(q: 0.5, column: column), createEmpty: false)\n  |> set(key: \"stat\", value: \"p50\")\n  |> group(columns: [\"_field\", \"stat\"])"
+    },
+    {
+     "refId": "B",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ui_ux\" and r.type == \"timing\" and (r._field == \"ttfb\" or r._field == \"dcl\" or r._field == \"tiles\"))\n  |> group(columns: [\"_field\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: (column, tables=<-) => tables |> quantile(q: 0.95, column: column), createEmpty: false)\n  |> set(key: \"stat\", value: \"p95\")\n  |> group(columns: [\"_field\", \"stat\"])"
+    }
+   ]
+  },
+  {
+   "id": 42,
+   "type": "table",
+   "title": "UI script errors",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 122
+   },
+   "datasource": {
+    "type": "influxdb",
+    "uid": "${DS_INFLUXDB}"
+   },
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": []
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "query": "from(bucket: \"buspi\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"ui_ux\" and r.type == \"error\")\n  |> map(fn: (r) => ({r with source: if exists r.source then r.source else \"buspi\"}))\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> group()\n  |> keep(columns: [\"_time\", \"source\", \"origin\", \"ua_class\", \"standalone\", \"msg\", \"sid\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> limit(n: 500)"
+    }
+   ],
+   "options": {
+    "showHeader": true
+   }
   }
  ]
 }
