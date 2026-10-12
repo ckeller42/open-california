@@ -416,6 +416,34 @@ def test_cli_refuses_an_empty_url(capsys):
     assert "CALICTL_ESP_URL" in capsys.readouterr().err
 
 
+def test_http_fetch_retries_a_dropped_page_then_gives_up(monkeypatch):
+    """A satellite on WiFi drops a page now and then: the page is retried (3 tries, backoff), the
+    last error is raised."""
+    import http.client
+    import io
+
+    page = b'{"seq":1,"ev":"log"}\n{"next":2,"more":false}\n'
+    script = [http.client.RemoteDisconnected("gone"), TimeoutError("timed out"), page]
+    calls = []
+
+    def urlopen(u, timeout):
+        calls.append(u)
+        x = script.pop(0)
+        if isinstance(x, Exception):
+            raise x
+        return io.BytesIO(x)
+
+    monkeypatch.setattr(esp_ingest.urllib.request, "urlopen", urlopen)
+    waits = []
+    fetch = esp_ingest.http_fetch("http://esp/", sleep=waits.append)
+    assert fetch(1, 500) == ([{"seq": 1, "ev": "log"}], {"next": 2, "more": False})
+    assert len(calls) == 3 and calls[0] == "http://esp/api/log?since=1&max=500" and waits == [2.0, 4.0]
+
+    script[:] = [TimeoutError("a"), TimeoutError("b"), TimeoutError("c")]
+    with pytest.raises(TimeoutError, match="c"):
+        fetch(1, 500)
+
+
 # ---- diagnostics records (R_FW_DIAG_LOG -> R_ESP_INGEST_DIAG) --------------------------------------
 
 

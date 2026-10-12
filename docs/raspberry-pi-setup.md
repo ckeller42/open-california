@@ -283,7 +283,9 @@ buspi's live data always wins and the ESP fills the hours buspi was off or out o
   hold and the ramp debounce), in seq order.
 - **Cursor** — `~/.cache/calictl/esp_cursor.json` (`--cursor`): the last ingested seq plus the
   replay state (incl. each slot's pending point and the last written codes). It moves only after a successful write; a failed run (ESP or InfluxDB unreachable)
-  retries from the same place, and a re-run writes identical points.
+  retries from the same place, and a re-run writes identical points. A single dropped page (a
+  reset connection or a timeout on the satellite's WiFi) is retried up to 3 times, 2 s then 4 s
+  apart, before the run gives up.
 - **Diagnostics** — the satellite's own `diag`/`perf`/`evt`/`log` records ([firmware](firmware.md),
   `R_FW_DIAG_LOG`) exist only on the ESP, so they skip replay and gap fill and are written as they
   are, at their time (same back-stamping and cursor), one measurement each (`R_ESP_INGEST_DIAG`):

@@ -559,8 +559,13 @@ comes back without a re-pair). After that, an update is `curl -X POST http://<es
 image `firmware-build` makes with `esptool merge-bin @flash_args`; it erases NVS) from the same
 release: [How to set up a new satellite](howto-esp-first-flash.md).
 
-**Not yet measured on the board:** HTTPS heap use during a download alongside the BLE session
-(PSRAM present; the TLS buffers are malloc'd), and the download time.
+**Heap (field 2026-10-12, fw 38339ca):** with IDF's defaults the network stack lived in internal
+RAM — the internal heap's low-water mark reached 0 a few minutes after boot (large `/` and
+`/api/log` responses: lwIP pbufs + WiFi dynamic TX copies), `heap_free` fell to 8 KB during a
+download (mbedTLS's 16 KB record buffer), one download failed and `/api/log` pages were dropped,
+while 7.7 MB of PSRAM sat unused. `sdkconfig.defaults` now puts mbedTLS
+(`CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC`) and lwIP/WiFi buffers (`CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP`,
+8 static DMA TX buffers) in PSRAM. Not yet measured on the board: the download time.
 
 ## Time (`R_FW_TIME`)
 
