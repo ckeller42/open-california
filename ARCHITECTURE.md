@@ -475,17 +475,11 @@ name) or `omit` (with a reason). A field that is dropped or unaccounted **fails 
 how the camping-lights inversion slipped through). Verify polarity against the app's own getter or
 the unit's on-screen display, not a guess. See [`signals.md`](https://ckeller42.github.io/open-california/business-logic/signals.html).
 
-### Add a signal (the loop)
+### Add a signal
 
-1. **Catalog it** in `protocol/signals.yaml` (surface-or-omit, with provenance; `python3 -m tools.audit_signals --seed`
-   stubs any new field for you to decide).
-2. **Emit it** in `semantics.py`.
-3. **Surface it** — update the Grafana dashboard (`calictl/deploy/camper-dashboard.json`, pushed with
-   `push_dashboard.py`) and Home Assistant.
-4. **Audit** — `python3 -m tools.audit_signals --report`.
-5. **Keep the suite green** — `python3 -m pytest tests/ -q`. What each test layer (mock unit, GUI
-   e2e, real-unit trace replay, the pairing harnesses, the {term}`app lab`, C parity) proves and which CI job
-   runs it: [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html).
+The steps (catalog → `semantics` → dashboard + Home Assistant → audit) live in the `add-signal` skill
+(`.claude/skills/add-signal/SKILL.md`). What each test layer proves and which CI job runs it:
+[simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html).
 
 ### Invariants (do not break these)
 

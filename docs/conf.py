@@ -57,7 +57,7 @@ html_favicon = "_static/favicon.ico"
 # Main (product-docs) build: the reverse-engineering lab notes are NOT part of this build —
 # they are rendered by the separate "evidence" build below onto the same business-logic/ URLs,
 # so links keep working while the product docs' nav + search stay free of lab notes.
-exclude_patterns = ["_build", "api/openapi.yaml", "README.md", "api/README.md", "protocol/README.md",
+exclude_patterns = ["_build", "api/openapi.yaml", "api/README.md", "protocol/README.md",
                     "business-logic/**", "superpowers/**"]
 
 # The lab-notebook markdown links freely to code files and repo paths that are not part of the
