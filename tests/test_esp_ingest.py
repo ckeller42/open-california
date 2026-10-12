@@ -181,8 +181,9 @@ def test_ingest_writes_only_the_gaps_tagged_esp_at_the_record_time(tmp_path, fra
     no_diag = dict.fromkeys((m for m, _ in esp_ingest.DIAG.values()), 0)
     assert s == {
         "pulled": 4,
-        "written": 2,
+        "written": 2,  # the 30 s slot of seq 2/3 ends at seq 4 (covered or not)
         "skipped_covered": 2,
+        "thinned": 0,
         "skipped_no_time": 0,
         "held": 0,
         "lost": 0,
@@ -195,6 +196,63 @@ def test_ingest_writes_only_the_gaps_tagged_esp_at_the_record_time(tmp_path, fra
         ("energy", "esp", (T0 + 200_000, "ms")),
     ]
     assert json.loads((tmp_path / "c.json").read_text())["seq"] == 4
+
+
+S0 = (T0 // 30_000 + 1) * 30_000  # a 30 s slot boundary
+
+
+def test_thinning_keeps_the_last_gap_record_per_30_s_slot(tmp_path, frames):
+    """Dense notifies in one slot -> one point, the slot's last (S0 + 29.999 s is still in it,
+    S0 + 30 s is not); the slot is written when a later slot's record arrives, the newest waits in
+    the cursor; a re-run, and a run paged one record at a time, write identical points.
+
+    .. test:: esp-ingest writes the last gap record per function and 30 s slot, deterministically
+       :id: T_ESP_INGEST_THIN
+       :links: R_ESP_INGEST_GAPFILL
+    """
+    records = [
+        rec(1, "cooler", frames["cooler"], ts=S0),
+        rec(2, "cooler", frames["cooler"], ts=S0 + 10_000),
+        rec(3, "cooler", frames["cooler"], ts=S0 + 29_999),
+        rec(4, "cooler", frames["cooler"], ts=S0 + 30_000),  # next slot: closes the first
+    ]
+    a = DB()
+    s = esp_ingest.ingest(pager(records, boot=1), a, str(tmp_path / "a.json"))
+    assert (s["written"], s["thinned"]) == (1, 2)
+    assert [p[3] for w in a.writes for p in w] == [(S0 + 29_999, "ms")]
+    state = json.loads((tmp_path / "a.json").read_text())["state"]
+    assert state["thin"]["pending"]["cooler"][0] == S0 + 30_000
+    b, c = DB(), DB()
+    esp_ingest.ingest(pager(records, boot=1), b, str(tmp_path / "b.json"))
+    esp_ingest.ingest(pager(records, boot=1), c, str(tmp_path / "c.json"), page=1)
+
+    def flat(db):
+        return [p for w in db.writes for p in w]
+
+    assert flat(b) == flat(c) == flat(a)
+    assert json.loads((tmp_path / "c.json").read_text())["state"] == state
+
+
+def test_thinning_writes_every_alert_or_ignition_change_at_once(funcs):
+    """A record whose ``*_code`` or ``ignition_on`` differs from the previous point is written at
+    once (after the pending point it follows), even mid-slot; the cursor state carries the codes.
+
+    .. test:: esp-ingest never thins away an alert-code or ignition change
+       :id: T_ESP_INGEST_THIN_CHANGE
+       :links: R_ESP_INGEST_GAPFILL
+    """
+    ok, err = {"installed": True, "fault": None}, {"installed": True, "fault": "error"}
+    r = esp_ingest.Replay(funcs)
+    assert r.thin("cooler", S0 + 1000, ok) == []
+    assert r.thin("cooler", S0 + 2000, err) == [("cooler", S0 + 1000, ok), ("cooler", S0 + 2000, err)]
+    assert r.thin("cooler", S0 + 3000, err) == []  # unchanged: pending
+    assert r.thin("cooler", S0 + 4000, ok) == [("cooler", S0 + 3000, err), ("cooler", S0 + 4000, ok)]
+    on, off = {"installed": True, "ignition_on": True}, {"installed": True, "ignition_on": False}
+    assert r.thin("vehicle", S0 + 5000, off) == []
+    assert r.thin("vehicle", S0 + 6000, on) == [("vehicle", S0 + 5000, off), ("vehicle", S0 + 6000, on)]
+    again = esp_ingest.Replay(funcs, json.loads(json.dumps(r.dump())))  # the cursor round trip
+    assert again.thin("vehicle", S0 + 7000, off) == [("vehicle", S0 + 7000, off)]
+    assert again.close(S0 + 30_000) == [] and r.thinned == 0
 
 
 # ---- 5. the cursor -------------------------------------------------------------------------------
@@ -211,7 +269,8 @@ def test_cursor_moves_only_after_a_successful_write_and_a_rerun_writes_identical
     records = [
         rec(1, "general", frames["general"], ts=T0),
         rec(2, "energy", frames["energy"], ts=T0 + 1000),
-        rec(3, "cooler", frames["cooler"], up=5000, boot=2),  # current boot, no stamp yet: held
+        rec(3, "cooler", frames["cooler"], ts=T0 + 60_000),  # ends seq 1/2's slot; itself pending
+        rec(4, "cooler", frames["cooler"], up=5000, boot=2),  # current boot, no stamp yet: held
     ]
     cur = str(tmp_path / "c.json")
     with pytest.raises(OSError):
@@ -221,13 +280,14 @@ def test_cursor_moves_only_after_a_successful_write_and_a_rerun_writes_identical
     s = esp_ingest.ingest(pager(records, boot=2), a, cur)
     assert s["held"] == 1 and s["written"] == 2
     saved = json.loads((tmp_path / "c.json").read_text())
-    assert saved["seq"] == 2  # held at the current boot's unstamped record
+    assert saved["seq"] == 3  # held at the current boot's unstamped record
+    assert list(saved["state"]["thin"]["pending"]) == ["cooler"]  # seq 3 waits in the cursor
     energy = next(dict(p[2]) for p in a.writes[0] if dict(p[1])["function"] == "energy")
     assert energy["dcdc_current"] == 2.0  # serve's +2 on AmbSwVersion 0410, from the replayed general
     # the next run starts at the hold; a re-run from the same cursor writes byte-identical points
     nxt = pager(records, boot=2)
     esp_ingest.ingest(nxt, DB(), cur)
-    assert nxt.calls[0] == 2
+    assert nxt.calls[0] == 3
     b = DB()
     esp_ingest.ingest(pager(records, boot=2), b, str(tmp_path / "c2.json"))
     assert b.writes == a.writes

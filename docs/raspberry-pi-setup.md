@@ -270,13 +270,19 @@ buspi's live data always wins and the ESP fills the hours buspi was off or out o
 - **Points** — measurement `camper`, the same `function` + fields as serve, plus the tag
   `source=esp` (a series of its own: dashboards filtering by function + field show both; the ESP
   data can be audited or deleted by that tag), at the record's own time from the card.
+- **Thinning** — the ESP sees every notify (several a second while something changes); of the
+  gap records, only the **last per function and 30 s slot** (`floor(ts / 30 s)`, buspi's poll
+  cadence) is written, once a later slot's record arrives — the newest waits in the cursor. A
+  record whose alert/state codes (`*_code`: `fault_code`, `alert_code`, `fresh_alert_code`,
+  `waste_alert_code`, `error_code`; `ignition_on`) differ from the function's previous point is
+  always written, at its own time. Counted as `thinned`.
 - **Time** — a record with `ts` keeps it; one without (between boot/link-up and the first clock) is
   back-stamped from the next stamped record of the same ESP boot by uptime; the running boot's
   unstamped records wait for their stamp; an older boot that never got one is skipped and counted.
 - **Replay** — the frames go through serve's own decode, interpretation and water guard (the 1 L
   hold and the ramp debounce), in seq order.
 - **Cursor** — `~/.cache/calictl/esp_cursor.json` (`--cursor`): the last ingested seq plus the
-  replay state. It moves only after a successful write; a failed run (ESP or InfluxDB unreachable)
+  replay state (incl. each slot's pending point and the last written codes). It moves only after a successful write; a failed run (ESP or InfluxDB unreachable)
   retries from the same place, and a re-run writes identical points.
 - **Diagnostics** — the satellite's own `diag`/`perf`/`evt`/`log` records ([firmware](firmware.md),
   `R_FW_DIAG_LOG`) exist only on the ESP, so they skip replay and gap fill and are written as they
@@ -294,8 +300,8 @@ buspi's live data always wins and the ESP fills the hours buspi was off or out o
   stay apart. They feed the **🧭 UI usage** row (views per screen, controls used, page-load
   p50/p95, script errors), each split buspi / esp.
 - **Config** — serve's env (`INFLUXDB_TOKEN`, `INFLUX_URL`/`INFLUX_ORG`/`INFLUX_BUCKET`, from
-  `/etc/buspi/secrets.env`). Each run logs `{pulled, written, skipped_covered, skipped_no_time,
-  held, lost, diag_points}` (`lost` = records the card deleted at 90 % full before they were ingested).
+  `/etc/buspi/secrets.env`). Each run logs `{pulled, written, skipped_covered, thinned,
+  skipped_no_time, held, lost, diag_points}` (`lost` = records the card deleted at 90 % full before they were ingested).
 
 ```sh
 python3 -m calictl esp-ingest --url http://<esp> --dry-run   # pull + time + gap check, write nothing:

@@ -388,8 +388,9 @@ def test_esp_ingest_reads_the_c_pager_over_http(cli, dirs, tmp_path, monkeypatch
         )
     finally:
         srv.shutdown()
-    assert s["pulled"] == 7 and s["written"] == 7
-    assert [p.t for p in written] == [1789639000000 + n * 200000 for n in range(1, 8)]
+    # 200 s apart: each its own 30 s slot, written once the next arrives; the newest waits (thinning)
+    assert s["pulled"] == 7 and s["written"] == 6 and s["thinned"] == 0
+    assert [p.t for p in written] == [1789639000000 + n * 200000 for n in range(1, 7)]
     assert json.loads((tmp_path / "cur.json").read_text())["seq"] == 7
 
 
