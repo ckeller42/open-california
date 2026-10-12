@@ -205,3 +205,11 @@ label.row { cursor: pointer; }
 .menupop { position: absolute; top: 2.6rem; right: .4rem; z-index: 40; background: var(--card, #fff); border: 1px solid rgba(128,128,128,.35); border-radius: .5rem; box-shadow: 0 4px 14px rgba(0,0,0,.25); padding: .25rem; display: flex; flex-direction: column; min-width: 11rem; }
 .menupop button { background: none; border: 0; font: inherit; color: inherit; text-align: left; padding: .5rem .7rem; border-radius: .35rem; cursor: pointer; }
 .menupop button:hover { background: rgba(128,128,128,.15); }
+
+/* per-screen Help sheet (⋮ → Help, #314) — a native modal <dialog> */
+dialog.help { max-width: min(32rem, calc(100vw - 2rem)); max-height: 85vh; overflow: auto; padding: 1rem 1.1rem;
+  background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 16px; }
+dialog.help::backdrop { background: rgba(0,0,0,.45); }
+dialog.help h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+dialog.help p { font-size: .92rem; line-height: 1.45; margin: 0 0 .7rem; }
+dialog.help a { display: block; margin: .2rem 0 .9rem; color: var(--accent); }

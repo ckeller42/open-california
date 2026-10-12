@@ -396,6 +396,50 @@ def test_every_tile_renders_without_js_errors(page):
     expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()  # back on the dashboard
 
 
+HELP_VIEWS = (
+    "home",
+    "devicestatus",
+    "cooler",
+    "campingmode",
+    "lighting",
+    "airheater",
+    "water",
+    "energy",
+    "roof",
+    "vehicle",
+)
+
+
+def _help_sheets(pg, help_label, close_label):
+    """Open ⋮ → Help on every screen; returns {view: sheet text}. Each sheet must link to the docs."""
+    texts = {}
+    for v in HELP_VIEWS:
+        pg.evaluate("v => goto(v)", v)
+        pg.click("#menu")
+        pg.locator(".menupop").get_by_role("button", name=help_label, exact=True).click()
+        sheet = pg.locator("dialog.help")
+        expect(sheet).to_be_visible()
+        href = sheet.locator("a").get_attribute("href")
+        assert href.startswith("https://ckeller42.github.io/open-california/"), href
+        texts[v] = sheet.locator("p").all_inner_texts()
+        assert texts[v], "%s help sheet is empty" % v
+        sheet.get_by_role("button", name=close_label).click()
+        expect(sheet).to_have_count(0)
+    return texts
+
+
+def test_every_screen_has_a_help_sheet_en_and_de(base_url, error_gated_page):
+    """#314: every screen's ⋮ → Help opens its sheet without a JS error, in English and German, and
+    the German sheet is really translated (a missing strings.de.js key falls back to English)."""
+    with error_gated_page(base_url, locale="en-US") as pg:
+        en = _help_sheets(pg, "Help", "Close")
+    with error_gated_page(base_url, locale="de-DE") as pg:
+        de = _help_sheets(pg, "Hilfe", "Schließen")
+    for v in HELP_VIEWS:
+        assert len(de[v]) == len(en[v]), v
+        assert de[v] != en[v], "%s help has no German translation" % v
+
+
 def test_roof_hold_release_sends_stop(page):
     # The hold-to-move contract: pressing Open streams the move, RELEASING must send STOP. Before the
     # fix, command() re-rendered synchronously, detaching the held button, so its closure-scoped

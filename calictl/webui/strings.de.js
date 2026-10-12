@@ -10,6 +10,8 @@ window.STRINGS_DE = {
 
   // --- ⋮ menu / Device-status screen ----------------------------------------------------------
   "Device status": "Gerätestatus",
+  "Help": "Hilfe",
+  "More in the documentation": "Mehr in der Dokumentation",
   "Camper unit": "Camper-Einheit",
   "Last update": "Letzte Aktualisierung",
   "Bonded unit": "Gekoppelte Einheit",
@@ -113,15 +115,6 @@ window.STRINGS_DE = {
   "Rear USB ports": "Hintere USB-Anschlüsse",
   "Restore camping after you park": "Campingmodus nach dem Parken wiederherstellen",
   "⟳ will restore on park": "⟳ wird beim Parken wiederhergestellt",
-  ["The unit drops camper mode when the engine starts and won't allow it back on while driving. "
-    + "This turns camper mode + rear USB back on once you park (ignition off), if the engine had "
-    + "shed it. Respects a manual off, and stands down on low battery so it never fights "
-    + "the unit's power saving."]:
-    "Die Einheit deaktiviert den Campingmodus beim Motorstart und lässt ihn während der Fahrt nicht "
-    + "wieder zu. Diese Funktion schaltet Campingmodus + hintere USB-Anschlüsse wieder ein, sobald "
-    + "du parkst (Zündung aus), falls der Motor sie abgeschaltet hatte. Berücksichtigt ein manuelles "
-    + "Aus und hält sich bei schwacher Batterie zurück, um nie gegen die Energiesparfunktion der "
-    + "Einheit zu arbeiten.",
   "Auto camper on": "Auto-Campingmodus an",
   "Auto camper off": "Auto-Campingmodus aus",
   "Couldn't change auto camper": "Auto-Campingmodus konnte nicht geändert werden",
@@ -247,9 +240,6 @@ window.STRINGS_DE = {
   "Waste water": "Grauwasser",
   "🕒 last measured": "🕒 zuletzt gemessen",
   "🕒 measured {ago}": "🕒 {ago} gemessen",
-  "🕒 Showing the LAST MEASURED water level": "🕒 Es wird der ZULETZT GEMESSENE Wasserstand angezeigt",
-  "🕒 Showing the LAST MEASURED water level{ago} — the BLE level only refreshes while the van's water system is running, so it lags until the pump next runs. It's read correctly, just not live.":
-    "🕒 Es wird der ZULETZT GEMESSENE Wasserstand angezeigt{ago} — der BLE-Wert aktualisiert sich nur, während die Wasseranlage des Fahrzeugs läuft, und hinkt daher hinterher, bis die Pumpe das nächste Mal läuft. Er wird korrekt gelesen, nur nicht live.",
 
   // --- energy --------------------------------------------------------------------------------
   "Energy mode": "Energiemodus",
@@ -274,8 +264,6 @@ window.STRINGS_DE = {
   "on": "an",
   "error": "Fehler",
   "🕒 stale (starter asleep)": "🕒 veraltet (Starter im Ruhezustand)",
-  "🕒 Starter-battery values are stale — that subsystem only measures with the engine on, so it holds the last reading while parked. The leisure battery stays live.":
-    "🕒 Die Werte der Starterbatterie sind veraltet — dieses Subsystem misst nur bei laufendem Motor und hält daher im geparkten Zustand den letzten Messwert. Die Zweitbatterie bleibt live.",
   ["Set the energy management mode? This control is derived from the app and not yet verified on "
     + "the van. Continue?"]:
     "Energiemanagement-Modus setzen? Diese Funktion ist abgeleitet und am Fahrzeug noch nicht "
@@ -318,10 +306,8 @@ window.STRINGS_DE = {
   "  ✓ tested": "  ✓ getestet",
 
   // --- banners (firmware / anchors) ---------------------------------------------------------
-  ["⚠ Untested firmware — unit reports amb {amb} · comm {comm} (this project was validated on {tested}). "
-    + "Decode/semantics may have drifted; treat readings with care."]:
-    "⚠ Ungetestete Firmware — Einheit meldet Umg. {amb} · Komm {comm} (dieses Projekt wurde auf {tested} "
-    + "validiert). Dekodierung/Semantik könnte abweichen; Werte mit Vorsicht behandeln.",
+  "⚠ Untested firmware — unit reports amb {amb} · comm {comm} (validated on {tested}); readings may be off.":
+    "⚠ Ungetestete Firmware — Einheit meldet Umg. {amb} · Komm {comm} (validiert auf {tested}); Werte können abweichen.",
   "⚠ Implausible reading(s): {list} — possible decode drift.":
     "⚠ Unplausible Messwerte: {list} — mögliche Dekodierungsabweichung.",
   "Loading…": "Wird geladen…",
@@ -471,6 +457,152 @@ window.STRINGS_DE = {
   "Switch the refrigerator box on first": "Zuerst die Kühlbox einschalten",
   "Switch the refrigerator box off first": "Zuerst die Kühlbox ausschalten",
   "Roof move blocked": "Dachbewegung blockiert",
+
+  // --- per-screen Help sheets (⋮ → Help, #314): keys = the HELP texts in app.js ----------------
+  ["Each tile is one function of the camper unit; tap it for details. Only functions fitted to this van "
+    + "are shown. A ⚠ on a tile means the unit reports a fault there.\n\n"
+    + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
+    + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
+    + "Read-only: control writes are switched off on this device; values still update. An untested-firmware "
+    + "warning means the unit runs software this project was not validated on, so decoded values may be off."]:
+    "Jede Kachel ist eine Funktion der Camper-Einheit; tippe darauf für Details. Es werden nur "
+    + "Funktionen angezeigt, die in diesem Fahrzeug verbaut sind. Ein ⚠ auf einer Kachel heißt, dass "
+    + "die Einheit dort eine Störung meldet.\n\nOffline: Geparkt fällt die Einheit in Tiefschlaf und "
+    + "antwortet nicht mehr, bis das Fahrzeug wieder benutzt wird. Die Seite zeigt dann die letzten "
+    + "Daten und ihr Alter. 🕒 kennzeichnet einen Wert, der früher gemessen wurde, nicht "
+    + "live.\n\nNur-Lesen: Steuerbefehle sind auf diesem Gerät abgeschaltet; die Werte aktualisieren "
+    + "sich trotzdem. Eine Warnung zu ungetesteter Firmware heißt, dass die Einheit Software nutzt, "
+    + "auf der dieses Projekt nicht validiert wurde; dekodierte Werte können abweichen.",
+  ["Camper unit: online while the Bluetooth link to the unit works; offline usually means the parked unit "
+    + "is asleep. Last update is the age of the newest data. Bonded unit is the unit this device is paired "
+    + "with; pair or unpair from the ⋮ menu.\n\n"
+    + "On the ESP satellite this screen also shows its firmware, Bluetooth link, WiFi, uptime, microSD log "
+    + "and free memory. Open setup leads to the satellite's own page: WiFi, auto camper, clock and the "
+    + "firmware update (only on request, needs the home WiFi)."]:
+    "Camper-Einheit: online, solange die Bluetooth-Verbindung zur Einheit steht; offline heißt "
+    + "meist, dass die geparkte Einheit schläft. Letzte Aktualisierung ist das Alter der neuesten "
+    + "Daten. Gekoppelte Einheit ist die Einheit, mit der dieses Gerät gekoppelt ist; koppeln oder "
+    + "entkoppeln kannst du im ⋮-Menü.\n\nAuf dem ESP-Satelliten zeigt dieser Bildschirm auch seine "
+    + "Firmware, die Bluetooth-Verbindung, WLAN, Laufzeit, das microSD-Log und den freien Speicher. "
+    + "Setup öffnen führt zur eigenen Seite des Satelliten: WLAN, Auto-Campingmodus, Uhr und "
+    + "Firmware-Update (nur auf Anfrage, braucht das Heim-WLAN).",
+  ["Switch the refrigerator box on or off and set its cooling level.\n\n"
+    + "Quiet mode: Off, Manual or Automatic. Manual runs quiet mode for up to 23 hours; Automatic runs it "
+    + "between the start and end hour you set. Quiet mode can only be set while the box is on.\n\n"
+    + "The timer starts cooling at a set time. It can only be set while the box is off.\n\n"
+    + "Quiet mode and timer are not yet verified on the van. Banners show what the unit reports: the door "
+    + "is not fully closed, emergency mode, or an error for the workshop."]:
+    "Schalte die Kühlbox ein oder aus und stelle die Kühlstufe ein.\n\nFlüstermodus: Aus, Manuell "
+    + "oder Automatisch. Manuell läuft der Flüstermodus bis zu 23 Stunden; Automatisch zwischen der "
+    + "eingestellten Start- und Endstunde. Den Flüstermodus kannst du nur bei eingeschalteter Kühlbox "
+    + "einstellen.\n\nDer Timer startet das Kühlen zu einer festen Uhrzeit. Er lässt sich nur bei "
+    + "ausgeschalteter Kühlbox einstellen.\n\nFlüstermodus und Timer sind am Fahrzeug noch nicht "
+    + "verifiziert. Hinweise zeigen, was die Einheit meldet: Tür nicht ganz geschlossen, Notbetrieb "
+    + "oder ein Fehler für die Werkstatt.",
+  ["Camping mode is the unit's master switch for the camper functions. Exterior and interior lighting and "
+    + "the rear USB ports only work while it is on; the rear USB ports are off whenever camping mode is off.\n\n"
+    + "The unit turns camping mode off when the engine starts and does not allow it while the ignition is "
+    + "on: it is only possible when stationary.\n\n"
+    + "Restore camping after you park: turns camping mode and the rear USB ports back on once you park "
+    + "(ignition off), if the engine had switched them off. It respects a manual off and stands down on "
+    + "low battery, so it never fights the unit's power saving."]:
+    "Der Campingmodus ist der Hauptschalter der Einheit für die Camper-Funktionen. Außen- und "
+    + "Innenbeleuchtung und die hinteren USB-Anschlüsse funktionieren nur, solange er an ist; die "
+    + "hinteren USB-Anschlüsse sind immer aus, wenn der Campingmodus aus ist.\n\nDie Einheit schaltet "
+    + "den Campingmodus beim Motorstart aus und lässt ihn bei eingeschalteter Zündung nicht zu: Er ist "
+    + "nur im Stand möglich.\n\nCampingmodus nach dem Parken wiederherstellen: schaltet Campingmodus "
+    + "und hintere USB-Anschlüsse wieder ein, sobald du parkst (Zündung aus), falls der Motor sie "
+    + "abgeschaltet hatte. Ein manuelles Aus wird berücksichtigt, und bei schwacher Batterie hält sich "
+    + "die Funktion zurück, damit sie nie gegen die Energiesparfunktion der Einheit arbeitet.",
+  ["All lights switches every lamp on or off. The favourites 1–4 recall light profiles stored on the "
+    + "unit; save the current lamp levels to one under Functions & settings.\n\n"
+    + "Each lamp has a brightness from 0 (off) to 10 (100 %). The pop-up roof reading light only works "
+    + "while the pop-up roof is open.\n\n"
+    + "Wake-up light: at the wake-up time the chosen vehicle areas light up to the set brightness; the lead "
+    + "time adds a gentle ramp of that many minutes before it. At least one area stays selected.\n\n"
+    + "Lighting & sliding door: when on, opening the sliding door switches on the rear interior lights."]:
+    "Alle Lichter schaltet jede Leuchte ein oder aus. Die Favoriten 1–4 rufen Lichtprofile ab, die "
+    + "auf der Einheit gespeichert sind; die aktuellen Helligkeiten speicherst du unter Funktionen & "
+    + "Einstellungen in einem Favoriten.\n\nJede Leuchte hat eine Helligkeit von 0 (aus) bis 10 (100 "
+    + "%). Das Leselicht im Aufstelldach funktioniert nur bei geöffnetem Aufstelldach.\n\nWecklicht: "
+    + "Zur Weckzeit leuchten die gewählten Fahrzeugbereiche mit der eingestellten Helligkeit; die "
+    + "Vorlaufzeit fügt davor ein sanftes Hochdimmen über so viele Minuten hinzu. Mindestens ein "
+    + "Bereich bleibt ausgewählt.\n\nLicht & Schiebetür: Wenn an, schaltet das Öffnen der Schiebetür "
+    + "die hintere Innenbeleuchtung ein.",
+  ["Immediate heating starts the heater now for the set run time (10–120 min). Continuous heating runs "
+    + "without a time limit. It can only be started from inside the vehicle; here you can only turn it "
+    + "off, and the run time is locked while it runs.\n\n"
+    + "Heating temperature is a level from 1 to 9 or HI, not degrees.\n\n"
+    + "Timer: set Start heating at, then Start timer. The heater then starts at that time for the run "
+    + "time. If continuous heating is on, it turns off when the timer ends.\n\n"
+    + "The heater burns fuel, so every start asks first; it is not live-verified. A ⚠ banner shows why "
+    + "the unit refused or stopped it, for example low battery, low fuel or a running engine."]:
+    "Sofortheizen startet die Heizung jetzt für die eingestellte Laufzeit (10–120 min). Dauerbetrieb "
+    + "läuft ohne Zeitbegrenzung. Er lässt sich nur im Fahrzeug starten; hier kannst du ihn nur "
+    + "ausschalten, und die Laufzeit ist gesperrt, solange er läuft.\n\nDie Heizstufe ist eine Stufe "
+    + "von 1 bis 9 oder HI, keine Gradzahl.\n\nTimer: Stelle Heizen startet um ein und tippe auf Timer "
+    + "starten. Die Heizung startet dann zu dieser Zeit für die Laufzeit. Ist Dauerbetrieb an, "
+    + "schaltet er sich am Ende des Timers aus.\n\nDie Heizung verbrennt Kraftstoff, daher fragt jeder "
+    + "Start nach; sie ist nicht live verifiziert. Ein ⚠-Hinweis zeigt, warum die Einheit sie "
+    + "abgelehnt oder gestoppt hat, zum Beispiel schwache Batterie, wenig Kraftstoff oder laufender "
+    + "Motor.",
+  ["Fresh and waste water are read-only. The unit measures the tanks only while the van's water system "
+    + "is running. Parked, it keeps its last measurement, so the level can lag until the water system "
+    + "runs again: it is read correctly, just not live.\n\n"
+    + "🕒 marks such a held value and when it was measured. A drop to about 1 litre while parked is the "
+    + "unit's stale value, not a real reading; the last plausible level is kept until a new measurement "
+    + "arrives.\n\n"
+    + "⚠ banners are the unit's own tank alerts, for example pump protection, tank empty or full, or a "
+    + "sensor fault."]:
+    "Frisch- und Grauwasser werden nur gelesen. Die Einheit misst die Tanks nur, während die "
+    + "Wasseranlage des Fahrzeugs läuft. Geparkt behält sie die letzte Messung, daher kann der Stand "
+    + "hinterherhinken, bis die Wasseranlage wieder läuft: Er wird korrekt gelesen, nur nicht "
+    + "live.\n\n🕒 kennzeichnet so einen gehaltenen Wert und wann er gemessen wurde. Ein Abfall auf "
+    + "etwa 1 Liter im geparkten Fahrzeug ist der veraltete Wert der Einheit, keine echte Messung; der "
+    + "letzte plausible Stand bleibt stehen, bis eine neue Messung kommt.\n\n⚠-Hinweise sind die "
+    + "eigenen Tankmeldungen der Einheit, zum Beispiel Pumpenschutz, Tank leer oder voll oder ein "
+    + "Sensorfehler.",
+  ["Second battery is the leisure battery; it is measured all the time. The starter battery is only "
+    + "measured with the engine running, so parked it keeps its last values (🕒 stale).\n\n"
+    + "The battery bars come from a coarse level shown in 10 % steps, as in the app, not from a precise "
+    + "percentage. Voltages and currents are in volts and amps.\n\n"
+    + "Vehicle power is the charger fed by the alternator while the engine runs. Shore and solar power "
+    + "appear only if fitted. Issues lists the unit's own warnings.\n\n"
+    + "The energy mode is not yet verified on the van, and the unit can lock it."]:
+    "Die Zweitbatterie wird ständig gemessen. Die Starterbatterie wird nur bei laufendem Motor "
+    + "gemessen, geparkt behält sie daher ihre letzten Werte (🕒 veraltet).\n\nDie Batteriebalken "
+    + "beruhen auf einer groben Stufe, angezeigt in 10-%-Schritten wie in der App, nicht auf einem "
+    + "genauen Prozentwert. Spannungen und Ströme sind in Volt und Ampere.\n\nFahrzeugstrom ist das "
+    + "Ladegerät, das bei laufendem Motor von der Lichtmaschine gespeist wird. Landstrom und "
+    + "Solarstrom erscheinen nur, wenn verbaut. Probleme listet die eigenen Warnungen der "
+    + "Einheit.\n\nDer Energiemodus ist am Fahrzeug noch nicht verifiziert, und die Einheit kann ihn "
+    + "sperren.",
+  ["Press and hold open or close: the roof moves while you hold and stops when you release (or press "
+    + "stop). The ignition must be on. The unit may wait about 3 seconds before the motor starts, and a "
+    + "new press within 1 second is ignored. The roof stops by itself at its end position.\n\n"
+    + "⚠ banners are the unit's own roof alerts; most of them block open and close, stop always works.\n\n"
+    + "Roof control is not live-verified: watch the roof while it moves. The ESP satellite has no roof "
+    + "control."]:
+    "Halte öffnen oder schließen gedrückt: Das Dach bewegt sich, solange du hältst, und stoppt beim "
+    + "Loslassen (oder mit stopp). Die Zündung muss an sein. Die Einheit wartet eventuell etwa 3 "
+    + "Sekunden, bevor der Motor anläuft, und ein erneuter Druck innerhalb von 1 Sekunde wird "
+    + "ignoriert. In der Endlage stoppt das Dach von selbst.\n\n⚠-Hinweise sind die eigenen "
+    + "Dachmeldungen der Einheit; die meisten sperren öffnen und schließen, stopp geht immer.\n\nDie "
+    + "Dachsteuerung ist nicht live verifiziert: Beobachte das Dach, während es sich bewegt. Der "
+    + "ESP-Satellit hat keine Dachsteuerung.",
+  ["Ignition shows terminal 15 as the unit reports it.\n\n"
+    + "Level indicator: roll and pitch of the van in degrees. They are only available with the ignition "
+    + "on; with it off the gauges show -.-°. Above about 10 km/h the unit sends no reading and asks you "
+    + "to slow down. Positive pitch means the front is up; the roll direction is not yet confirmed.\n\n"
+    + "Vehicle clock is the unit's own clock, advanced live between reads. Firmware shows the unit's "
+    + "software versions and whether this project was tested on them."]:
+    "Zündung zeigt Klemme 15, wie die Einheit sie meldet.\n\nNiveauanzeige: Roll- und Nickwinkel des "
+    + "Fahrzeugs in Grad. Sie gibt es nur bei eingeschalteter Zündung; sonst zeigen die Anzeigen -.-°. "
+    + "Über etwa 10 km/h sendet die Einheit keinen Wert und bittet dich, langsamer zu fahren. "
+    + "Positiver Nickwinkel heißt: Front oben; die Rollrichtung ist noch nicht "
+    + "bestätigt.\n\nFahrzeuguhr ist die eigene Uhr der Einheit, zwischen den Abfragen live "
+    + "weitergezählt. Firmware zeigt die Softwarestände der Einheit und ob dieses Projekt darauf "
+    + "getestet wurde.",
 
   // --- language toggle -----------------------------------------------------------------------
   "Deutsch": "Deutsch",

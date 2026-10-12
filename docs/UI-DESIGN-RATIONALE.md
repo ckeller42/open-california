@@ -51,6 +51,28 @@ Char bases per subsystem are in `docs/hardware.rst`; field bit-layout is
 **Not-installed subsystems** (stairs, roof-A/C, satellite, living-room heater on the reference van)
 have `Installed=0` and are hidden — their screens exist as specs only, never rendered.
 
+## In-app help (⋮ → Help)
+
+Explanations do not live on the screens: a screen shows its values plus short status hints
+("🕒 measured 3 min ago", a ⚠ alert from the unit). The *why* is one tap away, in the screen's
+**⋮ → Help** sheet (#314). The served web UI (`calictl/webui/`, also bundled into the ESP32
+satellite) keeps all help text in one table, `HELP` in `app.js` (English), with the German text in
+`strings.de.js` under the same key. Each sheet links to the page below that carries the evidence:
+
+| Screen | Help links to |
+|---|---|
+| Vehicle (overview) | [documentation home](index.rst) |
+| Device status | [ESP32 satellite firmware](firmware.md) |
+| Cooler | [cooler and air heater business logic](https://ckeller42.github.io/open-california/business-logic/cooler-airheater.html) |
+| Camping mode | [auto camper mode](https://ckeller42.github.io/open-california/business-logic/auto-camper-mode.html) |
+| Lighting, Energy, Roof | [lighting, energy, water, roof business logic](https://ckeller42.github.io/open-california/business-logic/lighting-energy-water-sat-roof.html) |
+| Air heater | [cooler and air heater business logic](https://ckeller42.github.io/open-california/business-logic/cooler-airheater.html) |
+| Water | [value freshness](https://ckeller42.github.io/open-california/business-logic/value-freshness.html) |
+| Vehicle (level indicator) | [alert states](https://ckeller42.github.io/open-california/business-logic/alert-states.html) |
+
+`tests/test_webui_help.py` checks every linked page exists; the e2e test
+`test_every_screen_has_a_help_sheet_en_and_de` opens every sheet in English and German.
+
 ## Out of scope (deliberately not modeled)
 
 App-shell / account / onboarding / analytics / discover / travel screens from the vendor app are
