@@ -592,11 +592,7 @@ The terms used across these docs, including the camper unit's own vocabulary, ar
 
 ## Where to read next
 
-- **Run it on a Pi** — [`docs/raspberry-pi-setup.md`](docs/raspberry-pi-setup.md)
-- **The wire protocol + frame format** — [`docs/protocol.md`](docs/protocol.md)
-- **Control recipes + the arm gate** — [`docs/business-logic/control-and-actuation.md`](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html)
-- **Sequence diagrams** — the [rendered docs](https://ckeller42.github.io/open-california/protocol-sequences.html)
-- **Per-signal provenance + scales** — [`docs/business-logic/signals.md`](https://ckeller42.github.io/open-california/business-logic/signals.html)
-- **The tested hardware + GATT map** — the [hardware reference](https://ckeller42.github.io/open-california/hardware.html)
-- **Test layers, the mock unit + its fidelity gaps, CI jobs** — [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html)
-- **Contributor rules + hard invariants** — [`AGENTS.md`](AGENTS.md)
+The [documentation site](https://ckeller42.github.io/open-california/) indexes everything. Start with
+[control and actuation](https://ckeller42.github.io/open-california/business-logic/control-and-actuation.html)
+and [simulation and testing](https://ckeller42.github.io/open-california/simulation-and-testing.html);
+contributor rules are in [`AGENTS.md`](AGENTS.md).
