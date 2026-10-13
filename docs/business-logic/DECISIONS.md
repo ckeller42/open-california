@@ -8,6 +8,15 @@ the decompiled sources (bad-code pass) = bad-code pass). Newest first.
 
 ---
 
+## 2026-10-13 — `CarVariant` wire values vs enum ordinals (`car_model`)
+
+"CarVariant=2 = GRAND_CALIFORNIA" was wrong in every app version: 2 is the `te/a`/`lf/a` enum
+**ordinal** (6.1=0, T7=1, GC=2, Next=3). The raw→enum map is 5.0.8 `zf/d.java:163,362` (raw 1 →
+GRAND_CALIFORNIA, everything else → CALIFORNIA_7) and 5.4.0 `qg/e.java:357-363` (raw 0 → T7, 1 → GC,
+2 → CALIFORNIA_NEXT, else T7). This van reads raw 0 (the "reads 4" comments were pre-layout-fix,
+`protocol-alignment.md`). calictl: `vehicle.car_model` (0 "California T7" / 1 "Grand California" /
+2 "California Next" / else `None`), the web UI's sliding-door gate now hides on raw 1, mock seeds 0.
+
 ## 2026-10-11 — air heater: the app's gates, mirrored
 
 DECOMPILE 5.4.0.3036 + APP-OBSERVED 2026-10-11 (thinky lab vs fake unit) + REAL PHONE 2026-10-11 (at the van). The 2026-09-16 entry below said the app "never greys the heater

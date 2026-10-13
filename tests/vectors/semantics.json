@@ -258,7 +258,8 @@
   {
    "expect": {
     "car_clock": "2026-07-08 19:30:00",
-    "car_variant": 4,
+    "car_model": "California T7",
+    "car_variant": 0,
     "ignition_on": false,
     "installed": true,
     "level_pitch": null,
@@ -275,7 +276,7 @@
     "CarTimeMonth": 6,
     "CarTimeSecond": 0,
     "CarTimeYear": 126,
-    "CarVariant": 4,
+    "CarVariant": 0,
     "TerminalOneFive": 0
    },
    "function": "vehicle",
@@ -4961,6 +4962,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": null,
     "car_variant": 15,
     "ignition_on": false,
     "installed": true,
@@ -4979,6 +4981,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -4997,6 +5000,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": true,
     "installed": true,
@@ -5015,6 +5019,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5034,6 +5039,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5054,6 +5060,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5075,6 +5082,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5097,6 +5105,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5120,6 +5129,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5144,6 +5154,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5169,6 +5180,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5195,6 +5207,7 @@
   {
    "expect": {
     "car_clock": "2072-180-186 193:200:207",
+    "car_model": null,
     "car_variant": 10,
     "ignition_on": true,
     "installed": true,
@@ -5221,6 +5234,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
     "car_variant": 0,
     "ignition_on": false,
     "installed": true,
@@ -5693,6 +5707,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": null,
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
@@ -10401,6 +10416,7 @@
   {
    "expect": {
     "car_clock": "2026-07-08 19:30:05",
+    "car_model": null,
     "car_variant": 4,
     "ignition_on": true,
     "installed": true,
@@ -10425,6 +10441,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": null,
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
@@ -10446,6 +10463,58 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": "California T7",
+    "car_variant": 0,
+    "ignition_on": false,
+    "installed": true,
+    "level_pitch": null,
+    "level_popup": null,
+    "level_roll": null
+   },
+   "fields": {
+    "CarVariant": 0
+   },
+   "function": "vehicle",
+   "id": "vehicle/variant-0"
+  },
+  {
+   "expect": {
+    "car_clock": null,
+    "car_model": "Grand California",
+    "car_variant": 1,
+    "ignition_on": false,
+    "installed": true,
+    "level_pitch": null,
+    "level_popup": null,
+    "level_roll": null
+   },
+   "fields": {
+    "CarVariant": 1
+   },
+   "function": "vehicle",
+   "id": "vehicle/variant-1"
+  },
+  {
+   "expect": {
+    "car_clock": null,
+    "car_model": "California Next",
+    "car_variant": 2,
+    "ignition_on": false,
+    "installed": true,
+    "level_pitch": null,
+    "level_popup": null,
+    "level_roll": null
+   },
+   "fields": {
+    "CarVariant": 2
+   },
+   "function": "vehicle",
+   "id": "vehicle/variant-2"
+  },
+  {
+   "expect": {
+    "car_clock": null,
+    "car_model": null,
     "car_variant": null,
     "ignition_on": true,
     "installed": true,
@@ -10465,6 +10534,7 @@
   {
    "expect": {
     "car_clock": "1900-01-01 19:30:05",
+    "car_model": null,
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
@@ -10486,6 +10556,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": null,
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
@@ -10503,6 +10574,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": null,
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
@@ -10520,6 +10592,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": null,
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
@@ -10537,6 +10610,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": null,
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
@@ -10554,6 +10628,7 @@
   {
    "expect": {
     "car_clock": null,
+    "car_model": null,
     "car_variant": null,
     "ignition_on": false,
     "installed": true,
@@ -20542,7 +20617,8 @@
      },
      "vehicle": {
       "car_clock": "2026-07-08 19:30:00",
-      "car_variant": 4,
+      "car_model": "California T7",
+      "car_variant": 0,
       "ignition_on": false,
       "installed": true,
       "level_pitch": null,
@@ -20688,7 +20764,7 @@
      "CarTimeMonth": 6,
      "CarTimeSecond": 0,
      "CarTimeYear": 126,
-     "CarVariant": 4,
+     "CarVariant": 0,
      "TerminalOneFive": 0
     },
     "water": {
@@ -20833,7 +20909,8 @@
      },
      "vehicle": {
       "car_clock": "2026-07-08 19:30:00",
-      "car_variant": 4,
+      "car_model": "California T7",
+      "car_variant": 0,
       "ignition_on": false,
       "installed": true,
       "level_pitch": null,
@@ -20979,7 +21056,7 @@
      "CarTimeMonth": 6,
      "CarTimeSecond": 0,
      "CarTimeYear": 126,
-     "CarVariant": 4,
+     "CarVariant": 0,
      "TerminalOneFive": 0
     },
     "water": {
@@ -21124,7 +21201,8 @@
      },
      "vehicle": {
       "car_clock": "2026-07-08 19:30:00",
-      "car_variant": 4,
+      "car_model": "California T7",
+      "car_variant": 0,
       "ignition_on": false,
       "installed": true,
       "level_pitch": null,
@@ -21270,7 +21348,7 @@
      "CarTimeMonth": 6,
      "CarTimeSecond": 0,
      "CarTimeYear": 126,
-     "CarVariant": 4,
+     "CarVariant": 0,
      "TerminalOneFive": 0
     },
     "water": {
@@ -21408,7 +21486,8 @@
      },
      "vehicle": {
       "car_clock": "2026-07-08 19:30:00",
-      "car_variant": 4,
+      "car_model": "California T7",
+      "car_variant": 0,
       "ignition_on": false,
       "installed": true,
       "level_pitch": null,
@@ -21549,7 +21628,7 @@
      "CarTimeMonth": 6,
      "CarTimeSecond": 0,
      "CarTimeYear": 126,
-     "CarVariant": 4,
+     "CarVariant": 0,
      "TerminalOneFive": 0
     },
     "water": {
@@ -21699,7 +21778,8 @@
      },
      "vehicle": {
       "car_clock": "2026-07-08 19:30:00",
-      "car_variant": 4,
+      "car_model": "California T7",
+      "car_variant": 0,
       "ignition_on": false,
       "installed": true,
       "level_pitch": null,
@@ -21845,7 +21925,7 @@
      "CarTimeMonth": 6,
      "CarTimeSecond": 0,
      "CarTimeYear": 126,
-     "CarVariant": 4,
+     "CarVariant": 0,
      "TerminalOneFive": 0
     },
     "water": {

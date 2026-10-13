@@ -321,6 +321,7 @@ function semVehicle(d) {
     installed: true,
     ignition_on: ign,
     car_variant: semGet(d, "CarVariant"),
+    car_model: SEM_CAR_MODEL[/** @type {number} */ (semGet(d, "CarVariant"))] ?? null,
     level_popup: popup,
     level_roll: level ? deg(semGet(d, "CarLevelRoll")) : null,
     level_pitch: level ? deg(semGet(d, "CarLevelPitch")) : null,

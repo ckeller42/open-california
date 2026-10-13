@@ -86,7 +86,7 @@ answers wire facts; it adds nothing for app-side logic or unexposed features.
 | Unclear item | Capture resolves it? | What to do |
 |---|---|---|
 | ~~**Air-heater level range**~~ | ✅ **DONE** | 1–10 (HI=10), captured 2026-07-14; live 2026-10-11: calictl `level 3` and the app's `level 8` (`3f78007f1f3f`, = calictl's) both applied on the real unit. |
-| **`car_variant` → model name** | 🟡 **partial** | A single **read** of char `1004` shows this van's raw `CarVariant`; the app screen shows the model. Pairs raw→label for *this* van (confirms whether `1 = California 7`, per `te/a.java`). Can't prove the other variants — only one vehicle. Kept as raw int meanwhile. |
+| ~~**`car_variant` → model name**~~ | ✅ **DONE** (decompile) | This van reads raw `CarVariant` 0 live; the app maps raw 0 → CALIFORNIA_7, 1 → GRAND_CALIFORNIA, 2 → CALIFORNIA_NEXT, else T7 (5.4.0 `qg/e.java:357-363`; 5.0.8 `zf/d.java:163`: 1 → GC, else T7). The `te/a` values 0/1/2 are enum ordinals, not wire values. calictl surfaces `car_model` from that map. The other variants can't be live-checked — only one vehicle. |
 | **Vehicle clock-out-of-sync** | ❌ **no — not on the wire** | The RTC decode is already correct. "Out of sync" is the app comparing the unit clock to the **phone** clock (>5 min, `zf/d.java:235`). Nothing to capture — implement daemon-side (compare `vehicle.car_clock` to the Pi system clock) if wanted. |
 | **Lighting colour (`SET_COLOR`)** | ❌ **no — not exposed** | The colour UI is model-gated (likely Grand-California-only), so a T7 app never emits a colour frame. calictl sends SET_COLOR only as the `save_profile N <colour>` preface (DECOMPILE-only); the standalone `set lighting color` is retired. |
 

@@ -819,7 +819,9 @@ def test_vehicle_decode_char_1004():
        :status: passing
 
        Verifies :need:`R_VEHICLE_1004`: a captured ``1004`` frame decodes to the
-       correct ignition (terminal-15 off), car variant, real-time clock and
+       correct ignition (terminal-15 off), car variant (raw + the app's model label:
+       raw 0 California T7, 1 Grand California, 2 California Next, else unknown —
+       ``qg/e.java:357-363``, not the enum ordinals), real-time clock and
        roll/pitch leveling, and that the level axes are signed.
     """
     f = _funcs()
@@ -830,6 +832,11 @@ def test_vehicle_decode_char_1004():
     # CONSISTENT CarVariant across frames (0 here and in the ignition-on capture), whereas the
     # old CarVariant@3/4 spuriously read a CarLevelPopUp bit as "2". See test_capture_verified.
     assert v["car_variant"] == 0
+    assert v["car_model"] == "California T7"  # raw 0 -> CALIFORNIA_7 (qg/e.java:357-363)
+    assert semantics.vehicle({"CarVariant": 1})["car_model"] == "Grand California"
+    assert semantics.vehicle({"CarVariant": 2})["car_model"] == "California Next"
+    assert semantics.vehicle({"CarVariant": 4})["car_model"] is None  # app falls back to T7; we don't guess
+    assert semantics.vehicle({})["car_model"] is None
     assert v["car_clock"] == "2026-07-07 23:20:42"  # year+1900, month+1
     # ignition off: the unit sends 0/0 but has no level signal — the app shows "-.-°, Signal
     # unavailable. Ignition is off." (APP-DISPLAY 2026-10-10), so the axes are unavailable, not 0.0

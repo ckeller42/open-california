@@ -302,6 +302,7 @@ window.STRINGS_DE = {
 
   // --- vehicle -------------------------------------------------------------------------------
   "Ignition": "Zündung",
+  "Model": "Modell",
   "Level indicator (roll / pitch)": "Niveauanzeige (Roll / Nick)",
   "roll": "Roll",
   "pitch": "Nick",

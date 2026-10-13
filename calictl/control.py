@@ -620,7 +620,8 @@ def command_precondition(function, what, value, states):
             if semantics.wakeup_config(semantics.lighting_config(None, states.get("lighting") or {})) is None:
                 return WAKEUP_UNKNOWN
     # door_contact: deliberately NOT gated on vehicle.CarVariant — the app gates the sliding-door
-    # page on its onboarding model, not on BLE, and this T7 reads CarVariant=4 (feature-availability.md).
+    # page on its onboarding model, not on BLE; this T7 reads CarVariant=0 (raw 0 T7 / 1 GC / 2 Next,
+    # qg/e.java:357-363; feature-availability.md).
     return None
 
 

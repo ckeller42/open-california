@@ -98,6 +98,7 @@ _JS_TABLES = (
     ("SEM_AIRHEATER_ERROR", "semantics", "_AIRHEATER_ERROR"),
     ("SEM_ROOF_POS", "semantics", "_ROOF_POS"),
     ("SEM_ROOF_ALERT", "semantics", "_ROOF_ALERT"),
+    ("SEM_CAR_MODEL", "semantics", "_CAR_MODEL"),
     ("SEM_LZONES", "semantics", "_LZONES"),
     ("SEM_LIGHT_CONFIG_KEYS", "semantics", "LIGHT_CONFIG_KEYS"),
     ("SEM_DCDC_PLUS2_SW", "semantics", "_DCDC_PLUS2_SW"),

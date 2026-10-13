@@ -231,8 +231,9 @@ with L5 = kitchen: the wake-up area AREA_2 "Kitchen background lighting" maps to
    (`control._lighting`), pinned by `T_LIGHT_DOOR_CONTACT`, **APP-RECORDED** 2026-10-06 (`door-contact.jsonl`:
    `0810…01` / `0810…00`, byte-exact; the row is one tappable "Enabled"/"Disabled" status row); no CarVariant gate
    in the builder/CLI (the app gates the page on its onboarding model, not on BLE). The web UI hides the row
-   when the live BLE `CarVariant` is Grand California (2), the nearest available stand-in for that onboarding
-   model (this T7 reads 4, so it is shown). Camping-page row gates (decompile cross-check 2026-10-06, enigma `46f982d3`): shown on
+   when the live BLE `CarVariant` is Grand California (raw 1 — `qg/e.java:357-363`: raw 0 T7, 1 GC, 2 California
+   Next; not the enum ordinals), the nearest available stand-in for that onboarding
+   model (this T7 reads 0, so it is shown). Camping-page row gates (decompile cross-check 2026-10-06, enigma `46f982d3`): shown on
    every variant except Grand California (`wh/c.h0`, `bc/a.java:117-140`), no equipment gate; the whole camping
    page is blocked by "Only possible when stationary" while 1202 `Enable` ([terminal-15](https://ckeller42.github.io/open-california/glossary.html#term-Terminal-15) mirror) is set
    (`ut/hf.java:68-80`).
@@ -379,7 +380,8 @@ itself (`ak/a.java:704-716`) offers Normal + Max always and **ECO only when `zj/
 flag, source one hop unresolved); calictl offers ECO unconditionally.
 **Negative confirmation, APP-OBSERVED 2026-09-27** (`tools/applab`, inventory screens 58-59): the
 real app's picker showed only Normal / Max with `EnergyModeNotSelectable=0`, with
-`energy.PvInstalled=1`, and with `vehicle.CarVariant=2` (GRAND_CALIFORNIA) — no BLE field the fake
+`energy.PvInstalled=1`, and with `vehicle.CarVariant=2` (read by the 5.0.8 app as CALIFORNIA_7, not Grand
+California — raw 1 is GC, `zf/d.java:163`; 5.4.0 reads 2 as California Next) — no BLE field the fake
 unit serves unlocks ECO. **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` is **RESOLVED (#154): 1602 bit 10 `PvInstalled`**, contradicting the observation. **Likely cause of the contradiction (decompile cross-check 2026-10-06, enigma `46f982d3`, medium confidence): a stale first read.** `ak/a.b` reads `N0`'s raw value without a Compose state read (`ak/a.java:714`) and is composed at `:196`, before `:197` subscribes the same flow; the proxy StateFlow (`yg/j.t1`, `a40/y`) refreshes only while subscribed, so the first visit sees the seed (false) and `b()` is then skipped. App-lab retest owed: with `PvInstalled=1`, a **second visit** to the Energy page in the same app session (or an energy-mode change). **APP-OBSERVED 2026-10-06 (settles it):** with `PvInstalled=1` on the wire, the first visit to Vehicle Information > Energy Mode offers Normal / Max; leaving and opening it again in the same app session offers **ECO / Normal / Max**. ECO is gated by `PvInstalled`; the 2026-09-27 screens were first visits. This van has no solar (`PvInstalled=0`), so its app never offers ECO and never sends `EnergyModeSet=2` on this van.
 
 ("Land" = shore/landline power, "Pv" = photovoltaic/solar, "Dcdc" = DC-DC converter, "Afs" = raw AFS-scaled
