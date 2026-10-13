@@ -43,7 +43,7 @@ order of operations so you fix things forward instead of chasing red CI.
    ```
    python3 -m pytest tests/test_codec_vectors.py tests/test_gen_c_dict.py \
        tests/test_codec_parity.py tests/test_signal_coverage.py -q
-   DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # on buspi
+   DECOMPILE_SRC=~/src/californiaontour-5.4.0/raw/sources python3 -m tools.audit_signals --report   # on buspi, RAW tree of the current decompile
    python3 -m pytest tests/ -q                                        # full suite
    ```
 

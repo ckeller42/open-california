@@ -223,6 +223,14 @@ van, so polarity cannot be live-verified**:
 |---|---|---|
 | `satelliteantenna` | the only `!((Boolean)…)` in `mg/f.java:399` negates the derived `I0` composite (`System==1`), not any surfaced field | surfaced booleans **statically verified non-inverted**: `system_on`=`System==1` (`mg/f.java:162`), `installed`=raw `f17097b` (no negation). Only the uninstalled `Error`-enum granularity stays unconfirmable — a conservative flag |
 | `stairs` | inverted setter + readback in `og/b.java` | `extended`/`obstacle_sensor` polarity UNVERIFIED — resolve when a stairs-equipped vehicle is available |
+| `energy` (5.4.0 tree only) | `og/e.java:1319` renders a derived UI flow as `!B \|\| J` (`B`/`J` = the 3rd/12th 1602 flag cells); 5.0.8 wrote the same flow as `k0 \|\| s0` (`xf/a.java:389`) with no negation | a composite flow, not a surfaced-field readback; jadx rendering vs smali unverified — review item, not a decode risk |
+
+Class names in this table are **app 5.0.8.3028** (the tree the audit was first run on; 5.4.0
+equivalents: `mg/f`→`dh/h`, `og/b`→`fh/c`, see the rename table in the RE repo). The auditor was
+re-run on the 5.4.0.3036 raw tree on 2026-10-13: same two flags plus the `energy` row above;
+`COMBINED-CONTROL` had silently vanished because R8 renamed the stage call `.o(`→`.l(` — fixed by
+keying `tools/app_setters.py` on the call shape, and the auditor now prints a `decompile:` summary
+line (+ WARNING when a tree yields nothing).
 
 These stay flagged **on purpose** — the check honestly reports real, unresolved risk. Do not
 "acknowledge" them by marking a scale `inverted` without verifying which field, or you

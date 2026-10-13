@@ -42,9 +42,11 @@ if reads_decompile and not edits_mapping:
     msg = (
         "You just read/traced the decompiled app. If you understood any class or method not yet in "
         "the Enigma mapping — or found an existing entry wrong/thin — UPDATE it now: append/enrich "
-        "the class + method names and a doc-comment (with class.java:line cites) in "
-        "~/src/californiaontour-decompile/mapping.enigma on buspi, then commit + push to "
-        "ckeller42/californiaontour-re. Standing rule: the mapping GROWS MONOTONICALLY — never let a "
-        "fresh understanding go unrecorded. (Decompile pipeline + skill live in the private RE repo.)"
+        "the class + method names and a doc-comment (with class.java:line cites, app-version-stamped) in "
+        "~/src/californiaontour-decompile/mapping.enigma on buspi — the ONLY editable copy; it holds the "
+        "CURRENT 5.4.0.3036 names (the 5.0.8 tree in that dir goes with mapping-5.0.8.3028.enigma) — "
+        "then commit + push to ckeller42/californiaontour-re. Standing rule: the mapping GROWS "
+        "MONOTONICALLY — never let a fresh understanding go unrecorded. (Decompile pipeline + skill live "
+        "in the private RE repo.)"
     )
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}))

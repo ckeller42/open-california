@@ -62,6 +62,14 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
   derived `soc*_pct` (level×10, `None` above 10) only mirrors the app's display math; temps are
   raw levels (`UNVERIFIED`). Currents ARE verified amps since 2026-09-07 (`batt2/shore/solar`
   ×0.1, `dcdc` raw, per the app view-model). See `docs/business-logic/signals.md` §4/§5.
+- **Decompile cites are app-version-stamped.** `class.java:line` cites in `protocol/signals.yaml`,
+  `docs/business-logic/` and `mapping.enigma` comments are **app 5.0.8.3028** names unless marked
+  `5.4.0`; R8 renames every class AND member per build. Current decompile = **5.4.0.3036** on buspi
+  (`~/src/californiaontour-5.4.0/raw/sources`, mapping `mapping.enigma` in the private RE repo);
+  the 5.0.8 tree stays at `~/src/californiaontour-decompile/sources` (`mapping-5.0.8.3028.enigma`).
+  Old→new class names: the rename table in the RE repo's `notes/2026-10-10-diff-5.0.8-to-5.4.0.md`.
+  Tools that grep the decompile (`audit_signals`/`app_setters`/`extract_protocol`) must key on code
+  SHAPE, not R8 member names — a name-keyed regex goes silently empty on the next version.
 - **Never commit** the APK, decompiled sources (`decompile/`), VW manuals (`manuals/`), or
   secrets/tokens (`*.env`) — all gitignored. VW material: citations only. **App screenshots (real phone or
   emulator) go ONLY to the owner's private repo `ckeller42/californiaontour-re` (`screens/`)** — never here
@@ -83,7 +91,7 @@ tools/ci.sh dev                                      # once per clone: dev deps 
 python3 -m pytest tests/ -q                          # the suite (keep green)
 tools/ci.sh [ci|webcheck|test|lint|audit|…]          # the local CI gate — NOT all of GitHub CI (below)
 tools/ci.sh cov                                      # suite under coverage; floor gates calictl/ only (pyproject fail_under, a ratchet — raise it, never lower)
-DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report   # coverage + semantic-review
+DECOMPILE_SRC=~/src/californiaontour-5.4.0/raw/sources python3 -m tools.audit_signals --report   # coverage + semantic-review (buspi; RAW tree of the CURRENT decompile, never named/)
 python3 -m calictl status                            # live read of all functions (needs BLE; on buspi stop `serve` first — it owns hci0)
 python3 -m calictl serve [--dry-run]                 # the unified daemon (read-only unless --enable-writes)
 curl -s localhost:8088/api/state                     # buspi: live decoded state via the RUNNING daemon

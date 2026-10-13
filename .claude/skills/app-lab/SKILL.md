@@ -158,7 +158,7 @@ hand once per APK version. Never `pkill -f` the fake: use `labctl.sh` and the pi
 | a claim checked against the app | row in `docs/business-logic/protocol-crosscheck-applab.md` (OBSERVED / CONSISTENT / CONTRADICTED / NOT TESTABLE, screen cited) |
 | a frame, gate or dialog text | `control-and-actuation.md` recipe/capture table, `alert-states.md`, the function's doc; tier line in `evidence-ledger.md` ("APP-OBSERVED (date)") |
 | what a screen shows | `ui/screens/` — `home`, `vehicle-info`, `energy`, `coolbox`, `air-heater`, `camping-mode`, `lighting`, `roof`, `water`, `notifications`, `self-check`, `settings`, `account`, `connectivity`, `onboarding` (+ `stairs`, `roof-air-condition`, `satellite-antenna` not fitted) `.yaml` — `label_text` + `evidence:`; dead keys marked |
-| what a class/method does | `~/src/californiaontour-decompile/mapping.enigma` on buspi (private repo; grows monotonically; commit + push) |
+| what a class/method does | `~/src/californiaontour-decompile/mapping.enigma` on buspi (private repo; 5.4.0.3036 names — the lab APK is 5.0.8, so translate via the rename table in `notes/2026-10-10-diff-5.0.8-to-5.4.0.md`; grows monotonically; commit + push) |
 | a new byte-identical frame | a `tools/scenarios/<function>/<name>.yaml` capture-diff scenario |
 
 ## Common mistakes
