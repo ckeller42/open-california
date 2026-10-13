@@ -45,7 +45,8 @@ void cali_ble_nimble_init(void (*on_sync)(void));
  * so the session can treat a failed beat as a lost link. connect_bonded() re-encrypts by itself
  * once connected (ENC_OK / ENC_FAIL). disconnect() is silent: the link it drops (or the
  * connect it cancels) produces no DISCONNECTED/CONNECT_FAIL; only a drop the stack or the peer
- * caused is reported. remove_bond() drops the link, then deletes every bonded peer. pair()
+ * caused is reported. remove_bond() drops the link, then deletes every bonded peer;
+ * keep_only_bond() deletes every bond but the connected peer's (one unit, #255). pair()
  * probes a bond already stored for the connected peer first (re-encryption): a working bond is kept
  * (ENC_OK without SMP, "LOG pair: the stored bond works, keeping it"); one the unit proves stale
  * (HCI 0x05/0x06) is dropped and a fresh SMP pairing runs ("LOG pair: the stored bond is stale …");

@@ -56,6 +56,7 @@ static int f_read(uint16_t c) { return call_u("read", c); }
 static int f_subscribe(uint16_t c) { return call_u("subscribe", c); }
 static int f_write_heartbeat(uint32_t n) { return call_u("write_heartbeat", n); }
 static int f_disconnect(void) { return call("disconnect", NULL); }
+static int f_keep_only_bond(void) { return call("keep_only_bond", NULL); }
 static int f_remove_bond(void) { return call("remove_bond", NULL); }
 static int f_has_bond(void) { return 0; }
 static const char *f_identity(void) { return FAKE_IDENTITY; }
@@ -64,7 +65,7 @@ static int f_write(uint16_t c, const uint8_t *d, size_t n) { (void)c; (void)d; (
 static const cali_transport_t FAKE = {
     f_set_sink, f_start_scan, f_stop_scan, f_connect_found, f_connect_bonded, f_pair,
     f_inject_passkey, f_discover, f_read, f_subscribe, f_write_heartbeat, f_disconnect,
-    f_remove_bond, f_has_bond, f_identity, f_write,
+    f_remove_bond, f_has_bond, f_identity, f_write, f_keep_only_bond,
 };
 
 static void on_state(const cali_pair_state_t *s, const char *address) {

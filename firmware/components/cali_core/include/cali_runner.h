@@ -15,8 +15,9 @@
  *
  * Action -> transport: START_SCAN start_scan(CODEC_DEVICE_NAME), STOP_SCAN stop_scan, CONNECT
  * connect_found, PAIR pair, SEND_PASSKEY inject_passkey, VERIFY read(CODEC_CHAR_AUTH), DISCONNECT
- * disconnect, REMOVE_BOND remove_bond (then EV_RESET_DONE when it returned 0), PERSIST_BOND nothing
- * (NimBLE already persisted the bond through the store callbacks) — the bonded STATE carries
+ * disconnect, REMOVE_BOND remove_bond (then EV_RESET_DONE when it returned 0), PERSIST_BOND
+ * keep_only_bond (NimBLE already persisted the bond through the store callbacks; the ESP serves one
+ * unit, so a verified pairing drops every other bond, #255) — the bonded STATE carries
  * address = identity(). A call that cannot start is fed back as the matching failure event
  * (connect -> EV_CONNECT_FAIL, pair/passkey -> EV_PAIR_FAIL, verify -> EV_VERIFY_FAIL); a scan
  * that cannot start is ended by the scanning timeout.

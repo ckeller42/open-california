@@ -51,8 +51,9 @@ static void run_action(const cali_pair_action_t *a) {
     case PAIR_ACT_VERIFY:
         if (s_t->read(CODEC_CHAR_AUTH) != 0) feed(PAIR_EV_VERIFY_FAIL, 0);
         break;
-    case PAIR_ACT_PERSIST_BOND:
-        break;                                        /* NimBLE's store callbacks already did it */
+    case PAIR_ACT_PERSIST_BOND:                       /* NimBLE's store callbacks stored it; the */
+        (void)s_t->keep_only_bond();                  /* ESP serves one unit: drop the others (#255) */
+        break;
     case PAIR_ACT_DISCONNECT:
         (void)s_t->disconnect();                      /* may be down already: nothing to do then */
         break;

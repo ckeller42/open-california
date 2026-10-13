@@ -89,6 +89,7 @@ def test_happy_path_call_and_state_sequence(fake):
         st("pairing"),
         "CALL read 4100",
         st("verifying"),  # 4100 = 0x1004 (CODEC_CHAR_AUTH)
+        "CALL keep_only_bond",  # verified: drop every other unit's bond (#255)
         st("bonded", address=IDENTITY),
     ]
 
@@ -169,6 +170,7 @@ def test_a_call_that_cannot_start_is_fed_back_as_its_failure(fake):
     ]
     out = run(fake, "fail read", *HAPPY[:-1])
     assert out[-4:] == ["CALL read 4100", st("verifying"), "CALL disconnect", st("error", 0, "verify_failed")]
+    assert "CALL keep_only_bond" not in out  # #255: an unverified pairing keeps the other bonds
 
 
 def test_events_the_runner_does_not_consume_are_forwarded(fake):

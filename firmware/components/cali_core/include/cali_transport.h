@@ -71,6 +71,8 @@ typedef struct {
     int  (*write)(uint16_t char_short, const uint8_t *data, size_t len);   /* a control frame, write
                                                       with response: WRITTEN. Refused (nonzero, nothing
                                                       sent) unless cali_ctl_write_ok(char_short, len) */
+    int  (*keep_only_bond)(void);                  /* delete every bond but the connected peer's
+                                                      (the ESP serves one unit, #255) */
 } cali_transport_t;
 
 #ifdef __cplusplus
