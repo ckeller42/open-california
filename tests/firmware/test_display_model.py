@@ -84,9 +84,9 @@ def test_camper_link_up_no_data_yet(cli):  # Review Focus 2
     assert v["camper"].startswith("amber|")
 
 
-def test_camper_stale_after_10s(cli):
-    (v,) = run(cli, BASE.replace("age=800", "age=10001") + " now=20000 lang=0")
-    assert v["camper"] == "red|keine Daten seit 10 s"
+def test_camper_stale_after_90s(cli):
+    (v,) = run(cli, BASE.replace("age=800", "age=90001") + " now=100000 lang=0")
+    assert v["camper"] == "red|keine Daten seit 90 s"
 
 
 def test_camper_link_lost(cli):
@@ -209,10 +209,10 @@ def test_camper_bonded_after_reboot(cli, link, want):  # PAIR_IDLE with a stored
 def test_stale_boundary(cli):
     a, b = run(
         cli,
-        BASE.replace("age=800", "age=10000") + " now=1 lang=0",
-        BASE.replace("age=800", "age=10001") + " now=1 lang=0",
+        BASE.replace("age=800", "age=90000") + " now=1 lang=0",
+        BASE.replace("age=800", "age=90001") + " now=1 lang=0",
     )
-    assert a["camper"] == "green|verbunden · Daten vor 10 s" and b["camper"] == "red|keine Daten seit 10 s"
+    assert a["camper"] == "green|verbunden · Daten vor 90 s" and b["camper"] == "red|keine Daten seit 90 s"
 
 
 @pytest.mark.parametrize("ms,txt", [(61_000, "1 min"), (7_980_000, "2 h 13 min"), (273_600_000, "3 d 4 h")])
@@ -310,6 +310,25 @@ def test_alert_wakes_ordinary_change_does_not(cli):
         + " now=800200",  # WiFi green -> amber (retrying): wake
     )
     assert [x["state"] for x in v] == ["on", "off", "on", "off", "on"]
+
+
+def test_parked_refresh_sawtooth_never_wakes(cli):
+    """A parked unit refreshes the snapshot only by the 30 s water re-read (CALI_SESSION_WATER_REREAD_MS),
+    so the data age saws 2 s -> ~32 s -> 2 s. That normal gap is not "stale": with no other input
+    the screen dims after 60 s and is off after 5 min (live 2026-10-13: it stayed on for 15 min).
+
+    .. test:: The parked snapshot-age sawtooth neither turns the camper row red nor wakes the screen
+       :id: T_FW_DISPLAY_PARKED_SAWTOOTH
+       :links: R_FW_DISPLAY_WAKE
+    """
+    lines = ["reset"] + [
+        BASE.replace("age=800", "age=%d" % (2000 + t % 30000)) + " now=%d" % t for t in range(0, 360_000, 500)
+    ]
+    v = run(cli, *lines)
+    assert {x["camper"].split("|")[0] for x in v} == {"green"}
+    assert v[59_000 // 500]["state"] == "on"
+    assert v[61_000 // 500]["state"] == "dim"
+    assert v[301_000 // 500]["state"] == v[-1]["state"] == "off"
 
 
 def test_hand_near_wakes_on_two_reads_with_hysteresis(cli):

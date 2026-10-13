@@ -412,7 +412,7 @@ document, so a stale bundle fails CI. The browser does the interpretation: the f
 `/api/state` goes through `calictl/webui/semantics.js`, the JavaScript twin of
 `calictl/semantics.py`, pinned to it by the golden vectors in `tests/vectors/semantics.json`.
 `adaptSatellite` turns the body into the daemon's state shape and synthesizes `_meta`; `online` =
-link up and snapshot age ≤ 10 s (`SAT_STALE_S`), the same instant the CoreS3 screen goes stale.
+snapshot age ≤ 90 s (`SAT_OFFLINE_S`, 3 × the 30 s water re-read), the same instant the CoreS3 screen goes stale (`DISPLAY_STALE_MS`).
 `_meta.read_only` is the inverse of the firmware's `device.control.writes` (`writes` is true in station
 mode; `read_only = !writes`): with `writes` true the controls are **live** — the page POSTs calictl's `/api/command` body and requests nothing but `/`,
 `/api/state`, `/api/command`, the wizard's `/api/pairing` and the home-screen manifest + icons (the icons cached a day, then revalidated) — except the pop-top roof, which stays greyed
@@ -808,7 +808,9 @@ The CoreS3 screen is dark when nobody uses it (spec `docs/superpowers/specs/2026
   **Wake events:** a touch; a hand near (the proximity count above `DISPLAY_PROX_NEAR` for two reads in
   a row — the rising edge only, so something parked in front never pins it on; far again below
   `DISPLAY_PROX_FAR`); the WiFi or camper row turning red or amber. A tick of a number or a change to
-  green/grey does not wake it (before this, any colour or wording change did).
+  green/grey does not wake it (before this, any colour or wording change did). The camper row's
+  "no data" red needs `DISPLAY_STALE_MS` (90 s = 3 × the 30 s water re-read, the only refresh while
+  parked), so the normal parked data-age sawtooth (2 s -> ~31 s) never wakes it; a lost link still does.
 - **A wake tap is swallowed:** a press that starts while the screen is dim or off only wakes it; LVGL
   sees no press until that finger lifts (`cali_display_touch_gate`, inside `display.c`'s touch read).
 - **A failed touch read never aborts** (`R_FW_TOUCH_NO_ABORT`, #346): esp_lvgl_port's own touch read

@@ -419,7 +419,7 @@ The board build paints a 320 x 240 status screen: title + `fw <version>`, then t
 coloured dot — **Gerät/Device** (running · uptime), **WLAN/WiFi** (setup hotspot / joining /
 retrying = amber, SSID · IP · RSSI = green, not connected + reason = red), **Camper** (not paired
 = grey, connecting / pairing / enter the code = amber, connected · data age = green, link lost /
-no data for more than 10 s / pairing failed = red) — and a footer: `http://calictl-esp.local`, or
+no data for more than 90 s / pairing failed = red) — and a footer: `http://calictl-esp.local`, or
 in setup mode the hotspot SSID and passphrase. The full row table with the German texts is in
 `docs/howto-esp-wifi-setup.md` "What the screen tells you". Pieces: `cali_core/status.c` (one
 `cali_status_t`, shared with `/api/state`), `cali_core/display_model.c` (pure model, host-tested),
@@ -427,7 +427,7 @@ in setup mode the hotspot SSID and passphrase. The full row table with the Germa
 `components/cali_display/` (LVGL painter + `screenshot`, board only).
 
 - **Timing and brightness** come from `csrc/net_consts.h` (generated from `tools/wifi_consts.py`):
-  `DISPLAY_REFRESH_MS` 200, `DISPLAY_STALE_MS` 10000, `DISPLAY_DIM_AFTER_MS` 60000,
+  `DISPLAY_REFRESH_MS` 200, `DISPLAY_STALE_MS` 90000 (3 × the 30 s water re-read = the web page's `SAT_OFFLINE_S`), `DISPLAY_DIM_AFTER_MS` 60000,
   `DISPLAY_OFF_AFTER_MS` 300000, `DISPLAY_BRIGHT_PCT` 100, `DISPLAY_DIM_PCT` 10 (the no-sensor
   fallback), `DISPLAY_LOCK_TIMEOUT_MS` 50. Wake (tap, hand near, a row turning red/amber), dim, off,
   and the brightness from the LTR-553 room light: `docs/firmware.md` "Screen wake and brightness"
