@@ -5,7 +5,9 @@
 # can lag ~1-2 min), installs, then waits for the new fw and the 60 s rollback window. USB: flash_ci.sh.
 set -euo pipefail
 REF="${1:-main}"; ESP="${2:-http://192.168.8.183}"; REPO=ckeller42/open-california
-if [ "$REF" = main ]; then sha=$(gh api "repos/$REPO/commits/main" --jq .sha); else sha=$REF; fi
+# main = its newest commit CI builds: a [skip ci] commit (the screenshot bot) never gets an esp-latest image
+if [ "$REF" = main ]; then sha=$(gh api "repos/$REPO/commits?sha=main&per_page=20" \
+  --jq '[.[] | select(.commit.message | contains("[skip ci]") | not)][0].sha'); else sha=$REF; fi
 sha7=${sha:0:7}; echo "deploying $sha7 to $ESP"
 j() { python3 -c 'import functools,json,sys; print(functools.reduce(lambda d,k: d[k], sys.argv[1].split("."), json.load(sys.stdin)))' "$1"; }
 dev() { curl -sf --max-time 10 "$ESP/api/state" | j "device.$1" 2>/dev/null || true; }
