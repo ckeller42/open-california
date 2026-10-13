@@ -445,6 +445,14 @@ bit-exact `NightTimerHourOn@48`/`NightTimerHourOff@56`); energy `energy_mode` (`
   (`_roof_stop`). No DOM rebuild while `roofHold` is set; a re-press within 1000 ms is debounced (a
   restarted SafetyCounter costs another ~3 s motor withhold). Open/close are greyed under the app's
   move-block set (`ROOF_MOVE_BLOCK`, see `alert-states.md`); STOP is never greyed.
+- **Server-side press/release ordering (`serve.py`, #239):** every press gets a fresh stop token
+  before it waits for the `_ble` lock, and a new press sets the token of any earlier pending or
+  running move (supersede). A release with no move in flight sends a **standalone STOP**. The web
+  server handles the press and release POSTs on separate threads, so a release can arrive *before*
+  its own press; a roof press arriving within `ROOF_RELEASE_GUARD_S` (250 ms) after a standalone
+  STOP is therefore **refused** (it is that release's late press — else it would drive to the limit
+  or the 30 s cap). The UI's 1000 ms re-press debounce means no real press is lost. Inside a move
+  the release interrupts the inter-frame wait at once (`wait_for(stop_event.wait(), period_s)`).
 - **Most gates are enforced server-side** (`control.command_precondition`, shared by `/api/command`,
   the CLI and HA/MQTT — the web UI's greying is only the affordance on top): roof reading light needs
   the roof raised, the cooling timer needs the fridge off, quiet mode + its night schedule need the

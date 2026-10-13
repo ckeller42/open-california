@@ -162,6 +162,10 @@ Tests
 .. autofunction:: tests.test_influx_fields.test_ux_points_identical_events_of_one_beacon_stay_distinct
 .. autofunction:: tests.test_device.test_actuate_arms_then_writes
 .. autofunction:: tests.test_device.test_actuate_roof_stops_at_limit_position
+.. autofunction:: tests.test_device.test_actuate_roof_release_interrupts_the_inter_frame_wait
+.. autofunction:: tests.test_web_serve.test_roof_press_arriving_after_its_own_release_never_moves
+.. autofunction:: tests.test_web_serve.test_roof_new_press_supersedes_a_pending_press
+.. autofunction:: tests.test_web_serve.test_roof_new_press_stops_a_running_move
 .. autofunction:: tests.test_web_serve.test_supervise_releases_session_when_ui_idle
 .. autofunction:: tests.test_web_serve.test_poll_nap_shortens_only_while_watched_on_a_held_session
 .. autofunction:: tests.test_web_serve.test_roof_move_skips_the_session_warmup

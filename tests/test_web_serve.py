@@ -956,6 +956,98 @@ def test_roof_stop_with_no_move_in_flight_uses_the_live_session(monkeypatch):
     assert order == [("sess.actuate_roof", "roof", 0x00, None, 0.0)]
 
 
+def test_roof_press_arriving_after_its_own_release_never_moves(monkeypatch):
+    """SAFETY (#239): the web server handles the press and release POSTs on separate threads, so a
+    release can reach the daemon BEFORE its own press. It finds nothing in flight and sends a
+    standalone STOP; the late press must then be refused, or it drives the roof to the limit or the
+    30 s cap. A press after the guard window (``ROOF_RELEASE_GUARD_S``) moves as normal.
+
+    .. test:: A press that arrives just after a standalone STOP (its own release) never moves
+       :id: T_ROOF_LATE_PRESS_REFUSED
+       :links: R_ROOF_ACTUATE
+    """
+    order = []
+    s = _roof_server(monkeypatch, order)
+    s._sessions._session = _LiveRoofSess(order)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._sessions.attach(s._ble)
+        await s.on_command("roof", "stop", None)  # the release, handled first
+        await s.on_command("roof", "open", None)  # its own press, a few ms late
+        assert order == [("sess.actuate_roof", "roof", 0x00, None, 0.0)], "the late press must not move"
+        monkeypatch.setattr(serve, "ROOF_RELEASE_GUARD_S", 0.0)  # the guard window has passed
+        await s.on_command("roof", "open", None)
+
+    asyncio.run(_run())
+    assert order[-1] == ("sess.actuate_roof", "roof", 0x01, frozenset({1}), None)
+
+
+def test_roof_new_press_supersedes_a_pending_press(monkeypatch):
+    """A new press stops an earlier press still waiting for the ``_ble`` lock: the earlier one never
+    starts, only the new direction moves (kills a mutation that drops the supersede ``set()``).
+
+    .. test:: A new roof press supersedes an earlier pending press
+       :id: T_ROOF_SUPERSEDE_PENDING
+       :links: R_ROOF_ACTUATE
+    """
+    order = []
+    s = _roof_server(monkeypatch, order)
+    s._sessions._session = _LiveRoofSess(order)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._sessions.attach(s._ble)
+        await s._ble.acquire()  # a poll holds the lock
+        first = asyncio.ensure_future(s.on_command("roof", "open", None))
+        await asyncio.sleep(0)
+        second = asyncio.ensure_future(s.on_command("roof", "close", None))
+        await asyncio.sleep(0)
+        s._ble.release()
+        await asyncio.gather(first, second)
+
+    asyncio.run(_run())
+    assert [o[2] for o in order] == [0x04], order
+
+
+def test_roof_new_press_stops_a_running_move(monkeypatch):
+    """A new press sets the stop token of a move already running (holding the lock), so that move
+    ends and the new one runs after it.
+
+    .. test:: A new roof press stops an earlier running move
+       :id: T_ROOF_SUPERSEDE_RUNNING
+       :links: R_ROOF_ACTUATE
+    """
+    order = []
+    s = _roof_server(monkeypatch, order)
+
+    class _Sess(_LiveRoofSess):
+        async def actuate_roof(self, f, move_frame, stop_frame, stop_event=None, **kw):
+            self._order.append(("start", move_frame[0]))
+            if stop_event is not None:  # a running move: until its token is set (or a 2 s cap)
+                try:
+                    await asyncio.wait_for(stop_event.wait(), 2.0)
+                except TimeoutError:
+                    self._order.append(("ran to the cap", move_frame[0]))
+                    return
+            self._order.append(("stopped", move_frame[0]))
+
+    s._sessions._session = _Sess(order)
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        s._sessions.attach(s._ble)
+        first = asyncio.ensure_future(s.on_command("roof", "open", None))
+        await asyncio.sleep(0.05)  # the open move is running
+        second = asyncio.ensure_future(s.on_command("roof", "close", None))
+        await asyncio.sleep(0.05)
+        s._roof_stop.set()  # end the close move so the test terminates
+        await asyncio.gather(first, second)
+
+    asyncio.run(_run())
+    assert order[:3] == [("start", 0x01), ("stopped", 0x01), ("start", 0x04)], order
+
+
 def test_non_roof_command_keeps_the_session_warmup(monkeypatch):
     """Every other command keeps its behaviour: ``set_mode("connect")`` then the wait for the
     session, then the one-shot actuate."""
