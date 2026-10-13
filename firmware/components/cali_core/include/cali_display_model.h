@@ -1,5 +1,5 @@
 /* cali_display_model.h — pure status-display model (#154): a cali_status_t snapshot plus the
- * light/proximity/touch inputs in, three rows (device / WiFi / camper), the footer text, the screen
+ * light/proximity/motion/touch inputs in, three rows (device / WiFi / camper), the footer text, the screen
  * state (on / dim / off) and the brightness out (R_FW_DISPLAY_WAKE). No LVGL, no platform:
  * host-tested by tests/firmware/test_display_model.py; the LVGL view only paints this.
  * The settings + the last painted state (NVS, /api/state device.display) live in display_cfg.c. */
@@ -39,16 +39,23 @@ typedef enum { CALI_SENSOR_OK, CALI_SENSOR_ABSENT, CALI_SENSOR_ERROR } cali_sens
 #define DISPLAY_SENSOR_FAIL_MS 5000 /* no valid lux this long: fixed DISPLAY_BRIGHT_PCT / DISPLAY_DIM_PCT */
 #define DISPLAY_PROX_NEAR 200       /* LTR-553 PS counts (11 bit): near after 2 reads in a row above */
 #define DISPLAY_PROX_FAR 150        /* ... far again below this (hysteresis) */
+/* BMI270 motion: the accel vector's change between two 200 ms reads, mg. Deliberately high (a pick-up
+ * or a firm knock, not a van rocking under a step, ~50 mg): a wake after 2 reads in a row above WAKE;
+ * re-armed only once every read stayed below STILL for REARM_MS (driving / engine: one wake, not a pinned screen). */
+#define DISPLAY_MOTION_WAKE_MG 200
+#define DISPLAY_MOTION_STILL_MG 50
+#define DISPLAY_MOTION_REARM_MS 10000
 
-/* Settings (NVS keys disp_auto / disp_prox / disp_min / disp_max / disp_off in namespace cali). */
+/* Settings (NVS keys disp_auto / disp_prox / disp_min / disp_max / disp_off / disp_motion in namespace cali). */
 typedef struct {
     uint8_t auto_on;   /* brightness from the room light (else always max_pct) */
     uint8_t prox_wake; /* a hand near wakes the screen */
     uint8_t min_pct;   /* 1..50 */
     uint8_t max_pct;   /* 20..100, > min_pct */
     int8_t offset;     /* -50..50 points on the on level (curve or max), clamped to min..max */
+    uint8_t motion_wake; /* moving the device (BMI270) wakes the screen */
 } cali_display_cfg_t;
-#define CALI_DISPLAY_CFG_DEFAULT {1, 1, 8, 100, 0}   /* the fallback levels (sensor absent/error) ignore offset */
+#define CALI_DISPLAY_CFG_DEFAULT {1, 1, 8, 100, 0, 1}   /* the fallback levels (sensor absent/error) ignore offset */
 
 /* One tick's sensor + touch inputs. */
 typedef struct {
@@ -57,6 +64,8 @@ typedef struct {
     uint8_t present; /* the light sensor answered at init */
     uint8_t touched; /* the screen was touched since the last tick */
     cali_batt_t batt; /* the station footer's battery (R_FW_BATTERY); never wakes the screen */
+    uint8_t acc_ok;  /* acc holds a reading this tick (0: no IMU, or the read failed) */
+    int32_t acc[3];  /* BMI270 acceleration x/y/z, mg */
 } cali_display_in_t;
 
 typedef struct {
@@ -66,18 +75,22 @@ typedef struct {
     cali_disp_state_t state;
     cali_sensor_t sensor;
     int32_t lux, prox;       /* the last valid readings, -1 = none */
+    int32_t motion;          /* this tick's accel change, mg; -1 = none (no IMU, a failed read, the first read) */
     uint8_t brightness_pct;  /* 0 when off */
 } cali_display_view_t;
 
-/* Wake/brightness state. Wake events: a touch, a hand near (rising edge, when prox_wake), a row
+/* Wake/brightness state. Wake events: a touch, a hand near (rising edge, when prox_wake), motion
+ * (rising edge, when motion_wake), a row
  * turning red/amber, the first call. on for DISPLAY_DIM_AFTER_MS after the last one, then dim, off
  * after DISPLAY_OFF_AFTER_MS. Ages, uptime, the footer (battery) and green/grey changes never wake. */
 typedef struct {
     uint64_t last_wake_ms, last_lux_ms, last_good_ms;
     float lux_log;          /* EMA of log10(max(lux, 1)) */
-    int32_t lux, prox;
+    uint64_t last_shake_ms; /* the last read with motion >= DISPLAY_MOTION_STILL_MG */
+    int32_t lux, prox, motion;
+    int32_t acc[3];         /* the previous valid accel read (have_acc) */
     uint32_t cfg_sig;
-    uint8_t started, have_lux, level, near, near_reads;
+    uint8_t started, have_lux, level, near, near_reads, have_acc, moving, motion_reads;
     uint8_t dots[2];        /* the WiFi and camper row colours last tick */
 } cali_display_model_t;
 
@@ -102,7 +115,7 @@ int cali_display_cfg_valid(const cali_display_cfg_t *c);
 int cali_display_cfg_set(const cali_display_cfg_t *c);
 /* The painter's last state (never called without a screen: device.display's live members stay null). */
 void cali_display_publish(const cali_display_view_t *v);
-/* device.display: {"state","lux","prox","brightness_pct","sensor","auto","prox_wake","min","max","offset"}. */
+/* device.display: {"state","lux","prox","motion","brightness_pct","sensor","auto","prox_wake","motion_wake","min","max","offset"}. */
 void cali_display_json(cali_json_t *j);
 
 /* Copies src into dst (CALI_ROW_TEXT_MAX bytes), cut at a UTF-8 boundary when too long. */

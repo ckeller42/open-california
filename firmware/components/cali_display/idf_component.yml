@@ -8,3 +8,6 @@ dependencies:
   espressif/m5stack_core_s3: "==4.1.0"
   espressif/esp_lvgl_port: "==2.9.0"
   espressif/esp_lcd_touch: "==1.2.1"
+## BSP 4.1.0 pulls espressif/bmi270 at "*"; display.c reads its handle's i2c_handle and has
+## bmi270_create upload the config blob — pinned to the version that API was read from.
+  espressif/bmi270: "==1.1.0"

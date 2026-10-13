@@ -3,13 +3,14 @@
  * every LVGL call sits under bsp_display_lock. Only changed labels/dots are touched.
  * Wake + brightness (R_FW_DISPLAY_WAKE): reads the LTR-553ALS light/proximity sensor on the board
  * package's I2C bus every tick and filters the touch input (a wake tap is swallowed); the model
- * decides on / dim / off and the level.
+ * decides on / dim / off and the level. Motion wake: reads the BMI270 accelerometer every tick too.
  * Battery (R_FW_BATTERY): reads the AXP2101 every CALI_BATT_READ_MS into cali_battery_update.
  * Touch (R_FW_TOUCH_NO_ABORT, #346): the touch controller is read here, not by esp_lvgl_port, whose read
  * ESP_ERROR_CHECKs it — one failed I2C read on the shared bus aborted the whole firmware. */
 #include <stdio.h>
 #include <string.h>
 
+#include "bmi270.h"
 #include "bsp/esp-bsp.h"
 #include "cali_battery.h"
 #include "cali_display.h"
@@ -44,6 +45,18 @@ static const uint8_t LTR_INIT[][2] = {
     {0x80, (3 << 2) | 1},      /* ALS gain 8x, active */
     {0x81, 0x02},              /* PS active, gain 16x */
 };
+
+/* BMI270 accelerometer, I2C 0x69 on the same bus (M5Unified's CoreS3 address; the BMM150 behind it is
+ * unused). It outputs no data until Bosch's 8 KB config blob is loaded (INIT_CTRL 0x59 / INIT_DATA 0x5E,
+ * then INTERNAL_STATUS 0x21 = 0x01): Bosch's SensorAPI, the Linux bmi270 driver, M5Unified and
+ * espressif/bmi270 all upload it, and Bosch's forum confirms no data without it. BSP 4.1.0 already
+ * links espressif/bmi270 (its sensor-hub IMU, Apache-2.0, the blob inside), so bmi270_create does the
+ * upload and no blob is vendored here. Then only the accelerometer is powered (PWR_CTRL 0x7D = 0x04),
+ * range +-8 g (ACC_RANGE 0x41 = 0x02, 4096 LSB/g), the reset ACC_CONF (100 Hz). ACC_X..Z = 0x0C..0x11,
+ * int16 little endian. ponytail: bmi270_create's transfers wait without a timeout (the driver's -1);
+ * a probe of 0x69 goes first, and it runs once at init — the tick's read keeps LTR_IO_MS. */
+#define IMU_ACC_X 0x0C
+static const uint8_t IMU_INIT[][2] = {{0x41, 0x02}, {0x7D, 0x04}};
 
 /* AXP2101 battery read (R_FW_BATTERY), on the same bus. Register meanings as M5Stack's own drivers:
  * M5Unified src/utility/power/AXP2101_Class.inl (isVBUS: 0x00 bit 5 VBUS good; getBatState: 0x00
@@ -100,6 +113,7 @@ static char s_footer_now[CALI_ROW_TEXT_MAX];
 static int s_brightness = -1;
 static i2c_master_dev_handle_t s_ltr;   /* NULL: no light/proximity sensor */
 static i2c_master_dev_handle_t s_axp;   /* NULL: no power chip handle (battery stays unknown) */
+static bmi270_handle_t *s_imu;          /* NULL: no accelerometer (motion wake off, device.display.motion null) */
 static uint64_t s_last_batt;
 static int s_batt_read;                 /* a battery read has happened (the first one is due at once) */
 static int s_axp_enabled;               /* both enable bits confirmed set (else retried with each read) */
@@ -267,6 +281,35 @@ static void ltr_read(int32_t *lux, int32_t *prox) {
     }
 }
 
+static void imu_init(void) {   /* after ltr_init: the camera/sensor rails are on by then, whichever it needs */
+    bmi270_driver_config_t cfg = {.addr = BMI270_I2C_ADDRESS_H, .interface = BMI270_USE_I2C, .i2c_bus = bsp_i2c_get_handle()};
+    if (i2c_master_probe(bsp_i2c_get_handle(), BMI270_I2C_ADDRESS_H, PROBE_MS) != ESP_OK) {
+        cali_log("display: no accelerometer (bmi270), motion wake off");
+        return;
+    }
+    if (bmi270_create(&cfg, &s_imu) != ESP_OK) {   /* chip id, soft reset, the config upload, INIT_OK */
+        s_imu = NULL;
+        cali_log("display: bmi270 init failed, motion wake off");
+        return;
+    }
+    for (size_t i = 0; i < sizeof IMU_INIT / sizeof IMU_INIT[0]; i++)
+        if (i2c_master_transmit(s_imu->i2c_handle, IMU_INIT[i], 2, PROBE_MS) != ESP_OK) {
+            (void)bmi270_delete(s_imu);
+            s_imu = NULL;
+            cali_log("display: bmi270 accel enable failed, motion wake off");
+            return;
+        }
+    cali_log("display: accelerometer bmi270 ready");
+}
+
+/* Acceleration in mg; 0 = a reading, -1 = none (the model then compares nothing). */
+static int imu_read(int32_t acc[3]) {
+    uint8_t reg = IMU_ACC_X, b[6];
+    if (i2c_master_transmit_receive(s_imu->i2c_handle, &reg, 1, b, 6, LTR_IO_MS) != ESP_OK) return -1;
+    for (int i = 0; i < 3; i++) acc[i] = (int32_t)(int16_t)(b[2 * i + 1] << 8 | b[2 * i]) * 1000 / 4096;
+    return 0;
+}
+
 static int axp_get(uint8_t reg, uint8_t *v, size_t n) {   /* LTR_IO_MS per transfer, as the LTR reads */
     return i2c_master_transmit_receive(s_axp, &reg, 1, v, n, LTR_IO_MS) == ESP_OK ? 0 : -1;
 }
@@ -337,6 +380,7 @@ int cali_display_init(const cali_transport_t *t) {
         }
     }
     ltr_init();
+    imu_init();
     axp_init();
     bsp_display_unlock();
     bsp_display_backlight_on();
@@ -375,7 +419,7 @@ static void touch_errors_evt(uint64_t now_ms) {
 void cali_display_tick(uint64_t now_ms) {
     cali_status_t st;
     cali_display_view_t v;
-    cali_display_in_t in = {-1, -1, s_ltr != NULL, 0, CALI_BATT_UNKNOWN};
+    cali_display_in_t in = {-1, -1, s_ltr != NULL, 0, CALI_BATT_UNKNOWN, 0, {0, 0, 0}};
     if (!s_ok || now_ms - s_last_paint < DISPLAY_REFRESH_MS) return;
     s_last_paint = now_ms;
     if (!s_batt_read || now_ms - s_last_batt >= CALI_BATT_READ_MS) {   /* off the paint's lock; ~5 short reads */
@@ -390,6 +434,7 @@ void cali_display_tick(uint64_t now_ms) {
      * the model and the painted-text buffers untouched, so the next try repaints whatever changed. */
     if (!bsp_display_lock(DISPLAY_LOCK_TIMEOUT_MS)) return;
     if (s_ltr) ltr_read(&in.lux, &in.prox);
+    if (s_imu) in.acc_ok = imu_read(in.acc) == 0;
     in.touched = (uint8_t)__atomic_exchange_n(&s_touched, 0, __ATOMIC_RELAXED);
     cali_status_get(&st, s_t, now_ms);
     cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), &v);
