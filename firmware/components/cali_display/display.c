@@ -98,6 +98,7 @@ static i2c_master_dev_handle_t s_ltr;   /* NULL: no light/proximity sensor */
 static i2c_master_dev_handle_t s_axp;   /* NULL: no power chip handle (battery stays unknown) */
 static uint64_t s_last_batt;
 static int s_batt_read;                 /* a battery read has happened (the first one is due at once) */
+static int s_axp_enabled;               /* both enable bits confirmed set (else retried with each read) */
 static lv_indev_read_cb_t s_touch_read;
 static uint8_t s_swallow;               /* LVGL task only */
 static int s_touched, s_awake = 1;      /* LVGL task <-> owner task, __atomic */
@@ -226,12 +227,21 @@ static int axp_get(uint8_t reg, uint8_t *v, size_t n) {   /* LTR_IO_MS per trans
     return i2c_master_transmit_receive(s_axp, &reg, 1, v, n, LTR_IO_MS) == ESP_OK ? 0 : -1;
 }
 
-static void axp_set_bit(uint8_t reg, uint8_t bit) {   /* read-modify-write, only when the bit is clear */
+/* Read-modify-write, only when the bit is clear. 0 = the bit is set (now or already), -1 = a failed transfer. */
+static int axp_set_bit(uint8_t reg, uint8_t bit) {
     uint8_t v, w[2];
-    if (axp_get(reg, &v, 1) != 0 || (v & bit)) return;
+    if (axp_get(reg, &v, 1) != 0) return -1;
+    if (v & bit) return 0;
     w[0] = reg;
     w[1] = (uint8_t)(v | bit);
-    if (i2c_master_transmit(s_axp, w, 2, PROBE_MS) != ESP_OK) cali_log("battery: axp2101 enable 0x%02x failed", reg);
+    if (i2c_master_transmit(s_axp, w, 2, PROBE_MS) == ESP_OK) return 0;
+    cali_log("battery: axp2101 enable 0x%02x failed", reg);
+    return -1;
+}
+
+static void axp_enable(void) {   /* at init, then with each read until both bits are confirmed */
+    int adc = axp_set_bit(AXP_ADC_CTRL, 0x01), gauge = axp_set_bit(AXP_GAUGE_CTRL, 0x08);
+    s_axp_enabled = adc == 0 && gauge == 0;
 }
 
 static void axp_init(void) {   /* the chip answered the probe in cali_display_init */
@@ -241,8 +251,7 @@ static void axp_init(void) {   /* the chip answered the probe in cali_display_in
         cali_log("battery: axp2101 not added, battery unknown");
         return;
     }
-    axp_set_bit(AXP_ADC_CTRL, 0x01);
-    axp_set_bit(AXP_GAUGE_CTRL, 0x08);
+    axp_enable();
 }
 
 /* One reading: a failed status read -> all unknown; no battery (or a failed read of it) -> pct / mv unknown. */
@@ -250,6 +259,7 @@ static void axp_read(cali_batt_t *b) {
     uint8_t s1, s2, v[2], pct;
     const cali_batt_t unknown = CALI_BATT_UNKNOWN;
     *b = unknown;
+    if (s_axp && !s_axp_enabled) axp_enable();
     if (!s_axp || axp_get(AXP_STATUS1, &s1, 1) != 0 || axp_get(AXP_STATUS2, &s2, 1) != 0) return;
     b->usb = (s1 & 0x20) != 0;
     b->charging = ((s2 >> 5) & 0x03) == 0x01;
