@@ -166,8 +166,9 @@ def test_adapter_interprets_like_python_and_synthesizes_meta():
                 "uptime_ms": 5000,
                 "wifi": _DEVICE["wifi"],
                 "link_up": True,
-                "sd": None,  # an older firmware without device.sd / device.res
+                "sd": None,  # an older firmware without device.sd / device.res / device.battery
                 "res": None,
+                "battery": None,
             },
         },
     )

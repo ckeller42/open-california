@@ -253,6 +253,39 @@ def test_storage_and_resources_lines(page, locale, lang):
         expect(pg.locator("#time")).to_have_text(s("time_unit", boot=17))
 
 
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_battery_line(page, locale, lang):
+    """The /device Battery line (R_FW_BATTERY: device.battery), EN + DE: on battery with and without
+    the runtime estimate, on USB charging / full, and empty without a power chip.
+
+    .. test:: The /device page shows device.battery
+       :id: T_FW_BATTERY_PAGE
+       :links: R_FW_BATTERY
+    """
+
+    def s(key, **kw):
+        out = STRINGS[key][lang]
+        for k, v in kw.items():
+            out = out.replace("{%s}" % k, str(v))
+        return out
+
+    head = s("batt_title") + ": "
+    with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
+        b = stub.fixtures["station"]["/api/state"]["device"]["battery"]
+        line = pg.locator("#battery")
+        expect(line).to_have_text(
+            head + " · ".join(["64 %", "3.89 V", s("batt_on"), s("batt_left", time="2 h 10 min")])
+        )
+        b.update(runtime_min=None)
+        expect(line).to_have_text(head + " · ".join(["64 %", "3.89 V", s("batt_on")]))
+        b.update(pct=87, mv=4120, usb=True, charging=True, runtime_min=None)
+        expect(line).to_have_text(head + " · ".join(["87 %", "4.12 V", s("batt_charging")]))
+        b.update(pct=100, charging=False)
+        expect(line).to_have_text(head + " · ".join(["100 %", "4.12 V", s("batt_usb")]))
+        b.update(pct=None, mv=None, usb=None, charging=None)
+        expect(line).to_have_text("")
+
+
 def test_firmware_row_offers_no_update_over_the_setup_hotspot(stub, page):
     """Like the firmware's 403: no Check/Install outside station mode, and the row says why."""
     with page(stub.base, locale="en-US") as pg:

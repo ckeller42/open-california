@@ -152,6 +152,7 @@ Tests
 .. autofunction:: tests.e2e.test_esp_page.test_firmware_row_checks_and_installs
 .. autofunction:: tests.e2e.test_esp_page.test_clock_line_shows_sync_and_boot
 .. autofunction:: tests.e2e.test_esp_page.test_storage_and_resources_lines
+.. autofunction:: tests.e2e.test_esp_page.test_battery_line
 .. autofunction:: tests.e2e.test_esp_page.test_auto_camper_row_shows_and_switches
 .. autofunction:: tests.e2e.test_esp_page.test_screen_row_shows_state_and_switches
 .. autofunction:: tests.e2e.test_esp_page.test_usage_data_row_shows_and_switches
@@ -256,6 +257,7 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_diag
 .. automodule:: tests.firmware.test_auto_camper_parity
 .. automodule:: tests.firmware.test_auto_camper_e2e
+.. automodule:: tests.firmware.test_battery
 .. automodule:: calictl.esp_ingest
 .. automodule:: tests.test_esp_ingest
 .. automodule:: tests.test_camper_dashboard

@@ -41,8 +41,19 @@ def display_texts() -> list[tuple[str, str, str]]:
             ("footer", lang, STRINGS["d_footer_setup"][lang] % (CONSTS["NET_AP_SSID"], CONSTS["NET_AP_PSK"]))
         )
         out.append(("url", lang, f"http://{CONSTS['NET_HOSTNAME']}.local"))
+        out += [("batt_footer", lang, t) for t in battery_footers(lang)]
     out.append(("title", "-", "calictl satellite fw 0123456789abcdef-dirty"))
     return out
+
+
+def battery_footers(lang: str) -> list[str]:
+    """The longest station footers display_model.c builds (R_FW_BATTERY): USB charging, and on the
+    battery with the widest estimate (100 % over 2 points in 10 min = 500 min)."""
+    url = f"http://{CONSTS['NET_HOSTNAME']}.local"
+    return [
+        f"{url} · USB 100 % {STRINGS['d_charging'][lang]}",
+        f"{url} · {STRINGS['d_batt'][lang]} 100 % ~8 h 20",
+    ]
 
 
 def test_display_key_set_includes_failures():
@@ -133,3 +144,11 @@ def test_value_box_is_two_lines_and_the_title_clears_the_fw_label():
     assert "lv_obj_set_size(r->value, W - PAD - VALUE_X, 2 * line)" in DISPLAY_C
     assert layout("ROW_H") >= 2 * line
     assert layout("PAD") + width("calictl satellite", advance(24)) < layout("TITLE_END_X")
+
+
+@pytest.mark.parametrize("lang", ["en", "de"])
+def test_battery_footer_fits_two_lines(lang):
+    """The station footer with the battery wraps to at most two lines (the setup footer's room)."""
+    adv = advance(16)
+    for text in battery_footers(lang):
+        assert lines(text, layout("W") - 2 * layout("PAD"), adv) <= 2, (lang, text)

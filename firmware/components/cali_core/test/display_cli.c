@@ -1,6 +1,6 @@
 /* display_cli.c — host driver for display_model.c: one stdin line per case ("key=value ..." for the
  * cali_status_t fields plus now= and lang=, the inputs lux= prox= (default -1) als= (sensor present,
- * default 0) touch=, the settings auto= pw= min= max= off= (default CALI_DISPLAY_CFG_DEFAULT); "reset"
+ * default 0) touch=, the battery bpct= usb= chg= brt= (runtime min; default -1), the settings auto= pw= min= max= off= (default CALI_DISPLAY_CFG_DEFAULT); "reset"
  * restarts the model), one stdout line per case:
  *   device=<dot>|<text> ;; wifi=<dot>|<text> ;; camper=<dot>|<text> ;; setup=<0|1> ;; footer=<text> ;;
  *   bright=<pct> ;; state=<on|dim|off> ;; sensor=<ok|absent|error>
@@ -28,7 +28,7 @@ int main(void) {
         cali_display_view_t v;
         uint64_t now = 0;
         int lang = CALI_LANG_DE;
-        cali_display_in_t in = {-1, -1, 0, 0};
+        cali_display_in_t in = {-1, -1, 0, 0, CALI_BATT_UNKNOWN};
         cali_display_cfg_t cfg = CALI_DISPLAY_CFG_DEFAULT;
         char *tok;
         line[strcspn(line, "\r\n")] = 0;
@@ -70,6 +70,10 @@ int main(void) {
             else if (!strcmp(tok, "prox")) in.prox = atoi(val);
             else if (!strcmp(tok, "als")) in.present = (uint8_t)atoi(val);
             else if (!strcmp(tok, "touch")) in.touched = (uint8_t)atoi(val);
+            else if (!strcmp(tok, "bpct")) in.batt.pct = atoi(val);
+            else if (!strcmp(tok, "usb")) in.batt.usb = atoi(val);
+            else if (!strcmp(tok, "chg")) in.batt.charging = atoi(val);
+            else if (!strcmp(tok, "brt")) in.batt.runtime_min = atoi(val);
             else if (!strcmp(tok, "auto")) cfg.auto_on = (uint8_t)atoi(val);
             else if (!strcmp(tok, "pw")) cfg.prox_wake = (uint8_t)atoi(val);
             else if (!strcmp(tok, "min")) cfg.min_pct = (uint8_t)atoi(val);

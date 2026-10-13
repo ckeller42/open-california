@@ -18,7 +18,7 @@
  * the keys in this file. */
 enum {
     K_DEVICE, K_WIFI, K_CAMPER, K_RUNNING, K_SETUP, K_JOINING, K_RETRYING, K_WIFI_OFF, K_CONNECTED,
-    K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_FOOTER_SETUP, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_COUNT
+    K_CONNECTING, K_PAIRING, K_PASSKEY, K_LINK_LOST, K_STALE, K_PAIR_ERROR, K_NOT_PAIRED, K_FOOTER_SETUP, K_FAIL_NOT_FOUND, K_FAIL_AUTH, K_FAIL_OTHER, K_BATT, K_CHARGING, K_COUNT
 };
 static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_DEVICE] = {WEB_STR_DE_DEVICE, WEB_STR_EN_DEVICE},
@@ -41,6 +41,8 @@ static const struct { const char *de, *en; } TXT[K_COUNT] = {
     [K_FAIL_AUTH] = {WEB_STR_DE_D_FAIL_AUTH, WEB_STR_EN_D_FAIL_AUTH},
     [K_FAIL_OTHER] = {WEB_STR_DE_D_FAIL_OTHER, WEB_STR_EN_D_FAIL_OTHER},
     [K_FOOTER_SETUP] = {WEB_STR_DE_D_FOOTER_SETUP, WEB_STR_EN_D_FOOTER_SETUP},
+    [K_BATT] = {WEB_STR_DE_D_BATT, WEB_STR_EN_D_BATT},
+    [K_CHARGING] = {WEB_STR_DE_D_CHARGING, WEB_STR_EN_D_CHARGING},
 };
 
 static const char *tx(int key, int lang) { return lang == CALI_LANG_EN ? TXT[key].en : TXT[key].de; }
@@ -152,6 +154,25 @@ static void camper_row(cali_row_t *r, const cali_status_t *s, int lang) {
     row(r, CALI_DOT_GREEN, label, K_CONNECTED, lang, age, NULL);
 }
 
+/* "http://<host>.local · <battery>" (R_FW_BATTERY): on USB "USB 87 % charging" / "USB 100 %", on
+ * the battery "Batt 64 % ~2 h 10" (DE "Akku …"; "~45 min" under an hour; no "~…" while the estimate is
+ * unknown); the URL alone while the percent is unknown. Plain text: the Latin-1 fonts have no ⚡. */
+static void station_footer(char dst[CALI_ROW_TEXT_MAX], const cali_batt_t *b, int lang) {
+    char tmp[2 * CALI_ROW_TEXT_MAX];
+    int n = snprintf(tmp, sizeof tmp, "http://" NET_HOSTNAME ".local");
+    if (b->pct >= 0 && b->usb == 1)
+        snprintf(tmp + n, sizeof tmp - (size_t)n, " · USB %d %%%s%s", b->pct, b->charging == 1 ? " " : "",
+                 b->charging == 1 ? tx(K_CHARGING, lang) : "");
+    else if (b->pct >= 0 && b->runtime_min >= 60)
+        snprintf(tmp + n, sizeof tmp - (size_t)n, " · %s %d %% ~%d h %02d", tx(K_BATT, lang), b->pct,
+                 b->runtime_min / 60, b->runtime_min % 60);
+    else if (b->pct >= 0 && b->runtime_min >= 0)
+        snprintf(tmp + n, sizeof tmp - (size_t)n, " · %s %d %% ~%d min", tx(K_BATT, lang), b->pct, b->runtime_min);
+    else if (b->pct >= 0)
+        snprintf(tmp + n, sizeof tmp - (size_t)n, " · %s %d %%", tx(K_BATT, lang), b->pct);
+    cali_display_fit_text(dst, tmp);
+}
+
 void cali_display_model_init(cali_display_model_t *m) {
     memset(m, 0, sizeof *m);
     m->lux = m->prox = -1;
@@ -248,7 +269,7 @@ void cali_display_model(cali_display_model_t *m, const cali_status_t *s, uint64_
         snprintf(tmp, sizeof tmp, tx(K_FOOTER_SETUP, lang), NET_AP_SSID, NET_AP_PSK);
         cali_display_fit_text(out->footer, tmp);
     } else {
-        cali_display_fit_text(out->footer, "http://" NET_HOSTNAME ".local");
+        station_footer(out->footer, &in->batt, lang);
     }
     wake_and_brightness(m, now_ms, in, cfg, out);
 }

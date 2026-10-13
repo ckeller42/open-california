@@ -146,6 +146,10 @@ def test_menu_device_status_screen(sat, stub):
     expect(sat.locator(".row", has_text="Resources")).to_contain_text(
         "RAM 61 KB free (lowest 38) · PSRAM 7302 KB free · CPU 4 %"
     )
+    # the satellite's own battery (R_FW_BATTERY, device.battery)
+    expect(sat.locator(".row", has_text="Satellite battery")).to_contain_text(
+        "64 % · 3.89 V · on battery · ~2 h 10 min left"
+    )
     sat.get_by_text("Open setup").click()  # satellite-only link
     sat.wait_for_url(stub.base + "/device")
     sat.wait_for_selector('#device a[href="/"]')  # the link back (station mode)

@@ -38,6 +38,11 @@
   "res_ram": {"en": "RAM {free} KB free (lowest {min})", "de": "RAM {free} KB frei (Minimum {min})"},
   "res_psram": {"en": "PSRAM {free} KB free", "de": "PSRAM {free} KB frei"},
   "res_cpu": {"en": "CPU {pct} %", "de": "CPU {pct} %"},
+  "batt_title": {"en": "Battery", "de": "Akku"},
+  "batt_usb": {"en": "on USB", "de": "an USB"},
+  "batt_charging": {"en": "on USB, charging", "de": "an USB, lädt"},
+  "batt_on": {"en": "on battery", "de": "im Akkubetrieb"},
+  "batt_left": {"en": "~{time} left", "de": "noch ~{time}"},
   "ac_title": {"en": "Restore camping after you park", "de": "Campingmodus nach dem Parken wiederherstellen"},
   "ac_on": {"en": "Auto camper on", "de": "Auto-Campingmodus an"},
   "ac_off": {"en": "Auto camper off", "de": "Auto-Campingmodus aus"},
@@ -88,5 +93,7 @@
   "d_fail_not_found": {"en": "network not found", "de": "Netz nicht gefunden"},
   "d_fail_auth": {"en": "wrong password", "de": "falsches Passwort"},
   "d_fail_other": {"en": "could not connect", "de": "Verbindungsfehler"},
-  "d_footer_setup": {"en": "WiFi %s · password %s", "de": "WLAN %s · Passwort %s"}
+  "d_footer_setup": {"en": "WiFi %s · password %s", "de": "WLAN %s · Passwort %s"},
+  "d_batt": {"en": "Batt", "de": "Akku"},
+  "d_charging": {"en": "charging", "de": "lädt"}
 }
