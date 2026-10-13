@@ -192,6 +192,14 @@ Bluetooth jobs at once. The how-to for owners is
   unpaired daemon does not poll or scan at all. This matters here because a daemon that *did*
   scan on every failed poll would itself be one more client competing for discovery, working
   against the very radio the wizard needs quiet. `_meta.paired` reports this state to the UI.
+- **A unit change forgets the old unit's state** (#254, `R_SERVE_UNIT_CHANGE_FORGETS`). On
+  unpair (reset) and on a bond to an address other than the daemon's current target,
+  `Server._forget_unit_state` clears the decoded-state cache — including the lighting config
+  latch (wake-up, door contact, stored favourites) — the last-poll time and the water baseline,
+  in memory and in `last_state.json`. Otherwise unit A's config would gate unit B's commands or
+  ride along in them (a wake-up edit carrying A's enabled bit). The next command or poll reads
+  the new unit; a wake-up edit pulls its config with REQUEST_CONFIG first (R5). Re-bonding the
+  same address keeps the cache. The auto-camper toggle and the firmware identity are kept.
 
 ## Exclusion model (single BLE owner rule, AGENTS.md)
 

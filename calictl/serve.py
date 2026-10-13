@@ -631,7 +631,10 @@ class Server:
         SAME object the poll loop, `_sessions` (SessionSupervisor), and every actuate path hold
         a reference to, so mutating its `.addr` here is enough for all of them to pick it up on
         their next connect -- no separate cache to keep in sync. `CALICTL_ADDR` / pairing.json
-        remain how this survives a process restart."""
+        remain how this survives a process restart. A bond to a NEW identity first forgets the
+        old unit's cached state (`_forget_unit_state`)."""
+        if address != self.dev.addr:
+            self._forget_unit_state()
         self.dev.addr = address
         log.info("pairing: bonded to %s -- daemon now targets it live" % address)
 
@@ -687,7 +690,28 @@ class Server:
             self._ensure_pairing_runner()
             assert self._pairing is not None  # _ensure_pairing_runner() just set it
             await self._pairing.reset()
+            self._forget_unit_state()  # unpaired: no unit's state is current any more
         return self.pairing_snapshot()
+
+    def _forget_unit_state(self):
+        """Drop the cached unit state (memory + the persisted state file) when the bonded unit
+        changes. Keeps the operator's own settings (auto-camper toggle, firmware identity).
+
+        .. req:: Forget the previous unit's state on unpair or a bond to a new unit
+           :id: R_SERVE_UNIT_CHANGE_FORGETS
+           :status: implemented
+           :tags: serve, pairing, lighting
+
+           On unpair, and on a bond to an address other than the one the daemon targets, the
+           daemon shall clear its decoded-state cache (incl. the lighting config latch), the
+           last-poll time and the water baseline, in memory and in its state file, so no gate,
+           carried field or display uses another unit's state (#254). Re-bonding the same address
+           keeps the cache.
+        """
+        self._last = {}
+        self._last_ok_ts = None
+        self._water_good = self._water_stale_since = self._water_measured_at = self._water_pending = None
+        self._save_last()
 
     async def _start_pairing_when_radio_free(self):
         """Take `self._ble` (let an in-flight poll/command finish), then enter SCANNING while

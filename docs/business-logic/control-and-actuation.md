@@ -406,7 +406,9 @@ itself sent** (polls + pushes, `semantics.lighting_config`), never from the fram
 ACK-but-not-applied write leaves the latch unchanged. Caveat (van check): the state char may itself
 write-through-echo config frames, as it does for SET_BRIGHTNESS, in which case a poll would latch calictl's
 own (unapplied) write; the mock does not model that. The echoed REQUEST shape (Mode 12 / PN 13) is never
-read as a favourites reply. The wake-up date (today vs tomorrow) follows the **daemon host's** clock, so
+read as a favourites reply. The latch belongs to the bonded unit: unpair, or a bond to another
+address, clears it with the rest of the cached state (#254, `R_SERVE_UNIT_CHANGE_FORGETS`), so a
+new unit starts unknown and R5 applies. The wake-up date (today vs tomorrow) follows the **daemon host's** clock, so
 buspi's timezone must equal the van's.
 
 **State readback surfaced** (decoded straight from the state chars, cross-checked against the
