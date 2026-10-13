@@ -397,7 +397,7 @@ _(none)_
 
 | field | offset | width | default | raw_range | value_semantics |
 |---|---|---|---|---|---|
-| CarVariant | 0 | 4 | — | — | — |
+| CarVariant | 0 | 4 | — | — | 0 California T7, 1 Grand California, 2 California Next (app 5.4.0 qg/e.java:357-363; wire values, not the enum ordinals) |
 | CarLevelPopUp | 4 | 2 | — | — | — |
 | TerminalOneFive | 7 | 1 | — | — | — |
 | CarTimeYear | 8 | 8 | — | — | — |

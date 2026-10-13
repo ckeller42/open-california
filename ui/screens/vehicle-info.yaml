@@ -121,7 +121,9 @@ widgets:
       [1000,1001,1002,1004], dictionary.yaml:104-107 — currently undecoded
       there). Always-on (b4() hardcoded true), read first on every connect,
       before any accessory function (pf/k.java constructor order). CarVariant
-      decodes to CALIFORNIA_6_1/CALIFORNIA_7/GRAND_CALIFORNIA (te/a.java)
+      decodes to CALIFORNIA_6_1/CALIFORNIA_7/GRAND_CALIFORNIA (te/a.java; wire
+      raw 1 = GRAND_CALIFORNIA, else CALIFORNIA_7 at zf/d.java:163 — 5.4.0
+      qg/e.java:357-363: raw 0 T7, 1 GC, 2 CALIFORNIA_NEXT; enum ordinals differ)
       but per feature-availability.md §2e is NOT a reliable feature-gating
       signal — do not use vehicle model to decide which of this task's
       screens (roof/roof-air-condition/satellite-antenna/stairs/camping-mode)

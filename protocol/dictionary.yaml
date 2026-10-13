@@ -152,7 +152,7 @@ functions:
     state_fields:
       # byte-0 layout from the app's own subList slices (Lzf/d;), not our original hand guess:
       # captured frame 017e0608...(ignition ON, leveling non-zero) only decodes T15=1 with T15@7.
-      - {name: CarVariant, offset: 0, width: 4}
+      - {name: CarVariant, offset: 0, width: 4, value_semantics: "0 California T7, 1 Grand California, 2 California Next (app 5.4.0 qg/e.java:357-363; wire values, not the enum ordinals)"}
       - {name: CarLevelPopUp, offset: 4, width: 2}          # bit 6 = spare
       - {name: TerminalOneFive, offset: 7, width: 1}        # terminal-15 / ignition
       - {name: CarTimeYear, offset: 8, width: 8}          # +1900

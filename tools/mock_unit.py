@@ -206,7 +206,7 @@ DEFAULT_SEED = {
     # pitch 0.35°; raw CarLevelRoll -109 = 0.01°-units, ÷100 in semantics).
     "vehicle": {
         "TerminalOneFive": 0,
-        "CarVariant": 4,
+        "CarVariant": 0,  # this van's live value = California T7 (raw 0 T7 / 1 GC / 2 Next)
         "CarTimeYear": 126,
         "CarTimeMonth": 6,
         "CarTimeDay": 8,

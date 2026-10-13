@@ -22,6 +22,8 @@ const SEM_AIRHEATER_ERROR = {1: "low_battery", 2: "low_fuel", 3: "system_error",
 const SEM_ROOF_POS = {0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error"};
 /** @type {Record<number, string>} calictl/semantics.py _ROOF_ALERT */
 const SEM_ROOF_ALERT = {1: "child_lock", 4: "error", 5: "driving", 6: "sensor_error", 7: "emergency_locked", 10: "not_possible", 11: "low_battery", 2: "open_checklist", 9: "not_stationary"};
+/** @type {Record<number, string>} calictl/semantics.py _CAR_MODEL */
+const SEM_CAR_MODEL = {0: "California T7", 1: "Grand California", 2: "California Next"};
 /** @type {Record<string, number>} calictl/semantics.py _LZONES */
 const SEM_LZONES = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6, "Seven": 7, "Eight": 8, "Nine": 9, "OneZero": 10, "OneOne": 11, "OneTwo": 12, "OneThree": 13, "OneFour": 14, "OneFive": 15, "OneSix": 16};
 /** @type {string[]} calictl/semantics.py LIGHT_CONFIG_KEYS */

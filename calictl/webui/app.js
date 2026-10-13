@@ -132,6 +132,7 @@
  * // vehicle (semantics.vehicle)
  * @property {boolean} [ignition_on]
  * @property {number|null} [car_variant]
+ * @property {string|null} [car_model]
  * @property {number|null} [level_popup]
  * @property {number|null} [level_roll]
  * @property {number|null} [level_pitch]
@@ -848,6 +849,8 @@ const FEATURES = {
     title: "Vehicle", icon: "🚗",
     readouts: [
       { label: "Ignition", get: (s) => onoff(s.ignition_on) },
+      // 1004 CarVariant -> the app's model name (semantics._CAR_MODEL); unknown raw -> "—"
+      { label: "Model", get: (s) => s.car_model ?? "—" },
       { label: "Level indicator (roll / pitch)",
         // CarLevelPopUp 2 = driving: the app swaps the gauges for "Please slow down" (< 10 km/h).
         // No reading (ignition off): the app's "-.-°" plus its "Signal unavailable" hint.
@@ -2057,10 +2060,11 @@ function renderLighting(s) {
   fbody.appendChild(wc);
 
   // Lighting & sliding door (dg/h.n4: SET_PROFILE PN 8, LightValue 1/0). Not variant-gated (see
-  // control.command_precondition): the app's T7 page shows it, and this T7 reads CarVariant=4.
+  // control.command_precondition): the app's T7 page shows it, and this T7 reads CarVariant=0.
   const dc = document.createElement("div"); dc.className = "card";
-  // the app hides the row only on Grand California (CarVariant 2); no equipment gate (wh/c.h0)
-  const gc = !!STATE.vehicle && STATE.vehicle.car_variant === 2;
+  // the app hides the row only on Grand California = raw CarVariant 1 (qg/e.java:357-363: raw 0 T7,
+  // 1 GC, 2 California Next — NOT the enum ordinals); no equipment gate (wh/c.h0)
+  const gc = !!STATE.vehicle && STATE.vehicle.car_variant === 1;
   const dh = document.createElement("div"); dh.className = "note"; dh.style.padding = ".6rem 0 0";
   dh.textContent = /** @type {string} */ (t("Lighting & sliding door")); dc.appendChild(dh);
   const drow = document.createElement("div"); drow.className = "row";

@@ -33,7 +33,8 @@ VIN/model → feature table** anywhere in the app. Instead:
    (`lf/a`, `jf/a`, `cf/b`, `kf/c`, `ff/a`, `we/b`/`df/a`, `af/a` all `extends te.k`).
 4. A separate, always-first characteristic (service `0x1000`, class `zf/d.java`, "General"/Vehicle
    info) reports firmware version, VIN, and a `CarVariant` field that decodes to a
-   `CALIFORNIA_6_1` / `CALIFORNIA_7` / `GRAND_CALIFORNIA` enum (`te/a.java`). This is a **secondary,
+   `CALIFORNIA_6_1` / `CALIFORNIA_7` / `GRAND_CALIFORNIA` enum (`te/a.java`; raw 0 = T7, raw 1 = Grand
+   California, raw 2 = California Next since app 5.4.0 — see §2e). This is a **secondary,
    much weaker signal** — in the files reviewed it is read but the app-wide flag it could feed
    (`pf/k.java:96`, `f21190d0`) is a hardcoded default that is never observed being written from
    the live `CarVariant` decode, and the one place that reads it (AirHeater's
@@ -190,7 +191,12 @@ unconditionally available on any unit that answers BLE at all:
 ### 2e. `CarVariant` / vehicle model — parsed, weakly wired, not a gating signal
 
 `zf/d.java:152-153,307-308` decodes the 4-bit `CarVariant` field and maps it to `te.a` enum
-`CALIFORNIA_6_1(0)` / `CALIFORNIA_7(1)` / `GRAND_CALIFORNIA(2)` (`te/a.java:15-23`), stored in
+`CALIFORNIA_6_1(0)` / `CALIFORNIA_7(1)` / `GRAND_CALIFORNIA(2)` (`te/a.java:15-23`). **Those are
+enum ordinals, not wire values.** The raw→enum map is `zf/d.java:163,362`: **raw 1 → GRAND_CALIFORNIA,
+anything else → CALIFORNIA_7** (5.0.8); app 5.4.0 (`qg/e.java:357-363`, enum `lf/a.java:25-32` adds
+`CALIFORNIA_NEXT(3)`) maps raw 0 → T7, 1 → Grand California, 2 → California Next, else T7. This van
+reads raw 0 live (= T7; calictl surfaces it as `car_model`). The old project statement "CarVariant=2 =
+GRAND_CALIFORNIA" was the ordinal mix-up — raw 2 was never Grand California in any app version. Stored in
 `zf.d`'s own private `B0` field — which has **no public getter** on any of the three interfaces
 `zf.d` implements (`ye/a.java`, `ze/a.java`, `mf/a.java` — checked, none expose it). Separately,
 `pf/k.java:96` holds an app-wide `f21190d0` flow of the same `te.a` type, defaulted to
@@ -222,7 +228,8 @@ Observed with app 5.0.8.3028 against the fake unit (`tools/applab`, session inve
   then its call site). calictl keeps reading and flags `firmware_untested` instead (by design).
 - **ECO energy mode is not an `Installed` bit; it follows 1602 `PvInstalled` (stale on the first visit).** The Energy Mode picker
   showed Normal / Max only with `EnergyModeNotSelectable=0`, with `energy.PvInstalled=1`, and with
-  `vehicle.CarVariant=2` (GRAND_CALIFORNIA). **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` is **RESOLVED (#154): 1602 bit 10 `PvInstalled`**, contradicting the observation above. **Likely cause of the contradiction (decompile cross-check 2026-10-06, enigma `46f982d3`, medium confidence): a stale first read.** `ak/a.b` reads `N0`'s raw value without a Compose state read (`ak/a.java:714`) and is composed at `:196`, before `:197` subscribes the same flow; the proxy StateFlow (`yg/j.t1`, `a40/y`) refreshes only while subscribed, so the first visit sees the seed (false) and `b()` is then skipped. App-lab retest owed: with `PvInstalled=1`, a **second visit** to the Energy page in the same app session (or an energy-mode change). **APP-OBSERVED 2026-10-06 (settles it):** with `PvInstalled=1` on the wire, the first visit to Vehicle Information > Energy Mode offers Normal / Max; leaving and opening it again in the same app session offers **ECO / Normal / Max**. ECO is gated by `PvInstalled`; the 2026-09-27 screens were first visits.
+  `vehicle.CarVariant=2` (which the 5.0.8 app read as CALIFORNIA_7, not Grand California — raw 1 is GC,
+  §2e). **DECOMPILE-VERIFIED:** ECO is offered only when `zj/c.N0` is true (`ak/a.java:712-716`: `ak/a.b` reads `N0` and conditionally prepends `bf.c.X` ECO_MODE to the selector); `EnergyModeNotSelectable` is never read; the SOURCE of `N0` is **RESOLVED (#154): 1602 bit 10 `PvInstalled`**, contradicting the observation above. **Likely cause of the contradiction (decompile cross-check 2026-10-06, enigma `46f982d3`, medium confidence): a stale first read.** `ak/a.b` reads `N0`'s raw value without a Compose state read (`ak/a.java:714`) and is composed at `:196`, before `:197` subscribes the same flow; the proxy StateFlow (`yg/j.t1`, `a40/y`) refreshes only while subscribed, so the first visit sees the seed (false) and `b()` is then skipped. App-lab retest owed: with `PvInstalled=1`, a **second visit** to the Energy page in the same app session (or an energy-mode change). **APP-OBSERVED 2026-10-06 (settles it):** with `PvInstalled=1` on the wire, the first visit to Vehicle Information > Energy Mode offers Normal / Max; leaving and opening it again in the same app session offers **ECO / Normal / Max**. ECO is gated by `PvInstalled`; the 2026-09-27 screens were first visits.
 
 ## Part 3 — Recommended detection rule for the HA integration
 

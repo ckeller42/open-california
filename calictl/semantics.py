@@ -277,6 +277,12 @@ def campingmode(d: dict) -> dict:
 # Roof Position -> name (ig/c.java l() + hf/b.java enum): 0/14=closed, 1=open, 2=middle,
 # 15=error, everything else (3-13, transitional) = other.
 _ROOF_POS = {0: "closed", 1: "open", 2: "middle", 14: "closed", 15: "error"}
+# 1004 CarVariant raw value -> model, per the app's own mapping (5.4.0 qg/e.java:357-363: raw 0
+# CALIFORNIA_7, 1 GRAND_CALIFORNIA, 2 CALIFORNIA_NEXT, anything else CALIFORNIA_7; 5.0.8
+# zf/d.java:163 had raw 1 = GC, everything else T7). NOT the lf/a enum ordinals (6.1=0, T7=1,
+# GC=2, Next=3) — the old "raw 2 = Grand California" was that ordinal mix-up. Unknown raw -> None
+# (the app's fallback to T7 is a UI default, not a decode). This T7 reads 0 live.
+_CAR_MODEL = {0: "California T7", 1: "Grand California", 2: "California Next"}
 # Roof InfoPopUp alert enum (ig/c.java, 4-bit InfoPopUp), only meaningful while installed:
 # 0=none 1=child_lock 4=error 5=driving 6=sensor_error 7=emergency_locked 10=not_possible
 # 11=low_battery. Names are the app's internal IDs; what they MEAN to the user (child_lock = an
@@ -599,7 +605,8 @@ def vehicle(d: dict) -> dict:
         ``vehicle`` function (keys ``TerminalOneFive``, ``CarVariant``,
         ``CarTime*``, ``CarLevelRoll``, ``CarLevelPitch``).
     :returns: interpreted dict with ``ignition_on`` (terminal-15),
-        ``car_variant``, ``level_roll``/``level_pitch`` (degrees, signed), ``car_clock``
+        ``car_variant`` (raw) + ``car_model`` (its app label via :data:`_CAR_MODEL`, ``None``
+        when unknown), ``level_roll``/``level_pitch`` (degrees, signed), ``car_clock``
         (ISO-ish ``YYYY-MM-DD HH:MM:SS``) and ``level_popup``.
 
     .. req:: Decode vehicle state (char 1004)
@@ -643,6 +650,7 @@ def vehicle(d: dict) -> dict:
         "installed": True,
         "ignition_on": ign,
         "car_variant": d.get("CarVariant"),
+        "car_model": _CAR_MODEL.get(d.get("CarVariant")),  # type: ignore[arg-type]
         "level_popup": popup,
         "level_roll": deg(d.get("CarLevelRoll")) if level else None,  # degrees (signed, 0.01° resolution)
         "level_pitch": deg(d.get("CarLevelPitch")) if level else None,

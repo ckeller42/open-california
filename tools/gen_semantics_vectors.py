@@ -300,6 +300,10 @@ def _hand_cases() -> list:
         ("vehicle/clock", "vehicle", {**clock, "TerminalOneFive": 1, "CarVariant": 4, "CarLevelPopUp": 1})
     )
     c.append(("vehicle/rtc-day-0", "vehicle", {**clock, "CarTimeDay": 0}))
+    # CarVariant raw -> car_model (app qg/e.java:357-363): 0 T7, 1 GC, 2 Next; the clock vector
+    # above covers 4 (unknown -> null)
+    for raw in (0, 1, 2):
+        c.append(("vehicle/variant-%d" % raw, "vehicle", {"CarVariant": raw}))
     c.append(  # driving: popup 2 = "Please slow down", axes unavailable
         (
             "vehicle/moving",

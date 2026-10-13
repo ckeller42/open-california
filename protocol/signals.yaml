@@ -2124,9 +2124,13 @@ vehicle:
       decision: surface
       kind: state
       name: car_variant
-      scale: raw
+      scale: "raw enum, labelled as car_model: 0 California T7, 1 Grand California, 2 California\
+        \ Next (app 5.4.0 qg/e.java:357-363; else the app assumes T7, calictl None). These are\
+        \ wire values, NOT the lf/a (was te/a) enum ordinals 6.1=0/T7=1/GC=2/Next=3. This van\
+        \ reads 0 live."
       sources:
-        app: "ag/a.java f1072c (4-bit, default 15); zf/d.java ==1/==2 branch"
+        app: "ag/a.java f1072c (4-bit, default 15); 5.0.8 zf/d.java:163,362 raw 1 -> GRAND_CALIFORNIA,\
+          \ else CALIFORNIA_7; 5.4.0 qg/e.java:357-363 adds raw 2 -> CALIFORNIA_NEXT"
         gui: null
         vwdoc: null
       unit: null

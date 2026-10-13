@@ -1338,7 +1338,7 @@ def test_wakeup_areas_are_a_vertical_checkbox_list(base_url, error_gated_page, l
 
 def test_door_contact_row_hidden_on_grand_california(page, base_url):
     """
-    .. test:: The sliding-door row is shown on every variant except Grand California (2)
+    .. test:: The sliding-door row is shown on every variant except Grand California (raw CarVariant 1)
        :id: T_E2E_LIGHT_DOOR_GATE
        :links: R_LIGHT_DOOR_CONTACT
     """
@@ -1346,7 +1346,8 @@ def test_door_contact_row_hidden_on_grand_california(page, base_url):
     def patch(route):
         r = route.fetch()
         body = r.json()
-        body.setdefault("vehicle", {})["car_variant"] = 2
+        # raw 1 = Grand California (qg/e.java:357-363) — 2 is California Next, not GC
+        body.setdefault("vehicle", {})["car_variant"] = 1
         route.fulfill(response=r, json=body)
 
     page.route("**/api/state", patch)
@@ -1381,6 +1382,7 @@ def test_level_indicator_shows_the_apps_two_gauges(page, base_url):
     page.locator(".tile:has(.tt:text-is('Vehicle'))").click()
     app = page.locator("#app")
     expect(app.get_by_text("1.1° / 1.5°", exact=True)).to_be_visible()
+    expect(app.get_by_text("California T7", exact=True)).to_be_visible()  # Model row: mock CarVariant 0
     gauges = app.locator(".lg-gauge")
     expect(gauges).to_have_count(2)
     expect(gauges.nth(0).locator(".lg-label")).to_have_text("Roll")
