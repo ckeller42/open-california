@@ -18,8 +18,8 @@
 /** Seconds without a snapshot after which the satellite page reads offline ("van asleep"): three
  * of the session's held-link water re-read periods (3 * CALI_SESSION_WATER_REREAD_MS / 1000,
  * cali_session.h — tests pin it), so a link momentarily down with seconds-old data is NOT "van
- * asleep" — the banner keys on DATA AGE, never on link state. (The CoreS3's own screen keeps its 10 s red tint: DISPLAY_STALE_MS in
- * display_model.c is the device's link-freshness cue, a different thing.) */
+ * asleep" — the banner keys on DATA AGE, never on link state. The CoreS3 screen's red "no data"
+ * row uses the same threshold (DISPLAY_STALE_MS, net_consts.h — the parity test pins both). */
 const SAT_OFFLINE_S = 90;
 
 /**

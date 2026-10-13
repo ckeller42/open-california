@@ -119,6 +119,9 @@ def test_sat_offline_s_is_three_water_reread_periods(js):
     ).read_text()
     period_ms = int(re.search(r"#define CALI_SESSION_WATER_REREAD_MS (\d+)u", header).group(1))
     assert js["SAT_OFFLINE_S"] == 3 * period_ms / 1000
+    # The CoreS3 screen's stale rule is the same instant (docs/firmware.md): one threshold, two places.
+    consts = (Path(__file__).resolve().parents[1] / "csrc/net_consts.h").read_text()
+    assert int(re.search(r"#define DISPLAY_STALE_MS (\d+)", consts).group(1)) == js["SAT_OFFLINE_S"] * 1000
 
 
 _DEVICE = {

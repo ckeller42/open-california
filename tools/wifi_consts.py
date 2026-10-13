@@ -45,7 +45,11 @@ CONSTS = {
     # The tick also polls the light/proximity sensor (R_FW_DISPLAY_WAKE): 200 ms, so a hand near
     # (two reads in a row) wakes the screen in well under a second; off after DISPLAY_OFF_AFTER_MS.
     "DISPLAY_REFRESH_MS": 200,
-    "DISPLAY_STALE_MS": 10000,
+    # Stale = no snapshot for three water re-read periods (3 * CALI_SESSION_WATER_REREAD_MS, 30 s):
+    # parked, that re-read is the ONLY refresh (no notifications; the 1003 heartbeat is a write), so
+    # the data age normally saws up to ~31 s. The web page's SAT_OFFLINE_S (90 s) is the same rule
+    # (tests/test_semantics_js_parity.py pins both). 10 s used to flip the row red -> woke the screen.
+    "DISPLAY_STALE_MS": 90000,
     "DISPLAY_DIM_AFTER_MS": 60000,
     "DISPLAY_OFF_AFTER_MS": 300000,
     "DISPLAY_BRIGHT_PCT": 100,

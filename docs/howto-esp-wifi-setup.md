@@ -182,7 +182,7 @@ password) at the bottom. The texts are German by default; an English build exist
 |---|---|---|---|---|
 | **Gerät** (device) | *läuft · seit 2 h 13 min* — running, and for how long | — | — (a crash shows as a restart: the time starts again) | — |
 | **WLAN** (WiFi) | *\<network\> · 192.168.x.y · −58 dBm* — on your network, its address and signal | *Hotspot calictl-esp-setup · 192.168.4.1* (setup hotspot open); *verbinde mit \<network\>* (joining); *\<network\> nicht erreichbar, versuche neu* (out of reach, retrying) | *nicht verbunden* plus the reason: *Netz nicht gefunden*, *falsches Passwort* or *Verbindungsfehler* | — |
-| **Camper** | *verbunden · Daten vor 1 s* — linked, and how old the last reading is | *verbinde …* (connecting); *Kopplung läuft …* (pairing); *Code der Einheit eingeben* (type the code the unit shows) | *Verbindung verloren, verbinde neu* (link lost, reconnecting); *keine Daten seit 14 s* (linked, but no reading for more than 10 s); *Kopplung fehlgeschlagen* (pairing failed) | *nicht gekoppelt* — not paired yet |
+| **Camper** | *verbunden · Daten vor 1 s* — linked, and how old the last reading is | *verbinde …* (connecting); *Kopplung läuft …* (pairing); *Code der Einheit eingeben* (type the code the unit shows) | *Verbindung verloren, verbinde neu* (link lost, reconnecting); *keine Daten seit 95 s* (linked, but no reading for more than 90 s); *Kopplung fehlgeschlagen* (pairing failed) | *nicht gekoppelt* — not paired yet |
 
 The screen lights up when you **tap it** (that tap only wakes it, it presses nothing), when you
 **reach toward it**, or when a row turns amber or red; it dims after **60 seconds** and goes dark

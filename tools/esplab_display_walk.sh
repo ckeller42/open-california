@@ -12,7 +12,7 @@
 #   3 online       (wait)                     -> green WiFi: SSID, IP, RSSI
 #   4 pairing      fresh mock unit, pair      -> amber camper (waiting for passkey)
 #   5 connected    passkey                    -> green camper, data age
-#   6 stale        SIGSTOP the mock 13 s      -> red camper "no data" (link up, data > 10 s old)
+#   6 stale        SIGSTOP the mock 93 s      -> red camper "no data" (link up, data > 90 s old, DISPLAY_STALE_MS)
 #   7 link lost    SIGCONT, then stop mock    -> red camper "link lost, reconnecting"
 #   8 dimmed       75 s without a change      -> `LOG display: brightness <pct>` (timestamped log)
 #   9 reconnected  start the mock again       -> 09a right after the start (reconnect in progress),
@@ -112,7 +112,7 @@ shot 05-connected
 
 say "6 stale: mock unit frozen (SIGSTOP) - the link stays up, no data arrives"
 mock_signal STOP
-esp 13 "wifi status"
+esp 93 "wifi status"
 shot 06-stale
 mock_signal CONT
 esp 15 status
