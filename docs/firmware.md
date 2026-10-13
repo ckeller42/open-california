@@ -678,6 +678,7 @@ IP and no user-typed value is ever recorded.
 |---|---|---|
 | `diag` | every 60 s (app_main) | `heap_free`, `heap_min` (internal heap, B), `psram_free`, `cpu_pct` (since the previous diag), `stack_min` `{owner, sd, display, ota, console, lwip}` (high-water mark, B), `wifi_rssi`, `ble_rssi` (`null` offline / unlinked), `link_up`, `uptime_s` |
 | `evt` `boot` | once per boot, when the card takes it | `reset_reason` (`esp_reset_reason`: `poweron`/`sw`/`panic`/`task_wdt`/`int_wdt`/`brownout`/…), `fw`, `boot`, `prev_up_s` (the previous boot's last diag uptime, RTC no-init RAM: survives a reset, `null` after power-on) |
+| `evt` `panic` | right after `boot`, when the previous boot panicked (`R_FW_PANIC_CAPTURE`, below) | `task` (the task running on the panicking core), `reason` (the exception, or abort()/assert's details; <= 47 chars), `bt` (up to 16 backtrace PCs, innermost first, space-separated bare hex) |
 | `evt` `link_up` | link encrypted (session.c) | `reconnect_ms` (down -> up; `null` for the first link of a boot), `attempts` (`connect_bonded` calls since) |
 | `evt` `link_down` | an up link went | `reason` (`disconnected`/`connect_fail`/`enc_fail`/`heartbeat`/`discover`/`connect_timeout`/`enc_timeout`/`stop`), `status` (the transport status: NimBLE, HCI = 0x200 + code, e.g. 531 = 0x13), `dur_ms` |
 | `evt` `wifi_up` / `wifi_down` | station online / lost (wifi_run.c) | `rssi`, `ip_changed` (bool, never the address) / `reason` `lost`, `rssi`, `dur_ms` |
@@ -700,6 +701,34 @@ row (`R_ESP_INGEST_DIAG`, [raspberry-pi-setup](raspberry-pi-setup.md#esp-ingest-
 day fully linked with no browser open: diag 1440 x ~300 B = 0.43 MB, water re-reads 2880 x ~125 B =
 0.36 MB, heartbeat perf 1440 x ~125 B = 0.18 MB, a few kB of events — about 1 MB/day on top of the
 frame log; an open web UI adds ~150 B per request.
+
+### Panic capture (`R_FW_PANIC_CAPTURE`)
+
+There is no coredump partition (adding one changes the partition table, which needs a USB flash), so
+a panic leaves its own small record instead. `app_main.c` wraps `esp_panic_handler`
+(`-Wl,--wrap=esp_panic_handler`, `main/CMakeLists.txt`; ESP-IDF's own esp_system tests do the same):
+before the IDF's handler prints the Guru Meditation and resets, the wrapper writes the task name, the
+reason (`info->reason`, or the abort()/assert details) and up to 16 backtrace PCs (the same frame walk
+as the console backtrace, stopping at the first insane frame) into a `cali_panic_t` in RTC no-init
+RAM, sealed with a magic and an FNV-1a checksum. RTC no-init RAM survives the panic reset but not a
+power-off; garbage after a power-on fails the checksum and is never logged. The next boot prints
+`PANIC {"task":…,"reason":…,"bt":…}` on the console and, right after the `evt boot` record (whose
+`fw` names the build), logs `evt panic` and clears the capture. No card: the capture is kept and logged by
+the first later boot that has one (a second panic first overwrites it).
+
+**Symbolize** with the ELF of the build that crashed (`fw` in the boot record = its commit):
+
+```
+# the newest main merge: cali_fw.elf on the esp-latest release (manifest.json names its sha)
+gh release download esp-latest -p cali_fw.elf -p manifest.json -R ckeller42/open-california
+# an older build: the firmware-esp32s3 artifact of that commit's CI run (kept 90 days)
+gh run download <run-id> -n firmware-esp32s3 -R ckeller42/open-california   # cali_fw.elf among the images
+docker run --rm -v "$PWD":/w -w /w espressif/idf:v6.1 \
+  xtensa-esp32s3-elf-addr2line -pfiaC -e cali_fw.elf 4200abcd 40375f00 …   # the bt entries as they are
+```
+
+The ELF must be the exact build: a local rebuild of the same commit is not byte-identical in
+general.
 
 ### Device resources (`device.res`)
 
@@ -873,7 +902,7 @@ The `/device` page budget `NET_HTTP_BODY_MAX` grew 24 -> 28 KB for the usage-dat
 | `codec-parity` | `gen_c_dict` / `gen_codec_vectors` / `gen_control_vectors --check` and the C parity modules (`test_control_parity.py` among them) with `gcc` |
 | `firmware-host-e2e` | The NimBLE-Linux + Bumble end-to-end tier, incl. the WiFi/web e2e, the control path (`test_control_e2e.py`) and the page in Chromium with a live fridge toggle reaching the fake unit (`tools/ci.sh firmware`) |
 | `firmware-build` | Compiles the release esp32s3 image against ESP-IDF's real esp-nimble; uploads the flashable images |
-| `firmware-release` | Push to `main` only: uploads `cali_fw.bin` + `manifest.json` to the `esp-latest` prerelease (the OTA source, `R_FW_OTA`), plus the first-flash `cali_fw_full.bin`; the only job besides `coverage-badge` with `contents: write` |
+| `firmware-release` | Push to `main` only: uploads `cali_fw.bin` + `manifest.json` to the `esp-latest` prerelease (the OTA source, `R_FW_OTA`), plus the first-flash `cali_fw_full.bin` and `cali_fw.elf` (symbols for a panic backtrace, `R_FW_PANIC_CAPTURE`); the only job besides `coverage-badge` with `contents: write` |
 | `firmware-qemu` | Builds the QEMU-probe variant (no WiFi driver) and boots it in QEMU |
 
 ## Hardware watch items (unresolved until the CoreS3 board runs)
@@ -1305,6 +1334,18 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    records, at most 20 a minute plus a dropped count. Records come from any task without blocking
    (dropped and counted when the queue is full) and never hold a client's MAC or IP address.
 
+.. req:: The satellite keeps the backtrace of a panic and logs it on the next boot
+   :id: R_FW_PANIC_CAPTURE
+   :status: implemented
+   :tags: esp32, diagnostics, sd
+
+   On a panic, the firmware shall keep the task name, the panic reason (cut) and up to 16 backtrace
+   PCs in RTC no-init memory, guarded by a magic and a checksum, without a coredump partition (an
+   OTA-only change). The next boot shall print it on the console and log it as an ``evt`` ``panic``
+   record after the boot record (``R_FW_DIAG_LOG``), then clear it; a capture that fails its magic,
+   depth or checksum is never logged. CI shall keep each build's ``cali_fw.elf`` so the PCs can be
+   symbolized.
+
 .. req:: The satellite restores camping mode after you park, as calictl serve does
    :id: R_FW_AUTO_CAMPER
    :status: implemented
@@ -1510,6 +1551,11 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   a failed join, no address), `T_FW_DIAG_HTTP_PERF` (`test_http_core.py`) and `T_FW_DIAG_OTA`
   (`test_ota.py`). Board-only (owed): one reboot -> `evt boot` with its reason; a link drop ->
   `link_down`/`link_up`; heap/stack/RSSI plausible; the `esp_log_set_vprintf` hook sees IDF warnings.
+- **`R_FW_PANIC_CAPTURE`** — verified by `T_FW_PANIC_CAPTURE` (`tests/firmware/test_diag.py`: a sealed
+  capture becomes one `evt panic` record and is cleared, kept while the sink refuses it, a bad magic,
+  checksum or depth is never logged, the longest record fits). Board-only (owed): a forced panic ->
+  `PANIC {…}` on the console + `evt panic` on the card, and `addr2line` on the CI ELF names the
+  faulting function.
 - **`R_FW_AUTO_CAMPER`** — verified by `T_FW_AUTO_CAMPER_PARITY` (`tests/firmware/test_auto_camper_parity.py`:
   every vector of `tests/vectors/auto_camper.json` through the C twin, the vectors fresh and reaching
   every outcome), `T_FW_AUTO_CAMPER_API` (`tests/firmware/test_web_handlers.py`: default on, persisted,

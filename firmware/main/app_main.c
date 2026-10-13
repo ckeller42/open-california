@@ -65,6 +65,13 @@
 #error "console must be USB-Serial/JTAG (device) or UART (QEMU): see firmware/README.md"
 #endif
 #include "esp_attr.h"
+#include "esp_debug_helpers.h"
+#include "esp_memory_utils.h"
+#include "esp_private/panic_internal.h"
+#if CONFIG_IDF_TARGET_ARCH_XTENSA
+#include "esp_cpu_utils.h"
+#include "xtensa_context.h"
+#endif
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
@@ -122,6 +129,43 @@ static long s_prev_up = -1;   /* the previous boot's, read once at boot */
 static int s_boot_logged;
 static vprintf_like_t s_vprintf;
 
+/* ---- panic capture (R_FW_PANIC_CAPTURE): no coredump partition (that would need a USB flash), so
+ * the panic handler keeps the task, reason and backtrace PCs in RTC_NOINIT memory (survives the
+ * panic reset, not a power-off) and the next boot logs it after the boot record. Linked in by
+ * -Wl,--wrap=esp_panic_handler (main/CMakeLists.txt), as ESP-IDF's own esp_system tests do. The IDF
+ * panic path has re-enabled the flash cache before esp_panic_handler runs. */
+RTC_NOINIT_ATTR static cali_panic_t s_panic;
+static int s_panic_done;
+
+static void panic_copy(char *dst, size_t cap, const char *src) {
+    size_t i = 0;
+    for (; src && i < cap - 1 && src[i]; i++) dst[i] = src[i];
+    for (; i < cap; i++) dst[i] = 0;   /* every byte written: the checksum covers them */
+}
+
+void __real_esp_panic_handler(panic_info_t *info);
+void __wrap_esp_panic_handler(panic_info_t *info) {
+    cali_panic_t *p = &s_panic;
+    TaskHandle_t t = xTaskGetCurrentTaskHandleForCore(info->core);
+    panic_copy(p->task, sizeof p->task, t ? pcTaskGetName(t) : NULL);
+    /* abort()/assert: the IDF overrides info->reason with these details inside the real handler */
+    panic_copy(p->reason, sizeof p->reason, g_panic_abort ? g_panic_abort_details : info->reason);
+    p->depth = 0;
+#if CONFIG_IDF_TARGET_ARCH_XTENSA
+    if (info->frame) {   /* esp_backtrace_print_from_frame's walk, stopping at the first insane frame */
+        const XtExcFrame *f = info->frame;
+        esp_backtrace_frame_t fr = {.pc = f->pc, .sp = f->a1, .next_pc = f->a0, .exc_frame = f};
+        p->pc[p->depth++] = esp_cpu_process_stack_pc(fr.pc);
+        while (p->depth < CALI_PANIC_DEPTH && fr.next_pc && esp_stack_ptr_is_sane(fr.sp) &&
+               esp_backtrace_get_next_frame(&fr))
+            p->pc[p->depth++] = esp_cpu_process_stack_pc(fr.pc);
+    }
+#endif
+    for (uint32_t i = p->depth; i < CALI_PANIC_DEPTH; i++) p->pc[i] = 0;
+    cali_panic_seal(p);
+    __real_esp_panic_handler(info);
+}
+
 static const char *reset_name(esp_reset_reason_t r) {
     switch (r) {
     case ESP_RST_POWERON: return "poweron";
@@ -170,6 +214,7 @@ static void diag_tick(uint64_t now) {
     cali_diag_health_t h = {0};
     if (!s_boot_logged)
         s_boot_logged = cali_diag_boot(reset_name(esp_reset_reason()), cali_fw_version(), cali_time_boot(), s_prev_up) == 0;
+    if (s_boot_logged && !s_panic_done) s_panic_done = cali_diag_panic(&s_panic) >= 0;   /* after the boot record */
     if (!cali_diag_due(now)) return;
     cali_diag_log(now, NULL);   /* a log storm's dropped count, even if no warning follows */
     s_rtc_up_s = (uint32_t)(now / 1000);
@@ -495,6 +540,10 @@ void app_main(void) {
     }
     ESP_ERROR_CHECK(err);
     console_init();
+    {
+        char pf[CALI_DIAG_BODY_MAX];
+        if (cali_panic_fields(&s_panic, pf, sizeof pf)) printf("PANIC {%s}\n", pf);   /* once, for a USB console */
+    }
     if (s_rtc_magic == RTC_MAGIC) s_prev_up = (long)s_rtc_up_s;
     s_rtc_magic = 0;   /* this boot writes its own once its first diag is due */
     cali_diag_sink = cali_sdlog_text;   /* diagnostics -> the SD log (no card: dropped) */
