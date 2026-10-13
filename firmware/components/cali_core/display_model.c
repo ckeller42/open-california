@@ -235,7 +235,8 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
         }
         memcpy(m->acc, in->acc, sizeof m->acc);
         m->have_acc = 1;
-    } else {   /* no reading: nothing to compare the next one with */
+    } else {   /* no reading: nothing to compare the next one with, and unseen is not still */
+        if (m->moving) m->last_shake_ms = now_ms;
         m->have_acc = 0;
         m->motion_reads = 0;
         m->motion = -1;

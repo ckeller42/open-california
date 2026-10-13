@@ -423,6 +423,13 @@ def test_motion_wake_off_and_read_failures_never_wake(cli):
     # a failed read in between: no comparison across it, no wake
     v = motion_states(cli, [STILL, TILT, None, STILL, None, TILT])
     assert {x["state"] for x in v} == {"off"} and v[2]["motion"] == "-1"
+    # shaking, then 6 min without a reading (screen off): unseen is not still, so one still read after
+    # it does not re-arm, and the next shake does not wake it again
+    st = [
+        x["state"]
+        for x in motion_states(cli, [STILL, TILT] * 5 + [None] * 1800 + [STILL, STILL, TILT, STILL])
+    ]
+    assert st[2] == "on" and st[-5:] == ["off"] * 5
 
 
 @pytest.mark.parametrize(

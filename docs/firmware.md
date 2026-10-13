@@ -850,7 +850,8 @@ The CoreS3 screen is dark when nobody uses it (spec `docs/superpowers/specs/2026
   so driving or a running engine wakes it once and it then dims and goes off as usual. The threshold is
   deliberately high: a van rocking under a step tilts the unit by a degree or two (~20–50 mg), a
   pick-up moves the vector by hundreds of mg over a few reads. A knock is mostly too short for 5 Hz
-  sampling to see twice. A failed read is no reading (no comparison across it, `motion` `null`).
+  sampling to see twice. A failed read is no reading (no comparison across it, `motion` `null`), and
+  not a still one: it restarts the re-arm period.
   **Init needs Bosch's config blob:** the BMI270 outputs no data until its ~8 KB config is uploaded
   (`INIT_CTRL` `0x59` = 0, burst `INIT_DATA` `0x5E`, `INIT_CTRL` = 1, then `INTERNAL_STATUS` `0x21` =
   `0x01`) — Bosch's BMI270_SensorAPI, the Linux `bmi270` driver, M5Unified and `espressif/bmi270` all do
