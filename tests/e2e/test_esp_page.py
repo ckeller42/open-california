@@ -408,6 +408,8 @@ def test_screen_row_shows_state_and_switches(page, locale, lang):
         expect(pg.locator("#scr-auto-l")).to_have_text(STRINGS["scr_auto"][lang])
         expect(auto).to_be_checked()
         expect(pg.locator("#scr-prox")).to_be_checked()
+        expect(pg.locator("#scr-motion-l")).to_have_text(STRINGS["scr_motion"][lang])
+        expect(pg.locator("#scr-motion")).to_be_checked()
         expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "0"))
         auto.uncheck()
         for _ in range(50):  # the POST lands before the fixture flips the next poll's state
@@ -419,14 +421,23 @@ def test_screen_row_shows_state_and_switches(page, locale, lang):
         pg.locator("#scr-dn").click()
         pg.locator("#scr-dn").click()
         expect(pg.locator("#scr-off")).to_have_text(STRINGS["scr_offset"][lang].replace("{n}", "-5"))
+        pg.locator("#scr-motion").uncheck()
+        expect(pg.locator("#scr-motion")).not_to_be_checked()
         disp.update(state="off", brightness_pct=0, lux=None, sensor="error")
         expect(status).to_have_text(
             STRINGS["scr_off"][lang] + " · 0 % (8–100) · " + STRINGS["scr_nolux"][lang]
         )
         expect(auto).not_to_be_checked()
-        assert posts == [{"auto": False}, {"offset": 5}, {"offset": 0}, {"offset": -5}]
+        assert posts == [
+            {"auto": False},
+            {"offset": 5},
+            {"offset": 0},
+            {"offset": -5},
+            {"motion_wake": False},
+        ]
     with ux_gallery.EspStub("setup") as stub, page(stub.base + "/device", locale=locale) as pg:
         expect(pg.locator("#scr-auto")).to_be_disabled()
         expect(pg.locator("#scr-up")).to_be_disabled()
+        expect(pg.locator("#scr-motion")).to_be_disabled()
         stub.fixtures["setup"]["/api/state"]["device"]["display"].update(state=None)
         expect(pg.locator("#scr")).to_be_hidden()

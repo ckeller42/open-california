@@ -429,11 +429,13 @@ in setup mode the hotspot SSID and passphrase. The full row table with the Germa
 - **Timing and brightness** come from `csrc/net_consts.h` (generated from `tools/wifi_consts.py`):
   `DISPLAY_REFRESH_MS` 200, `DISPLAY_STALE_MS` 90000 (3 × the 30 s water re-read = the web page's `SAT_OFFLINE_S`), `DISPLAY_DIM_AFTER_MS` 60000,
   `DISPLAY_OFF_AFTER_MS` 300000, `DISPLAY_BRIGHT_PCT` 100, `DISPLAY_DIM_PCT` 10 (the no-sensor
-  fallback), `DISPLAY_LOCK_TIMEOUT_MS` 50. Wake (tap, hand near, a row turning red/amber), dim, off,
+  fallback), `DISPLAY_LOCK_TIMEOUT_MS` 50. Wake (tap, hand near, motion on the BMI270, a row turning red/amber), dim, off,
   and the brightness from the LTR-553 room light: `docs/firmware.md` "Screen wake and brightness"
   (`R_FW_DISPLAY_WAKE`; calibration knobs in `cali_display_model.h`). The painter logs
   `LOG display: brightness <pct>` on every change and `display: light sensor ltr553 part 0x..` /
-  `display: no light sensor (ltr553), fixed brightness` once at init.
+  `display: no light sensor (ltr553), fixed brightness` once at init, and `display: accelerometer
+  bmi270 ready` / `display: no accelerometer (bmi270), motion wake off` (or `... init failed` /
+  `... accel enable failed`).
 - **Language:** German by default; `CONFIG_CALI_DISPLAY_LANG_EN=y` selects English. Texts are the
   `d_*` keys of `firmware/web/strings.json` (same generator as the page); the fonts are generated
   Latin-1 subsets (`tools/gen_display_font.sh`, OFL notice in `components/cali_display/FONTS-LICENSE`).

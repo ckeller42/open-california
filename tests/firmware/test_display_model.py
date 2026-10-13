@@ -372,6 +372,59 @@ def test_hand_near_ignored_when_prox_wake_off(cli):
     assert v[-1]["state"] == "off"
 
 
+def motion_states(cli, accs, start=400000, extra=""):
+    """reset, wake at 0, then one tick per 200 ms from ``start`` with each acc vector (None = no reading)."""
+    lines = ["reset", BASE + " now=0"]
+    for i, a in enumerate(accs):
+        acc = "" if a is None else " acc=%d,%d,%d" % a
+        lines.append(BASE + " now=%d%s%s" % (start + 200 * i, acc, extra))
+    return run(cli, *lines)[1:]
+
+
+STILL = (12, -8, 1000)  # flat on a table, 1 g on z
+TILT = (450, -8, 890)  # picked up: ~27 deg, the vector moves ~450 mg
+LIFT1, LIFT2 = (300, -8, 955), (600, -8, 800)  # a pick-up across reads: ~290 / ~340 mg steps
+
+
+def test_motion_wakes_on_two_reads_in_a_row(cli):
+    """A pick-up (the accel vector changing by more than DISPLAY_MOTION_WAKE_MG between two reads, two
+    reads in a row) wakes a dark screen; one step alone (moved, then held) does not.
+
+    .. test:: Motion on the BMI270 wakes the screen on two reads in a row over the threshold
+       :id: T_FW_DISPLAY_MOTION_WAKE
+       :links: R_FW_DISPLAY_WAKE
+    """
+    v = motion_states(cli, [STILL, STILL, LIFT1, LIFT1, LIFT1, LIFT2, STILL])
+    assert [x["state"] for x in v] == ["off", "off", "off", "off", "off", "off", "on"]
+    assert v[0]["motion"] == "-1" and int(v[1]["motion"]) == 0 and 280 < int(v[2]["motion"]) < 300
+
+
+def test_still_sensor_and_van_rocking_never_wake(cli):
+    noise = [(12 + i % 3, -8 - i % 2, 1000 + (i % 5) * 10) for i in range(50)]  # sensor noise
+    rock = [(12, -8 + (60 if i % 2 else -60), 1000) for i in range(50)]  # ~120 mg sway each read
+    assert {x["state"] for x in motion_states(cli, noise)} == {"off"}
+    assert {x["state"] for x in motion_states(cli, rock)} == {"off"}
+
+
+def test_continuous_shaking_does_not_keep_the_screen_on(cli):
+    """Driving / a running engine: every read over the threshold for 10 min — one wake (the rising
+    edge), then dim and off like any other wake; re-armed only once it was still for
+    DISPLAY_MOTION_REARM_MS."""
+    shake = [STILL if i % 2 else TILT for i in range(3000)]  # 10 min of 200 ms reads
+    st = [x["state"] for x in motion_states(cli, shake + [STILL] * 60 + [TILT, STILL])]
+    assert st[1:3] == ["off", "on"]  # the second shaking read in a row woke it
+    assert st[2 + 305] == "dim" and st[2 + 1505] == st[2999] == st[-2] == "off"
+    assert st[-1] == "on"  # still for 12 s, then a pick-up wakes it again
+
+
+def test_motion_wake_off_and_read_failures_never_wake(cli):
+    assert motion_states(cli, [STILL, TILT, STILL])[-1]["state"] == "on"
+    assert motion_states(cli, [STILL, TILT, STILL], extra=" mw=0")[-1]["state"] == "off"
+    # a failed read in between: no comparison across it, no wake
+    v = motion_states(cli, [STILL, TILT, None, STILL, None, TILT])
+    assert {x["state"] for x in v} == {"off"} and v[2]["motion"] == "-1"
+
+
 @pytest.mark.parametrize(
     "pressed_awake,want", [(["10", "10", "11", "00", "11", "01"], ["0", "0", "0", "1", "1", "1"])]
 )

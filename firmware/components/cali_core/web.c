@@ -743,7 +743,7 @@ static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) 
     }
 }
 
-/* ---- POST /api/display {"auto"?,"prox_wake"?,"min"?,"max"?,"offset"?} (R_FW_DISPLAY_WAKE): station mode only ---- */
+/* ---- POST /api/display {"auto"?,"prox_wake"?,"min"?,"max"?,"offset"?,"motion_wake"?} (R_FW_DISPLAY_WAKE): station mode only ---- */
 
 static int parse_pct(cursor_t *c, int *out, int sign) {   /* [-]1-3 digits; a 4th is then bad JSON */
     const char *s;
@@ -758,8 +758,8 @@ static int parse_pct(cursor_t *c, int *out, int sign) {   /* [-]1-3 digits; a 4t
 
 /* Merges the given members into *d. 0 ok, -1 not an object of those keys (each at most once). */
 static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *d) {
-    static const char *const KEYS[5] = {"auto", "prox_wake", "min", "max", "offset"};
-    uint8_t *dst[5] = {&d->auto_on, &d->prox_wake, &d->min_pct, &d->max_pct, (uint8_t *)&d->offset};
+    static const char *const KEYS[6] = {"auto", "prox_wake", "min", "max", "offset", "motion_wake"};
+    uint8_t *dst[6] = {&d->auto_on, &d->prox_wake, &d->min_pct, &d->max_pct, (uint8_t *)&d->offset, &d->motion_wake};
     cursor_t c = {body, body + body_len};
     int seen = 0;
     if (expect(&c, '{') != 0) return -1;
@@ -770,8 +770,9 @@ static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *
         size_t klen;
         int i, v;
         if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
-        for (i = 0; i < 5 && strcmp(key, KEYS[i]) != 0; i++) {}
-        if (i == 5 || (seen & (1 << i)) || (i < 2 ? parse_bool(&c, &v) : parse_pct(&c, &v, i == 4)) != 0) return -1;
+        for (i = 0; i < 6 && strcmp(key, KEYS[i]) != 0; i++) {}
+        if (i == 6 || (seen & (1 << i)) || (i < 2 || i == 5 ? parse_bool(&c, &v) : parse_pct(&c, &v, i == 4)) != 0)
+            return -1;
         seen |= 1 << i;
         *dst[i] = (uint8_t)(int8_t)v;
         skip_ws(&c);

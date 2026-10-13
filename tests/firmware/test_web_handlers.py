@@ -227,7 +227,7 @@ def test_api_state_shape(web_cli):
     )  # no power chip on the host (R_FW_BATTERY)
     # no screen on the host: the live members null, the default settings (R_FW_DISPLAY_WAKE)
     assert body["device"]["display"] == dict(
-        dict.fromkeys(DISPLAY_KEYS), auto=True, prox_wake=True, min=8, max=100, offset=0
+        dict.fromkeys(DISPLAY_KEYS), auto=True, prox_wake=True, motion_wake=True, min=8, max=100, offset=0
     )
     assert body["device"]["control"] == {"writes": True} and set(body["device"]["control"]) == CONTROL_KEYS
     assert list(body["fn"]) == ["cooler", "roof"]  # CODEC_CHARS order, frames held only
@@ -259,8 +259,9 @@ EXPECTED_DEVICE_TAIL = (
     '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
     '"battery":{"pct":null,"mv":null,"usb":null,"charging":null,"runtime_min":null},'
     '"auto_camper":{"enabled":true,"state":"idle"},'
-    '"display":{"state":null,"lux":null,"prox":null,"brightness_pct":null,"sensor":null,"auto":true,'
-    '"prox_wake":true,"min":8,"max":100,"offset":0},"ux":{"enabled":true},"water_held":false}}'
+    '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
+    '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0},"ux":{"enabled":true},'
+    '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
     '{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61,"last_error":"auth","scan":[]}'
@@ -1621,7 +1622,33 @@ def test_display_settings_merge_persist_and_show_in_state(web_cli):
         "KV \x05",
         "KV <",
     ]  # 0 / 1 / 5 / 60 (%.*s stops at the NUL)
-    assert "LOG display: settings auto=0 prox=1 min=5 max=60 offset=0" in other
+    assert "LOG display: settings auto=0 prox=1 motion=1 min=5 max=60 offset=0" in other
+
+
+def test_display_motion_wake_switch_persists_and_shows_in_state(web_cli):
+    """``motion_wake`` (a bool, default on) lands in kv ``disp_motion`` and in ``device.display``; a
+    store without the key (firmware before it) keeps the default; ``device.display.motion`` is null
+    without a BMI270 reading (the host has none)."""
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/display", '{"motion_wake":false}'),
+            req("GET", "/api/state"),
+            b"kv disp_motion",
+        ],
+    )
+    disp = resps[1].json()["device"]["display"]
+    assert resps[0].status == 200 and disp["motion_wake"] is False and disp["prox_wake"] is True
+    assert disp["motion"] is None and "KV " in other
+    resps, _ = drive(
+        web_cli, [*(s.encode() for s in STATION), b"kvhex disp_motion 01", req("GET", "/api/state")]
+    )
+    assert resps[0].json()["device"]["display"]["motion_wake"] is True
+    resps, other = drive(
+        web_cli, [*(s.encode() for s in STATION), b"kvhex disp_motion 02", req("GET", "/api/state")]
+    )
+    assert "LOG display: stored settings out of range, using defaults" in other
 
 
 @pytest.mark.parametrize(
@@ -1632,6 +1659,9 @@ def test_display_settings_merge_persist_and_show_in_state(web_cli):
         (STATION, "POST", "", 400, "bad_json"),
         (STATION, "POST", '{"min":"10"}', 400, "bad_json"),
         (STATION, "POST", '{"auto":1}', 400, "bad_json"),
+        (STATION, "POST", '{"motion_wake":1}', 400, "bad_json"),
+        (STATION, "POST", '{"motion_wake":"true"}', 400, "bad_json"),
+        (STATION, "POST", '{"motion_wake":true,"motion_wake":false}', 400, "bad_json"),
         (STATION, "POST", '{"min":10,"min":11}', 400, "bad_json"),
         (STATION, "POST", '{"min":-1}', 400, "bad_json"),
         (STATION, "POST", '{"min":1000}', 400, "bad_json"),

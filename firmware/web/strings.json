@@ -62,6 +62,7 @@
   "scr_nolux": {"en": "no light sensor reading", "de": "kein Lichtsensor-Wert"},
   "scr_auto": {"en": "Brightness from room light", "de": "Helligkeit nach Raumlicht"},
   "scr_prox": {"en": "Wake when a hand is near", "de": "Bei Annäherung einschalten"},
+  "scr_motion": {"en": "Wake on motion", "de": "Bei Bewegung einschalten"},
   "scr_offset": {"en": "Brightness {n}", "de": "Helligkeit {n}"},
   "fw_title": {"en": "Firmware update", "de": "Firmware-Update"},
   "fw_running": {"en": "Running {sha}", "de": "Läuft: {sha}"},

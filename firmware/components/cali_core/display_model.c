@@ -175,7 +175,7 @@ static void station_footer(char dst[CALI_ROW_TEXT_MAX], const cali_batt_t *b, in
 
 void cali_display_model_init(cali_display_model_t *m) {
     memset(m, 0, sizeof *m);
-    m->lux = m->prox = -1;
+    m->lux = m->prox = m->motion = -1;
 }
 
 /* log curve: DISPLAY_LUX_LOW -> min, DISPLAY_LUX_HIGH -> max (x = the smoothed log10 lux) */
@@ -216,6 +216,30 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
             m->near_reads = 0;
         }
     }
+    if (in->acc_ok) {   /* motion = |acc - previous acc|; moving after two reads in a row above WAKE */
+        if (m->have_acc) {
+            float d[3], sq = 0;
+            for (int i = 0; i < 3; i++) d[i] = (float)(in->acc[i] - m->acc[i]), sq += d[i] * d[i];
+            m->motion = (int32_t)(sqrtf(sq) + 0.5f);
+            if (m->motion >= DISPLAY_MOTION_STILL_MG) m->last_shake_ms = now_ms;
+            if (!m->moving) {
+                m->motion_reads = m->motion > DISPLAY_MOTION_WAKE_MG ? (uint8_t)(m->motion_reads + 1) : 0;
+                if (m->motion_reads >= 2) {
+                    m->moving = 1;
+                    if (c->motion_wake) wake = 1;   /* the rising edge only: driving never pins it on */
+                }
+            } else if (now_ms - m->last_shake_ms >= DISPLAY_MOTION_REARM_MS) {
+                m->moving = 0;
+                m->motion_reads = 0;
+            }
+        }
+        memcpy(m->acc, in->acc, sizeof m->acc);
+        m->have_acc = 1;
+    } else {   /* no reading: nothing to compare the next one with */
+        m->have_acc = 0;
+        m->motion_reads = 0;
+        m->motion = -1;
+    }
     if (in->present && in->lux >= 0) {   /* EMA on log10(lux), time constant DISPLAY_LUX_TAU_MS */
         float x = log10f(in->lux > 1 ? (float)in->lux : 1.0f);
         if (!m->have_lux) {
@@ -249,6 +273,7 @@ static void wake_and_brightness(cali_display_model_t *m, uint64_t now_ms, const 
     m->cfg_sig = sig;
     out->lux = m->lux;
     out->prox = m->prox;
+    out->motion = m->motion;
     {
         uint64_t idle = now_ms - m->last_wake_ms;
         out->state = idle < DISPLAY_DIM_AFTER_MS ? CALI_DISP_ON : idle < DISPLAY_OFF_AFTER_MS ? CALI_DISP_DIM : CALI_DISP_OFF;
