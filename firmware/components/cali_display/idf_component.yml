@@ -1,5 +1,10 @@
 ## ESP-IDF component manager manifest for cali_display (#154 status display).
 ## Exact pin: the newest espressif/m5stack_core_s3 the registry serves for ESP-IDF v6.1 on 2026-10-01
 ## (kws-de runs 2.0.1 on IDF 5.5). It brings esp_lvgl_port + LVGL 9.
+## esp_lvgl_port + esp_lcd_touch (#346): display.c reads the touch controller itself through the
+## port's private touch context (its first member is the handle) — pinned to the versions that
+## layout was read from; a bump means re-reading src/lvgl9/esp_lvgl_port_touch.c.
 dependencies:
   espressif/m5stack_core_s3: "==4.1.0"
+  espressif/esp_lvgl_port: "==2.9.0"
+  espressif/esp_lcd_touch: "==1.2.1"
