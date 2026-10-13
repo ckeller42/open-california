@@ -852,7 +852,7 @@ The CoreS3 screen is dark when nobody uses it (spec `docs/superpowers/specs/2026
 
 ## Battery (`R_FW_BATTERY`)
 
-The CoreS3 has a 500 mAh cell. **Measured 2026-10-13** (fw dee17ae–31156dc, WiFi + BLE link up, no CPU
+The {term}`CoreS3` has a 500 mAh cell. **Measured 2026-10-13** (fw dee17ae–31156dc, WiFi + BLE link up, no CPU
 power management): ~0.33 %/min (~100 mA), about 5 h from full, with the screen dim or off alike —
 WiFi + BLE dominate. Since then the CPU idles at 40 MHz (`CONFIG_PM_DFS_INIT_AUTO`); re-measure. Older estimate: ~2–2.5 h with the screen on, ~4–5 h
 with it off. The AXP2101 power chip (I2C `0x34`, the board package's bus) is read every 10 s by
