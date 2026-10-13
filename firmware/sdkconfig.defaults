@@ -136,3 +136,12 @@ CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
 CONFIG_ESP_WIFI_RX_BA_WIN=6
 CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+
+# Battery (R_FW_BATTERY): dynamic frequency scaling. Startup calls esp_pm_configure with max =
+# ESP_DEFAULT_CPU_FREQ_MHZ, min = XTAL (40 MHz); WiFi, BT, SPI (LCD, SD) and I2C hold PM locks while
+# they work, so the CPU idles at 40 MHz the ~92 % it does nothing (cpu_pct 5-8). The backlight is the
+# AXP2101's DLDO voltage, not an LEDC PWM, so the APB change cannot flicker it. No light sleep yet
+# (FREERTOS_USE_TICKLESS_IDLE): with BLE connected the controller needs the main XTAL powered, and the
+# 200 ms display/sensor ticks would keep waking it — measure DFS first (drain %/min unplugged).
+CONFIG_PM_ENABLE=y
+CONFIG_PM_DFS_INIT_AUTO=y
