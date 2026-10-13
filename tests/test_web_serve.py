@@ -1972,6 +1972,70 @@ def test_wakeup_edit_still_unknown_after_the_pull_is_refused_not_written(monkeyp
     assert writes == [control.LIGHT_REQUEST_CONFIG.hex()]  # only the pull
 
 
+def _unit_a_server(monkeypatch):
+    """A daemon bonded to unit A with A's wake-up config (ON, 06:00) latched and persisted."""
+    s, writes = _light_server(monkeypatch, [])
+    s.dev.addr = "11:11:11:11:11:11"
+    s._last["lighting"].update(WakeupTimestamp=6 * 3600, WakeupLightValue=0x1301)
+    s._save_last()
+
+    class FakeRunner:
+        on_bonded = None
+
+        async def reset(self):
+            pass
+
+        def snapshot(self):
+            return {"state": "idle", "attempts": 0, "error": None, "address": None}
+
+    s._pairing = FakeRunner()
+    return s, writes
+
+
+def _wakeup_edit(s):
+    async def read_one(func):  # unit B's own lighting state: lamps only, no config reported yet
+        return bytes.fromhex(_light_hex(Mode=4, ProfileNumber=9))
+
+    s._sessions._session.read_one = read_one
+
+    async def _run():
+        s._ble = asyncio.Lock()
+        return await s.on_command("lighting", "wakeup", "07:00")
+
+    return asyncio.run(_run())
+
+
+def test_unpair_then_pair_another_unit_forgets_the_old_units_config(monkeypatch):
+    """#254: unit A's latched config must not gate (or ride along on) writes to unit B. Unpair, pair
+    B (which has not reported any config): a wake-up edit pulls REQUEST_CONFIG and is refused —
+    never written with A's enabled bit — and the persisted state file no longer holds A's state.
+
+    .. test:: Unpair / a new bond forgets the previous unit's cached state
+       :id: T_SERVE_UNIT_CHANGE_FORGETS
+       :links: R_SERVE_UNIT_CHANGE_FORGETS, R_LIGHT_CONFIG_LATCH, R_LIGHT_CONFIG_PULL
+    """
+    s, writes = _unit_a_server(monkeypatch)
+    asyncio.run(s.pairing_command("reset", None))
+    s._on_pairing_bonded("22:22:22:22:22:22")
+    assert _wakeup_edit(s) is None
+    assert writes == [control.LIGHT_REQUEST_CONFIG.hex()]  # the pull only, no edit with A's config
+    import json
+
+    with open(s._state_cache) as f:
+        assert "lighting" not in json.load(f)["last"]
+
+
+def test_bonding_a_different_unit_without_unpair_forgets_the_old_state(monkeypatch):
+    """A bond to a NEW identity clears the cache even without an explicit unpair; re-bonding the SAME
+    unit keeps it (its config is still that unit's)."""
+    s, writes = _unit_a_server(monkeypatch)
+    s._on_pairing_bonded("11:11:11:11:11:11")
+    assert s._last["lighting"]["WakeupTimestamp"] == 6 * 3600
+    s._on_pairing_bonded("22:22:22:22:22:22")
+    assert s._last == {}
+    assert _wakeup_edit(s) is None and writes == [control.LIGHT_REQUEST_CONFIG.hex()]
+
+
 def test_a_save_ack_does_not_make_the_favourite_the_active_profile(monkeypatch):
     """Only an activate sets the active profile; the save ack (Mode 4 / PN N) must not — nor the door
     (Mode 16 / PN 8) or wake-up (Mode 20 / PN 14) config echoes."""

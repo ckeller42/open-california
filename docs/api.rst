@@ -18,6 +18,7 @@ Daemon state
 
 .. automethod:: calictl.serve.Server._save_last
 .. automethod:: calictl.serve.Server._pull_lighting_config
+.. automethod:: calictl.serve.Server._forget_unit_state
 .. automethod:: calictl.serve.Server._poll_nap
 .. autofunction:: calictl.serve.interpret_frames
 .. autofunction:: calictl.serve.guard_water
@@ -66,6 +67,7 @@ Control frames
 .. autofunction:: tests.test_web_serve.test_wakeup_write_is_not_latched_only_the_units_own_frames_are
 .. autofunction:: tests.test_web_serve.test_a_pushed_unit_frame_latches_the_lighting_config
 .. autofunction:: tests.test_web_serve.test_wakeup_edit_pulls_the_config_with_request_config_then_proceeds
+.. autofunction:: tests.test_web_serve.test_unpair_then_pair_another_unit_forgets_the_old_units_config
 .. autofunction:: tests.test_web_serve.test_poll_door_contact_echo_keeps_the_active_profile
 .. autofunction:: tests.test_web_serve.test_confirm_waits_past_the_rising_zones_first_frame
 .. autofunction:: tests.e2e.test_gui.test_favourite_save_is_not_an_activation
