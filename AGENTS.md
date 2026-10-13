@@ -19,9 +19,9 @@ semantics → sinks). This file is the agent-facing rules + operational state; i
 | `tests/` | pytest; **must stay green**. `tests/e2e/` = Playwright over the mock daemon; every test fails on an uncaught JS error. `tests/realstack/` = the real-BlueZ pairing rig (CI VM only, not collected by pytest) |
 | `docs/business-logic/` | RE notes (control recipes, feature gating, the write gate, signal catalog + scales) — the full provenance behind the terse "Known state" below |
 | `docs/superpowers/` | specs + plans — **local-only** (gitignored, not in the repo); docs that cite a spec there point at an untracked file |
-| `ui/` | machine-usable GUI specs (`screens/*.yaml`) + `prototype.html` (an **RE spec preview**, not the served UI) — **authoritative for app UI semantics**. Icons are VW/partner copyright: **not committed** (gitignored `ui/assets/svg/`); they are regenerated locally from the APK with a `vd2svg.py` converter that is itself **not in the repo** (`ui/assets/` is untracked); `build_prototype.py` falls back to neutral placeholders without them. |
+| `ui/` | GUI specs (`screens/*.yaml`) — **authoritative for app UI semantics** — + `prototype.html` (an RE preview, not the served UI). VW icons are **never committed** (`ui/assets/` untracked; placeholders without them). |
 | `calictl/deploy/` | systemd unit, Mosquitto + HA compose, Grafana dashboard, `push_dashboard.py` |
-| `firmware/` | ESP32-S3 satellite (#154, WIP; controls cooler/camping/lighting/air heater/energy — no roof; the wake-up light with the page's clock `local_now` + the unit's latched config (`R_FW_WAKEUP`), writes only in station mode, one write allow-list `R_FW_WRITE_ALLOWLIST`; bench CoreS3 + mock unit (2026-10-07); **bonded to and running against the real unit since 2026-10-08**, holds its link while parked since #279): `cali_core` (pairing SM/runner/session/console + `control` = C twin of `calictl.control` held to `tests/vectors/control.json` + `control_run` sequencer, WiFi SM/runner, HTTP core, captive DNS, web endpoints incl. `POST /api/command` and calictl's pairing wizard `GET/POST /api/pairing` (`R_FW_PAIRING_WIZARD`, also over the setup hotspot via `GET /app`) — platform-free C) + `cali_ble_nimble` (NimBLE transport) + `platform` (NVS/host kv store, `cali_net` = `net_host.c` fake WiFi / `net_esp.c` esp_wifi+lwIP+mdns) + `web/` (status page: edit `index.html`+`page.js`+`strings.json`, `gen_c_dict` renders `index_gen.html`/`strings_gen.h`) + `host`/`qemu`/`main` builds (two 3 MB OTA slots; on-request update from the `esp-latest` GitHub release, `R_FW_OTA`; NVS boot counter + SNTP/unit clock `device.time`, `R_FW_TIME`; JSONL frame log on the microSD `device.sd`, `R_FW_SD_LOG`; `device.res` heap/PSRAM/CPU — no power measurement, the AXP2101 has no current ADC; auto camper = calictl's restore-after-park as a C twin, on by default, `R_FW_AUTO_CAMPER`; the screen wakes on tap / hand near (LTR-553) / a red-amber row, dims, goes off, brightness from the room light, `device.display` + `POST /api/display`, `R_FW_DISPLAY_WAKE`); see `docs/firmware.md`, owner how-tos `docs/howto-esp-wifi-setup.md` + `docs/howto-esp-standalone.md` |
+| `firmware/` | ESP32-S3 satellite (#154): `cali_core` (platform-free C: pairing, session, `control` twin of `calictl.control`, WiFi, HTTP, web endpoints), `cali_ble_nimble`, `platform`, `web/` (edit `index.html`/`page.js`/`strings.json`; `gen_c_dict` renders the rest), `host`/`qemu`/`main` builds. No roof. Features + requirements: `docs/firmware.md` |
 
 ## Hard rules (don't break these)
 
@@ -140,113 +140,46 @@ never open a 2nd BLE connection from buspi (the unit itself serves several centr
 buspi's own adapter). Warm the fast session first with `POST /api/session {"action":"connect"}`
 (auto-releases after ~25 s idle).
 
-## Known state (operational takeaways — full provenance in `docs/business-logic/` + `evidence-ledger.md`)
+## Known state (operational takeaways — provenance in `docs/business-logic/` + `evidence-ledger.md`)
 
-- **Control writes WORK** (issue #2, 2026-07-07): armed by a **+1 4-byte-BE liveness heartbeat on
-  char `1003`** (~0.6 s). One-shot arm — the load latches, so the heartbeat only spans the write
-  window (`device.actuate`, under the `serve` lock). Live-verified on-device: **cooler**, **campingmode** (master/lights/usb), **lighting** (per-zone
-  brightness), **air heater** (start/level/runtime/timer arm+cancel, 2026-10-11 — the first
-  calictl-driven heater run; the roof is still never driven). **CAPTURE 2026-10-10:** the real app's frames on the real unit are byte-identical to
-  `control.build` for every non-motor control exercised (cooler power/level/quiet/timer incl. the
-  `State=3` frames, lighting, camping) — the app adds a neutral re-write (`ff771e3e1f1f` / `ff`) 500 ms
-  later, which the unit ignores; calictl doesn't send it.
-- **Lighting** actuates on an **awake** unit with a bare `SET_BRIGHTNESS` + `0e00…` commit — no
-  REQUEST_CONFIG preamble, no 1003 heartbeat, no delay (the wake state is the gate, not any arming
-  frame; the app's screen-open REQUEST_CONFIG pull is NOT required for actuation — calictl sends it only to
-  read the wake-up/door/favourite config before a wake-up edit whose config is unknown, R5).
-  Brightness is the **0-11 enum** (0=OFF, 1-10 = 10–100 %, 11=DEFAULT; 13=NOT_EQUIPPED read-only,
-  14=leave-unchanged; `LIGHT_ON_BRIGHTNESS=10`, slider max 10). The `1502` **Mode-4 notification** is a
-  decodable state frame carrying the real ramping brightness — the truthful feedback channel; the
-  state-char **readback is a write-through echo, never proof of actuation**. `set lighting color` is
-  **retired**; the app's lighting commands calictl builds are `power`, zones, `profile`,
-  `save_profile N [colour]` (colour = SET_COLOR preface, DECOMPILE-only; the app's colour UI is
-  model-gated), `wakeup`, `door_contact`. All of them except the colour preface are
-  app-recorded byte-exact (zones, save, `profile` activate, wake-up time + on/off, `door_contact`). Wake-up /
-  door / favourite config is latched **only** from the unit's own 1502 Mode-20 / Mode-16-PN-8 / Mode-12
-  frames, never from calictl's write. Extend via `control.BUILDERS`. See `control-and-actuation.md`.
-- **Roof** (needs ignition ON): press-and-hold — stream move frames while held, STOP/cease on release
-  (no confirmation phase). Direction bytes match the app (open `0x01`/stop `0x00`/close `0x04`). The
-  **SafetyCounter is app-generated** (monotonic BE-uint32, +1 per 500 ms tick), NOT echoed; the unit
-  withholds the motor ~3 s after a FRESH counter validates (`1402` bit 7). **Roof view = the app's roof
-  screen** (owner 2026-10-10, CAPTURE 2026-10-10, `R_ROOF_VIEW_STREAM`): while the web UI's roof page is
-  open (`POST /api/roof` `view`, refreshed ~5 s, lapses after 15 s, `leave` ends a held move) the
-  persistent session streams STOP frames (`device.RoofStream`); a press switches the SAME stream to the
-  move byte, repeating the current counter, so no withhold; release → STOP. A press without a view
-  (API/CLI/HA) starts its own stream (fresh counter, ~3 s withhold). `actuate_roof` is protocol-correct but
-  **has NEVER driven a real motor**. App-faithful arm: the **1003 heartbeat ticks during the move**
-  (the app's is session-global, decompile + `roof-hold` recording, #235) and the counter streams
-  IMMEDIATELY — NO `ARM_DELAY_S` pre-arm (#150: a gap would make the unit see a fresh counter and
-  withhold the motor another ~3 s). The real app's heartbeat-through-the-move is CAPTURE-confirmed on the
-  unit (2026-10-10); calictl's own roof path is not yet device-verified (#157/#230).
-  GUI is press-and-hold (release → STOP via lock-free `_roof_stop`, a fresh token per press made
-  before the `_ble` wait, so an early release cancels a queued press); a re-press within 1000 ms is
-  debounced (without a view it would restart the counter → another ~3 s withhold). `actuate_roof` polls
-  `1402` ~1 Hz and auto-stops at end of travel (`InfoPopUp` 8, `2308`, as the app) or the limit Position
-  (open `1` / closed `0`/`14`; `control.roof_limit_positions`)
-  — best-effort over the unit's own limit switches. **A roof move/STOP runs inside a live persistent
-  session** (`PersistentSession.actuate_roof`, its heartbeat ticking — no second connection; the unit
-  does accept several centrals, 2026-10-10); with none up it opens its own connection, heartbeat on. A roof command never warms
-  the session first (no keep-warm nudge, no `CALICTL_SESSION_WAIT_S` wait). See
-  `protocol-alignment.md` + `protocol-sequences`.
-- **Reads go stale + the unit deep-sleeps.** The 1003 heartbeat runs during reads/writes (`device.read_all`/
-  `read` do) to arm writes and refresh the re-read chars — it is NOT what keeps the link up (a held
-  link without heartbeats stayed up >2 min, 2026-10-10). It does
-  NOT refresh water: water is measurement-gated (the unit measures only while its water system is
-  powered), so a parked read may return the stale latch **FreshWaterLevel = 1**. `freshness.implausible_water_drop`
-  (and its C twins in `csrc/ports.c` + the ESP's `session.c`) holds the last good reading ONLY for a drop to
-  ≤ 1 L with grey exactly unchanged (#274; grey reads 0 on every frame on this van, so the old
-  "any drop with grey frozen" rule held real readings for weeks). The real app has NO water filter (5.0.8 +
-  5.4.0: shows every 1302 frame literally, reads once at connect); our guard is a deliberate deviation.
-  Every poll reads 1302 after subscribing and the last frame wins (`R_READ_LAST_FRAME_WINS`). Parked, the
-  unit deep-sleeps and stops advertising — buspi can't connect for days until physical use wakes it, so
-  access is **inherently intermittent**: `serve` persists last-state + an "as of" timestamp, and the
-  web UI shows an offline banner. See `value-freshness.md`.
-- **`vehicle` (char 1004):** ignition (terminal-15 is **bit 7**, not 0 — was a decode bug), car
-  variant, unit RTC, 2-axis roll/pitch leveling. **Hand-added to `dictionary.yaml` — NOT emitted by
-  `extract_protocol`, so preserve it on regen.** Leveling reads only while ignition is on: with ignition off `level_roll`/`level_pitch` are `None`
-  (the unit sends 0/0; the app shows "-.-°", #282). The unit clock (`CarTime*`) is NOT
-  ignition-gated: present with ignition on and off, 3–5 s behind NTP, but sometimes all-zero (day 0
-  → `car_clock` `None`) for hours while parked, cause unknown (buspi trace 2026-09-16…10-11,
-  `evidence-ledger.md`). (`general` is char 1001.)
-- **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar (semantics
-  static-verified against the app's getters — no live check possible here). The pop-top **roof IS
-  installed** (`roof.Installed=1`, #106) but its motor has never been driven by calictl.
-- **buspi:** `sudo` needs the Pi password; `serve` runs under `~/solix-env` (the installed unit
-  adds `--web 8088` through a `systemctl edit` drop-in, not the committed template); secrets in
-  `/etc/buspi/*.env` (root 0600). A parked unit is unreachable (deep-sleep, above). The web UI can
-  optionally be fronted by HTTPS on the tailnet via `tailscale serve` (tailnet-only, never
-  `funnel`) — see the `buspi-deploy` skill + `docs/raspberry-pi-setup.md` "Remote access over
-  Tailscale".
-- **The unit accepts several centrals at once** (CAPTURE 2026-10-10: the phone app, buspi and the ESP
-  connected simultaneously; the app held an idle heartbeat-only link 46 min while parked). On every
-  connect **the unit sends the central an ATT Exchange MTU Request** (Client RX MTU 247) and terminates
-  the link (HCI `0x13`) if it is unanswered for 30 s — BlueZ/Android answer it; the ESP needs NimBLE's
-  GATT server (`CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y` + `GATT_SERVER=y`, #279, guarded by
-  `test_sdkconfig_gatt_server.py`) or it is "kicked" every ~30 s. "`serve` is the single BLE owner"
-  is about buspi's own `hci0`, not a unit slot.
-- **ESP standalone (no buspi in the path, spec `2026-10-11-esp-standalone-design`):** OTA from the
-  `esp-latest` release **live-verified on the board 2026-10-11** (install of a newer build AND
-  `ota invalid` → rollback to the previous slot); SNTP synced on the board (`device.time` `sntp`);
-  SD log `ok` on a 32 GB card (`device.sd`). Own 5 V USB-C supply; power draw is unmeasurable from
-  the ESP (AXP2101 has no current ADC). HTTPS: the router's `tailscale serve` →
-  `https://busnet.tail0e7f29.ts.net:8443/` (tailnet-only, buspi-config #83), LAN fallback
-  `http://192.168.8.183`. buspi's gap-fill collector `esp-ingest` = #320 (merged). Owner how-to:
-  `docs/howto-esp-standalone.md`.
-- **App versions:** the owner's phone runs CaliforniaOnTour **5.4.0.3036**; decompile + mapping exist for
-  5.4.0 and 5.0.8.3028 (private repo `ckeller42/californiaontour-re`, skill `decompile-app`). For this
-  van (CommunicationVersion 2) 5.4.0's protocol is unchanged; 5.4.0 adds a V3 layer (chars `1603`,
-  `F002`, V3 1602/F001 layouts) calictl must never write to a V2 unit. Real-phone data collection:
-  skill `phone-app-lab` (wireless adb from buspi, HCI snoop, never actuate without the owner's request). Turning a
-  recording into a documented fact (tier, scoped claim, docs, mock): skill `real-unit-evidence`.
-- **Pairing needs a quiet radio:** any BlueZ client holding discovery (calictl unpaired polls —
-  now guarded, readers, HA Bluetooth) kills a new LE link with 0x3e; the unit advertises a
-  rotating address, only the bonded identity is stable. See `guided-pairing.md`.
-- **Guided pairing (#201):** the wizard (`POST /api/pairing`, owner guide `docs/howto-pair-your-camper.md`)
-  probes an existing bond first and **keeps a working one**; it drops a bond only on proof it is stale
-  (auth-class failure, or link up but the auth read timed out), then re-discovers and re-pairs
-  (`pairing.json` kept). Unreachable/asleep unit = `connect_failed` (bounded retries, 20 s CONNECTING
-  budget), never a bond drop; `radio_busy` flags another client holding discovery. CI-verified against
-  real BlueZ in a VM (`pairing-real-stack`), **not yet live-verified at the van** (#157).
+- **Control writes are armed by the `1003` heartbeat** (+1 4-byte BE, ~0.6 s; issue #2). One-shot: the
+  load latches, so it only spans the write window (`device.actuate`, under the `serve` lock). Device-verified:
+  cooler, campingmode, lighting, air heater. calictl's frames are byte-identical to the real app's
+  (CAPTURE 2026-10-10). See `control-and-actuation.md`.
+- **Lighting** actuates on an awake unit with a bare `SET_BRIGHTNESS` + `0e00…` commit (no preamble, no
+  heartbeat). Brightness is the 0–11 enum (0 OFF, 1–10, 11 DEFAULT; 13 NOT_EQUIPPED, 14 leave-unchanged).
+  **The state-char readback is a write-through echo, never proof**; the `1502` Mode-4 notification is the
+  truthful feedback. Wake-up/door/favourite config is latched only from the unit's own frames. Extend via
+  `control.BUILDERS`.
+- **Roof** (ignition ON, press-and-hold): **calictl has NEVER driven the real motor** (#157/#230). The
+  SafetyCounter is app-generated (+1 per 500 ms); a fresh counter gets a ~3 s motor withhold. The 1003
+  heartbeat ticks through the move, no `ARM_DELAY_S`. The web roof page streams STOP frames while open so a
+  press reuses the counter. Release → lock-free `_roof_stop`; 1000 ms re-press debounce; auto-stop at end of
+  travel/limit. See `protocol-alignment.md` + `protocol-sequences`.
+- **Reads go stale; the parked unit deep-sleeps** and stops advertising (access is intermittent; `serve`
+  persists last-state + "as of", the UI shows an offline banner). Water is measurement-gated: a parked read
+  may return the stale latch FreshWaterLevel = 1, which `freshness.implausible_water_drop` (+ C twins) holds
+  back (#274) — a deliberate deviation from the app. See `value-freshness.md`.
+- **`vehicle` (char 1004)** is **hand-added to `dictionary.yaml`, NOT emitted by `extract_protocol` —
+  preserve it on regen.** Ignition = bit 7. Leveling is `None` with ignition off; the unit clock is not
+  ignition-gated but sometimes all-zero while parked.
+- **Not installed on this van:** stairs, living-room heater, roof-A/C, satellite, solar. The pop-top roof
+  IS installed.
+- **The unit accepts several centrals at once** (phone + buspi + ESP). It sends every central an ATT MTU
+  request and drops it after 30 s unanswered — the ESP needs NimBLE's GATT server (#279). "`serve` is the
+  single BLE owner" is about buspi's `hci0`.
+- **buspi:** `serve` runs under `~/solix-env`; the installed unit adds `--web 8088` via a drop-in; secrets in
+  `/etc/buspi/*.env` (root 0600); optional tailnet HTTPS via `tailscale serve`, never `funnel` (skill
+  `buspi-deploy`).
+- **ESP standalone:** OTA from the `esp-latest` release, SNTP, SD log; LAN `http://192.168.8.183`; buspi's
+  `esp-ingest` fills gaps. See `docs/firmware.md` + `docs/howto-esp-standalone.md`.
+- **App:** the owner runs CaliforniaOnTour 5.4.0.3036 (decompile in the private `californiaontour-re`,
+  skill `decompile-app`). This van is CommunicationVersion 2 — never write 5.4.0's V3 chars (`1603`, `F002`).
+  Real-phone captures: skill `phone-app-lab` (never actuate without the owner's request); turning one into a
+  fact: skill `real-unit-evidence`.
+- **Pairing needs a quiet radio** (a BlueZ client holding discovery kills a new link with 0x3e). The wizard
+  (`POST /api/pairing`) keeps a working bond and drops one only on proof it is stale; not yet verified at
+  the van. See `guided-pairing.md` + `docs/howto-pair-your-camper.md`.
 
 ## Documentation (sphinx + sphinx-needs)
 
