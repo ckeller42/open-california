@@ -54,10 +54,12 @@ const char *cali_fw_version(void);
 
 /* Dynamic frequency scaling of the CPU (esp: esp_pm; host and a build without CONFIG_PM_ENABLE:
  * none). on = 1 / 0 sets the PM config to max = the build's CPU clock, min = XTAL (on) or max (off);
- * on < 0 only reads. Then the live config: returns 1 (min < max: DFS active), 0 (fixed), -1 (no PM;
- * pm untouched) and, when pm is given, "<min>-<max>" MHz into it (cap bytes). Not persisted: a boot
- * starts at the sdkconfig default. ponytail: #346 debug knob (A/B the touch NACKs without a rebuild);
- * drop once the cause is settled. */
+ * on < 0 only reads. Then the live config: returns 1 (min < max: DFS active), 0 (fixed), -1 (PM exists
+ * but the config could not be read; pm untouched), CALI_PM_NONE (no PM at all: host, a build without
+ * CONFIG_PM_ENABLE; pm untouched) and, when pm is given, "<min>-<max>" MHz into it (cap bytes). Not
+ * persisted: a boot starts at the sdkconfig default. ponytail: #346 debug knob (A/B the touch NACKs
+ * without a rebuild); drop once the cause is settled. */
+#define CALI_PM_NONE (-2)
 int cali_pm_dfs(int on, char *pm, size_t cap);
 
 /* host: store_dir is the directory for the kv files (created if missing; NULL = "."); esp: ignored

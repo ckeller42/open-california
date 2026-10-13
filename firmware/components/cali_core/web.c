@@ -48,6 +48,7 @@ static const char ERR_JSON[] = "{\"ok\":false,\"error\":\"json\"}";
 static const char ERR_SSID[] = "{\"ok\":false,\"error\":\"ssid\"}";
 static const char ERR_PSK[] = "{\"ok\":false,\"error\":\"psk\"}";
 static const char ERR_STORE[] = "{\"ok\":false,\"error\":\"store\"}";
+static const char ERR_PM[] = "{\"ok\":false,\"error\":\"pm\"}";   /* #346 knob: DFS did not apply */
 static const char ERR_METHOD[] = "{\"ok\":false,\"error\":\"method\"}";
 static const char ERR_BAD_JSON[] = "{\"ok\":false,\"error\":\"bad_json\"}";
 static const char ERR_MISSING[] = "{\"ok\":false,\"error\":\"missing_function_or_what\"}";
@@ -756,9 +757,10 @@ static int parse_pct(cursor_t *c, int *out, int sign) {   /* [-]1-3 digits; a 4t
     return c->p == s ? -1 : 0;
 }
 
-/* Merges the given members into *d; "dfs" (a bool, not a setting) into *dfs (-1 when absent).
+/* Merges the given members into *d; "dfs" (a bool, not a setting) into *dfs (-1 when absent);
+ * *only_dfs = the body held nothing but "dfs" (then there is no setting to store).
  * 0 ok, -1 not an object of those keys (each at most once). */
-static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *d, int *dfs) {
+static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *d, int *dfs, int *only_dfs) {
     static const char *const KEYS[7] = {"auto", "prox_wake", "min", "max", "offset", "motion_wake", "dfs"};
     uint8_t *dst[6] = {&d->auto_on, &d->prox_wake, &d->min_pct, &d->max_pct, (uint8_t *)&d->offset, &d->motion_wake};
     cursor_t c = {body, body + body_len};
@@ -784,26 +786,28 @@ static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *
         break;
     }
     skip_ws(&c);
+    *only_dfs = seen == 1 << 6;
     return c.p == c.end ? 0 : -1;
 }
 
 static void api_display(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_display_cfg_t d = *cali_display_cfg();
-    int rc, dfs = -1;
+    int rc, dfs = -1, only_dfs = 0, pm;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (parse_display(req->body, req->body_len, &d, &dfs) != 0) {
+    } else if (parse_display(req->body, req->body_len, &d, &dfs, &only_dfs) != 0) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
-    } else if ((rc = cali_display_cfg_set(&d)) == -1) {
+    } else if ((rc = only_dfs ? 0 : cali_display_cfg_set(&d)) == -1) {   /* dfs alone: nothing to store */
         SET_CONST(resp, 400, ERR_BAD_VALUE);
     } else if (rc != 0) {
         SET_CONST(resp, 500, ERR_STORE);
-    } else {
+    } else if (dfs >= 0 && (pm = cali_pm_dfs(dfs, NULL, 0)) != CALI_PM_NONE && pm != dfs) {
         /* ponytail: #346 debug knob — DFS on/off at runtime, not persisted (a boot = sdkconfig);
          * device.display.dfs / pm show the live result (null where there is no PM). Drop with #346. */
-        if (dfs >= 0) (void)cali_pm_dfs(dfs, NULL, 0);
+        SET_CONST(resp, 500, ERR_PM);   /* PM exists but the config did not take (or cannot be read) */
+    } else {
         SET_CONST(resp, 200, OK_BODY);   /* the new settings: /api/state device.display */
     }
 }

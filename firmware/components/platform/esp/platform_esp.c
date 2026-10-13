@@ -63,7 +63,7 @@ int cali_pm_dfs(int on, char *pm, size_t cap) {
     (void)on;
     (void)pm;
     (void)cap;
-    return -1;
+    return CALI_PM_NONE;
 #endif
 }
 

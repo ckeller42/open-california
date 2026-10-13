@@ -197,7 +197,7 @@ int cali_pm_dfs(int on, char *pm, size_t cap) {   /* no PM, as the host: device.
     (void)pm;
     (void)cap;
     if (on >= 0) printf("CALL pm_dfs %d\n", on);
-    return -1;
+    return CALI_PM_NONE;
 }
 void cali_log(const char *fmt, ...) {
     va_list ap;

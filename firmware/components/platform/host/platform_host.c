@@ -174,7 +174,7 @@ int cali_pm_dfs(int on, char *pm, size_t cap) {   /* no PM on the host: device.d
     (void)on;
     (void)pm;
     (void)cap;
-    return -1;
+    return CALI_PM_NONE;
 }
 
 int cali_kv_erase_all(void) {

@@ -144,7 +144,9 @@ static uint32_t s_bus_done_ms;
 /* The last failure's context, written by the LVGL task before the count's release-add; the owner
  * reads it after the acquire-load. ponytail: a read torn between two back-to-back failures mixes two
  * real contexts; a seqlock if that ever misleads. */
-static struct { int mhz, usb, chg, scr, bus, pmode; long bus_ms; } s_touch_ctx;
+struct touch_ctx { int mhz, usb, chg, scr, bus, pmode; long bus_ms; };
+static struct touch_ctx s_touch_ctx;                      /* LVGL task writes, owner task reads: s_touch_mux */
+static portMUX_TYPE s_touch_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static lv_obj_t *box(lv_obj_t *parent, int x, int y, int w, int h, uint32_t rgb) {
     lv_obj_t *o = lv_obj_create(parent);
@@ -238,16 +240,20 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
         if (e == ESP_OK) e = esp_lcd_touch_get_data(s_tp, p, &n, CONFIG_ESP_LCD_TOUCH_MAX_POINTS);
         if (e != ESP_OK) {
             uint8_t pm = 0;
+            struct touch_ctx ctx;
             n = 0;
-            s_touch_ctx.mhz = esp_clk_cpu_freq() / 1000000;   /* right after the failed call: DFS state then */
-            s_touch_ctx.pmode = esp_lcd_panel_io_rx_param(s_tp->io, FT_PMODE, &pm, 1) == ESP_OK ? pm : -1;
-            s_touch_ctx.usb = __atomic_load_n(&s_batt_usb, __ATOMIC_RELAXED);
-            s_touch_ctx.chg = __atomic_load_n(&s_batt_chg, __ATOMIC_RELAXED);
-            s_touch_ctx.scr = __atomic_load_n(&s_scr, __ATOMIC_RELAXED);
-            s_touch_ctx.bus = __atomic_load_n(&s_bus, __ATOMIC_RELAXED);
-            s_touch_ctx.bus_ms = s_touch_ctx.bus == BUS_NONE
-                                     ? -1
-                                     : (long)(uint32_t)((uint32_t)cali_uptime_ms() - __atomic_load_n(&s_bus_done_ms, __ATOMIC_RELAXED));
+            ctx.mhz = esp_clk_cpu_freq() / 1000000;   /* right after the failed call: DFS state then */
+            ctx.pmode = esp_lcd_panel_io_rx_param(s_tp->io, FT_PMODE, &pm, 1) == ESP_OK ? pm : -1;
+            ctx.usb = __atomic_load_n(&s_batt_usb, __ATOMIC_RELAXED);
+            ctx.chg = __atomic_load_n(&s_batt_chg, __ATOMIC_RELAXED);
+            ctx.scr = __atomic_load_n(&s_scr, __ATOMIC_RELAXED);
+            ctx.bus = __atomic_load_n(&s_bus, __ATOMIC_RELAXED);
+            ctx.bus_ms = ctx.bus == BUS_NONE
+                             ? -1
+                             : (long)(uint32_t)((uint32_t)cali_uptime_ms() - __atomic_load_n(&s_bus_done_ms, __ATOMIC_RELAXED));
+            portENTER_CRITICAL(&s_touch_mux);   /* one whole context at a time (the owner copies under the same lock) */
+            s_touch_ctx = ctx;
+            portEXIT_CRITICAL(&s_touch_mux);
             __atomic_store_n(&s_touch_err, esp_err_to_name(e), __ATOMIC_RELAXED);
             __atomic_add_fetch(&s_touch_errs, 1, __ATOMIC_RELEASE);
         }
@@ -457,10 +463,13 @@ static void paint_row(row_ui_t *r, const cali_row_t *m) {
 static void touch_errors_evt(uint64_t now_ms) {
     uint32_t n = __atomic_load_n(&s_touch_errs, __ATOMIC_ACQUIRE);
     cali_diag_touch_t t;
+    struct touch_ctx c;
     if (n == s_touch_logged || (s_touch_logged && now_ms - s_touch_log_ms < CALI_DIAG_PERIOD_MS)) return;
-    t = (cali_diag_touch_t){n, __atomic_load_n(&s_touch_err, __ATOMIC_RELAXED), s_touch_ctx.mhz, s_touch_ctx.usb,
-                            s_touch_ctx.chg, SCR_NAMES[s_touch_ctx.scr], BUS_NAMES[s_touch_ctx.bus], s_touch_ctx.bus_ms,
-                            s_touch_ctx.pmode};
+    portENTER_CRITICAL(&s_touch_mux);
+    c = s_touch_ctx;
+    portEXIT_CRITICAL(&s_touch_mux);
+    t = (cali_diag_touch_t){n, __atomic_load_n(&s_touch_err, __ATOMIC_RELAXED), c.mhz, c.usb, c.chg,
+                            SCR_NAMES[c.scr], BUS_NAMES[c.bus], c.bus_ms, c.pmode};
     if (cali_diag_touch(&t) != 0) return;
     s_touch_logged = n;
     s_touch_log_ms = now_ms;
@@ -477,7 +486,7 @@ void cali_display_tick(uint64_t now_ms) {
         s_batt_read = 1;
         s_last_batt = now_ms;
         axp_read(&b);
-        bus_mark(BUS_AXP);
+        if (s_axp) bus_mark(BUS_AXP);   /* no chip handle = no transfer attempted */
         cali_battery_update(&b, now_ms);
     }
     cali_battery_get(&in.batt);
