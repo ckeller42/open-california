@@ -82,6 +82,27 @@ int cali_diag_boot(const char *reset_reason, const char *fw, unsigned long boot,
                          cali_diag_q(f, sizeof f, fw, 40), boot, num(p, sizeof p, prev_up_s, prev_up_s >= 0));
 }
 
+const char *cali_panic_fields(const cali_panic_t *p, char *buf, size_t cap) {
+    char t[40], r[56], bt[CALI_PANIC_DEPTH * 9 + 1];
+    size_t n = 0;
+    if (p->magic != CALI_PANIC_MAGIC || p->depth > CALI_PANIC_DEPTH || p->sum != cali_panic_sum(p)) return NULL;
+    bt[0] = 0;
+    for (uint32_t i = 0; i < p->depth; i++)
+        n += (size_t)snprintf(bt + n, sizeof bt - n, "%s%08lx", i ? " " : "", (unsigned long)p->pc[i]);
+    snprintf(buf, cap, "\"task\":%s,\"reason\":%s,\"bt\":\"%s\"",
+             cali_diag_q(t, sizeof t, p->task, sizeof p->task - 1),
+             cali_diag_q(r, sizeof r, p->reason, sizeof p->reason - 1), bt);
+    return buf;
+}
+
+int cali_diag_panic(cali_panic_t *p) {
+    char f[CALI_DIAG_BODY_MAX];
+    if (!cali_panic_fields(p, f, sizeof f)) return 0;
+    if (cali_diag_evt("panic", "%s", f) != 0) return -1;
+    p->magic = 0;
+    return 1;
+}
+
 int cali_diag_due(uint64_t now_ms) {
     static uint64_t next;
     if (!next) {

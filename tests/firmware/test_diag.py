@@ -11,6 +11,13 @@ board-only.
 .. test:: Diagnostics record shapes, the 60 s cadence, BLE perf sampling, the log mirror's rate limit
    :id: T_FW_DIAG_LOG
    :links: R_FW_DIAG_LOG
+
+The panic capture's boot side (``cali_panic_fields``/``cali_diag_panic``; the ESP's
+``__wrap_esp_panic_handler`` that fills it is board-only):
+
+.. test:: A sealed panic capture becomes one evt panic record and is cleared; a corrupt one is never logged
+   :id: T_FW_PANIC_CAPTURE
+   :links: R_FW_PANIC_CAPTURE
 """
 
 import json
@@ -134,3 +141,35 @@ def test_log_mirror_keeps_warnings_and_errors_only_20_a_minute(cli):
         run(cli, *("log %d W (9) x: y" % (10 + i) for i in range(25)), "logflush 30000", "logflush 60010")
     )
     assert quiet[-1] == {"ev": "log", "dropped": 5} and len(quiet) == 21
+
+
+def test_panic_capture_logged_once_then_cleared(cli):
+    """The panic capture (R_FW_PANIC_CAPTURE, T_FW_PANIC_CAPTURE): the next boot logs it once."""
+    out = run(cli, "panic httpd LoadProhibited 4200abcd 40375f00 0", "paniclog", "paniclog")
+    assert recs(out) == [
+        {"ev": "evt", "kind": "panic", "task": "httpd", "reason": "LoadProhibited",
+         "bt": "4200abcd 40375f00 00000000"},
+    ]  # fmt: skip
+    assert out[-2:] == ["PANIC 1", "PANIC 0"]  # cleared: the next boot logs nothing
+
+
+def test_panic_capture_kept_while_the_card_is_not_ready(cli):
+    out = run(cli, "panic t r 1", "panicnosink", "paniclog")
+    assert out[0] == "PANIC -1" and out[-1] == "PANIC 1" and len(recs(out)) == 1
+
+
+@pytest.mark.parametrize("bad", ["magic", "sum", "depth"])
+def test_corrupt_panic_capture_is_omitted(cli, bad):
+    out = run(cli, "panic t r 1 2", f"panicbad {bad}", "paniclog")
+    assert out == ["PANIC 0"] and not recs(out)
+
+
+def test_panic_record_fits_at_its_longest(cli):
+    pcs = " ".join(["ffffffff"] * 20)  # cut to CALI_PANIC_DEPTH
+    task, reason = '"' * 15, "\\" * 47  # every byte escaped: the longest JSON
+    out = run(cli, f"panic {task} {reason} {pcs}", "paniclog")
+    (rec,) = recs(out)
+    assert rec["task"] == '"' * 15 and rec["reason"].startswith("\\" * 20)  # escaped, cut
+    assert out[-1] == "PANIC 1"
+    assert len(rec["bt"].split()) == 16
+    assert len(json.dumps(rec, separators=(",", ":"))) < BODY_MAX

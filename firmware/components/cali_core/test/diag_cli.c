@@ -11,6 +11,10 @@
  *   ble <hex chr> <op> <ms> <now>       cali_diag_ble
  *   log <now> <line…>            cali_diag_log ("\e" in the line = ESC)
  *   logflush <now>               cali_diag_log(now, NULL)
+ *   panic <task> <reason> <hex pc>…   seal a capture (reason: '_' -> ' ')
+ *   panicbad magic|sum|depth     corrupt the sealed capture
+ *   panicnosink                  cali_diag_panic with the sink failing ("PANIC rc"; capture kept)
+ *   paniclog                     "PANIC <rc>" = cali_diag_panic
  * stdout: "REC {<body>}" per record handed to the sink; "RC <rc>" after evt/health/boot.
  */
 #include <stdio.h>
@@ -23,6 +27,13 @@ static int sink(const char *body) {
     printf("REC {%s}\n", body);
     return 0;
 }
+
+static int sink_fail(const char *body) {
+    (void)body;
+    return -1;
+}
+
+static cali_panic_t cap;
 
 int main(void) {
     char line[512];
@@ -81,6 +92,35 @@ int main(void) {
             cali_diag_log(now, end + 1);
         } else if (strncmp(line, "logflush ", 9) == 0) {
             cali_diag_log(strtoull(line + 9, NULL, 10), NULL);
+        } else if (strncmp(line, "panic ", 6) == 0) {
+            static char tok[2][64];
+            char *p, *end;
+            memset(&cap, 0, sizeof cap);
+            if (sscanf(line + 6, "%63s %63s", tok[0], tok[1]) != 2) return 3;
+            for (p = tok[1]; *p; p++) if (*p == '_') *p = ' ';
+            strncpy(cap.task, tok[0], sizeof cap.task - 1);
+            strncpy(cap.reason, tok[1], sizeof cap.reason - 1);
+            p = strchr(strchr(line + 6, ' ') + 1, ' ');
+            while (p && cap.depth < CALI_PANIC_DEPTH) {
+                unsigned long v = strtoul(p, &end, 16);
+                if (end == p) break;
+                cap.pc[cap.depth++] = (uint32_t)v;
+                p = end;
+            }
+            cali_panic_seal(&cap);
+        } else if (strcmp(line, "panicbad magic") == 0) {
+            cap.magic ^= 1;
+        } else if (strcmp(line, "panicbad sum") == 0) {
+            cap.pc[0] ^= 1;
+        } else if (strcmp(line, "panicbad depth") == 0) {
+            cap.depth = CALI_PANIC_DEPTH + 1;
+            cap.sum = cali_panic_sum(&cap);
+        } else if (strcmp(line, "panicnosink") == 0) {
+            cali_diag_sink = sink_fail;
+            printf("PANIC %d\n", cali_diag_panic(&cap));
+            cali_diag_sink = sink;
+        } else if (strcmp(line, "paniclog") == 0) {
+            printf("PANIC %d\n", cali_diag_panic(&cap));
         } else {
             printf("ERR %s\n", line);
         }

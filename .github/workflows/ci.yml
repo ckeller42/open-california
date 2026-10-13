@@ -325,8 +325,10 @@ jobs:
           name: firmware-esp32s3
           # *.bin = cali_fw.bin + ota_data_initial.bin (otadata, R_FW_OTA: flash_ci.sh writes it)
           # + cali_fw_full.bin (the merged first-flash image; flash_ci.sh ignores it)
+          # + cali_fw.elf (symbols: an evt panic backtrace, R_FW_PANIC_CAPTURE)
           path: |
             firmware/build/*.bin
+            firmware/build/cali_fw.elf
             firmware/build/bootloader/bootloader.bin
             firmware/build/partition_table/partition-table.bin
             firmware/build/flasher_args.json
@@ -370,6 +372,7 @@ jobs:
           gh release upload esp-latest "$bin" --clobber
           gh release upload esp-latest manifest.json --clobber
           gh release upload esp-latest fw/cali_fw_full.bin --clobber   # USB first flash only; not in the manifest
+          gh release upload esp-latest fw/cali_fw.elf --clobber   # symbols for an evt panic backtrace (R_FW_PANIC_CAPTURE)
 
   # The "chip simulator" tier (#154 Task 9): the esp32s3 image boots in Espressif's QEMU (pinned by
   # the IDF: tools/tools.json, esp-develop-9.2.2-20260417, in the same container). Its own variant

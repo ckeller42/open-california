@@ -9,7 +9,7 @@
  *   {"ev":"diag","heap_free":…,"heap_min":…,"psram_free":…,"cpu_pct":…,"stack_min":{"owner":…,…},
  *    "wifi_rssi":…,"ble_rssi":…,"link_up":true,"uptime_s":…}                 (app_main, every 60 s)
  *   {"ev":"evt","kind":"<kind>",…}   boot | link_up | link_down | wifi_up | wifi_down | net | cmd |
- *                                    ota | auto_camper | sd | display (the display-wake PR:
+ *                                    ota | auto_camper | sd | panic | display (the display-wake PR:
  *                                    cali_diag_evt("display", "\"state\":\"on\",\"src\":\"tap\""))
  *   {"ev":"perf","route":"/api/state","status":200,"bytes":4711,"ms":100}   every HTTP response
  *   {"ev":"perf","char":"1602","op":"read","ms":84}                         BLE ops, sampled
@@ -71,6 +71,42 @@ int cali_diag_health(const cali_diag_health_t *h);   /* {"ev":"diag",…} */
 /* {"ev":"evt","kind":"boot","reset_reason":…,"fw":…,"boot":n,"prev_up_s":n|null}: prev_up_s = the
  * previous boot's last diag uptime (< 0: unknown, e.g. after a power-on). */
 int cali_diag_boot(const char *reset_reason, const char *fw, unsigned long boot, long prev_up_s);
+
+/* ---- panic capture (R_FW_PANIC_CAPTURE) ----
+ * The ESP's esp_panic_handler wrapper (app_main.c) fills one of these in RTC_NOINIT memory and seals
+ * it; the next boot hands it to cali_diag_panic, which logs
+ *   {"ev":"evt","kind":"panic","task":"<name>","reason":"<cut>","bt":"4200abcd 4037f00e …"}
+ * (bt = PCs, innermost first, bare hex: addr2line's own argument format) and clears it. A struct
+ * that fails the magic, depth or checksum (power-on garbage) is never logged. Only fixed-size
+ * fields, so the checksum covers bytes that are always written. */
+#define CALI_PANIC_MAGIC 0x9a71c0deu
+#define CALI_PANIC_DEPTH 16
+typedef struct {
+    uint32_t magic;
+    uint32_t depth;                   /* valid entries in pc[] */
+    uint32_t pc[CALI_PANIC_DEPTH];
+    char task[16];                    /* NUL-terminated */
+    char reason[48];                  /* NUL-terminated, cut */
+    uint32_t sum;                     /* cali_panic_sum over everything before it */
+} cali_panic_t;
+
+/* FNV-1a over the struct before `sum`. */
+static inline uint32_t cali_panic_sum(const cali_panic_t *p) {
+    const unsigned char *b = (const unsigned char *)p;
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < offsetof(cali_panic_t, sum); i++) h = (h ^ b[i]) * 16777619u;
+    return h;
+}
+/* Any context (the panic handler): magic + checksum. */
+static inline void cali_panic_seal(cali_panic_t *p) {
+    p->magic = CALI_PANIC_MAGIC;
+    p->sum = cali_panic_sum(p);
+}
+/* The record's fields (no braces, no "ev"/"kind") into buf, or NULL if p is not a valid capture. */
+const char *cali_panic_fields(const cali_panic_t *p, char *buf, size_t cap);
+/* Boot (owner task): a valid capture -> the panic record; cleared once the sink took it.
+ * 1 logged, 0 nothing to log, -1 not taken (no card yet: kept, call again). */
+int cali_diag_panic(cali_panic_t *p);
 
 /* Owner task: 1 once every CALI_DIAG_PERIOD_MS (the first CALI_DIAG_PERIOD_MS after the first call). */
 int cali_diag_due(uint64_t now_ms);
