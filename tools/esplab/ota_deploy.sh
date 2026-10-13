@@ -21,4 +21,6 @@ until [[ "$(dev fw)" == "$sha7"* ]]; do   # check every 15 s until the ESP offer
   [ "$(dev ota.state)" = available ] && [[ "$(dev ota.available_sha)" == "$sha7"* ]] || continue
   ota install; until [[ "$(dev fw)" == "$sha7"* ]]; do sleep 5; fail_on_error; done; done
 until [ "$(dev uptime_ms)" -gt 70000 ] 2>/dev/null; do sleep 5; done   # 60 s rollback window passed
+# a crash inside that window makes the bootloader roll back to the old slot: that is a failed deploy
+[[ "$(dev fw)" == "$sha7"* ]] || { echo "rolled back: device.fw = $(dev fw)" >&2; exit 1; }
 for k in fw link ota; do echo "device.$k = $(dev $k)"; done
