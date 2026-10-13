@@ -325,5 +325,5 @@ static const struct codec_func CODEC_FUNCS[] = {
 };
 #define CODEC_NFUNCS 14
 #define CODEC_MAX_FIELDS 36
-#define CODEC_MAX_FRAME 32  /* bytes; largest real frame is lighting (16) */
+#define CODEC_MAX_FRAME 32  /* bytes; largest real frames: energy state (22), lighting control (16) */
 #endif /* CODEC_DICT_H */

@@ -3,8 +3,8 @@
 
 #include <string.h>
 
-#define MAX_NAME_WIRE 253u /* wire-format bytes (length octets + labels + the terminating 0) */
-#define RECV_MAX 512u      /* a query this large has no business on a captive portal; drop it */
+#define MAX_NAME_WIRE 253u /* wire-format bytes before the terminating 0 (length octets + labels) */
+#define RECV_MAX 512u      /* a larger datagram is read truncated to this (and then usually fails to parse) */
 #define REPLY_MAX 512u
 #define DRAIN_MAX 16 /* datagrams answered per cali_captive_dns_poll() */
 #define ANSWER_RR_LEN 16u  /* pointer(2) + TYPE(2) + CLASS(2) + TTL(4) + RDLENGTH(2) + RDATA(4) */

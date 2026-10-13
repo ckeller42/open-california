@@ -202,7 +202,9 @@ def generate() -> str:
     out.append("};")
     out.append("#define CODEC_NFUNCS %d" % len(funcs))
     out.append("#define CODEC_MAX_FIELDS %d" % max_fields)
-    out.append("#define CODEC_MAX_FRAME 32  /* bytes; largest real frame is lighting (16) */")
+    out.append(
+        "#define CODEC_MAX_FRAME 32  /* bytes; largest real frames: energy state (22), lighting control (16) */"
+    )
     out.append("#endif /* CODEC_DICT_H */")
     return "\n".join(out) + "\n"
 

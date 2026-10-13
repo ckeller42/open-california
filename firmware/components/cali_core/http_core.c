@@ -338,5 +338,5 @@ void cali_http_poll(uint64_t now_ms) {
         dispatch(now_ms); /* bytes past this request (pipelining) are dropped with the connection */
         return;
     }
-    if (peer_gone || now_ms - S.last_ms > CALI_HTTP_IDLE_MS) close_conn();
+    if (peer_gone || now_ms - S.last_ms > (S.len ? CALI_HTTP_IDLE_MS : CALI_HTTP_FIRST_BYTE_MS)) close_conn();
 }

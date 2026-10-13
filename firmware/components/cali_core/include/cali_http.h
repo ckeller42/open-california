@@ -17,7 +17,9 @@
  *   500  the handler's Content-Type + Location do not fit the response header buffer, or the
  *        handler answered a 3xx redirect (not 304) without a location — a handler bug
  * A connection that makes no progress for more than CALI_HTTP_IDLE_MS is closed: while reading,
- * counted from its accept or its last received byte (closed without a response); while sending,
+ * counted from its last received byte (closed without a response) — but one that sent nothing yet
+ * gets only CALI_HTTP_FIRST_BYTE_MS from its accept (a browser's speculative preconnect or a
+ * captive-portal probe must not hold the single connection for 5 s, #273 M5); while sending,
  * from the last byte the socket took (the response is cut short). A connection the peer closes
  * mid-request is closed without a response. Every response carries Content-Type, Content-Length and
  * Connection: close; a response with a location (302) also carries Location. A 302 MUST set
@@ -54,6 +56,7 @@ extern "C" {
 #endif
 
 #define CALI_HTTP_IDLE_MS 5000u
+#define CALI_HTTP_FIRST_BYTE_MS 1000u   /* idle budget before a connection's first byte */
 #define CALI_HTTP_PENDING 2   /* handler: not answered yet — re-ask me (req->resume = 1) on every poll */
 #define CALI_HTTP_PENDING_MAX_MS 8000u   /* 2 x CALI_CTL_DEADLINE_MS: never reached by a well-behaved handler */
 
