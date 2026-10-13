@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "cali_auto_camper.h"
+#include "cali_battery.h"
 #include "cali_captive.h"
 #include "cali_control.h"
 #include "cali_display_model.h"
@@ -215,6 +216,8 @@ static void api_state(cali_http_resp_t *resp) {
     cali_sdlog_json(&j);
     cali_json_key(&j, "res");
     res_json(&j);
+    cali_json_key(&j, "battery");   /* the CoreS3's own battery (R_FW_BATTERY) */
+    cali_battery_json(&j);
     cali_json_key(&j, "auto_camper");   /* restore camping after park (R_FW_AUTO_CAMPER) */
     cali_ac_json(&j);
     cali_json_key(&j, "display");   /* screen state + settings (R_FW_DISPLAY_WAKE) */

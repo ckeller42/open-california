@@ -18,6 +18,7 @@ DEVICE_KEYS = frozenset(
         "time",
         "sd",
         "res",
+        "battery",
         "auto_camper",
         "display",
         "ux",
@@ -28,6 +29,7 @@ OTA_KEYS = frozenset({"state", "available_sha", "progress_pct", "error"})  # /ap
 TIME_KEYS = frozenset({"source", "synced", "boot", "up"})  # /api/state device.time (R_FW_TIME)
 SD_KEYS = frozenset({"state", "total_mb", "free_mb", "last_seq", "dropped"})  # device.sd (R_FW_SD_LOG)
 RES_KEYS = frozenset({"heap_free_kb", "heap_min_kb", "psram_free_kb", "cpu_pct"})  # device.res
+BATTERY_KEYS = frozenset({"pct", "mv", "usb", "charging", "runtime_min"})  # device.battery (R_FW_BATTERY)
 # device.display (R_FW_DISPLAY_WAKE): the live screen state + the settings
 DISPLAY_KEYS = frozenset(
     {"state", "lux", "prox", "brightness_pct", "sensor", "auto", "prox_wake", "min", "max", "offset"}

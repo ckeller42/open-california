@@ -26,6 +26,8 @@
  *                                  "sd":{"state","total_mb","free_mb","last_seq","dropped"},   -- cali_sdlog.h
  *                                  "res":{"heap_free_kb","heap_min_kb","psram_free_kb","cpu_pct"},
  *                                        -- cali_res_stats; each an int or null (unknown: host, no PSRAM)
+ *                                  "battery":{"pct","mv","usb","charging","runtime_min"},   -- cali_battery.h
+ *                                        (R_FW_BATTERY); each null when unknown (host, QEMU, no AXP2101)
  *                                  "auto_camper":{"enabled":<bool>,"state":"idle"|"armed"|"restoring"},
  *                                                -- cali_auto_camper.h (R_FW_AUTO_CAMPER)
  *                                  "display":{"state":"on"|"dim"|"off","lux","prox","brightness_pct",

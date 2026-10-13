@@ -462,6 +462,7 @@ function adaptSatellite(body, nowMs) {
       link_up: !!link.up,
       sd: dev.sd || null,     // the SD log's card (R_FW_SD_LOG)
       res: dev.res || null,   // heap / PSRAM / CPU of the satellite itself
+      battery: dev.battery || null,   // the CoreS3's own battery (R_FW_BATTERY)
     },
   };
   // = AutoCamper.snapshot()

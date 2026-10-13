@@ -442,3 +442,49 @@ def test_offset_shifts_the_level_clamps_and_reaches_dim(cli):
     # a changed offset applies on the next tick, past the deadband
     v = run(cli, "reset", BASE + " now=0 als=1 lux=100", BASE + " now=200 als=1 lux=100 off=5")
     assert [x["bright"] for x in v] == ["69", "74"]
+
+
+URL = "http://calictl-esp.local"
+
+
+@pytest.mark.parametrize(
+    "batt,de,en",
+    [
+        ("", URL, URL),  # no power chip (host, QEMU): the URL alone
+        ("bpct=87 usb=1 chg=1", URL + " · USB 87 % lädt", URL + " · USB 87 % charging"),
+        ("bpct=100 usb=1 chg=0", URL + " · USB 100 %", URL + " · USB 100 %"),
+        ("bpct=64 usb=0 chg=0", URL + " · Akku 64 %", URL + " · Batt 64 %"),  # no estimate yet
+        ("bpct=64 usb=0 chg=0 brt=130", URL + " · Akku 64 % ~2 h 10", URL + " · Batt 64 % ~2 h 10"),
+        ("bpct=64 usb=0 chg=0 brt=65", URL + " · Akku 64 % ~1 h 05", URL + " · Batt 64 % ~1 h 05"),
+        ("bpct=9 usb=0 chg=0 brt=45", URL + " · Akku 9 % ~45 min", URL + " · Batt 9 % ~45 min"),
+        ("usb=1 chg=1", URL, URL),  # percent unknown: no battery text
+    ],
+)
+def test_station_footer_shows_the_battery(cli, batt, de, en):
+    """The battery sits in the station footer only (R_FW_BATTERY), EN + DE.
+
+    .. test:: The station footer shows the battery: USB / charging / percent / runtime, EN + DE
+       :id: T_FW_BATTERY_FOOTER
+       :links: R_FW_BATTERY
+    """
+    v_de, v_en = run(cli, BASE + " now=1 lang=0 " + batt, BASE + " now=1 lang=1 " + batt)
+    assert v_de["footer"] == de and v_en["footer"] == en
+
+
+def test_setup_footer_ignores_the_battery(cli):
+    (v,) = run(cli, "wmode=1 now=1 lang=1 bpct=50 usb=0 chg=0 brt=90")
+    assert v["setup"] == "1" and "Batt" not in v["footer"] and "%" not in v["footer"]
+
+
+def test_battery_changes_never_wake_the_screen(cli):
+    # on, then idle into "off"; a battery change (USB pulled, percent and estimate moving) keeps it off
+    out = run(
+        cli,
+        "reset",
+        BASE + " now=0 bpct=90 usb=1 chg=1",
+        BASE + " now=400000 bpct=90 usb=1 chg=1",
+        BASE + " now=401000 bpct=80 usb=0 chg=0 brt=95",
+        BASE + " now=402000 bpct=5 usb=0 chg=0 brt=9",
+    )
+    assert out[0]["state"] == "on" and [v["state"] for v in out[1:]] == ["off"] * 3
+    assert out[-1]["footer"].endswith("Akku 5 % ~9 min")

@@ -16,9 +16,10 @@
  * @typedef {{ source: string, synced: boolean, boot: number }} Time
  * @typedef {{ state: string, total_mb: number|null, free_mb: number|null, last_seq: number|null, dropped: number }} Sd
  * @typedef {{ heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null }} Res
+ * @typedef {{ pct: number|null, mv: number|null, usb: boolean|null, charging: boolean|null, runtime_min: number|null }} Battery
  * @typedef {{ enabled: boolean, state: string }} AutoCamper
  * @typedef {{ state: string|null, lux: number|null, brightness_pct: number|null, sensor: string|null, auto: boolean, prox_wake: boolean, min: number, max: number, offset: number }} Display
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, auto_camper: AutoCamper, display: Display, ux?: { enabled: boolean } }} Device  the /api/state fields this page reads
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, battery: Battery, auto_camper: AutoCamper, display: Display, ux?: { enabled: boolean } }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -142,6 +143,21 @@ function renderRes(r) {
   if (r.psram_free_kb !== null) parts.push(t("res_psram", {free: r.psram_free_kb}));
   if (r.cpu_pct !== null) parts.push(t("res_cpu", {pct: r.cpu_pct}));
   $("res").textContent = parts.length ? t("res_title") + ": " + parts.join(" · ") : "";
+}
+
+/* The CoreS3's own battery (R_FW_BATTERY): "Battery: 64 % · 3.89 V · on battery · ~2 h 10 min left";
+ * empty while the percent is unknown (no power chip). */
+/** @param {Battery} b */
+function renderBattery(b) {
+  if (b.pct === null) { $("battery").textContent = ""; return; }
+  const parts = [b.pct + " %"];
+  if (b.mv !== null) parts.push((b.mv / 1000).toFixed(2) + " V");
+  if (b.usb !== null) parts.push(t(b.usb ? (b.charging ? "batt_charging" : "batt_usb") : "batt_on"));
+  if (!b.usb && b.runtime_min !== null) {
+    const h = Math.floor(b.runtime_min / 60), m = b.runtime_min % 60;
+    parts.push(t("batt_left", {time: h ? h + " h " + m + " min" : m + " min"}));
+  }
+  $("battery").textContent = t("batt_title") + ": " + parts.join(" · ");
 }
 
 /* The firmware row (R_FW_OTA): the running build, the update's progress, Check / Install <sha7>
@@ -341,6 +357,7 @@ async function poll() {
     renderTime(s.device.time);
     renderSd(s.device.sd);
     renderRes(s.device.res);
+    renderBattery(s.device.battery);
     const setup = s.device.wifi.mode === "setup" || joining !== null || $("setup-msg").querySelector("a") !== null;
     $("setup").hidden = !setup;
     if (setup && !setupShown && !joining) scan();

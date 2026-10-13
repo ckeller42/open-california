@@ -24,6 +24,7 @@ from tools.wifi_consts import CONSTS
 
 from .api_shape import (
     AP_KEYS,
+    BATTERY_KEYS,
     CONTROL_KEYS,
     DEVICE_KEYS,
     DISPLAY_KEYS,
@@ -90,6 +91,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "auto_camper.c"),
             str(CORE / "auto_camper_run.c"),
             str(CORE / "display_cfg.c"),
+            str(CORE / "battery.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
             "-o",
@@ -220,6 +222,9 @@ def test_api_state_shape(web_cli):
     }
     assert set(body["device"]["sd"]) == SD_KEYS
     assert body["device"]["res"] == dict.fromkeys(RES_KEYS)
+    assert body["device"]["battery"] == dict.fromkeys(
+        BATTERY_KEYS
+    )  # no power chip on the host (R_FW_BATTERY)
     # no screen on the host: the live members null, the default settings (R_FW_DISPLAY_WAKE)
     assert body["device"]["display"] == dict(
         dict.fromkeys(DISPLAY_KEYS), auto=True, prox_wake=True, min=8, max=100, offset=0
@@ -252,6 +257,7 @@ EXPECTED_DEVICE_TAIL = (
     '"time":{"source":"none","synced":false,"boot":0,"up":5010},'
     '"sd":{"state":"absent","total_mb":null,"free_mb":null,"last_seq":null,"dropped":0},'
     '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
+    '"battery":{"pct":null,"mv":null,"usb":null,"charging":null,"runtime_min":null},'
     '"auto_camper":{"enabled":true,"state":"idle"},'
     '"display":{"state":null,"lux":null,"prox":null,"brightness_pct":null,"sensor":null,"auto":true,'
     '"prox_wake":true,"min":8,"max":100,"offset":0},"ux":{"enabled":true},"water_held":false}}'

@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
+#include "cali_battery.h"
 #include "cali_json.h"
 #include "cali_status.h"
 
@@ -55,11 +56,12 @@ typedef struct {
     int32_t prox;    /* proximity counts; -1 = no reading */
     uint8_t present; /* the light sensor answered at init */
     uint8_t touched; /* the screen was touched since the last tick */
+    cali_batt_t batt; /* the station footer's battery (R_FW_BATTERY); never wakes the screen */
 } cali_display_in_t;
 
 typedef struct {
     cali_row_t device, wifi, camper;
-    int footer_setup;        /* 1: footer shows NET_AP_SSID / NET_AP_PSK; 0: http://NET_HOSTNAME.local */
+    int footer_setup;        /* 1: footer shows NET_AP_SSID / NET_AP_PSK; 0: http://NET_HOSTNAME.local + battery */
     char footer[CALI_ROW_TEXT_MAX];
     cali_disp_state_t state;
     cali_sensor_t sensor;
@@ -69,7 +71,7 @@ typedef struct {
 
 /* Wake/brightness state. Wake events: a touch, a hand near (rising edge, when prox_wake), a row
  * turning red/amber, the first call. on for DISPLAY_DIM_AFTER_MS after the last one, then dim, off
- * after DISPLAY_OFF_AFTER_MS. Ages, uptime and green/grey changes never wake. */
+ * after DISPLAY_OFF_AFTER_MS. Ages, uptime, the footer (battery) and green/grey changes never wake. */
 typedef struct {
     uint64_t last_wake_ms, last_lux_ms, last_good_ms;
     float lux_log;          /* EMA of log10(max(lux, 1)) */
