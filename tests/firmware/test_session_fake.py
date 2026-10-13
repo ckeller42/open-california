@@ -1021,6 +1021,35 @@ def test_wifi_boot_with_saved_creds_joins_and_keeps_them_on_failure(fake):
     ]
 
 
+def test_wifi_creds_count_as_validated_only_after_they_joined(fake):
+    """#273 M1 (R6's premise): ``wifi_ok`` is "0" from ``wifi set`` until GOT_IP makes it "1". Creds
+    saved but never joined (a power cut before the FAILED) boot like a setup-flow join: hotspot up,
+    and a failure clears them instead of retrying a typo forever."""
+    out = run(
+        fake, "wifi_boot", "> wifi set minsel " + PSK, "kv wifi_ok", "NET_GOT_IP 192.168.1.42", "kv wifi_ok"
+    )
+    assert [line for line in out if line.startswith("KV")] == ["KV wifi_ok 0", "KV wifi_ok 1"]
+    out = run(
+        fake,
+        "kvset wifi_ssid minsel",
+        "kvset wifi_psk wrong-psk-99",
+        "kvset wifi_ok 0",
+        "wifi_boot",
+        "NET_FAILED 2",
+        "kv wifi_ssid",
+    )
+    assert out == [
+        AP,
+        "NET udp_bind 53",
+        "NET scan",
+        "LOG wifi: joining minsel",
+        "NET sta_start minsel wrong-psk-99",
+        "LOG wifi: failed auth",
+        "LOG wifi: credentials cleared",
+        "KV wifi_ssid missing",
+    ]
+
+
 def test_wifi_forget_clears_creds_and_opens_setup(fake):
     """Online past the AP-close window (hotspot closed), a forget reopens the hotspot."""
     out = run(
@@ -1150,6 +1179,13 @@ def test_wifi_first_page_scan_runs_at_once(fake):
         "webscan",
     )
     assert out.count("NET scan") == 1, out
+
+
+def test_wifi_scan_list_has_one_entry_per_ssid(fake):
+    """#273 M9: a mesh/multi-AP network answers a scan once per access point; the list keeps one
+    entry per SSID, so repeats do not use up the NET_SCAN_MAX slots on the setup page."""
+    out = run(fake, "wifi_boot", "NET_SCAN_DONE minsel other minsel minsel", "> wifi status")
+    assert out[-1] == "LOG wifi: setup ssid=- ip=- rssi=- scan=2"
 
 
 def test_wifi_failed_scan_keeps_the_last_list(fake):

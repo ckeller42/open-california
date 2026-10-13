@@ -23,7 +23,7 @@ typedef struct {
 } codec_kv_t;
 
 #define CODEC_KV_MAX    64   /* >= CODEC_MAX_FIELDS (checked at compile time in codec.c) */
-#define CODEC_FRAME_MAX 32   /* bytes; largest real frame is lighting (16) */
+#define CODEC_FRAME_MAX 32   /* bytes; largest real frames: energy state (22), lighting control (16) */
 
 enum {
     CODEC_OK            = 0,

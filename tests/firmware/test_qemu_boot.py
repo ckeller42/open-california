@@ -43,7 +43,11 @@ def test_boots_unpaired_and_nvs_survives_reboot(qemu):
 
 def test_corrupt_bond_record_boots_unpaired(qemu):
     """A CRC-broken first peer-bond record (``sec_peer_0``, ble_store_kv.c's slot key) in real NVS:
-    the next boot logs it ignored, comes up idle, keeps the intact records, and does not crash."""
+    the next boot logs it ignored, comes up idle, keeps the intact records, and does not crash.
+
+    The probe build has no BLE transport, so ``has_bond()`` is always 0 and "idle" holds whatever the
+    store did: it is no evidence here. The evidence is the ``LOG store: corrupt record`` line plus
+    the single boot banner (no crash loop), and both are asserted."""
     s = qemu.boot()
     s.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
     s.send("kvprobe set 0a0b0c")

@@ -26,6 +26,7 @@ static struct {
     char ssid[NET_SSID_MAX + 1];     /* the station credentials (a copy: callers zero theirs) */
     char psk[NET_PSK_MAX + 1];
     int have_creds;
+    int creds_ok;                    /* the creds joined (kv CALI_WIFI_KEY_OK says so, or GOT_IP did) */
     uint32_t ip;                     /* while ONLINE */
     int rssi;
     uint64_t rssi_at;                /* last sta_rssi() refresh on a tick; 0 = due at the next tick */
@@ -42,6 +43,12 @@ static struct {
     uint32_t last_ip;                /* the previous lease (wifi_up's ip_changed; the address is never logged) */
     uint64_t up_at;                  /* now of the last GOT_IP (wifi_down's dur_ms) */
 } W;
+
+/* The stored creds have not joined yet (CALI_WIFI_KEY_OK "0"). */
+static void mark_unjoined(void) {
+    W.creds_ok = 0;
+    (void)cali_kv_set(CALI_WIFI_KEY_OK, "0", 1);
+}
 
 static void wipe_creds(void) {
     memset(W.ssid, 0, sizeof W.ssid);
@@ -126,6 +133,7 @@ static void run_action(const cali_wifi_action_t *a) {
         /* both erases always run; a missing key is not an error (cali_kv_erase) */
         int ok = cali_kv_erase(CALI_WIFI_KEY_SSID) == 0;
         ok = cali_kv_erase(CALI_WIFI_KEY_PSK) == 0 && ok;
+        mark_unjoined();
         wipe_creds();
         cali_log(ok ? "wifi: credentials cleared" : "wifi: credential erase failed");
         break;
@@ -156,6 +164,7 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
     case CALI_NET_EV_STA_GOT_IP:
         feed(WEV_GOT_IP, 0);
         if (W.sm.st == WIFI_ONLINE) {
+            if (!W.creds_ok && cali_kv_set(CALI_WIFI_KEY_OK, "1", 1) == 0) W.creds_ok = 1;   /* once, not per rejoin */
             W.last_fail = CALI_NET_REASON_NONE;
             W.ip = e->ip;
             W.rssi = W.net->sta_rssi();
@@ -190,9 +199,16 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
         W.scan_in_flight = 0;
         if (e->nscan < 0) break;           /* refused/aborted/timed out: keep the last good list */
         if (n > NET_SCAN_MAX) n = NET_SCAN_MAX;
-        if (n) memcpy(W.scan, e->scan, (size_t)n * sizeof *W.scan);
-        for (int i = 0; i < n; i++) W.scan[i].ssid[NET_SSID_MAX] = '\0';
-        W.nscan = n;
+        /* one entry per SSID, the strongest (mesh/multi-AP networks repeat it, #273 M9) */
+        W.nscan = 0;
+        for (int i = 0; i < n; i++) {
+            cali_net_ap_t ap = e->scan[i];
+            int j = 0;
+            ap.ssid[NET_SSID_MAX] = '\0';
+            while (j < W.nscan && strcmp(W.scan[j].ssid, ap.ssid) != 0) j++;
+            if (j == W.nscan) W.scan[W.nscan++] = ap;
+            else if (ap.rssi > W.scan[j].rssi) W.scan[j] = ap;
+        }
         break;
     }
     case CALI_NET_EV_AP_STOPPED:
@@ -205,6 +221,12 @@ static void on_net(const cali_net_event_t *e, void *ctx) {
     }
 }
 
+/* WEV_CREDS_SET: a new attempt — the previous attempt's failure reason no longer applies. */
+static void feed_creds_set(void) {
+    W.last_fail = CALI_NET_REASON_NONE;
+    feed(WEV_CREDS_SET, 0);
+}
+
 void cali_wifi_run_init(const cali_net_t *net) {
     memset(&W, 0, sizeof W);
     W.net = net;
@@ -214,11 +236,20 @@ void cali_wifi_run_init(const cali_net_t *net) {
 void cali_wifi_run_boot(void) {
     char ssid[NET_SSID_MAX + 1], psk[NET_PSK_MAX + 1];
     size_t ssid_len = sizeof ssid - 1, psk_len = sizeof psk - 1;
+    char joined = '1';
+    size_t joined_len = 1;
     int ok;
     if (!W.net) return;
     ok = cali_kv_get(CALI_WIFI_KEY_SSID, ssid, &ssid_len) == CALI_KV_OK && cali_kv_get(CALI_WIFI_KEY_PSK, psk, &psk_len) == CALI_KV_OK &&
          copy_creds(ssid, ssid_len, psk, psk_len) == 0;
     memset(psk, 0, sizeof psk);
+    if (cali_kv_get(CALI_WIFI_KEY_OK, &joined, &joined_len) != CALI_KV_OK) joined = '1';   /* missing: legacy, trusted */
+    W.creds_ok = ok && joined == '1';
+    if (ok && !W.creds_ok) {   /* never joined (saved, then a power cut): the setup flow's join */
+        feed(WEV_BOOT_NO_CREDS, 0);
+        feed_creds_set();
+        return;
+    }
     feed(ok ? WEV_BOOT_WITH_CREDS : WEV_BOOT_NO_CREDS, 0);
 }
 
@@ -237,12 +268,6 @@ void cali_wifi_run_tick(uint64_t now_ms) {
     }
 }
 
-/* WEV_CREDS_SET: a new attempt — the previous attempt's failure reason no longer applies. */
-static void feed_creds_set(void) {
-    W.last_fail = CALI_NET_REASON_NONE;
-    feed(WEV_CREDS_SET, 0);
-}
-
 void cali_wifi_run_set_creds(const char *ssid, const char *psk) {
     uint8_t st = W.sm.st;
     if (!W.net || !ssid || !psk) return;
@@ -252,6 +277,9 @@ void cali_wifi_run_set_creds(const char *ssid, const char *psk) {
         strcmp(psk, W.psk) == 0)
         return;
     if (copy_creds(ssid, strlen(ssid), psk, strlen(psk)) != 0) return;
+    /* ponytail: the caller stored the creds a moment before this; a power cut in between keeps the
+     * previous flag. Writing "0" before the creds (in web.c/console.c) closes it if it ever matters. */
+    mark_unjoined();
     if (st == WIFI_SETUP_AP || st == WIFI_SETUP_AP_RETRYING) {
         feed_creds_set();
     } else if (st != WIFI_UNPROVISIONED) {

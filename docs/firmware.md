@@ -150,6 +150,10 @@ Not drawn: `CREDS_FORGET` (console `wifi forget`, `DELETE /api/wifi`) goes from 
   an unreachable router retries forever — after 5 min the setup hotspot opens alongside
   (`SETUP_AP_RETRYING`), the retries go on. Only credentials typed in the current setup flow are
   cleared by a failed join (a typo never bricks setup: back to `SETUP_AP`, hotspot still up).
+  "Saved" means saved **and joined**: kv `wifi_ok` is `0` from `wifi set`/`POST /api/wifi` until the
+  first IP makes it `1`. Credentials that never joined (a typo, then a power cut before the failure)
+  boot through `SETUP_AP` into a setup-flow join instead, so a failure clears them (#273 M1). No
+  `wifi_ok` key (stored by older firmware) counts as joined.
 - **Hotspot close.** Once `ONLINE`, a hotspot that is still up closes 30000 ms later (the phone that
   did the setup gets to see the "connected as" answer first).
 - **Replacing credentials** (`wifi set` or a `POST /api/wifi` while online/retrying/mid-join,
@@ -211,7 +215,8 @@ one connection at a time, one request per connection, every response `Connection
 requests up to `NET_HTTP_REQ_MAX` (2048 B) of headers, no chunked bodies (400), 413/431 on
 oversize; the response is streamed across as many ticks as the socket needs (`tcp_send` "would
 block" = retry next poll — never blocks, never spins); a connection idle for `CALI_HTTP_IDLE_MS`
-(5000 ms) is closed, except while a handler's answer is pending (`CALI_HTTP_PENDING`, below). The
+(5000 ms) is closed — one that has sent no byte yet after `CALI_HTTP_FIRST_BYTE_MS` (1000 ms), so a
+preconnect or captive-portal probe cannot hold the core for 5 s — except while a handler's answer is pending (`CALI_HTTP_PENDING`, below). The
 page polls `/api/state` every 2000 ms; while a command pends the single connection is held, so a
 poll waits up to the command's deadline (the UI shows "Sending…", never the offline banner).
 

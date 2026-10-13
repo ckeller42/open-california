@@ -39,6 +39,11 @@ extern "C" {
  * POST /api/wifi, console.c "wifi set", wifi_run.c boot + WACT_CLEAR_CREDS). */
 #define CALI_WIFI_KEY_SSID "wifi_ssid"
 #define CALI_WIFI_KEY_PSK "wifi_psk"
+/* "1" once the stored creds joined (GOT_IP), "0" from set_creds()/WACT_CLEAR_CREDS until then. A boot
+ * with creds and "0" joins them as typed-in-setup creds (hotspot up, a failure clears them): a typo
+ * saved just before a power cut never boots as "validated" (#273 M1). Missing = stored before this
+ * key existed: trusted, as before. */
+#define CALI_WIFI_KEY_OK "wifi_ok"
 
 void cali_wifi_run_init(const cali_net_t *net);
 void cali_wifi_run_boot(void);                       /* stored creds -> WEV_BOOT_WITH_CREDS, else _NO_CREDS */
@@ -60,7 +65,7 @@ void cali_wifi_run_scan_auto(void);
 const char *cali_wifi_run_ssid(void);                /* the station SSID, or NULL when none */
 uint32_t cali_wifi_run_ip(void);                     /* station IPv4, host byte order; 0 = none */
 int cali_wifi_run_rssi(void);                        /* station RSSI in dBm; 0 = none */
-int cali_wifi_run_scan_list(const cali_net_ap_t **out);   /* the last SCAN_DONE's list: count, *out set */
+int cali_wifi_run_scan_list(const cali_net_ap_t **out);   /* the last SCAN_DONE's list, one entry per SSID (the strongest): count, *out set */
 /* Why the last join failed: "not_found" | "auth" | "other" (the reason of the last WACT_LOG_REASON),
  * or NULL — none yet, or cleared by new credentials (WEV_CREDS_SET) or by joining (GOT_IP). The
  * setup page shows it as one of three texts (ruling R23). */

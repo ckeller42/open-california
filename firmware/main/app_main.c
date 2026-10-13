@@ -6,7 +6,7 @@
  * not USB-Serial/JTAG). Same line protocol on both. The bond store is NVS.
  *
  * Tasks: the NimBLE host task (nimble_port_freertos_init) makes EVERY cali_core and transport
- * call, as main does on the host. The console task only reads UART lines into a queue and posts
+ * call, as main does on the host. The console task only reads console lines into a queue and posts
  * one NimBLE event; the 100 ms esp_timer only sets a flag and posts the same event. That event's
  * callback (do_work) runs the tick and feeds queued lines to cali_console_line on the host task.
  *

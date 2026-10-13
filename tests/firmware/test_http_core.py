@@ -206,6 +206,15 @@ def test_idle_timeout_closes(http_cli):
     assert sent == "" and closed
 
 
+def test_silent_connection_closes_after_the_first_byte_budget(http_cli):
+    """#273 M5: a connection that sends nothing (a speculative preconnect, a captive-portal probe)
+    holds the single connection for CALI_HTTP_FIRST_BYTE_MS (1 s) from its accept, not 5 s."""
+    sent, closed = session(http_cli, [], tail=(10, 1000))
+    assert sent == "" and not closed  # exactly 1 000 ms silent: still open
+    sent, closed = session(http_cli, [], tail=(10, 1001))
+    assert sent == "" and closed
+
+
 def test_peer_close_mid_request_closes_silently(http_cli):
     sent, closed = session(http_cli, ["GET /hel"], eof=True)
     assert sent == "" and closed
