@@ -181,6 +181,52 @@ def test_restart_reconnects_with_the_bond_after_rotation(host_fw, hci_unit, tmp_
     assert not any("waiting_passkey" in l for l in fw2.log)
 
 
+def test_pair_to_a_second_unit_drops_the_first_bond(host_fw, hci_unit):
+    """#255: the ESP serves ONE unit. Bonded to unit A, rebooted, then paired to unit B: A's bond is
+    gone, so the next reboot reconnects to B (not A) and the identity is B's."""
+    from tests.firmware.conftest import HciUnit
+
+    fw = host_fw(hci_unit)
+    assert _pair(fw, hci_unit)["address"] == "C0:FF:EE:CA:11:F0"
+    fw.stop()
+    unit_b = HciUnit(identity="C0:FF:EE:CA:11:B2", irk=bytes(range(16)))
+    try:
+        fw2 = host_fw(unit_b)  # reboot, still bonded to A (out of reach)
+        s = _pair(fw2, unit_b)
+        assert s["state"] == "bonded" and s["address"] == "C0:FF:EE:CA:11:B2", s
+        fw2.stop()
+        fw3 = host_fw(unit_b)  # reboot: reconnects by bond to B, no passkey
+        fw3.expect("SNAP", timeout=40)
+        fw3.send("status")
+        assert fw3.expect("STATE", lambda s: s["address"])["address"] == "C0:FF:EE:CA:11:B2"
+        assert not any("waiting_passkey" in l for l in fw3.log)
+    finally:
+        unit_b.close()
+
+
+def test_failed_pair_to_a_second_unit_keeps_the_first_bond(host_fw, hci_unit):
+    """#255: only a VERIFIED pairing drops the other bonds. Bonded to A, a pair to unit B fails
+    (its pairing screen closed) -> A's bond survives: the next boot reconnects to A."""
+    from tests.firmware.conftest import HciUnit
+
+    fw = host_fw(hci_unit)
+    _pair(fw, hci_unit)
+    fw.stop()
+    unit_b = HciUnit(identity="C0:FF:EE:CA:11:B2", irk=bytes(range(16)), pairing_mode=False)
+    try:
+        fw2 = host_fw(unit_b)
+        fw2.send("pair")
+        assert fw2.expect("STATE", lambda s: s["state"] == "error", timeout=90)["error"] == "pairing_failed"
+        fw2.stop()
+    finally:
+        unit_b.close()
+    fw3 = host_fw(hci_unit)  # back at A: reconnects by its bond, no passkey
+    fw3.expect("SNAP", timeout=40)
+    fw3.send("status")
+    assert fw3.expect("STATE", lambda s: s["address"])["address"] == "C0:FF:EE:CA:11:F0"
+    assert not any("dropped the bond" in l for l in fw2.log + fw3.log)
+
+
 async def _hold_connects(hu, on, cancel_delay_s=0.0, connect_on_cancel=False):
     """While on, the firmware-side controller keeps an LE connection pending (never completes);
     a cancel of it completes ``cancel_delay_s`` later, or (``connect_on_cancel``) loses the race:

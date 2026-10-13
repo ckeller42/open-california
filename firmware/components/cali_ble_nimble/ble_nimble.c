@@ -816,6 +816,24 @@ static int t_has_bond(void) {
     return first_bond(&id) == 0;
 }
 
+/* The ESP serves ONE unit (#255): identity() and connect_bonded() take the first stored bond, so a
+ * bond kept for an earlier unit would win. The runner calls this once a pairing is VERIFIED (its
+ * PERSIST_BOND, the auth char read on the encrypted link) — every pair path (console, web wizard);
+ * a failed or aborted pairing never gets here, so the old bond survives it. */
+static int t_keep_only_bond(void) {
+    struct ble_gap_conn_desc desc;
+    ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+    int n = 0, rc;
+    if (s_conn == BLE_HS_CONN_HANDLE_NONE || ble_gap_conn_find(s_conn, &desc) != 0) return BLE_HS_ENOTCONN;
+    if ((rc = ble_store_util_bonded_peers(peers, &n, MYNEWT_VAL(BLE_STORE_MAX_BONDS))) != 0) return rc;
+    for (int i = 0; i < n; i++) {
+        if (ble_addr_cmp(&peers[i], &desc.peer_id_addr) == 0) continue;
+        rc = ble_store_util_delete_peer(&peers[i]);
+        cali_log("ble: dropped the bond of another unit (%d)", rc);
+    }
+    return 0;
+}
+
 static const char *t_identity(void) {
     ble_addr_t id;
     if (first_bond(&id) != 0) return NULL;
@@ -827,7 +845,7 @@ static const char *t_identity(void) {
 static const cali_transport_t TRANSPORT = {
     t_set_sink, t_start_scan, t_stop_scan, t_connect_found, t_connect_bonded, t_pair,
     t_inject_passkey, t_discover, t_read, t_subscribe, t_write_heartbeat, t_disconnect,
-    t_remove_bond, t_has_bond, t_identity, t_write,
+    t_remove_bond, t_has_bond, t_identity, t_write, t_keep_only_bond,
 };
 
 const cali_transport_t *cali_ble_nimble_transport(void) { return &TRANSPORT; }

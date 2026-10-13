@@ -245,8 +245,12 @@ reason), and the runner's retry pairs afresh. Anything else (an unreachable unit
 `connect_failed`, a link lost for another reason such as `0x13`, a timeout) keeps the bond, and
 the retry probes again; unlike calictl, a link that came up but never encrypted is not taken
 as proof (NimBLE reports a definite status; the user still has *Bluetooth reset / re-pair*). A
-unit no stored bond matches — another camper, issue #255 — is paired as before (#255 itself is
-unchanged). The match runs over **every** stored bond: by identity, compared type-agnostically
+unit no stored bond matches — another camper, issue #255 — is paired as before; **one bond only** (#255): once a pairing is
+verified (`bonded`: encrypted, the auth char read — the runner's `PERSIST_BOND`, any pair path:
+console `pair` or the wizard) the transport deletes every other stored bond
+(`keep_only_bond`, `LOG ble: dropped the bond of another unit`), so the next boot reconnects to the
+unit just paired and `address` is its identity. A pairing that fails or is cancelled before that
+keeps the old bond. The match runs over **every** stored bond: by identity, compared type-agnostically
 (a controller that resolved the address reports it typed `PUBLIC_ID`/`RANDOM_ID`, the bond is
 stored typed public/random), or by the RPA resolving with that bond's IRK; a PSA failure is logged
 (`LOG pair: psa_… failed`) and the unit treated as unbonded. An SMP pairing that starts (passkey,
