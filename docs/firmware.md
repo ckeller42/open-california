@@ -899,7 +899,9 @@ report the **live** `esp_pm` config, so a boot's DFS state is a fact, not a flag
 
 The {term}`CoreS3` has a 500 mAh cell. **Measured 2026-10-13** (fw dee17ae–31156dc, WiFi + BLE link up, no CPU
 power management): ~0.33 %/min (~100 mA), about 5 h from full, with the screen dim or off alike —
-WiFi + BLE dominate. Since then the CPU idles at 40 MHz (`CONFIG_PM_DFS_INIT_AUTO`); re-measure. Older estimate: ~2–2.5 h with the screen on, ~4–5 h
+WiFi + BLE dominate. Dynamic frequency scaling (CPU idling at 40 MHz) was tried on 2026-10-13 and measured
+at 0.36 %/min: no gain, so a boot keeps a fixed clock (`POST /api/display {"dfs":true}` switches it on at
+runtime for experiments). Older estimate: ~2–2.5 h with the screen on, ~4–5 h
 with it off. The AXP2101 power chip (I2C `0x34`, the board package's bus) is read every 10 s by
 `display.c` on the owner task: fuel-gauge percent (`0xA4`), battery voltage (`0x34/0x35`, mV), VBUS
 good = on USB and battery present (`0x00`), charge direction (`0x01` bits 6:5). Init sets only the
