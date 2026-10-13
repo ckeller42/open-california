@@ -20,6 +20,7 @@ def test_display_never_aborts_on_an_esp_error():
     code = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
     assert "ESP_ERROR_CHECK" not in code and "abort(" not in code
     assert "esp_lcd_touch_read_data(s_tp)" in code  # not the port's read
+    assert "lv_indev_get_read_cb" not in code  # ... not even as a fallback
     assert 'cali_diag_evt("touch"' in code  # the error count reaches the log
 
 

@@ -816,7 +816,8 @@ The CoreS3 screen is dark when nobody uses it (spec `docs/superpowers/specs/2026
   an error is "released" for that tick, counted, and logged as `evt` `touch` (`errors` since boot, `last`
   error name; at most once a minute). The handle comes from the port's private touch context (its
   first member; BSP 4.1.0 exposes none), so `esp_lvgl_port` is pinned `==2.9.0` and the handle is
-  checked against the BSP's 320x240 config — if that fails the port's read stays (logged). The I2C
+  checked against the BSP's 320x240 config — if that fails touch is off (logged; the hand-near wake
+  still works), never back on the aborting read. The I2C
   driver serializes the devices on the bus itself (`bus_lock_mux`), so the LTR (owner task, under the
   display lock) and AXP (owner task, outside it) reads need no LVGL lock; they keep their 10 ms
   timeouts, the touch read waits without one (`esp_lcd` I2C default).

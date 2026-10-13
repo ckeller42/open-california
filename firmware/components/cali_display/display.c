@@ -103,8 +103,7 @@ static i2c_master_dev_handle_t s_axp;   /* NULL: no power chip handle (battery s
 static uint64_t s_last_batt;
 static int s_batt_read;                 /* a battery read has happened (the first one is due at once) */
 static int s_axp_enabled;               /* both enable bits confirmed set (else retried with each read) */
-static lv_indev_read_cb_t s_touch_read;   /* the port's own read: only if s_tp could not be found */
-static esp_lcd_touch_handle_t s_tp;
+static esp_lcd_touch_handle_t s_tp;     /* NULL: touch off (the port's own read is never called) */
 static uint32_t s_touch_errs;           /* LVGL task -> owner task, __atomic */
 static const char *s_touch_err;         /* the last one's esp_err_to_name, __atomic */
 static uint32_t s_touch_logged;         /* owner task: the count in the last "touch" evt */
@@ -180,7 +179,8 @@ int cali_display_ready(void) { return s_ok; }
 /* esp_lvgl_port 2.9.0 (pinned in idf_component.yml) keeps the esp_lcd_touch handle only in its private
  * lvgl_port_touch_ctx_t (src/lvgl9/esp_lvgl_port_touch.c), the indev's driver data, as the FIRST member;
  * C lets a struct pointer be read as a pointer to its first member. BSP 4.1.0 keeps its own copy in a
- * static and exposes none. A layout change fails the plausibility check (the BSP's 320x240 config). */
+ * static and exposes none. A layout change fails the plausibility check (the BSP's 320x240 config):
+ * then touch is off (the hand-near wake still works) rather than back on the aborting read. */
 typedef struct { esp_lcd_touch_handle_t handle; } port_touch_ctx_head_t;
 
 static esp_lcd_touch_handle_t port_touch_handle(lv_indev_t *in) {
@@ -194,6 +194,8 @@ static esp_lcd_touch_handle_t port_touch_handle(lv_indev_t *in) {
  * swallow a wake tap (cali_display_touch_gate). */
 static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     int pressed;
+    (void)indev;
+    data->state = LV_INDEV_STATE_RELEASED;
     if (s_tp) {
         esp_lcd_touch_point_data_t p[CONFIG_ESP_LCD_TOUCH_MAX_POINTS];
         uint8_t n = 0;
@@ -204,13 +206,11 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
             __atomic_store_n(&s_touch_err, esp_err_to_name(e), __ATOMIC_RELAXED);
             __atomic_add_fetch(&s_touch_errs, 1, __ATOMIC_RELEASE);
         }
-        data->state = n ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
         if (n) {
+            data->state = LV_INDEV_STATE_PRESSED;
             data->point.x = p[0].x;
             data->point.y = p[0].y;
         }
-    } else {
-        s_touch_read(indev, data);
     }
     pressed = data->state == LV_INDEV_STATE_PRESSED;
     if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
@@ -331,9 +331,8 @@ int cali_display_init(const cali_transport_t *t) {
     {
         lv_indev_t *in = bsp_display_get_input_dev();
         if (in) {
-            s_touch_read = lv_indev_get_read_cb(in);
             s_tp = port_touch_handle(in);
-            if (!s_tp) cali_log("display: touch handle not found, the port's read stays (aborts on an I2C error)");
+            if (!s_tp) cali_log("display: touch handle not found, touch off");
             lv_indev_set_read_cb(in, touch_read);
         }
     }
