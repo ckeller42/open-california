@@ -4,17 +4,21 @@
  * Wake + brightness (R_FW_DISPLAY_WAKE): reads the LTR-553ALS light/proximity sensor on the board
  * package's I2C bus every tick and filters the touch input (a wake tap is swallowed); the model
  * decides on / dim / off and the level.
- * Battery (R_FW_BATTERY): reads the AXP2101 every CALI_BATT_READ_MS into cali_battery_update. */
+ * Battery (R_FW_BATTERY): reads the AXP2101 every CALI_BATT_READ_MS into cali_battery_update.
+ * Touch (R_FW_TOUCH_NO_ABORT, #346): the touch controller is read here, not by esp_lvgl_port, whose read
+ * ESP_ERROR_CHECKs it — one failed I2C read on the shared bus aborted the whole firmware. */
 #include <stdio.h>
 #include <string.h>
 
 #include "bsp/esp-bsp.h"
 #include "cali_battery.h"
 #include "cali_display.h"
+#include "cali_diag.h"
 #include "cali_display_model.h"
 #include "cali_platform.h"
 #include "cali_status.h"
 #include "driver/i2c_master.h"
+#include "esp_lcd_touch.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
@@ -99,7 +103,12 @@ static i2c_master_dev_handle_t s_axp;   /* NULL: no power chip handle (battery s
 static uint64_t s_last_batt;
 static int s_batt_read;                 /* a battery read has happened (the first one is due at once) */
 static int s_axp_enabled;               /* both enable bits confirmed set (else retried with each read) */
-static lv_indev_read_cb_t s_touch_read;
+static lv_indev_read_cb_t s_touch_read;   /* the port's own read: only if s_tp could not be found */
+static esp_lcd_touch_handle_t s_tp;
+static uint32_t s_touch_errs;           /* LVGL task -> owner task, __atomic */
+static const char *s_touch_err;         /* the last one's esp_err_to_name, __atomic */
+static uint32_t s_touch_logged;         /* owner task: the count in the last "touch" evt */
+static uint64_t s_touch_log_ms;
 static uint8_t s_swallow;               /* LVGL task only */
 static int s_touched, s_awake = 1;      /* LVGL task <-> owner task, __atomic */
 
@@ -164,10 +173,45 @@ static void build(void) {
 
 int cali_display_ready(void) { return s_ok; }
 
-/* The touch read in LVGL's task: note the touch for the model, swallow a wake tap (cali_display_touch_gate). */
+#if CONFIG_LV_USE_GESTURE_RECOGNITION
+#error "touch_read replaces esp_lvgl_port's read, which also feeds LVGL's gesture recognizers"
+#endif
+
+/* esp_lvgl_port 2.9.0 (pinned in idf_component.yml) keeps the esp_lcd_touch handle only in its private
+ * lvgl_port_touch_ctx_t (src/lvgl9/esp_lvgl_port_touch.c), the indev's driver data, as the FIRST member;
+ * C lets a struct pointer be read as a pointer to its first member. BSP 4.1.0 keeps its own copy in a
+ * static and exposes none. A layout change fails the plausibility check (the BSP's 320x240 config). */
+typedef struct { esp_lcd_touch_handle_t handle; } port_touch_ctx_head_t;
+
+static esp_lcd_touch_handle_t port_touch_handle(lv_indev_t *in) {
+    const port_touch_ctx_head_t *ctx = lv_indev_get_driver_data(in);
+    esp_lcd_touch_handle_t h = ctx ? ctx->handle : NULL;
+    return h && h->read_data && h->config.x_max == BSP_LCD_H_RES && h->config.y_max == BSP_LCD_V_RES ? h : NULL;
+}
+
+/* The touch read in LVGL's task, as the port's (point 0, no scaling: the BSP sets none) but a failed
+ * read is "released" for this tick and counted, never an abort. Then: note the touch for the model,
+ * swallow a wake tap (cali_display_touch_gate). */
 static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     int pressed;
-    s_touch_read(indev, data);
+    if (s_tp) {
+        esp_lcd_touch_point_data_t p[CONFIG_ESP_LCD_TOUCH_MAX_POINTS];
+        uint8_t n = 0;
+        esp_err_t e = esp_lcd_touch_read_data(s_tp);
+        if (e == ESP_OK) e = esp_lcd_touch_get_data(s_tp, p, &n, CONFIG_ESP_LCD_TOUCH_MAX_POINTS);
+        if (e != ESP_OK) {
+            n = 0;
+            __atomic_store_n(&s_touch_err, esp_err_to_name(e), __ATOMIC_RELAXED);
+            __atomic_add_fetch(&s_touch_errs, 1, __ATOMIC_RELEASE);
+        }
+        data->state = n ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        if (n) {
+            data->point.x = p[0].x;
+            data->point.y = p[0].y;
+        }
+    } else {
+        s_touch_read(indev, data);
+    }
     pressed = data->state == LV_INDEV_STATE_PRESSED;
     if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
     if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED)))
@@ -288,6 +332,8 @@ int cali_display_init(const cali_transport_t *t) {
         lv_indev_t *in = bsp_display_get_input_dev();
         if (in) {
             s_touch_read = lv_indev_get_read_cb(in);
+            s_tp = port_touch_handle(in);
+            if (!s_tp) cali_log("display: touch handle not found, the port's read stays (aborts on an I2C error)");
             lv_indev_set_read_cb(in, touch_read);
         }
     }
@@ -314,6 +360,17 @@ static void paint_row(row_ui_t *r, const cali_row_t *m) {
         memcpy(r->text_now, m->text, sizeof r->text_now);
         lv_label_set_text(r->value, m->text);
     }
+}
+
+/* Owner task: {"ev":"evt","kind":"touch","errors":<since boot>,"last":"<esp_err name>"} when the count
+ * grew, at most once per CALI_DIAG_PERIOD_MS (a dead bus fails every read); retried until the log takes it. */
+static void touch_errors_evt(uint64_t now_ms) {
+    uint32_t n = __atomic_load_n(&s_touch_errs, __ATOMIC_ACQUIRE);
+    if (n == s_touch_logged || (s_touch_logged && now_ms - s_touch_log_ms < CALI_DIAG_PERIOD_MS)) return;
+    if (cali_diag_evt("touch", "\"errors\":%lu,\"last\":\"%s\"", (unsigned long)n,
+                      __atomic_load_n(&s_touch_err, __ATOMIC_RELAXED)) != 0) return;
+    s_touch_logged = n;
+    s_touch_log_ms = now_ms;
 }
 
 void cali_display_tick(uint64_t now_ms) {
@@ -348,6 +405,7 @@ void cali_display_tick(uint64_t now_ms) {
     }
     bsp_display_unlock();
     cali_display_publish(&v);   /* /api/state device.display */
+    touch_errors_evt(now_ms);
 
     /* only after a successful paint; can still block/abort inside the board package (cali_display.h) */
     if (s_brightness != v.brightness_pct) {

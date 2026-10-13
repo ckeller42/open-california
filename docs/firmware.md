@@ -692,6 +692,7 @@ IP and no user-typed value is ever recorded.
 | `evt` `ota` | every state transition (ota.c) | `state`, `dur_ms` since the request, `error` on `error` |
 | `evt` `auto_camper` | a decision (as serve's log) | `decision` (`armed_engine_shed`/`restoring`/`restored`/`stood_down`/`gave_up`), `soc`, `fails` |
 | `evt` `sd` | a failed write/fsync, once remounted | `err` (`write`/`fsync`), `again` |
+| `evt` `touch` | the touch read failed since the last one (display.c, `R_FW_TOUCH_NO_ABORT`); at most once a minute | `errors` (failed touch reads since boot), `last` (the last one's `esp_err_to_name`, e.g. `ESP_FAIL`) |
 | `evt` `display` | reserved for the display-wake PR | `state` (`on`/`dim`/`off`), `src` (`tap`/`prox`/`alert`) |
 | `perf` (HTTP) | every response (http_core.c) | `route` (the path, no query; a 404 is `other`, an unparsed request `-`), `status`, `bytes` sent, `ms` accept -> last byte (100 ms poll clock) |
 | `perf` (BLE) | read/write/heartbeat completions (ble_nimble.c) | `char`, `op` (`read`/`write`/`hb`), `ms`; every op of a char asked at most once a second, else 1 in 10; heartbeats at most one a minute |
@@ -805,8 +806,20 @@ The CoreS3 screen is dark when nobody uses it (spec `docs/superpowers/specs/2026
   `DISPLAY_PROX_FAR`); the WiFi or camper row turning red or amber. A tick of a number or a change to
   green/grey does not wake it (before this, any colour or wording change did).
 - **A wake tap is swallowed:** a press that starts while the screen is dim or off only wakes it; LVGL
-  sees no press until that finger lifts (`cali_display_touch_gate`, wrapped around the board
-  package's touch read).
+  sees no press until that finger lifts (`cali_display_touch_gate`, inside `display.c`'s touch read).
+- **A failed touch read never aborts** (`R_FW_TOUCH_NO_ABORT`, #346): esp_lvgl_port's own touch read
+  `ESP_ERROR_CHECK`s the FT5x06 I2C read, and the touch controller shares the board package's I2C bus
+  with the LTR-553 and AXP2101 reads and the init probes — one transient error aborted the firmware
+  (`taskLVGL`, `abort()` in `lvgl_port_touchpad_read`; 25+ panic reboots from 2026-10-12, 2 of 3 OTA
+  first boots). `display.c` now reads the controller itself (`esp_lcd_touch_read_data` +
+  `esp_lcd_touch_get_data`, point 0 unscaled as the port did — the BSP sets no scale, swap or mirror):
+  an error is "released" for that tick, counted, and logged as `evt` `touch` (`errors` since boot, `last`
+  error name; at most once a minute). The handle comes from the port's private touch context (its
+  first member; BSP 4.1.0 exposes none), so `esp_lvgl_port` is pinned `==2.9.0` and the handle is
+  checked against the BSP's 320x240 config — if that fails the port's read stays (logged). The I2C
+  driver serializes the devices on the bus itself (`bus_lock_mux`), so the LTR (owner task, under the
+  display lock) and AXP (owner task, outside it) reads need no LVGL lock; they keep their 10 ms
+  timeouts, the touch read waits without one (`esp_lcd` I2C default).
 - **Brightness** follows the room light: a log curve from `min` at ≤ 1 lux to `max` at ≥ 1000 lux,
   an EMA on log10(lux) with a 3 s time constant, and the applied level moves only on a change of
   more than 15 % (a 1 s headlight sweep does not move it). Dim = 30 % of the on level, at least 3 %.
@@ -1257,6 +1270,15 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    wake on hand, min, max, a −50…+50 brightness offset clamped to min..max) persist in NVS, ``/api/state`` reports ``device.display`` and
    ``POST /api/display`` changes them (station mode only); the ``/device`` page shows it, EN + DE.
 
+.. req:: A failed touch-controller read never aborts the firmware
+   :id: R_FW_TOUCH_NO_ABORT
+   :status: implemented
+   :tags: esp32, display
+
+   The firmware shall read the CoreS3 touch controller without an abort-on-error check: a failed
+   read shall report no touch for that read and be counted, and the count since boot with the last
+   error's name shall be logged as an ``evt`` ``touch`` record at most once a minute (#346).
+
 .. req:: The satellite reports its own battery and a measured runtime estimate
    :id: R_FW_BATTERY
    :status: implemented
@@ -1576,6 +1598,9 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   `device.display`, `POST /api/display` merge/persist/ranges/station-only, the offset read back after a reboot) and `T_FW_DISPLAY_WAKE_PAGE`
   (`tests/e2e/test_esp_page.py`: the `/device` Screen row, EN + DE). The sensor driver, the touch
   wrapper and the thresholds are board-only (hardware watch item 8).
+- **`R_FW_TOUCH_NO_ABORT`** — verified by `T_FW_TOUCH_NO_ABORT` (`tests/test_display_touch.py`: no
+  `ESP_ERROR_CHECK`/`abort` in `display.c`, the touch read is its own, the error evt, the port pinned to
+  the version the private-context layout was read from). The I2C error path itself is board-only.
 - **`R_FW_BATTERY`** — verified by `T_FW_BATTERY` (`tests/firmware/test_battery.py`: `device.battery`'s
   shape, all `null` without a reading, the estimate only after 5 min and 2 points, the 10-min window,
   the reset on USB / charging / unknown, the 10 s cadence in the sample ring), `T_FW_BATTERY_FOOTER`

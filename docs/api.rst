@@ -272,6 +272,7 @@ Firmware (issue #154)
 .. automodule:: tests.test_ux_gallery_esp_fixtures
 .. automodule:: tests.firmware.test_display_model
 .. automodule:: tests.test_display_font
+.. automodule:: tests.test_display_touch
 .. automodule:: tests.test_esp_shot
 
 Fake unit peripheral (Bumble, shared by the app lab + pairing tests)
