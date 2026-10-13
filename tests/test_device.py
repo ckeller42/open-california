@@ -224,6 +224,47 @@ def test_actuate_roof_stops_when_event_set(fake_bleak):
     assert 0x01 not in dirs and 0x00 in dirs
 
 
+def test_actuate_roof_release_interrupts_the_inter_frame_wait(fake_bleak, monkeypatch):
+    """A release mid-period sends STOP at once, not after the rest of the frame period: the wait
+    between frames is ``wait_for(stop_event.wait(), period_s)``, never a plain sleep (a mutation to
+    ``asyncio.sleep(period_s)`` makes this take the whole 5 s period).
+
+    .. test:: A roof release interrupts the inter-frame wait
+       :id: T_ROOF_INTERRUPTIBLE_WAIT
+       :links: R_ROOF_ACTUATE
+    """
+    import asyncio.tasks
+    import time
+
+    from calictl import control, overrides, protocol
+
+    monkeypatch.setattr(device.asyncio, "sleep", asyncio.tasks.sleep)  # real time: the point here
+    funcs = protocol.load()
+    overrides.apply(funcs)
+    f = funcs["roof"]
+    ev = asyncio.Event()
+
+    async def _run():
+        dev = device.CamperDevice("11:22:33:44:55:66")
+        asyncio.get_running_loop().call_later(0.2, ev.set)  # the release, mid-period
+        t0 = time.monotonic()
+        await dev.actuate_roof(
+            f,
+            control.roof_frame(funcs, "open"),
+            control.roof_frame(funcs, "stop"),
+            period_s=5.0,
+            verify=False,
+            validate_s=None,
+            stop_event=ev,
+        )
+        return time.monotonic() - t0, fake_bleak.instances[-1]
+
+    elapsed, cli = asyncio.run(_run())
+    dirs = [d[0] for op, u, d in cli.calls if op == "write" and u == f.control_char]
+    assert dirs[0] == 0x01 and dirs[-1] == 0x00
+    assert elapsed < 1.5, "STOP waited out the frame period (%.1fs)" % elapsed
+
+
 def test_actuate_roof_stops_at_limit_position(fake_bleak, monkeypatch):
     """A move ceases (-> STOP) as soon as the roof Position reaches the direction's limit, rather
     than running to the travel cap.

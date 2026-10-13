@@ -62,6 +62,12 @@ _SESSION_WAIT_S = float(os.environ.get("CALICTL_SESSION_WAIT_S", "6"))
 # this long the STOP stream ends — it never outlives the screen. A move in flight holds it open.
 _ROOF_VIEW_LAPSE_S = float(os.environ.get("CALICTL_ROOF_VIEW_LAPSE_S", "15"))
 
+# SAFETY (#239): the web server handles a press and its release on separate threads, so the release
+# can reach the daemon first. It finds no move in flight and sends a standalone STOP; a roof press
+# arriving within this window after such a STOP is taken as that release's own late press and is
+# refused. The web UI already ignores a re-press within 1 s, so no real press is lost.
+ROOF_RELEASE_GUARD_S = 0.25
+
 # How long POST /api/pairing {"action":"start"} waits for the wizard to actually start before it
 # answers with a "scanning" snapshot anyway (the start then completes once the radio is free).
 # Far below ServeBackend.pairing_command's 30 s bridge timeout.
@@ -375,6 +381,7 @@ class Server:
         self._published = set()  # functions whose discovery is sent
         self._last = {}  # function -> last DECODED state (for commands)
         self._roof_stop: asyncio.Event | None = None  # lazy, loop-bound: interrupts an in-flight roof move
+        self._roof_standalone_stop_at = float("-inf")  # monotonic arrival of the last standalone STOP
         self._roof_view_until = 0.0  # monotonic deadline of the roof view (0 = not viewing)
         self._roof_view_task: asyncio.Future | None = None  # the view loop (_roof_view_loop)
         self._roof_view_wake: asyncio.Event | None = None  # lazy, loop-bound: wakes it on leave
@@ -986,6 +993,11 @@ class Server:
         lock, so the fast path comes back afterwards."""
         # _roof_move_command is called after run() initializes _ble
         assert self._ble is not None
+        if time.monotonic() - self._roof_standalone_stop_at < ROOF_RELEASE_GUARD_S:
+            log.warning(
+                "roof %s refused: arrived just after a standalone STOP (its own release, #239)" % what
+            )
+            return None
         # SAFETY: a fresh stop token per press, created BEFORE waiting for the lock. A release that
         # arrives while the press still queues behind a poll/write must find this token "pending"
         # and set it — the press then never starts. (The token used to be created/cleared only once
@@ -1020,6 +1032,7 @@ class Server:
             self._roof_stop.set()
         if moving:
             return None
+        self._roof_standalone_stop_at = time.monotonic()  # a late press of this release is refused
         async with self._ble:
             try:
                 stop_frame = control.roof_frame(self.funcs, "stop")
