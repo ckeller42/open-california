@@ -7,7 +7,8 @@ set -euo pipefail
 REF="${1:-main}"; ESP="${2:-http://192.168.8.183}"; REPO=ckeller42/open-california
 # main = its newest commit CI builds: a [skip ci] commit (the screenshot bot) never gets an esp-latest image
 if [ "$REF" = main ]; then sha=$(gh api "repos/$REPO/commits?sha=main&per_page=20" \
-  --jq '[.[] | select(.commit.message | contains("[skip ci]") | not)][0].sha'); else sha=$REF; fi
+  --jq '[.[] | select(.commit.message | contains("[skip ci]") | not)][0].sha // empty'); else sha=$REF; fi
+[ -n "$sha" ] || { echo "no CI-built commit in main's last 20" >&2; exit 1; }
 sha7=${sha:0:7}; echo "deploying $sha7 to $ESP"
 j() { python3 -c 'import functools,json,sys; print(functools.reduce(lambda d,k: d[k], sys.argv[1].split("."), json.load(sys.stdin)))' "$1"; }
 dev() { curl -sf --max-time 10 "$ESP/api/state" | j "device.$1" 2>/dev/null || true; }
