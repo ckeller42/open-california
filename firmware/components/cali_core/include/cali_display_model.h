@@ -115,7 +115,8 @@ int cali_display_cfg_valid(const cali_display_cfg_t *c);
 int cali_display_cfg_set(const cali_display_cfg_t *c);
 /* The painter's last state (never called without a screen: device.display's live members stay null). */
 void cali_display_publish(const cali_display_view_t *v);
-/* device.display: {"state","lux","prox","motion","brightness_pct","sensor","auto","prox_wake","motion_wake","min","max","offset"}. */
+/* device.display: {"state","lux","prox","motion","brightness_pct","sensor","auto","prox_wake","motion_wake","min","max","offset",
+ * "dfs","pm"} — dfs/pm = the live cali_pm_dfs state (bool / "<min>-<max>" MHz; null without PM: host, QEMU). */
 void cali_display_json(cali_json_t *j);
 
 /* Copies src into dst (CALI_ROW_TEXT_MAX bytes), cut at a UTF-8 boundary when too long. */

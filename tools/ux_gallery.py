@@ -196,6 +196,8 @@ DISPLAY_ON = {
     "min": 8,
     "max": 100,
     "offset": 0,
+    "dfs": True,
+    "pm": "40-240",
 }
 
 

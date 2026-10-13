@@ -9,5 +9,5 @@ idf_component_register(SRCS "esp/platform_esp.c" "esp/net_esp.c"
                        INCLUDE_DIRS "include"
                        REQUIRES cali_core
                        PRIV_REQUIRES nvs_flash esp_timer esp_app_format esp_wifi esp_netif esp_event lwip
-                                     espressif__mdns)
+                                     espressif__mdns esp_pm)
 include(${CMAKE_CURRENT_LIST_DIR}/../../cmake/cali_strict.cmake)

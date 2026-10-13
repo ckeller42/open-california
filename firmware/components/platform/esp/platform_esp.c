@@ -16,6 +16,9 @@
 #include "esp_app_desc.h"
 #include "esp_timer.h"
 #include "nvs.h"
+#if CONFIG_PM_ENABLE
+#include "esp_pm.h"
+#endif
 
 #define KV_NAMESPACE "cali"
 #define KV_RECORD_MAX (64u * 1024u) /* same bound as the host: bigger = not ours = corrupt */
@@ -42,6 +45,26 @@ void cali_log(const char *fmt, ...) {
  * at configure time (esp_app_desc_t.version, 32 bytes, NUL-terminated). */
 const char *cali_fw_version(void) {
     return esp_app_get_description()->version;
+}
+
+/* The live esp_pm config, never a flag of our own: device.display.dfs must say whether DFS is really
+ * active in this boot (#346: two "DFS on" boots differed 45x in touch NACKs). */
+int cali_pm_dfs(int on, char *pm, size_t cap) {
+#if CONFIG_PM_ENABLE
+    esp_pm_config_t c = {.max_freq_mhz = CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ, .light_sleep_enable = false};
+    if (on >= 0) {
+        c.min_freq_mhz = on ? CONFIG_XTAL_FREQ : CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ;
+        if (esp_pm_configure(&c) != ESP_OK) cali_log("pm: configure failed");
+    }
+    if (esp_pm_get_configuration(&c) != ESP_OK) return -1;
+    if (pm) snprintf(pm, cap, "%d-%d", c.min_freq_mhz, c.max_freq_mhz);
+    return c.min_freq_mhz < c.max_freq_mhz;
+#else
+    (void)on;
+    (void)pm;
+    (void)cap;
+    return -1;
+#endif
 }
 
 /* store_dir is the host's; on the ESP the store is NVS (nvs_flash_init() must have run). */

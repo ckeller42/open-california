@@ -549,6 +549,12 @@ void app_main(void) {
     cali_diag_sink = cali_sdlog_text;   /* diagnostics -> the SD log (no card: dropped) */
     s_vprintf = esp_log_set_vprintf(log_hook);
     if (cali_platform_init(NULL) != 0) cali_log("store: NVS namespace unusable, bonds will not persist");
+    {   /* is DFS really active this boot (#346)? the live esp_pm config, as device.display.dfs/pm */
+        char pm[16];
+        int d = cali_pm_dfs(-1, pm, sizeof pm);
+        if (d < 0) cali_log("pm: off");
+        else cali_log("pm: %s %s", d ? "dfs" : "fixed", pm);
+    }
     (void)cali_time_init();   /* the boot counter (R_FW_TIME): "LOG time: boot N", test_qemu_boot.py */
     cali_session_on_io = cali_sdlog_io;   /* unit frames -> the unit clock + the SD log (R_FW_SD_LOG) */
     cali_ac_init();           /* the auto-camper toggle + restore debt (R_FW_AUTO_CAMPER) */

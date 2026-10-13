@@ -260,7 +260,8 @@ EXPECTED_DEVICE_TAIL = (
     '"battery":{"pct":null,"mv":null,"usb":null,"charging":null,"runtime_min":null},'
     '"auto_camper":{"enabled":true,"state":"idle"},'
     '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
-    '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0},"ux":{"enabled":true},'
+    '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
+    '"ux":{"enabled":true},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
@@ -1651,11 +1652,41 @@ def test_display_motion_wake_switch_persists_and_shows_in_state(web_cli):
     assert "LOG display: stored settings out of range, using defaults" in other
 
 
+def test_display_dfs_knob_is_applied_at_once_never_stored_and_reads_the_live_pm_state(web_cli):
+    """``dfs`` (a bool) reaches the platform's ``cali_pm_dfs`` at once and lands in no kv key;
+    ``device.display.dfs`` / ``pm`` come from the live PM config — ``null`` on the host (no PM).
+
+    .. test:: POST /api/display {"dfs"}: a bool, applied at once, not persisted; device.display.dfs/pm live
+       :id: T_FW_DISPLAY_DFS_KNOB
+       :links: R_FW_DISPLAY_WAKE
+    """
+    resps, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/display", '{"dfs":false}'),
+            req("POST", "/api/display", '{"dfs":true,"min":9}'),
+            req("GET", "/api/state"),
+            b"kv dfs",
+            b"kv disp_dfs",
+        ],
+    )
+    assert [(r.status, r.json()) for r in resps[:2]] == [(200, {"ok": True})] * 2
+    assert [ln for ln in other if ln.startswith("CALL pm_dfs")] == ["CALL pm_dfs 0", "CALL pm_dfs 1"]
+    disp = resps[2].json()["device"]["display"]
+    assert disp["dfs"] is None and disp["pm"] is None and disp["min"] == 9
+    assert other.count("KV <missing>") == 2
+
+
 @pytest.mark.parametrize(
     "setup,method,body,status,error",
     [
         (STATION, "GET", None, 405, "method"),
         (["wifi setup_ap"], "POST", '{"min":10}', 403, "setup_mode"),
+        (["wifi setup_ap"], "POST", '{"dfs":false}', 403, "setup_mode"),
+        (STATION, "POST", '{"dfs":1}', 400, "bad_json"),
+        (STATION, "POST", '{"dfs":"false"}', 400, "bad_json"),
+        (STATION, "POST", '{"dfs":true,"dfs":true}', 400, "bad_json"),
         (STATION, "POST", "", 400, "bad_json"),
         (STATION, "POST", '{"min":"10"}', 400, "bad_json"),
         (STATION, "POST", '{"auto":1}', 400, "bad_json"),

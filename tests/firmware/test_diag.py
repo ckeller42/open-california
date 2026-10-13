@@ -18,6 +18,12 @@ The panic capture's boot side (``cali_panic_fields``/``cali_diag_panic``; the ES
 .. test:: A sealed panic capture becomes one evt panic record and is cleared; a corrupt one is never logged
    :id: T_FW_PANIC_CAPTURE
    :links: R_FW_PANIC_CAPTURE
+
+The touch record's body (``cali_diag_touch``; the context capture in ``display.c`` is board-only):
+
+.. test:: The evt touch record carries the last NACK's context and fits the record limit at its longest
+   :id: T_FW_TOUCH_NACK_CONTEXT
+   :links: R_FW_TOUCH_NO_ABORT
 """
 
 import json
@@ -84,6 +90,28 @@ def test_health_record_fits_at_its_longest_and_nulls_the_unknown(cli):
         "ev": "diag", "heap_free": None, "heap_min": None, "psram_free": None, "cpu_pct": None,
         "stack_min": {}, "wifi_rssi": None, "ble_rssi": None, "link_up": False, "uptime_s": 0,
     }  # fmt: skip
+
+
+def test_touch_record_context_fits_at_its_longest_and_nulls_the_unknown(cli):
+    """``evt touch``: the count, the last error name and the context of the last failure (CPU MHz,
+    USB / charging, screen state, the owner task's last I2C device + ms since, the FT5x06 power
+    mode); every unknown ``null``; the longest body stays under the record limit (#346)."""
+    longest, unknown = recs(run(cli, "touch max", "touch min"))
+    assert len(json.dumps(longest, separators=(",", ":"))) < BODY_MAX
+    assert longest == {
+        "ev": "evt",
+        "kind": "touch",
+        "errors": 4294967295,
+        "last": "ESP_ERR_INVALID_RESPONSE_LONGEST_NAME_40",
+        "mhz": 240,
+        "usb": False,
+        "chg": False,
+        "scr": "dim",
+        "bus": "none",
+        "bus_ms": 4294967295,
+        "pmode": 255,
+    }
+    assert unknown == dict.fromkeys(longest, None) | {"ev": "evt", "kind": "touch", "errors": 0}
 
 
 def test_boot_event(cli):

@@ -33,7 +33,7 @@ BATTERY_KEYS = frozenset({"pct", "mv", "usb", "charging", "runtime_min"})  # dev
 # device.display (R_FW_DISPLAY_WAKE): the live screen state + the settings
 DISPLAY_KEYS = frozenset(
     {"state", "lux", "prox", "motion", "brightness_pct", "sensor", "auto", "prox_wake", "motion_wake"}
-    | {"min", "max", "offset"}
+    | {"min", "max", "offset", "dfs", "pm"}
 )
 CONTROL_KEYS = frozenset({"writes"})  # /api/state device.control: POST /api/command accepted (station mode)
 PAIRING_KEYS = frozenset({"state", "address"})  # /api/state device.pairing

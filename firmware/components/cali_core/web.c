@@ -743,7 +743,7 @@ static void api_auto_camper(const cali_http_req_t *req, cali_http_resp_t *resp) 
     }
 }
 
-/* ---- POST /api/display {"auto"?,"prox_wake"?,"min"?,"max"?,"offset"?,"motion_wake"?} (R_FW_DISPLAY_WAKE): station mode only ---- */
+/* ---- POST /api/display {"auto"?,"prox_wake"?,"min"?,"max"?,"offset"?,"motion_wake"?,"dfs"?} (R_FW_DISPLAY_WAKE): station mode only ---- */
 
 static int parse_pct(cursor_t *c, int *out, int sign) {   /* [-]1-3 digits; a 4th is then bad JSON */
     const char *s;
@@ -756,12 +756,14 @@ static int parse_pct(cursor_t *c, int *out, int sign) {   /* [-]1-3 digits; a 4t
     return c->p == s ? -1 : 0;
 }
 
-/* Merges the given members into *d. 0 ok, -1 not an object of those keys (each at most once). */
-static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *d) {
-    static const char *const KEYS[6] = {"auto", "prox_wake", "min", "max", "offset", "motion_wake"};
+/* Merges the given members into *d; "dfs" (a bool, not a setting) into *dfs (-1 when absent).
+ * 0 ok, -1 not an object of those keys (each at most once). */
+static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *d, int *dfs) {
+    static const char *const KEYS[7] = {"auto", "prox_wake", "min", "max", "offset", "motion_wake", "dfs"};
     uint8_t *dst[6] = {&d->auto_on, &d->prox_wake, &d->min_pct, &d->max_pct, (uint8_t *)&d->offset, &d->motion_wake};
     cursor_t c = {body, body + body_len};
     int seen = 0;
+    *dfs = -1;
     if (expect(&c, '{') != 0) return -1;
     skip_ws(&c);
     if (c.p < c.end && *c.p == '}') c.p++;
@@ -770,11 +772,12 @@ static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *
         size_t klen;
         int i, v;
         if (parse_str(&c, key, sizeof key, &klen) != 0 || klen >= sizeof key || expect(&c, ':') != 0) return -1;
-        for (i = 0; i < 6 && strcmp(key, KEYS[i]) != 0; i++) {}
-        if (i == 6 || (seen & (1 << i)) || (i < 2 || i == 5 ? parse_bool(&c, &v) : parse_pct(&c, &v, i == 4)) != 0)
+        for (i = 0; i < 7 && strcmp(key, KEYS[i]) != 0; i++) {}
+        if (i == 7 || (seen & (1 << i)) || (i < 2 || i >= 5 ? parse_bool(&c, &v) : parse_pct(&c, &v, i == 4)) != 0)
             return -1;
         seen |= 1 << i;
-        *dst[i] = (uint8_t)(int8_t)v;
+        if (i == 6) *dfs = v;
+        else *dst[i] = (uint8_t)(int8_t)v;
         skip_ws(&c);
         if (c.p < c.end && *c.p == ',') { c.p++; continue; }
         if (expect(&c, '}') != 0) return -1;
@@ -786,18 +789,21 @@ static int parse_display(const char *body, size_t body_len, cali_display_cfg_t *
 
 static void api_display(const cali_http_req_t *req, cali_http_resp_t *resp) {
     cali_display_cfg_t d = *cali_display_cfg();
-    int rc;
+    int rc, dfs = -1;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
         SET_CONST(resp, 403, ERR_SETUP_MODE);
-    } else if (parse_display(req->body, req->body_len, &d) != 0) {
+    } else if (parse_display(req->body, req->body_len, &d, &dfs) != 0) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
     } else if ((rc = cali_display_cfg_set(&d)) == -1) {
         SET_CONST(resp, 400, ERR_BAD_VALUE);
     } else if (rc != 0) {
         SET_CONST(resp, 500, ERR_STORE);
     } else {
+        /* ponytail: #346 debug knob — DFS on/off at runtime, not persisted (a boot = sdkconfig);
+         * device.display.dfs / pm show the live result (null where there is no PM). Drop with #346. */
+        if (dfs >= 0) (void)cali_pm_dfs(dfs, NULL, 0);
         SET_CONST(resp, 200, OK_BODY);   /* the new settings: /api/state device.display */
     }
 }

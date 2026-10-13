@@ -9,7 +9,7 @@
  *   {"ev":"diag","heap_free":…,"heap_min":…,"psram_free":…,"cpu_pct":…,"stack_min":{"owner":…,…},
  *    "wifi_rssi":…,"ble_rssi":…,"link_up":true,"uptime_s":…}                 (app_main, every 60 s)
  *   {"ev":"evt","kind":"<kind>",…}   boot | link_up | link_down | wifi_up | wifi_down | net | cmd |
- *                                    ota | auto_camper | sd | panic | touch (display.c, #346) | display (the display-wake PR:
+ *                                    ota | auto_camper | sd | panic | touch (cali_diag_touch, #346) | display (the display-wake PR:
  *                                    cali_diag_evt("display", "\"state\":\"on\",\"src\":\"tap\""))
  *   {"ev":"perf","route":"/api/state","status":200,"bytes":4711,"ms":100}   every HTTP response
  *   {"ev":"perf","char":"1602","op":"read","ms":84}                         BLE ops, sampled
@@ -71,6 +71,22 @@ int cali_diag_health(const cali_diag_health_t *h);   /* {"ev":"diag",…} */
 /* {"ev":"evt","kind":"boot","reset_reason":…,"fw":…,"boot":n,"prev_up_s":n|null}: prev_up_s = the
  * previous boot's last diag uptime (< 0: unknown, e.g. after a power-on). */
 int cali_diag_boot(const char *reset_reason, const char *fw, unsigned long boot, long prev_up_s);
+
+/* The touch record (display.c, R_FW_TOUCH_NO_ABORT, #346): the failed-read count plus the context
+ * of the LAST failure, captured in the touch task right after the failed call. Each < 0 int -> null. */
+typedef struct {
+    uint32_t errors;   /* failed touch reads since boot */
+    const char *last;  /* the last one's esp_err_to_name */
+    int mhz;           /* CPU clock right after the failed call (DFS: 40 idle / 240 busy) */
+    int usb, chg;      /* the display tick's last battery reading: on USB / charging (0/1) */
+    const char *scr;   /* screen state then: "on" | "dim" | "off" */
+    const char *bus;   /* the owner task's last I2C device: "ltr" | "axp" | "bmi" | "bl" | "none" */
+    long bus_ms;       /* ms since that transfer finished (< 0: none yet) */
+    int pmode;         /* FT5x06 PWR_MODE (0xA5) re-read after the failure: 0 active, 1 monitor, 3 hibernate; -1 failed too */
+} cali_diag_touch_t;
+/* {"ev":"evt","kind":"touch","errors":n,"last":"…","mhz":…,"usb":…,"chg":…,"scr":"…","bus":"…",
+ *  "bus_ms":…,"pmode":…}. Owner task. 0 queued, -1 not. */
+int cali_diag_touch(const cali_diag_touch_t *t);
 
 /* ---- panic capture (R_FW_PANIC_CAPTURE) ----
  * The ESP's esp_panic_handler wrapper (app_main.c) fills one of these in RTC_NOINIT memory and seals
