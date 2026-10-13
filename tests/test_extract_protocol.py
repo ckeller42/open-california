@@ -92,3 +92,25 @@ def test_offset_width_validation():
 
     assert resolve("f1", 2) == 6  # power resolves
     assert resolve("f2", 4) is None  # level ambiguous across branches
+
+
+def test_main_refuses_layoutless_dictionary(tmp_path, capsys):
+    # app 5.4.0.3036 shape: the log anchor survives, the sg.a/.f399c/.p( anchors do not ->
+    # names only. main must exit 2 and write nothing instead of a silent offset-less dictionary.
+    d = tmp_path / "src" / "mg"
+    d.mkdir(parents=True)
+    (d / "d.java").write_text(
+        "public final class d {\n"
+        "    public final void g(String str, Boolean[] boolArr) {\n"
+        '        StringBuilder sbN = u.n("<-- Incoming Data for Cooler:  State: ", obj, "  Level: ", obj2, "  ");\n'
+        "        aVar14.m((Boolean[]) m10.o.O(boolArr).subList(7, 8).toArray(new Boolean[0]));\n"
+        "        wo.a.a(dVar.f22490r, sbN.toString(), 6);\n"
+        "    }\n}\n"
+    )
+    out = tmp_path / "dict.yaml"
+    import sys
+
+    sys.argv = ["extract_protocol.py", str(tmp_path / "src"), str(out)]
+    assert ep.main() == 2
+    assert not out.exists()
+    assert "NO bit layout" in capsys.readouterr().err

@@ -17,6 +17,14 @@ Sources joined per field object:
 
 Usage:  python3 extract_protocol.py <decompile/.../sources> [out.yaml]
 Stdlib only. Output holds protocol facts only (names, bits) — no app source.
+
+VERSION-KEYED: the anchors below are the R8 MEMBER names of app 5.0.8.3028 (`sg.a` cell
+class, `.f398b` value / `.f399c` bits, `.p(` slice populate). App 5.4.0.3036 renamed them
+(`lh.a`, `.f2247a` / `.f2248b`, `.m(`) and split the energy decode into a V2 and a V3
+branch, so on that tree the extractor recovers names but NO bit layout. `main` refuses to
+write such a layout-less dictionary (exit 2) instead of silently emitting one. The committed
+dictionary is the 5.0.8 extraction + hand edits (see its PRESERVE comments); re-extracting
+is only needed when the T7/V2 frames change, which 5.4.0 did not do.
 """
 
 from __future__ import annotations
@@ -269,9 +277,21 @@ def main():
         functions[fn]["control_uuid"] = cc["ctrl_uuid"]
         functions[fn]["control_source"] = cc["file"]
 
+    if functions and not layout_recovered(functions):
+        sys.stderr.write(
+            "ERROR: %d functions found but NO bit layout recovered — the R8 member "
+            "names this extractor keys on moved with an app version bump; see the module "
+            "docstring. Not writing %s.\n" % (len(functions), out)
+        )
+        return 2
     _emit(functions, unresolved, command_enums, out)
     _report(functions, unresolved)
     return 0
+
+
+def layout_recovered(functions) -> bool:
+    """True when at least one state field carries a bit offset (names-only = anchors drifted)."""
+    return any("offset" in f for e in functions.values() for f in e["state_fields"])
 
 
 def _emit(functions, unresolved, command_enums, out):

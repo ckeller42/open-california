@@ -19,8 +19,10 @@ Do this whenever you touch an interpretation in `calictl/semantics.py`, or when
 1. **The unit's own on-screen display** — the highest authority. An owner photo of the camper
    screen catches mislabels a readback echo hides. If you have one, it wins over everything below.
 2. **The app's decompiled getter** — the real polarity/combination logic. On buspi (the canonical
-   decompile machine): `DECOMPILE_SRC=<sources>` then trace the getter for the field, or
-   cross-check `mapping.enigma`. `ui/screens/*.yaml` is the machine-usable mirror of the app UI —
+   decompile machine): `DECOMPILE_SRC=~/src/californiaontour-5.4.0/raw/sources` (the RAW tree of
+   the current decompile; the 5.0.8 tree is `~/src/californiaontour-decompile/sources`) then trace
+   the getter for the field, or cross-check `mapping.enigma` (5.4.0 names; `mapping-5.0.8.3028.enigma`
+   for the old tree). `ui/screens/*.yaml` is the machine-usable mirror of the app UI —
    **authoritative for app-UI semantics**.
 3. **The readback state-char** — a **write-through echo**, NOT proof. Never conclude polarity from
    "I wrote 1 and read back 1." The `1502`/`1102` Mode-4 notifications are the truthful feedback
@@ -28,7 +30,9 @@ Do this whenever you touch an interpretation in `calictl/semantics.py`, or when
 
 ## Checklist
 
-1. **Run the auditor**: `DECOMPILE_SRC=<sources> python3 -m tools.audit_signals --report`. Any
+1. **Run the auditor**: `DECOMPILE_SRC=~/src/californiaontour-5.4.0/raw/sources python3 -m tools.audit_signals --report`
+   (buspi). Its `decompile:` line must report setter-flagged functions > 0 — a WARNING there
+   means the tree was not read (wrong path, or R8 member names moved with a version bump). Any
    `SEMANTIC-REVIEW-NEEDED` line names a field whose app setter/getter is **inverted** or
    **combined** — those are the ones this skill exists for.
 2. **Find the app getter** (not a naive bool): what does the app return for this field? Look in

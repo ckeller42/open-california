@@ -10,6 +10,13 @@ Two signatures (the ones that bit us on camping lights):
 Functions are identified by the `Incoming Data for <Fn>:` debug log that sits in the
 same class as the setters. Best-effort + stdlib-only; results are review flags, not
 gospel (the decompiled tree is R8-obfuscated).
+
+R8 renames MEMBERS per build too, not only classes: the bit-field stage call was
+`.o(Integer.valueOf(x))` in app 5.0.8.3028 and `.l(Integer.valueOf(x))` in 5.4.0.3036.
+The regexes below therefore key on the call SHAPE, never on a member name — a name-keyed
+regex silently matches nothing after a version bump (COMBINED-CONTROL vanished for every
+function on the 5.4.0 tree before this was fixed). Run against the RAW jadx tree, not the
+mapping-renamed `named/` tree.
 """
 
 from __future__ import annotations
@@ -19,7 +26,7 @@ import re
 
 _INV_WRITE = re.compile(r"!\s*\w+\s*\?\s*1\s*:\s*0|!\s*\w+\s*\?\s*0\s*:\s*1")  # setter inverts value
 _INV_READ = re.compile(r"!\s*\(\(Boolean\)")  # readback getter inverts a field (the READ risk)
-_WRITE = re.compile(r"\.o\(Integer\.valueOf\((\w+)\)\)")
+_WRITE = re.compile(r"\.\w{1,2}\(Integer\.valueOf\((\w+)\)\)")  # <holder>.<r8 name>(Integer.valueOf(local))
 _FN = re.compile(r"Incoming Data for (\w+)")
 
 

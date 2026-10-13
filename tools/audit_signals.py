@@ -1,4 +1,12 @@
-"""Four-source auditor: seed/update the catalog and report discrepancies."""
+"""Four-source auditor: seed/update the catalog and report discrepancies.
+
+``DECOMPILE_SRC`` = the RAW jadx tree of the CURRENT app decompile on buspi
+(``~/src/californiaontour-5.4.0/raw/sources``; the ``named/`` tree is mapping-renamed and
+breaks the stdlib greps — Water/GPS lose their fields, a bogus SCALE-MISMATCH appears).
+The app-derived inputs are regex harvests over R8-obfuscated code, so a version bump can
+empty them silently; ``main`` prints a ``decompile:`` summary line and a WARNING when the
+tree yielded nothing, so an empty harvest never passes as "clean".
+"""
 
 from __future__ import annotations
 
@@ -132,6 +140,17 @@ def main(argv=None):
     app = __import__("tools.app_scales", fromlist=["scales"]).scales(src)
     setters = __import__("tools.app_setters", fromlist=["nontrivial"]).nontrivial(src) if src else {}
     gui = gui_keys(os.path.join(root, "ui", "screens"))
+    if src:
+        dict_fields = {k.split(".")[-1] for k in catalog.dictionary_keys(funcs)}
+        print(
+            "decompile: %s -> %d setter-flagged functions, %d scale hits on dictionary fields"
+            % (src, len(setters), len(dict_fields & set(app)))
+        )
+        if not setters:
+            print(
+                "WARNING: DECOMPILE_SRC yielded no setter signatures — wrong tree (use the raw "
+                "jadx tree) or the R8 member names moved with an app version bump (tools/app_setters.py)"
+            )
     if "--report" in argv:
         print("\n".join(report(funcs, cat, app, gui, {}, setters)) or "clean")
     if "--seed" in argv:
