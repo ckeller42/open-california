@@ -193,6 +193,12 @@ int cali_kv_get(const char *key, void *buf, size_t *len) {
 }
 uint64_t cali_uptime_ms(void) { return s_now; }
 const char *cali_fw_version(void) { return "test"; }
+int cali_pm_dfs(int on, char *pm, size_t cap) {   /* no PM, as the host: device.display.dfs / pm null */
+    (void)pm;
+    (void)cap;
+    if (on >= 0) printf("CALL pm_dfs %d\n", on);
+    return CALI_PM_NONE;
+}
 void cali_log(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);

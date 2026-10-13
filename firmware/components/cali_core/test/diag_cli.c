@@ -5,6 +5,7 @@
  *   nosink                       cali_diag_sink = NULL
  *   evt <kind> [raw fields]      cali_diag_evt(kind, "%s", fields)
  *   health max|min               cali_diag_health with every field at its longest | unknown
+ *   touch max|min                cali_diag_touch with every field at its longest | unknown
  *   boot <reason> <fw> <n> <prev>   cali_diag_boot
  *   due <now>                    "DUE 0|1"
  *   http <status> <bytes> <ms> [path]   cali_diag_http (no path = NULL)
@@ -61,6 +62,12 @@ int main(void) {
                 }
             }
             printf("RC %d\n", cali_diag_health(&h));
+        } else if (strncmp(line, "touch ", 6) == 0) {
+            cali_diag_touch_t t = {0, NULL, -1, -1, -1, NULL, NULL, -1, -1};
+            if (strcmp(line + 6, "max") == 0)   /* every field at its longest */
+                t = (cali_diag_touch_t){4294967295ul, "ESP_ERR_INVALID_RESPONSE_LONGEST_NAME_40", 240, 0, 0, "dim",
+                                        "none", 4294967295l, 255};
+            printf("RC %d\n", cali_diag_touch(&t));
         } else if (strncmp(line, "boot ", 5) == 0) {
             unsigned long n;
             long prev;

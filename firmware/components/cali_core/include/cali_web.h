@@ -32,7 +32,8 @@
  *                                                -- cali_auto_camper.h (R_FW_AUTO_CAMPER)
  *                                  "display":{"state":"on"|"dim"|"off","lux","prox","motion","brightness_pct",
  *                                             "sensor":"ok"|"absent"|"error","auto":<bool>,
- *                                             "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset"}
+ *                                             "prox_wake":<bool>,"motion_wake":<bool>,"min","max","offset",
+ *                                             "dfs":<bool>|null,"pm":"<min>-<max>"|null (the live esp_pm config)}
  *                                             -- R_FW_DISPLAY_WAKE; motion = mg, null without a BMI270 reading;
  *                                             the live members are null without a screen (host, QEMU)
  *                                  "ux":{"enabled":<bool>},   -- "Send usage data" (NVS ux_on, default on;
@@ -129,8 +130,10 @@
  *                     bad_action, 409 busy (one runs), 503 ota_unavailable (no OTA I/O: the host
  *                     build, the QEMU image). Any other method: 405 method.
  *   POST /api/display {"auto"?:<bool>,"prox_wake"?:<bool>,"min"?:<int>,"max"?:<int>,"offset"?:<int>,
- *                     "motion_wake"?:<bool>} (R_FW_DISPLAY_WAKE): merged into the current settings,
- *                     persisted (kv disp_auto/disp_prox/disp_min/disp_max/disp_off/disp_motion)
+ *                     "motion_wake"?:<bool>,"dfs"?:<bool>} (R_FW_DISPLAY_WAKE): merged into the current settings,
+ *                     persisted (kv disp_auto/disp_prox/disp_min/disp_max/disp_off/disp_motion);
+ *                     "dfs" is NOT a setting: cali_pm_dfs(on) at once, never persisted (ponytail: the
+ *                     #346 touch-NACK A/B knob; device.display.dfs/pm = the live PM state)
  *                     -> 200 {"ok":true}; station mode only (403 setup_mode), 400 bad_json (other keys,
  *                     a key twice, a non-bool flag, a non-integer percent), 400 bad_value (min 1..50,
  *                     max 20..100, min < max, offset -50..50), 500 store, 405 for another method.

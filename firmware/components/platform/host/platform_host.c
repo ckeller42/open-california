@@ -170,6 +170,13 @@ int cali_kv_erase(const char *key) {
     return rc;
 }
 
+int cali_pm_dfs(int on, char *pm, size_t cap) {   /* no PM on the host: device.display.dfs null */
+    (void)on;
+    (void)pm;
+    (void)cap;
+    return CALI_PM_NONE;
+}
+
 int cali_kv_erase_all(void) {
     char path[sizeof s_dir + 300];
     struct dirent *e;

@@ -86,5 +86,13 @@ void cali_display_json(cali_json_t *j) {
     cali_json_int(j, c->max_pct);
     cali_json_key(j, "offset");
     cali_json_int(j, c->offset);
+    {   /* the live PM config (never a stored flag): is DFS really active in this boot? (#346) */
+        char pm[16];
+        int d = cali_pm_dfs(-1, pm, sizeof pm);
+        cali_json_key(j, "dfs");
+        if (d < 0) cali_json_null(j); else cali_json_bool(j, d);
+        cali_json_key(j, "pm");
+        if (d < 0) cali_json_null(j); else cali_json_str(j, pm);
+    }
     cali_json_obj_end(j);
 }

@@ -82,6 +82,18 @@ int cali_diag_boot(const char *reset_reason, const char *fw, unsigned long boot,
                          cali_diag_q(f, sizeof f, fw, 40), boot, num(p, sizeof p, prev_up_s, prev_up_s >= 0));
 }
 
+int cali_diag_touch(const cali_diag_touch_t *t) {
+    char l[48], v[5][24], s[8], b[8];
+    return cali_diag_evt("touch",
+                         "\"errors\":%lu,\"last\":%s,\"mhz\":%s,\"usb\":%s,\"chg\":%s,\"scr\":%s,\"bus\":%s,"
+                         "\"bus_ms\":%s,\"pmode\":%s",
+                         (unsigned long)t->errors, cali_diag_q(l, sizeof l, t->last, 40),
+                         num(v[0], sizeof v[0], t->mhz, t->mhz >= 0), t->usb < 0 ? "null" : t->usb ? "true" : "false",
+                         t->chg < 0 ? "null" : t->chg ? "true" : "false", cali_diag_q(s, sizeof s, t->scr, 3),
+                         cali_diag_q(b, sizeof b, t->bus, 4), num(v[1], sizeof v[1], t->bus_ms, t->bus_ms >= 0),
+                         num(v[2], sizeof v[2], t->pmode, t->pmode >= 0));
+}
+
 const char *cali_panic_fields(const cali_panic_t *p, char *buf, size_t cap) {
     char t[40], r[56], bt[CALI_PANIC_DEPTH * 9 + 1];
     size_t n = 0;

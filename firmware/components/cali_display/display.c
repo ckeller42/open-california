@@ -19,7 +19,9 @@
 #include "cali_platform.h"
 #include "cali_status.h"
 #include "driver/i2c_master.h"
+#include "esp_lcd_panel_io.h"
 #include "esp_lcd_touch.h"
+#include "esp_private/esp_clk.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "lvgl.h"
@@ -73,6 +75,17 @@ static const uint8_t IMU_INIT[][2] = {{0x41, 0x02}, {0x7D, 0x04}};
 #define AXP_VBAT_H 0x34
 #define AXP_PCT 0xA4
 
+/* FT5x06 touch controller (I2C 0x38, behind the BSP's esp_lcd_touch handle), registers as the
+ * esp_lcd_touch_ft5x06 driver names them: ID_G_PMODE 0xA5 (0 active, 1 monitor, 3 hibernate),
+ * ID_G_FIRMID 0xA6, ID_G_FT5201ID 0xA8 (vendor). Read through the handle's panel io (the driver's
+ * own path) for the NACK context (#346). */
+#define FT_PMODE 0xA5
+#define FT_FIRMID 0xA6
+#define FT_VENDOR 0xA8
+enum { BUS_NONE, BUS_LTR, BUS_AXP, BUS_BMI, BUS_BL };
+static const char *const BUS_NAMES[] = {"none", "ltr", "axp", "bmi", "bl"};
+static const char *const SCR_NAMES[] = {"on", "dim", "off"};
+
 #if CONFIG_CALI_DISPLAY_LANG_EN
 #define LANG CALI_LANG_EN
 #else
@@ -124,6 +137,16 @@ static uint32_t s_touch_logged;         /* owner task: the count in the last "to
 static uint64_t s_touch_log_ms;
 static uint8_t s_swallow;               /* LVGL task only */
 static int s_touched, s_awake = 1;      /* LVGL task <-> owner task, __atomic */
+/* NACK context (#346): owner task -> LVGL task, __atomic relaxed: the tick's last battery reading,
+ * screen state, and the last owner-task I2C transfer + when it finished. */
+static int s_batt_usb = -1, s_batt_chg = -1, s_scr, s_bus = BUS_NONE;
+static uint32_t s_bus_done_ms;
+/* The last failure's context, written by the LVGL task before the count's release-add; the owner
+ * reads it after the acquire-load. ponytail: a read torn between two back-to-back failures mixes two
+ * real contexts; a seqlock if that ever misleads. */
+struct touch_ctx { int mhz, usb, chg, scr, bus, pmode; long bus_ms; };
+static struct touch_ctx s_touch_ctx;                      /* LVGL task writes, owner task reads: s_touch_mux */
+static portMUX_TYPE s_touch_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static lv_obj_t *box(lv_obj_t *parent, int x, int y, int w, int h, uint32_t rgb) {
     lv_obj_t *o = lv_obj_create(parent);
@@ -216,7 +239,21 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
         esp_err_t e = esp_lcd_touch_read_data(s_tp);
         if (e == ESP_OK) e = esp_lcd_touch_get_data(s_tp, p, &n, CONFIG_ESP_LCD_TOUCH_MAX_POINTS);
         if (e != ESP_OK) {
+            uint8_t pm = 0;
+            struct touch_ctx ctx;
             n = 0;
+            ctx.mhz = esp_clk_cpu_freq() / 1000000;   /* right after the failed call: DFS state then */
+            ctx.pmode = esp_lcd_panel_io_rx_param(s_tp->io, FT_PMODE, &pm, 1) == ESP_OK ? pm : -1;
+            ctx.usb = __atomic_load_n(&s_batt_usb, __ATOMIC_RELAXED);
+            ctx.chg = __atomic_load_n(&s_batt_chg, __ATOMIC_RELAXED);
+            ctx.scr = __atomic_load_n(&s_scr, __ATOMIC_RELAXED);
+            ctx.bus = __atomic_load_n(&s_bus, __ATOMIC_RELAXED);
+            ctx.bus_ms = ctx.bus == BUS_NONE
+                             ? -1
+                             : (long)(uint32_t)((uint32_t)cali_uptime_ms() - __atomic_load_n(&s_bus_done_ms, __ATOMIC_RELAXED));
+            portENTER_CRITICAL(&s_touch_mux);   /* one whole context at a time (the owner copies under the same lock) */
+            s_touch_ctx = ctx;
+            portEXIT_CRITICAL(&s_touch_mux);
             __atomic_store_n(&s_touch_err, esp_err_to_name(e), __ATOMIC_RELAXED);
             __atomic_add_fetch(&s_touch_errs, 1, __ATOMIC_RELEASE);
         }
@@ -230,6 +267,20 @@ static void touch_read(lv_indev_t *indev, lv_indev_data_t *data) {
     if (pressed) __atomic_store_n(&s_touched, 1, __ATOMIC_RELAXED);
     if (!cali_display_touch_gate(&s_swallow, pressed, __atomic_load_n(&s_awake, __ATOMIC_RELAXED)))
         data->state = LV_INDEV_STATE_RELEASED;
+}
+
+static void bus_mark(int dev) {   /* owner task: an I2C transfer on dev just finished */
+    __atomic_store_n(&s_bus_done_ms, (uint32_t)cali_uptime_ms(), __ATOMIC_RELAXED);
+    __atomic_store_n(&s_bus, dev, __ATOMIC_RELAXED);
+}
+
+static void touch_ids_log(void) {   /* once at init: what chip + power mode the NACKs come from (#346) */
+    uint8_t fw = 0, vendor = 0, pm = 0;
+    int ok = esp_lcd_panel_io_rx_param(s_tp->io, FT_FIRMID, &fw, 1) == ESP_OK &&
+             esp_lcd_panel_io_rx_param(s_tp->io, FT_VENDOR, &vendor, 1) == ESP_OK &&
+             esp_lcd_panel_io_rx_param(s_tp->io, FT_PMODE, &pm, 1) == ESP_OK;
+    if (ok) cali_log("display: touch ft5x06 firmid 0x%02x vendor 0x%02x pmode %u", fw, vendor, pm);
+    else cali_log("display: touch ft5x06 id read failed");
 }
 
 static int ltr_get(uint8_t reg, uint8_t *v) {   /* single-byte combined reads, as the data sheet shows */
@@ -376,6 +427,7 @@ int cali_display_init(const cali_transport_t *t) {
         if (in) {
             s_tp = port_touch_handle(in);
             if (!s_tp) cali_log("display: touch handle not found, touch off");
+            else touch_ids_log();
             lv_indev_set_read_cb(in, touch_read);
         }
     }
@@ -405,13 +457,20 @@ static void paint_row(row_ui_t *r, const cali_row_t *m) {
     }
 }
 
-/* Owner task: {"ev":"evt","kind":"touch","errors":<since boot>,"last":"<esp_err name>"} when the count
- * grew, at most once per CALI_DIAG_PERIOD_MS (a dead bus fails every read); retried until the log takes it. */
+/* Owner task: the evt touch record (cali_diag_touch: the count since boot + the last failure's
+ * context) when the count grew, at most once per CALI_DIAG_PERIOD_MS (a dead bus fails every read);
+ * retried until the log takes it. */
 static void touch_errors_evt(uint64_t now_ms) {
     uint32_t n = __atomic_load_n(&s_touch_errs, __ATOMIC_ACQUIRE);
+    cali_diag_touch_t t;
+    struct touch_ctx c;
     if (n == s_touch_logged || (s_touch_logged && now_ms - s_touch_log_ms < CALI_DIAG_PERIOD_MS)) return;
-    if (cali_diag_evt("touch", "\"errors\":%lu,\"last\":\"%s\"", (unsigned long)n,
-                      __atomic_load_n(&s_touch_err, __ATOMIC_RELAXED)) != 0) return;
+    portENTER_CRITICAL(&s_touch_mux);
+    c = s_touch_ctx;
+    portEXIT_CRITICAL(&s_touch_mux);
+    t = (cali_diag_touch_t){n, __atomic_load_n(&s_touch_err, __ATOMIC_RELAXED), c.mhz, c.usb, c.chg,
+                            SCR_NAMES[c.scr], BUS_NAMES[c.bus], c.bus_ms, c.pmode};
+    if (cali_diag_touch(&t) != 0) return;
     s_touch_logged = n;
     s_touch_log_ms = now_ms;
 }
@@ -427,18 +486,28 @@ void cali_display_tick(uint64_t now_ms) {
         s_batt_read = 1;
         s_last_batt = now_ms;
         axp_read(&b);
+        if (s_axp) bus_mark(BUS_AXP);   /* no chip handle = no transfer attempted */
         cali_battery_update(&b, now_ms);
     }
     cali_battery_get(&in.batt);
+    __atomic_store_n(&s_batt_usb, in.batt.usb, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_batt_chg, in.batt.charging, __ATOMIC_RELAXED);
     /* The owner task is the NimBLE host task: never wait on a wedged render. A skipped paint leaves
      * the model and the painted-text buffers untouched, so the next try repaints whatever changed. */
     if (!bsp_display_lock(DISPLAY_LOCK_TIMEOUT_MS)) return;
-    if (s_ltr) ltr_read(&in.lux, &in.prox);
-    if (s_imu) in.acc_ok = imu_read(in.acc) == 0;
+    if (s_ltr) {
+        ltr_read(&in.lux, &in.prox);
+        bus_mark(BUS_LTR);
+    }
+    if (s_imu) {
+        in.acc_ok = imu_read(in.acc) == 0;
+        bus_mark(BUS_BMI);
+    }
     in.touched = (uint8_t)__atomic_exchange_n(&s_touched, 0, __ATOMIC_RELAXED);
     cali_status_get(&st, s_t, now_ms);
     cali_display_model(&s_model, &st, now_ms, LANG, &in, cali_display_cfg(), &v);
     __atomic_store_n(&s_awake, v.state == CALI_DISP_ON, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_scr, (int)v.state, __ATOMIC_RELAXED);
 
     paint_row(&s_rows[0], &v.device);
     paint_row(&s_rows[1], &v.wifi);
@@ -455,6 +524,7 @@ void cali_display_tick(uint64_t now_ms) {
     if (s_brightness != v.brightness_pct) {
         s_brightness = v.brightness_pct;
         bsp_display_brightness_set(v.brightness_pct);
+        bus_mark(BUS_BL);   /* an AXP2101 DLDO write: a rail change right before a touch NACK would show here */
         cali_log("display: brightness %u", (unsigned)v.brightness_pct);
     }
 }
