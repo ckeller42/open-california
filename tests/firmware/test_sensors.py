@@ -1,6 +1,6 @@
-"""sensors.c: type table, Govee decoder, seen/configured tables, window cadence, ext records.
+"""sensors.c: type table, Govee + Victron decoders, seen/configured tables, window cadence, ext records.
 
-.. test:: Sensor core (Govee)
+.. test:: Sensor core (Govee, Victron)
    :id: T_FW_SENSORS_CORE
    :links: R_FW_SENSORS
 """
@@ -161,3 +161,74 @@ def test_ext_record_fits_body_max(cli, tmp_path):
     # the longest body: a 16-char alias + every field of the widest type; vrec refuses an over-long one
     out = run(cli, tmp_path, ["init", "maxbody"])
     assert int(out[-1].split()[1]) < 288
+
+
+# Victron Instant Readout (victron_ble 0.9.3 container). The CLI's AES stub returns the key as the
+# keystream block, so "ciphertext" = plaintext XOR key; the real AES-CTR path is test_sensors_e2e.py.
+KEY = bytes.fromhex("00112233445566778899aabbccddeeff")
+
+
+def bits(fields):  # [(value, nbits)] LSB-first -> bytes
+    v = n = 0
+    for val, nb in fields:
+        v |= (val & ((1 << nb) - 1)) << n
+        n += nb
+    return v.to_bytes((n + 7) // 8, "little")
+
+
+def victron(model, mode, plain, key=KEY, iv=0x1234):
+    cipher = bytes(p ^ k for p, k in zip(plain, key))  # the CLI stub's keystream = key
+    return ("e102" + "10" + "00" + model.to_bytes(2, "little").hex() + bytes([mode]).hex()
+            + iv.to_bytes(2, "little").hex() + bytes([key[0]]).hex() + cipher.hex())  # fmt: skip
+
+
+# float, no error, 13.52 V, 2.3 A, 420 Wh, 87 W, load n/a
+SOLAR = bits([(5, 8), (0, 8), (1352, 16), (23, 16), (42, 16), (87, 16), (0x1FF, 9)])
+# 12.98 V, 298.15 K = 25.0 C
+BSENSE = bits(
+    [(0xFFFF, 16), (1298, 16), (0, 16), (29815, 16), (2, 2), (0x3FFFFF, 22), (0xFFFFF, 20), (0x3FF, 10)]
+)
+
+
+def test_victron_mppt_decodes(cli, tmp_path):
+    adv = victron(0xA075, 0x01, SOLAR)
+    out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "api 1000"])
+    sid = json.loads(out[-1][4:])["seen"][0]["id"]
+    assert json.loads(out[-1][4:])["seen"][0]["type"] == "victron_mppt"
+    out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", f"add {sid} - {KEY.hex()}",
+                              f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "state 2000"])  # fmt: skip
+    assert json.loads(out[-1][4:]) == {"mppt-75-15": {"battery_current": 2.3, "battery_voltage": 13.52, "charge_state": 5,
+                                       "error_code": 0, "load_current": None, "pv_power": 87, "yield_today_kwh": 0.42,
+                                       "age_s": 2}}  # fmt: skip
+
+
+def test_victron_battery_sense_decodes(cli, tmp_path):
+    adv = victron(0xA3A4, 0x02, BSENSE)
+    out = run(cli, tmp_path, ["init", f"adv CB:F2:E4:00:00:01 1 -58 BatterySense_00 {adv}", "api 1000"])
+    sid = json.loads(out[-1][4:])["seen"][0]["id"]
+    out = run(cli, tmp_path, ["init", f"adv CB:F2:E4:00:00:01 1 -58 BatterySense_00 {adv}", f"add {sid} - {KEY.hex()}",
+                              f"adv CB:F2:E4:00:00:01 1 -58 BatterySense_00 {adv}", "state 2000"])  # fmt: skip
+    assert json.loads(out[-1][4:]) == {
+        "battery-sense": {"battery_voltage": 12.98, "temperature_c": 25.0, "age_s": 2}
+    }
+
+
+def test_victron_add_needs_key_and_checks_byte(cli, tmp_path):
+    adv = victron(0xA075, 0x01, SOLAR)
+    out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "api 1000"])
+    sid = json.loads(out[-1][4:])["seen"][0]["id"]
+    pre = ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}"]
+    assert run(cli, tmp_path, pre + [f"add {sid} - -"])[-1] == "OK -2"  # CALI_SENS_E_KEY
+    assert (
+        run(cli, tmp_path, pre + [f"add {sid} - ff" + KEY.hex()[2:]])[-1] == "OK -3"
+    )  # CALI_SENS_E_KEY_MISMATCH
+    assert run(cli, tmp_path, pre + [f"add {sid} - {KEY.hex()}"])[-1] == "OK 0"
+
+
+def test_victron_non_product_record_is_ignored(cli, tmp_path):
+    # a Victron also emits a record whose prefix byte is not 0x10 (no Instant Readout): never a seen row, never a
+    # decode. (A key with the right first byte but wrong rest decodes to garbage — the key-check byte is the only
+    # defence the protocol offers; the owner compares the first values with VictronConnect, see the board steps.)
+    adv = "e102" + "20" + "00" + "75a0" + "01" + "3412" + "00" + "aa"
+    out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "api 1000"])
+    assert json.loads(out[-1][4:])["seen"] == []

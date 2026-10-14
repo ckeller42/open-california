@@ -32,6 +32,9 @@ void cali_json_key(cali_json_t *j, const char *key);          /* ,"key": (comma 
 void cali_json_str(cali_json_t *j, const char *s);             /* "escaped" (\" \\ \n \r \t, <0x20 as \u00XX) */
 void cali_json_int(cali_json_t *j, long long v);
 void cali_json_num(cali_json_t *j, double v);           /* %.2f, trailing zeros and "." dropped (23.96, 90, -0.5); NaN/inf -> null */
+/* cali_json_num's text into out (NUL-terminated): its length, or -1 for NaN/inf or a value that does not
+ * fit cap (the ext record formatter shares it, so a record leaves out exactly what JSON nulls). */
+int cali_json_fmt_num(char *out, size_t cap, double v);
 void cali_json_bool(cali_json_t *j, int v);
 void cali_json_null(cali_json_t *j);
 void cali_json_obj_begin(cali_json_t *j);

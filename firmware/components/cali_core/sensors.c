@@ -2,6 +2,7 @@
  * readings, JSON, ext records and the window cadence. Contract: include/cali_sensors.h. */
 #include "cali_sensors.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -51,9 +52,92 @@ static int decode_govee(const uint8_t *adv, size_t len, const uint8_t key[16], c
     return 0;
 }
 
+static cali_sensors_aes_fn s_aes;   /* the Victron CTR keystream: PSA on the ESP, a stub in the test CLI */
+
+/* Victron "Instant Readout" (victron_ble 0.9.3 parse_container/decrypt): adv = company id 0x02E1 +
+ * [2] 0x10 (product advertisement), [3] 0x00, [4..5] model id LE, [6] readout type, [7..8] iv LE,
+ * [9] key check (= key[0]), [10..] AES-128-CTR ciphertext, counter block = iv as a 128-bit LE int. */
+#define VIC_MIN_LEN 10
+
+/* 1 = mppt (solar charger), 2 = battery (Smart Battery Sense by model, else a battery monitor), 0 = none. */
+static int victron_type_of(const uint8_t *adv, size_t len) {
+    if (len < VIC_MIN_LEN || adv[2] != 0x10) return 0;
+    uint16_t model = (uint16_t)(adv[4] | adv[5] << 8);
+    if (model == 0xA3A4 || model == 0xA3A5) return 2;
+    return adv[6] == 0x01 ? 1 : adv[6] == 0x02 ? 2 : 0;
+}
+static int match_victron_mppt(const uint8_t *adv, size_t len) { return victron_type_of(adv, len) == 1; }
+static int match_victron_battery(const uint8_t *adv, size_t len) { return victron_type_of(adv, len) == 2; }
+
+/* The decrypted payload into out (<= 16 bytes), its length in *n; -1 without AES or on a key-check
+ * mismatch. ponytail: one keystream block (payloads <= 15 bytes here); a longer type needs the LE
+ * counter incremented per block. */
+static int victron_plain(const uint8_t *adv, size_t len, const uint8_t key[16], uint8_t out[16], size_t *n) {
+    uint8_t block[16] = {0}, ks[16];
+    if (len < VIC_MIN_LEN || adv[2] != 0x10 || !s_aes || adv[9] != key[0]) return -1;
+    block[0] = adv[7];   /* iv = adv[7] | adv[8] << 8, as the counter's low bytes */
+    block[1] = adv[8];
+    if (s_aes(key, block, ks) != 0) return -1;
+    *n = len - VIC_MIN_LEN > 15 ? 15 : len - VIC_MIN_LEN;
+    for (size_t i = 0; i < *n; i++) out[i] = adv[VIC_MIN_LEN + i] ^ ks[i];
+    memset(ks, 0, sizeof ks);
+    return 0;
+}
+
+/* n (<= 32) bits LSB-first from p at bit *pos, which advances. */
+static uint32_t rbits(const uint8_t *p, unsigned *pos, unsigned n) {
+    uint32_t v = 0;
+    for (unsigned k = 0; k < n; k++, (*pos)++) v |= (uint32_t)(p[*pos / 8] >> (*pos % 8) & 1u) << k;
+    return v;
+}
+
+/* v (n bits) as two's complement. */
+static int32_t sext(uint32_t v, unsigned n) { return v & 1u << (n - 1) ? (int32_t)v - (int32_t)(1u << n) : (int32_t)v; }   /* n < 32 */
+
+/* Solar charger: charge_state u8, charger_error u8, battery_voltage s16 0.01 V, battery_current s16
+ * 0.1 A, yield_today u16 10 Wh, solar_power u16 W, load_current u9 0.1 A (all-ones / 0x7FFF = n/a). */
+static int decode_victron_mppt(const uint8_t *adv, size_t len, const uint8_t key[16], cali_sensor_reading_t *out) {
+    uint8_t p[16];
+    size_t n;
+    unsigned pos = 0;
+    if (victron_plain(adv, len, key, p, &n) != 0 || n < 12) return -1;
+    uint32_t state = rbits(p, &pos, 8), err = rbits(p, &pos, 8), v = rbits(p, &pos, 16), i = rbits(p, &pos, 16);
+    uint32_t yield = rbits(p, &pos, 16), pv = rbits(p, &pos, 16), load = rbits(p, &pos, 9);
+    out->f[0] = i == 0x7FFF ? NAN : (float)(sext(i, 16) / 10.0);
+    out->f[1] = v == 0x7FFF ? NAN : (float)(sext(v, 16) / 100.0);
+    out->f[2] = (float)state;
+    out->f[3] = (float)err;
+    out->f[4] = load == 0x1FF ? NAN : (float)(load / 10.0);
+    out->f[5] = pv == 0xFFFF ? NAN : (float)pv;
+    out->f[6] = yield == 0xFFFF ? NAN : (float)(yield * 10 / 1000.0);
+    out->n = 7;
+    return 0;
+}
+
+/* Battery monitor / Smart Battery Sense: remaining_mins u16, voltage s16 0.01 V, alarm u16, aux u16,
+ * aux_mode u2 (2 = temperature, aux in 0.01 K), then current/consumed/soc (unused). */
+static int decode_victron_battery(const uint8_t *adv, size_t len, const uint8_t key[16], cali_sensor_reading_t *out) {
+    uint8_t p[16];
+    size_t n;
+    unsigned pos = 16;   /* past remaining_mins */
+    if (victron_plain(adv, len, key, p, &n) != 0 || n < 9) return -1;
+    uint32_t v = rbits(p, &pos, 16);
+    pos += 16;   /* alarm */
+    uint32_t aux = rbits(p, &pos, 16), mode = rbits(p, &pos, 2);
+    out->f[0] = v == 0x7FFF ? NAN : (float)(sext(v, 16) / 100.0);
+    out->f[1] = mode == 2 ? (float)(aux / 100.0 - 273.15) : NAN;
+    out->n = 2;
+    return 0;
+}
+
 static const char *const GOVEE_F[] = {"temp_c", "humidity", "battery"};
-static const sens_type_t TYPES[] = {
-    {"govee", 0xEC88, 0, "govee", GOVEE_F, 3, NULL, decode_govee},   /* Task 5 adds the Victron rows */
+static const char *const MPPT_F[] = {"battery_current", "battery_voltage", "charge_state", "error_code",
+                                     "load_current", "pv_power", "yield_today_kwh"};
+static const char *const VBATT_F[] = {"battery_voltage", "temperature_c"};
+static const sens_type_t TYPES[] = {   /* the index is the NVS type: append only */
+    {"govee", 0xEC88, 0, "govee", GOVEE_F, 3, NULL, decode_govee},
+    {"victron_mppt", 0x02E1, 1, "mppt-75-15", MPPT_F, 7, match_victron_mppt, decode_victron_mppt},
+    {"victron_battery", 0x02E1, 1, "battery-sense", VBATT_F, 2, match_victron_battery, decode_victron_battery},
 };
 #define NTYPES (sizeof TYPES / sizeof TYPES[0])
 
@@ -70,11 +154,11 @@ static struct {
     uint8_t type, addr_type, addr[6];
     int8_t rssi;
     char model[24];
+    uint8_t adv[31], adv_len;  /* the last advert: add checks a key's check byte against it */
     uint64_t at_ms;
 } s_seen[SENS_MAX];
 static uint64_t s_last_window_ms;
 static int s_kick, s_paused;
-static cali_sensors_aes_fn s_aes;   /* the Victron decoders' AES (Task 5) */
 
 /* The boot-local id: never 0, the same for one address all boot. */
 static uint16_t sens_id(const uint8_t addr[6]) { return (uint16_t)((cali_crc32(0, addr, 6) & 0xffffu) | 1u); }
@@ -139,23 +223,13 @@ static void load(void) {
     memset(s_val, 0, sizeof s_val);
 }
 
-/* v as "%.2f" without trailing zeros / "." (cali_json_num's rule), for the record text. */
-static int fmt_num(char *out, size_t cap, double v) {
-    int n = snprintf(out, cap, "%.2f", v);
-    if (n < 0 || (size_t)n >= cap) return -1;
-    while (out[n - 1] == '0') n--;
-    if (out[n - 1] == '.') n--;
-    out[n] = 0;
-    return n;
-}
-
-/* ,"<field>":<num> for every non-NaN field of r into out. */
+/* ,"<field>":<num> for every finite field of r into out (cali_json_fmt_num: NaN/inf left out). */
 static void rec_fields(char *out, size_t cap, const sens_type_t *t, const cali_sensor_reading_t *r) {
     size_t o = 0;
     out[0] = 0;
     for (uint8_t i = 0; i < t->nfields && i < r->n && o < cap; i++) {
         char v[24];
-        if (r->f[i] != r->f[i] || fmt_num(v, sizeof v, r->f[i]) < 0) continue;
+        if (cali_json_fmt_num(v, sizeof v, r->f[i]) < 0) continue;
         int k = snprintf(out + o, cap - o, ",\"%s\":%s", t->fields[i], v);
         if (k < 0 || (size_t)k >= cap - o) return;   /* cut: vrec refuses the record */
         o += (size_t)k;
@@ -226,6 +300,8 @@ void cali_sensors_on_adv(const cali_tevent_t *e, uint64_t now_ms) {
     memcpy(s_seen[row].addr, addr, 6);
     s_seen[row].rssi = e->rssi;
     model_of(e->name, s_seen[row].model);
+    s_seen[row].adv_len = (uint8_t)(e->len < sizeof s_seen[row].adv ? e->len : sizeof s_seen[row].adv);
+    memcpy(s_seen[row].adv, e->data, s_seen[row].adv_len);
     s_seen[row].at_ms = now_ms;
 }
 
@@ -307,7 +383,7 @@ int cali_sensors_add(uint16_t id, const char *alias, const char *key_hex, uint64
     if (alias_ok(alias, -1) != 0) return CALI_SENS_E_ALIAS;
     sens_cfg_t c;
     memset(&c, 0, sizeof c);
-    if (t->needs_key || key_hex) {   /* a key given is 32 hex digits for any type; the check byte: Task 5 */
+    if (t->needs_key || key_hex) {   /* a key given is 32 hex digits for any type */
         if (!key_hex || strlen(key_hex) != 32 || strspn(key_hex, HEXDIGITS) != 32) return CALI_SENS_E_KEY;
     }
     if (t->needs_key) {
@@ -316,8 +392,16 @@ int cali_sensors_add(uint16_t id, const char *alias, const char *key_hex, uint64
             sscanf(key_hex + 2 * i, "%2x", &b);
             c.key[i] = (uint8_t)b;
         }
+        /* Victron (the only key type): the advert's check byte [9] is key[0] (match: adv_len >= 10) */
+        if (s_seen[row].adv[9] != c.key[0]) {
+            memset(&c, 0, sizeof c);
+            return CALI_SENS_E_KEY_MISMATCH;
+        }
     }
-    if (s_cfg.n == SENS_MAX) return CALI_SENS_E_FULL;
+    if (s_cfg.n == SENS_MAX) {
+        memset(&c, 0, sizeof c);
+        return CALI_SENS_E_FULL;
+    }
     c.type = s_seen[row].type;
     c.addr_type = s_seen[row].addr_type;
     memcpy(c.addr, s_seen[row].addr, 6);

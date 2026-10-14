@@ -42,6 +42,7 @@ from .api_shape import (
     WIFI_GET_KEYS,
     WIFI_KEYS,
 )
+from .test_sensors import KEY
 
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware" / "components" / "cali_core"
@@ -1752,6 +1753,28 @@ def test_sensors_post_errors(web_cli, body, error):
     sid = rs[0].json()["seen"][0]["id"]
     r, _ = one(web_cli, "POST", "/api/sensors", body.replace("SID", str(sid)), setup=on)
     assert (r.status, r.json()) == (400, {"ok": False, "error": error})
+
+
+VICTRON_SEEN = [
+    "sensadv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 e102100075a00134120005116a3653554c77df9955ba"
+]  # test_sensors.victron(0xA075, 0x01, SOLAR): check byte 0x00 = the test key's first byte
+
+
+@pytest.mark.parametrize(
+    "body,error",
+    [
+        ('{"add":SID}', "bad_key"),  # a Victron row needs a key
+        ('{"add":SID,"key":"ff%s"}' % KEY.hex()[2:], "key_mismatch"),
+    ],
+)
+def test_sensors_post_victron_key_errors(web_cli, body, error):
+    on = ["kvhex exp_sensors 01", *STATION, *VICTRON_SEEN]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("GET", "/api/sensors")])
+    sid = rs[0].json()["seen"][0]["id"]
+    r, _ = one(web_cli, "POST", "/api/sensors", body.replace("SID", str(sid)), setup=on)
+    assert (r.status, r.json()) == (400, {"ok": False, "error": error})
+    ok, _ = one(web_cli, "POST", "/api/sensors", '{"add":%d,"key":"%s"}' % (sid, KEY.hex()), setup=on)
+    assert ok.status == 200 and ok.json()["configured"][0]["has_key"] is True
 
 
 def test_sensors_second_of_type_needs_alias(web_cli):

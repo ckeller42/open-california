@@ -262,7 +262,7 @@ unit just paired and `address` is its identity. A pairing that fails or is cance
 keeps the old bond. The match runs over **every** stored bond: by identity, compared type-agnostically
 (a controller that resolved the address reports it typed `PUBLIC_ID`/`RANDOM_ID`, the bond is
 stored typed public/random), or by the RPA resolving with that bond's IRK; a PSA failure is logged
-(`LOG pair: psa_… failed`) and the unit treated as unbonded. An SMP pairing that starts (passkey,
+(`LOG aes: psa_… failed`) and the unit treated as unbonded. An SMP pairing that starts (passkey,
 repeat-pairing) ends the probe, so its encryption result is never reported as "the stored bond
 works". Logs show the raw HCI code (`0x06`), not NimBLE's wrapped `0x206`.
 
@@ -997,7 +997,26 @@ to the sensors and never to the pairing SM or the session.
   |---|---|---|---|---|
   | `govee` | `0xEC88` | no | `govee` | `temp_c`, `humidity`, `battery` — 7+ data bytes: int16 °C × 100, uint16 % × 100, battery %; 5–6 bytes: 24 bits, sign bit 23, `(t / 1000) / 10` °C, `(t % 1000) / 10` %, battery `& 0x7F` (`govee_reader.py parse_govee`) |
 
+  | `victron_mppt` | `0x02E1`, readout type `0x01` (solar charger) | yes | `mppt-75-15` | `battery_current` (A), `battery_voltage` (V), `charge_state`, `error_code`, `load_current` (A), `pv_power` (W), `yield_today_kwh` |
+  | `victron_battery` | `0x02E1`, model `0xA3A4`/`0xA3A5` (Smart Battery Sense), else readout type `0x02` (battery monitor) | yes | `battery-sense` | `battery_voltage` (V), `temperature_c` (aux mode 2: aux / 100 − 273.15, else `null`) |
+
   `0x0001`/`0x8801` (other Govee layouts) are not matched: `0x0001` is shared by unrelated devices.
+- **Victron "Instant Readout"** (`victron_ble` 0.9.3 `parse_container`/`decrypt`): after the
+  company id, `0x10 0x00` (a product advertisement — any other prefix is ignored, not even a seen
+  row), model id u16 LE, readout type u8, iv u16 LE, then the **key-check byte** (= `key[0]`) and the
+  AES-128-CTR ciphertext; the counter block is the iv as a 128-bit little-endian integer. The
+  plaintext is read LSB-first: solar charger `charge_state u8, charger_error u8, battery_voltage s16
+  (0.01 V), battery_current s16 (0.1 A), yield_today u16 (10 Wh), solar_power u16 (W), load_current
+  u9 (0.1 A)`; battery monitor `remaining_mins u16, voltage s16 (0.01 V), alarm u16, aux u16, aux_mode
+  u2, …`. All-ones (`0x7FFF` for the signed ones) = not available (`null`). The AES block comes
+  through `cali_sensors_set_aes`: on the ESP `ble_nimble.c`'s `aes128_ecb` (PSA
+  `PSA_ALG_ECB_NO_PADDING`, the key imported per call and destroyed — the same code that resolves
+  the unit's RPA), in the test CLI a stub. **One keystream block** (≤ 15 payload bytes, both types
+  here); a longer type needs the little-endian counter incremented per block. **Key rule:** `add`
+  checks the key's first byte against the last advert's check byte (`key_mismatch`); a key with the
+  right first byte but a wrong rest decodes to garbage — the protocol offers no other check, so
+  compare the first values with VictronConnect. The key lives only in `sens_list`: never returned
+  (`has_key` only), never logged.
 - **Seen table:** an unconfigured advert of a known type fills one of 16 rows (type, model = the
   local name without its last `_…` part, never the MAC; rssi); a full table replaces the oldest
   row; rows older than 10 min are not reported. Never logged.
@@ -1006,7 +1025,8 @@ to the sensors and never to the pairing SM or the session.
 - **Configured list:** NVS blob `sens_list` (`n` + 16 × `{type, addr_type, addr[6], key[16],
   alias[17]}`), rewritten whole on every change; `forget`/unpair never touch it, nor does the flag.
   Alias `[a-z0-9_-]{1,16}`, unique; omitted = the type's default alias, refused when that type is
-  already configured. A key type needs 32 hex digits.
+  already configured. A key type needs 32 hex digits whose first byte matches the advert's
+  check byte.
 - **Readings:** per configured sensor the last decode and its age — `/api/state` `ext.<alias>`
   (`{fields…, "age_s"}`, `null`s before the first reading) and the `ext` SD record above, at most
   once a minute each. Numbers: two decimals at most, trailing zeros dropped (`cali_json_num`).

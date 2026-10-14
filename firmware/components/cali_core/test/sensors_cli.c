@@ -12,7 +12,8 @@
  *   state <now_ms>                           "EXT " + the ext object
  *   api <now_ms>                             "API " + the /api/sensors object
  *   maxbody                                  "MAXBODY <len>"
- * Every ext record reaches the diag sink, which prints "REC <body>". */
+ * Every ext record reaches the diag sink, which prints "REC <body>". The AES hook is a stub whose
+ * keystream block is the key itself (a Victron vector's "ciphertext" = plaintext XOR key). */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,12 @@
 
 static int rec(const char *body) {
     printf("REC %s\n", body);
+    return 0;
+}
+
+static int stub_aes(const uint8_t key[16], const uint8_t in[16], uint8_t out[16]) {
+    (void)in;
+    memcpy(out, key, 16);
     return 0;
 }
 
@@ -51,6 +58,7 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IOLBF, 0);
     cali_diag_sink = rec;
     t.scan_window = window;
+    cali_sensors_set_aes(stub_aes);
     while (fgets(line, sizeof line, stdin)) {
         char cmd[16], a[4][128];
         int n = sscanf(line, "%15s %127s %127s %127s %127s", cmd, a[0], a[1], a[2], a[3]);

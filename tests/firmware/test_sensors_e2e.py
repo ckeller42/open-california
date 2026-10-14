@@ -7,7 +7,7 @@ import pytest
 
 from .conftest import FakeAdvertiser
 from .test_host_e2e import _pair
-from .test_sensors import GOVEE_H5074
+from .test_sensors import GOVEE_H5074, KEY, SOLAR
 
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
 
@@ -50,6 +50,42 @@ def test_window_sees_govee_configures_and_logs_ext(host_fw, hci_unit):
         "humidity": 58.48,
         "battery": 90,
     }
+
+
+def _victron_aes(model, mode, plain, iv=0xBEEF):
+    """A Victron Instant Readout advert encrypted with REAL AES-128-CTR (counter = iv as a 128-bit
+    little-endian int): the only test of ble_nimble.c's aes128_ecb keystream short of the board."""
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    enc = Cipher(algorithms.AES(KEY), modes.CTR(iv.to_bytes(2, "little") + bytes(14))).encryptor()
+    cipher = enc.update(plain) + enc.finalize()
+    return (
+        bytes([0xE1, 0x02, 0x10, 0x00])
+        + model.to_bytes(2, "little")
+        + bytes([mode])
+        + iv.to_bytes(2, "little")
+        + KEY[:1]
+        + cipher
+    )
+
+
+def test_window_decodes_victron_with_real_aes(host_fw, hci_unit):
+    """A SmartSolar advert encrypted in Python with the test key decodes on host NimBLE (PSA AES)."""
+    fw = host_fw(hci_unit)
+    # name <= 5 chars: name AD (2 + 5) + mfg AD (2 + 22) = the 31-byte advert
+    FakeAdvertiser(hci_unit, "DA:4B:25:00:00:01", _victron_aes(0xA075, 0x01, SOLAR), "SS_01").start()
+    fw.send("sensors on")
+    fw.expect("LOG exp: sensors", lambda v: v == "on")
+    seen = _first_seen(fw)
+    assert seen and seen["type"] == "victron_mppt"
+    fw.send("sensors add %d - %s" % (seen["id"], KEY.hex()))
+    fw.expect("LOG sensors", lambda v: v == "ok")
+    rec = fw.expect("REC", lambda v: v.startswith('"ev":"ext","dev":"mppt-75-15"'), timeout=90)
+    assert (
+        '"type":"victron_mppt","battery_current":2.3,"battery_voltage":13.52,"charge_state":5,'
+        '"error_code":0,"pv_power":87,"yield_today_kwh":0.42' in rec
+    )  # load_current n/a: left out
+    assert "load_current" not in rec
 
 
 def test_sensors_window_yields_to_pairing(host_fw, hci_unit):
