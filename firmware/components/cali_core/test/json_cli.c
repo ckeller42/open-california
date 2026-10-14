@@ -7,6 +7,7 @@
  *                rejoined with single spaces; \n \r \t \\ within are unescaped first, so a
  *                script can embed control characters on one stdin line.
  *   I n          cali_json_int(n)
+ *   D v          cali_json_num(strtod(v)) ("nan" -> NaN)
  *   B 0|1        cali_json_bool()
  *   N            cali_json_null()
  *   A ... ]      cali_json_arr_begin() ... cali_json_arr_end()
@@ -28,7 +29,7 @@ static char pending[MAX_TOK];
 static int has_pending;
 
 static int is_reserved(const char *w) {
-    static const char *const words[] = {"K", "S", "I", "B", "N", "A", "]", "{", "}", "END"};
+    static const char *const words[] = {"K", "S", "I", "D", "B", "N", "A", "]", "{", "}", "END"};
     for (size_t i = 0; i < sizeof words / sizeof *words; i++)
         if (strcmp(w, words[i]) == 0) return 1;
     return 0;
@@ -116,6 +117,9 @@ int main(int argc, char **argv) {
         } else if (strcmp(tok, "I") == 0) {
             char v[MAX_TOK];
             if (get_tok(v, sizeof v)) cali_json_int(&j, strtoll(v, NULL, 10));
+        } else if (strcmp(tok, "D") == 0) {
+            char v[MAX_TOK];
+            if (get_tok(v, sizeof v)) cali_json_num(&j, strtod(v, NULL));
         } else if (strcmp(tok, "B") == 0) {
             char v[MAX_TOK];
             if (get_tok(v, sizeof v)) cali_json_bool(&j, atoi(v));

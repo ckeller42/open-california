@@ -67,14 +67,9 @@ static int copy_creds(const char *ssid, size_t ssid_len, const char *psk, size_t
     return 0;
 }
 
-static int ble_pairing_active(void) {
-    uint8_t st = cali_runner_state()->st;
-    return st != PAIR_IDLE && st != PAIR_BONDED && st != PAIR_ERROR;
-}
-
 static void start_scan(void) {
     if (W.scan_in_flight) return;          /* one at a time: its SCAN_DONE brings the list */
-    if (ble_pairing_active()) {            /* R15: never while BLE pairs; the tick retries */
+    if (cali_runner_in_flow()) {            /* R15: never while BLE pairs; the tick retries */
         W.scan_wanted = 1;
         return;
     }
@@ -261,7 +256,7 @@ void cali_wifi_run_tick(uint64_t now_ms) {
         feed(WEV_FAILED, CALI_NET_REASON_OTHER);
     }
     feed(WEV_TICK, now_ms);
-    if (W.scan_wanted && !ble_pairing_active()) start_scan();
+    if (W.scan_wanted && !cali_runner_in_flow()) start_scan();
     if (W.sm.st == WIFI_ONLINE && (W.rssi_at == 0 || now_ms - W.rssi_at >= RSSI_EVERY_MS)) {
         W.rssi = W.net->sta_rssi();
         W.rssi_at = now_ms;

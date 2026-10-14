@@ -90,6 +90,24 @@ void cali_json_int(cali_json_t *j, long long v) {
     raw(j, buf, (size_t)n);
 }
 
+void cali_json_num(cali_json_t *j, double v) {
+    if (v != v || v - v != 0) {   /* NaN (a field the device marks "not available") or inf: not JSON */
+        cali_json_null(j);
+        return;
+    }
+    if (j->overflow) return;
+    comma(j);
+    char buf[48];
+    int n = snprintf(buf, sizeof buf, "%.2f", v);
+    if (n < 0 || (size_t)n >= sizeof buf) {
+        j->overflow = 1;
+        return;
+    }
+    while (buf[n - 1] == '0') n--;   /* "%.2f" always has a ".": stops there at the latest */
+    if (buf[n - 1] == '.') n--;
+    raw(j, buf, (size_t)n);
+}
+
 void cali_json_bool(cali_json_t *j, int v) {
     if (j->overflow) return;
     comma(j);

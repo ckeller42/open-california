@@ -50,7 +50,7 @@ def fake(tmp_path_factory):
             str(ROOT / "csrc"),
             str(CORE / "runner.c"),
             str(CORE / "pairing_sm.c"),
-            str(CORE / "test" / "runner_fake.c"),
+            str(CORE / "test" / "runner_fake.c"),  # stubs cali_sensors_on_adv (prints SENSADV)
             "-o",
             str(out),
         ],
@@ -192,6 +192,16 @@ def test_events_the_runner_does_not_consume_are_forwarded(fake):
         "OTHER DISCONNECTED 0 8",
         "OTHER FOUND 0 0",
     ]
+
+
+def test_sensor_adverts_go_to_the_sensors_never_the_sm_or_the_session(fake):
+    """R_FW_SENSORS: an ADV during a pairing scan or on a bonded link is handed to
+    cali_sensors_on_adv at the latest tick's now_ms; it is no FOUND and never reaches on_other."""
+    out = run(fake, "tick 1500", "pair", "ADV", *HAPPY[1:], "ADV")
+    assert out.count("SENSADV A4:C1:38:00:00:01 1500") == 2
+    assert out[:2] == ["CALL start_scan VWCAMPER", st("scanning")]
+    assert out[2] == "SENSADV A4:C1:38:00:00:01 1500"  # still scanning: no connect_found
+    assert not any(line.startswith("OTHER") for line in out)
 
 
 def test_forget_removes_the_bond_then_idles(fake):

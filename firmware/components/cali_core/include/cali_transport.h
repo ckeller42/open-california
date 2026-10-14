@@ -31,9 +31,12 @@ typedef enum {
     CALI_TEV_NOTIFY,        /* notification on char_short; data/len valid */
     CALI_TEV_DISCOVERED,    /* discover() completed; status 0 -> every char is known */
     CALI_TEV_HEARTBEAT,     /* a write_heartbeat() completed; status 0 = written (acknowledged) */
-    CALI_TEV_WRITTEN        /* a write() completed; char_short set; status 0 = ACKed by the unit.
+    CALI_TEV_WRITTEN,       /* a write() completed; char_short set; status 0 = ACKed by the unit.
                                May arrive inside the write() call (a request the stack fails at
                                once); never for a write() that returned nonzero */
+    CALI_TEV_ADV            /* a passive scan window saw an advert with manufacturer data: data/len =
+                               the mfg AD payload (company id first, little-endian), addr, rssi, name
+                               set; status = addr type (0 public, 1 random) */
 } cali_tev_t;
 
 /* data points into transport memory valid only for the duration of the sink call: copy it. */
@@ -43,7 +46,9 @@ typedef struct {
     uint16_t char_short;
     const uint8_t *data;
     size_t len;
-    char addr[18];          /* "AA:BB:CC:DD:EE:FF" for FOUND, else "" */
+    char addr[18];          /* "AA:BB:CC:DD:EE:FF" for FOUND and ADV, else "" */
+    int8_t rssi;            /* ADV: dBm */
+    char name[24];          /* ADV: the local name ("" if none) */
 } cali_tevent_t;
 
 typedef void (*cali_tsink_t)(const cali_tevent_t *e, void *ctx);
@@ -73,6 +78,9 @@ typedef struct {
                                                       sent) unless cali_ctl_write_ok(char_short, len) */
     int  (*keep_only_bond)(void);                  /* delete every bond but the connected peer's
                                                       (the ESP serves one unit, #255) */
+    int  (*scan_window)(uint32_t ms);              /* a passive window of ms; ADV events during it; -1
+                                                      when the stack is busy (a connect pending, a
+                                                      pairing scan running), 0 started */
 } cali_transport_t;
 
 #ifdef __cplusplus

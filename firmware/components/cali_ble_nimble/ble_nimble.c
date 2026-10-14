@@ -17,6 +17,9 @@
  * disconnect() during a connect cancels it; until that cancel's CONNECT event arrives a scan is
  * deferred (NimBLE refuses it) and a link that completed anyway is dropped. A GATT op that fails
  * ENOTCONN (the link is going down) is not reported: the queue is dropped and DISCONNECTED follows.
+ * scan_window() (R_FW_SENSORS) runs a passive ble_gap_disc of its own: refused while the runner's
+ * scan or a connect is under way, cancelled by either (a connect, start_scan), and its reports with
+ * manufacturer data go out as CALI_TEV_ADV instead of matching the unit's name.
  */
 /* CALI_TEST_LATE_IO_CAP: a host-only regression build (make cali-host-jw) that reproduces the
  * 2026-09-26 calictl bug — the passkey IO capability arrives only once pairing is already under
@@ -73,6 +76,8 @@ static int s_scanning, s_found;
 static ble_addr_t s_found_addr;
 static int s_connecting, s_connect_cancelled;
 static int s_scan_deferred;                 /* start_scan() while our connect cancel is in flight */
+static int s_window;                        /* a passive scan window is open (sensors, R_FW_SENSORS):
+                                               DISC reports go out as CALI_TEV_ADV */
 static int s_encrypt_on_connect;            /* connect_bonded(): re-encrypt once the link is up */
 static int s_probing;                       /* pair(): re-encrypting with the stored bond (the probe) */
 static ble_addr_t s_probe_peer;             /* ... whose identity the bond is stored under */
@@ -441,10 +446,34 @@ static int auth_failure(int status) {
     return status == BLE_HS_HCI_ERR(BLE_ERR_AUTH_FAIL) || status == BLE_HS_HCI_ERR(BLE_ERR_PINKEY_MISSING);
 }
 
+/* A window's report with manufacturer data -> CALI_TEV_ADV (rssi + name: not emit()'s shape). */
+static void adv_event(const struct ble_gap_disc_desc *d) {
+    struct ble_hs_adv_fields f;
+    cali_tevent_t e;
+    if (ble_hs_adv_parse_fields(&f, d->data, d->length_data) != 0 || f.mfg_data == NULL || f.mfg_data_len < 2) return;
+    memset(&e, 0, sizeof e);
+    e.ev = CALI_TEV_ADV;
+    e.status = d->addr.type;
+    e.data = f.mfg_data;
+    e.len = f.mfg_data_len;
+    e.rssi = d->rssi;
+    snprintf(e.addr, sizeof e.addr, "%02X:%02X:%02X:%02X:%02X:%02X", d->addr.val[5], d->addr.val[4],
+             d->addr.val[3], d->addr.val[2], d->addr.val[1], d->addr.val[0]);
+    if (f.name) {
+        size_t n = f.name_len < sizeof e.name - 1 ? f.name_len : sizeof e.name - 1;
+        memcpy(e.name, f.name, n);
+    }
+    if (s_sink) s_sink(&e, s_sink_ctx);
+}
+
 static int gap_cb(struct ble_gap_event *ev, void *arg) {
     (void)arg;
     switch (ev->type) {
     case BLE_GAP_EVENT_DISC:
+        if (s_window) {
+            adv_event(&ev->disc);
+            return 0;
+        }
         if (s_scanning && !s_found && name_matches(&ev->disc)) {
             s_found = 1;
             s_found_addr = ev->disc.addr;
@@ -453,6 +482,7 @@ static int gap_cb(struct ble_gap_event *ev, void *arg) {
         return 0;
     case BLE_GAP_EVENT_DISC_COMPLETE:
         s_scanning = 0;
+        s_window = 0;
         return 0;
     case BLE_GAP_EVENT_CONNECT:
         s_connecting = 0;
@@ -556,7 +586,8 @@ static int scan_now(void) {
     memset(&p, 0, sizeof p);
     p.passive = 0;                  /* active: the name may be in the scan response */
     p.filter_duplicates = 1;
-    if (s_scanning) ble_gap_disc_cancel();
+    if (s_scanning || s_window) ble_gap_disc_cancel();   /* the runner's scan wins over a window */
+    s_window = 0;
     int rc = ble_gap_disc(s_own_addr_type, BLE_HS_FOREVER, &p, gap_cb, NULL);
     s_scanning = rc == 0;
     return rc;
@@ -602,6 +633,10 @@ static int t_stop_scan(void) {
 static int connect_to(const ble_addr_t *addr) {
     if (s_conn != BLE_HS_CONN_HANDLE_NONE || s_connecting) return BLE_HS_EALREADY;
     if (s_connect_cancelled) return BLE_HS_EBUSY;   /* our cancel has not landed yet */
+    if (s_window) {                                 /* NimBLE refuses a connect while discovering: */
+        ble_gap_disc_cancel();                      /* the unit's link wins over a sensor window */
+        s_window = 0;
+    }
     s_encrypt_on_connect = 0;
     int rc = ble_gap_connect(s_own_addr_type, addr, CONNECT_TIMEOUT_MS, NULL, gap_cb, NULL);
     s_connecting = rc == 0;
@@ -842,10 +877,22 @@ static const char *t_identity(void) {
     return s_identity;
 }
 
+/* R_FW_SENSORS: a passive window of ms; -1 while the runner's scan or a connect owns the radio. */
+static int t_scan_window(uint32_t ms) {
+    if (s_scanning || s_connecting || s_connect_cancelled || s_window) return -1;
+    struct ble_gap_disc_params p;
+    memset(&p, 0, sizeof p);
+    p.passive = 1;
+    p.filter_duplicates = 1;
+    int rc = ble_gap_disc(s_own_addr_type, (int32_t)ms, &p, gap_cb, NULL);
+    s_window = rc == 0;
+    return rc == 0 ? 0 : -1;
+}
+
 static const cali_transport_t TRANSPORT = {
     t_set_sink, t_start_scan, t_stop_scan, t_connect_found, t_connect_bonded, t_pair,
     t_inject_passkey, t_discover, t_read, t_subscribe, t_write_heartbeat, t_disconnect,
-    t_remove_bond, t_has_bond, t_identity, t_write, t_keep_only_bond,
+    t_remove_bond, t_has_bond, t_identity, t_write, t_keep_only_bond, t_scan_window,
 };
 
 const cali_transport_t *cali_ble_nimble_transport(void) { return &TRANSPORT; }
@@ -866,7 +913,7 @@ static void on_sync(void) {
 
 static void on_reset(int reason) {
     cali_log("ble: host reset %d", reason);
-    s_scanning = s_connecting = 0;
+    s_scanning = s_connecting = s_window = 0;
     s_connect_cancelled = s_scan_deferred = 0;
     link_reset();
 }

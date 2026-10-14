@@ -103,6 +103,7 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_sdlog.h"
+#include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_sntp_esp.h"
 #include "cali_time.h"
@@ -120,6 +121,7 @@ static struct ble_npl_event s_work_ev; /* BLE: the owner is the NimBLE host task
 static TaskHandle_t s_core_task;       /* no BLE: the owner is this task */
 static int s_wifi;                     /* cali_net_esp_init succeeded: the network runs on the tick */
 static int s_web;                      /* the web server listens (the OTA "healthy run" needs it) */
+static const cali_transport_t *s_ble;  /* NimBLE's transport, or s_no_ble: the sensor windows' radio */
 static int s_valid_checked;            /* cali_ota_esp_mark_valid ran (once, R_FW_OTA rollback) */
 
 /* ---- diagnostics (R_FW_DIAG_LOG) ---- */
@@ -322,6 +324,7 @@ static void do_work(void) {
         uint64_t now = cali_uptime_ms();
         cali_runner_tick(now);        /* BLE first: WiFi/web work (NVS writes, mode switches) never */
         cali_session_tick(now);       /* delays this tick's heartbeat decision */
+        cali_sensors_tick(now, s_ble, cali_exp_sensors(), cali_runner_in_flow());   /* R_FW_SENSORS */
         cali_sdlog_tick(now);         /* the 5-min snapshot into the SD log (no card: nothing) */
         cali_ac_tick(now);            /* auto camper (R_FW_AUTO_CAMPER): restore camping after park */
         diag_tick(now);               /* R_FW_DIAG_LOG: boot event, the minute's diag record */
@@ -410,6 +413,7 @@ static const cali_transport_t s_no_ble = {
     .has_bond = nt_no,
     .identity = nt_identity,
     .write = nt_write,
+    .scan_window = nt_u32,
 };
 
 static void core_task(void *param) {
@@ -559,6 +563,7 @@ void app_main(void) {
     cali_session_on_io = cali_sdlog_io;   /* unit frames -> the unit clock + the SD log (R_FW_SD_LOG) */
     cali_ac_init();           /* the auto-camper toggle + restore debt (R_FW_AUTO_CAMPER) */
     cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL, test_qemu_boot.py */
+    cali_sensors_init();      /* the configured sensor list (NVS sens_list, R_FW_SENSORS) */
 
     s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);
     configASSERT(s_lines != NULL);
@@ -585,6 +590,7 @@ void app_main(void) {
         cali_console_init(&s_no_ble);
     }
     const cali_transport_t *ble = err == ESP_OK ? cali_ble_nimble_transport() : &s_no_ble;
+    s_ble = ble;              /* before the tick timer starts */
     wifi_init(ble);
 #if CONFIG_CALI_DISPLAY
     if (cali_display_init(ble) == 0) cali_sdcard_esp_start();   /* -1: no screen (and no SD); BLE/WiFi carry on */
