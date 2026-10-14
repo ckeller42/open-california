@@ -19,7 +19,7 @@
  * @typedef {{ pct: number|null, mv: number|null, usb: boolean|null, charging: boolean|null, runtime_min: number|null }} Battery
  * @typedef {{ enabled: boolean, state: string }} AutoCamper
  * @typedef {{ state: string|null, lux: number|null, motion: number|null, brightness_pct: number|null, sensor: string|null, auto: boolean, prox_wake: boolean, motion_wake: boolean, min: number, max: number, offset: number }} Display
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, battery: Battery, auto_camper: AutoCamper, display: Display, ux?: { enabled: boolean } }} Device  the /api/state fields this page reads
+ * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, battery: Battery, auto_camper: AutoCamper, display: Display, ux?: { enabled: boolean }, experimental?: { sensors: boolean } }} Device  the /api/state fields this page reads
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
@@ -101,6 +101,8 @@ $("fw-channel-l").textContent = t("fw_channel");
 select("fw-channel").options[0].textContent = t("fw_ch_stable");
 select("fw-channel").options[1].textContent = t("fw_ch_latest");
 $("scr-title").textContent = t("scr_title");
+$("exp-title").textContent = t("exp_title");
+$("exp-hint").textContent = t("exp_hint");
 $("scr-auto-l").textContent = t("scr_auto");
 $("scr-prox-l").textContent = t("scr_prox");
 $("scr-motion-l").textContent = t("scr_motion");
@@ -204,15 +206,25 @@ function renderUx(d) {
   b.dataset.on = on ? "1" : "";
 }
 
-/** POST {"enabled": <the opposite>} to a toggle endpoint. @param {string} path @param {string} id the row's id prefix @param {string} err */
-async function toggle(path, id, err) {
+/* Experimental sensor track (R_FW_EXPERIMENTAL): on/off, station mode only */
+/** @param {Device} d */
+function renderExp(d) {
+  const on = !!(d.experimental && d.experimental.sensors), b = $("exp-toggle");
+  $("exp-status").textContent = t(on ? "exp_on" : "exp_off");
+  b.hidden = d.wifi.mode !== "station";
+  b.textContent = t(on ? "ac_turn_off" : "ac_turn_on");
+  b.dataset.on = on ? "1" : "";
+}
+
+/** POST {<key, default "enabled">: <the opposite>} to a toggle endpoint. @param {string} path @param {string} id the row's id prefix @param {string} err @param {string} [key] */
+async function toggle(path, id, err, key) {
   const b = $(id + "-toggle"), msg = $(id + "-msg");
   msg.textContent = "";
   b.hidden = true;   /* the next poll shows it again */
   let ok = false;
   try {
     ok = (/** @type {{body: PostResult}} */ (await fetchJson(path, {method: "POST",
-      headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: !b.dataset.on})}))).body.ok;
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({[key || "enabled"]: !b.dataset.on})}))).body.ok;
   } catch (e) { /* ok stays false */ }
   if (!ok) msg.textContent = t(err);
 }
@@ -372,6 +384,7 @@ async function poll() {
     renderFw(s.device);
     renderAutoCamper(s.device);
     renderUx(s.device);
+    renderExp(s.device);
     renderScreen(s.device);
     renderTime(s.device.time);
     renderSd(s.device.sd);
@@ -392,6 +405,7 @@ $("connect").addEventListener("click", connect);
 $("rescan").addEventListener("click", scan);
 $("ac-toggle").addEventListener("click", () => toggle("/api/auto_camper", "ac", "ac_error"));
 $("ux-toggle").addEventListener("click", () => toggle("/api/ux_setting", "ux", "ux_error"));
+$("exp-toggle").addEventListener("click", () => toggle("/api/experimental", "exp", "exp_error", "sensors"));
 for (const [id, k] of [["scr-auto", "auto"], ["scr-prox", "prox_wake"], ["scr-motion", "motion_wake"]]) $(id).addEventListener("change", () => scrPost({[k]: input(id).checked}));
 $("scr-dn").addEventListener("click", () => scrStep(-5));
 $("scr-up").addEventListener("click", () => scrStep(5));

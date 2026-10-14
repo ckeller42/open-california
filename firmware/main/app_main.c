@@ -558,6 +558,7 @@ void app_main(void) {
     (void)cali_time_init();   /* the boot counter (R_FW_TIME): "LOG time: boot N", test_qemu_boot.py */
     cali_session_on_io = cali_sdlog_io;   /* unit frames -> the unit clock + the SD log (R_FW_SD_LOG) */
     cali_ac_init();           /* the auto-camper toggle + restore debt (R_FW_AUTO_CAMPER) */
+    cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL, test_qemu_boot.py */
 
     s_lines = xQueueCreate(NLINES, LINE_MAX_LEN);
     configASSERT(s_lines != NULL);

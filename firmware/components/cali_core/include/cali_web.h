@@ -38,6 +38,8 @@
  *                                             the live members are null without a screen (host, QEMU)
  *                                  "ux":{"enabled":<bool>},   -- "Send usage data" (NVS ux_on, default on;
  *                                                                the web UI's _meta.ux, R_UX_TELEMETRY)
+ *                                  "experimental":{"sensors":<bool>},   -- the sensor track switch (NVS
+ *                                                                exp_sensors, default off; R_FW_EXPERIMENTAL)
  *                                  "water_held":<bool>,
  *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
  *                                                                   was measured on this boot
@@ -120,6 +122,10 @@
  *                     (cali_sdlog_text; no card: none) and 204. 405 for another method.
  *   POST /api/ux_setting  {"enabled":<bool>} (exactly that object): the /device switch -> NVS ux_on,
  *                     200 {"ok":true,"ux":<bool>}; station mode only (403), 400 bad_json, 500 store, 405.
+ *   POST /api/experimental  {"sensors":<bool>} (exactly that object; R_FW_EXPERIMENTAL): the /device
+ *                     "Sensors (experimental)" switch -> cali_exp_sensors_set (NVS exp_sensors, applied at
+ *                     once, LOG exp: sensors on|off) -> 200 {"ok":true,"sensors":<bool>}; station mode
+ *                     only (403 setup_mode), 400 bad_json, 500 store, 405 for another method.
  *   POST /api/auto_camper  {"enabled":<bool>} (exactly that object; R_FW_AUTO_CAMPER, serve's endpoint):
  *                     cali_ac_set_enabled -> 200 {"ok":true,"auto_camper":<bool>}; station mode only
  *                     (403 setup_mode), 400 bad_json, 500 store (not saved), 405 for another method.
@@ -168,6 +174,7 @@
 
 #define CALI_UX_ON_KEY "ux_on"     /* NVS (namespace cali): "Send usage data", 1 byte, absent = on */
 #define CALI_UX_BODY_MAX 2048      /* POST /api/ux body cap (calictl web.UX_MAX_BODY) */
+#define CALI_EXP_SENSORS_KEY "exp_sensors"   /* NVS (namespace cali): the experimental sensor track, 1 byte, absent = off (R_FW_EXPERIMENTAL) */
 
 #include <stdint.h>
 
@@ -192,6 +199,12 @@ typedef struct {
 void cali_res_stats(cali_res_t *r);
 void cali_web_poll(uint64_t now_ms);   /* cali_http_poll */
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx);   /* 1 = handled */
+
+/* 1 while the experimental sensor track is switched on (POST /api/experimental), else 0. Lazy kv read. */
+int cali_exp_sensors(void);
+/* Stores the switch (kv CALI_EXP_SENSORS_KEY), updates the cache, logs "exp: sensors on|off".
+ * 0 ok, -1 store failure (cache unchanged). */
+int cali_exp_sensors_set(int on);
 
 #ifdef __cplusplus
 }

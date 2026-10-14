@@ -22,6 +22,7 @@ DEVICE_KEYS = frozenset(
         "auto_camper",
         "display",
         "ux",
+        "experimental",
         "water_held",
     }
 )  # /api/state device

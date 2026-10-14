@@ -236,6 +236,7 @@ def esp_fixtures():
             "display": dict(DISPLAY_ON),
             "auto_camper": {"enabled": True, "state": "idle"},
             "ux": {"enabled": True},
+            "experimental": {"sensors": False},
             "water_held": False,
         },
     }
@@ -265,6 +266,7 @@ def esp_fixtures():
                     "display": dict(DISPLAY_ON),
                     "auto_camper": {"enabled": True, "state": "idle"},
                     "ux": {"enabled": True},
+                    "experimental": {"sensors": False},
                     "water_held": False,
                 },
             },

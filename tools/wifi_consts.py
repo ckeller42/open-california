@@ -38,8 +38,9 @@ CONSTS = {
     "NET_HTTP_REQ_MAX": 2048,
     # The status/setup page budget (tests/test_web_strings.py): the rendered index_gen.html must fit.
     # A flash-only budget (the page is a const array, no RAM buffer); 24 KB since the auto-camper row,
-    # 28 KB since the "Send usage data" row (R_UX_TELEMETRY; the screen row left ~100 B).
-    "NET_HTTP_BODY_MAX": 28672,
+    # 28 KB since the "Send usage data" row (R_UX_TELEMETRY; the screen row left ~100 B),
+    # 32 KB since the Experimental + Sensors boxes (R_FW_EXPERIMENTAL, R_FW_SENSORS).
+    "NET_HTTP_BODY_MAX": 32768,
     # Status display (#154, spec 2026-10-01): refresh, stale threshold, dimming, LVGL lock bound
     # (the tick runs on the NimBLE host task: never wait on a wedged render longer than this).
     # The tick also polls the light/proximity sensor (R_FW_DISPLAY_WAKE): 200 ms, so a hand near

@@ -86,6 +86,25 @@ static int ux_on(void) {
     return s_ux;
 }
 
+/* R_FW_EXPERIMENTAL: one NVS byte gates everything in the sensor track; the stable paths never read it. */
+static int s_exp = -1;
+int cali_exp_sensors(void) {
+    if (s_exp < 0) {
+        uint8_t b = 0;
+        size_t n = 1;
+        s_exp = cali_kv_get(CALI_EXP_SENSORS_KEY, &b, &n) == CALI_KV_OK && n == 1 ? b != 0 : 0;
+    }
+    return s_exp;
+}
+
+int cali_exp_sensors_set(int on) {
+    uint8_t b = (uint8_t)(on != 0);
+    if (cali_kv_set(CALI_EXP_SENSORS_KEY, &b, 1) != 0) return -1;
+    s_exp = b;
+    cali_log("exp: sensors %s", b ? "on" : "off");
+    return 0;
+}
+
 static void set_body(cali_http_resp_t *resp, int status, const char *type, const char *body, size_t len) {
     resp->status = status;
     resp->content_type = type;
@@ -227,6 +246,11 @@ static void api_state(cali_http_resp_t *resp) {
     cali_json_obj_begin(&j);
     cali_json_key(&j, "enabled");
     cali_json_bool(&j, ux_on());
+    cali_json_obj_end(&j);
+    cali_json_key(&j, "experimental");   /* the sensor track switch (R_FW_EXPERIMENTAL) */
+    cali_json_obj_begin(&j);
+    cali_json_key(&j, "sensors");
+    cali_json_bool(&j, cali_exp_sensors());
     cali_json_obj_end(&j);
     cali_json_key(&j, "water_held");   /* fn.water is the held last-plausible reading, not the parked latch */
     cali_json_bool(&j, cali_session_water_held());
@@ -1107,6 +1131,28 @@ static void api_ux_setting(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
+/* ---- POST /api/experimental {"sensors":<bool>}: the /device sensor-track switch, station only ---- */
+static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    cursor_t c = {req->body, req->body + req->body_len};
+    char key[8];
+    size_t klen;
+    int on;
+    if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+    } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {
+        SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 || strcmp(key, "sensors") != 0 ||
+               expect(&c, ':') != 0 || parse_bool(&c, &on) != 0 || expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) {
+        SET_CONST(resp, 400, ERR_BAD_JSON);
+    } else if (cali_exp_sensors_set(on) != 0) {
+        SET_CONST(resp, 500, ERR_STORE);
+    } else if (on) {
+        SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":true}");
+    } else {
+        SET_CONST(resp, 200, "{\"ok\":true,\"sensors\":false}");
+    }
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
@@ -1158,6 +1204,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/ux_setting") == 0) {
         api_ux_setting(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/experimental") == 0) {
+        api_experimental(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */
