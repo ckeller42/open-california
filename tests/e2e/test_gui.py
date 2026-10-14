@@ -518,6 +518,12 @@ def test_dashboard_summary_card(page):
     assert re.search(r"\d+ / \d+ l", card.inner_text())
 
 
+def test_no_sensors_card_on_buspi(page):
+    # the Sensors card shows the ESP's ext readings only (#371); buspi's /api/state has no ext
+    expect(page.locator(".card.summary")).to_be_visible()
+    expect(page.locator(".card.sensors")).to_have_count(0)
+
+
 def test_no_red_flag_text(page, base_url):
     # Auto-catches the UX-bug classes we hit by hand: raw compose-key ids, undefined/null/NaN,
     # nonsense dates, [object Object]. Scans every installed screen + the dashboard.

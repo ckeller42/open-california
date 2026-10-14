@@ -255,6 +255,13 @@ def test_adapter_with_no_functions():
     assert got["_meta"]["firmware"] == ServeBackend._firmware_meta(None) and got["_meta"]["anchors"] == []
 
 
+def test_adapter_carries_the_external_sensors_through():
+    """Top-level ``ext`` (R_FW_SENSORS, only while the sensor track is on) -> ``STATE.ext`` as is."""
+    ext = {"govee": {"temp_c": 16.5, "humidity": None, "battery": 49, "age_s": 6}}
+    assert _adapt(dict(_body(fn={}), ext=ext))["ext"] == ext
+    assert "ext" not in _adapt(_body(fn={}))
+
+
 @pytest.mark.parametrize(
     "body,want",
     [

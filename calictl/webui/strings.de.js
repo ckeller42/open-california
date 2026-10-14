@@ -249,6 +249,17 @@ window.STRINGS_DE = {
   "🕒 last measured": "🕒 zuletzt gemessen",
   "🕒 measured {ago}": "🕒 {ago} gemessen",
 
+  // --- external sensors (the ESP's ext, R_FW_SENSORS) ---------------------------------------
+  // Victron charge states in VictronConnect's German words (Bulk/Absorption/Float)
+  "Sensors": "Sensoren",
+  "Thermo-hygrometer (Govee)": "Thermo-Hygrometer (Govee)",
+  "Solar charger (Victron)": "Solarladeregler (Victron)",
+  "Battery sense (Victron)": "Batteriesensor (Victron)",
+  "bulk": "Konstantstrom",
+  "absorption": "Konstantspannung",
+  "float": "Erhaltungsladung",
+  "error {n}": "Fehler {n}",
+
   // --- energy --------------------------------------------------------------------------------
   "Energy mode": "Energiemodus",
   "Max": "MAX",
