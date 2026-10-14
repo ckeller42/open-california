@@ -1,4 +1,4 @@
-"""tools/esplab/soak_report.py: the 9 criteria against fixture rows (no Influx, no ESP).
+"""tools/esplab/soak_report.py: the 10 criteria against fixture rows (no Influx, no ESP).
 
 .. test:: Soak criteria and verdict
    :id: T_SOAK_REPORT
@@ -52,6 +52,7 @@ def test_all_green():
         "PASS",
         "SKIP",
         "PASS",
+        "SKIP",  # sensors: nothing comparable in the default fixture
     ]
     assert soak.verdict(lines) == "PASS"
 
@@ -167,3 +168,40 @@ def test_fw_mid_window_install_fails():
 def test_fw_unreachable_or_no_boot_skips():
     assert by_name(soak.evaluate(data(fw="?")))["fw"][0] == "SKIP"
     assert by_name(soak.evaluate(data(boots=[])))["fw"][0] == "SKIP"
+
+
+ESP_EXT = {
+    "govee": {"temp_c": 20.5, "humidity": 59.1, "battery": 50, "age_s": 12},
+    "mppt-75-15": {"battery_voltage": 13.52, "battery_current": 2.3, "pv_power": 87, "age_s": 30},
+    "battery-sense": {"battery_voltage": 12.98, "temperature_c": 25.0, "age_s": 40},
+}
+BUSPI = {
+    "govee": {"temp_c": 20.7, "humidity": 58.0, "battery": 50.0, "age_s": 20},
+    "victron_mppt": {"battery_voltage": 13.5, "battery_current": 2.4, "age_s": 25},
+    "victron_battery": {"battery_voltage": 12.99, "temperature_c": 24.8, "age_s": 50},
+}
+
+
+def test_sensors_match_passes():
+    v, detail = by_name(soak.evaluate(data(ext=ESP_EXT, buspi_sensors=BUSPI)))["sensors"]
+    assert v == "PASS" and detail.startswith("6 fields")  # 3 govee + 1 mppt voltage + 2 battery-sense
+
+
+def test_sensors_voltage_delta_fails_naming_the_field():
+    bad = {**BUSPI, "victron_mppt": {"battery_voltage": 13.22, "age_s": 25}}
+    v, detail = by_name(soak.evaluate(data(ext=ESP_EXT, buspi_sensors=bad)))["sensors"]
+    assert v == "FAIL" and "mppt-75-15.battery_voltage esp=13.52 buspi=13.22" in detail
+
+
+def test_sensors_stale_or_absent_skips():
+    stale_esp = {a: {**r, "age_s": 301} for a, r in ESP_EXT.items()}
+    stale_buspi = {m: {**r, "age_s": 301} for m, r in BUSPI.items()}
+    never = {"govee": {"temp_c": None, "humidity": None, "battery": None, "age_s": None}}
+    for kw in (
+        dict(ext={}, buspi_sensors=BUSPI),
+        dict(ext=ESP_EXT, buspi_sensors={}),
+        dict(ext=stale_esp, buspi_sensors=BUSPI),
+        dict(ext=ESP_EXT, buspi_sensors=stale_buspi),
+        dict(ext=never, buspi_sensors=BUSPI),
+    ):
+        assert by_name(soak.evaluate(data(**kw)))["sensors"][0] == "SKIP"
