@@ -99,9 +99,16 @@ class DB:
     def __init__(self, have=None, fail=False):
         self.have, self.fail, self.writes, self.queries = have or {}, fail, [], []
 
-    def times(self, lo, hi, source=None):
+    def times(self, lo, hi, source=None, measurements=("camper",)):
+        """``have``: camper ``{fn: [ms]}``; any other measurement ``{(measurement, source): [ms]}``."""
         self.queries.append((lo, hi))
-        return {fn: sorted(t for t in ts if lo <= t <= hi) for fn, ts in self.have.items()}
+        if measurements != ("camper",):
+            return {
+                m: sorted(t for t in self.have.get((m, source), []) if lo <= t <= hi) for m in measurements
+            }
+        return {
+            fn: sorted(t for t in ts if lo <= t <= hi) for fn, ts in self.have.items() if isinstance(fn, str)
+        }
 
     def write(self, points):
         if self.fail:
@@ -683,3 +690,71 @@ def test_verify_diag_marks_measurements_missing_from_influx():
     assert [ln.split()[0] for ln in out if "missing" in ln] == ["esp_log"]
     esp_ingest.verify_diag([], db, out.append)
     assert out[-1] == "verify: no ESP diagnostics records in range"
+
+
+# ---- ext: the satellite's own BLE sensors (Govee, Victron) -----------------------------------------
+
+EXT_GOVEE = drec(
+    10, {"ev": "ext", "dev": "govee", "type": "govee", "temp_c": 23.96, "humidity": 58.48, "battery": 90}
+)
+EXT_MPPT = drec(
+    11,
+    {
+        "ev": "ext",
+        "dev": "mppt-75-15",
+        "type": "victron_mppt",
+        "battery_current": 2.3,
+        "battery_voltage": 13.52,
+        "charge_state": 5,
+        "error_code": 0,
+        "pv_power": 87,
+        "yield_today_kwh": 0.42,
+    },  # load_current absent = n/a
+)
+
+
+def test_ext_records_become_sensor_points_tagged_source_esp(tmp_path):
+    """An ``ext`` record -> one point in its type's measurement, floats only, ``online`` for Govee,
+    tags ``device=<alias>`` + ``source=esp``, at the record's time; counted in ``diag_points``.
+
+    .. test:: esp-ingest maps ext records to govee and victron rows tagged source=esp
+       :id: T_ESP_INGEST_EXT
+       :links: R_ESP_INGEST_EXT
+    """
+    db = DB()
+    s = esp_ingest.ingest(pager([EXT_GOVEE, EXT_MPPT], 1), db, str(tmp_path / "c.json"))
+    keys = [k for w in db.writes for k in w]
+    assert (
+        "govee",
+        [("device", "govee"), ("source", "esp")],
+        [("battery", 90.0), ("humidity", 58.48), ("online", 1.0), ("temp_c", 23.96)],
+        (T0, "ms"),
+    ) in keys
+    m = [k for k in keys if k[0] == "victron_mppt"][0]
+    assert m[1] == [("device", "mppt-75-15"), ("source", "esp")]
+    assert "load_current" not in dict(m[2]) and dict(m[2])["pv_power"] == 87.0
+    assert all(type(v) is float for _, v in m[2])
+    assert {k: n for k, n in s["diag_points"].items() if n} == {"govee": 1, "victron_mppt": 1}
+    assert len(db.queries) == 1  # one gap query per batch over the ext measurements
+
+
+def test_ext_point_skipped_when_buspi_has_the_minute(tmp_path):
+    db = DB(have={("govee", None): [T0 + 20_000]})  # buspi's own govee point 20 s away
+    s = esp_ingest.ingest(pager([EXT_GOVEE], 1), db, str(tmp_path / "c.json"))
+    assert not any(k[0] == "govee" for w in db.writes for k in w) and s["skipped_covered"] == 1
+    assert s["diag_points"].get("govee", 0) == 0
+    flux = esp_ingest.flux_times("b", T0, T0, measurements=("govee", "victron_mppt"))
+    assert '(r._measurement == "govee" and r._field == "temp_c")' in flux and "not exists r.source" in flux
+
+
+def test_ext_unknown_type_or_bad_dev_is_dropped_not_crashed(tmp_path):
+    db = DB()
+    recs = [
+        drec(12, {"ev": "ext", "dev": "x", "type": "anker", "w": 1}),
+        drec(13, {"ev": "ext", "dev": 7, "type": "govee", "temp_c": 20.0}),
+        drec(14, {"ev": "ext", "dev": "govee", "type": "govee"}),  # no field: nothing to write
+        drec(15, {"ev": "ext", "dev": "g", "type": ["govee"], "temp_c": 1.0}),  # unhashable type
+        drec(16, {"ev": "ext", "dev": "g", "type": {"a": 1}, "temp_c": 1.0}),
+    ]
+    s = esp_ingest.ingest(pager(recs, 1), db, str(tmp_path / "c.json"))
+    assert not db.writes and s["pulled"] == 5 and s["skipped_covered"] == 0

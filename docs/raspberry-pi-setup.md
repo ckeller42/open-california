@@ -301,6 +301,15 @@ buspi's live data always wins and the ESP fills the hours buspi was off or out o
   types), tagged `source=esp` — calictl's own carry no `source` — so both land in one series and
   stay apart. They feed the **🧭 UI usage** row (views per screen, controls used, page-load
   p50/p95, script errors), each split buspi / esp.
+- **Sensors** — the satellite's own BLE sensor readings (`ext` records, at most one a minute per
+  sensor: Govee, Victron MPPT, Victron battery sense) become the rows buspi's own readers write —
+  measurement `govee` (`temp_c`, `humidity`, `battery`, plus `online` = 1), `victron_mppt`
+  (`battery_voltage`, `battery_current`, `charge_state`, `error_code`, `load_current`, `pv_power`,
+  `yield_today_kwh`), `victron_battery` (`battery_voltage`, `temperature_c`) — floats only, a field
+  the sensor marks n/a left out, tags `device=<the ESP's alias>` + `source=esp`. **Gap-filled like
+  the camper data:** written only when buspi's own series of that measurement (no `source` tag, any
+  `device`) has no point within ±90 s; an unknown type is dropped. Counted in `diag_points`
+  (`R_ESP_INGEST_EXT`, verified by `T_ESP_INGEST_EXT`).
 - **Config** — serve's env (`INFLUXDB_TOKEN`, `INFLUX_URL`/`INFLUX_ORG`/`INFLUX_BUCKET`, from
   `/etc/buspi/secrets.env`). Each run logs `{pulled, written, skipped_covered, thinned,
   skipped_no_time, held, lost, diag_points}` (`lost` = records the card deleted at 90 % full before they were ingested).
