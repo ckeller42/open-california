@@ -172,7 +172,9 @@ def test_firmware_row_checks_and_installs(page, locale, lang):
     with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
         pg.route("**/api/ota", on_ota)
         status = pg.locator("#fw-status")
-        expect(status).to_have_text(STRINGS["fw_running"][lang].replace("{sha}", "bef07f1") + " · " + STRINGS["fw_ch_stable"][lang])
+        expect(status).to_have_text(
+            STRINGS["fw_running"][lang].replace("{sha}", "bef07f1") + " · " + STRINGS["fw_ch_stable"][lang]
+        )
         expect(pg.locator("#fw-install")).to_be_hidden()
         with pg.expect_response("**/api/ota"):
             pg.click("#fw-check")
