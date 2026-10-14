@@ -90,21 +90,25 @@ void cali_json_int(cali_json_t *j, long long v) {
     raw(j, buf, (size_t)n);
 }
 
+int cali_json_fmt_num(char *out, size_t cap, double v) {
+    if (v != v || v - v != 0) return -1;   /* NaN (a field the device marks "not available") or inf: not JSON */
+    int n = snprintf(out, cap, "%.2f", v);
+    if (n < 0 || (size_t)n >= cap) return -1;
+    while (out[n - 1] == '0') n--;   /* "%.2f" always has a ".": stops there at the latest */
+    if (out[n - 1] == '.') n--;
+    out[n] = 0;
+    return n;
+}
+
 void cali_json_num(cali_json_t *j, double v) {
-    if (v != v || v - v != 0) {   /* NaN (a field the device marks "not available") or inf: not JSON */
+    char buf[48];
+    int n = cali_json_fmt_num(buf, sizeof buf, v);
+    if (n < 0) {   /* not finite, or past 1e45: null */
         cali_json_null(j);
         return;
     }
     if (j->overflow) return;
     comma(j);
-    char buf[48];
-    int n = snprintf(buf, sizeof buf, "%.2f", v);
-    if (n < 0 || (size_t)n >= sizeof buf) {
-        j->overflow = 1;
-        return;
-    }
-    while (buf[n - 1] == '0') n--;   /* "%.2f" always has a ".": stops there at the latest */
-    if (buf[n - 1] == '.') n--;
     raw(j, buf, (size_t)n);
 }
 

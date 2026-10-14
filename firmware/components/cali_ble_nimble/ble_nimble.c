@@ -43,6 +43,7 @@
 #include "cali_control.h"
 #include "cali_diag.h"
 #include "cali_platform.h"
+#include "cali_sensors.h"
 #include "cali_transport.h"
 #include "codec.h"
 #include "codec_chars.h"
@@ -653,38 +654,46 @@ static int first_bond(ble_addr_t *out) {
     return 0;
 }
 
-/* Whether resolvable private address a was made with irk (as stored: LSB first): the Core spec's
- * ah(k, r) = e(k, 0^104 || prand) mod 2^24 == hash (Vol 3 Part H 2.2.2), e = AES-128 MSB first,
- * through PSA crypto (Mbed TLS 3.6 on the host, 4.x in ESP-IDF v6). */
-static int rpa_matches(const uint8_t irk[16], const ble_addr_t *a) {
+/* One AES-128 block, e(key, in) -> out (key MSB first), through PSA crypto (Mbed TLS 3.6 on the
+ * host, 4.x in ESP-IDF v6): rpa_matches' ah() and the Victron decoders' CTR keystream
+ * (cali_sensors_set_aes). The key is imported per call and destroyed. 0 ok, -1 (the first failure
+ * logged, not one per advert). */
+static int aes128_ecb(const uint8_t key[16], const uint8_t in[16], uint8_t out[16]) {
+    static int logged;
     psa_key_attributes_t at = PSA_KEY_ATTRIBUTES_INIT;
     psa_key_id_t id;
-    uint8_t key[16], in[16] = {0}, out[16];
     size_t olen = 0;
     psa_status_t st;
+    const char *what = "psa_crypto_init";
+    if ((st = psa_crypto_init()) == PSA_SUCCESS) {
+        psa_set_key_usage_flags(&at, PSA_KEY_USAGE_ENCRYPT);
+        psa_set_key_algorithm(&at, PSA_ALG_ECB_NO_PADDING);
+        psa_set_key_type(&at, PSA_KEY_TYPE_AES);
+        psa_set_key_bits(&at, 128);
+        what = "psa_import_key";
+        if ((st = psa_import_key(&at, key, 16, &id)) == PSA_SUCCESS) {
+            what = "psa_cipher_encrypt";
+            st = psa_cipher_encrypt(id, PSA_ALG_ECB_NO_PADDING, in, 16, out, 16, &olen);
+            (void)psa_destroy_key(id);
+            if (st == PSA_SUCCESS && olen == 16) return 0;
+        }
+    }
+    if (!logged) cali_log("aes: %s failed %d", what, (int)st);
+    logged = 1;
+    return -1;
+}
+
+/* Whether resolvable private address a was made with irk (as stored: LSB first): the Core spec's
+ * ah(k, r) = e(k, 0^104 || prand) mod 2^24 == hash (Vol 3 Part H 2.2.2), e = AES-128 MSB first.
+ * An AES failure: the found unit is treated as unbonded. */
+static int rpa_matches(const uint8_t irk[16], const ble_addr_t *a) {
+    uint8_t key[16], in[16] = {0}, out[16];
     if (a->type != BLE_ADDR_RANDOM || (a->val[5] & 0xc0) != 0x40) return 0;   /* not an RPA */
     for (int i = 0; i < 16; i++) key[i] = irk[15 - i];
     in[13] = a->val[5];
     in[14] = a->val[4];
     in[15] = a->val[3];
-    if ((st = psa_crypto_init()) != PSA_SUCCESS) {
-        cali_log("pair: psa_crypto_init failed %d: the found unit is treated as unbonded", (int)st);
-        return 0;
-    }
-    psa_set_key_usage_flags(&at, PSA_KEY_USAGE_ENCRYPT);
-    psa_set_key_algorithm(&at, PSA_ALG_ECB_NO_PADDING);
-    psa_set_key_type(&at, PSA_KEY_TYPE_AES);
-    psa_set_key_bits(&at, 128);
-    if ((st = psa_import_key(&at, key, sizeof key, &id)) != PSA_SUCCESS) {
-        cali_log("pair: psa_import_key failed %d: the found unit is treated as unbonded", (int)st);
-        return 0;
-    }
-    st = psa_cipher_encrypt(id, PSA_ALG_ECB_NO_PADDING, in, sizeof in, out, sizeof out, &olen);
-    (void)psa_destroy_key(id);
-    if (st != PSA_SUCCESS || olen != 16) {
-        cali_log("pair: psa_cipher_encrypt failed %d: the found unit is treated as unbonded", (int)st);
-        return 0;
-    }
+    if (aes128_ecb(key, in, out) != 0) return 0;
     return out[13] == a->val[2] && out[14] == a->val[1] && out[15] == a->val[0];
 }
 
@@ -944,4 +953,5 @@ void cali_ble_nimble_init(void (*sync_cb)(void)) {
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
     cali_ble_store_init();                    /* persistent bonds (not RAM-only ble_store_config) */
+    cali_sensors_set_aes(aes128_ecb);         /* the Victron decoders' keystream */
 }
