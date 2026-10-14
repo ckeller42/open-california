@@ -548,7 +548,9 @@ def test_firmware_channel_select(host_fw, hci_unit, tmp_path):
         assert page.input_value("#fw-channel") == "stable"
         page.select_option("#fw-channel", "latest")
         page.wait_for_function(
-            "() => document.getElementById('fw-status').textContent.includes('latest')", timeout=5000
+            "(s) => document.getElementById('fw-status').textContent.includes(s)",
+            arg=STRINGS["fw_ch_latest"]["en"],
+            timeout=5000,
         )
         browser.close()
     assert get_json(fw, "/api/state")["device"]["ota"]["channel"] == "latest"

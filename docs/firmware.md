@@ -1001,7 +1001,7 @@ The `/device` page budget `NET_HTTP_BODY_MAX` grew 24 -> 28 KB for the usage-dat
 | `codec-parity` | `gen_c_dict` / `gen_codec_vectors` / `gen_control_vectors --check` and the C parity modules (`test_control_parity.py` among them) with `gcc` |
 | `firmware-host-e2e` | The NimBLE-Linux + Bumble end-to-end tier, incl. the WiFi/web e2e, the control path (`test_control_e2e.py`) and the page in Chromium with a live fridge toggle reaching the fake unit (`tools/ci.sh firmware`) |
 | `firmware-build` | Compiles the release esp32s3 image against ESP-IDF's real esp-nimble; uploads the flashable images |
-| `firmware-release` | Push to `main` only: uploads `cali_fw.bin` + `manifest.json` to the `esp-latest` prerelease (the `latest` OTA channel, `R_FW_OTA`; the `stable` channel's `esp-stable` release comes from the separate `esp-stable.yml`, run by `promote_stable.sh`), plus the first-flash `cali_fw_full.bin` and `cali_fw.elf` (symbols for a panic backtrace, `R_FW_PANIC_CAPTURE`); the only job besides `coverage-badge` with `contents: write` |
+| `firmware-release` | Push to `main` only: uploads `cali_fw.bin` + `manifest.json` to the `esp-latest` prerelease (the `latest` OTA channel, `R_FW_OTA`; the `stable` channel's `esp-stable` release comes from the separate `esp-stable.yml`, run by `promote_stable.sh`), plus the first-flash `cali_fw_full.bin` and `cali_fw.elf` (symbols for a panic backtrace, `R_FW_PANIC_CAPTURE`); with `coverage-badge` the only ci.yml jobs with `contents: write` (`esp-stable.yml`'s job has it too) |
 | `firmware-qemu` | Builds the QEMU-probe variant (no WiFi driver) and boots it in QEMU |
 
 ## Hardware watch items (unresolved until the CoreS3 board runs)

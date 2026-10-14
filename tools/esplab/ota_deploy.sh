@@ -19,7 +19,11 @@ dev() { curl -sf --max-time 10 "$ESP/api/state" | j "device.$1" 2>/dev/null || t
 ota() { curl -sf --max-time 10 -X POST "$ESP/api/ota" -d "{\"action\":\"$1\"}" >/dev/null || true; }
 fail_on_error() { [ "$(dev ota.state)" != error ] || { echo "ota error: $(dev ota.error)" >&2; exit 1; }; }
 curl -sf --max-time 10 -X POST "$ESP/api/ota" -d "{\"channel\":\"$chan\"}" >/dev/null || true
-[ "$(dev ota.channel)" = "$chan" ] || { echo "channel not set" >&2; exit 1; }
+ch=$(dev ota.channel)   # empty: firmware from before the channels, which always uses esp-latest
+if [ -z "$ch" ]; then
+  [ "$chan" = latest ] || { echo "ESP firmware has no channel support yet: install main first" >&2; exit 1; }
+  echo "note: ESP firmware has no channel support yet; it uses esp-latest"
+elif [ "$ch" != "$chan" ]; then echo "channel not set" >&2; exit 1; fi
 until [[ "$(gh release download "esp-$chan" -R "$REPO" -p manifest.json -O - | j sha)" == "$sha7"* ]]; do
   echo "waiting for esp-$chan manifest = $sha7"; sleep 15; done
 until [[ "$(dev fw)" == "$sha7"* ]]; do   # check every 15 s until the ESP offers this sha, then install

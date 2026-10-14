@@ -250,7 +250,7 @@ function renderBattery(b) {
 function renderFw(d) {
   const o = d.ota, sha = (o.available_sha || "").slice(0, 7), key = OTA_TEXT[o.state];
   const station = d.wifi.mode === "station", busy = ["checking", "downloading", "verifying", "rebooting"].includes(o.state);
-  let text = t("fw_running", {sha: d.fw}) + " · " + o.channel;
+  let text = t("fw_running", {sha: d.fw}) + " · " + t(o.channel === "latest" ? "fw_ch_latest" : "fw_ch_stable");
   if (key) text += " · " + t(key, {sha: sha, pct: o.progress_pct, error: o.error || ""});
   if (!station) text += " · " + t("fw_station_only");
   $("fw-status").textContent = text;

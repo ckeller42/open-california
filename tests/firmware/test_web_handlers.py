@@ -1287,14 +1287,15 @@ def test_ota_starts_on_the_ota_task_and_shows_in_state(web_cli, action):
     assert len(ota_wakes(other)) == 1
 
 
+@pytest.mark.parametrize("body", ['{"action":"install"}', '{"channel":"latest"}'])
 @pytest.mark.parametrize("state,joined", NOT_STATION)
-def test_ota_refused_outside_station_mode(web_cli, state, joined):
-    """Like /api/command: never over the setup hotspot or a setup-flow join."""
+def test_ota_refused_outside_station_mode(web_cli, state, joined, body):
+    """Like /api/command: never over the setup hotspot or a setup-flow join (a channel change neither)."""
     r, other = one(
         web_cli,
         "POST",
         "/api/ota",
-        '{"action":"install"}',
+        body,
         setup=["wifi " + state, "joined %d" % joined, "otainit"],
     )
     assert (r.status, r.json()) == (403, {"ok": False, "error": "setup_mode"})
