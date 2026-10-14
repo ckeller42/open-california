@@ -49,6 +49,14 @@ class SoakData:
     boot: int
 
 
+def _since_ms(s):
+    """``--since`` ISO text to epoch ms; a value without an offset is UTC."""
+    t = dt.datetime.fromisoformat(s)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=dt.UTC)
+    return int(t.timestamp() * 1000)
+
+
 def _intervals(d):
     """Boot intervals [(lo, hi)] from the boot points; the first starts at the window start."""
     edges = [d.start_ms] + [b["t"] for b in d.boots if b["t"] > d.start_ms] + [d.end_ms]
@@ -56,7 +64,13 @@ def _intervals(d):
 
 
 def evaluate(d):
-    lines = []
+    lines = [
+        (
+            "telemetry",
+            "PASS" if d.diag else "FAIL",
+            "%d diag samples" % len(d.diag) if d.diag else "no esp_diag samples in the window",
+        )
+    ]
     bad = [b for b in d.boots if b["reset_reason"] in BAD_RESETS]
     reasons = ",".join(b["reset_reason"] for b in d.boots) or "none"
     lines.append(("reboots", "FAIL" if bad else "PASS", "%d boots (%s)" % (len(d.boots), reasons)))
@@ -114,13 +128,16 @@ def evaluate(d):
 
     lines.append(("screen", "SKIP", "no display record (evt display is reserved, firmware.md)"))
 
-    days = max((d.end_ms - d.start_ms) / (24 * H), 1 / 24.0)
-    per_day = len(d.i2c_lines) / days
+    buckets: dict = {}
+    for x in d.i2c_lines:
+        k = (x["t"] - d.start_ms) // int(24 * H)
+        buckets[k] = buckets.get(k, 0) + 1
+    worst_day = max(buckets.values(), default=0)
     lines.append(
         (
             "i2c_timeouts",
-            "FAIL" if per_day > I2C_PER_DAY_MAX else "PASS",
-            "%d lines = %.2f/day (limit %d/day)" % (len(d.i2c_lines), per_day, I2C_PER_DAY_MAX),
+            "FAIL" if worst_day > I2C_PER_DAY_MAX else "PASS",
+            "worst day %d lines (limit %d/day), %d in total" % (worst_day, I2C_PER_DAY_MAX, len(d.i2c_lines)),
         )
     )
     return lines
@@ -242,15 +259,18 @@ def main(argv=None):
 
     try:
         db = Influx()
-    except SystemExit as e:  # no INFLUXDB_TOKEN etc.: cannot run
-        print(e, file=sys.stderr)
+    except (SystemExit, Exception) as e:  # no token, no client, unreachable: cannot run
+        print("soak: cannot run: %s" % e, file=sys.stderr)
         return 2
     end = int(dt.datetime.now(dt.UTC).timestamp() * 1000)
-    start = int(dt.datetime.fromisoformat(a.since).timestamp() * 1000) if a.since else end - int(a.hours * H)
+    start = _since_ms(a.since) if a.since else end - int(a.hours * H)
     fw, boot = _esp(a.url) if a.url else ("?", -1)
-    d = SoakData(
-        start_ms=start, end_ms=end, ingest=_journal(start), fw=fw, boot=boot, **_pull(db, start, end)
-    )
+    try:
+        pulled = _pull(db, start, end)
+    except Exception as e:  # unreachable Influx, bad query: cannot run
+        print("soak: cannot run: %s" % e, file=sys.stderr)
+        return 2
+    d = SoakData(start_ms=start, end_ms=end, ingest=_journal(start), fw=fw, boot=boot, **pulled)
     lines = evaluate(d)
     text = render(d, lines)
     sys.stdout.write(text)

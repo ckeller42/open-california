@@ -329,7 +329,7 @@ journalctl -u calictl-esp-ingest -n 20            # the per-run summary
 
 ## ESP soak report
 
-`tools/esplab/soak_report.py` reads the last 72 h of the satellite's diagnostics (`esp_evt`,
+`tools/esplab/soak_report.py` reads the last 72 h of the {term}`satellite`'s diagnostics (`esp_evt`,
 `esp_diag`, `esp_log` from [ESP ingest](#esp-ingest-gap-fill)), the `esp-ingest` journal summaries
 and the ESP's `/api/state`, prints one line per criterion plus `VERDICT PASS|FAIL`, writes
 `~/esp-soak/<date>.txt` and one `esp_soak` point (exit 0 PASS, 1 FAIL, 2 cannot run). A `SKIP`
@@ -338,7 +338,7 @@ never fails the verdict.
 | # | Criterion | PASS when |
 |---|---|---|
 | 1 | `reboots` | no boot with `reset_reason` panic, int_wdt, task_wdt, wdt, brownout or cpu_lockup (sw, poweron, usb are listed only) |
-| 2 | `link` | at most 10 `link_down` events per boot interval (the `link_up` fraction is printed as information: a parked unit deep-sleeps) |
+| 2 | `link` | at most 10 `link_down` events per boot interval (the `link_up` fraction is printed as information: a parked {term}`camper unit` deep-sleeps) |
 | 3 | `touch_nacks` | per boot, max cumulative touch `errors` / hours of that boot is at most 5 |
 | 4 | `ingest` | every `esp-ingest` summary has `lost == 0` and the last has `held == 0` (SKIP without a journal summary) |
 | 5 | `heap_min` | `heap_min` is at least 32768 B in every `esp_diag` sample |

@@ -42,7 +42,7 @@ def by_name(lines):
 
 def test_all_green():
     lines = soak.evaluate(data())
-    assert [v for _, v, _ in lines] == ["PASS", "PASS", "PASS", "PASS", "PASS", "SKIP", "PASS"]
+    assert [v for _, v, _ in lines] == ["PASS", "PASS", "PASS", "PASS", "PASS", "PASS", "SKIP", "PASS"]
     assert soak.verdict(lines) == "PASS"
 
 
@@ -100,10 +100,27 @@ def test_heap_min_threshold():
     assert v == "FAIL" and "32767" in detail
 
 
+def _i2c(*hours):
+    return [{"t": T0 + int(h * H), "msg": "i2c.master: I2C transaction timeout"} for h in hours]
+
+
 def test_i2c_timeouts_per_day():
-    lines = [{"t": T0 + i * H, "msg": "i2c.master: I2C transaction timeout"} for i in range(7)]
-    assert by_name(soak.evaluate(data(i2c_lines=lines)))["i2c_timeouts"][0] == "FAIL"  # 7 in 3 days > 2/day
-    assert by_name(soak.evaluate(data(i2c_lines=lines[:6])))["i2c_timeouts"][0] == "PASS"
+    assert (
+        by_name(soak.evaluate(data(i2c_lines=_i2c(1, 2, 3, 4, 5, 6))))["i2c_timeouts"][0] == "FAIL"
+    )  # burst
+    assert by_name(soak.evaluate(data(i2c_lines=_i2c(1, 2, 25, 26, 49, 50))))["i2c_timeouts"][0] == "PASS"
+    v, detail = by_name(soak.evaluate(data(i2c_lines=_i2c(1, 2, 3))))["i2c_timeouts"]
+    assert v == "FAIL" and "worst day 3" in detail
+
+
+def test_empty_window_fails():
+    lines = soak.evaluate(data(diag=[]))
+    assert by_name(lines)["telemetry"][0] == "FAIL" and soak.verdict(lines) == "FAIL"
+
+
+def test_since_without_offset_is_utc():
+    assert soak._since_ms("2026-10-14T00:00") == soak._since_ms("2026-10-14T00:00:00+00:00")
+    assert soak._since_ms("2026-10-14T02:00+02:00") == soak._since_ms("2026-10-14T00:00")
 
 
 def test_report_text_and_point(capsys):
