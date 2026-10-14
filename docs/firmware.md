@@ -1619,8 +1619,23 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
    shell (the page at ``/`` and the same-origin files it links; the satellite's ``/app`` is the same
    bundle) stale-while-revalidate keyed on the server's ``ETag``, offers "New version — tap to
    reload" when a revalidated file changed, and never caches ``/api/*``. The page keeps the last
-   ``/api/state`` in ``localStorage`` and shows it at start, read-only behind the offline banner
-   with its age, until the first live poll answers.
+   ``/api/state`` in ``localStorage`` and shows it at start, read-only behind the neutral
+   "Connecting…" banner with its age, until the first live poll answers.
+
+.. req:: The web UI tells a sleeping van from an unreachable backend
+   :id: R_UI_LINK_STATE
+   :status: implemented
+   :tags: web, esp32
+
+   One link state shall drive both the status pill and one persistent ``role=status`` banner above
+   the page: *live* (no banner); *asleep* (the backend answered, the unit is offline: amber "van
+   asleep" with the last data's time and age); *connecting* (no answer yet in this page life, e.g. a
+   restored snapshot: neutral "Connecting…", never red); *unreachable* (no answer for 15 s, timed
+   from the oldest unanswered poll's send, so a hidden tab never counts down: red "calictl (host)" or
+   "Satellite" "not reachable since" the last answer, overriding asleep). A shorter gap keeps the last
+   state. The state poll aborts after 8 s (above the satellite's 4 s command stall) so a hung
+   connection is retried; the first good answer clears the red banner. The banner's text changes
+   only with the state; its age ticks in an ``aria-hidden`` child. No buttons.
 ```
 
 - **`R_FW_PAIRING_SM`** (C twin of the pairing state machine, `firmware/components/cali_core/pairing_sm.c`)
@@ -1702,6 +1717,11 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
 - **`R_UI_PWA_OFFLINE`** — verified by `T_UI_PWA_OFFLINE`, `T_UI_PWA_UPDATE`, `T_UI_PWA_INSECURE`,
   `T_UI_PWA_SATELLITE` (`tests/e2e/test_pwa.py`, Chromium on 127.0.0.1, a secure context) and
   `T_FW_SW_SERVED` (`tests/firmware/test_web_handlers.py`).
+- **`R_UI_LINK_STATE`** — verified by `T_UI_LINK_ASLEEP`, `T_UI_LINK_UNREACHABLE`
+  (`tests/e2e/test_link_state.py`, page.clock over a fixed calictl state: blip, hung poll, hidden
+  tab, asleep-then-unreachable, DE copy + the quiet live region) and `T_UI_LINK_RESTORED`
+  (`tests/e2e/test_pwa.py`); the satellite's 4 s command stall by
+  `test_a_pending_command_does_not_trip_the_offline_banner`.
 - **`R_FW_SHARED_UI`** — verified by `T_SEMANTICS_JS_PARITY` (`tests/test_semantics_js_parity.py`,
   `semantics.js` vs the Python golden vectors), `T_FW_APP_BUNDLE` (`tests/test_app_bundle.py`, the
   generated bundle) and `T_FW_SHARED_UI_HOST` (`tests/firmware/test_web_e2e.py`, the host tier's

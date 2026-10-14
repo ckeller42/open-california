@@ -6,6 +6,8 @@ window.STRINGS_DE = {
   "Vehicle": "Fahrzeug",
   "live": "live",
   "offline": "offline",
+  "connecting…": "verbinde…",
+  "unreachable": "nicht erreichbar",
   "Sending…": "Wird gesendet…",
   "New version — tap to reload": "Neue Version — zum Neuladen tippen",
 
@@ -349,6 +351,12 @@ window.STRINGS_DE = {
     "Offline — Fahrzeug im Ruhezustand. Letzte Daten {clock} ({ago}).",
   "Offline — no data yet (van asleep since the monitor started). Checked {clock}.":
     "Offline — noch keine Daten (Fahrzeug seit dem Start im Ruhezustand). Geprüft {clock}.",
+  "Connecting… Last data {clock} ({ago}).": "Verbinde … Letzte Daten {clock} ({ago}).",
+  "Connecting…": "Verbinde …",
+  "⚠ {name} not reachable since {since}. Last data {clock} ({ago}).":
+    "⚠ {name} nicht erreichbar seit {since}. Letzte Daten {clock} ({ago}).",
+  "⚠ {name} not reachable since {since}.": "⚠ {name} nicht erreichbar seit {since}.",
+  "Satellite": "Satellit",
   "{m} min ago": "vor {m} Min",
   "{h} h ago": "vor {h} Std",
   "{d} d ago": "vor {d} T",
@@ -470,6 +478,8 @@ window.STRINGS_DE = {
     + "are shown. A ⚠ on a tile means the unit reports a fault there.\n\n"
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
     + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
+    + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
+    + "itself may be fine.\n\n"
     + "Read-only: control writes are switched off on this device; values still update. An untested-firmware "
     + "warning means the unit runs software this project was not validated on, so decoded values may be off."]:
     "Jede Kachel ist eine Funktion der Camper-Einheit; tippe darauf für Details. Es werden nur "
@@ -477,7 +487,9 @@ window.STRINGS_DE = {
     + "die Einheit dort eine Störung meldet.\n\nOffline: Geparkt fällt die Einheit in Tiefschlaf und "
     + "antwortet nicht mehr, bis das Fahrzeug wieder benutzt wird. Die Seite zeigt dann die letzten "
     + "Daten und ihr Alter. 🕒 kennzeichnet einen Wert, der früher gemessen wurde, nicht "
-    + "live.\n\nNur-Lesen: Steuerbefehle sind auf diesem Gerät abgeschaltet; die Werte aktualisieren "
+    + "live.\n\nNicht erreichbar: Diese Seite erreicht calictl oder den Satelliten nicht (WLAN, "
+    + "Tailscale, Strom). Dem Fahrzeug selbst geht es womöglich gut.\n\nNur-Lesen: Steuerbefehle "
+    + "sind auf diesem Gerät abgeschaltet; die Werte aktualisieren "
     + "sich trotzdem. Eine Warnung zu ungetesteter Firmware heißt, dass die Einheit Software nutzt, "
     + "auf der dieses Projekt nicht validiert wurde; dekodierte Werte können abweichen.",
   ["Camper unit: online while the Bluetooth link to the unit works; offline usually means the parked unit "

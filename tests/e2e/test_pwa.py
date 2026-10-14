@@ -108,15 +108,52 @@ def test_offline_reload_shows_the_last_state(daemon):
         } <= cached
         assert not any(p.startswith("/api/") for p in cached), cached
         stop()  # the van's network is gone
+        pg.clock.install()
         pg.reload()
-        expect(pg.locator(".offline")).to_contain_text("Offline — van asleep. Last data")
+        # the snapshot is shown neutral ("connecting") -- never red, never "van asleep" -- for 15 s
+        expect(pg.locator("#conn.connecting")).to_contain_text("Connecting… Last data")
         expect(pg.get_by_text("Cooler").first).to_be_visible()
-        expect(pg.locator("#status")).to_have_text("offline")
+        expect(pg.locator("#status")).to_have_text("connecting…")
         assert pg.evaluate("() => STATE._meta.online === false && readOnly()") is True
         assert pg.locator(".readonly").count() == 0  # the offline banner explains it
         pg.locator(".tile", has_text="Cooler").first.click()
         controls = "#app :is(input,select):enabled, #app [role=switch]:not([disabled])"
         assert pg.locator(controls).count() == 0  # greyed until a live poll answers
+        assert pg.locator("#conn.unreachable").count() == 0
+        for _ in range(8):  # 16 s of 2 s ticks, each failed poll settling in real time
+            pg.clock.run_for(2000)
+            pg.wait_for_timeout(150)
+        expect(pg.locator("#conn.unreachable")).to_contain_text("⚠ calictl (127.0.0.1) not reachable since")
+        expect(pg.locator("#status")).to_have_text("unreachable")
+        assert "asleep" not in pg.locator("#conn").inner_text()
+
+
+def test_a_restored_snapshot_connects_then_goes_live(daemon):
+    """Server up: the reload shows the snapshot as "Connecting…" first, the first answer clears it.
+
+    .. test:: A restored snapshot is neutral until the first answer, then live
+       :id: T_UI_LINK_RESTORED
+       :links: R_UI_LINK_STATE
+    """
+    _, base, _ = daemon
+    record = (  # every #conn state, from before app.js runs (it paints the snapshot synchronously)
+        "window.__conn = [];"
+        "new MutationObserver(() => { const c = document.getElementById('conn');"
+        " const v = c && c.className + '|' + c.textContent;"
+        " if (c && v !== window.__conn[window.__conn.length - 1]) window.__conn.push(v); })"
+        ".observe(document, { childList: true, subtree: true, characterData: true, attributes: true });"
+    )
+    with _page(record) as pg:
+        pg.goto(base + "/")
+        _installed(pg)
+        pg.reload()
+        expect(pg.locator("#status")).to_have_text("live")
+        expect(pg.locator("#conn.offline")).to_have_count(0)
+        seen = pg.evaluate("() => window.__conn")
+        shown = [v for v in seen if v != "|"]  # "|" = the empty #conn (no banner)
+        assert shown and "connecting|Connecting… Last data" in shown[0], seen
+        assert seen[-1] == "|", seen
+        assert not any("unreachable" in s or "asleep" in s for s in seen), seen
 
 
 def test_a_changed_shell_offers_a_reload(daemon):
@@ -176,6 +213,12 @@ def test_satellite_app_opens_offline():
         cached = _installed(pg)
         assert {"/", "/manifest.webmanifest", "/apple-touch-icon.png"} <= cached, cached
         stub.__exit__(None, None, None)
+        pg.clock.install()
         pg.reload()
-        expect(pg.locator(".offline")).to_contain_text("Offline — van asleep. Last data")
+        expect(pg.locator("#conn.connecting")).to_contain_text("Connecting… Last data")
         assert pg.evaluate("() => STATE._meta.satellite") is True
+        for _ in range(8):  # 16 s of 2 s ticks
+            pg.clock.run_for(2000)
+            pg.wait_for_timeout(150)
+        # the satellite page names its own backend, not calictl
+        expect(pg.locator("#conn.unreachable")).to_contain_text("⚠ Satellite not reachable since")
