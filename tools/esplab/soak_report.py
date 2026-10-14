@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ESP soak report: 7 criteria over the last N hours of the ESP's diagnostics in InfluxDB (R_SOAK_REPORT).
+"""ESP soak report: 9 criteria over the last N hours of the ESP's diagnostics in InfluxDB (R_SOAK_REPORT).
 
 Runs on buspi under calictl-esp-soak.timer (daily 08:00) with the serve env (INFLUXDB_TOKEN from
 /etc/buspi/secrets.env). Prints one line per criterion, ``VERDICT PASS|FAIL``, writes the text to
@@ -9,10 +9,11 @@ Runs on buspi under calictl-esp-soak.timer (daily 08:00) with the serve env (INF
    :id: R_SOAK_REPORT
    :status: open
 
-   Criteria: (1) no reboot with reset_reason in BAD_RESETS; (2) <= 10 link_down events per boot;
-   (3) touch NACKs <= 5/h per boot; (4) esp-ingest lost = 0 in every summary, held = 0 in the last;
-   (5) heap_min >= 32 KB in every diag sample; (6) screen: SKIP until an evt display record exists;
-   (7) i2c.master timeout log lines <= 2 per day. A SKIP never fails the verdict.
+   Criteria: (1) telemetry: esp_diag samples exist; (2) no reboot with reset_reason in BAD_RESETS;
+   (3) fw: every boot in the window ran the current build; (4) <= 10 link_down events per boot;
+   (5) touch NACKs <= 5/h per boot; (6) esp-ingest lost = 0 in every summary, held = 0 in the last;
+   (7) heap_min >= 32 KB in every diag sample; (8) screen: SKIP until an evt display record exists;
+   (9) i2c.master timeout log lines <= 2 per day. A SKIP never fails the verdict.
 """
 
 import argparse
@@ -74,6 +75,19 @@ def evaluate(d):
     bad = [b for b in d.boots if b["reset_reason"] in BAD_RESETS]
     reasons = ",".join(b["reset_reason"] for b in d.boots) or "none"
     lines.append(("reboots", "FAIL" if bad else "PASS", "%d boots (%s)" % (len(d.boots), reasons)))
+
+    seen = sorted({b["fw"] for b in d.boots if b.get("fw")})
+    if d.fw == "?" or not seen:
+        lines.append(("fw", "SKIP", "ESP unreachable or no boot point"))
+    else:
+        other = [f for f in seen if not (d.fw.startswith(f[:7]) or f.startswith(d.fw[:7]))]
+        lines.append(
+            (
+                "fw",
+                "FAIL" if other else "PASS",
+                ("boots ran %s, now %s" % (",".join(other), d.fw)) if other else "all boots on %s" % d.fw,
+            )
+        )
 
     worst = 0
     for lo, hi in _intervals(d):
@@ -169,7 +183,13 @@ def point(d, lines):
 
 def parse_journal(text):
     """The ``esp-ingest: {...}`` summaries in journalctl output, in order."""
-    return [json.loads(m.group(1)) for m in re.finditer(r"esp-ingest: (\{.*\})\s*$", text, re.M)]
+    out = []
+    for m in re.finditer(r"esp-ingest: (\{.*\})\s*$", text, re.M):
+        try:
+            out.append(json.loads(m.group(1)))
+        except ValueError:  # a truncated line must not crash the report (exit 1 reads as FAIL)
+            pass
+    return out
 
 
 def _iso(ms):

@@ -1,4 +1,4 @@
-"""tools/esplab/soak_report.py: the 7 criteria against fixture rows (no Influx, no ESP).
+"""tools/esplab/soak_report.py: the 9 criteria against fixture rows (no Influx, no ESP).
 
 .. test:: Soak criteria and verdict
    :id: T_SOAK_REPORT
@@ -42,7 +42,17 @@ def by_name(lines):
 
 def test_all_green():
     lines = soak.evaluate(data())
-    assert [v for _, v, _ in lines] == ["PASS", "PASS", "PASS", "PASS", "PASS", "PASS", "SKIP", "PASS"]
+    assert [v for _, v, _ in lines] == [
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "PASS",
+        "SKIP",
+        "PASS",
+    ]
     assert soak.verdict(lines) == "PASS"
 
 
@@ -136,3 +146,24 @@ def test_report_text_and_point(capsys):
 def test_journal_summary_parser():
     out = 'Oct 14 08:00:01 buspi python[1]: INFO esp-ingest: {"pulled": 3, "held": 1, "lost": 0}\nnoise\n'
     assert soak.parse_journal(out) == [{"pulled": 3, "held": 1, "lost": 0}]
+
+
+def test_journal_parser_skips_malformed_line():
+    out = 'esp-ingest: {"held": 1, "lo\nesp-ingest: {"held": 0, "lost": 0}\n'
+    assert soak.parse_journal(out) == [{"held": 0, "lost": 0}]
+
+
+def test_fw_mid_window_install_fails():
+    boots = [
+        {"t": T0 + 1000, "reset_reason": "sw", "fw": "1111111"},
+        {"t": T0 + 5 * H, "reset_reason": "sw", "fw": "8f9d591"},
+    ]
+    v, detail = by_name(soak.evaluate(data(boots=boots)))["fw"]
+    assert v == "FAIL" and "1111111" in detail
+    long_fw = [{"t": T0 + 1000, "reset_reason": "sw", "fw": "8f9d591aaaa"}]
+    assert by_name(soak.evaluate(data(boots=long_fw)))["fw"][0] == "PASS"  # prefix compare
+
+
+def test_fw_unreachable_or_no_boot_skips():
+    assert by_name(soak.evaluate(data(fw="?")))["fw"][0] == "SKIP"
+    assert by_name(soak.evaluate(data(boots=[])))["fw"][0] == "SKIP"

@@ -337,13 +337,15 @@ never fails the verdict.
 
 | # | Criterion | PASS when |
 |---|---|---|
-| 1 | `reboots` | no boot with `reset_reason` panic, int_wdt, task_wdt, wdt, brownout or cpu_lockup (sw, poweron, usb are listed only) |
-| 2 | `link` | at most 10 `link_down` events per boot interval (the `link_up` fraction is printed as information: a parked {term}`camper unit` deep-sleeps) |
-| 3 | `touch_nacks` | per boot, max cumulative touch `errors` / hours of that boot is at most 5 |
-| 4 | `ingest` | every `esp-ingest` summary has `lost == 0` and the last has `held == 0` (SKIP without a journal summary) |
-| 5 | `heap_min` | `heap_min` is at least 32768 B in every `esp_diag` sample |
-| 6 | `screen` | always SKIP until an `evt display` record exists (reserved, see [firmware](firmware.md)) |
-| 7 | `i2c_timeouts` | `esp_log` lines with `i2c.master` and `timeout`: at most 2 per 24 h |
+| 1 | `telemetry` | the window holds `esp_diag` samples (an empty window is a FAIL, not a quiet pass) |
+| 2 | `reboots` | no boot with `reset_reason` panic, int_wdt, task_wdt, wdt, brownout or cpu_lockup (sw, poweron, usb are listed only) |
+| 3 | `fw` | every `boot` point in the window carries the ESP's current `fw` (sha prefix compare; SKIP when the ESP is unreachable or there is no boot point), so the 72 h ran on one build |
+| 4 | `link` | at most 10 `link_down` events per boot interval (the `link_up` fraction is printed as information: a parked {term}`camper unit` deep-sleeps) |
+| 5 | `touch_nacks` | per boot, max cumulative touch `errors` / hours of that boot is at most 5 |
+| 6 | `ingest` | every `esp-ingest` summary has `lost == 0` and the last has `held == 0` (SKIP without a journal summary) |
+| 7 | `heap_min` | `heap_min` is at least 32768 B in every `esp_diag` sample |
+| 8 | `screen` | always SKIP until an `evt display` record exists (reserved, see [firmware](firmware.md)) |
+| 9 | `i2c_timeouts` | `esp_log` lines with `i2c.master` and `timeout`: at most 2 per 24 h |
 
 Requirement `R_SOAK_REPORT` (in the script's docstring, `docs/api.rst`).
 
