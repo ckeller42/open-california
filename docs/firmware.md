@@ -1714,6 +1714,8 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   string drawable with the generated fonts) and on the board by `tools/esplab_display_walk.sh`
   (screenshots of the spec's seven states + dimming, decoded by `tools/esp_shot.py`, `tests/test_esp_shot.py`; BOARD rows
   in `docs/business-logic/evidence-ledger.md`).
+- **`R_SOAK_REPORT`** — verified by `T_SOAK_REPORT` (`tests/test_soak_report.py`: the 7 criteria against
+  fixture rows, the report text and `esp_soak` point, the journal summary parser).
 
 The full needs table for the whole project, not just firmware, is at the bottom of
 [the docs home page](index.md).
