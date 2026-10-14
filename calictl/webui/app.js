@@ -1033,9 +1033,9 @@ function paintLink() {
     vars.since = clockText(/** @type {number} */ (lastAnswerAt ?? waitingSince) / 1000);
     tmpl = clock ? "⚠ {name} not reachable since {since}. Last data {clock} ({ago})."
       : "⚠ {name} not reachable since {since}.";
-  } else if (s === "connecting" && clock) {
+  } else if (s === "connecting") {
     cls += " connecting";
-    tmpl = "Connecting… Last data {clock} ({ago}).";
+    tmpl = clock ? "Connecting… Last data {clock} ({ago})." : "Connecting…";
   } else if (s === "asleep") {
     tmpl = "Offline — van asleep. Last data {clock} ({ago}).";
   } else if (s === "never") {
@@ -1077,6 +1077,9 @@ async function refreshState(force) {
   let next;
   try {
     next = await api("/api/state", { signal: ac.signal });
+    // an error body (calictl's 500/503 {error}, a proxy page) is no answer: keep STATE and the
+    // unreachable clock. Checked here, not in api(): the wizard and commands read JSON error bodies.
+    if (!isSatelliteBody(next) && !(next && typeof next === "object" && next._meta)) throw new Error("no state");
   } catch (e) {
     paintLink();   // a failure alone changes nothing: unreachable is time-based (UNREACHABLE_MS)
     return;

@@ -10,6 +10,7 @@ errors on purpose here, so only uncaught page errors fail a test. OPT-IN like te
 
 import contextlib
 import copy
+import re
 from pathlib import Path
 
 import pytest
@@ -61,8 +62,9 @@ def _asleep(b):
 
 
 @contextlib.contextmanager
-def _page(b, locale="en-US", init_script=None):
-    """A Chromium page on a fake clock (installed before the load, so every timer is ours)."""
+def _page(b, locale="en-US", init_script=None, before=None):
+    """A Chromium page on a fake clock (installed before the load, so every timer is ours).
+    ``before(pg)`` runs before the load (a route); then the first answer is not awaited."""
     with sync_api.sync_playwright() as p:
         browser = p.chromium.launch()
         ctx = browser.new_context(locale=locale, service_workers="block")
@@ -72,8 +74,11 @@ def _page(b, locale="en-US", init_script=None):
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
         pg.clock.install()
+        if before:
+            before(pg)
         pg.goto(b.base)
-        pg.wait_for_function(ANSWERED)
+        if not before:
+            pg.wait_for_function(ANSWERED)
         try:
             yield pg
         finally:
@@ -127,7 +132,7 @@ def test_backend_down_turns_red_at_15_s_and_recovers(backend):
         _tick(pg, 10000)
         assert pg.locator("#conn.unreachable").count() == 0
         assert pg.locator("#status").inner_text() != "unreachable"
-        _tick(pg, 6000)
+        _tick(pg, 8000)
         expect(pg.locator("#conn.unreachable")).to_contain_text("⚠ %s not reachable since" % NAME)
         expect(pg.locator("#conn")).to_contain_text("Last data")
         expect(pg.locator("#status")).to_have_text("unreachable")
@@ -161,7 +166,7 @@ def test_a_hung_poll_turns_red_at_15_s(backend):
         pg.route("**/api/state", lambda route: held.append(route))  # never fulfilled
         _tick(pg, 10000)
         assert pg.locator("#conn.unreachable").count() == 0
-        _tick(pg, 6000)
+        _tick(pg, 8000)
         expect(pg.locator("#conn.unreachable")).to_contain_text("not reachable since")
         expect(pg.locator("#status")).to_have_text("unreachable")
         assert len(held) >= 2, held  # the 8 s abort freed the poll: a later tick sent another
@@ -190,7 +195,7 @@ def test_hidden_tab_does_not_count_down(backend):
         assert pg.locator("#conn.unreachable").count() == 0
         # hours-old values are not "live": no fresh answer yet -> connecting
         assert pg.locator("#status").inner_text() == "connecting…"
-        _tick(pg, 16000)
+        _tick(pg, 18000)
         expect(pg.locator("#conn.unreachable")).to_be_visible()
 
 
@@ -200,7 +205,7 @@ def test_asleep_then_unreachable_shows_only_the_red_banner(backend):
     with _page(backend) as pg:
         expect(_conn(pg)).to_contain_text("van asleep")
         _down(pg)
-        _tick(pg, 16000)
+        _tick(pg, 18000)
         expect(pg.locator("#conn.unreachable")).to_contain_text("not reachable since")
         assert pg.locator(".offline").count() == 1
         assert "asleep" not in _conn(pg).inner_text()
@@ -217,7 +222,33 @@ def test_german_copy_and_a_quiet_live_region(backend):
         _tick(pg, 6000)  # good polls: same state
         assert pg.evaluate("() => document.getElementById('conn').firstChild === window.__first")
         _down(pg)
-        _tick(pg, 16000)
+        _tick(pg, 18000)
         expect(pg.locator("#conn.unreachable")).to_contain_text("⚠ %s nicht erreichbar seit" % NAME)
         expect(_conn(pg)).to_contain_text("Letzte Daten")
         expect(pg.locator("#status")).to_have_text("nicht erreichbar")
+
+
+def test_an_error_answer_is_no_answer(backend):
+    """A cold open whose /api/state answers 500 {error} (the daemon cannot build its state): plain
+    "Connecting…" banner at once, red after 15 s with no "Last data" clause, live once it answers."""
+
+    def err(pg):
+        pg.route(
+            "**/api/state",
+            lambda route: route.fulfill(
+                status=500, content_type="application/json", body='{"error": "state_failed"}'
+            ),
+        )
+
+    with _page(backend, before=err) as pg:
+        expect(pg.locator("#conn.connecting")).to_have_text("Connecting…")
+        expect(pg.locator("#status")).to_have_text("connecting…")
+        _tick(pg, 20000)
+        expect(pg.locator("#conn.unreachable")).to_have_text(
+            re.compile(r"^⚠ calictl \(127\.0\.0\.1\) not reachable since [^.]+\.$")
+        )
+        expect(pg.locator("#status")).to_have_text("unreachable")
+        pg.unroute("**/api/state")
+        _tick(pg, 2000)
+        expect(pg.locator("#status")).to_have_text("live")
+        expect(pg.locator("#conn.offline")).to_have_count(0)

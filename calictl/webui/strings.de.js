@@ -352,6 +352,7 @@ window.STRINGS_DE = {
   "Offline — no data yet (van asleep since the monitor started). Checked {clock}.":
     "Offline — noch keine Daten (Fahrzeug seit dem Start im Ruhezustand). Geprüft {clock}.",
   "Connecting… Last data {clock} ({ago}).": "Verbinde … Letzte Daten {clock} ({ago}).",
+  "Connecting…": "Verbinde …",
   "⚠ {name} not reachable since {since}. Last data {clock} ({ago}).":
     "⚠ {name} nicht erreichbar seit {since}. Letzte Daten {clock} ({ago}).",
   "⚠ {name} not reachable since {since}.": "⚠ {name} nicht erreichbar seit {since}.",
