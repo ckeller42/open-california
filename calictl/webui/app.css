@@ -204,8 +204,11 @@ label.row { cursor: pointer; }
 .session-pill.busy { color: var(--accent); }
 
 #menu { font-size: 1.4rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0;
-  min-width: 44px; min-height: 44px; margin: -.6rem -.5rem; }   /* 44 px hit area without growing the topbar */
-button.pill { background: none; font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  min-width: 44px; min-height: 44px; margin: -.6rem -.5rem -.6rem 0; }   /* 44 px hit area without growing the topbar */
+/* the tappable status pill: 44 px tall hit area via ::after (topbar keeps its height); no
+   horizontal extension, so >= 8 px stays between its hit area and the ⋮ button's */
+button.pill { position: relative; background: none; font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.pill::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
 /* fixed + top set from the topbar's bottom edge in app.js (that edge includes the safe-area inset) */
 .menupop { position: fixed; right: calc(.4rem + env(safe-area-inset-right)); z-index: 40; background: var(--card, #fff); border: 1px solid rgba(128,128,128,.35); border-radius: .5rem; box-shadow: 0 4px 14px rgba(0,0,0,.25); padding: .25rem; display: flex; flex-direction: column; min-width: 11rem; }
 .menupop button { background: none; border: 0; font: inherit; color: inherit; text-align: left; padding: .5rem .7rem; min-height: 44px; border-radius: .35rem; cursor: pointer; }

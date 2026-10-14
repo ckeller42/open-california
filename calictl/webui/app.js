@@ -241,7 +241,8 @@ function onMenuKey(ev) {
   if (!menuPop) return;
   const items = /** @type {HTMLElement[]} */ (Array.from(menuPop.querySelectorAll('[role="menuitem"]')));
   const i = items.indexOf(/** @type {HTMLElement} */ (document.activeElement));
-  const next = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[ev.key];
+  // nothing focused (i = -1): ArrowUp/End -> last, ArrowDown/Home -> first
+  const next = { ArrowDown: i + 1, ArrowUp: (i < 0 ? items.length : i) - 1, Home: 0, End: items.length - 1 }[ev.key];
   if (next === undefined) return;
   ev.preventDefault();
   items[(next + items.length) % items.length].focus();
@@ -251,6 +252,8 @@ function closeMenu() {
   if (menuPop) { menuPop.remove(); menuPop = null; }
   menuEl.setAttribute("aria-expanded", "false");
   document.removeEventListener("keydown", onMenuKey);
+  document.removeEventListener("click", closeMenu);   // keyboard-closed: drop the idle outside-click listener
+  window.removeEventListener("resize", closeMenu);
 }
 
 /** The in-app Device-status screen (from the ⋮ menu or the status pill). */
@@ -320,7 +323,9 @@ menuEl.onclick = (ev) => {
   /** @type {HTMLButtonElement} */ (menuPop.firstElementChild).focus();   // keyboard lands in the menu
   document.addEventListener("keydown", onMenuKey);                        // Escape closes it
   // close on any outside click/tap (registered after this event finishes bubbling)
-  setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+  setTimeout(() => { if (menuPop) document.addEventListener("click", closeMenu, { once: true }); }, 0);
+  // `top` is measured once: a rotation / topbar-height change closes rather than misplaces it
+  window.addEventListener("resize", closeMenu, { once: true });
 };
 
 /** @type {State} */
@@ -913,7 +918,8 @@ async function api(path, opts) {
 function setStatus(text, kind) {
   statusEl.textContent = /** @type {string} */ (t(text));
   statusEl.className = "pill" + (kind ? " " + kind : "");
-  statusEl.setAttribute("aria-label", /** @type {string} */ (t("Device status")));   // tap -> that screen
+  // tap -> that screen; the name keeps the state for screen readers ("Device status: live")
+  statusEl.setAttribute("aria-label", t("Device status") + ": " + statusEl.textContent);
 }
 
 /**

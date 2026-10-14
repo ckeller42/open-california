@@ -19,6 +19,7 @@ fixture fails on any uncaught `pageerror`/console error, and one test opens ever
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -869,6 +870,22 @@ def test_menu_touch_targets_44px(page):
         assert box and box["height"] >= 44, (i, box)
 
 
+def test_status_pill_hit_area_44px_and_gap_to_menu(page):
+    """The tappable status pill: a 44 px tall hit area (::after, the topbar keeps its height) and
+    >= 8 px between its hit area and the ⋮ button's, so a thumb cannot hit the wrong one."""
+    pill = page.locator("#status").bounding_box()
+    menu = page.locator("#menu").bounding_box()
+    assert pill and menu
+    cx, cy = pill["x"] + pill["width"] / 2, pill["y"] + pill["height"] / 2
+    for dy in (-21, 21):  # 44 px tall hit area centred on the pill
+        hit = page.evaluate("([x, y]) => document.elementFromPoint(x, y).id", [cx, cy + dy])
+        assert hit == "status", (dy, hit, pill)
+    # ::after has no horizontal extension -> the pill's box IS its hit area's width
+    hit = page.evaluate("([x, y]) => document.elementFromPoint(x, y).id", [pill["x"] + pill["width"] + 1, cy])
+    assert hit != "status"
+    assert menu["x"] - (pill["x"] + pill["width"]) >= 8, (pill, menu)
+
+
 def test_menu_roles_and_arrow_keys(page):
     """WAI-ARIA menu pattern: role=menu/menuitem, ArrowDown/ArrowUp/Home/End move focus with
     wrap, Tab closes the menu."""
@@ -895,9 +912,19 @@ def test_menu_roles_and_arrow_keys(page):
     assert focused() == labels[-1]
     page.keyboard.press("Home")
     assert focused() == labels[0]
+    # nothing focused inside the menu: ArrowUp -> last, ArrowDown -> first
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("ArrowUp")
+    assert focused() == labels[-1]
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("ArrowDown")
+    assert focused() == labels[0]
     page.keyboard.press("Tab")
     expect(page.locator(".menupop")).to_have_count(0)
     expect(page.get_by_role("button", name="Menu")).to_have_attribute("aria-expanded", "false")
+    # focus moved on past ⋮, not trapped on it or lost to <body>
+    assert page.evaluate("document.activeElement.id") != "menu"
+    assert page.evaluate("document.activeElement !== document.body")
 
 
 def test_status_pill_opens_device_status(page):
@@ -905,6 +932,8 @@ def test_status_pill_opens_device_status(page):
     pill = page.get_by_role("button", name="Device status")
     expect(pill).to_have_count(1)
     assert page.evaluate("document.getElementById('status').tagName") == "BUTTON"
+    # the accessible name keeps the visible state for screen readers
+    expect(pill).to_have_attribute("aria-label", re.compile(r"^Device status: .+"))
     pill.focus()
     page.keyboard.press("Enter")
     expect(page.locator("#title")).to_have_text("Device status")
@@ -925,6 +954,7 @@ def test_menu_unpair_workflow_after_bonding(pairing_page):
         "e => [e.previousElementSibling.textContent, e.nextElementSibling.getAttribute('role')]"
     )
     assert sib == ["Bluetooth pairing…", "separator"]
+    expect(unpair).to_have_class(re.compile(r"\bdanger\b"))
     unpair.click()
     # reset drives the SM resetting -> idle; the wizard stays open showing the guided first step
     expect(page.get_by_role("checkbox", name="I'm on that screen")).to_be_visible(timeout=10000)
