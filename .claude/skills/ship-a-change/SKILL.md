@@ -13,7 +13,8 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 | Step | Do |
 |---|---|
 | Work | Fresh scratch clone + branch, never the owner's checkout. `python3.13` (bare `python3` = 3.9). |
-| Gate | `tools/ci.sh test`, `tools/ci.sh webcheck`, `tools/ci.sh lint`, `python3.13 -m pre_commit run --files …`. Never `--no-verify`. |
+| Gate | `tools/ci.sh ci` (= lint + tests + audit), `tools/ci.sh webcheck`, `~/Library/Python/3.13/bin/pre-commit run --all-files` (ALL files: CI runs the hooks that way; `--files` misses a reformat elsewhere). Never `--no-verify`. |
+| CI-only gates | Firmware/C or anything near a secret: the three checks below that only CI runs — gcc `-Werror`, the gitleaks working-tree scan, `sphinx -W`. |
 | Push | `git -c credential.helper='!gh auth git-credential' push` (MacPorts hang). End commits/PR body with the attribution lines. |
 | Wait | `gh pr checks N --watch`, then read `gh pr view N --comments` + `gh api repos/ckeller42/open-california/pulls/N/comments`. |
 | Bots | CodeRabbit rate-limited → comment `@coderabbitai review` later. claude-review infra failure → `gh run rerun <id>`. |
@@ -24,6 +25,47 @@ merge commit on buspi and the ESP. Buspi mechanics (live reads, address, tailsca
 | Dashboard | After signal/enum changes: `push_dashboard.py` to Pi :3000 (`GRAFANA_PASSWORD`) and Cloud (`sudo -n bash -c 'set -a; . /etc/buspi/secrets.env; GRAFANA_TOKEN=$GRAFANA_CLOUD_TOKEN …'`; 503 → retry). Never echo secrets. |
 | Update ESP | If `firmware/`, `calictl/webui/**` or semantics changed (UI is bundled): OTA from the merge's `firmware-release`, below. |
 | Offline | `until ssh -o ConnectTimeout=8 -o BatchMode=yes pi@buspi true; do sleep 60; done` in background; then deploy/flash, tell the owner. |
+
+## CI-only gates (green on the Mac, red in CI)
+
+The Mac's clang and the staged-only hooks miss three things CI enforces. Run them before pushing
+a PR that touches `firmware/` C, a `cali_core/test/*_cli.c`, a key/token-shaped literal, or docs:
+
+```sh
+# 1) the host test CLIs compile with gcc -Werror on Linux (clang skips -Wformat-truncation:
+#    snprintf(buf, sizeof buf, "%s", tok) from a longer token → use a precision, "%.17s")
+docker run --rm --platform linux/amd64 -v "$PWD":/repo -w /repo python:3.13 bash -c \
+  'pip install -q pytest pyyaml; python -m pytest tests/firmware/test_sensors.py tests/firmware/test_web_handlers.py -q -p no:cacheprovider'
+# 2) the gitleaks WORKING-TREE scan (manual stage; the commit hook scans only staged hunks):
+#    a hex alphabet or any literal next to a word like key/token trips generic-api-key →
+#    a named constant (static const char HEXDIGITS[] = "0123…") away from the word
+~/Library/Python/3.13/bin/pre-commit run --hook-stage manual gitleaks-dir --all-files
+# 3) docs: sphinx -W (an unbalanced ``literal`` in a docstring fails the docs job; sphinx is
+#    not installed on the Mac)
+docker run --rm --platform linux/amd64 -v "$PWD":/repo -w /repo python:3.13 bash -c \
+  'pip install -q -r docs/requirements.txt; python -m sphinx -b html -W --keep-going docs /tmp/out 2>&1 | grep -iE "warning|error|build succeeded"'
+```
+
+CI job logs are unreadable until the whole run completes (`gh run view --log` says "still in
+progress"); reproduce locally instead of waiting ~25 min for the e2e jobs.
+
+## Stacked PRs (the base is another PR's branch)
+
+Open each PR with `--base <parent-branch>`; the repo **squash-merges**, so after the parent
+lands the child's merge-base is stale (its diff re-shows the parent, bots re-review it). Before
+the owner merges the next one:
+
+```sh
+OLD=$(gh pr view <parent-PR#> --json commits --jq '.commits[-1].oid')   # the parent's tip before its squash (= the local parent branch)
+git fetch origin main
+git rebase --onto origin/main "$OLD" <child>
+git push --force-with-lease=<child>:$(git ls-remote origin refs/heads/<child> | cut -c1-40) origin <child>
+```
+
+GitHub retargets the child to `main` by itself when the parent merges; never
+`--delete-branch` a parent while children are open (it closes them). A hotfix to a branch
+another checkout is busy on: `git worktree add /tmp/fix <branch>` — never switch branches
+under a running implementer.
 
 ## Generated-file conflicts (rebase on `origin/main`)
 
@@ -44,9 +86,19 @@ CI's `firmware-release` job (push to `main` only) puts the merge commit's `cali_
 `manifest.json` on the prerelease `esp-latest`; the ESP installs it on request (`R_FW_OTA`,
 `docs/firmware.md` "Firmware update from GitHub"):
 
-`tools/esplab/ota_deploy.sh [sha|main] [esp-url]` does all of it: waits for `esp-latest` to name
-the sha, checks every 15 s until the ESP offers it, installs, waits for `device.fw` + the rollback
-window, prints `device.fw`/`link`/`ota` (fails on `ota.state` `error`). By hand:
+**Two channels** (PR #365): `esp-latest` = every `main` merge; `esp-stable` = the build the moving
+git tag `esp-stable` points at (published by the `workflow_dispatch` workflow `esp-stable.yml`).
+The ESP picks its channel (NVS `ota_channel`, default stable; `/device` → Firmware → Channel, or
+`POST /api/ota {"channel":"stable"|"latest"}`; `device.ota.channel`).
+
+| Want | Do |
+|---|---|
+| Install a merge | `tools/esplab/ota_deploy.sh main` (or `<sha>`) — sets channel `latest`, waits for `esp-latest` to name the sha, installs, waits for `device.fw` + the 60 s rollback window, fails on `ota.state` `error` or a rollback. |
+| Promote the soaked build | `tools/esplab/promote_stable.sh <sha>` after a green 72 h soak report (`tools/esplab/soak_report.py`, daily `calictl-esp-soak.timer` on buspi → `~/esp-soak/<date>.txt`, `VERDICT PASS`): moves the tag, dispatches the workflow (needs that sha's `main` CI artifact, ≤ 90 days old). |
+| Fall back | `tools/esplab/ota_deploy.sh stable` — switches the channel, installs the `esp-stable` image. On pre-channel firmware (no `device.ota.channel`) only `main` works; the script re-sets the channel after that first install. |
+| The gate | No install on the van ESP before the running build's 72 h report is green; a new build runs 72 h with `exp_sensors` off, then 72 h on, before promotion. |
+
+By hand (latest channel):
 
 ```sh
 SHA=$(gh pr view N --json mergeCommit --jq .mergeCommit.oid)
@@ -77,3 +129,6 @@ table, `ota_data_initial.bin`, app at `ota_0`; NVS untouched). Link timing over 
 | Merged on green CI before reading bot comments | Read both comment endpoints first |
 | `--delete-branch` on a base with stacked child PRs (closes them) | Retarget the children first |
 | CodeRabbit check "pass" | Often means skipped (rate limit); look for its review, re-trigger |
+| Local gate green, CI `test`/`pre-commit`/`docs` red | A CI-only gate: gcc `-Werror`, gitleaks working tree, `sphinx -W` (section above) |
+| `ota_deploy.sh main` right after a merge | `firmware-release` must finish first (the manifest still names the previous merge) |
+| Promoting a sha whose CI artifact expired (> 90 d) | `esp-stable.yml` fails loudly; re-run that commit's `main` CI or promote a newer sha |
