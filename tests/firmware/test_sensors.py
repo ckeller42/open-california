@@ -279,6 +279,7 @@ def test_company_id_0001_needs_a_plausible_6_byte_payload(cli, tmp_path):
             "init",
             "adv 11:22:33:44:55:01 1 -50 Other 0100010103231732aa",
             "adv 11:22:33:44:55:02 1 -50 Other 01000101ffffffff",
+            "adv 11:22:33:44:55:03 1 -50 Other 010002010323173" + "2",  # prefix 02 01: not a Govee
             "api 1000",
         ],
     )
