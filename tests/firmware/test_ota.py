@@ -239,6 +239,14 @@ def test_channel_json(ota_cli):
     assert '"channel":"latest"' in run(ota_cli, "channel latest", "json")[-1]
 
 
+def test_channel_change_clears_a_stale_available(ota_cli):
+    """A settled result belongs to the old channel: switching drops it, so no stale Install is offered."""
+    out = run(ota_cli, "manifest " + manifest(), "check", "work", "json")
+    assert ota(out)["state"] == "available" and ota(out)["available_sha"]
+    o = ota(run(ota_cli, "manifest " + manifest(), "check", "work", "channel latest", "json"))
+    assert o["state"] == "idle" and o["available_sha"] is None and o["channel"] == "latest"
+
+
 def test_one_request_at_a_time_then_again_after_it_ends(ota_cli):
     out = run(ota_cli, "manifest " + manifest(), "check", "install", "work", "check", "json")
     assert [ln for ln in out if ln.startswith("REQ ")] == ["REQ 0", "REQ -2", "REQ 0"]

@@ -34,23 +34,25 @@ const char *cali_ota_state_name(int st) {
     return st >= 0 && st < (int)(sizeof NAMES / sizeof *NAMES) ? NAMES[st] : "error";
 }
 
-void cali_ota_init(const cali_ota_ops_t *ops) { s_ops = ops; }
-
-static int s_channel = -1;   /* 0 stable, 1 latest; -1 = not read yet (__atomic: both tasks read it) */
-int cali_ota_channel(void) {
-    int ch = __atomic_load_n(&s_channel, __ATOMIC_RELAXED);
-    if (ch < 0) {
-        uint8_t b = 0;
-        size_t n = 1;
-        ch = cali_kv_get(CALI_OTA_CHANNEL_KEY, &b, &n) == CALI_KV_OK && n == 1 ? b == 1 : 0;
-        __atomic_store_n(&s_channel, ch, __ATOMIC_RELAXED);
-    }
-    return ch;
+static int s_channel;   /* 0 stable, 1 latest; read from kv once in cali_ota_init (__atomic: both tasks read it) */
+void cali_ota_init(const cali_ota_ops_t *ops) {
+    uint8_t b = 0;
+    size_t n = 1;
+    s_ops = ops;
+    __atomic_store_n(&s_channel, cali_kv_get(CALI_OTA_CHANNEL_KEY, &b, &n) == CALI_KV_OK && n == 1 ? b == 1 : 0,
+                     __ATOMIC_RELAXED);
 }
+int cali_ota_channel(void) { return __atomic_load_n(&s_channel, __ATOMIC_RELAXED); }
 int cali_ota_set_channel(int latest) {
     uint8_t b = (uint8_t)(latest != 0);
     if (cali_kv_set(CALI_OTA_CHANNEL_KEY, &b, 1) != 0) return -1;
     __atomic_store_n(&s_channel, (int)b, __ATOMIC_RELAXED);
+    /* a settled result was for the old channel: stop offering its install (a running request is left alone) */
+    int st = cali_ota_state();
+    if (st == CALI_OTA_AVAILABLE || st == CALI_OTA_UP_TO_DATE) {
+        s_sha[0] = 0;
+        set_state(CALI_OTA_IDLE);
+    }
     cali_log("ota: channel %s", cali_ota_channel_name(b));
     return 0;
 }

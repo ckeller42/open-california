@@ -1337,7 +1337,8 @@ def test_ota_channel_persists_and_shows_in_state(web_cli):
     assert rs[1].json()["device"]["ota"]["channel"] == "latest"
     assert "KV \x01" in other and not ota_wakes(other)  # a channel change never starts the OTA task
     rs, _ = drive(
-        web_cli, [b"kvhex ota_channel 01", *(s.encode() for s in STATION), req("GET", "/api/state")]
+        web_cli,
+        [b"kvhex ota_channel 01", *(s.encode() for s in STATION), b"otainit", req("GET", "/api/state")],
     )
     assert rs[0].json()["device"]["ota"]["channel"] == "latest"
     # the host/QEMU build has no OTA ops but still stores the choice
