@@ -172,7 +172,7 @@ def test_firmware_row_checks_and_installs(page, locale, lang):
     with ux_gallery.EspStub("station") as stub, page(stub.base + "/device", locale=locale) as pg:
         pg.route("**/api/ota", on_ota)
         status = pg.locator("#fw-status")
-        expect(status).to_have_text(STRINGS["fw_running"][lang].replace("{sha}", "bef07f1"))
+        expect(status).to_have_text(STRINGS["fw_running"][lang].replace("{sha}", "bef07f1") + " · stable")
         expect(pg.locator("#fw-install")).to_be_hidden()
         with pg.expect_response("**/api/ota"):
             pg.click("#fw-check")
@@ -186,6 +186,12 @@ def test_firmware_row_checks_and_installs(page, locale, lang):
         install.click()
         expect(pg.locator("#fw-msg")).to_have_text(STRINGS["ota_error"][lang].replace("{error}", "busy"))
         assert posts[1] == {"action": "install"}
+        # the channel select (T_FW_OTA_CHANNEL_UI covers the real firmware): it posts {"channel"}
+        expect(pg.locator("#fw-channel")).to_have_value("stable")
+        with pg.expect_response("**/api/ota"):
+            pg.select_option("#fw-channel", "latest")
+        assert posts[2] == {"channel": "latest"}
+        expect(pg.locator("#fw-msg")).to_have_text(STRINGS["fw_ch_error"][lang])  # the stub's 409
         stub.fixtures["station"]["/api/state"]["device"]["ota"].update(state="downloading", progress_pct=42)
         expect(status).to_contain_text(STRINGS["ota_downloading"][lang].replace("{pct}", "42"))
         expect(install).to_be_hidden()

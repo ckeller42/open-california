@@ -181,7 +181,13 @@ def calictl_state(fn):
     return out
 
 
-OTA_IDLE = {"state": "idle", "available_sha": None, "progress_pct": 0, "error": None}  # device.ota
+OTA_IDLE = {
+    "state": "idle",
+    "available_sha": None,
+    "progress_pct": 0,
+    "error": None,
+    "channel": "stable",
+}  # device.ota
 # device.display (R_FW_DISPLAY_WAKE): a lit screen in an evening van, default settings
 DISPLAY_ON = {
     "state": "on",

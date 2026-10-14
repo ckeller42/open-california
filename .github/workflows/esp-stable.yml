@@ -1,0 +1,50 @@
+name: esp-stable
+
+# The stable OTA channel (R_FW_OTA): publish the build the moving tag `esp-stable` points at to the
+# release `esp-stable` (not a prerelease). tools/esplab/promote_stable.sh moves the tag and then runs
+# this workflow. No rebuild: it republishes the `firmware-esp32s3` artifact of that commit's successful
+# main CI run, so the stable binary is byte-identical to the soaked esp-latest one. No tag trigger
+# (a tag push would run the tagged commit's workflow file) and no caches (nothing to poison).
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: esp-stable
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # gh release create/edit/upload
+      actions: read     # gh run list/download (the main CI run's artifact)
+    steps:
+      - name: Upload the esp-stable commit's cali_fw.bin + manifest.json (+ cali_fw_full.bin, cali_fw.elf)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          sha=$(gh api "repos/$GH_REPO/git/ref/tags/esp-stable" --jq .object.sha)
+          run_id=$(gh run list --workflow ci.yml --commit "$sha" --branch main --status success \
+            --json databaseId -q '.[0].databaseId')
+          [ -n "$run_id" ] || { echo "::error::no successful main CI run of $sha"; exit 1; }
+          # ponytail: no build fallback; an expired artifact (90-day retention) needs a CI re-run or a newer sha
+          gh run download "$run_id" -n firmware-esp32s3 -D fw || {
+            echo "::error::artifact of $sha expired: re-run main CI for that commit or promote a newer sha"; exit 1; }
+          bin=fw/cali_fw.bin
+          jq -n --arg sha "$sha" --argjson size "$(stat -c %s "$bin")" \
+            --arg sha256 "$(sha256sum "$bin" | cut -d' ' -f1)" --argjson run_id "$run_id" \
+            --arg built_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{sha: $sha, size: $size, sha256: $sha256, run_id: $run_id, built_at: $built_at}' > manifest.json
+          tee -a "$GITHUB_STEP_SUMMARY" < manifest.json
+          gh release view esp-stable >/dev/null 2>&1 || gh release create esp-stable \
+            --target "$sha" --title "ESP firmware (stable)" \
+            --notes "The ESP32 satellite's stable OTA channel: the build the \`esp-stable\` tag points at (promoted with tools/esplab/promote_stable.sh after its soak, R_SOAK_REPORT). Rewritten on every promotion."
+          gh release edit esp-stable --target "$sha"
+          gh release upload esp-stable "$bin" --clobber
+          gh release upload esp-stable manifest.json --clobber
+          gh release upload esp-stable fw/cali_fw_full.bin --clobber   # USB first flash only; not in the manifest
+          gh release upload esp-stable fw/cali_fw.elf --clobber   # symbols for an evt panic backtrace (R_FW_PANIC_CAPTURE)

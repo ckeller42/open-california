@@ -21,7 +21,7 @@
  *                                          "ip":"a.b.c.d"|null,"rssi":<int>|null},
  *                                  "control":{"writes":<bool>},   -- POST /api/command accepted (station mode)
  *                                  "uptime_ms":<int>,"fw":"<cali_fw_version()>",
- *                                  "ota":{"state","available_sha","progress_pct","error"},   -- cali_ota.h
+ *                                  "ota":{"state","available_sha","progress_pct","error","channel"},   -- cali_ota.h
  *                                  "time":{"source","synced","boot","up"},   -- cali_time.h (R_FW_TIME)
  *                                  "sd":{"state","total_mb","free_mb","last_seq","dropped"},   -- cali_sdlog.h
  *                                  "res":{"heap_free_kb","heap_min_kb","psram_free_kb","cpu_pct"},
@@ -129,6 +129,9 @@
  *                     400 bad_json (the /api/pairing parser: action/value/confirm keys), 400
  *                     bad_action, 409 busy (one runs), 503 ota_unavailable (no OTA I/O: the host
  *                     build, the QEMU image). Any other method: 405 method.
+ *                     {"channel":"stable"|"latest"} instead (never with "action"): cali_ota_set_channel
+ *                     -> 200 {"ok":true} (stored; the next check uses it; no OTA I/O needed), 400
+ *                     bad_value (another string), 500 store; same method/mode checks.
  *   POST /api/display {"auto"?:<bool>,"prox_wake"?:<bool>,"min"?:<int>,"max"?:<int>,"offset"?:<int>,
  *                     "motion_wake"?:<bool>,"dfs"?:<bool>} (R_FW_DISPLAY_WAKE): merged into the current settings,
  *                     persisted (kv disp_auto/disp_prox/disp_min/disp_max/disp_off/disp_motion);

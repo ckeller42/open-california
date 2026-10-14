@@ -1,4 +1,6 @@
-/* cali_ota.h — firmware update from the GitHub release `esp-latest` (R_FW_OTA, #154 standalone).
+/* cali_ota.h — firmware update from a GitHub release (R_FW_OTA, #154 standalone): the channel's
+ * `esp-stable` (the build the moving `esp-stable` tag points at; the default) or `esp-latest` (every
+ * main merge), picked by the kv byte CALI_OTA_CHANNEL_KEY.
  *
  * The portable state machine: fetch manifest.json, compare its sha with the running firmware
  * (cali_fw_version(), the build's `git describe`, i.e. a sha prefix), and on install stream
@@ -10,7 +12,8 @@
  * runs on the OTA task, which may block for minutes on HTTPS. The owner never waits for it.
  *
  * device.ota (cali_ota_json): {"state":"idle|checking|up_to_date|available|downloading|verifying|
- * rebooting|error","available_sha":"<40 hex>"|null,"progress_pct":<0..100>,"error":"<code>"|null}
+ * rebooting|error","available_sha":"<40 hex>"|null,"progress_pct":<0..100>,"error":"<code>"|null,
+ * "channel":"stable|latest"}
  * error codes: "manifest" (fetch or parse), "download", "checksum", "commit".
  *
  * C99, no malloc, no ESP-IDF headers. Proven by tests/firmware/test_ota.py (test/ota_cli.c).
@@ -27,9 +30,11 @@
 extern "C" {
 #endif
 
-#define CALI_OTA_BASE_URL "https://github.com/ckeller42/open-california/releases/download/esp-latest/"
-#define CALI_OTA_MANIFEST_URL CALI_OTA_BASE_URL "manifest.json"
-#define CALI_OTA_BIN_URL CALI_OTA_BASE_URL "cali_fw.bin"
+/* printf formats: %s = cali_ota_channel_name() */
+#define CALI_OTA_URL_FMT "https://github.com/ckeller42/open-california/releases/download/esp-%s/"
+#define CALI_OTA_MANIFEST_FMT CALI_OTA_URL_FMT "manifest.json"
+#define CALI_OTA_BIN_FMT CALI_OTA_URL_FMT "cali_fw.bin"
+#define CALI_OTA_CHANNEL_KEY "ota_channel"   /* 1 byte: 0 stable, 1 latest; absent = stable */
 #define CALI_OTA_MANIFEST_MAX 512        /* the manifest is ~200 B */
 #define CALI_OTA_SLOT_SIZE 0x300000u     /* firmware/partitions.csv ota_0 / ota_1 */
 
@@ -70,6 +75,11 @@ void cali_ota_work(void);
 void cali_ota_progress(size_t done, size_t total);
 int cali_ota_state(void);
 const char *cali_ota_state_name(int st);
+/* The release channel: 0 stable, 1 latest (the kv byte, read once). */
+int cali_ota_channel(void);
+/* Owner task: store the channel (latest != 0: latest); the next request uses it. 0 ok, -1 store. */
+int cali_ota_set_channel(int latest);
+const char *cali_ota_channel_name(int ch);   /* "stable" / "latest" */
 /* The device.ota object (a value: call cali_json_key first). */
 void cali_ota_json(cali_json_t *j);
 

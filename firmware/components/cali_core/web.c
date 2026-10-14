@@ -701,14 +701,36 @@ static void api_pairing(const cali_http_req_t *req, cali_http_resp_t *resp) {
     }
 }
 
-/* ---- POST /api/ota {"action":"check"|"install"} (R_FW_OTA): station mode only, like /api/command ---- */
+/* {"channel":"<s>"} exactly: 0 (the value in out, NUL-terminated, *len its whole length), -1 not that shape. */
+static int parse_channel(const char *body, size_t body_len, char *out, size_t cap, size_t *len) {
+    cursor_t c = {body, body + body_len};
+    char key[8];
+    size_t klen;
+    if (expect(&c, '{') != 0 || parse_str(&c, key, sizeof key, &klen) != 0 || klen != 7 ||
+        strcmp(key, "channel") != 0 || expect(&c, ':') != 0 || parse_str(&c, out, cap, len) != 0 ||
+        expect(&c, '}') != 0)
+        return -1;
+    skip_ws(&c);
+    return c.p == c.end ? 0 : -1;
+}
+
+/* ---- POST /api/ota {"action":"check"|"install"} | {"channel":"stable"|"latest"} (R_FW_OTA): station
+ * mode only, like /api/command. The channel is stored at once (the next check uses it), even on a
+ * build without OTA I/O; it never starts the OTA task. ---- */
 static void api_ota(const cali_http_req_t *req, cali_http_resp_t *resp) {
     static pair_req_t r;   /* the same {"action":…} shape as /api/pairing */
+    char ch[8];
+    size_t chlen;
     int rc;
     if (strcmp(req->method, "POST") != 0) {
         SET_CONST(resp, 405, ERR_METHOD);
     } else if (wifi_mode() != CALI_WIFI_MODE_STATION) {   /* never over the setup hotspot */
         SET_CONST(resp, 403, ERR_SETUP_MODE);
+    } else if (parse_channel(req->body, req->body_len, ch, sizeof ch, &chlen) == 0) {
+        int latest = chlen == 6 && strcmp(ch, "latest") == 0;
+        if (!latest && !(chlen == 6 && strcmp(ch, "stable") == 0)) SET_CONST(resp, 400, ERR_BAD_VALUE);
+        else if (cali_ota_set_channel(latest) != 0) SET_CONST(resp, 500, ERR_STORE);
+        else SET_CONST(resp, 200, OK_BODY);   /* the choice: /api/state device.ota.channel */
     } else if (parse_pairing(req->body, req->body_len, &r) != 0) {
         SET_CONST(resp, 400, ERR_BAD_JSON);
     } else if (!is_action(&r, "check") && !is_action(&r, "install")) {

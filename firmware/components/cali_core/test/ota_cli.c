@@ -10,6 +10,7 @@
  *   noinit              cali_ota_init(NULL) (default: the fake ops)
  *   check | install     cali_ota_request -> "REQ <rc>"
  *   work                cali_ota_work()
+ *   channel stable|latest  cali_ota_set_channel (the kv store: one fake byte, "ota_channel" only)
  *   json                "JSON <the device.ota object>"
  *   diaghook            from now on print "DIAG {<body>}" per diagnostics record (R_FW_DIAG_LOG)
  * ops calls print "CALL get <url>", "CALL download <url> <size> (<state meanwhile>)", "CALL slot_sha256 <size>",
@@ -43,6 +44,23 @@ void cali_log(const char *fmt, ...) {
     vprintf(fmt, ap);
     printf("\n");
     va_end(ap);
+}
+
+/* The kv store: the one byte cali_ota_channel reads (absent until a "channel" line). */
+static uint8_t s_kv_byte;
+static int s_kv_present;
+int cali_kv_get(const char *key, void *buf, size_t *len) {
+    if (strcmp(key, CALI_OTA_CHANNEL_KEY) != 0 || !s_kv_present) return CALI_KV_MISSING;
+    if (*len < 1) return CALI_KV_CORRUPT;
+    *(uint8_t *)buf = s_kv_byte;
+    *len = 1;
+    return CALI_KV_OK;
+}
+int cali_kv_set(const char *key, const void *buf, size_t len) {
+    if (strcmp(key, CALI_OTA_CHANNEL_KEY) != 0 || len != 1) return -1;
+    s_kv_byte = *(const uint8_t *)buf;
+    s_kv_present = 1;
+    return 0;
 }
 
 static int f_get(const char *url, char *buf, size_t cap) {
@@ -99,6 +117,7 @@ int main(void) {
         else if (strcmp(line, "check") == 0 || strcmp(line, "install") == 0)
             printf("REQ %d\n", cali_ota_request(line[0] == 'i'));
         else if (strcmp(line, "work") == 0) cali_ota_work();
+        else if (strncmp(line, "channel ", 8) == 0) printf("SET %d\n", cali_ota_set_channel(strcmp(arg, "latest") == 0));
         else if (strcmp(line, "diaghook") == 0) cali_diag_sink = print_diag;
         else if (strcmp(line, "json") == 0) {
             char buf[256];
