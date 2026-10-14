@@ -36,6 +36,26 @@ const char *cali_ota_state_name(int st) {
 
 void cali_ota_init(const cali_ota_ops_t *ops) { s_ops = ops; }
 
+static int s_channel = -1;   /* 0 stable, 1 latest; -1 = not read yet (__atomic: both tasks read it) */
+int cali_ota_channel(void) {
+    int ch = __atomic_load_n(&s_channel, __ATOMIC_RELAXED);
+    if (ch < 0) {
+        uint8_t b = 0;
+        size_t n = 1;
+        ch = cali_kv_get(CALI_OTA_CHANNEL_KEY, &b, &n) == CALI_KV_OK && n == 1 ? b == 1 : 0;
+        __atomic_store_n(&s_channel, ch, __ATOMIC_RELAXED);
+    }
+    return ch;
+}
+int cali_ota_set_channel(int latest) {
+    uint8_t b = (uint8_t)(latest != 0);
+    if (cali_kv_set(CALI_OTA_CHANNEL_KEY, &b, 1) != 0) return -1;
+    __atomic_store_n(&s_channel, (int)b, __ATOMIC_RELAXED);
+    cali_log("ota: channel %s", cali_ota_channel_name(b));
+    return 0;
+}
+const char *cali_ota_channel_name(int ch) { return ch ? "latest" : "stable"; }
+
 int cali_ota_request(int install) {
     int st = cali_ota_state();
     if (!s_ops) return -1;
@@ -115,14 +135,16 @@ static void fail(const char *code) {
 
 void cali_ota_work(void) {
     static char body[CALI_OTA_MANIFEST_MAX];
-    char url[sizeof CALI_OTA_MANIFEST_URL + 24], sha[41], want[65], got_hex[65];
+    char url[128], sha[41], want[65], got_hex[65];
+    const char *ch;
     uint8_t got[32];
     size_t size;
     int req = __atomic_exchange_n(&s_pending, 0, __ATOMIC_ACQUIRE);
     if (!req || !s_ops) return;
+    ch = cali_ota_channel_name(cali_ota_channel());   /* once: a change mid-request never mixes releases */
     /* a fresh query per check: GitHub's edge served one client the old manifest's redirect for ~2 min
      * after CI replaced it (2026-10-11). The image itself is SHA-256 checked, so it needs none. */
-    snprintf(url, sizeof url, CALI_OTA_MANIFEST_URL "?t=%llu", (unsigned long long)cali_uptime_ms());
+    snprintf(url, sizeof url, CALI_OTA_MANIFEST_FMT "?t=%llu", ch, (unsigned long long)cali_uptime_ms());
     if (s_ops->get(url, body, sizeof body) < 0 || parse_manifest(body, sha, want, &size) != 0) {
         fail("manifest");
         return;
@@ -139,7 +161,8 @@ void cali_ota_work(void) {
     set_state(req == 2 ? CALI_OTA_DOWNLOADING : CALI_OTA_AVAILABLE);
     if (req != 2) return;
 
-    if (s_ops->download(CALI_OTA_BIN_URL, size) != 0) {
+    snprintf(url, sizeof url, CALI_OTA_BIN_FMT, ch);
+    if (s_ops->download(url, size) != 0) {
         s_ops->abort();
         fail("download");
         return;
@@ -180,5 +203,7 @@ void cali_ota_json(cali_json_t *j) {
     cali_json_int(j, __atomic_load_n(&s_pct, __ATOMIC_RELAXED));
     cali_json_key(j, "error");
     if (st == CALI_OTA_ERROR && err) cali_json_str(j, err); else cali_json_null(j);
+    cali_json_key(j, "channel");
+    cali_json_str(j, cali_ota_channel_name(cali_ota_channel()));
     cali_json_obj_end(j);
 }

@@ -641,8 +641,8 @@ defined in `docs/firmware.md` too, with their verifying tests (`T_WIFI_SM_REF`,
 `T_FW_ESP_SCREENSHOT_FIXTURES`, `T_FW_WIFI_LOSS_SESSION`, `T_FW_WEB_E2E`) declared in the test
 modules' docstrings.
 
-**R_FW_OTA** (the on-request update from the `esp-latest` GitHub release, rollback after 60 s
-healthy) is defined in `docs/firmware.md` too; verified by `T_FW_OTA_SM` (`tests/firmware/test_ota.py`,
+**R_FW_OTA** (the on-request update from the channel's GitHub release — `esp-stable` by default,
+`esp-latest` on the `latest` channel — rollback after 60 s healthy) is defined in `docs/firmware.md` too; verified by `T_FW_OTA_SM` (`tests/firmware/test_ota.py`,
 `cali_core/ota.c` against a fake fetcher/slot via `test/ota_cli.c`), `T_FW_OTA_API` and
 `T_FW_OTA_PAGE`. The ESP I/O (`components/cali_ota/ota_esp.c`: `esp_https_ota`, the certificate
 bundle, the flash read-back SHA-256, rollback, console `ota check|install|status|invalid`) is
@@ -670,15 +670,16 @@ BOARD/DEVICE rows of the evidence ledger record what has been proven):
    @flash_args` (the same `@flash_args` pattern `qemu/run_qemu.sh` uses to merge the image for
    QEMU) — both read the addresses/sizes out of the build, so a bootloader/partition-table/app
    offset never gets hand-typed and drifts from the build. (A **new user's** board: the merged
-   `cali_fw_full.bin` from the `esp-latest` release at `0x0` — `docs/howto-esp-first-flash.md`.) See the `flashing-cores3-on-bar` skill
+   `cali_fw_full.bin` from the `esp-stable` release (or `esp-latest` for the newest merge) at `0x0` — `docs/howto-esp-first-flash.md`.) See the `flashing-cores3-on-bar` skill
    for the CoreS3-specific port-finding and serial-capture mechanics on the bar Mac.
    **From CI on a Linux host (buspi in the van, or thinky):** `tools/esplab/flash_ci.sh [branch|run-id]
    [port]` downloads the `firmware-esp32s3` artifact of the latest successful CI run (default `main`)
    with `gh` into `~/calictl-esp/ci-<sha>-<run>/` and flashes it with `tools/esplab/flash.sh` — the
    offsets still come from that artifact's `flasher_args.json` (since `R_FW_OTA` that includes
    `ota_data_initial.bin`; the script refuses an artifact missing a listed image). Once the ESP runs an
-   OTA build this USB path is for recovery only: updates come over WiFi (`POST /api/ota`, see
-   `docs/firmware.md`). Needs `gh` logged in,
+   OTA build this USB path is for recovery only: updates come over WiFi (`POST /api/ota` from the
+   release of the ESP's channel, `esp-stable` by default; `tools/esplab/ota_deploy.sh stable|main`;
+   see `docs/firmware.md`). Needs `gh` logged in,
    `~/esp-venv/bin/esptool` and the user in `dialout`; console afterwards:
    `tools/esplab/esp_cmd.py /dev/ttyACM0 2 status` (opens the port without resetting the chip).
 2. **Console over USB-Serial/JTAG.** The CoreS3's USB-C enumerates as the S3's native USB (not a

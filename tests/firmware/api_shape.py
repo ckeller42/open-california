@@ -25,7 +25,9 @@ DEVICE_KEYS = frozenset(
         "water_held",
     }
 )  # /api/state device
-OTA_KEYS = frozenset({"state", "available_sha", "progress_pct", "error"})  # /api/state device.ota (R_FW_OTA)
+OTA_KEYS = frozenset(
+    {"state", "available_sha", "progress_pct", "error", "channel"}
+)  # /api/state device.ota (R_FW_OTA)
 TIME_KEYS = frozenset({"source", "synced", "boot", "up"})  # /api/state device.time (R_FW_TIME)
 SD_KEYS = frozenset({"state", "total_mb", "free_mb", "last_seq", "dropped"})  # device.sd (R_FW_SD_LOG)
 RES_KEYS = frozenset({"heap_free_kb", "heap_min_kb", "psram_free_kb", "cpu_pct"})  # device.res

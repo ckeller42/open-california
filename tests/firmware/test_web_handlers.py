@@ -203,7 +203,13 @@ def test_api_state_shape(web_cli):
     assert set(body["device"]) == DEVICE_KEYS
     assert set(body["device"]["pairing"]) == PAIRING_KEYS and set(body["device"]["link"]) == LINK_KEYS
     assert set(body["device"]["wifi"]) == WIFI_KEYS
-    assert body["device"]["ota"] == {"state": "idle", "available_sha": None, "progress_pct": 0, "error": None}
+    assert body["device"]["ota"] == {
+        "state": "idle",
+        "available_sha": None,
+        "progress_pct": 0,
+        "error": None,
+        "channel": "stable",
+    }
     assert set(body["device"]["ota"]) == OTA_KEYS
     assert body["device"]["time"] == {
         "source": "none",
@@ -253,7 +259,7 @@ EXPECTED_DEVICE_TAIL = (
     '"device":{"pairing":{"state":"idle","address":"C0:FF:EE:CA:11:F0"},"link":{"up":true,'
     '"last_snap_age_ms":1010},"wifi":{"mode":"station","ssid":"minsel","ip":"192.168.1.23","rssi":-61},'
     '"control":{"writes":true},"uptime_ms":5010,"fw":"test",'
-    '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null},'
+    '"ota":{"state":"idle","available_sha":null,"progress_pct":0,"error":null,"channel":"stable"},'
     '"time":{"source":"none","synced":false,"boot":0,"up":5010},'
     '"sd":{"state":"absent","total_mb":null,"free_mb":null,"last_seq":null,"dropped":0},'
     '"res":{"heap_free_kb":null,"heap_min_kb":null,"psram_free_kb":null,"cpu_pct":null},'
@@ -1281,14 +1287,15 @@ def test_ota_starts_on_the_ota_task_and_shows_in_state(web_cli, action):
     assert len(ota_wakes(other)) == 1
 
 
+@pytest.mark.parametrize("body", ['{"action":"install"}', '{"channel":"latest"}'])
 @pytest.mark.parametrize("state,joined", NOT_STATION)
-def test_ota_refused_outside_station_mode(web_cli, state, joined):
-    """Like /api/command: never over the setup hotspot or a setup-flow join."""
+def test_ota_refused_outside_station_mode(web_cli, state, joined, body):
+    """Like /api/command: never over the setup hotspot or a setup-flow join (a channel change neither)."""
     r, other = one(
         web_cli,
         "POST",
         "/api/ota",
-        '{"action":"install"}',
+        body,
         setup=["wifi " + state, "joined %d" % joined, "otainit"],
     )
     assert (r.status, r.json()) == (403, {"ok": False, "error": "setup_mode"})
@@ -1303,12 +1310,43 @@ def test_ota_refused_outside_station_mode(web_cli, state, joined):
         ("POST", '{"action":"install","x":1}', 400, "bad_json"),
         ("POST", '{"action":"update"}', 400, "bad_action"),
         ("POST", "{}", 400, "bad_action"),
+        ("POST", '{"channel":"beta"}', 400, "bad_value"),
+        ("POST", '{"channel":1}', 400, "bad_json"),
+        ("POST", '{"action":"check","channel":"stable"}', 400, "bad_json"),
     ],
 )
 def test_ota_errors(web_cli, method, body, status, error):
     r, other = one(web_cli, method, "/api/ota", body, setup=[*STATION, "otainit"])
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
     assert not ota_wakes(other)
+
+
+def test_ota_channel_persists_and_shows_in_state(web_cli):
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            b"otainit",
+            req("POST", "/api/ota", '{"channel":"latest"}'),
+            req("GET", "/api/state"),
+            b"kv ota_channel",
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (200, {"ok": True})
+    assert rs[1].json()["device"]["ota"]["channel"] == "latest"
+    assert "KV \x01" in other and not ota_wakes(other)  # a channel change never starts the OTA task
+    rs, _ = drive(
+        web_cli, [b"kvhex ota_channel 01", *(s.encode() for s in STATION), req("GET", "/api/state")]
+    )
+    assert rs[0].json()["device"]["ota"]["channel"] == "latest"
+    # the host/QEMU build has no OTA ops but still stores the choice
+    r, _ = one(web_cli, "POST", "/api/ota", '{"channel":"latest"}', setup=STATION)
+    assert (r.status, r.json()) == (200, {"ok": True})
+
+
+def test_ota_channel_store_failure(web_cli):
+    r, _ = one(web_cli, "POST", "/api/ota", '{"channel":"latest"}', setup=STATION + ["kvfail 1"])
+    assert (r.status, r.json()) == (500, {"ok": False, "error": "store"})
 
 
 def test_ota_unavailable_without_an_ota_task(web_cli):

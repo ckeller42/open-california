@@ -23,7 +23,7 @@ SHA = "0123456789abcdef0123456789abcdef01234567"
 IMAGE = b"cali_fw image bytes"
 DIGEST = hashlib.sha256(IMAGE).hexdigest()
 SIZE = len(IMAGE)
-BASE = "https://github.com/ckeller42/open-california/releases/download/esp-latest/"
+BASE = "https://github.com/ckeller42/open-california/releases/download/esp-stable/"  # the default channel
 
 
 def manifest(sha=SHA, size=SIZE, sha256=DIGEST):
@@ -91,6 +91,7 @@ def test_idle_before_any_request(ota_cli):
         "available_sha": None,
         "progress_pct": 0,
         "error": None,
+        "channel": "stable",
     }
 
 
@@ -108,8 +109,20 @@ def test_same_sha_is_up_to_date(ota_cli, fw):
 @pytest.mark.parametrize("fw", ["fedcba9", "0123456-dirty", "0123", "unknown"])
 def test_other_build_sees_available_and_check_downloads_nothing(ota_cli, fw):
     out = run(ota_cli, "fw " + fw, "manifest " + manifest(), "check", "json", "work", "json")
-    assert otas(out)[0] == {"state": "checking", "available_sha": None, "progress_pct": 0, "error": None}
-    assert ota(out) == {"state": "available", "available_sha": SHA, "progress_pct": 0, "error": None}
+    assert otas(out)[0] == {
+        "state": "checking",
+        "available_sha": None,
+        "progress_pct": 0,
+        "error": None,
+        "channel": "stable",
+    }
+    assert ota(out) == {
+        "state": "available",
+        "available_sha": SHA,
+        "progress_pct": 0,
+        "error": None,
+        "channel": "stable",
+    }
     assert calls(out) == ["wake", "get " + BASE + "manifest.json?t=4000"]  # fake clock: +1 s per read
 
 
@@ -132,7 +145,13 @@ def test_install_downloads_verifies_then_switches_and_restarts(ota_cli):
         "commit",
         "restart",
     ]
-    assert ota(out) == {"state": "rebooting", "available_sha": SHA, "progress_pct": 100, "error": None}
+    assert ota(out) == {
+        "state": "rebooting",
+        "available_sha": SHA,
+        "progress_pct": 100,
+        "error": None,
+        "channel": "stable",
+    }
 
 
 @pytest.mark.parametrize("slot", ["00" * 32, "fail"])
@@ -140,7 +159,13 @@ def test_checksum_mismatch_is_an_error_and_never_switches_the_slot(ota_cli, slot
     out = run(ota_cli, "manifest " + manifest(), "slot " + slot, "install", "work", "json")
     assert calls(out)[-2:] == ["slot_sha256 %d" % len(IMAGE), "abort"]
     assert "commit" not in calls(out) and "restart" not in calls(out)
-    assert ota(out) == {"state": "error", "available_sha": SHA, "progress_pct": 100, "error": "checksum"}
+    assert ota(out) == {
+        "state": "error",
+        "available_sha": SHA,
+        "progress_pct": 100,
+        "error": "checksum",
+        "channel": "stable",
+    }
 
 
 def test_download_failure_aborts_without_switching(ota_cli):
@@ -170,8 +195,48 @@ def test_commit_failure_is_an_error_without_restart(ota_cli):
 )
 def test_bad_manifest_is_an_error(ota_cli, body):
     out = run(ota_cli, "manifest " + body, "install", "work", "json")
-    assert ota(out) == {"state": "error", "available_sha": None, "progress_pct": 0, "error": "manifest"}
+    assert ota(out) == {
+        "state": "error",
+        "available_sha": None,
+        "progress_pct": 0,
+        "error": "manifest",
+        "channel": "stable",
+    }
     assert not any(c.startswith(("download", "commit")) for c in calls(out))
+
+
+def test_check_uses_the_channel_release(ota_cli):
+    """The default channel is stable; a stored ``latest`` switches the manifest URL.
+
+    .. test:: The OTA check fetches the channel's release
+       :id: T_FW_OTA_CHANNEL
+       :links: R_FW_OTA
+    """
+    out = run(ota_cli, "manifest " + manifest(), "check", "work")  # default channel
+    assert any(
+        ln.startswith(
+            "CALL get https://github.com/ckeller42/open-california/releases/download/esp-stable/manifest.json?t="
+        )
+        for ln in out
+    )
+    out = run(ota_cli, "channel latest", "manifest " + manifest(), "check", "work")
+    assert any("/releases/download/esp-latest/manifest.json?t=" in ln for ln in out)
+    assert any(ln.startswith("CALL get") for ln in out)
+
+
+def test_install_downloads_from_the_same_channel(ota_cli):
+    out = run(ota_cli, "channel latest", "manifest " + manifest(), "install", "work")
+    assert any(
+        ln.startswith(
+            "CALL download https://github.com/ckeller42/open-california/releases/download/esp-latest/cali_fw.bin"
+        )
+        for ln in out
+    )
+
+
+def test_channel_json(ota_cli):
+    assert '"channel":"stable"' in run(ota_cli, "json")[-1]
+    assert '"channel":"latest"' in run(ota_cli, "channel latest", "json")[-1]
 
 
 def test_one_request_at_a_time_then_again_after_it_ends(ota_cli):

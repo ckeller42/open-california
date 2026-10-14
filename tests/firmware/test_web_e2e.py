@@ -525,6 +525,37 @@ def test_busy_satellite_tells_the_user_to_retry(host_fw, rec_unit, tmp_path):
     assert not [e for e in errors if "409" not in e], errors
 
 
+def test_firmware_channel_select(host_fw, hci_unit, tmp_path):
+    """Station mode (the select is hidden over the setup hotspot, like Check / Install): the select
+    shows the stored channel, a change POSTs it and the status line names it.
+
+    .. test:: The Firmware box switches the OTA channel
+       :id: T_FW_OTA_CHANNEL_UI
+       :links: R_FW_OTA
+    """
+    sync_playwright = _require_chromium()
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel ok 192.168.1.42\n")
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    _pair(fw, hci_unit)
+    fw.expect("SNAP", timeout=40)
+    fw.send("wifi set minsel %s" % PSK)
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.goto("http://127.0.0.1:%d/device" % fw.http_port)
+        page.wait_for_selector("#fw-channel:not([hidden])", timeout=5000)
+        assert page.input_value("#fw-channel") == "stable"
+        page.select_option("#fw-channel", "latest")
+        page.wait_for_function(
+            "(s) => document.getElementById('fw-status').textContent.includes(s)",
+            arg=STRINGS["fw_ch_latest"]["en"],
+            timeout=5000,
+        )
+        browser.close()
+    assert get_json(fw, "/api/state")["device"]["ota"]["channel"] == "latest"
+
+
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_page_renders(host_fw, hci_unit, tmp_path, locale, lang):
     """GET / renders the title and the link to the calictl UI within 3 s, in the browser's language;

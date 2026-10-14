@@ -12,7 +12,7 @@
  * @typedef {{ mode: string, ssid: string|null, ip: string|null, rssi: number|null }} Wifi
  * @typedef {{ ssid: string, rssi: number, secure: boolean }} Ap
  * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
- * @typedef {{ state: string, available_sha: string|null, progress_pct: number, error: string|null }} Ota
+ * @typedef {{ state: string, available_sha: string|null, progress_pct: number, error: string|null, channel: string }} Ota
  * @typedef {{ source: string, synced: boolean, boot: number }} Time
  * @typedef {{ state: string, total_mb: number|null, free_mb: number|null, last_seq: number|null, dropped: number }} Sd
  * @typedef {{ heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null }} Res
@@ -97,6 +97,9 @@ $("rescan").textContent = t("rescan");
 $("fw-title").textContent = t("fw_title");
 $("ac-title").textContent = t("ac_title");
 $("fw-check").textContent = t("fw_check");
+$("fw-channel-l").textContent = t("fw_channel");
+select("fw-channel").options[0].textContent = t("fw_ch_stable");
+select("fw-channel").options[1].textContent = t("fw_ch_latest");
 $("scr-title").textContent = t("scr_title");
 $("scr-auto-l").textContent = t("scr_auto");
 $("scr-prox-l").textContent = t("scr_prox");
@@ -161,13 +164,13 @@ function renderBattery(b) {
   $("battery").textContent = t("batt_title") + ": " + parts.join(" · ");
 }
 
-/* The firmware row (R_FW_OTA): the running build, the update's progress, Check / Install <sha7>
- * (station mode only, like the firmware's POST /api/ota). */
+/* The firmware row (R_FW_OTA): the running build + its release channel, the update's progress,
+ * Check / Install <sha7> and the channel select (station mode only, like the firmware's POST /api/ota). */
 /** @param {Device} d */
 function renderFw(d) {
   const o = d.ota, sha = (o.available_sha || "").slice(0, 7), key = OTA_TEXT[o.state];
   const station = d.wifi.mode === "station", busy = ["checking", "downloading", "verifying", "rebooting"].includes(o.state);
-  let text = t("fw_running", {sha: d.fw});
+  let text = t("fw_running", {sha: d.fw}) + " · " + t(o.channel === "latest" ? "fw_ch_latest" : "fw_ch_stable");
   if (key) text += " · " + t(key, {sha: sha, pct: o.progress_pct, error: o.error || ""});
   if (!station) text += " · " + t("fw_station_only");
   $("fw-status").textContent = text;
@@ -175,6 +178,9 @@ function renderFw(d) {
   const install = $("fw-install");
   install.hidden = !station || busy || !sha;
   install.textContent = t("fw_install", {sha: sha});
+  const sel = select("fw-channel");
+  sel.hidden = $("fw-channel-l").hidden = !station || busy;
+  if (document.activeElement !== sel) sel.value = o.channel;
 }
 
 /* Auto camper (R_FW_AUTO_CAMPER): on/off, a restore owed, the toggle (station mode only) */
@@ -246,6 +252,17 @@ async function ota(action) {
     const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/ota", {method: "POST",
       headers: {"Content-Type": "application/json"}, body: JSON.stringify({action: action})}));
     if (!r.body.ok) msg.textContent = t("ota_error", {error: r.body.error || ""});
+  } catch (e) { msg.textContent = t("err_net"); }
+}
+
+/** @param {string} ch */
+async function otaChannel(ch) {
+  const msg = $("fw-msg");
+  msg.textContent = "";
+  try {
+    const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/ota", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify({channel: ch})}));
+    if (!r.body.ok) msg.textContent = t("fw_ch_error");
   } catch (e) { msg.textContent = t("err_net"); }
 }
 
@@ -380,4 +397,5 @@ $("scr-dn").addEventListener("click", () => scrStep(-5));
 $("scr-up").addEventListener("click", () => scrStep(5));
 $("fw-check").addEventListener("click", () => ota("check"));
 $("fw-install").addEventListener("click", () => ota("install"));
+$("fw-channel").addEventListener("change", () => otaChannel(select("fw-channel").value));
 poll();
