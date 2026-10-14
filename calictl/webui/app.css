@@ -3,12 +3,13 @@
   --bg: #eef1f5; --fg: #1a1d24; --muted: #6b7280; --card: #ffffff; --border: #e2e6ee;
   --accent: #2f6fed; --accent-fg: #fff; --track-off: #cdd2dc;
   --ok: #2e9e5b; --warn: #c99019; --error: #d0453b; --bar: #e6e9f0;
+  --danger: #c0392b;   /* destructive menu actions; 5.4:1 on --card (WCAG AA) */
   --shadow: 0 1px 2px rgba(20,24,33,.06), 0 8px 24px -16px rgba(20,24,33,.25);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f1116; --fg: #eef0f4; --muted: #9aa1b0; --card: #1a1d25; --border: #262a34;
-    --track-off: #363b47; --bar: #262a34;
+    --track-off: #363b47; --bar: #262a34; --danger: #f87171;   /* 6.1:1 on --card */
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -18px rgba(0,0,0,.6);
   }
 }
@@ -202,10 +203,19 @@ label.row { cursor: pointer; }
 .session-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
 .session-pill.busy { color: var(--accent); }
 
-#menu { font-size: 1.4rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 .3rem; }
-.menupop { position: absolute; top: 2.6rem; right: .4rem; z-index: 40; background: var(--card, #fff); border: 1px solid rgba(128,128,128,.35); border-radius: .5rem; box-shadow: 0 4px 14px rgba(0,0,0,.25); padding: .25rem; display: flex; flex-direction: column; min-width: 11rem; }
-.menupop button { background: none; border: 0; font: inherit; color: inherit; text-align: left; padding: .5rem .7rem; border-radius: .35rem; cursor: pointer; }
+#menu { font-size: 1.4rem; line-height: 1; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0;
+  min-width: 44px; min-height: 44px; margin: -.6rem -.5rem -.6rem 0; }   /* 44 px hit area without growing the topbar */
+/* the tappable status pill: 44 px tall hit area via ::after (topbar keeps its height); no
+   horizontal extension, so >= 8 px stays between its hit area and the ⋮ button's */
+button.pill { position: relative; background: none; font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.pill::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
+/* fixed + top set from the topbar's bottom edge in app.js (that edge includes the safe-area inset) */
+.menupop { position: fixed; right: calc(.4rem + env(safe-area-inset-right)); z-index: 40; background: var(--card, #fff); border: 1px solid rgba(128,128,128,.35); border-radius: .5rem; box-shadow: 0 4px 14px rgba(0,0,0,.25); padding: .25rem; display: flex; flex-direction: column; min-width: 11rem; }
+.menupop button { background: none; border: 0; font: inherit; color: inherit; text-align: left; padding: .5rem .7rem; min-height: 44px; border-radius: .35rem; cursor: pointer; }
+.menupop button + button { border-top: 1px solid var(--border); border-radius: 0; }
 .menupop button:hover { background: rgba(128,128,128,.15); }
+.menupop .danger { color: var(--danger); }
+.menupop [role="separator"] { height: 0; border-top: 1px solid rgba(128,128,128,.45); margin: .3rem 0; }
 
 /* per-screen Help sheet (⋮ → Help, #314) — a native modal <dialog> */
 dialog.help { max-width: min(32rem, calc(100vw - 2rem)); max-height: 85vh; overflow: auto; padding: 1rem 1.1rem;

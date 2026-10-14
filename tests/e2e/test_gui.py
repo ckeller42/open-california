@@ -19,6 +19,7 @@ fixture fails on any uncaught `pageerror`/console error, and one test opens ever
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -259,7 +260,7 @@ def test_pairing_chrome_hidden_when_paired_and_online(page):
     expect(page.get_by_role("button", name="Connect now")).to_have_count(0)
     expect(page.locator("#unpaired-banner")).to_have_count(0)
     page.get_by_role("button", name="Menu").click()
-    expect(page.get_by_role("button", name="Bluetooth pairing…")).to_be_visible()
+    expect(page.get_by_role("menuitem", name="Bluetooth pairing…")).to_be_visible()
 
 
 def test_water_screen_shows_level_percent(page):
@@ -416,7 +417,7 @@ def _help_sheets(pg, help_label, close_label):
     for v in HELP_VIEWS:
         pg.evaluate("v => goto(v)", v)
         pg.click("#menu")
-        pg.locator(".menupop").get_by_role("button", name=help_label, exact=True).click()
+        pg.locator(".menupop").get_by_role("menuitem", name=help_label, exact=True).click()
         sheet = pg.locator("dialog.help")
         expect(sheet).to_be_visible()
         href = sheet.locator("a").get_attribute("href")
@@ -592,7 +593,7 @@ def _open_pairing_via_menu(page):
     """The wizard lives behind the topbar context menu — no card in the main flow when the
     daemon is paired/online (UX: the guided flow is only prominent on true first-run)."""
     page.get_by_role("button", name="Menu").click()
-    page.get_by_role("button", name="Bluetooth pairing…").click()
+    page.get_by_role("menuitem", name="Bluetooth pairing…").click()
 
 
 def _open_and_start_pairing(page):
@@ -819,9 +820,9 @@ def test_pairing_hidden_until_opened_from_menu(unconfigured_pairing_page):
     expect(page.get_by_role("button", name="Menu")).to_be_visible()
     expect(page.locator("#unpaired-banner")).to_be_visible()
     page.get_by_role("button", name="Menu").click()
-    expect(page.get_by_role("button", name="Bluetooth pairing…")).to_be_visible()
+    expect(page.get_by_role("menuitem", name="Bluetooth pairing…")).to_be_visible()
     # no bond configured in this daemon -> no Unpair entry
-    expect(page.get_by_role("button", name="Unpair…")).to_have_count(0)
+    expect(page.get_by_role("menuitem", name="Unpair…")).to_have_count(0)
 
 
 def test_menu_a11y_escape_closes_and_lang_syncs(page):
@@ -837,19 +838,123 @@ def test_menu_a11y_escape_closes_and_lang_syncs(page):
     # language toggle keeps <html lang> honest
     assert page.evaluate("document.documentElement.lang") == "en"
     menu.click()
-    page.get_by_role("button", name="Deutsch").click()
+    page.get_by_role("menuitem", name="Deutsch").click()
     assert page.evaluate("document.documentElement.lang") == "de"
+
+
+def test_menu_below_topbar_with_safe_area_inset(page):
+    """iPhone PWA (black-translucent status bar): the topbar grows by env(safe-area-inset-top);
+    the menu must open BELOW the topbar, not inside the status-bar strip over the ⋮ button.
+    Chromium cannot set env(safe-area-inset-top), so the inset is simulated by giving the topbar
+    the exact padding its rule computes with a 47 px inset (iPhone notch)."""
+    page.add_style_tag(content="#topbar { padding-top: calc(.9rem + 47px) !important; }")
+    page.click("#menu")
+    for _ in range(2):  # as opened, then after scrolling with the menu open (sticky topbar)
+        bar = page.locator("#topbar").bounding_box()
+        pop = page.locator(".menupop").bounding_box()
+        assert bar and pop
+        assert pop["y"] >= bar["y"] + bar["height"] - 1, (pop, bar)
+        page.mouse.wheel(0, 400)
+        page.wait_for_timeout(150)
+
+
+def test_menu_touch_targets_44px(page):
+    """Apple HIG: every menu row and the ⋮ button are at least 44 px tall (the ⋮ also wide)."""
+    btn = page.locator("#menu").bounding_box()
+    assert btn and btn["width"] >= 44 and btn["height"] >= 44, btn
+    page.click("#menu")
+    items = page.get_by_role("menuitem")
+    assert items.count() >= 3
+    for i in range(items.count()):
+        box = items.nth(i).bounding_box()
+        assert box and box["height"] >= 44, (i, box)
+
+
+def test_status_pill_hit_area_44px_and_gap_to_menu(page):
+    """The tappable status pill: a 44 px tall hit area (::after, the topbar keeps its height) and
+    >= 8 px between its hit area and the ⋮ button's, so a thumb cannot hit the wrong one."""
+    pill = page.locator("#status").bounding_box()
+    menu = page.locator("#menu").bounding_box()
+    assert pill and menu
+    cx, cy = pill["x"] + pill["width"] / 2, pill["y"] + pill["height"] / 2
+    for dy in (-21, 21):  # 44 px tall hit area centred on the pill
+        hit = page.evaluate("([x, y]) => document.elementFromPoint(x, y).id", [cx, cy + dy])
+        assert hit == "status", (dy, hit, pill)
+    # ::after has no horizontal extension -> the pill's box IS its hit area's width
+    hit = page.evaluate("([x, y]) => document.elementFromPoint(x, y).id", [pill["x"] + pill["width"] + 1, cy])
+    assert hit != "status"
+    assert menu["x"] - (pill["x"] + pill["width"]) >= 8, (pill, menu)
+
+
+def test_menu_roles_and_arrow_keys(page):
+    """WAI-ARIA menu pattern: role=menu/menuitem, ArrowDown/ArrowUp/Home/End move focus with
+    wrap, Tab closes the menu."""
+    page.get_by_role("button", name="Menu").click()
+    menu = page.get_by_role("menu")
+    expect(menu).to_have_count(1)
+    items = menu.get_by_role("menuitem")
+    n = items.count()
+    assert n >= 3
+    labels = [items.nth(i).inner_text() for i in range(n)]
+
+    def focused():
+        return page.evaluate("document.activeElement.textContent")
+
+    assert focused() == labels[0]
+    page.keyboard.press("ArrowDown")
+    assert focused() == labels[1]
+    page.keyboard.press("ArrowUp")
+    page.keyboard.press("ArrowUp")  # wraps to the last
+    assert focused() == labels[-1]
+    page.keyboard.press("ArrowDown")  # wraps to the first
+    assert focused() == labels[0]
+    page.keyboard.press("End")
+    assert focused() == labels[-1]
+    page.keyboard.press("Home")
+    assert focused() == labels[0]
+    # nothing focused inside the menu: ArrowUp -> last, ArrowDown -> first
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("ArrowUp")
+    assert focused() == labels[-1]
+    page.evaluate("document.activeElement.blur()")
+    page.keyboard.press("ArrowDown")
+    assert focused() == labels[0]
+    page.keyboard.press("Tab")
+    expect(page.locator(".menupop")).to_have_count(0)
+    expect(page.get_by_role("button", name="Menu")).to_have_attribute("aria-expanded", "false")
+    # focus moved on past ⋮, not trapped on it or lost to <body>
+    assert page.evaluate("document.activeElement.id") != "menu"
+    assert page.evaluate("document.activeElement !== document.body")
+
+
+def test_status_pill_opens_device_status(page):
+    """The status pill next to ⋮ is a button (keyboard-reachable) that opens Device status."""
+    pill = page.get_by_role("button", name="Device status")
+    expect(pill).to_have_count(1)
+    assert page.evaluate("document.getElementById('status').tagName") == "BUTTON"
+    # the accessible name keeps the visible state for screen readers
+    expect(pill).to_have_attribute("aria-label", re.compile(r"^Device status: .+"))
+    pill.focus()
+    page.keyboard.press("Enter")
+    expect(page.locator("#title")).to_have_text("Device status")
+    expect(page.get_by_text("Camper unit", exact=True)).to_be_visible()
 
 
 def test_menu_unpair_workflow_after_bonding(pairing_page):
     """The explicit unpair workflow: after bonding, the context menu gains 'Unpair…' which
-    confirm()s, removes the bond (reset), and leaves the wizard open guiding a re-pair."""
+    confirm()s, removes the bond (reset), and leaves the wizard open guiding a re-pair.
+    'Unpair…' closes the pairing group: right after 'Bluetooth pairing…', then a separator."""
     page = pairing_page
     page.on("dialog", lambda d: d.accept())
     _complete_bonding(page)
     page.get_by_role("button", name="Menu").click()
-    unpair = page.get_by_role("button", name="Unpair…")
+    unpair = page.get_by_role("menuitem", name="Unpair…")
     expect(unpair).to_be_visible()
+    sib = unpair.evaluate(
+        "e => [e.previousElementSibling.textContent, e.nextElementSibling.getAttribute('role')]"
+    )
+    assert sib == ["Bluetooth pairing…", "separator"]
+    expect(unpair).to_have_class(re.compile(r"\bdanger\b"))
     unpair.click()
     # reset drives the SM resetting -> idle; the wizard stays open showing the guided first step
     expect(page.get_by_role("checkbox", name="I'm on that screen")).to_be_visible(timeout=10000)
@@ -882,7 +987,7 @@ def test_language_toggle_to_german(page):
     a reload (localStorage); toggling back restores English."""
     expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
     page.get_by_role("button", name="Menu").click()
-    page.get_by_role("button", name="Deutsch").click()
+    page.get_by_role("menuitem", name="Deutsch").click()
     expect(page.get_by_text("Kühlbox", exact=True).first).to_be_visible()
     assert page.get_by_text("Cooler", exact=True).count() == 0
     # persists across a reload
@@ -890,7 +995,7 @@ def test_language_toggle_to_german(page):
     expect(page.get_by_text("Kühlbox", exact=True).first).to_be_visible()
     # toggle back to English
     page.get_by_role("button", name="Menu").click()
-    page.get_by_role("button", name="English").click()
+    page.get_by_role("menuitem", name="English").click()
     expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
     assert page.get_by_text("Kühlbox", exact=True).count() == 0
 
