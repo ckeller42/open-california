@@ -151,6 +151,9 @@ Tests
 .. autofunction:: tests.e2e.test_pwa.test_a_changed_shell_offers_a_reload
 .. autofunction:: tests.e2e.test_pwa.test_no_worker_and_no_saved_state_on_an_insecure_origin
 .. autofunction:: tests.e2e.test_pwa.test_satellite_app_opens_offline
+.. autofunction:: tests.e2e.test_pwa.test_a_restored_snapshot_connects_then_goes_live
+.. autofunction:: tests.e2e.test_link_state.test_asleep_van_shows_the_amber_banner
+.. autofunction:: tests.e2e.test_link_state.test_backend_down_turns_red_at_15_s_and_recovers
 .. autofunction:: tests.e2e.test_esp_page.test_firmware_row_checks_and_installs
 .. autofunction:: tests.e2e.test_esp_page.test_clock_line_shows_sync_and_boot
 .. autofunction:: tests.e2e.test_esp_page.test_storage_and_resources_lines

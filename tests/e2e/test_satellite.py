@@ -668,9 +668,9 @@ def test_a_pending_command_does_not_trip_the_offline_banner(stub, error_gated_pa
         seen = set()
         for _ in range(10):  # ~2.5-3 s into the 4 s stall (margin for a slow runner)
             seen.add(pg.locator("#status").inner_text())
-            assert pg.locator(".offline").count() == 0
+            assert pg.locator(".offline").count() == 0  # neither asleep nor unreachable
             pg.wait_for_timeout(250)
-        assert "Sending…" in seen and "offline" not in seen, seen
+        assert "Sending…" in seen and "offline" not in seen and "unreachable" not in seen, seen
         expect(pg.locator(".toast")).to_have_text("Sent — the unit didn't confirm it", timeout=9000)
         expect(pg.locator("#status")).to_have_text("live")
     # the UI sends at most one poll at a time: exactly one was waiting on the stalled core

@@ -561,6 +561,8 @@ const HELP = {
     + "are shown. A ⚠ on a tile means the unit reports a fault there.\n\n"
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
     + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live.\n\n"
+    + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
+    + "itself may be fine.\n\n"
     + "Read-only: control writes are switched off on this device; values still update. An untested-firmware "
     + "warning means the unit runs software this project was not validated on, so decoded values may be off."],
   devicestatus: ["firmware.html",
@@ -970,6 +972,86 @@ function toast(msg, kind, ms = 4000) {
 let polling = false;     // a state poll is on the wire
 let forceNext = false;   // a forced refresh arrived while one was: repaint when that one lands
 
+// --- link state (R_UI_LINK_STATE): one linkState() drives the status pill AND the #conn banner ----
+// "Unreachable" after this long with no answer: longer than the satellite's 4 s command stall plus a
+// 2 s tick, and longer than a daemon restart (the TLS proxy 502s, then JSON again), so a blip never
+// shows red. Timed from the oldest unanswered poll's send, not from the last answer: a hidden tab
+// sends nothing, so it never counts down.
+const UNREACHABLE_MS = 15000;
+// The state poll's own timeout: above the satellite's 4 s command stall (that poll just waits), so a
+// hung TCP connection (dead Tailscale peer) fails and the next tick retries instead of waiting out
+// iOS's ~75 s connect timeout.
+const POLL_TIMEOUT_MS = 8000;
+let waitingSince = /** @type {number|null} */ (null);   // ms: the oldest unanswered poll was sent
+let lastAnswerAt = /** @type {number|null} */ (null);   // ms: the backend last answered (restored: saved)
+let stateAt = 0;                                        // ms: STATE (its _meta.age_s) was taken
+const connEl = /** @type {HTMLElement} */ (document.getElementById("conn"));
+let connKey = "";
+
+/** @returns {"live"|"asleep"|"never"|"connecting"|"unreachable"} */
+function linkState() {
+  if (waitingSince != null && Date.now() - waitingSince >= UNREACHABLE_MS) return "unreachable";
+  const m = STATE._meta;
+  if (lastAnswerAt == null || (m && m.restored)) return "connecting";   // a snapshot, or nothing yet
+  if (!m || m.online) return "live";
+  return m.last_seen ? "asleep" : "never";
+}
+
+// This page's own backend: the satellite, or calictl on the host that served the page (buspi).
+function backendName() {
+  if (satellite()) return /** @type {string} */ (t("Satellite"));
+  const h = location.hostname;
+  return "calictl (" + (/^[\d.:[\]]+$/.test(h) ? h : h.split(".")[0]) + ")";
+}
+
+/** @type {Record<string, [string, string]>} */
+const LINK_PILL = { live: ["live", "ok"], asleep: ["offline", "warn"], never: ["offline", "warn"],
+  connecting: ["connecting…", ""], unreachable: ["unreachable", "error"] };
+
+// Paint the pill + the persistent #conn banner (outside #app: a hung poll never reaches render(),
+// the 2 s tick still lands here). #conn is a role=status region: its text is replaced only when the
+// state/wording changes; the ticking {ago} (or "Checked" clock) lives in an aria-hidden child.
+function paintLink() {
+  const s = linkState();
+  if (!hasWork()) setStatus(LINK_PILL[s][0], LINK_PILL[s][1]);   // a command keeps "Sending…"
+  const m = STATE._meta;
+  const clock = m && m.last_seen ? clockText(m.last_seen) : null;
+  const ago = agoText(m && m.age_s != null ? m.age_s + (Date.now() - stateAt) / 1000 : null);
+  let cls = "offline", tmpl = "", tick = "ago";
+  /** @type {Record<string, any>} */
+  let vars = { clock: clock, ago: ago };
+  if (s === "unreachable") {
+    cls += " unreachable";
+    vars.name = backendName();
+    vars.since = clockText(/** @type {number} */ (lastAnswerAt ?? waitingSince) / 1000);
+    tmpl = clock ? "⚠ {name} not reachable since {since}. Last data {clock} ({ago})."
+      : "⚠ {name} not reachable since {since}.";
+  } else if (s === "connecting" && clock) {
+    cls += " connecting";
+    tmpl = "Connecting… Last data {clock} ({ago}).";
+  } else if (s === "asleep") {
+    tmpl = "Offline — van asleep. Last data {clock} ({ago}).";
+  } else if (s === "never") {
+    tmpl = "Offline — no data yet (van asleep since the monitor started). Checked {clock}.";
+    vars.clock = clockText(/** @type {number} */ (lastAnswerAt) / 1000);
+    tick = "clock";
+  }
+  const parts = tmpl ? tf(tmpl, Object.assign({}, vars, { [tick]: "\u0001" })).split("\u0001") : [];
+  const key = cls + "|" + parts.join("\u0001");
+  if (key !== connKey) {
+    connKey = key;
+    connEl.className = tmpl ? cls : "";
+    connEl.replaceChildren();
+    if (parts.length > 1) {
+      const sp = document.createElement("span");
+      sp.setAttribute("aria-hidden", "true");
+      connEl.append(parts[0], sp, parts[1]);
+    } else if (tmpl) connEl.append(parts[0]);
+  }
+  const sp = connEl.querySelector("span");
+  if (sp) sp.textContent = String(vars[tick]);
+}
+
 /** @param {boolean} [force] */
 async function refreshState(force) {
   // The satellite answers POST /api/command only after the unit's ACK (<= 4 s) and serves nothing
@@ -979,15 +1061,21 @@ async function refreshState(force) {
   // then drain them oldest-first (tests/e2e/test_satellite.py pins "at most one waiting", both engines).
   if (polling) { forceNext = forceNext || !!force; return; }
   polling = true;
+  if (waitingSince == null) waitingSince = Date.now();
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), POLL_TIMEOUT_MS);
   let next;
   try {
-    next = await api("/api/state");
+    next = await api("/api/state", { signal: ac.signal });
   } catch (e) {
-    setStatus("offline", "error");
+    paintLink();   // a failure alone changes nothing: unreachable is time-based (UNREACHABLE_MS)
     return;
   } finally {
+    clearTimeout(timer);
     polling = false;
   }
+  waitingSince = null;
+  lastAnswerAt = stateAt = Date.now();
   force = force || forceNext;
   forceNext = false;
   // The ESP32 satellite answers RAW decoded fields ({t, fn, device}); interpret them in the browser.
@@ -1001,12 +1089,7 @@ async function refreshState(force) {
   // down (low battery) or gives up (keeps dropping). Show it as a toast once.
   const acn = STATE._meta && STATE._meta.auto_camper && STATE._meta.auto_camper.notice;
   if (acn && acn.ts && acn.ts > lastAcNotice) { lastAcNotice = acn.ts; toast(acn.msg, "warn"); }
-  // "live" = the van is currently reachable; "offline" = daemon can't reach it (van asleep),
-  // matching the banner. The web UI itself is up either way — this reflects the vehicle link.
-  if (!hasWork()) {
-    const vanOnline = !STATE._meta || STATE._meta.online;
-    setStatus(vanOnline ? "live" : "offline", vanOnline ? "ok" : "warn");
-  }
+  paintLink();
   // don't repaint out from under a control the user is actively using — a poll-driven re-render
   // rebuilds the DOM (app.innerHTML="") and would slam an OPEN <select> dropdown shut, or interrupt
   // a slider drag / time entry. Skip while such a control is focused; optimistic values + the queue
@@ -1198,20 +1281,6 @@ function clockText(epochSec) {
   const t = d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" });
   const sameDay = d.toDateString() === new Date().toDateString();
   return sameDay ? t : `${d.toLocaleDateString(loc, { month: "short", day: "numeric" })} ${t}`;
-}
-
-// The camper unit deep-sleeps when the van is parked and becomes unreachable — so when the daemon
-// hasn't polled recently, show the LAST known values behind a clear "offline — last seen X" banner
-// rather than a blank screen or a stale number pretending to be live.
-function offlineBanner() {
-  const m = STATE._meta;
-  if (!m || m.online) return null;
-  const b = document.createElement("div");
-  b.className = "offline";
-  b.textContent = m.last_seen
-    ? tf("Offline — van asleep. Last data {clock} ({ago}).", { clock: clockText(m.last_seen), ago: agoText(m.age_s) })
-    : tf("Offline — no data yet (van asleep since the monitor started). Checked {clock}.", { clock: clockText(Date.now() / 1000) });
-  return b;
 }
 
 // Connection toggle for buspi's persistent BLE session. It SHOWS the state and lets you release
@@ -1662,8 +1731,7 @@ function render() {
   app.innerHTML = "";
   const sp = sessionToggle();
   if (sp) app.appendChild(sp);
-  const ob = offlineBanner();
-  if (ob) app.appendChild(ob);
+  paintLink();   // the asleep / unreachable banner lives in #conn, above #app
   if (readOnly() && STATE._meta && !STATE._meta.restored) {
     const b = document.createElement("div");
     b.className = "readonly";
@@ -2574,6 +2642,8 @@ function restoreLastState() {
     m.last_seen = seen;
     m.age_s = Math.max(0, Math.round(Date.now() / 1000 - seen));
     STATE = saved.state;
+    stateAt = Date.now();
+    lastAnswerAt = saved.at;   // "not reachable since" the snapshot was saved
     render();
   } catch (e) { /* storage blocked or a corrupt entry: start empty, as without it */ }
 }
@@ -2599,7 +2669,13 @@ async function main() {
   const ms = (/** @type {number} */ v) => Math.min(600000, Math.max(0, Math.round(v)));   // the endpoints' range
   ux({ type: "timing", ttfb: ms(nav ? nav.responseStart : 0), dcl: ms(nav ? nav.domContentLoadedEventEnd : 0),
     tiles: ms(performance.now()) });   // first render of the tiles, ms since navigation start
-  setInterval(() => { if (!document.hidden) refreshState(false); }, STATE_POLL_MS);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshState(true); });
+  // the tick repaints the link state even while a poll hangs (refreshState then returns early)
+  setInterval(() => { if (!document.hidden) { refreshState(false); paintLink(); } }, STATE_POLL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) return;
+    if (waitingSince != null) waitingSince = Date.now();   // the hidden time does not count down
+    refreshState(true);
+    paintLink();
+  });
 }
 main();

@@ -102,7 +102,7 @@ installed on the reference van, so they are verified statically only.
 - **Drift is caught** — A {term}`signal catalog <Catalog>` (`protocol/signals.yaml`) records a `surface` or `omit` decision for every field, enforced by `tests/test_signal_coverage.py` and `tools.audit_signals`.
 - **Safe actuation** — Control frames are built by `control.BUILDERS`, validated by `protocol.encode` against bit widths and curated ranges, and written under the single BLE lock while the `1003` heartbeat ticks. Readback is a write-through echo, so it is never reported as proof.
 - **One BLE owner** — One daemon (`serve`) owns the connection. The web UI, MQTT and InfluxDB are sinks inside that process.
-- **Absent unit** — `serve` persists the last state with an "as of" timestamp, and the UI shows an offline banner. `freshness` holds the last plausible value for measurement-gated fields such as water.
+- **Absent unit** — `serve` persists the last state with an "as of" timestamp, and the UI shows an amber "van asleep" banner (a red "not reachable" one only when calictl or the satellite itself stops answering for 15 s, `R_UI_LINK_STATE`). `freshness` holds the last plausible value for measurement-gated fields such as water.
 - **Evidence over assertion** — Every protocol claim carries a verification tier (DEVICE, CAPTURE, DECOMPILE, UNVERIFIED) in the evidence ledger.
 
 ## 5. Building block view
