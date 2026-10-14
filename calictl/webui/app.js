@@ -233,9 +233,18 @@ function setLang(l) {
 // --- topbar context menu (UX: pairing chrome lives here, not in the main flow) ---------------
 let menuPop = /** @type {?HTMLElement} */ (null);
 
-/** @param {KeyboardEvent} ev */
+/** WAI-ARIA menu keys: arrows/Home/End move focus (with wrap), Tab closes, Escape closes + refocuses ⋮.
+ * @param {KeyboardEvent} ev */
 function onMenuKey(ev) {
-  if (ev.key === "Escape") { closeMenu(); menuEl.focus(); }
+  if (ev.key === "Escape") { closeMenu(); menuEl.focus(); return; }
+  if (ev.key === "Tab") { closeMenu(); menuEl.focus(); return; }   // default Tab then moves on from ⋮
+  if (!menuPop) return;
+  const items = /** @type {HTMLElement[]} */ (Array.from(menuPop.querySelectorAll('[role="menuitem"]')));
+  const i = items.indexOf(/** @type {HTMLElement} */ (document.activeElement));
+  const next = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[ev.key];
+  if (next === undefined) return;
+  ev.preventDefault();
+  items[(next + items.length) % items.length].focus();
 }
 
 function closeMenu() {
@@ -244,59 +253,68 @@ function closeMenu() {
   document.removeEventListener("keydown", onMenuKey);
 }
 
+/** The in-app Device-status screen (from the ⋮ menu or the status pill). */
+function openDeviceStatus() {
+  closeMenu();
+  goto("devicestatus");
+  // The load-time /api/pairing fetch may have failed (PAIRING still null): retry on open so
+  // the screen can tell "unknown" from a fetched "not paired" (CodeRabbit, PR #267).
+  if (!PAIRING) pairingFetch().then(() => { if (view === "devicestatus") render(); });
+}
+statusEl.onclick = openDeviceStatus;
+
+/** A menu row. @param {string} label @param {() => any} onclick @param {string} [cls] */
+function menuItem(label, onclick, cls) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.setAttribute("role", "menuitem");
+  b.textContent = label;
+  b.onclick = onclick;
+  if (cls) b.className = cls;
+  return b;
+}
+
 menuEl.onclick = (ev) => {
   ev.stopPropagation();
   if (menuPop) { closeMenu(); return; }
   menuPop = document.createElement("div");
   menuPop.className = "menupop";
+  menuPop.setAttribute("role", "menu");
+  menuPop.setAttribute("aria-labelledby", "menu");
+  // Groups, separated by dividers: [Device status] | [pairing…, Unpair…] | [Help, language].
+  /** @type {HTMLElement[][]} */
+  const groups = [[], [], []];
   if (STATE._meta) {
     // The in-app Device-status screen, on both flavors (the satellite's raw /device setup page
     // stays reachable from inside that screen).
-    const dev = document.createElement("button");
-    dev.type = "button";
-    dev.textContent = /** @type {string} */ (t("Device status"));
-    dev.onclick = () => {
-      closeMenu();
-      goto("devicestatus");
-      // The load-time /api/pairing fetch may have failed (PAIRING still null): retry on open so
-      // the screen can tell "unknown" from a fetched "not paired" (CodeRabbit, PR #267).
-      if (!PAIRING) pairingFetch().then(() => { if (view === "devicestatus") render(); });
-    };
-    menuPop.appendChild(dev);
-  }
-  if (STATE._meta) {   // calictl and the satellite both serve /api/pairing (R_FW_PAIRING_WIZARD)
-    const pair = document.createElement("button");
-    pair.type = "button";
-    pair.textContent = /** @type {string} */ (t("Bluetooth pairing…"));
-    pair.onclick = () => { closeMenu(); openPairingWizard(); };
-    menuPop.appendChild(pair);
+    groups[0].push(menuItem(/** @type {string} */ (t("Device status")), openDeviceStatus));
+    // calictl and the satellite both serve /api/pairing (R_FW_PAIRING_WIZARD)
+    groups[1].push(menuItem(/** @type {string} */ (t("Bluetooth pairing…")), () => { closeMenu(); openPairingWizard(); }));
     // Unpair only makes sense once a bond exists (PAIRING is fetched at load + while the wizard polls).
+    // Destructive: last in its group, behind the divider, in --danger.
     if (PAIRING && PAIRING.address) {
-      const unpair = document.createElement("button");
-      unpair.type = "button";
-      unpair.textContent = /** @type {string} */ (t("Unpair…"));
-      unpair.onclick = async () => {
+      groups[1].push(menuItem(/** @type {string} */ (t("Unpair…")), async () => {
         closeMenu();
         if (!confirm(/** @type {string} */ (t("Unpair removes the working bond; telemetry stops until re-paired. Continue?")))) return;
         await openPairingWizard();               // show the flow while the reset runs
         pairingAction("reset", undefined, true); // then guides straight into re-pairing (idle step)
-      };
-      menuPop.appendChild(unpair);
+      }, "danger"));
     }
   }
-  if (HELP[view]) {   // per-screen help (#314)
-    const help = document.createElement("button");
-    help.type = "button";
-    help.textContent = /** @type {string} */ (t("Help"));
-    help.onclick = openHelp;
-    menuPop.appendChild(help);
-  }
+  if (HELP[view]) groups[2].push(menuItem(/** @type {string} */ (t("Help")), openHelp));   // per-screen help (#314)
   // Language toggle: label names the language you'd switch TO.
-  const lang = document.createElement("button");
-  lang.type = "button";
-  lang.textContent = LANG === "de" ? "English" : "Deutsch";
-  lang.onclick = () => { setLang(LANG === "de" ? "en" : "de"); };
-  menuPop.appendChild(lang);
+  groups[2].push(menuItem(LANG === "de" ? "English" : "Deutsch", () => { setLang(LANG === "de" ? "en" : "de"); }));
+  for (const g of groups.filter((g) => g.length)) {
+    if (menuPop.childElementCount) {
+      const sep = document.createElement("div");
+      sep.setAttribute("role", "separator");
+      menuPop.appendChild(sep);
+    }
+    for (const b of g) menuPop.appendChild(b);
+  }
+  // fixed, right under the topbar: its bottom edge already includes env(safe-area-inset-top)
+  // (iPhone PWA status bar) and the sticky topbar never scrolls away.
+  menuPop.style.top = /** @type {HTMLElement} */ (menuEl.parentElement).getBoundingClientRect().bottom + "px";
   document.body.appendChild(menuPop);
   menuEl.setAttribute("aria-expanded", "true");
   /** @type {HTMLButtonElement} */ (menuPop.firstElementChild).focus();   // keyboard lands in the menu
@@ -895,6 +913,7 @@ async function api(path, opts) {
 function setStatus(text, kind) {
   statusEl.textContent = /** @type {string} */ (t(text));
   statusEl.className = "pill" + (kind ? " " + kind : "");
+  statusEl.setAttribute("aria-label", /** @type {string} */ (t("Device status")));   // tap -> that screen
 }
 
 /**
