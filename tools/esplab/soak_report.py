@@ -182,7 +182,7 @@ def _sensors(d):
             if a is None or b is None:
                 continue
             n += 1
-            if abs(a - b) > tol:
+            if round(abs(a - b), 6) > tol:   # 12.98 - 12.93 is 0.05000000000000071 in binary floats
                 bad.append("%s.%s esp=%s buspi=%s" % (alias, f, a, b))
     if not n:
         return ("sensors", "SKIP", "no reading fresh (<= %d s) on both the ESP and buspi" % SENSOR_MAX_AGE_S)
