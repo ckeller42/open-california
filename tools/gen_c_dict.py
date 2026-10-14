@@ -435,7 +435,7 @@ def page_script(text: str | None = None) -> str:
     (prose and JSDoc, which ``tsc`` reads but the browser never needs — the page must stay under
     ``NET_HTTP_BODY_MAX``). A comment with code after it on its line (an inline JSDoc cast) stays.
     Line-based: a comment-looking line inside a template literal would be dropped too (page.js has
-    no template literals; ``tests/test_web_strings.py`` ``node --check``s the result).
+    no template literals; ``tests/test_web_strings.py`` runs ``node --check`` on the result).
 
     :param text: the script to strip (default: ``page.js``).
     :returns: the script text.
