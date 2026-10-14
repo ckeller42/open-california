@@ -918,10 +918,14 @@ async function api(path, opts) {
  * @param {string} [kind]
  */
 function setStatus(text, kind) {
-  statusEl.textContent = /** @type {string} */ (t(text));
-  statusEl.className = "pill" + (kind ? " " + kind : "");
+  const tx = /** @type {string} */ (t(text)), cls = "pill" + (kind ? " " + kind : "");
   // tap -> that screen; the name keeps the state for screen readers ("Device status: live")
-  statusEl.setAttribute("aria-label", t("Device status") + ": " + statusEl.textContent);
+  const label = t("Device status") + ": " + tx;
+  if (statusEl.textContent === tx && statusEl.className === cls
+      && statusEl.getAttribute("aria-label") === label) return;   // aria-live: no re-announce
+  statusEl.textContent = tx;
+  statusEl.className = cls;
+  statusEl.setAttribute("aria-label", label);
 }
 
 /**
@@ -992,7 +996,10 @@ let connKey = "";
 function linkState() {
   if (waitingSince != null && Date.now() - waitingSince >= UNREACHABLE_MS) return "unreachable";
   const m = STATE._meta;
-  if (lastAnswerAt == null || (m && m.restored)) return "connecting";   // a snapshot, or nothing yet
+  // a snapshot, nothing yet, or no FRESH answer (a tab back after hours: its STATE is hours old;
+  // a normal blip's gap is ~2 s)
+  if (lastAnswerAt == null || (m && m.restored)
+      || (waitingSince != null && waitingSince - lastAnswerAt > UNREACHABLE_MS)) return "connecting";
   if (!m || m.online) return "live";
   return m.last_seen ? "asleep" : "never";
 }
@@ -1036,7 +1043,10 @@ function paintLink() {
     vars.clock = clockText(/** @type {number} */ (lastAnswerAt) / 1000);
     tick = "clock";
   }
-  const parts = tmpl ? tf(tmpl, Object.assign({}, vars, { [tick]: "\u0001" })).split("\u0001") : [];
+  // the ticking value and its brackets go into the aria-hidden span (no "( )" read aloud)
+  const filled = tmpl ? tf(tmpl, Object.assign({}, vars, { [tick]: "\u0001" })) : "";
+  const br = filled.includes("(\u0001)");
+  const parts = tmpl ? filled.replace("(\u0001)", "\u0001").split("\u0001") : [];
   const key = cls + "|" + parts.join("\u0001");
   if (key !== connKey) {
     connKey = key;
@@ -1049,7 +1059,7 @@ function paintLink() {
     } else if (tmpl) connEl.append(parts[0]);
   }
   const sp = connEl.querySelector("span");
-  if (sp) sp.textContent = String(vars[tick]);
+  if (sp) sp.textContent = br ? "(" + vars[tick] + ")" : String(vars[tick]);
 }
 
 /** @param {boolean} [force] */
@@ -2662,6 +2672,7 @@ if (PWA) {
 }
 
 async function main() {
+  paintLink();                // "connecting…" at once, not "…" while a hung first poll waits 8 s
   await refreshState(true);   // also takes the one-off /api/pairing once a calictl `_meta` answers
   render();
   const nav = /** @type {PerformanceNavigationTiming|undefined} */ (performance.getEntriesByType("navigation")[0]);

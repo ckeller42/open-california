@@ -188,7 +188,8 @@ def test_hidden_tab_does_not_count_down(backend):
         )
         pg.wait_for_timeout(300)
         assert pg.locator("#conn.unreachable").count() == 0
-        assert pg.locator("#status").inner_text() != "unreachable"
+        # hours-old values are not "live": no fresh answer yet -> connecting
+        assert pg.locator("#status").inner_text() == "connecting…"
         _tick(pg, 16000)
         expect(pg.locator("#conn.unreachable")).to_be_visible()
 

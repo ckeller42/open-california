@@ -487,7 +487,8 @@ window.STRINGS_DE = {
     + "antwortet nicht mehr, bis das Fahrzeug wieder benutzt wird. Die Seite zeigt dann die letzten "
     + "Daten und ihr Alter. 🕒 kennzeichnet einen Wert, der früher gemessen wurde, nicht "
     + "live.\n\nNicht erreichbar: Diese Seite erreicht calictl oder den Satelliten nicht (WLAN, "
-    + "Tailscale, Strom). Dem Fahrzeug selbst geht es womöglich gut.\n\nNur-Lesen: Steuerbefehle sind auf diesem Gerät abgeschaltet; die Werte aktualisieren "
+    + "Tailscale, Strom). Dem Fahrzeug selbst geht es womöglich gut.\n\nNur-Lesen: Steuerbefehle "
+    + "sind auf diesem Gerät abgeschaltet; die Werte aktualisieren "
     + "sich trotzdem. Eine Warnung zu ungetesteter Firmware heißt, dass die Einheit Software nutzt, "
     + "auf der dieses Projekt nicht validiert wurde; dekodierte Werte können abweichen.",
   ["Camper unit: online while the Bluetooth link to the unit works; offline usually means the parked unit "

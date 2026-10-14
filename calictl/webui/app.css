@@ -10,6 +10,7 @@
   :root:not([data-theme="light"]) {
     --bg: #0f1116; --fg: #eef0f4; --muted: #9aa1b0; --card: #1a1d25; --border: #262a34;
     --track-off: #363b47; --bar: #262a34; --danger: #f87171;   /* 6.1:1 on --card */
+    --error: #ef6b62;   /* the light red is ~4:1 on the dark bar at the pill's .72rem */
     --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -18px rgba(0,0,0,.6);
   }
 }
