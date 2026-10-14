@@ -61,6 +61,7 @@ Load relevant rule files from `rules/` based on what the code contains:
 | Consent-like UI, anything where the owner's interest and the software's could diverge | no rule file here: never recommend a dark pattern; flag one as Critical |
 
 Analyze the code against each loaded rule file. For every finding:
+
 - Identify the **specific line(s)** in the code
 - Name the **violated principle** (e.g., "Fitts's Law", "WCAG 2.2 SC 2.5.8")
 - Explain **why** it matters for the user
@@ -115,6 +116,7 @@ Output findings using this structure:
 These are always in context. Detailed rules are in `rules/` files.
 
 ### Response Time Thresholds
+
 - <100ms: nothing beyond the press-state animation — a spinner here is noise
 - 100-300ms: press-state animation + content swap; no spinner, no skeleton (a sub-200ms spinner flash reads as broken)
 - 300ms-1s: skeleton matching the content shape, or a 200ms-floored inline spinner
@@ -122,21 +124,24 @@ These are always in context. Detailed rules are in `rules/` files.
 - 3-10s: determinate progress bar with a label ("4 of 12 files")
 - >10s: streamed partial output, cancellable progress bar with ETA, or an async "we'll notify you" pattern
 
-
 ### Touch Target Minimums
+
 - iOS: 44x44pt | Android: 48x48dp | WCAG AA: 24x24px | WCAG AAA: 44x44px
 - Minimum spacing between targets: 8dp/pt
 
 ### Contrast Ratios
+
 - Normal text: 4.5:1 (AA) / 7:1 (AAA)
 - Large text (>=18pt): 3:1 (AA) / 4.5:1 (AAA)
 - UI components: 3:1
 
 ### Navigation Limits
+
 - Bottom tabs: 3-5 items | Web primary nav: 5-8 items
 - Choices per decision: 5-7 max (Hick's Law)
 
 ### Typography
+
 - Body min: 16px (web) / 17pt (iOS) / 14sp (Android)
 - Line length: 45-75 chars (66 optimal)
 - Line height: 1.4-1.6 body / 1.1-1.3 headings

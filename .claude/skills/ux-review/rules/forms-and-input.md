@@ -13,7 +13,7 @@
 | Rule | Details |
 |------|---------|
 | Labels always visible | Never use placeholder as sole label — it disappears on input |
-| Placeholder for format hints | "e.g., john@example.com" or "MM/DD/YYYY" |
+| Placeholder for format hints | "e.g., `john@example.com`" or "MM/DD/YYYY" |
 | Required vs optional | Mark the minority — if most fields required, mark optional ones "(optional)" |
 | Associated labels | `<label htmlFor>` on web, `accessibilityLabel` on RN |
 | Help text below field | For additional context, not in placeholder |
