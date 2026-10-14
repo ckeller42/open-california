@@ -358,8 +358,10 @@ def ext_point(rec, ts_ms):
     ``source=esp``. None for an unknown type, a non-string ``dev`` or no field."""
     from influxdb_client import Point, WritePrecision
 
-    row = EXT.get(rec.get("type"))
-    if row is None or not isinstance(rec.get("dev"), str):
+    if not isinstance(rec.get("type"), str) or not isinstance(rec.get("dev"), str):
+        return None  # a JSON array/object type would be unhashable for the lookup
+    row = EXT.get(rec["type"])
+    if row is None:
         return None
     m, names = row
     fields = {

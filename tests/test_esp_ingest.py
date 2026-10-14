@@ -753,6 +753,8 @@ def test_ext_unknown_type_or_bad_dev_is_dropped_not_crashed(tmp_path):
         drec(12, {"ev": "ext", "dev": "x", "type": "anker", "w": 1}),
         drec(13, {"ev": "ext", "dev": 7, "type": "govee", "temp_c": 20.0}),
         drec(14, {"ev": "ext", "dev": "govee", "type": "govee"}),  # no field: nothing to write
+        drec(15, {"ev": "ext", "dev": "g", "type": ["govee"], "temp_c": 1.0}),  # unhashable type
+        drec(16, {"ev": "ext", "dev": "g", "type": {"a": 1}, "temp_c": 1.0}),
     ]
     s = esp_ingest.ingest(pager(recs, 1), db, str(tmp_path / "c.json"))
-    assert not db.writes and s["pulled"] == 3 and s["skipped_covered"] == 0
+    assert not db.writes and s["pulled"] == 5 and s["skipped_covered"] == 0
