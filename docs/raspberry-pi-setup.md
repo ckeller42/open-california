@@ -340,7 +340,7 @@ journalctl -u calictl-esp-ingest -n 20            # the per-run summary
 
 `tools/esplab/soak_report.py` reads the last 72 h of the {term}`satellite`'s diagnostics (`esp_evt`,
 `esp_diag`, `esp_log` from [ESP ingest](#esp-ingest-gap-fill)), the `esp-ingest` journal summaries
-and the ESP's `/api/state`, prints one line per criterion plus `VERDICT PASS|FAIL`, writes
+the ESP's `/api/state` and buspi's own `govee`/`victron_*` points, prints one line per criterion (10) plus `VERDICT PASS|FAIL`, writes
 `~/esp-soak/<date>.txt` and one `esp_soak` point (exit 0 PASS, 1 FAIL, 2 cannot run). A `SKIP`
 never fails the verdict.
 
@@ -355,6 +355,7 @@ never fails the verdict.
 | 7 | `heap_min` | `heap_min` is at least 32768 B in every `esp_diag` sample |
 | 8 | `screen` | always SKIP until an `evt display` record exists (reserved, see [firmware](firmware.md)) |
 | 9 | `i2c_timeouts` | `esp_log` lines with `i2c.master` and `timeout`: at most 2 per 24 h |
+| 10 | `sensors` | for each ESP sensor alias (`govee`, `mppt-75-15`, `battery-sense`) whose `/api/state` `ext` reading and buspi's own last point (no `source` tag) are both at most 5 min old: `battery_voltage` within 0.05 V, `temp_c`/`temperature_c` within 0.5 °C, `humidity` within 2 %, `battery` within 5; a FAIL names `alias.field esp=… buspi=…` (SKIP when nothing is comparable) |
 
 Requirement `R_SOAK_REPORT` (in the script's docstring, `docs/api.rst`).
 

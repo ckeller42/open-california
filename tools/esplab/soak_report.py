@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ESP soak report: 9 criteria over the last N hours of the ESP's diagnostics in InfluxDB (R_SOAK_REPORT).
+"""ESP soak report: 10 criteria over the last N hours of the ESP's diagnostics in InfluxDB (R_SOAK_REPORT).
 
 Runs on buspi under calictl-esp-soak.timer (daily 08:00) with the serve env (INFLUXDB_TOKEN from
 /etc/buspi/secrets.env). Prints one line per criterion, ``VERDICT PASS|FAIL``, writes the text to
@@ -13,7 +13,9 @@ Runs on buspi under calictl-esp-soak.timer (daily 08:00) with the serve env (INF
    (3) fw: every boot in the window ran the current build; (4) <= 10 link_down events per boot;
    (5) touch NACKs <= 5/h per boot; (6) esp-ingest lost = 0 in every summary, held = 0 in the last;
    (7) heap_min >= 32 KB in every diag sample; (8) screen: SKIP until an evt display record exists;
-   (9) i2c.master timeout log lines <= 2 per day. A SKIP never fails the verdict.
+   (9) i2c.master timeout log lines <= 2 per day; (10) sensors: every reading the ESP and buspi
+   both hold fresh (<= 5 min) agrees within SENSOR_TOL (SKIP when none). A SKIP never fails the
+   verdict.
 """
 
 import argparse
@@ -24,7 +26,7 @@ import re
 import subprocess
 import sys
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
@@ -34,6 +36,10 @@ NACKS_PER_H_MAX = 5.0
 HEAP_MIN_B = 32768
 I2C_PER_DAY_MAX = 2
 H = 3_600_000.0
+SENSOR_MAX_AGE_S = 300
+# the ESP's default aliases (sensors.c TYPES) -> buspi's measurement (esp_ingest.EXT)
+SENSOR_MEAS = {"govee": "govee", "mppt-75-15": "victron_mppt", "battery-sense": "victron_battery"}
+SENSOR_TOL = {"battery_voltage": 0.05, "temperature_c": 0.5, "temp_c": 0.5, "humidity": 2.0, "battery": 5.0}
 
 
 @dataclass
@@ -48,6 +54,8 @@ class SoakData:
     i2c_lines: list  # [{"t", "msg"}]
     fw: str
     boot: int
+    ext: dict = field(default_factory=dict)  # the ESP's /api/state "ext" ({} when absent/unreachable)
+    buspi_sensors: dict = field(default_factory=dict)  # {measurement: {field: value, "age_s"}}, buspi's own
 
 
 def _since_ms(s):
@@ -154,7 +162,33 @@ def evaluate(d):
             "worst day %d lines (limit %d/day), %d in total" % (worst_day, I2C_PER_DAY_MAX, len(d.i2c_lines)),
         )
     )
+    lines.append(_sensors(d))
     return lines
+
+
+def _fresh(r):
+    return isinstance(r, dict) and r.get("age_s") is not None and r["age_s"] <= SENSOR_MAX_AGE_S
+
+
+def _sensors(d):
+    """Value drift: the ESP's live readings vs buspi's own last point per measurement."""
+    n, bad = 0, []
+    for alias, esp in sorted(d.ext.items()):
+        bus = d.buspi_sensors.get(SENSOR_MEAS.get(alias))
+        if not (_fresh(esp) and _fresh(bus)):
+            continue
+        for f, tol in SENSOR_TOL.items():
+            a, b = esp.get(f), bus.get(f)
+            if a is None or b is None:
+                continue
+            n += 1
+            if round(abs(a - b), 6) > tol:  # 12.98 - 12.93 is 0.05000000000000071 in binary floats
+                bad.append("%s.%s esp=%s buspi=%s" % (alias, f, a, b))
+    if not n:
+        return ("sensors", "SKIP", "no reading fresh (<= %d s) on both the ESP and buspi" % SENSOR_MAX_AGE_S)
+    if bad:
+        return ("sensors", "FAIL", "%d of %d fields off: %s" % (len(bad), n, "; ".join(bad)))
+    return ("sensors", "PASS", "%d fields agree" % n)
 
 
 def verdict(lines):
@@ -233,6 +267,32 @@ def _pull(db, lo, hi):
     )
 
 
+def _pull_sensors(db, end):
+    """buspi's own (no ``source`` tag) last value per field of the sensor measurements in the 5 min
+    before ``end``: ``{measurement: {field: value, "age_s": s}}``. ponytail: one device per
+    measurement (the van has one of each); group by ``device`` when that changes."""
+    flux = (
+        'from(bucket:"%s") |> range(start:%s, stop:%s) '
+        "|> filter(fn:(r) => contains(value:r._measurement, set:[%s]) and not exists r.source) "
+        "|> filter(fn:(r) => contains(value:r._field, set:[%s])) "
+        '|> group(columns:["_measurement","_field"]) |> last()'
+        % (
+            db.bucket,
+            _rfc(end - SENSOR_MAX_AGE_S * 1000),
+            _rfc(end + 1000),
+            ",".join('"%s"' % m for m in SENSOR_MEAS.values()),
+            ",".join('"%s"' % f for f in SENSOR_TOL),
+        )
+    )
+    out: dict = {}
+    for r in db.rows(flux):
+        m = out.setdefault(r.values["_measurement"], {"age_s": None})
+        m[r.values["_field"]] = r.values["_value"]
+        age = int((end - r.values["_time"].timestamp() * 1000) // 1000)
+        m["age_s"] = age if m["age_s"] is None else max(m["age_s"], age)  # the stalest field counts
+    return out
+
+
 def _journal(lo):
     try:
         out = subprocess.run(
@@ -257,11 +317,11 @@ def _journal(lo):
 
 def _esp(url):
     try:
-        dev = json.load(urllib.request.urlopen(url.rstrip("/") + "/api/state", timeout=10))["device"]
-        return dev["fw"], dev["time"]["boot"]
+        st = json.load(urllib.request.urlopen(url.rstrip("/") + "/api/state", timeout=10))
+        return st["device"]["fw"], st["device"]["time"]["boot"], st.get("ext") or {}
     except Exception as e:  # unreachable ESP: the report still runs on Influx alone
         print("soak: ESP unreachable (%s)" % e, file=sys.stderr)
-        return "?", -1
+        return "?", -1, {}
 
 
 def main(argv=None):
@@ -284,13 +344,14 @@ def main(argv=None):
         return 2
     end = int(dt.datetime.now(dt.UTC).timestamp() * 1000)
     start = _since_ms(a.since) if a.since else end - int(a.hours * H)
-    fw, boot = _esp(a.url) if a.url else ("?", -1)
+    fw, boot, ext = _esp(a.url) if a.url else ("?", -1, {})
     try:
         pulled = _pull(db, start, end)
+        pulled["buspi_sensors"] = _pull_sensors(db, end)
     except Exception as e:  # unreachable Influx, bad query: cannot run
         print("soak: cannot run: %s" % e, file=sys.stderr)
         return 2
-    d = SoakData(start_ms=start, end_ms=end, ingest=_journal(start), fw=fw, boot=boot, **pulled)
+    d = SoakData(start_ms=start, end_ms=end, ingest=_journal(start), fw=fw, boot=boot, ext=ext, **pulled)
     lines = evaluate(d)
     text = render(d, lines)
     sys.stdout.write(text)
