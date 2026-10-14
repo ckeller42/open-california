@@ -56,7 +56,7 @@ lands the child's merge-base is stale (its diff re-shows the parent, bots re-rev
 the owner merges the next one:
 
 ```sh
-OLD=$(gh pr view <parent-PR#> --json commits --jq '.commits[-1].oid')   # the parent's tip before its squash (= the local parent branch)
+OLD=$(git merge-base <parent-branch> <child>)   # where the child forked from the parent (NOT the parent's tip: it may have grown since)
 git fetch origin main
 git rebase --onto origin/main "$OLD" <child>
 git push --force-with-lease=<child>:$(git ls-remote origin refs/heads/<child> | cut -c1-40) origin <child>
