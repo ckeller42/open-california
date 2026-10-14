@@ -63,9 +63,9 @@ git push --force-with-lease=<child>:$(git ls-remote origin refs/heads/<child> | 
 ```
 
 GitHub retargets the child to `main` by itself when the parent merges; never
-`--delete-branch` a parent while children are open (it closes them). A hotfix to a branch
-another checkout is busy on: `git worktree add /tmp/fix <branch>` — never switch branches
-under a running implementer.
+`--delete-branch` a parent while children are open (it closes them). A hotfix while another
+worktree has `<branch>` checked out: `git worktree add --detach /tmp/fix <branch>`, commit there,
+`git push origin HEAD:<branch>` — never switch branches under a running implementer.
 
 ## Generated-file conflicts (rebase on `origin/main`)
 
