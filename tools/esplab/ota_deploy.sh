@@ -4,7 +4,8 @@
 # stable = the esp-stable tag's build (channel stable); main / a sha = a merge commit (channel latest).
 # Sets the ESP's OTA channel, waits for esp-<channel>'s manifest.json to name the sha, checks until
 # the ESP sees it (GitHub's CDN can lag ~1-2 min), installs, then waits for the new fw and the 60 s
-# rollback window. USB: flash_ci.sh.
+# rollback window. Firmware from before the channels boots with no channel byte (= stable): the channel
+# is then set again after the install. USB: flash_ci.sh.
 set -euo pipefail
 REF="${1:-main}"; ESP="${2:-http://192.168.8.183}"; REPO=ckeller42/open-california
 chan=latest
@@ -33,4 +34,8 @@ until [[ "$(dev fw)" == "$sha7"* ]]; do   # check every 15 s until the ESP offer
 until [ "$(dev uptime_ms)" -gt 70000 ] 2>/dev/null; do sleep 5; done   # 60 s rollback window passed
 # a crash inside that window makes the bootloader roll back to the old slot: that is a failed deploy
 [[ "$(dev fw)" == "$sha7"* ]] || { echo "rolled back: device.fw = $(dev fw)" >&2; exit 1; }
+if [ -z "$ch" ]; then   # pre-channel firmware: the new build booted on the default (stable), so set it again
+  curl -sf --max-time 10 -X POST "$ESP/api/ota" -d "{\"channel\":\"$chan\"}" >/dev/null || true
+  [ "$(dev ota.channel)" = "$chan" ] || { echo "channel not set after install: ota.channel = $(dev ota.channel)" >&2; exit 1; }
+fi
 for k in fw link ota; do echo "device.$k = $(dev $k)"; done
