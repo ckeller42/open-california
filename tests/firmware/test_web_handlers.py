@@ -268,6 +268,7 @@ EXPECTED_DEVICE_TAIL = (
     '"display":{"state":null,"lux":null,"prox":null,"motion":null,"brightness_pct":null,"sensor":null,'
     '"auto":true,"prox_wake":true,"motion_wake":true,"min":8,"max":100,"offset":0,"dfs":null,"pm":null},'
     '"ux":{"enabled":true},'
+    '"experimental":{"sensors":false},'
     '"water_held":false}}'
 )
 EXPECTED_WIFI_BODY = (
@@ -1621,6 +1622,53 @@ def test_ux_errors(web_cli, setup, method, body, status, error):
 )
 def test_ux_setting_errors(web_cli, setup, method, body, status, error):
     r, _ = one(web_cli, method, "/api/ux_setting", body, setup=setup)
+    assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+def test_api_state_has_experimental_off_by_default(web_cli):
+    """The sensor track switch is off on a fresh store.
+
+    .. test:: device.experimental defaults off; POST /api/experimental stores and logs it
+       :id: T_FW_EXPERIMENTAL
+       :links: R_FW_EXPERIMENTAL
+    """
+    d = json.loads(get(web_cli, "/api/state", setup=STATION))["device"]
+    assert d["experimental"] == {"sensors": False}
+
+
+def test_experimental_switch_persists_and_shows_in_state(web_cli):
+    rs, other = drive(
+        web_cli,
+        [
+            *(s.encode() for s in STATION),
+            req("POST", "/api/experimental", '{"sensors":true}'),
+            req("GET", "/api/state"),
+            b"kv exp_sensors",
+        ],
+    )
+    assert (rs[0].status, rs[0].json()) == (200, {"ok": True, "sensors": True})
+    assert json.loads(rs[1].body)["device"]["experimental"] == {"sensors": True}
+    assert "KV \x01" in other
+    assert any(l.startswith("LOG exp: sensors on") for l in other)
+    # a fresh process with the byte stored reads it back
+    rs, _ = drive(
+        web_cli, [b"kvhex exp_sensors 01", *(s.encode() for s in STATION), req("GET", "/api/state")]
+    )
+    assert json.loads(rs[0].body)["device"]["experimental"] == {"sensors": True}
+
+
+@pytest.mark.parametrize(
+    "setup,method,body,status,error",
+    [
+        (STATION, "GET", None, 405, "method"),
+        (STATION, "POST", '{"sensors":1}', 400, "bad_json"),
+        (STATION, "POST", '{"sensors":true,"x":1}', 400, "bad_json"),
+        (STATION + ["kvfail 1"], "POST", '{"sensors":false}', 500, "store"),
+        (["wifi setup_ap"], "POST", '{"sensors":false}', 403, "setup_mode"),
+    ],
+)
+def test_experimental_errors(web_cli, setup, method, body, status, error):
+    r, _ = one(web_cli, method, "/api/experimental", body, setup=setup)
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
 
 

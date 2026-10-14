@@ -557,6 +557,41 @@ def test_firmware_channel_select(host_fw, hci_unit, tmp_path):
 
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
+    """Station mode (the toggle is hidden over the setup hotspot, like the channel select).
+
+    .. test:: The /device Experimental box switches exp_sensors
+       :id: T_FW_EXPERIMENTAL_UI
+       :links: R_FW_EXPERIMENTAL
+    """
+    sync_playwright = _require_chromium()
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel ok 192.168.1.42\n")
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    _pair(fw, hci_unit)
+    fw.expect("SNAP", timeout=40)
+    fw.send("wifi set minsel %s" % PSK)
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
+    errors = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_context(locale=locale).new_page()
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto("http://127.0.0.1:%d/device" % fw.http_port)
+        page.wait_for_selector("#exp-toggle:not([hidden])", timeout=5000)
+        assert page.inner_text("#exp-title") == STRINGS["exp_title"][lang]
+        assert page.inner_text("#exp-status") == STRINGS["exp_off"][lang]
+        page.click("#exp-toggle")
+        page.wait_for_function(
+            "t => document.getElementById('exp-status').textContent === t",
+            arg=STRINGS["exp_on"][lang],
+            timeout=5000,
+        )
+        browser.close()
+    assert not errors, errors
+    assert get_json(fw, "/api/state")["device"]["experimental"] == {"sensors": True}
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
 def test_page_renders(host_fw, hci_unit, tmp_path, locale, lang):
     """GET / renders the title and the link to the calictl UI within 3 s, in the browser's language;
     any uncaught page error fails the test."""

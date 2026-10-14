@@ -197,6 +197,7 @@ int main(int argc, char **argv) {
     }
     ble_hci_sock_set_device(port);
     cali_ac_init();
+    cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL */
 
     nimble_port_init();           /* also connects the TCP HCI socket (ble_transport_ll_init) */
     cali_ble_nimble_init(on_sync);

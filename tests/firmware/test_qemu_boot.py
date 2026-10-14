@@ -27,6 +27,7 @@ def test_boots_unpaired_and_nvs_survives_reboot(qemu):
     """
     s = qemu.boot()
     assert s.expect("LOG time: boot", timeout=90) == "1"
+    assert s.expect("LOG exp: sensors", timeout=90) == "off"
     s.expect("LOG ble: controller unavailable", timeout=90)
     s.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
     s.send("status")
