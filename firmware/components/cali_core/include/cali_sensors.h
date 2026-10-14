@@ -71,7 +71,7 @@ const char *cali_sensors_scan_state(void);   /* "ok" | "paused" */
  * aes128_ecb, tests = a stub. Without one a Victron advert never decodes. 0 ok. Victron container:
  * company id, 0x10 0x00, model u16 LE, readout type, iv u16 LE, key-check byte (= key[0], checked by
  * add against the seen row's last advert -> CALI_SENS_E_KEY_MISMATCH), CTR ciphertext (counter = iv,
- * 128-bit LE; one keystream block, <= 15 payload bytes). docs/firmware.md "External sensors". */
+ * 128-bit LE; one keystream block = 16 payload bytes, more needs the LE counter increment). docs/firmware.md "External sensors". */
 typedef int (*cali_sensors_aes_fn)(const uint8_t key[16], const uint8_t in[16], uint8_t out[16]);
 void cali_sensors_set_aes(cali_sensors_aes_fn fn);
 /* The longest ext record body any type can produce (a 16-char alias, every field -9999.99), in

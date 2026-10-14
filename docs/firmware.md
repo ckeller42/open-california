@@ -262,7 +262,7 @@ unit just paired and `address` is its identity. A pairing that fails or is cance
 keeps the old bond. The match runs over **every** stored bond: by identity, compared type-agnostically
 (a controller that resolved the address reports it typed `PUBLIC_ID`/`RANDOM_ID`, the bond is
 stored typed public/random), or by the RPA resolving with that bond's IRK; a PSA failure is logged
-(`LOG aes: psa_… failed`) and the unit treated as unbonded. An SMP pairing that starts (passkey,
+(`LOG aes: psa_… failed`, once per boot) and the unit treated as unbonded. An SMP pairing that starts (passkey,
 repeat-pairing) ends the probe, so its encryption result is never reported as "the stored bond
 works". Logs show the raw HCI code (`0x06`), not NimBLE's wrapped `0x206`.
 
@@ -1008,11 +1008,14 @@ to the sensors and never to the pairing SM or the session.
   plaintext is read LSB-first: solar charger `charge_state u8, charger_error u8, battery_voltage s16
   (0.01 V), battery_current s16 (0.1 A), yield_today u16 (10 Wh), solar_power u16 (W), load_current
   u9 (0.1 A)`; battery monitor `remaining_mins u16, voltage s16 (0.01 V), alarm u16, aux u16, aux_mode
-  u2, …`. All-ones (`0x7FFF` for the signed ones) = not available (`null`). The AES block comes
+  u2, …`. All-ones (`0x7FFF` for the signed ones) = not available (`null`) for `battery_voltage`,
+  `battery_current`, `yield_today_kwh`, `pv_power`, `load_current`; `temperature_c` is `null` unless
+  aux mode is 2; `charge_state`/`error_code` are emitted raw (no sentinel). The AES block comes
   through `cali_sensors_set_aes`: on the ESP `ble_nimble.c`'s `aes128_ecb` (PSA
   `PSA_ALG_ECB_NO_PADDING`, the key imported per call and destroyed — the same code that resolves
-  the unit's RPA), in the test CLI a stub. **One keystream block** (≤ 15 payload bytes, both types
-  here); a longer type needs the little-endian counter incremented per block. **Key rule:** `add`
+  the unit's RPA), in the test CLI a stub. **One keystream block** = 16 payload bytes (the
+  check byte sits outside the ciphertext; the battery monitor's 128-bit layout fills it exactly); a
+  type with more needs the little-endian counter incremented per block. **Key rule:** `add`
   checks the key's first byte against the last advert's check byte (`key_mismatch`); a key with the
   right first byte but a wrong rest decodes to garbage — the protocol offers no other check, so
   compare the first values with VictronConnect. The key lives only in `sens_list`: never returned

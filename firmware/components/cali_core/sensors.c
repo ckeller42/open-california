@@ -70,18 +70,21 @@ static int match_victron_mppt(const uint8_t *adv, size_t len) { return victron_t
 static int match_victron_battery(const uint8_t *adv, size_t len) { return victron_type_of(adv, len) == 2; }
 
 /* The decrypted payload into out (<= 16 bytes), its length in *n; -1 without AES or on a key-check
- * mismatch. ponytail: one keystream block (payloads <= 15 bytes here); a longer type needs the LE
- * counter incremented per block. */
+ * mismatch. ponytail: one keystream block = 16 bytes (the battery monitor's 128-bit layout fills it);
+ * a type with more needs the little-endian counter incremented per block. */
 static int victron_plain(const uint8_t *adv, size_t len, const uint8_t key[16], uint8_t out[16], size_t *n) {
     uint8_t block[16] = {0}, ks[16];
+    int rc = -1;
     if (len < VIC_MIN_LEN || adv[2] != 0x10 || !s_aes || adv[9] != key[0]) return -1;
     block[0] = adv[7];   /* iv = adv[7] | adv[8] << 8, as the counter's low bytes */
     block[1] = adv[8];
-    if (s_aes(key, block, ks) != 0) return -1;
-    *n = len - VIC_MIN_LEN > 15 ? 15 : len - VIC_MIN_LEN;
-    for (size_t i = 0; i < *n; i++) out[i] = adv[VIC_MIN_LEN + i] ^ ks[i];
+    if (s_aes(key, block, ks) == 0) {
+        *n = len - VIC_MIN_LEN > 16 ? 16 : len - VIC_MIN_LEN;
+        for (size_t i = 0; i < *n; i++) out[i] = adv[VIC_MIN_LEN + i] ^ ks[i];
+        rc = 0;
+    }
     memset(ks, 0, sizeof ks);
-    return 0;
+    return rc;
 }
 
 /* n (<= 32) bits LSB-first from p at bit *pos, which advances. */
@@ -92,7 +95,7 @@ static uint32_t rbits(const uint8_t *p, unsigned *pos, unsigned n) {
 }
 
 /* v (n bits) as two's complement. */
-static int32_t sext(uint32_t v, unsigned n) { return v & 1u << (n - 1) ? (int32_t)v - (int32_t)(1u << n) : (int32_t)v; }   /* n < 32 */
+static int32_t sext(uint32_t v, unsigned n) { return (v & (1u << (n - 1))) ? (int32_t)v - (int32_t)(1u << n) : (int32_t)v; }   /* n < 32 */
 
 /* Solar charger: charge_state u8, charger_error u8, battery_voltage s16 0.01 V, battery_current s16
  * 0.1 A, yield_today u16 10 Wh, solar_power u16 W, load_current u9 0.1 A (all-ones / 0x7FFF = n/a). */

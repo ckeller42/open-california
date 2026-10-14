@@ -232,3 +232,25 @@ def test_victron_non_product_record_is_ignored(cli, tmp_path):
     adv = "e102" + "20" + "00" + "75a0" + "01" + "3412" + "00" + "aa"
     out = run(cli, tmp_path, ["init", f"adv DA:4B:25:00:00:01 1 -55 SmartSolar_HQ00 {adv}", "api 1000"])
     assert json.loads(out[-1][4:])["seen"] == []
+
+
+def _seen(cli, tmp_path, adv):
+    out = run(cli, tmp_path, ["init", f"adv CB:F2:E4:00:00:01 1 -58 BMV_00 {adv}", "api 1000"])
+    return json.loads(out[-1][4:])["seen"]
+
+
+def test_victron_battery_monitor_by_mode_and_unknown_mode_ignored(cli, tmp_path):
+    assert (
+        _seen(cli, tmp_path, victron(0xA389, 0x02, BSENSE))[0]["type"] == "victron_battery"
+    )  # not A3A4: mode 2
+    assert _seen(cli, tmp_path, victron(0xA389, 0x03, BSENSE)) == []  # prefix 0x10, unknown readout type
+
+
+def test_victron_short_advert_never_decodes(cli, tmp_path):
+    adv = victron(0xA075, 0x01, SOLAR[:8])  # 8 of the 12 layout bytes
+    sid = _seen(cli, tmp_path, adv)[0]["id"]
+    a = f"adv CB:F2:E4:00:00:01 1 -58 BMV_00 {adv}"
+    out = run(cli, tmp_path, ["init", a, f"add {sid} - {KEY.hex()}", a, "state 0"])
+    assert json.loads(out[-1][4:])["mppt-75-15"]["age_s"] is None and not any(
+        x.startswith("REC") for x in out
+    )

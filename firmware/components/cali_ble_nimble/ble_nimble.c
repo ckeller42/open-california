@@ -656,31 +656,31 @@ static int first_bond(ble_addr_t *out) {
 
 /* One AES-128 block, e(key, in) -> out (key MSB first), through PSA crypto (Mbed TLS 3.6 on the
  * host, 4.x in ESP-IDF v6): rpa_matches' ah() and the Victron decoders' CTR keystream
- * (cali_sensors_set_aes). The key is imported per call and destroyed. 0 ok, -1 (logged). */
+ * (cali_sensors_set_aes). The key is imported per call and destroyed. 0 ok, -1 (the first failure
+ * logged, not one per advert). */
 static int aes128_ecb(const uint8_t key[16], const uint8_t in[16], uint8_t out[16]) {
+    static int logged;
     psa_key_attributes_t at = PSA_KEY_ATTRIBUTES_INIT;
     psa_key_id_t id;
     size_t olen = 0;
     psa_status_t st;
-    if ((st = psa_crypto_init()) != PSA_SUCCESS) {
-        cali_log("aes: psa_crypto_init failed %d", (int)st);
-        return -1;
+    const char *what = "psa_crypto_init";
+    if ((st = psa_crypto_init()) == PSA_SUCCESS) {
+        psa_set_key_usage_flags(&at, PSA_KEY_USAGE_ENCRYPT);
+        psa_set_key_algorithm(&at, PSA_ALG_ECB_NO_PADDING);
+        psa_set_key_type(&at, PSA_KEY_TYPE_AES);
+        psa_set_key_bits(&at, 128);
+        what = "psa_import_key";
+        if ((st = psa_import_key(&at, key, 16, &id)) == PSA_SUCCESS) {
+            what = "psa_cipher_encrypt";
+            st = psa_cipher_encrypt(id, PSA_ALG_ECB_NO_PADDING, in, 16, out, 16, &olen);
+            (void)psa_destroy_key(id);
+            if (st == PSA_SUCCESS && olen == 16) return 0;
+        }
     }
-    psa_set_key_usage_flags(&at, PSA_KEY_USAGE_ENCRYPT);
-    psa_set_key_algorithm(&at, PSA_ALG_ECB_NO_PADDING);
-    psa_set_key_type(&at, PSA_KEY_TYPE_AES);
-    psa_set_key_bits(&at, 128);
-    if ((st = psa_import_key(&at, key, 16, &id)) != PSA_SUCCESS) {
-        cali_log("aes: psa_import_key failed %d", (int)st);
-        return -1;
-    }
-    st = psa_cipher_encrypt(id, PSA_ALG_ECB_NO_PADDING, in, 16, out, 16, &olen);
-    (void)psa_destroy_key(id);
-    if (st != PSA_SUCCESS || olen != 16) {
-        cali_log("aes: psa_cipher_encrypt failed %d", (int)st);
-        return -1;
-    }
-    return 0;
+    if (!logged) cali_log("aes: %s failed %d", what, (int)st);
+    logged = 1;
+    return -1;
 }
 
 /* Whether resolvable private address a was made with irk (as stored: LSB first): the Core spec's
