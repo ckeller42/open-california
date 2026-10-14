@@ -43,7 +43,7 @@ docker run --rm --platform linux/amd64 -v "$PWD":/repo -w /repo python:3.13 bash
 # 3) docs: sphinx -W (an unbalanced ``literal`` in a docstring fails the docs job; sphinx is
 #    not installed on the Mac)
 docker run --rm --platform linux/amd64 -v "$PWD":/repo -w /repo python:3.13 bash -c \
-  'pip install -q -r docs/requirements.txt; python -m sphinx -b html -W --keep-going docs /tmp/out 2>&1 | grep -iE "warning|error|build succeeded"'
+  'set -euo pipefail; pip install -q -r docs/requirements.txt; python -m sphinx -b html -W --keep-going docs /tmp/out 2>&1 | grep -iE "warning|error|build succeeded"'
 ```
 
 CI job logs are unreadable until the whole run completes (`gh run view --log` says "still in
