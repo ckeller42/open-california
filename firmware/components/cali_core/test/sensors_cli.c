@@ -68,10 +68,10 @@ int main(int argc, char **argv) {
             if (sscanf(line, "%*s %*s %*s %*s %*s %127s", hex) != 1) continue;
             while (len < sizeof mfg && hex[2 * len] && sscanf(hex + 2 * len, "%2hhx", &mfg[len]) == 1) len++;
             e.ev = CALI_TEV_ADV;
-            snprintf(e.addr, sizeof e.addr, "%s", a[0]);
+            snprintf(e.addr, sizeof e.addr, "%.17s", a[0]);
             e.status = atoi(a[1]);
             e.rssi = (int8_t)atoi(a[2]);
-            snprintf(e.name, sizeof e.name, "%s", a[3]);
+            snprintf(e.name, sizeof e.name, "%.23s", a[3]);
             e.data = mfg;
             e.len = len;
             cali_sensors_on_adv(&e, now);

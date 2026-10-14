@@ -40,10 +40,16 @@ def test_window_sees_govee_configures_and_logs_ext(host_fw, hci_unit):
     assert seen and seen["type"] == "govee" and seen["model"] == "GVH5074"
     fw.send("sensors add %d kitchen -" % seen["id"])
     fw.expect("LOG sensors", lambda v: v == "ok")
-    rec = fw.expect("REC", lambda v: v.startswith('"ev":"ext","dev":"kitchen"'), timeout=90)  # the next window
+    rec = fw.expect(
+        "REC", lambda v: v.startswith('"ev":"ext","dev":"kitchen"'), timeout=90
+    )  # the next window
     assert '"type":"govee","temp_c":23.96,"humidity":58.48,"battery":90' in rec
     fw.send("sensors")
-    assert fw.expect("SENSORS")["configured"][0]["value"] == {"temp_c": 23.96, "humidity": 58.48, "battery": 90}
+    assert fw.expect("SENSORS")["configured"][0]["value"] == {
+        "temp_c": 23.96,
+        "humidity": 58.48,
+        "battery": 90,
+    }
 
 
 def test_sensors_window_yields_to_pairing(host_fw, hci_unit):

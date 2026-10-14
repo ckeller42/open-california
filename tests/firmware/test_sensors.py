@@ -15,7 +15,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 CORE = ROOT / "firmware" / "components" / "cali_core"
 
 GOVEE_H5075 = "88ec" + "00" + "03b8c5" + "64" + "00"  # 0xEC88 LE; 24-bit 0x03b8c5 -> 24.3 C 90.9 %, batt 100
-GOVEE_H5074 = "88ec" + "00" + "5c09" + "d816" + "5a" + "02"  # int16 0x095c=2396 -> 23.96 C; 0x16d8=5848 -> 58.48 %; 90
+GOVEE_H5074 = (
+    "88ec" + "00" + "5c09" + "d816" + "5a" + "02"
+)  # int16 0x095c=2396 -> 23.96 C; 0x16d8=5848 -> 58.48 %; 90
 
 
 @pytest.fixture(scope="module")
@@ -51,7 +53,9 @@ def test_govee_24bit_values_after_add(cli, tmp_path):
     sid = json.loads(out[-1][4:])["seen"][0]["id"]
     out = run(cli, tmp_path, ["init", f"adv A4:C1:38:00:00:01 1 -60 GVH5075_0001 {GOVEE_H5075}",
                               f"add {sid} - -", f"adv A4:C1:38:00:00:01 1 -60 GVH5075_0001 {GOVEE_H5075}", "state 0"])  # fmt: skip
-    assert json.loads(out[-1][4:]) == {"govee": {"temp_c": 24.3, "humidity": 90.9, "battery": 100, "age_s": 0}}
+    assert json.loads(out[-1][4:]) == {
+        "govee": {"temp_c": 24.3, "humidity": 90.9, "battery": 100, "age_s": 0}
+    }
 
 
 def test_govee_7byte_layout_and_reading_after_add(cli, tmp_path):
@@ -59,7 +63,12 @@ def test_govee_7byte_layout_and_reading_after_add(cli, tmp_path):
     sid = json.loads(out[-1][4:])["seen"][0]["id"]
     out = run(cli, tmp_path, ["init", f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}",
                               f"add {sid} - -", f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}", "state 2000"])  # fmt: skip
-    assert any(l.startswith('REC "ev":"ext","dev":"govee","type":"govee","temp_c":23.96,"humidity":58.48,"battery":90') for l in out)  # noqa: E741
+    assert any(
+        l.startswith(
+            'REC "ev":"ext","dev":"govee","type":"govee","temp_c":23.96,"humidity":58.48,"battery":90'
+        )
+        for l in out
+    )  # noqa: E741
     ext = json.loads(out[-1][4:])
     assert ext == {"govee": {"temp_c": 23.96, "humidity": 58.48, "battery": 90, "age_s": 2}}
 
@@ -67,7 +76,11 @@ def test_govee_7byte_layout_and_reading_after_add(cli, tmp_path):
 def test_configured_list_persists_and_ids_are_boot_local(cli, tmp_path):
     out = run(cli, tmp_path, ["init", f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}", "api 1000"])
     sid = json.loads(out[-1][4:])["seen"][0]["id"]
-    run(cli, tmp_path, ["init", f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}", f"add {sid} kitchen -"])
+    run(
+        cli,
+        tmp_path,
+        ["init", f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}", f"add {sid} kitchen -"],
+    )
     out = run(cli, tmp_path, ["init", "api 1000"])  # a new process = a new boot: the list is back
     api = json.loads(out[-1][4:])
     assert [c["alias"] for c in api["configured"]] == ["kitchen"] and api["configured"][0]["value"] is None
@@ -112,8 +125,15 @@ def test_window_cadence_and_pause(cli, tmp_path):
 
 
 def test_kick_opens_a_window_at_once_unless_one_ran_recently(cli, tmp_path):
-    out = run(cli, tmp_path, ["init", "tick 100 1 0", "kick", "tick 5000 1 0", "tick 20000 1 0", "kick", "tick 20100 1 0"])
-    assert [line for line in out if line.startswith("WINDOW")] == ["WINDOW 5000", "WINDOW 5000"]  # t=100 and t=20100
+    out = run(
+        cli,
+        tmp_path,
+        ["init", "tick 100 1 0", "kick", "tick 5000 1 0", "tick 20000 1 0", "kick", "tick 20100 1 0"],
+    )
+    assert [line for line in out if line.startswith("WINDOW")] == [
+        "WINDOW 5000",
+        "WINDOW 5000",
+    ]  # t=100 and t=20100
 
 
 def test_ext_record_fits_body_max(cli, tmp_path):
