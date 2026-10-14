@@ -1033,3 +1033,77 @@ def test_auto_camper_toggle_on_a_firmware_that_reports_it(stub, error_gated_page
         assert posts == [{"enabled": False}]
         dev["control"]["writes"] = False  # the setup hotspot: read-only
         expect(pg.get_by_role("switch", name="Auto camper mode")).to_be_disabled()
+
+
+# ---- external sensors (R_FW_SENSORS, #371) ------------------------------------------------------
+
+SENSOR_ROWS = {
+    "en-US": [
+        ("Thermo-hygrometer (Govee)", "govee", "16.5 °C · 58.6 % · 🔋 49 %", "just now"),
+        ("Solar charger (Victron)", "mppt-75-15", "13.21 V · 0.0 A · 0 W · 0.19 kWh · off", "just now"),
+        ("Battery sense (Victron)", "battery-sense", "13.32 V · 17.3 °C", "just now"),
+    ],
+    "de-DE": [
+        ("Thermo-Hygrometer (Govee)", "govee", "16.5 °C · 58.6 % · 🔋 49 %", "gerade eben"),
+        ("Solarladeregler (Victron)", "mppt-75-15", "13.21 V · 0.0 A · 0 W · 0.19 kWh · aus", "gerade eben"),
+        ("Batteriesensor (Victron)", "battery-sense", "13.32 V · 17.3 °C", "gerade eben"),
+    ],
+}
+
+
+def _sensor_rows(pg):
+    pg.wait_for_selector(".tilegrid .tile")
+    return pg.locator(".card.sensors .sensor")
+
+
+@pytest.mark.parametrize("locale", ["en-US", "de-DE"])
+def test_sensors_card_shows_the_esps_external_sensors(stub, error_gated_page, locale):
+    """The ESP's ``ext`` readings get their own Sensors card right after the summary card: one row
+    per alias with the type's name, the alias the owner chose, the values with units and the age.
+
+    .. test:: The shared UI shows the ESP's external sensors on a Sensors card
+       :id: T_SAT_UI_SENSORS_CARD
+       :links: R_FW_SHARED_UI, R_FW_SENSORS
+    """
+    with error_gated_page(stub.base, locale=locale) as pg:
+        rows = _sensor_rows(pg)
+        expect(rows).to_have_count(3)
+        for i, (label, alias, values, age) in enumerate(SENSOR_ROWS[locale]):
+            row = rows.nth(i)
+            expect(row.locator(".sname")).to_have_text(label)
+            expect(row.locator(".alias")).to_have_text(alias)
+            expect(row.locator(".sv")).to_have_text(values)
+            expect(row.locator(".val")).to_have_text(age)
+            expect(row).not_to_have_class(re.compile(r"\bstale\b"))
+        expect(pg.locator(".card.summary + .card.sensors")).to_have_count(1)  # placed after the summary
+
+
+def test_sensors_card_marks_old_and_missing_values(stub, error_gated_page):
+    """An old reading (> 10 min) is muted and carries the 🕒 marker (never colour alone); a value not
+    read yet is "—"; the charge state is a word, a non-zero error code shows; an unknown shape shows
+    its alias."""
+    ext = stub.fixtures["satellite"]["/api/state"]["ext"]
+    ext["govee"].update(age_s=720, humidity=None)
+    ext["mppt-75-15"].update(charge_state=4, error_code=2, pv_power=None)
+    ext["thing"] = {"foo": 1, "age_s": None}
+    with error_gated_page(stub.base) as pg:
+        rows = _sensor_rows(pg)
+        expect(rows).to_have_count(4)
+        expect(rows.nth(0)).to_have_class(re.compile(r"\bstale\b"))
+        expect(rows.nth(0).locator(".val")).to_have_text("🕒 12 min ago")
+        expect(rows.nth(0).locator(".sv")).to_have_text("16.5 °C · — % · 🔋 49 %")
+        expect(rows.nth(1).locator(".sv")).to_have_text(
+            "13.21 V · 0.0 A · — W · 0.19 kWh · absorption · error 2"
+        )
+        expect(rows.nth(3).locator(".sname")).to_have_text("thing")
+        expect(rows.nth(3).locator(".val")).to_have_text("unknown")
+
+
+@pytest.mark.parametrize("mode", ["satellite", "calictl"])
+def test_no_sensors_card_without_ext(stub, error_gated_page, mode):
+    """No ``ext`` (the sensor track off, or calictl's /api/state) -> no Sensors card."""
+    stub.fixtures["satellite"]["/api/state"].pop("ext")
+    stub.mode = mode
+    with error_gated_page(stub.base) as pg:
+        expect(_sensor_rows(pg)).to_have_count(0)
+        expect(pg.locator(".card.sensors")).to_have_count(0)

@@ -28,6 +28,8 @@ from tests.firmware.api_shape import (
     PAIRING_KEYS,
     RES_KEYS,
     SD_KEYS,
+    SENSOR_CFG_KEYS,
+    SENSORS_KEYS,
     STATE_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
@@ -44,8 +46,10 @@ def fixtures():
 @pytest.mark.parametrize("mode", ["setup", "station", "satellite"])
 def test_state_fixture_shape(fixtures, mode):
     state = fixtures[mode]["/api/state"]
-    assert set(state) == STATE_KEYS
     d = state["device"]
+    assert set(state) == STATE_KEYS | (
+        {"ext"} if d["experimental"]["sensors"] else set()
+    )  # ext only while on
     assert set(d) == DEVICE_KEYS
     assert set(d["pairing"]) == PAIRING_KEYS
     assert set(d["link"]) == LINK_KEYS
@@ -63,6 +67,14 @@ def test_state_fixture_shape(fixtures, mode):
     pairing = fixtures[mode]["/api/pairing"]  # GET /api/pairing: calictl's snapshot, as web.c
     assert set(pairing) == PAIRING_API_KEYS and pairing["radio_busy"] is False
     assert {k: pairing[k] for k in PAIRING_KEYS} == d["pairing"]
+
+
+def test_sensors_fixture_shape(fixtures):
+    """The satellite mode has the sensor track on: /api/sensors (the /device box) names the same
+    readings /api/state's ext carries."""
+    sens, ext = fixtures["satellite"]["/api/sensors"], fixtures["satellite"]["/api/state"]["ext"]
+    assert set(sens) == SENSORS_KEYS and all(set(c) == SENSOR_CFG_KEYS for c in sens["configured"])
+    assert {c["alias"]: dict(c["value"], age_s=c["last_seen_s"]) for c in sens["configured"]} == ext
 
 
 @pytest.mark.parametrize("mode", ["setup", "station", "satellite"])

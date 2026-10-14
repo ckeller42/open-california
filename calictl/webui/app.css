@@ -59,6 +59,13 @@ body { margin: 0; font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", 
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px;
   box-shadow: var(--shadow); padding: .3rem 1rem; }
 .card.summary { margin-bottom: .9rem; }
+.card.sensors { margin-bottom: .9rem; }
+/* Sensors card (the ESP's ext): name + the owner's alias, the values below; an old reading is
+   muted AND carries the 🕒 marker in its age (app.js renderSensors) */
+.sensor .alias { color: var(--muted); font-size: .8rem; margin-left: .4rem; white-space: nowrap; }
+.sensor .sv { display: block; color: var(--muted); font-size: .88rem; font-variant-numeric: tabular-nums; }
+.sensor .val { align-self: flex-start; white-space: nowrap; }
+.sensor.stale .lbl, .sensor.stale .val { opacity: .6; }
 .card.dim { opacity: .5; }   /* lamp controls disabled until a lighting profile is active */
 .offline { margin-bottom: .9rem; padding: .7rem 1rem; border-radius: 12px; font-size: .9rem;
   background: color-mix(in srgb, var(--warn) 16%, var(--card)); color: var(--warn);

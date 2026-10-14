@@ -207,6 +207,23 @@ DISPLAY_ON = {
 }
 
 
+# /api/state ext while exp_sensors is on (R_FW_SENSORS): one sensor of each type, by default alias
+EXT_SENSORS = {
+    "govee": {"temp_c": 16.5, "humidity": 58.6, "battery": 49, "age_s": 6},
+    "mppt-75-15": {
+        "battery_current": 0,
+        "battery_voltage": 13.21,
+        "charge_state": 0,
+        "error_code": 0,
+        "load_current": 0,
+        "pv_power": 0,
+        "yield_today_kwh": 0.19,
+        "age_s": 7,
+    },
+    "battery-sense": {"battery_voltage": 13.32, "temperature_c": 17.25, "age_s": 7},
+}
+
+
 def esp_fixtures():
     """Canned firmware API responses for the two page modes.
 
@@ -284,14 +301,36 @@ def esp_fixtures():
             "/api/state": station_state,
             "/api/wifi": dict(station_wifi, last_error=None, scan=[]),
         },
-        "satellite": {
-            "/api/state": dict(station_state, fn=_esp_fn(DEFAULT_SEED)),
+        "satellite": {  # + the experimental sensor track on: top-level ext (R_FW_SENSORS)
+            "/api/state": dict(
+                station_state,
+                fn=_esp_fn(DEFAULT_SEED),
+                device=dict(station_state["device"], experimental={"sensors": True}),
+                ext=EXT_SENSORS,
+            ),
             "/api/wifi": dict(station_wifi, last_error=None, scan=[]),
         },
         "calictl": {
             "/api/state": calictl_state(_esp_fn(DEFAULT_SEED)),
             "/api/pairing": {"state": "bonded", "address": "C0:FF:EE:CA:11:F0"},
         },
+    }
+    fx["satellite"]["/api/sensors"] = {  # the /device page's Sensors box polls it while the track is on
+        "configured": [
+            {
+                "id": 0x1001 + 2 * i,  # boot-local ids, never a MAC
+                "type": typ,
+                "alias": alias,
+                "last_seen_s": EXT_SENSORS[alias]["age_s"],
+                "value": {k: v for k, v in EXT_SENSORS[alias].items() if k != "age_s"},
+                "has_key": typ != "govee",
+            }
+            for i, (alias, typ) in enumerate(
+                (("govee", "govee"), ("mppt-75-15", "victron_mppt"), ("battery-sense", "victron_battery"))
+            )
+        ],
+        "seen": [],
+        "scan": "ok",
     }
     for mode in ("setup", "station", "satellite"):  # GET /api/pairing: calictl's snapshot, as web.c
         p = fx[mode]["/api/state"]["device"]["pairing"]

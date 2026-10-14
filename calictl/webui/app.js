@@ -140,7 +140,12 @@
  */
 /**
  * Full `/api/state` payload: one `FnState` per function, plus the non-function `_meta` block.
- * @typedef {{ [fn: string]: FnState } & { _meta?: Meta }} State
+ * @typedef {{ [fn: string]: FnState } & { _meta?: Meta, ext?: Record<string, SensorReading> }} State
+ */
+/**
+ * One external BLE sensor's last reading, the ESP's `/api/state` `ext.<alias>` (R_FW_SENSORS): its
+ * fields (`null` = not read yet) and the reading's age in s (`null` before the first one).
+ * @typedef {Record<string, number|null>} SensorReading
  */
 /**
  * A queued/in-flight control command (`command()` -> POST /api/command). `value` is the token or
@@ -1904,6 +1909,73 @@ function renderSummary() {
   return card;
 }
 
+// The ESP's external BLE sensors (R_FW_SENSORS, `ext`): one row per alias. Only the satellite
+// reports them, so buspi's page never shows the card. The type is read off the field set (the
+// firmware's /api/sensors names it, but the shared UI does not fetch that).
+/** @type {[string, number, string, string?][]} field, decimals, unit, prefix — in display order;
+ * unit "" = the solar charger's charge state, shown as a word */
+const SENSOR_FIELDS = [
+  ["temp_c", 1, "°C"], ["humidity", 1, "%"], ["battery", 0, "%", "🔋 "],
+  ["battery_voltage", 2, "V"], ["battery_current", 1, "A"], ["pv_power", 0, "W"],
+  ["yield_today_kwh", 2, "kWh"], ["charge_state", 0, ""], ["temperature_c", 1, "°C"],
+];
+// Victron's charger states the solar charger reports most (VictronConnect's words)
+/** @type {Record<number, string>} */
+const CHARGE_STATES = { 0: "off", 3: "bulk", 4: "absorption", 5: "float" };
+const SENSOR_STALE_S = 600;   // the firmware's /api/sensors drops a reading this old too
+
+/** @param {SensorReading} r @returns {string|null} the type's name, null = unknown shape */
+function sensorType(r) {
+  if ("temp_c" in r && "humidity" in r) return /** @type {string} */ (t("Thermo-hygrometer (Govee)"));
+  if ("pv_power" in r) return /** @type {string} */ (t("Solar charger (Victron)"));
+  if ("battery_voltage" in r && "temperature_c" in r) return /** @type {string} */ (t("Battery sense (Victron)"));
+  return null;
+}
+
+/** @param {SensorReading} r @returns {string} */
+function sensorValues(r) {
+  const parts = [];
+  for (const [k, digits, unit, prefix] of SENSOR_FIELDS) {
+    if (!(k in r)) continue;
+    const v = r[k];
+    if (!unit) parts.push(v == null ? "—" : /** @type {string} */ (t(CHARGE_STATES[v] || String(v))));
+    else parts.push((prefix || "") + (v == null ? "—" : v.toFixed(digits)) + " " + unit);
+  }
+  if (r.error_code) parts.push(tf("error {n}", { n: r.error_code }));
+  return parts.join(" · ");
+}
+
+function renderSensors() {
+  const ext = STATE.ext;
+  if (!ext || !Object.keys(ext).length) return null;
+  const card = document.createElement("div");
+  card.className = "card sensors";
+  card.setAttribute("role", "group");
+  card.setAttribute("aria-label", /** @type {string} */ (t("Sensors")));
+  for (const [alias, r] of Object.entries(ext)) {
+    const age = r.age_s;
+    const stale = age != null && age > SENSOR_STALE_S;
+    const row = document.createElement("div");
+    row.className = "row sensor" + (stale ? " stale" : "");
+    const lbl = document.createElement("span"); lbl.className = "lbl";
+    const name = document.createElement("span"); name.className = "sname";
+    const type = sensorType(r);
+    name.textContent = type || alias;
+    lbl.appendChild(name);
+    if (type) {   // the name the owner gave the device
+      const a = document.createElement("span"); a.className = "alias"; a.textContent = alias;
+      lbl.appendChild(a);
+    }
+    const sv = document.createElement("span"); sv.className = "sv"; sv.textContent = sensorValues(r);
+    lbl.appendChild(sv);
+    const val = document.createElement("span"); val.className = "val";
+    val.textContent = (stale ? "🕒 " : "") + agoText(age);
+    row.append(lbl, val);
+    card.appendChild(row);
+  }
+  return card;
+}
+
 function renderDashboard() {
   titleEl.textContent = /** @type {string} */ (t("Vehicle"));
   // Prominent = the daemon can't reach the van AND no bond exists yet -- the exact moment a
@@ -1925,6 +1997,8 @@ function renderDashboard() {
   }
   const summary = renderSummary();
   if (summary) app.appendChild(summary);
+  const sensors = renderSensors();
+  if (sensors) app.appendChild(sensors);
   const grid = document.createElement("div");
   grid.className = "tilegrid";
   for (const fn of ORDER) {

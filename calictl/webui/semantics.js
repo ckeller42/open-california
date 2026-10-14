@@ -467,6 +467,8 @@ function adaptSatellite(body, nowMs) {
     },
   };
   // = AutoCamper.snapshot()
+  // The external BLE sensors (R_FW_SENSORS): top-level ext, only while the sensor track is on.
+  if (body.ext && typeof body.ext === "object") out.ext = body.ext;
   const ac = dev.auto_camper;
   if (ac) out._meta.auto_camper = { enabled: !!ac.enabled, armed: ac.state !== "idle", notice: null };
   return out;
