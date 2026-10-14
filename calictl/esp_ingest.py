@@ -24,7 +24,9 @@ single BLE owner):
 
 The satellite's own diagnostics (``R_FW_DIAG_LOG``: ``diag``, ``evt``, ``perf``, ``log``, ``ux``) ride
 in the same stream; only the ESP has them, so they skip replay and gap fill and are written as they are
-at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_point`).
+at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_point`). The
+satellite's own BLE sensor readings (``ext``: Govee, Victron) are timed the same way and become the
+rows buspi's own readers write (:data:`EXT`, :func:`ext_point`), gap-filled against them.
 
 ``--dry-run`` does steps 1-4, writes nothing, keeps the cursor and prints a per-function summary;
 ``--verify`` checks what is in InfluxDB (see :func:`verify`). Config: the ``serve`` env
@@ -59,6 +61,15 @@ at the time from step 2, one measurement per ``ev`` (:data:`DIAG`, :func:`diag_p
    and count them per measurement in its summary (``diag_points``). A ``ux`` record (the web UI's
    usage beacon, ``R_UX_TELEMETRY``) shall become the ``ui_ux`` point calictl writes for its own
    ``POST /api/ux`` — same tags and field types — tagged ``source=esp``.
+
+.. req:: ESP sensor rows
+   :id: R_ESP_INGEST_EXT
+   :status: open
+   :tags: esp32, influx, ingest
+
+   An ``ext`` record becomes one point in the measurement of its type (``govee``, ``victron_mppt``,
+   ``victron_battery``), tags ``device=<alias>`` and ``source=esp``, floats only, written only when
+   buspi's own series (no ``source`` tag) has no point within WINDOW_MS; unknown types are dropped.
 """
 
 from __future__ import annotations
@@ -93,6 +104,24 @@ DIAG = {
     "ux": ("ui_ux", ("type", "ua_class", "origin", "standalone", "screen", "fn", "control")),
 }
 UX_BATCH = ("sid", "ua_class", "standalone", "origin")  # a ux record's beacon-wide keys; the rest = event
+# The satellite's own BLE sensors (ev "ext"): type -> (measurement, the fields buspi's own readers
+# write, all floats). The first field is the presence probe of the gap query (every buspi point has it).
+EXT = {
+    "govee": ("govee", ("temp_c", "humidity", "battery")),
+    "victron_mppt": (
+        "victron_mppt",
+        (
+            "battery_voltage",
+            "battery_current",
+            "charge_state",
+            "error_code",
+            "load_current",
+            "pv_power",
+            "yield_today_kwh",
+        ),
+    ),
+    "victron_battery": ("victron_battery", ("battery_voltage", "temperature_c")),
+}
 STAMP = ("seq", "boot", "up", "ts", "tsrc", "ev")  # the log's own keys, never fields
 COMPARE = {
     "water": ("fresh_liters", "waste_liters"),
@@ -323,6 +352,31 @@ def ux_point(rec, ts_ms):
     return p.tag("source", "esp").time(int(ts_ms) * 1_000_000 + rec["seq"] % 1_000_000, WritePrecision.NS)
 
 
+def ext_point(rec, ts_ms):
+    """One sensor point for an ``ext`` record at ``ts_ms`` (``R_ESP_INGEST_EXT``): the :data:`EXT`
+    fields present as floats (``online 1.0`` for Govee, like buspi's reader), tags ``device`` +
+    ``source=esp``. None for an unknown type, a non-string ``dev`` or no field."""
+    from influxdb_client import Point, WritePrecision
+
+    row = EXT.get(rec.get("type"))
+    if row is None or not isinstance(rec.get("dev"), str):
+        return None
+    m, names = row
+    fields = {
+        f: float(rec[f])
+        for f in names
+        if isinstance(rec.get(f), (int, float)) and not isinstance(rec[f], bool)
+    }
+    if not fields:
+        return None
+    if m == "govee":
+        fields["online"] = 1.0
+    p = Point(m).tag("device", rec["dev"]).tag("source", "esp")
+    for k, v in fields.items():
+        p.field(k, v)
+    return p.time(int(ts_ms), WritePrecision.MS)
+
+
 # ---- 4. gap fill ---------------------------------------------------------------------------------
 
 
@@ -336,15 +390,19 @@ def _rfc3339(ms):
     return datetime.fromtimestamp(ms / 1000, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
-def flux_times(bucket, start_ms, stop_ms, source=None):
-    """The Flux listing one row per ``camper`` point in [start, stop] — buspi's own series (no
-    ``source`` tag) or ``source``'s — by its ``installed`` field (every stored point has it: serve and
-    the ingest store installed functions only)."""
+def flux_times(bucket, start_ms, stop_ms, source=None, measurements=("camper",)):
+    """The Flux listing one row per point of ``measurements`` in [start, stop] — buspi's own series
+    (no ``source`` tag) or ``source``'s. ``camper`` by its ``installed`` field (every stored point has
+    it: serve and the ingest store installed functions only), an :data:`EXT` measurement by its first
+    field."""
+    probe = {"camper": "installed", **{m: f[0] for m, f in EXT.values()}}
+    meas = " or ".join('(r._measurement == "%s" and r._field == "%s")' % (m, probe[m]) for m in measurements)
     src = 'r.source == "%s"' % source if source else "not exists r.source"
     return (
         'from(bucket:"%s") |> range(start:%s, stop:%s) '
-        '|> filter(fn:(r) => r._measurement == "camper" and r._field == "installed" and %s) '
-        '|> keep(columns:["_time","function"])' % (bucket, _rfc3339(start_ms), _rfc3339(stop_ms + 1), src)
+        "|> filter(fn:(r) => (%s) and %s) "
+        '|> keep(columns:["_time","_measurement","function"])'
+        % (bucket, _rfc3339(start_ms), _rfc3339(stop_ms + 1), meas, src)
     )
 
 
@@ -368,11 +426,14 @@ class Influx:
     def rows(self, flux):
         return [r for t in self.client.query_api().query(flux, org=self.org) for r in t.records]
 
-    def times(self, start_ms, stop_ms, source=None):
-        """``{function: sorted [epoch ms]}`` of the points in range (buspi's own when source is None)."""
+    def times(self, start_ms, stop_ms, source=None, measurements=("camper",)):
+        """``{function: sorted [epoch ms]}`` of the ``camper`` points in range (buspi's own when source
+        is None); ``{measurement: …}`` for the other ``measurements``."""
         out: dict = {}
-        for r in self.rows(flux_times(self.bucket, start_ms, stop_ms, source)):
-            out.setdefault(r.values["function"], []).append(int(r.get_time().timestamp() * 1000))
+        for r in self.rows(flux_times(self.bucket, start_ms, stop_ms, source, measurements)):
+            m = r.values["_measurement"]
+            key = r.values["function"] if m == "camper" else m
+            out.setdefault(key, []).append(int(r.get_time().timestamp() * 1000))
         return {f: sorted(t) for f, t in out.items()}
 
     def write(self, points):
@@ -443,15 +504,17 @@ def ingest(
     """One ingest run (see the module doc).
 
     :param fetch: ``fetch(since, max) -> (records, trailer)`` (:func:`http_fetch`).
-    :param db: ``times(start_ms, stop_ms) -> {fn: [ms]}`` + ``write(points)`` (:class:`Influx`).
+    :param db: ``times(start_ms, stop_ms, source=None, measurements=("camper",)) -> {fn | measurement:
+        [ms]}`` + ``write(points)`` (:class:`Influx`).
     :param cursor_path: the cursor file (seq + replay state).
     :param dry_run: write nothing, keep the cursor; per-point decisions go to ``report``.
     :param from_seq: start here with a fresh replay state instead of the cursor (``--verify``).
     :param report: a list that receives ``(fn, ts_ms, tsrc, covered, interp)`` per point (dry run, verify).
     :param diag: a list that receives ``(measurement, ts_ms)`` per diagnostics point (verify).
     :returns: the summary ``{pulled, written, skipped_covered, skipped_no_time, held, lost,
-        diag_points}`` — ``diag_points`` = ``{measurement: points}`` of the diagnostics records
-        (written, or in a dry run would be).
+        diag_points}`` — ``diag_points`` = ``{measurement: points}`` of the diagnostics and ``ext``
+        records (written, or in a dry run would be); a covered ``ext`` record counts as
+        ``skipped_covered``.
     """
     funcs = funcs or _funcs()
     cur = load_cursor(cursor_path) if from_seq is None else {"seq": from_seq, "state": None}
@@ -478,6 +541,7 @@ def ingest(
         done, buf = resolve(buf, tr["boot"], final)
         if done:
             batch = []  # (fn, ts, tsrc, interp)
+            ext = []  # (measurement, ts, point)
             points = []
             for rec, ts in done:
                 if ts is None:
@@ -491,6 +555,11 @@ def ingest(
                         if diag is not None:
                             diag.append((m, ts))
                     continue
+                if rec.get("ev") == "ext":  # the satellite's own sensors: gap-filled below, no replay
+                    p = ext_point(rec, ts)
+                    if p is not None:
+                        ext.append((EXT[rec["type"]][0], ts, p))
+                    continue
                 for fn, interp in replay.process(rec, ts).items():
                     batch.append((fn, ts, rec.get("tsrc") or "back", interp))
             have = (
@@ -498,6 +567,21 @@ def ingest(
                 if batch
                 else {}
             )
+            have_ext = (
+                db.times(
+                    min(e[1] for e in ext) - WINDOW_MS,
+                    max(e[1] for e in ext) + WINDOW_MS,
+                    measurements=tuple(m for m, _ in EXT.values()),
+                )
+                if ext
+                else {}
+            )
+            for m, ts, p in ext:
+                if covered(have_ext.get(m, []), ts):
+                    summary["skipped_covered"] += 1
+                else:
+                    points.append(p)
+                    summary["diag_points"][m] = summary["diag_points"].get(m, 0) + 1
             for fn, ts, tsrc, interp in batch:
                 cov = covered(have.get(fn, []), ts)
                 summary["skipped_covered"] += cov
