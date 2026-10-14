@@ -7,6 +7,11 @@ name: esp-stable
 # (a tag push would run the tagged commit's workflow file) and no caches (nothing to poison).
 on:
   workflow_dispatch:
+    inputs:
+      sha:
+        description: "The promoted commit (40 hex); the esp-stable tag must already point at it"
+        required: true
+        type: string
 
 permissions: {}
 
@@ -26,8 +31,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          SHA: ${{ inputs.sha }}
         run: |
-          sha=$(gh api "repos/$GH_REPO/git/ref/tags/esp-stable" --jq .object.sha)
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha input is not 40 hex"; exit 1; }
+          sha=$SHA
+          tag=$(gh api "repos/$GH_REPO/git/ref/tags/esp-stable" --jq .object.sha)
+          [ "$tag" = "$sha" ] || { echo "::error::esp-stable tag moved ($tag != $sha): re-run promote_stable.sh"; exit 1; }
           run_id=$(gh run list --workflow ci.yml --commit "$sha" --branch main --status success \
             --json databaseId -q '.[0].databaseId')
           [ -n "$run_id" ] || { echo "::error::no successful main CI run of $sha"; exit 1; }
@@ -44,6 +53,7 @@ jobs:
             --target "$sha" --title "ESP firmware (stable)" \
             --notes "The ESP32 satellite's stable OTA channel: the build the \`esp-stable\` tag points at (promoted with tools/esplab/promote_stable.sh after its soak, R_SOAK_REPORT). Rewritten on every promotion."
           gh release edit esp-stable --target "$sha"
+          # bin before manifest, like ci.yml's esp-latest: the ESP SHA-256 checks the image, a mid-download swap = checksum error = install again
           gh release upload esp-stable "$bin" --clobber
           gh release upload esp-stable manifest.json --clobber
           gh release upload esp-stable fw/cali_fw_full.bin --clobber   # USB first flash only; not in the manifest

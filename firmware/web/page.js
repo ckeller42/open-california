@@ -182,6 +182,7 @@ function renderFw(d) {
   install.textContent = t("fw_install", {sha: sha});
   const sel = select("fw-channel");
   sel.hidden = $("fw-channel-l").hidden = !station || busy;
+  sel.dataset.v = o.channel;
   if (document.activeElement !== sel) sel.value = o.channel;
 }
 
@@ -274,8 +275,10 @@ async function otaChannel(ch) {
   try {
     const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/ota", {method: "POST",
       headers: {"Content-Type": "application/json"}, body: JSON.stringify({channel: ch})}));
-    if (!r.body.ok) msg.textContent = t("fw_ch_error");
+    if (r.body.ok) return;
+    msg.textContent = t("fw_ch_error");
   } catch (e) { msg.textContent = t("err_net"); }
+  select("fw-channel").value = $("fw-channel").dataset.v || "";
 }
 
 /** @param {Ap[]} scan */
