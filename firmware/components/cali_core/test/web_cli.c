@@ -353,10 +353,10 @@ int main(void) {
             (void)sscanf(line, "%*s %*s %*s %*s %*s %127s", hex);   /* the 6th token: past a1..a4 */
             while (len < sizeof mfg && hex[2 * len] && sscanf(hex + 2 * len, "%2hhx", &mfg[len]) == 1) len++;
             e.ev = CALI_TEV_ADV;
-            snprintf(e.addr, sizeof e.addr, "%s", a1);
+            snprintf(e.addr, sizeof e.addr, "%.17s", a1);
             e.status = (int)strtol(a2, NULL, 10);
             e.rssi = (int8_t)strtol(a3, NULL, 10);
-            snprintf(e.name, sizeof e.name, "%s", a4);
+            snprintf(e.name, sizeof e.name, "%.23s", a4);
             e.data = mfg;
             e.len = len;
             cali_sensors_on_adv(&e, s_now);
