@@ -44,10 +44,12 @@ add() {   # add <id> <alias> [key] -> the HTTP status on stdout, the body in $RE
 }
 
 setup_type() {   # setup_type <type> <alias> [keyfile]: 0 configured, 2 nothing seen yet, 1 error
-    local type=$1 alias=$2 keyfile=${3:-} id rc KEY=""
-    if [[ " $(configured) " == *" $type "* ]]; then echo "$type: already configured"; return 0; fi
+    local type=$1 alias=$2 keyfile=${3:-} id rc KEY="" have ids
+    have=$(configured) || { echo "$type: GET /api/sensors failed" >&2; return 1; }
+    if [[ " $have " == *" $type "* ]]; then echo "$type: already configured"; return 0; fi
     [ -n "$keyfile" ] && { read_key "$keyfile" || return 1; }
-    for id in $(seen_ids "$type"); do
+    ids=$(seen_ids "$type") || { echo "$type: GET /api/sensors failed" >&2; return 1; }
+    for id in $ids; do
         rc=$(add "$id" "$alias" "$KEY")
         if [ "$rc" = 200 ]; then echo "$type: added as $alias (id $id)"; return 0; fi
         if grep -q key_mismatch "$RESP"; then echo "$type: id $id is not ours (key mismatch), next"; continue; fi
@@ -68,6 +70,7 @@ for ((i = 1; i <= WAIT_MIN; i++)); do
         case $rc in 0) ;; 2) pending=$((pending + 1)) ;; *) exit 1 ;; esac
     done
     [ "$pending" = 0 ] && break
+    [ "$i" = "$WAIT_MIN" ] && { echo "gave up: $pending wanted type(s) never seen in $WAIT_MIN windows" >&2; exit 2; }
     echo "waiting for the next scan window ($i/$WAIT_MIN)"; sleep 60
 done
 echo "configured: $(configured)"

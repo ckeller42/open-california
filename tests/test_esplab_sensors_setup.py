@@ -165,3 +165,45 @@ def test_setup_skips_a_wrong_key_device_and_is_idempotent(tmp_path):
     ]  # 11 refused (key_mismatch), then ours; 2nd run adds nothing
     assert "not ours (key mismatch)" in p.stdout or "already configured" in p.stdout
     assert len(esp.configured) == 3
+
+
+@pytest.mark.skipif(not shutil.which("curl") or not shutil.which("bash"), reason="needs bash + curl")
+def test_setup_fails_when_a_wanted_type_is_never_seen(tmp_path):
+    esp = Esp()
+    esp.seen = [s for s in esp.seen if s[1] != "govee"]  # no Govee in range
+    srv = serve(esp)
+    (tmp_path / "mppt.key").write_text(KEY_MPPT)
+    (tmp_path / "batt.key").write_text(KEY_BATT)
+    env = dict(
+        os.environ,
+        MPPT_KEY_FILE=str(tmp_path / "mppt.key"),
+        BATT_KEY_FILE=str(tmp_path / "batt.key"),
+        WAIT_MIN="1",
+        SETTLE_S="0",
+    )
+    p = subprocess.run(
+        ["bash", str(SCRIPT), "http://127.0.0.1:%d" % srv.server_port],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    srv.shutdown()
+    assert p.returncode == 2 and "never seen" in p.stderr
+    assert len(esp.configured) == 2  # the Victrons were still added
+
+
+@pytest.mark.skipif(not shutil.which("curl") or not shutil.which("bash"), reason="needs bash + curl")
+def test_setup_reports_an_api_failure(tmp_path):
+    srv = serve(Esp())
+    port = srv.server_port
+    srv.shutdown()  # the experimental POST fails first: no silent retry loop
+    env = dict(os.environ, WAIT_MIN="1", SETTLE_S="0")
+    p = subprocess.run(
+        ["bash", str(SCRIPT), "http://127.0.0.1:%d" % port],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert p.returncode == 1 and "cannot switch" in p.stderr
