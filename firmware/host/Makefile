@@ -61,11 +61,13 @@ CSRC := ../../csrc
 OWN_INC := $(COMPONENTS)/platform/include $(COMPONENTS)/cali_ble_nimble/include \
 	$(COMPONENTS)/cali_core/include $(CSRC) ../web
 # ble_nimble.o calls cali_ctl_write_ok (control.o, which needs the codec), and store-cli links it.
-# ble_nimble.o also times its GATT ops into diag.o (R_FW_DIAG_LOG; no sink on the host: nothing recorded).
-COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o control.o codec.o diag.o
+# ble_nimble.o also times its GATT ops into diag.o (R_FW_DIAG_LOG; host_main prints them as REC lines).
+# runner.o hands sensor adverts to sensors.o (R_FW_SENSORS), which writes JSON (json.o).
+COMPONENT_OBJ := platform_host.o net_host.o ble_store_kv.o ble_nimble.o runner.o pairing_sm.o control.o codec.o diag.o \
+	sensors.o json.o
 # The rest of cali_core (console + snapshot + json + session + control sequencer + wifi_sm + wifi_run +
 # http_core + captive_dns + web + ota + time + sdlog): only cali-host needs them.
-CORE_OBJ := console.o snapshot.o status.o json.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o
+CORE_OBJ := console.o snapshot.o status.o session.o ports.o control_run.o wifi_sm.o wifi_run.o http_core.o captive_dns.o web.o ota.o time.o sdlog.o display_model.o display_cfg.o battery.o auto_camper.o auto_camper_run.o
 OWN_OBJ := host_main.o store_cli.o ble_nimble_jw.o $(COMPONENT_OBJ) $(CORE_OBJ)
 $(OWN_OBJ): CFLAGS += -Wall -Wextra -Werror $(addprefix -I, $(OWN_INC))
 LIBS := $(NIMBLE_LDFLAGS) $(MBEDTLS_LIBS) -lrt -lpthread -lstdc++ -lm
@@ -114,6 +116,7 @@ ble_nimble.o: $(COMPONENTS)/cali_ble_nimble/ble_nimble.c $(COMPONENTS)/cali_ble_
 # cali_core: no NimBLE headers; built with the same flags so the -m32 -Werror build covers it.
 runner.o: $(COMPONENTS)/cali_core/runner.c $(COMPONENTS)/cali_core/include/cali_runner.h \
 		$(COMPONENTS)/cali_core/include/cali_transport.h $(COMPONENTS)/cali_core/include/cali_pairing_sm.h \
+		$(CORE_H)/cali_sensors.h $(CORE_H)/cali_json.h \
 		$(CSRC)/codec_chars.h $(CSRC)/pairing_consts.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
@@ -140,7 +143,7 @@ console.o: $(COMPONENTS)/cali_core/console.c $(CORE_H)/cali_console.h $(CORE_H)/
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_transport.h $(CORE_H)/cali_pairing_sm.h \
 		$(CORE_H)/cali_json.h $(CORE_H)/cali_snapshot.h $(CSRC)/pairing_consts.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_net.h $(CSRC)/net_consts.h \
-		$(COMPONENTS)/platform/include/cali_platform.h
+		$(CORE_H)/cali_sensors.h $(CORE_H)/cali_web.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The "fn" emitter + pairing address shared by console.c (SNAP/STATE) and web.c (/api/state).
@@ -230,6 +233,11 @@ display_cfg.o: $(COMPONENTS)/cali_core/display_cfg.c $(CORE_H)/cali_display_mode
 		$(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
+# External BLE sensors (R_FW_SENSORS): type table, decoders, window cadence. tests/firmware/test_sensors.py.
+sensors.o: $(COMPONENTS)/cali_core/sensors.c $(CORE_H)/cali_sensors.h $(CORE_H)/cali_json.h $(CORE_H)/cali_diag.h \
+		$(CORE_H)/cali_transport.h $(COMPONENTS)/platform/include/cali_platform.h
+	$(CC) -c $(CFLAGS) -o $@ $<
+
 # The battery reading + runtime estimate (R_FW_BATTERY). The host has no power chip: all null.
 battery.o: $(COMPONENTS)/cali_core/battery.c $(CORE_H)/cali_battery.h $(CORE_H)/cali_json.h
 	$(CC) -c $(CFLAGS) -o $@ $<
@@ -250,6 +258,7 @@ host_main.o: host_main.c $(COMPONENTS)/cali_ble_nimble/include/cali_ble_nimble.h
 		$(CORE_H)/cali_session.h $(CORE_H)/cali_control.h $(CSRC)/codec.h $(CORE_H)/cali_runner.h \
 		$(CORE_H)/cali_transport.h $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h $(CORE_H)/cali_net.h $(CORE_H)/cali_captive.h \
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(COMPONENTS)/platform/include/cali_net_host.h \
+		$(CORE_H)/cali_sensors.h $(CORE_H)/cali_diag.h \
 		$(COMPONENTS)/platform/include/cali_platform.h syscfg/syscfg.h | $(MBEDTLS_LIBS)
 	$(CC) -c $(CFLAGS) -o $@ $<
 

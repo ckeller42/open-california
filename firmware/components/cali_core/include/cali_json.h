@@ -31,6 +31,7 @@ void cali_json_begin(cali_json_t *j, char *buf, size_t cap);  /* writes "{" */
 void cali_json_key(cali_json_t *j, const char *key);          /* ,"key": (comma handled) */
 void cali_json_str(cali_json_t *j, const char *s);             /* "escaped" (\" \\ \n \r \t, <0x20 as \u00XX) */
 void cali_json_int(cali_json_t *j, long long v);
+void cali_json_num(cali_json_t *j, double v);           /* %.2f, trailing zeros and "." dropped (23.96, 90, -0.5); NaN/inf -> null */
 void cali_json_bool(cali_json_t *j, int v);
 void cali_json_null(cali_json_t *j);
 void cali_json_obj_begin(cali_json_t *j);

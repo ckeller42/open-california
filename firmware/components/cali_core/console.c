@@ -3,14 +3,17 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "cali_control.h"
 #include "cali_json.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
+#include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_snapshot.h"
+#include "cali_web.h"
 #include "cali_wifi_run.h"
 #include "pairing_consts.h"
 
@@ -210,6 +213,36 @@ static void set_cmd(char *args) {
     (void)cali_ctl_submit(fn, what, value, -1, NULL, &reason, "console");   /* no page, no clock */
 }
 
+/* "sensors" (SENSORS <the /api/sensors object>), "sensors on|off" (the exp_sensors flag, as POST
+ * /api/experimental), "sensors add <id> [alias|-] [keyhex|-]", "sensors remove <id>" (LOG sensors
+ * ok | err <code>): the QEMU/board probe and the host e2e's drive path (R_FW_SENSORS). */
+static void sensors_cmd(char *sub) {
+    char *op = strtok(sub, " \t"), *a1 = op ? strtok(NULL, " \t") : NULL;
+    char *a2 = a1 ? strtok(NULL, " \t") : NULL, *a3 = a2 ? strtok(NULL, " \t") : NULL;
+    int rc;
+    if (!op) {
+        cali_json_t j;
+        begin_line(&j, "SENSORS ");
+        cali_sensors_api_json(&j, cali_uptime_ms());
+        finish_line(&j, "SENSORS ");
+        out_line();
+        return;
+    }
+    if (!strcmp(op, "on") || !strcmp(op, "off")) {
+        if (cali_exp_sensors_set(!strcmp(op, "on")) != 0) cali_log("exp: storing the flag failed");   /* else it logs */
+        return;
+    }
+    if (!strcmp(op, "add") && a1) rc = cali_sensors_add((uint16_t)atoi(a1), a2 && strcmp(a2, "-") ? a2 : NULL,
+                                                        a3 && strcmp(a3, "-") ? a3 : NULL);
+    else if (!strcmp(op, "remove") && a1) rc = cali_sensors_remove((uint16_t)atoi(a1));
+    else {
+        cali_log("sensors: usage: sensors [on|off|add <id> [alias|-] [key|-]|remove <id>]");
+        return;
+    }
+    if (rc == 0) cali_log("sensors ok");
+    else cali_log("sensors err %d", rc);
+}
+
 static void on_state(const cali_pair_state_t *s, const char *address) {
     cali_console_state(s, address);
     if (s->st == PAIR_BONDED) {
@@ -277,6 +310,8 @@ void cali_console_line(const char *line) {
         wifi_cmd(sub);
     } else if (strcmp(cmd, "wifi") == 0) {
         wifi_cmd(cmd + 4);
+    } else if (strncmp(cmd, "sensors", 7) == 0 && (cmd[7] == ' ' || cmd[7] == '\t' || cmd[7] == 0)) {
+        sensors_cmd(cmd + 7);
     } else if (strncmp(cmd, "set", 3) == 0 && (cmd[3] == ' ' || cmd[3] == '\t' || cmd[3] == 0)) {
         set_cmd(cmd + 3);
     } else {

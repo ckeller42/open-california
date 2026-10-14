@@ -10,7 +10,8 @@
  *   itself emits no ENC_CHANGE, only a drop, or nothing — then PAIR_TIMEOUT_S[pairing] ends it),
  *   EV_VERIFY_FAIL (verifying). In waiting_passkey the SM has no EV_PAIR_FAIL transition (Python
  *   parity), so ENC_FAIL/DISCONNECTED there are consumed and the passkey timeout ends the flow.
- * Every other event (NOTIFY, DISCOVERED, other READs, anything outside a flow) goes to
+ * ADV (a sensor window's advert) goes to cali_sensors_on_adv at the latest tick's now_ms. Every
+ * other event (NOTIFY, DISCOVERED, other READs, anything outside a flow) goes to
  * cali_runner_on_other (the session, Task 6).
  *
  * Action -> transport: START_SCAN start_scan(CODEC_DEVICE_NAME), STOP_SCAN stop_scan, CONNECT
@@ -47,6 +48,8 @@ void cali_runner_forget(void);                     /* console "forget" -> EV_RES
 void cali_runner_cancel(void);                     /* POST /api/pairing "cancel" -> EV_CANCEL */
 void cali_runner_tick(uint64_t now_ms);            /* drives EV_TIMEOUT from PAIR_TIMEOUT_S */
 const cali_pair_state_t *cali_runner_state(void);
+int cali_runner_in_flow(void);                     /* 1 while a pairing flow runs (not idle/bonded/error):
+                                                      WiFi scans and sensor windows wait */
 
 /* Called on every SM state change (state, attempts or error), after that step's actions ran.
  * address = the transport's identity() in bonded, else NULL. NULL hook = silent. Task 6 points it

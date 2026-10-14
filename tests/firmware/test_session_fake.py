@@ -114,6 +114,7 @@ def fake(tmp_path_factory):
             str(CORE / "control.c"),
             str(CORE / "control_run.c"),
             str(CORE / "runner.c"),
+            str(CORE / "sensors.c"),  # runner.c hands sensor adverts to it
             str(CORE / "pairing_sm.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(ROOT / "csrc" / "ports.c"),

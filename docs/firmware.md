@@ -60,7 +60,8 @@ Identical on the host build (stdin/stdout) and the device (UART/USB-Serial-JTAG 
   ignored unless waiting for one), `forget` (drop the bond), `status` (reprint `STATE`), `quit`
   (host only — exits the process; no-op on the device), the WiFi commands `wifi set <ssid>
   <psk>`, `wifi status`, `wifi forget`, `wifi scan` (see [the network section](#network-wifi-setup-and-the-status-page);
-  `LOG wifi: not enabled` while WiFi is off), and `set <function> <what> [value]` — a control
+  `LOG wifi: not enabled` while WiFi is off), the sensor probe `sensors [on|off|add …|remove …]`
+  ([External sensors](#external-sensors-experimental-r_fw_sensors)), and `set <function> <what> [value]` — a control
   command in calictl's `set` vocabulary (`set cooler power on`, `set lighting kitchen 5`,
   `set lighting save_profile 3 amber`; the value is the rest of the line, `""` when absent), see
   [Control path](#control-path). The console is physical access (USB), so `set` works in every WiFi
@@ -727,6 +728,7 @@ IP and no user-typed value is ever recorded.
 | `perf` (HTTP) | every response (http_core.c) | `route` (the path, no query; a 404 is `other`, an unparsed request `-`), `status`, `bytes` sent, `ms` accept -> last byte (100 ms poll clock) |
 | `perf` (BLE) | read/write/heartbeat completions (ble_nimble.c) | `char`, `op` (`read`/`write`/`hb`), `ms`; every op of a char asked at most once a second, else 1 in 10; heartbeats at most one a minute |
 | `log` | an `ESP_LOGW`/`ESP_LOGE` line (`esp_log_set_vprintf` hook) | `lvl` (`W`/`E`), `tag`, `msg` (<= 117 chars); at most 20 a minute, then one `{"ev":"log","dropped":n}` when the minute ends |
+| `ext` | one reading of a configured external sensor (`R_FW_SENSORS`, [External sensors](#external-sensors-experimental-r_fw_sensors)), at most once a minute per sensor | `dev` (alias), `type`, the type's fields (`govee`: `temp_c`, `humidity`, `battery`; a field the advert marks not available is left out) |
 
 buspi's `calictl esp-ingest` writes these records to InfluxDB as they are, at their time, one
 measurement per `ev` — `esp_diag`, `esp_perf` (tag `route` or `char` + `op`), `esp_evt` (tag
@@ -960,6 +962,57 @@ is touched. No chip, a failed read or no screen (host, QEMU): every member `null
    log and the diag records never read it. ``POST /api/experimental {"sensors":bool}`` applies at
    once; ``device.experimental.sensors`` reports it; the boot log prints ``LOG exp: sensors on|off``.
 ```
+
+## External sensors (experimental, `R_FW_SENSORS`)
+
+```{eval-rst}
+.. req:: External BLE sensors (experimental)
+   :id: R_FW_SENSORS
+   :status: open
+
+   Behind exp_sensors (R_FW_EXPERIMENTAL): a 5 s passive scan window every 60 s (skipped while a
+   connect is pending or a pairing flow runs) delivers manufacturer-data adverts; configured
+   addresses decode by type (govee, victron_mppt, victron_battery) into /api/state ext.<alias> and
+   an ext SD record at most once a minute; unconfigured ones fill a 16-row seen table with
+   boot-local ids. The list (<= 16, NVS sens_list) survives the flag; keys never leave the ESP.
+```
+
+`cali_core/sensors.c` (`include/cali_sensors.h`, host-tested) holds the type table, the decoders,
+the seen and configured tables, the readings and the window cadence; the NimBLE transport only
+opens the window (`scan_window`) and turns its reports into `CALI_TEV_ADV`; the runner hands those
+to the sensors and never to the pairing SM or the session.
+
+- **Window:** with the flag on, the owner tick opens a passive, duplicate-filtered `ble_gap_disc`
+  of 5 s, the first on the next tick and then every 60 s; a kick (the coming `GET /api/sensors`)
+  opens one at once unless one ran in the last 15 s. The transport refuses a window while the
+  pairing runner's scan or a connect is under way (the next tick retries); a pairing scan
+  (`start_scan`) or a connect (the session's reconnect) cancels an open window — the unit's link
+  always wins. While a pairing flow runs no window opens (`scan: "paused"`). The flag off: no
+  window, so no adverts, no readings, no records.
+- **Types** (match on the manufacturer id, the first two AD bytes, little-endian):
+
+  | id | Manufacturer id | Key | Default alias | Fields |
+  |---|---|---|---|---|
+  | `govee` | `0xEC88` | no | `govee` | `temp_c`, `humidity`, `battery` — 7+ data bytes: int16 °C × 100, uint16 % × 100, battery %; 5–6 bytes: 24 bits, sign bit 23, `(t / 1000) / 10` °C, `(t % 1000) / 10` %, battery `& 0x7F` (`govee_reader.py parse_govee`) |
+
+  `0x0001`/`0x8801` (other Govee layouts) are not matched: `0x0001` is shared by unrelated devices.
+- **Seen table:** an unconfigured advert of a known type fills one of 16 rows (type, model = the
+  local name without its last `_…` part, never the MAC; rssi); a full table replaces the oldest
+  row; rows older than 10 min are not reported. Never logged.
+- **Ids:** boot-local, `(crc32(address) & 0xffff) | 1` — never 0, the same for one address all boot
+  (and across boots, as long as the address stays); the MAC itself never leaves the ESP.
+- **Configured list:** NVS blob `sens_list` (`n` + 16 × `{type, addr_type, addr[6], key[16],
+  alias[17]}`), rewritten whole on every change; `forget`/unpair never touch it, nor does the flag.
+  Alias `[a-z0-9_-]{1,16}`, unique; omitted = the type's default alias, refused when that type is
+  already configured. A key type needs 32 hex digits.
+- **Readings:** per configured sensor the last decode and its age — `/api/state` `ext.<alias>`
+  (`{fields…, "age_s"}`, `null`s before the first reading) and the `ext` SD record above, at most
+  once a minute each. Numbers: two decimals at most, trailing zeros dropped (`cali_json_num`).
+- **Console** (the board/QEMU probe and the host e2e's path): `sensors` prints `SENSORS {…}` (the
+  `/api/sensors` object: `configured`, `seen`, `scan`); `sensors on|off` sets the flag as
+  `POST /api/experimental` does; `sensors add <id> [alias|-] [key|-]` / `sensors remove <id>` answer
+  `LOG sensors ok` / `LOG sensors err <code>` (`CALI_SENS_E_*`). The host build prints every
+  diagnostics record as `REC <body>`.
 
 ## UX telemetry (`R_UX_TELEMETRY`)
 
@@ -1728,6 +1781,14 @@ human-readable version of the same trace). `docs/api.rst` pulls those test modul
   `exp: sensors on|off`, its 403/400/500/405 codes) and `T_FW_EXPERIMENTAL_UI`
   (`tests/firmware/test_web_e2e.py`: the `/device` Experimental box switches it, EN + DE). The boot
   line `LOG exp: sensors off` is checked on QEMU (`tests/firmware/test_qemu_boot.py`).
+- **`R_FW_SENSORS`** — verified by `T_FW_SENSORS_CORE` (`tests/firmware/test_sensors.py`: both Govee
+  layouts, the seen table (16 rows, unknown manufacturer ids ignored, boot-local ids), add / rename /
+  remove rules, the list surviving a reboot, the `ext` record and its once-a-minute limit, the
+  longest record body under `CALI_DIAG_BODY_MAX`, the window cadence, the pause while pairing and the
+  kick; `tests/firmware/test_runner_fake.py` proves the runner hands adverts only to the sensors) and
+  `T_FW_SENSORS_E2E` (`tests/firmware/test_sensors_e2e.py`: cali-host's NimBLE window finds a Bumble
+  Govee, the console configures it, its `ext` record lands; a window never blocks a pairing; flag off
+  = nothing seen). QEMU boots with the flag on (`tests/firmware/test_qemu_boot.py`).
 - **`R_FW_STATUS_DISPLAY`** — verified by `T_FW_DISPLAY_MODEL` (`tests/firmware/test_display_model.py`,
   every row state, the 10 s stale rule, the setup footer and the bright/dim timing through a C driver
   over `display_model.c`), `T_FW_DISPLAY_FONT` (`tests/test_display_font.py`, every EN/DE screen

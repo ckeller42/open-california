@@ -336,6 +336,65 @@ class HciUnit:
         self.loop.call_soon_threadsafe(self.loop.stop)
 
 
+class FakeAdvertiser:
+    """A second Bumble device on the HciUnit's radio link that only advertises manufacturer data
+    (non-connectable, random static address): a Govee or a Victron next to the camper unit.
+    ``mfg`` = the MANUFACTURER_SPECIFIC_DATA value: company id little-endian + payload."""
+
+    def __init__(self, hu, address, mfg: bytes, name: str):
+        self.hu, self.address, self.mfg, self.name = hu, address, mfg, name
+        self.device = None
+
+    async def _start(self):
+        from bumble.controller import Controller
+        from bumble.device import Device, DeviceConfiguration
+        from bumble.hci import Address
+
+        c = Controller("adv", link=self.hu.link)
+        # the repo's constructor form (tools/fake_unit_peripheral.py build_unit); an advert every 100 ms
+        cfg = DeviceConfiguration(
+            name=self.name,
+            address=Address(self.address),
+            advertising_interval_min=100,
+            advertising_interval_max=100,
+        )
+        self.device = Device.from_config_with_hci(cfg, c, c)
+        self.device.random_address = Address(self.address)
+        await self.device.power_on()
+        await self._advertise()
+
+    async def _advertise(self):
+        from bumble.core import AdvertisingData
+        from bumble.device import AdvertisingType
+        from bumble.hci import OwnAddressType
+
+        await self.device.start_advertising(
+            advertising_type=AdvertisingType.UNDIRECTED_SCANNABLE,  # non-connectable
+            own_address_type=OwnAddressType.RANDOM,
+            advertising_data=bytes(
+                AdvertisingData(
+                    [
+                        (AdvertisingData.COMPLETE_LOCAL_NAME, self.name.encode()),
+                        (AdvertisingData.MANUFACTURER_SPECIFIC_DATA, self.mfg),
+                    ]
+                )
+            ),
+            auto_restart=True,
+        )
+
+    async def _restart(self):
+        await self.device.stop_advertising()
+        await self._advertise()
+
+    def start(self):
+        self.hu.call(self._start)
+        return self
+
+    def set_mfg(self, mfg: bytes):
+        self.mfg = mfg
+        self.hu.call(self._restart)
+
+
 @pytest.fixture
 def hci_unit():
     hu = HciUnit()

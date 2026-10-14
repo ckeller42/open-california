@@ -23,6 +23,9 @@
  *                allow-list as POST /api/command, in any WiFi mode (the console is physical
  *                access); the value is the rest of the line (none = JSON null); outcome on
  *                "LOG control: …"
+ *   sensors      "SENSORS <the GET /api/sensors object>" (cali_sensors.h, R_FW_SENSORS)
+ *   sensors on|off   the exp_sensors flag (cali_exp_sensors_set: "LOG exp: sensors on|off")
+ *   sensors add <id> [alias|-] [keyhex|-] / sensors remove <id>   "LOG sensors ok" | "LOG sensors err <code>"
  *   Before the WiFi runtime booted (host without --http) every "wifi …" line only prints
  *   "LOG wifi: not enabled".
  * anything else -> "LOG unknown command: <first word>" ("wifi <subcommand>" for an unknown wifi

@@ -62,3 +62,8 @@ def test_escapes_and_nesting(json_cli):
 def test_overflow_reports_and_emits_nothing(json_cli):
     out = run(json_cli, 16, "K name S 0123456789012345678901234567890123456789 END")
     assert out == "OVERFLOW"
+
+
+def test_num_two_decimals_trailing_zeros_stripped(json_cli):
+    out = run(json_cli, 256, "K a A D 23.96 D 90.0 D 0.42 D -0.5 D 1234567.0 D nan ] END")
+    assert out == '{"a":[23.96,90,0.42,-0.5,1234567,null]}'

@@ -20,7 +20,7 @@
  * NimBLE default event queue; that event's callback feeds them to cali_console_line on the host
  * task. A 100 ms callout drives the tick: with --http first the network (cali_net_host_poll ->
  * cali_wifi_run_tick -> cali_captive_dns_poll -> cali_web_poll, each non-blocking), then
- * cali_runner_tick/cali_session_tick.
+ * cali_runner_tick/cali_session_tick/cali_sensors_tick. Diagnostics records print as "REC <body>".
  */
 #include <pthread.h>
 #include <stdio.h>
@@ -36,9 +36,11 @@
 #include "cali_ble_nimble.h"
 #include "cali_captive.h"
 #include "cali_console.h"
+#include "cali_diag.h"
 #include "cali_net_host.h"
 #include "cali_platform.h"
 #include "cali_runner.h"
+#include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_web.h"
 #include "cali_wifi_run.h"
@@ -107,6 +109,7 @@ static void tick_cb(struct ble_npl_event *ev) {
     uint64_t now = cali_uptime_ms();
     cali_runner_tick(now);              /* BLE first: WiFi/web work never delays this tick's */
     cali_session_tick(now);             /* heartbeat decision (same order as app_main.c) */
+    cali_sensors_tick(now, cali_ble_nimble_transport(), cali_exp_sensors(), cali_runner_in_flow());
     cali_ac_tick(now);
     if (s_http) {
         cali_net_host_poll(now);        /* WiFi events -> the runner's sink */
@@ -115,6 +118,13 @@ static void tick_cb(struct ble_npl_event *ev) {
         cali_web_poll(now);
     }
     ble_npl_callout_reset(&s_tick, ble_npl_time_ms_to_ticks32(TICK_MS));
+}
+
+/* Diagnostics records (cali_diag.h) as "REC <body>" lines: the host has no SD card; the e2e reads the
+ * ext records here (test_sensors_e2e.py). Firmware.expect skips lines with another prefix. */
+static int rec_line(const char *body) {
+    printf("REC %s\n", body);
+    return 0;
 }
 
 static void on_sync(void) {
@@ -198,6 +208,8 @@ int main(int argc, char **argv) {
     ble_hci_sock_set_device(port);
     cali_ac_init();
     cali_log("exp: sensors %s", cali_exp_sensors() ? "on" : "off");   /* R_FW_EXPERIMENTAL */
+    cali_sensors_init();
+    cali_diag_sink = rec_line;
 
     nimble_port_init();           /* also connects the TCP HCI socket (ble_transport_ll_init) */
     cali_ble_nimble_init(on_sync);

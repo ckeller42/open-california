@@ -264,6 +264,8 @@ Firmware (issue #154)
 .. automodule:: tests.firmware.test_auto_camper_parity
 .. automodule:: tests.firmware.test_auto_camper_e2e
 .. automodule:: tests.firmware.test_battery
+.. automodule:: tests.firmware.test_sensors
+.. automodule:: tests.firmware.test_sensors_e2e
 .. automodule:: calictl.esp_ingest
 .. automodule:: tests.test_esp_ingest
 .. automodule:: tests.test_camper_dashboard

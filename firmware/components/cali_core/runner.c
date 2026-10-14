@@ -5,6 +5,8 @@
 
 #include <stddef.h>
 
+#include "cali_sensors.h"
+
 #include "codec_chars.h"
 #include "pairing_consts.h"
 
@@ -132,6 +134,10 @@ static int map_event(const cali_tevent_t *e, uint32_t *arg) {
 static void sink(const cali_tevent_t *e, void *ctx) {
     (void)ctx;
     uint32_t arg;
+    if (e->ev == CALI_TEV_ADV) {   /* sensor adverts: never the SM's or the session's */
+        cali_sensors_on_adv(e, s_now_ms);
+        return;
+    }
     int ev = map_event(e, &arg);
     if (ev >= 0) feed((uint8_t)ev, arg);
     else if (cali_runner_on_other) cali_runner_on_other(e);
@@ -165,3 +171,5 @@ void cali_runner_tick(uint64_t now_ms) {
 }
 
 const cali_pair_state_t *cali_runner_state(void) { return &s_ps; }
+
+int cali_runner_in_flow(void) { return s_ps.st != PAIR_IDLE && s_ps.st != PAIR_BONDED && s_ps.st != PAIR_ERROR; }

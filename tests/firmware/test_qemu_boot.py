@@ -99,3 +99,20 @@ def test_no_wifi_driver_boots_and_serves_nothing(qemu):
     assert s.expect("STATE")["state"] == "idle"
     assert sum(line.startswith(BOOT_BANNER) for line in s.log) == 1, "rebooted:\n" + "\n".join(s.log)
     assert sum(line.strip() == "LOG wifi: driver unavailable" for line in s.log) == 1, "\n".join(s.log)
+
+
+def test_boots_with_sensors_flag_on(qemu):
+    """R_FW_SENSORS: the flag survives a reboot and a board without a controller (QEMU) boots with it
+    on — the window is never opened (scan_window refuses), nothing crashes."""
+    s = qemu.boot()
+    s.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
+    s.send("sensors on")
+    assert s.expect("LOG exp: sensors") == "on"
+    s.stop()
+    s2 = qemu.boot()  # same flash.bin
+    assert s2.expect("LOG exp: sensors", timeout=90) == "on"
+    s2.expect("STATE", lambda v: v["state"] == "idle", timeout=90)
+    time.sleep(3)  # a crash would reboot within ~0.4 s (QEMU)
+    s2.send("sensors")
+    assert s2.expect("SENSORS")["seen"] == []
+    assert sum(line.startswith(BOOT_BANNER) for line in s2.log) == 1, "rebooted:\n" + "\n".join(s2.log)

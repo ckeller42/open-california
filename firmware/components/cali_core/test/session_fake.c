@@ -131,7 +131,7 @@ static int f_write(uint16_t c, const uint8_t *d, size_t n) {
 static const cali_transport_t FAKE = {
     f_set_sink, f_start_scan, f_stop_scan, f_connect_found, f_connect_bonded, f_pair,
     f_inject_passkey, f_discover, f_read, f_subscribe, f_write_heartbeat, f_disconnect,
-    f_remove_bond, f_has_bond, f_identity, f_write, f_keep_only_bond,
+    f_remove_bond, f_has_bond, f_identity, f_write, f_keep_only_bond, NULL /* scan_window: no sensor tick here */,
 };
 
 static size_t unhex(const char *h, uint8_t *out, size_t max) {
@@ -197,6 +197,10 @@ int cali_kv_set(const char *key, const void *buf, size_t len) {
     s_kv[i].len = len;
     return 0;
 }
+
+/* console.c's "sensors" commands link these (web.c / the platform clock are not in this build). */
+int cali_exp_sensors_set(int on) { (void)on; return -1; }
+uint64_t cali_uptime_ms(void) { return 0; }
 
 static int s_erase_fail;   /* "kverasefail n": the next n erases fail */
 

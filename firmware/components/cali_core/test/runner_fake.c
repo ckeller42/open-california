@@ -6,6 +6,7 @@
  *   transport events (delivered through the sink the runner registered):
  *     FOUND | CONNECTED | CONNECT_FAIL [status] | PASSKEY_REQ | ENC_OK | ENC_FAIL [status]
  *     DISCONNECTED [reason] | READ <hex char> <status> | NOTIFY <hex char> | DISCOVERED [status]
+ *     ADV                (a sensor window's advert)
  *   console-side commands:
  *     pair | passkey N | forget | tick <now_ms>
  *     fail <call>        the next call of that transport function returns -1
@@ -14,12 +15,15 @@
  *                        set_sink/has_bond/identity are not printed
  *   STATE <json>         each cali_runner_on_state, keys state/attempts/error/address
  *   OTHER <ev> <char> <status>   each event forwarded to cali_runner_on_other
+ *   SENSADV <addr> <now_ms>      each ADV the runner hands to cali_sensors_on_adv (stubbed here)
+ *   WINDOW <ms>                  scan_window (never called by the runner)
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "cali_runner.h"
+#include "cali_sensors.h"
 #include "pairing_consts.h"
 
 #define FAKE_IDENTITY "C0:FF:EE:CA:11:F0"
@@ -61,11 +65,17 @@ static int f_remove_bond(void) { return call("remove_bond", NULL); }
 static int f_has_bond(void) { return 0; }
 static const char *f_identity(void) { return FAKE_IDENTITY; }
 static int f_write(uint16_t c, const uint8_t *d, size_t n) { (void)c; (void)d; (void)n; return -1; }
+static int f_scan_window(uint32_t ms) { printf("WINDOW %u\n", (unsigned)ms); return 0; }
+
+/* sensors.c's entry point, stubbed: the runner's ADV forwarding is what this fake proves. */
+void cali_sensors_on_adv(const cali_tevent_t *e, uint64_t now_ms) {
+    printf("SENSADV %s %llu\n", e->addr, (unsigned long long)now_ms);
+}
 
 static const cali_transport_t FAKE = {
     f_set_sink, f_start_scan, f_stop_scan, f_connect_found, f_connect_bonded, f_pair,
     f_inject_passkey, f_discover, f_read, f_subscribe, f_write_heartbeat, f_disconnect,
-    f_remove_bond, f_has_bond, f_identity, f_write, f_keep_only_bond,
+    f_remove_bond, f_has_bond, f_identity, f_write, f_keep_only_bond, f_scan_window,
 };
 
 static void on_state(const cali_pair_state_t *s, const char *address) {
@@ -98,6 +108,7 @@ static void deliver(cali_tev_t ev, int status, uint16_t c) {
         e.len = sizeof payload;
     }
     if (ev == CALI_TEV_FOUND) strcpy(e.addr, "5A:11:22:33:44:55");
+    if (ev == CALI_TEV_ADV) strcpy(e.addr, "A4:C1:38:00:00:01");
     if (s_sink) s_sink(&e, s_ctx);
 }
 
@@ -123,6 +134,7 @@ int main(void) {
             deliver(CALI_TEV_READ, (int)strtol(a2, NULL, 10), (uint16_t)strtoul(a1, NULL, 16));
         else if (strcmp(word, "NOTIFY") == 0) deliver(CALI_TEV_NOTIFY, 0, (uint16_t)strtoul(a1, NULL, 16));
         else if (strcmp(word, "DISCOVERED") == 0) deliver(CALI_TEV_DISCOVERED, n1, 0);
+        else if (strcmp(word, "ADV") == 0) deliver(CALI_TEV_ADV, 1, 0);
         else if (strcmp(word, "pair") == 0) cali_runner_start();
         else if (strcmp(word, "passkey") == 0) cali_runner_passkey((uint32_t)strtoul(a1, NULL, 10));
         else if (strcmp(word, "forget") == 0) cali_runner_forget();

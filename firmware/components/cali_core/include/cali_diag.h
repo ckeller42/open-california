@@ -14,6 +14,8 @@
  *   {"ev":"perf","route":"/api/state","status":200,"bytes":4711,"ms":100}   every HTTP response
  *   {"ev":"perf","char":"1602","op":"read","ms":84}                         BLE ops, sampled
  *   {"ev":"log","lvl":"W","tag":"wifi","msg":"…"} / {"ev":"log","dropped":n} ESP_LOGW/E, rate-limited
+ *   {"ev":"ext","dev":"<alias>","type":"govee","temp_c":…,…}  a configured external sensor's reading
+ *                                    (sensors.c, R_FW_SENSORS), at most once a minute per sensor
  * No client MAC or IP and no user-typed value is ever recorded (cmd: the fn + control name only).
  *
  * C99, no malloc, no ESP-IDF headers, no clock of its own (callers pass now_ms). Thread-safe where
