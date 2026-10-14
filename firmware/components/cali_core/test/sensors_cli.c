@@ -4,9 +4,10 @@
  *   init                                     cali_sensors_init()
  *   now <ms>                                 the clock adv uses (starts at 0)
  *   adv <addr> <addr_type> <rssi> <name> <mfg hex>   a CALI_TEV_ADV at the clock
- *   add <id> <alias|-> <keyhex|->            cali_sensors_add ("-" = NULL)
+ *   add <id> <alias|-> <keyhex|->            cali_sensors_add ("-" = NULL) at the clock
  *   remove <id> | rename <id> <alias>
  *   kick                                     cali_sensors_kick()
+ *   busy 0|1                                 1: the fake transport refuses windows (prints nothing)
  *   tick <now_ms> <enabled> <pairing>        cali_sensors_tick on a fake transport: "WINDOW <ms>" per window
  *   state <now_ms>                           "EXT " + the ext object
  *   api <now_ms>                             "API " + the /api/sensors object
@@ -25,7 +26,9 @@ static int rec(const char *body) {
     return 0;
 }
 
+static int s_busy;
 static int window(uint32_t ms) {
+    if (s_busy) return -1;
     printf("WINDOW %u\n", (unsigned)ms);
     return 0;
 }
@@ -78,13 +81,16 @@ int main(int argc, char **argv) {
             printf("OK 0\n");
         } else if (!strcmp(cmd, "add") && n == 4) {
             printf("OK %d\n", cali_sensors_add((uint16_t)atoi(a[0]), strcmp(a[1], "-") ? a[1] : NULL,
-                                               strcmp(a[2], "-") ? a[2] : NULL));
+                                               strcmp(a[2], "-") ? a[2] : NULL, now));
         } else if (!strcmp(cmd, "remove") && n == 2) {
             printf("OK %d\n", cali_sensors_remove((uint16_t)atoi(a[0])));
         } else if (!strcmp(cmd, "rename") && n == 3) {
             printf("OK %d\n", cali_sensors_rename((uint16_t)atoi(a[0]), a[1]));
         } else if (!strcmp(cmd, "kick")) {
             cali_sensors_kick();
+            printf("OK 0\n");
+        } else if (!strcmp(cmd, "busy") && n == 2) {
+            s_busy = atoi(a[0]);
             printf("OK 0\n");
         } else if (!strcmp(cmd, "tick") && n == 4) {
             cali_sensors_tick(strtoull(a[0], NULL, 10), &t, atoi(a[1]), atoi(a[2]));

@@ -41,8 +41,10 @@
  *                                  "experimental":{"sensors":<bool>},   -- the sensor track switch (NVS
  *                                                                exp_sensors, default off; R_FW_EXPERIMENTAL)
  *                                  "water_held":<bool>,
- *                                  "water_held_age_ms":<int>}}   -- only while held AND the baseline
+ *                                  "water_held_age_ms":<int>},   -- only while held AND the baseline
  *                                                                   was measured on this boot
+ *                      "ext":{"<alias>":{<field>:<num|null>,…,"age_s":<int|null>},…}}   -- ONLY while
+ *                                  exp_sensors is on (off: the key is absent); cali_sensors_state_json
  *                     built whole in one handler call (one consistent snapshot) into a
  *                     NET_JSON_MAX buffer; overflow -> 500 + LOG "http: overflow".
  *   GET /api/wifi     200 {"mode","ssid","ip","rssi","last_error":"not_found"|"auth"|"other"|null,
@@ -126,6 +128,14 @@
  *                     "Sensors (experimental)" switch -> cali_exp_sensors_set (NVS exp_sensors, applied at
  *                     once, LOG exp: sensors on|off) -> 200 {"ok":true,"sensors":<bool>}; station mode
  *                     only (403 setup_mode), 400 bad_json, 500 store, 405 for another method.
+ *   GET|POST /api/sensors  (R_FW_SENSORS, cali_sensors.h) every WiFi mode; 404 {"ok":false,"error":
+ *                     "disabled"} on both while exp_sensors is off (checked first). GET -> 200
+ *                     {"configured":[{id,type,alias,last_seen_s,value|null,has_key}],"seen":[{id,type,
+ *                     model,rssi}],"scan":"ok"|"paused"} and cali_sensors_kick. POST exactly one of
+ *                     {"add":<id>,"alias"?:"…","key"?:"<32 hex>"} | {"remove":<id>} | {"id":<id>,
+ *                     "alias":"…"} (any order, each key once; id 0..65535) -> 200 the GET body; 400
+ *                     bad_json (not that shape) | bad_alias | bad_key | key_mismatch | unknown_id |
+ *                     full, 500 store; 405 for another method.
  *   POST /api/auto_camper  {"enabled":<bool>} (exactly that object; R_FW_AUTO_CAMPER, serve's endpoint):
  *                     cali_ac_set_enabled -> 200 {"ok":true,"auto_camper":<bool>}; station mode only
  *                     (403 setup_mode), 400 bad_json, 500 store (not saved), 405 for another method.

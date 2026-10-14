@@ -34,6 +34,9 @@ from .api_shape import (
     PAIRING_KEYS,
     RES_KEYS,
     SD_KEYS,
+    SENSOR_CFG_KEYS,
+    SENSOR_SEEN_KEYS,
+    SENSORS_KEYS,
     STATE_KEYS,
     TIME_KEYS,
     WIFI_GET_KEYS,
@@ -92,6 +95,7 @@ def _build(tmp_path_factory, name, *defines):
             str(CORE / "auto_camper_run.c"),
             str(CORE / "display_cfg.c"),
             str(CORE / "battery.c"),
+            str(CORE / "sensors.c"),
             str(ROOT / "csrc" / "codec.c"),
             str(CORE / "test" / "web_cli.c"),
             "-o",
@@ -1671,6 +1675,119 @@ def test_experimental_switch_persists_and_shows_in_state(web_cli):
 def test_experimental_errors(web_cli, setup, method, body, status, error):
     r, _ = one(web_cli, method, "/api/experimental", body, setup=setup)
     assert (r.status, r.json()) == (status, {"ok": False, "error": error})
+
+
+# ---- /api/sensors (R_FW_SENSORS) ----------------------------------------------------------------
+
+GOVEE_SEEN = [
+    "sensadv A4:C1:38:00:00:02 1 -70 GVH5074_0002 88ec005c09d8165a02"
+]  # web_cli.c: cali_sensors_on_adv
+
+
+def test_sensors_404_disabled_while_flag_off(web_cli):
+    """Flag off: both methods 404, and /api/state carries no ``ext``.
+
+    .. test:: /api/sensors: the flag gate, the shapes, add/rename/remove and every error code
+       :id: T_FW_SENSORS_API
+       :links: R_FW_SENSORS
+    """
+    for m, body in (("GET", None), ("POST", '{"remove":1}')):
+        r, _ = one(web_cli, m, "/api/sensors", body, setup=STATION)
+        assert (r.status, r.json()) == (404, {"ok": False, "error": "disabled"})
+    assert "ext" not in json.loads(get(web_cli, "/api/state", setup=STATION))
+
+
+def test_sensors_get_seen_add_remove_roundtrip(web_cli):
+    on = ["kvhex exp_sensors 01", *STATION, *GOVEE_SEEN]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("GET", "/api/sensors")])
+    api = rs[0].json()
+    sid = api["seen"][0]["id"]
+    assert set(api) == SENSORS_KEYS and set(api["seen"][0]) == SENSOR_SEEN_KEYS
+    assert api["scan"] == "ok" and api["configured"] == []
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("POST", "/api/sensors", '{"add":%d,"alias":"kitchen"}' % sid),
+                            *(GOVEE_SEEN[0].encode(),), req("GET", "/api/state"), req("POST", "/api/sensors", '{"remove":%d}' % sid)])  # fmt: skip
+    c = rs[0].json()["configured"]
+    assert set(c[0]) == SENSOR_CFG_KEYS and set(json.loads(rs[1].body)) == STATE_KEYS | {"ext"}
+    assert c == [
+        {"id": sid, "type": "govee", "alias": "kitchen", "last_seen_s": None, "value": None, "has_key": False}
+    ]
+    assert json.loads(rs[1].body)["ext"] == {
+        "kitchen": {"temp_c": 23.96, "humidity": 58.48, "battery": 90, "age_s": 0}
+    }
+    assert rs[2].json()["configured"] == []
+
+
+def test_sensors_get_kicks_and_post_works_in_setup_mode(web_cli):
+    on = ["kvhex exp_sensors 01", "wifi setup_ap", *GOVEE_SEEN]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("GET", "/api/sensors")])
+    sid = rs[0].json()["seen"][0]["id"]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("POST", "/api/sensors", '{"add":%d}' % sid),
+                            req("POST", "/api/sensors", '{"alias":"porch","id":%d}' % sid), req("PUT", "/api/sensors", "{}")])  # fmt: skip
+    assert rs[0].status == 200 and [c["alias"] for c in rs[1].json()["configured"]] == ["porch"]
+    assert (rs[2].status, rs[2].json()) == (405, {"ok": False, "error": "method"})
+
+
+@pytest.mark.parametrize(
+    "body,error",
+    [
+        ('{"add":"x"}', "bad_json"),
+        ('{"add":1,"remove":1}', "bad_json"),
+        ('{"add":1,"add":2}', "bad_json"),
+        ('{"add":65536}', "bad_json"),
+        ('{"add":1,"x":1}', "bad_json"),
+        ('{"alias":"x"}', "bad_json"),
+        ('{"add":1} x', "bad_json"),
+        ('{"add":65535}', "unknown_id"),
+        ('{"add":SID,"alias":"Küche"}', "bad_alias"),
+        ('{"add":SID,"alias":"a-very-long-alias-x"}', "bad_alias"),
+        ('{"add":SID,"key":"abc"}', "bad_key"),
+        ('{"add":SID,"key":"%s"}' % ("0" * 33), "bad_key"),
+        ('{"id":65535,"alias":"x"}', "unknown_id"),
+        ('{"remove":65535}', "unknown_id"),
+    ],
+)
+def test_sensors_post_errors(web_cli, body, error):
+    on = ["kvhex exp_sensors 01", *STATION, *GOVEE_SEEN]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("GET", "/api/sensors")])
+    sid = rs[0].json()["seen"][0]["id"]
+    r, _ = one(web_cli, "POST", "/api/sensors", body.replace("SID", str(sid)), setup=on)
+    assert (r.status, r.json()) == (400, {"ok": False, "error": error})
+
+
+def test_sensors_second_of_type_needs_alias(web_cli):
+    on = [
+        "kvhex exp_sensors 01",
+        *STATION,
+        *GOVEE_SEEN,
+        "sensadv A4:C1:38:00:00:03 1 -71 GVH5074_0003 88ec005c09d8165a02",
+    ]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("GET", "/api/sensors")])
+    a, b = [s["id"] for s in rs[0].json()["seen"]]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("POST", "/api/sensors", '{"add":%d}' % a),
+                            req("POST", "/api/sensors", '{"add":%d}' % b), req("POST", "/api/sensors", '{"add":%d,"alias":"bed"}' % b)])  # fmt: skip
+    assert rs[0].status == 200 and rs[1].json() == {"ok": False, "error": "bad_alias"} and rs[2].status == 200
+    assert sorted(c["alias"] for c in rs[2].json()["configured"]) == ["bed", "govee"]
+
+
+def test_sensors_list_survives_flag_off(web_cli):
+    # web_cli's kv fake is per process: everything that must share state goes into ONE drive() script
+    on = ["kvhex exp_sensors 01", *STATION, *GOVEE_SEEN]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("GET", "/api/sensors")])
+    sid = rs[0].json()["seen"][0]["id"]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("POST", "/api/sensors", '{"add":%d}' % sid),
+                            req("POST", "/api/experimental", '{"sensors":false}'), req("GET", "/api/sensors"),
+                            req("GET", "/api/state"), req("POST", "/api/experimental", '{"sensors":true}'), req("GET", "/api/sensors")])  # fmt: skip
+    assert rs[0].status == 200 and rs[2].status == 404
+    assert "ext" not in json.loads(rs[3].body)
+    assert [c["alias"] for c in rs[5].json()["configured"]] == ["govee"]
+
+
+def test_sensors_store_failure_is_500(web_cli):
+    on = ["kvhex exp_sensors 01", *STATION, *GOVEE_SEEN]
+    rs, _ = drive(web_cli, [*(s.encode() for s in on), req("GET", "/api/sensors")])
+    sid = rs[0].json()["seen"][0]["id"]
+    r, _ = one(web_cli, "POST", "/api/sensors", '{"add":%d}' % sid, setup=on + ["kvfail 1"])
+    assert (r.status, r.json()) == (500, {"ok": False, "error": "store"})
 
 
 # ---- /api/display (R_FW_DISPLAY_WAKE) ---------------------------------------------------------

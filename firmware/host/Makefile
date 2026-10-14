@@ -189,7 +189,7 @@ web.o: $(COMPONENTS)/cali_core/web.c $(CORE_H)/cali_web.h $(CORE_H)/cali_http.h 
 		$(CORE_H)/cali_wifi_run.h $(CORE_H)/cali_wifi_sm.h $(CORE_H)/cali_session.h \
 		$(CORE_H)/cali_runner.h $(CORE_H)/cali_control.h $(CSRC)/net_consts.h $(CSRC)/pairing_consts.h ../web/strings_gen.h \
 		../web/app_bundle_gen.h $(CORE_H)/cali_ota.h $(CORE_H)/cali_time.h $(CORE_H)/cali_sdlog.h $(CORE_H)/cali_auto_camper.h \
-		$(CORE_H)/cali_display_model.h $(COMPONENTS)/platform/include/cali_platform.h
+		$(CORE_H)/cali_display_model.h $(CORE_H)/cali_sensors.h $(COMPONENTS)/platform/include/cali_platform.h
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 # The OTA state machine (R_FW_OTA): /api/ota + device.ota. The host has no OTA I/O (cali_ota_init is

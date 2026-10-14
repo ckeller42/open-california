@@ -33,8 +33,9 @@ from tools import gen_c_dict
 from tools.gen_semantics_vectors import UI_FUNCTIONS
 from tools.wifi_consts import CONSTS
 
-from .conftest import build_host
+from .conftest import FakeAdvertiser, build_host
 from .test_host_e2e import _beats_seen, _funcs, _pair, _serve_raw, _served_frames
+from .test_sensors import GOVEE_H5074
 
 # One xdist worker: the host_fw fixture runs `make` in firmware/host (like test_host_e2e.py).
 pytestmark = [pytest.mark.linux_only, pytest.mark.xdist_group("firmware-host-build")]
@@ -589,6 +590,42 @@ def test_experimental_box_toggles(host_fw, hci_unit, tmp_path, locale, lang):
         browser.close()
     assert not errors, errors
     assert get_json(fw, "/api/state")["device"]["experimental"] == {"sensors": True}
+
+
+@pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])
+def test_sensors_box_add_and_remove(host_fw, hci_unit, tmp_path, locale, lang):
+    """Station mode (the flag's switch is station only); the box's own poll kicks a window.
+
+    .. test:: The /device Sensors box (EN + DE)
+       :id: T_FW_SENSORS_UI
+       :links: R_FW_SENSORS
+    """
+    sync_playwright = _require_chromium()
+    wifi = _wifi_script(tmp_path, "ap minsel -55 1\njoin minsel ok 192.168.1.42\n")
+    fw = host_fw(hci_unit, http=True, fake_wifi=wifi)
+    _pair(fw, hci_unit)
+    fw.expect("SNAP", timeout=40)
+    fw.send("wifi set minsel %s" % PSK)
+    fw.expect("LOG", lambda l: l == "wifi: online 192.168.1.42")
+    FakeAdvertiser(hci_unit, "A4:C1:38:00:00:02", bytes.fromhex(GOVEE_H5074), "GVH5074_0002").start()
+    assert post_json(fw, "/api/experimental", {"sensors": True}) == {"ok": True, "sensors": True}
+    errors = []
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_context(locale=locale).new_page()
+        page.on("dialog", lambda d: d.accept())
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto("http://127.0.0.1:%d/device" % fw.http_port)
+        page.wait_for_selector("#sens-seen .row", timeout=90_000)  # the first window finds it
+        assert page.inner_text("#sens-title") == STRINGS["sens_title"][lang]
+        assert "GVH5074" in page.inner_text("#sens-seen .row")
+        page.click("#sens-seen .row button")  # Add
+        page.wait_for_selector("#sens-cfg .row", timeout=10_000)
+        assert page.inner_text("#sens-cfg .row").startswith("govee")
+        page.click("#sens-cfg .row button")  # Remove (confirm auto-accepted)
+        page.wait_for_function("() => !document.querySelector('#sens-cfg .row')", timeout=10_000)
+        browser.close()
+    assert not errors, errors
 
 
 @pytest.mark.parametrize("locale,lang", [("en-US", "en"), ("de-DE", "de")])

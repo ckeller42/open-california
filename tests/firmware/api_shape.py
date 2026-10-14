@@ -5,7 +5,10 @@ real C handlers (``web.c``), ``tests/test_ux_gallery_esp_fixtures.py`` of the ca
 docs screenshots — so a handler shape change that updates one and not the other fails.
 """
 
-STATE_KEYS = frozenset({"t", "fn", "device"})  # GET /api/state
+STATE_KEYS = frozenset({"t", "fn", "device"})  # GET /api/state (+ "ext" while exp_sensors is on)
+SENSORS_KEYS = frozenset({"configured", "seen", "scan"})  # GET /api/sensors (R_FW_SENSORS)
+SENSOR_CFG_KEYS = frozenset({"id", "type", "alias", "last_seen_s", "value", "has_key"})  # .configured[]
+SENSOR_SEEN_KEYS = frozenset({"id", "type", "model", "rssi"})  # .seen[]
 DEVICE_KEYS = frozenset(
     {
         "pairing",

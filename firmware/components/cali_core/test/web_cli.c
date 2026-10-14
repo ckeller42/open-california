@@ -44,6 +44,8 @@
  *                    (NULL when absent)
  *   sdlog <dir> <cap>   the SD side: cali_sdlog_open(dir), card "ok", a <cap>-byte /api/log page buffer;
  *                    every poll of a request then also runs cali_sdlog_page_serve (the SD task)
+ *   sensadv <addr> <addr_type> <rssi> <name> <mfg hex>   a CALI_TEV_ADV into cali_sensors_on_adv at the
+ *                    clock (sensors.c is real; cali_sensors_init runs at start, an empty kv store)
  *   otainit          cali_ota_init with fake ops (default: none, so /api/ota answers 503); their
  *                    wake prints "CALL ota_wake", the rest are never reached (ota.c runs on the OTA
  *                    task, tests/firmware/test_ota.py)
@@ -64,7 +66,7 @@
 #include "cali_platform.h"
 #include "cali_sdlog.h"
 #include "cali_runner.h"
-#include "cali_sdlog.h"
+#include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_web.h"
 #include "cali_wifi_run.h"
@@ -162,8 +164,8 @@ static const char *f_identity(void) { return s_bond ? "C0:FF:EE:CA:11:F0" : NULL
 static const cali_transport_t fake_t = {.has_bond = f_has_bond, .identity = f_identity};
 
 /* ---- the fake platform ---- */
-#define KV_N 8
-static struct { char key[CALI_KV_KEY_MAX + 1]; char val[128]; size_t len; int used; } s_kv[KV_N];
+#define KV_N 12
+static struct { char key[CALI_KV_KEY_MAX + 1]; char val[1024]; size_t len; int used; } s_kv[KV_N];   /* val: the sens_list blob */
 static int s_kvfail;
 
 int cali_kv_set(const char *key, const void *buf, size_t len) {
@@ -324,6 +326,7 @@ int main(void) {
     static char line[LINE_MAX];
     setvbuf(stdout, NULL, _IOFBF, 1 << 16);
     fprintf(stderr, "init=%d\n", cali_web_init(&fake_net, &fake_t, NET_HTTP_PORT));
+    cali_sensors_init();
     while (fgets(line, sizeof line, stdin)) {
         char w[64] = "", a1[64] = "", a2[64] = "", a3[64] = "", a4[64] = "";
         long v;
@@ -341,6 +344,23 @@ int main(void) {
         else if (strcmp(w, "flipping") == 0) s_flipping = (int)v;
         else if (strcmp(w, "nofn") == 0) s_nofn = 1;
         else if (strcmp(w, "otainit") == 0) cali_ota_init(&fake_ota);
+        else if (strcmp(w, "sensadv") == 0) {
+            char hex[128] = "";
+            uint8_t mfg[62];
+            size_t len = 0;
+            cali_tevent_t e;
+            memset(&e, 0, sizeof e);
+            (void)sscanf(line, "%*s %*s %*s %*s %*s %127s", hex);   /* the 6th token: past a1..a4 */
+            while (len < sizeof mfg && hex[2 * len] && sscanf(hex + 2 * len, "%2hhx", &mfg[len]) == 1) len++;
+            e.ev = CALI_TEV_ADV;
+            snprintf(e.addr, sizeof e.addr, "%.17s", a1);
+            e.status = (int)strtol(a2, NULL, 10);
+            e.rssi = (int8_t)strtol(a3, NULL, 10);
+            snprintf(e.name, sizeof e.name, "%.23s", a4);
+            e.data = mfg;
+            e.len = len;
+            cali_sensors_on_adv(&e, s_now);
+        }
         else if (strcmp(w, "sdlog") == 0) {
             static char pagebuf[OUT_MAX], dir[256];
             unsigned long cap = 0;

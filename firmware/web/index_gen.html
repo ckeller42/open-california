@@ -71,6 +71,13 @@ a{color:var(--accent)}
   <button id="exp-toggle" class="secondary" type="button" hidden></button>
   <p id="exp-msg" class="bad"></p>
 </section>
+<section id="sens" class="box" hidden>
+  <h2 id="sens-title"></h2>
+  <p id="sens-hint" class="muted"></p>
+  <div id="sens-cfg"></div>
+  <div id="sens-seen"></div>
+  <p id="sens-msg" class="bad"></p>
+</section>
 <section id="fw" class="box">
   <h2 id="fw-title"></h2>
   <p id="fw-status"></p>
@@ -82,94 +89,40 @@ a{color:var(--accent)}
 </main>
 <script>
 const CFG = {pollMs: 2000, connectTimeoutMs: 8000, connectRetryMs: 3000, host: "calictl-esp", ssidMax: 32, pskMin: 8, pskMax: 63};
-const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"ac_turn_off":{"de":"Ausschalten","en":"Turn off"},"ac_turn_on":{"de":"Einschalten","en":"Turn on"},"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"app_link_pair":{"de":"Camper-Oberfläche öffnen, um die Einheit zu koppeln","en":"Open the camper UI to pair the unit"},"batt_charging":{"de":"an USB, lädt","en":"on USB, charging"},"batt_left":{"de":"noch ~{time}","en":"~{time} left"},"batt_on":{"de":"im Akkubetrieb","en":"on battery"},"batt_title":{"de":"Akku","en":"Battery"},"batt_usb":{"de":"an USB","en":"on USB"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"exp_error":{"de":"Schalter konnte nicht geändert werden","en":"Couldn't change the switch"},"exp_hint":{"de":"Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.","en":"Enables the sensor scan and setup. Stable features do not depend on it."},"exp_off":{"de":"Sensoren (experimentell): aus","en":"Sensors (experimental): off"},"exp_on":{"de":"Sensoren (experimentell): an","en":"Sensors (experimental): on"},"exp_title":{"de":"Experimentell","en":"Experimental"},"fw_ch_error":{"de":"Kanal konnte nicht geändert werden","en":"Couldn't change the channel"},"fw_ch_latest":{"de":"neueste (jeder Merge)","en":"latest (every merge)"},"fw_ch_stable":{"de":"stabil (getestet)","en":"stable (tested)"},"fw_channel":{"de":"Kanal","en":"Channel"},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_station_only":{"de":"Updates brauchen das Heim-WLAN.","en":"Updates need the home WiFi."},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_motion":{"de":"Bei Bewegung einschalten","en":"Wake on motion"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Camper-Einrichtung","en":"Camper setup"},"ux_error":{"de":"Nutzungsdaten konnten nicht geändert werden","en":"Couldn't change usage data"},"ux_off":{"de":"Nutzungsdaten senden: aus","en":"Send usage data: off"},"ux_on":{"de":"Nutzungsdaten senden: an","en":"Send usage data: on"}};
+const STR = {"ac_armed":{"de":"⟳ wird beim Parken wiederhergestellt","en":"⟳ will restore on park"},"ac_error":{"de":"Auto-Campingmodus konnte nicht geändert werden","en":"Couldn't change auto camper"},"ac_off":{"de":"Auto-Campingmodus aus","en":"Auto camper off"},"ac_on":{"de":"Auto-Campingmodus an","en":"Auto camper on"},"ac_restoring":{"de":"⟳ wird wiederhergestellt …","en":"⟳ restoring …"},"ac_station_only":{"de":"braucht das Heim-WLAN","en":"needs the home WiFi"},"ac_title":{"de":"Campingmodus nach dem Parken wiederherstellen","en":"Restore camping after you park"},"ac_turn_off":{"de":"Ausschalten","en":"Turn off"},"ac_turn_on":{"de":"Einschalten","en":"Turn on"},"app_link":{"de":"Camper-Oberfläche öffnen","en":"Open the camper UI"},"app_link_pair":{"de":"Camper-Oberfläche öffnen, um die Einheit zu koppeln","en":"Open the camper UI to pair the unit"},"batt_charging":{"de":"an USB, lädt","en":"on USB, charging"},"batt_left":{"de":"noch ~{time}","en":"~{time} left"},"batt_on":{"de":"im Akkubetrieb","en":"on battery"},"batt_title":{"de":"Akku","en":"Battery"},"batt_usb":{"de":"an USB","en":"on USB"},"connect":{"de":"Verbinden","en":"Connect"},"device":{"de":"Gerät","en":"Device"},"err_json":{"de":"Das Gerät hat die Anfrage abgelehnt.","en":"The device rejected the request."},"err_net":{"de":"Keine Antwort vom Gerät.","en":"No answer from the device."},"err_psk":{"de":"Das Passwort braucht {min}–{max} Zeichen.","en":"The password needs {min}–{max} characters."},"err_ssid":{"de":"Wähle ein Netzwerk (1–{max} Zeichen).","en":"Choose a network (1–{max} characters)."},"err_store":{"de":"Die WLAN-Einstellungen konnten nicht gespeichert werden.","en":"Could not save the WiFi settings."},"exp_error":{"de":"Schalter konnte nicht geändert werden","en":"Couldn't change the switch"},"exp_hint":{"de":"Schaltet Sensorsuche und -einrichtung frei. Stabile Funktionen hängen nicht davon ab.","en":"Enables the sensor scan and setup. Stable features do not depend on it."},"exp_off":{"de":"Sensoren (experimentell): aus","en":"Sensors (experimental): off"},"exp_on":{"de":"Sensoren (experimentell): an","en":"Sensors (experimental): on"},"exp_title":{"de":"Experimentell","en":"Experimental"},"fw_ch_error":{"de":"Kanal konnte nicht geändert werden","en":"Couldn't change the channel"},"fw_ch_latest":{"de":"neueste (jeder Merge)","en":"latest (every merge)"},"fw_ch_stable":{"de":"stabil (getestet)","en":"stable (tested)"},"fw_channel":{"de":"Kanal","en":"Channel"},"fw_check":{"de":"Nach Update suchen","en":"Check for update"},"fw_install":{"de":"{sha} installieren","en":"Install {sha}"},"fw_running":{"de":"Läuft: {sha}","en":"Running {sha}"},"fw_station_only":{"de":"Updates brauchen das Heim-WLAN.","en":"Updates need the home WiFi."},"fw_title":{"de":"Firmware-Update","en":"Firmware update"},"join_failed_auth":{"de":"Falsches Passwort — versuche es erneut.","en":"Wrong password — try again."},"join_failed_not_found":{"de":"Netzwerk nicht gefunden — prüfe, ob es in Reichweite ist, und versuche es erneut.","en":"Network not found — check that it is in range, then try again."},"join_failed_other":{"de":"Verbindung nicht möglich — versuche es erneut.","en":"Could not join the network — try again."},"joined":{"de":"Verbunden als {ip}. Verbinde auch dieses Gerät mit {ssid} und öffne dann:","en":"Connected as {ip}. Join {ssid} with this device too, then open:"},"joining":{"de":"Verbinde mit {ssid}…","en":"Connecting to {ssid}…"},"network":{"de":"Netzwerk","en":"Network"},"no_networks":{"de":"Keine Netzwerke gefunden","en":"No networks found"},"offline":{"de":"Gerät nicht erreichbar","en":"Device not reachable"},"open_unsupported":{"de":"offenes Netz, nicht unterstützt","en":"open network, not supported"},"ota_available":{"de":"{sha} ist verfügbar","en":"{sha} is available"},"ota_checking":{"de":"suche …","en":"checking …"},"ota_downloading":{"de":"lade {pct} %","en":"downloading {pct} %"},"ota_error":{"de":"Update fehlgeschlagen ({error})","en":"update failed ({error})"},"ota_rebooting":{"de":"installiert, startet neu …","en":"installed, restarting …"},"ota_up_to_date":{"de":"aktuell","en":"up to date"},"ota_verifying":{"de":"prüfe …","en":"verifying …"},"password":{"de":"Passwort","en":"Password"},"res_cpu":{"de":"CPU {pct} %","en":"CPU {pct} %"},"res_psram":{"de":"PSRAM {free} KB frei","en":"PSRAM {free} KB free"},"res_ram":{"de":"RAM {free} KB frei (Minimum {min})","en":"RAM {free} KB free (lowest {min})"},"res_title":{"de":"Ressourcen","en":"Resources"},"rescan":{"de":"Erneut suchen","en":"Search again"},"retrying":{"de":"Verbindung wird erneut versucht…","en":"Retrying the connection…"},"scanning":{"de":"Suche Netzwerke…","en":"Searching for networks…"},"scr_auto":{"de":"Helligkeit nach Raumlicht","en":"Brightness from room light"},"scr_dim":{"de":"gedimmt","en":"dimmed"},"scr_motion":{"de":"Bei Bewegung einschalten","en":"Wake on motion"},"scr_nolux":{"de":"kein Lichtsensor-Wert","en":"no light sensor reading"},"scr_off":{"de":"aus","en":"off"},"scr_offset":{"de":"Helligkeit {n}","en":"Brightness {n}"},"scr_on":{"de":"an","en":"on"},"scr_prox":{"de":"Bei Annäherung einschalten","en":"Wake when a hand is near"},"scr_title":{"de":"Bildschirm","en":"Screen"},"sd_absent":{"de":"Keine SD-Karte","en":"No SD card"},"sd_dropped":{"de":"{n} Einträge verworfen","en":"{n} records dropped"},"sd_error":{"de":"SD-Kartenfehler","en":"SD card error"},"sd_log":{"de":"Log Nr. {seq}","en":"log #{seq}"},"sd_ok":{"de":"SD {free} von {total} GB frei","en":"SD {free} of {total} GB free"},"sd_title":{"de":"Speicher","en":"Storage"},"sens_add":{"de":"Hinzufügen","en":"Add"},"sens_alias":{"de":"Name (a–z, 0–9, -, _)","en":"Name (a–z, 0–9, -, _)"},"sens_confirm_remove":{"de":"{alias} entfernen?","en":"Remove {alias}?"},"sens_err_bad_alias":{"de":"Name vergeben oder ungültig","en":"Name taken or invalid"},"sens_err_bad_key":{"de":"Schlüssel muss 32 Hex-Zeichen haben","en":"Key must be 32 hex digits"},"sens_err_full":{"de":"Sensorliste ist voll (16)","en":"Sensor list is full (16)"},"sens_err_key_mismatch":{"de":"Schlüssel passt nicht zu diesem Gerät","en":"Key does not match this device"},"sens_error":{"de":"Sensoren konnten nicht geändert werden","en":"Couldn't change the sensors"},"sens_hint":{"de":"Sensoren in der Nähe erscheinen unten; füge deine hinzu.","en":"Nearby sensors appear below; add the ones that are yours."},"sens_key":{"de":"Verschlüsselungsschlüssel (32 Hex-Zeichen)","en":"Encryption key (32 hex digits)"},"sens_none":{"de":"Noch keine Sensoren gefunden (die Suche läuft jede Minute).","en":"No sensors found yet (the scan runs every minute)."},"sens_paused":{"de":"Suche pausiert während der Kopplung","en":"Scan paused while pairing"},"sens_remove":{"de":"Entfernen","en":"Remove"},"sens_t_govee":{"de":"Thermo-Hygrometer (Govee)","en":"Thermo-hygrometer (Govee)"},"sens_t_victron_battery":{"de":"Batteriesensor (Victron)","en":"Battery sense (Victron)"},"sens_t_victron_mppt":{"de":"Solarladeregler (Victron)","en":"Solar charger (Victron)"},"sens_title":{"de":"Sensoren","en":"Sensors"},"setup_hint":{"de":"Wähle ein Netzwerk und gib sein Passwort ein.","en":"Choose a network and enter its password."},"setup_title":{"de":"Mit deinem WLAN verbinden","en":"Connect to your WiFi"},"time_none":{"de":"Keine Zeitquelle · Start Nr. {boot}","en":"No clock source · boot {boot}"},"time_synced":{"de":"Uhr synchronisiert (SNTP) · Start Nr. {boot}","en":"Clock synced (SNTP) · boot {boot}"},"time_unit":{"de":"Uhr der Camper-Einheit · Start Nr. {boot}","en":"Clock from the camper unit · boot {boot}"},"time_waiting":{"de":"Uhr noch nicht synchronisiert · Start Nr. {boot}","en":"Clock not synced yet · boot {boot}"},"title":{"de":"Camper-Einrichtung","en":"Camper setup"},"ux_error":{"de":"Nutzungsdaten konnten nicht geändert werden","en":"Couldn't change usage data"},"ux_off":{"de":"Nutzungsdaten senden: aus","en":"Send usage data: off"},"ux_on":{"de":"Nutzungsdaten senden: an","en":"Send usage data: on"}};
 </script>
 <script>
-/* page.js — the ESP32 firmware's WiFi setup page script (#154): the provisioning form + a link to the
- * calictl UI, whose Device status screen shows the satellite's status (#267). SOURCE: tools/gen_c_dict.py inlines
- * it into index_gen.html (index.html's PAGE_JS placeholder), right after the script that defines
- * CFG (generated constants) and STR (the strings.json table) — their types: globals.d.ts.
- * Un-built JS: `tools/ci.sh webcheck` type-checks it (tsc --checkJs, jsconfig.json, 0 errors) and
- * tests/firmware/test_web_e2e.py drives it in Chromium. */
-// @ts-check
 "use strict";
 
-/* The firmware API shapes (firmware/components/cali_core/include/cali_web.h). */
-/**
- * @typedef {{ mode: string, ssid: string|null, ip: string|null, rssi: number|null }} Wifi
- * @typedef {{ ssid: string, rssi: number, secure: boolean }} Ap
- * @typedef {Wifi & { last_error: string|null, scan: Ap[] }} WifiGet
- * @typedef {{ state: string, available_sha: string|null, progress_pct: number, error: string|null, channel: string }} Ota
- * @typedef {{ source: string, synced: boolean, boot: number }} Time
- * @typedef {{ state: string, total_mb: number|null, free_mb: number|null, last_seq: number|null, dropped: number }} Sd
- * @typedef {{ heap_free_kb: number|null, heap_min_kb: number|null, psram_free_kb: number|null, cpu_pct: number|null }} Res
- * @typedef {{ pct: number|null, mv: number|null, usb: boolean|null, charging: boolean|null, runtime_min: number|null }} Battery
- * @typedef {{ enabled: boolean, state: string }} AutoCamper
- * @typedef {{ state: string|null, lux: number|null, motion: number|null, brightness_pct: number|null, sensor: string|null, auto: boolean, prox_wake: boolean, motion_wake: boolean, min: number, max: number, offset: number }} Display
- * @typedef {{ pairing: { address: string|null }, wifi: Wifi, fw: string, ota: Ota, time: Time, sd: Sd, res: Res, battery: Battery, auto_camper: AutoCamper, display: Display, ux?: { enabled: boolean }, experimental?: { sensors: boolean } }} Device  the /api/state fields this page reads
- * @typedef {{ device: Device }} State
- * @typedef {{ ok: boolean, error?: string }} PostResult
- * @typedef {{ ssid: string, polls: number, left: boolean }} Join
- */
 
 const LANG = /^de\b/i.test(navigator.language || "") ? "de" : "en";
-/**
- * @param {string} key a strings.json key
- * @param {Record<string, string|number>} [vars] "{name}" substitutions
- * @returns {string}
- */
 function t(key, vars) {
   let s = STR[key] ? STR[key][LANG] : key;
   for (const k in vars || {}) s = s.split("{" + k + "}").join(String((vars || {})[k]));
   return s;
 }
-/* /api/wifi last_error -> the text that says why a join failed */
-/** @type {Record<string, string>} */
 const JOIN_FAILED = {not_found: "join_failed_not_found", auth: "join_failed_auth", other: "join_failed_other"};
-/** @type {Record<string, string>} */
 const POST_ERROR = {ssid: "err_ssid", psk: "err_psk", store: "err_store"};
-/* device.ota.state -> its text (idle: none) */
-/** @type {Record<string, string>} */
 const OTA_TEXT = {checking: "ota_checking", up_to_date: "ota_up_to_date", available: "ota_available",
   downloading: "ota_downloading", verifying: "ota_verifying", rebooting: "ota_rebooting", error: "ota_error"};
 
-/**
- * @param {string} id
- * @returns {HTMLElement} the element (index.html has every id this script uses)
- */
 function $(id) {
   const e = document.getElementById(id);
   if (!e) throw new Error("missing #" + id);
   return e;
 }
-/** @param {string} id @returns {HTMLInputElement} */
 const input = (id) => /** @type {HTMLInputElement} */ ($(id));
-/** @param {string} id @returns {HTMLSelectElement} */
 const select = (id) => /** @type {HTMLSelectElement} */ ($(id));
-/**
- * @template {keyof HTMLElementTagNameMap} K
- * @param {K} tag
- * @param {string} [text]
- * @param {string} [cls]
- * @returns {HTMLElementTagNameMap[K]}
- */
 function el(tag, text, cls) {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
   if (cls) e.className = cls;
   return e;
 }
-/**
- * @template T
- * @param {string} url
- * @param {RequestInit} [opts]
- * @returns {Promise<{status: number, body: T}>}
- */
 async function fetchJson(url, opts) {
   const r = await fetch(url, Object.assign({cache: "no-store"}, opts));
   return {status: r.status, body: await r.json()};
 }
-/** @returns {Promise<WifiGet>} */
 async function getWifi() {
   return (/** @type {{body: WifiGet}} */ (await fetchJson("/api/wifi"))).body;
 }
@@ -190,18 +143,16 @@ select("fw-channel").options[1].textContent = t("fw_ch_latest");
 $("scr-title").textContent = t("scr_title");
 $("exp-title").textContent = t("exp_title");
 $("exp-hint").textContent = t("exp_hint");
+$("sens-title").textContent = t("sens_title");
+$("sens-hint").textContent = t("sens_hint");
 $("scr-auto-l").textContent = t("scr_auto");
 $("scr-prox-l").textContent = t("scr_prox");
 $("scr-motion-l").textContent = t("scr_motion");
 document.documentElement.lang = LANG;
 
-/** @type {Join|null} a submitted join being watched */
 let joining = null;
 
-/** @param {Device} d */
 function renderLink(d) {
-  /* the calictl web UI: GET / in station mode; elsewhere (the setup hotspot) GET /app, where its
-   * pairing wizard pairs the unit without home WiFi */
   const box = $("device"), station = d.wifi.mode === "station";
   box.textContent = "";
   const a = el("a", t(station || d.pairing.address ? "app_link" : "app_link_pair"));
@@ -209,17 +160,12 @@ function renderLink(d) {
   box.appendChild(a);
 }
 
-/* The clock the SD log stamps with (R_FW_TIME): SNTP synced or not, and the boot number. */
-/** @param {Time} c */
 function renderTime(c) {
   const key = c.source === "none" ? "time_none" : c.source === "unit" ? "time_unit" : c.synced ? "time_synced" : "time_waiting";
   $("time").textContent = t(key, {boot: c.boot});
 }
 
-/* The SD log's card (R_FW_SD_LOG): "Storage: SD 28.1 of 29.7 GB free · log #1042 · 3 records dropped". */
-/** @param {Sd} sd */
 function renderSd(sd) {
-  /** @param {number|null} mb */
   const gb = (mb) => ((mb || 0) / 1024).toFixed(1);
   const parts = [sd.state === "ok" ? t("sd_ok", {free: gb(sd.free_mb), total: gb(sd.total_mb)})
     : t(sd.state === "error" ? "sd_error" : "sd_absent")];
@@ -228,8 +174,6 @@ function renderSd(sd) {
   $("sd").textContent = t("sd_title") + ": " + parts.join(" · ");
 }
 
-/* The satellite's own resources: internal RAM free (lowest since boot), PSRAM free, CPU busy. */
-/** @param {Res} r */
 function renderRes(r) {
   const parts = [];
   if (r.heap_free_kb !== null) parts.push(t("res_ram", {free: r.heap_free_kb, min: r.heap_min_kb ?? "?"}));
@@ -238,9 +182,6 @@ function renderRes(r) {
   $("res").textContent = parts.length ? t("res_title") + ": " + parts.join(" · ") : "";
 }
 
-/* The CoreS3's own battery (R_FW_BATTERY): "Battery: 64 % · 3.89 V · on battery · ~2 h 10 min left";
- * empty while the percent is unknown (no power chip). */
-/** @param {Battery} b */
 function renderBattery(b) {
   if (b.pct === null) { $("battery").textContent = ""; return; }
   const parts = [b.pct + " %"];
@@ -253,9 +194,6 @@ function renderBattery(b) {
   $("battery").textContent = t("batt_title") + ": " + parts.join(" · ");
 }
 
-/* The firmware row (R_FW_OTA): the running build + its release channel, the update's progress,
- * Check / Install <sha7> and the channel select (station mode only, like the firmware's POST /api/ota). */
-/** @param {Device} d */
 function renderFw(d) {
   const o = d.ota, sha = (o.available_sha || "").slice(0, 7), key = OTA_TEXT[o.state];
   const station = d.wifi.mode === "station", busy = ["checking", "downloading", "verifying", "rebooting"].includes(o.state);
@@ -273,8 +211,6 @@ function renderFw(d) {
   if (document.activeElement !== sel) sel.value = o.channel;
 }
 
-/* Auto camper (R_FW_AUTO_CAMPER): on/off, a restore owed, the toggle (station mode only) */
-/** @param {Device} d */
 function renderAutoCamper(d) {
   const a = d.auto_camper, st = d.wifi.mode === "station", b = $("ac-toggle");
   $("ac-status").textContent = [t(a.enabled ? "ac_on" : "ac_off"), a.state === "armed" ? t("ac_armed") : "",
@@ -284,8 +220,6 @@ function renderAutoCamper(d) {
   b.dataset.on = a.enabled ? "1" : "";
 }
 
-/* "Send usage data" (R_UX_TELEMETRY): the web UI's usage beacons on/off (station mode only) */
-/** @param {Device} d */
 function renderUx(d) {
   const on = !!(d.ux && d.ux.enabled), b = $("ux-toggle");
   $("ux-status").textContent = t(on ? "ux_on" : "ux_off");
@@ -294,8 +228,6 @@ function renderUx(d) {
   b.dataset.on = on ? "1" : "";
 }
 
-/* Experimental sensor track (R_FW_EXPERIMENTAL): on/off, station mode only */
-/** @param {Device} d */
 function renderExp(d) {
   const on = !!(d.experimental && d.experimental.sensors), b = $("exp-toggle");
   $("exp-status").textContent = t(on ? "exp_on" : "exp_off");
@@ -304,7 +236,6 @@ function renderExp(d) {
   b.dataset.on = on ? "1" : "";
 }
 
-/** POST {<key, default "enabled">: <the opposite>} to a toggle endpoint. @param {string} path @param {string} id the row's id prefix @param {string} err @param {string} [key] */
 async function toggle(path, id, err, key) {
   const b = $(id + "-toggle"), msg = $(id + "-msg");
   msg.textContent = "";
@@ -317,10 +248,61 @@ async function toggle(path, id, err, key) {
   if (!ok) msg.textContent = t(err);
 }
 
-/* Screen (R_FW_DISPLAY_WAKE) */
-/** @type {Record<string, string>} */
+const SENS_T = {govee: "sens_t_govee", victron_mppt: "sens_t_victron_mppt", victron_battery: "sens_t_victron_battery"};
+const SENS_ERR = {bad_alias: "sens_err_bad_alias", bad_key: "sens_err_bad_key", key_mismatch: "sens_err_key_mismatch", full: "sens_err_full"};
+let sensOn = false;
+function renderSensors(d) {
+  $("sens").hidden = !(d.experimental && d.experimental.sensors);
+  if (!$("sens").hidden && !sensOn) { sensOn = true; pollSensors(); }
+}
+async function pollSensors() {
+  if (sensOn = !$("sens").hidden) {
+    try { renderSens((/** @type {{body: Sensors}} */ (await fetchJson("/api/sensors"))).body); } catch (e) { /* next poll */ }
+    setTimeout(pollSensors, 10000);
+  }
+}
+function renderSens(s) {
+  const cfg = $("sens-cfg"), seen = $("sens-seen");
+  cfg.textContent = "";
+  for (const c of s.configured) {
+    const v = c.value ? Object.entries(c.value).slice(0, 2).map((e) => e.join("=")).join(" ") : "—";
+    const p = cfg.appendChild(el("p", [c.alias, v, c.last_seen_s === null ? "—" : c.last_seen_s + " s"].join(" · ") + " ", "row"));
+    p.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
+      confirm(t("sens_confirm_remove", {alias: c.alias})) && sensPost({remove: c.id});
+  }
+  if (seen.querySelector("input")) return;   /* a key or name being typed */
+  seen.textContent = "";
+  if (s.scan === "paused" || !s.seen.length) seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : "sens_none"), "muted"));
+  for (const r of s.seen) {
+    const p = seen.appendChild(el("p", [t(SENS_T[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · ") + " ", "row"));
+    const b = p.appendChild(el("button", t("sens_add")));
+    const need = [];
+    if (r.type.startsWith("victron")) need.push(["key", "sens_key", "password"]);
+    if (s.configured.some((c) => c.type === r.type)) need.push(["alias", "sens_alias", "text"]);
+    b.onclick = () => {
+      const ins = p.querySelectorAll("input");
+      const o = {add: r.id};
+      need.forEach(([k, ph, ty], i) => {
+        if (ins[i]) o[k] = ins[i].value;
+        else { const n = p.insertBefore(el("input"), b); n.type = ty; n.placeholder = t(ph); }
+      });
+      if (ins.length === need.length) sensPost(o);
+    };
+  }
+}
+async function sensPost(o) {
+  const msg = $("sens-msg");
+  msg.textContent = "";
+  try {
+    const r = /** @type {{status: number, body: Sensors}} */ (await fetchJson("/api/sensors", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(o)}));
+    if (r.status !== 200) { msg.textContent = t(SENS_ERR[r.body.error || ""] || "sens_error"); return; }
+    $("sens-seen").textContent = "";
+    renderSens(r.body);
+  } catch (e) { msg.textContent = t("sens_error"); }
+}
+
 const SCR = {on: "scr_on", dim: "scr_dim", off: "scr_off"};
-/** @param {Device} d */
 function renderScreen(d) {
   const p = d.display;
   $("scr").hidden = p.state === null;
@@ -336,17 +318,13 @@ function renderScreen(d) {
 }
 
 let scrOff = 0;
-/** @param {object} o */
 const scrPost = (o) => fetchJson("/api/display", {method: "POST", headers: {"Content-Type": "application/json"},
   body: JSON.stringify(o)}).catch(() => null);
-/** @param {number} step */
 const scrStep = (step) => scrPost({offset: scrOff = Math.max(-50, Math.min(50, scrOff + step))});
 
-/** @param {"check"|"install"} action */
 async function ota(action) {
   const msg = $("fw-msg");
   msg.textContent = "";
-  /* no second click while this one is in flight: the next poll shows the buttons again (busy -> not) */
   $("fw-check").hidden = $("fw-install").hidden = true;
   try {
     const r = /** @type {{body: PostResult}} */ (await fetchJson("/api/ota", {method: "POST",
@@ -355,7 +333,6 @@ async function ota(action) {
   } catch (e) { msg.textContent = t("err_net"); }
 }
 
-/** @param {string} ch */
 async function otaChannel(ch) {
   const msg = $("fw-msg");
   msg.textContent = "";
@@ -368,7 +345,6 @@ async function otaChannel(ch) {
   select("fw-channel").value = $("fw-channel").dataset.v || "";
 }
 
-/** @param {Ap[]} scan */
 function renderNetworks(scan) {
   const sel = select("ssid"), keep = sel.value;
   sel.textContent = "";
@@ -382,7 +358,6 @@ function renderNetworks(scan) {
   if (scan.some((ap) => ap.ssid === keep)) sel.value = keep;
 }
 
-/** @type {ReturnType<typeof setTimeout>|null} the pending delayed re-read from the last scan() */
 let scanTimer = null;
 
 async function scan() {
@@ -393,7 +368,6 @@ async function scan() {
   const still = () => msg.textContent === t("scanning");  /* nothing newer (join result, error) landed */
   try {
     renderNetworks((await getWifi()).scan);
-    /* each GET starts a fresh scan for the next one: read its result a moment later */
     scanTimer = setTimeout(async () => {
       scanTimer = null;
       try { renderNetworks((await getWifi()).scan); if (still()) msg.textContent = ""; }
@@ -410,7 +384,6 @@ async function connect() {
   if (psk.length < CFG.pskMin || psk.length > CFG.pskMax) {
     msg.textContent = t("err_psk", {min: CFG.pskMin, max: CFG.pskMax}); return;
   }
-  /* a hanging POST (answers lost, connection still open) ends after CFG.connectTimeoutMs: the retry path */
   const send = () => {
     const ac = new AbortController(), timer = setTimeout(() => ac.abort(), CFG.connectTimeoutMs);
     return fetch("/api/wifi", {cache: "no-store", method: "POST", signal: ac.signal,
@@ -421,8 +394,6 @@ async function connect() {
     let res;
     try { res = await send(); }
     catch (e) {
-      /* no answer: the phone can drop off the setup hotspot for a moment (the shared radio scans or
-       * switches channel) — say so, wait, and try once more */
       msg.className = "";
       msg.textContent = t("retrying");
       await new Promise((done) => setTimeout(done, CFG.connectRetryMs));
@@ -442,7 +413,6 @@ async function connect() {
   } catch (e) { msg.textContent = t("err_net"); }
 }
 
-/** @param {Join} j the join being watched */
 async function watchJoin(j) {
   const msg = $("setup-msg");
   const w = await getWifi();
@@ -458,7 +428,6 @@ async function watchJoin(j) {
     joining = null;
   } else if (w.mode === "setup" && (j.left || j.polls > 3)) {
     msg.className = "bad";
-    /* why it failed (/api/wifi last_error): out of range, a typo, or anything else */
     msg.textContent = t(JOIN_FAILED[w.last_error || ""] || "join_failed_other");
     joining = null;
   }
@@ -475,6 +444,7 @@ async function poll() {
     renderAutoCamper(s.device);
     renderUx(s.device);
     renderExp(s.device);
+    renderSensors(s.device);
     renderScreen(s.device);
     renderTime(s.device.time);
     renderSd(s.device.sd);
