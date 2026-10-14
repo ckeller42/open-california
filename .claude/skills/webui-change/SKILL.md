@@ -36,6 +36,13 @@ bundler catches mistakes, so the gates below are the only safety net.
   A re-render must not reset a field from stale state while a command is in flight.
 - **Gate like the app** (greyed + reason) but the server gate in `command_precondition` is the real one.
 
+## Review lens
+
+Before opening the PR (and when a screen looks wrong on the phone), run the `ux-review` skill over
+the diff: it applies this repo's constraints (EN+DE strings, the unit's vocabulary, 390 px + safe
+area, honest offline states, `// @ts-check`, e2e-pinned fixes) and WCAG 2.2 / Apple HIG, and reports
+by severity with file:line and a code fix. Ship a finding's fix together with the e2e that pins it.
+
 ## e2e pitfalls (each cost a review round)
 
 - `page.wait_for_function("async () => …")` **never waits**: the returned Promise is truthy. Use a
