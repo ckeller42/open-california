@@ -141,6 +141,9 @@ webcheck() {   # hard gate: the web UIs are un-built JS, so this is their only s
   npx --yes -p typescript@7.0.2 tsc --noEmit -p firmware/web/jsconfig.json
   node --check calictl/webui/app.js && node --check calictl/webui/strings.de.js && node --check calictl/webui/semantics_tables.js && node --check calictl/webui/semantics.js
   node --check firmware/web/page.js
+  _d="$(mktemp -d)"   # the script as the page inlines it (gen_c_dict.page_script: comment lines stripped)
+  "$PY" -c 'from tools import gen_c_dict; import sys; sys.stdout.write(gen_c_dict.page_script())' > "$_d/page.js"
+  node --check "$_d/page.js"; rm -rf "$_d"
   echo "web UI typecheck: OK"
 }
 dev() {

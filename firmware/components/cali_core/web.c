@@ -1237,12 +1237,12 @@ static void api_sensors(const cali_http_req_t *req, cali_http_resp_t *resp) {
             SET_CONST(resp, 400, ERR_BAD_JSON);
             return;
         }
-        if (rc == CALI_SENS_E_STORE) {
-            SET_CONST(resp, 500, ERR_STORE);
-            return;
-        }
         if (rc < 0 && -rc - 1 < (int)N_OF(ERRS)) {
             set_body(resp, 400, JSON_TYPE, ERRS[-rc - 1], strlen(ERRS[-rc - 1]));
+            return;
+        }
+        if (rc < 0) {   /* CALI_SENS_E_STORE, or any code the table lacks: never a 200 */
+            SET_CONST(resp, 500, ERR_STORE);
             return;
         }
     }

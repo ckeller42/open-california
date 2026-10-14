@@ -64,11 +64,11 @@ def test_govee_7byte_layout_and_reading_after_add(cli, tmp_path):
     out = run(cli, tmp_path, ["init", f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}",
                               f"add {sid} - -", f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}", "state 2000"])  # fmt: skip
     assert any(
-        l.startswith(
+        line.startswith(
             'REC "ev":"ext","dev":"govee","type":"govee","temp_c":23.96,"humidity":58.48,"battery":90'
         )
-        for l in out
-    )  # noqa: E741
+        for line in out
+    )
     ext = json.loads(out[-1][4:])
     assert ext == {"govee": {"temp_c": 23.96, "humidity": 58.48, "battery": 90, "age_s": 2}}
 

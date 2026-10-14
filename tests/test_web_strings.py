@@ -12,9 +12,12 @@ page fits ``NET_HTTP_BODY_MAX`` and loads nothing external.
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 from tools import gen_c_dict
 from tools.wifi_consts import CONSTS
@@ -114,3 +117,18 @@ def test_display_format_strings_are_safe():
         assert en == de, key
         assert set(en) <= {"%s"} and len(en) <= 2, key
     assert re.findall(r"%.?", STRINGS["d_footer_setup"]["de"]) == ["%s", "%s"]  # SSID + PSK
+
+
+def test_page_script_stripper():
+    js = "/* a\n * b\n */\n// c\n/** @type {X} */ (y);\n/* x */ code();\nkeep();\n"
+    assert gen_c_dict.page_script(js) == "/** @type {X} */ (y);\n/* x */ code();\nkeep();\n"
+    with pytest.raises(ValueError, match="line 2"):
+        gen_c_dict.page_script("/* a\n   more */ init();\n")
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="no node")
+def test_rendered_page_script_parses(tmp_path):
+    f = tmp_path / "page.js"
+    f.write_text(gen_c_dict.page_script(), encoding="utf-8")
+    r = subprocess.run(["node", "--check", str(f)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr

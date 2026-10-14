@@ -430,18 +430,26 @@ def _web_strings() -> dict:
     return json.loads((WEB_DIR / "strings.json").read_text(encoding="utf-8"))
 
 
-def page_script() -> str:
+def page_script(text: str | None = None) -> str:
     """``firmware/web/page.js`` as the page inlines it: without the lines that are only a comment
     (prose and JSDoc, which ``tsc`` reads but the browser never needs — the page must stay under
     ``NET_HTTP_BODY_MAX``). A comment with code after it on its line (an inline JSDoc cast) stays.
+    Line-based: a comment-looking line inside a template literal would be dropped too (page.js has
+    no template literals; ``tests/test_web_strings.py`` ``node --check``s the result).
 
+    :param text: the script to strip (default: ``page.js``).
     :returns: the script text.
+    :raises ValueError: when a dropped block comment closes on a line with code after ``*/``.
     """
+    if text is None:
+        text = (WEB_DIR / "page.js").read_text(encoding="utf-8")
     out, in_block = [], False
-    for line in (WEB_DIR / "page.js").read_text(encoding="utf-8").splitlines(keepends=True):
+    for n, line in enumerate(text.splitlines(keepends=True), 1):
         s = line.strip()
         if in_block:
             in_block = "*/" not in s
+            if not in_block and not s.endswith("*/"):
+                raise ValueError("page.js line %d: code after a multi-line comment's */: %r" % (n, s))
         elif s.startswith("//"):
             pass
         elif s.startswith("/*") and ("*/" not in s or s.find("*/") == len(s) - 2):
