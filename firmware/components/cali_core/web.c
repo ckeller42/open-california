@@ -18,6 +18,7 @@
 #include "cali_platform.h"
 #include "cali_runner.h"
 #include "cali_sdlog.h"
+#include "cali_sensors.h"
 #include "cali_session.h"
 #include "cali_time.h"
 #include "cali_snapshot.h"
@@ -58,6 +59,7 @@ static const char ERR_BAD_VALUE[] = "{\"ok\":false,\"error\":\"bad_value\"}";
 static const char ERR_BAD_ACTION[] = "{\"ok\":false,\"error\":\"bad_action\"}";
 static const char ERR_BUSY[] = "{\"ok\":false,\"error\":\"busy\"}";
 static const char ERR_OTA_UNAVAILABLE[] = "{\"ok\":false,\"error\":\"ota_unavailable\"}";
+static const char ERR_DISABLED[] = "{\"ok\":false,\"error\":\"disabled\"}";   /* /api/sensors, flag off */
 static const char OVERFLOW_BODY[] = "response too large";
 /* /api/pairing errors: calictl's own bodies (web.py), no "ok" member */
 static const char ERR_P_BAD_JSON[] = "{\"error\":\"bad_json\"}";
@@ -260,6 +262,12 @@ static void api_state(cali_http_resp_t *resp) {
         cali_json_int(&j, (long long)(st.uptime_ms >= wg ? st.uptime_ms - wg : 0));
     }
     cali_json_obj_end(&j);
+    if (cali_exp_sensors()) {   /* external sensors (R_FW_SENSORS): absent while the flag is off */
+        cali_json_key(&j, "ext");
+        cali_json_obj_begin(&j);
+        cali_sensors_state_json(&j, st.uptime_ms);
+        cali_json_obj_end(&j);
+    }
     finish_json(&j, resp);
 }
 
@@ -393,6 +401,21 @@ static int parse_bool(cursor_t *c, int *out) {
     if (c->end - c->p >= 4 && memcmp(c->p, "true", 4) == 0) { c->p += 4; *out = 1; return 0; }
     if (c->end - c->p >= 5 && memcmp(c->p, "false", 5) == 0) { c->p += 5; *out = 0; return 0; }
     return -1;
+}
+
+/* An unsigned integer 0..65535 (digits only, no leading zero): 0 ok, -1 anything else. */
+static int parse_uint(cursor_t *c, unsigned *out) {
+    const char *p0;
+    unsigned long v = 0;
+    skip_ws(c);
+    p0 = c->p;
+    while (c->p < c->end && *c->p >= '0' && *c->p <= '9') {
+        v = v * 10 + (unsigned long)(*c->p++ - '0');
+        if (v > 65535) return -1;
+    }
+    if (c->p == p0 || (*p0 == '0' && c->p - p0 > 1)) return -1;
+    *out = (unsigned)v;
+    return 0;
 }
 
 /* value: a string (decoded), an integer -?(0|[1-9][0-9]*) passed on as its text, or null (-> "");
@@ -1153,6 +1176,82 @@ static void api_experimental(const cali_http_req_t *req, cali_http_resp_t *resp)
     }
 }
 
+/* ---- GET|POST /api/sensors: the /device Sensors box (R_FW_SENSORS), every mode, 404 while the flag is off ---- */
+
+enum { S_ADD = 1, S_REMOVE = 2, S_ID = 4, S_ALIAS = 8, S_KEY = 16 };
+
+/* {"add":<id>,"alias"?,"key"?} | {"remove":<id>} | {"id":<id>,"alias":…}, any order, each key once:
+ * the keys present (S_*), or -1 not that shape. *alias_len / *key_len = the whole decoded lengths. */
+static int sensors_parse(const char *body, size_t body_len, unsigned *id, char alias[17], size_t *alias_len,
+                         char key[33], size_t *key_len) {
+    static const char *const NAMES[] = {"add", "remove", "id", "alias", "key"};
+    cursor_t c = {body, body + body_len};
+    int seen = 0;
+    if (expect(&c, '{') != 0) return -1;
+    do {
+        char name[8];
+        size_t len, i;
+        if (parse_str(&c, name, sizeof name, &len) != 0 || expect(&c, ':') != 0) return -1;
+        for (i = 0; i < N_OF(NAMES) && (len != strlen(NAMES[i]) || strcmp(name, NAMES[i]) != 0); i++) {}
+        if (i == N_OF(NAMES) || (seen & 1 << i)) return -1;
+        seen |= 1 << i;
+        if ((1 << i) == S_ALIAS ? parse_str(&c, alias, 17, alias_len)
+            : (1 << i) == S_KEY ? parse_str(&c, key, 33, key_len)
+                                : parse_uint(&c, id))
+            return -1;
+        skip_ws(&c);
+    } while (c.p < c.end && *c.p == ',' && c.p++);
+    if (expect(&c, '}') != 0 || (skip_ws(&c), c.p != c.end)) return -1;
+    if ((seen & S_ADD) ? (seen & (S_REMOVE | S_ID)) != 0 : seen != S_REMOVE && seen != (S_ID | S_ALIAS)) return -1;
+    return seen;
+}
+
+static void api_sensors(const cali_http_req_t *req, cali_http_resp_t *resp) {
+    static const char *const ERRS[] = {   /* -CALI_SENS_E_* - 1 */
+        "{\"ok\":false,\"error\":\"bad_alias\"}", "{\"ok\":false,\"error\":\"bad_key\"}",
+        "{\"ok\":false,\"error\":\"key_mismatch\"}", "{\"ok\":false,\"error\":\"unknown_id\"}",
+        "{\"ok\":false,\"error\":\"full\"}"};
+    char alias[17], key[33];
+    size_t alias_len = 0, key_len = 0;
+    unsigned id = 0;
+    int keys, rc;
+    if (!cali_exp_sensors()) {
+        SET_CONST(resp, 404, ERR_DISABLED);
+        return;
+    }
+    if (strcmp(req->method, "GET") == 0) {
+        cali_sensors_kick();   /* the box is open: a fresh window soon */
+    } else if (strcmp(req->method, "POST") != 0) {
+        SET_CONST(resp, 405, ERR_METHOD);
+        return;
+    } else {
+        keys = sensors_parse(req->body, req->body_len, &id, alias, &alias_len, key, &key_len);
+        if (keys < 0) rc = 1;   /* bad_json */
+        else if ((keys & S_ALIAS) && alias_len > 16) rc = CALI_SENS_E_ALIAS;
+        else if ((keys & S_KEY) && key_len > 32) rc = CALI_SENS_E_KEY;
+        else if (keys & S_ADD) rc = cali_sensors_add((uint16_t)id, keys & S_ALIAS ? alias : NULL, keys & S_KEY ? key : NULL, cali_uptime_ms());
+        else if (keys & S_REMOVE) rc = cali_sensors_remove((uint16_t)id);
+        else rc = cali_sensors_rename((uint16_t)id, alias);
+        memset(key, 0, sizeof key);   /* no key copy left on the stack */
+        if (rc == 1) {
+            SET_CONST(resp, 400, ERR_BAD_JSON);
+            return;
+        }
+        if (rc == CALI_SENS_E_STORE) {
+            SET_CONST(resp, 500, ERR_STORE);
+            return;
+        }
+        if (rc < 0 && -rc - 1 < (int)N_OF(ERRS)) {
+            set_body(resp, 400, JSON_TYPE, ERRS[-rc - 1], strlen(ERRS[-rc - 1]));
+            return;
+        }
+    }
+    cali_json_t j;
+    cali_json_begin(&j, s_json, sizeof s_json);
+    cali_sensors_api_json(&j, cali_uptime_ms());
+    finish_json(&j, resp);
+}
+
 int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ctx) {
     int get = strcmp(req->method, "GET") == 0;
     (void)ctx;
@@ -1208,6 +1307,10 @@ int cali_web_handle(const cali_http_req_t *req, cali_http_resp_t *resp, void *ct
     }
     if (strcmp(req->path, "/api/experimental") == 0) {
         api_experimental(req, resp);
+        return 1;
+    }
+    if (strcmp(req->path, "/api/sensors") == 0) {
+        api_sensors(req, resp);
         return 1;
     }
     if (get && strcmp(req->path, "/device") == 0) {    /* the status/setup page, in every mode */

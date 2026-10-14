@@ -430,14 +430,35 @@ def _web_strings() -> dict:
     return json.loads((WEB_DIR / "strings.json").read_text(encoding="utf-8"))
 
 
+def page_script() -> str:
+    """``firmware/web/page.js`` as the page inlines it: without the lines that are only a comment
+    (prose and JSDoc, which ``tsc`` reads but the browser never needs — the page must stay under
+    ``NET_HTTP_BODY_MAX``). A comment with code after it on its line (an inline JSDoc cast) stays.
+
+    :returns: the script text.
+    """
+    out, in_block = [], False
+    for line in (WEB_DIR / "page.js").read_text(encoding="utf-8").splitlines(keepends=True):
+        s = line.strip()
+        if in_block:
+            in_block = "*/" not in s
+        elif s.startswith("//"):
+            pass
+        elif s.startswith("/*") and ("*/" not in s or s.find("*/") == len(s) - 2):
+            in_block = "*/" not in s
+        else:
+            out.append(line)
+    return "".join(out)
+
+
 def render_web_page() -> str:
     """Render ``firmware/web/index.html`` into the page the firmware serves (``index_gen.html``).
 
     :returns: the page with every ``{{NAME}}`` placeholder substituted: ``{{STRINGS}}`` by the
         ``strings.json`` table (minus the ``d_*`` display keys, which stay out of the page to
         keep it under ``NET_HTTP_BODY_MAX``) as compact JSON (``{"key": {"en": …, "de": …}}``, sorted keys),
-        ``{{PAGE_JS}}`` by the page script ``firmware/web/page.js`` verbatim (its own file so
-        ``tsc --checkJs`` can gate it), and ``{{NET_*}}`` by that
+        ``{{PAGE_JS}}`` by the page script ``firmware/web/page.js`` minus its whole-line comments
+        (:func:`page_script`; its own file so ``tsc --checkJs`` can gate it), and ``{{NET_*}}`` by that
         :data:`tools.wifi_consts.CONSTS` value (strings unquoted, numbers decimal) — so the page
         never hand-types a constant (e.g. ``NET_PAGE_POLL_MS``). Substituted text is not scanned
         again.
@@ -455,7 +476,7 @@ def render_web_page() -> str:
     # "</" never appears inside the inline <script> (an SSID-free table, but keep it robust)
     table = table.replace("</", "<\\/")
 
-    script = (WEB_DIR / "page.js").read_text(encoding="utf-8")
+    script = page_script()
     if "</script" in script.lower():
         raise ValueError("firmware/web/page.js must not contain '</script' (it is inlined)")
 

@@ -87,8 +87,11 @@ def test_generated_files_are_fresh():
 
 def test_page_script_is_inlined_once():
     rendered = gen_c_dict.render_web_page()
-    script = (WEB / "page.js").read_text(encoding="utf-8")
+    script = gen_c_dict.page_script()
     assert "{{PAGE_JS}}" in PAGE and rendered.count(script) == 1
+    assert (
+        "/**" not in script.replace("/** @type", "") and '"use strict";' in script
+    )  # comment lines out, code in
     assert "const CFG" in rendered.split(script)[0]  # the globals page.js reads come first
 
 

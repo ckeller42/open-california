@@ -182,10 +182,14 @@ void cali_sensors_init(void) {
 void cali_sensors_tick(uint64_t now_ms, const cali_transport_t *t, int enabled, int pairing_active) {
     s_paused = pairing_active;
     if (!enabled || pairing_active) return;
-    int kick = s_kick;
-    s_kick = 0;   /* a kick is for the next tick only: a window that ran recently answers it */
-    if (s_last_window_ms && now_ms - s_last_window_ms < (kick ? SENS_KICK_MIN_MS : SENS_PERIOD_MS)) return;
-    if (t->scan_window(SENS_WINDOW_MS) == 0) s_last_window_ms = now_ms;   /* busy: the next tick retries */
+    if (s_last_window_ms && now_ms - s_last_window_ms < (s_kick ? SENS_KICK_MIN_MS : SENS_PERIOD_MS)) {
+        s_kick = 0;   /* a kick is for the next tick only: a window that ran recently answers it */
+        return;
+    }
+    if (t->scan_window(SENS_WINDOW_MS) == 0) {   /* busy: the next tick retries, the kick kept */
+        s_last_window_ms = now_ms;
+        s_kick = 0;
+    }
 }
 
 void cali_sensors_on_adv(const cali_tevent_t *e, uint64_t now_ms) {
@@ -289,10 +293,10 @@ void cali_sensors_api_json(cali_json_t *j, uint64_t now_ms) {
     cali_json_str(j, cali_sensors_scan_state());
 }
 
-int cali_sensors_add(uint16_t id, const char *alias, const char *key_hex) {
-    int row = -1;
+int cali_sensors_add(uint16_t id, const char *alias, const char *key_hex, uint64_t now_ms) {
+    int row = -1;   /* a row past the offline age is hidden from the API, so it is unknown here too */
     for (int i = 0; i < SENS_MAX && row < 0; i++)
-        if (s_seen[i].id && s_seen[i].id == id) row = i;
+        if (s_seen[i].id && s_seen[i].id == id && now_ms - s_seen[i].at_ms < SENS_OFFLINE_S * 1000u) row = i;
     if (row < 0) return CALI_SENS_E_UNKNOWN;
     const sens_type_t *t = &TYPES[s_seen[row].type];
     if (!alias) {   /* the default alias only for the first sensor of its type */
@@ -303,8 +307,10 @@ int cali_sensors_add(uint16_t id, const char *alias, const char *key_hex) {
     if (alias_ok(alias, -1) != 0) return CALI_SENS_E_ALIAS;
     sens_cfg_t c;
     memset(&c, 0, sizeof c);
-    if (t->needs_key) {   /* the key-check byte against the advert: Task 5 */
+    if (t->needs_key || key_hex) {   /* a key given is 32 hex digits for any type; the check byte: Task 5 */
         if (!key_hex || strlen(key_hex) != 32 || strspn(key_hex, HEXDIGITS) != 32) return CALI_SENS_E_KEY;
+    }
+    if (t->needs_key) {
         for (int i = 0; i < 16; i++) {
             unsigned b;
             sscanf(key_hex + 2 * i, "%2x", &b);

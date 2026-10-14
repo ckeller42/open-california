@@ -23,6 +23,9 @@
  * @typedef {{ device: Device }} State
  * @typedef {{ ok: boolean, error?: string }} PostResult
  * @typedef {{ ssid: string, polls: number, left: boolean }} Join
+ * @typedef {{ id: number, type: string, alias: string, last_seen_s: number|null, value: Record<string, number|null>|null }} SensCfg
+ * @typedef {{ id: number, type: string, model: string, rssi: number }} SensSeen
+ * @typedef {{ configured: SensCfg[], seen: SensSeen[], scan: string, error?: string }} Sensors  GET/POST /api/sensors
  */
 
 const LANG = /^de\b/i.test(navigator.language || "") ? "de" : "en";
@@ -103,6 +106,8 @@ select("fw-channel").options[1].textContent = t("fw_ch_latest");
 $("scr-title").textContent = t("scr_title");
 $("exp-title").textContent = t("exp_title");
 $("exp-hint").textContent = t("exp_hint");
+$("sens-title").textContent = t("sens_title");
+$("sens-hint").textContent = t("sens_hint");
 $("scr-auto-l").textContent = t("scr_auto");
 $("scr-prox-l").textContent = t("scr_prox");
 $("scr-motion-l").textContent = t("scr_motion");
@@ -228,6 +233,69 @@ async function toggle(path, id, err, key) {
       headers: {"Content-Type": "application/json"}, body: JSON.stringify({[key || "enabled"]: !b.dataset.on})}))).body.ok;
   } catch (e) { /* ok stays false */ }
   if (!ok) msg.textContent = t(err);
+}
+
+/* External sensors (R_FW_SENSORS): shown while the flag is on; its own 10 s poll (a GET kicks a window) */
+/** @type {Record<string, string>} */
+const SENS_T = {govee: "sens_t_govee", victron_mppt: "sens_t_victron_mppt", victron_battery: "sens_t_victron_battery"};
+/** @type {Record<string, string>} */
+const SENS_ERR = {bad_alias: "sens_err_bad_alias", bad_key: "sens_err_bad_key", key_mismatch: "sens_err_key_mismatch", full: "sens_err_full"};
+let sensOn = false;
+/** @param {Device} d */
+function renderSensors(d) {
+  $("sens").hidden = !(d.experimental && d.experimental.sensors);
+  if (!$("sens").hidden && !sensOn) { sensOn = true; pollSensors(); }
+}
+async function pollSensors() {
+  if (sensOn = !$("sens").hidden) {
+    try { renderSens((/** @type {{body: Sensors}} */ (await fetchJson("/api/sensors"))).body); } catch (e) { /* next poll */ }
+    setTimeout(pollSensors, 10000);
+  }
+}
+/** @param {Sensors} s */
+function renderSens(s) {
+  const cfg = $("sens-cfg"), seen = $("sens-seen");
+  cfg.textContent = "";
+  for (const c of s.configured) {
+    const v = c.value ? Object.entries(c.value).slice(0, 2).map((e) => e.join("=")).join(" ") : "—";
+    const p = cfg.appendChild(el("p", [c.alias, v, c.last_seen_s === null ? "—" : c.last_seen_s + " s"].join(" · ") + " ", "row"));
+    p.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
+      confirm(t("sens_confirm_remove", {alias: c.alias})) && sensPost({remove: c.id});
+  }
+  if (seen.querySelector("input")) return;   /* a key or name being typed */
+  seen.textContent = "";
+  if (s.scan === "paused" || !s.seen.length) seen.appendChild(el("p", t(s.scan === "paused" ? "sens_paused" : "sens_none"), "muted"));
+  for (const r of s.seen) {
+    const p = seen.appendChild(el("p", [t(SENS_T[r.type] || r.type), r.model, r.rssi + " dBm"].join(" · ") + " ", "row"));
+    const b = p.appendChild(el("button", t("sens_add")));
+    /* a key type asks for its key, a second one of a type for a name: inputs first, then Add posts */
+    /** @type {string[][]} */
+    const need = [];
+    if (r.type.startsWith("victron")) need.push(["key", "sens_key", "password"]);
+    if (s.configured.some((c) => c.type === r.type)) need.push(["alias", "sens_alias", "text"]);
+    b.onclick = () => {
+      const ins = p.querySelectorAll("input");
+      /** @type {Record<string, string|number>} */
+      const o = {add: r.id};
+      need.forEach(([k, ph, ty], i) => {
+        if (ins[i]) o[k] = ins[i].value;
+        else { const n = p.insertBefore(el("input"), b); n.type = ty; n.placeholder = t(ph); }
+      });
+      if (ins.length === need.length) sensPost(o);
+    };
+  }
+}
+/** @param {Record<string, string|number>} o */
+async function sensPost(o) {
+  const msg = $("sens-msg");
+  msg.textContent = "";
+  try {
+    const r = /** @type {{status: number, body: Sensors}} */ (await fetchJson("/api/sensors", {method: "POST",
+      headers: {"Content-Type": "application/json"}, body: JSON.stringify(o)}));
+    if (r.status !== 200) { msg.textContent = t(SENS_ERR[r.body.error || ""] || "sens_error"); return; }
+    $("sens-seen").textContent = "";
+    renderSens(r.body);
+  } catch (e) { msg.textContent = t("sens_error"); }
 }
 
 /* Screen (R_FW_DISPLAY_WAKE) */
@@ -388,6 +456,7 @@ async function poll() {
     renderAutoCamper(s.device);
     renderUx(s.device);
     renderExp(s.device);
+    renderSensors(s.device);
     renderScreen(s.device);
     renderTime(s.device.time);
     renderSd(s.device.sd);

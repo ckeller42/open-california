@@ -136,6 +136,27 @@ def test_kick_opens_a_window_at_once_unless_one_ran_recently(cli, tmp_path):
     ]  # t=100 and t=20100
 
 
+def test_kick_survives_a_busy_transport(cli, tmp_path):
+    out = run(
+        cli,
+        tmp_path,
+        ["init", "tick 100 1 0", "kick", "busy 1", "tick 20000 1 0", "busy 0", "tick 20100 1 0"],
+    )
+    assert [line for line in out if line.startswith("WINDOW")] == [
+        "WINDOW 5000",
+        "WINDOW 5000",
+    ]  # t=100, t=20100
+
+
+def test_add_refuses_a_seen_row_past_the_offline_age(cli, tmp_path):
+    a = f"adv A4:C1:38:00:00:02 1 -70 GVH5074_0002 {GOVEE_H5074}"
+    out = run(cli, tmp_path, ["init", a, "api 0"])
+    sid = json.loads(out[-1][4:])["seen"][0]["id"]
+    out = run(cli, tmp_path, ["init", a, "now 600000", f"add {sid} - -", "now 0", f"add {sid} - -"])
+    rcs = [line for line in out if line.startswith("OK ")][-4:]
+    assert rcs == ["OK 0", "OK -4", "OK 0", "OK 0"]  # now | hidden (600 s old) -> unknown | now | added
+
+
 def test_ext_record_fits_body_max(cli, tmp_path):
     # the longest body: a 16-char alias + every field of the widest type; vrec refuses an over-long one
     out = run(cli, tmp_path, ["init", "maxbody"])

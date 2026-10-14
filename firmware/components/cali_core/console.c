@@ -233,7 +233,7 @@ static void sensors_cmd(char *sub) {
         return;
     }
     if (!strcmp(op, "add") && a1) rc = cali_sensors_add((uint16_t)atoi(a1), a2 && strcmp(a2, "-") ? a2 : NULL,
-                                                        a3 && strcmp(a3, "-") ? a3 : NULL);
+                                                        a3 && strcmp(a3, "-") ? a3 : NULL, cali_uptime_ms());
     else if (!strcmp(op, "remove") && a1) rc = cali_sensors_remove((uint16_t)atoi(a1));
     else {
         cali_log("sensors: usage: sensors [on|off|add <id> [alias|-] [key|-]|remove <id>]");
