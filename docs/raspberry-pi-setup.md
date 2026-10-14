@@ -327,6 +327,38 @@ sudo systemctl daemon-reload && sudo systemctl enable --now calictl-esp-ingest.t
 journalctl -u calictl-esp-ingest -n 20            # the per-run summary
 ```
 
+## ESP soak report
+
+`tools/esplab/soak_report.py` reads the last 72 h of the satellite's diagnostics (`esp_evt`,
+`esp_diag`, `esp_log` from [ESP ingest](#esp-ingest-gap-fill)), the `esp-ingest` journal summaries
+and the ESP's `/api/state`, prints one line per criterion plus `VERDICT PASS|FAIL`, writes
+`~/esp-soak/<date>.txt` and one `esp_soak` point (exit 0 PASS, 1 FAIL, 2 cannot run). A `SKIP`
+never fails the verdict.
+
+| # | Criterion | PASS when |
+|---|---|---|
+| 1 | `reboots` | no boot with `reset_reason` panic, int_wdt, task_wdt, wdt, brownout or cpu_lockup (sw, poweron, usb are listed only) |
+| 2 | `link` | at most 10 `link_down` events per boot interval (the `link_up` fraction is printed as information: a parked unit deep-sleeps) |
+| 3 | `touch_nacks` | per boot, max cumulative touch `errors` / hours of that boot is at most 5 |
+| 4 | `ingest` | every `esp-ingest` summary has `lost == 0` and the last has `held == 0` (SKIP without a journal summary) |
+| 5 | `heap_min` | `heap_min` is at least 32768 B in every `esp_diag` sample |
+| 6 | `screen` | always SKIP until an `evt display` record exists (reserved, see [firmware](firmware.md)) |
+| 7 | `i2c_timeouts` | `esp_log` lines with `i2c.master` and `timeout`: at most 2 per 24 h |
+
+Requirement `R_SOAK_REPORT` (in the script's docstring, `docs/api.rst`).
+
+**Gate rule.** The stable firmware must be green for 72 h; then install the experimental sensors
+build and run another 72 h; then 72 h with it off again, then 72 h on. Only a green window counts.
+
+**The timer (not installed by `install.sh`).** Same shape as the ingest timer, daily at 08:00:
+
+```sh
+sudo cp calictl/deploy/calictl-esp-soak.{service,timer} /etc/systemd/system/
+sudo systemctl edit calictl-esp-soak.service   # [Service] Environment=CALICTL_ESP_URL=http://<esp>
+sudo systemctl daemon-reload && sudo systemctl enable --now calictl-esp-soak.timer
+sudo systemctl start calictl-esp-soak.service && cat ~/esp-soak/$(date -I).txt
+```
+
 ## Troubleshooting
 
 - **`VWCAMPER` not found** — make sure the camper is on its "Connect device" screen (it only

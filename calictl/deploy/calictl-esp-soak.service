@@ -1,0 +1,17 @@
+# One soak report (R_SOAK_REPORT): the 7 criteria over the last 72 h of esp_* in InfluxDB + the ESP's
+# fw/boot. Started by calictl-esp-soak.timer. Set the ESP's address like the ingest service:
+#   systemctl edit calictl-esp-soak.service -> [Service] Environment=CALICTL_ESP_URL=http://<esp>
+[Unit]
+Description=VW California: ESP soak report (72 h criteria)
+After=influxdb.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/solix-env/bin/python tools/esplab/soak_report.py --url ${CALICTL_ESP_URL} --out /home/pi/esp-soak
+WorkingDirectory=/home/pi/open-california
+EnvironmentFile=-/etc/buspi/secrets.env
+EnvironmentFile=-/etc/buspi/calictl.env
+Environment=PYTHONUNBUFFERED=1
+TimeoutStartSec=5min
+User=pi

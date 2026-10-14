@@ -1,0 +1,11 @@
+# Runs calictl-esp-soak.service every day at 08:00 (local). A FAIL exit only shows in the journal and
+# in the esp_soak point; nothing is retried.
+[Unit]
+Description=VW California: ESP soak report daily 08:00
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
