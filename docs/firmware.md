@@ -1000,7 +1000,7 @@ to the sensors and never to the pairing SM or the session.
   | `victron_mppt` | `0x02E1`, readout type `0x01` (solar charger) | yes | `mppt-75-15` | `battery_current` (A), `battery_voltage` (V), `charge_state`, `error_code`, `load_current` (A), `pv_power` (W), `yield_today_kwh` |
   | `victron_battery` | `0x02E1`, model `0xA3A4`/`0xA3A5` (Smart Battery Sense), else readout type `0x02` (battery monitor) | yes | `battery-sense` | `battery_voltage` (V), `temperature_c` (aux mode 2: aux / 100 − 273.15, else `null`) |
 
-  `0x0001`/`0x8801` (other Govee layouts) are not matched: `0x0001` is shared by unrelated devices.
+  Other `0x0001` layouts and `0x8801` (the H5179's 9-byte form) are not matched: `0x0001` is shared by unrelated devices, so only the `01 01` + 6-byte plausible form above counts.
 - **Victron "Instant Readout"** (`victron_ble` 0.9.3 `parse_container`/`decrypt`): after the
   company id, `0x10 0x00` (a product advertisement — any other prefix is ignored, not even a seen
   row), model id u16 LE, readout type u8, iv u16 LE, then the **key-check byte** (= `key[0]`) and the

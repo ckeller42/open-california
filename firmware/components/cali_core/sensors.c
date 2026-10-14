@@ -63,7 +63,7 @@ static int decode_govee(const uint8_t *adv, size_t len, const uint8_t key[16], c
  * only a 6-byte payload whose values are plausible (-40..80 C, 0..100 %, battery <= 100). */
 static int match_govee_0001(const uint8_t *adv, size_t len) {
     cali_sensor_reading_t r;
-    if (len != 2 + 6) return 0;
+    if (len != 2 + 6 || adv[2] != 0x01 || adv[3] != 0x01) return 0;   /* the Govee prefix seen on the GV5179 */
     govee24(adv + 2 + 2, &r);
     return r.f[0] >= -40.0f && r.f[0] <= 80.0f && r.f[1] <= 100.0f && r.f[2] <= 100;
 }
