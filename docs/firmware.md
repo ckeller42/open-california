@@ -996,6 +996,7 @@ to the sensors and never to the pairing SM or the session.
   | id | Manufacturer id | Key | Default alias | Fields |
   |---|---|---|---|---|
   | `govee` | `0xEC88` | no | `govee` | `temp_c`, `humidity`, `battery` — 7+ data bytes: int16 °C × 100, uint16 % × 100, battery %; 5–6 bytes: 24 bits, sign bit 23, `(t / 1000) / 10` °C, `(t % 1000) / 10` %, battery `& 0x7F` (`govee_reader.py parse_govee`) |
+  | `govee` | `0x0001` | no | `govee` | GV5179 and the H5101/H5102/H5174/H5177 family: data `01 01`, the 24-bit value at bytes 2–4, battery at 5. The company id is shared, so only a 6-byte payload with plausible values (−40…80 °C, ≤ 100 %, battery ≤ 100) counts (`govee_reader.py` `0x0001` path) |
   | `victron_mppt` | `0x02E1`, readout type `0x01` (solar charger) | yes | `mppt-75-15` | `battery_current` (A), `battery_voltage` (V), `charge_state`, `error_code`, `load_current` (A), `pv_power` (W), `yield_today_kwh` |
   | `victron_battery` | `0x02E1`, model `0xA3A4`/`0xA3A5` (Smart Battery Sense), else readout type `0x02` (battery monitor) | yes | `battery-sense` | `battery_voltage` (V), `temperature_c` (aux mode 2: aux / 100 − 273.15, else `null`) |
 

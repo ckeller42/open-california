@@ -31,6 +31,16 @@ typedef struct {
     int (*decode)(const uint8_t *adv, size_t len, const uint8_t key[16], cali_sensor_reading_t *out);
 } sens_type_t;
 
+/* The 24-bit Govee value (govee_reader.py _decode_24bit): sign in bit 23, temp*10000 + humidity*10;
+ * p[0..2] the value, p[3] the battery percent (bit 7 is a flag). */
+static void govee24(const uint8_t *p, cali_sensor_reading_t *out) {
+    uint32_t base = (uint32_t)p[0] << 16 | (uint32_t)p[1] << 8 | p[2];
+    uint32_t t = base & 0x7FFFFFu;
+    out->f[0] = (float)(t / 1000u) / 10.0f * (base & 0x800000u ? -1.0f : 1.0f);
+    out->f[1] = (float)(t % 1000u) / 10.0f;
+    out->f[2] = p[3] & 0x7F;
+}
+
 /* Govee 0xEC88 (govee_reader.py parse_govee): adv = company id + data; data[1..] carries the values. */
 static int decode_govee(const uint8_t *adv, size_t len, const uint8_t key[16], cali_sensor_reading_t *out) {
     const uint8_t *d = adv + 2;
@@ -41,13 +51,26 @@ static int decode_govee(const uint8_t *adv, size_t len, const uint8_t key[16], c
         out->f[0] = (float)(int16_t)(d[1] | d[2] << 8) / 100.0f;
         out->f[1] = (float)(uint16_t)(d[3] | d[4] << 8) / 100.0f;
         out->f[2] = d[5];
-    } else {        /* H5075: 24 bits, sign in bit 23, temp*10000 + humidity*10 */
-        uint32_t base = (uint32_t)d[1] << 16 | (uint32_t)d[2] << 8 | d[3];
-        uint32_t t = base & 0x7FFFFFu;
-        out->f[0] = (float)(t / 1000u) / 10.0f * (base & 0x800000u ? -1.0f : 1.0f);
-        out->f[1] = (float)(t % 1000u) / 10.0f;
-        out->f[2] = d[4] & 0x7F;
+    } else {        /* H5075: 24 bits at data[1..3], battery data[4] */
+        govee24(d + 1, out);
     }
+    out->n = 3;
+    return 0;
+}
+
+/* Govee company id 0x0001 (GV5179 and the H5101/H5102/H5174/H5177 family, govee_reader.py): data =
+ * [0..1] 01 01, [2..4] the 24-bit value, [5] battery. 0x0001 is a shared company id, so the row matches
+ * only a 6-byte payload whose values are plausible (-40..80 C, 0..100 %, battery <= 100). */
+static int match_govee_0001(const uint8_t *adv, size_t len) {
+    cali_sensor_reading_t r;
+    if (len != 2 + 6) return 0;
+    govee24(adv + 2 + 2, &r);
+    return r.f[0] >= -40.0f && r.f[0] <= 80.0f && r.f[1] <= 100.0f && r.f[2] <= 100;
+}
+static int decode_govee_0001(const uint8_t *adv, size_t len, const uint8_t key[16], cali_sensor_reading_t *out) {
+    (void)key;
+    if (len != 2 + 6) return -1;
+    govee24(adv + 2 + 2, out);
     out->n = 3;
     return 0;
 }
@@ -141,6 +164,7 @@ static const sens_type_t TYPES[] = {   /* the index is the NVS type: append only
     {"govee", 0xEC88, 0, "govee", GOVEE_F, 3, NULL, decode_govee},
     {"victron_mppt", 0x02E1, 1, "mppt-75-15", MPPT_F, 7, match_victron_mppt, decode_victron_mppt},
     {"victron_battery", 0x02E1, 1, "battery-sense", VBATT_F, 2, match_victron_battery, decode_victron_battery},
+    {"govee", 0x0001, 0, "govee", GOVEE_F, 3, match_govee_0001, decode_govee_0001},   /* GV5179 & co. */
 };
 #define NTYPES (sizeof TYPES / sizeof TYPES[0])
 
