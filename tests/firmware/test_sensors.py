@@ -18,6 +18,9 @@ GOVEE_H5075 = "88ec" + "00" + "03b8c5" + "64" + "00"  # 0xEC88 LE; 24-bit 0x03b8
 GOVEE_H5074 = (
     "88ec" + "00" + "5c09" + "d816" + "5a" + "02"
 )  # int16 0x095c=2396 -> 23.96 C; 0x16d8=5848 -> 58.48 %; 90
+GOVEE_GV5179 = (
+    "0100" + "0101" + "032317" + "32"
+)  # company id 0x0001 LE; 24-bit 0x032317 -> 20.5 C 59.1 %, batt 50 (a live van advert)
 
 
 @pytest.fixture(scope="module")
@@ -254,3 +257,30 @@ def test_victron_short_advert_never_decodes(cli, tmp_path):
     assert json.loads(out[-1][4:])["mppt-75-15"]["age_s"] is None and not any(
         x.startswith("REC") for x in out
     )
+
+
+def test_govee_0001_gv5179_layout_decodes(cli, tmp_path):
+    """The owner's GV5179 advertises under the shared company id 0x0001: a 6-byte, plausible payload is a Govee."""
+    a = f"adv A4:C1:38:00:00:05 1 -59 GV5179_0005 {GOVEE_GV5179}"
+    out = run(cli, tmp_path, ["init", a, "api 1000"])
+    api = json.loads(out[-1][4:])
+    assert api["seen"][0]["type"] == "govee" and api["seen"][0]["model"] == "GV5179"
+    sid = api["seen"][0]["id"]
+    out = run(cli, tmp_path, ["init", a, f"add {sid} - -", a, "state 0"])
+    assert json.loads(out[-1][4:]) == {"govee": {"temp_c": 20.5, "humidity": 59.1, "battery": 50, "age_s": 0}}
+
+
+def test_company_id_0001_needs_a_plausible_6_byte_payload(cli, tmp_path):
+    # 0x0001 is shared: a 7-byte payload and a 6-byte one with 255 % humidity are not Govees
+    out = run(
+        cli,
+        tmp_path,
+        [
+            "init",
+            "adv 11:22:33:44:55:01 1 -50 Other 0100010103231732aa",
+            "adv 11:22:33:44:55:02 1 -50 Other 01000101ffffffff",
+            "adv 11:22:33:44:55:03 1 -50 Other 010002010323173" + "2",  # prefix 02 01: not a Govee
+            "api 1000",
+        ],
+    )
+    assert json.loads(out[-1][4:])["seen"] == []
