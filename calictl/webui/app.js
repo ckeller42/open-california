@@ -576,8 +576,8 @@ const HELP = {
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
     + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live. "
     + "Still offline while the van is in use? Check the pairing in Device status.\n\n"
-    + "Not paired: no camper unit is paired yet, so there is no data; tap Set up remote control on the "
-    + "banner, or Pair… in Device status.\n\n"
+    + "Not paired: no camper unit is paired yet, so there is no data; tap Pair… on the "
+    + "banner, or in Device status.\n\n"
     + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
     + "itself may be fine.\n\n"
     + "Read-only: control writes are switched off on calictl or the satellite; values still update. An untested-firmware "
@@ -1647,7 +1647,7 @@ function pairingCard() {
   const card = document.createElement("div");
   card.className = "card"; card.id = "pairing-card";
   const head = document.createElement("div"); head.className = "row";
-  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = /** @type {string} */ (t("Set up remote control"));
+  const hlbl = document.createElement("span"); hlbl.className = "lbl"; hlbl.textContent = /** @type {string} */ (t("Pair the camper unit"));
   head.appendChild(hlbl);
   const closeBtn = document.createElement("button"); closeBtn.type = "button"; closeBtn.className = "btn";
   closeBtn.textContent = /** @type {string} */ (t("Close"));
@@ -2131,7 +2131,7 @@ function renderDashboard() {
     msg.textContent = /** @type {string} */ (t("No camper unit is paired yet."));
     b.append(msg);
     const go = document.createElement("button"); go.type = "button"; go.className = "btn";
-    go.textContent = /** @type {string} */ (t("Set up remote control"));
+    go.textContent = /** @type {string} */ (t("Pair…"));
     go.onclick = () => openPairingWizard();   // calictl and the satellite both run the wizard
     b.append(go);
     app.appendChild(b);

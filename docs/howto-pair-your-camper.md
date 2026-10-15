@@ -50,7 +50,7 @@ can make that window run out. Before you open the wizard:
    unit's menus were only seen in German for this project — the English-UI wording is unknown;
    look for the equivalent "Bluetooth" / "connect device" screen if your unit is set to English).
    It shows **"Passcode: ---"** until buspi connects to it.
-2. **In the web UI**, tap **Set up remote control** on the *No camper unit is paired yet* banner, or
+2. **In the web UI**, tap **Pair…** on the *No camper unit is paired yet* banner, or
    open **⋮ → Device status** and tap **Pair…** in the *Camper unit* card (already paired: **Unpair…**
    there first). The wizard opens at the top of the start page. Tick **"I'm on that screen"**, then press **Pair now**.
 3. The unit's `---` changes to a **6-digit passcode**. Type that number into the web UI's

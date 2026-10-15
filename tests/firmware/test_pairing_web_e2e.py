@@ -214,13 +214,13 @@ def test_start_while_a_command_runs_is_busy(host_fw, rec_unit, tmp_path):
         (
             "en-US",
             True,
-            ("Set up remote control", "I'm on that screen", "Pair now", "Send", "✓ Paired — "),
+            ("Pair…", "I'm on that screen", "Pair now", "Send", "✓ Paired — "),
         ),
         (
             "de-DE",
             False,
             (
-                "Fernsteuerung einrichten",
+                "Koppeln…",
                 "Ich bin auf diesem Bildschirm",
                 "Jetzt koppeln",
                 "Senden",

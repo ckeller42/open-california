@@ -256,7 +256,7 @@ def test_pairing_chrome_hidden_when_paired_and_online(page):
     Asserts on what the user sees, not the JS predicate's internals (`_meta.online`/`_meta.paired`)."""
     # let the dashboard finish rendering its tiles before checking for absent chrome
     expect(page.get_by_text("Cooler", exact=True).first).to_be_visible()
-    expect(page.get_by_text("Set up remote control")).to_have_count(0)
+    expect(page.get_by_text("Pair the camper unit")).to_have_count(0)
     expect(page.get_by_role("button", name="Pair now")).to_have_count(0)
     expect(page.locator("#unpaired-banner")).to_have_count(0)
     page.get_by_role("button", name="Menu").click()
@@ -279,7 +279,7 @@ def test_pair_link_shows_the_wizard_at_the_top_on_a_phone(base_url, error_gated_
         _open_pairing(pg)
         card = pg.locator("#pairing-card")
         expect(card.get_by_role("button", name="Pair now")).to_be_in_viewport()
-        expect(card.get_by_text("Set up remote control")).to_be_in_viewport()
+        expect(card.get_by_text("Pair the camper unit")).to_be_in_viewport()
         assert card.evaluate(
             "c => c.getBoundingClientRect().bottom"
             " <= document.querySelector('.tilegrid').getBoundingClientRect().top"

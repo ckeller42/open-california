@@ -323,7 +323,7 @@ def test_device_page_pair_now_opens_the_wizard_at_the_top(stub, error_gated_page
         expect(link).to_have_attribute("href", "/#pair")
         link.click()
         card = pg.locator("#pairing-card")
-        expect(card.get_by_text("Set up remote control")).to_be_in_viewport()
+        expect(card.get_by_text("Pair the camper unit")).to_be_in_viewport()
         assert pg.evaluate("location.hash") == ""
 
 
@@ -760,7 +760,8 @@ BUSPI_ONLY = (
 )
 WIZARD_TEXT = {
     "en-US": {
-        "go": "Set up remote control",
+        "go": "Pair…",
+        "title": "Pair the camper unit",
         "ready": "I'm on that screen",
         "connect": "Pair now",
         "send": "Send",
@@ -769,7 +770,8 @@ WIZARD_TEXT = {
         "paired": "✓ Paired — C0:FF:EE:CA:11:F0",
     },
     "de-DE": {
-        "go": "Fernsteuerung einrichten",
+        "go": "Koppeln…",
+        "title": "Camper-Einheit koppeln",
         "ready": "Ich bin auf diesem Bildschirm",
         "connect": "Jetzt koppeln",
         "send": "Senden",
@@ -787,8 +789,8 @@ def _unpaired(stub, mode="satellite"):
 
 def _card_text(pg):
     return (
-        pg.locator(".card", has_text=WIZARD_TEXT["en-US"]["go"])
-        .or_(pg.locator(".card", has_text=WIZARD_TEXT["de-DE"]["go"]))
+        pg.locator(".card", has_text=WIZARD_TEXT["en-US"]["title"])
+        .or_(pg.locator(".card", has_text=WIZARD_TEXT["de-DE"]["title"]))
         .first.inner_text()
     )
 
@@ -875,7 +877,7 @@ def test_pair_link_shows_the_wizard_at_the_top(stub, error_gated_page):
         pg.evaluate("window.scrollTo(0, document.body.scrollHeight)")  # the user scrolled down
         pg.evaluate("location.hash = '#pair'")
         card = pg.locator("#pairing-card")
-        expect(card.get_by_text("Set up remote control")).to_be_in_viewport()
+        expect(card.get_by_text("Pair the camper unit")).to_be_in_viewport()
         expect(card.get_by_role("button", name="Unpair…")).to_be_in_viewport()  # the bonded step
         above = card.evaluate(
             "c => c.getBoundingClientRect().bottom"

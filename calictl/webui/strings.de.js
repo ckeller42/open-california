@@ -390,7 +390,7 @@ window.STRINGS_DE = {
   "⚪ Asleep — tap to wake": "⚪ Ruhezustand — zum Aufwecken tippen",
 
   // --- pairing wizard ------------------------------------------------------------------------
-  "Set up remote control": "Fernsteuerung einrichten",
+  "Pair the camper unit": "Camper-Einheit koppeln",
   "Close": "Schließen",
   ["On the camper unit open Einstellungen → Bluetooth → Gerät verbinden. It shows "
     + "“Passcode: ---” until buspi connects."]:
@@ -503,8 +503,8 @@ window.STRINGS_DE = {
     + "Offline: parked, the unit goes into deep sleep and stops answering until the van is used again. "
     + "The page then shows the last data and its age. 🕒 marks a value that was measured earlier, not live. "
     + "Still offline while the van is in use? Check the pairing in Device status.\n\n"
-    + "Not paired: no camper unit is paired yet, so there is no data; tap Set up remote control on the "
-    + "banner, or Pair… in Device status.\n\n"
+    + "Not paired: no camper unit is paired yet, so there is no data; tap Pair… on the "
+    + "banner, or in Device status.\n\n"
     + "Not reachable: this page cannot reach calictl or the satellite (WiFi, Tailscale, power). The van "
     + "itself may be fine.\n\n"
     + "Read-only: control writes are switched off on calictl or the satellite; values still update. An untested-firmware "
@@ -521,7 +521,7 @@ window.STRINGS_DE = {
     + "Daten und ihr Alter. 🕒 kennzeichnet einen Wert, der früher gemessen wurde, nicht "
     + "live. Trotz benutztem Fahrzeug offline? Prüfe die Kopplung im Gerätestatus.\n\nNicht gekoppelt: "
     + "Es ist noch keine Camper-Einheit gekoppelt, daher gibt es keine Daten; kopple sie über den "
-    + "Hinweis (Fernsteuerung einrichten) oder im Gerätestatus (Koppeln…).\n\nNicht erreichbar: Diese Seite erreicht calictl oder den "
+    + "Hinweis oder im Gerätestatus (jeweils Koppeln…).\n\nNicht erreichbar: Diese Seite erreicht calictl oder den "
     + "Satelliten nicht (WLAN, Tailscale, Strom). Dem Fahrzeug selbst geht es womöglich gut.\n\n"
     + "Nur-Lesen: Steuerbefehle sind auf calictl bzw. dem Satelliten abgeschaltet; die Werte aktualisieren "
     + "sich trotzdem. Eine Warnung zu ungetesteter Firmware heißt, dass die Einheit Software nutzt, "

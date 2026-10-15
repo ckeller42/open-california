@@ -77,7 +77,7 @@ camper screen's side: [How to pair your camper unit](howto-pair-your-camper.md))
    Bluetooth clients at once, so the satellite pairs alongside it.
 2. Open the calictl UI — **<http://calictl-esp.local>** on your WiFi, or, still on the setup
    hotspot, the *Pair now ›* link in the device page's *Camper unit* box (**<http://192.168.4.1/app#pair>**).
-3. The link opens the wizard; otherwise tap **Set up remote control** on the *No camper unit is
+3. The link opens the wizard; otherwise tap **Pair…** on the *No camper unit is
    paired yet* banner (or ⋮ → **Device status** → **Pair…**). The wizard opens at the top of the page. Tick *I'm on that screen*, tap **Pair now**.
 4. Type the 6-digit passcode the unit now shows and tap **Send**. *✓ Paired — …* — the satellite
    keeps the pairing across restarts and reads the unit from then on.
