@@ -242,8 +242,8 @@ const SENS_T = {govee: ["sens_t_govee", "govee"], victron_mppt: ["sens_t_victron
 /** @type {Record<string, string>} */
 const SENS_ERR = {bad_alias: "sens_err_bad_alias", bad_key: "sens_err_bad_key", key_mismatch: "sens_err_key_mismatch", full: "sens_err_full"};
 /* a field name -> its unit, in display order (the rest has none and is not shown here) */
-const SENS_U = [[/_c$/, "°C"], [/humidity/, "%"], [/^battery$/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"]];
-let sensOn = false;
+const SENS_U = [[/_c$/, "°C"], [/humidity/, "%"], [/voltage/, "V"], [/power/, "W"], [/kwh/, "kWh"], [/current/, "A"]];
+let sensOn = false, sensBusy = false;
 /** @param {Device} d */
 function renderSensors(d) {
   $("sens").hidden = !(d.experimental && d.experimental.sensors);
@@ -271,6 +271,7 @@ function sensName(value, ph) {
   n.value = value;
   n.placeholder = ph;
   n.autocapitalize = "none";
+  n.spellcheck = false;
   n.setAttribute("aria-label", t("sens_alias"));
   return n;
 }
@@ -278,22 +279,31 @@ function sensName(value, ph) {
  * @param {HTMLInputElement} n @param {boolean} need @returns {string|null} */
 function sensAlias(n, need) {
   const a = n.value = n.value.trim().toLowerCase();
-  if ((a || need) && !/^[a-z0-9_-]{1,16}$/.test(a)) { $("sens-msg").textContent = t("sens_err_bad_alias"); return null; }
+  if ((a || need) && !/^[a-z0-9_-]{1,16}$/.test(a)) { sensErr("sens_err_name"); return null; }
   return a;
 }
+/** Show an error where the owner looks (announced: aria-live). @param {string} key */
+function sensErr(key) {
+  const m = $("sens-msg");
+  m.textContent = t(key);
+  m.scrollIntoView({block: "nearest"});
+}
 /** Swap a row's buttons for an inline step (a question or fields) + OK and Cancel; Cancel puts them back.
- * The 10 s poll leaves the box alone while one is open (.open).
- * @param {HTMLElement} acts @param {Node[]} nodes @param {string} okKey @param {string} okCls @param {() => void} ok */
+ * The 10 s poll leaves the box alone while one is open (.open). Focus: the first field, else Cancel.
+ * @param {HTMLElement} acts @param {Node[]} nodes @param {string} okKey @param {string} okCls
+ * @param {() => Promise<void>|void} ok OK is disabled while it runs (a double tap posts once) */
 function sensAsk(acts, nodes, okKey, okCls, ok) {
   const old = Array.from(acts.childNodes);
   acts.className = "acts open";
   acts.replaceChildren(...nodes);
-  acts.appendChild(el("button", t(okKey), okCls)).onclick = ok;
-  acts.appendChild(el("button", t("sens_cancel"), "secondary")).onclick = () => {
+  const b = acts.appendChild(el("button", t(okKey), okCls)), c = acts.appendChild(el("button", t("sens_cancel"), "secondary"));
+  b.onclick = async () => { b.disabled = true; await ok(); b.disabled = false; };
+  c.onclick = () => {
     acts.className = "acts";
     acts.replaceChildren(...old);
     $("sens-msg").textContent = "";
   };
+  (nodes[0] instanceof HTMLInputElement ? nodes[0] : c).focus();
 }
 /** @param {Sensors} s */
 function renderSens(s) {
@@ -307,7 +317,7 @@ function renderSens(s) {
     const acts = p.appendChild(el("span", undefined, "acts"));
     acts.appendChild(el("button", t("sens_rename"), "secondary")).onclick = () => {
       const n = sensName(c.alias, "");
-      sensAsk(acts, [n], "sens_save", "", () => { const a = sensAlias(n, true); if (a) sensPost({id: c.id, alias: a}); });
+      sensAsk(acts, [n], "sens_save", "", () => { const a = sensAlias(n, true); if (a) return sensPost({id: c.id, alias: a}); });
     };
     acts.appendChild(el("button", t("sens_remove"), "secondary")).onclick = () =>
       sensAsk(acts, [el("span", t("sens_confirm_remove", {alias: c.alias}))], "sens_remove", "danger", () => sensPost({remove: c.id}));
@@ -321,7 +331,7 @@ function renderSens(s) {
       const need = s.configured.some((c) => c.type === r.type), def = (SENS_T[r.type] || [])[1];
       const n = sensName("", need || !def ? t("sens_alias") : def), nodes = [n];
       const k = r.type.startsWith("victron") ? el("input") : null;
-      if (k) { k.type = "password"; k.placeholder = t("sens_key"); k.setAttribute("aria-label", t("sens_key")); nodes.push(k); }
+      if (k) { k.autocomplete = "off"; k.spellcheck = false; k.placeholder = t("sens_key"); k.setAttribute("aria-label", t("sens_key")); nodes.push(k); }
       sensAsk(acts, nodes, "sens_add", "", () => {
         const a = sensAlias(n, need);
         if (a === null) return;
@@ -329,22 +339,23 @@ function renderSens(s) {
         const o = {add: r.id};
         if (a) o.alias = a;
         if (k) o.key = k.value.trim();
-        sensPost(o);
+        return sensPost(o);
       });
     };
   }
 }
 /** @param {Record<string, string|number>} o */
 async function sensPost(o) {
-  const msg = $("sens-msg");
-  msg.textContent = "";
+  if (sensBusy) return;   /* one POST at a time */
+  sensBusy = true;
+  $("sens-msg").textContent = "";
   try {
     const r = /** @type {{status: number, body: Sensors}} */ (await fetchJson("/api/sensors", {method: "POST",
       headers: {"Content-Type": "application/json"}, body: JSON.stringify(o)}));
-    if (r.status !== 200) { msg.textContent = t(SENS_ERR[r.body.error || ""] || "sens_error"); return; }
+    if (r.status !== 200) return sensErr(SENS_ERR[r.body.error || ""] || "sens_error");
     $("sens-cfg").textContent = $("sens-seen").textContent = "";   /* closes the open step */
     renderSens(r.body);
-  } catch (e) { msg.textContent = t("sens_error"); }
+  } catch (e) { sensErr("sens_error"); } finally { sensBusy = false; }
 }
 
 /* Screen (R_FW_DISPLAY_WAKE) */

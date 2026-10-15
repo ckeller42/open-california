@@ -89,7 +89,7 @@ def _add(pg, lang, model, name=None, key=None):
     if name is not None:
         row.get_by_role("textbox", name=_s("sens_alias", lang)).fill(name)
     if key is not None:
-        row.locator("input[type=password]").fill(key)
+        row.get_by_role("textbox", name=_s("sens_key", lang)).fill(key)
     row.get_by_role("button", name=_s("sens_add", lang)).click()
     return row
 
@@ -123,7 +123,7 @@ def test_a_second_sensor_of_a_type_needs_a_name(stub, error_gated_page):
         _add(pg, "en", "GVH5074_0001")
         expect(_cfg_row(pg, "govee")).to_be_visible()
         _add(pg, "en", "GVH5074_0002")  # no name: refused on the page, nothing posted
-        expect(pg.locator("#sens-msg")).to_have_text(STR["sens_err_bad_alias"]["en"])
+        expect(pg.locator("#sens-msg")).to_have_text(STR["sens_err_name"]["en"])  # a name is needed
         assert len(stub.sensor_posts) == 1
         _add(pg, "en", "GVH5074_0002", name="aussen")
         expect(_cfg_row(pg, "aussen")).to_be_visible()
@@ -135,7 +135,7 @@ def test_a_second_sensor_of_a_type_needs_a_name(stub, error_gated_page):
 def test_an_invalid_name_is_refused_before_posting(stub, error_gated_page, locale, lang, bad):
     with _open(error_gated_page, stub, lang) as pg:
         row = _add(pg, lang, "GVH5074_0001", name=bad)
-        expect(pg.locator("#sens-msg")).to_have_text(_s("sens_err_bad_alias", lang))
+        expect(pg.locator("#sens-msg")).to_have_text(_s("sens_err_name", lang))
         expect(row.get_by_role("textbox")).to_be_visible()  # the form stays open to fix it
         assert stub.sensor_posts == []
 
@@ -231,7 +231,7 @@ def test_configured_rows_read_as_type_name_values_age(stub, error_gated_page):
     with _open(error_gated_page, stub, "en") as pg:
         row = _cfg_row(pg, "innen")
         expect(row).to_contain_text(
-            "Thermo-hygrometer (Govee) · innen · 16.5\u00a0°C · 58.6\u00a0% · 49\u00a0% · 6 s"
+            "Thermo-hygrometer (Govee) · innen · 16.5\u00a0°C · 58.6\u00a0% · 6 s"  # no sensor battery: two bare % read alike
         )
 
 
@@ -252,3 +252,54 @@ def test_the_poll_leaves_an_open_step_alone(stub, error_gated_page, step):
         assert row.inner_text() == before
         if step == "add":
             expect(row.get_by_role("textbox")).to_have_value("aussen")
+
+
+def test_the_key_field_shows_what_is_typed(stub, error_gated_page):
+    """A 32-hex key copied by hand: visible (no password field), no autofill or spell-check."""
+    with _open(error_gated_page, stub, "en") as pg:
+        row = _seen_row(pg, "SmartSolar")
+        row.get_by_role("button", name="Add").click()
+        key = row.get_by_role("textbox", name=STR["sens_key"]["en"])
+        expect(key).to_have_js_property("type", "text")
+        expect(key).to_have_attribute("autocomplete", "off")
+        expect(key).to_have_attribute("spellcheck", "false")
+
+
+@pytest.mark.parametrize("step", ["add", "remove"])
+def test_a_double_tap_on_ok_posts_once_and_shows_no_error(stub, error_gated_page, step):
+    _configured(stub, (GOVEE_A, "innen", GOVEE_VALUE))
+    with _open(error_gated_page, stub, "en") as pg:
+        if step == "add":
+            row = _seen_row(pg, "GVH5074_0002")
+            row.get_by_role("button", name="Add").click()
+            row.get_by_role("textbox").fill("aussen")
+            row.get_by_role("button", name="Add").dblclick()
+            expect(_cfg_row(pg, "aussen")).to_be_visible()
+        else:
+            row = _cfg_row(pg, "innen")
+            row.get_by_role("button", name="Remove").click()
+            row.locator("button.danger").dblclick()
+            expect(pg.locator("#sens-cfg .row")).to_have_count(0)
+        pg.wait_for_timeout(300)  # a second answer would land by now
+        assert len(stub.sensor_posts) == 1, stub.sensor_posts
+        expect(pg.locator("#sens-msg")).to_have_text("")
+
+
+@pytest.mark.parametrize("step", ["add", "rename", "remove"])
+def test_an_opened_step_takes_the_focus(stub, error_gated_page, step):
+    """The tapped button is gone: focus moves to the name field (Cancel for the remove question)."""
+    _configured(stub, (GOVEE_A, "innen", GOVEE_VALUE))
+    with _open(error_gated_page, stub, "en") as pg:
+        row = _seen_row(pg, "GVH5074_0002") if step == "add" else _cfg_row(pg, "innen")
+        row.get_by_role("button", name=STR["sens_" + step]["en"]).click()
+        target = row.get_by_role("button", name="Cancel") if step == "remove" else row.get_by_role("textbox")
+        expect(target).to_be_focused()
+
+
+def test_an_error_is_announced_and_scrolled_into_view(stub, error_gated_page):
+    with error_gated_page(stub.base + "/device", viewport={"width": 390, "height": 400}) as pg:
+        msg = pg.locator("#sens-msg")
+        expect(msg).to_have_attribute("aria-live", "polite")
+        _add(pg, "en", "GVH5074_0001", name="mein sensor")  # the click scrolled its row into view
+        expect(msg).to_have_text(STR["sens_err_name"]["en"])
+        expect(msg).to_be_in_viewport()

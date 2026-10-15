@@ -1052,16 +1052,18 @@ to the sensors and never to the pairing SM or the session.
   diagnostics record as `REC <body>`.
 - **Setup (`/device` Sensors box, EN + DE):** shown while the flag is on, it polls
   `GET /api/sensors` every 10 s (each GET kicks a window). Configured rows show the type, the alias,
-  up to three readings with their units (°C, %, V, W, kWh, A — fields without a clear unit are left
-  to the shared UI) and the age, then **Rename** (an inline name field prefilled with the alias +
+  up to three readings with their units (°C, %, V, W, kWh, A — fields without a clear unit, and a
+  Govee's own battery, are left to the shared UI) and the age, then **Rename** (an inline name field prefilled with the alias +
   Save/Cancel; posts `{"id","alias"}`) and **Remove**, which asks in the page ("Remove <alias>?" with
   a red **Remove** + **Cancel**; no `window.confirm()`, which iOS home-screen apps and in-app
   browsers may never show). Seen rows show the type, the model, the RSSI and **Add**, which opens a
   name field (optional for the first sensor of a type — its placeholder is the type's default
-  alias; required for a second) plus, for a key type (`victron_*`), the key (a password field) and
-  Cancel. The name is lowercased and checked against `[a-z0-9_-]{1,16}` before posting; the
-  firmware's own errors (taken name, bad/mismatched key, list full) show below the box. While a
-  confirmation or a field is open, the 10 s poll leaves the box alone. The ids in the box are the
+  alias; required for a second) plus, for a key type (`victron_*`), the key (a plain text field, no
+  autofill: the owner must see a typo) and Cancel; an opened step takes the focus (the name field,
+  Cancel for the question), and OK posts once however often it is tapped. The name is lowercased
+  and checked against `[a-z0-9_-]{1,16}` before posting ("Use a–z, 0–9, - or _"); the firmware's
+  own errors (name already used, bad/mismatched key, list full) show below the box, scrolled into
+  view and announced (`aria-live`). While a confirmation or a field is open, the 10 s poll leaves the box alone. The ids in the box are the
   boot-local ids above: after a reboot the box simply shows the fresh ones.
 
 ## UX telemetry (`R_UX_TELEMETRY`)
